@@ -1,0 +1,90 @@
+/*
+ * Learner template-host chrome (PRD-12). Plain-CSS classes replacing the raw
+ * Tailwind utilities on the framework wrappers / footers / nav buttons of the
+ * learner screens (take-test.tsx, result.tsx, template-question-screen.tsx).
+ * These are host-framework chrome around the shared template render, not DS
+ * components — semantic composable classes (tbh-*), DS tokens where applicable.
+ * Part of the Tailwind-removal track (stage 5).
+ */
+
+.tbh-minh-screen { min-height: 100vh; }
+.tbh-minh-full { min-height: 100%; }
+.tbh-col { display: flex; flex-direction: column; }
+.tbh-noselect { user-select: none; }
+.tbh-fill { flex: 1 1 0%; width: 100%; }
+.tbh-wfull { width: 100%; }
+.tbh-dim { opacity: 0.7; }
+
+/* Question/blocked-screen footer: edges with back + forward, centered, capped. */
+.tbh-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 24px 40px;
+  margin-inline: auto;
+  width: 100%;
+  max-width: 48rem;
+}
+
+/* Result-screen footer: centered wrapping meta row. */
+.tbh-result-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  column-gap: 24px;
+  row-gap: 8px;
+  padding: 0 24px 40px;
+  font-size: 14px;
+}
+
+/* Blocked-screen footer: single centered action. */
+.tbh-center-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 40px;
+}
+
+/* Subtle back/nav button (transparent, dims when idle/disabled). */
+.tbh-navbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  opacity: 0.8;
+  transition: opacity 0.15s;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+}
+.tbh-navbtn:hover:not(:disabled) { opacity: 1; }
+.tbh-navbtn:disabled { opacity: 0.3; cursor: default; }
+
+/* Result back-link (anchor styled like a subtle nav link). */
+.tbh-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.8;
+  transition: opacity 0.15s;
+}
+.tbh-link:hover { opacity: 1; }
+
+/* Primary forward button (background set inline per theme). */
+.tbh-primarybtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 0.5625rem;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  border: 0;
+  cursor: pointer;
+}
+.tbh-primarybtn:disabled { opacity: 0.5; cursor: default; }

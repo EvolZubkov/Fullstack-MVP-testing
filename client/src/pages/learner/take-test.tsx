@@ -1,19 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
-import { ChevronLeft, ChevronRight, CheckCircle, XCircle, ArrowUp, ArrowDown, Trophy, Target, GripVertical, Clock, BookOpen, RotateCcw, Play } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw } from "lucide-react";
+import { Banner, Box, Button, Card, CardBody, CardHeader, Center, Cluster, ModalDialog, Stack, Tag, Text } from "@universityrt/ui-kit";
 import { useToast } from "@/hooks/use-toast";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
 import { TemplateQuestionScreen } from "./template-question-screen";
+import { fmtIsoDateHuman, daysUntilIsoDate } from "./cooldown-format";
 import { buildStartState } from "@shared/template/start-state";
+import { buildQuestionProgress } from "@shared/template/question-progress-context";
+import { buildReviewContext } from "@shared/template/review-context";
+import { buildSectionResultContext } from "@shared/template/result-context";
 import {
   useSectionTimer,
   useAdaptiveSectionTimer,
@@ -78,6 +75,28 @@ interface AdaptiveState {
   questionsAnswered: number;
 }
 
+/**
+ * PRD-19 Block E (FR-07/FR-13): the answers that COUNT for grading. In flexible
+ * mode (allowReturnToUnanswered) a question counts only if it was explicitly
+ * submitted ('answered'); a surviving draft (selected but never submitted, kept
+ * for resume per FR-03b), a skipped or an unanswered question is dropped so it
+ * scores 0 (incorrect). Strict mode grades the full answer map as-is (no navigable
+ * drafts). Parity with the SCORM runtime's `gradedAnswerFor`. Drafts still persist
+ * via save-progress (resume) — only the grading payload is filtered.
+ */
+function pickGradedAnswers(
+  answers: Record<string, any>,
+  questionStatus: Record<string, "unanswered" | "answered" | "skipped">,
+  flexible: boolean,
+): Record<string, any> {
+  if (!flexible) return answers;
+  const out: Record<string, any> = {};
+  for (const k of Object.keys(answers)) {
+    if (questionStatus[k] === "answered") out[k] = answers[k];
+  }
+  return out;
+}
+
 /** Escape text for safe injection into a template slot. */
 function escSlot(s: unknown): string {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -129,18 +148,28 @@ export default function TakeTestPage() {
     resumeIndex: number | null;
     resumeTotal: number | null;
     lastCompletedAttemptId: string | null;
+    // PRD-19 Block F (FR-19/20): retake cooldown facts resolved server-side, so the
+    // start screen renders the cooldown state (date + disabled button + prior
+    // summary) on the SAME page — no separate block-wall. Null = eligible.
+    retakeGate: { cooldownPeriodDays: number | null; availableDate: string | null } | null;
+    // PRD-19 Block F (FR-19/20): prior-attempt summary («повтор: можно» + cooldown).
+    priorResult: { percent: number; passed: boolean | null; attemptNumber: number | null; maxAttempts: number | null } | null;
   } | null>(null);
   // PRD-12 web-host: start screen template assets (null -> legacy React markup).
   const [startTpl, setStartTpl] = useState<{
     layout: string;
     css: string;
     theme?: { background: string; foreground: string };
+    cssVars?: Record<string, string>;
+    design?: { logoUrl?: string };
   } | null>(null);
   // PRD-12 / PRD-6: retake block-wall template + cooldown data (set on 403).
   const [blockedTpl, setBlockedTpl] = useState<{
     layout: string;
     css: string;
     theme?: { background: string; foreground: string };
+    cssVars?: Record<string, string>;
+    design?: { logoUrl?: string };
   } | null>(null);
   const [blockData, setBlockData] = useState<{ cooldownPeriodDays?: number; availableDate?: string | null } | null>(null);
   // PRD-12 #3: question screen template assets (null -> legacy React markup).
@@ -148,7 +177,36 @@ export default function TakeTestPage() {
     layout: string;
     css: string;
     theme?: { background: string; foreground: string };
+    cssVars?: Record<string, string>;
+    design?: { logoUrl?: string };
   } | null>(null);
+  // PRD-19 Block D: обзор (review) screen template + visibility flag.
+  const [reviewTpl, setReviewTpl] = useState<{
+    layout: string;
+    css: string;
+    theme?: { background: string; foreground: string };
+    cssVars?: Record<string, string>;
+    design?: { logoUrl?: string };
+  } | null>(null);
+  const [showReview, setShowReview] = useState(false);
+  // PRD-19 Block D (FR-09): finish-confirm modal payload (null = hidden).
+  // `onConfirm` runs the staged action (section finish or whole-test submit).
+  const [finishConfirm, setFinishConfirm] = useState<{ count: number; label: string; onConfirm: () => void } | null>(null);
+  // PRD-19 D5 (FR-05a): section-results (итоги раздела) screen layout + payload.
+  const [sectionResultsTpl, setSectionResultsTpl] = useState<{
+    layout: string;
+    css: string;
+    theme?: { background: string; foreground: string };
+    cssVars?: Record<string, string>;
+    design?: { logoUrl?: string };
+  } | null>(null);
+  // PRD-19 D5: per-section freeze map (web analogue of SCORM state.sectionCommitted).
+  const [sectionCommitted, setSectionCommitted] = useState<Record<string, boolean>>({});
+  // PRD-19 D5: the computed section-results screen payload (null = not shown). Built
+  // from the server /section-result grade (parity with SCORM computeSectionResult).
+  const [sectionResultView, setSectionResultView] = useState<
+    { topicId: string; topicName: string; correct: number; total: number; percent: number; passed: boolean | null; isLast: boolean } | null
+  >(null);
 
   // Standard mode state
   // Standard mode state
@@ -168,7 +226,30 @@ export default function TakeTestPage() {
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [flatQuestions, setFlatQuestions] = useState<FlatQuestion[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // PRD-15 FR-14: set when a submit/answer hits 404 because the attempt was
+  // annulled by an emergency re-publish — the learner is told to start over.
+  const [attemptGone, setAttemptGone] = useState(false);
   const [shuffleMappings, setShuffleMappings] = useState<Record<string, any>>({});
+
+  // PRD-19 (Block B): runtime navigation settings + per-question status, the web
+  // analogue of TEST_DATA + suspend_data.currentSession.questionStatuses in the
+  // SCORM host. Read from the attempt start / resume responses; status persisted
+  // through save-progress. Defaults keep legacy (strict-linear) behaviour until
+  // the response populates them.
+  const [navSettings, setNavSettings] = useState<{
+    allowReturnToUnanswered: boolean;
+    allowAnswerChange: boolean;
+    showSectionResults: boolean;
+    answerCommitScope: "test" | "section";
+  }>({
+    allowReturnToUnanswered: false,
+    allowAnswerChange: false,
+    showSectionResults: true,
+    answerCommitScope: "test",
+  });
+  const [questionStatus, setQuestionStatus] = useState<
+    Record<string, "unanswered" | "answered" | "skipped">
+  >({});
 
   // PRD-4 v1.1 §3.2 — per-topic (section) timer for the standard flow. The
   // expiry handler is invoked via a ref so it can read the freshest state
@@ -286,7 +367,8 @@ export default function TakeTestPage() {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               credentials: "include",
-              body: JSON.stringify({ answers, timeExpired: true }),
+              // PRD-19 Block E (FR-15): timeout auto-finish — drafts don't count in flexible.
+              body: JSON.stringify({ answers: pickGradedAnswers(answers, questionStatus, navSettings.allowReturnToUnanswered), timeExpired: true }),
             });
 
             if (!res.ok) throw new Error("Failed to submit");
@@ -359,6 +441,8 @@ export default function TakeTestPage() {
           resumeIndex: test.resumeIndex ?? null,
           resumeTotal: test.resumeTotal ?? null,
           lastCompletedAttemptId: test.lastCompletedAttemptId ?? null,
+          retakeGate: test.retakeGate ?? null,
+          priorResult: test.priorResult ?? null,
         });
 
         // PRD-12 web-host: fetch the start screen template (best-effort; null ->
@@ -368,6 +452,12 @@ export default function TakeTestPage() {
           if (tplRes.ok) setStartTpl(await tplRes.json());
           const qRes = await fetch(`/api/tests/${testId}/screen-template/question`, { credentials: "include" });
           if (qRes.ok) setQuestionTpl(await qRes.json());
+          // PRD-19 Block D: обзор (review) screen layout.
+          const rvRes = await fetch(`/api/tests/${testId}/screen-template/review`, { credentials: "include" });
+          if (rvRes.ok) setReviewTpl(await rvRes.json());
+          // PRD-19 D5: section-results (итоги раздела) screen layout.
+          const srRes = await fetch(`/api/tests/${testId}/screen-template/section-results`, { credentials: "include" });
+          if (srRes.ok) setSectionResultsTpl(await srRes.json());
         } catch {
           /* fall back to React markup */
         }
@@ -405,6 +495,27 @@ export default function TakeTestPage() {
     } catch (err) {
       const retake = (err as { retake?: { cooldownPeriodDays?: number; availableDate?: string | null } }).retake;
       if ((err as Error)?.message === "RETAKE_COOLDOWN") {
+        // PRD-19 Block F (FR-20): a cooldown that the up-front gate missed (a race —
+        // e.g. another tab consumed the last eligible window). Render the cooldown
+        // state ON the start page (parity with the resolved-at-load path), not a
+        // separate wall: fold the 403 facts into testMetadata.retakeGate and stay on
+        // start. Falls back to the legacy block-wall only when the start template is
+        // unavailable (no `startTpl`), so the learner never sees a blank screen.
+        if (startTpl) {
+          setTestMetadata((m) =>
+            m
+              ? {
+                  ...m,
+                  retakeGate: {
+                    cooldownPeriodDays: retake?.cooldownPeriodDays ?? null,
+                    availableDate: retake?.availableDate ?? null,
+                  },
+                }
+              : m,
+          );
+          setPhase("start");
+          return;
+        }
         try {
           const r = await fetch(`/api/tests/${testId}/screen-template/blocked`, { credentials: "include" });
           if (r.ok) setBlockedTpl(await r.json());
@@ -449,6 +560,7 @@ export default function TakeTestPage() {
       if (testMode === "adaptive") {
         // TODO: Реализовать восстановление адаптивного теста
         toast({
+          variant: "info",
           title: "Информация",
           description: "Восстановление адаптивного теста пока не поддерживается. Начинаем заново.",
         });
@@ -461,6 +573,14 @@ export default function TakeTestPage() {
       setShowCorrectAnswers(data.attempt.showCorrectAnswers || false);
       setAnswers(data.savedAnswers || {});
       setCurrentIndex(data.currentIndex || 0);
+      // PRD-19 (Block B): restore runtime settings + per-question statuses.
+      setNavSettings({
+        allowReturnToUnanswered: data.attempt.allowReturnToUnanswered ?? false,
+        allowAnswerChange: data.attempt.allowAnswerChange ?? false,
+        showSectionResults: data.attempt.showSectionResults ?? true,
+        answerCommitScope: data.attempt.answerCommitScope ?? "test",
+      });
+      setQuestionStatus(data.questionStatus || {});
 
       // Инициализация таймера (с учётом прошедшего времени)
       if (data.attempt.timeLimitMinutes && data.attempt.timeLimitMinutes > 0) {
@@ -582,6 +702,14 @@ export default function TakeTestPage() {
     const data = await res.json();
     setAttempt(data);
     setShowCorrectAnswers(data.showCorrectAnswers || false);
+    // PRD-19 (Block B): runtime navigation settings from the start response.
+    setNavSettings({
+      allowReturnToUnanswered: data.allowReturnToUnanswered ?? false,
+      allowAnswerChange: data.allowAnswerChange ?? false,
+      showSectionResults: data.showSectionResults ?? true,
+      answerCommitScope: data.answerCommitScope ?? "test",
+    });
+    setQuestionStatus({});
 
     // Инициализация таймера
     if (data.timeLimitMinutes && data.timeLimitMinutes > 0) {
@@ -700,23 +828,52 @@ export default function TakeTestPage() {
     }
   };
 
+  // PRD-19 (Block B): persist progress including per-question status (web
+  // analogue of saveCurrentSession in the SCORM host). Pass the NEXT values
+  // explicitly to avoid React state staleness.
+  const saveProgress = (
+    nextAnswers: Record<string, any>,
+    nextIndex: number,
+    nextStatus: Record<string, "unanswered" | "answered" | "skipped">,
+  ) => {
+    if (!attempt) return;
+    fetch(`/api/attempts/${attempt.id}/save-progress`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ answers: nextAnswers, currentIndex: nextIndex, questionStatus: nextStatus }),
+    }).catch((err) => console.error("Auto-save error:", err));
+  };
+
+  // PRD-19 (Block B): is the question locked against edits? A committed
+  // ('answered') question is read-only unless allowAnswerChange — mirrors
+  // isAnswerLocked in the SCORM runtime. Cross-section freeze (answerCommitScope
+  // 'section') is enforced by bounding «Назад» to the current section (below),
+  // so a frozen section is never reachable for editing.
+  const isQuestionLocked = (fq: FlatQuestion): boolean => {
+    return questionStatus[fq.question.id] === "answered" && !navSettings.allowAnswerChange;
+  };
+
   // Standard mode handlers
   const handleAnswer = (questionId: string, answer: any) => {
-    setAnswers((prev) => {
-      const newAnswers = { ...prev, [questionId]: answer };
+    const fq = flatQuestions[currentIndex];
+    if (fq && isQuestionLocked(fq)) return; // committed + no allowAnswerChange → read-only
 
-      // Автосохранение прогресса
-      if (attempt) {
-        fetch(`/api/attempts/${attempt.id}/save-progress`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ answers: newAnswers, currentIndex }),
-        }).catch(err => console.error("Auto-save error:", err));
-      }
+    // Pure update + side effects as plain statements (no side effects inside the
+    // setAnswers updater). newAnswers is built from the current render's `answers`.
+    const newAnswers = { ...answers, [questionId]: answer };
+    setAnswers(newAnswers);
 
-      return newAnswers;
-    });
+    // PRD-19 (Block B): re-editing a committed answer (allowAnswerChange on)
+    // re-opens it — drop the 'answered' fixation until the learner re-commits.
+    let nextStatus = questionStatus;
+    if (questionStatus[questionId] === "answered") {
+      nextStatus = { ...questionStatus, [questionId]: "unanswered" };
+      setQuestionStatus(nextStatus);
+    }
+
+    // Автосохранение прогресса
+    saveProgress(newAnswers, currentIndex, nextStatus);
   };
 
   // Локальная проверка ответа для стандартного теста
@@ -793,6 +950,12 @@ export default function TakeTestPage() {
       feedback: feedback || undefined,
     });
     setStandardFeedbackShown(true);
+
+    // PRD-19 (Block B): «Принять» is the explicit fixation point in
+    // showCorrectAnswers mode — mark the question 'answered' and persist.
+    const nextStatus = { ...questionStatus, [currentQ.question.id]: "answered" as const };
+    setQuestionStatus(nextStatus);
+    saveProgress(answers, currentIndex, nextStatus);
   };
 
   // Перейти к следующему вопросу после просмотра фидбека
@@ -802,7 +965,9 @@ export default function TakeTestPage() {
 
     // Skip past any topic whose section timer has already expired.
     const nextIdx = nextAccessibleIndex(flatQuestions, currentIndex + 1, lockedTopics);
-    if (nextIdx !== null) setCurrentIndex(nextIdx);
+    // PRD-19 D5: a section boundary (or test end) is intercepted by the staged
+    // finish обзор instead of crossing straight into the next section.
+    advanceOrStageFinish(nextIdx, answers, questionStatus);
   };
 
   const handleNext = () => {
@@ -844,9 +1009,151 @@ export default function TakeTestPage() {
       }
     }
 
+    // PRD-19 (Block B): «Далее» commits the current answer — mark 'answered'.
+    const nextStatus = { ...questionStatus, [currentQ.question.id]: "answered" as const };
+    setQuestionStatus(nextStatus);
+
     // Skip past any topic whose section timer has already expired.
     const nextIdx = nextAccessibleIndex(flatQuestions, currentIndex + 1, lockedTopics);
-    if (nextIdx !== null) setCurrentIndex(nextIdx);
+    // PRD-19 D5: intercept a section boundary / test end with the staged обзор.
+    advanceOrStageFinish(nextIdx, answers, nextStatus);
+  };
+
+  // PRD-19 (Block B): «Пропустить» — flexible mode only. Marks the current
+  // question 'skipped' WITHOUT requiring an answer, clears any uncommitted draft
+  // (so a final 'skipped' scores as incorrect, FR-07 — the server grades answers,
+  // not status), then advances. Mirrors skipQuestion in the SCORM runtime.
+  const handleSkip = () => {
+    if (!navSettings.allowReturnToUnanswered) return;
+    const currentQ = flatQuestions[currentIndex];
+    if (!currentQ) return;
+    setStandardFeedbackShown(false);
+    setStandardAnswerResult(null);
+    const nextStatus = { ...questionStatus, [currentQ.question.id]: "skipped" as const };
+    setQuestionStatus(nextStatus);
+    // PRD-19 (Block B): clear the uncommitted draft so a skipped question scores as
+    // incorrect (FR-07) — the server grades answers, not status. Mirrors SCORM skipQuestion.
+    const nextAnswers = { ...answers };
+    delete nextAnswers[currentQ.question.id];
+    setAnswers(nextAnswers);
+    const nextIdx = nextAccessibleIndex(flatQuestions, currentIndex + 1, lockedTopics);
+    // PRD-19 D5: intercept a section boundary / test end with the staged обзор.
+    advanceOrStageFinish(nextIdx, nextAnswers, nextStatus);
+  };
+
+  // ─── PRD-19 D5: staged completion (section-finish → section-results → next) ────
+
+  /** Sectional flows commit answers per section; flat commits the whole test. */
+  const sectionScope = navSettings.answerCommitScope === "section";
+
+  /** True when `topicId` is the LAST section in delivery order (no later topic). */
+  const isLastSectionWeb = (topicId: string): boolean => {
+    const last = flatQuestions[flatQuestions.length - 1];
+    return !last || last.topicId === topicId;
+  };
+
+  /** First accessible question index AFTER the contiguous block of `topicId`. */
+  const firstIndexAfterSection = (topicId: string): number | null => {
+    let i = 0;
+    while (i < flatQuestions.length && flatQuestions[i].topicId !== topicId) i++;
+    while (i < flatQuestions.length && flatQuestions[i].topicId === topicId) i++;
+    if (i >= flatQuestions.length) return null;
+    return nextAccessibleIndex(flatQuestions, i, lockedTopics);
+  };
+
+  /**
+   * PRD-19 D5 (FR-05): advance after a commit/skip, but intercept a section
+   * boundary (flexible sectional) or the test end (flexible flat) with the staged
+   * обзор instead of crossing straight on. `nextIdx === null` = no further question
+   * (test end). Strict mode keeps the plain advance (no обзор, FR-02/FR-08a).
+   */
+  const advanceOrStageFinish = (
+    nextIdx: number | null,
+    nextAnswers: Record<string, any>,
+    nextStatus: Record<string, "unanswered" | "answered" | "skipped">,
+  ) => {
+    const curTopic = flatQuestions[currentIndex]?.topicId;
+    if (sectionScope) {
+      const crossing = !!curTopic && (nextIdx === null || flatQuestions[nextIdx].topicId !== curTopic);
+      if (crossing && !sectionCommitted[curTopic!]) {
+        if (navSettings.allowReturnToUnanswered) {
+          setShowReview(true); // flexible → section обзор («Завершить раздел»)
+          return;
+        }
+        // Strict (no return): show the computed section-results between sections
+        // (FR-05a) — no обзор/modal; the last section flows to the test results.
+        if (navSettings.showSectionResults && !isLastSectionWeb(curTopic!)) {
+          void finishSectionWeb(curTopic!, false);
+          return;
+        }
+      }
+    } else if (navSettings.allowReturnToUnanswered && nextIdx === null) {
+      setShowReview(true); // flat flexible → single end-of-test обзор
+      return;
+    }
+    if (nextIdx !== null) {
+      setCurrentIndex(nextIdx);
+      saveProgress(nextAnswers, nextIdx, nextStatus);
+    } else {
+      // Strict end (no обзор): submit is triggered by the «Завершить тест» button.
+      saveProgress(nextAnswers, currentIndex, nextStatus);
+    }
+  };
+
+  /**
+   * PRD-19 D5 (FR-05/06): commit a section (freeze it) from its обзор, then show
+   * the computed section-results (FR-05a, when `showSectionResults`) fetched via
+   * the shared server grader (parity with SCORM), or advance to the next section.
+   */
+  const finishSectionWeb = async (topicId: string, isLast: boolean) => {
+    setSectionCommitted((prev) => ({ ...prev, [topicId]: true })); // FR-06 freeze
+    setShowReview(false);
+    if (navSettings.showSectionResults && attempt && sectionResultsTpl) {
+      try {
+        const res = await fetch(`/api/attempts/${attempt.id}/section-result`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          // PRD-19 Block E: drafts/skipped don't count toward the section score in flexible.
+          body: JSON.stringify({ topicId, answers: pickGradedAnswers(answers, questionStatus, navSettings.allowReturnToUnanswered) }),
+        });
+        if (res.ok) {
+          const d = await res.json();
+          setSectionResultView({
+            topicId,
+            topicName: d.topicName,
+            correct: d.correct,
+            total: d.total,
+            percent: d.percent,
+            passed: d.passed,
+            isLast,
+          });
+          return;
+        }
+      } catch {
+        /* fall through to advancing without the (optional) section-results screen */
+      }
+    }
+    continueAfterSection(topicId, isLast);
+  };
+
+  /** «Продолжить»/«Завершить тест» after a section: next section, or finish the test. */
+  const continueAfterSection = (topicId: string, isLast: boolean) => {
+    setSectionResultView(null);
+    setShowReview(false);
+    if (isLast) {
+      handleSubmit();
+      return;
+    }
+    const nextIdx = firstIndexAfterSection(topicId);
+    if (nextIdx === null) {
+      handleSubmit();
+      return;
+    }
+    setStandardFeedbackShown(false);
+    setStandardAnswerResult(null);
+    setCurrentIndex(nextIdx);
+    saveProgress(answers, nextIdx, questionStatus);
   };
 
   const handleSubmit = async () => {
@@ -856,7 +1163,11 @@ export default function TakeTestPage() {
       (fq) => answers[fq.question.id] === undefined || answers[fq.question.id] === null
     );
 
-    if (unansweredQuestions.length > 0) {
+    // PRD-19 (Block B): strict-linear tests (allowReturnToUnanswered=false) still
+    // require every question answered — you cannot skip, so any gap is a mistake.
+    // Flexible tests MAY finish with skipped/unanswered questions: they score as
+    // incorrect (FR-07). The обзор / finish-confirm warning is added in Block D.
+    if (unansweredQuestions.length > 0 && !navSettings.allowReturnToUnanswered) {
       toast({
         variant: "destructive",
         title: "Не все вопросы отвечены",
@@ -871,9 +1182,10 @@ export default function TakeTestPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ answers }),
+        body: JSON.stringify({ answers: pickGradedAnswers(answers, questionStatus, navSettings.allowReturnToUnanswered) }),
       });
 
+      if (res.status === 404) { setAttemptGone(true); return; }
       if (!res.ok) throw new Error("Failed to submit");
       navigate(`/learner/result/${attempt.id}`);
     } catch (err) {
@@ -898,8 +1210,9 @@ export default function TakeTestPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ answers }),
+        body: JSON.stringify({ answers: pickGradedAnswers(answers, questionStatus, navSettings.allowReturnToUnanswered) }),
       });
+      if (res.status === 404) { setAttemptGone(true); return; }
       if (!res.ok) throw new Error("Failed to submit");
       navigate(`/learner/result/${attempt.id}`);
     } catch (err) {
@@ -1039,6 +1352,7 @@ export default function TakeTestPage() {
         }),
       });
 
+      if (res.status === 404) { setAttemptGone(true); return; }
       if (!res.ok) throw new Error("Failed to submit answer");
       const data = await res.json();
 
@@ -1161,6 +1475,7 @@ export default function TakeTestPage() {
         }),
       });
 
+      if (res.status === 404) { setAttemptGone(true); return; }
       if (!res.ok) throw new Error("Failed to submit answer");
       const data = await res.json();
 
@@ -1239,6 +1554,29 @@ export default function TakeTestPage() {
   };
 
   // Loading state
+  // PRD-15 FR-14: the attempt was annulled by an emergency re-publish (404 on
+  // submit/answer). Tell the learner the attempt is not counted and let them
+  // restart — reloading re-enters the start flow with a fresh attempt.
+  if (attemptGone) {
+    return (
+      <Center minH="screen" pad={6}>
+        <Box full maxW="md">
+          <Card>
+            <CardHeader title={<Cluster gap={2}><RotateCcw size={20} color="var(--ou-accent-default)" />Тест обновлён</Cluster>} />
+            <CardBody>
+              <Stack gap={4}>
+                <Text variant="body-s" tone="muted">
+                  Эта попытка прервана: тест переопубликован. Попытка не засчитана — начните прохождение заново.
+                </Text>
+                <Button fullWidth onClick={() => window.location.reload()}>Начать заново</Button>
+              </Stack>
+            </CardBody>
+          </Card>
+        </Box>
+      </Center>
+    );
+  }
+
   if (phase === "loading" || (isStarting && phase !== "start")) {
     return <LoadingState message={t.common.preparingTest} />;
   }
@@ -1256,16 +1594,16 @@ export default function TakeTestPage() {
       blockedTpl.css +
       '\n[data-retake-branch="default"],[data-retake-branch="error"]{display:none}[data-retake-branch="cooldown"]{display:block}';
     return (
-      <div className="min-h-screen flex flex-col" style={{ background: blockedTpl.theme?.background }}>
+      <div className="tbh-minh-screen tbh-col" style={{ background: blockedTpl.theme?.background }}>
         <TemplateScreen
-          className="flex-1 w-full"
+          className="tbh-fill"
           layout={blockedTpl.layout}
           css={blockCss}
-          context={{ retake: { cooldownPeriodDays: blockData.cooldownPeriodDays, availableDateHuman } }}
+          cssVars={blockedTpl.cssVars}
+          context={{ retake: { cooldownPeriodDays: blockData.cooldownPeriodDays, availableDateHuman }, ...(blockedTpl.design ? { design: blockedTpl.design } : {}) }}
         />
-        <div className="flex items-center justify-center pb-10">
-          <Button variant="outline" onClick={() => navigate("/learner")}>
-            <ChevronLeft className="h-4 w-4 mr-2" />
+        <div className="tbh-center-foot">
+          <Button variant="secondary" leadingIcon={<ChevronLeft size={16} />} onClick={() => navigate("/learner")}>
             К списку тестов
           </Button>
         </div>
@@ -1280,6 +1618,12 @@ export default function TakeTestPage() {
   if (phase === "start" && testInfo && testMetadata && testMode === "standard" && startTpl) {
     const exhausted =
       testMetadata.maxAttempts !== null && testMetadata.completedAttempts >= testMetadata.maxAttempts;
+    // PRD-19 Block F (FR-19/20): cooldown facts render the cooldown card + disabled
+    // start button ON this start page (no separate block-wall). Prior summary shows
+    // for both eligible «повтор: можно» and cooldown. The web has no client-side PDF
+    // report, so «Скачать отчёт» is omitted (canDownloadReport stays off) — only
+    // «Мой результат» links the prior attempt.
+    const gate = testMetadata.retakeGate;
     const startContext = buildStartState({
       info: {
         title: testInfo.title,
@@ -1298,21 +1642,29 @@ export default function TakeTestPage() {
           : null,
       hasCompletedResults: testMetadata.completedAttempts > 0,
       canStartNew: !exhausted,
+      cooldown: gate
+        ? {
+            availableDateHuman: fmtIsoDateHuman(gate.availableDate),
+            daysUntil: daysUntilIsoDate(gate.availableDate),
+          }
+        : null,
+      priorResult: testMetadata.priorResult,
       showBack: true,
     });
     return (
       <div
-        className="min-h-screen select-none"
+        className="tbh-minh-screen tbh-noselect"
         style={{ background: startTpl.theme?.background }}
         onCopy={(e) => e.preventDefault()}
         onCut={(e) => e.preventDefault()}
         onContextMenu={(e) => e.preventDefault()}
       >
         <TemplateScreen
-          className="w-full"
+          className="tbh-wfull"
           layout={startTpl.layout}
           css={startTpl.css}
-          context={startContext}
+          cssVars={startTpl.cssVars}
+          context={{ ...startContext, ...(startTpl.design ? { design: startTpl.design } : {}) }}
           onAction={(action) => {
             if (action === "start-test" || action === "restart") handleStartTest();
             else if (action === "resume") handleResumeTest();
@@ -1325,221 +1677,58 @@ export default function TakeTestPage() {
     );
   }
 
-  // Start page
-  if (phase === "start" && testInfo && testMetadata) {
-    const attemptsExhausted = testMetadata.maxAttempts !== null &&
-      testMetadata.completedAttempts >= testMetadata.maxAttempts;
-    const attemptsLeft = testMetadata.maxAttempts !== null
-      ? testMetadata.maxAttempts - testMetadata.completedAttempts
-      : null;
-
-    return (
-      <div className="min-h-screen bg-background select-none" onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()}>
-        <div className="max-w-2xl mx-auto px-6 py-12">
-          {/* Header Card */}
-          <Card className="text-center mb-6">
-            <CardHeader>
-              <CardTitle className="text-2xl">{testInfo.title}</CardTitle>
-              {testInfo.description && (
-                <p className="text-muted-foreground mt-2">{testInfo.description}</p>
-              )}
-            </CardHeader>
-          </Card>
-
-          {/* Info Card */}
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="text-lg">Информация о тесте</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {/* Количество вопросов / тем */}
-              <div className="flex items-center gap-3 p-4 rounded-lg bg-muted">
-                <BookOpen className="h-6 w-6 text-indigo-500 shrink-0" />
-                <div>
-                  {testMode === "adaptive" ? (
-                    <>
-                      <div className="font-semibold">Количество тем</div>
-                      <div className="text-sm text-muted-foreground">{(testInfo as any).sections?.length || 0}</div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="font-semibold">Количество вопросов</div>
-                      <div className="text-sm text-muted-foreground">{testMetadata.totalQuestions}</div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Проходной балл */}
-              {testMetadata.passPercent !== null && (
-                <div className="flex items-center gap-3 p-4 rounded-lg bg-muted">
-                  <Target className="h-6 w-6 text-green-500 shrink-0" />
-                  <div>
-                    <div className="font-semibold">Проходной балл</div>
-                    <div className="text-sm text-muted-foreground">{testMetadata.passPercent}%</div>
-                  </div>
-                </div>
-              )}
-
-              {/* Ограничение времени */}
-              {testMetadata.timeLimitMinutes && (
-                <div className="flex items-center gap-3 p-4 rounded-lg bg-muted">
-                  <Clock className="h-6 w-6 text-amber-500 shrink-0" />
-                  <div>
-                    <div className="font-semibold">Ограничение времени</div>
-                    <div className="text-sm text-muted-foreground">{testMetadata.timeLimitMinutes} минут</div>
-                  </div>
-                </div>
-              )}
-
-              {/* Попытки */}
-              {testMetadata.maxAttempts !== null && (
-                <div className="flex items-center gap-3 p-4 rounded-lg bg-muted">
-                  <RotateCcw className="h-6 w-6 text-violet-500 shrink-0" />
-                  <div>
-                    <div className="font-semibold">Попытки</div>
-                    <div className={`text-sm ${attemptsExhausted ? "text-red-500" : "text-muted-foreground"}`}>
-                      {attemptsExhausted
-                        ? "Попытки закончились"
-                        : `осталось ${attemptsLeft} из ${testMetadata.maxAttempts}`
-                      }
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Custom content */}
-              {testMetadata.startPageContent && (
-                <div className="p-4 rounded-lg bg-muted border-l-4 border-primary">
-                  <div className="text-sm whitespace-pre-wrap">{testMetadata.startPageContent}</div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Buttons */}
-          <div className="flex flex-col items-center gap-3">
-            {attemptsExhausted ? (
-              <>
-                <Button disabled className="w-full max-w-xs">
-                  Попытки закончились
-                </Button>
-                <Button variant="outline" onClick={() => navigate("/learner")} className="w-full max-w-xs">
-                  К списку тестов
-                </Button>
-              </>
-            ) : testMetadata.hasInProgress ? (
-              <>
-                <Button
-                  onClick={handleResumeTest}
-                  disabled={isStarting}
-                  className="w-full max-w-xs"
-                  size="lg"
-                >
-                  {isStarting ? "Загрузка..." : (
-                    <>
-                      <Play className="h-4 w-4 mr-2" />
-                      Продолжить тест
-                    </>
-                  )}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleStartTest}
-                  disabled={isStarting}
-                  className="w-full max-w-xs"
-                >
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  Начать заново
-                </Button>
-                <Button variant="ghost" onClick={() => navigate("/learner")} className="w-full max-w-xs">
-                  Назад
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  onClick={handleStartTest}
-                  disabled={isStarting}
-                  className="w-full max-w-xs"
-                  size="lg"
-                >
-                  {isStarting ? (
-                    "Загрузка..."
-                  ) : testMetadata.completedAttempts > 0 ? (
-                    <>
-                      <Play className="h-4 w-4 mr-2" />
-                      Начать заново
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-4 w-4 mr-2" />
-                      Начать тестирование
-                    </>
-                  )}
-                </Button>
-                <Button variant="outline" onClick={() => navigate("/learner")} className="w-full max-w-xs">
-                  Назад
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // Adaptive mode - finished
   if (testMode === "adaptive" && adaptiveState?.isFinished) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="max-w-3xl mx-auto px-6 py-12">
-          <Card>
-            <CardHeader className="text-center">
-              <Trophy className="h-16 w-16 mx-auto text-primary mb-4" />
-              <CardTitle className="text-2xl">Тест завершён!</CardTitle>
-              <p className="text-muted-foreground mt-1">{adaptiveState.testTitle}</p>
-            </CardHeader>
-            <CardContent className="space-y-6">
+      <Box maxW="3xl" padX={6} padY={8}>
+        <Card>
+          <CardBody>
+            <Stack gap={6}>
+              <Stack gap={2} align="center">
+                <Trophy size={48} color="var(--ou-accent-default)" />
+                <Text variant="display-s" weight="bold">Тест завершён!</Text>
+                <Text tone="muted">{adaptiveState.testTitle}</Text>
+              </Stack>
+
               {adaptiveState.result?.topicResults?.map((tr: any, idx: number) => (
-                <div key={idx} className="p-4 rounded-lg border space-y-3">
-                  <h3 className="font-semibold text-lg">{tr.topicName}</h3>
-                  {tr.achievedLevelName ? (
-                    <Badge variant="default" className="bg-green-600 text-base px-4 py-1">
-                      {tr.achievedLevelName}
-                    </Badge>
-                  ) : (
-                    <Badge variant="destructive" className="text-base px-4 py-1">
-                      {tr.feedback || "Уровень не достигнут"}
-                    </Badge>
-                  )}
-                  {tr.achievedLevelName && tr.feedback && (
-                    <p className="text-sm text-muted-foreground">{tr.feedback}</p>
-                  )}
-                  {tr.recommendedLinks?.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">Рекомендуемые материалы:</p>
-                      <ul className="space-y-1">
-                        {tr.recommendedLinks.map((link: any, i: number) => (
-                          <li key={i}>
-                            <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
-                              {link.title}
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
+                <Box key={idx} border radius="l" pad={4}>
+                  <Stack gap={3}>
+                    <Text variant="heading-s" weight="semibold">{tr.topicName}</Text>
+                    <Cluster>
+                      {tr.achievedLevelName ? (
+                        <Tag tone="success" variant="solid">{tr.achievedLevelName}</Tag>
+                      ) : (
+                        <Tag tone="error" variant="solid">{tr.feedback || "Уровень не достигнут"}</Tag>
+                      )}
+                    </Cluster>
+                    {tr.achievedLevelName && tr.feedback && (
+                      <Text variant="body-s" tone="muted">{tr.feedback}</Text>
+                    )}
+                    {tr.recommendedLinks?.length > 0 && (
+                      <Stack gap={1}>
+                        <Text variant="body-s" weight="medium">Рекомендуемые материалы:</Text>
+                        <Stack as="ul" gap={1}>
+                          {tr.recommendedLinks.map((link: any, i: number) => (
+                            <li key={i}>
+                              <a href={link.url} target="_blank" rel="noopener noreferrer">
+                                <Text variant="body-s" tone="accent">{link.title}</Text>
+                              </a>
+                            </li>
+                          ))}
+                        </Stack>
+                      </Stack>
+                    )}
+                  </Stack>
+                </Box>
               ))}
 
-              <Button className="w-full" onClick={() => navigate("/learner")}>
+              <Button fullWidth onClick={() => navigate("/learner")}>
                 Вернуться к списку тестов
               </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            </Stack>
+          </CardBody>
+        </Card>
+      </Box>
     );
   }
 
@@ -1548,38 +1737,40 @@ export default function TakeTestPage() {
     const { levelTransition, topicTransition, isCorrect } = adaptiveState.lastResult;
 
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="max-w-md w-full mx-4">
-          <CardContent className="pt-6 text-center space-y-4">
-            {isCorrect ? (
-              <CheckCircle className="h-16 w-16 mx-auto text-green-500" />
-            ) : (
-              <XCircle className="h-16 w-16 mx-auto text-red-500" />
-            )}
+      <Center minH="screen" pad={4}>
+        <Box full maxW="md">
+          <Card>
+            <CardBody>
+              <Stack gap={4} align="center">
+                {isCorrect ? (
+                  <CheckCircle size={48} color="var(--ou-success-600)" />
+                ) : (
+                  <XCircle size={48} color="var(--ou-error-600)" />
+                )}
 
-            <p className="text-lg font-medium">
-              {isCorrect ? "Правильно!" : "Неправильно"}
-            </p>
+                <Text variant="heading-s" weight="medium">
+                  {isCorrect ? "Правильно!" : "Неправильно"}
+                </Text>
 
-            {levelTransition && (
-              <Alert className={levelTransition.type === "up" ? "border-green-500" : levelTransition.type === "down" ? "border-red-500" : "border-primary"}>
-                <div className="flex items-center gap-2">
-                  {levelTransition.type === "up" && <ArrowUp className="h-5 w-5 text-green-500" />}
-                  {levelTransition.type === "down" && <ArrowDown className="h-5 w-5 text-red-500" />}
-                  {levelTransition.type === "complete" && <Target className="h-5 w-5 text-primary" />}
-                  <AlertDescription>{levelTransition.message}</AlertDescription>
-                </div>
-              </Alert>
-            )}
+                {levelTransition && (
+                  <Banner
+                    fullWidth
+                    tone={levelTransition.type === "up" ? "success" : levelTransition.type === "down" ? "error" : "info"}
+                  >
+                    {levelTransition.message}
+                  </Banner>
+                )}
 
-            {topicTransition && (
-              <p className="text-sm text-muted-foreground">
-                Переход к теме: <span className="font-medium">{topicTransition.toTopic}</span>
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                {topicTransition && (
+                  <Text variant="body-s" tone="muted">
+                    Переход к теме: <Text as="span" variant="body-s" weight="medium">{topicTransition.toTopic}</Text>
+                  </Text>
+                )}
+              </Stack>
+            </CardBody>
+          </Card>
+        </Box>
+      </Center>
     );
   }
 
@@ -1640,160 +1831,284 @@ export default function TakeTestPage() {
           shuffleMapping={shuffleMappings[currentQ.id]}
           onAnswer={feedbackShown ? () => {} : handleAdaptiveAnswer}
           locked={feedbackShown}
+          reviewMode={feedbackShown && adaptiveState.showCorrectAnswers}
+          correctAnswer={lastAnswerResult?.correctAnswer}
           feedbackHtml={fbHtml}
           footer={footer}
         />
       );
     }
 
-    return (
-      <div className="min-h-screen bg-background select-none" onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()}>
-        <div className="max-w-3xl mx-auto px-6 py-12">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-xl font-semibold">{testTitle}</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Вопрос {currentQuestion.questionNumber} из {currentQuestion.totalInLevel}
-                {showDifficultyLevel && (
-                  <span className="ml-2">• Уровень: <Badge variant="outline">{currentQuestion.levelName}</Badge></span>
-                )}
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              {remainingSeconds !== null && (
-                <TimerDisplay remainingSeconds={remainingSeconds} />
-              )}
-              {adaptiveSectionRemaining !== null && (
-                <SectionTimerDisplay remainingSeconds={adaptiveSectionRemaining} />
-              )}
-              <div className="text-sm text-muted-foreground">
-                Тема: <span className="font-medium text-foreground">{currentQuestion.topicName}</span>
-              </div>
-            </div>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg font-medium">
-                {currentQ.prompt}
-              </CardTitle>
-              {currentQ.mediaUrl && currentQ.mediaType && (
-                <div className="mt-4">
-                  {currentQ.mediaType === "image" && (
-                    <img
-                      src={currentQ.mediaUrl}
-                      alt="Изображение к вопросу"
-                      className="max-h-64 object-contain mx-auto rounded-md"
-                    />
-                  )}
-                  {currentQ.mediaType === "audio" && (
-                    <audio controls className="w-full">
-                      <source src={currentQ.mediaUrl} />
-                    </audio>
-                  )}
-                  {currentQ.mediaType === "video" && (
-                    <video controls className="max-h-64 w-full rounded-md">
-                      <source src={currentQ.mediaUrl} />
-                    </video>
-                  )}
-                </div>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <QuestionInput
-                question={currentQ}
-                answer={adaptiveState.answer}
-                onAnswer={feedbackShown ? () => { } : handleAdaptiveAnswer}
-                shuffleMapping={shuffleMappings[currentQ.id]}
-                disabled={feedbackShown}
-                showCorrectAnswer={feedbackShown}
-                correctAnswer={lastAnswerResult?.correctAnswer}
-              />
-
-              {/* Фидбек после ответа */}
-              {feedbackShown && lastAnswerResult && (
-                <div className={`p-4 rounded-lg border ${lastAnswerResult.isCorrect
-                  ? "bg-green-50 dark:bg-green-900/20 border-green-500"
-                  : "bg-red-50 dark:bg-red-900/20 border-red-500"
-                  }`}>
-                  <div className={`font-semibold mb-2 ${lastAnswerResult.isCorrect ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
-                    }`}>
-                    {lastAnswerResult.isCorrect ? "Правильно!" : "Неправильно"}
-                  </div>
-
-                  {/* Показываем правильный ответ для single/multiple */}
-                  {!lastAnswerResult.isCorrect && lastAnswerResult.correctAnswer !== undefined && (
-                    <div className="text-sm mb-2">
-                      <span className="font-medium">Правильный ответ: </span>
-                      {currentQ.type === "single" && (currentQ.dataJson as any)?.options && (
-                        <span>{(currentQ.dataJson as any).options[lastAnswerResult.correctAnswer.correctIndex]}</span>
-                      )}
-                      {currentQ.type === "multiple" && (currentQ.dataJson as any)?.options && Array.isArray(lastAnswerResult.correctAnswer.correctIndices) && (
-                        <span>{lastAnswerResult.correctAnswer.correctIndices.map((idx: number) => (currentQ.dataJson as any)?.options?.[idx]).join(", ")}</span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Фидбек к вопросу */}
-                  {lastAnswerResult.feedback && (
-                    <div className="text-sm text-muted-foreground">
-                      {lastAnswerResult.feedback}
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="flex justify-end mt-8">
-            {adaptiveState.showCorrectAnswers ? (
-              feedbackShown ? (
-                <Button onClick={handleAdaptiveContinue}>
-                  Далее
-                  <ChevronRight className="h-4 w-4 ml-2" />
-                </Button>
-              ) : (
-                <Button
-                  onClick={handleAdaptiveConfirm}
-                  disabled={isAnswering || adaptiveState.answer === null}
-                >
-                  {isAnswering ? "Отправка..." : "Принять"}
-                  <ChevronRight className="h-4 w-4 ml-2" />
-                </Button>
-              )
-            ) : (
-              <Button
-                onClick={handleAdaptiveSubmit}
-                disabled={isAnswering || adaptiveState.answer === null}
-              >
-                {isAnswering ? "Отправка..." : "Далее"}
-                <ChevronRight className="h-4 w-4 ml-2" />
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
   }
 
   // Standard mode — question screen via the design template (PRD-12 #3): all question
   // types (single/multiple/ranking/matching). The per-question feedback mode
   // (showCorrectAnswers) still uses the React markup below.
+  // PRD-19 Block D: обзор (review) screen — rendered from the SHARED `review`
+  // template layout (pills + unanswered list + «Завершить»), reached via «Вернуться».
+  // Оформление — через шаблон (parity with SCORM); finish здесь = завершить тест.
+  if (testMode === "standard" && attempt && flatQuestions.length > 0 && showReview && reviewTpl) {
+    const curQ = flatQuestions[currentIndex];
+    const curTopic = curQ.topicId;
+    // PRD-19 D5: the last section without a section-results screen merges into the
+    // «Завершить тест» step (no extra locked-review screen); otherwise «Завершить раздел».
+    const isLast = isLastSectionWeb(curTopic);
+    const finishLabel =
+      !sectionScope || (isLast && !navSettings.showSectionResults) ? "Завершить тест" : "Завершить раздел";
+    const built = buildReviewContext({
+      questions: flatQuestions.map((fq) => ({ id: fq.question.id, topicId: fq.topicId, prompt: fq.question.prompt })),
+      statuses: questionStatus,
+      commitScope: navSettings.answerCommitScope,
+      scopeTopicId: sectionScope ? curTopic : null,
+      isTest: !sectionScope,
+      scopeLabel: sectionScope ? `Раздел «${curQ.topicName}» · обзор` : "Обзор теста",
+      finishLabel,
+    });
+    // Sectional → finish the current section (freeze → section-results → next);
+    // flat → finish the whole test.
+    const doFinish = () => {
+      if (sectionScope) void finishSectionWeb(curTopic, isLast);
+      else {
+        setShowReview(false);
+        void handleSubmit();
+      }
+    };
+    return (
+      <div className="tbh-minh-screen tbh-col" style={{ background: reviewTpl.theme?.background }}>
+        <TemplateScreen
+          className="tbh-fill"
+          layout={reviewTpl.layout}
+          css={reviewTpl.css}
+          cssVars={reviewTpl.cssVars}
+          context={{
+            course: { title: attempt.testTitle },
+            design: reviewTpl.design,
+            state: { questionsProgress: built.questionsProgress },
+            review: built.review,
+          }}
+          onAction={(action) => {
+            if (action.startsWith("goto:")) {
+              const i = Number(action.slice("goto:".length));
+              // Frontier (FR-11): no jump into a timer-expired or frozen (committed) section.
+              if (
+                !Number.isNaN(i) &&
+                i >= 0 &&
+                i < flatQuestions.length &&
+                !lockedTopics.has(flatQuestions[i].topicId) &&
+                !sectionCommitted[flatQuestions[i].topicId]
+              ) {
+                setStandardFeedbackShown(false);
+                setStandardAnswerResult(null);
+                setCurrentIndex(i);
+                saveProgress(answers, i, questionStatus);
+              }
+              setShowReview(false);
+            } else if (action === "finish-review") {
+              // FR-09: confirm when finishing with unanswered questions.
+              if (built.review.unansweredCount > 0) {
+                setFinishConfirm({ count: built.review.unansweredCount, label: built.review.finishLabel, onConfirm: doFinish });
+              } else {
+                doFinish();
+              }
+            }
+          }}
+        />
+        {finishConfirm && (
+          <ModalDialog
+            open
+            size="s"
+            onClose={() => setFinishConfirm(null)}
+            title={`${finishConfirm.label}?`}
+            description={`Вопросов без ответа: ${finishConfirm.count}. Они будут засчитаны как неверные. После завершения вернуться к ним нельзя.`}
+            footer={
+              <>
+                <Button variant="ghost" size="m" onClick={() => setFinishConfirm(null)}>
+                  Отмена
+                </Button>
+                <Button
+                  variant="primary"
+                  size="m"
+                  onClick={() => {
+                    const run = finishConfirm.onConfirm;
+                    setFinishConfirm(null);
+                    run();
+                  }}
+                >
+                  {finishConfirm.label}
+                </Button>
+              </>
+            }
+          />
+        )}
+      </div>
+    );
+  }
+
+  // PRD-19 D5 (FR-05a): computed section-results (итоги раздела) — score ring +
+  // summary + verdict + «Продолжить»/«Завершить тест». Built from the shared
+  // section grader (parity with the SCORM-baked computeSectionResult) + the shared
+  // buildSectionResultContext, rendered from the same section-results layout.
+  if (testMode === "standard" && attempt && sectionResultView && sectionResultsTpl) {
+    const built = buildSectionResultContext({
+      topicName: sectionResultView.topicName,
+      correct: sectionResultView.correct,
+      total: sectionResultView.total,
+      percent: sectionResultView.percent,
+      passed: sectionResultView.passed,
+      continueLabel: sectionResultView.isLast ? "Завершить тест" : "Продолжить",
+    });
+    const srTopic = sectionResultView.topicId;
+    const srIsLast = sectionResultView.isLast;
+    return (
+      <div className="tbh-minh-screen tbh-col" style={{ background: sectionResultsTpl.theme?.background }}>
+        <TemplateScreen
+          className="tbh-fill"
+          layout={sectionResultsTpl.layout}
+          css={sectionResultsTpl.css}
+          cssVars={sectionResultsTpl.cssVars}
+          context={{
+            course: built.course,
+            design: sectionResultsTpl.design,
+            sectionResult: built.sectionResult,
+          }}
+          onAction={(action) => {
+            if (action === "section-continue") continueAfterSection(srTopic, srIsLast);
+          }}
+        />
+      </div>
+    );
+  }
+
   if (
     testMode === "standard" &&
     attempt &&
     flatQuestions.length > 0 &&
-    questionTpl &&
-    !showCorrectAnswers
+    questionTpl
   ) {
     const currentQ = flatQuestions[currentIndex];
     // PRD-4 v1.1 §3.2 — section-timer state for the templated standard screen.
     const currentTopicLocked = lockedTopics.has(currentQ.topicId);
-    const prevIdx = prevAccessibleIndex(flatQuestions, currentIndex - 1, lockedTopics);
+    const rawPrevIdx = prevAccessibleIndex(flatQuestions, currentIndex - 1, lockedTopics);
+    // PRD-19 (Block B): bound «Назад». Strict mode (allowReturnToUnanswered=false)
+    // forbids return entirely; sectional scope keeps return inside the current
+    // section (earlier sections are frozen on exit). Flat flexible = free back-nav.
+    let prevIdx = rawPrevIdx;
+    if (!navSettings.allowReturnToUnanswered) {
+      prevIdx = null;
+    } else if (
+      navSettings.answerCommitScope === "section" &&
+      rawPrevIdx !== null &&
+      flatQuestions[rawPrevIdx].topicId !== currentQ.topicId
+    ) {
+      prevIdx = null;
+    }
+    const isLastQuestion = currentIndex === flatQuestions.length - 1;
+    // PRD-19 (Block B): «Пропустить» — flexible mode, before the current question
+    // is committed and not during showCorrectAnswers feedback review.
+    const committedCurrent = questionStatus[currentQ.question.id] === "answered";
+    const canSkip = navSettings.allowReturnToUnanswered && !committedCurrent && !standardFeedbackShown;
+    // PRD-19 (Block D / FR-04c): «Вернуться» → обзор, shown when skipped questions
+    // exist in scope (section in sectional flows, whole test in flat).
+    const hasSkipped =
+      navSettings.allowReturnToUnanswered &&
+      flatQuestions.some((fq) => {
+        if (navSettings.answerCommitScope === "section" && fq.topicId !== currentQ.topicId) return false;
+        return questionStatus[fq.question.id] === "skipped";
+      });
+    // PRD-19 (Block B): a committed answer is read-only unless allowAnswerChange.
+    const prd19Locked = isQuestionLocked(currentQ);
     const sectionClock =
       sectionRemainingSeconds !== null
         ? ` · Время темы ${Math.floor(sectionRemainingSeconds / 60)}:${String(sectionRemainingSeconds % 60).padStart(2, "0")}`
         : "";
+    const goBack = () => {
+      setStandardFeedbackShown(false);
+      setStandardAnswerResult(null);
+      // Skip back over any topic whose section timer already expired.
+      if (prevIdx !== null) {
+        setCurrentIndex(prevIdx);
+        // PRD-19 (Block B): persist the back position like every forward move.
+        saveProgress(answers, prevIdx, questionStatus);
+      }
+    };
+    // PRD-19 (Block C): clickable progress-pills map (replaces the linear bar). The
+    // builder gates `clickable` (frontier + strict mode); the jump mirrors goBack.
+    const questionsProgress =
+      buildQuestionProgress({
+        questions: flatQuestions.map((fq) => ({ id: fq.question.id, topicId: fq.topicId })),
+        statuses: questionStatus,
+        currentIndex,
+        commitScope: navSettings.answerCommitScope,
+        // PRD-19 D5: a committed (finished) section's pills are locked (FR-06/FR-11).
+        sectionCommitted,
+        allowReturn: navSettings.allowReturnToUnanswered,
+        scopeLabel:
+          navSettings.answerCommitScope === "section"
+            ? `Вопросы раздела «${currentQ.topicName}»`
+            : "Вопросы теста",
+      }) ?? undefined;
+    const navigateToQuestion = (idx: number) => {
+      if (idx < 0 || idx >= flatQuestions.length) return;
+      if (lockedTopics.has(flatQuestions[idx].topicId)) return; // expired section
+      if (sectionCommitted[flatQuestions[idx].topicId]) return; // frozen section (FR-06)
+      setStandardFeedbackShown(false);
+      setStandardAnswerResult(null);
+      setCurrentIndex(idx);
+      saveProgress(answers, idx, questionStatus);
+    };
+    // PRD-19 (Block B): the two-step footer (explicit «Отправить ответ»/«Принять»
+    // fixation → «Далее»/«Завершить») is used for BOTH showCorrectAnswers AND any
+    // flexible test (allowReturnToUnanswered), mirroring the SCORM «Отправить
+    // ответ»+«Пропустить» nav. Strict non-feedback tests keep the default footer.
+    const reviewFooter = (showCorrectAnswers || navSettings.allowReturnToUnanswered) ? (
+      <>
+        <button
+          type="button"
+          onClick={goBack}
+          disabled={prevIdx === null}
+          className="tbh-navbtn"
+        >
+          ← Назад
+        </button>
+        {canSkip && (
+          <button type="button" onClick={handleSkip} className="tbh-navbtn">
+            Пропустить
+          </button>
+        )}
+        {hasSkipped && (
+          <button type="button" onClick={() => setShowReview(true)} className="tbh-navbtn">
+            Вернуться
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={
+            !(standardFeedbackShown || committedCurrent)
+              ? handleStandardConfirm
+              : // PRD-19 D5 (FR-16): the question page has NO finish button in flexible
+                // mode — «Далее» on the last question reaches the обзор (section/test
+                // finish). Strict-feedback (showCorrectAnswers, no return) keeps the
+                // direct «Завершить тест» submit.
+                isLastQuestion && !navSettings.allowReturnToUnanswered
+                ? handleSubmit
+                : handleStandardContinue
+          }
+          disabled={isSubmitting}
+          className="tbh-primarybtn"
+          style={{ background: "#2563eb" }}
+        >
+          {!(standardFeedbackShown || committedCurrent)
+            ? navSettings.allowReturnToUnanswered
+              ? "Отправить ответ"
+              : "Принять"
+            : isLastQuestion && !navSettings.allowReturnToUnanswered
+              ? isSubmitting
+                ? "Отправка..."
+                : "Завершить тест"
+              : "Далее →"}
+        </button>
+      </>
+    ) : undefined;
     return (
       <TemplateQuestionScreen
         tpl={questionTpl}
@@ -1804,15 +2119,22 @@ export default function TakeTestPage() {
         answer={answers[currentQ.question.id]}
         shuffleMapping={shuffleMappings[currentQ.question.id]}
         onAnswer={(a) => handleAnswer(currentQ.question.id, a)}
-        locked={currentTopicLocked}
+        locked={(showCorrectAnswers && standardFeedbackShown) || currentTopicLocked || prd19Locked}
+        reviewMode={showCorrectAnswers && standardFeedbackShown}
+        correctAnswer={standardAnswerResult?.correctAnswer}
+        feedbackHtml={
+          showCorrectAnswers && standardFeedbackShown && standardAnswerResult
+            ? adaptiveFeedbackHtml(currentQ.question, standardAnswerResult)
+            : undefined
+        }
+        footer={reviewFooter}
+        questionsProgress={questionsProgress}
+        onNavigateToQuestion={navigateToQuestion}
         canPrev={prevIdx !== null}
-        onPrev={() => {
-          setStandardFeedbackShown(false);
-          setStandardAnswerResult(null);
-          // Skip back over any topic whose section timer already expired.
-          if (prevIdx !== null) setCurrentIndex(prevIdx);
-        }}
-        isLast={currentIndex === flatQuestions.length - 1}
+        onPrev={goBack}
+        canSkip={canSkip}
+        onSkip={handleSkip}
+        isLast={isLastQuestion}
         isSubmitting={isSubmitting}
         onNext={handleNext}
         onSubmit={handleSubmit}
@@ -1820,812 +2142,30 @@ export default function TakeTestPage() {
     );
   }
 
-  // Standard mode
-  if (testMode === "standard" && attempt && flatQuestions.length > 0) {
-    const currentQ = flatQuestions[currentIndex];
-    const progress = ((currentIndex + 1) / flatQuestions.length) * 100;
-    const isLastQuestion = currentIndex === flatQuestions.length - 1;
-    // Section-timer state for this view (PRD-4 v1.1 §3.2).
-    const currentTopicLocked = lockedTopics.has(currentQ.topicId);
-    const prevIdx = prevAccessibleIndex(flatQuestions, currentIndex - 1, lockedTopics);
-
+  // No design template available (rare: the screen-template fetch failed). Per the
+  // parity principle (PRD-12) BOTH hosts render learner screens from the shared
+  // template, so we do not ship a second React question renderer — surface a reload
+  // instead of a divergent in-app UI. The normal + review render is the templated
+  // branch above (questionTpl present), matching the SCORM runtime.
+  if (testMode === "standard" && attempt && flatQuestions.length > 0 && !questionTpl) {
     return (
-      <div className="min-h-screen bg-background select-none" onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()}>
-        <div className="fixed top-0 left-0 right-0 h-2 bg-muted z-50">
-          <Progress value={progress} className="h-2" />
-        </div>
-
-        <div className="max-w-3xl mx-auto px-6 py-12">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-xl font-semibold">{attempt.testTitle}</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Вопрос {currentIndex + 1} из {flatQuestions.length}
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              {remainingSeconds !== null && (
-                <TimerDisplay remainingSeconds={remainingSeconds} />
-              )}
-              {sectionRemainingSeconds !== null && (
-                <SectionTimerDisplay remainingSeconds={sectionRemainingSeconds} />
-              )}
-              <div className="text-sm text-muted-foreground">
-                Тема: <span className="font-medium text-foreground">{currentQ.topicName}</span>
-              </div>
-            </div>
-          </div>
-
+      <Center minH="screen" pad={6}>
+        <Box full maxW="md">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg font-medium">{currentQ.question.prompt}</CardTitle>
-              {currentQ.question.mediaUrl && currentQ.question.mediaType && (
-                <div className="mt-4">
-                  {currentQ.question.mediaType === "image" && (
-                    <img
-                      src={currentQ.question.mediaUrl}
-                      alt="Изображение"
-                      className="max-h-64 object-contain mx-auto rounded-md"
-                    />
-                  )}
-                  {currentQ.question.mediaType === "audio" && (
-                    <audio controls className="w-full">
-                      <source src={currentQ.question.mediaUrl} />
-                    </audio>
-                  )}
-                  {currentQ.question.mediaType === "video" && (
-                    <video controls className="max-h-64 w-full rounded-md">
-                      <source src={currentQ.question.mediaUrl} />
-                    </video>
-                  )}
-                </div>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <QuestionInput
-                question={currentQ.question}
-                answer={answers[currentQ.question.id]}
-                onAnswer={standardFeedbackShown || currentTopicLocked ? () => { } : (answer) => handleAnswer(currentQ.question.id, answer)}
-                shuffleMapping={shuffleMappings[currentQ.question.id]}
-                disabled={standardFeedbackShown || currentTopicLocked}
-                showCorrectAnswer={standardFeedbackShown}
-                correctAnswer={standardAnswerResult?.correctAnswer}
-              />
-
-              {/* Фидбек после ответа */}
-              {standardFeedbackShown && standardAnswerResult && (
-                <div className={`p-4 rounded-lg border ${standardAnswerResult.isCorrect
-                  ? "bg-green-50 dark:bg-green-900/20 border-green-500"
-                  : "bg-red-50 dark:bg-red-900/20 border-red-500"
-                  }`}>
-                  <div className={`font-semibold mb-2 ${standardAnswerResult.isCorrect
-                    ? "text-green-600 dark:text-green-400"
-                    : "text-red-600 dark:text-red-400"
-                    }`}>
-                    {standardAnswerResult.isCorrect ? "Правильно!" : "Неправильно"}
-                  </div>
-
-                  {/* Фидбек к вопросу */}
-                  {standardAnswerResult.feedback && (
-                    <div className="text-sm text-muted-foreground">
-                      {standardAnswerResult.feedback}
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
+            <CardHeader title="Оформление недоступно" />
+            <CardBody>
+              <Stack gap={4}>
+                <Text variant="body-s" tone="muted">
+                  Не удалось загрузить оформление теста. Обновите страницу, чтобы продолжить прохождение.
+                </Text>
+                <Button fullWidth onClick={() => window.location.reload()}>Обновить</Button>
+              </Stack>
+            </CardBody>
           </Card>
-
-          <div className="flex items-center justify-between mt-8">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setStandardFeedbackShown(false);
-                setStandardAnswerResult(null);
-                // Skip back over any topic whose section timer already expired.
-                if (prevIdx !== null) setCurrentIndex(prevIdx);
-              }}
-              disabled={prevIdx === null}
-            >
-              <ChevronLeft className="h-4 w-4 mr-2" />
-              Назад
-            </Button>
-
-            {showCorrectAnswers ? (
-              standardFeedbackShown ? (
-                isLastQuestion ? (
-                  <Button onClick={handleSubmit} disabled={isSubmitting}>
-                    {isSubmitting ? "Отправка..." : "Завершить тест"}
-                    <CheckCircle className="h-4 w-4 ml-2" />
-                  </Button>
-                ) : (
-                  <Button onClick={handleStandardContinue}>
-                    Далее
-                    <ChevronRight className="h-4 w-4 ml-2" />
-                  </Button>
-                )
-              ) : (
-                <Button onClick={handleStandardConfirm}>
-                  Принять
-                  <ChevronRight className="h-4 w-4 ml-2" />
-                </Button>
-              )
-            ) : (
-              isLastQuestion ? (
-                <Button onClick={handleSubmit} disabled={isSubmitting}>
-                  {isSubmitting ? "Отправка..." : "Завершить тест"}
-                  <CheckCircle className="h-4 w-4 ml-2" />
-                </Button>
-              ) : (
-                <Button onClick={handleNext}>
-                  Далее
-                  <ChevronRight className="h-4 w-4 ml-2" />
-                </Button>
-              )
-            )}
-          </div>
-        </div>
-      </div>
+        </Box>
+      </Center>
     );
   }
 
   return <LoadingState message={t.common.preparingTest} />;
-}
-
-// ==================== Question Input Component ====================
-
-interface QuestionInputProps {
-  question: Question;
-  answer: any;
-  onAnswer: (answer: any) => void;
-  shuffleMapping?: any;
-  disabled?: boolean;
-  showCorrectAnswer?: boolean;
-  correctAnswer?: any;
-}
-
-const QUESTION_HINTS: Record<string, string> = {
-  single: "Выберите только один правильный ответ.",
-  multiple: "Выберите один или несколько правильных ответов.",
-  ranking: "Расставьте элементы в правильной последовательности. Для этого зажмите нужный элемент и передвиньте.",
-  matching: "Расставьте элементы в правильной последовательности. Для этого зажмите нужный элемент и передвиньте.",
-};
-
-function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = false, showCorrectAnswer = false, correctAnswer }: QuestionInputProps) {
-  const data = question.dataJson as any;
-  const hint = QUESTION_HINTS[question.type];
-
-  // Single choice
-  if (question.type === "single") {
-    const options = data.options || [];
-    const displayOrder = shuffleMapping || options.map((_: any, i: number) => i);
-    const correctIndex = correctAnswer?.correctIndex;
-
-    return (
-      <>
-        {hint && <p className="text-sm text-muted-foreground -mt-1 mb-1">{hint}</p>}
-        <RadioGroup
-        value={answer !== undefined && answer !== null ? String(answer) : ""}
-        onValueChange={(val) => !disabled && onAnswer(Number(val))}
-        className="space-y-3"
-        disabled={disabled}
-      >
-        {displayOrder.map((originalIndex: number, displayIndex: number) => {
-          const isSelected = answer === originalIndex;
-          const isCorrect = showCorrectAnswer && correctIndex === originalIndex;
-          const isWrong = showCorrectAnswer && isSelected && correctIndex !== originalIndex;
-
-          let borderClass = "border-border hover:border-primary/50";
-          let bgClass = "";
-
-          if (showCorrectAnswer) {
-            if (isCorrect) {
-              borderClass = "border-green-500";
-              bgClass = "bg-green-50 dark:bg-green-900/20";
-            } else if (isWrong) {
-              borderClass = "border-red-500";
-              bgClass = "bg-red-50 dark:bg-red-900/20";
-            }
-          } else if (isSelected) {
-            borderClass = "border-primary";
-            bgClass = "bg-primary/5";
-          }
-
-          return (
-            <div
-              key={displayIndex}
-              className={`flex items-center space-x-3 p-4 rounded-lg border transition-colors ${disabled ? "cursor-default" : "cursor-pointer"
-                } ${borderClass} ${bgClass}`}
-              onClick={() => !disabled && onAnswer(originalIndex)}
-            >
-              <RadioGroupItem value={String(originalIndex)} id={`opt-${question.id}-${displayIndex}`} disabled={disabled} />
-              <Label htmlFor={`opt-${question.id}-${displayIndex}`} className={`flex-1 ${disabled ? "cursor-default" : "cursor-pointer"}`}>
-                {options[originalIndex]}
-              </Label>
-              {showCorrectAnswer && isCorrect && (
-                <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
-              )}
-              {showCorrectAnswer && isWrong && (
-                <XCircle className="h-5 w-5 text-red-500 shrink-0" />
-              )}
-            </div>
-          );
-        })}
-      </RadioGroup>
-      </>
-    );
-  }
-
-  // Multiple choice
-  if (question.type === "multiple") {
-    const options = data.options || [];
-    const displayOrder = shuffleMapping || options.map((_: any, i: number) => i);
-    const selected: number[] = answer || [];
-    const correctIndices: number[] = correctAnswer?.correctIndices || [];
-
-    const toggle = (originalIdx: number) => {
-      if (disabled) return;
-      if (selected.includes(originalIdx)) {
-        onAnswer(selected.filter((i) => i !== originalIdx));
-      } else {
-        onAnswer([...selected, originalIdx]);
-      }
-    };
-
-    return (
-      <>
-        {hint && <p className="text-sm text-muted-foreground -mt-1 mb-1">{hint}</p>}
-        <div className="space-y-3">
-        {displayOrder.map((originalIndex: number, displayIndex: number) => {
-          const isSelected = selected.includes(originalIndex);
-          const isCorrect = showCorrectAnswer && correctIndices.includes(originalIndex);
-          const isWrong = showCorrectAnswer && isSelected && !correctIndices.includes(originalIndex);
-          const isMissed = showCorrectAnswer && !isSelected && correctIndices.includes(originalIndex);
-
-          let borderClass = "border-border hover:border-primary/50";
-          let bgClass = "";
-
-          if (showCorrectAnswer) {
-            if (isCorrect) {
-              borderClass = "border-green-500";
-              bgClass = "bg-green-50 dark:bg-green-900/20";
-            } else if (isWrong) {
-              borderClass = "border-red-500";
-              bgClass = "bg-red-50 dark:bg-red-900/20";
-            }
-          } else if (isSelected) {
-            borderClass = "border-primary";
-            bgClass = "bg-primary/5";
-          }
-
-          return (
-            <div
-              key={displayIndex}
-              className={`flex items-center space-x-3 p-4 rounded-lg border transition-colors select-none ${disabled ? "cursor-default" : "cursor-pointer"
-                } ${borderClass} ${bgClass}`}
-              onClick={() => toggle(originalIndex)}
-            >
-              <Checkbox
-                checked={isSelected}
-                className="pointer-events-none"
-                disabled={disabled}
-              />
-              <span className="flex-1">
-                {options[originalIndex]}
-              </span>
-              {showCorrectAnswer && isCorrect && isSelected && (
-                <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
-              )}
-              {showCorrectAnswer && isMissed && (
-                <CheckCircle className="h-5 w-5 text-green-500 shrink-0 opacity-50" />
-              )}
-              {showCorrectAnswer && isWrong && (
-                <XCircle className="h-5 w-5 text-red-500 shrink-0" />
-              )}
-            </div>
-          );
-        })}
-        </div>
-      </>
-    );
-  }
-
-  // Matching with DnD
-  if (question.type === "matching") {
-    return (
-      <>
-        {hint && <p className="text-sm text-muted-foreground -mt-1 mb-1">{hint}</p>}
-        <MatchingQuestion
-          question={question}
-          answer={answer}
-          onAnswer={disabled ? () => { } : onAnswer}
-          shuffleMapping={shuffleMapping}
-          disabled={disabled}
-          showCorrectAnswer={showCorrectAnswer}
-          correctAnswer={correctAnswer}
-        />
-      </>
-    );
-  }
-
-  // Ranking with DnD
-  if (question.type === "ranking") {
-    return (
-      <>
-        {hint && <p className="text-sm text-muted-foreground -mt-1 mb-1">{hint}</p>}
-        <RankingQuestion
-          question={question}
-          answer={answer}
-          onAnswer={disabled ? () => { } : onAnswer}
-          shuffleMapping={shuffleMapping}
-          disabled={disabled}
-          showCorrectAnswer={showCorrectAnswer}
-          correctAnswer={correctAnswer}
-        />
-      </>
-    );
-  }
-
-  return <div>Неизвестный тип вопроса</div>;
-}
-
-// ==================== Matching Question with DnD (SCORM style) ====================
-
-interface MatchingQuestionProps {
-  question: Question;
-  answer: any;
-  onAnswer: (answer: any) => void;
-  shuffleMapping?: any;
-  disabled?: boolean;
-  showCorrectAnswer?: boolean;
-  correctAnswer?: any;
-}
-
-function MatchingQuestion({ question, answer, onAnswer, shuffleMapping, disabled = false, showCorrectAnswer = false, correctAnswer }: MatchingQuestionProps) {
-  const data = question.dataJson as any;
-  const leftItems = data.left || [];
-  const rightItems = data.right || [];
-
-  const leftMapping = shuffleMapping?.left || leftItems.map((_: any, i: number) => i);
-  const rightMapping = shuffleMapping?.right || rightItems.map((_: any, i: number) => i);
-
-  const pairs: Record<number, number> = answer || {};
-
-  // Build correct pairs mapping for highlighting
-  const correctPairs: Array<{ left: number, right: number }> = correctAnswer?.pairs || [];
-  const correctLeftToRight: Record<number, number> = {};
-  correctPairs.forEach(p => {
-    correctLeftToRight[p.left] = p.right;
-  });
-
-  // Build rightToLeft mapping
-  const rightToLeft: Record<number, number> = {};
-  Object.keys(pairs).forEach(k => {
-    const leftIdx = parseInt(k);
-    const rightIdx = pairs[leftIdx];
-    if (typeof rightIdx === 'number') {
-      rightToLeft[rightIdx] = leftIdx;
-    }
-  });
-
-  // Build pool - left items not yet matched, in leftMapping order
-  const usedLeft = new Set(Object.keys(pairs).map(k => parseInt(k)));
-  const pool = leftMapping.filter((idx: number) => !usedLeft.has(idx));
-
-  const [draggedItem, setDraggedItem] = useState<{
-    leftIdx: number;
-    from: 'pool' | 'matched';
-    fromRightIdx?: number;
-    poolIndex?: number;
-  } | null>(null);
-  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
-
-  const handleDragStart = (
-    e: React.DragEvent,
-    leftIdx: number,
-    from: 'pool' | 'matched',
-    fromRightIdx?: number,
-    poolIndex?: number
-  ) => {
-    if (disabled) {
-      e.preventDefault();
-      return;
-    }
-    setDraggedItem({ leftIdx, from, fromRightIdx, poolIndex });
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragEnd = () => {
-    setDraggedItem(null);
-    setDragOverTarget(null);
-  };
-
-  const handleDragOver = (e: React.DragEvent, targetId: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setDragOverTarget(targetId);
-  };
-
-  const handleDragLeave = () => {
-    setDragOverTarget(null);
-  };
-
-  const handleDropOnRight = (e: React.DragEvent, targetRightIdx: number) => {
-    e.preventDefault();
-    if (!draggedItem) return;
-
-    const newPairs = { ...pairs };
-
-    // If target already has a match, it will be displaced
-    const existingLeftIdx = rightToLeft[targetRightIdx];
-
-    // Remove dragged item from its previous position
-    if (draggedItem.from === 'matched' && draggedItem.fromRightIdx !== undefined) {
-      delete newPairs[draggedItem.leftIdx];
-    }
-
-    // If there was something in target slot, remove it (it goes back to pool)
-    if (existingLeftIdx !== undefined && existingLeftIdx !== draggedItem.leftIdx) {
-      delete newPairs[existingLeftIdx];
-    }
-
-    // Add new match
-    newPairs[draggedItem.leftIdx] = targetRightIdx;
-
-    onAnswer(newPairs);
-    setDraggedItem(null);
-    setDragOverTarget(null);
-  };
-
-  const handleDropOnPool = (e: React.DragEvent, targetPoolSlot: number) => {
-    e.preventDefault();
-    if (!draggedItem || draggedItem.from !== 'matched') return;
-
-    // Remove from matched pairs - it will appear in pool automatically
-    const newPairs = { ...pairs };
-    delete newPairs[draggedItem.leftIdx];
-    onAnswer(newPairs);
-
-    setDraggedItem(null);
-    setDragOverTarget(null);
-  };
-
-  const handleDoubleClick = (leftIdx: number) => {
-    if (disabled) return;
-    // Return to pool on double click
-    const newPairs = { ...pairs };
-    delete newPairs[leftIdx];
-    onAnswer(newPairs);
-  };
-
-  // Track pool slot index
-  let poolSlot = 0;
-
-  return (
-    <div className="space-y-3">
-      {rightMapping.map((rightIdx: number, displayIdx: number) => {
-        const matchedLeftIdx = rightToLeft[rightIdx];
-        const isJoined = matchedLeftIdx !== undefined;
-        const currentPoolSlot = poolSlot;
-        const poolLeftIdx = !isJoined && poolSlot < pool.length ? pool[poolSlot] : null;
-
-        if (!isJoined) {
-          poolSlot++;
-        }
-
-        const leftTargetId = `left-${rightIdx}`;
-        const rightTargetId = `right-${rightIdx}`;
-
-        // When joined - render as single merged block
-        if (isJoined) {
-          // Check if this match is correct
-          const isCorrectMatch = showCorrectAnswer && correctLeftToRight[matchedLeftIdx] === rightIdx;
-          const isWrongMatch = showCorrectAnswer && correctLeftToRight[matchedLeftIdx] !== rightIdx;
-
-          let borderClass = "border-border";
-          let chipBgClass = "bg-primary text-primary-foreground";
-
-          if (showCorrectAnswer) {
-            if (isCorrectMatch) {
-              borderClass = "border-green-500";
-              chipBgClass = "bg-green-500 text-white";
-            } else if (isWrongMatch) {
-              borderClass = "border-red-500";
-              chipBgClass = "bg-red-500 text-white";
-            }
-          }
-
-          return (
-            <div
-              key={displayIdx}
-              className="flex items-stretch"
-            >
-              {/* MERGED BLOCK - Left chip + Right text */}
-              <div
-                className={`flex-1 min-h-[56px] rounded-lg border ${borderClass} bg-card flex items-stretch overflow-hidden`}
-                onDragOver={(e) => handleDragOver(e, rightTargetId)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDropOnRight(e, rightIdx)}
-              >
-                {/* Left part - draggable chip */}
-                <div
-                  draggable={!disabled}
-                  onDragStart={(e) => handleDragStart(e, matchedLeftIdx, 'matched', rightIdx)}
-                  onDragEnd={handleDragEnd}
-                  onDoubleClick={() => handleDoubleClick(matchedLeftIdx)}
-                  className={`min-w-[120px] px-4 py-3 ${chipBgClass} flex items-center justify-center gap-2 cursor-grab active:cursor-grabbing select-none font-medium`}
-                  title="Дважды щёлкните, чтобы вернуть"
-                >
-                  {leftItems[matchedLeftIdx]}
-                  {showCorrectAnswer && isCorrectMatch && <CheckCircle className="h-4 w-4" />}
-                  {showCorrectAnswer && isWrongMatch && <XCircle className="h-4 w-4" />}
-                </div>
-                {/* Right part - text */}
-                <div className="flex-1 px-4 py-3 flex items-center">
-                  <span className="text-sm">
-                    {rightItems[rightIdx]}
-                  </span>
-                </div>
-              </div>
-            </div>
-          );
-        }
-
-        // Not joined - separate blocks
-        return (
-          <div
-            key={displayIdx}
-            className="flex items-stretch gap-3"
-          >
-            {/* LEFT SIDE - Slot with draggable chip */}
-            <div
-              className={`flex-1 min-h-[56px] rounded-lg border transition-all flex items-center px-3 ${dragOverTarget === leftTargetId
-                ? 'border-primary border-2 bg-primary/5'
-                : 'border-border bg-card'
-                }`}
-              onDragOver={(e) => handleDragOver(e, leftTargetId)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDropOnPool(e, currentPoolSlot)}
-            >
-              {poolLeftIdx !== null ? (
-                // Pool item - chip style
-                <div
-                  draggable={!disabled}
-                  onDragStart={(e) => handleDragStart(e, poolLeftIdx, 'pool', undefined, currentPoolSlot)}
-                  onDragEnd={handleDragEnd}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md cursor-grab active:cursor-grabbing select-none font-medium hover:bg-primary/90 transition-colors"
-                >
-                  {leftItems[poolLeftIdx]}
-                </div>
-              ) : (
-                // Empty slot placeholder
-                <span className="text-muted-foreground text-sm">Перетащите вариант</span>
-              )}
-            </div>
-
-            {/* ARROW */}
-            <div className="w-8 flex items-center justify-center text-muted-foreground">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M5 12h14M13 5l7 7-7 7" />
-              </svg>
-            </div>
-
-            {/* RIGHT SIDE - Drop target with text */}
-            <div
-              className={`flex-1 min-h-[56px] rounded-lg border transition-all flex items-center px-4 ${dragOverTarget === rightTargetId
-                ? 'border-primary border-2 bg-primary/5'
-                : 'border-border bg-muted/30'
-                }`}
-              onDragOver={(e) => handleDragOver(e, rightTargetId)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDropOnRight(e, rightIdx)}
-            >
-              <span className="text-sm">
-                {rightItems[rightIdx]}
-              </span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ==================== Ranking Question with DnD ====================
-
-interface RankingQuestionProps {
-  question: Question;
-  answer: any;
-  onAnswer: (answer: any) => void;
-  shuffleMapping?: any;
-  disabled?: boolean;
-  showCorrectAnswer?: boolean;
-  correctAnswer?: any;
-}
-
-function RankingQuestion({ question, answer, onAnswer, shuffleMapping, disabled = false, showCorrectAnswer = false, correctAnswer }: RankingQuestionProps) {
-  const data = question.dataJson as any;
-  const items = data.items || [];
-
-  // Initialize order from answer or shuffle mapping
-  const initialOrder = shuffleMapping || items.map((_: any, i: number) => i);
-  const order: number[] = answer || initialOrder;
-
-  // Correct order for highlighting
-  const correctOrder: number[] = correctAnswer?.correctOrder || [];
-
-  // Set initial answer if not set
-  useEffect(() => {
-    if (answer === undefined || answer === null) {
-      onAnswer(initialOrder);
-    }
-  }, []);
-
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    if (disabled) {
-      e.preventDefault();
-      return;
-    }
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setDragOverIndex(index);
-  };
-
-  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
-    e.preventDefault();
-    if (draggedIndex === null || draggedIndex === targetIndex) return;
-
-    const newOrder = [...order];
-    const [draggedItem] = newOrder.splice(draggedIndex, 1);
-    newOrder.splice(targetIndex, 0, draggedItem);
-
-    onAnswer(newOrder);
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-
-  const moveItem = (fromIndex: number, toIndex: number) => {
-    if (disabled) return;
-    if (toIndex < 0 || toIndex >= order.length) return;
-
-    const newOrder = [...order];
-    const [item] = newOrder.splice(fromIndex, 1);
-    newOrder.splice(toIndex, 0, item);
-    onAnswer(newOrder);
-  };
-
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Расположите элементы в правильном порядке (перетаскивайте или используйте стрелки)
-      </p>
-
-      {order.map((itemIdx, position) => {
-        // Check if item is in correct position
-        const isCorrectPosition = showCorrectAnswer && correctOrder[position] === itemIdx;
-        const isWrongPosition = showCorrectAnswer && correctOrder.length > 0 && correctOrder[position] !== itemIdx;
-
-        let borderClass = "border-border hover:border-primary/50";
-        let bgClass = "bg-card";
-
-        if (showCorrectAnswer) {
-          if (isCorrectPosition) {
-            borderClass = "border-green-500";
-            bgClass = "bg-green-50 dark:bg-green-900/20";
-          } else if (isWrongPosition) {
-            borderClass = "border-red-500";
-            bgClass = "bg-red-50 dark:bg-red-900/20";
-          }
-        } else if (draggedIndex === position) {
-          borderClass = "opacity-50 border-primary";
-        } else if (dragOverIndex === position) {
-          borderClass = "border-primary";
-          bgClass = "bg-primary/5";
-        }
-
-        return (
-          <div
-            key={`${itemIdx}-${position}`}
-            draggable={!disabled}
-            onDragStart={(e) => handleDragStart(e, position)}
-            onDragEnd={handleDragEnd}
-            onDragOver={(e) => handleDragOver(e, position)}
-            onDrop={(e) => handleDrop(e, position)}
-            className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"
-              } ${borderClass} ${bgClass}`}
-          >
-            {/* Drag handle */}
-            <GripVertical className="h-5 w-5 text-muted-foreground shrink-0" />
-
-            {/* Position number */}
-            <span className="text-sm font-bold w-6 text-muted-foreground">{position + 1}.</span>
-
-            {/* Item text */}
-            <span className="flex-1">{items[itemIdx]}</span>
-
-            {/* Correct/Wrong indicator */}
-            {showCorrectAnswer && isCorrectPosition && (
-              <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
-            )}
-            {showCorrectAnswer && isWrongPosition && (
-              <XCircle className="h-5 w-5 text-red-500 shrink-0" />
-            )}
-
-            {/* Arrow buttons */}
-            {!showCorrectAnswer && (
-              <div className="flex flex-col gap-0.5">
-                <button
-                  type="button"
-                  onClick={() => moveItem(position, position - 1)}
-                  disabled={disabled || position === 0}
-                  className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label="Move up"
-                >
-                  <ArrowUp className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => moveItem(position, position + 1)}
-                  disabled={disabled || position === order.length - 1}
-                  className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label="Move down"
-                >
-                  <ArrowDown className="h-4 w-4" />
-                </button>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ==================== Timer Display Component ====================
-
-function TimerDisplay({ remainingSeconds }: { remainingSeconds: number }) {
-  const minutes = Math.floor(remainingSeconds / 60);
-  const seconds = remainingSeconds % 60;
-  const isLowTime = remainingSeconds <= 60;
-
-  return (
-    <div className={`font-mono text-lg ${isLowTime ? "text-red-500 font-bold animate-pulse" : "text-muted-foreground"}`}>
-      {minutes}:{seconds < 10 ? "0" : ""}{seconds}
-    </div>
-  );
-}
-
-/**
- * Per-topic (section) countdown shown next to the test-wide timer (PRD-4 v1.1
- * §3.2). Mirrors {@link TimerDisplay} with a «Тема» label so the learner can
- * tell the two budgets apart.
- */
-function SectionTimerDisplay({ remainingSeconds }: { remainingSeconds: number }) {
-  const minutes = Math.floor(remainingSeconds / 60);
-  const seconds = remainingSeconds % 60;
-  const isLowTime = remainingSeconds <= 60;
-
-  return (
-    <div
-      className={`flex items-center gap-1 font-mono text-lg ${isLowTime ? "text-red-500 font-bold animate-pulse" : "text-muted-foreground"}`}
-      title="Время на текущую тему"
-      data-testid="section-timer-display"
-    >
-      <BookOpen className="h-4 w-4" aria-hidden="true" />
-      {minutes}:{seconds < 10 ? "0" : ""}{seconds}
-    </div>
-  );
 }

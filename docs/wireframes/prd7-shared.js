@@ -74,6 +74,17 @@
       menu.setAttribute('role', 'listbox');
 
       opts.forEach(function (label) {
+        // Non-selectable group header: a label prefixed with "## " renders as a
+        // muted heading (used to group options, e.g. Темы / Шкалы). Backward
+        // compatible — option sets without the prefix are unaffected.
+        if (label.indexOf('## ') === 0) {
+          var hdr = document.createElement('li');
+          hdr.className = 'wf-opt-group';
+          hdr.setAttribute('role', 'presentation');
+          hdr.textContent = label.slice(3);
+          menu.appendChild(hdr);
+          return;
+        }
         var li = document.createElement('li');
         li.className = 'ou-select__opt' + (label === current ? ' is-selected' : '');
         li.setAttribute('role', 'option');

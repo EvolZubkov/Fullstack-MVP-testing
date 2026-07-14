@@ -1,8 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import {
+  Box,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  Cluster,
+  EmptyState,
+  Stack,
+  Tag,
+  Text,
+} from "@universityrt/ui-kit";
 import { LoadingState } from "@/components/loading-state";
 import { CheckCircle, XCircle, AlertTriangle, Eye, History, TrendingUp } from "lucide-react";
 import { format } from "date-fns";
@@ -43,119 +52,100 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold" data-testid="text-history-title">{t.history.title}</h1>
-        <p className="text-muted-foreground">{t.history.description}</p>
-      </div>
+    <Box pad={6}>
+      <Stack gap={6}>
+        <Stack gap={1}>
+          <Text as="h1" variant="display-s" weight="semibold" data-testid="text-history-title">{t.history.title}</Text>
+          <Text tone="muted">{t.history.description}</Text>
+        </Stack>
 
-      {!testGroups || testGroups.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <History className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-muted-foreground text-center">
-              {t.history.noHistory}
-            </p>
-            <Link href="/learner">
-              <Button className="mt-4" data-testid="button-browse-tests">{t.history.browseTests}</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      ) : (
-        testGroups.map((group) => (
-          <Card key={group.testId} data-testid={`card-test-history-${group.testId}`}>
-            <CardHeader>
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <CardTitle className="text-lg">{group.testTitle}</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    {formatAttempts(group.attemptCount)} 
-                    {" | "}{t.history.currentVersion} v{group.currentVersion}
-                  </p>
-                </div>
-                {group.overallImprovement !== null && group.overallImprovement > 0 && (
-                  <Badge variant="secondary" className="gap-1" data-testid={`badge-improvement-${group.testId}`}>
-                    <TrendingUp className="h-3 w-3" />
-                    +{group.overallImprovement.toFixed(1)}%
-                  </Badge>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {group.attempts.map((attempt) => (
-                  <div 
-                    key={attempt.id}
-                    className="flex items-center justify-between gap-4 p-3 rounded-md border"
-                    data-testid={`row-attempt-${attempt.id}`}
-                  >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      {attempt.isAdaptive ? (
-                        <CheckCircle className="h-5 w-5 text-blue-500 shrink-0" />
-                      ) : attempt.overallPassed ? (
-                        <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
-                      ) : (
-                        <XCircle className="h-5 w-5 text-red-500 shrink-0" />
-                      )}
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
+        {!testGroups || testGroups.length === 0 ? (
+          <EmptyState
+            art={<History size={48} color="var(--ou-fg-muted)" />}
+            title={t.history.noHistory}
+            actions={
+              <Link href="/learner">
+                <Button data-testid="button-browse-tests">{t.history.browseTests}</Button>
+              </Link>
+            }
+          />
+        ) : (
+          testGroups.map((group) => (
+            <Card key={group.testId} data-testid={`card-test-history-${group.testId}`}>
+              <CardHeader
+                title={group.testTitle}
+                subtitle={`${formatAttempts(group.attemptCount)} | ${t.history.currentVersion} v${group.currentVersion}`}
+                trail={
+                  group.overallImprovement !== null && group.overallImprovement > 0 ? (
+                    <Tag tone="success" data-testid={`badge-improvement-${group.testId}`}>
+                      <TrendingUp />+{group.overallImprovement.toFixed(1)}%
+                    </Tag>
+                  ) : undefined
+                }
+              />
+              <CardBody>
+                <Stack gap={3}>
+                  {group.attempts.map((attempt) => (
+                    <Box key={attempt.id} border radius="m" pad={3} data-testid={`row-attempt-${attempt.id}`}>
+                      <Cluster justify="between" gap={4}>
+                        <Cluster gap={3} grow wrap={false}>
                           {attempt.isAdaptive ? (
-                            <span className="font-medium">
-                              {attempt.achievedCount ?? 0}/{attempt.totalTopics ?? 0} тем
-                            </span>
+                            <CheckCircle size={20} color="var(--ou-info-600)" />
+                          ) : attempt.overallPassed ? (
+                            <CheckCircle size={20} color="var(--ou-success-600)" />
                           ) : (
-                            <>
-                              <span className="font-medium">
-                                {attempt.overallPercent.toFixed(1)}%
-                              </span>
-                              <span className="text-sm text-muted-foreground">
-                                ({attempt.totalEarnedPoints}/{attempt.totalPossiblePoints} {t.common.points})
-                              </span>
-                            </>
+                            <XCircle size={20} color="var(--ou-error-600)" />
                           )}
-                          {!attempt.isAdaptive && attempt.delta !== null && (
-                            <Badge
-                              variant={attempt.delta > 0 ? "secondary" : attempt.delta < 0 ? "destructive" : "outline"}
-                              className="text-xs"
-                              data-testid={`badge-delta-${attempt.id}`}
-                            >
-                              {attempt.delta >= 0 ? "+" : ""}{attempt.delta.toFixed(1)}%
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap mt-1">
-                          <span className="text-xs text-muted-foreground">
-                            {format(new Date(attempt.finishedAt), "d MMM yyyy 'в' HH:mm", { locale: ru })}
-                          </span>
-                          <Badge variant="outline" className="text-xs">
-                            v{attempt.testVersion}
-                          </Badge>
-                          {attempt.isOutdated && (
-                            <Badge 
-                              variant="outline" 
-                              className="text-xs gap-1 text-amber-600 border-amber-600"
-                              data-testid={`badge-outdated-${attempt.id}`}
-                            >
-                              <AlertTriangle className="h-3 w-3" />
-                              {t.history.outdated}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <Link href={`/learner/result/${attempt.id}`}>
-                      <Button variant="ghost" size="sm" data-testid={`button-view-result-${attempt.id}`}>
-                        <Eye className="h-4 w-4 mr-1" />
-                        {t.history.viewResult}
-                      </Button>
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        ))
-      )}
-    </div>
+                          <Stack gap={1} grow>
+                            <Cluster gap={2}>
+                              {attempt.isAdaptive ? (
+                                <Text weight="medium">{attempt.achievedCount ?? 0}/{attempt.totalTopics ?? 0} тем</Text>
+                              ) : (
+                                <>
+                                  <Text weight="medium">{attempt.overallPercent.toFixed(1)}%</Text>
+                                  <Text variant="body-s" tone="muted">
+                                    ({attempt.totalEarnedPoints}/{attempt.totalPossiblePoints} {t.common.points})
+                                  </Text>
+                                </>
+                              )}
+                              {!attempt.isAdaptive && attempt.delta !== null && (
+                                <Tag
+                                  tone={attempt.delta > 0 ? "success" : attempt.delta < 0 ? "error" : "neutral"}
+                                  variant={attempt.delta === 0 ? "outline" : "soft"}
+                                  size="s"
+                                  data-testid={`badge-delta-${attempt.id}`}
+                                >
+                                  {attempt.delta >= 0 ? "+" : ""}{attempt.delta.toFixed(1)}%
+                                </Tag>
+                              )}
+                            </Cluster>
+                            <Cluster gap={2}>
+                              <Text variant="body-xs" tone="muted">
+                                {format(new Date(attempt.finishedAt), "d MMM yyyy 'в' HH:mm", { locale: ru })}
+                              </Text>
+                              <Tag variant="outline" size="s">v{attempt.testVersion}</Tag>
+                              {attempt.isOutdated && (
+                                <Tag variant="outline" tone="warning" size="s" data-testid={`badge-outdated-${attempt.id}`}>
+                                  <AlertTriangle />{t.history.outdated}
+                                </Tag>
+                              )}
+                            </Cluster>
+                          </Stack>
+                        </Cluster>
+                        <Link href={`/learner/result/${attempt.id}`}>
+                          <Button variant="ghost" size="s" leadingIcon={<Eye size={16} />} data-testid={`button-view-result-${attempt.id}`}>
+                            {t.history.viewResult}
+                          </Button>
+                        </Link>
+                      </Cluster>
+                    </Box>
+                  ))}
+                </Stack>
+              </CardBody>
+            </Card>
+          ))
+        )}
+      </Stack>
+    </Box>
   );
 }

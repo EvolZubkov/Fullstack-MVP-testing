@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-19 — Настройки теста › Правила прохождения. Три тогла:
+      allowReturnToUnanswered (возврат к неотвеченным, дефолт ВКЛ для новых),
+      allowAnswerChange (изменение ответа до завершения, дефолт ВЫКЛ; зависит от возврата ВКЛ,
+        ВЗАИМОИСКЛЮЧЕНИЕ с showCorrectAnswers — FR-04b),
+      showSectionResults (итоги раздела, дефолт ВКЛ для секционных).
+    Канон: docs/wireframes/approved/prd7-editor-settings-tab.html (ou-switch-field, split-рейл).
+    НЕ согласован — черновик к ревью.
+    -->
+    <title>PRD-19 — Настройки: Правила прохождения</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+    <style>
+      .wf-sprite { display: none; }
+
+      .wf-editor { max-width: var(--wf-size-900, 900px); margin: 0 auto; background: var(--ou-bg-elevated); border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-l); box-shadow: var(--ou-shadow-s); overflow: hidden; }
+      .wf-editor__head { display: flex; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-4) var(--ou-space-5); border-bottom: var(--wf-border-w) solid var(--ou-border-soft); }
+      .wf-editor__title { font: var(--ou-text-heading-s); flex: 1; }
+
+      /* Split: рейл подразделов + контент (как ou-drawer__split в каноне). */
+      .tb-split { display: grid; grid-template-columns: var(--wf-size-200, 200px) 1fr; }
+      .tb-rail { display: flex; flex-direction: column; gap: var(--wf-space-half, 2px); padding: var(--ou-space-4); border-right: var(--wf-border-w) solid var(--ou-border-soft); background: var(--ou-bg-surface-2); }
+      .tb-rail-item { text-align: left; padding: var(--ou-space-2) var(--ou-space-3); border-radius: var(--ou-radius-s); background: transparent; border: 0; color: var(--ou-fg-muted); font: var(--ou-text-body-s); cursor: pointer; }
+      .tb-rail-item:hover { background: var(--ou-bg-hover); color: var(--ou-fg-default); }
+      .tb-rail-item.is-active { background: var(--ou-accent-soft); color: var(--ou-accent-on-soft); font-weight: 600; }
+      .tb-content { padding: var(--ou-space-5); min-width: 0; }
+      .tb-content-title { font: var(--ou-text-heading-s); margin: 0 0 var(--ou-space-2); }
+      .tb-content-sub { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-4); }
+
+      /* Setting row */
+      .tb-setting { padding: var(--ou-space-4) 0; }
+      .tb-setting + .tb-setting { border-top: var(--wf-border-w) solid var(--ou-border-soft); }
+      .tb-setting--disabled { opacity: .55; }
+      .ou-switch-field__desc { display: block; font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--wf-space-half, 3px); max-width: 56ch; }
+      .ou-switch.is-disabled { opacity: .5; }
+      /* Note под зависимой настройкой — почему недоступно / как включить. */
+      .tb-setting-note { display: flex; align-items: flex-start; gap: var(--ou-space-2); margin: var(--ou-space-2) 0 0 calc(var(--ou-space-9) + var(--ou-space-2)); padding: var(--ou-space-2) var(--ou-space-3); font: var(--ou-text-caption); color: var(--ou-warning-on-soft); background: var(--ou-warning-soft); border-radius: var(--ou-radius-s); max-width: 60ch; }
+      .tb-setting-note svg { flex-shrink: 0; margin-top: 1px; }
+      .tb-setting-note a { color: var(--ou-accent-default); font-weight: 600; }
+      .tb-badge-default { font: var(--ou-text-caption); color: var(--ou-fg-muted); background: var(--ou-bg-surface-3); border-radius: var(--ou-radius-xs); padding: 0 var(--ou-space-1); margin-left: var(--ou-space-2); }
+    </style>
+
+    <style data-wf-template-overrides>
+      :root { --wf-nav-offset: 92px; }
+      .wf-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 9999; display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--ou-space-4); background: var(--ou-bg-elevated); border-bottom: var(--wf-border-w) solid var(--ou-border-soft); box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap; }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+      .wf-nav button { padding: var(--ou-space-1) var(--ou-space-3); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-s); background: transparent; color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer; }
+      .wf-nav button:hover { background: var(--ou-bg-hover); }
+      .wf-nav button.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+      .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+      .wf-stage { padding: var(--wf-nav-offset) var(--ou-space-6) var(--ou-space-10); }
+      .wf-state { display: none; }
+      .wf-state.active { display: block; }
+      .wf-doc { padding: 0 var(--ou-space-6) var(--ou-space-10); max-width: var(--wf-size-960, 960px); margin: 0 auto; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+      <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Настройки · Правила прохождения:</span>
+      <button type="button" class="active" onclick="showState(this, 'default')">возврат ВКЛ</button>
+      <button type="button" onclick="showState(this, 'mutex')">показ корректности ВКЛ</button>
+      <button type="button" onclick="showState(this, 'off')">возврат ВЫКЛ</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd19-structure-obzor.html">&harr; Структура</a>
+    </nav>
+
+    <div class="wf-stage">
+      <!-- ░░░ ВОЗВРАТ ВКЛ — изменение ответа доступно ░░░ -->
+      <div class="wf-state active" data-state="default">
+        <div class="wf-editor">
+          <div class="wf-editor__head">
+            <span class="wf-editor__title">Основы сетей</span>
+            <span class="ou-tag ou-tag--neutral">Черновик</span>
+            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Закрыть"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-x" /></svg></span></button>
+          </div>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+            <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Настройки</button>
+            <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+            <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+          </div></nav>
+          <div class="tb-split">
+            <nav class="tb-rail" aria-label="Подразделы настроек">
+              <button type="button" class="tb-rail-item">Основное</button>
+              <button type="button" class="tb-rail-item is-active" aria-current="page">Правила прохождения</button>
+              <button type="button" class="tb-rail-item">Ограничения</button>
+              <button type="button" class="tb-rail-item">Адаптивный режим</button>
+            </nav>
+            <div class="tb-content">
+              <h2 class="tb-content-title">Правила прохождения</h2>
+              <p class="tb-content-sub">Режим: По темам · навигация и завершение</p>
+
+              <div class="tb-setting">
+                <div class="ou-switch-field">
+                  <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true" aria-label="Возврат к неотвеченным включён"><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+                  <span class="ou-switch-field__text"><span class="ou-switch-field__label">Разрешить возврат к неотвеченным вопросам<span class="tb-badge-default">по умолч. ВКЛ</span></span><span class="ou-switch-field__desc">Ученик может пропускать вопросы и возвращаться к ним до завершения. Включает карту-индикатор прогресса и экран обзора.</span></span>
+                </div>
+              </div>
+
+              <div class="tb-setting">
+                <div class="ou-switch-field">
+                  <span class="ou-switch ou-switch--m" role="switch" aria-checked="false" aria-label="Изменение ответа выключено"><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+                  <span class="ou-switch-field__text"><span class="ou-switch-field__label">Позволить изменять ответ до завершения</span><span class="ou-switch-field__desc">При возврате к уже отвеченному вопросу можно изменить ответ (до завершения раздела/теста).</span></span>
+                </div>
+              </div>
+
+              <div class="tb-setting">
+                <div class="ou-switch-field">
+                  <span class="ou-switch ou-switch--m" role="switch" aria-checked="false" aria-label="Показ корректности выключен"><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+                  <span class="ou-switch-field__text"><span class="ou-switch-field__label">Показывать корректность ответа ученику</span><span class="ou-switch-field__desc">После ответа ученик видит, верно ли он ответил. Несовместимо с изменением ответа.</span></span>
+                </div>
+              </div>
+
+              <div class="tb-setting">
+                <div class="ou-switch-field">
+                  <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true" aria-label="Итоги раздела включены"><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+                  <span class="ou-switch-field__text"><span class="ou-switch-field__label">Показывать итоги раздела<span class="tb-badge-default">по умолч. ВКЛ</span></span><span class="ou-switch-field__desc">После завершения раздела показывается экран с его результатом. Только для секционных тестов.</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ░░░ ПОКАЗ КОРРЕКТНОСТИ ВКЛ — изменение ответа disabled (взаимоисключение) ░░░ -->
+      <div class="wf-state" data-state="mutex">
+        <div class="wf-editor">
+          <div class="wf-editor__head">
+            <span class="wf-editor__title">Основы сетей</span>
+            <span class="ou-tag ou-tag--neutral">Черновик</span>
+            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Закрыть"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-x" /></svg></span></button>
+          </div>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+            <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Настройки</button>
+            <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+            <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+          </div></nav>
+          <div class="tb-split">
+            <nav class="tb-rail" aria-label="Подразделы настроек">
+              <button type="button" class="tb-rail-item">Основное</button>
+              <button type="button" class="tb-rail-item is-active" aria-current="page">Правила прохождения</button>
+              <button type="button" class="tb-rail-item">Ограничения</button>
+              <button type="button" class="tb-rail-item">Адаптивный режим</button>
+            </nav>
+            <div class="tb-content">
+              <h2 class="tb-content-title">Правила прохождения</h2>
+              <p class="tb-content-sub">Режим: По темам · навигация и завершение</p>
+
+              <div class="tb-setting">
+                <div class="ou-switch-field">
+                  <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true" aria-label="Возврат к неотвеченным включён"><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+                  <span class="ou-switch-field__text"><span class="ou-switch-field__label">Разрешить возврат к неотвеченным вопросам<span class="tb-badge-default">по умолч. ВКЛ</span></span><span class="ou-switch-field__desc">Ученик может пропускать вопросы и возвращаться к ним до завершения. Включает карту-индикатор прогресса и экран обзора.</span></span>
+                </div>
+              </div>
+
+              <div class="tb-setting tb-setting--disabled">
+                <div class="ou-switch-field">
+                  <span class="ou-switch ou-switch--m is-disabled" role="switch" aria-checked="false" aria-disabled="true" aria-label="Изменение ответа недоступно"><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+                  <span class="ou-switch-field__text"><span class="ou-switch-field__label">Позволить изменять ответ до завершения</span><span class="ou-switch-field__desc">При возврате к уже отвеченному вопросу можно изменить ответ (до завершения раздела/теста).</span></span>
+                </div>
+                <div class="tb-setting-note">
+                  <svg width="13" height="13"><use href="#i-warn" /></svg>
+                  <span>Недоступно при включённом «Показывать корректность ответа»: иначе ученик увидит правильный ответ и переправит свой. Выключите показ корректности, чтобы разрешить изменение.</span>
+                </div>
+              </div>
+
+              <div class="tb-setting">
+                <div class="ou-switch-field">
+                  <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true" aria-label="Показ корректности включён"><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+                  <span class="ou-switch-field__text"><span class="ou-switch-field__label">Показывать корректность ответа ученику</span><span class="ou-switch-field__desc">После ответа ученик видит, верно ли он ответил. Несовместимо с изменением ответа.</span></span>
+                </div>
+              </div>
+
+              <div class="tb-setting">
+                <div class="ou-switch-field">
+                  <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true" aria-label="Итоги раздела включены"><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+                  <span class="ou-switch-field__text"><span class="ou-switch-field__label">Показывать итоги раздела<span class="tb-badge-default">по умолч. ВКЛ</span></span><span class="ou-switch-field__desc">После завершения раздела показывается экран с его результатом. Только для секционных тестов.</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ░░░ ВОЗВРАТ ВЫКЛ — изменение ответа disabled (нет навигации назад) ░░░ -->
+      <div class="wf-state" data-state="off">
+        <div class="wf-editor">
+          <div class="wf-editor__head">
+            <span class="wf-editor__title">Основы сетей</span>
+            <span class="ou-tag ou-tag--neutral">Черновик</span>
+            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Закрыть"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-x" /></svg></span></button>
+          </div>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+            <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Настройки</button>
+            <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+            <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+          </div></nav>
+          <div class="tb-split">
+            <nav class="tb-rail" aria-label="Подразделы настроек">
+              <button type="button" class="tb-rail-item">Основное</button>
+              <button type="button" class="tb-rail-item is-active" aria-current="page">Правила прохождения</button>
+              <button type="button" class="tb-rail-item">Ограничения</button>
+              <button type="button" class="tb-rail-item">Адаптивный режим</button>
+            </nav>
+            <div class="tb-content">
+              <h2 class="tb-content-title">Правила прохождения</h2>
+              <p class="tb-content-sub">Режим: По темам · строго линейно</p>
+
+              <div class="tb-setting">
+                <div class="ou-switch-field">
+                  <span class="ou-switch ou-switch--m" role="switch" aria-checked="false" aria-label="Возврат к неотвеченным выключен"><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+                  <span class="ou-switch-field__text"><span class="ou-switch-field__label">Разрешить возврат к неотвеченным вопросам</span><span class="ou-switch-field__desc">Выключено — строго линейно: пропуск и возврат недоступны, карта-индикатор только показывает прогресс, экран обзора отключён (см. Структура).</span></span>
+                </div>
+              </div>
+
+              <div class="tb-setting tb-setting--disabled">
+                <div class="ou-switch-field">
+                  <span class="ou-switch ou-switch--m is-disabled" role="switch" aria-checked="false" aria-disabled="true" aria-label="Изменение ответа недоступно"><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+                  <span class="ou-switch-field__text"><span class="ou-switch-field__label">Позволить изменять ответ до завершения</span><span class="ou-switch-field__desc">При возврате к уже отвеченному вопросу можно изменить ответ (до завершения раздела/теста).</span></span>
+                </div>
+                <div class="tb-setting-note">
+                  <svg width="13" height="13"><use href="#i-info" /></svg>
+                  <span>Доступно только при включённом возврате к неотвеченным (нужна навигация назад). Включите возврат выше.</span>
+                </div>
+              </div>
+
+              <div class="tb-setting">
+                <div class="ou-switch-field">
+                  <span class="ou-switch ou-switch--m" role="switch" aria-checked="false" aria-label="Показ корректности выключен"><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+                  <span class="ou-switch-field__text"><span class="ou-switch-field__label">Показывать корректность ответа ученику</span><span class="ou-switch-field__desc">После ответа ученик видит, верно ли он ответил. Несовместимо с изменением ответа.</span></span>
+                </div>
+              </div>
+
+              <div class="tb-setting">
+                <div class="ou-switch-field">
+                  <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true" aria-label="Итоги раздела включены"><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+                  <span class="ou-switch-field__text"><span class="ou-switch-field__label">Показывать итоги раздела<span class="tb-badge-default">по умолч. ВКЛ</span></span><span class="ou-switch-field__desc">Независимая настройка (работает и без возврата). Только для секционных тестов.</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ░░░ Пояснения + DS Mapping ░░░ -->
+      <div class="wf-state" data-state="docs">
+        <div class="wf-doc">
+          <div class="wf-notes">
+            <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+            <table>
+              <thead><tr><th>Настройка</th><th>Поле / дефолт</th><th>Примечание</th></tr></thead>
+              <tbody>
+                <tr><td>Разрешить возврат к неотвеченным</td><td>FR-01; <code>allowReturnToUnanswered</code>; дефолт ВКЛ (новые), миграция → ВЫКЛ существующим</td><td>Уровень ТЕСТА (на все разделы). ВКЛ → пропуск/возврат + карта-индикатор + экран обзора; ВЫКЛ → строго линейно</td></tr>
+                <tr><td>Позволить изменять ответ до завершения</td><td>FR-04a; <code>allowAnswerChange</code>; дефолт ВЫКЛ</td><td>ЗАВИСИМАЯ: доступна только при возврате ВКЛ И показе корректности ВЫКЛ. Иначе — disabled + причина (FR-04b, взаимоисключение)</td></tr>
+                <tr><td>Показывать корректность ответа</td><td><code>showCorrectAnswers</code> (существующая)</td><td>Показана рядом — источник взаимоисключения с «изменением ответа». При ВКЛ гасит «изменение»</td></tr>
+                <tr><td>Показывать итоги раздела</td><td>FR-05a; <code>showSectionResults</code>; дефолт ВКЛ (секционные)</td><td>НЕзависимая (работает и без возврата). Управляет опциональным экраном итогов раздела. Скрыта/неактуальна для linear_flat</td></tr>
+                <tr><td>Размещение</td><td>Настройки › Правила прохождения</td><td>Подраздел через рейл (как в каноне settings-tab). Рядом — flowMode (Режим), показанный в подзаголовке</td></tr>
+                <tr><td>Не показано здесь</td><td>след. итерации</td><td>Excel-проброс настроек (PRD-14), состояние «изменение ВКЛ → показ корректности гаснет» (обратное взаимоисключение — симметрично показанному)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="wf-mapping">
+            <h2 class="wf-mapping-title">DS Mapping</h2>
+            <p class="wf-mapping-sub">UI собран из DS-компонентов (<code>ou-*</code>). Классы <code>tb-*</code>/<code>wf-*</code> — каркас ТОЛЬКО эскиза.</p>
+            <table>
+              <thead><tr><th>Элемент</th><th>DS-компонент</th><th>Источник</th></tr></thead>
+              <tbody>
+                <tr><td>Переключатели</td><td><code>Switch</code> (<code>ou-switch</code> / <code>ou-switch-field</code>)</td><td>существующий компонент</td></tr>
+                <tr><td>Редактор / вкладки / рейл</td><td><code>Drawer</code> (<code>ou-drawer</code>), <code>Tabs</code> (<code>ou-tabs--underline</code>), split-рейл (соглашение prd7-editor-settings-tab)</td><td>DS + канон</td></tr>
+                <tr><td>Подсказка-причина (disabled)</td><td><code>Banner</code>-подобная плашка; <code>tb-setting-note</code> — каркас ТОЛЬКО эскиза</td><td>faux-chrome</td></tr>
+                <tr><td>Бейджи / теги</td><td><code>Tag</code> (<code>ou-tag</code>)</td><td>существующий компонент</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.showState = function showState(btn, id) {
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el.getAttribute('data-state') === id);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>

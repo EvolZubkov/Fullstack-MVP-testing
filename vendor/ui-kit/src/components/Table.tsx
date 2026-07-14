@@ -48,6 +48,14 @@ export interface TableProps<T> extends Omit<React.HTMLAttributes<HTMLDivElement>
   emptyMessage?: React.ReactNode;
   /** Подсветить строку по rowKey. */
   highlightedKey?: string;
+  /**
+   * Раскрываемая панель под строкой (на всю ширину). Рендерится для строк,
+   * чьи ключи перечислены в `expandedKeys`. Тоггл — на стороне потребителя
+   * (через `onRowClick` + управление `expandedKeys`).
+   */
+  renderExpanded?: (row: T, index: number) => React.ReactNode;
+  /** Ключи строк с раскрытой панелью (controlled). */
+  expandedKeys?: string[];
 }
 
 const SortIcon: React.FC<{ dir?: SortDir; active?: boolean }> = ({ dir, active }) => (
@@ -68,8 +76,10 @@ export function Table<T>({
   selectable, selected = [], onSelectChange,
   sortKey, sortDir, onSort,
   onRowClick, emptyMessage, highlightedKey,
+  renderExpanded, expandedKeys = [],
   className, style, ...rest
 }: TableProps<T>) {
+  const totalCols = columns.length + (selectable ? 1 : 0);
   const toggleAll = () => {
     if (!onSelectChange) return;
     if (selected.length === rows.length) onSelectChange([]);
@@ -133,7 +143,7 @@ export function Table<T>({
             <tr>
               <td
                 className="ou-tbl__empty"
-                colSpan={columns.length + (selectable ? 1 : 0)}
+                colSpan={totalCols}
               >
                 {emptyMessage ?? 'Нет данных'}
               </td>
@@ -142,36 +152,45 @@ export function Table<T>({
             const id = rowKey(row);
             const isSel = selected.includes(id);
             const isHi = highlightedKey === id;
+            const isExpanded = renderExpanded != null && expandedKeys.includes(id);
             return (
-              <tr
-                key={id}
-                className={cn(isSel && 'is-selected', isHi && 'is-highlighted', onRowClick && 'is-clickable')}
-                onClick={onRowClick ? () => onRowClick(row, idx) : undefined}
-              >
-                {selectable && (
-                  <td className="ou-tbl__sel" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      aria-label={`Выбрать строку ${idx + 1}`}
-                      checked={isSel}
-                      onChange={() => toggle(id)}
-                    />
-                  </td>
+              <React.Fragment key={id}>
+                <tr
+                  className={cn(isSel && 'is-selected', isHi && 'is-highlighted', onRowClick && 'is-clickable')}
+                  onClick={onRowClick ? () => onRowClick(row, idx) : undefined}
+                >
+                  {selectable && (
+                    <td className="ou-tbl__sel" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Выбрать строку ${idx + 1}`}
+                        checked={isSel}
+                        onChange={() => toggle(id)}
+                      />
+                    </td>
+                  )}
+                  {columns.map(c => (
+                    <td
+                      key={c.key}
+                      className={cn(
+                        c.numeric && 'is-numeric',
+                        cssStyleClass({ textAlign: c.align ?? 'left' }, 'ou-tbl-cell'),
+                      )}
+                    >
+                      {c.render
+                        ? c.render(row, idx)
+                        : ((row as unknown as Record<string, React.ReactNode>)[c.key] ?? null)}
+                    </td>
+                  ))}
+                </tr>
+                {isExpanded && (
+                  <tr className="ou-tbl__expanded">
+                    <td colSpan={totalCols} className={cssStyleClass({ padding: 0 }, 'ou-tbl-exp')}>
+                      {renderExpanded!(row, idx)}
+                    </td>
+                  </tr>
                 )}
-                {columns.map(c => (
-                  <td
-                    key={c.key}
-                    className={cn(
-                      c.numeric && 'is-numeric',
-                      cssStyleClass({ textAlign: c.align ?? 'left' }, 'ou-tbl-cell'),
-                    )}
-                  >
-                    {c.render
-                      ? c.render(row, idx)
-                      : ((row as unknown as Record<string, React.ReactNode>)[c.key] ?? null)}
-                  </td>
-                ))}
-              </tr>
+              </React.Fragment>
             );
           })}
         </tbody>

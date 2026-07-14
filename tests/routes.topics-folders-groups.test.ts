@@ -11,13 +11,18 @@ const { storageMock } = vi.hoisted(() => ({
   storageMock: {
     // topics
     getTopics: vi.fn(), getTopic: vi.fn(), createTopic: vi.fn(),
-    updateTopic: vi.fn(), deleteTopic: vi.fn(), deleteTopicsBulk: vi.fn(),
+    updateTopic: vi.fn(), renameTopicInFormulas: vi.fn(), deleteTopic: vi.fn(), deleteTopicsBulk: vi.fn(),
     getTopicCourses: vi.fn(), createTopicCourse: vi.fn(), deleteTopicCourse: vi.fn(),
     getTopicEvents: vi.fn(), createTopicEvent: vi.fn(), deleteTopicEvent: vi.fn(),
     getQuestionsByTopic: vi.fn(),
+    // referential protection (PRD-15 FR-03..FR-05)
+    getTestsUsingTopic: vi.fn(), getTestSectionsByTopic: vi.fn(),
+    getMeasurementsForQuestions: vi.fn(), getTopicPageRefs: vi.fn(),
+    getTest: vi.fn(), getAdaptiveLevels: vi.fn(),
     // folders
     getFolders: vi.fn(), getFolder: vi.fn(), createFolder: vi.fn(),
     updateFolder: vi.fn(), deleteFolder: vi.fn(),
+    getFolderSubtreeIds: vi.fn(), deleteFoldersBulk: vi.fn(), moveTopicsToFolder: vi.fn(),
     // groups
     getGroups: vi.fn(), getGroup: vi.fn(), createGroup: vi.fn(),
     updateGroup: vi.fn(), deleteGroup: vi.fn(),
@@ -73,18 +78,33 @@ describe("Topics routes", () => {
     vi.clearAllMocks();
     storageMock.getUser.mockResolvedValue(authorUser);
     storageMock.getTopicEvents.mockResolvedValue([]);
+    // PRD-15 FR-05 defaults: the topic exists and has no dependent tests, so
+    // the referential protection lets destructive operations through.
+    storageMock.getTopic.mockResolvedValue(topic);
+    storageMock.getQuestionsByTopic.mockResolvedValue([]);
+    storageMock.getTestsUsingTopic.mockResolvedValue([]);
+    storageMock.getTestSectionsByTopic.mockResolvedValue([]);
+    storageMock.getMeasurementsForQuestions.mockResolvedValue([]);
+    storageMock.getTopicPageRefs.mockResolvedValue([]);
     app = makeApp(topicsRouter, "/api/topics");
   });
 
-  it("GET / — returns topics with courses, events and questionCount", async () => {
-    storageMock.getTopics.mockResolvedValue([topic]);
-    storageMock.getTopicCourses.mockResolvedValue([course]);
-    storageMock.getTopicEvents.mockResolvedValue([event]);
+  it("GET / — derives courses/events from feedback + returns questionCount", async () => {
+    // TD-02 r.3: recommendations come from the topic's feedback_json, not tables.
+    storageMock.getTopics.mockResolvedValue([{
+      ...topic,
+      feedbackJson: {
+        format: "plain", text: "", assets: [],
+        links: [{ title: "Курс по JS", url: "https://example.com" }],
+        events: [{ title: "Мастер-класс по JS" }],
+      },
+    }]);
     storageMock.getQuestionsByTopic.mockResolvedValue([question, question]);
     const res = await asAuthor(request(app).get("/api/topics"));
     expect(res.status).toBe(200);
     expect(res.body[0].questionCount).toBe(2);
     expect(res.body[0].courses).toHaveLength(1);
+    expect(res.body[0].courses[0].title).toBe("Курс по JS");
     expect(res.body[0].events).toHaveLength(1);
     expect(res.body[0].events[0].title).toBe("Мастер-класс по JS");
   });
@@ -113,10 +133,82 @@ describe("Topics routes", () => {
     expect(res.body.name).toBe("TypeScript");
   });
 
+  it("PUT /:id — a rename rewrites topicByName(...) formula references (PRD-2 §4.2)", async () => {
+    storageMock.updateTopic.mockResolvedValue({ ...topic, name: "TypeScript" });
+    await asAuthor(request(app).put("/api/topics/t1").send({ name: "TypeScript" }));
+    expect(storageMock.renameTopicInFormulas).toHaveBeenCalledWith("t1", "JavaScript", "TypeScript");
+  });
+
+  it("PUT /:id — no formula rewrite when the name is unchanged", async () => {
+    storageMock.updateTopic.mockResolvedValue(topic);
+    await asAuthor(request(app).put("/api/topics/t1").send({ name: "JavaScript", description: "x" }));
+    expect(storageMock.renameTopicInFormulas).not.toHaveBeenCalled();
+  });
+
   it("PUT /:id — returns 404 when topic not found", async () => {
     storageMock.updateTopic.mockResolvedValue(undefined);
     const res = await asAuthor(request(app).put("/api/topics/x").send({ name: "X" }));
     expect(res.status).toBe(404);
+  });
+
+  // ── TD-02 r.2: rich topic feedbackJson round-trip (additive) ────────────────
+
+  const feedbackJson = {
+    format: "plain",
+    text: "Повторите главу 3",
+    links: [{ title: "Курс по JS", url: "https://example.com/js" }],
+    events: [{ title: "Вебинар по JS" }],
+  };
+
+  it("POST / — persists a valid feedbackJson", async () => {
+    storageMock.createTopic.mockResolvedValue(topic);
+    const res = await asAuthor(
+      request(app).post("/api/topics").send({ name: "JS", feedbackJson }),
+    );
+    expect(res.status).toBe(201);
+    expect(storageMock.createTopic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        feedbackJson: expect.objectContaining({
+          text: "Повторите главу 3",
+          links: [{ title: "Курс по JS", url: "https://example.com/js" }],
+          events: [{ title: "Вебинар по JS" }],
+          assets: [],
+        }),
+      }),
+    );
+  });
+
+  it("POST / — returns 400 on malformed feedbackJson", async () => {
+    const res = await asAuthor(
+      request(app).post("/api/topics").send({ name: "JS", feedbackJson: { format: "bogus" } }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_feedback_json");
+    expect(storageMock.createTopic).not.toHaveBeenCalled();
+  });
+
+  it("PUT /:id — persists feedbackJson when sent", async () => {
+    storageMock.updateTopic.mockResolvedValue(topic);
+    const res = await asAuthor(
+      request(app).put("/api/topics/t1").send({ name: "JS", feedbackJson }),
+    );
+    expect(res.status).toBe(200);
+    expect(storageMock.updateTopic.mock.calls[0][1]).toHaveProperty("feedbackJson");
+  });
+
+  it("PUT /:id — omits feedbackJson from the patch when not sent (preserves stored)", async () => {
+    storageMock.updateTopic.mockResolvedValue(topic);
+    const res = await asAuthor(request(app).put("/api/topics/t1").send({ name: "JS" }));
+    expect(res.status).toBe(200);
+    expect(storageMock.updateTopic.mock.calls[0][1]).not.toHaveProperty("feedbackJson");
+  });
+
+  it("PUT /:id — returns 400 on malformed feedbackJson", async () => {
+    const res = await asAuthor(
+      request(app).put("/api/topics/t1").send({ name: "JS", feedbackJson: { text: 5 } }),
+    );
+    expect(res.status).toBe(400);
+    expect(storageMock.updateTopic).not.toHaveBeenCalled();
   });
 
   it("DELETE /:id — deletes topic", async () => {
@@ -144,74 +236,9 @@ describe("Topics routes", () => {
     expect(res.status).toBe(400);
   });
 
-  it("POST /:topicId/courses — creates course", async () => {
-    storageMock.createTopicCourse.mockResolvedValue(course);
-    const res = await asAuthor(request(app).post("/api/topics/t1/courses")
-      .send({ title: "Course 1", url: "https://example.com" }));
-    expect(res.status).toBe(201);
-    expect(res.body.title).toBe("Course 1");
-  });
-
-  it("POST /:topicId/courses — returns 400 when url missing", async () => {
-    const res = await asAuthor(request(app).post("/api/topics/t1/courses").send({ title: "Course 1" }));
-    expect(res.status).toBe(400);
-  });
-
-  it("DELETE /courses/:id — deletes course", async () => {
-    storageMock.deleteTopicCourse.mockResolvedValue(true);
-    const res = await asAuthor(request(app).delete("/api/topics/courses/c1"));
-    expect(res.status).toBe(200);
-  });
-
-  it("DELETE /courses/:id — returns 404 when course not found", async () => {
-    storageMock.deleteTopicCourse.mockResolvedValue(false);
-    const res = await asAuthor(request(app).delete("/api/topics/courses/x"));
-    expect(res.status).toBe(404);
-  });
-
-  // ── Events ──────────────────────────────────────────────────────────────────
-
-  it("POST /:topicId/events — creates event with title only", async () => {
-    storageMock.createTopicEvent.mockResolvedValue(event);
-    const res = await asAuthor(request(app).post("/api/topics/t1/events")
-      .send({ title: "Мастер-класс по JS" }));
-    expect(res.status).toBe(201);
-    expect(res.body.title).toBe("Мастер-класс по JS");
-    expect(storageMock.createTopicEvent).toHaveBeenCalledWith({
-      topicId: "t1",
-      title: "Мастер-класс по JS",
-    });
-  });
-
-  it("POST /:topicId/events — returns 400 when title missing", async () => {
-    const res = await asAuthor(request(app).post("/api/topics/t1/events").send({}));
-    expect(res.status).toBe(400);
-  });
-
-  it("POST /:topicId/events — returns 401 when not authenticated", async () => {
-    const res = await request(app).post("/api/topics/t1/events").send({ title: "Test" });
-    expect(res.status).toBe(401);
-  });
-
-  it("DELETE /events/:id — deletes event", async () => {
-    storageMock.deleteTopicEvent.mockResolvedValue(true);
-    const res = await asAuthor(request(app).delete("/api/topics/events/e1"));
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(storageMock.deleteTopicEvent).toHaveBeenCalledWith("e1");
-  });
-
-  it("DELETE /events/:id — returns 404 when event not found", async () => {
-    storageMock.deleteTopicEvent.mockResolvedValue(false);
-    const res = await asAuthor(request(app).delete("/api/topics/events/x"));
-    expect(res.status).toBe(404);
-  });
-
-  it("DELETE /events/:id — does NOT call deleteTopic", async () => {
-    storageMock.deleteTopicEvent.mockResolvedValue(true);
-    await asAuthor(request(app).delete("/api/topics/events/e1"));
-    expect(storageMock.deleteTopic).not.toHaveBeenCalled();
-  });
+  // TD-02 r.3: the per-topic course/event CRUD endpoints were removed —
+  // recommendations are edited via the topic feedback (PUT /api/topics/:id,
+  // feedback_json), covered by the feedbackJson round-trip tests above.
 
   it("GET /:topicId/difficulty-distribution — returns distribution", async () => {
     storageMock.getQuestionsByTopic.mockResolvedValue([
@@ -285,6 +312,8 @@ describe("Folders routes", () => {
   });
 
   it("DELETE /:id — deletes folder", async () => {
+    // No body → "folder-only" mode: contents reparented to root, folder dropped.
+    storageMock.getFolder.mockResolvedValue(folder);
     storageMock.deleteFolder.mockResolvedValue(true);
     const res = await asAuthor(request(app).delete("/api/folders/f1"));
     expect(res.status).toBe(200);

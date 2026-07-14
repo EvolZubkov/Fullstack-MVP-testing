@@ -38,9 +38,20 @@ function isValidHttpUrl(value: string): boolean {
   }
 }
 
-/** Calculate total questions across all sections (sum of drawCount). */
-function getTotalQuestionsCount(sections: EditorSection[]): number {
-  return sections.reduce((sum, section) => sum + section.drawCount, 0);
+/**
+ * A section's maximum attainable points (Σ question points). PRD-10: an absolute
+ * pass threshold is compared against earned POINTS at runtime (graded scoring),
+ * so it is bounded by this, not by the question count. Falls back to the question
+ * count when the pool's points are unknown (points >= 1 per question, so the count
+ * is a safe lower bound — see {@link EditorSection.maxPoints}).
+ */
+function getSectionMaxPoints(section: EditorSection): number {
+  return section.maxPoints ?? section.maxQuestions;
+}
+
+/** Total attainable points across all sections (Σ of {@link getSectionMaxPoints}). */
+function getTotalMaxPoints(sections: EditorSection[]): number {
+  return sections.reduce((sum, section) => sum + getSectionMaxPoints(section), 0);
 }
 
 /** Get section by topic ID; returns undefined if not found. */
@@ -133,6 +144,9 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
   for (let i = 0; i < model.sections.length; i++) {
     const section = model.sections[i];
     if (sectionDrawsAll(section.drawAll, model.mode)) continue;
+    // PRD-17: variants mode hides the draw-count control (the variant is delivered
+    // whole), so drawCount is not validated for it.
+    if (model.mode !== "adaptive" && section.formSet != null) continue;
     if (section.drawCount < 1 || section.drawCount > section.maxQuestions) {
       errors.push({
         field: `sections[${i}].drawCount`,
@@ -149,6 +163,7 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
   for (let i = 0; i < model.sections.length; i++) {
     const section = model.sections[i];
     if (sectionDrawsAll(section.drawAll, model.mode)) continue; // quotas moot when drawing all
+    if (model.mode !== "adaptive" && section.formSet != null) continue; // variants mode hides quotas
     const bp = section.drawBlueprint;
     if (bp && bp.strata.length > 0) {
       const sum = bp.strata.reduce((acc, s) => acc + (s.count || 0), 0);
@@ -163,16 +178,46 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
     }
   }
 
-  // FR-15c-f: absolute pass rules must not exceed available questions
-  const totalQuestions = getTotalQuestionsCount(model.sections);
+  // PRD-17 (BR-12): a section in variants mode needs >= 2 variants, each with at
+  // least one question (the variant is delivered whole). Adaptive ignores variants
+  // (the editor hides them), so they are not validated there.
+  for (let i = 0; i < model.sections.length; i++) {
+    const section = model.sections[i];
+    if (model.mode === "adaptive" || section.formSet == null) continue;
+    const forms = section.formSet.forms;
+    if (forms.length < 2) {
+      errors.push({
+        field: `sections[${i}].formSetJson`,
+        code: "range",
+        message: `Тема «${section.topicName}»: нужно не менее 2 вариантов теста.`,
+        severity: "error",
+      });
+    } else {
+      const empty = forms.filter((f) => f.questionIds.length === 0).length;
+      if (empty > 0) {
+        errors.push({
+          field: `sections[${i}].formSetJson`,
+          code: "range",
+          message: `Тема «${section.topicName}»: ${empty} вариант(а/ов) без вопросов — добавьте вопросы или удалите вариант.`,
+          severity: "error",
+        });
+      }
+    }
+  }
+
+  // FR-15c-f: absolute pass thresholds must not exceed the attainable POINTS.
+  // PRD-10: graded scoring makes earned points (not the question count) the basis
+  // of an absolute pass, so a points threshold may legitimately exceed the number
+  // of questions (e.g. matching = 3 points). It is bounded by Σ question points.
+  const totalMaxPoints = getTotalMaxPoints(model.sections);
   if (
     model.passRules.overall.type === "absolute" &&
-    model.passRules.overall.value > totalQuestions
+    model.passRules.overall.value > totalMaxPoints
   ) {
     errors.push({
       field: "passRules.overall.value",
       code: "range",
-      message: `Overall absolute pass threshold (${model.passRules.overall.value}) cannot exceed total questions (${totalQuestions}).`,
+      message: `Overall absolute pass threshold (${model.passRules.overall.value}) cannot exceed total points (${totalMaxPoints}).`,
       severity: "error",
     });
   }
@@ -181,15 +226,14 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
     if (rule.source === "custom" && rule.type === "absolute") {
       const section = getSectionByTopicId(model.sections, topicId);
       if (section) {
-        // Effective draw: the full pool when drawing all, else drawCount.
-        const effectiveDraw = sectionDrawsAll(section.drawAll, model.mode)
-          ? section.maxQuestions
-          : section.drawCount;
-        if (rule.value > effectiveDraw) {
+        // A draw is a subset of the pool, so the pool's max points is a safe
+        // upper bound on any attempt's earned points for this section.
+        const maxPoints = getSectionMaxPoints(section);
+        if (rule.value > maxPoints) {
           errors.push({
             field: `passRules.byTopic[${topicId}].value`,
             code: "range",
-            message: `Topic absolute pass threshold (${rule.value}) cannot exceed draw count (${effectiveDraw}).`,
+            message: `Topic absolute pass threshold (${rule.value}) cannot exceed topic max points (${maxPoints}).`,
             severity: "error",
           });
         }
@@ -410,14 +454,8 @@ function validateResultVariables(
       }
     }
 
-    if (!v.label.trim()) {
-      errors.push({
-        field: `resultVariables[${i}].label`,
-        code: "required",
-        message: "Укажите метку показателя.",
-        severity: "error",
-      });
-    }
+    // Label is OPTIONAL (parity with scales): an empty label is not an error;
+    // consumers fall back to the name for display (see scorm test-json bake).
 
     if (!v.formula.trim()) {
       errors.push({
@@ -468,9 +506,11 @@ const SCALE_KEY_RE = /^[a-z][a-z0-9_]{0,63}$/;
 
 /**
  * Synchronous structural checks for scales (PRD-5). The checks the editor can
- * make from the draft alone: key grammar/uniqueness, required label, and the
- * interpretation bands' numeric validity, ordering and non-overlap (§5.3 — bands
- * are entered ascending on raw and must not overlap). Coverage (a scale with no
+ * make from the draft alone: key grammar/uniqueness and the interpretation bands'
+ * numeric validity, ordering and non-overlap (§5.3 — bands are entered ascending
+ * on raw and must not overlap). The label is OPTIONAL (per the approved wireframe —
+ * no required marker): an empty label is not an error; consumers fall back to the
+ * key for display (see scorm test-json bake). Coverage (a scale with no
  * contributions) is a soft warning surfaced in the section, not a save blocker.
  */
 function validateScales(model: TestEditorModel, errors: ValidationIssue[]): void {
@@ -506,14 +546,7 @@ function validateScales(model: TestEditorModel, errors: ValidationIssue[]): void
       }
     }
 
-    if (!s.label.trim()) {
-      errors.push({
-        field: `scales[${i}].label`,
-        code: "required",
-        message: "Укажите метку шкалы.",
-        severity: "error",
-      });
-    }
+    // Label is optional (empty -> key shown). Не валидируем.
 
     // Bands: each row must be numeric with min ≤ max; rows must be ascending and
     // non-overlapping on raw. A trailing fully-empty row (the "new" row) is

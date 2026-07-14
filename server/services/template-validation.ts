@@ -16,6 +16,12 @@
  * template, which does not declare them.
  */
 import { templateManifestSchema, isSupportedTemplateApiVersion } from "@shared/schema";
+// The path-only DSL is a pure `string -> string` compiler with no DOM/Node deps,
+// so it is safe to run here (NFR-02 forbids EXECUTING template code; compiling a
+// layout neither runs template.js nor touches the DOM). It is the SAME compiler
+// both runtime hosts use, so a layout it rejects would throw unhandled in the
+// preview/runtime — we reject it at import instead (see the layout-syntax pass).
+import { compileTemplate } from "@shared/template/dsl";
 import type { TemplateEntries } from "./template-package";
 
 /** Default ZIP size ceiling (PRD-3 §8): 20 MB. */
@@ -130,6 +136,46 @@ function collectReferences(manifest: Record<string, unknown>): Array<{ ref: stri
 }
 
 /**
+ * Collects archive paths whose CONTENT the runtime renders through the path-only
+ * DSL ({@link module:shared/template/dsl}): every declared layout, partial,
+ * system-page layout and content-template `layoutFile`. These must compile.
+ * Non-DSL referenced files (CSS/JS/JSON/images, and the `*.ejs` build templates)
+ * are intentionally excluded — they are never fed to the mustache compiler.
+ */
+function collectTemplateSources(manifest: Record<string, unknown>): Array<{ ref: string; field: string }> {
+  const out: Array<{ ref: string; field: string }> = [];
+  const push = (v: unknown, field: string) => {
+    const s = asString(v);
+    if (s) out.push({ ref: s, field });
+  };
+
+  const layouts = manifest.layouts as Record<string, unknown> | undefined;
+  if (layouts) for (const [k, v] of Object.entries(layouts)) push(v, `layouts.${k}`);
+
+  const partials = manifest.partials as Record<string, unknown> | undefined;
+  if (partials) for (const [k, v] of Object.entries(partials)) push(v, `partials.${k}`);
+
+  const systemPages = manifest.systemPages;
+  if (Array.isArray(systemPages)) {
+    systemPages.forEach((sp, i) => {
+      if (sp && typeof sp === "object") push((sp as Record<string, unknown>).layout, `systemPages[${i}].layout`);
+    });
+  }
+
+  const contentTemplates = manifest.contentTemplates;
+  if (Array.isArray(contentTemplates)) {
+    contentTemplates.forEach((ct, i) => {
+      if (ct && typeof ct === "object") {
+        const c = ct as Record<string, unknown>;
+        push(c.layoutFile, `contentTemplates[${i}].layoutFile (${asString(c.key) ?? i})`);
+      }
+    });
+  }
+
+  return out;
+}
+
+/**
  * Validates an extracted template package. Returns a structured report; the
  * caller persists it as `validation_json` and gates activation on `ok`.
  */
@@ -237,6 +283,30 @@ export function validateTemplatePackage(
     referencedPaths.add(ref);
     if (!entries.has(ref)) {
       blocking.push({ code: "FILE_MISSING", message: `Referenced file отсутствует: ${ref}`, ref: field });
+    }
+  }
+
+  // ── layout DSL compiles (catch malformed mustache before the runtime does) ─
+  // The runtime renders every layout through the SAME compiler; a layout it
+  // rejects (empty `{{}}`, `{{{ }}}`, an unclosed/mismatched block, an unknown
+  // helper) throws at compile time. Without this gate such a package validates,
+  // is stored as a draft, and only blows up as an unhandled error in the admin's
+  // preview/runtime (dsl §8.2.1.3). Compile each unique DSL source so the import
+  // is rejected here with a precise, per-file message instead.
+  const compiledSources = new Set<string>();
+  for (const { ref, field } of collectTemplateSources(manifest)) {
+    if (EXTERNAL_REF.test(ref) || compiledSources.has(ref) || !entries.has(ref)) continue;
+    compiledSources.add(ref);
+    const src = text(entries, ref);
+    if (src === null) continue;
+    try {
+      compileTemplate(src);
+    } catch (e) {
+      blocking.push({
+        code: "LAYOUT_TEMPLATE_SYNTAX",
+        message: `Макет «${field}» содержит недопустимый синтаксис шаблона: ${(e as Error).message}`,
+        ref: `${field} (${ref})`,
+      });
     }
   }
 

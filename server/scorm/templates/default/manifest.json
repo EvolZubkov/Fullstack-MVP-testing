@@ -1,7 +1,7 @@
 {
   "id": "default",
   "name": "Стандартный",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "templateApiVersion": "1.0",
   "description": "Базовый одноколоночный плеер. Используется по умолчанию для обратной совместимости.",
   "params": [
@@ -135,50 +135,33 @@
       "placeholders": []
     },
     {
-      "key": "intro.hero",
-      "label": "Введение: заголовок и изображение",
+      "key": "intro.standard",
+      "label": "Введение раздела: стандартное",
       "kind": "intro",
       "pageKind": "content.intro",
+      "layoutFile": "layouts/section-intro.html",
+      "isDefault": true,
       "placeholders": [
         {
-          "key": "title",
-          "type": "text",
-          "label": "Заголовок",
+          "key": "instruction",
+          "type": "richText",
+          "label": "Краткая инструкция к разделу",
           "required": false,
-          "maxLength": 120,
           "textFit": {
-            "mode": "autoFitFont",
-            "defaultFontSize": 36,
-            "minFontSize": 24,
-            "maxFontSize": 36,
-            "allowAuthorFontSize": false,
+            "mode": "growBox",
+            "defaultFontSize": 16,
             "overflow": "warn"
-          }
-        },
-        {
-          "key": "subtitle",
-          "type": "text",
-          "label": "Подзаголовок",
-          "required": false,
-          "maxLength": 300,
-          "textFit": {
-            "mode": "fixed",
-            "defaultFontSize": 18,
-            "allowAuthorFontSize": true,
-            "allowedFontSizes": [
-              16,
-              18,
-              20,
-              22
-            ],
-            "overflow": "warn"
-          }
-        },
-        {
-          "key": "heroImage",
-          "type": "image",
-          "label": "Изображение",
-          "required": false
+          },
+          "allowedMarks": [
+            "bold",
+            "italic",
+            "link"
+          ],
+          "allowedBlocks": [
+            "paragraph",
+            "bulletedList",
+            "numberedList"
+          ]
         }
       ]
     },
@@ -265,6 +248,24 @@
       ]
     },
     {
+      "key": "review.standard",
+      "label": "Обзор раздела: стандартный",
+      "kind": "review",
+      "pageKind": "review",
+      "layoutFile": "layouts/review.html",
+      "isDefault": true,
+      "placeholders": []
+    },
+    {
+      "key": "section-results.standard",
+      "label": "Итоги раздела: стандартные",
+      "kind": "section-results",
+      "pageKind": "section-results",
+      "layoutFile": "layouts/section-results.html",
+      "isDefault": true,
+      "placeholders": []
+    },
+    {
       "key": "question.standard",
       "label": "Стандартный макет вопроса",
       "kind": "questions",
@@ -309,6 +310,9 @@
     "question": "layouts/question.html",
     "results": "layouts/results.html",
     "results.adaptive": "layouts/results.adaptive.html",
+    "review": "layouts/review.html",
+    "section-results": "layouts/section-results.html",
+    "section-intro": "layouts/section-intro.html",
     "system.blocked": "layouts/system.blocked.html",
     "system.transition": "layouts/system.transition.html"
   },
@@ -362,8 +366,8 @@
       {
         "route": "content.intro",
         "pageId": "demo-intro",
-        "templateKey": "intro.hero",
-        "label": "Введение: заголовок и изображение"
+        "templateKey": "intro.standard",
+        "label": "Введение раздела"
       },
       {
         "route": "content.info",
@@ -396,6 +400,14 @@
         "pageId": "demo-summary",
         "templateKey": "summary.result",
         "label": "Итог: результат"
+      },
+      {
+        "route": "review",
+        "label": "Обзор раздела"
+      },
+      {
+        "route": "section-results",
+        "label": "Итоги раздела"
       },
       {
         "route": "results",

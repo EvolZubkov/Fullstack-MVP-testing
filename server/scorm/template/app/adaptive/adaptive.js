@@ -65,7 +65,11 @@ function initAdaptiveTest() {
     currentQuestionId: null,
     questionsAnswered: 0,
     isFinished: false,
-    result: null
+    result: null,
+    // PRD-18 (Вариант B): per-answer level-path log for the debug player's
+    // «Выдача» (adaptive) tab — the REAL transition the engine computed at each
+    // step. Additive; ignored by the scoring aggregate and the LMS report.
+    stepLog: []
   };
 
   // Get first question
@@ -168,6 +172,10 @@ function submitAdaptiveAnswer(questionId, answer) {
 
   var currentTopic = state.adaptiveState.topics[state.adaptiveState.currentTopicIndex];
   var currentLevel = currentTopic.levelsState[currentTopic.currentLevelIndex];
+  // Capture the level this answer was given AT — currentLevelIndex may change
+  // below (handleLevelPassed/Failed) before we record the step (PRD-18 step log).
+  var answeredLevelIndex = currentTopic.currentLevelIndex;
+  var answeredLevelName = currentLevel.levelName;
 
   console.log('=== ADAPTIVE ANSWER ===');
   console.log('Topic:', currentTopic.topicName, '| Level:', currentLevel.levelName, '(index:', currentTopic.currentLevelIndex + ')');
@@ -288,6 +296,25 @@ function submitAdaptiveAnswer(questionId, answer) {
       result.levelTransition = handleLevelFailed(currentTopic, currentLevel);
     }
   }
+
+  // PRD-18 (Вариант B): record this answered step with the REAL transition the
+  // engine just computed (up / down / complete / continue), the level it was
+  // answered at, and the topic's achieved level so far. The debug player renders
+  // Шаг|Уровень|Ответ|Переход from this; nothing else reads it.
+  if (!state.adaptiveState.stepLog) state.adaptiveState.stepLog = [];
+  var stepTransition = result.levelTransition;
+  state.adaptiveState.stepLog.push({
+    topicId: currentTopic.topicId,
+    topicName: currentTopic.topicName,
+    questionId: questionId,
+    levelIndex: answeredLevelIndex,
+    levelName: answeredLevelName,
+    isCorrect: isCorrect,
+    transitionType: stepTransition ? stepTransition.type : 'continue',
+    toLevelName: stepTransition ? (stepTransition.toLevel || null) : null,
+    achievedLevelName: (currentTopic.finalLevelIndex !== null && currentTopic.levelsState[currentTopic.finalLevelIndex])
+      ? currentTopic.levelsState[currentTopic.finalLevelIndex].levelName : null
+  });
 
   // Check if topic completed and move to next
   if (currentTopic.status === 'completed') {
@@ -478,80 +505,46 @@ function handleLevelFailed(topic, level) {
 /**
  * Build adaptive test result
  */
+// PRD-18 «ВСЕ РАСЧЕТЫ ПО ЕДИНОМУ АЛГОРИТМУ»: thin host adapter over the shared
+// aggregateAdaptiveResult (window.TBTemplate, the SAME engine the web grader uses).
+// This side only normalizes in-package data (TEST_DATA.adaptiveTopics + live
+// levelsState) into the engine input. TEST_DATA levels are sorted by levelIndex
+// (test-json.ts), positionally aligned with levelsState, so the engine's POSITIONAL
+// finalLevelIndex lookup is correct (and guarded — no more unguarded throw).
 function buildAdaptiveResult() {
-  var topicResults = state.adaptiveState.topics.map(function(topic) {
-    var topicData = TEST_DATA.adaptiveTopics.find(function(t) { 
-      return t.topicId === topic.topicId; 
+  var topics = state.adaptiveState.topics.map(function(topic) {
+    var topicData = TEST_DATA.adaptiveTopics.find(function(t) {
+      return t.topicId === topic.topicId;
     });
-
-    // Calculate totals
-    var totalQuestionsAnswered = 0;
-    var totalCorrect = 0;
-    var levelsAttempted = [];
-
-    topic.levelsState.forEach(function(level) {
-      if (level.status === 'passed' || level.status === 'failed') {
-        totalQuestionsAnswered += level.answeredQuestionIds.length;
-        totalCorrect += level.correctCount;
-        levelsAttempted.push({
-          levelIndex: level.levelIndex,
-          levelName: level.levelName,
-          questionsAnswered: level.answeredQuestionIds.length,
-          correctCount: level.correctCount,
-          status: level.status
-        });
-      }
-    });
-
-    // Get achieved level info
-    var achievedLevelIndex = topic.finalLevelIndex;
-    var achievedLevelName = null;
-    var levelPercent = 0;
-    var feedback = null;
-    var recommendedLinks = [];
-
-    if (achievedLevelIndex !== null) {
-      var achievedLevel = topic.levelsState[achievedLevelIndex];
-      var levelData = topicData.levels[achievedLevelIndex];
-      achievedLevelName = achievedLevel.levelName;
-      levelPercent = achievedLevel.answeredQuestionIds.length > 0 
-        ? (achievedLevel.correctCount / achievedLevel.answeredQuestionIds.length) * 100 
-        : 0;
-      feedback = levelData ? levelData.feedback : null;
-      recommendedLinks = levelData ? (levelData.links || []) : [];
-    } else {
-      // No level achieved - use failure feedback
-      feedback = topicData ? topicData.failureFeedback : null;
-      // Use links from lowest level
-      if (topicData && topicData.levels.length > 0) {
-        recommendedLinks = topicData.levels[0].links || [];
-      }
-    }
+    var metaLevels = (topicData && topicData.levels) || [];
 
     return {
       topicId: topic.topicId,
       topicName: topic.topicName,
-      achievedLevelIndex: achievedLevelIndex,
-      achievedLevelName: achievedLevelName,
-      levelPercent: levelPercent,
-      totalQuestionsAnswered: totalQuestionsAnswered,
-      totalCorrect: totalCorrect,
-      levelsAttempted: levelsAttempted,
-      feedback: feedback,
-      recommendedLinks: recommendedLinks
+      finalLevelIndex: topic.finalLevelIndex,
+      levelsState: topic.levelsState.map(function(ls) {
+        return {
+          levelIndex: ls.levelIndex,
+          levelName: ls.levelName,
+          status: ls.status,
+          answeredCount: ls.answeredQuestionIds.length,
+          correctCount: ls.correctCount
+        };
+      }),
+      levels: metaLevels.map(function(ld) {
+        return {
+          levelName: ld.levelName,
+          feedback: ld.feedback != null ? ld.feedback : null,
+          links: ld.links || []
+        };
+      }),
+      failureFeedback: topicData ? topicData.failureFeedback : null,
+      // Preserve SCORM's failure branch: recommend the lowest level's links.
+      failureLinks: (metaLevels[0] && metaLevels[0].links) || []
     };
   });
 
-  // Overall passed if at least one level achieved in each topic
-  var overallPassed = topicResults.every(function(tr) {
-    return tr.achievedLevelIndex !== null;
-  });
-
-  return {
-    mode: 'adaptive',
-    overallPassed: overallPassed,
-    topicResults: topicResults
-  };
+  return window.TBTemplate.aggregateAdaptiveResult({ topics: topics });
 }
 
 /**

@@ -3,7 +3,9 @@ import { logger } from "../../logger";
 import { storage } from "../../storage";
 import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
+import { canReadTestAnalytics } from "../../services/test-access";
 import { checkAnswer } from "../../utils/check-answer";
+import { loadTestScoringContext } from "../../services/effective-scoring";
 
 const router = Router();
 
@@ -26,6 +28,12 @@ router.get("/tests/:testId/attempts", requirePermission("analytics.read"), requi
     for (const u of users) {
       if (u) userMap.set(u.id, u.name || u.email || "Unknown");
     }
+
+    // PRD-15 T-20 (FR-15): resolve each attempt's publication version. Attempts
+    // pinned to a snapshot carry its monotonic version; legacy/transitional
+    // attempts (no snapshot) report null.
+    const snapshots = await storage.getSnapshotsForTest(testId);
+    const versionBySnapshot = new Map(snapshots.map(s => [s.id, s.version]));
 
     const attemptsList = testAttempts.map(attempt => {
       const result = attempt.resultJson as any;
@@ -54,6 +62,8 @@ router.get("/tests/:testId/attempts", requirePermission("analytics.read"), requi
         passed: result?.overallPassed || false,
         completed: result !== null,
         achievedLevels,
+        // PRD-15 T-20: which published edition this attempt was taken on.
+        snapshotVersion: attempt.snapshotId ? versionBySnapshot.get(attempt.snapshotId) ?? null : null,
       };
     }).sort((a, b) => {
       if (a.completed !== b.completed) return b.completed ? 1 : -1;
@@ -62,10 +72,23 @@ router.get("/tests/:testId/attempts", requirePermission("analytics.read"), requi
       return dateB.localeCompare(dateA);
     });
 
+    // PRD-15 T-20: distribution of attempts across publication versions, so the
+    // author sees which edition learners took (sorted newest version first;
+    // `null` = legacy/pre-snapshot attempts).
+    const versionCounts = new Map<number | null, number>();
+    for (const a of attemptsList) {
+      versionCounts.set(a.snapshotVersion, (versionCounts.get(a.snapshotVersion) ?? 0) + 1);
+    }
+    const versions = [...versionCounts.entries()]
+      .map(([snapshotVersion, attemptCount]) => ({ snapshotVersion, attemptCount }))
+      .sort((a, b) => (b.snapshotVersion ?? -1) - (a.snapshotVersion ?? -1));
+
     res.json({
       testId: test.id,
       testTitle: test.title,
       testMode: test.mode,
+      currentVersion: snapshots[0]?.version ?? null,
+      versions,
       attempts: attemptsList,
     });
 
@@ -88,6 +111,17 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
     const test = await storage.getTest(attempt.testId);
     if (!test) {
       return res.status(404).json({ error: "Test not found" });
+    }
+
+    // PRD-15 FR-08 (audit F-5): a single attempt is readable only within the
+    // analytics scope of its test (owner/grant/admin).
+    const allowed = await canReadTestAnalytics(
+      req.effectiveRoles ?? [],
+      req.currentUser?.id ?? "",
+      test,
+    );
+    if (!allowed) {
+      return res.status(403).json({ error: "Forbidden" });
     }
 
     const user = await storage.getUser(attempt.userId);
@@ -116,13 +150,22 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
     const questions = await storage.getQuestionsByIds(uniqueQuestionIds);
     const questionMap = new Map(questions.map(q => [q.id, q]));
 
+    // PRD-15 block D (FR-32): the recompute mirrors delivery — price, graded
+    // config and difficulty come from the test-effective chain.
+    const scoring = await loadTestScoringContext(test.id, storage);
+
     const detailedAnswers: any[] = [];
 
     for (const [qId, userAnswer] of Object.entries(answers)) {
       const question = questionMap.get(qId);
       if (!question) continue;
 
-      const isCorrect = checkAnswer(question, userAnswer) === 1;
+      const effective = scoring.resolve(question);
+      // PRD-18: use the GRADED ratio (not a binary === 1 collapse) so weighted/tiered
+      // partial answers earn partial points and the per-row totals reconcile with the
+      // stored attempt aggregate. `isCorrect` stays boolean only for the UI verdict label.
+      const ratio = checkAnswer(question, userAnswer, effective.scoring);
+      const isCorrect = ratio === 1;
 
       let levelName: string | undefined;
       let levelIndex: number | undefined;
@@ -179,9 +222,9 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
         correctAnswer: formattedCorrectAnswer,
         correctAnswerRaw: correctJson,
         isCorrect,
-        earnedPoints: isCorrect ? (question.points || 1) : 0,
-        possiblePoints: question.points || 1,
-        difficulty: question.difficulty || 50,
+        earnedPoints: ratio * effective.points,
+        possiblePoints: effective.points,
+        difficulty: scoring.difficultyOf(question) || 50,
         levelName,
         levelIndex,
         questionData: dataJson,
@@ -224,6 +267,11 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       ? (new Date(attempt.finishedAt).getTime() - new Date(attempt.startedAt).getTime()) / 1000
       : null;
 
+    // PRD-15 T-20: the publication edition this attempt was delivered from.
+    const snapshotVersion = attempt.snapshotId
+      ? (await storage.getSnapshot(attempt.snapshotId))?.version ?? null
+      : null;
+
     res.json({
       attemptId: attempt.id,
       userId: attempt.userId,
@@ -231,6 +279,7 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       testId: test.id,
       testTitle: test.title,
       testMode: test.mode,
+      snapshotVersion,
       startedAt: attempt.startedAt?.toISOString() || null,
       finishedAt: attempt.finishedAt?.toISOString() || null,
       duration,

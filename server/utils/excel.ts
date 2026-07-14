@@ -135,6 +135,24 @@ export function sheetToObjects(
 }
 
 /**
+ * Read the trimmed header names from row 1 as a set. Used by the question
+ * import to tell "column present but empty" (reset field) from "column absent"
+ * (leave field unchanged) — a distinction `sheetToObjects` erases by omitting
+ * empty cells from the row object (PRD-14 FR-11).
+ */
+export function sheetHeaders(ws: ExcelJS.Worksheet): Set<string> {
+  const headerRow = ws.getRow(1);
+  const columnCount = ws.actualColumnCount || ws.columnCount;
+  const out = new Set<string>();
+  for (let c = 1; c <= columnCount; c++) {
+    const raw = unwrapCellValue(headerRow.getCell(c).value);
+    const name = raw === undefined ? "" : String(raw).trim();
+    if (name) out.add(name);
+  }
+  return out;
+}
+
+/**
  * Read the first (or named) worksheet as an array of arrays. Matches
  * `XLSX.utils.sheet_to_json(sheet, { header: 1 })`.
  */

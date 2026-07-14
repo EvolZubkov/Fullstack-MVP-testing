@@ -20,11 +20,14 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
     setTestOwner: vi.fn().mockResolvedValue(undefined),
     getTopics: vi.fn(), getQuestionsByTopic: vi.fn(),
     getQuestionsByIds: vi.fn(), getTopicCourses: vi.fn(),
+    getTopicEvents: vi.fn().mockResolvedValue([]),
     getAssignedTestsForUser: vi.fn(),
     getAdaptiveTopicSettingsByTest: vi.fn(), getAdaptiveLevelsByTest: vi.fn(),
     getResultVariables: vi.fn().mockResolvedValue([]),
     getScales: vi.fn().mockResolvedValue([]),
     getQuestionMeasurements: vi.fn().mockResolvedValue([]),
+    // PRD-15 block D: per-test scoring overrides (none by default).
+    getTestQuestionScoring: vi.fn().mockResolvedValue([]),
     getAdaptiveLevelLinks: vi.fn(),
     deleteAdaptiveLevelLinksByTest: vi.fn(), deleteAdaptiveLevelsByTest: vi.fn(),
     deleteAdaptiveTopicSettingsByTest: vi.fn(),
@@ -126,6 +129,29 @@ describe("Attempts routes — learner/tests", () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(0);
   });
+
+  it("GET /learner/tests — exposes resume position and the last completed attempt", async () => {
+    storageMock.getAssignedTestsForUser.mockResolvedValue([dbTest]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 5 }]);
+    const inProgress = {
+      ...dbAttempt, id: "in-1",
+      variantJson: { currentIndex: 2, sections: [{ topicId: "t1", questionIds: ["q1", "q2", "q3"] }] },
+    };
+    const completedOld = { ...finishedAttempt, id: "done-old", finishedAt: new Date("2026-01-01") };
+    const completedNew = { ...finishedAttempt, id: "done-new", finishedAt: new Date("2026-06-01") };
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([completedOld, inProgress, completedNew]);
+
+    const res = await asLearner(request(app).get("/api/learner/tests"));
+    expect(res.status).toBe(200);
+    expect(res.body[0]).toMatchObject({
+      completedAttempts: 2,
+      inProgressAttemptId: "in-1",
+      resumeIndex: 2,
+      resumeTotal: 3,
+      lastCompletedAttemptId: "done-new",
+    });
+  });
 });
 
 describe("Attempts routes — start attempt", () => {
@@ -199,6 +225,70 @@ describe("Attempts routes — start attempt", () => {
     const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
     expect(res.status).toBe(403);
     expect(res.body.code).toBe("ATTEMPTS_EXHAUSTED");
+  });
+
+  // ── PRD-17 (BR-12): variants mode ──
+  const FORM_SET = {
+    forms: [
+      { id: "v1", label: "Вариант 1", questionIds: ["q1", "q2"] },
+      { id: "v2", label: "Вариант 2", questionIds: ["q3", "q4"] },
+    ],
+  };
+  const bankQuestions = ["q1", "q2", "q3", "q4"].map((id) => ({ ...dbQuestion, id }));
+
+  it("POST .../start — variants mode: delivers ONE variant whole and pins its formId (PRD-17 FR-04/08)", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 2, formSetJson: FORM_SET }]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue(bankQuestions);
+    storageMock.getQuestionsByIds.mockResolvedValue([]);
+    storageMock.createAttempt.mockResolvedValue(dbAttempt);
+
+    await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+    const section = storageMock.createAttempt.mock.calls[0][0].variantJson.sections[0];
+    const byForm: Record<string, string[]> = { v1: ["q1", "q2"], v2: ["q3", "q4"] };
+    expect(["v1", "v2"]).toContain(section.formId);
+    // whole variant delivered (presentation order is randomised → compare as a set)
+    expect([...section.questionIds].sort()).toEqual(byForm[section.formId]);
+  });
+
+  it("POST .../start — variants mode: rotates away from a variant seen in a prior completed attempt (PRD-17 FR-07)", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([
+      { ...finishedAttempt, variantJson: { sections: [{ topicId: "t1", topicName: "JS", questionIds: ["q1", "q2"], formId: "v1" }] } },
+    ]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 2, formSetJson: FORM_SET }]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue(bankQuestions);
+    storageMock.getQuestionsByIds.mockResolvedValue([]);
+    storageMock.createAttempt.mockResolvedValue(dbAttempt);
+
+    await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+    const section = storageMock.createAttempt.mock.calls[0][0].variantJson.sections[0];
+    expect(section.formId).toBe("v2"); // v1 excluded by rotation → only v2 remains
+    expect([...section.questionIds].sort()).toEqual(["q3", "q4"]);
+  });
+
+  it("POST .../start — variants mode: drops a variant question no longer in the bank, no dup/pad (PRD-17 FR-17)", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    // Exclude v2 via history so v1 is chosen deterministically.
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([
+      { ...finishedAttempt, variantJson: { sections: [{ topicId: "t1", topicName: "JS", questionIds: [], formId: "v2" }] } },
+    ]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 2, formSetJson: FORM_SET }]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    // q2 removed from the topic bank.
+    storageMock.getQuestionsByTopic.mockResolvedValue([
+      { ...dbQuestion, id: "q1" }, { ...dbQuestion, id: "q3" }, { ...dbQuestion, id: "q4" },
+    ]);
+    storageMock.getQuestionsByIds.mockResolvedValue([]);
+    storageMock.createAttempt.mockResolvedValue(dbAttempt);
+
+    await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+    const section = storageMock.createAttempt.mock.calls[0][0].variantJson.sections[0];
+    expect(section.formId).toBe("v1");
+    expect(section.questionIds).toEqual(["q1"]); // q2 dropped; no duplication, no padding
   });
 });
 
@@ -319,6 +409,194 @@ describe("Attempts routes — adaptive topic timer", () => {
   });
 });
 
+// Adaptive answering: level transitions and the final result build. Block D:
+// grading goes through the test-effective scoring chain (FR-32/FR-34).
+describe("Attempts routes — answer-adaptive", () => {
+  let app: express.Express;
+  const adaptiveTest = { ...dbTest, mode: "adaptive" };
+  const dbQuestion2 = { ...dbQuestion, id: "q2", topicId: "t2", prompt: "Q2?" };
+
+  // One topic, two 1-question levels (threshold 50% => 1 correct passes a level).
+  const twoLevelVariant = () => ({
+    mode: "adaptive",
+    currentTopicIndex: 0,
+    currentQuestionId: "q1",
+    topics: [
+      {
+        topicId: "t1", topicName: "JS", currentLevelIndex: 0, finalLevelIndex: null,
+        status: "in_progress", timeLimitMinutes: null,
+        levelsState: [
+          {
+            levelIndex: 0, levelName: "База", questionIds: ["q1"], answeredQuestionIds: [],
+            correctCount: 0, status: "in_progress", passThreshold: 50, passThresholdType: "percent",
+          },
+          {
+            levelIndex: 1, levelName: "Профи", questionIds: ["q1b"], answeredQuestionIds: [],
+            correctCount: 0, status: "pending", passThreshold: 50, passThresholdType: "percent",
+          },
+        ],
+      },
+    ],
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(learnerUser);
+    storageMock.getTestQuestionScoring.mockResolvedValue([]);
+    app = makeApp(attemptsRouter);
+  });
+
+  it("correct answer passes the level and moves UP to the pending level", async () => {
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, answersJson: {}, variantJson: twoLevelVariant() });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getTestSections.mockResolvedValue([]);
+    storageMock.getQuestionsByIds
+      .mockResolvedValueOnce([dbQuestion]) // graded question
+      .mockResolvedValue([{ ...dbQuestion, id: "q1b" }]); // next-level question
+    storageMock.updateAttempt.mockResolvedValue({});
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive")
+      .send({ questionId: "q1", answer: 0 }));
+    expect(res.status).toBe(200);
+    expect(res.body.isCorrect).toBe(true);
+    expect(res.body.levelTransition).toMatchObject({ type: "up", toLevel: "Профи" });
+    expect(res.body.nextQuestion.id).toBe("q1b");
+    expect(res.body.isFinished).toBe(false);
+  });
+
+  it("wrong answer on a started upper level moves DOWN to the pending lower one", async () => {
+    const variant = twoLevelVariant();
+    variant.currentTopicIndex = 0;
+    variant.currentQuestionId = "q1b";
+    variant.topics[0].currentLevelIndex = 1;
+    variant.topics[0].levelsState[0].status = "pending"; // lower level untouched
+    variant.topics[0].levelsState[1].status = "in_progress";
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, answersJson: {}, variantJson: variant });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getTestSections.mockResolvedValue([]);
+    storageMock.getQuestionsByIds
+      .mockResolvedValueOnce([{ ...dbQuestion, id: "q1b" }])
+      .mockResolvedValue([dbQuestion]);
+    storageMock.updateAttempt.mockResolvedValue({});
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive")
+      .send({ questionId: "q1b", answer: 1 })); // wrong
+    expect(res.status).toBe(200);
+    expect(res.body.isCorrect).toBe(false);
+    expect(res.body.levelTransition).toMatchObject({ type: "down", toLevel: "База" });
+    expect(res.body.nextQuestion.id).toBe("q1");
+  });
+
+  it("failing the lowest level of the last topic finishes and builds the adaptive result", async () => {
+    const variant = twoLevelVariant();
+    variant.topics[0].levelsState.splice(1); // single level, no way down
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, answersJson: {}, variantJson: variant });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getTestSections.mockResolvedValue([]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([
+      { topicId: "t1", failureFeedback: "Подтяните основы" },
+    ]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([
+      { id: "lvl-0", topicId: "t1", levelIndex: 0, levelName: "База", feedback: "ОС уровня" },
+    ]);
+    storageMock.updateAttempt.mockResolvedValue({});
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive")
+      .send({ questionId: "q1", answer: 1 })); // wrong
+    expect(res.status).toBe(200);
+    expect(res.body.isFinished).toBe(true);
+    expect(res.body.result).toMatchObject({ mode: "adaptive", overallPassed: false });
+    expect(res.body.result.topicResults[0]).toMatchObject({
+      topicId: "t1", achievedLevelIndex: null, feedback: "Подтяните основы",
+    });
+    expect(storageMock.updateAttempt.mock.calls[0][1].finishedAt).not.toBeNull();
+  });
+
+  it("passing the only level of the last topic finishes with the achieved level and its links", async () => {
+    const variant = twoLevelVariant();
+    variant.topics[0].levelsState.splice(1);
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, answersJson: {}, variantJson: variant });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getTestSections.mockResolvedValue([]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([{ topicId: "t1", failureFeedback: null }]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([
+      { id: "lvl-0", topicId: "t1", levelIndex: 0, levelName: "База", feedback: "Молодец" },
+    ]);
+    storageMock.getAdaptiveLevelLinks.mockResolvedValue([{ title: "Курс", url: "https://x" }]);
+    storageMock.updateAttempt.mockResolvedValue({});
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive")
+      .send({ questionId: "q1", answer: 0 })); // correct
+    expect(res.status).toBe(200);
+    expect(res.body.isFinished).toBe(true);
+    expect(res.body.result.overallPassed).toBe(true);
+    expect(res.body.result.topicResults[0]).toMatchObject({
+      achievedLevelName: "База", feedback: "Молодец",
+      recommendedLinks: [{ title: "Курс", url: "https://x" }],
+    });
+  });
+
+  it("rejects an unexpected questionId (400) and a foreign attempt (403)", async () => {
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, answersJson: {}, variantJson: twoLevelVariant() });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getTestSections.mockResolvedValue([]);
+    const bad = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive")
+      .send({ questionId: "q-not-current", answer: 0 }));
+    expect(bad.status).toBe(400);
+
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, userId: "other", variantJson: twoLevelVariant() });
+    const foreign = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive")
+      .send({ questionId: "q1", answer: 0 }));
+    expect(foreign.status).toBe(403);
+  });
+
+  // PRD-15 block D (FR-34): the start draw filters levels by the EFFECTIVE difficulty.
+  it("start-adaptive picks questions into levels by the overridden difficulty", async () => {
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([{ topicId: "t1" }]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([
+      { topicId: "t1", levelIndex: 0, levelName: "Профи", minDifficulty: 80, maxDifficulty: 100, questionsCount: 1, passThreshold: 50, passThresholdType: "percent" },
+    ]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", timeLimitMinutes: null }]);
+    // Base difficulty 50 would never reach the 80..100 level...
+    storageMock.getQuestionsByTopic.mockResolvedValue([{ ...dbQuestion, difficulty: 50 }]);
+    // ...but THIS test re-pins q1 to 85.
+    storageMock.getTestQuestionScoring.mockResolvedValue([
+      { id: "ov1", testId: "test1", questionId: "q1", points: null, scoringJson: null, difficulty: 85, pinnedContentHash: null },
+    ]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.createAttempt.mockResolvedValue({ ...dbAttempt, id: "atmp-ad" });
+
+    const res = await asLearner(request(app).post("/api/tests/test1/attempts/start-adaptive"));
+    expect(res.status).toBe(201);
+    const saved = storageMock.createAttempt.mock.calls[0][0].variantJson;
+    expect(saved.topics[0].levelsState[0].questionIds).toEqual(["q1"]);
+  });
+
+  it("start-adaptive leaves a level empty when no effective difficulty matches", async () => {
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([{ topicId: "t1" }]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([
+      { topicId: "t1", levelIndex: 0, levelName: "Профи", minDifficulty: 80, maxDifficulty: 100, questionsCount: 1, passThreshold: 50, passThresholdType: "percent" },
+    ]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", timeLimitMinutes: null }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([{ ...dbQuestion, difficulty: 50 }]);
+    storageMock.getQuestionsByIds.mockResolvedValue([]);
+    storageMock.createAttempt.mockResolvedValue({ ...dbAttempt, id: "atmp-ad" });
+
+    const res = await asLearner(request(app).post("/api/tests/test1/attempts/start-adaptive"));
+    expect(res.status).toBe(201);
+    const saved = storageMock.createAttempt.mock.calls[0][0].variantJson;
+    expect(saved.topics[0].levelsState[0].questionIds).toEqual([]);
+  });
+});
+
 describe("Attempts routes — save-progress, resume", () => {
   let app: express.Express;
   beforeEach(() => {
@@ -424,6 +702,87 @@ describe("Attempts routes — finish attempt", () => {
       .send({ answers: { q1: 1 } }));
     expect(res.status).toBe(200);
     expect(res.body.result.overallPassed).toBe(false);
+  });
+
+  // PRD-15 block D (FR-32): the web grading resolves the per-test override chain.
+  it("POST /attempts/:id/finish — grades with the per-test points override", async () => {
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", topicPassRuleJson: null }]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]); // own points = 1
+    storageMock.getTopicCourses.mockResolvedValue([]);
+    storageMock.getTestQuestionScoring.mockResolvedValue([
+      { id: "ov1", testId: "test1", questionId: "q1", points: 10, scoringJson: null, difficulty: null, pinnedContentHash: null },
+    ]);
+    storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+    expect(res.status).toBe(200);
+    expect(res.body.result.totalEarnedPoints).toBe(10);
+    expect(res.body.result.totalPossiblePoints).toBe(10);
+  });
+
+  it("POST /attempts/:id/finish — a controls_status result variable overrides the pass flag", async () => {
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", topicPassRuleJson: null }]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getTopicCourses.mockResolvedValue([]);
+    storageMock.getTestQuestionScoring.mockResolvedValue([]);
+    // PRD-2: the variable demands an unreachable percent, so success = false
+    // even though the answer below is correct (parity with the SCORM runtime).
+    storageMock.getResultVariables.mockResolvedValue([
+      { id: "rv1", testId: "test1", name: "ok", label: "OK", type: "boolean",
+        formula: "percent >= 200", controlsStatus: "success", showToLearner: false,
+        scormTarget: "both", sortOrder: 0 },
+    ]);
+    storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+    expect(res.status).toBe(200);
+    expect(res.body.result.resultVariables.ok).toBe(false);
+    expect(res.body.result.overallPassed).toBe(false);
+    expect(res.body.result.status).toEqual({ success: false });
+    storageMock.getResultVariables.mockResolvedValue([]);
+  });
+
+  it("POST /attempts/:id/finish — absolute pass rules count correct answers", async () => {
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.getTest.mockResolvedValue({
+      ...dbTest, overallPassRuleJson: { type: "absolute", value: 1 },
+    });
+    storageMock.getTestSections.mockResolvedValue([{
+      topicId: "t1", topicPassRuleJson: { type: "absolute", value: 1 },
+    }]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getTopicCourses.mockResolvedValue([]);
+    storageMock.getTestQuestionScoring.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+    expect(res.status).toBe(200);
+    expect(res.body.result.topicResults[0].passed).toBe(true);
+    expect(res.body.result.overallPassed).toBe(true);
+  });
+
+  it("POST /attempts/:id/finish — an explicit exact override shadows graded scoring", async () => {
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", topicPassRuleJson: null }]);
+    // The question itself grants partial credit for the wrong option...
+    storageMock.getQuestionsByIds.mockResolvedValue([
+      { ...dbQuestion, scoringJson: { kind: "weighted", weights: [2, 1] } },
+    ]);
+    storageMock.getTopicCourses.mockResolvedValue([]);
+    // ...but THIS test overrides it back to exact 0/1.
+    storageMock.getTestQuestionScoring.mockResolvedValue([
+      { id: "ov1", testId: "test1", questionId: "q1", points: null, scoringJson: { kind: "exact" }, difficulty: null, pinnedContentHash: null },
+    ]);
+    storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 1 } })); // wrong option
+    expect(res.status).toBe(200);
+    expect(res.body.result.totalEarnedPoints).toBe(0);
   });
 });
 

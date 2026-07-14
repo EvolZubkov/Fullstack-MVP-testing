@@ -39,7 +39,7 @@ function loadManifest(id: string): Record<string, unknown> {
 // ─── VariantKind enum ─────────────────────────────────────────────────────────
 
 describe("variantKindSchema", () => {
-  it.each(["start", "questions", "router", "summary", "results", "intro", "info"] as const)(
+  it.each(["start", "questions", "router", "summary", "results", "intro", "info", "review", "section-results"] as const)(
     "accepts %s",
     (kind) => {
       expect(variantKindSchema.safeParse(kind).success).toBe(true);
@@ -153,17 +153,20 @@ describe("defaultTemplateManifestSchema", () => {
     templateApiVersion: "1.0",
   };
 
-  // The default template is the system-wide fallback for every system kind
-  // (PRD-1 §4.3.2). It must declare start/intro/summary/router/questions;
-  // otherwise bindSystemVariant() silently returns null and reconcile drops the
-  // row (G48 2026-05-28).
+  // The default template is the system-wide fallback for every REQUIRED system
+  // kind (PRD-1 §4.3.2 / PRD-19 §3.2). It must declare start/results/router/
+  // questions/review/section-results; otherwise bindSystemVariant() silently
+  // returns null and reconcile drops the row (G48 2026-05-28). Legacy intro/summary
+  // are valid kinds but no longer required (the section boundary is review +
+  // section-results; section intro/summary content is authored as `info` pages).
   const allSystemKinds = [
     { key: "start.simple", label: "Start", kind: "start" },
-    { key: "intro.simple", label: "Intro", kind: "intro" },
-    { key: "summary.simple", label: "Summary", kind: "summary" },
     { key: "results.simple", label: "Results", kind: "results" },
     { key: "router.menu", label: "Router", kind: "router" },
     { key: "question.standard", label: "Q", kind: "questions" },
+    { key: "intro.standard", label: "Intro", kind: "intro" },
+    { key: "review.standard", label: "Review", kind: "review" },
+    { key: "section-results.standard", label: "SR", kind: "section-results" },
   ];
 
   it("accepts manifest declaring all system kinds", () => {
@@ -173,7 +176,7 @@ describe("defaultTemplateManifestSchema", () => {
     }).success).toBe(true);
   });
 
-  it.each(["start", "intro", "summary", "results", "router", "questions"] as const)(
+  it.each(["start", "results", "router", "questions", "intro", "review", "section-results"] as const)(
     "rejects manifest missing kind:%s variant",
     (missing) => {
       const result = defaultTemplateManifestSchema.safeParse({
@@ -201,27 +204,29 @@ describe("validateManifest", () => {
         templateApiVersion: "1.0",
         contentTemplates: [
           { key: "st.s", label: "St", kind: "start" },
-          { key: "i.s", label: "I", kind: "intro" },
-          { key: "s.s", label: "S", kind: "summary" },
           { key: "res.s", label: "Res", kind: "results" },
           { key: "r.s", label: "R", kind: "router" },
           { key: "q.s", label: "Q", kind: "questions" },
+          { key: "in.s", label: "In", kind: "intro" },
+          { key: "rv.s", label: "Rv", kind: "review" },
+          { key: "sr.s", label: "Sr", kind: "section-results" },
         ],
       },
       "default",
     )).toBeNull();
   });
 
-  it.each(["start", "intro", "summary", "results", "router", "questions"] as const)(
+  it.each(["start", "results", "router", "questions", "intro", "review", "section-results"] as const)(
     "rejects default-template manifest missing kind:%s variant",
     (missing) => {
       const allEntries = [
         { key: "st.s", label: "St", kind: "start" },
-        { key: "i.s", label: "I", kind: "intro" },
-        { key: "s.s", label: "S", kind: "summary" },
         { key: "res.s", label: "Res", kind: "results" },
         { key: "r.s", label: "R", kind: "router" },
         { key: "q.s", label: "Q", kind: "questions" },
+        { key: "in.s", label: "In", kind: "intro" },
+        { key: "rv.s", label: "Rv", kind: "review" },
+        { key: "sr.s", label: "Sr", kind: "section-results" },
       ];
       const reason = validateManifest(
         {
@@ -279,12 +284,12 @@ describe("built-in manifests parse and validate", () => {
       const cts = m.contentTemplates as Record<string, unknown>[];
       for (const ct of cts) {
         expect(typeof ct.kind, `kind in ${id} → ${ct.key}`).toBe("string");
-        expect(["start", "questions", "router", "summary", "results", "intro", "info"]).toContain(ct.kind);
+        expect(["start", "questions", "router", "summary", "results", "intro", "info", "review", "section-results"]).toContain(ct.kind);
       }
     });
   }
 
-  it.each(["start", "intro", "summary", "results", "router", "questions"] as const)(
+  it.each(["start", "results", "router", "questions", "intro", "review", "section-results"] as const)(
     "default manifest declares at least one kind:%s variant",
     (kind) => {
       const m = loadManifest("default");

@@ -7,7 +7,8 @@
  * 6.2 and 6.3. Any change here must be reflected in decisions.md first.
  */
 
-import type { DrawBlueprint, RetakePolicy } from "@shared/schema";
+import type { DrawBlueprint, FormSet, RetakePolicy } from "@shared/schema";
+import type { QuestionScoringOverride } from "./scoring-api";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // All enums are frozen by docs/prd-7-decisions.md section 2.
@@ -70,6 +71,12 @@ export type FeedbackAsset = {
 export type FeedbackLink = {
   title: string;
   url: string;
+};
+
+/** Recommended event (TD-02). URL optional — an event may have no page. */
+export type FeedbackEvent = {
+  title: string;
+  url?: string;
 };
 
 // ─── Adaptive ─────────────────────────────────────────────────────────────────
@@ -154,7 +161,17 @@ export type SectionTimeLimit =
 export type EditorSection = {
   topicId: string;
   topicName: string;
+  /** PRD-2 §4.2: topic's author-defined readable id (slug), or null → use the UUID. */
+  topicCode?: string | null;
   maxQuestions: number;
+  /**
+   * PRD-10: the topic pool's maximum attainable points (Σ question points).
+   * Absolute pass thresholds are compared against earned POINTS at runtime
+   * (graded scoring), so the editor caps them by this rather than by the
+   * question count. Absent (e.g. a section built locally before the API
+   * round-trip) — validation falls back to {@link maxQuestions}.
+   */
+  maxPoints?: number;
   drawCount: number;
   /**
    * When true the topic draws its ENTIRE current question pool (ignoring
@@ -168,11 +185,25 @@ export type EditorSection = {
   feedback: FeedbackContent;
   feedbackLinks: FeedbackLink[];
   feedbackAssets: FeedbackAsset[];
+  feedbackEvents: FeedbackEvent[];
   /**
    * PRD-11: optional per-tag draw quotas. Absent/`null` = uniform draw (FR-02).
    * When present, `strata` lists per-sub-topic quotas (tag + count + per-tag mode).
    */
   drawBlueprint?: DrawBlueprint | null;
+  /**
+   * PRD-17 (BR-12): optional fixed-variant set. Present = the section runs in
+   * "variants mode" — one variant is delivered whole; the draw controls
+   * (drawAll/drawCount/drawBlueprint) are then not applied. `null`/absent =
+   * legacy draw.
+   */
+  formSet?: FormSet | null;
+  /**
+   * PRD-15 block D (FR-31): per-section default price of a question. `null` =
+   * inherit the test default. Edited in the «Оценка» tab, persisted with the
+   * section row.
+   */
+  defaultPoints: number | null;
 };
 
 /**
@@ -316,6 +347,7 @@ export type TestEditorModel = {
     feedback: FeedbackContent;
     feedbackLinks: FeedbackLink[];
     feedbackAssets: FeedbackAsset[];
+    feedbackEvents: FeedbackEvent[];
     webhookUrl: string;
     telemetryEnabled: boolean;
   };
@@ -323,6 +355,10 @@ export type TestEditorModel = {
     timeLimitMinutes: number | null;
     maxAttempts: number | null;
     showCorrectAnswers: boolean;
+    // PRD-19 (Блок A): правила навигации/завершения.
+    allowReturnToUnanswered: boolean; // FR-01
+    allowAnswerChange: boolean; // FR-04a (зависит от возврата; взаимоискл. с showCorrectAnswers)
+    showSectionResults: boolean; // FR-05a (секционные)
   };
   passRules: PassRules;
   sections: EditorSection[];
@@ -339,6 +375,18 @@ export type TestEditorModel = {
   measurements: QuestionMeasurementModel[];
   /** PRD-6 retake gate. `enabled: false` = legacy behaviour (no cooldown). */
   retakePolicy: RetakePolicy;
+  /**
+   * PRD-15 block D (FR-31): test-side scoring edited in the «Оценка» tab.
+   * `defaultQuestionPoints = null` = system default (1 point). `questionOverrides`
+   * are the per-(test, question) overrides; they are part of the draft and persist
+   * with the single drawer «Сохранить» (reconciled against the snapshot in the
+   * editor's save mutation, see scoring-api `saveQuestionOverrides`). «Закрыть»
+   * discards them.
+   */
+  scoring: {
+    defaultQuestionPoints: number | null;
+    questionOverrides: QuestionScoringOverride[];
+  };
 };
 
 // ─── API DTO payloads ─────────────────────────────────────────────────────────
@@ -354,6 +402,7 @@ export type FeedbackPayload = {
   text: string;
   links: FeedbackLink[];
   assets: FeedbackAsset[];
+  events: FeedbackEvent[];
 };
 
 /**
@@ -373,6 +422,10 @@ export type TestSettingsPayload = {
   timeLimitMinutes: number | null;
   maxAttempts: number | null;
   showCorrectAnswers: boolean;
+  // PRD-19 (Блок A): правила навигации/завершения теста.
+  allowReturnToUnanswered: boolean;
+  allowAnswerChange: boolean;
+  showSectionResults: boolean;
   /**
    * Test-level feedback. Sent under the `feedbackJson` key because the legacy
    * `feedback` server field is `string`-typed (zod-validated). The new structured
@@ -383,6 +436,8 @@ export type TestSettingsPayload = {
   telemetryEnabled: boolean;
   /** PRD-6 retake gate; `null` when disabled (= legacy behaviour, FR-02). */
   retakePolicyJson?: RetakePolicy | null;
+  /** PRD-15 block D (FR-31): test-wide default price; `null` = system (1). */
+  defaultQuestionPoints: number | null;
   expectedVersion: number;
   /** Only sent on create (FAB folder-pick). PUT path leaves it undefined and
    *  uses the dedicated `/api/test-folders/move/:id` endpoint instead. */
@@ -400,6 +455,10 @@ export type TestSectionPayload = {
   feedbackJson: FeedbackPayload;
   /** PRD-11: per-tag draw quotas; `null` = uniform draw (FR-02). */
   drawBlueprintJson: DrawBlueprint | null;
+  /** PRD-17 (BR-12): fixed-variant set; `null` = legacy draw. */
+  formSetJson: FormSet | null;
+  /** PRD-15 block D (FR-31): per-section default price; `null` = inherit test. */
+  defaultPoints: number | null;
 };
 
 export type AdaptiveSettingsPayload = {

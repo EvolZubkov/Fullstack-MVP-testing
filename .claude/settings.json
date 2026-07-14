@@ -4,7 +4,25 @@
       "mcp__playwright__browser_close",
       "mcp__playwright__browser_take_screenshot",
       "mcp__playwright__browser_navigate",
-      "mcp__playwright__browser_click"
+      "mcp__playwright__browser_click",
+      "PowerShell(npm run dev)",
+      "PowerShell(npm run check 2>&1)",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_fill_form",
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_console_messages",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_resize",
+      "Bash(node_modules/.bin/markdownlint-cli2 \"docs/specs/prd-18/debug-test-player.md\")",
+      "mcp__playwright__browser_wait_for",
+      "mcp__playwright__browser_select_option",
+      "mcp__playwright__browser_network_requests",
+      "Bash(npx vitest *)",
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(echo \"build started \\(pid $!\\)\")"
     ]
   }
 }

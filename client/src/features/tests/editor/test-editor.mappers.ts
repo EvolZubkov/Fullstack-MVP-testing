@@ -18,7 +18,8 @@
  *   - §6.8  empty `description`/`webhookUrl` normalised to `null`
  *   - FR-25h adaptive payload excluded when `mode === "standard"`
  */
-import type { DrawBlueprint, EligibilityPluginRef, RetakePolicy } from "@shared/schema";
+import type { DrawBlueprint, EligibilityPluginRef, FormSet, RetakePolicy } from "@shared/schema";
+import { formSetSchema } from "@shared/schema";
 import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
@@ -27,6 +28,7 @@ import type {
   EditorSection,
   FeedbackAsset,
   FeedbackContent,
+  FeedbackEvent,
   FeedbackFormat,
   FeedbackLink,
   FeedbackPayload,
@@ -52,6 +54,7 @@ import type {
   TestStatus,
   TopicPassRule,
 } from "./test-editor.types";
+import { makeQuestionOverride, type QuestionScoringOverride } from "./scoring-api";
 
 // ─── API response shape ───────────────────────────────────────────────────────
 
@@ -78,11 +81,19 @@ export type ApiTestResponse = {
   timeLimitMinutes?: number | null;
   maxAttempts?: number | null;
   showCorrectAnswers?: boolean | null;
+  // PRD-19 (Блок A)
+  allowReturnToUnanswered?: boolean | null;
+  allowAnswerChange?: boolean | null;
+  showSectionResults?: boolean | null;
   startPageContent?: string | null;
   folderId?: string | null;
   sections?: unknown[];
   adaptiveSettings?: unknown;
   retakePolicyJson?: unknown;
+  /** PRD-15 block D (FR-31): test-wide default price; null = system (1). */
+  defaultQuestionPoints?: number | null;
+  /** PRD-15 block D (FR-30): per-(test, question) scoring overrides. */
+  questionScoring?: unknown;
 };
 
 // ─── Type guards ──────────────────────────────────────────────────────────────
@@ -138,15 +149,17 @@ function parseFeedbackObject(raw: unknown): {
   content: FeedbackContent;
   links: FeedbackLink[];
   assets: FeedbackAsset[];
+  events: FeedbackEvent[];
 } {
   if (isPlainObject(raw)) {
     const format: FeedbackFormat = isFeedbackFormat(raw.format) ? raw.format : "plain";
     const text = typeof raw.text === "string" ? raw.text : "";
     const links = Array.isArray(raw.links) ? (raw.links as FeedbackLink[]) : [];
     const assets = Array.isArray(raw.assets) ? (raw.assets as FeedbackAsset[]) : [];
-    return { content: { format, text }, links, assets };
+    const events = Array.isArray(raw.events) ? (raw.events as FeedbackEvent[]) : [];
+    return { content: { format, text }, links, assets, events };
   }
-  return { content: { format: "plain", text: "" }, links: [], assets: [] };
+  return { content: { format: "plain", text: "" }, links: [], assets: [], events: [] };
 }
 
 /**
@@ -158,6 +171,7 @@ function readFeedbackFromApi(api: ApiTestResponse): {
   content: FeedbackContent;
   links: FeedbackLink[];
   assets: FeedbackAsset[];
+  events: FeedbackEvent[];
 } {
   if (isPlainObject(api.feedbackJson)) {
     return parseFeedbackObject(api.feedbackJson);
@@ -167,6 +181,7 @@ function readFeedbackFromApi(api: ApiTestResponse): {
     content: { format: "plain", text: legacyText },
     links: [],
     assets: [],
+    events: [],
   };
 }
 
@@ -283,6 +298,17 @@ function readDrawBlueprintFromApi(raw: unknown): DrawBlueprint | null {
 }
 
 /**
+ * Read a fixed-variant set (PRD-17) from the API jsonb. Validated with
+ * `formSetSchema`; absence or any malformed shape degrades to `null` (legacy
+ * draw), so a bad blob never breaks the editor.
+ */
+function readFormSetFromApi(raw: unknown): FormSet | null {
+  if (raw == null) return null;
+  const parsed = formSetSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
  * Map editor `SectionTimeLimit` back to the DB integer.
  * Both `inherit_test` and `none` are encoded as `null`.
  */
@@ -311,7 +337,12 @@ function buildSectionsFromApi(src: ApiTestResponse): {
 
     const topicId = typeof raw.topicId === "string" ? raw.topicId : "";
     const topicName = typeof raw.topicName === "string" ? raw.topicName : "";
+    const topicCode = typeof raw.topicCode === "string" ? raw.topicCode : null;
     const maxQuestions = typeof raw.maxQuestions === "number" ? raw.maxQuestions : 0;
+    // PRD-10: Σ points of the topic pool (falls back to the question count for an
+    // older API response without it — points >= 1 per question, so it stays a
+    // valid lower bound until the next save round-trips the real value).
+    const maxPoints = typeof raw.maxPoints === "number" ? raw.maxPoints : maxQuestions;
     const drawCount = typeof raw.drawCount === "number" ? raw.drawCount : 1;
     const drawAll = typeof raw.drawAll === "boolean" ? raw.drawAll : false;
     const required = typeof raw.required === "boolean" ? raw.required : true;
@@ -327,7 +358,9 @@ function buildSectionsFromApi(src: ApiTestResponse): {
     sections.push({
       topicId,
       topicName,
+      topicCode,
       maxQuestions,
+      maxPoints,
       drawCount,
       drawAll,
       required,
@@ -335,7 +368,12 @@ function buildSectionsFromApi(src: ApiTestResponse): {
       feedback: fb.content,
       feedbackLinks: fb.links,
       feedbackAssets: fb.assets,
+      feedbackEvents: fb.events,
       drawBlueprint: readDrawBlueprintFromApi(raw.drawBlueprintJson),
+      // PRD-17 (BR-12): fixed-variant set (validate; invalid/absent = null).
+      formSet: readFormSetFromApi(raw.formSetJson),
+      // PRD-15 block D (FR-31): per-section default price (null = inherit test).
+      defaultPoints: typeof raw.defaultPoints === "number" ? raw.defaultPoints : null,
     });
   }
 
@@ -525,6 +563,38 @@ function buildResultVariablesFromApi(src: ApiTestResponse): ResultVariableModel[
   return out.sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+/**
+ * PRD-15 block D (FR-30): read the test's per-question scoring overrides from the
+ * embedded `questionScoring` array of the test detail response into the draft.
+ * Built via {@link makeQuestionOverride} so the objects compare stably against
+ * the snapshot in `JSON.stringify`-based dirty detection.
+ */
+function buildQuestionOverridesFromApi(src: ApiTestResponse): QuestionScoringOverride[] {
+  const raw = src.questionScoring;
+  if (!Array.isArray(raw)) return [];
+  const out: QuestionScoringOverride[] = [];
+  for (const item of raw) {
+    if (!isPlainObject(item)) continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.questionId !== "string") continue;
+    out.push(
+      makeQuestionOverride({
+        id: typeof r.id === "string" ? r.id : "",
+        testId: typeof r.testId === "string" ? r.testId : "",
+        questionId: r.questionId,
+        points: typeof r.points === "number" ? r.points : null,
+        scoringJson:
+          isPlainObject(r.scoringJson) || r.scoringJson === null
+            ? (r.scoringJson as QuestionScoringOverride["scoringJson"])
+            : null,
+        difficulty: typeof r.difficulty === "number" ? r.difficulty : null,
+        pinnedContentHash: typeof r.pinnedContentHash === "string" ? r.pinnedContentHash : null,
+      }),
+    );
+  }
+  return out;
+}
+
 const SCALE_TYPES = new Set(["number", "boolean", "category", "level"]);
 const SCALE_AGGREGATIONS = new Set(["sum", "avg", "weighted_avg", "max", "min"]);
 const SCALE_NORMALIZATIONS = new Set(["none", "percent", "custom"]);
@@ -687,6 +757,7 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
       feedback: { format: "plain", text: "" },
       feedbackLinks: [],
       feedbackAssets: [],
+      feedbackEvents: [],
       webhookUrl: "",
       telemetryEnabled: false,
     },
@@ -694,6 +765,10 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
       timeLimitMinutes: null,
       maxAttempts: null,
       showCorrectAnswers: false,
+      // PRD-19 (Блок A): новый тест — возврат ВКЛ по умолчанию (FR-01).
+      allowReturnToUnanswered: true,
+      allowAnswerChange: false,
+      showSectionResults: true,
     },
     passRules: {
       decisionPolicy: "overall_only",
@@ -710,6 +785,7 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
     scales: [],
     measurements: [],
     retakePolicy: defaultRetakePolicy(),
+    scoring: { defaultQuestionPoints: null, questionOverrides: [] },
   };
 }
 
@@ -767,6 +843,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
       feedback: feedback.content,
       feedbackLinks: feedback.links,
       feedbackAssets: feedback.assets,
+      feedbackEvents: feedback.events,
       webhookUrl: typeof src.webhookUrl === "string" ? src.webhookUrl : "",
       telemetryEnabled:
         typeof src.telemetryEnabled === "boolean" ? src.telemetryEnabled : false,
@@ -777,6 +854,14 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
       maxAttempts: typeof src.maxAttempts === "number" ? src.maxAttempts : null,
       showCorrectAnswers:
         typeof src.showCorrectAnswers === "boolean" ? src.showCorrectAnswers : false,
+      // PRD-19 (Блок A): загрузка существующего теста. Отсутствие поля (до A3) → консервативно:
+      // возврат ВЫКЛ (как у существующих после миграции), итоги раздела ВКЛ.
+      allowReturnToUnanswered:
+        typeof src.allowReturnToUnanswered === "boolean" ? src.allowReturnToUnanswered : false,
+      allowAnswerChange:
+        typeof src.allowAnswerChange === "boolean" ? src.allowAnswerChange : false,
+      showSectionResults:
+        typeof src.showSectionResults === "boolean" ? src.showSectionResults : true,
     },
     passRules: {
       decisionPolicy,
@@ -793,6 +878,11 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
     scales: scalesModel,
     measurements: buildMeasurementsFromApi(src, scalesModel),
     retakePolicy: readRetakePolicyFromApi(src),
+    scoring: {
+      defaultQuestionPoints:
+        typeof src.defaultQuestionPoints === "number" ? src.defaultQuestionPoints : null,
+      questionOverrides: buildQuestionOverridesFromApi(src),
+    },
   };
 }
 
@@ -816,6 +906,7 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     text: model.basic.feedback.text,
     links: model.basic.feedbackLinks,
     assets: stripScormHref(model.basic.feedbackAssets),
+    events: model.basic.feedbackEvents,
   };
 
   const payload: TestSettingsPayload = {
@@ -829,12 +920,18 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     timeLimitMinutes: model.runtime.timeLimitMinutes,
     maxAttempts: model.runtime.maxAttempts,
     showCorrectAnswers: model.runtime.showCorrectAnswers,
+    allowReturnToUnanswered: model.runtime.allowReturnToUnanswered,
+    allowAnswerChange: model.runtime.allowAnswerChange,
+    showSectionResults: model.runtime.showSectionResults,
     feedbackJson,
     webhookUrl: emptyToNull(model.basic.webhookUrl),
     telemetryEnabled: model.basic.telemetryEnabled,
     // PRD-6 FR-02: a disabled policy persists as `null` so the export stays
     // byte-identical to legacy tests (the gate is omitted from the package).
     retakePolicyJson: model.retakePolicy.enabled ? model.retakePolicy : null,
+    // PRD-15 block D (FR-31): test-wide default price (null = system default).
+    // Defensive `?.` — drafts persisted before block D have no scoring slice.
+    defaultQuestionPoints: model.scoring?.defaultQuestionPoints ?? null,
     expectedVersion: model.version,
     folderId: model.folderId,
   };
@@ -864,6 +961,7 @@ export function mapEditorSectionsToPayload(model: TestEditorModel): TestSectionP
       text: section.feedback.text,
       links: section.feedbackLinks,
       assets: stripScormHref(section.feedbackAssets),
+      events: section.feedbackEvents,
     };
 
     // PRD-11: send the blueprint only when it has at least one stratum; an empty
@@ -883,6 +981,10 @@ export function mapEditorSectionsToPayload(model: TestEditorModel): TestSectionP
       timeLimitMinutes: timeLimitToMinutes(section.timeLimit),
       feedbackJson,
       drawBlueprintJson,
+      // PRD-17 (BR-12): fixed-variant set (null = legacy draw).
+      formSetJson: section.formSet ?? null,
+      // PRD-15 block D (FR-31): per-section default price.
+      defaultPoints: section.defaultPoints ?? null,
     };
   });
 }

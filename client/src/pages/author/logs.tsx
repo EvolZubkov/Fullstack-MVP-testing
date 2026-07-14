@@ -1,34 +1,50 @@
+/**
+ * @module pages/author/logs
+ * @description Server-log viewer for authors/admins: a filter row (date, level,
+ * debounced text search, refresh, live-tail) over a monospace, auto-scrolling log
+ * output. Rendered entirely with the UniversityRT design system — layout via
+ * Stack/Cluster/Box, typography via Text (mono-s for log lines), level badges via
+ * Tag, the empty/loading state via EmptyState — with no raw utility classes.
+ */
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Box,
+  Button,
+  Cluster,
+  EmptyState,
+  Input,
+  ScrollArea,
+  Select,
+  Stack,
+  Tag,
+  Text,
+} from "@universityrt/ui-kit";
 import { ScrollText, RefreshCw, Play, Square } from "lucide-react";
 
 type LogLevel = "all" | "info" | "warn" | "error" | "fatal" | "debug";
 
 function getLevelBadge(line: string) {
-  if (line.includes("[FATAL]")) return <Badge className="text-xs px-1 py-0 bg-red-700 hover:bg-red-700 text-white">FATAL</Badge>;
-  if (line.includes("[ERROR]")) return <Badge variant="destructive" className="text-xs px-1 py-0">ERROR</Badge>;
-  if (line.includes("[WARN ]")) return <Badge variant="outline" className="text-xs px-1 py-0 border-yellow-500 text-yellow-600">WARN</Badge>;
-  if (line.includes("[DEBUG]")) return <Badge variant="outline" className="text-xs px-1 py-0 text-muted-foreground">DEBUG</Badge>;
-  return <Badge variant="outline" className="text-xs px-1 py-0 border-blue-500 text-blue-600">INFO</Badge>;
+  if (line.includes("[FATAL]")) return <Tag tone="error" variant="solid" size="s">FATAL</Tag>;
+  if (line.includes("[ERROR]")) return <Tag tone="error" size="s">ERROR</Tag>;
+  if (line.includes("[WARN ]")) return <Tag tone="warning" variant="outline" size="s">WARN</Tag>;
+  if (line.includes("[DEBUG]")) return <Tag variant="outline" size="s">DEBUG</Tag>;
+  return <Tag tone="info" variant="outline" size="s">INFO</Tag>;
 }
 
 function LogLine({ line }: { line: string }) {
   // Формат: 2026-03-19 14:32:01 [ERROR] [source] message
   const match = line.match(/^(\S+ \S+) \[(\w+)\s*\] \[([^\]]+)\] (.+)$/);
-  if (!match) return <div className="font-mono text-xs text-muted-foreground py-0.5">{line}</div>;
+  if (!match) return <Text as="div" variant="mono-s" tone="muted">{line}</Text>;
   const [, ts, , source, message] = match;
   return (
-    <div className="font-mono text-xs py-0.5 flex items-start gap-2 hover:bg-muted/30 px-2 rounded">
-      <span className="text-muted-foreground shrink-0">{ts}</span>
+    <Cluster gap={2} align="start" wrap={false}>
+      <Text variant="mono-s" tone="muted">{ts}</Text>
       {getLevelBadge(line)}
-      <span className="text-muted-foreground shrink-0">[{source}]</span>
-      <span className="break-all">{message}</span>
-    </div>
+      <Text variant="mono-s" tone="muted">[{source}]</Text>
+      <Text variant="mono-s">{message}</Text>
+    </Cluster>
   );
 }
 
@@ -77,89 +93,95 @@ export default function LogsPage() {
   }, [data?.lines, liveMode]);
 
   return (
-    <div className="flex flex-col h-full">
+    <Stack gap={0} full>
       <PageHeader
         title="Логи сервера"
         description="Просмотр серверных логов"
-        icon={<ScrollText className="h-6 w-6" />}
+        icon={<ScrollText size={24} />}
       />
 
       {/* Панель фильтров */}
-      <div className="flex flex-wrap items-center gap-2 px-6 py-3 border-b">
-        {/* Дата */}
-        <Select value={date} onValueChange={setDate}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Дата" />
-          </SelectTrigger>
-          <SelectContent>
-            {dates.map((d) => (
-              <SelectItem key={d} value={d}>{d}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <Box border>
+        <Cluster gap={2} justify="between">
+          <Cluster gap={2}>
+            {/* Дата */}
+            <Select
+              value={date}
+              onChange={setDate}
+              placeholder="Дата"
+              options={dates.map((d) => ({ value: d, label: d }))}
+            />
 
-        {/* Уровень */}
-        <Select value={level} onValueChange={(v) => setLevel(v as LogLevel)}>
-          <SelectTrigger className="w-32">
-            <SelectValue placeholder="Уровень" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Все</SelectItem>
-            <SelectItem value="fatal">FATAL</SelectItem>
-            <SelectItem value="error">ERROR</SelectItem>
-            <SelectItem value="warn">WARN</SelectItem>
-            <SelectItem value="info">INFO</SelectItem>
-            <SelectItem value="debug">DEBUG</SelectItem>
-          </SelectContent>
-        </Select>
+            {/* Уровень */}
+            <Select<LogLevel>
+              value={level}
+              onChange={setLevel}
+              placeholder="Уровень"
+              options={[
+                { value: "all", label: "Все" },
+                { value: "fatal", label: "FATAL" },
+                { value: "error", label: "ERROR" },
+                { value: "warn", label: "WARN" },
+                { value: "info", label: "INFO" },
+                { value: "debug", label: "DEBUG" },
+              ]}
+            />
 
-        {/* Поиск */}
-        <Input
-          placeholder="Поиск по тексту..."
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          className="w-56"
-        />
+            {/* Поиск */}
+            <Input
+              placeholder="Поиск по тексту..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+            />
 
-        {/* Кнопки */}
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-          <RefreshCw className={`h-4 w-4 mr-1 ${isFetching ? "animate-spin" : ""}`} />
-          Обновить
-        </Button>
+            {/* Кнопки */}
+            <Button
+              variant="secondary"
+              size="s"
+              leadingIcon={<RefreshCw size={16} />}
+              loading={isFetching}
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              Обновить
+            </Button>
 
-        <Button
-          variant={liveMode ? "default" : "outline"}
-          size="sm"
-          onClick={() => setLiveMode(!liveMode)}
-        >
-          {liveMode
-            ? <><Square className="h-4 w-4 mr-1" />Стоп</>
-            : <><Play className="h-4 w-4 mr-1" />Живой режим</>
-          }
-        </Button>
+            <Button
+              variant={liveMode ? "primary" : "secondary"}
+              size="s"
+              leadingIcon={liveMode ? <Square size={16} /> : <Play size={16} />}
+              onClick={() => setLiveMode(!liveMode)}
+            >
+              {liveMode ? "Стоп" : "Живой режим"}
+            </Button>
+          </Cluster>
 
-        {data && (
-          <span className="text-sm text-muted-foreground ml-auto">
-            Записей: {data.total}
-          </span>
-        )}
-      </div>
+          {data && (
+            <Text variant="body-s" tone="muted">
+              Записей: {data.total}
+            </Text>
+          )}
+        </Cluster>
+      </Box>
 
       {/* Лог-вывод */}
-      <div className="flex-1 overflow-y-auto bg-muted/20 p-2">
+      <Box surface="muted" pad={2} grow>
         {!data || data.lines.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-            {isFetching ? "Загрузка..." : "Нет записей для выбранных фильтров"}
-          </div>
+          <EmptyState
+            art={<ScrollText size={48} color="var(--ou-fg-subtle)" />}
+            title={isFetching ? "Загрузка..." : "Нет записей для выбранных фильтров"}
+          />
         ) : (
-          <>
-            {data.lines.map((line, i) => (
-              <LogLine key={i} line={line} />
-            ))}
-            <div ref={bottomRef} />
-          </>
+          <ScrollArea>
+            <Stack gap={1}>
+              {data.lines.map((line, i) => (
+                <LogLine key={i} line={line} />
+              ))}
+              <div ref={bottomRef} />
+            </Stack>
+          </ScrollArea>
         )}
-      </div>
-    </div>
+      </Box>
+    </Stack>
   );
 }

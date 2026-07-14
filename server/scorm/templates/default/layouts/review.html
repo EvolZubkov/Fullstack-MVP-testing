@@ -1,0 +1,39 @@
+<div class="results-page">
+  {{#if design.logoUrl}}<div class="tb-brand"><img class="tb-brand__logo" src="{{ design.logoUrl }}" alt=""></div>{{/if}}
+  <div class="card">
+    <div class="obzor-title">{{review.scopeLabel}}</div>
+    <div class="obzor-sub">{{review.hint}}</div>
+    {{#if state.questionsProgress}}
+    <div class="tb-pills" role="group" aria-label="Карта вопросов">
+      <div class="tb-pills__head">
+        <span>{{state.questionsProgress.scopeLabel}}</span>
+        <b>отвечено {{state.questionsProgress.answeredCount}} из {{state.questionsProgress.total}}</b>
+      </div>
+      <div class="tb-pills__dots">
+        {{#each state.questionsProgress.states}}
+        <button type="button" class="tb-pill {{statusClass}}" {{#unless clickable}}disabled{{/unless}} data-action="goto:{{index}}" aria-label="{{ariaLabel}}">{{number}}</button>
+        {{/each}}
+      </div>
+      <div class="tb-pills__legend">
+        <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-answered"></span>отвечен</span>
+        <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-skipped"></span>не отвечен</span>
+      </div>
+    </div>
+    {{/if}}
+    {{#if review.unansweredCount}}
+    <div class="tb-unanswered">
+      <div class="tb-unanswered__head">Без ответа ({{review.unansweredCount}}) — ответьте перед завершением:</div>
+      {{#each review.unanswered}}
+      <button type="button" class="tb-unanswered__row" data-action="goto:{{index}}">
+        <span><strong>Вопрос {{number}}</strong> · {{prompt}}</span>
+        <span class="tb-unanswered__go">Перейти →</span>
+      </button>
+      {{/each}}
+    </div>
+    {{/if}}
+    <div class="q-actions">
+      <span class="q-actions__spacer"></span>
+      <button type="button" class="btn" data-action="finish-review">{{review.finishLabel}}</button>
+    </div>
+  </div>
+</div>

@@ -19,7 +19,7 @@
  */
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, Trash2 } from "lucide-react";
 import {
   Accordion,
   AccordionItem,
@@ -41,12 +41,14 @@ import {
   FeedbackEditorModal,
   type FeedbackEditorValue,
 } from "./feedback-editor-modal";
+import { FeedbackPreview } from "./feedback-preview";
 import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
   AdaptiveTopicConfig,
   FeedbackAsset,
   FeedbackContent,
+  FeedbackEvent,
   FeedbackLink,
   FlowMode,
   OverallPassRule,
@@ -209,7 +211,7 @@ function BasicPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: Set
           id="settings-title"
           size="m"
           fullWidth
-          label="Название *"
+          label="Название"
           value={model.basic.title}
           placeholder="Введите название теста"
           required
@@ -331,6 +333,7 @@ function BasicPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: Set
             feedback={model.basic.feedback}
             links={model.basic.feedbackLinks}
             assets={model.basic.feedbackAssets}
+            events={model.basic.feedbackEvents}
             onSave={(next) => {
               updateModel((m) => ({
                 ...m,
@@ -339,6 +342,7 @@ function BasicPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: Set
                   feedback: { format: next.format, text: next.text },
                   feedbackLinks: next.links,
                   feedbackAssets: next.assets,
+                  feedbackEvents: next.events,
                 },
               }));
             }}
@@ -352,7 +356,13 @@ function BasicPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: Set
                 const checked = e.target.checked;
                 updateModel((m) => ({
                   ...m,
-                  runtime: { ...m.runtime, showCorrectAnswers: checked },
+                  runtime: {
+                    ...m.runtime,
+                    showCorrectAnswers: checked,
+                    // PRD-19 FR-04b: взаимоисключение — при показе правильных ответов
+                    // изменение ответа недоступно.
+                    allowAnswerChange: checked ? false : m.runtime.allowAnswerChange,
+                  },
                 }));
               }}
               data-testid="settings-show-correct-checkbox"
@@ -752,8 +762,81 @@ const DECISION_POLICIES: { value: PassDecisionPolicy; label: string }[] = [
 ];
 
 function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: SettingsSectionProps) {
+  // PRD-19 (FR-04b): «изменение ответа» зависит от возврата ВКЛ и взаимоисключается с показом
+  // правильных ответов (раздел «Ограничения»). showSectionResults — только для секционных.
+  const changeDisabled =
+    !model.runtime.allowReturnToUnanswered || model.runtime.showCorrectAnswers;
+  const showSectionResultsApplicable =
+    model.flowMode !== "linear_flat" && model.sections.length > 0;
   return (
     <>
+      <div className="ou-formfield">
+        <Switch
+          label="Разрешить возврат к неотвеченным вопросам"
+          description="Ученик может пропускать вопросы и возвращаться к ним до завершения. Включает карту-индикатор прогресса и экран обзора."
+          checked={model.runtime.allowReturnToUnanswered}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              runtime: {
+                ...m.runtime,
+                allowReturnToUnanswered: checked,
+                // изменение ответа невозможно без возврата
+                allowAnswerChange: checked ? m.runtime.allowAnswerChange : false,
+              },
+            }));
+          }}
+          data-testid="settings-allow-return-checkbox"
+        />
+      </div>
+      <div className="ou-formfield">
+        <Switch
+          label="Позволить изменять ответ до завершения"
+          description="При возврате к уже отвеченному вопросу можно изменить ответ (до завершения раздела/теста)."
+          checked={model.runtime.allowAnswerChange && !changeDisabled}
+          disabled={changeDisabled}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, allowAnswerChange: checked },
+            }));
+          }}
+          data-testid="settings-allow-change-checkbox"
+        />
+        {changeDisabled && (
+          <Banner
+            tone="warning"
+            size="sm"
+            description={
+              !model.runtime.allowReturnToUnanswered
+                ? "Доступно только при включённом возврате к неотвеченным."
+                : "Недоступно при включённом показе правильных ответов (раздел «Ограничения»): иначе ученик увидит правильный ответ и переправит свой."
+            }
+          />
+        )}
+      </div>
+      {showSectionResultsApplicable && (
+        <div className="ou-formfield">
+          <Switch
+            label="Показывать итоги раздела"
+            description="После завершения раздела показывается экран с его результатом. Только для секционных тестов."
+            checked={model.runtime.showSectionResults}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              updateModel((m) => ({
+                ...m,
+                runtime: { ...m.runtime, showSectionResults: checked },
+              }));
+            }}
+            data-testid="settings-show-section-results-checkbox"
+          />
+        </div>
+      )}
+
+      <hr className="wf-sep" />
+
       <Card
         variant="outlined"
         size="sm"
@@ -1372,7 +1455,7 @@ function AdaptiveLevelCard(props: {
             <Button
               variant="ghost"
               size="s"
-              leadingIcon={<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
+              leadingIcon={<Trash2 size={14} aria-hidden="true" />}
               onClick={props.onRemove}
               disabled={!props.canRemove}
               aria-label={
@@ -1391,7 +1474,7 @@ function AdaptiveLevelCard(props: {
               onClick={() => setCollapsed((v) => !v)}
               data-testid={`${testIdBase}-toggle`}
             >
-              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              <ChevronDown size={16} aria-hidden="true" />
             </button>
           </>
         }
@@ -1507,54 +1590,31 @@ function TestFeedbackTrigger(props: {
   feedback: FeedbackContent;
   links: FeedbackLink[];
   assets: FeedbackAsset[];
+  events: FeedbackEvent[];
   onSave: (next: {
     format: FeedbackContent["format"];
     text: string;
     links: FeedbackLink[];
     assets: FeedbackAsset[];
+    events: FeedbackEvent[];
   }) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const isEmpty =
-    props.feedback.text.trim() === "" &&
-    props.links.length === 0 &&
-    props.assets.length === 0;
-  const preview =
-    props.feedback.text.trim() !== ""
-      ? props.feedback.text.replace(/<[^>]+>/g, "").slice(0, 80)
-      : "Не задано - нажмите для редактирования";
-  // Compact meta line: «N ссыл..., M PDF» rendered alongside the preview.
-  // Pluralisation matches FeedbackEditTrigger for visual consistency.
-  const metaParts: string[] = [];
-  if (props.links.length > 0) {
-    const n = props.links.length;
-    const word = n === 1 ? "ка" : n >= 2 && n <= 4 ? "ки" : "ок";
-    metaParts.push(`${n} ссыл${word}`);
-  }
-  if (props.assets.length > 0) {
-    metaParts.push(`${props.assets.length} PDF`);
-  }
 
   return (
     <>
       <label className="ou-formfield__lbl">Обратная связь после прохождения</label>
-      <button
-        type="button"
-        className={"tb-feedback-preview" + (isEmpty ? " is-empty" : "")}
-        onClick={() => setOpen(true)}
-        aria-label="Редактировать обратную связь теста"
-        data-testid="settings-feedback-trigger"
-      >
-        <span className="tb-feedback-preview__text">
-          <span className="tb-feedback-preview__snippet">{preview}</span>
-          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-        </span>
-        {metaParts.length > 0 && (
-          <span className="tb-feedback-preview__meta">
-            {metaParts.join(" · ")}
-          </span>
-        )}
-      </button>
+      {/* TD-02: grouped-list preview (Документы / Курсы / Мероприятия) + pencil. */}
+      <FeedbackPreview
+        format={props.feedback.format}
+        text={props.feedback.text}
+        links={props.links}
+        assets={props.assets}
+        events={props.events}
+        onEdit={() => setOpen(true)}
+        editAriaLabel="Редактировать обратную связь теста"
+        testId="settings-feedback-trigger"
+      />
       <FeedbackEditorModal
         open={open}
         title="Общая обратная связь теста"
@@ -1564,6 +1624,7 @@ function TestFeedbackTrigger(props: {
           text: props.feedback.text,
           links: props.links,
           assets: props.assets,
+          events: props.events,
         }}
         onCancel={() => setOpen(false)}
         onSave={(v: FeedbackEditorValue) => {
@@ -1572,6 +1633,7 @@ function TestFeedbackTrigger(props: {
             text: v.text,
             links: v.links,
             assets: v.assets,
+            events: v.events ?? [],
           });
           setOpen(false);
         }}
@@ -1600,39 +1662,23 @@ function FeedbackEditTrigger(props: {
   testId: string;
 }) {
   const [open, setOpen] = useState(false);
-  const preview =
-    props.text.trim() !== ""
-      ? props.text.replace(/<[^>]+>/g, "").slice(0, 80)
-      : "Не задано — нажмите для редактирования";
-  const isEmpty = props.text.trim() === "" && props.links.length === 0;
 
   return (
     <>
       <label className="ou-formfield__lbl">{props.label}</label>
-      <button
-        type="button"
-        className={
-          "tb-feedback-preview" + (isEmpty ? " is-empty" : "")
-        }
-        onClick={() => setOpen(true)}
-        aria-label={props.buttonAriaLabel}
-        data-testid={props.testId}
-      >
-        <span className="tb-feedback-preview__text">
-          <span className="tb-feedback-preview__snippet">{preview}</span>
-          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-        </span>
-        {(props.links.length > 0) && (
-          <span className="tb-feedback-preview__meta">
-            {props.links.length} ссыл
-            {props.links.length === 1
-              ? "ка"
-              : props.links.length >= 2 && props.links.length <= 4
-                ? "ки"
-                : "ок"}
-          </span>
-        )}
-      </button>
+      {/* TD-02: standard grouped-list preview (here only «Курсы» links — assets
+          and events are not used at the adaptive level), shared with test/topic
+          feedback so the preview is identical at every level. */}
+      <FeedbackPreview
+        format="plain"
+        text={props.text}
+        links={props.links}
+        assets={[]}
+        events={[]}
+        onEdit={() => setOpen(true)}
+        editAriaLabel={props.buttonAriaLabel}
+        testId={props.testId}
+      />
       <FeedbackEditorModal
         open={open}
         title={props.modalTitle}
@@ -1644,6 +1690,7 @@ function FeedbackEditTrigger(props: {
           assets: [],
         }}
         hideAssets={props.hideAssets}
+        hideEvents
         onCancel={() => setOpen(false)}
         onSave={(v: FeedbackEditorValue) => {
           props.onSave({ text: v.text, links: v.links });

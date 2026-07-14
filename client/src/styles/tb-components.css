@@ -81,6 +81,15 @@
   overflow: visible;
 }
 
+/* Modal opt-in: a SHORT modal (`tb-select-modal`) lets the DS Select's absolute
+   `.ou-select__menu` escape the modal body's `overflow-y: auto` while it is open.
+   Safe here because `.ou-modal` has no overflow clip and the menu (z-index:50) sits
+   above the footer. NOT applied to all modals — a tall/scrolling modal would spill
+   its content when a Select opens. */
+.tb-select-modal .ou-modal__body:has(.ou-select.is-open) {
+  overflow: visible;
+}
+
 /* ── Settings content container (правая колонка drawer-а Настроек) ──── */
 /* container-type: inline-size — точка отсчёта для @container ниже:
    адаптив реагирует на ширину самой колонки настроек, а не viewport
@@ -118,6 +127,24 @@
 /* Section caption (subdued uppercase-like heading внутри формы). */
 .tb-section-label { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-2); display: inline-flex; align-items: center; gap: var(--ou-space-2); }
 
+/* Result-variable visual builder (PRD-2 §4.1): template select + condition rows.
+   A condition row is «Элемент(grow) · Свойство · Оператор · Значение · удалить»;
+   the same primitive renders «Порог» (one row) and «Вердикт» (a list). */
+.tb-formula-builder { display: flex; flex-direction: column; gap: var(--ou-space-3); margin-top: var(--ou-space-2); }
+.tb-rows { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+.tb-rows-actions { margin-top: var(--ou-space-2); }
+.tb-cond-row { display: flex; align-items: flex-end; gap: var(--ou-space-2); }
+.tb-cond-row > .tb-cond-row__grow { flex: 1 1 auto; min-width: 0; }
+.tb-cond-sep { font: var(--ou-text-body-s); color: var(--ou-fg-muted); white-space: nowrap; padding-bottom: var(--ou-space-2); }
+
+/* DSL «Функции» reference (modal): toolbar trigger + grouped function rows. */
+.tb-fn-toolbar { display: flex; justify-content: flex-end; margin-bottom: var(--ou-space-2); }
+.tb-fn-group { margin-bottom: var(--ou-space-5); }
+.tb-fn-group__title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-2); }
+.tb-fn-row { display: grid; grid-template-columns: max-content 1fr auto; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-2) 0; border-top: var(--wf-border-w) solid var(--ou-border-soft); }
+.tb-fn-sig { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+.tb-fn-desc { color: var(--ou-fg-muted); font: var(--ou-text-body-s); }
+
 /* Card body paragraph (muted info). */
 .tb-card-desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-2); }
 
@@ -146,6 +173,46 @@
 .tb-table tr:last-child td { border-bottom: none; }
 .tb-table--mb { margin-bottom: var(--ou-space-3); }
 .tb-table__cell--nowrap { white-space: nowrap; }
+
+/* ─── PRD-5 «Вклады вопросов»: contribution matrix ───────────────────────────── */
+/* Scoped to .tb-contrib-grid so the shared .tb-table (bands, scoring, preview)
+   keeps its full-width auto layout. The answer-text column is widened and pinned;
+   the scale-value columns are narrowed; the table scrolls horizontally inside the
+   card body when the scale columns overflow the drawer width. */
+.tb-contrib-grid-wrap { overflow-x: auto; }
+/* table-layout: fixed + an EXPLICIT table width = the exact column sum. With
+   width:auto the table grows to max-content (the inputs' ~20ch intrinsic size)
+   and the surplus inflates the value columns, defeating the narrowing. Pinning
+   the width to (text col + N × value col) — N comes from the inline
+   --tb-contrib-cols var — makes fixed layout honor each column exactly, and the
+   table overflows the drawer when there are many scales → the wrapper scrolls. */
+.tb-table.tb-contrib-grid {
+  table-layout: fixed;
+  width: calc(var(--tb-contrib-unit-w, 18rem) + var(--tb-contrib-cols, 0) * var(--tb-contrib-val-w, 7rem));
+}
+
+/* Answer-text column: ~2x wider than its prior auto width, pinned on scroll. */
+.tb-contrib-grid__unit-col { width: var(--tb-contrib-unit-w, 18rem); }
+.tb-contrib-grid th.tb-contrib-grid__unit-col,
+.tb-contrib-grid td.tb-contrib-grid__unit-col {
+  position: -webkit-sticky; position: sticky; left: 0; z-index: 1;
+  box-shadow: 1px 0 0 0 var(--ou-border-soft);
+}
+/* Opaque fills so scrolled value cells pass cleanly under the pinned column. */
+.tb-contrib-grid td.tb-contrib-grid__unit-col { background: var(--ou-bg-elevated); }
+.tb-contrib-grid th.tb-contrib-grid__unit-col { background: var(--ou-bg-muted); }
+
+/* Check icon to the left of the option text; the reserved slot keeps the text
+   left edge aligned across rows whether or not the row is the correct answer. */
+.tb-contrib-grid__unit { display: flex; align-items: flex-start; gap: var(--ou-space-2); }
+.tb-contrib-grid__check {
+  flex: 0 0 1rem; display: inline-flex; align-items: center;
+  height: 1.25rem; color: var(--ou-success-default);
+}
+.tb-contrib-grid__unit-text { min-width: 0; }
+
+/* Scale value columns: ~half their prior auto width (input fills the cell). */
+.tb-contrib-grid__val-col { width: var(--tb-contrib-val-w, 7rem); }
 
 /* Compact rule cell inside table (custom rule + fields + unit). */
 .tb-rule-cell { display: flex; flex-direction: column; gap: var(--ou-space-1); }
@@ -603,6 +670,46 @@
 }
 .tb-quota-sum.is-error { color: var(--ou-error-default); font-weight: 600; }
 
+/* PRD-17 (BR-12): variants editor — modal toolbar (tabs + «Удалить вариант»),
+   footer (coverage + «Готово») and the question-type leading icon in the
+   TransferList rows (replaces the avatar initials via TransferItem.icon). */
+.tb-variants-modal__toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--ou-space-3); flex-wrap: wrap; margin-bottom: var(--ou-space-4);
+}
+.tb-variants-modal__foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--ou-space-4); width: 100%;
+}
+.tb-variant-qtype {
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--ou-fg-muted);
+}
+.tb-variant-qtype svg { display: block; }
+
+/* Transfer inside the variants modal: make the dual-list fill the modal body
+   and scroll INTERNALLY instead of letting each pane balloon to its content
+   height (41+ question rows) and push the whole modal — and the move controls —
+   past the form edge. Ported from the approved wireframe (prd17-test-variants).
+   The body becomes a bounded flex column so `.ou-transfer { flex: 1 }` can take
+   the remaining height; `min-height: 0` on every level lets the list's
+   `overflow: auto` actually clip. Question prompts are long, so rows wrap and use
+   the smaller body-s font (WF), unlike the avatar-based single-line default. */
+.tb-variants-modal .ou-modal__body {
+  display: flex; flex-direction: column; min-height: 0;
+}
+.tb-variants-modal .ou-transfer {
+  flex: 1 1 auto; min-height: 0;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+.tb-variants-modal .ou-transfer__pane { min-height: 0; }
+.tb-variants-modal .ou-transfer__list { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.tb-variants-modal .ou-transfer__row { align-items: start; }
+.tb-variants-modal .ou-transfer__row-name {
+  white-space: normal; overflow: visible; font: var(--ou-text-body-s);
+}
+.tb-variants-modal .ou-transfer__row-meta { white-space: normal; overflow: visible; }
+
 /* Feedback preview (read-only) — clickable card со snippet'ом и meta-row.
    Edit-форма — отдельный паттерн `.tb-feedback-block` (см. выше).
    `.is-empty` — placeholder-вариант («Не задано — нажмите для редактирования»).
@@ -614,13 +721,14 @@
   padding: var(--ou-space-2) var(--ou-space-3);
   font: var(--ou-text-body-s);
   background: var(--ou-bg-elevated);
-  cursor: pointer;
   text-align: left;
 }
-.tb-feedback-preview:hover { border-color: var(--ou-accent-default); }
+/* TD-02: only the empty placeholder is click-to-edit; non-empty cards edit via
+   the pencil button and carry real item links. */
 .tb-feedback-preview.is-empty {
-  color: var(--ou-fg-muted); font-style: italic;
+  color: var(--ou-fg-muted); font-style: italic; cursor: pointer;
 }
+.tb-feedback-preview.is-empty:hover { border-color: var(--ou-accent-default); }
 .tb-feedback-preview__text {
   display: flex; align-items: baseline; gap: var(--ou-space-2);
 }
@@ -645,6 +753,31 @@
   display: flex; justify-content: flex-end; margin-top: var(--ou-space-1);
   color: var(--ou-fg-muted);
 }
+/* TD-02: head row (snippet/rich text + pencil edit button) */
+.tb-feedback-preview__head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--ou-space-2);
+}
+.tb-feedback-preview__head .tb-feedback-preview__snippet,
+.tb-feedback-preview__head .tb-feedback-preview__rich { flex: 1; min-width: 0; }
+/* TD-02: grouped reference lists (Документы / Курсы / Мероприятия) */
+.tb-feedback-preview__group { margin-top: var(--ou-space-2); }
+.tb-feedback-preview__group-title {
+  font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted);
+  text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: var(--ou-space-1);
+}
+.tb-feedback-preview__items {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: var(--ou-space-1);
+}
+.tb-feedback-preview__item {
+  display: flex; align-items: center; gap: var(--ou-space-2); min-width: 0;
+}
+.tb-feedback-preview__item-ico {
+  display: inline-flex; flex-shrink: 0; color: var(--ou-fg-muted);
+}
+.tb-feedback-preview__item a { color: var(--ou-accent-default); text-decoration: none; }
+.tb-feedback-preview__item a:hover { text-decoration: underline; }
 
 /* ── Saving overlay (наложение со спиннером поверх Drawer body) ─────────
    Используется во время атомарного сохранения теста (PUT /api/tests/:id).
@@ -1062,6 +1195,30 @@
 .page-title { font: var(--ou-text-body-s); flex: 1; min-width: 0; }
 .page-actions { display: flex; gap: var(--ou-space-1); flex-shrink: 0; }
 .page-icon { color: var(--ou-fg-muted); flex-shrink: 0; }
+
+/* PRD-19 FR-08a: «Обзор раздела/теста» navigation slot (section-finish /
+   test-finish). Accent left-bar marks it as the navigation slot; the disabled
+   variant (return OFF) dims it and drops the accent, with a `.page-comment`
+   below explaining how to enable it. */
+.page-row--obzor {
+  border-left: var(--wf-space-1q, 3px) solid var(--ou-accent-default);
+  padding-left: var(--wf-space-11, 11px);
+}
+.page-row--obzor.page-row--disabled {
+  border-left-color: var(--ou-border-default);
+  opacity: 0.55;
+}
+.page-row--disabled .page-title { color: var(--ou-fg-muted); }
+.page-comment {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-2);
+  padding: var(--wf-space-6, 6px) var(--wf-space-10, 10px) var(--wf-space-6, 6px) var(--wf-space-14, 14px);
+  font: var(--ou-text-caption);
+  color: var(--ou-fg-muted);
+  background: var(--ou-bg-surface-2);
+}
+.page-comment svg { flex-shrink: 0; margin-top: 1px; color: var(--ou-fg-muted); }
 
 /* Severity indicator on page-row: derived from meta tag tones. */
 .page-row:has(> .page-row__meta .ou-tag--info):not(:has(> .page-row__meta .ou-tag--warning)):not(:has(> .page-row__meta .ou-tag--error)) {
@@ -1758,3 +1915,136 @@
   font: var(--ou-text-body-s);
   color: var(--ou-fg-muted);
 }
+
+/* ─── PRD-15 block D — вкладка «Оценка» редактора теста ──────────────────────
+   Wireframe: docs/wireframes/approved/prd15-test-scoring.html (s-tab).
+   Признак «настроено в тесте» — ПОСТОЯННЫЙ и отличается от маркера
+   несохранённых изменений: полоска слева у строки с переопределением +
+   мягкая акцентная заливка каждой настроенной ячейки (tooltip на ячейке). */
+.tb-qscoring { display: flex; flex-direction: column; gap: var(--ou-space-4); padding: var(--ou-space-1) 0; }
+.tb-qscoring__default-row { display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap; }
+.tb-qscoring__default-lbl { font: var(--ou-text-body-m); font-weight: 600; }
+.tb-qscoring__default-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+.tb-qscoring__num { width: var(--tb-input-w-sm); }
+.tb-qscoring__sec {
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  padding: var(--ou-space-4);
+  background: var(--ou-bg-surface);
+}
+.tb-qscoring__sec-head { display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap; margin-bottom: var(--ou-space-2); }
+.tb-qscoring__sec-name { font: var(--ou-text-body-m); font-weight: 700; min-width: 0; }
+.tb-qscoring__sec-default { display: inline-flex; align-items: center; gap: var(--ou-space-2); }
+.tb-qscoring__sec-default-lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* ─── Сворачиваемые секции списков (Оценка / Вклады вопросов) ──────────────────
+   Общий примитив: триггер-заголовок (шеврон + название), глобальные
+   «Свернуть все / Развернуть все», и обёртка-секция для «Вкладов». */
+.tb-fold-actions { margin-left: auto; display: inline-flex; gap: var(--ou-space-2); }
+.tb-fold-trigger {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tb-fold-chev { flex: none; color: var(--ou-fg-muted); }
+.tb-fold-toolbar { display: flex; align-items: center; }
+.tb-fold-sec {
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  padding: var(--ou-space-4);
+  background: var(--ou-bg-surface);
+}
+.tb-fold-sec-head { display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap; }
+.tb-fold-sec-name { font: var(--ou-text-body-m); font-weight: 700; min-width: 0; }
+.tb-fold-sec__body { display: flex; flex-direction: column; gap: var(--ou-space-3); margin-top: var(--ou-space-3); }
+
+/* Disabled state for a Drawer rail item (DS has none): e.g. «Вклады вопросов»
+   stays inert until a scale exists. */
+.ou-drawer__rail-item:disabled { opacity: 0.5; cursor: not-allowed; }
+.ou-drawer__rail-item:disabled:hover { background: transparent; }
+
+/* Прозрачная рамка у всех строк сохраняет выравнивание; у переопределённых
+   она акцентная (быстрый скан «в этой строке что-то настроено»). */
+.tb-qscoring .tb-table tbody td:first-child { border-left: var(--ou-space-1) solid transparent; }
+.tb-qscoring .tb-table tbody tr.tb-qscoring__row--override > td:first-child { border-left-color: var(--ou-accent-default); }
+/* Переопределённое ЗНАЧЕНИЕ — мягкая акцентная заливка ячейки. */
+.tb-qscoring .tb-table tbody td.tb-qscoring__cell--override { background: var(--ou-accent-soft); }
+.tb-qscoring__actions { display: inline-flex; gap: var(--ou-space-1); justify-content: flex-end; }
+/* Пиктограмма типа вопроса — инлайново перед текстом, на той же строке. */
+.tb-qscoring__qtype { display: inline-flex; vertical-align: -0.15em; margin-right: var(--ou-space-2); color: var(--ou-fg-muted); }
+/* Recap вопроса в модале переопределения (read-only контекст). */
+.tb-qscoring__recap {
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-page);
+  margin-bottom: var(--ou-space-4);
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+.tb-qscoring__recap b { color: var(--ou-fg-default); }
+.tb-qscoring__modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ou-space-3) var(--ou-space-4); margin-bottom: var(--ou-space-4); }
+/* Футер модала переопределения: «Сбросить настройку» прижата влево
+   (эскиз prd15-test-scoring, ou-modal__foot--between). */
+.ou-modal__foot .tb-qscoring__foot-left { margin-right: auto; }
+
+/* Tailwind-removal (stage 5) helpers: uppercase eyebrow label + row separator. */
+.tb-caps { text-transform: uppercase; letter-spacing: 0.025em; }
+.tb-row-sep { border-bottom: 1px solid hsl(var(--border) / 0.5); }
+.tb-row-sep:last-child { border-bottom: 0; }
+/* Fixed field widths for the scoring condition row (was Tailwind w-20/24/36). */
+.tb-fw-sm { width: 5rem; }
+.tb-fw-md { width: 6rem; }
+.tb-fw-lg { width: 9rem; }
+/* The DS Select trigger carries min-width:180px; on the compact operator /
+   counter selects that floor overrides the width above, so the trigger stays
+   ~180px and the count field wraps under it. Relax the floor when one of these
+   width utilities is applied to a Select so the intended width takes effect. */
+.tb-fw-sm.ou-select .ou-select__trigger,
+.tb-fw-md.ou-select .ou-select__trigger,
+.tb-fw-lg.ou-select .ou-select__trigger { min-width: 0; }
+
+/* PRD-16: drag handle for the answer-option / ranking reorder rows in the
+   question editor (mirrors the wireframe `.qd-grip` affordance). */
+.tb-drag-handle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  cursor: grab;
+  touch-action: none;
+  color: var(--ou-fg-muted);
+}
+.tb-drag-handle:active { cursor: grabbing; }
+
+/* PRD-16: folder picker as a combobox that opens a DS Tree in a popover. */
+.tb-foldercombo { position: relative; }
+.tb-foldercombo__trigger {
+  display: flex; align-items: center; gap: var(--ou-space-2); width: 100%;
+  min-height: var(--ou-size-control-m, 2.5rem); padding: 0 var(--ou-space-3);
+  background: var(--ou-bg-default); border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m); color: var(--ou-fg-default); cursor: pointer;
+  font: var(--ou-text-body-m); text-align: left;
+}
+.tb-foldercombo__trigger:hover { border-color: var(--ou-border-strong, var(--ou-accent-default)); }
+.tb-foldercombo.is-open .tb-foldercombo__trigger { border-color: var(--ou-accent-default); }
+.tb-foldercombo__ico { flex: none; color: var(--ou-fg-muted); }
+.tb-foldercombo__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-foldercombo__chev { flex: none; color: var(--ou-fg-muted); transition: transform .15s; }
+.tb-foldercombo.is-open .tb-foldercombo__chev { transform: rotate(180deg); }
+/* Portaled to <body> (top/left/width set inline) so it is never clipped by a
+   modal/drawer; z-index sits above the DS modal layer. */
+.tb-foldercombo__pop {
+  position: fixed; z-index: 2000;
+  background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m); box-shadow: var(--ou-shadow-lg); padding: var(--ou-space-1);
+}
+/* The tree inside the popover scrolls if tall (the popover itself frames it). */
+.tb-foldercombo__pop .tb-foldertree { max-height: 16rem; overflow-y: auto; }

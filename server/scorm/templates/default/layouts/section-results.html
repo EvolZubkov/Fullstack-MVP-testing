@@ -1,0 +1,27 @@
+<div class="results-page section-results">
+  {{#if design.logoUrl}}<div class="tb-brand"><img class="tb-brand__logo" src="{{ design.logoUrl }}" alt=""></div>{{/if}}
+  <div class="card section-results__card">
+    <div class="section-results__eyebrow">Итоги раздела</div>
+    <div class="section-results__title">Раздел «<span data-path="sectionResult.topicName"></span>»</div>
+
+    <div class="results-ring">
+      <svg viewBox="0 0 140 140" width="140" height="140">
+        <circle cx="70" cy="70" r="63" class="ring-bg" stroke-width="14" fill="none"></circle>
+        <circle cx="70" cy="70" r="63" class="ring-fg {{ sectionResult.passClass }}" stroke-width="14" fill="none" stroke-linecap="round" style="stroke-dasharray:395.84;stroke-dashoffset:{{ sectionResult.ringDashoffset }}"></circle>
+      </svg>
+      <div class="results-ring-center">
+        <div class="results-ring-pct"><span data-path="sectionResult.scorePercent"></span>%</div>
+        <div class="results-ring-label">Баллы</div>
+      </div>
+    </div>
+
+    <div class="section-results__summary" data-path="sectionResult.summaryLabel"></div>
+    {{#if sectionResult.hasVerdict}}
+    <div class="results-pill {{ sectionResult.passClass }}" data-path="sectionResult.statusLabel"></div>
+    {{/if}}
+
+    <div class="q-actions q-actions--center">
+      <button type="button" class="btn" data-action="section-continue">{{ sectionResult.continueLabel }}</button>
+    </div>
+  </div>
+</div>

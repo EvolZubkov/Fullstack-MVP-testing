@@ -1,137 +1,313 @@
-// app/timer/timer.js
+/**
+ * @module scorm/template/app/timer
+ *
+ * Countdown timers for the in-package runtime: one test-wide time limit and an
+ * optional per-section limit (PRD-4 v1.1 section 3.2 / 4.6). Both derive the
+ * remaining time from a monotonic performance.now() reading rather than a blind
+ * per-tick decrement, so the display stays correct when the browser throttles
+ * background-tab intervals and cannot be stretched by moving the system clock
+ * (PRD-20, phase 1).
+ *
+ * Runs inside the concatenated IIFE bundle, so it shares scope with `state`,
+ * `TEST_DATA`, `submit()` and the DOM instead of importing them.
+ *
+ * Contract consumed by other bundle modules (kept stable):
+ *   initTimer()                             - startPage on attempt start
+ *   stopTestTimer()                         - answers / startPage on reset
+ *   startSectionTimer(topicId, min, onExp)  - contentFlow / routerFlow
+ *   stopSectionTimer()                      - contentFlow / routerFlow
+ *   formatTime(seconds) -> "M:SS"           - mainRender / adaptiveRender
+ * Shared state fields:
+ *   state.timerInterval    - active interval handle; kept here because reset
+ *                            paths historically stop the timer through it.
+ *   state.timerStartPerfMs - monotonic start reading of the test timer.
+ *   state.remainingSeconds - test seconds left; read by renderers and results.
+ *   state.timeExpired      - set when the test limit runs out.
+ *   state.sectionTimer     - { topicId, limitMinutes, remainingSeconds,
+ *                              expired, onExpire, intervalId, startPerfMs }.
+ */
 
-function initTimer() {
-  if (TEST_DATA.timeLimitMinutes && TEST_DATA.timeLimitMinutes > 0) {
-    state.remainingSeconds = TEST_DATA.timeLimitMinutes * 60;
-    state.timerInterval = setInterval(updateTimer, 1000);
-    updateTimerDisplay();
-  }
-}
+var TIMER_TICK_MS = 1000;
+var TIMER_WARN_AT = 60; // seconds-left threshold that marks the display critical
+var TIMER_COMMIT_MS = 10000; // PRD-20 phase 2c: kill-resistance commit cadence
 
-function updateTimer() {
-  if (state.submitted) {
-    if (state.timerInterval) {
-      clearInterval(state.timerInterval);
-      state.timerInterval = null;
-    }
-    return;
-  }
-
-  if (state.remainingSeconds === null || state.remainingSeconds <= 0) {
-    if (state.timerInterval) {
-      clearInterval(state.timerInterval);
-      state.timerInterval = null;
-    }
-    return;
-  }
-
-  state.remainingSeconds--;
-  updateTimerDisplay();
-
-  if (state.remainingSeconds <= 0 && !state.submitted) {
-    state.timeExpired = true;
-    if (state.timerInterval) {
-      clearInterval(state.timerInterval);
-      state.timerInterval = null;
-    }
-    submit(true); // форсируем завершение
-  }
-}
-
-function updateTimerDisplay() {
-  var timerEl = document.getElementById('timer-display');
-  if (timerEl && state.remainingSeconds !== null) {
-    var mins = Math.floor(state.remainingSeconds / 60);
-    var secs = state.remainingSeconds % 60;
-    timerEl.textContent = mins + ':' + (secs < 10 ? '0' : '') + secs;
-    if (state.remainingSeconds <= 60) {
-      timerEl.style.color = '#dc2626';
-      timerEl.style.fontWeight = 'bold';
-    }
-  }
-  // PRD-4 v1.1 §3.2: per-section timer display lives alongside the
-  // test-wide timer. Templates can render a separate element with
-  // id="section-timer-display" or data-path="section.current.timer".
-  var secTimerEl = document.getElementById('section-timer-display');
-  if (secTimerEl && state.sectionTimer && typeof state.sectionTimer.remainingSeconds === 'number') {
-    var sm = Math.floor(state.sectionTimer.remainingSeconds / 60);
-    var ss = state.sectionTimer.remainingSeconds % 60;
-    secTimerEl.textContent = sm + ':' + (ss < 10 ? '0' : '') + ss;
-    if (state.sectionTimer.remainingSeconds <= 60) {
-      secTimerEl.style.color = '#dc2626';
-      secTimerEl.style.fontWeight = 'bold';
-    }
-  }
-  // Sync onto TEST_DATA.section.current.timer for data-path binding so
-  // templates that bind via renderPathOnlyDsl see live values.
-  if (typeof TEST_DATA !== 'undefined' && TEST_DATA.section && TEST_DATA.section.current) {
-    if (state.sectionTimer && typeof state.sectionTimer.remainingSeconds === 'number') {
-      TEST_DATA.section.current.timer = {
-        remainingSeconds: state.sectionTimer.remainingSeconds,
-        displayText: formatTime(state.sectionTimer.remainingSeconds),
-      };
-    } else {
-      TEST_DATA.section.current.timer = null;
-    }
-  }
-}
-
-function formatTime(seconds) {
-  var mins = Math.floor(seconds / 60);
-  var secs = seconds % 60;
-  return mins + ':' + (secs < 10 ? '0' : '') + secs;
+/**
+ * Monotonic millisecond clock, immune to system-clock changes. Falls back to
+ * wall time on engines without the Performance API (ES5-safe feature detect).
+ * @returns {number}
+ */
+function timerNowMs() {
+  return (window.performance && typeof performance.now === 'function')
+    ? performance.now()
+    : Date.now();
 }
 
 /**
- * PRD-4 v1.1 §3.2 / §4.6 — section timer lifecycle.
- *
- * Started by contentFlow / routerFlow when the learner enters a section
- * (linear chunk OR a router-picked topic). Stopped automatically when
- * the section completes (advancePageSequence past after_topic, router
- * returnFromTopic, adaptive session callback) or when the timer expires.
- *
- * Two simultaneous timers (test + section) are independent: test
- * expiry forces submit() per the existing flow; section expiry calls
- * onExpire(topicId) which the caller maps to "skip rest of section,
- * advance to next" (linear) or "return to router with section marked
- * completed" (router).
+ * Parse a SCORM 2004 timeinterval ("PT#H#M#S") into whole seconds.
+ * @param {string} iso
+ * @returns {number|null}
+ */
+function parseScormDuration(iso) {
+  if (!iso) return null;
+  var m = /P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:([\d.]+)S)?/.exec(String(iso));
+  if (!m) return null;
+  return (+m[1] || 0) * 86400 + (+m[2] || 0) * 3600 + (+m[3] || 0) * 60 + Math.floor(+m[4] || 0);
+}
+
+/**
+ * Read cmi.total_time (LMS-accumulated active time) in seconds, or null when
+ * unavailable/unparseable. Null triggers degradation to the phase-1 timer.
+ * @returns {number|null}
+ */
+function readTotalTimeSec() {
+  try {
+    if (typeof SCORM === 'undefined' || !SCORM.getValue) return null;
+    var sec = parseScormDuration(SCORM.getValue('cmi.total_time'));
+    return (typeof sec === 'number' && !isNaN(sec)) ? sec : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** Format whole seconds as a SCORM 2004 timeinterval ("PT#H#M#S"). */
+function secondsToIsoDuration(sec) {
+  var s = sec > 0 ? Math.floor(sec) : 0;
+  return 'PT' + Math.floor(s / 3600) + 'H' + Math.floor((s % 3600) / 60) + 'M' + (s % 60) + 'S';
+}
+
+/**
+ * PRD-20 phase 2c: commit the current session's elapsed time to
+ * cmi.session_time so an ungraceful kill still credits the time already spent
+ * (validated: committed session_time survives a tab kill). Best-effort.
+ */
+function commitSessionTime() {
+  try {
+    if (typeof SCORM === 'undefined' || !SCORM.setValue) return;
+    if (state.timerStartPerfMs === null) return;
+    var elapsed = Math.floor((timerNowMs() - state.timerStartPerfMs) / 1000);
+    SCORM.setValue('cmi.session_time', secondsToIsoDuration(elapsed));
+    SCORM.commit();
+  } catch (e) {
+    /* best-effort; a failed commit just widens the kill-loss window */
+  }
+}
+
+/** Start the periodic session-time commit (kill-resistance). */
+function startTimerCommit() {
+  stopTimerCommit();
+  if (typeof SCORM === 'undefined' || !SCORM.setValue) return; // standalone / no RTE
+  state.timerCommitInterval = setInterval(commitSessionTime, TIMER_COMMIT_MS);
+}
+
+/** Stop the periodic session-time commit. */
+function stopTimerCommit() {
+  if (state.timerCommitInterval) {
+    clearInterval(state.timerCommitInterval);
+    state.timerCommitInterval = null;
+  }
+}
+
+/**
+ * Format a second count as "M:SS"; negative input clamps to "0:00".
+ * @param {number} seconds
+ * @returns {string}
+ */
+function formatTime(seconds) {
+  var total = seconds > 0 ? seconds : 0;
+  var mins = Math.floor(total / 60);
+  var secs = total % 60;
+  return mins + ':' + (secs < 10 ? '0' + secs : secs);
+}
+
+/**
+ * Whole seconds still left from a monotonic start reading, never below zero.
+ * @param {number} startMs
+ * @param {number} totalSeconds
+ * @returns {number}
+ */
+function timerRemaining(startMs, totalSeconds) {
+  var elapsed = Math.floor((timerNowMs() - startMs) / 1000);
+  var left = totalSeconds - elapsed;
+  return left > 0 ? left : 0;
+}
+
+/**
+ * Paint one timer element: text plus a reversible critical highlight.
+ * @param {string} elementId
+ * @param {number} seconds
+ */
+function paintTimer(elementId, seconds) {
+  var el = document.getElementById(elementId);
+  if (!el) return;
+  el.textContent = formatTime(seconds);
+  var critical = seconds <= TIMER_WARN_AT;
+  el.style.color = critical ? '#dc2626' : '';
+  el.style.fontWeight = critical ? 'bold' : '';
+}
+
+// --- Test-wide timer -------------------------------------------------------
+
+/**
+ * Start the test-wide countdown when the test carries a positive limit.
+ * Fresh attempt: write the active-time anchor and use the full limit. Reload
+ * with a matching anchor: restore remaining from consumed active time
+ * (PRD-20 phase 2b), or expire the attempt if the limit was exhausted while
+ * away. Missing anchor / unreadable total_time degrades to the phase-1
+ * (full, session-only) timer.
+ */
+function initTimer() {
+  var minutes = TEST_DATA.timeLimitMinutes;
+  if (!minutes || minutes <= 0) return;
+
+  var totalSeconds = minutes * 60;
+  var anchor = (typeof readTimerAnchor === 'function') ? readTimerAnchor() : null;
+  var totalNow = readTotalTimeSec();
+  var isResume =
+    anchor &&
+    anchor.limitMinutes === minutes &&
+    typeof anchor.baselineTotalSec === 'number' &&
+    totalNow !== null;
+
+  var startSeconds;
+  if (isResume) {
+    // Consumed active time = LMS-committed sessions of this attempt so far.
+    var consumed = totalNow - anchor.baselineTotalSec;
+    if (consumed < 0) {
+      consumed = 0; // total_time regressed below baseline -> ignore (safety)
+      state.timerAnchorTampered = true; // PRD-20 2f: anomaly (total_time went back)
+    }
+    startSeconds = totalSeconds - consumed;
+    if (startSeconds > totalSeconds) startSeconds = totalSeconds;
+    if (startSeconds <= 0) {
+      // Limit exhausted while away: expire with a visible notice, not silently.
+      state.timeExpired = true;
+      state.remainingSeconds = 0;
+      paintTimer('timer-display', 0);
+      if (typeof showToast === 'function') showToast('Время теста истекло', 'warn');
+      stopTestTimer();
+      submit(true);
+      return;
+    }
+  } else {
+    // Fresh attempt: establish the anchor (phase 2a) and use the full limit.
+    startSeconds = totalSeconds;
+    if (totalNow !== null && typeof writeTimerAnchor === 'function') {
+      writeTimerAnchor({ limitMinutes: minutes, baselineTotalSec: totalNow });
+    }
+  }
+
+  state.remainingSeconds = startSeconds;
+  state.timerStartPerfMs = timerNowMs();
+  paintTimer('timer-display', startSeconds);
+
+  state.timerInterval = setInterval(function () {
+    // Reset paths (answers / startPage) stop us by nulling the handle.
+    if (state.timerInterval === null || state.submitted) {
+      stopTestTimer();
+      return;
+    }
+    var left = timerRemaining(state.timerStartPerfMs, startSeconds);
+    state.remainingSeconds = left;
+    paintTimer('timer-display', left);
+    if (left <= 0) {
+      state.timeExpired = true;
+      stopTestTimer();
+      submit(true); // force completion on expiry
+    }
+  }, TIMER_TICK_MS);
+
+  startTimerCommit();
+}
+
+/**
+ * Single entry point to stop the test timer; called by reset paths too.
+ * Clears the active-time anchor so the next attempt starts fresh. A reload
+ * never calls this, so the anchor survives a reload (enabling resume), but a
+ * submit / restart / expiry does clear it.
+ */
+function stopTestTimer() {
+  stopTimerCommit();
+  if (state.timerInterval) {
+    clearInterval(state.timerInterval);
+    state.timerInterval = null;
+  }
+  state.timerStartPerfMs = null;
+  if (typeof clearTimerAnchor === 'function') clearTimerAnchor();
+}
+
+// --- Per-section timer (PRD-4 v1.1 section 3.2 / 4.6) ----------------------
+
+/**
+ * Start an independent per-section countdown, replacing any current one.
+ * On expiry calls onExpire(topicId); the caller maps that to advancing past
+ * the section (linear) or returning to the router (router mode).
+ * @param {string} topicId
+ * @param {number} limitMinutes
+ * @param {(topicId: string) => void} [onExpire]
  */
 function startSectionTimer(topicId, limitMinutes, onExpire) {
   stopSectionTimer();
   if (!limitMinutes || limitMinutes <= 0) return;
-  state.sectionTimer = {
+
+  var totalSeconds = limitMinutes * 60;
+  var section = {
     topicId: topicId,
     limitMinutes: limitMinutes,
-    remainingSeconds: limitMinutes * 60,
+    remainingSeconds: totalSeconds,
     expired: false,
     onExpire: onExpire || null,
     intervalId: null,
+    startPerfMs: timerNowMs()
   };
-  state.sectionTimer.intervalId = setInterval(function () {
-    if (!state.sectionTimer || state.submitted) {
+  state.sectionTimer = section;
+
+  section.intervalId = setInterval(function () {
+    if (state.sectionTimer !== section) return; // superseded by a newer section
+    if (state.submitted) {
       stopSectionTimer();
       return;
     }
-    state.sectionTimer.remainingSeconds--;
-    updateTimerDisplay();
-    if (state.sectionTimer.remainingSeconds <= 0) {
-      state.sectionTimer.expired = true;
-      var onExp = state.sectionTimer.onExpire;
-      var tid = state.sectionTimer.topicId;
+    var left = timerRemaining(section.startPerfMs, totalSeconds);
+    section.remainingSeconds = left;
+    paintTimer('section-timer-display', left);
+    syncSectionBinding(section);
+    if (left <= 0) {
+      section.expired = true;
+      var onExp = section.onExpire;
+      var tid = section.topicId;
       stopSectionTimer();
       if (typeof onExp === 'function') onExp(tid);
     }
-  }, 1000);
-  updateTimerDisplay();
+  }, TIMER_TICK_MS);
+
+  paintTimer('section-timer-display', totalSeconds);
+  syncSectionBinding(section);
 }
 
+/** Stop and clear the section timer and its data-path binding. */
 function stopSectionTimer() {
   if (state.sectionTimer && state.sectionTimer.intervalId) {
     clearInterval(state.sectionTimer.intervalId);
   }
   state.sectionTimer = null;
-  // Clear the data-path binding so stale values don't linger.
-  if (typeof TEST_DATA !== 'undefined' && TEST_DATA.section && TEST_DATA.section.current) {
-    TEST_DATA.section.current.timer = null;
-  }
+  clearSectionBinding();
+}
+
+/**
+ * Mirror the live section time onto TEST_DATA so templates bound via
+ * renderPathOnlyDsl (section.current.timer.*) show current values.
+ * @param {object} section
+ */
+function syncSectionBinding(section) {
+  if (typeof TEST_DATA === 'undefined' || !TEST_DATA.section || !TEST_DATA.section.current) return;
+  TEST_DATA.section.current.timer = {
+    remainingSeconds: section.remainingSeconds,
+    displayText: formatTime(section.remainingSeconds)
+  };
+}
+
+/** Clear the section timer data-path binding so stale values do not linger. */
+function clearSectionBinding() {
+  if (typeof TEST_DATA === 'undefined' || !TEST_DATA.section || !TEST_DATA.section.current) return;
+  TEST_DATA.section.current.timer = null;
 }

@@ -28,7 +28,7 @@
  * The modal owns a draft copy of the values; on Save it emits via `onSave`.
  */
 import { useEffect, useRef, useState } from "react";
-import { Link as LinkIcon, Paperclip, Plus, Trash2 } from "lucide-react";
+import { CalendarDays, Link as LinkIcon, Paperclip, Plus, Trash2 } from "lucide-react";
 import {
   Banner,
   Button,
@@ -44,14 +44,21 @@ import type { FeedbackAsset } from "../test-editor.types";
 
 export type FeedbackFormat = "plain" | "richText" | "html";
 
+/** Course recommendation — URL required (label «Курсы» in the UI). */
 export type FeedbackLink = { title: string; url: string };
+
+/** Event recommendation (TD-02) — URL optional. */
+export type FeedbackEvent = { title: string; url?: string };
 
 /** Value shape passed in and emitted by the modal. `assets` are canonical — no UI-only fields. */
 export type FeedbackEditorValue = {
   format: FeedbackFormat;
   text: string;
+  /** Recommended courses (UI label «Курсы»). */
   links: FeedbackLink[];
   assets: FeedbackAsset[];
+  /** Recommended events (TD-02). Optional in the type so legacy callers compile. */
+  events?: FeedbackEvent[];
 };
 
 export type FeedbackEditorModalProps = {
@@ -63,6 +70,8 @@ export type FeedbackEditorModalProps = {
   value: FeedbackEditorValue;
   /** When true, the «PDF» section is hidden entirely (e.g. for level feedback). */
   hideAssets?: boolean;
+  /** When true, the «Мероприятия» section is hidden (contexts that do not persist events). */
+  hideEvents?: boolean;
   onCancel: () => void;
   onSave: (value: FeedbackEditorValue) => void;
   /** Optional test id for the modal root. */
@@ -79,7 +88,11 @@ export type FeedbackEditorModalProps = {
  */
 type DraftAsset = FeedbackAsset & { size?: number; file?: File };
 
-type DraftValue = Omit<FeedbackEditorValue, "assets"> & { assets: DraftAsset[] };
+type DraftValue = Omit<FeedbackEditorValue, "assets" | "events"> & {
+  assets: DraftAsset[];
+  /** Always a concrete array in the draft (normalized from the optional prop). */
+  events: FeedbackEvent[];
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -97,7 +110,10 @@ function formatBytes(n: number): string {
 
 /** @public */
 export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
-  const [draft, setDraft] = useState<DraftValue>(props.value);
+  const [draft, setDraft] = useState<DraftValue>(() => ({
+    ...props.value,
+    events: props.value.events ?? [],
+  }));
   /** Ref to the contenteditable RTE area (richText mode only). */
   const rteRef = useRef<HTMLDivElement>(null);
   /** Hidden file input for PDF upload. */
@@ -122,7 +138,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
   useEffect(() => {
     if (!props.open) return;
     const newVal = props.value;
-    setDraft(newVal);
+    setDraft({ ...newVal, events: newVal.events ?? [] });
     if (newVal.format === "richText") {
       requestAnimationFrame(() => {
         if (rteRef.current) rteRef.current.innerHTML = newVal.text;
@@ -388,22 +404,22 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
           </div>
         )}
 
-        {/* ── Links section ────────────────────────────────────────────── */}
+        {/* ── Courses section (data field `links`; UI label «Курсы») ────── */}
         <div className="tb-feedback-editor__section">
           <div className="tb-feedback-editor__sec-title">
-            <LinkIcon className="h-3.5 w-3.5" aria-hidden="true" />
-            Ссылки на материалы
+            <LinkIcon size={14} aria-hidden="true" />
+            Курсы
           </div>
           {/* No empty-state per wireframe — just the list (if any) + button. */}
           {draft.links.length > 0 && (
-            <ul className="tb-feedback-editor__list" aria-label="Ссылки">
+            <ul className="tb-feedback-editor__list" aria-label="Курсы">
               {draft.links.map((link, idx) => (
                 <li key={idx} className="tb-feedback-editor__item">
                   <div className="tb-feedback-editor__item-fields">
                     <Input
                       size="s"
                       fullWidth
-                      aria-label="Название ссылки"
+                      aria-label="Название курса"
                       value={link.title}
                       placeholder="Название"
                       onChange={(e) => {
@@ -420,7 +436,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
                       size="s"
                       fullWidth
                       type="url"
-                      aria-label="URL ссылки"
+                      aria-label="URL курса"
                       value={link.url}
                       placeholder="https://…"
                       onChange={(e) => {
@@ -435,8 +451,8 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
                     />
                   </div>
                   <IconButton
-                    icon={<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
-                    aria-label={`Удалить ссылку ${idx + 1}`}
+                    icon={<Trash2 size={14} aria-hidden="true" />}
+                    aria-label={`Удалить курс ${idx + 1}`}
                     variant="ghost"
                     size="s"
                     onClick={() => {
@@ -457,22 +473,102 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
             <Button
               variant="secondary"
               size="s"
-              leadingIcon={<Plus className="h-3 w-3" aria-hidden="true" />}
+              leadingIcon={<Plus size={12} aria-hidden="true" />}
               onClick={() =>
                 setDraft((d) => ({ ...d, links: [...d.links, { title: "", url: "" }] }))
               }
               data-testid="feedback-editor-link-add"
             >
-              Добавить ссылку
+              Добавить курс
             </Button>
           </div>
         </div>
+
+        {/* ── Events section (TD-02; URL optional) ─────────────────────── */}
+        {!props.hideEvents && (
+        <div className="tb-feedback-editor__section">
+          <div className="tb-feedback-editor__sec-title">
+            <CalendarDays size={14} aria-hidden="true" />
+            Мероприятия
+          </div>
+          {draft.events.length > 0 && (
+            <ul className="tb-feedback-editor__list" aria-label="Мероприятия">
+              {draft.events.map((event, idx) => (
+                <li key={idx} className="tb-feedback-editor__item">
+                  <div className="tb-feedback-editor__item-fields">
+                    <Input
+                      size="s"
+                      fullWidth
+                      aria-label="Название мероприятия"
+                      value={event.title}
+                      placeholder="Название"
+                      onChange={(e) => {
+                        const title = e.target.value;
+                        setDraft((d) => {
+                          const events = [...d.events];
+                          events[idx] = { ...events[idx], title };
+                          return { ...d, events };
+                        });
+                      }}
+                      data-testid={`feedback-editor-event-title-${idx}`}
+                    />
+                    <Input
+                      size="s"
+                      fullWidth
+                      type="url"
+                      aria-label="Ссылка на мероприятие (необязательно)"
+                      value={event.url ?? ""}
+                      placeholder="https://… (необязательно)"
+                      onChange={(e) => {
+                        const url = e.target.value;
+                        setDraft((d) => {
+                          const events = [...d.events];
+                          events[idx] = { ...events[idx], url };
+                          return { ...d, events };
+                        });
+                      }}
+                      data-testid={`feedback-editor-event-url-${idx}`}
+                    />
+                  </div>
+                  <IconButton
+                    icon={<Trash2 size={14} aria-hidden="true" />}
+                    aria-label={`Удалить мероприятие ${idx + 1}`}
+                    variant="ghost"
+                    size="s"
+                    onClick={() => {
+                      setDraft((d) => {
+                        const events = [...d.events];
+                        events.splice(idx, 1);
+                        return { ...d, events };
+                      });
+                    }}
+                    data-testid={`feedback-editor-event-remove-${idx}`}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+          <div>
+            <Button
+              variant="secondary"
+              size="s"
+              leadingIcon={<Plus size={12} aria-hidden="true" />}
+              onClick={() =>
+                setDraft((d) => ({ ...d, events: [...d.events, { title: "", url: "" }] }))
+              }
+              data-testid="feedback-editor-event-add"
+            >
+              Добавить мероприятие
+            </Button>
+          </div>
+        </div>
+        )}
 
         {/* ── PDF assets section ───────────────────────────────────────── */}
         {!props.hideAssets && (
           <div className="tb-feedback-editor__section">
             <div className="tb-feedback-editor__sec-title">
-              <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+              <Paperclip size={14} aria-hidden="true" />
               Прикреплённые файлы (PDF)
             </div>
             {draft.assets.length > 0 && (
@@ -509,7 +605,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
                       </div>
                     </div>
                     <IconButton
-                      icon={<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                      icon={<Trash2 size={14} aria-hidden="true" />}
                       aria-label={`Удалить файл ${i + 1}`}
                       variant="ghost"
                       size="s"
@@ -530,7 +626,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
               <Button
                 variant="secondary"
                 size="s"
-                leadingIcon={<Plus className="h-3 w-3" aria-hidden="true" />}
+                leadingIcon={<Plus size={12} aria-hidden="true" />}
                 onClick={() => fileInputRef.current?.click()}
                 data-testid="feedback-editor-asset-upload"
               >

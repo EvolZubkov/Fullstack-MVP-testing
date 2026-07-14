@@ -11,7 +11,7 @@
  *   - FAB speed-dial toggles + sub-actions render.
  *   - Empty state shown when there are no tests and no folders.
  */
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getPermissions, ROLES, type Capability } from "@shared/access";
@@ -21,9 +21,19 @@ import { TestsListPage } from "../tests-list";
 // context so the component renders without an AuthProvider; `authMock.can` is
 // mutable so individual tests can simulate a role. Reset to "all true" in
 // beforeEach so the rest of the suite keeps every action visible.
-const { authMock } = vi.hoisted(() => ({ authMock: { can: (_cap: string): boolean => true } }));
+const { authMock } = vi.hoisted(() => ({
+  authMock: {
+    can: (_cap: string): boolean => true,
+    roles: [] as string[],
+    userId: "current-user",
+  },
+}));
 vi.mock("@/lib/auth", () => ({
-  useAuth: () => ({ can: (cap: string) => authMock.can(cap) }),
+  useAuth: () => ({
+    can: (cap: string) => authMock.can(cap),
+    hasRole: (role: string) => authMock.roles.includes(role),
+    user: { id: authMock.userId },
+  }),
 }));
 
 /** Build a `can` that mirrors the real role -> permission map for the role set. */
@@ -84,6 +94,8 @@ beforeEach(() => {
   window.localStorage.clear();
   // Default: every capability granted (admin-like) so unrelated tests are unaffected.
   authMock.can = () => true;
+  authMock.roles = [ROLES.ADMINISTRATOR];
+  authMock.userId = "current-user";
 });
 
 afterEach(() => {
@@ -182,7 +194,7 @@ describe("<TestsListPage /> — search", () => {
     expect(screen.getByText("GDPR для разработчиков")).toBeInTheDocument();
   });
 
-  it("Сбросить clears the search", async () => {
+  it("очистка поля поиска возвращает дерево", async () => {
     mockMany({
       "/api/tests": [buildApiTestRow()],
       "/api/test-folders": [],
@@ -190,9 +202,10 @@ describe("<TestsListPage /> — search", () => {
     renderPage();
     await waitFor(() => screen.getByText("Основы информационной безопасности"));
 
+    // Поиск в стиле «Темы и вопросы» (DS Input) — отдельной кнопки «Сбросить»
+    // нет; поиск очищается опустошением поля, после чего возвращается дерево.
     fireEvent.change(screen.getByTestId("tests-list-search-input"), { target: { value: "anything" } });
-    await waitFor(() => screen.getByTestId("tests-list-search-clear"));
-    fireEvent.click(screen.getByTestId("tests-list-search-clear"));
+    fireEvent.change(screen.getByTestId("tests-list-search-input"), { target: { value: "" } });
 
     await waitFor(() => expect(screen.getByTestId("tests-list-tree")).toBeInTheDocument());
   });
@@ -263,9 +276,22 @@ describe("<TestsListPage /> — owner column + action gating by role (PRD-13)", 
     expect(screen.queryByTestId("test-more-t-1")).toBeNull();
   });
 
-  it("the «Общий доступ» menu item is hidden without tests.access.grant (author)", async () => {
+  it("«Общий доступ» shows for the test owner (author, BRC-27)", async () => {
     authMock.can = canForRoles([ROLES.AUTHOR]);
-    mockMany({ "/api/tests": [buildApiTestRow()], "/api/test-folders": [] });
+    authMock.roles = [ROLES.AUTHOR];
+    authMock.userId = "current-user";
+    mockMany({ "/api/tests": [buildApiTestRow({ ownerId: "current-user" })], "/api/test-folders": [] });
+    renderPage();
+    await waitFor(() => screen.getByTestId("test-row-t-1"));
+    fireEvent.click(screen.getByTestId("test-more-t-1"));
+    expect(screen.getByTestId("menu-access-t-1")).toBeInTheDocument();
+  });
+
+  it("«Общий доступ» is hidden for a non-owner author (object scope, BRC-27)", async () => {
+    authMock.can = canForRoles([ROLES.AUTHOR]);
+    authMock.roles = [ROLES.AUTHOR];
+    authMock.userId = "current-user";
+    mockMany({ "/api/tests": [buildApiTestRow({ ownerId: "someone-else" })], "/api/test-folders": [] });
     renderPage();
     await waitFor(() => screen.getByTestId("test-row-t-1"));
     fireEvent.click(screen.getByTestId("test-more-t-1"));
@@ -288,15 +314,19 @@ describe("<TestsListPage /> — move-to-folder (S13.1-G32)", () => {
     fireEvent.click(screen.getByTestId("menu-move-t-1"));
 
     expect(promptSpy).not.toHaveBeenCalled();
-    expect(screen.getByTestId("move-folder-pick-root")).toBeInTheDocument();
-    // Root pre-selected (test.folderId === null) and submit disabled (no change).
-    expect(
-      (screen.getByTestId("move-folder-pick-root") as HTMLInputElement).checked,
-    ).toBe(true);
+    // Папка выбирается DS-деревом (комбобокс), как на «Темах и вопросах».
+    // Корень предвыбран (test.folderId === null) → «Переместить» заблокирована (нет изменения).
     expect(screen.getByTestId("move-folder-pick-submit")).toBeDisabled();
 
-    // Pick a different folder — submit enables.
-    fireEvent.click(screen.getByTestId("move-folder-pick-folder-f-1"));
+    // Раскрыть дерево и выбрать другую папку — кнопка разблокируется.
+    // Триггер комбобокса — внутри модалки; дерево раскрывается в портале
+    // (document.body), поэтому узел «ИБ» ищем внутри попапа .tb-foldercombo__pop
+    // (папка «ИБ» есть и в основном дереве — нужно избежать неоднозначности).
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByText("Корень (без папки)"));
+    const pop = document.querySelector(".tb-foldercombo__pop");
+    expect(pop).not.toBeNull();
+    fireEvent.click(within(pop as HTMLElement).getByText("ИБ"));
     expect(screen.getByTestId("move-folder-pick-submit")).not.toBeDisabled();
 
     promptSpy.mockRestore();

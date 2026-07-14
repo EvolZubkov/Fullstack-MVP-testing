@@ -296,6 +296,29 @@ ok "Roles backfilled"
 # one-off container with the entrypoint overridden so the app itself does not
 # start (the ownership reassignment above exists precisely so push can ALTER the
 # cloned tables). Mirrors the prod deploy.sh schema step.
+# PRD-15 data/destructive migrations that push cannot perform, BEFORE push (same
+# rule as the role backfill above and prod deploy.sh). The clone carries prod's
+# topic_courses/topic_events and questions.points/scoring_json; these must be
+# backfilled into feedback_json / test_question_scoring and the replacement table
+# created BEFORE push drops the sources or mis-maps test_question_scoring onto a
+# dropped table. All idempotent; run in order in one invocation.
+info "Applying pre-push data migrations (TD-02 feedback, PRD-15 scoring)..."
+docker compose run --rm --no-deps --entrypoint sh "${TEST_PROJECT}" -c "node script/run-sql.cjs \
+  migrations/023_td02_topic_feedback_json.sql \
+  migrations/024_td02_drop_topic_courses_events.sql \
+  migrations/026_prd15_test_question_scoring.sql \
+  migrations/027_prd15_scoring_backfill.sql \
+  migrations/028_prd15_drop_question_scoring_columns.sql"
+ok "Data migrations applied"
+
+# Safety gate: assert the destructive/ambiguous PRD-15 migrations took effect
+# BEFORE push (otherwise push prompts create/rename and --force would DROP
+# sources without backfill). Loud failure instead of silent data loss.
+info "Verifying schema is migrated before push (PRD-15 gate)..."
+docker compose run --rm --no-deps --entrypoint sh "${TEST_PROJECT}" -c "node script/run-sql.cjs script/verify-prd15-pre-push.sql" \
+    || error "Pre-push gate failed: PRD-15 data migrations did not take effect. NOT running push (would risk data loss). See message above."
+ok "Schema gate passed"
+
 info "Applying DB schema to test DB (drizzle-kit push)..."
 docker compose run --rm --no-deps --entrypoint sh "${TEST_PROJECT}" -c "npx drizzle-kit push --force"
 ok "DB schema up to date"

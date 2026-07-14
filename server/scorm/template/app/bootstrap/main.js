@@ -91,7 +91,10 @@
           });
           goToPageSequenceIndex(itemIndex >= 0 ? itemIndex : 0);
         }
-        render();
+        // PRD-20 (5.6/5.12): resume the test timer from the active-time anchor.
+        // initTimer expires-and-submits if the limit was exhausted while away.
+        if (TEST_DATA.timeLimitMinutes && typeof initTimer === 'function') initTimer();
+        if (!state.submitted) render();
       } else if (recovery.action === 'restore_router') {
         // PRD-4 v1.1 §3.2 / Phase 4f — router-mode recovery: re-apply the
         // completed-topics snapshot, generate a fresh variant (questions
@@ -102,15 +105,34 @@
         restoreRouterSession(recovery.session);
         generateVariant();
         if (typeof rebuildPageSequence === 'function') rebuildPageSequence();
-        // Skip the test-before content the learner has already seen by
-        // jumping to the router page itself, if present.
-        if (state.pageSequence) {
-          var routerIdx = state.pageSequence.findIndex(function (it) {
-            return it && it.isRouter;
-          });
-          if (routerIdx >= 0) goToPageSequenceIndex(routerIdx);
+        // PRD-20 (5.6): resume the test timer from the active-time anchor
+        // (may expire-and-submit if the limit ran out while away).
+        if (TEST_DATA.timeLimitMinutes && typeof initTimer === 'function') initTimer();
+        var _sess = recovery.session;
+        var _resumed = false;
+        if (!state.submitted && _sess.currentRouterTopic && TEST_DATA.mode !== 'adaptive' &&
+            typeof RouterFlow !== 'undefined' && RouterFlow.resumeRouterTopic) {
+          // PRD-20 (2e): resume INSIDE the unfinished topic. Restore the saved
+          // question pool + answers so the topic chunk and saved position line up.
+          if (_sess.flatQuestions && _sess.flatQuestions.length) {
+            state.flatQuestions = _sess.flatQuestions;
+          }
+          state.answers = _sess.answers || {};
+          state.questionStatuses = _sess.questionStatuses || {};
+          state.sectionCommitted = _sess.sectionCommitted || {};
+          _resumed = RouterFlow.resumeRouterTopic(_sess.currentRouterTopic, _sess.currentPageIndex);
         }
-        render();
+        if (!_resumed && !state.submitted) {
+          // Fall back to the router page (previous behaviour): completed topics
+          // show «Пройдена», the unfinished topic is re-enterable.
+          if (state.pageSequence) {
+            var routerIdx = state.pageSequence.findIndex(function (it) {
+              return it && it.isRouter;
+            });
+            if (routerIdx >= 0) goToPageSequenceIndex(routerIdx);
+          }
+          render();
+        }
       } else if (recovery.action === 'show_last_attempt') {
         // Показываем результат последней попытки, сбрасываем незавершённую сессию
         clearCurrentSession();
@@ -154,8 +176,9 @@
   }
 
   // PRD-6: the retake gate runs BEFORE SCORM.Initialize for tests with a policy
-  // (NFR-01/02). Blocked => block-wall (no init, no cmi). Allowed => «Начать
-  // курс» shell whose click runs the normal course. Non-gated tests run directly.
+  // (NFR-01/02). Blocked => block-wall (no init, no cmi). Allowed (PRD-19 FR-19)
+  // => runs the normal course directly (no gate-shell). Non-gated tests run
+  // directly too.
   function boot() {
     if (typeof RetakeGate !== "undefined" && RetakeGate.isGated(TEST_DATA)) {
       RetakeGate.run(TEST_DATA, runCourse);

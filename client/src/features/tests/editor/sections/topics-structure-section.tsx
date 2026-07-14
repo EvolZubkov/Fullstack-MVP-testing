@@ -21,8 +21,8 @@
  */
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Layers, Pencil, Plus, Trash2, X, Link as LinkIcon, Paperclip } from "lucide-react";
-import type { DrawBlueprint, Topic } from "@shared/schema";
+import { Layers, Plus, Trash2, X } from "lucide-react";
+import type { DrawBlueprint, FormSet, Topic } from "@shared/schema";
 import { tagKey } from "@shared/tags";
 import {
   Banner,
@@ -38,6 +38,8 @@ import {
   Tag,
 } from "@universityrt/ui-kit";
 import { FeedbackEditorModal } from "./feedback-editor-modal";
+import { VariantsEditor } from "./variants-editor";
+import { FeedbackPreview as SharedFeedbackPreview } from "./feedback-preview";
 import type {
   EditorSection,
   TestEditorModel,
@@ -71,7 +73,7 @@ async function fetchTopicsWithCount(): Promise<TopicWithQuestionCount[]> {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: CompositionSectionProps) {
-  const { data: allTopics = [] } = useQuery<TopicWithQuestionCount[]>({
+  const { data: allTopics = [], isSuccess: topicsLoaded } = useQuery<TopicWithQuestionCount[]>({
     queryKey: ["/api/topics"],
     queryFn: fetchTopicsWithCount,
   });
@@ -90,6 +92,9 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
     () => allTopics.filter((t) => !usedTopicIds.has(t.id)),
     [allTopics, usedTopicIds],
   );
+  // PRD-15 E-11: /api/topics is visibility-scoped, so a section whose topicId is
+  // absent here references a topic the author can no longer see.
+  const visibleTopicIds = useMemo(() => new Set(allTopics.map((t) => t.id)), [allTopics]);
 
   const updateSection = (topicId: string, patch: Partial<EditorSection>) => {
     updateModel((m) => ({
@@ -130,7 +135,9 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
           feedback: { format: "plain", text: "" },
           feedbackLinks: [],
           feedbackAssets: [],
+          feedbackEvents: [],
           drawBlueprint: null,
+          defaultPoints: null,
         },
       ],
     }));
@@ -164,9 +171,11 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
           key={section.topicId}
           index={index}
           section={section}
+          unavailable={topicsLoaded && !visibleTopicIds.has(section.topicId)}
           adaptive={model.mode === "adaptive"}
           drawCountError={fieldErrors.get(`sections[${index}].drawCount`)}
           blueprintError={fieldErrors.get(`sections[${index}].drawBlueprintJson`)}
+          variantsError={fieldErrors.get(`sections[${index}].formSetJson`)}
           topicTags={tagsByTopic.get(section.topicId)?.tags ?? []}
           availByKey={tagsByTopic.get(section.topicId)?.availByKey ?? {}}
           onChangeDrawCount={(n) => updateSection(section.topicId, { drawCount: n })}
@@ -183,6 +192,7 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
             updateSection(section.topicId, { required })
           }
           onChangeBlueprint={(bp) => updateSection(section.topicId, { drawBlueprint: bp })}
+          onChangeFormSet={(formSet) => updateSection(section.topicId, { formSet })}
           onRemove={() => removeSection(section.topicId)}
           onSaveFeedback={(patch) => updateSection(section.topicId, patch)}
         />
@@ -192,7 +202,7 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
         variant="secondary"
         size="m"
         fullWidth
-        leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
+        leadingIcon={<Plus size={16} aria-hidden="true" />}
         onClick={() => setPickerOpen(true)}
         data-testid="composition-add-topic"
         data-field="sections"
@@ -235,9 +245,17 @@ function TopicRow(props: {
   onToggleRequired: (required: boolean) => void;
   /** Replace this section's draw blueprint (`null` = uniform draw). */
   onChangeBlueprint: (bp: DrawBlueprint | null) => void;
+  /** PRD-17 (BR-12): replace this section's variant set (`null` = variants off). */
+  onChangeFormSet: (formSet: FormSet | null) => void;
+  /** FR-20c: validation message for this section's variants. */
+  variantsError?: string;
   onRemove: () => void;
   /** Called with a partial EditorSection patch when feedback is saved. */
   onSaveFeedback: (patch: Partial<EditorSection>) => void;
+  /** PRD-15 E-11: the author can no longer see this section's topic (grant
+   * revoked / made private). The test still works and saves; only new draws
+   * from this topic are blocked. */
+  unavailable?: boolean;
 }) {
   const { section } = props;
   const maxQ = Math.max(section.maxQuestions, 1);
@@ -247,12 +265,35 @@ function TopicRow(props: {
   // governs how many are shown); the stored manual `drawAll` is preserved so
   // leaving adaptive restores it. The switch + count field lock while adaptive.
   const effectiveDrawAll = props.adaptive || section.drawAll;
+  // PRD-17: variants mode is for standard delivery only; in adaptive the section
+  // draws by difficulty levels, so the variant set is ignored and not edited.
+  const variantsOn = !props.adaptive && section.formSet != null;
+
+  // Author request (UX): never HIDE the mutually-exclusive controls — show them
+  // DISABLED instead, so the card never appears to silently "lose" settings.
+  // Variants mode overrides the whole-topic draw; "draw all" overrides the
+  // partial-draw quotas. `partialDrawLocked` covers both the count field and the
+  // quota editor (a partial draw is the only thing they apply to).
+  const drawAllDisabled = props.adaptive || variantsOn;
+  const partialDrawLocked = effectiveDrawAll || variantsOn;
+  const quotaReason = variantsOn
+    ? "Недоступно: активен режим «Варианты теста» — вопросы берутся из выпавшего варианта целиком."
+    : effectiveDrawAll
+      ? "Недоступно: выдаётся вся тема. Квоты применяются только к частичной выборке."
+      : undefined;
+  // The draw-count error only applies to an editable partial whole-topic draw.
+  const drawCountError = !partialDrawLocked ? props.drawCountError : undefined;
 
   return (
     <>
       <div className="tb-topic-row" data-testid={`topic-row-${section.topicId}`}>
         <div className="tb-topic-row__header">
           <span className="tb-topic-row__name">{section.topicName}</span>
+          {props.unavailable && (
+            <Tag tone="warning" size="s" data-testid={`topic-unavailable-${section.topicId}`}>
+              Тема недоступна
+            </Tag>
+          )}
           <span className="tb-topic-row__count">
             {section.maxQuestions} вопрос{plural(section.maxQuestions)}
           </span>
@@ -266,7 +307,7 @@ function TopicRow(props: {
             <span className="tb-topic-row__required-lbl">Обязательная</span>
           </label>
           <IconButton
-            icon={<X className="h-3.5 w-3.5" aria-hidden="true" />}
+            icon={<X size={14} aria-hidden="true" />}
             aria-label={`Убрать тему «${section.topicName}»`}
             variant="ghost"
             size="s"
@@ -275,23 +316,30 @@ function TopicRow(props: {
           />
         </div>
         <div className="tb-topic-row__body">
+          {/* PRD-17: variants mode overrides the whole-topic draw (the source
+              becomes the drawn variant, delivered whole), and "draw all" overrides
+              the partial-draw quotas. Per author request these controls are kept
+              VISIBLE but DISABLED in those cases instead of being hidden, so the
+              card never looks like it silently dropped settings. */}
           <label className="tb-draw-all-row">
             <Switch
               checked={effectiveDrawAll}
-              disabled={props.adaptive}
+              disabled={drawAllDisabled}
               onChange={(e) => props.onToggleDrawAll(e.target.checked)}
               aria-label={`Все вопросы темы: ${section.topicName}`}
               data-testid={`topic-drawall-${section.topicId}`}
             />
             <span className="tb-draw-all-row__lbl">Все вопросы темы</span>
-            {props.adaptive && (
+            {props.adaptive ? (
               <span className="tb-draw-all-row__hint">включено адаптивным режимом</span>
-            )}
+            ) : variantsOn ? (
+              <span className="tb-draw-all-row__hint">отключено в режиме вариантов</span>
+            ) : null}
           </label>
           <div
             className="tb-draw-count-row"
             data-field={`sections[${props.index}].drawCount`}
-            data-invalid={!effectiveDrawAll && props.drawCountError ? "true" : undefined}
+            data-invalid={drawCountError ? "true" : undefined}
           >
             <span className="tb-draw-count-row__label">Вопросов в тест</span>
             <NumberInput
@@ -299,33 +347,42 @@ function TopicRow(props: {
               value={effectiveDrawAll ? maxQ : section.drawCount}
               min={1}
               max={maxQ}
-              disabled={effectiveDrawAll}
-              invalid={!effectiveDrawAll && Boolean(props.drawCountError)}
+              disabled={partialDrawLocked}
+              invalid={Boolean(drawCountError)}
               aria-label={`Количество вопросов из темы ${section.topicName}`}
               data-testid={`topic-drawcount-${section.topicId}`}
               onChange={(next) => props.onChangeDrawCount(next)}
             />
             <span className="tb-draw-count-row__max">из {section.maxQuestions}</span>
           </div>
-          {!effectiveDrawAll && props.drawCountError && (
+          {drawCountError && (
             <p className="tb-field-error" role="alert" data-testid={`topic-drawcount-error-${section.topicId}`}>
-              {props.drawCountError}
+              {drawCountError}
             </p>
           )}
 
-          {/* Quotas slice a partial draw — meaningless when the whole topic is
-              drawn, so the quota editor is hidden while "draw all" is effective. */}
-          {!effectiveDrawAll && (
-            <QuotaEditor
-              topicId={section.topicId}
-              topicName={section.topicName}
-              drawCount={section.drawCount}
-              blueprint={section.drawBlueprint ?? null}
-              topicTags={props.topicTags}
-              availByKey={props.availByKey}
-              onChange={props.onChangeBlueprint}
-            />
-          )}
+          <QuotaEditor
+            topicId={section.topicId}
+            topicName={section.topicName}
+            drawCount={section.drawCount}
+            blueprint={section.drawBlueprint ?? null}
+            topicTags={props.topicTags}
+            availByKey={props.availByKey}
+            onChange={props.onChangeBlueprint}
+            disabled={partialDrawLocked}
+            disabledReason={quotaReason}
+          />
+
+          {/* PRD-17 (BR-12): fixed variants. In adaptive mode the section draws by
+              difficulty levels, so the editor is shown DISABLED (not hidden). */}
+          <VariantsEditor
+            topicId={section.topicId}
+            topicName={section.topicName}
+            formSet={section.formSet ?? null}
+            onChange={props.onChangeFormSet}
+            error={props.variantsError}
+            disabled={props.adaptive}
+          />
 
           <div className="tb-card-desc">Обратная связь по теме</div>
           {/* Clicking the preview opens FeedbackEditorModal (FR-36 / FR-37). */}
@@ -344,6 +401,7 @@ function TopicRow(props: {
           text: section.feedback.text,
           links: section.feedbackLinks,
           assets: section.feedbackAssets,
+          events: section.feedbackEvents,
         }}
         onCancel={() => setFeedbackOpen(false)}
         onSave={(v) => {
@@ -351,6 +409,7 @@ function TopicRow(props: {
             feedback: { format: v.format, text: v.text },
             feedbackLinks: v.links,
             feedbackAssets: v.assets,
+            feedbackEvents: v.events ?? [],
           });
           setFeedbackOpen(false);
         }}
@@ -377,10 +436,18 @@ function QuotaEditor(props: {
   topicTags: string[];
   availByKey: Record<string, number>;
   onChange: (bp: DrawBlueprint | null) => void;
+  /** Force the whole editor disabled (drawing the whole topic / variants mode). */
+  disabled?: boolean;
+  /** Why the editor is force-disabled — shown in place of the off-state hint. */
+  disabledReason?: string;
 }) {
   const { topicId, topicName, drawCount, blueprint, topicTags, availByKey, onChange } = props;
+  const forcedDisabled = props.disabled ?? false;
   const enabled = blueprint != null;
   const noTags = topicTags.length === 0;
+  // When force-disabled the toggle stays visible (greyed) but the editing table
+  // collapses — its config is preserved in the draft, just not applied here.
+  const expanded = enabled && !forcedDisabled;
   const strata = blueprint?.strata ?? [];
 
   const usedKeys = new Set(strata.map((s) => tagKey(s.tag)));
@@ -410,29 +477,32 @@ function QuotaEditor(props: {
       <label className="tb-quota-toggle">
         <Switch
           checked={enabled}
-          disabled={noTags}
+          disabled={noTags || forcedDisabled}
           onChange={(e) => toggle(e.target.checked)}
           aria-label={`Квоты по подтемам: ${topicName}`}
           data-testid={`topic-quota-toggle-${topicId}`}
         />
         <span className="tb-section-label">
-          <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+          <Layers size={14} aria-hidden="true" />
           Квоты по подтемам (тегам)
         </span>
       </label>
 
-      {noTags && (
+      {forcedDisabled ? (
+        <div className="tb-card-desc" data-testid={`topic-quota-locked-${topicId}`}>
+          {props.disabledReason}
+        </div>
+      ) : noTags ? (
         <div className="tb-card-desc" data-testid={`topic-quota-notags-${topicId}`}>
           У вопросов темы нет тегов — добавьте теги в разделе «Вопросы», чтобы задавать квоты по подтемам.
         </div>
-      )}
-      {!noTags && !enabled && (
+      ) : !enabled ? (
         <div className="tb-card-desc">
           Выключено — выдача равномерная (случайные вопросы из всей темы). Включите, чтобы гарантировать покрытие подтем.
         </div>
-      )}
+      ) : null}
 
-      {enabled && (
+      {expanded && (
         <div className="tb-quota-block" data-testid={`topic-quota-block-${topicId}`}>
           {overflow && (
             <Banner
@@ -518,7 +588,7 @@ function QuotaEditor(props: {
                     )}
                     <td>
                       <IconButton
-                        icon={<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                        icon={<Trash2 size={14} aria-hidden="true" />}
                         variant="ghost"
                         size="s"
                         aria-label={`Удалить квоту «${s.tag}»`}
@@ -536,7 +606,7 @@ function QuotaEditor(props: {
             <Button
               variant="ghost"
               size="s"
-              leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
+              leadingIcon={<Plus size={16} aria-hidden="true" />}
               disabled={unusedTags.length === 0}
               onClick={addStratum}
               data-testid={`quota-add-${topicId}`}
@@ -578,104 +648,25 @@ function FeedbackPreview({
   section: EditorSection;
   onEdit?: () => void;
 }) {
-  const hasText = section.feedback.text.trim() !== "";
-  const linkCount = section.feedbackLinks.length;
-  const assetCount = section.feedbackAssets.length;
-  const isRich = section.feedback.format === "richText" || section.feedback.format === "html";
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      onEdit?.();
-    }
-  };
-
-  if (!hasText && linkCount === 0 && assetCount === 0) {
-    const cls = "tb-feedback-preview is-empty";
-    const label = "Редактировать обратную связь по теме";
-    const empty = "Не задано — нажмите для редактирования";
-    const emptyReadonly = "Не задано — обратная связь по теме пока не настроена";
-    if (onEdit) {
-      return (
-        <div
-          role="button"
-          tabIndex={0}
-          className={cls}
-          onClick={onEdit}
-          onKeyDown={handleKeyDown}
-          aria-label={label}
-          data-testid={`feedback-preview-${section.topicId}`}
-        >
-          {empty}
-        </div>
-      );
-    }
-    return <div className={cls}>{emptyReadonly}</div>;
-  }
-
-  const meta = (linkCount > 0 || assetCount > 0) && (
-    <div className="tb-feedback-preview__meta">
-      {linkCount > 0 && (
-        <>
-          <LinkIcon aria-hidden="true" />
-          {linkCount} ссыл{plural(linkCount, "ка", "ки", "ок")}
-        </>
-      )}
-      {linkCount > 0 && assetCount > 0 && (
-        <span className="tb-feedback-preview__sep">·</span>
-      )}
-      {assetCount > 0 && (
-        <>
-          <Paperclip aria-hidden="true" />
-          {assetCount} файл{plural(assetCount)}
-        </>
-      )}
-    </div>
+  // TD-02: delegate to the shared grouped-list preview (Документы / Курсы /
+  // Мероприятия) with a pencil edit trigger.
+  return (
+    <SharedFeedbackPreview
+      format={section.feedback.format}
+      text={section.feedback.text}
+      links={section.feedbackLinks}
+      assets={section.feedbackAssets}
+      events={section.feedbackEvents}
+      onEdit={onEdit}
+      editAriaLabel="Редактировать обратную связь по теме"
+      emptyLabel={
+        onEdit
+          ? "Не задано — нажмите для редактирования"
+          : "Не задано — обратная связь по теме пока не настроена"
+      }
+      testId={`feedback-preview-${section.topicId}`}
+    />
   );
-
-  const inner = isRich && hasText ? (
-    <>
-      <div
-        className="tb-feedback-preview__rich"
-        // Author-controlled RTE content — rendered in the author's editor UI only.
-        dangerouslySetInnerHTML={{ __html: section.feedback.text }}
-      />
-      {meta}
-      <div className="tb-feedback-preview__edit-hint">
-        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-      </div>
-    </>
-  ) : (
-    <>
-      <div className="tb-feedback-preview__text">
-        <span className="tb-feedback-preview__snippet">
-          {hasText
-            ? section.feedback.text.replace(/<[^>]+>/g, "").slice(0, 120)
-            : "Без текста"}
-        </span>
-        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-      </div>
-      {meta}
-    </>
-  );
-
-  if (onEdit) {
-    return (
-      <div
-        role="button"
-        tabIndex={0}
-        className="tb-feedback-preview"
-        onClick={onEdit}
-        onKeyDown={handleKeyDown}
-        aria-label="Редактировать обратную связь по теме"
-        data-testid={`feedback-preview-${section.topicId}`}
-      >
-        {inner}
-      </div>
-    );
-  }
-
-  return <div className="tb-feedback-preview">{inner}</div>;
 }
 
 function TopicPickerModal(props: {

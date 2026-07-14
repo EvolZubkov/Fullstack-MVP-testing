@@ -1,8 +1,9 @@
 # Архитектура серверных сервисов
 
-> Актуализировано 2026-06-06: маршрутизация разнесена на модульные роутеры
+> Актуализировано 2026-07-01 (релиз 2.6.0-beta): маршрутизация разнесена на модульные роутеры
 > (`server/routes/`), выделен слой сервисов (`server/services/`), добавлены доменные движки
-> в `shared/` и единый шаблонный рендерер `shared/template/` (PRD-12).
+> в `shared/` и единый шаблонный рендерер `shared/template/` (PRD-12). Списки роутеров и
+> сервисов в §6 приведены в соответствие с актуальным составом (PRD-13/14/15/18).
 
 ## Обзор
 
@@ -85,8 +86,10 @@
 | Test Assignments | `getTestAssignments`, `createTestAssignment`, `getAssignedTestsForUser` | Назначение тестов |
 | Password Reset | `createPasswordResetToken`, `getPasswordResetToken`, `markTokenAsUsed`, `getRecentTokensCount` | Токены сброса пароля |
 | Folders | `getFolders`, `createFolder`, `updateFolder`, `deleteFolder` | Папки для тем |
-| Topics | `getTopics`, `createTopic`, `deleteTopic`, `duplicateTopicWithQuestions` | Темы вопросов |
-| Topic Courses | `getTopicCourses`, `createTopicCourse`, `deleteTopicCourse` | Рекомендуемые курсы |
+| Topics | `getTopics`, `createTopic`, `deleteTopic`, `duplicateTopicWithQuestions` | Темы вопросов (рекомендации теперь в `topics.feedback_json`, не в отдельных таблицах) |
+| User Roles | `getUserRoles`, `setUserRoles`, `addUserRole` | Мультироль пользователя (PRD-13; `user_roles`) |
+| Access Grants | `getTestAccessGrants`, гранты доступа к темам | Объектные области: гранты теста / темы (PRD-13/15) |
+| Snapshots & Scoring | `createTestSnapshot`, `getTestQuestionScoring`, `upsertTestQuestionScoring` | Публикация версий и переопределения оценки (PRD-15) |
 | Questions | `getQuestions`, `getQuestionsByTopic`, `createQuestion`, `duplicateQuestion`, `deleteQuestionsBulk` | Вопросы 4 типов |
 | Tests | `getTests`, `createTest`, `updateTest`, `deleteTest`, `getTestSections` | Тесты и секции |
 | Attempts | `createAttempt`, `updateAttempt`, `getAttemptsByUser`, `getAttemptsByUserAndTest` | Попытки прохождения |
@@ -201,12 +204,23 @@ interface ExportData {
   sections: (TestSection & {
     topic: Topic
     questions: Question[]
-    courses: TopicCourse[]
+    // courses/events -- legacy-поля типа; таблицы удалены (миграция 024),
+    // приходят пустыми, рекомендации берутся из topics.feedback_json
   })[]
+  questionScoring?: TestQuestionScoring[]   // PRD-15 блок D: эффективная оценка запекается в TEST_DATA
   adaptiveSettings?: AdaptiveSettingsExport | null
+  contentPages?: ContentPage[]              // PRD-1/19: контент-страницы и системные узлы разделов
+  resultVariables?: ResultVariable[]        // PRD-2
+  scales?: Scale[]; measurements?: QuestionMeasurement[]  // PRD-5
+  designSettings?: DesignSettingsExport     // PRD-7: выбранный шаблон и его параметры
+  templateDir?: string                      // резолвится роутом (built-in или загруженный PRD-3)
   telemetry?: { enabled: boolean; packageId: string; secretKey: string; apiBaseUrl: string } | null
 }
 ```
+
+> `ExportData` собирается общим ассемблером `buildScormExportData(testId, {source})`
+> ([build-export-data.ts](../../server/scorm/build-export-data.ts)), который используют И
+> экспорт SCORM, И встроенный плеер отладки (PRD-18) -- «отлаживаешь то, что отгружается».
 
 ### 5.3 Builders
 
@@ -241,25 +255,45 @@ interface ExportData {
 
 **Экспортируемая функция:** `registerRoutes(httpServer, app)`.
 
-**Модульные роутеры:** [server/routes/](../../server/routes/) -- по одному файлу на домен
-(auth, users, groups, topics, questions, tests, attempts, assignments, folders, test-folders,
-content-pages, result-variables, scales, templates, access, analytics, scorm-telemetry, logs),
-монтируются через массив `routerConfig` в [server/routes/index.ts](../../server/routes/index.ts).
+**Модульные роутеры:** [server/routes/](../../server/routes/) -- по одному файлу на домен,
+монтируются через массив `routerConfig` в [server/routes/index.ts](../../server/routes/index.ts):
+
+- Ядро: `auth`, `users`, `groups`, `topics`, `questions`, `tests`, `attempts`, `assignments`,
+  `folders`, `test-folders`, `content-pages`, `result-variables`, `scales`, `logs`.
+- Доступ и шаблоны: `access` (PRD-13 гранты доступа), `templates` (PRD-7), `admin-templates`
+  (PRD-3 админ-реестр внешних ZIP).
+- Excel (PRD-14): `workbook` + `tests-workbook` (мультилист импорт/экспорт).
+- SCORM и отладка: `scorm-telemetry`, `debug-player` (PRD-18 встроенный плеер/отладчик),
+  `analytics/` (подпапка: general, combined, attempts, test-details, export, scorm).
 
 **Слой сервисов:** [server/services/](../../server/services/) -- бизнес-логика вынесена из
-route-хендлеров: `result-compute.ts` (серверный расчёт результата, PRD-2/5/10), `result-context.ts`
-(контекст экрана итогов), `scoring-config.ts`, `retake-gate.ts` (PRD-6), `template-render.ts`
-(layout+CSS для веб-хоста), `flow-policy-validator.ts`, `variant-binding.ts`,
-`content-pages-lifecycle.ts`, `test-settings.ts`, `required-fields-validator.ts`.
+route-хендлеров:
+
+- Расчёт и оценка: `result-compute.ts` (серверный расчёт результата, PRD-2/5/10),
+  `result-context.ts` (контекст экрана итогов), `scoring-config.ts`, `effective-scoring.ts`
+  (резолвер эффективной цены/градуировки/сложности, PRD-15 блок D).
+- Поток и настройки теста: `flow-policy-validator.ts`, `variant-binding.ts`,
+  `content-pages-lifecycle.ts`, `test-settings.ts`, `required-fields-validator.ts`,
+  `retake-gate.ts` (PRD-6).
+- Доступ (PRD-13/15): `access.ts` (роли/права + конфиг-суперадмины), `test-access.ts`
+  (владелец/гранты теста), `topic-access.ts` (видимость/гранты темы, двухрежимный отзыв).
+- Целостность и публикация (PRD-15): `content-guard.ts` + `draw-feasibility.ts` (защита
+  зависимого контента, 409 + dry-run), `test-snapshot.ts` (снапшоты публикации, дрейф).
+- Импорт/экспорт (PRD-14): `workbook-import.ts`, `questions-import.ts`, `questions-export.ts`.
+- Шаблоны (PRD-3/7/12): `template-render.ts` (layout+CSS для веб-хоста), `template-dir.ts`,
+  `template-package.ts`, `template-rebind.ts`, `template-validation.ts`.
 
 ### Middleware авторизации
 
 | Middleware | Описание |
 | --- | --- |
 | `requireAuth` | Проверка наличия сессии |
-| `requireAuthor` | Проверка роли `author` |
-| `requireLearner` | Проверка роли `learner` |
+| `requirePermission(...)` | Проверка права из ролевой модели PRD-13 (объединение по ролям + конфиг-суперадмин) |
+| Object scope | Область объекта поверх роли: владелец/гранты теста (`test-access`), видимость/гранты темы (`topic-access`) |
 | `rejectBase64MediaUrl` | Блокировка inline base64 в mediaUrl |
+
+> Устаревшие `requireAuthor` / `requireLearner` удалены с закрытием PRD-13 (T-10, миграция 017):
+> роли живут только в `user_roles`, доступ гейтится через `requirePermission` + область объекта.
 
 ### Конфигурация
 
@@ -302,42 +336,52 @@ route-хендлеров: `result-compute.ts` (серверный расчёт �
 
 | Таблица | Описание |
 | --- | --- |
-| `users` | Пользователи (encrypted email, role, status, GDPR) |
+| `users` | Пользователи (encrypted email, status, GDPR; столбец `role` удалён миграцией 017) |
+| `userRoles` | Мультироль пользователя (PRD-13; единственный источник хранимых ролей) |
 | `groups` | Группы пользователей |
 | `userGroups` | M:N связь users-groups |
 | `testAssignments` | Назначения тестов (user/group) |
+| `assignmentAccessTokens` | Magic-link токены доступа к назначению |
 | `passwordResetTokens` | Токены сброса пароля (HMAC-SHA256, TTL 30 мин) |
 | `folders` | Иерархия папок для тем |
-| `topics` | Темы вопросов |
-| `topicCourses` | Рекомендуемые курсы к темам |
+| `topics` | Темы вопросов (owner/visibility/feedback_json/code) |
+| `topicAccessGrants` | Гранты доступа к теме (use/manage; PRD-15) |
 | `questions` | Вопросы (4 типа: single, multiple, matching, ranking) |
-| `tests` | Тесты (standard/adaptive, versioned) |
-| `testSections` | Секции теста (тема + drawCount) |
+| `tests` | Тесты (standard/adaptive, versioned, status draft/published/archived) |
+| `testAccessGrants` | Гранты доступа к тесту (edit/assign; PRD-13) |
+| `testFolders` | Иерархия папок для тестов |
+| `testSections` | Секции теста (тема + drawCount + form_set + draw_blueprint) |
 | `adaptiveTopicSettings` | Настройки адаптивного режима по темам |
 | `adaptiveLevels` | Уровни адаптивного тестирования |
 | `adaptiveLevelLinks` | Ссылки на материалы уровня |
-| `attempts` | Попытки прохождения тестов |
+| `attempts` | Попытки прохождения тестов (пин `snapshot_id`) |
+| `testSnapshots` | Неизменные опубликованные версии теста (PRD-15) |
+| `testQuestionScoring` | Переопределение оценки по (тест, вопрос) (PRD-15 блок D) |
 | `scormPackages` | Экспортированные SCORM пакеты |
 | `scormAttempts` | Попытки из LMS |
 | `scormAnswers` | Ответы из LMS |
-| `testFolders` | Иерархия папок для тестов |
-| `topicEvents` | События темы (рекомендуемые мероприятия) |
-| `assignmentAccessTokens` | Magic-link токены доступа к назначению |
-| `templates` | Дизайн-шаблоны (PRD-7) |
-| `contentPages` | Контентные страницы (PRD-1) |
+| `templates` | Дизайн-шаблоны (PRD-7) + админ-реестр внешних ZIP (PRD-3) |
+| `contentPages` | Контентные страницы и системные узлы разделов (PRD-1/19) |
 | `resultVariables` | Показатели результата `result.*` (PRD-2) |
 | `scales`, `questionMeasurements` | Шкалы и вклады вопросов (PRD-5) |
 
-Опциональные PRD-колонки: `questions.scoring_json` (PRD-10), `questions.tags` (PRD-11/2),
-`test_sections.draw_blueprint_json` (PRD-11), `tests.retake_policy_json` (PRD-6) -- все
-nullable/с дефолтом (отсутствие = легаси-поведение).
+Всего 29 таблиц. Legacy `topicCourses` / `topicEvents` удалены (миграция 024): рекомендации
+темы живут в `topics.feedback_json`. Столбцы `questions.points` / `scoring_json` удалены
+(миграция 028): оценка -- свойство теста (PRD-15 блок D, T-40).
+
+Опциональные PRD-колонки (все nullable/с дефолтом, отсутствие = легаси-поведение):
+`questions.tags` (PRD-11/2), `questions.difficulty` nullable (PRD-16, миграция 029),
+`test_sections.draw_blueprint_json` (PRD-11), `test_sections.form_set_json` (PRD-17 варианты),
+`tests.retake_policy_json` (PRD-6), `tests.allow_return_to_unanswered` / `allow_answer_change` /
+`show_section_results` (PRD-19, миграция 031), `topics.code` (PRD-2, миграция 032).
 
 ### Доменные движки (shared/)
 
 Помимо схемы, `shared/` содержит чистые browser-safe движки, общие для клиента, сервера и
-SCORM-пакета: `scoring/` (цена ответа PRD-10), `scales/` + `formula/` (шкалы/показатели PRD-5/2),
-`eligibility/` (retake PRD-6), `draw/` + `tags.ts` (квоты выдачи PRD-11), `template/` (единый
-рендерер PRD-12). Единый источник логики -- без копий на хост.
+SCORM-пакета: `scoring/` (цена ответа PRD-10 + эффективная оценка PRD-15), `scales/` + `formula/`
+(шкалы/показатели PRD-5/2), `eligibility/` (retake PRD-6), `draw/` + `tags.ts` (квоты выдачи PRD-11 и фиксированные
+варианты/формы PRD-17), `access/` (ролевая модель и права PRD-13), `template/`
+(единый рендерер PRD-12). Единый источник логики -- без копий на хост.
 
 ---
 
@@ -360,7 +404,7 @@ SCORM-пакета: `scoring/` (цена ответа PRD-10), `scales/` + `form
 | Аспект | Реализация |
 | --- | --- |
 | Аутентификация | Express-session, bcrypt, 24h TTL |
-| Авторизация | Роли author/learner, middleware на каждом endpoint |
+| Авторизация | Ролевая модель PRD-13 (5 ролей, мультироль, `requirePermission`) + объектные области (владелец/гранты теста и темы) |
 | Email | AES шифрование в БД, SHA-256 хеш для поиска |
 | Сброс пароля | HMAC-SHA256 токены, 30 мин TTL, rate limit 3/час |
 | Загрузка файлов | Whitelist MIME, лимит 200MB, блокировка base64 URL |

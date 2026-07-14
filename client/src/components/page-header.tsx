@@ -1,3 +1,5 @@
+import { Box, Cluster, Text } from "@universityrt/ui-kit";
+
 interface PageHeaderProps {
   title: string;
   description?: string;
@@ -7,17 +9,19 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, actions, icon }: PageHeaderProps) {
   return (
-    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between mb-6">
-      <div className="flex items-start gap-3">
-        {icon && <div className="mt-1 text-muted-foreground">{icon}</div>}
-        <div>
-          <h1 className="text-2xl font-semibold">{title}</h1>
-          {description && (
-            <p className="text-muted-foreground mt-1">{description}</p>
-          )}
-        </div>
-      </div>
-      {actions && <div className="flex items-center gap-2 mt-3 sm:mt-0">{actions}</div>}
-    </div>
+    <Box padBottom={6}>
+      <Cluster justify="between" align="center" gap={4} wrap={false}>
+        <Cluster align="start" gap={3} wrap={false}>
+          {icon && <Text as="div" tone="muted" style={{ marginTop: "var(--ou-space-1)" }}>{icon}</Text>}
+          <div>
+            <Text as="h1" variant="heading-l">{title}</Text>
+            {description && (
+              <Text as="p" tone="muted" style={{ marginTop: "var(--ou-space-1)" }}>{description}</Text>
+            )}
+          </div>
+        </Cluster>
+        {actions && <Cluster gap={2} wrap={false}>{actions}</Cluster>}
+      </Cluster>
+    </Box>
   );
 }

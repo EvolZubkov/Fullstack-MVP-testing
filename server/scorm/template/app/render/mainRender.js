@@ -1,4 +1,46 @@
+/**
+ * PRD-7 G21 fallback helpers. When the active template doesn't declare a system
+ * kind (start/results), the exporter bundles the `default` template under
+ * `template-default/` + `styles-default.css`; these helpers let the start/results
+ * renderers mount default's layout with default's CSS so the SCORM package matches
+ * «Структура» / the editor preview («Из стандартного шаблона»).
+ */
+function isFallbackKind(kind) {
+    var ds = (typeof TEST_DATA !== 'undefined' && TEST_DATA.designSettings) || null;
+    var list = (ds && ds.fallbackKinds) || [];
+    return !!kind && list.indexOf(kind) >= 0;
+}
+
+/** Layout HTML for a system kind — the bundled default's when it's a fallback kind. */
+function systemLayout(kind) {
+    if (isFallbackKind(kind) && state.fallbackLayouts && state.fallbackLayouts[kind]) {
+        return state.fallbackLayouts[kind];
+    }
+    return state.templateLayouts && state.templateLayouts[kind];
+}
+
+/**
+ * Activates the bundled default stylesheet while a fallback system screen is shown
+ * and restores the active template's stylesheet otherwise. Safe no-op when the
+ * package ships no fallback (the `styles-fallback` link is absent). The package
+ * shows one full screen at a time, so a global stylesheet swap is conflict-free.
+ */
+function applySystemScreenStyles(kind) {
+    if (typeof document === 'undefined') return;
+    var alt = document.getElementById('styles-fallback');
+    if (!alt) return;
+    var useFallback = isFallbackKind(kind);
+    var main = document.getElementById('styles-main');
+    alt.disabled = !useFallback;
+    if (main) main.disabled = useFallback;
+}
+
 function render() {
+    // Reset to the active template's stylesheet on every render; fallback system
+    // screens (start/results) re-activate the default stylesheet from their own
+    // templated renderers below.
+    applySystemScreenStyles(null);
+
     // Check for adaptive mode
     if (TEST_DATA.mode === 'adaptive' && state.adaptiveState) {
       renderAdaptive();
@@ -18,6 +60,18 @@ function render() {
 
     if (state.phase === 'postResults') {
         renderPostResults();
+        return;
+    }
+
+    // PRD-19 (Block D): review/обзор screen (section-finish / test-finish).
+    if (state.phase === 'review') {
+        renderReviewScreen();
+        return;
+    }
+
+    // PRD-19 (Block D / D5, FR-05a): computed section-results (итоги раздела).
+    if (state.phase === 'sectionResults') {
+        renderSectionResults(state.sectionResultsTopicId, state.sectionResultsIsLast);
         return;
     }
 
@@ -77,18 +131,297 @@ function buildQuestionFeedbackHtml(q) {
     return html;
 }
 
-/** Navigation row HTML (Принять / Далее / Завершить), onclick-wired. */
-function buildQuestionNavHtml(current, total) {
-    var html = '<div class="navigation" style="justify-content:flex-end">';
-    if (TEST_DATA.showCorrectAnswers && !state.feedbackShown) {
-        html += '<button class="btn" data-action="answer-submit" onclick="confirmAnswer()">Принять</button>';
-    } else if (current < total - 1 || (state.pageSequence && state.currentPageIndex < state.pageSequence.length - 1)) {
-        html += '<button class="btn" data-nav="next" onclick="next()">Далее</button>';
-    } else {
-        html += '<button class="btn" data-action="test-finish" onclick="submit()">Завершить тест</button>';
+// PRD-19 (Block D): true when the current scope has ≥1 skipped question — drives
+// the «Вернуться» button (the obvious navigation path to the обзор screen, FR-04c).
+function hasSkippedInScope() {
+    if (!TEST_DATA.allowReturnToUnanswered || !state.flatQuestions) return false;
+    var sectionScope = TEST_DATA.answerCommitScope === 'section';
+    var curFq = state.flatQuestions[state.currentIndex];
+    var curTopic = sectionScope && curFq ? curFq.topicId : null;
+    for (var i = 0; i < state.flatQuestions.length; i++) {
+        var fq = state.flatQuestions[i];
+        if (!fq) continue;
+        if (sectionScope && fq.topicId !== curTopic) continue;
+        if (state.questionStatuses && state.questionStatuses[fq.question.id] === 'skipped') return true;
     }
-    html += '</div>';
-    return html;
+    return false;
+}
+
+// PRD-19 (Block D): open the обзор screen (section-finish / test-finish).
+function goToReview() {
+    state.phase = 'review';
+    state.feedbackShown = false;
+    render();
+}
+
+/**
+ * PRD-19 (Block D / FR-09): finish-confirm modal — host-chrome overlay (agreed),
+ * styled with template tokens (.tb-modal). Shown when finishing with unanswered
+ * questions; «Отмена» dismisses, the confirm button runs `onConfirm`.
+ */
+function showFinishConfirm(unansweredCount, finishLabel, onConfirm) {
+    var prev = document.getElementById('tb-finish-modal');
+    if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+    var back = document.createElement('div');
+    back.id = 'tb-finish-modal';
+    back.className = 'tb-modal-backdrop';
+    back.setAttribute('role', 'dialog');
+    back.setAttribute('aria-modal', 'true');
+    back.innerHTML =
+        '<div class="tb-modal">' +
+          '<div class="tb-modal__head">' +
+            '<div class="tb-modal__icon" aria-hidden="true">!</div>' +
+            '<div><h2 class="tb-modal__title">' + escapeHtml(finishLabel) + '?</h2>' +
+            '<p class="tb-modal__desc">Вопросов без ответа: ' + unansweredCount +
+              '. Они будут засчитаны как неверные. После завершения вернуться к ним нельзя.</p></div>' +
+          '</div>' +
+          '<div class="tb-modal__foot">' +
+            '<button type="button" class="btn btn-outline" data-modal="cancel">Отмена</button>' +
+            '<button type="button" class="btn" data-modal="confirm">' + escapeHtml(finishLabel) + '</button>' +
+          '</div>' +
+        '</div>';
+    document.body.appendChild(back);
+    function close() { if (back.parentNode) back.parentNode.removeChild(back); }
+    back.querySelector('[data-modal="cancel"]').addEventListener('click', close);
+    back.querySelector('[data-modal="confirm"]').addEventListener('click', function () { close(); onConfirm(); });
+    back.addEventListener('click', function (e) { if (e.target === back) close(); });
+}
+
+// PRD-19 (Block D / D5): true when `topicId` is the LAST section in delivery order
+// (no later flatQuestions belong to a different topic). Drives «Завершить раздел»
+// vs «Завершить тест» labelling and the separate test-finish step.
+function isLastSectionTopic(topicId) {
+    if (!state.flatQuestions || !state.flatQuestions.length) return true;
+    var last = state.flatQuestions[state.flatQuestions.length - 1];
+    return !!last && last.topicId === topicId;
+}
+
+/**
+ * PRD-19 (Block D / D5): render the обзор screen from the SHARED `review` template
+ * layout (pills + explicit unanswered list + «Завершить …»). Оформление — через
+ * шаблон (FR-16 / контракт §5). Scope-aware (FR-05/05b):
+ *   - flat (commitScope 'test'): «Завершить тест» → submit() (single test finish);
+ *   - sectional: scoped to the CURRENT section, «Завершить раздел» → finishSection()
+ *     (freeze → optional section-results → next section). The last section without
+ *     section-results merges into «Завершить тест» (no extra locked-review screen).
+ */
+function renderReviewScreen() {
+    var app = document.getElementById('app');
+    var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    var layout = state.templateLayouts && state.templateLayouts['review'];
+    var sectionScope = TEST_DATA.answerCommitScope === 'section';
+    var isRouterMode = (typeof RouterFlow !== 'undefined' && RouterFlow.isRouterMode());
+    var curFq = state.flatQuestions[state.currentIndex];
+    var scopeTopicId = sectionScope && curFq ? curFq.topicId : null;
+    var scopeName = curFq ? (curFq.topicName || '') : '';
+    // Router free-order has no «last section» — «Завершить тест» lives on the hub
+    // (FR-05b); the per-topic обзор is always «Завершить раздел». Linear sectional
+    // computes the last section to merge the test-finish step.
+    var isLast = !sectionScope ? true : (isRouterMode ? false : isLastSectionTopic(scopeTopicId));
+    // «Завершить раздел» unless this section also IS the test finish (last section
+    // with no section-results screen to follow) or the flow is flat.
+    var finishLabel = (!sectionScope || (isLast && !TEST_DATA.showSectionResults))
+        ? 'Завершить тест'
+        : 'Завершить раздел';
+    if (!layout || !TB || !TB.renderScreenInto || !TB.buildReviewContext) {
+        // No review layout — fall through to finishing (section or whole test).
+        if (sectionScope && scopeTopicId) { finishSection(scopeTopicId, isLast, 0, true); }
+        else { submit(); }
+        return;
+    }
+    var built = TB.buildReviewContext({
+        questions: state.flatQuestions.map(function (fq) {
+            return { id: fq.question.id, topicId: fq.topicId, prompt: fq.question.prompt };
+        }),
+        statuses: state.questionStatuses || {},
+        commitScope: sectionScope ? 'section' : 'test',
+        scopeTopicId: scopeTopicId,
+        isTest: !sectionScope,
+        scopeLabel: sectionScope ? ('Раздел «' + scopeName + '» · обзор') : 'Обзор теста',
+        finishLabel: finishLabel
+    });
+    var context = {
+        course: { title: TEST_DATA.title },
+        design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {},
+        state: { questionsProgress: built.questionsProgress },
+        review: built.review
+    };
+    app.innerHTML = '';
+    var wrap = document.createElement('div');
+    app.appendChild(wrap);
+    TB.renderScreenInto(wrap, { layout: layout, context: context });
+    var actionEls = wrap.querySelectorAll('[data-action]');
+    Array.prototype.forEach.call(actionEls, function (el) {
+        var a = el.getAttribute('data-action') || '';
+        if (a.indexOf('goto:') === 0) {
+            el.addEventListener('click', function () {
+                if (el.disabled) return;
+                var idx = parseInt(a.slice(5), 10);
+                // Mark that this question was opened FROM the обзор, so its nav
+                // offers «К обзору» to return (the обзор itself has no «back»).
+                if (!isNaN(idx)) { state.fromReview = true; state.phase = 'question'; goToQuestionIndex(idx); }
+            });
+        } else if (a === 'finish-review') {
+            el.addEventListener('click', function () {
+                var unanswered = built.review.unansweredCount;
+                if (sectionScope && scopeTopicId) {
+                    // Section finish (D5): confirm-if-unanswered handled inside finishSection.
+                    finishSection(scopeTopicId, isLast, unanswered, false);
+                } else if (unanswered > 0) {
+                    // Flat test finish (FR-09): confirm when unanswered remain.
+                    showFinishConfirm(unanswered, built.review.finishLabel, function () { submit(); });
+                } else {
+                    submit();
+                }
+            });
+        }
+    });
+}
+
+// PRD-19 (D5 / FR-05b): resume after a section is committed. Router mode returns
+// to the router hub (RouterFlow gates «Завершить тест» until all topics are done);
+// linear sectional advances past the section (submits the attempt on the last).
+function advanceAfterSection(topicId) {
+    if (typeof RouterFlow !== 'undefined' && RouterFlow.isRouterMode()) {
+        RouterFlow.returnFromTopic();
+    } else if (typeof skipSectionFromCurrent === 'function') {
+        skipSectionFromCurrent(topicId);
+    } else {
+        submit(true);
+    }
+}
+
+/**
+ * PRD-19 (Block D / D5, FR-05/06): commit a section from its обзор and proceed.
+ * Freezes the section (no more edits/return, FR-06), then shows the computed
+ * section-results screen (FR-05a, when `showSectionResults`) or advances straight
+ * to the next section / router hub. `unansweredCount > 0` raises the finish-confirm
+ * modal first (FR-09) unless `skipConfirm` (degraded no-layout path).
+ */
+function finishSection(topicId, isLast, unansweredCount, skipConfirm) {
+    function proceed() {
+        if (!state.sectionCommitted) state.sectionCommitted = {};
+        state.sectionCommitted[topicId] = true; // FR-06: freeze the section.
+        state.fromReview = false; // leaving the section — clear the «К обзору» flag.
+        if (typeof saveSessionState === 'function') saveSessionState();
+        if (TEST_DATA.showSectionResults) {
+            state.sectionResultsTopicId = topicId;
+            state.sectionResultsIsLast = isLast;
+            state.phase = 'sectionResults';
+            renderSectionResults(topicId, isLast);
+        } else {
+            advanceAfterSection(topicId); // → next section / router hub / submit
+        }
+    }
+    var finishLabel = (isLast && !TEST_DATA.showSectionResults) ? 'Завершить тест' : 'Завершить раздел';
+    if (!skipConfirm && unansweredCount > 0) {
+        showFinishConfirm(unansweredCount, finishLabel, proceed);
+    } else {
+        proceed();
+    }
+}
+
+/**
+ * PRD-19 (FR-05a): render the COMPUTED section-results (итоги раздела) screen from
+ * the SHARED `section-results` layout — the section's score ring + summary + verdict
+ * + «Продолжить» (or «Завершить тест» on the last section). «Продолжить» advances
+ * past the section (submits the attempt on the last section — the separate
+ * test-finish step). Falls through to advancing when the layout is unavailable.
+ */
+function renderSectionResults(topicId, isLast) {
+    var app = document.getElementById('app');
+    var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    var layout = state.templateLayouts && state.templateLayouts['section-results'];
+    var sr = (typeof computeSectionResult === 'function') ? computeSectionResult(topicId) : null;
+    var advance = function () { advanceAfterSection(topicId); };
+    if (!sr || !layout || !TB || !TB.renderScreenInto || !TB.buildSectionResultContext) {
+        advance();
+        return;
+    }
+    // Router mode returns to the hub («Продолжить»); the «Завершить тест» step lives
+    // on the hub (FR-05b). Linear sectional uses «Завершить тест» only on the last.
+    var isRouterMode = (typeof RouterFlow !== 'undefined' && RouterFlow.isRouterMode());
+    var built = TB.buildSectionResultContext({
+        topicName: sr.topicName,
+        correct: sr.correct,
+        total: sr.total,
+        percent: sr.percent,
+        passed: sr.passed,
+        continueLabel: (isLast && !isRouterMode) ? 'Завершить тест' : 'Продолжить'
+    });
+    var context = {
+        course: built.course,
+        design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {},
+        sectionResult: built.sectionResult
+    };
+    app.innerHTML = '';
+    var wrap = document.createElement('div');
+    app.appendChild(wrap);
+    TB.renderScreenInto(wrap, { layout: layout, context: context });
+    var btn = wrap.querySelector('[data-action="section-continue"]');
+    if (btn) btn.addEventListener('click', advance);
+}
+
+/**
+ * Navigation row HTML, onclick-wired. PRD-19 (Block B):
+ * - strict-linear (allowReturnToUnanswered=false, B2): original single-button
+ *   flow verbatim — «Принять» (showCorrectAnswers only) → «Далее»/«Завершить»;
+ * - flexible (allowReturnToUnanswered=true, B3): before fixation two buttons —
+ *   «Пропустить» (left) + «Отправить ответ» (right); after fixation «Далее»/
+ *   «Завершить тест».
+ */
+function buildQuestionNavHtml(current, total) {
+    var hasNext = current < total - 1 ||
+        (state.pageSequence && state.currentPageIndex < state.pageSequence.length - 1);
+
+    if (!TEST_DATA.allowReturnToUnanswered) {
+        var sh = '<div class="navigation" style="justify-content:flex-end">';
+        if (TEST_DATA.showCorrectAnswers && !state.feedbackShown) {
+            sh += '<button class="btn" data-action="answer-submit" onclick="confirmAnswer()">Принять</button>';
+        } else if (hasNext) {
+            sh += '<button class="btn" data-nav="next" onclick="next()">Далее</button>';
+        } else {
+            sh += '<button class="btn" data-action="test-finish" onclick="submit()">Завершить тест</button>';
+        }
+        sh += '</div>';
+        return sh;
+    }
+
+    // Flexible mode. «Вернуться» → обзор (Block D) and the clickable progress
+    // pills (Block C) are layered on later; goToNextUnanswered() already backs them.
+    var fq = state.flatQuestions[current];
+    var committed = state.feedbackShown ||
+        !!(fq && state.questionStatuses && state.questionStatuses[fq.question.id] === 'answered');
+
+    var left = '';
+    var right = '';
+    // PRD-19 (Block B): «Назад» — return to the previous accessible question
+    // (bounded to the current section in sectional flows). Parity with the web
+    // host (take-test.tsx); rendered always in flexible mode, disabled when no
+    // accessible previous question exists (first question of the test/section).
+    var prevIdx = typeof prevAccessibleQuestionIndex === 'function' ? prevAccessibleQuestionIndex() : -1;
+    left += '<button class="btn btn-outline" data-action="answer-back" onclick="goBack()"' + (prevIdx < 0 ? ' disabled' : '') + '>← Назад</button>';
+    if (!committed) {
+        left += '<button class="btn btn-outline" data-action="answer-skip" onclick="skipQuestion()">Пропустить</button>';
+        right += '<button class="btn" data-action="answer-submit" onclick="confirmAnswer()">Отправить ответ</button>';
+    } else {
+        // PRD-19 (Block D / FR-16): the question page has NO finish button — «Далее»
+        // always advances; завершение happens on the обзор (section-finish/test-finish).
+        // On the last item «Далее» → advancePageSequence reaches the обзор (D5).
+        right += '<button class="btn" data-nav="next" onclick="next()">Далее</button>';
+    }
+    // PRD-19 (Block D / FR-04c): «К обзору» → обзор. Shown when skipped questions
+    // exist in scope (the obvious navigation path alongside the quick pills) OR the
+    // learner jumped here FROM the обзор (a review jump must always be able to return —
+    // the обзор itself has no «back»). Cleared when the section is finished.
+    if (hasSkippedInScope() || state.fromReview) {
+        left += '<button class="btn btn-outline" data-action="answer-return" onclick="goToReview()">К обзору</button>';
+    }
+
+    return '<div class="navigation">' +
+        '<div class="navigation__left" style="display:flex;gap:12px">' + left + '</div>' +
+        '<div class="navigation__right" style="display:flex;gap:12px">' + right + '</div>' +
+        '</div>';
 }
 
 /**
@@ -110,7 +443,23 @@ function renderStandardQuestion(qData, current, total, progress) {
 
     if (layout && TB && TB.renderScreenInto) {
         var counterLabel = 'Вопрос ' + (current + 1) + ' из ' + total + ' | ' + qData.topicName;
-        var context = { course: { title: TEST_DATA.title }, state: { questionCounterLabel: counterLabel } };
+        // PRD-19 Block C: progress-pills map for the current scope (replaces the bar).
+        var sectionScope = TEST_DATA.answerCommitScope === 'section';
+        var qProgress = (TB.buildQuestionProgress) ? TB.buildQuestionProgress({
+            questions: state.flatQuestions.map(function (fq) { return { id: fq.question.id, topicId: fq.topicId }; }),
+            statuses: state.questionStatuses || {},
+            currentIndex: current,
+            commitScope: sectionScope ? 'section' : 'test',
+            sectionCommitted: state.sectionCommitted || {},
+            allowReturn: !!TEST_DATA.allowReturnToUnanswered,
+            scopeLabel: sectionScope ? ('Вопросы раздела «' + (qData.topicName || '') + '»') : 'Вопросы теста'
+        }) : null;
+        var context = {
+            course: { title: TEST_DATA.title },
+            state: { questionCounterLabel: counterLabel },
+            design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {}
+        };
+        if (qProgress) context.state.questionsProgress = qProgress;
         var slots = {
             'question-text': escapeHtml(q.prompt),
             'question-media': renderQuestionMedia(q),
@@ -121,6 +470,19 @@ function renderStandardQuestion(qData, current, total, progress) {
         var wrap = document.createElement('div');
         app.appendChild(wrap);
         TB.renderScreenInto(wrap, { layout: layout, context: context, slots: slots });
+
+        // PRD-19 Block C: wire pill clicks → goToQuestionIndex (frontier enforced
+        // by the `disabled` attribute the builder set on non-reachable pills).
+        var pills = wrap.querySelectorAll('.tb-pill[data-action]');
+        Array.prototype.forEach.call(pills, function (btn) {
+            btn.addEventListener('click', function () {
+                if (btn.disabled) return;
+                var a = btn.getAttribute('data-action') || '';
+                if (a.indexOf('goto:') !== 0) return;
+                var idx = parseInt(a.slice(5), 10);
+                if (!isNaN(idx) && typeof goToQuestionIndex === 'function') goToQuestionIndex(idx);
+            });
+        });
 
         // Progress fill (or hide the bar when progress is suppressed).
         var pb = wrap.querySelector('.progress-bar');

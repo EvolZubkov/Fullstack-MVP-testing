@@ -48,6 +48,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
         topicId: "topic-1",
         topicName: "Topic One",
         maxQuestions: 10,
+        maxPoints: 10,
         drawCount: 5,
         required: true,
         timeLimit: { source: "inherit_test" },
@@ -312,7 +313,7 @@ describe("FR-13: drawCount range", () => {
 // ─── FR-15c-f: absolute pass rule constraints ──────────────────────────────
 
 describe("FR-15: absolute pass rule constraints", () => {
-  it("happy path — absolute pass rule <= total questions passes", () => {
+  it("happy path — overall absolute pass rule <= total points passes", () => {
     const model = baseModel({
       passRules: {
         decisionPolicy: "overall_only",
@@ -327,7 +328,7 @@ describe("FR-15: absolute pass rule constraints", () => {
     expect(rangeErrors).toHaveLength(0);
   });
 
-  it("sad path — absolute pass rule exceeds total questions produces range error", () => {
+  it("sad path — overall absolute pass rule exceeds total points produces range error", () => {
     const model = baseModel({
       passRules: {
         decisionPolicy: "overall_only",
@@ -345,13 +346,14 @@ describe("FR-15: absolute pass rule constraints", () => {
     );
   });
 
-  it("happy path — topic absolute pass rule <= topic drawCount passes", () => {
+  it("happy path — topic absolute pass rule <= topic max points passes", () => {
     const model = baseModel({
       sections: [
         {
           topicId: "topic-1",
           topicName: "Topic One",
           maxQuestions: 20,
+          maxPoints: 30,
           drawCount: 10,
           required: true,
           timeLimit: { source: "inherit_test" },
@@ -371,13 +373,44 @@ describe("FR-15: absolute pass rule constraints", () => {
     expect(topicErrors).toHaveLength(0);
   });
 
-  it("sad path — topic absolute pass rule exceeds topic drawCount produces error", () => {
+  // PRD-10: a graded points threshold may exceed the question count — the runtime
+  // compares against earned POINTS (e.g. matching = 3 points), so a 15-point bar
+  // over 10 questions (16 attainable points) must NOT be rejected.
+  it("happy path — topic absolute threshold above question count but within max points passes", () => {
+    const model = baseModel({
+      sections: [
+        {
+          topicId: "topic-1",
+          topicName: "Topic One",
+          maxQuestions: 10,
+          maxPoints: 16,
+          drawCount: 10,
+          required: true,
+          timeLimit: { source: "inherit_test" },
+          feedback: { format: "plain", text: "" },
+          feedbackLinks: [],
+          feedbackAssets: [],
+        },
+      ],
+      passRules: {
+        decisionPolicy: "overall_and_required_topics",
+        overall: { type: "percent", value: 60 },
+        byTopic: { "topic-1": { source: "custom", type: "absolute", value: 15 } },
+      },
+    });
+    const result = validateTestEditor(model);
+    const topicErrors = result.errors.filter((e) => e.field.includes("byTopic"));
+    expect(topicErrors).toHaveLength(0);
+  });
+
+  it("sad path — topic absolute pass rule exceeds topic max points produces error", () => {
     const model = baseModel({
       sections: [
         {
           topicId: "topic-1",
           topicName: "Topic One",
           maxQuestions: 20,
+          maxPoints: 10,
           drawCount: 10,
           required: true,
           timeLimit: { source: "inherit_test" },
@@ -1106,5 +1139,67 @@ describe("PRD-4 v1.1: adaptive + linear_flat blocked (deferred to future PRD)", 
         result.errors.filter((e) => e.code === "adaptive_flat_unsupported"),
       ).toHaveLength(0);
     }
+  });
+});
+
+// ─── PRD-17 (BR-12): variants validation ──────────────────────────────────────
+
+describe("PRD-17: variants mode validation", () => {
+  const baseSection = baseModel().sections[0];
+  const withForms = (forms: Array<{ id: string; label: string; questionIds: string[] }>) =>
+    baseModel({ sections: [{ ...baseSection, formSet: { forms } }] });
+  const variantErrors = (m: ReturnType<typeof baseModel>) =>
+    validateTestEditor(m).errors.filter((e) => e.field === "sections[0].formSetJson");
+
+  it("fewer than 2 variants → section error", () => {
+    expect(variantErrors(withForms([{ id: "v1", label: "Вариант 1", questionIds: ["q1"] }]))).toHaveLength(1);
+  });
+
+  it("a variant with no questions → section error", () => {
+    const errs = variantErrors(
+      withForms([
+        { id: "v1", label: "Вариант 1", questionIds: ["q1"] },
+        { id: "v2", label: "Вариант 2", questionIds: [] },
+      ]),
+    );
+    expect(errs).toHaveLength(1);
+  });
+
+  it("≥2 non-empty variants pass", () => {
+    expect(
+      variantErrors(
+        withForms([
+          { id: "v1", label: "Вариант 1", questionIds: ["q1"] },
+          { id: "v2", label: "Вариант 2", questionIds: ["q2"] },
+        ]),
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("variants mode skips the drawCount range check (control is hidden)", () => {
+    // drawCount 99 > maxQuestions 10 would normally error, but variants hide it.
+    const model = baseModel({
+      sections: [
+        {
+          ...baseSection,
+          drawCount: 99,
+          formSet: {
+            forms: [
+              { id: "v1", label: "Вариант 1", questionIds: ["q1"] },
+              { id: "v2", label: "Вариант 2", questionIds: ["q2"] },
+            ],
+          },
+        },
+      ],
+    });
+    expect(validateTestEditor(model).errors.filter((e) => e.field === "sections[0].drawCount")).toHaveLength(0);
+  });
+
+  it("adaptive ignores variants (not validated)", () => {
+    const model = baseModel({
+      mode: "adaptive",
+      sections: [{ ...baseSection, formSet: { forms: [{ id: "v1", label: "Вариант 1", questionIds: [] }] } }],
+    });
+    expect(validateTestEditor(model).errors.filter((e) => e.field === "sections[0].formSetJson")).toHaveLength(0);
   });
 });

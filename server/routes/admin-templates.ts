@@ -45,12 +45,18 @@ import {
   MAX_TEMPLATE_ZIP_BYTES,
   type TemplateValidationReport,
 } from "../services/template-validation";
+import {
+  rebindToDefault,
+  manifestParamKeys,
+  DEFAULT_TEMPLATE_ID,
+  type DefaultTemplateInfo,
+  type DesignSlepok,
+} from "../services/template-rebind";
 // Type-only: the smoke-runner is a browser/jsdom module; the server never executes
 // it (NFR-02), it only persists and gates on the report the admin browser produces.
 import type { SmokeReport } from "@shared/template/smoke-runner";
 
 const router = Router();
-const DEFAULT_TEMPLATE_ID = "default";
 
 /** Loads a single template row by id, or null. */
 async function loadTemplate(id: string): Promise<Template | null> {
@@ -200,20 +206,32 @@ router.put("/:id/deactivate", requirePermission("adminTemplates.manage"), async 
     }
 
     const switched = await db.transaction(async (tx) => {
+      // Load `default` so each dependent's slepok can be made consistent with it
+      // (§5.3): keep only params whose keys still exist in `default`'s manifest
+      // and re-stamp the version fields. Leaving the removed template's params /
+      // version behind made `default` render with foreign params and forced
+      // authors to manually reset a test before a re-uploaded template took.
+      const [def] = await tx
+        .select()
+        .from(templates)
+        .where(eq(templates.id, DEFAULT_TEMPLATE_ID));
+      const defaultInfo: DefaultTemplateInfo = {
+        version: def?.version ?? null,
+        templateApiVersion: def?.templateApiVersion ?? null,
+        paramKeys: manifestParamKeys(def?.manifest),
+      };
+
       const dependents = await tx
-        .select({ id: tests.id })
+        .select({ id: tests.id, designSettingsJson: tests.designSettingsJson })
         .from(tests)
         .where(sql`${tests.designSettingsJson}->>'templateId' = ${row.id}`);
 
-      if (dependents.length > 0) {
-        // Keep params; only rebind templateId to default (§5.3 "Совместимые
-        // параметры сохранены"). The design tab reconciles version on next open.
+      for (const dep of dependents) {
+        const next = rebindToDefault(dep.designSettingsJson as DesignSlepok, defaultInfo);
         await tx
           .update(tests)
-          .set({
-            designSettingsJson: sql`jsonb_set(${tests.designSettingsJson}, '{templateId}', '"default"'::jsonb, true)`,
-          })
-          .where(sql`${tests.designSettingsJson}->>'templateId' = ${row.id}`);
+          .set({ designSettingsJson: next })
+          .where(eq(tests.id, dep.id));
       }
 
       await tx

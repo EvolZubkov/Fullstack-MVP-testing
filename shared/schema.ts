@@ -1,4 +1,5 @@
-import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, uuid, real } from "drizzle-orm/pg-core"
+import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, index, uuid, real } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { normalizeTag, normalizeTags, TAG_MAX_LENGTH } from "./tags";
@@ -96,6 +97,8 @@ export const folders = pgTable("folders", {
   id: varchar("id", { length: 36 }).primaryKey(),
   name: text("name").notNull(),
   parentId: varchar("parent_id", { length: 36 }),
+  // PRD-15 FR-01: creation audit. NULL = legacy row (destructive ops admin-only).
+  createdBy: varchar("created_by", { length: 36 }),
 });
 
 export const topics = pgTable("topics", {
@@ -103,22 +106,67 @@ export const topics = pgTable("topics", {
   name: text("name").notNull(),
   description: text("description"),
   feedback: text("feedback"),
+  // TD-02 (additive, variant A): rich topic feedback mirroring tests/sections
+  // `feedback_json` ({ format, text, links (courses), assets (PDF), events }).
+  // Backfilled from the legacy `feedback` text + topic_courses + topic_events by
+  // migration 023. Delivery readers (web results, SCORM, snapshots) still source
+  // the legacy tables until r.3; this column backs the unified topic feedback
+  // editor (T-32 Drawer). NULL = not yet backfilled.
+  feedbackJson: jsonb("feedback_json"),
   folderId: varchar("folder_id", { length: 36 }),
-});
+  // PRD-15 FR-01: creation audit. NULL = legacy row (destructive ops admin-only).
+  createdBy: varchar("created_by", { length: 36 }),
+  // PRD-15 block C (FR-18): topic owner. NULL = legacy (admin-managed). New
+  // topics are owned by their creator.
+  ownerId: varchar("owner_id", { length: 36 }),
+  // Visibility: `private` (owner + grants + admin) or `shared` (all authors may
+  // use). New topics default to private (confidentiality of keys, F-10); legacy
+  // rows are backfilled to shared so nothing changes on day one.
+  visibility: text("visibility", { enum: ["private", "shared"] }).notNull().default("shared"),
+  // PRD-15 FR-27: normalized name (lowercase, collapsed spaces, ё->е) backing
+  // the per-owner uniqueness index and the same-name warning. NULL only for rows
+  // not yet backfilled by migration 022.
+  nameNormalized: text("name_normalized"),
+  // Optional author-defined readable id (slug). When set, result-variable formulas
+  // address the topic via `topicById("<code>")` instead of the opaque UUID; absent
+  // (NULL) → formulas fall back to the UUID. Uniqueness is not enforced at the DB
+  // level — resolution is per-test (migration 032).
+  code: text("code"),
+}, (table) => ({
+  // FR-27: hard uniqueness only WITHIN one owner; legacy unowned rows (owner
+  // NULL) are excluded by the partial predicate, so they never collide.
+  ownerNameIdx: uniqueIndex("topics_owner_name_normalized_idx")
+    .on(table.ownerId, table.nameNormalized)
+    .where(sql`owner_id IS NOT NULL`),
+}));
 
-export const topicCourses = pgTable("topic_courses", {
+// PRD-15 block C (FR-19): access to a topic for a non-owner USER. `use` lets
+// them see the topic and its questions and use the topic in their tests;
+// `manage` adds CRUD of the topic's questions and editing the topic (not
+// deletion — owner/admin only). `state` carries the soft-revoke "revoked, in
+// use" (FR-25). One grant per (topic, user). TD-01: grants address users only —
+// groups are for test assignment, not content access (the grantee_type column
+// was dropped, migration 025).
+export const topicAccessGrants = pgTable("topic_access_grants", {
   id: varchar("id", { length: 36 }).primaryKey(),
   topicId: varchar("topic_id", { length: 36 }).notNull(),
-  title: text("title").notNull(),
-  url: text("url").notNull(),
-});
+  granteeId: varchar("grantee_id", { length: 36 }).notNull(),
+  accessLevel: text("access_level", { enum: ["use", "manage"] }).notNull(),
+  state: text("state", { enum: ["active", "revoked_in_use"] }).notNull().default("active"),
+  grantedBy: varchar("granted_by", { length: 36 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  topicGranteeIdx: uniqueIndex("topic_access_grants_topic_grantee_idx").on(
+    table.topicId, table.granteeId,
+  ),
+}));
 
-// Рекомендуемые мероприятия (офлайн: мастер-класс, лабораторная и т.д.)
-export const topicEvents = pgTable("topic_events", {
-  id: varchar("id", { length: 36 }).primaryKey(),
-  topicId: varchar("topic_id", { length: 36 }).notNull(),
-  title: text("title").notNull(),
-});
+export type TopicAccessGrant = typeof topicAccessGrants.$inferSelect;
+
+// TD-02 r.3: the topic_courses / topic_events tables were dropped (migration
+// 024). Recommended courses/events live in topics.feedback_json; these shapes
+// are kept as standalone types for the delivery projection (see
+// shared/topics/recommendations.ts and TestSnapshotContent).
 
 // ─── PRD-10: graded answer scoring (цена ответа) ─────────────────────────────
 // Per-question scoring config on the correctness axis (how many points an answer
@@ -186,8 +234,13 @@ export const questions = pgTable("questions", {
   prompt: text("prompt").notNull(),
   dataJson: jsonb("data_json").notNull(),
   correctJson: jsonb("correct_json").notNull(),
-  points: integer("points").notNull().default(1),
-  difficulty: integer("difficulty").notNull().default(50),
+  // PRD-15 block D, T-40: `points` and `scoring_json` were dropped here (migration
+  // 028) — scoring is a property of the test, not the question. The price and the
+  // graded config now live on test_question_scoring (per-test override) + section/
+  // test defaults + the system default; see shared/scoring/effective-scoring.
+  // PRD-16 FR-10: difficulty is an OPTIONAL 0–100 number; NULL = «не задано».
+  // Default 50 kept for inserts that omit it; an explicit null clears it.
+  difficulty: integer("difficulty").default(50),
   mediaUrl: text("media_url"),
   mediaType: text("media_type", { enum: ["image", "audio", "video"] }),
   shuffleAnswers: boolean("shuffle_answers").notNull().default(true),
@@ -198,8 +251,8 @@ export const questions = pgTable("questions", {
   contentHash: text("content_hash"),
   // PRD-2 §8.2: tags feed result-variable aggregate formulas; chip input in the question card.
   tags: jsonb("tags").$type<string[]>().notNull().default([]),
-  // PRD-10: graded answer scoring (correctness axis). Null = exact match (FR-02).
-  scoringJson: jsonb("scoring_json").$type<QuestionScoring>(),
+  // PRD-15 FR-01: creation audit. NULL = legacy row (destructive ops admin-only).
+  createdBy: varchar("created_by", { length: 36 }),
 });
 
 export const testFolders = pgTable("test_folders", {
@@ -207,6 +260,8 @@ export const testFolders = pgTable("test_folders", {
   name: text("name").notNull(),
   parentId: varchar("parent_id", { length: 36 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  // PRD-15 FR-01: creation audit. NULL = legacy row (destructive ops admin-only).
+  createdBy: varchar("created_by", { length: 36 }),
 });
 
 // ─── PRD-6: retake gate / cooldown (ограничение повторного прохождения) ──────
@@ -277,6 +332,20 @@ export const tests = pgTable("tests", {
   designSettingsJson: jsonb("design_settings_json").notNull().default({}),
   // PRD-6: optional retake gate / cooldown policy. Null = legacy (no gate).
   retakePolicyJson: jsonb("retake_policy_json").$type<RetakePolicy>(),
+  // PRD-15 block D (FR-31): test-wide default price of a question. Null = no
+  // default — the effective chain falls through to the system default (1 point).
+  defaultQuestionPoints: integer("default_question_points"),
+  // PRD-19 (FR-01): allow skipping a question and returning to unanswered ones within an
+  // attempt. Default true (new tests); migration 031 backfills EXISTING tests to false to
+  // preserve their strict-linear navigation.
+  allowReturnToUnanswered: boolean("allow_return_to_unanswered").notNull().default(true),
+  // PRD-19 (FR-04a): permit changing an already-submitted answer before section/test finish.
+  // Default false. Depends on allowReturnToUnanswered=true and is mutually exclusive with
+  // showCorrectAnswers (FR-04b) — enforced in the editor/service layer, not as a DB CHECK.
+  allowAnswerChange: boolean("allow_answer_change").notNull().default(false),
+  // PRD-19 (FR-05a): show the section-results screen (optional system node, sectioned tests).
+  // Default true; not applicable to linear_flat (no sections) — ignored by the runtime there.
+  showSectionResults: boolean("show_section_results").notNull().default(true),
 });
 
 /**
@@ -333,6 +402,31 @@ export const drawBlueprintSchema = z.object({
 export type DrawStratum = z.infer<typeof drawStratumSchema>;
 export type DrawBlueprint = z.infer<typeof drawBlueprintSchema>;
 
+/**
+ * PRD-17 (BR-12): a single fixed VARIANT of a section — a named, author-curated
+ * subset of the topic's question bank. `id` is a stable key (rotation history is
+ * matched on it, not on list position — PRD-17 R-3/D-8). `questionIds` is the
+ * variant's content; the whole variant is delivered, in random order (FR-04/15).
+ */
+export const formSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1).max(100),
+  questionIds: z.array(z.string()).min(1),
+});
+
+/**
+ * PRD-17 (BR-12): the set of fixed variants on a section. Presence switches the
+ * section into "variants mode": one variant is picked at topic start and
+ * delivered whole; the section's draw_count/draw_all/draw_blueprint are NOT
+ * applied (FR-03). At least two variants. Absence = legacy draw (uniform/quotas).
+ */
+export const formSetSchema = z.object({
+  forms: z.array(formSchema).min(2),
+});
+
+export type Form = z.infer<typeof formSchema>;
+export type FormSet = z.infer<typeof formSetSchema>;
+
 export const testSections = pgTable("test_sections", {
   id: varchar("id", { length: 36 }).primaryKey(),
   testId: varchar("test_id", { length: 36 }).notNull(),
@@ -349,11 +443,22 @@ export const testSections = pgTable("test_sections", {
   feedbackJson: jsonb("feedback_json"),
   // PRD-11: optional stratified-draw blueprint. Null = uniform draw (FR-02).
   drawBlueprintJson: jsonb("draw_blueprint_json").$type<DrawBlueprint>(),
+  // PRD-17 (BR-12): optional fixed-variant set. Presence puts the section into
+  // "variants mode" (one variant picked at topic start, delivered whole — FR-04);
+  // draw_count/draw_all/draw_blueprint are then not applied (FR-03). Null = legacy
+  // draw (uniform / quotas), backward-compatible.
+  formSetJson: jsonb("form_set_json").$type<FormSet>(),
+  // PRD-15 block D (FR-31): per-section default price of a question. Null = no
+  // default — the chain falls through to the test default, then the system 1.
+  defaultPoints: integer("default_points"),
   // PRD-7 S13.5 / G47: explicit author-controlled topic order. Persisted on
   // every save as the index of the topic in the editor's sections array, so
   // drag-reorder in Structure round-trips through getTestSections() ORDER BY.
   sortOrder: integer("sort_order").notNull().default(0),
-});
+}, (table) => ({
+  // PRD-15 FR-03: powers the "where used" lookup (tests depending on a topic).
+  topicIdIdx: index("test_sections_topic_id_idx").on(table.topicId),
+}));
 
 export const adaptiveTopicSettings = pgTable("adaptive_topic_settings", {
   id: varchar("id", { length: 36 }).primaryKey(),
@@ -388,6 +493,10 @@ export const attempts = pgTable("attempts", {
   userId: varchar("user_id", { length: 36 }).notNull(),
   testId: varchar("test_id", { length: 36 }).notNull(),
   testVersion: integer("test_version").notNull().default(1),
+  // PRD-15 block B (FR-13): the publication snapshot this attempt is delivered
+  // and graded from. NULL = legacy/live delivery (drafts, preview, or attempts
+  // started before snapshots existed) — the transitional mode.
+  snapshotId: varchar("snapshot_id", { length: 36 }),
   variantJson: jsonb("variant_json").notNull(),
   answersJson: jsonb("answers_json"),
   resultJson: jsonb("result_json"),
@@ -395,18 +504,81 @@ export const attempts = pgTable("attempts", {
   finishedAt: timestamp("finished_at"),
 });
 
+// PRD-15 block B (FR-10): a frozen, self-contained snapshot of a test created
+// on publish/republish. Delivery of a published test reads ONLY from the
+// snapshot, so later edits to the bank do not change in-flight or future
+// attempts until the next republish. `content_json` holds the resolved
+// deliverable (test row, sections, per-topic question pools, adaptive config,
+// scales, measurements, result variables, content pages, topic courses/events).
+// `version` is a per-test monotonic counter; one row per (test_id, version).
+export const testSnapshots = pgTable("test_snapshots", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  testId: varchar("test_id", { length: 36 }).notNull(),
+  version: integer("version").notNull(),
+  contentJson: jsonb("content_json").notNull(),
+  publishedAt: timestamp("published_at").notNull().defaultNow(),
+  publishedBy: varchar("published_by", { length: 36 }),
+}, (table) => ({
+  testVersionIdx: uniqueIndex("test_snapshots_test_version_idx").on(table.testId, table.version),
+}));
+
+export type TestSnapshot = typeof testSnapshots.$inferSelect;
+
+// PRD-15 block D (FR-30): per-(test, question) scoring override — the price and
+// graded config are a property of the TEST; the question row carries content
+// only. Every value column is independently nullable: a null link falls through
+// the effective chain (override -> section default -> test default -> system;
+// shared/scoring/effective-scoring). `pinned_content_hash` is the question's
+// contentHash at authoring time — a mismatch with the current hash marks the
+// override as stale in the editor (FR-30). Rows die with their test or question
+// (FK cascade).
+export const testQuestionScoring = pgTable("test_question_scoring", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  testId: varchar("test_id", { length: 36 }).notNull().references(() => tests.id, { onDelete: "cascade" }),
+  questionId: varchar("question_id", { length: 36 }).notNull().references(() => questions.id, { onDelete: "cascade" }),
+  points: integer("points"),
+  scoringJson: jsonb("scoring_json").$type<QuestionScoring>(),
+  difficulty: integer("difficulty"),
+  pinnedContentHash: text("pinned_content_hash"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  testQuestionIdx: uniqueIndex("test_question_scoring_test_question_idx").on(table.testId, table.questionId),
+  questionIdIdx: index("test_question_scoring_question_id_idx").on(table.questionId),
+}));
+
+export const insertTestQuestionScoringSchema = createInsertSchema(testQuestionScoring)
+  .omit({ id: true, createdAt: true, updatedAt: true })
+  .extend({
+    // The override price allows an explicit 0 (an unscored question in THIS test).
+    points: z.number().int().min(0).nullish(),
+    difficulty: z.number().int().min(0).max(100).nullish(),
+    // drizzle-zod types jsonb loosely; validate the graded config explicitly.
+    scoringJson: questionScoringSchema.nullish(),
+  });
+
+export type TestQuestionScoring = typeof testQuestionScoring.$inferSelect;
+export type InsertTestQuestionScoring = z.infer<typeof insertTestQuestionScoringSchema>;
+
 export const insertTestFolderSchema = createInsertSchema(testFolders).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertFolderSchema = createInsertSchema(folders).omit({ id: true });
-export const insertTopicSchema = createInsertSchema(topics).omit({ id: true });
-export const insertTopicCourseSchema = createInsertSchema(topicCourses).omit({ id: true });
-export const insertTopicEventSchema = createInsertSchema(topicEvents).omit({ id: true });
+export const insertTopicSchema = createInsertSchema(topics).omit({ id: true }).extend({
+  // Optional readable id (slug): lower snake_case, ≤64. Blank → NULL (use the UUID).
+  code: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? null : v),
+    z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{0,63}$/, "code: строчная буква в начале; буквы/цифры/подчёркивание; до 64 символов")
+      .nullable()
+      .optional(),
+  ),
+});
 export const insertQuestionSchema = createInsertSchema(questions)
   .omit({ id: true })
-  // drizzle-zod types jsonb loosely; validate the scoring config explicitly (FR-13)
-  // and normalize tags on save (PRD-11 §3a: trim/collapse, dedup, length cap).
+  // drizzle-zod types jsonb loosely; normalize tags on save (PRD-11 §3a:
+  // trim/collapse, dedup, length cap). Scoring left the question in T-40.
   .extend({
-    scoringJson: questionScoringSchema.nullish(),
     tags: z.array(z.string()).transform(normalizeTags).optional(),
   });
 export const insertTestSchema = createInsertSchema(tests)
@@ -415,8 +587,11 @@ export const insertTestSchema = createInsertSchema(tests)
   .extend({ retakePolicyJson: retakePolicySchema.nullish() });
 export const insertTestSectionSchema = createInsertSchema(testSections)
   .omit({ id: true })
-  // drizzle-zod types jsonb loosely; validate the draw blueprint explicitly.
-  .extend({ drawBlueprintJson: drawBlueprintSchema.nullish() });
+  // drizzle-zod types jsonb loosely; validate the draw blueprint + variant set explicitly.
+  .extend({
+    drawBlueprintJson: drawBlueprintSchema.nullish(),
+    formSetJson: formSetSchema.nullish(),
+  });
 export const insertAttemptSchema = createInsertSchema(attempts).omit({ id: true });
 
 export const insertAdaptiveTopicSettingsSchema = createInsertSchema(adaptiveTopicSettings).omit({ id: true });
@@ -448,11 +623,11 @@ export type TestFolder = typeof testFolders.$inferSelect;
 export type InsertTopic = z.infer<typeof insertTopicSchema>;
 export type Topic = typeof topics.$inferSelect;
 
-export type InsertTopicCourse = z.infer<typeof insertTopicCourseSchema>;
-export type TopicCourse = typeof topicCourses.$inferSelect;
-
-export type InsertTopicEvent = z.infer<typeof insertTopicEventSchema>;
-export type TopicEvent = typeof topicEvents.$inferSelect;
+// TD-02 r.3: standalone projection shapes (the backing tables were dropped,
+// migration 024). A recommended course = a feedback link; an event = a feedback
+// event title. Ids are synthetic (index-based) — see shared/topics/recommendations.
+export type TopicCourse = { id: string; topicId: string; title: string; url: string };
+export type TopicEvent = { id: string; topicId: string; title: string };
 
 export type InsertQuestion = z.infer<typeof insertQuestionSchema>;
 export type Question = typeof questions.$inferSelect;
@@ -528,16 +703,30 @@ export const feedbackAssetSchema = z.object({
   scormHref: z.string().optional(),
 });
 
+/**
+ * Recommended event (TD-02): a named event the learner may attend. Unlike a
+ * course link (`feedbackLinkSchema`, URL required), the event URL is OPTIONAL —
+ * an event may have no registration page.
+ */
+export const feedbackEventSchema = z.object({
+  title: z.string().min(1),
+  url: z.union([z.string().url(), z.literal("")]).optional(),
+});
+
 export const feedbackContentSchema = z.object({
   format: feedbackFormatSchema,
   text: z.string(),
+  // `links` carries recommended courses (UI label «Курсы»); `assets` — documents
+  // (PDF); `events` — recommended events with an optional link.
   links: z.array(feedbackLinkSchema).default([]),
   assets: z.array(feedbackAssetSchema).default([]),
+  events: z.array(feedbackEventSchema).default([]),
 });
 
 export type FeedbackFormat = z.infer<typeof feedbackFormatSchema>;
 export type FeedbackLink = z.infer<typeof feedbackLinkSchema>;
 export type FeedbackAsset = z.infer<typeof feedbackAssetSchema>;
+export type FeedbackEvent = z.infer<typeof feedbackEventSchema>;
 export type FeedbackContent = z.infer<typeof feedbackContentSchema>;
 
 export const singleChoiceDataSchema = z.object({
@@ -589,6 +778,13 @@ export const testVariantSchema = z.object({
     topicName: z.string(),
     questionIds: z.array(z.string()),
     /**
+     * PRD-17 (BR-12): when this section ran in "variants mode", the stable id of
+     * the variant that was drawn for this attempt. Pins the delivered set and is
+     * the source of rotation history on the next retake (FR-07/FR-08). Absent for
+     * non-variant sections and pre-PRD-17 attempts (treat missing as "no variant").
+     */
+    formId: z.string().optional(),
+    /**
      * PRD-4 v1.1 §3.2 — per-section (per-topic) time budget in minutes, or
      * `null` when the topic has no custom limit (inherit_test / none). Carried
      * in the persisted variant so the web learner runtime can run a per-topic
@@ -615,6 +811,9 @@ export const topicResultSchema = z.object({
   passed: z.boolean().nullable(),
   passRule: passRuleSchema.nullable(),
   recommendedCourses: z.array(z.object({ title: z.string(), url: z.string() })),
+  // TD-02: recommended events for a failed topic (url optional). `.default([])`
+  // keeps legacy stored results (without the field) valid.
+  recommendedEvents: z.array(z.object({ title: z.string(), url: z.string().optional() })).default([]),
 });
 
 export const attemptResultSchema = z.object({
@@ -1071,8 +1270,12 @@ export const contentPages = pgTable("content_pages", {
   mode: text("mode", { enum: ["template", "standard", "html"] }).notNull().default("template"),
   /** @deprecated Use `kind` instead. Kept for backward compat in this release. */
   type: text("type", { enum: ["intro", "info", "summary", "html"] }).notNull(),
-  /** PRD-1 §4.3: variant-binding kind. Drives lifecycle of system pages. */
-  kind: text("kind", { enum: ["start", "questions", "router", "summary", "results", "intro", "info"] }).notNull(),
+  /** PRD-1 §4.3: variant-binding kind. Drives lifecycle of system pages.
+   *  PRD-19: `review` (обзор / section-finish) and `section-results` (итоги раздела)
+   *  are system runtime nodes — singleton design bindings like start/results,
+   *  rendered by their own runtime phase and EXCLUDED from the content-page flow.
+   *  They replace the legacy per-topic `intro`/`summary` section pages. */
+  kind: text("kind", { enum: ["start", "questions", "router", "summary", "results", "intro", "info", "review", "section-results"] }).notNull(),
   templateKey: text("template_key"),
   sortOrder: integer("sort_order").notNull().default(0),
   valuesJson: jsonb("values_json").notNull().default({}),
@@ -1103,7 +1306,7 @@ export type ScormAnswer = typeof scormAnswers.$inferSelect;
  * PRD-1 §4.3: variant.kind — functional role of a template variant.
  * Drives variant binding rules in PRD-7 §1.4 (silent binding for system kinds).
  */
-export const variantKindSchema = z.enum(["start", "questions", "router", "summary", "results", "intro", "info"]);
+export const variantKindSchema = z.enum(["start", "questions", "router", "summary", "results", "intro", "info", "review", "section-results"]);
 export type VariantKind = z.infer<typeof variantKindSchema>;
 
 /**
@@ -1140,10 +1343,15 @@ export const templateManifestSchema = z.object({
  * default itself must declare each system kind, otherwise reconcile silently
  * fails to materialize the corresponding `content_pages` row (G48 2026-05-28).
  *
- * System kinds: `start`, `intro`, `summary`, `results`, `router`, `questions`. The
- * user kind `info` is author-created and not lifecycle-managed.
+ * System kinds: `start`, `results`, `router`, `questions`, `intro` («Введение
+ * раздела», per-topic — PRD-1 §4.3), plus the PRD-19 section nodes `review` (обзор)
+ * and `section-results` (итоги раздела — supersedes the legacy per-topic `summary`).
+ * `summary` is kept as a valid kind for backward compatibility with existing
+ * rows/templates but is no longer system-managed (its «Итог раздела» role is the
+ * computed `section-results` node). The user kind `info` is author-created and not
+ * lifecycle-managed.
  */
-const REQUIRED_DEFAULT_VARIANT_KINDS = ["start", "intro", "summary", "results", "router", "questions"] as const;
+const REQUIRED_DEFAULT_VARIANT_KINDS = ["start", "results", "router", "questions", "intro", "review", "section-results"] as const;
 
 export const defaultTemplateManifestSchema = templateManifestSchema.superRefine((m, ctx) => {
   const declared = new Set(m.contentTemplates.map((ct) => ct.kind));
@@ -1230,7 +1438,10 @@ export const insertResultVariableSchema = createInsertSchema(resultVariables)
     name: z
       .string()
       .regex(/^[a-z][a-z0-9_]{0,63}$/, "name: начинается с буквы; строчные/цифры/подчёркивание; до 64 символов"),
-    label: z.string().min(1).max(120),
+    // Label is OPTIONAL (parity with scales, per the approved wireframe). Empty is
+    // allowed; consumers fall back to the name for display. Column is NOT NULL, so
+    // "" (not null) is stored.
+    label: z.string().max(120).default(""),
   });
 
 export type InsertResultVariable = z.infer<typeof insertResultVariableSchema>;
@@ -1264,7 +1475,9 @@ export const insertScaleSchema = createInsertSchema(scales)
     key: z
       .string()
       .regex(/^[a-z][a-z0-9_]{0,63}$/, "key: начинается с буквы; строчные/цифры/подчёркивание; до 64 символов"),
-    label: z.string().min(1).max(120),
+    // Label is OPTIONAL (per the approved wireframe). Empty is allowed; consumers
+    // fall back to the key for display. Column is NOT NULL, so "" (not null) is stored.
+    label: z.string().max(120).default(""),
   });
 
 export type InsertScale = z.infer<typeof insertScaleSchema>;

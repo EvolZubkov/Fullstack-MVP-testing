@@ -1,0 +1,213 @@
+/**
+ * tb-content-tree.css
+ *
+ * Project DS-extension layer (tb-*) for the unified "Темы и вопросы" section:
+ * a table-tree (Folder ⊃ Topic ⊃ Question) sharing the visual language of the
+ * tests list (tb-tests-list.css) — column header, plain-number counts, indent
+ * guide, bottom-border rows, no card. Composition only, on DS tokens; all
+ * controls are DS components. Mirrors the approved wireframe
+ * docs/wireframes/approved/content-bank-explorer.html. Scoped under
+ * `.tb-content-tree` to avoid global leakage. Imported from client/src/index.css.
+ */
+
+/* Page wrapper fills the shell main so the tree scrolls internally and the
+   title + toolbar + table header stay put (sticky region). */
+.tb-content-page { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.tb-content-tree { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+/* Toolbar above the tree (anchor for the filter popover) */
+.tb-content-tree .ct-toolbar { position: relative; display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; margin-bottom: var(--ou-space-4); flex-shrink: 0; }
+.tb-content-tree .ct-search { flex: 1; min-width: var(--wf-size-200, 200px); }
+.tb-content-tree .ct-search .ou-field { width: 100%; }
+.tb-content-tree .ct-spacer { flex: 1; }
+
+/* Filter popover (floating over the tree, anchored under the toolbar) */
+.tb-content-tree .ct-filterpop {
+  position: absolute; top: calc(100% + var(--ou-space-1)); left: 0; z-index: 30;
+  width: var(--wf-size-620, 620px); max-width: calc(100% - var(--ou-space-6) * 2);
+  background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m); box-shadow: var(--ou-shadow-lg);
+}
+.tb-content-tree .ct-filterpop__body {
+  display: flex; flex-direction: column; gap: var(--ou-space-5);
+  padding: var(--ou-space-4); max-height: 70vh; overflow: auto;
+}
+.tb-content-tree .ct-facet { display: flex; flex-direction: column; gap: var(--ou-space-2); min-width: 0; }
+.tb-content-tree .ct-facet__lbl { font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); }
+.tb-content-tree .ct-facet__row { display: flex; flex-wrap: wrap; gap: var(--ou-space-2) var(--ou-space-4); }
+.tb-content-tree .ct-filterpop__foot {
+  display: flex; align-items: center; gap: var(--ou-space-3);
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border-top: 1px solid var(--ou-border-default);
+}
+
+/* Active-condition chips + result note */
+.tb-content-tree .ct-chips { margin-bottom: var(--ou-space-3); }
+.tb-content-tree .ct-filternote { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-bottom: var(--ou-space-3); }
+
+/* Tree + columns: НАЗВАНИЕ | ВЛАДЕЛЕЦ | СЛОЖНОСТЬ | ВОПРОСОВ | ⋯ actions.
+   The tree scrolls internally; the column header (.ct-thead) is sticky. */
+.tb-content-tree .ct-tree { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
+
+/* Depth-based indentation (avoids inline styles; --ct-depth drives .ct-name padding) */
+.tb-content-tree .ct-d0 { --ct-depth: 0; }
+.tb-content-tree .ct-d1 { --ct-depth: 1; }
+.tb-content-tree .ct-d2 { --ct-depth: 2; }
+.tb-content-tree .ct-d3 { --ct-depth: 3; }
+.tb-content-tree .ct-d4 { --ct-depth: 4; }
+.tb-content-tree .ct-d5 { --ct-depth: 5; }
+.tb-content-tree .ct-d6 { --ct-depth: 6; }
+.tb-content-tree .ct-thead,
+.tb-content-tree .ct-row {
+  display: grid;
+  grid-template-columns: 1fr var(--wf-size-150, 150px) var(--wf-size-110, 116px) var(--wf-size-95, 96px) var(--wf-size-90, 88px);
+  align-items: center;
+  border-bottom: 1px solid var(--ou-border-default);
+}
+.tb-content-tree .ct-thead { font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: .05em; position: sticky; top: 0; z-index: 2; background: var(--ou-bg-page); }
+.tb-content-tree .ct-thead > div { padding: var(--ou-space-2); text-align: center; }
+.tb-content-tree .ct-thead > div:first-child { text-align: left; padding-left: var(--ou-space-3); }
+.tb-content-tree .ct-thead > div:nth-child(2) { text-align: left; }
+.tb-content-tree .ct-owner { font: var(--ou-text-body-s); color: var(--ou-fg-muted); padding: 0 var(--ou-space-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tb-content-tree .ct-row { min-height: var(--wf-size-44, 44px); cursor: pointer; -webkit-user-select: none; user-select: none; }
+.tb-content-tree .ct-row:hover { background: var(--ou-bg-hover); }
+
+/* Name cell: depth-driven indentation via --ct-depth */
+.tb-content-tree .ct-name {
+  display: flex; align-items: center; gap: var(--ou-space-2); min-width: 0;
+  padding: var(--ou-space-2) var(--ou-space-2) var(--ou-space-2)
+           calc(var(--ou-space-3) + var(--ct-depth, 0) * var(--ou-space-5));
+}
+.tb-content-tree .ct-name__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-content-tree .ct-twist,
+.tb-content-tree .ct-ico,
+.tb-content-tree .ct-qtype { width: var(--ou-space-4); height: var(--ou-space-4); flex: none; display: inline-flex; align-items: center; justify-content: center; color: var(--ou-fg-muted); }
+.tb-content-tree .ct-twist--leaf { visibility: hidden; }
+.tb-content-tree .ct-ico--topic { color: var(--ou-accent-default); }
+.tb-content-tree .ct-cell { font: var(--ou-text-body-s); color: var(--ou-fg-default); text-align: center; padding: 0 var(--ou-space-2); }
+.tb-content-tree .ct-na { color: var(--ou-fg-muted); }
+.tb-content-tree .ct-qmedia { color: var(--ou-fg-muted); width: var(--ou-space-4); height: var(--ou-space-4); display: inline-flex; flex: none; }
+
+/* Root label "Все темы (N)" */
+.tb-content-tree .ct-rootrow { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--ou-space-3) var(--ou-space-2) calc(var(--ou-space-3) + var(--ou-space-5) + var(--ou-space-2)); font: var(--ou-text-body-s); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); border-bottom: 1px solid var(--ou-border-default); }
+
+/* Folder */
+.tb-content-tree .ct-row--folder .ct-name__label { font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ou-fg-muted); }
+.tb-content-tree .ct-foldercount { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+
+/* Topic */
+.tb-content-tree .ct-row--topic .ct-name__label { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-default); }
+.tb-content-tree .ct-row--topic.is-open,
+.tb-content-tree .ct-row--topic.is-open:hover { background: var(--ou-accent-soft); box-shadow: inset 3px 0 0 var(--ou-accent-default); }
+
+/* Question — leaf under an indent guide. The vertical guide aligns under the
+   parent topic's chevron: a question at --ct-depth nests under a topic at
+   --ct-depth - 1, whose twist centre is space-3 + ct-depth*space-5 + space-4
+   (one indent step + the leading checkbox slot + half the twist glyph). */
+.tb-content-tree .ct-row--q .ct-name { position: relative; }
+.tb-content-tree .ct-row--q .ct-name::before {
+  content: ""; position: absolute;
+  left: calc(var(--ou-space-3) + var(--ct-depth, 0) * var(--ou-space-5) + var(--ou-space-4));
+  top: 0; bottom: 0; width: 1px; background: var(--ou-border-default);
+}
+
+/* Inline read-only question preview (expanded question row). Indented so the
+   option icons line up under the question's type pictogram and the option text
+   under the question label — i.e. shifted past the question's leading controls
+   (checkbox slot + twist + their gaps). The parent topic's guide line continues
+   through the card (same x as the question row's guide). */
+.tb-content-tree .ct-qpreview-row {
+  position: relative;
+  border-bottom: 1px solid var(--ou-border-default);
+  background: var(--ou-bg-subtle, var(--ou-bg-hover));
+  padding: var(--ou-space-2) var(--ou-space-4) var(--ou-space-2)
+           calc(var(--ou-space-3) + var(--ct-depth, 0) * var(--ou-space-5)
+                + var(--ou-space-5) + var(--ou-space-2) + var(--ou-space-4) + var(--ou-space-2));
+}
+.tb-content-tree .ct-qpreview-row::before {
+  content: ""; position: absolute;
+  left: calc(var(--ou-space-3) + var(--ct-depth, 0) * var(--ou-space-5) + var(--ou-space-4));
+  top: 0; bottom: 0; width: 1px; background: var(--ou-border-default);
+}
+.tb-content-tree .ct-qpreview { max-width: 40rem; }
+
+/* States */
+.tb-content-tree .ct-empty { padding: var(--ou-space-7) var(--ou-space-3); }
+.tb-content-tree .ct-more { padding: var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* ── Phase 3: per-row ⋯ actions (mirrors the tests-list dropdown pattern) ──── */
+.tb-content-tree .ct-acts { display: flex; align-items: center; justify-content: flex-end; padding-right: var(--ou-space-3); }
+.tb-content-tree .ct-more-wrap { position: relative; }
+.tb-content-tree .ct-actbtn {
+  width: var(--wf-size-28, 28px); height: var(--wf-size-28, 28px); border-radius: var(--ou-radius-s);
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: none; cursor: pointer; color: var(--ou-fg-muted);
+}
+.tb-content-tree .ct-actbtn:hover { background: var(--ou-bg-active, var(--ou-bg-hover)); color: var(--ou-fg-default); }
+
+/* Dropdown menu (anchored to the ⋯ button) */
+.tb-content-tree .ct-menu {
+  position: absolute; top: calc(100% + var(--ou-space-1)); right: 0; z-index: 40;
+  min-width: var(--wf-size-200, 200px);
+  background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m); box-shadow: var(--ou-shadow-lg);
+  padding: var(--ou-space-1); display: flex; flex-direction: column;
+}
+.tb-content-tree .ct-menu__item {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--ou-space-3); border-radius: var(--ou-radius-s);
+  background: transparent; border: none; cursor: pointer; text-align: left;
+  font: var(--ou-text-body-s); color: var(--ou-fg-default); white-space: nowrap;
+}
+.tb-content-tree .ct-menu__item:hover { background: var(--ou-bg-hover); }
+.tb-content-tree .ct-menu__item.is-danger { color: var(--ou-error-default); }
+.tb-content-tree .ct-menu__item.is-danger:hover { background: var(--ou-error-soft); }
+.tb-content-tree .ct-menu__sep { height: 1px; background: var(--ou-border-default); margin: var(--ou-space-1) 0; border: none; }
+
+/* Selection checkbox — a fixed-width LEADING slot in the name cell, in normal
+   flow (so it is fully clickable). Folders render an empty slot of the same
+   width, so the chevron stays visible AND topics/questions align with folders at
+   the same depth. Revealed on hover / when selected. */
+.tb-content-tree .ct-qcheck {
+  flex: none; width: var(--ou-space-5); display: inline-flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .12s;
+}
+.tb-content-tree .ct-row--q:hover .ct-qcheck,
+.tb-content-tree .ct-row--q.is-selected .ct-qcheck,
+.tb-content-tree .ct-row--topic:hover .ct-qcheck,
+.tb-content-tree .ct-row--topic.is-tselected .ct-qcheck { opacity: 1; }
+.tb-content-tree .ct-row--q.is-selected { background: var(--ou-accent-soft); }
+
+/* Speed-dial FAB (canon: tests-list). The wrap is a FIXED 56×56 box so the
+   toggle stays put; the actions float ABSOLUTELY above it (else, in flow, the
+   growing list would shove the toggle up over its own items). */
+.tb-content-tree .ct-fab-wrap { position: fixed; bottom: var(--ou-space-6); right: var(--ou-space-6); z-index: 30; width: var(--wf-size-56, 56px); height: var(--wf-size-56, 56px); }
+.tb-content-tree .ct-fab-actions {
+  position: absolute; bottom: calc(100% + var(--ou-space-3));
+  right: calc((var(--wf-size-56, 56px) - var(--wf-size-44, 44px)) / 2);
+  display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: flex-end; width: max-content;
+}
+.tb-content-tree .ct-fab-action { display: flex; align-items: center; gap: var(--ou-space-2); }
+.tb-content-tree .ct-fab-action-label {
+  font: var(--ou-text-body-s); font-weight: 500; background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+  border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-s);
+  padding: var(--ou-space-1) var(--ou-space-3); box-shadow: var(--ou-shadow-xs); white-space: nowrap;
+}
+.tb-content-tree .ct-fab-action-btn {
+  width: var(--wf-size-44, 44px); height: var(--wf-size-44, 44px); border-radius: var(--ou-radius-pill);
+  background: var(--ou-bg-elevated); color: var(--ou-fg-default); border: 1px solid var(--ou-border-default);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--ou-shadow-s); flex-shrink: 0;
+}
+.tb-content-tree .ct-fab-action-btn:hover { background: var(--ou-bg-hover); }
+.tb-content-tree .ou-fab--open { transform: rotate(45deg); }
+
+/* Bulk-action bar (shown when questions are selected) */
+.tb-content-tree .ct-bulkbar {
+  display: flex; align-items: center; gap: var(--ou-space-3);
+  padding: var(--ou-space-2) var(--ou-space-3); margin-bottom: var(--ou-space-3);
+  background: var(--ou-accent-soft); border: 1px solid var(--ou-accent-default);
+  border-radius: var(--ou-radius-m);
+}
+.tb-content-tree .ct-bulkbar__count { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-default); }
+.tb-content-tree .ct-bulkbar__spacer { flex: 1; }

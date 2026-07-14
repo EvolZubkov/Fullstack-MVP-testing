@@ -67,10 +67,57 @@ function tryReadBinaryAsset(relativePath: string): Buffer | null {
   return null;
 }
 
+/**
+ * System variant kinds (`start`/`results`) the active template does NOT declare
+ * in its `contentTemplates` — those screens fall back to the `default` template
+ * (PRD-7 G21). Returns `[]` when the active template IS `default` or its manifest
+ * cannot be read (never force a fallback in that case).
+ */
+function computeFallbackKinds(templateDir: string, defaultDir: string): string[] {
+  if (path.resolve(templateDir) === path.resolve(defaultDir)) return [];
+  let declared: Set<string>;
+  try {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(templateDir, "manifest.json"), "utf8"),
+    ) as { contentTemplates?: Array<{ kind?: string }> };
+    declared = new Set(
+      (manifest.contentTemplates ?? [])
+        .map((c) => c?.kind)
+        .filter((k): k is string => typeof k === "string"),
+    );
+  } catch {
+    return [];
+  }
+  return ["start", "results"].filter((k) => !declared.has(k));
+}
+
 export async function generateScormPackage(data: ExportData): Promise<Buffer> {
+  // Resolve the template directory up-front so we can detect which system screens
+  // (start/results) the active template doesn't declare and must fall back to the
+  // bundled `default` template for (PRD-7 G21). Mutating designSettings here lets
+  // the flag flow through buildTestJson into TEST_DATA for the runtime.
+  const templateId = data.designSettings?.templateId ?? "default";
+  const builtinRoot = getTemplatesRootDir();
+  const templateDir =
+    data.templateDir && fs.existsSync(data.templateDir)
+      ? data.templateDir
+      : path.join(builtinRoot, fs.existsSync(path.join(builtinRoot, templateId)) ? templateId : "default");
+  const defaultDir = path.join(builtinRoot, "default");
+  const fallbackKinds = computeFallbackKinds(templateDir, defaultDir);
+  if (data.designSettings && fallbackKinds.length > 0) {
+    data.designSettings.fallbackKinds = fallbackKinds;
+  }
+
   const testJson = buildTestJson(data);
 
-  const indexHtml = readAsset("index.html").replace("__TITLE__", escapeXml(data.test.title));
+  const indexHtml = readAsset("index.html")
+    .replace("__TITLE__", escapeXml(data.test.title))
+    .replace(
+      "__FALLBACK_STYLES__",
+      fallbackKinds.length > 0
+        ? '<link rel="stylesheet" href="styles-default.css" id="styles-fallback" disabled />'
+        : "",
+    );
   const runtimeJs = readAsset("runtime.js");
 
   const testObj = JSON.parse(testJson);
@@ -306,23 +353,19 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     }
   });
 
-  const templateId = data.designSettings?.templateId ?? "default";
-  // Resolve the template's files directory. The route passes `data.templateDir`
-  // (built-in or uploaded PRD-3 path, resolved via the templates table). Without
-  // it, fall back to the built-in convention `server/scorm/templates/<id>` (and
-  // `default` when that id has no shipped directory) — this keeps the exporter
-  // usable standalone (acceptance fixtures pass no templateDir).
-  const builtinRoot = getTemplatesRootDir();
-  const templateDir =
-    data.templateDir && fs.existsSync(data.templateDir)
-      ? data.templateDir
-      : path.join(builtinRoot, fs.existsSync(path.join(builtinRoot, templateId)) ? templateId : "default");
-
+  // templateId / builtinRoot / templateDir / defaultDir / fallbackKinds were
+  // resolved at the top of the function (needed before buildTestJson).
   const templateFiles: Record<string, string | Buffer> = {};
   if (fs.existsSync(templateDir)) {
     copyDirToFiles(templateDir, "template", templateFiles);
   } else {
     logger.warn(`Template directory not found for "${templateId}" (${templateDir})`, "scorm-export");
+  }
+  // PRD-7 G21: bundle the `default` template under `template-default/` so the
+  // runtime can render fallback system screens (start/results the active template
+  // doesn't declare) from default's own layout + CSS.
+  if (fallbackKinds.length > 0 && fs.existsSync(defaultDir) && path.resolve(defaultDir) !== path.resolve(templateDir)) {
+    copyDirToFiles(defaultDir, "template-default", templateFiles);
   }
   const manifestHrefs = mediaHrefs.concat(Object.keys(templateFiles));
 
@@ -338,6 +381,20 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     }
   };
   const stylesCss = readStyle("theme.css") + "\n" + readStyle("base.css");
+
+  // PRD-7 G21: default template CSS for fallback system screens. Loaded into the
+  // package as `styles-default.css` and toggled active by the runtime only while a
+  // fallback screen is shown (the package is one screen at a time), so it never
+  // conflicts with the active template's own screens.
+  const readDefaultStyle = (f: string): string => {
+    try {
+      return fs.readFileSync(path.join(defaultDir, "styles", f), "utf8");
+    } catch {
+      return "";
+    }
+  };
+  const stylesDefaultCss =
+    fallbackKinds.length > 0 ? readDefaultStyle("theme.css") + "\n" + readDefaultStyle("base.css") : "";
 
   // Vendored PDF-export libraries (no CDN — the package must work offline inside the LMS).
   // html2canvas + jsPDF are shipped in the package (from server/scorm/assets/vendor/) and
@@ -356,7 +413,8 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "vendor/jspdf.umd.min.js": jspdfJs,
     ...templateFiles,
   };
-  
+  if (stylesDefaultCss) files["styles-default.css"] = stylesDefaultCss;
+
   // Добавляем подложки и логотипы для PDF (только в assets/media/)
   try {
     const pdfBg1 = tryReadBinaryAsset("assets/media/pdf-bg-1.png");

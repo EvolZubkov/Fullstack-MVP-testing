@@ -31,12 +31,10 @@
         "id": "demo-intro",
         "type": "intro",
         "route": "content.intro",
-        "templateKey": "intro.hero",
+        "templateKey": "intro.standard",
         "topicId": "topic-1",
         "values": {
-          "title": "Введение в раздел",
-          "subtitle": "Перед началом ответьте внимательно на каждый вопрос",
-          "heroImage": null
+          "instruction": "<p>Перед началом ответьте внимательно на каждый вопрос. Вернуться к вопросам можно до завершения раздела.</p>"
         }
       },
       {

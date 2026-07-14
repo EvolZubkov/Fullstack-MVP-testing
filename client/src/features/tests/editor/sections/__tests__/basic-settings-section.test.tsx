@@ -35,10 +35,11 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       feedback: { format: "plain", text: "" },
       feedbackLinks: [],
       feedbackAssets: [],
+      feedbackEvents: [],
       webhookUrl: "",
       telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true },
     passRules: {
       decisionPolicy: "overall_only",
       overall: { type: "percent", value: 70 },
@@ -50,6 +51,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     scales: [],
     measurements: [],
     retakePolicy: defaultRetakePolicy(),
+    scoring: { defaultQuestionPoints: null, questionOverrides: [] },
     ...overrides,
   };
 }
@@ -186,6 +188,8 @@ const sampleSection: TestEditorModel["sections"][number] = {
   feedback: { format: "plain", text: "" },
   feedbackLinks: [],
   feedbackAssets: [],
+  feedbackEvents: [],
+  defaultPoints: null,
 };
 
 const sampleAdaptiveTopic: TestEditorModel["adaptive"]["topics"][number] = {
@@ -278,7 +282,7 @@ describe("<SettingsSection /> — Ограничения pane", () => {
 
   it("sets timeLimitMinutes back to null when input is cleared", () => {
     const updateModel = vi.fn();
-    const model = baseModel({ runtime: { timeLimitMinutes: 30, maxAttempts: null, showCorrectAnswers: false } });
+    const model = baseModel({ runtime: { timeLimitMinutes: 30, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true } });
     render(<SettingsSection model={model} updateModel={updateModel} />);
     fireEvent.click(screen.getByTestId("settings-rail-limits"));
     fireEvent.change(screen.getByTestId("settings-time-limit-input"), {
@@ -442,6 +446,8 @@ describe("<SettingsSection /> — Правила прохождения pane", (
       feedback: { format: "plain" as const, text: "" },
       feedbackLinks: [],
       feedbackAssets: [],
+      feedbackEvents: [],
+      defaultPoints: null,
       ...over,
     };
   }
@@ -586,6 +592,8 @@ describe("<SettingsSection /> — Адаптивный режим pane (mode = a
       feedback: { format: "plain" as const, text: "" },
       feedbackLinks: [],
       feedbackAssets: [],
+      feedbackEvents: [],
+      defaultPoints: null,
       ...over,
     };
   }
@@ -751,8 +759,8 @@ describe("<SettingsSection /> — Адаптивный режим pane (mode = a
     render(<SettingsSection model={model} updateModel={updateModel} />);
     fireEvent.click(screen.getByTestId("settings-rail-adaptive"));
     fireEvent.click(screen.getByTestId("adaptive-topic-toggle-t1"));
-    // Open the feedback editor modal for level 0
-    fireEvent.click(screen.getByTestId("adaptive-level-t1-0-feedback"));
+    // Open the feedback editor modal for level 0 (non-empty → pencil opens it).
+    fireEvent.click(screen.getByTestId("adaptive-level-t1-0-feedback-edit"));
     // Remove the only link inside the modal
     fireEvent.click(screen.getByTestId("feedback-editor-link-remove-0"));
     // Save closes the modal and propagates the new links array via onSave

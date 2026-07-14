@@ -1,6 +1,8 @@
-import type { Test, TestSection, Topic, Question, TopicCourse, TopicEvent, PassRule, AdaptiveTopicSettings, AdaptiveLevel, AdaptiveLevelLink, ContentPage, ResultVariable, Scale, QuestionMeasurement, RetakePolicy } from "@shared/schema";
+import type { Test, TestSection, Topic, Question, TopicCourse, TopicEvent, PassRule, AdaptiveTopicSettings, AdaptiveLevel, AdaptiveLevelLink, ContentPage, ResultVariable, Scale, QuestionMeasurement, RetakePolicy, TestQuestionScoring } from "@shared/schema";
 import { sanitizeHtml } from "../../utils/html-sanitizer";
 import { findEligibilityPlugin, findEligibilityConfig } from "@shared/eligibility/registry";
+import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
+import { buildTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
 
 interface AdaptiveLevelWithLinks extends AdaptiveLevel {
   links: AdaptiveLevelLink[];
@@ -16,11 +18,27 @@ interface DesignSettingsExport {
   templateVersion?: string;
   templateApiVersion?: string;
   params: Record<string, unknown>;
+  /**
+   * System variant kinds (`start`/`results`) the active template does NOT declare
+   * in its `contentTemplates`, so the runtime must render them from the bundled
+   * `default` template (PRD-7 G21). Set by the exporter when it bundles the
+   * `template-default/` files; absent/empty means no fallback.
+   */
+  fallbackKinds?: string[];
 }
 
 interface ExportData {
   test: Test;
   sections: (TestSection & { topic: Topic; questions: Question[]; courses: TopicCourse[]; events: TopicEvent[] })[];
+  /**
+   * PRD-15 block D (FR-32): per-(test, question) scoring overrides. The bake
+   * resolves the EFFECTIVE price / graded config / difficulty per question and
+   * writes the resolved values into TEST_DATA, so the in-package runtime keeps
+   * reading plain `q.points`/`q.scoring`/`q.difficulty` from the baked JSON
+   * (not a DB column — unaffected by the T-40 column drop). Absent/empty = the
+   * chain falls through to the section/test defaults and the system default.
+   */
+  questionScoring?: TestQuestionScoring[];
   adaptiveSettings?: AdaptiveSettingsExport | null;
   contentPages?: ContentPage[];
   resultVariables?: ResultVariable[];
@@ -44,6 +62,26 @@ interface ExportData {
 
 export function buildTestJson(data: ExportData): string {
   const testMode = data.test.mode || "standard";
+  // PRD-15 block D (FR-32): one resolution context for the whole bake. With no
+  // overrides and no defaults the chain returns the legacy question values, so
+  // packages of untouched tests stay byte-identical.
+  const scoringCtx: TestScoringContext = buildTestScoringContext(
+    data.test,
+    data.sections,
+    data.questionScoring ?? [],
+  );
+  /** Bake one question's effective scoring into the TEST_DATA shape. */
+  const bakeScoring = (q: Question): { points: number; difficulty: number; scoring?: unknown } => {
+    const eff = scoringCtx.resolve(q);
+    return {
+      points: eff.points,
+      // `|| 50` keeps the historical coercion of the SCORM bake (FR-02).
+      difficulty: scoringCtx.difficultyOf(q) || 50,
+      // PRD-10: included only when authored (override or legacy) so packages
+      // for unscored questions stay byte-identical (FR-02).
+      ...(eff.source.scoring !== "system" ? { scoring: eff.scoring } : {}),
+    };
+  };
   // Effective per-topic draw count. `drawAll` (or adaptive mode, which always
   // feeds the whole pool to the level engine) means "draw every question the
   // topic currently has" — resolved dynamically here, not from the stored
@@ -109,6 +147,17 @@ export function buildTestJson(data: ExportData): string {
     timeLimitMinutes: data.test.timeLimitMinutes || null,
     maxAttempts: data.test.maxAttempts || null,
     showCorrectAnswers: data.test.showCorrectAnswers || false,
+    // PRD-19 (Блок A): правила навигации/завершения для рантайма (применение — Блок B/C/D).
+    allowReturnToUnanswered: data.test.allowReturnToUnanswered ?? true,
+    allowAnswerChange: data.test.allowAnswerChange ?? false,
+    showSectionResults: data.test.showSectionResults ?? true,
+    // PRD-19 (Блок B): единый резолв гранулярности фиксации ответа — оба хоста
+    // читают готовое значение (без повторного вывода из flowMode), что
+    // исключает дрейф skip/return/freeze между SCORM и вебом.
+    answerCommitScope: resolveAnswerCommitScope({
+      mode: data.test.mode,
+      flowMode: exportedFlowPolicy.mode,
+    }),
     // PRD-7 S10: legacy `start_page_content` is no longer exported into TEST_DATA.
     // Its content is migrated to a `content_pages` 'intro' row (migration 003 §4.2)
     // and rendered by the content-flow runtime; the DB column is kept write-only
@@ -118,6 +167,11 @@ export function buildTestJson(data: ExportData): string {
     sections: data.sections.map((s) => ({
       topicId: s.topic.id,
       topicName: s.topic.name,
+      // PRD-1 §4.3: topic description (from topic properties) — rendered on the
+      // «Введение раздела» (section-intro) screen. null/empty → no description block.
+      topicDescription: s.topic.description ?? null,
+      // Author-defined readable id (slug) for `topicById("<code>")`; null → UUID.
+      topicCode: s.topic.code ?? null,
       drawCount: effectiveDraw(s),
       // PRD-4 v1.1 §4.7: `required` drives routerCompletionPolicy's
       // «all_required_*» calculation; `false` means optional (the test can
@@ -131,32 +185,44 @@ export function buildTestJson(data: ExportData): string {
       // PRD-11: stratified-draw blueprint. Included only when set so packages
       // without quotas stay byte-identical (FR-02); runtime reads section.drawBlueprint.
       ...(s.drawBlueprintJson ? { drawBlueprint: s.drawBlueprintJson } : {}),
+      // PRD-17 (BR-12): fixed-variant set. Included only when present so packages
+      // without variants stay byte-identical (FR-02); the runtime (selectForm in
+      // app.js) picks one variant and delivers it whole, overriding the uniform/
+      // stratified draw. SCORM has no cross-attempt store (NFR-17) so rotation
+      // degrades to a random pick (R-6). The whole bank ships (every variant's
+      // questions+keys, R-7) — selection happens client-side.
+      ...(s.formSetJson ? { formSet: s.formSetJson } : {}),
       topicFeedback: s.topic.feedback || null,
       recommendedCourses: s.courses.map((c) => ({ title: c.title, url: c.url })),
       recommendedEvents: s.events.map((e) => ({ title: e.title })),
-      questions: s.questions.map((q) => ({
-        id: q.id,
-        type: q.type,
-        prompt: q.prompt,
-        data: q.dataJson,
-        correct: q.correctJson,
-        points: q.points || 1,
-        difficulty: q.difficulty || 50,
-        mediaUrl: q.mediaUrl || null,
-        mediaType: q.mediaType || null,
-        feedback: q.feedback || null,
-        feedbackMode: q.feedbackMode || "general",
-        feedbackCorrect: q.feedbackCorrect || null,
-        feedbackIncorrect: q.feedbackIncorrect || null,
-        // PRD-10: graded answer scoring. Included only when set so packages for
-        // unscored questions stay byte-identical (FR-02); runtime reads q.scoring.
-        ...(q.scoringJson ? { scoring: q.scoringJson } : {}),
-        // PRD-11: sub-topic tags drive the stratified draw (drawSection matches a
-        // stratum tag against q.tags). Included only when non-empty so packages
-        // for untagged questions stay byte-identical (FR-02); the draw blueprint
-        // is useless without them.
-        ...(Array.isArray(q.tags) && q.tags.length ? { tags: q.tags } : {}),
-      })),
+      questions: s.questions.map((q) => {
+        // PRD-15 block D: effective price / graded config / difficulty are
+        // resolved here, at bake time; the runtime keeps its plain reads.
+        const baked = bakeScoring(q);
+        return {
+          id: q.id,
+          type: q.type,
+          prompt: q.prompt,
+          data: q.dataJson,
+          correct: q.correctJson,
+          points: baked.points,
+          difficulty: baked.difficulty,
+          mediaUrl: q.mediaUrl || null,
+          mediaType: q.mediaType || null,
+          feedback: q.feedback || null,
+          feedbackMode: q.feedbackMode || "general",
+          feedbackCorrect: q.feedbackCorrect || null,
+          feedbackIncorrect: q.feedbackIncorrect || null,
+          // PRD-10: graded answer scoring. Included only when authored so packages
+          // for unscored questions stay byte-identical (FR-02); runtime reads q.scoring.
+          ...(baked.scoring ? { scoring: baked.scoring } : {}),
+          // PRD-11: sub-topic tags drive the stratified draw (drawSection matches a
+          // stratum tag against q.tags). Included only when non-empty so packages
+          // for untagged questions stay byte-identical (FR-02); the draw blueprint
+          // is useless without them.
+          ...(Array.isArray(q.tags) && q.tags.length ? { tags: q.tags } : {}),
+        };
+      }),
     })),
   };
 
@@ -220,24 +286,28 @@ export function buildTestJson(data: ExportData): string {
         topicName: s.topic.name,
         failureFeedback: topicSetting?.failureFeedback || null,
         levels: levelsByTopic[s.topic.id] || [],
-        // Include all questions for this topic (they will be filtered by difficulty in runtime)
-        questions: s.questions.map((q) => ({
-          id: q.id,
-          type: q.type,
-          prompt: q.prompt,
-          data: q.dataJson,
-          correct: q.correctJson,
-          points: q.points || 1,
-          difficulty: q.difficulty || 50,
-          mediaUrl: q.mediaUrl || null,
-          mediaType: q.mediaType || null,
-          feedback: q.feedback || null,
-          feedbackMode: q.feedbackMode || "general",
-          feedbackCorrect: q.feedbackCorrect || null,
-          feedbackIncorrect: q.feedbackIncorrect || null,
-          // PRD-10: graded answer scoring (see standard-section map above).
-          ...(q.scoringJson ? { scoring: q.scoringJson } : {}),
-        })),
+        // Include all questions for this topic (they will be filtered by difficulty
+        // in runtime — against the baked EFFECTIVE difficulty, FR-34).
+        questions: s.questions.map((q) => {
+          const baked = bakeScoring(q);
+          return {
+            id: q.id,
+            type: q.type,
+            prompt: q.prompt,
+            data: q.dataJson,
+            correct: q.correctJson,
+            points: baked.points,
+            difficulty: baked.difficulty,
+            mediaUrl: q.mediaUrl || null,
+            mediaType: q.mediaType || null,
+            feedback: q.feedback || null,
+            feedbackMode: q.feedbackMode || "general",
+            feedbackCorrect: q.feedbackCorrect || null,
+            feedbackIncorrect: q.feedbackIncorrect || null,
+            // PRD-10: graded answer scoring (see standard-section map above).
+            ...(baked.scoring ? { scoring: baked.scoring } : {}),
+          };
+        }),
       };
     });
   }
@@ -248,6 +318,9 @@ export function buildTestJson(data: ExportData): string {
       templateVersion: data.designSettings.templateVersion,
       templateApiVersion: data.designSettings.templateApiVersion,
       params: data.designSettings.params,
+      ...(data.designSettings.fallbackKinds && data.designSettings.fallbackKinds.length > 0
+        ? { fallbackKinds: data.designSettings.fallbackKinds }
+        : {}),
     };
   }
 
@@ -289,7 +362,8 @@ export function buildTestJson(data: ExportData): string {
     test.resultVariables = data.resultVariables.map((rv) => ({
       id: rv.id,
       name: rv.name,
-      label: rv.label,
+      // Label is optional; fall back to the name so the package never shows blank.
+      label: rv.label.trim() ? rv.label : rv.name,
       type: rv.type,
       formula: rv.formula,
       showToLearner: rv.showToLearner,
@@ -310,7 +384,8 @@ export function buildTestJson(data: ExportData): string {
       const config = (s.configJson as { bands?: unknown }) ?? {};
       return {
         key: s.key,
-        label: s.label,
+        // Label is optional; fall back to the key so the package never shows blank.
+        label: s.label.trim() ? s.label : s.key,
         type: s.type,
         aggregation: s.aggregation,
         normalization: s.normalization,

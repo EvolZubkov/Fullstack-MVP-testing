@@ -65,10 +65,17 @@ export function evaluate(node: Ast, ctx: EvalContext): FormulaValue {
     case "percent":
       return ctx.percent;
 
+    case "score":
+      return ctx.score;
+
     case "accessor": {
       switch (node.fn) {
         case "topicById": {
           const t = ctx.topics[node.arg] ?? DEFAULT_TOPIC;
+          return (t as unknown as Record<string, FormulaValue>)[node.prop];
+        }
+        case "topicByName": {
+          const t = (ctx.topicsByName ?? {})[node.arg] ?? DEFAULT_TOPIC;
           return (t as unknown as Record<string, FormulaValue>)[node.prop];
         }
         case "tag": {

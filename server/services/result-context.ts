@@ -35,11 +35,29 @@ function toTopicInput(t: TopicResult): TopicInput {
   };
 }
 
+/** Dedup recommendations across failed topics by title + url (mirrors SCORM vrRecommended). */
+function dedupRecommendations(items: { title: string; url?: string }[]): { title: string; url?: string }[] {
+  const seen = new Set<string>();
+  const out: { title: string; url?: string }[] = [];
+  for (const it of items) {
+    const key = `${it.title}|${it.url ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(it);
+  }
+  return out;
+}
+
 /**
- * Build the standard results-screen context from a computed attempt result. No
- * SCORM-extras (the web results screen is the base layout).
+ * Build the standard results-screen context from a computed attempt result.
+ * Recommended courses (links) and events from FAILED topics are aggregated and
+ * deduped, matching the SCORM runtime, so the web template results screen shows
+ * them too (TD-02). The shared builder owns the actual shaping/rendering.
  */
 export function buildResultContext(result: AttemptResult, testTitle: string): ResultRenderContext {
+  const failed = (result.topicResults || []).filter((t) => t.passed === false);
+  const recommendedCourses = dedupRecommendations(failed.flatMap((t) => t.recommendedCourses ?? []));
+  const recommendedEvents = dedupRecommendations(failed.flatMap((t) => t.recommendedEvents ?? []));
   return buildSharedResultContext(
     {
       passed: result.overallPassed,
@@ -51,6 +69,10 @@ export function buildResultContext(result: AttemptResult, testTitle: string): Re
       topicResults: (result.topicResults || []).map(toTopicInput),
     },
     testTitle,
+    {
+      ...(recommendedCourses.length ? { recommendedCourses } : {}),
+      ...(recommendedEvents.length ? { recommendedEvents } : {}),
+    },
   );
 }
 

@@ -3,6 +3,8 @@ import { logger } from "../../logger";
 import { storage } from "../../storage";
 import { requirePermission } from "../../middleware/auth";
 import { checkAnswer } from "../../utils/check-answer";
+import { loadTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
+import { analyticsScope } from "./helpers";
 
 const router = Router();
 
@@ -11,6 +13,8 @@ router.get("/combined", requirePermission("analytics.read"), async (req: Request
   try {
     const source = req.query.source as string || "all";
     const testId = req.query.testId as string || null;
+    // PRD-15 FR-08 (audit F-5): aggregates only over readable tests.
+    const scope = await analyticsScope(req);
 
     let webAttempts: any[] = [];
     let lmsAttempts: any[] = [];
@@ -28,6 +32,7 @@ router.get("/combined", requirePermission("analytics.read"), async (req: Request
 
       webAttempts = attempts
         .filter(a => !testId || a.testId === testId)
+        .filter(a => scope.has(a.testId))
         .filter(a => a.finishedAt)
         .map(a => {
           const user = userMap.get(a.userId);
@@ -66,6 +71,7 @@ router.get("/combined", requirePermission("analytics.read"), async (req: Request
           const pkg = packageMap.get(a.packageId);
           return pkg?.testId === testId;
         })
+        .filter(a => scope.has(packageMap.get(a.packageId)?.testId ?? null))
         .filter(a => a.finishedAt)
         .map(a => {
           const pkg = packageMap.get(a.packageId);
@@ -134,6 +140,8 @@ router.get("/summary", requirePermission("analytics.read"), async (req: Request,
   try {
     const source = (req.query.source as string) || "all";
     const testIdFilter = req.query.testId as string | undefined;
+    // PRD-15 FR-08 (audit F-5): aggregates only over readable tests.
+    const scope = await analyticsScope(req);
 
     let webCount = 0, webPassed = 0, webPercent = 0, webAdaptive = 0, webAdaptivePassed = 0;
     let lmsCount = 0, lmsPassed = 0, lmsPercent = 0;
@@ -144,6 +152,7 @@ router.get("/summary", requirePermission("analytics.read"), async (req: Request,
       const attempts = await storage.getAllAttempts();
       const filtered = attempts
         .filter(a => !testIdFilter || a.testId === testIdFilter)
+        .filter(a => scope.has(a.testId))
         .filter(a => a.finishedAt);
 
       for (const a of filtered) {
@@ -172,6 +181,7 @@ router.get("/summary", requirePermission("analytics.read"), async (req: Request,
           const pkg = packageMap.get(a.packageId);
           return pkg?.testId === testIdFilter;
         })
+        .filter(a => scope.has(packageMap.get(a.packageId)?.testId ?? null))
         .filter(a => a.finishedAt);
 
       for (const a of filtered) {
@@ -212,6 +222,8 @@ router.get("/combined-full", requirePermission("analytics.read"), async (req: Re
   try {
     const source = (req.query.source as string) || "all";
     const testIdFilter = req.query.testId as string | undefined;
+    // PRD-15 FR-08 (audit F-5): aggregates only over readable tests.
+    const scope = await analyticsScope(req);
 
     let webAttempts: any[] = [];
     let lmsAttempts: any[] = [];
@@ -230,6 +242,7 @@ router.get("/combined-full", requirePermission("analytics.read"), async (req: Re
 
       webAttempts = attempts
         .filter(a => !testIdFilter || a.testId === testIdFilter)
+        .filter(a => scope.has(a.testId))
         .filter(a => a.finishedAt)
         .map(a => {
           const user = userMap.get(a.userId);
@@ -279,6 +292,7 @@ router.get("/combined-full", requirePermission("analytics.read"), async (req: Re
           const pkg = packageMap.get(a.packageId);
           return pkg?.testId === testIdFilter;
         })
+        .filter(a => scope.has(packageMap.get(a.packageId)?.testId ?? null))
         .filter(a => a.finishedAt)
         .map(a => {
           const pkg = packageMap.get(a.packageId);
@@ -431,10 +445,20 @@ router.get("/combined-full", requirePermission("analytics.read"), async (req: Re
     const allQuestions = await storage.getQuestionsByIds(Array.from(questionIdsAll));
     const questionMap = new Map(allQuestions.map(q => [q.id, q]));
 
+    // PRD-15 block D (FR-32): correctness uses the test-effective graded config
+    // — one resolution context per involved test.
+    const scoringByTest = new Map<string, TestScoringContext>();
+    for (const testId of new Set(
+      webAttemptsFullAll.filter((a): a is NonNullable<typeof a> => !!a).map((a) => a.testId),
+    )) {
+      scoringByTest.set(testId, await loadTestScoringContext(testId, storage));
+    }
+
     // Стандартные web попытки — считаем по ответам
     for (let i = 0; i < webAttempts.length; i++) {
       if (webAttempts[i].isAdaptive) continue;
       const answers = webAnswersMaps[i];
+      const scoring = scoringByTest.get(webAttemptsFullAll[i]?.testId ?? "");
       for (const [qId, userAnswer] of Object.entries(answers)) {
         const q = questionMap.get(qId);
         if (!q) continue;
@@ -447,7 +471,7 @@ router.get("/combined-full", requirePermission("analytics.read"), async (req: Re
           failureCount: 0,
         };
         existing.totalAnswers++;
-        const isCorrect = checkAnswer(q, userAnswer) === 1;
+        const isCorrect = checkAnswer(q, userAnswer, scoring?.resolve(q).scoring) === 1;
         if (isCorrect) existing.correctAnswers++;
         else existing.failureCount++;
         topicStatsMap.set(q.topicId, existing);

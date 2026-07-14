@@ -7,7 +7,12 @@ var QUESTION_HINTS = {
 
 function renderQuestionInput(q) {
   var answer = state.answers[q.id];
-  var locked = TEST_DATA.showCorrectAnswers && state.feedbackShown;
+  // PRD-19 (Block B): render inputs read-only when feedback is shown OR the
+  // question is committed/frozen (isAnswerLocked keys off the PERSISTED status,
+  // so a returned-to committed answer renders disabled — FR-04 / web parity).
+  var fqCur = (state.flatQuestions || [])[state.currentIndex];
+  var locked = (TEST_DATA.showCorrectAnswers && state.feedbackShown) ||
+    (typeof isAnswerLocked === 'function' && isAnswerLocked(fqCur));
   var correct = q.correct || {};
   var shuffleMapping = state.shuffleMappings[q.id];
 

@@ -77,6 +77,14 @@ async function buildAll() {
   await mkdir("dist/scorm/template", { recursive: true });
   await cp("server/scorm/template", "dist/scorm/template", { recursive: true });
 
+  // PRD-18 in-service debug player: the browser RTE shim + inspector compute are
+  // read at request time (server/scorm/debug-player/assets.ts). They live OUTSIDE
+  // server/scorm/{assets,template}, so copy them explicitly or /debug/shim.js 404s
+  // in the bundled server.
+  console.log("copying debug-player assets...");
+  await mkdir("dist/scorm/debug-player/assets", { recursive: true });
+  await cp("server/scorm/debug-player/assets", "dist/scorm/debug-player/assets", { recursive: true });
+
   // PRD-12 (2-7): pre-bundle the shared template runtime so the production
   // exporter reads it as a static asset (no esbuild at request time in prod).
   console.log("bundling shared template runtime...");

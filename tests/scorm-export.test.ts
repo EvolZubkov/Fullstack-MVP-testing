@@ -35,6 +35,8 @@ const { storageMock, scormMock, fsMock, isSupportedMock } = vi.hoisted(() => {
     getResultVariables: vi.fn().mockResolvedValue([]),
     getScales: vi.fn().mockResolvedValue([]),
     getQuestionMeasurements: vi.fn().mockResolvedValue([]),
+    // PRD-15 block D: per-test scoring overrides (none by default).
+    getTestQuestionScoring: vi.fn().mockResolvedValue([]),
   };
 
   const scormMock = { generateScormPackage: vi.fn().mockResolvedValue(Buffer.from("ZIP")) };

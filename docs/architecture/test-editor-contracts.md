@@ -1,7 +1,9 @@
 # Контракты редактора теста
 
 **Статус:** актуально (описывает текущую модель данных и API редактора теста)  
-**Дата актуализации:** 2026-06-06  
+**Дата актуализации:** 2026-07-01 (релиз 2.6.0-beta; добавлены контракты PRD-17
+«Фиксированные варианты выдачи (формы)» и PRD-19 «Навигация прохождения» + системные
+узлы границ раздела)  
 **Назначение:** единственный источник истины по контрактам редактора теста — enum,
 JSON-shapes, API, маппинг legacy-полей, правила версионирования. Прозовое описание
 параметров и UX — в [test-settings-parameter-structure.md](./test-settings-parameter-structure.md);
@@ -182,6 +184,18 @@ type SectionUnlockMode =
 Default: `"always_available"`. Редактируется по каждой теме (`sectionId`) во вкладке
 «Настройки → Сценарий».
 
+### 2.11 Навигация прохождения (PRD-19, блок A)
+
+Три булевых поля теста управляют навигацией и завершением попытки. В таблице `tests` —
+отдельные колонки; в `TestEditorModel` живут в объекте `runtime`; в payload (`apiTest`)
+— поля первого уровня. Не входят в `flow_policy_json`.
+
+| Поле модели / колонка | Тип | Default | FR | Поведение |
+| --- | --- | --- | --- | --- |
+| `runtime.allowReturnToUnanswered` / `allow_return_to_unanswered` | `boolean` | `true` | FR-01 | Разрешает пропустить вопрос и вернуться к непройденным в пределах попытки. Миграция 031 выставляет СУЩЕСТВУЮЩИМ тестам `false` (сохранение строго-линейной навигации); новые тесты создаются с `true` |
+| `runtime.allowAnswerChange` / `allow_answer_change` | `boolean` | `false` | FR-04a | Разрешает менять уже данный ответ до завершения раздела/теста. Зависит от `allowReturnToUnanswered = true`, взаимоисключающе с `showCorrectAnswers` (FR-04b) — проверяется в слое редактора/сервиса, не CHECK-ограничением БД |
+| `runtime.showSectionResults` / `show_section_results` | `boolean` | `true` | FR-05a | Показывать экран промежуточных итогов раздела (опциональный системный узел, только секционные тесты). Неприменимо к `linear_flat` (нет разделов) — рантайм там игнорирует поле |
+
 ---
 
 ## JSON-shapes
@@ -274,6 +288,37 @@ default-случая колонка `null`.
 Структура из PRD-1: `{ templateId, params }`. Значения media-типов хранятся envelope
 `MediaParamValue` (см. [test-settings-parameter-structure.md §4](./test-settings-parameter-structure.md)).
 
+### 3.7 `test_sections.form_set_json` (PRD-17, тип `FormSet`)
+
+Наличие колонки включает у раздела режим «Варианты теста»: раздел выдаётся целым
+предзаданным набором форм (каждая форма — авторски отобранный поднабор вопросов темы), при
+старте темы выбирается ОДИН вариант и выдаётся целиком в случайном порядке вопросов.
+При этом `draw_count`/`draw_all`/`draw_blueprint_json` раздела НЕ применяются (FR-03).
+Отсутствие колонки (`null`) = legacy-выдача (равномерный жребий / квоты по тегам).
+
+Ротация вариантов между попытками (совпадение истории по стабильному `id`, а не по позиции в
+списке) реализована только на веб-хосте; в SCORM режим деградирует до случайного выбора
+варианта (нет cross-attempt хранилища, см. `reference_webtutor_scorm_runtime`).
+
+В `EditorSection` поле доступно как `formSet`; в payload раздела — как `formSetJson`.
+Тип `FormSet` (`shared/schema.ts`, `formSetSchema`):
+
+```json
+{
+  "forms": [
+    { "id": "form-a", "label": "Вариант A", "questionIds": ["q1", "q2", "q3"] },
+    { "id": "form-b", "label": "Вариант B", "questionIds": ["q4", "q5", "q6"] }
+  ]
+}
+```
+
+Ключевые ограничения (zod):
+
+- `forms` — минимум 2 варианта (`min(2)`).
+- `Form.id` — стабильный непустой ключ (по нему матчится история ротации, PRD-17 R-3/D-8), не по позиции.
+- `Form.label` — непустая строка, до 100 символов.
+- `Form.questionIds` — непустой массив идентификаторов вопросов (весь вариант выдаётся целиком).
+
 ---
 
 ## Маппинг legacy-полей
@@ -317,10 +362,42 @@ default-случая колонка `null`.
 | `timeLimitMinutes` | `null` |
 | `maxAttempts` | `null` |
 | `showCorrectAnswers` | `false` |
+| `allowReturnToUnanswered` | `true` (PRD-19 FR-01; миграция 031 бэкфилит существующие тесты в `false`) |
+| `allowAnswerChange` | `false` (PRD-19 FR-04a) |
+| `showSectionResults` | `true` (PRD-19 FR-05a) |
 | `test_sections.required` | `true` |
 | `test_sections.time_limit_minutes` | `null` (трактуется как `inherit_test`) |
 | `test_sections.feedback_json` | `{ format: "plain", text: "", links: [], assets: [] }` |
+| `test_sections.form_set_json` | `null` (PRD-17; трактуется как legacy-выдача — жребий/квоты) |
 | `feedback.format` | `"plain"` |
+
+### 4.5 `content_pages.kind` — системные узлы границ раздела (PRD-19/1)
+
+Актуальный enum `content_pages.kind` (`shared/schema.ts`):
+
+```ts
+type ContentPageKind =
+  | "start"
+  | "questions"
+  | "router"
+  | "summary"
+  | "results"
+  | "intro"
+  | "info"
+  | "review"
+  | "section-results";
+```
+
+Значения `review` (обзор перед завершением) и `section-results` (итоги раздела) добавлены как
+системные рантайм-узлы границ раздела (миграции 034/035). Это singleton-биндинги дизайна (как
+`start`/`results`): их рендерит собственная фаза рантайма, из потока контентных страниц они
+ИСКЛЮЧЕНЫ. Они заменили legacy per-topic страницы `intro`/`summary` как границы раздела; тем
+самым устранена протечка биндинга узлов и вопросов в поток (пустая страница «Далее»).
+
+Legacy-колонка `content_pages.type` (enum `intro`/`info`/`summary`/`html`) помечена deprecated
+(«Use `kind` instead»), сохранена для обратной совместимости в этом релизе; новый код опирается
+на `kind`. Значение `intro` в `kind` сохраняется для введения раздела (per-topic); значение
+`summary` — legacy, вытеснено `section-results`/`review`.
 
 ---
 

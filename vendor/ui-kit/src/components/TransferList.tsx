@@ -14,6 +14,9 @@ export interface TransferItem {
   color?: string;
   /** Картинка аватара. Если не задано — нарисуем инициалы. */
   avatarSrc?: string;
+  /** Иконка-лидер вместо аватара (напр. тип элемента). Если задана — рисуется
+   *  в слоте аватара, инициалы/картинка игнорируются. */
+  icon?: React.ReactNode;
   /** Произвольное произвольная категория (для фильтра). */
   category?: string;
   /** Запрещён к выбору. */
@@ -178,11 +181,13 @@ export const TransferList = forwardRef<HTMLDivElement, TransferListProps>(
           />
           {!compact && (
             <span className="ou-transfer__row-avatar">
-              <span className={cn('ou-avatar', 'ou-avatar--s', item.color && `ou-avatar--c-${item.color}`)}>
-                {item.avatarSrc
-                  ? <img src={item.avatarSrc} alt="" />
-                  : <span className="ou-avatar__initials">{initials(item.name)}</span>}
-              </span>
+              {item.icon ?? (
+                <span className={cn('ou-avatar', 'ou-avatar--s', item.color && `ou-avatar--c-${item.color}`)}>
+                  {item.avatarSrc
+                    ? <img src={item.avatarSrc} alt="" />
+                    : <span className="ou-avatar__initials">{initials(item.name)}</span>}
+                </span>
+              )}
             </span>
           )}
           <span className="ou-transfer__row-text">

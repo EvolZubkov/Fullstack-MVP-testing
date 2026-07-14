@@ -39,6 +39,8 @@ export type TestListEntry = {
   /** Used for the `updated_desc` / `created_desc` sort options. */
   updatedAt?: string | Date | null;
   createdAt?: string | Date | null;
+  /** PRD-15 FR-12: publication state for the "Есть изменения" badge / action. */
+  publicationState?: "draft" | "published" | "published_with_changes" | "archived";
 };
 
 export type FolderEntry = {

@@ -74,12 +74,35 @@ function buildScaleInteractions(scaleComputation) {
 // tags/sections resolve to neutral defaults (tag aggregation and PRD-4 section
 // keys come later).
 function buildResultVarContext(results, scaleComputation) {
+  // Topic name/code come from TEST_DATA.sections so `topicByName("<name>")` and
+  // `topicById("<code>")` resolve (PRD-2 §4.2); fall back to topicResult fields.
+  var meta = {};
+  var secs = (typeof TEST_DATA !== "undefined" && TEST_DATA.sections) || [];
+  for (var i = 0; i < secs.length; i++) meta[secs[i].topicId] = secs[i];
   var topics = {};
+  var topicsByName = {};
+  var totalScore = 0;
   (results.topicResults || []).forEach(function (tr) {
-    topics[tr.topicId] = { percent: tr.percent || 0, passed: tr.passed === true, score: tr.earnedPoints || 0 };
+    var r = { percent: tr.percent || 0, passed: tr.passed === true, score: tr.earnedPoints || 0 };
+    topics[tr.topicId] = r;
+    totalScore += tr.earnedPoints || 0;
+    var m = meta[tr.topicId] || {};
+    var code = m.topicCode || tr.code || null;
+    var name = m.topicName || tr.topicName || null;
+    if (code) topics[code] = r;
+    if (name) topicsByName[name] = r;
   });
   var scales = (scaleComputation && scaleComputation.values) || {};
-  return { percent: results.percent || 0, topics: topics, tags: {}, scales: scales, sections: {} };
+  // Overall earned points across the test = Σ of per-topic earned points.
+  return {
+    percent: results.percent || 0,
+    score: totalScore,
+    topics: topics,
+    topicsByName: topicsByName,
+    tags: {},
+    scales: scales,
+    sections: {},
+  };
 }
 
 function computeTestResultVariables(results, scaleComputation) {
@@ -385,6 +408,23 @@ window.finishAndClose = finishAndClose;
  * templates can bind `data-path="section.current.result.percent"` etc.
  * The result is cached in `state.sectionResults[topicId]` and returned.
  */
+// PRD-19 Block E (FR-07/FR-13): the answer that COUNTS for grading. In flexible
+// mode (allowReturnToUnanswered) a question counts only if it was explicitly
+// submitted ('answered'); a surviving draft (selected but never «Отправить», kept
+// for resume per FR-03b), a skipped or an unreached question scores 0 (incorrect).
+// Strict mode grades as-is — it has no navigable drafts («Далее»/«Завершить» IS the
+// explicit submission), so leaving it untouched avoids any scoring regression.
+function gradedAnswerFor(q) {
+  if (
+    TEST_DATA.allowReturnToUnanswered &&
+    state.questionStatuses &&
+    state.questionStatuses[q.id] !== "answered"
+  ) {
+    return undefined;
+  }
+  return state.answers[q.id];
+}
+
 function computeSectionResult(topicId) {
   if (state.sectionResults && state.sectionResults[topicId]) {
     return state.sectionResults[topicId];
@@ -398,9 +438,11 @@ function computeSectionResult(topicId) {
   state.flatQuestions.forEach(function (fq) {
     if (fq.topicId !== topicId) return;
     var q = fq.question;
-    var answer = state.answers[q.id];
+    var answer = gradedAnswerFor(q);
     var scoreRatio = checkAnswer(q, answer);
-    var qPoints = q.points || 1;
+    // PRD-18: preserve a legitimate 0-point price (don't coerce 0 -> 1); only an
+    // ABSENT price falls back to the system default of 1, matching the web grader.
+    var qPoints = q.points != null ? q.points : 1;
     total++;
     possiblePoints += qPoints;
     earnedPoints += qPoints * scoreRatio;
@@ -408,8 +450,11 @@ function computeSectionResult(topicId) {
   });
 
   var percent = possiblePoints > 0 ? (earnedPoints / possiblePoints) * 100 : 0;
+  // PRD-18: resolve the topic rule via the SAME shared engine as calculateResults
+  // (inherit_overall -> overall, none -> null), not the local pass-check.
   var passRule = section ? section.topicPassRule : null;
-  var passed = passRule ? checkPassRuleWithPartial(passRule, percent, earnedPoints) : null;
+  var resolvedRule = window.TBTemplate.resolveTopicRule(passRule, window.TBTemplate.resolveOverallRule(TEST_DATA.overallPassRule));
+  var passed = resolvedRule ? window.TBTemplate.checkPassRule(resolvedRule, percent, earnedPoints) : null;
 
   var result = {
     topicId: topicId,
@@ -432,72 +477,69 @@ function computeSectionResult(topicId) {
 }
 
 function calculateResults() {
-  var totalEarnedPoints = 0;
-  var totalPossiblePoints = 0;
-  var totalFullyCorrect = 0;
-  var totalQuestions = 0;
-  var topicData = {};
-
+  // PRD-18: the STANDARD result aggregation + pass-rule evaluation is the SINGLE
+  // shared engine (window.TBTemplate.aggregateStandardResult) — the SAME one the
+  // web grader (attempts.ts) runs. No per-host pass-rule logic lives here anymore;
+  // this only groups the delivered questions by topic (delivery order) and maps the
+  // shared result back into the runtime's existing shape.
+  var order = [];
+  var byTopic = {};
   state.flatQuestions.forEach(function (fq) {
     var q = fq.question;
-    var answer = state.answers[q.id];
-    var scoreRatio = checkAnswer(q, answer);
-    var qPoints = q.points || 1;
-
-    totalPossiblePoints += qPoints;
-    totalEarnedPoints += qPoints * scoreRatio;
-    totalQuestions++;
-    if (scoreRatio === 1) totalFullyCorrect++;
-
-    if (!topicData[fq.topicId]) {
+    if (!byTopic[fq.topicId]) {
       var section = TEST_DATA.sections.find(function (s) { return s.topicId === fq.topicId; });
-      topicData[fq.topicId] = {
+      byTopic[fq.topicId] = {
         topicId: fq.topicId,
         topicName: fq.topicName,
-        correct: 0,
-        earnedPoints: 0,
-        possiblePoints: 0,
-        total: 0,
-        passRule: section.topicPassRule,
-        topicFeedback: section.topicFeedback || null,
-        recommendedCourses: section.recommendedCourses || [],
-        recommendedEvents: section.recommendedEvents || []
+        topicPassRule: section ? section.topicPassRule : null,
+        questions: [],
+        extra: {
+          topicFeedback: (section && section.topicFeedback) || null,
+          recommendedCourses: (section && section.recommendedCourses) || [],
+          recommendedEvents: (section && section.recommendedEvents) || []
+        }
       };
+      order.push(fq.topicId);
     }
-    topicData[fq.topicId].total++;
-    topicData[fq.topicId].possiblePoints += qPoints;
-    topicData[fq.topicId].earnedPoints += qPoints * scoreRatio;
-    if (scoreRatio === 1) topicData[fq.topicId].correct++;
+    byTopic[fq.topicId].questions.push({
+      type: q.type,
+      correct: q.correct || {},
+      scoring: q.scoring,
+      points: q.points != null ? q.points : 1,
+      // PRD-19 Block E (FR-07/FR-13): drafts/skipped/unanswered score 0 in flexible mode.
+      answer: gradedAnswerFor(q)
+    });
   });
 
-  var overallPercent = totalPossiblePoints > 0 ? (totalEarnedPoints / totalPossiblePoints) * 100 : 0;
-  var overallPassed = checkPassRuleWithPartial(TEST_DATA.overallPassRule, overallPercent, totalEarnedPoints);
-
-  var topicResults = [];
-  var allTopicsPassed = true;
-
-  Object.keys(topicData).forEach(function (tid) {
-    var td = topicData[tid];
-    td.percent = td.possiblePoints > 0 ? (td.earnedPoints / td.possiblePoints) * 100 : 0;
-    if (td.passRule) {
-      td.passed = checkPassRuleWithPartial(td.passRule, td.percent, td.earnedPoints);
-      if (!td.passed) allTopicsPassed = false;
-    } else {
-      td.passed = null;
-    }
-    topicResults.push(td);
+  var sections = order.map(function (tid) { return byTopic[tid]; });
+  var agg = window.TBTemplate.aggregateStandardResult({
+    sections: sections,
+    overallPassRule: TEST_DATA.overallPassRule
   });
-
-  var passed = overallPassed && allTopicsPassed;
 
   return {
-    correct: totalFullyCorrect,
-    totalQuestions: totalQuestions,
-    earnedPoints: totalEarnedPoints,
-    possiblePoints: totalPossiblePoints,
-    percent: overallPercent,
-    passed: passed,
-    topicResults: topicResults
+    correct: agg.correct,
+    totalQuestions: agg.totalQuestions,
+    earnedPoints: agg.earnedPoints,
+    possiblePoints: agg.possiblePoints,
+    percent: agg.percent,
+    passed: agg.passed,
+    topicResults: agg.topicResults.map(function (t) {
+      return {
+        topicId: t.topicId,
+        topicName: t.topicName,
+        correct: t.correct,
+        total: t.total,
+        earnedPoints: t.earnedPoints,
+        possiblePoints: t.possiblePoints,
+        percent: t.percent,
+        passed: t.passed,
+        passRule: t.passRule,
+        topicFeedback: t.extra.topicFeedback,
+        recommendedCourses: t.extra.recommendedCourses,
+        recommendedEvents: t.extra.recommendedEvents
+      };
+    })
   };
 }
 
@@ -671,7 +713,11 @@ function finishScorm(results, passedForLms, resultComputation, scaleComputation)
 
   state.flatQuestions.forEach(function (fq) {
     var q = fq.question;
-    var ans = state.answers[q.id];
+    // PRD-19 Block E (FR-14): the LMS interaction must reflect the GRADED answer
+    // (status-aware), so a surviving draft / skipped / unanswered question reports
+    // 'incorrect' with an empty response — consistent with the score (calculateResults
+    // uses the same gradedAnswerFor). Strict mode is unchanged (gradedAnswerFor → raw).
+    var ans = gradedAnswerFor(q);
     var fullCorrect = checkAnswer(q, ans) === 1;
 
     interactions.push({
@@ -786,7 +832,11 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
 
   state.flatQuestions.forEach(function (fq) {
     var q = fq.question;
-    var ans = state.answers[q.id];
+    // PRD-19 Block E (FR-14): the LMS interaction must reflect the GRADED answer
+    // (status-aware), so a surviving draft / skipped / unanswered question reports
+    // 'incorrect' with an empty response — consistent with the score (calculateResults
+    // uses the same gradedAnswerFor). Strict mode is unchanged (gradedAnswerFor → raw).
+    var ans = gradedAnswerFor(q);
     var fullCorrect = checkAnswer(q, ans) === 1;
 
     interactions.push({

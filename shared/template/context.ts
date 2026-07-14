@@ -120,6 +120,178 @@ export interface CtxState {
   canViewResults?: boolean;
   /** Web-only: show the "back to list" action (the SCORM host omits it). */
   showBack?: boolean;
+  /** PRD-19 Block C: clickable progress pills for the current scope (replaces the linear bar). */
+  questionsProgress?: CtxQuestionsProgress;
+  /**
+   * PRD-19 Block F (FR-20): cooldown state ON the start screen. Present ONLY when a
+   * retake is blocked by the cooldown period; its presence ⇒ the start button is
+   * rendered DISABLED (not hidden) and the cooldown card is shown. Replaces the
+   * separate `system.blocked` wall — cooldown is now a state of the normal start.
+   */
+  cooldown?: CtxStartCooldown;
+  /**
+   * PRD-19 Block F (FR-20): prior-attempt summary on the start screen (eligible
+   * retake AND cooldown). Core-prepared (verdict label/class + attempts label).
+   * Set only where the host can supply prior-attempt data — absent on the SCORM
+   * cooldown path (rendered pre-Initialize, where suspend_data is unavailable).
+   */
+  priorResult?: CtxStartPriorResult;
+  /** PRD-19 Block F (FR-20): show «Скачать отчёт» — report for the prior attempt is downloadable. */
+  canDownloadReport?: boolean;
+}
+
+/**
+ * PRD-19 Block F (FR-20): cooldown state for the start screen ({@link CtxState.cooldown}).
+ * Passthrough — the host supplies the human date (ДД.ММ.ГГГГ, as the gate's
+ * `fmtDateHuman`) and optionally the derived days-until.
+ */
+export interface CtxStartCooldown {
+  /** Date the next attempt becomes available, formatted ДД.ММ.ГГГГ. */
+  availableDateHuman: string;
+  /** Days until the next attempt (availableDate − today), when computable. */
+  daysUntil?: number | null;
+}
+
+/**
+ * PRD-19 Block F (FR-20): prior-attempt summary ({@link CtxState.priorResult}).
+ * Core-prepared so the layout only interpolates: the builder computes the verdict
+ * label/class and the «попытка K из M» label from the raw facts.
+ */
+export interface CtxStartPriorResult {
+  /** Rounded percent score of the prior attempt. */
+  percent: number;
+  /** «пройдено» / «не пройдено» / "" (no resolved verdict). */
+  verdictLabel: string;
+  /** "" | "prior-fail" (verdict colour class for a failed attempt). */
+  verdictClass: string;
+  /** «попытка 2 из 3» when attempt counts are known, else "". */
+  attemptsLabel: string;
+}
+
+/**
+ * One progress pill (PRD-19 Block C). Core-prepared so the DSL only interpolates:
+ * the builder ({@link module:shared/template/question-progress-context}) computes
+ * the status class, a11y label and frontier (`clickable`); the layout renders a
+ * `<button class="tb-pill {{statusClass}}">` with `data-action="goto:{{index}}"`.
+ */
+export interface CtxQuestionPill {
+  /** Absolute 0-based question index — the `goto:<index>` jump target. */
+  index: number;
+  /** Display number, 1-based within the current navigation scope. */
+  number: number;
+  /** Status class: `is-answered`/`is-current`/`is-skipped`/`""` (+ review: `is-correct`/`is-incorrect`/`is-unanswered`). */
+  statusClass: string;
+  /** A11y label, e.g. «Вопрос 3, текущий» (FR-12). */
+  ariaLabel: string;
+  /** Reachable jump target? Frontier (FR-11): future / committed-section pills are not clickable. */
+  clickable: boolean;
+}
+
+/**
+ * Progress-pills map for the CURRENT navigation scope (`state.questionsProgress`,
+ * PRD-19 Block C). Sectional flows scope it to the current section; the flat flow
+ * spans the whole test. Absent on screens without a question map (e.g. content pages).
+ */
+export interface CtxQuestionsProgress {
+  /** Scope heading, e.g. «Вопросы раздела «Сеть»» / «Вопросы теста». */
+  scopeLabel: string;
+  /** Questions in scope. */
+  total: number;
+  answeredCount: number;
+  skippedCount: number;
+  /** One entry per in-scope question, in display order. */
+  states: CtxQuestionPill[];
+}
+
+/** One unanswered question in the review screen's explicit list (PRD-19 FR-08). */
+export interface CtxReviewUnanswered {
+  /** Absolute 0-based question index — the `goto:<index>` jump target. */
+  index: number;
+  /** Display number, 1-based within the review scope. */
+  number: number;
+  /** Question prompt (escaped by the renderer). */
+  prompt: string;
+}
+
+/**
+ * Review/finish screen namespace (`review.*`, PRD-19 Block D, FR-08). The system
+ * обзор screen (section-finish / test-finish) shows the pills
+ * ({@link CtxState.questionsProgress}, built with all pills issued) PLUS this
+ * explicit unanswered list and the «Завершить …» action. Runtime-rendered on both
+ * hosts from the shared `review` layout (no content_pages row — incremental model).
+ */
+export interface CtxReview {
+  /** Heading, e.g. «Раздел «Сеть» · обзор» / «Обзор теста». */
+  scopeLabel: string;
+  /** True for the test-finish обзор, false for a section-finish обзор. */
+  isTest: boolean;
+  /** Finish-button label: «Завершить раздел» / «Завершить тест». */
+  finishLabel: string;
+  /** Explicit list of still-unanswered (or skipped) questions in scope. */
+  unanswered: CtxReviewUnanswered[];
+  unansweredCount: number;
+  answeredCount: number;
+  total: number;
+  /** Pre-answer hint shown above the list. */
+  hint: string;
+}
+
+/**
+ * Computed section-results namespace (`sectionResult.*`, PRD-19 Block D / FR-05a).
+ * The optional staged screen shown after «Завершить раздел» when `showSectionResults`
+ * is on: the section's score ring + a one-line summary + an optional pass/fail verdict
+ * tag + «Продолжить». A COMPUTED screen (from the results engine), NOT an author
+ * `summary` content page. Both hosts build it from {@link
+ * module:shared/template/result-context}.buildSectionResultContext so the numbers
+ * never drift (SCORM computes the section offline; the web grades it on the server).
+ */
+export interface CtxSectionResult {
+  /** Section/topic name for the heading. */
+  topicName: string;
+  scorePercent: number;
+  /** Core-prepared SVG ring dash offset (precomputed; layout binds it directly). */
+  ringDashoffset: number;
+  /** Core-prepared class: `is-pass`/`is-fail`/`""` (empty when the section has no pass rule). */
+  passClass: string;
+  /** Verdict label: «Раздел пройден»/«Раздел не пройден»/`""`. */
+  statusLabel: string;
+  /** True when a pass/fail verdict applies — gates the verdict tag. */
+  hasVerdict: boolean;
+  correct: number;
+  total: number;
+  /** One-line summary, e.g. «6 из 8 верно · 75%». */
+  summaryLabel: string;
+  /** «Продолжить» action label. */
+  continueLabel: string;
+}
+
+/**
+ * PRD-1 §4.3: «Введение раздела» (section-intro) screen data (`sectionIntro.*`).
+ * Shown at the START of a section: topic name, description (from topic properties),
+ * question count, time limit (when set), and an author instruction. Both hosts build
+ * it from {@link module:shared/template/result-context}.buildSectionIntroContext.
+ */
+export interface CtxSectionIntro {
+  /** «Раздел N» eyebrow label. */
+  eyebrow: string;
+  /** Section/topic name (heading). */
+  topicName: string;
+  /** Topic description from its properties; empty string when absent. */
+  description: string;
+  /** Gates the description block. */
+  hasDescription: boolean;
+  /** Number of questions delivered in the section. */
+  questionCount: number;
+  /** Localized count label, e.g. «16 вопросов». */
+  questionCountLabel: string;
+  /** Gates the time-limit meta item. */
+  hasTimeLimit: boolean;
+  /** Localized time-limit label, e.g. «20 мин». */
+  timeLimitLabel: string;
+  /** Gates the author instruction block (set when the instruction is non-empty). */
+  hasInstruction: boolean;
+  /** «Далее» action label. */
+  continueLabel: string;
 }
 
 /** Adaptive inter-level/topic transition interstitial (`transition.*`). */
@@ -153,6 +325,18 @@ export interface CtxRetake {
 }
 
 /**
+ * Per-test branding shown across learner screens (`design.*`, PRD-7). Carried in
+ * the render context so the SAME layout binding works on both hosts. Built from
+ * the test's design params — the value is already RESOLVED to a plain URL string
+ * (the author stores a `{ url, name, … }` media envelope; each host extracts
+ * `.url` before it reaches the context, never the envelope).
+ */
+export interface CtxDesign {
+  /** Logo URL; absent → the `{{#if design.logoUrl}}` layout block renders nothing. */
+  logoUrl?: string;
+}
+
+/**
  * The public render context handed to the unified renderer for any screen. Every
  * namespace is optional — present only on the screens that use it (`course` on
  * start/question/results; `result` on results; `state` on start/question; `retake`
@@ -164,4 +348,12 @@ export interface PublicRenderContext {
   state?: CtxState;
   retake?: CtxRetake;
   transition?: CtxTransition;
+  /** Per-test branding (logo); present on every learner screen that shows it. */
+  design?: CtxDesign;
+  /** PRD-19 Block D: review/finish (обзор) screen data. */
+  review?: CtxReview;
+  /** PRD-19 Block D / FR-05a: computed section-results (итоги раздела) screen data. */
+  sectionResult?: CtxSectionResult;
+  /** PRD-1 §4.3: «Введение раздела» (section-intro) screen data. */
+  sectionIntro?: CtxSectionIntro;
 }

@@ -1,38 +1,71 @@
 import { Router, Request, Response } from "express";
-import { createHash } from "crypto";
 import { logger } from "../logger";
 import ExcelJS from "exceljs";
 import {
+  addAoaSheet,
   addJsonSheet,
   readWorkbookFromBuffer,
+  sheetHeaders,
   sheetToObjects,
   workbookToBuffer,
 } from "../utils/excel";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
-import { questionScoringSchema, type QuestionScoring } from "@shared/schema";
 import { normalizeTags } from "@shared/tags";
+import { importQuestionRows } from "../services/questions-import";
+import { serializeQuestionRow, QUESTION_WIDTHS } from "../services/questions-export";
+import { assessQuestionsRemoval, assessQuestionChange } from "../services/draw-feasibility";
+import {
+  respondForbiddenContent,
+  respondIfBlocked,
+  mergeAssessments,
+  isDryRun,
+  respondDryRun,
+} from "../services/content-guard";
+import {
+  visibleTopicScope,
+  canManageTopicContent,
+  isAdminOrSuper,
+} from "../services/topic-access";
+import type { Question } from "@shared/schema";
 
-// PRD-10: validate the optional graded-scoring config (FR-13). Null/undefined =
-// exact match (default); a present config must satisfy questionScoringSchema.
-function validateScoring(
-  scoringJson: unknown,
-  res: Response,
-): scoringJson is QuestionScoring | null | undefined {
-  if (scoringJson == null) return true;
-  const parsed = questionScoringSchema.safeParse(scoringJson);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid scoring config", details: parsed.error.flatten() });
-    return false;
-  }
-  return true;
+// PRD-15 FR-02: fields whose change affects delivery or grading of dependent
+// tests; such edits are restricted to the creator/administrator and, for
+// tags/difficulty/topic moves, run the draw-feasibility check (E-3/E-4).
+function gradingOrDrawFieldsChanged(existing: Question, body: UpdateQuestionBody): boolean {
+  const changed = (next: unknown, current: unknown) =>
+    next !== undefined && JSON.stringify(next) !== JSON.stringify(current);
+  return (
+    changed(body.type, existing.type) ||
+    changed(body.dataJson, existing.dataJson) ||
+    changed(body.correctJson, existing.correctJson) ||
+    changed(body.difficulty, existing.difficulty) ||
+    changed(body.topicId, existing.topicId) ||
+    (Array.isArray(body.tags) &&
+      JSON.stringify(normalizeTags(body.tags)) !== JSON.stringify(existing.tags ?? []))
+  );
 }
 
-// SHA-256 от type + prompt + нормализованные варианты ответов
-function computeQuestionHash(type: string, prompt: string, dataJson: unknown): string {
-  const normalized = JSON.stringify({ type, prompt: prompt.trim(), data: dataJson });
-  return createHash("sha256").update(normalized).digest("hex");
+/**
+ * PRD-15 block C (FR-22): a question is governed by its topic. CRUD on it
+ * requires `manage` on that topic (owner, manage grant, or admin). This
+ * replaces the block-A creator gate (`created_by`). A dangling question whose
+ * topic was deleted is administrator-only.
+ *
+ * @param req - the authenticated request (roles and current user).
+ * @param topicId - the question's topic id (or null for a dangling row).
+ * @returns whether the actor may create/update/delete this question.
+ */
+async function canManageQuestion(
+  req: Request,
+  topicId: string | null | undefined,
+): Promise<boolean> {
+  const roles = req.effectiveRoles ?? [];
+  if (isAdminOrSuper(roles)) return true;
+  if (!topicId) return false;
+  const topic = await storage.getTopic(topicId);
+  return topic ? canManageTopicContent(roles, req.currentUser?.id ?? "", topic) : false;
 }
 
 const router = Router();
@@ -55,7 +88,6 @@ interface CreateQuestionBody {
   prompt: string;
   dataJson: unknown;
   correctJson: unknown;
-  points?: number;
   difficulty?: number;
   mediaUrl?: string;
   mediaType?: "image" | "audio" | "video" | null;
@@ -64,7 +96,6 @@ interface CreateQuestionBody {
   feedbackMode?: "general" | "conditional";
   feedbackCorrect?: string;
   feedbackIncorrect?: string;
-  scoringJson?: QuestionScoring | null;
   /** PRD-11 §3a: sub-topic tags; normalized on save (trim/collapse, dedup, cap). */
   tags?: string[];
 }
@@ -80,34 +111,24 @@ interface ExportQuery {
   testId?: string;
 }
 
-// Маппинг типов: внутренний -> Excel
-const typeToExcel: Record<string, string> = {
-  single: "multiple_choice",
-  multiple: "multiple_response",
-  matching: "matching",
-  ranking: "ranking",
-};
-
-// Маппинг типов: Excel -> внутренний
-const typeFromExcel: Record<string, string> = {
-  multiple_choice: "single",
-  multiple_response: "multiple",
-  matching: "matching",
-  ranking: "ranking",
-  single: "single",
-  multiple: "multiple",
-};
+// Сериализация строки вопроса (экспорт) — server/services/questions-export.ts;
+// разбор (импорт) — server/services/questions-import.ts.
 
 // ============================================
 // GET /api/questions - Список вопросов
 // ============================================
-router.get("/", requirePermission("questions.manage"), async (_req: Request, res: Response) => {
+router.get("/", requirePermission("questions.read"), async (req: Request, res: Response) => {
   try {
     const questions = await storage.getQuestions();
     const topics = await storage.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t.name]));
 
-    const questionsWithTopics = questions.map((q) => ({
+    // PRD-15 block C (FR-22): questions inherit their topic's visibility — only
+    // those in topics the actor may see are returned.
+    const scope = await visibleTopicScope(req.effectiveRoles ?? [], req.currentUser?.id ?? "");
+    const visible = scope.all ? questions : questions.filter((q) => scope.ids.has(q.topicId));
+
+    const questionsWithTopics = visible.map((q) => ({
       ...q,
       topicName: topicMap.get(q.topicId) || "Unknown",
     }));
@@ -133,7 +154,6 @@ router.post(
         prompt,
         dataJson,
         correctJson,
-        points,
         difficulty,
         mediaUrl,
         mediaType,
@@ -142,7 +162,6 @@ router.post(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
-        scoringJson,
         tags,
       } = req.body;
 
@@ -152,7 +171,11 @@ router.post(
         return res.status(400).json({ error: "TopicId, type and prompt required" });
       }
 
-      if (!validateScoring(scoringJson, res)) return;
+      // PRD-15 block C: adding a question requires manage on the target topic.
+      if (!(await canManageQuestion(req, topicId))) {
+        respondForbiddenContent(res);
+        return;
+      }
 
       const question = await storage.createQuestion({
         topicId,
@@ -160,7 +183,6 @@ router.post(
         prompt,
         dataJson,
         correctJson,
-        points: points || 1,
         difficulty: difficulty || 50,
         mediaUrl: mediaUrl || null,
         mediaType: mediaType || null,
@@ -169,8 +191,8 @@ router.post(
         feedbackMode: feedbackMode || "general",
         feedbackCorrect: feedbackCorrect || null,
         feedbackIncorrect: feedbackIncorrect || null,
-        scoringJson: scoringJson ?? null,
         tags: normalizeTags(Array.isArray(tags) ? tags : []),
+        createdBy: req.currentUser?.id ?? null,
       } as any);
 
       res.status(201).json(question);
@@ -195,7 +217,6 @@ router.put(
         prompt,
         dataJson,
         correctJson,
-        points,
         difficulty,
         mediaUrl,
         mediaType,
@@ -204,13 +225,49 @@ router.put(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
-        scoringJson,
         tags,
       } = req.body as UpdateQuestionBody;
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
 
-      if (!validateScoring(scoringJson, res)) return;
+      // PRD-15 FR-05: tag/difficulty/move edits additionally pass the
+      // draw-feasibility check against dependent tests (E-3/E-4).
+      const existing = await storage.getQuestion(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Question not found" });
+      }
+      // PRD-15 block C: editing any question requires manage on its topic; a
+      // move additionally requires manage on the destination topic.
+      if (!(await canManageQuestion(req, existing.topicId))) {
+        respondForbiddenContent(res);
+        return;
+      }
+      const movesTopic = topicId !== undefined && topicId !== existing.topicId;
+      if (movesTopic && !(await canManageQuestion(req, topicId))) {
+        respondForbiddenContent(res);
+        return;
+      }
+      let feasibilityWarnings: unknown[] = [];
+      const affectsDelivery = gradingOrDrawFieldsChanged(existing, req.body as UpdateQuestionBody);
+      if (affectsDelivery) {
+        const nextTags = Array.isArray(tags) ? normalizeTags(tags) : undefined;
+        const assessments = [];
+        if (nextTags !== undefined || difficulty !== undefined) {
+          assessments.push(await assessQuestionChange(req.params.id, { tags: nextTags, difficulty }));
+        }
+        if (movesTopic) {
+          // Leaving the old topic shrinks its pool exactly like a removal.
+          assessments.push(await assessQuestionsRemoval([req.params.id]));
+        }
+        const assessment =
+          assessments.length > 0 ? mergeAssessments(assessments) : { blocking: [], warnings: [] };
+        if (isDryRun(req)) return respondDryRun(req, res, assessment);
+        if (respondIfBlocked(req, res, assessment)) return;
+        feasibilityWarnings = assessment.warnings;
+      } else if (isDryRun(req)) {
+        // Nothing delivery-affecting changes -> the edit is always safe.
+        return respondDryRun(req, res, { blocking: [], warnings: [] });
+      }
 
       const updated = await storage.updateQuestion(req.params.id, {
         topicId,
@@ -218,7 +275,6 @@ router.put(
         prompt,
         dataJson,
         correctJson,
-        points,
         difficulty,
         mediaUrl,
         mediaType,
@@ -227,7 +283,6 @@ router.put(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
-        scoringJson,
         // Only touch tags when the client sent them; otherwise leave unchanged.
         tags: Array.isArray(tags) ? normalizeTags(tags) : undefined,
       } as any);
@@ -236,7 +291,9 @@ router.put(
         return res.status(404).json({ error: "Question not found" });
       }
 
-      res.json(updated);
+      res.json(
+        feasibilityWarnings.length > 0 ? { ...updated, warnings: feasibilityWarnings } : updated,
+      );
     } catch (error) {
       logger.error("Update question error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to update question" });
@@ -247,16 +304,29 @@ router.put(
 // ============================================
 // DELETE /api/questions/:id - Удалить вопрос
 // ============================================
+// PRD-15 FR-02/FR-05 (E-1/E-3/E-4/E-5): creator/admin only; blocked while
+// published tests depend on the question (409 with the dependents list).
 router.delete(
   "/:id",
   requirePermission("questions.manage"),
   async (req: Request, res: Response) => {
     try {
+      const question = await storage.getQuestion(req.params.id);
+      if (!question) {
+        return res.status(404).json({ error: "Question not found" });
+      }
+      if (!(await canManageQuestion(req, question.topicId))) {
+        respondForbiddenContent(res);
+        return;
+      }
+      const assessment = await assessQuestionsRemoval([req.params.id]);
+      if (isDryRun(req)) return respondDryRun(req, res, assessment);
+      if (respondIfBlocked(req, res, assessment)) return;
       const success = await storage.deleteQuestion(req.params.id);
       if (!success) {
         return res.status(404).json({ error: "Question not found" });
       }
-      res.json({ success: true });
+      res.json({ success: true, warnings: assessment.warnings });
     } catch (error) {
       logger.error("Delete question error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to delete question" });
@@ -267,6 +337,7 @@ router.delete(
 // ============================================
 // POST /api/questions/bulk-delete - Массовое удаление
 // ============================================
+// PRD-15 FR-05 (E-10): bulk paths run the same guards as single deletes.
 router.post(
   "/bulk-delete",
   requirePermission("questions.manage"),
@@ -276,8 +347,18 @@ router.post(
       if (!Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ error: "IDs array required" });
       }
+      for (const id of ids) {
+        const question = await storage.getQuestion(id);
+        if (question && !(await canManageQuestion(req, question.topicId))) {
+          respondForbiddenContent(res);
+          return;
+        }
+      }
+      const assessment = await assessQuestionsRemoval(ids);
+      if (isDryRun(req)) return respondDryRun(req, res, assessment);
+      if (respondIfBlocked(req, res, assessment)) return;
       const deletedCount = await storage.deleteQuestionsBulk(ids);
-      res.json({ success: true, deletedCount });
+      res.json({ success: true, deletedCount, warnings: assessment.warnings });
     } catch (error) {
       logger.error("Bulk delete questions error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to delete questions" });
@@ -344,6 +425,13 @@ router.get(
         questions = questions.filter((q) => filterTopicIds.includes(q.topicId));
       }
 
+      // PRD-15 block C (FR-22): never export answer keys from topics the actor
+      // cannot see — restrict to the visible scope (admins see everything).
+      const scope = await visibleTopicScope(req.effectiveRoles ?? [], req.currentUser?.id ?? "");
+      if (!scope.all) {
+        questions = questions.filter((q) => scope.ids.has(q.topicId));
+      }
+
       // Сортировка по теме
       questions.sort((a, b) => {
         const topicA = topicMap.get(a.topicId) || "";
@@ -351,58 +439,11 @@ router.get(
         return topicA.localeCompare(topicB, "ru");
       });
 
-      // Формируем строки
-      const rows = questions.map((q) => {
-        const data = q.dataJson as any;
-        const correct = q.correctJson as any;
-
-        let optionsStr = "";
-        let correctStr = "";
-
-        if (q.type === "single" || q.type === "multiple") {
-          optionsStr = (data.options || []).join("#");
-
-          if (q.type === "single") {
-            correctStr = String((correct.correctIndex ?? 0) + 1);
-          } else {
-            correctStr = (correct.correctIndices || [])
-              .map((i: number) => i + 1)
-              .join(",");
-          }
-        } else if (q.type === "matching") {
-          const left = data.left || [];
-          const right = data.right || [];
-          const pairs: string[] = [];
-          for (let i = 0; i < left.length; i++) {
-            pairs.push(`${left[i]}#${right[i] || ""}`);
-          }
-          optionsStr = pairs.join("#");
-          correctStr = (correct.pairs || [])
-            .map((p: any) => `${p.left + 1}-${p.right + 1}`)
-            .join(",");
-        } else if (q.type === "ranking") {
-          optionsStr = (data.items || []).join("#");
-          correctStr = (correct.correctOrder || [])
-            .map((i: number) => i + 1)
-            .join(",");
-        }
-
-        return {
-          "ID": q.id,
-          "Тема": topicMap.get(q.topicId) || "",
-          "Тип вопроса": typeToExcel[q.type] || q.type,
-          "Текст вопроса": q.prompt,
-          "Балл": q.points || 1,
-          "Сложность": q.difficulty || 50,
-          "Тексты вариантов ответа": optionsStr,
-          "Номера правильных ответов": correctStr,
-          "Следование вариантов ответов": q.shuffleAnswers === false ? "Fixed" : "Random",
-          "Обратная связь": q.feedback || "",
-        };
-      });
+      // Формируем строки (общая сериализация — server/services/questions-export.ts)
+      const rows = questions.map((q) => serializeQuestionRow(q, topicMap.get(q.topicId) || ""));
 
       const wb = new ExcelJS.Workbook();
-      addJsonSheet(wb, "Вопросы", rows, [36, 25, 18, 50, 8, 12, 60, 25, 15, 40]);
+      addJsonSheet(wb, "Вопросы", rows, QUESTION_WIDTHS);
 
       const buffer = await workbookToBuffer(wb);
 
@@ -427,8 +468,76 @@ router.get(
 );
 
 // ============================================
+// GET /api/questions/template - Шаблон Excel для импорта (PRD-14 Ф2, FR-12)
+// ============================================
+// Canonical column order (must match the export — see спецификация формата §3).
+// T-40: «Балл» / «Цена ответа» left the bank sheet — scoring is a property of
+// the test (the test-scoped «Оценка» sheet of the workbook), not the question.
+const TEMPLATE_HEADERS = [
+  "ID",
+  "Тема",
+  "Тип вопроса",
+  "Текст вопроса",
+  "Сложность",
+  "Тексты вариантов ответа",
+  "Номера правильных ответов",
+  "Следование вариантов ответов",
+  "Обратная связь",
+  "Теги",
+  "Режим ОС",
+  "ОС при верном",
+  "ОС при неверном",
+];
+
+router.get(
+  "/template",
+  requirePermission("questions.importExport"),
+  async (_req: Request, res: Response) => {
+    try {
+      const wb = new ExcelJS.Workbook();
+      // Sheet 1 — headers only (the author fills rows below).
+      addAoaSheet(wb, "Вопросы", [TEMPLATE_HEADERS],
+        [36, 25, 18, 50, 12, 60, 25, 15, 40, 25, 12, 30, 30]);
+
+      // Sheet 2 — format reference per column / question type.
+      const help: string[][] = [
+        ["Колонка", "Описание / формат"],
+        ["ID", "Пусто — создать вопрос; заполнен и найден — обновить (см. экспорт)"],
+        ["Тема", "Обязательно. Имя темы; если её нет — будет создана"],
+        ["Тип вопроса", "Обязательно. multiple_choice | multiple_response | matching | ranking"],
+        ["Текст вопроса", "Обязательно. Формулировка"],
+        ["Сложность", "Целое 0..100; по умолчанию 50"],
+        ["Тексты вариантов ответа", "Разделитель вариантов — #. Для matching: «лево # ... || право # ...»"],
+        ["Номера правильных ответов", "1-based. multiple_choice: «2». multiple_response: «1,3». matching: «1-1, 2-2». ranking: порядок «3,1,2»"],
+        ["Следование вариантов ответов", "Random (по умолчанию) | Fixed"],
+        ["Обратная связь", "Общая обратная связь (режим «общая»)"],
+        ["Теги", "Список; разделители «;» и «,». Напр.: финансы; учёт"],
+        ["Режим ОС", "общая (по умолчанию) | условная"],
+        ["ОС при верном", "Текст; только при режиме «условная»"],
+        ["ОС при неверном", "Текст; только при режиме «условная»"],
+        ["", ""],
+        ["Цена ответа", "Задаётся в листе «Оценка» книги теста (не свойство вопроса — T-40)"],
+        ["Пример (multiple_choice)", "Варианты «A # B # C», правильный «2»"],
+        ["Пример (matching)", "«Кошка # Собака || Мяу # Гав # Буль», пары «1-1, 2-2»"],
+        ["Пример (ranking)", "Элементы «Шаг А # Шаг Б # Шаг В», порядок «3,1,2»"],
+      ];
+      addAoaSheet(wb, "Справка", help, [32, 90]);
+
+      const buffer = await workbookToBuffer(wb);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent("questions_template.xlsx")}"`);
+      res.send(buffer);
+    } catch (error) {
+      logger.error("Questions template error: " + (error as Error).message);
+      res.status(500).json({ error: "Failed to build template" });
+    }
+  }
+);
+
+// ============================================
 // POST /api/questions/import - Импорт из Excel
 // ============================================
+// `?dryRun=true` (FR-13): валидирует и считает план без записи в БД.
 router.post(
   "/import",
   requirePermission("questions.importExport"),
@@ -439,204 +548,31 @@ router.post(
         return res.status(400).json({ error: "File required" });
       }
 
+      const dryRun = String(req.query.dryRun ?? "").toLowerCase() === "true";
+
       const workbook = await readWorkbookFromBuffer(req.file.buffer);
       const sheet = workbook.worksheets[0];
       if (!sheet) return res.status(400).json({ error: "File is empty" });
-      const rows = sheetToObjects(sheet);
 
-      const topics = await storage.getTopics();
-      // Нормализуем ключ: убираем все виды пробелов (включая \u00a0, \r и т.д.)
-      const normalizeName = (s: string) => s.replace(/[\s\u00a0\u200b\ufeff]+/g, " ").trim().toLowerCase();
-      const topicByName = new Map(topics.map((t) => [normalizeName(t.name), t]));
-
-      // Кэш хэшей по topicId — загружаем лениво при первом обращении к теме
-      const hashCache = new Map<string, Set<string>>();
-      const getTopicHashes = async (topicId: string): Promise<Set<string>> => {
-        if (!hashCache.has(topicId)) {
-          hashCache.set(topicId, await storage.getContentHashesByTopic(topicId));
-        }
-        return hashCache.get(topicId)!;
-      };
-
-      const results = { created: 0, updated: 0, skipped: 0, errors: [] as string[] };
-
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const rowNum = i + 2;
-
-        try {
-          // Тема — создаём если не существует
-          const topicNameRaw = String(row["Тема"] || "").replace(/[\s\u00a0\u200b\ufeff]+/g, " ").trim();
-          const topicNameKey = normalizeName(topicNameRaw);
-          if (!topicNameKey) {
-            results.errors.push(`Строка ${rowNum}: не указана тема`);
-            continue;
-          }
-          let topic = topicByName.get(topicNameKey);
-          if (!topic) {
-            logger.warn(`Import строка ${rowNum}: тема "${topicNameRaw}" не найдена, создаём новую`, "questions");
-            topic = await storage.createTopic({ name: topicNameRaw });
-            topicByName.set(topicNameKey, topic);
-          }
-
-          // Тип вопроса
-          const rawType = String(row["Тип вопроса"] || row["Тип"] || "").trim().toLowerCase();
-          const type = typeFromExcel[rawType] as "single" | "multiple" | "matching" | "ranking" | undefined;
-          if (!type) {
-            results.errors.push(`Строка ${rowNum}: неизвестный тип "${row["Тип вопроса"] || row["Тип"]}"`);
-            continue;
-          }
-
-          // Текст вопроса
-          const prompt = String(row["Текст вопроса"] || row["Вопрос"] || "").trim();
-          if (!prompt) {
-            results.errors.push(`Строка ${rowNum}: пустой вопрос`);
-            continue;
-          }
-
-          // Варианты и правильные ответы
-          const optionsStr = String(row["Тексты вариантов ответа"] || row["Варианты"] || "").trim();
-          const correctStr = String(row["Номера правильных ответов"] || row["Правильный ответ"] || "").trim();
-
-          let dataJson: unknown = {};
-          let correctJson: unknown = {};
-
-          if (type === "single" || type === "multiple") {
-            const separator = optionsStr.includes("#") ? "#" : "|";
-            const options = optionsStr.split(separator).map((s) => s.trim()).filter(Boolean);
-
-            if (options.length < 2) {
-              results.errors.push(`Строка ${rowNum}: нужно минимум 2 варианта ответа`);
-              continue;
-            }
-            dataJson = { options };
-
-            if (type === "single") {
-              const idx = parseInt(correctStr, 10) - 1;
-              if (isNaN(idx) || idx < 0 || idx >= options.length) {
-                results.errors.push(`Строка ${rowNum}: некорректный номер правильного ответа "${correctStr}"`);
-                continue;
-              }
-              correctJson = { correctIndex: idx };
-            } else {
-              const indices = correctStr
-                .split(/[,.\s]+/)
-                .map((s) => parseInt(s.trim(), 10) - 1)
-                .filter((i) => !isNaN(i));
-
-              if (indices.length === 0) {
-                results.errors.push(`Строка ${rowNum}: не указаны правильные ответы`);
-                continue;
-              }
-              if (indices.some((i) => i < 0 || i >= options.length)) {
-                results.errors.push(`Строка ${rowNum}: номера правильных ответов выходят за пределы`);
-                continue;
-              }
-              correctJson = { correctIndices: indices };
-            }
-          } else if (type === "matching") {
-            const left: string[] = [];
-            const right: string[] = [];
-
-            if (optionsStr.includes("→")) {
-              const pairs = optionsStr.split("|").map((s) => s.trim()).filter(Boolean);
-              for (const pair of pairs) {
-                const [l, r] = pair.split("→").map((s) => s.trim());
-                if (l && r) {
-                  left.push(l);
-                  right.push(r);
-                }
-              }
-            } else {
-              const parts = optionsStr.split("#").map((s) => s.trim()).filter(Boolean);
-              for (let j = 0; j < parts.length - 1; j += 2) {
-                left.push(parts[j]);
-                right.push(parts[j + 1] || "");
-              }
-            }
-
-            if (left.length < 2) {
-              results.errors.push(`Строка ${rowNum}: нужно минимум 2 пары для сопоставления`);
-              continue;
-            }
-
-            dataJson = { left, right };
-            correctJson = { pairs: left.map((_, idx) => ({ left: idx, right: idx })) };
-          } else if (type === "ranking") {
-            const separator = optionsStr.includes("#") ? "#" : "|";
-            const items = optionsStr.split(separator).map((s) => s.trim()).filter(Boolean);
-
-            if (items.length < 2) {
-              results.errors.push(`Строка ${rowNum}: нужно минимум 2 элемента для ранжирования`);
-              continue;
-            }
-
-            dataJson = { items };
-            correctJson = { correctOrder: items.map((_, idx) => idx) };
-          }
-
-          // Следование вариантов
-          const shuffleStr = String(row["Следование вариантов ответов"] || "Random").trim().toLowerCase();
-          const shuffleAnswers = shuffleStr !== "fixed";
-
-          const contentHash = computeQuestionHash(type, prompt, dataJson);
-
-          // Обновление по ID если указан
-          const rowId = String(row["ID"] || "").trim();
-          if (rowId) {
-            const existing = await storage.getQuestion(rowId);
-            if (existing) {
-              await storage.updateQuestion(rowId, {
-                topicId: topic.id,
-                type,
-                prompt,
-                dataJson: dataJson as any,
-                correctJson: correctJson as any,
-                points: parseInt(String(row["Балл"]), 10) || 1,
-                difficulty: parseInt(String(row["Сложность"]), 10) || 50,
-                shuffleAnswers,
-                feedback: String(row["Обратная связь"] || "").trim() || null,
-                contentHash,
-              } as any);
-              results.updated++;
-              continue;
-            }
-          }
-
-          // Дедупликация: проверяем хэш контента
-          const existingHashes = await getTopicHashes(topic.id);
-          if (existingHashes.has(contentHash)) {
-            results.skipped++;
-            continue;
-          }
-
-          // Создаём вопрос
-          await storage.createQuestion({
-            topicId: topic.id,
-            type,
-            prompt,
-            dataJson,
-            correctJson,
-            points: parseInt(String(row["Балл"]), 10) || 1,
-            difficulty: parseInt(String(row["Сложность"]), 10) || 50,
-            shuffleAnswers,
-            feedback: String(row["Обратная связь"] || "").trim() || null,
-            contentHash,
-          } as any);
-
-          // Добавляем в кэш чтобы не дублировать внутри одного файла
-          existingHashes.add(contentHash);
-          results.created++;
-        } catch (err) {
-          results.errors.push(`Строка ${rowNum}: ${(err as Error).message}`);
-        }
-      }
+      const result = await importQuestionRows(
+        sheetToObjects(sheet),
+        sheetHeaders(sheet),
+        {
+          dryRun,
+          // PRD-15 FR-02/FR-05: import respects the same creator and
+          // feasibility guards as the editor path.
+          actor: req.currentUser
+            ? { id: req.currentUser.id, roles: req.effectiveRoles ?? [] }
+            : undefined,
+        },
+      );
 
       res.json({
-        created: results.created,
-        updated: results.updated,
-        skipped: results.skipped,
-        errors: results.errors,
+        created: result.created,
+        updated: result.updated,
+        skipped: result.skipped,
+        errors: result.errors,
+        dryRun,
       });
     } catch (error) {
       logger.error("Import questions error: " + (error as Error).message);

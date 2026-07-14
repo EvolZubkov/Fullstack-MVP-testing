@@ -4,17 +4,17 @@ import { eq, inArray, and, sql, desc, isNull } from "drizzle-orm";
 import { db } from "./db";
 import { encryptEmail, decryptEmail, hashEmail } from "./utils/crypto";
 import {
-  users, topics, topicCourses, topicEvents, questions, tests, testSections, attempts, folders, testFolders,
+  users, topics, questions, tests, testSections, attempts, folders, testFolders,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
   groups, userGroups, testAssignments, passwordResetTokens, assignmentAccessTokens,
-  contentPages, resultVariables, scales, questionMeasurements,
-  userRoles, testAccessGrants,
+  contentPages, resultVariables, scales, questionMeasurements, testQuestionScoring,
+  userRoles, testAccessGrants, testSnapshots, topicAccessGrants,
   type User, type InsertUser,
   type Folder, type InsertFolder,
   type TestFolder, type InsertTestFolder,
   type Topic, type InsertTopic,
-  type TopicCourse, type InsertTopicCourse,
-  type TopicEvent, type InsertTopicEvent,
+  type TopicCourse,
+  type TopicEvent,
   type Question, type InsertQuestion,
   type Test, type InsertTest,
   type TestSection, type InsertTestSection,
@@ -28,6 +28,8 @@ import {
   type Group, type InsertGroup,
   type UserGroup, type InsertUserGroup,
   type TestAccessGrant, type InsertTestAccessGrant,
+  type TestSnapshot,
+  type TopicAccessGrant,
   type TestAssignment, type InsertTestAssignment,
   type PasswordResetToken, type InsertPasswordResetToken,
   type AssignmentAccessToken, type InsertAssignmentAccessToken,
@@ -35,9 +37,12 @@ import {
   type ResultVariable, type InsertResultVariable,
   type Scale, type InsertScale,
   type QuestionMeasurement, type InsertQuestionMeasurement,
+  type TestQuestionScoring, type InsertTestQuestionScoring,
 } from "@shared/schema";
 import type { StoredRole } from "@shared/access";
-import { validate, type ValidationResult, type ValueType } from "@shared/formula";
+import { topicCoursesFromFeedback, topicEventsFromFeedback } from "@shared/topics/recommendations";
+import { validate, renameTopicByNameInFormula, type ValidationResult, type ValueType } from "@shared/formula";
+import { normalizeTopicName } from "@shared/topics/naming";
 
 /**
  * Normalizes a test row from the DB for backward compatibility (PRD-7 §1.11).
@@ -49,6 +54,19 @@ function mapLegacyTest(row: Test): Test {
   const published = status === "published";
   if (status === row.status && published === row.published) return row;
   return { ...row, status: status as Test["status"], published };
+}
+
+/**
+ * Minimal projection of a test that depends on a topic/question (PRD-15
+ * FR-03): enough for the 409 referential-protection payload and for the
+ * draw-feasibility policy (published vs draft, adaptive vs standard).
+ */
+export interface TestUsageRef {
+  id: string;
+  title: string;
+  ownerId: string | null;
+  status: Test["status"];
+  mode: Test["mode"];
 }
 
 export interface IStorage {
@@ -92,10 +110,30 @@ export interface IStorage {
   upsertTestAccessGrant(grant: InsertTestAccessGrant): Promise<TestAccessGrant>;
   removeTestAccessGrant(testId: string, userId: string): Promise<boolean>;
 
+  // "Where used" lookups (PRD-15 FR-03): tests depending on shared content.
+  getTestsUsingTopic(topicId: string): Promise<TestUsageRef[]>;
+  getTestsUsingQuestion(questionId: string): Promise<TestUsageRef[]>;
+
+  // Publication snapshots (PRD-15 block B, FR-10/FR-17).
+  createTestSnapshot(snapshot: {
+    testId: string;
+    version: number;
+    contentJson: unknown;
+    publishedBy: string | null;
+  }): Promise<TestSnapshot>;
+  getLatestSnapshot(testId: string): Promise<TestSnapshot | undefined>;
+  getSnapshot(id: string): Promise<TestSnapshot | undefined>;
+  getSnapshotsForTest(testId: string): Promise<TestSnapshot[]>;
+  deleteSnapshotsForTest(testId: string): Promise<void>;
+  /** Distinct snapshot ids still referenced by any attempt of the test (FR-17). */
+  getReferencedSnapshotIds(testId: string): Promise<string[]>;
+  deleteSnapshotById(id: string): Promise<void>;
+
   // Test Assignments
   getAssignment(id: string): Promise<TestAssignment | undefined>;
   getTestAssignments(testId: string): Promise<TestAssignment[]>;
   getUserAssignments(userId: string): Promise<TestAssignment[]>;
+  isTestAssignedToUser(testId: string, userId: string): Promise<boolean>;
   getGroupAssignments(groupId: string): Promise<TestAssignment[]>;
   createTestAssignment(assignment: InsertTestAssignment & { assignedBy: string }): Promise<TestAssignment>;
   deleteTestAssignment(id: string): Promise<boolean>;
@@ -119,7 +157,17 @@ export interface IStorage {
   getFolder(id: string): Promise<Folder | undefined>;
   createFolder(folder: InsertFolder): Promise<Folder>;
   updateFolder(id: string, folder: Partial<InsertFolder>): Promise<Folder | undefined>;
-  deleteFolder(id: string): Promise<boolean>;
+  /**
+   * Удаляет папку контента, предварительно переместив её темы и вложенные папки
+   * в указанное место (`moveTo`, по умолчанию `null` = корень) — вариант
+   * «Перенести содержимое» диалога удаления папки (s-folder-delete). Папки не
+   * несут прав, поэтому content-guard не нужен.
+   */
+  deleteFolder(id: string, moveTo?: string | null): Promise<boolean>;
+  /** Идентификаторы папки и всех её потомков (включая саму), обход в ширину. */
+  getFolderSubtreeIds(id: string): Promise<string[]>;
+  /** Удаляет строки папок по id (судьбу их содержимого решает вызывающий). */
+  deleteFoldersBulk(ids: string[]): Promise<number>;
 
   getTestFolders(): Promise<TestFolder[]>;
   createTestFolder(folder: InsertTestFolder): Promise<TestFolder>;
@@ -143,19 +191,22 @@ export interface IStorage {
   getTopic(id: string): Promise<Topic | undefined>;
   createTopic(topic: InsertTopic): Promise<Topic>;
   updateTopic(id: string, topic: Partial<InsertTopic>): Promise<Topic | undefined>;
+  renameTopicInFormulas(topicId: string, oldName: string, newName: string): Promise<void>;
   deleteTopic(id: string): Promise<boolean>;
   deleteTopicsBulk(ids: string[]): Promise<number>;
+  /** Массово переносит темы в папку (или в корень при `null`). Организационно. */
+  moveTopicsToFolder(ids: string[], folderId: string | null): Promise<number>;
 
+  // TD-02 r.3: recommended courses/events are derived from topics.feedback_json
+  // (write paths removed). Only the read accessors remain, kept for delivery.
   getTopicCourses(topicId: string): Promise<TopicCourse[]>;
-  createTopicCourse(course: InsertTopicCourse): Promise<TopicCourse>;
-  deleteTopicCourse(id: string): Promise<boolean>;
-
   getTopicEvents(topicId: string): Promise<TopicEvent[]>;
-  createTopicEvent(event: InsertTopicEvent): Promise<TopicEvent>;
-  deleteTopicEvent(id: string): Promise<boolean>;
 
   getQuestions(): Promise<Question[]>;
   getQuestionsByTopic(topicId: string): Promise<Question[]>;
+  getTestSectionsByTopic(topicId: string): Promise<TestSection[]>;
+  getMeasurementsForQuestions(questionIds: string[]): Promise<Array<{ testId: string; questionId: string }>>;
+  getTopicPageRefs(topicId: string): Promise<Array<{ testId: string }>>;
   getContentHashesByTopic(topicId: string): Promise<Set<string>>;
   getQuestion(id: string): Promise<Question | undefined>;
   getQuestionsByIds(ids: string[]): Promise<Question[]>;
@@ -180,6 +231,8 @@ export interface IStorage {
   getAttemptsByUser(userId: string): Promise<Attempt[]>;
   getAttemptsByUserAndTest(userId: string, testId: string): Promise<Attempt[]>;
   deleteAttemptsByUserAndTest(userId: string, testId: string): Promise<void>;
+  /** PRD-15 FR-14: annul (delete) all in-progress attempts of a test; returns the count. */
+  annulInProgressAttempts(testId: string): Promise<number>;
   getAllAttempts(): Promise<Attempt[]>;
 
   // Adaptive testing
@@ -235,7 +288,7 @@ export interface IStorage {
     testId: string,
     formula: string,
     type: ValueType,
-    opts?: { sortOrder?: number; excludeId?: string },
+    opts?: { sortOrder?: number; excludeId?: string; extraScaleKeys?: string[]; extraVarNames?: string[] },
   ): Promise<ValidationResult>;
   // PRD-5: scales and per-question measurements.
   getScales(testId: string): Promise<Scale[]>;
@@ -250,7 +303,20 @@ export interface IStorage {
     questionId: string,
     rows: InsertQuestionMeasurement[],
   ): Promise<QuestionMeasurement[]>;
+  // PRD-15 block D: per-(test, question) scoring overrides (FR-30).
+  getTestQuestionScoring(testId: string): Promise<TestQuestionScoring[]>;
+  upsertTestQuestionScoring(
+    testId: string,
+    questionId: string,
+    values: Omit<InsertTestQuestionScoring, "testId" | "questionId">,
+  ): Promise<TestQuestionScoring>;
+  deleteTestQuestionScoring(testId: string, questionId: string): Promise<boolean>;
+  replaceTestQuestionScoring(
+    testId: string,
+    rows: Omit<InsertTestQuestionScoring, "testId">[],
+  ): Promise<TestQuestionScoring[]>;
 }
+
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -493,6 +559,99 @@ export class DatabaseStorage implements IStorage {
     return rows.map((r) => r.id);
   }
 
+  async getTestsUsingTopic(topicId: string): Promise<TestUsageRef[]> {
+    return db
+      .selectDistinct({
+        id: tests.id,
+        title: tests.title,
+        ownerId: tests.ownerId,
+        status: tests.status,
+        mode: tests.mode,
+      })
+      .from(testSections)
+      .innerJoin(tests, eq(testSections.testId, tests.id))
+      .where(eq(testSections.topicId, topicId));
+  }
+
+  async getTestsUsingQuestion(questionId: string): Promise<TestUsageRef[]> {
+    // A question is delivered through its topic's sections; scale contributions
+    // (question_measurements) add direct per-test dependencies (PRD-5).
+    const question = await this.getQuestion(questionId);
+    const byTopic = question ? await this.getTestsUsingTopic(question.topicId) : [];
+    const viaMeasurements = await db
+      .selectDistinct({
+        id: tests.id,
+        title: tests.title,
+        ownerId: tests.ownerId,
+        status: tests.status,
+        mode: tests.mode,
+      })
+      .from(questionMeasurements)
+      .innerJoin(tests, eq(questionMeasurements.testId, tests.id))
+      .where(eq(questionMeasurements.questionId, questionId));
+    const seen = new Map<string, TestUsageRef>();
+    for (const ref of [...byTopic, ...viaMeasurements]) seen.set(ref.id, ref);
+    return [...seen.values()];
+  }
+
+  async createTestSnapshot(snapshot: {
+    testId: string;
+    version: number;
+    contentJson: unknown;
+    publishedBy: string | null;
+  }): Promise<TestSnapshot> {
+    const [row] = await db
+      .insert(testSnapshots)
+      .values({
+        id: randomUUID(),
+        testId: snapshot.testId,
+        version: snapshot.version,
+        contentJson: snapshot.contentJson,
+        publishedBy: snapshot.publishedBy,
+      })
+      .returning();
+    return row;
+  }
+
+  async getLatestSnapshot(testId: string): Promise<TestSnapshot | undefined> {
+    const [row] = await db
+      .select()
+      .from(testSnapshots)
+      .where(eq(testSnapshots.testId, testId))
+      .orderBy(desc(testSnapshots.version))
+      .limit(1);
+    return row || undefined;
+  }
+
+  async getSnapshot(id: string): Promise<TestSnapshot | undefined> {
+    const [row] = await db.select().from(testSnapshots).where(eq(testSnapshots.id, id));
+    return row || undefined;
+  }
+
+  async getSnapshotsForTest(testId: string): Promise<TestSnapshot[]> {
+    return db
+      .select()
+      .from(testSnapshots)
+      .where(eq(testSnapshots.testId, testId))
+      .orderBy(desc(testSnapshots.version));
+  }
+
+  async deleteSnapshotsForTest(testId: string): Promise<void> {
+    await db.delete(testSnapshots).where(eq(testSnapshots.testId, testId));
+  }
+
+  async getReferencedSnapshotIds(testId: string): Promise<string[]> {
+    const rows = await db
+      .selectDistinct({ snapshotId: attempts.snapshotId })
+      .from(attempts)
+      .where(and(eq(attempts.testId, testId), sql`${attempts.snapshotId} IS NOT NULL`));
+    return rows.map((r) => r.snapshotId).filter((id): id is string => !!id);
+  }
+
+  async deleteSnapshotById(id: string): Promise<void> {
+    await db.delete(testSnapshots).where(eq(testSnapshots.id, id));
+  }
+
   async getTestAccessGrants(testId: string): Promise<TestAccessGrant[]> {
     return db.select().from(testAccessGrants).where(eq(testAccessGrants.testId, testId));
   }
@@ -547,6 +706,24 @@ export class DatabaseStorage implements IStorage {
 
   async getGroupAssignments(groupId: string): Promise<TestAssignment[]> {
     return db.select().from(testAssignments).where(eq(testAssignments.groupId, groupId));
+  }
+
+  async isTestAssignedToUser(testId: string, userId: string): Promise<boolean> {
+    // Direct assignment first (cheapest), then via the user's groups.
+    const [direct] = await db
+      .select({ id: testAssignments.id })
+      .from(testAssignments)
+      .where(and(eq(testAssignments.testId, testId), eq(testAssignments.userId, userId)))
+      .limit(1);
+    if (direct) return true;
+    const groupIds = (await this.getUserGroups(userId)).map((g) => g.id);
+    if (groupIds.length === 0) return false;
+    const [viaGroup] = await db
+      .select({ id: testAssignments.id })
+      .from(testAssignments)
+      .where(and(eq(testAssignments.testId, testId), inArray(testAssignments.groupId, groupIds)))
+      .limit(1);
+    return !!viaGroup;
   }
 
   async createTestAssignment(assignment: InsertTestAssignment & { assignedBy: string }): Promise<TestAssignment> {
@@ -709,6 +886,7 @@ export class DatabaseStorage implements IStorage {
       id,
       name: folder.name,
       parentId: folder.parentId || null,
+      createdBy: folder.createdBy || null,
     }).returning();
     return newFolder;
   }
@@ -718,13 +896,38 @@ export class DatabaseStorage implements IStorage {
     return updated || undefined;
   }
 
-  async deleteFolder(id: string): Promise<boolean> {
-    // When deleting a folder, move all its topics to root (folderId = null)
-    await db.update(topics).set({ folderId: null }).where(eq(topics.folderId, id));
-    // Move child folders to root (parentId = null)
-    await db.update(folders).set({ parentId: null }).where(eq(folders.parentId, id));
+  async deleteFolder(id: string, moveTo: string | null = null): Promise<boolean> {
+    // "Folder only" mode: reparent the folder's topics and direct sub-folders to
+    // the chosen destination (`moveTo`, default null = root), then drop the row.
+    // Purely organizational — folders carry no ownership, so no content guard.
+    await db.update(topics).set({ folderId: moveTo }).where(eq(topics.folderId, id));
+    await db.update(folders).set({ parentId: moveTo }).where(eq(folders.parentId, id));
     const result = await db.delete(folders).where(eq(folders.id, id)).returning();
     return result.length > 0;
+  }
+
+  async getFolderSubtreeIds(id: string): Promise<string[]> {
+    const all = await db.select({ id: folders.id, parentId: folders.parentId }).from(folders);
+    const childrenByParent = new Map<string | null, string[]>();
+    for (const f of all) {
+      const key = f.parentId ?? null;
+      if (!childrenByParent.has(key)) childrenByParent.set(key, []);
+      childrenByParent.get(key)!.push(f.id);
+    }
+    const out: string[] = [];
+    const queue: string[] = [id];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      out.push(current);
+      queue.push(...(childrenByParent.get(current) ?? []));
+    }
+    return out;
+  }
+
+  async deleteFoldersBulk(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const result = await db.delete(folders).where(inArray(folders.id, ids)).returning();
+    return result.length;
   }
 
   async getTestFolders(): Promise<TestFolder[]> {
@@ -737,6 +940,7 @@ export class DatabaseStorage implements IStorage {
       id,
       name: folder.name,
       parentId: folder.parentId || null,
+      createdBy: folder.createdBy || null,
     }).returning();
     return newFolder;
   }
@@ -808,63 +1012,183 @@ export class DatabaseStorage implements IStorage {
     const [newTopic] = await db.insert(topics).values({
       id,
       name: topic.name,
+      code: topic.code ?? null,
       description: topic.description || null,
       feedback: topic.feedback || null,
+      feedbackJson: topic.feedbackJson ?? null,
       folderId: topic.folderId || null,
+      createdBy: topic.createdBy || null,
+      // PRD-15 block C: a new topic is owned by its creator and private by
+      // default (F-10). Legacy rows keep owner NULL / visibility shared.
+      ownerId: topic.ownerId ?? topic.createdBy ?? null,
+      visibility: topic.visibility ?? "private",
+      // PRD-15 FR-27: keep the normalized name in sync with `name`.
+      nameNormalized: normalizeTopicName(topic.name),
     }).returning();
     return newTopic;
   }
 
   async updateTopic(id: string, updates: Partial<InsertTopic>): Promise<Topic | undefined> {
-    const [updated] = await db.update(topics).set(updates).where(eq(topics.id, id)).returning();
+    // PRD-15 FR-27: a rename must refresh the normalized name too.
+    const patch =
+      typeof updates.name === "string"
+        ? { ...updates, nameNormalized: normalizeTopicName(updates.name) }
+        : updates;
+    const [updated] = await db.update(topics).set(patch).where(eq(topics.id, id)).returning();
     return updated || undefined;
   }
 
+  /**
+   * Keep `topicByName("…")` formula references consistent after a topic rename
+   * (PRD-2 §4.2). Scoped to LIVE result variables of tests that USE this topic —
+   * a formula may only reference its own test's topics, so the rename resolves
+   * unambiguously. Published snapshots are frozen and intentionally untouched.
+   */
+  async renameTopicInFormulas(topicId: string, oldName: string, newName: string): Promise<void> {
+    if (oldName === newName) return;
+    const sections = await db
+      .select({ testId: testSections.testId })
+      .from(testSections)
+      .where(eq(testSections.topicId, topicId));
+    const testIds = [...new Set(sections.map((s) => s.testId))];
+    if (testIds.length === 0) return;
+    const rvs = await db.select().from(resultVariables).where(inArray(resultVariables.testId, testIds));
+    for (const rv of rvs) {
+      const next = renameTopicByNameInFormula(rv.formula, oldName, newName);
+      if (next !== rv.formula) {
+        await db
+          .update(resultVariables)
+          .set({ formula: next, updatedAt: new Date() })
+          .where(eq(resultVariables.id, rv.id));
+      }
+    }
+  }
+
+  // ─── Topic ownership and access grants (PRD-15 block C) ────────────────────
+
+  async setTopicOwner(topicId: string, ownerId: string | null): Promise<void> {
+    await db.update(topics).set({ ownerId }).where(eq(topics.id, topicId));
+  }
+
+  async setTopicVisibility(topicId: string, visibility: "private" | "shared"): Promise<void> {
+    await db.update(topics).set({ visibility }).where(eq(topics.id, topicId));
+  }
+
+  async getTopicIdsByOwner(ownerId: string): Promise<string[]> {
+    const rows = await db.select({ id: topics.id }).from(topics).where(eq(topics.ownerId, ownerId));
+    return rows.map((r) => r.id);
+  }
+
+  async getSharedTopicIds(): Promise<string[]> {
+    const rows = await db.select({ id: topics.id }).from(topics).where(eq(topics.visibility, "shared"));
+    return rows.map((r) => r.id);
+  }
+
+  async getTopicGrants(topicId: string): Promise<TopicAccessGrant[]> {
+    return db.select().from(topicAccessGrants).where(eq(topicAccessGrants.topicId, topicId));
+  }
+
+  /** Active grants addressed to a user (TD-01: user-only, no group resolution). */
+  async getActiveTopicGrantsForGrantees(userId: string): Promise<TopicAccessGrant[]> {
+    return db
+      .select()
+      .from(topicAccessGrants)
+      .where(and(
+        eq(topicAccessGrants.state, "active"),
+        eq(topicAccessGrants.granteeId, userId),
+      ));
+  }
+
+  async getTopicGrantForGrantee(
+    topicId: string,
+    granteeId: string,
+  ): Promise<TopicAccessGrant | undefined> {
+    const [row] = await db
+      .select()
+      .from(topicAccessGrants)
+      .where(and(
+        eq(topicAccessGrants.topicId, topicId),
+        eq(topicAccessGrants.granteeId, granteeId),
+      ));
+    return row || undefined;
+  }
+
+  async upsertTopicGrant(grant: {
+    topicId: string;
+    granteeId: string;
+    accessLevel: "use" | "manage";
+    grantedBy: string | null;
+  }): Promise<TopicAccessGrant> {
+    const [row] = await db
+      .insert(topicAccessGrants)
+      .values({
+        id: randomUUID(),
+        topicId: grant.topicId,
+        granteeId: grant.granteeId,
+        accessLevel: grant.accessLevel,
+        state: "active",
+        grantedBy: grant.grantedBy,
+      })
+      .onConflictDoUpdate({
+        target: [topicAccessGrants.topicId, topicAccessGrants.granteeId],
+        set: { accessLevel: grant.accessLevel, state: "active", grantedBy: grant.grantedBy },
+      })
+      .returning();
+    return row;
+  }
+
+  async setTopicGrantState(id: string, state: "active" | "revoked_in_use"): Promise<void> {
+    await db.update(topicAccessGrants).set({ state }).where(eq(topicAccessGrants.id, id));
+  }
+
+  async removeTopicGrant(id: string): Promise<void> {
+    await db.delete(topicAccessGrants).where(eq(topicAccessGrants.id, id));
+  }
+
   async deleteTopic(id: string): Promise<boolean> {
-    // Cascade delete: first delete questions and courses for this topic
+    // Full cascade (PRD-15 FR-07, audit F-8/F-4): questions, dangling test
+    // sections and topic-scoped content pages all go with the topic.
+    // Recommended courses/events live in topics.feedback_json (deleted with the
+    // row). Deletion while published tests depend on it is gated upstream by the
+    // draw-feasibility check (FR-05), so reaching this point means the caller
+    // accepted the consequences.
     await db.delete(questions).where(eq(questions.topicId, id));
-    await db.delete(topicCourses).where(eq(topicCourses.topicId, id));
+    await db.delete(testSections).where(eq(testSections.topicId, id));
+    await db.delete(contentPages).where(eq(contentPages.topicId, id));
     const result = await db.delete(topics).where(eq(topics.id, id)).returning();
     return result.length > 0;
   }
 
   async deleteTopicsBulk(ids: string[]): Promise<number> {
     if (ids.length === 0) return 0;
-    // Cascade delete: first delete questions and courses for these topics
+    // Same full cascade as deleteTopic (PRD-15 FR-07).
     await db.delete(questions).where(inArray(questions.topicId, ids));
-    await db.delete(topicCourses).where(inArray(topicCourses.topicId, ids));
+    await db.delete(testSections).where(inArray(testSections.topicId, ids));
+    await db.delete(contentPages).where(inArray(contentPages.topicId, ids));
     const result = await db.delete(topics).where(inArray(topics.id, ids)).returning();
     return result.length;
   }
 
+  async moveTopicsToFolder(ids: string[], folderId: string | null): Promise<number> {
+    if (ids.length === 0) return 0;
+    const result = await db.update(topics).set({ folderId }).where(inArray(topics.id, ids)).returning();
+    return result.length;
+  }
+
+  // TD-02 r.3: recommended courses/events are now sourced from the topic's rich
+  // feedback (topics.feedback_json: links → courses, events → events), NOT the
+  // legacy topic_courses/topic_events tables (write paths removed in D1/D2). The
+  // accessor names/shapes are kept so delivery callers (attempts, SCORM export,
+  // snapshot capture, GET /api/topics) stay unchanged. The tables are write-dead
+  // and read-dead and will be dropped by a later migration.
   async getTopicCourses(topicId: string): Promise<TopicCourse[]> {
-    return db.select().from(topicCourses).where(eq(topicCourses.topicId, topicId));
-  }
-
-  async createTopicCourse(course: InsertTopicCourse): Promise<TopicCourse> {
-    const id = randomUUID();
-    const [newCourse] = await db.insert(topicCourses).values({ id, ...course }).returning();
-    return newCourse;
-  }
-
-  async deleteTopicCourse(id: string): Promise<boolean> {
-    const result = await db.delete(topicCourses).where(eq(topicCourses.id, id)).returning();
-    return result.length > 0;
+    const topic = await this.getTopic(topicId);
+    return topicCoursesFromFeedback(topic);
   }
 
   async getTopicEvents(topicId: string): Promise<TopicEvent[]> {
-    return db.select().from(topicEvents).where(eq(topicEvents.topicId, topicId));
-  }
-
-  async createTopicEvent(event: InsertTopicEvent): Promise<TopicEvent> {
-    const id = randomUUID();
-    const [newEvent] = await db.insert(topicEvents).values({ id, ...event }).returning();
-    return newEvent;
-  }
-
-  async deleteTopicEvent(id: string): Promise<boolean> {
-    const result = await db.delete(topicEvents).where(eq(topicEvents.id, id)).returning();
-    return result.length > 0;
+    const topic = await this.getTopic(topicId);
+    return topicEventsFromFeedback(topic);
   }
 
   async getQuestions(): Promise<Question[]> {
@@ -902,7 +1226,6 @@ export class DatabaseStorage implements IStorage {
       prompt: question.prompt,
       dataJson: question.dataJson,
       correctJson: question.correctJson,
-      points: question.points ?? 1,
       difficulty: question.difficulty ?? 50,
       mediaUrl: question.mediaUrl || null,
       mediaType: question.mediaType || null,
@@ -913,7 +1236,7 @@ export class DatabaseStorage implements IStorage {
       feedbackIncorrect: question.feedbackIncorrect || null,
       contentHash: question.contentHash || null,
       tags: question.tags ?? [],
-      scoringJson: question.scoringJson ?? null,
+      createdBy: question.createdBy || null,
     }).returning();
     return newQuestion;
   }
@@ -930,7 +1253,6 @@ export class DatabaseStorage implements IStorage {
       prompt: original.prompt + " (копия)",
       dataJson: original.dataJson,
       correctJson: original.correctJson,
-      points: original.points,
       difficulty: original.difficulty,
       feedback: original.feedback,
       feedbackMode: original.feedbackMode,
@@ -940,7 +1262,6 @@ export class DatabaseStorage implements IStorage {
       mediaType: original.mediaType,
       shuffleAnswers: original.shuffleAnswers,
       tags: original.tags,
-      scoringJson: original.scoringJson,
     }).returning();
     return newQuestion;
   }
@@ -955,17 +1276,10 @@ export class DatabaseStorage implements IStorage {
       name: originalTopic.name + " (копия)",
       description: originalTopic.description,
       feedback: originalTopic.feedback,
+      // TD-02 r.3: rich feedback (incl. recommended courses/events) travels with
+      // the copy; the legacy topic_courses copy is gone.
+      feedbackJson: originalTopic.feedbackJson,
     }).returning();
-
-    const originalCourses = await this.getTopicCourses(id);
-    for (const course of originalCourses) {
-      await db.insert(topicCourses).values({
-        id: randomUUID(),
-        topicId: newTopicId,
-        title: course.title,
-        url: course.url,
-      });
-    }
 
     const originalQuestions = await this.getQuestionsByTopic(id);
     const newQuestions: Question[] = [];
@@ -978,7 +1292,6 @@ export class DatabaseStorage implements IStorage {
         prompt: q.prompt,
         dataJson: q.dataJson,
         correctJson: q.correctJson,
-        points: q.points,
         difficulty: q.difficulty,
         mediaUrl: q.mediaUrl,
         mediaType: q.mediaType,
@@ -988,7 +1301,6 @@ export class DatabaseStorage implements IStorage {
         feedbackCorrect: q.feedbackCorrect,
         feedbackIncorrect: q.feedbackIncorrect,
         tags: q.tags,
-        scoringJson: q.scoringJson,
       }).returning();
       newQuestions.push(newQ);
     }
@@ -1087,6 +1399,8 @@ export class DatabaseStorage implements IStorage {
           timeLimitMinutes: section.timeLimitMinutes ?? null,
           feedbackJson: section.feedbackJson ?? null,
           drawBlueprintJson: section.drawBlueprintJson ?? null,
+          formSetJson: section.formSetJson ?? null,
+          defaultPoints: section.defaultPoints ?? null,
         });
       }
 
@@ -1143,6 +1457,7 @@ export class DatabaseStorage implements IStorage {
             timeLimitMinutes: section.timeLimitMinutes ?? null,
             feedbackJson: section.feedbackJson ?? null,
             drawBlueprintJson: section.drawBlueprintJson ?? null,
+            defaultPoints: section.defaultPoints ?? null,
           });
         }
       }
@@ -1173,6 +1488,27 @@ export class DatabaseStorage implements IStorage {
       .orderBy(testSections.sortOrder);
   }
 
+  async getTestSectionsByTopic(topicId: string): Promise<TestSection[]> {
+    return db.select().from(testSections).where(eq(testSections.topicId, topicId));
+  }
+
+  async getMeasurementsForQuestions(
+    questionIds: string[],
+  ): Promise<Array<{ testId: string; questionId: string }>> {
+    if (questionIds.length === 0) return [];
+    return db
+      .select({ testId: questionMeasurements.testId, questionId: questionMeasurements.questionId })
+      .from(questionMeasurements)
+      .where(inArray(questionMeasurements.questionId, questionIds));
+  }
+
+  async getTopicPageRefs(topicId: string): Promise<Array<{ testId: string }>> {
+    return db
+      .select({ testId: contentPages.testId })
+      .from(contentPages)
+      .where(eq(contentPages.topicId, topicId));
+  }
+
   async createAttempt(attempt: InsertAttempt): Promise<Attempt> {
     const id = randomUUID();
     const [newAttempt] = await db.insert(attempts).values({
@@ -1180,6 +1516,7 @@ export class DatabaseStorage implements IStorage {
       userId: attempt.userId,
       testId: attempt.testId,
       testVersion: attempt.testVersion || 1,
+      snapshotId: attempt.snapshotId ?? null,
       variantJson: attempt.variantJson,
       answersJson: attempt.answersJson || null,
       resultJson: attempt.resultJson || null,
@@ -1213,6 +1550,16 @@ export class DatabaseStorage implements IStorage {
     await db.delete(attempts).where(
       and(eq(attempts.userId, userId), eq(attempts.testId, testId))
     );
+  }
+
+  async annulInProgressAttempts(testId: string): Promise<number> {
+    // In-progress = finishedAt IS NULL. These were never completed, so they do
+    // not count toward the retake limit (PRD-6 counts completed only) — deleting
+    // them annuls without consuming an attempt (PRD-15 FR-14).
+    const result = await db
+      .delete(attempts)
+      .where(and(eq(attempts.testId, testId), isNull(attempts.finishedAt)));
+    return result.rowCount ?? 0;
   }
 
   async getAllAttempts(): Promise<Attempt[]> {
@@ -1493,18 +1840,36 @@ export class DatabaseStorage implements IStorage {
     testId: string,
     formula: string,
     type: ValueType,
-    opts: { sortOrder?: number; excludeId?: string } = {},
+    opts: { sortOrder?: number; excludeId?: string; extraScaleKeys?: string[]; extraVarNames?: string[] } = {},
   ): Promise<ValidationResult> {
     const sections = await db.select().from(testSections).where(eq(testSections.testId, testId));
-    const topicIds = new Set(sections.map((s) => s.topicId));
+    const sectionTopicIds = sections.map((s) => s.topicId);
+    // Valid `topicById` args = topic UUIDs plus their custom codes; `topicByName`
+    // args = topic names.
+    const topicRows = sectionTopicIds.length
+      ? await db
+          .select({ id: topics.id, name: topics.name, code: topics.code })
+          .from(topics)
+          .where(inArray(topics.id, sectionTopicIds))
+      : [];
+    const topicIds = new Set<string>(sectionTopicIds);
+    const topicNames = new Set<string>();
+    for (const t of topicRows) {
+      if (t.code) topicIds.add(t.code);
+      if (t.name) topicNames.add(t.name);
+    }
     const existing = await this.getResultVariables(testId);
     const prior = existing.filter(
       (rv) => rv.id !== opts.excludeId && (opts.sortOrder === undefined || rv.sortOrder < opts.sortOrder),
     );
-    const priorVarNames = new Set(prior.map((rv) => rv.name));
+    // `extraScaleKeys`/`extraVarNames`: scales/variables defined in the SAME
+    // workbook but not yet persisted (PRD-14 FR-15 dry-run, and a brand-new
+    // target test). Without them, a formula referencing a fresh scale/variable
+    // would falsely fail validation while the plan is computed without writes.
+    const priorVarNames = new Set([...prior.map((rv) => rv.name), ...(opts.extraVarNames ?? [])]);
     const scaleRows = await db.select().from(scales).where(eq(scales.testId, testId));
-    const scaleKeys = new Set(scaleRows.map((s) => s.key));
-    return validate(formula, type, { topicIds, priorVarNames, scaleKeys });
+    const scaleKeys = new Set([...scaleRows.map((s) => s.key), ...(opts.extraScaleKeys ?? [])]);
+    return validate(formula, type, { topicIds, topicNames, priorVarNames, scaleKeys });
   }
 
   // ─── PRD-5: scales ──────────────────────────────────────────────────────────
@@ -1584,6 +1949,68 @@ export class DatabaseStorage implements IStorage {
         .returning();
     });
   }
+
+  // ─── PRD-15 block D: per-(test, question) scoring overrides (FR-30) ──────────
+
+  async getTestQuestionScoring(testId: string): Promise<TestQuestionScoring[]> {
+    return db.select().from(testQuestionScoring)
+      .where(eq(testQuestionScoring.testId, testId));
+  }
+
+  /**
+   * Insert or update the single override row of one question in one test.
+   * All value columns are replaced as a unit — a null/undefined value clears
+   * that link of the chain.
+   */
+  async upsertTestQuestionScoring(
+    testId: string,
+    questionId: string,
+    values: Omit<InsertTestQuestionScoring, "testId" | "questionId">,
+  ): Promise<TestQuestionScoring> {
+    const patch = {
+      points: values.points ?? null,
+      scoringJson: values.scoringJson ?? null,
+      difficulty: values.difficulty ?? null,
+      pinnedContentHash: values.pinnedContentHash ?? null,
+    };
+    const [row] = await db.insert(testQuestionScoring)
+      .values({ testId, questionId, ...patch })
+      .onConflictDoUpdate({
+        target: [testQuestionScoring.testId, testQuestionScoring.questionId],
+        set: { ...patch, updatedAt: new Date() },
+      })
+      .returning();
+    return row;
+  }
+
+  async deleteTestQuestionScoring(testId: string, questionId: string): Promise<boolean> {
+    const result = await db.delete(testQuestionScoring)
+      .where(and(
+        eq(testQuestionScoring.testId, testId),
+        eq(testQuestionScoring.questionId, questionId),
+      ))
+      .returning();
+    return result.length > 0;
+  }
+
+  /**
+   * Replace ALL scoring overrides of a test with `rows` (delete-then-insert in
+   * a transaction) — the workbook «Оценка» sheet is authoritative for the
+   * test's override set (PRD-14/PRD-15 FR-36 round-trip). An empty `rows`
+   * clears every override.
+   */
+  async replaceTestQuestionScoring(
+    testId: string,
+    rows: Omit<InsertTestQuestionScoring, "testId">[],
+  ): Promise<TestQuestionScoring[]> {
+    return db.transaction(async (tx) => {
+      await tx.delete(testQuestionScoring).where(eq(testQuestionScoring.testId, testId));
+      if (rows.length === 0) return [];
+      return tx.insert(testQuestionScoring)
+        .values(rows.map((r) => ({ ...r, testId })))
+        .returning();
+    });
+  }
 }
 
 export const storage = new DatabaseStorage();
@@ -1636,32 +2063,44 @@ export async function seedDatabase() {
   const iptvTopicId = randomUUID();
   const wifiTopicId = randomUUID();
 
+  // TD-02 r.3: recommended courses live in the topic's rich feedback, not the
+  // legacy topic_courses table (which delivery no longer reads).
   await db.insert(topics).values([
-    { id: iptvTopicId, name: "IPTV", description: "Internet Protocol Television fundamentals and configuration" },
-    { id: wifiTopicId, name: "WiFi", description: "Wireless networking standards and troubleshooting" },
+    {
+      id: iptvTopicId, name: "IPTV",
+      description: "Internet Protocol Television fundamentals and configuration",
+      feedbackJson: {
+        format: "plain", text: "", assets: [], events: [],
+        links: [{ title: "IPTV Fundamentals Course", url: "https://example.com/iptv-course" }],
+      },
+    },
+    {
+      id: wifiTopicId, name: "WiFi",
+      description: "Wireless networking standards and troubleshooting",
+      feedbackJson: {
+        format: "plain", text: "", assets: [], events: [],
+        links: [{ title: "WiFi Troubleshooting Guide", url: "https://example.com/wifi-course" }],
+      },
+    },
   ]);
 
-  await db.insert(topicCourses).values([
-    { id: randomUUID(), topicId: iptvTopicId, title: "IPTV Fundamentals Course", url: "https://example.com/iptv-course" },
-    { id: randomUUID(), topicId: wifiTopicId, title: "WiFi Troubleshooting Guide", url: "https://example.com/wifi-course" },
-  ]);
-
+  // T-40: scoring is a property of the test — seed questions carry content only.
   const iptvQuestions = [
-    { topicId: iptvTopicId, type: "single" as const, prompt: "What does IPTV stand for?", dataJson: { options: ["Internet Protocol Television", "Internal Protocol TV", "Integrated Platform TV", "Internet Provider Television"] }, correctJson: { correctIndex: 0 }, points: 1 },
-    { topicId: iptvTopicId, type: "single" as const, prompt: "Which protocol is commonly used for IPTV streaming?", dataJson: { options: ["HTTP", "RTSP", "FTP", "SMTP"] }, correctJson: { correctIndex: 1 }, points: 1 },
-    { topicId: iptvTopicId, type: "multiple" as const, prompt: "Select all valid IPTV delivery methods:", dataJson: { options: ["Unicast", "Multicast", "Broadcast", "Anycast"] }, correctJson: { correctIndices: [0, 1] }, points: 2 },
-    { topicId: iptvTopicId, type: "matching" as const, prompt: "Match the IPTV term with its definition:", dataJson: { left: ["STB", "EPG", "VOD"], right: ["Set-Top Box", "Electronic Program Guide", "Video on Demand"] }, correctJson: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }, { left: 2, right: 2 }] }, points: 3 },
-    { topicId: iptvTopicId, type: "ranking" as const, prompt: "Rank these IPTV setup steps in correct order:", dataJson: { items: ["Connect STB to network", "Configure network settings", "Authenticate with provider", "Start watching channels"] }, correctJson: { correctOrder: [0, 1, 2, 3] }, points: 2 },
-    { topicId: iptvTopicId, type: "single" as const, prompt: "What is the typical bandwidth required for HD IPTV?", dataJson: { options: ["1 Mbps", "5 Mbps", "8-10 Mbps", "50 Mbps"] }, correctJson: { correctIndex: 2 }, points: 1 },
+    { topicId: iptvTopicId, type: "single" as const, prompt: "What does IPTV stand for?", dataJson: { options: ["Internet Protocol Television", "Internal Protocol TV", "Integrated Platform TV", "Internet Provider Television"] }, correctJson: { correctIndex: 0 } },
+    { topicId: iptvTopicId, type: "single" as const, prompt: "Which protocol is commonly used for IPTV streaming?", dataJson: { options: ["HTTP", "RTSP", "FTP", "SMTP"] }, correctJson: { correctIndex: 1 } },
+    { topicId: iptvTopicId, type: "multiple" as const, prompt: "Select all valid IPTV delivery methods:", dataJson: { options: ["Unicast", "Multicast", "Broadcast", "Anycast"] }, correctJson: { correctIndices: [0, 1] } },
+    { topicId: iptvTopicId, type: "matching" as const, prompt: "Match the IPTV term with its definition:", dataJson: { left: ["STB", "EPG", "VOD"], right: ["Set-Top Box", "Electronic Program Guide", "Video on Demand"] }, correctJson: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }, { left: 2, right: 2 }] } },
+    { topicId: iptvTopicId, type: "ranking" as const, prompt: "Rank these IPTV setup steps in correct order:", dataJson: { items: ["Connect STB to network", "Configure network settings", "Authenticate with provider", "Start watching channels"] }, correctJson: { correctOrder: [0, 1, 2, 3] } },
+    { topicId: iptvTopicId, type: "single" as const, prompt: "What is the typical bandwidth required for HD IPTV?", dataJson: { options: ["1 Mbps", "5 Mbps", "8-10 Mbps", "50 Mbps"] }, correctJson: { correctIndex: 2 } },
   ];
 
   const wifiQuestions = [
-    { topicId: wifiTopicId, type: "single" as const, prompt: "What does WiFi stand for?", dataJson: { options: ["Wireless Fidelity", "Wired Fiber", "Wireless Fiber", "Wide Fidelity"] }, correctJson: { correctIndex: 0 }, points: 1 },
-    { topicId: wifiTopicId, type: "single" as const, prompt: "Which frequency band provides faster speeds but shorter range?", dataJson: { options: ["2.4 GHz", "5 GHz", "900 MHz", "60 GHz"] }, correctJson: { correctIndex: 1 }, points: 1 },
-    { topicId: wifiTopicId, type: "multiple" as const, prompt: "Select all valid WiFi security protocols:", dataJson: { options: ["WPA2", "WPA3", "WEP", "HTTP"] }, correctJson: { correctIndices: [0, 1, 2] }, points: 2 },
-    { topicId: wifiTopicId, type: "matching" as const, prompt: "Match the WiFi standard with its maximum theoretical speed:", dataJson: { left: ["802.11n", "802.11ac", "802.11ax"], right: ["600 Mbps", "6.9 Gbps", "9.6 Gbps"] }, correctJson: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }, { left: 2, right: 2 }] }, points: 3 },
-    { topicId: wifiTopicId, type: "ranking" as const, prompt: "Rank WiFi security protocols from least to most secure:", dataJson: { items: ["WEP", "WPA", "WPA2", "WPA3"] }, correctJson: { correctOrder: [0, 1, 2, 3] }, points: 2 },
-    { topicId: wifiTopicId, type: "single" as const, prompt: "What is the main advantage of mesh WiFi systems?", dataJson: { options: ["Lower cost", "Better coverage", "Higher speeds", "Less power consumption"] }, correctJson: { correctIndex: 1 }, points: 1 },
+    { topicId: wifiTopicId, type: "single" as const, prompt: "What does WiFi stand for?", dataJson: { options: ["Wireless Fidelity", "Wired Fiber", "Wireless Fiber", "Wide Fidelity"] }, correctJson: { correctIndex: 0 } },
+    { topicId: wifiTopicId, type: "single" as const, prompt: "Which frequency band provides faster speeds but shorter range?", dataJson: { options: ["2.4 GHz", "5 GHz", "900 MHz", "60 GHz"] }, correctJson: { correctIndex: 1 } },
+    { topicId: wifiTopicId, type: "multiple" as const, prompt: "Select all valid WiFi security protocols:", dataJson: { options: ["WPA2", "WPA3", "WEP", "HTTP"] }, correctJson: { correctIndices: [0, 1, 2] } },
+    { topicId: wifiTopicId, type: "matching" as const, prompt: "Match the WiFi standard with its maximum theoretical speed:", dataJson: { left: ["802.11n", "802.11ac", "802.11ax"], right: ["600 Mbps", "6.9 Gbps", "9.6 Gbps"] }, correctJson: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }, { left: 2, right: 2 }] } },
+    { topicId: wifiTopicId, type: "ranking" as const, prompt: "Rank WiFi security protocols from least to most secure:", dataJson: { items: ["WEP", "WPA", "WPA2", "WPA3"] }, correctJson: { correctOrder: [0, 1, 2, 3] } },
+    { topicId: wifiTopicId, type: "single" as const, prompt: "What is the main advantage of mesh WiFi systems?", dataJson: { options: ["Lower cost", "Better coverage", "Higher speeds", "Less power consumption"] }, correctJson: { correctIndex: 1 } },
   ];
 
   for (const q of [...iptvQuestions, ...wifiQuestions]) {

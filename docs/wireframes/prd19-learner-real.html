@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-19 — ученические экраны вопрос/обзор/router на РЕАЛЬНОМ дефолтном шаблоне
+    (миграция с DS-приближения prd19-navigation-flow.html). Реальные theme.css + base.css; обе темы.
+      - вопрос: 1:1 с question.html (.layout-question-wrap / .q-header / .question-card / .option);
+        линейный .progress-bar заменён ПИЛЛАМИ (PRD-19 FR-10) — пиллы портированы на токены шаблона
+        (.tb-pills), т.к. в шаблоне их пока нет (нужно добавить компонент);
+      - обзор: НОВЫЙ системный экран PRD-19 (FR-08) в конвенциях шаблона (card + пиллы + явный список
+        неотвеченных + «Завершить»);
+      - router: 1:1 с routerFlow.js (.router-topic-cards / .router-topic-card--{status} / .router-finish).
+    НЕ согласован — черновик к ревью.
+    -->
+    <title>PRD-19 — Ученические экраны (реальный шаблон)</title>
+    <link rel="stylesheet" href="/server/scorm/templates/default/styles/theme.css" />
+    <link rel="stylesheet" href="/server/scorm/templates/default/styles/base.css" />
+    <style>
+      body { padding: 0; }
+
+      /* Тема как ВАРИАНТ шаблона (light + dark). Светлые токены — добавить в theme.css. */
+      body.theme-light {
+        --background: 0 0% 98%; --foreground: 225 15% 15%; --border: 220 13% 85%;
+        --card: 0 0% 100%; --card-foreground: 225 15% 15%; --card-border: 220 13% 88%;
+        --primary: 217 91% 42%; --primary-foreground: 0 0% 100%;
+        --muted: 220 14% 96%; --muted-foreground: 220 9% 40%; --accent: 220 14% 92%;
+        --destructive: 0 72% 51%; --success: 142 71% 35%;
+      }
+
+      .wf-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 9999; display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: hsl(var(--card)); border-bottom: 1px solid hsl(var(--card-border)); flex-wrap: wrap; }
+      .wf-nav-title { font-size: 13px; font-weight: 600; color: hsl(var(--muted-foreground)); margin-right: 8px; white-space: nowrap; }
+      .wf-nav button { padding: 4px 12px; border: 1px solid hsl(var(--border)); border-radius: 6px; background: transparent; color: hsl(var(--foreground)); font-size: 13px; cursor: pointer; font-family: inherit; }
+      .wf-nav button:hover { background: hsl(var(--accent)); }
+      .wf-nav button.active { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border-color: hsl(var(--primary)); }
+      .wf-nav-sep { width: 1px; height: 20px; background: hsl(var(--border)); margin: 0 8px; }
+      .wf-nav-link { font-size: 13px; color: hsl(var(--primary)); white-space: nowrap; text-decoration: none; }
+
+      .wf-stage { padding-top: 48px; }
+      .wf-state { display: none; }
+      .wf-state.active { display: block; }
+      .wf-state .tb-player { min-height: calc(100vh - 48px); }
+      .layout-question-wrap { max-width: 820px; margin: 0 auto; padding: 28px 18px; }
+
+      /* ПИЛЛЫ, портированные на токены шаблона (заменяют .progress-bar; PRD-19 FR-10).
+         Нужно добавить как компонент в шаблон (сейчас DS-only ou-quiz). */
+      .tb-pills { display: flex; flex-direction: column; gap: 8px; margin: 0 0 20px; }
+      .tb-pills__head { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: hsl(var(--muted-foreground)); }
+      .tb-pills__head b { color: hsl(var(--foreground)); font-weight: 600; }
+      .tb-pills__dots { display: flex; flex-wrap: wrap; gap: 6px; }
+      .tb-pill { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); border: 0; cursor: pointer; }
+      .tb-pill.is-answered { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+      .tb-pill.is-current { background: hsl(var(--card)); color: hsl(var(--primary)); box-shadow: inset 0 0 0 2px hsl(var(--primary)), 0 0 0 3px hsl(var(--primary) / .2); }
+      .tb-pill.is-skipped { background: transparent; color: hsl(var(--muted-foreground)); box-shadow: inset 0 0 0 1px hsl(var(--border)); }
+      .tb-pill:disabled { opacity: .4; cursor: not-allowed; }
+      .tb-pills__legend { display: flex; flex-wrap: wrap; gap: 10px 16px; font-size: 12px; color: hsl(var(--muted-foreground)); }
+      .tb-pills__legend-item { display: inline-flex; align-items: center; gap: 6px; }
+      .tb-pills__legend-dot { width: 10px; height: 10px; border-radius: 50%; background: hsl(var(--muted)); box-shadow: inset 0 0 0 1px hsl(var(--border)); }
+      .tb-pills__legend-dot.is-answered { background: hsl(var(--primary)); box-shadow: none; }
+      .tb-pills__legend-dot.is-current { background: hsl(var(--card)); box-shadow: inset 0 0 0 2px hsl(var(--primary)); }
+      .tb-pills__legend-dot.is-skipped { background: transparent; box-shadow: inset 0 0 0 1px hsl(var(--border)); }
+      .tb-pills__legend-dot.is-locked { opacity: .4; }
+
+      .question-meta { font-size: 13px; color: hsl(var(--muted-foreground)); margin-bottom: 10px; }
+      .question-text { font-size: 19px; font-weight: 700; color: hsl(var(--foreground)); margin-bottom: 18px; }
+
+      /* Ряд действий вопроса (Пропустить/Вернуться слева, Отправить справа). */
+      .q-actions { display: flex; align-items: center; gap: 12px; margin-top: 22px; }
+      .q-actions__spacer { flex: 1; }
+      .btn--sm { padding: 10px 18px; font-size: 14px; }
+
+      /* Обзор: новый системный экран PRD-19, в конвенциях шаблона. */
+      .obzor-title { font-size: 18px; font-weight: 800; color: hsl(var(--foreground)); margin: 0 0 4px; }
+      .obzor-sub { font-size: 14px; color: hsl(var(--muted-foreground)); margin: 0 0 18px; }
+      .tb-unanswered { display: flex; flex-direction: column; gap: 8px; text-align: left; margin-top: 16px; }
+      .tb-unanswered__head { font-size: 14px; font-weight: 600; color: hsl(var(--foreground)); }
+      .tb-unanswered__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 12px 16px; border: 1px solid hsl(var(--border)); border-radius: 10px; background: hsl(var(--card)); cursor: pointer; color: hsl(var(--foreground)); font-size: 14px; font-family: inherit; text-align: left; }
+      .tb-unanswered__row:hover { border-color: hsl(var(--primary)); background: hsl(var(--accent)); }
+      .tb-unanswered__go { color: hsl(var(--primary)); font-weight: 600; white-space: nowrap; }
+
+      .wf-doc { max-width: 900px; margin: 0 auto; padding: 24px 18px 48px; }
+      .wf-doc h3 { font-size: 14px; text-transform: uppercase; letter-spacing: .05em; color: hsl(var(--muted-foreground)); margin: 0 0 12px; }
+      .wf-doc table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      .wf-doc th, .wf-doc td { text-align: left; padding: 8px 10px; border: 1px solid hsl(var(--border)); vertical-align: top; color: hsl(var(--foreground)); }
+      .wf-doc th { background: hsl(var(--muted)); font-weight: 600; }
+      .wf-doc code { background: hsl(var(--muted)); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+      .r-sprite { position: absolute; width: 0; height: 0; }
+    </style>
+  </head>
+  <body>
+    <svg class="r-sprite" aria-hidden="true">
+      <symbol id="r-skip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></symbol>
+      <symbol id="r-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></symbol>
+      <symbol id="r-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+      <symbol id="r-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Ученические экраны (реальный шаблон):</span>
+      <button type="button" class="active" onclick="showState(this, 'question')">вопрос</button>
+      <button type="button" onclick="showState(this, 'obzor')">обзор</button>
+      <button type="button" onclick="showState(this, 'router')">router-хаб</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Светлая</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd19-navigation-flow.html">&harr; DS-вариант</a>
+    </nav>
+
+    <div class="wf-stage">
+      <!-- ░░░ ВОПРОС — реальный question.html, прогресс-бар заменён пиллами ░░░ -->
+      <div class="wf-state active" data-state="question">
+        <div class="tb-player" data-template="default">
+          <main class="tb-content">
+            <div class="layout-question-wrap">
+              <div class="q-header"><h1 class="q-title">Основы сетей</h1></div>
+
+              <div class="tb-pills" role="group" aria-label="Карта вопросов раздела">
+                <div class="tb-pills__head"><span>Вопросы раздела «Сеть»</span><b>отвечено 1 · пропущено 1</b></div>
+                <div class="tb-pills__dots">
+                  <button type="button" class="tb-pill is-answered">1</button>
+                  <button type="button" class="tb-pill is-skipped">2</button>
+                  <button type="button" class="tb-pill is-current">3</button>
+                  <button type="button" class="tb-pill" disabled>4</button>
+                  <button type="button" class="tb-pill" disabled>5</button>
+                  <button type="button" class="tb-pill" disabled>6</button>
+                  <button type="button" class="tb-pill" disabled>7</button>
+                  <button type="button" class="tb-pill" disabled>8</button>
+                </div>
+                <div class="tb-pills__legend">
+                  <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-answered"></span>отвечен</span>
+                  <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-skipped"></span>пропущен</span>
+                  <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-current"></span>текущий</span>
+                  <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-locked"></span>не выдан</span>
+                </div>
+              </div>
+
+              <div class="card question-card">
+                <div class="question-meta">Вопрос 3 из 8</div>
+                <div class="question-text">Какой протокол чаще всего используется для потокового IPTV?</div>
+                <label class="option"><input type="radio" name="rq"><span>HTTP</span></label>
+                <label class="option selected"><input type="radio" name="rq" checked><span>RTP / RTSP</span></label>
+                <label class="option"><input type="radio" name="rq"><span>SMTP</span></label>
+                <label class="option"><input type="radio" name="rq"><span>FTP</span></label>
+              </div>
+
+              <div class="q-actions">
+                <button type="button" class="btn btn--outline btn--sm"><svg width="15" height="15"><use href="#r-skip"/></svg> Пропустить</button>
+                <button type="button" class="btn btn--outline btn--sm"><svg width="15" height="15"><use href="#r-left"/></svg> Вернуться</button>
+                <span class="q-actions__spacer"></span>
+                <button type="button" class="btn btn--sm">Отправить ответ <svg width="15" height="15"><use href="#r-right"/></svg></button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+
+      <!-- ░░░ ОБЗОР — новый системный экран PRD-19 (в конвенциях шаблона) ░░░ -->
+      <div class="wf-state" data-state="obzor">
+        <div class="tb-player" data-template="default">
+          <main class="tb-content">
+            <div class="layout-question-wrap">
+              <div class="q-header"><h1 class="q-title">Основы сетей</h1></div>
+              <div class="card">
+                <div class="obzor-title">Обзор раздела «Сеть»</div>
+                <div class="obzor-sub">Проверьте перед завершением. Неотвеченные засчитываются как неверные.</div>
+
+                <div class="tb-pills" role="group" aria-label="Карта вопросов раздела">
+                  <div class="tb-pills__head"><span>Вопросы раздела</span><b>отвечено 6 из 8</b></div>
+                  <div class="tb-pills__dots">
+                    <button type="button" class="tb-pill is-answered">1</button>
+                    <button type="button" class="tb-pill is-skipped">2</button>
+                    <button type="button" class="tb-pill is-answered">3</button>
+                    <button type="button" class="tb-pill is-answered">4</button>
+                    <button type="button" class="tb-pill is-answered">5</button>
+                    <button type="button" class="tb-pill is-skipped">6</button>
+                    <button type="button" class="tb-pill is-answered">7</button>
+                    <button type="button" class="tb-pill is-answered">8</button>
+                  </div>
+                  <div class="tb-pills__legend">
+                    <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-answered"></span>отвечен (6)</span>
+                    <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-skipped"></span>не отвечен (2)</span>
+                  </div>
+                </div>
+
+                <div class="tb-unanswered">
+                  <div class="tb-unanswered__head">Без ответа (2) — ответьте перед завершением:</div>
+                  <button type="button" class="tb-unanswered__row"><span><strong>Вопрос 2</strong> · Какой протокол использует DNS?</span><span class="tb-unanswered__go">Перейти →</span></button>
+                  <button type="button" class="tb-unanswered__row"><span><strong>Вопрос 6</strong> · Что выполняет механизм NAT?</span><span class="tb-unanswered__go">Перейти →</span></button>
+                </div>
+
+                <div class="q-actions">
+                  <span class="q-actions__spacer"></span>
+                  <button type="button" class="btn"><svg width="16" height="16"><use href="#r-check"/></svg> Завершить раздел</button>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+
+      <!-- ░░░ ROUTER-ХАБ — 1:1 с routerFlow.js (.router-topic-cards / .router-finish) ░░░ -->
+      <div class="wf-state" data-state="router">
+        <div class="tb-player" data-template="default">
+          <main class="tb-content">
+            <div class="layout-question-wrap">
+              <div class="q-header"><h1 class="q-title">Основы сетей</h1></div>
+              <div class="card">
+                <div class="obzor-title">Выберите тему</div>
+                <div class="obzor-sub">Свободный порядок · пройдено 2 из 4. «Завершить тест» — когда все темы пройдены.</div>
+
+                <div class="router-topic-cards" role="list" aria-label="Доступные темы">
+                  <button type="button" class="router-topic-card router-topic-card--completed" role="listitem" disabled>
+                    <span class="router-topic-card__name">Сеть</span>
+                    <span class="router-topic-card__status">Пройдено · 100%</span>
+                  </button>
+                  <button type="button" class="router-topic-card router-topic-card--completed" role="listitem" disabled>
+                    <span class="router-topic-card__name">Безопасность</span>
+                    <span class="router-topic-card__status">Пройдено · 90%</span>
+                  </button>
+                  <button type="button" class="router-topic-card router-topic-card--notStarted" role="listitem">
+                    <span class="router-topic-card__name">Протоколы</span>
+                    <span class="router-topic-card__status">Начать</span>
+                  </button>
+                  <button type="button" class="router-topic-card router-topic-card--notStarted" role="listitem">
+                    <span class="router-topic-card__name">Маршрутизация <span class="router-topic-card__optional">(необязательная)</span></span>
+                    <span class="router-topic-card__status">Начать</span>
+                  </button>
+                </div>
+
+                <div class="q-actions">
+                  <span class="q-actions__spacer"></span>
+                  <button type="button" class="btn router-finish" data-action="router-finish" disabled>Завершить тест</button>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+
+      <!-- ░░░ Пояснения ░░░ -->
+      <div class="wf-state" data-state="docs">
+        <div class="wf-doc">
+          <h3>Пояснения — Wireframe</h3>
+          <table>
+            <thead><tr><th>Экран</th><th>Источник</th><th>Примечание</th></tr></thead>
+            <tbody>
+              <tr><td>Вопрос</td><td>question.html (1:1)</td><td>Реальная разметка (<code>.layout-question-wrap</code> / <code>.q-header</code> / <code>.question-card</code> / <code>.option</code>). Линейный <code>.progress-bar</code> ЗАМЕНЁН пиллами (FR-10)</td></tr>
+              <tr><td>Пиллы</td><td>портированы на токены шаблона</td><td>В шаблоне пиллов НЕТ (DS-only <code>ou-quiz</code>). Здесь <code>.tb-pills</code> на токенах шаблона — нужно добавить компонент пиллов в шаблон. Статусы: отвечен/пропущен/текущий/не выдан; клик = переход к выданным (фронтир)</td></tr>
+              <tr><td>Кнопки вопроса</td><td>FR-04c</td><td>«Отправить ответ» (справа) + «Пропустить»/«Вернуться» (слева; <code>.btn</code>/<code>.btn--outline</code>)</td></tr>
+              <tr><td>Обзор</td><td>НОВЫЙ системный экран (FR-08)</td><td>В шаблоне такого слота НЕТ — спроектирован в конвенциях шаблона (<code>.card</code> + пиллы + явный список неотвеченных «Перейти» + «Завершить»). Нужно добавить layout-слот в шаблон</td></tr>
+              <tr><td>Router-хаб</td><td>routerFlow.js (1:1)</td><td>Реальные классы <code>.router-topic-cards</code> / <code>.router-topic-card--{status}</code> / <code>.router-finish</code>. Завершённые disabled, доступные — «Начать», «Завершить тест» disabled пока не все пройдены</td></tr>
+              <tr><td>Тема</td><td>вариант шаблона</td><td>light + dark, тогл; светлые токены — добавить в theme.css</td></tr>
+              <tr><td>Что добавить в шаблон</td><td>реализация</td><td>(1) компонент пиллов; (2) layout-слот «обзор» (section-finish/test-finish); (3) кнопки skip/return; (4) светлые токены</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.showState = function showState(btn, id) {
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el.getAttribute('data-state') === id);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var light = document.body.classList.toggle('theme-light');
+        btn.textContent = light ? 'Тёмная' : 'Светлая';
+        btn.classList.toggle('active', light);
+      };
+    </script>
+  </body>
+</html>

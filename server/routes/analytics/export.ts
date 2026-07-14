@@ -6,7 +6,9 @@ import { storage } from "../../storage";
 import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { checkAnswer } from "../../utils/check-answer";
+import { loadTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
 import {
+  analyticsScope,
   formatQuestionType,
   formatAllOptions,
   formatCorrectAnswerText,
@@ -62,6 +64,9 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
 
     const questions = await storage.getQuestionsByIds(Array.from(allQuestionIds));
     const questionMap = new Map(questions.map(q => [q.id, q]));
+
+    // PRD-15 block D (FR-32): recompute with the test-effective price/config.
+    const scoring = await loadTestScoringContext(testId, storage);
 
     // ЛИСТ 1: Сводка
     const summaryData: any[][] = [
@@ -168,7 +173,8 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
         const question = questionMap.get(qId);
         if (!question) continue;
 
-        const isCorrect = checkAnswer(question, userAnswer) === 1;
+        const effective = scoring.resolve(question);
+        const isCorrect = checkAnswer(question, userAnswer, effective.scoring) === 1;
         const dataJson = question.dataJson as any;
         const correctJson = question.correctJson as any;
 
@@ -191,12 +197,12 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
           question.prompt,
           topicMap.get(question.topicId) || "Unknown",
           formatQuestionType(question.type),
-          question.difficulty || 50,
+          scoring.difficultyOf(question) || 50,
           formatAllOptions(question.type, dataJson),
           formatCorrectAnswerText(question.type, dataJson, correctJson),
           formatUserAnswerText(question.type, dataJson, userAnswer),
           isCorrect ? "Верно" : "Неверно",
-          isCorrect ? (question.points || 1) : 0,
+          isCorrect ? effective.points : 0,
         ];
 
         if (test.mode === "adaptive") {
@@ -218,7 +224,7 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
 
         const stats = questionStatsMap.get(qId) || { total: 0, correct: 0 };
         stats.total++;
-        if (checkAnswer(question, answer) === 1) {
+        if (checkAnswer(question, answer, scoring.resolve(question).scoring) === 1) {
           stats.correct++;
         }
         questionStatsMap.set(qId, stats);
@@ -240,7 +246,7 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
         question.prompt,
         topicMap.get(question.topicId) || "Unknown",
         formatQuestionType(question.type),
-        question.difficulty || 50,
+        scoring.difficultyOf(question) || 50,
         formatAllOptions(question.type, dataJson),
         formatCorrectAnswerText(question.type, dataJson, correctJson),
         stats.total,
@@ -279,12 +285,20 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
 });
 
 // GET /api/export/filters - Данные для фильтров экспорта
-router.get("/export/filters", requirePermission("analytics.export"), async (_req: Request, res: Response) => {
+router.get("/export/filters", requirePermission("analytics.export"), async (req: Request, res: Response) => {
   try {
-    const tests = await storage.getTests();
-    const allAttempts = await storage.getAllAttempts();
-    const allScormAttempts = await storage.getAllScormAttempts();
-    const scormPackages = await storage.getScormPackages();
+    // PRD-15 FR-08 (audit F-5): the filter dictionary only exposes readable tests
+    // and the attempts/packages belonging to them.
+    const scope = await analyticsScope(req);
+    const tests = (await storage.getTests()).filter((t) => scope.has(t.id));
+    const allAttempts = (await storage.getAllAttempts()).filter((a) => scope.has(a.testId));
+    const scormPackages = (await storage.getScormPackages()).filter((p) =>
+      scope.has(p.testId ?? null),
+    );
+    const scopedPackageIds = new Set(scormPackages.map((p) => p.id));
+    const allScormAttempts = (await storage.getAllScormAttempts()).filter((a) =>
+      scopedPackageIds.has(a.packageId),
+    );
 
     const webTestIds = new Set(allAttempts.filter(a => a.finishedAt).map(a => a.testId));
     const lmsTestIds = new Set<string>();
@@ -392,8 +406,13 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
       return res.status(400).json({ error: "testIds is required" });
     }
 
+    // PRD-15 FR-08 (audit F-5): export only the tests within the actor's scope.
+    const scope = await analyticsScope(req);
     const tests = await storage.getTests();
-    const selectedTests = tests.filter(t => testIds.includes(t.id));
+    const selectedTests = tests.filter(t => testIds.includes(t.id) && scope.has(t.id));
+    if (selectedTests.length === 0) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     const testTitleMap = new Map(selectedTests.map(t => [t.id, t.title]));
     const testModeMap = new Map(selectedTests.map(t => [t.id, t.mode || "standard"]));
 
@@ -402,8 +421,9 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
 
     const allAttempts = await storage.getAllAttempts();
 
-    // Filter attempts
-    let attempts = allAttempts.filter(a => testIds.includes(a.testId));
+    // Filter attempts (selectedTests is already scope-filtered, FR-08).
+    const selectedTestIds = new Set(selectedTests.map((t) => t.id));
+    let attempts = allAttempts.filter(a => selectedTestIds.has(a.testId));
 
     // Filter by groups
     let effectiveUserIds = [...userIds];
@@ -506,6 +526,13 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
     const questions = await storage.getQuestionsByIds(Array.from(allQuestionIds));
     const questionMap = new Map(questions.map(q => [q.id, q]));
 
+    // PRD-15 block D (FR-32): the effective price/config/difficulty of the same
+    // question differ between tests — one resolution context per selected test.
+    const scoringByTest = new Map<string, TestScoringContext>();
+    for (const t of selectedTests) {
+      scoringByTest.set(t.id, await loadTestScoringContext(t.id, storage));
+    }
+
     const wb = new ExcelJS.Workbook();
 
     // Sheet: Summary
@@ -573,12 +600,14 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
         const answers = (attempt.answersJson || {}) as Record<string, unknown>;
         const username = userMap.get(attempt.userId) || "Unknown";
         const startStr = attempt.startedAt ? new Date(attempt.startedAt).toLocaleString("ru-RU") : "";
+        const scoring = scoringByTest.get(attempt.testId);
 
         for (const [qId, userAnswer] of Object.entries(answers)) {
           const q = questionMap.get(qId);
           if (!q) continue;
 
-          const isCorrect = checkAnswer(q, userAnswer) === 1;
+          const effective = scoring?.resolve(q);
+          const isCorrect = checkAnswer(q, userAnswer, effective?.scoring) === 1;
           const dataJson = q.dataJson as any;
           const correctJson = q.correctJson as any;
 
@@ -590,12 +619,14 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
             q.prompt,
             topicMap.get(q.topicId) || "Unknown",
             formatQuestionType(q.type),
-            q.difficulty || 50,
+            (scoring ? scoring.difficultyOf(q) : q.difficulty) || 50,
             formatAllOptions(q.type, dataJson),
             formatCorrectAnswerText(q.type, dataJson, correctJson),
             formatUserAnswerText(q.type, dataJson, userAnswer),
             isCorrect ? "Верно" : "Неверно",
-            isCorrect ? (q.points || 1) : 0,
+            // T-40: points come from the effective chain; the `?? 1` is the
+            // system default for the defensive case of a missing scoring context.
+            isCorrect ? (effective?.points ?? 1) : 0,
           ]);
         }
       }
@@ -609,6 +640,7 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
 
       for (const attempt of completed) {
         const answers = (attempt.answersJson || {}) as Record<string, unknown>;
+        const scoring = scoringByTest.get(attempt.testId);
         for (const [qId, ans] of Object.entries(answers)) {
           const q = questionMap.get(qId);
           if (!q) continue;
@@ -616,7 +648,7 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
           const key = `${attempt.testId}:${qId}`;
           const s = stat.get(key) || { total: 0, correct: 0, testId: attempt.testId };
           s.total++;
-          if (checkAnswer(q, ans) === 1) s.correct++;
+          if (checkAnswer(q, ans, scoring?.resolve(q).scoring) === 1) s.correct++;
           stat.set(key, s);
         }
       }
@@ -626,13 +658,14 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
         const qId = key.split(":")[1];
         const q = questionMap.get(qId);
         if (!q) continue;
+        const scoring = scoringByTest.get(s.testId);
 
         rows.push([
           testTitleMap.get(s.testId) || s.testId,
           q.prompt,
           topicMap.get(q.topicId) || "Unknown",
           formatQuestionType(q.type),
-          q.difficulty || 50,
+          (scoring ? scoring.difficultyOf(q) : q.difficulty) || 50,
           s.total,
           s.correct,
           s.total ? `${((s.correct / s.total) * 100).toFixed(1)}%` : "0%",
@@ -746,8 +779,15 @@ router.post("/export/excel-lms", requirePermission("analytics.export"), async (r
       return res.status(400).json({ error: "testIds is required" });
     }
 
+    // PRD-15 FR-08 (audit F-5): export only the tests within the actor's scope.
+    const scope = await analyticsScope(req);
+    const scopedTestIds = testIds.filter((id) => scope.has(id));
+    if (scopedTestIds.length === 0) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
     const tests = await storage.getTests();
-    const selectedTests = tests.filter(t => testIds.includes(t.id));
+    const selectedTests = tests.filter(t => scopedTestIds.includes(t.id));
     const testTitleMap = new Map(selectedTests.map(t => [t.id, t.title]));
 
     const topics = await storage.getTopics();
@@ -756,7 +796,7 @@ router.post("/export/excel-lms", requirePermission("analytics.export"), async (r
     const packages = await storage.getScormPackages();
     const packageMap = new Map(packages.map(p => [p.id, p]));
 
-    const relevantPackages = packages.filter(p => p.testId && testIds.includes(p.testId));
+    const relevantPackages = packages.filter(p => p.testId && scopedTestIds.includes(p.testId));
     const relevantPackageIds = new Set(relevantPackages.map(p => p.id));
 
     const allAttempts = await storage.getAllScormAttempts();

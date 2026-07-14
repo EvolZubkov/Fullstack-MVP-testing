@@ -16,17 +16,29 @@ import type { ScaleSpec, MeasurementSpec } from "@shared/scales/engine";
 import type { ResultVariableSpec } from "@shared/formula/result-variables";
 import { storage } from "../storage";
 import type { ScoringConfig } from "./result-compute";
+import type { Scale, QuestionMeasurement, ResultVariable } from "@shared/schema";
+
+/** The scoring rows reader — live storage by default, a snapshot at delivery. */
+export interface ScoringConfigSource {
+  getScales(testId: string): Promise<Scale[]>;
+  getQuestionMeasurements(testId: string): Promise<QuestionMeasurement[]>;
+  getResultVariables(testId: string): Promise<ResultVariable[]>;
+}
 
 /**
  * Loads and maps a test's scales / measurements / result variables to engine specs.
  * Orphan measurement rows (scale deleted, cascade missed) are skipped, as in the
- * exporter.
+ * exporter. PRD-15 block B: pass a snapshot source so a published attempt is
+ * graded from frozen scales/variables; defaults to live storage.
  */
-export async function loadScoringConfig(testId: string): Promise<ScoringConfig> {
+export async function loadScoringConfig(
+  testId: string,
+  source: ScoringConfigSource = storage,
+): Promise<ScoringConfig> {
   const [scaleRows, measurementRows, rvRows] = await Promise.all([
-    storage.getScales(testId),
-    storage.getQuestionMeasurements(testId),
-    storage.getResultVariables(testId),
+    source.getScales(testId),
+    source.getQuestionMeasurements(testId),
+    source.getResultVariables(testId),
   ]);
 
   const scales: ScaleSpec[] = scaleRows.map((s) => {

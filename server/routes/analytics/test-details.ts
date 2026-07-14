@@ -4,6 +4,7 @@ import { storage } from "../../storage";
 import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { checkAnswer } from "../../utils/check-answer";
+import { loadTestScoringContext } from "../../services/effective-scoring";
 import type { AttemptResult } from "@shared/schema";
 
 const router = Router();
@@ -143,6 +144,9 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
     const topics = await storage.getTopics();
     const topicMap = new Map(topics.map(t => [t.id, t.name]));
 
+    // PRD-15 block D (FR-32): correctness/difficulty use the test-effective chain.
+    const scoring = await loadTestScoringContext(testId, storage);
+
     interface QuestionStatsEntry {
       questionId: string;
       questionPrompt: string;
@@ -169,13 +173,13 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
           questionType: question.type,
           topicId: question.topicId,
           topicName: topicMap.get(question.topicId) || "Unknown",
-          difficulty: question.difficulty || 50,
+          difficulty: scoring.difficultyOf(question) || 50,
           totalAnswers: 0,
           correctAnswers: 0,
         };
 
         existing.totalAnswers++;
-        if (checkAnswer(question, answer) === 1) {
+        if (checkAnswer(question, answer, scoring.resolve(question).scoring) === 1) {
           existing.correctAnswers++;
         }
 

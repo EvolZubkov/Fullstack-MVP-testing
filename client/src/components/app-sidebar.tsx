@@ -1,113 +1,92 @@
-import { useLocation, Link } from "wouter";
+/**
+ * @module components/app-sidebar
+ *
+ * Author-side primary navigation, rendered with the design-system `Sidebar`
+ * (`@universityrt/ui-kit`) inside the DS `AppShell` (see pages/author/layout).
+ * Replaces the former shadcn `Sidebar` shell so the app frame matches the rest
+ * of the DS-based UI (see docs/PLAN_appshell_migration.md).
+ *
+ * Nav items are gated by capability (PRD-13): each entry is shown only when the
+ * current user `can(perm)`. The active item is derived from the current route
+ * (wouter); selecting an item performs SPA navigation. The footer holds the
+ * signed-in user and the logout action.
+ */
+import { useLocation } from "wouter";
 import {
   BookOpen,
-  FolderOpen,
-  FileQuestion,
+  FolderTree,
   ClipboardList,
   LayoutTemplate,
   BarChart3,
-  LogOut,
-  User,
   Users,
   UsersRound,
-  ScrollText,
+  Import,
   type LucideIcon,
 } from "lucide-react";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { Cluster, Sidebar, Text } from "@universityrt/ui-kit";
 import { useAuth } from "@/lib/auth";
-import { formatRoles } from "@/lib/roles";
 import { t } from "@/lib/i18n";
 import type { Capability } from "@shared/access";
 
-/** Sidebar entries with the capability that gates each (PRD-13). */
-const authorNavItems: Array<{ title: string; href: string; icon: LucideIcon; perm: Capability }> = [
-  { title: t.navigation.topics, href: "/author/topics", icon: FolderOpen, perm: "topics.manage" },
-  { title: t.navigation.questions, href: "/author/questions", icon: FileQuestion, perm: "questions.manage" },
-  { title: t.navigation.tests, href: "/author/tests", icon: ClipboardList, perm: "tests.read" },
-  { title: t.navigation.templates, href: "/author/templates", icon: LayoutTemplate, perm: "adminTemplates.manage" },
-  { title: t.navigation.analytics, href: "/author/analytics", icon: BarChart3, perm: "analytics.read" },
-  { title: t.navigation.users, href: "/author/users", icon: Users, perm: "users.read" },
-  { title: t.navigation.groups, href: "/author/groups", icon: UsersRound, perm: "groups.manage" },
+/** Nav entry: route + icon + the capability that gates it (PRD-13). */
+interface NavEntry {
+  id: string;
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  perm: Capability;
+}
+
+const NAV: NavEntry[] = [
+  // PRD-16: «Темы» и «Вопросы» объединены в единый раздел «Темы и вопросы».
+  { id: "content", href: "/author/content", label: t.navigation.topicsAndQuestions, icon: FolderTree, perm: "topics.manage" },
+  { id: "tests", href: "/author/tests", label: t.navigation.tests, icon: ClipboardList, perm: "tests.read" },
+  { id: "templates", href: "/author/templates", label: t.navigation.templates, icon: LayoutTemplate, perm: "adminTemplates.manage" },
+  { id: "analytics", href: "/author/analytics", label: t.navigation.analytics, icon: BarChart3, perm: "analytics.read" },
+  { id: "users", href: "/author/users", label: t.navigation.users, icon: Users, perm: "users.read" },
+  { id: "groups", href: "/author/groups", label: t.navigation.groups, icon: UsersRound, perm: "groups.manage" },
+  { id: "import", href: "/author/import", label: t.navigation.import, icon: Import, perm: "questions.importExport" },
 ];
 
 export function AppSidebar() {
-  const [location] = useLocation();
-  const { user, logout, can } = useAuth();
-  const navItems = authorNavItems.filter((item) => can(item.perm));
+  const [location, setLocation] = useLocation();
+  const { can } = useAuth();
 
-  const handleLogout = async () => {
-    await logout();
-  };
+  const allowed = NAV.filter((n) => can(n.perm));
+  const activeId = allowed.find((n) => location.startsWith(n.href))?.id;
+  const hrefById = new Map(NAV.map((n) => [n.id, n.href]));
+
+  const items = allowed.map((n) => ({
+    id: n.id,
+    label: n.label,
+    icon: <n.icon size={16} />,
+  }));
 
   return (
-    <Sidebar>
-      <SidebarHeader className="p-4">
-        <Link href="/" className="flex items-center gap-2">
-          <BookOpen className="h-6 w-6 text-primary" />
-          <span className="font-semibold text-lg">{t.auth.appName}</span>
-        </Link>
-      </SidebarHeader>
-
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>{t.sidebar.authorPanel}</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location.startsWith(item.href)}
-                  >
-                    <Link href={item.href}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-
-      <SidebarFooter className="p-4 border-t">
-        <div className="flex items-center gap-3 mb-3">
-          <Avatar className="h-9 w-9">
-            <AvatarFallback>
-              <User className="h-4 w-4" />
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{user?.name || user?.email}</p>
-            <p className="text-xs text-muted-foreground">
-              {formatRoles(user?.roles)}
-            </p>
-          </div>
-        </div>
-        <Button
-          variant="outline"
-          className="w-full"
-          onClick={handleLogout}
-          data-testid="button-logout"
+    <Sidebar
+      groups={[{ items }]}
+      activeId={activeId}
+      onSelect={(id) => {
+        const href = hrefById.get(id);
+        if (href) setLocation(href);
+      }}
+      brand={
+        <a
+          href="/"
+          onClick={(e) => {
+            e.preventDefault();
+            setLocation("/");
+          }}
+          className="ou-link-reset"
         >
-          <LogOut className="h-4 w-4 mr-2" />
-          {t.navigation.logout}
-        </Button>
-      </SidebarFooter>
-    </Sidebar>
+          <Cluster gap={2} wrap={false}>
+            <span className="ou-shell__brand-mark">
+              <BookOpen size={16} />
+            </span>
+            <Text weight="semibold">{t.auth.appName}</Text>
+          </Cluster>
+        </a>
+      }
+    />
   );
 }

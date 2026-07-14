@@ -288,6 +288,28 @@ function TemplatePane({
   if (!tpl) return null;
   return (
     <div data-testid="design-template-pane">
+      {design.templateOutdated && (
+        <Banner
+          tone="warning"
+          icon={<AlertTriangle width={16} height={16} aria-hidden="true" />}
+          title="Шаблон обновлён"
+          description={
+            <>
+              Шаблон «<strong>{tpl.manifest.name ?? tpl.name}</strong>» был
+              перезагружен (версия v{tpl.manifest.version ?? tpl.version}).
+              Сохранённое оформление могло устареть. Обновите его, чтобы
+              применить актуальные параметры шаблона.
+            </>
+          }
+          actions={[
+            {
+              label: "Обновить оформление",
+              onClick: design.refreshTemplateVersion,
+            },
+          ]}
+          data-testid="design-template-outdated"
+        />
+      )}
       <div className="tpl-block" data-testid="design-template-card">
         <button
           type="button"
@@ -297,7 +319,7 @@ function TemplatePane({
           onClick={onPreview}
           data-testid="design-template-preview"
         >
-          <Eye className="h-4 w-4" aria-hidden="true" />
+          <Eye size={16} aria-hidden="true" />
         </button>
         <div className="tpl-thumb">
           <div className="preview-sketch" data-wf-demo>
@@ -354,7 +376,7 @@ function TemplatePane({
             <Button
               variant="secondary"
               size="s"
-              leadingIcon={<Layout className="h-3 w-3" aria-hidden="true" />}
+              leadingIcon={<Layout size={12} aria-hidden="true" />}
               data-testid="design-template-replace"
               onClick={onOpenGallery}
             >

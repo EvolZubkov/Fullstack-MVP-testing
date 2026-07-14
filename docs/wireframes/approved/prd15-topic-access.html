@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-15: Тема — единый Drawer (Свойства + Доступ)</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    /* Drawer rendering glue inside a wf-state (from prd7-editor-drawer) */
+    .wf-state.active { display: block; }
+    .wf-state > .ou-drawer-root {
+      top: var(--wf-nav-offset, var(--wf-size-52));
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .ou-drawer-root > .ou-drawer {
+      height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+    }
+    /* PRD-15 local layout (composition only, DS tokens) */
+    .ta-tabs { padding: 0 var(--ou-space-6); border-bottom: 1px solid var(--ou-border-default); }
+    .ta-stack { display: flex; flex-direction: column; gap: var(--ou-space-6); }
+    .ta-section { display: flex; flex-direction: column; gap: var(--ou-space-3); }
+    .ta-label {
+      font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted);
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .ta-owner { display: flex; align-items: center; gap: var(--ou-space-3); }
+    .ta-id { display: flex; align-items: center; gap: var(--ou-space-2); min-width: 0; }
+    .ta-id__name { font: var(--ou-text-body-m); }
+    .ta-spacer { flex: 1; }
+    /* Shared column model: add-row and the grants table align by column,
+       last column hugs the Drawer's right edge (button / trash). */
+    .ta-add { display: grid; grid-template-columns: 1fr 160px 132px; gap: var(--ou-space-3); align-items: end; }
+    .ta-add__col { display: flex; flex-direction: column; gap: var(--ou-space-1); min-width: 0; }
+    .ta-add__col .ou-select, .ta-add__col .ou-btn { width: 100%; }
+    .ta-add__lbl { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+    .ta-grants-table { width: 100%; table-layout: fixed; }
+    .ta-grants-table th:nth-child(2), .ta-grants-table td:nth-child(2) { width: 160px; }
+    .ta-grants-table th:nth-child(3), .ta-grants-table td:nth-child(3) { width: 132px; text-align: right; }
+    .ta-grants-table td .ou-select { width: 100%; }
+    .ta-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+    .ta-empty {
+      display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-7) var(--ou-space-4); text-align: center;
+      color: var(--ou-fg-muted); border: 1px dashed var(--ou-border-default);
+      border-radius: var(--ou-radius-m);
+    }
+    .ta-muted-row { color: var(--ou-fg-muted); }
+    .ta-deps { display: flex; flex-direction: column; gap: var(--ou-space-2); margin: var(--ou-space-2) 0; }
+    .ta-dep { display: flex; align-items: center; gap: var(--ou-space-2); font: var(--ou-text-body-s); }
+    .ta-res-list { margin: var(--ou-space-2) 0 0; padding-left: var(--ou-space-6); display: flex; flex-direction: column; gap: var(--ou-space-1); }
+    .ta-revoke-choice { display: flex; flex-direction: column; gap: var(--ou-space-3); }
+    .ta-revoke-opt { display: flex; flex-direction: column; gap: var(--ou-space-1); align-items: flex-start; text-align: left; width: 100%; padding: var(--ou-space-3) var(--ou-space-4); border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-m); background: var(--ou-bg-elevated); cursor: pointer; }
+    .ta-revoke-opt:hover { border-color: var(--ou-accent-default); }
+    .ta-revoke-opt__title { font: var(--ou-text-body-m); font-weight: 600; display: flex; align-items: center; gap: var(--ou-space-2); }
+    .ta-revoke-opt__hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+    .wf-sprite { display: none; }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.5 12.5 19 4"/><path d="M16 7l3 3"/></symbol>
+  <symbol id="i-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-rotate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+  <symbol id="i-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">PRD-15 · Тема (Drawer):</span>
+  <button class="wf-btn active" type="button" onclick="showState(this,'s-props')">Свойства</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-access')">Доступ</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-empty')">Доступ · пусто</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-revoke')">Выбор отзыва</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-soft')">Мягкий отзыв</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-hard')">Жёсткий отзыв (409)</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-owner')">Смена владельца</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn" type="button" onclick="toggleTheme(this)">Dark</button>
+  <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
+</nav>
+
+<!-- s-props: вкладка «Свойства» — редактирование темы в этом же Drawer -->
+<div class="wf-state active" id="s-props">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="tp-d">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="tp-d" class="ou-drawer__title">Тема</h1>
+          <p class="ou-drawer__desc">Финансовая грамотность</p>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m ta-tabs">
+        <div class="ou-tabs__list" role="tablist" aria-label="Разделы темы">
+          <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Свойства</button>
+          <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false" onclick="showState(null,'s-access')">Доступ</button>
+        </div>
+      </nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ta-stack">
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="tp-name">Название темы</label>
+            <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="tp-name" type="text" value="Финансовая грамотность" /></div></div>
+            <div class="ou-formfield__msg">Проверка одноимённости — как в диалоге создания (предупреждение для чужой видимой темы; 409 при дубле у владельца).</div>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="tp-folder">Папка</label>
+            <select class="ou-select ou-field--m" id="tp-folder"><option selected>Личные финансы</option><option>Без папки</option></select>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="tp-desc">Описание</label>
+            <div class="ou-textarea ou-textarea--m ou-textarea--full"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="tp-desc" rows="3" placeholder="Необязательно"></textarea></div></div>
+          </div>
+
+          <div class="ta-section">
+            <span class="ta-label">Обратная связь по теме</span>
+            <!-- Стандартный компонент tb-feedback-preview (общий с тестами, TD-02):
+                 сгруппированные списки Документы/Курсы/Мероприятия + pencil → feedback-editor-modal.
+                 Имена элементов — функциональные ссылки; у мероприятия ссылка опциональна. -->
+            <div class="tb-feedback-preview" aria-label="Обратная связь по теме Финансовая грамотность">
+              <div class="tb-feedback-preview__head">
+                <span class="tb-feedback-preview__snippet">Поздравляем! Базовый блок по финансовой грамотности пройден.</span>
+                <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать обратную связь">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-pencil"/></svg>
+                </button>
+              </div>
+              <div class="tb-feedback-preview__group">
+                <div class="tb-feedback-preview__group-title">Документы</div>
+                <ul class="tb-feedback-preview__items">
+                  <li class="tb-feedback-preview__item">
+                    <span class="tb-feedback-preview__item-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-file-text"/></svg></span>
+                    <a href="#" download>Памятка по личному бюджету.pdf</a>
+                  </li>
+                </ul>
+              </div>
+              <div class="tb-feedback-preview__group">
+                <div class="tb-feedback-preview__group-title">Курсы</div>
+                <ul class="tb-feedback-preview__items">
+                  <li class="tb-feedback-preview__item">
+                    <span class="tb-feedback-preview__item-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-link"/></svg></span>
+                    <a href="#" target="_blank" rel="noopener noreferrer">Основы инвестирования</a>
+                  </li>
+                </ul>
+              </div>
+              <div class="tb-feedback-preview__group">
+                <div class="tb-feedback-preview__group-title">Мероприятия</div>
+                <ul class="tb-feedback-preview__items">
+                  <li class="tb-feedback-preview__item">
+                    <span class="tb-feedback-preview__item-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-link"/></svg></span>
+                    <a href="#" target="_blank" rel="noopener noreferrer">Вебинар «Личный бюджет за час»</a>
+                  </li>
+                  <li class="tb-feedback-preview__item">
+                    <span class="tb-feedback-preview__item-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-link"/></svg></span>
+                    <span>Мастер-класс по финансовому планированию</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div class="ou-formfield__msg">Клик по карандашу открывает общий с тестами редактор обратной связи (feedback-editor-modal): формат plain/rich/html, текст, документы (PDF), курсы (ссылки) и мероприятия (ссылка опциональна). Источник — topics.feedback_json.</div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="ta-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- s-access: вкладка «Доступ» — видимость + владелец + гранты -->
+<div class="wf-state" id="s-access">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="ta-d">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="ta-d" class="ou-drawer__title">Тема</h1>
+          <p class="ou-drawer__desc">Финансовая грамотность</p>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m ta-tabs">
+        <div class="ou-tabs__list" role="tablist" aria-label="Разделы темы">
+          <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false" onclick="showState(null,'s-props')">Свойства</button>
+          <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Доступ</button>
+        </div>
+      </nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ta-stack">
+          <div class="ta-section">
+            <span class="ta-label">Владелец</span>
+            <div class="ta-owner">
+              <span class="ta-id"><span class="ou-shell__avatar">МИ</span><span class="ta-id__name">Марина Иванова</span></span>
+              <span class="ta-spacer"></span>
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(null,'s-owner')">Сменить владельца</button>
+            </div>
+          </div>
+
+          <div class="ta-section">
+            <span class="ta-label">Видимость</span>
+            <label class="ou-switch-field">
+              <span class="ou-switch ou-switch--m"><input type="checkbox" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+              <span class="ou-switch-field__text"><span class="ou-switch-field__label">Общая тема</span></span>
+            </label>
+            <div class="ta-hint">Сейчас приватная — видят только владелец, получатели грантов и администратор. Включите, чтобы тему могли использовать все авторы.</div>
+          </div>
+
+          <div class="ta-section">
+            <span class="ta-label">Гранты доступа</span>
+            <div class="ta-add">
+              <div class="ta-add__col">
+                <span class="ta-add__lbl">Пользователь</span>
+                <select class="ou-select" aria-label="Выбрать пользователя">
+                  <option selected disabled>Выберите пользователя…</option>
+                  <option>Дмитрий Орлов</option>
+                  <option>Анна Лебедева</option>
+                </select>
+              </div>
+              <div class="ta-add__col">
+                <span class="ta-add__lbl">Уровень</span>
+                <select class="ou-select" aria-label="Уровень доступа">
+                  <option selected>Просмотр</option>
+                  <option>Управление</option>
+                </select>
+              </div>
+              <div class="ta-add__col">
+                <span class="ta-add__lbl">&nbsp;</span>
+                <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Добавить</button>
+              </div>
+            </div>
+
+            <div class="ou-table-wrap">
+              <table class="ou-table ta-grants-table">
+                <thead><tr><th>Пользователь</th><th>Уровень</th><th aria-label="Действия"></th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><span class="ta-id"><span class="ou-shell__avatar">ДО</span><span class="ta-id__name">Дмитрий Орлов</span></span></td>
+                    <td>
+                      <select class="ou-select" aria-label="Уровень доступа">
+                        <option selected>Просмотр</option>
+                        <option>Управление</option>
+                      </select>
+                    </td>
+                    <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Отозвать доступ" onclick="showState(null,'s-revoke')"><svg width="14" height="14"><use href="#i-trash"/></svg></button></td>
+                  </tr>
+                  <tr>
+                    <td><span class="ta-id"><span class="ou-shell__avatar">АЛ</span><span class="ta-id__name">Анна Лебедева</span></span></td>
+                    <td>
+                      <select class="ou-select" aria-label="Уровень доступа">
+                        <option>Просмотр</option>
+                        <option selected>Управление</option>
+                      </select>
+                    </td>
+                    <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Отозвать доступ" onclick="showState(null,'s-revoke')"><svg width="14" height="14"><use href="#i-trash"/></svg></button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="ta-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- s-empty: вкладка «Доступ», грантов нет -->
+<div class="wf-state" id="s-empty">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="te-d">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="te-d" class="ou-drawer__title">Тема</h1>
+          <p class="ou-drawer__desc">Финансовая грамотность</p>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m ta-tabs">
+        <div class="ou-tabs__list" role="tablist" aria-label="Разделы темы">
+          <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false" onclick="showState(null,'s-props')">Свойства</button>
+          <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Доступ</button>
+        </div>
+      </nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ta-stack">
+          <div class="ta-section">
+            <span class="ta-label">Владелец</span>
+            <div class="ta-owner">
+              <span class="ta-id"><span class="ou-shell__avatar">МИ</span><span class="ta-id__name">Марина Иванова</span></span>
+              <span class="ta-spacer"></span>
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s">Сменить владельца</button>
+            </div>
+          </div>
+          <div class="ta-section">
+            <span class="ta-label">Видимость</span>
+            <label class="ou-switch-field">
+              <span class="ou-switch ou-switch--m"><input type="checkbox" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+              <span class="ou-switch-field__text"><span class="ou-switch-field__label">Общая тема</span></span>
+            </label>
+            <div class="ta-hint">Сейчас приватная.</div>
+          </div>
+          <div class="ta-section">
+            <span class="ta-label">Гранты доступа</span>
+            <div class="ta-empty">
+              <svg width="24" height="24" aria-hidden="true"><use href="#i-key"/></svg>
+              <div>Доступ ещё никому не выдан — тема видна только вам и администратору</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="ta-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- s-revoke: выбор режима отзыва (клик по корзине) -->
+<div class="wf-state" id="s-revoke">
+  <div class="ou-modal-root" role="dialog" aria-modal="true">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 class="ou-modal__title">Отозвать доступ</h1>
+          <p class="ou-modal__desc">Дмитрий Орлов · Финансовая грамотность</p>
+        </div>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="ta-revoke-choice">
+          <button type="button" class="ta-revoke-opt" onclick="showState(null,'s-soft')">
+            <span class="ta-revoke-opt__title"><svg width="16" height="16"><use href="#i-key"/></svg> Мягкий отзыв</span>
+            <span class="ta-revoke-opt__hint">По умолчанию. Тема уходит из банка получателя, но он сохраняет чтение содержимого в контексте уже собранных тестов. Не блокируется зависимостями. Доступно владельцу и администратору.</span>
+          </button>
+          <button type="button" class="ta-revoke-opt" onclick="showState(null,'s-hard')">
+            <span class="ta-revoke-opt__title"><svg width="16" height="16"><use href="#i-alert-triangle"/></svg> Жёсткий отзыв <span class="ou-tag ou-tag--neutral ou-tag--s">админ</span></span>
+            <span class="ta-revoke-opt__hint">Полностью убирает доступ, включая чтение в контексте тестов. Проверяет зависимые опубликованные тесты получателя. Только администратор.</span>
+          </button>
+        </div>
+        <div class="ou-formfield__msg">Владелец-неадминистратор видит только «Мягкий отзыв» — выбора нет, отзыв сразу мягкий.</div>
+      </div>
+      <footer class="ou-modal__foot">
+        <span class="ta-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- s-soft: грант после мягкого отзыва (revoked_in_use) -->
+<div class="wf-state" id="s-soft">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="ts-d">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="ts-d" class="ou-drawer__title">Тема</h1>
+          <p class="ou-drawer__desc">Финансовая грамотность</p>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m ta-tabs">
+        <div class="ou-tabs__list" role="tablist" aria-label="Разделы темы">
+          <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false" onclick="showState(null,'s-props')">Свойства</button>
+          <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Доступ</button>
+        </div>
+      </nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ta-stack">
+          <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+            <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-key"/></svg></div>
+            <div class="ou-banner__body"><div class="ou-banner__desc">Доступ отозван мягко: тема ушла из банка получателя, но он сохраняет чтение её содержимого в контексте уже собранных им тестов. Опубликованные тесты не пострадали.</div></div>
+          </div>
+          <div class="ta-section">
+            <span class="ta-label">Гранты доступа</span>
+            <div class="ou-table-wrap">
+              <table class="ou-table ta-grants-table">
+                <thead><tr><th>Пользователь</th><th>Статус</th><th aria-label="Действия"></th></tr></thead>
+                <tbody>
+                  <tr class="ta-muted-row">
+                    <td><span class="ta-id"><span class="ou-shell__avatar">ДО</span><span class="ta-id__name">Дмитрий Орлов</span></span></td>
+                    <td><span class="ou-tag ou-tag--warning ou-tag--s">Отозван (используется)</span></td>
+                    <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-rotate"/></svg> Вернуть</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="ta-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- s-hard: жёсткий отзыв администратором — 409 зависимостей -->
+<div class="wf-state" id="s-hard">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="th-d">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="th-d" class="ou-drawer__title">Жёсткий отзыв доступа</h1>
+          <p class="ou-drawer__desc">Дмитрий Орлов · Финансовая грамотность</p>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ta-stack">
+          <div class="ou-banner ou-banner--subtle ou-banner--error" role="alert">
+            <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-triangle"/></svg></div>
+            <div class="ou-banner__body">
+              <div class="ou-banner__title">Отзыв затрагивает опубликованные тесты получателя</div>
+              <div class="ou-banner__desc">Жёсткий отзыв полностью убирает доступ, включая чтение в контексте тестов. Эти тесты Дмитрия используют тему:</div>
+            </div>
+          </div>
+          <div class="ta-deps">
+            <div class="ta-dep"><span class="ou-tag ou-tag--success ou-tag--s">Опубликован</span> Базовый курс финансов</div>
+            <div class="ta-dep"><span class="ou-tag ou-tag--success ou-tag--s">Опубликован</span> Аттестация: финансовая грамотность</div>
+          </div>
+          <div class="ta-section">
+            <span class="ta-label">Варианты разрешения</span>
+            <ul class="ta-res-list">
+              <li>Заменить или удалить секции с этой темой в тестах получателя</li>
+              <li>Снять тесты с публикации</li>
+              <li>Сменить владельца темы</li>
+              <li>Материализовать снапшот теста (доставка из снапшота)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="ta-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--destructive ou-btn--m">Отозвать принудительно</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- s-owner: смена владельца (администратор) -->
+<div class="wf-state" id="s-owner">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="to-d">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="to-d" class="ou-drawer__title">Тема</h1>
+          <p class="ou-drawer__desc">Финансовая грамотность</p>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m ta-tabs">
+        <div class="ou-tabs__list" role="tablist" aria-label="Разделы темы">
+          <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false" onclick="showState(null,'s-props')">Свойства</button>
+          <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Доступ</button>
+        </div>
+      </nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ta-stack">
+          <div class="ta-section">
+            <span class="ta-label">Владелец</span>
+            <select class="ou-select ou-field--m" aria-label="Владелец темы">
+              <option selected>Марина Иванова</option>
+              <option>Дмитрий Орлов</option>
+              <option>Анна Лебедева</option>
+            </select>
+            <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-key"/></svg></div>
+              <div class="ou-banner__body"><div class="ou-banner__desc">Сменить владельца темы может только администратор.</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="ta-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- Пояснения -->
+<section class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения</h3>
+  <table>
+    <thead><tr><th>Элемент</th><th>Поведение</th><th>Правило (PRD-15)</th></tr></thead>
+    <tbody>
+      <tr><td>Единый Drawer темы</td><td>Редактирование темы и управление доступом — в одном Drawer на вкладках «Свойства» и «Доступ». Открывается из меню темы пунктом «Редактировать тему…». Отдельного модала редактирования больше нет</td><td>FR-18..FR-20 (объединение)</td></tr>
+      <tr><td>Вкладка «Свойства»</td><td>Имя, папка, описание, обратная связь — всё редактирование темы здесь, не на карточке. Проверка одноимённости — предупреждение для чужой видимой темы, 409 при дубле у владельца (визуалы как в диалоге создания)</td><td>FR-27; PUT /api/topics/:id</td></tr>
+      <tr><td>Обратная связь (tb-feedback-preview)</td><td>Стандартный превью-компонент (TD-02): сниппет текста + pencil, далее сгруппированные списки Документы (PDF) / Курсы (ссылки) / Мероприятия (ссылка опциональна); имена — функциональные ссылки; пустой вариант «Не задано — нажмите для редактирования». Карандаш открывает ОБЩИЙ с тестами редактор (формат plain/rich/html, текст, документы, курсы, мероприятия). Рекомендуемые курсы = ссылки фидбэка, мероприятия = тип events фидбэка — отдельных секций на карточке нет. Источник данных — topics.feedback_json (TD-02 r.2)</td><td>PRD-7 FR-36/FR-37; общий feedback-editor-modal; TD-02</td></tr>
+      <tr><td>Видимость (тумблер)</td><td>Приватная ↔ Общая. Общую тему могут использовать все авторы</td><td>PATCH /visibility (FR-18). Новые темы приватные</td></tr>
+      <tr><td>Получатель гранта — только пользователь</td><td>Группы в системе — исключительно для назначения тестов; грантов на темы группам НЕТ. Выбор пользователя + уровень + «Добавить»</td><td>grantee = user (FR-19)</td></tr>
+      <tr><td>Уровень «Просмотр» / «Управление»</td><td>use — видеть и использовать; manage — дополнительно вести вопросы темы. Удаление темы — владелец/админ</td><td>Гранты use/manage (FR-19)</td></tr>
+      <tr><td>Отзыв (корзина) → выбор режима</td><td>Клик по корзине открывает выбор: «Мягкий отзыв» (по умолчанию) или «Жёсткий отзыв» (только админ). Для владельца-неадминистратора выбора нет — сразу мягкий</td><td>FR-25/FR-26</td></tr>
+      <tr><td>Мягкий отзыв</td><td>Грант → «Отозван (используется)»; «Вернуть» возвращает. Не блокируется зависимостями</td><td>Мягкий отзыв revoked_in_use (FR-25)</td></tr>
+      <tr><td>Жёсткий отзыв (409)</td><td>Только администратор. Зависимые опубликованные тесты + варианты разрешения; «Отозвать принудительно» с журналом</td><td>FR-26; force + аудит</td></tr>
+      <tr><td>Смена владельца</td><td>Только администратор</td><td>PATCH /owner; topics.owner.change (FR-18)</td></tr>
+      <tr><td>«Сохранить»</td><td>Применяет всё (свойства, видимость, владелец, гранты, отзыв) одним действием</td><td>FR-18..FR-20, FR-25, FR-27</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- DS Mapping -->
+<section class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping — UniversityRT</h2>
+  <table>
+    <thead><tr><th>Класс</th><th>Где используется</th><th>DS компонент</th><th>React (ui-kit)</th></tr></thead>
+    <tbody>
+      <tr><td><code>.ou-drawer</code></td><td>Контейнер темы</td><td>Drawer</td><td><code>Drawer</code> (--wide, --right)</td></tr>
+      <tr><td><code>.ou-tabs</code></td><td>Свойства / Доступ</td><td>Tabs</td><td><code>Tabs</code> (--underline)</td></tr>
+      <tr><td><code>.ou-field</code> / <code>.ou-textarea</code></td><td>Имя; описание</td><td>Input / Textarea</td><td><code>Input</code> / <code>Textarea</code></td></tr>
+      <tr><td><code>.tb-feedback-preview</code></td><td>Обратная связь по теме — стандартный превью-триггер</td><td>FeedbackPreview</td><td><code>FeedbackEditorModal</code> (общий с тестами)</td></tr>
+      <tr><td><code>.ou-switch</code></td><td>Видимость приватная/общая</td><td>Switch</td><td><code>Switch</code></td></tr>
+      <tr><td><code>.ou-select</code></td><td>Папка, пользователь, уровень, владелец</td><td>Select</td><td><code>Combobox</code> / <code>Select</code></td></tr>
+      <tr><td><code>.ou-table</code></td><td>Список грантов</td><td>Table</td><td><code>Table</code></td></tr>
+      <tr><td><code>.ou-tag</code></td><td>Статус отзыва, статус теста</td><td>Tag</td><td><code>Tag</code></td></tr>
+      <tr><td><code>.ou-banner</code></td><td>Мягкий отзыв (info), 409 (error)</td><td>Banner</td><td><code>Banner</code></td></tr>
+      <tr><td><code>.ou-btn</code></td><td>Сохранить, добавить, отозвать, вернуть, сменить владельца, принудительно</td><td>Button</td><td><code>Button</code></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById('wf-' + id) || document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+    document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) { button.classList.toggle('active', button === btn); });
+  };
+  window.toggleTheme = function toggleTheme(btn) {
+    var dark = document.body.classList.toggle('ou--dark');
+    document.body.classList.toggle('ou--light', !dark);
+    btn.textContent = dark ? 'Light' : 'Dark';
+    btn.classList.toggle('active', dark);
+  };
+  window.toggleDensity = function toggleDensity(btn) {
+    var compact = document.body.classList.toggle('ou--compact');
+    document.body.classList.toggle('ou--normal', !compact);
+    btn.textContent = compact ? 'Normal' : 'Compact';
+    btn.classList.toggle('active', compact);
+  };
+</script>
+
+</body>
+</html>

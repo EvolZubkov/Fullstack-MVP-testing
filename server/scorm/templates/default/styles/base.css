@@ -30,6 +30,73 @@ body {
   margin: 0 auto;
 }
 
+/* ===== Brand / Logo (PRD-7 design param `logoUrl`) =====
+   Rendered at the top of each learner screen (start / question / results) when
+   the test sets a logo; the `{{#if design.logoUrl}}` block omits it otherwise. */
+.tb-brand {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 28px;
+}
+.tb-brand__logo {
+  max-height: 72px;
+  max-width: 300px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+/* ===== Progress pills (PRD-19 Block C, FR-10/11/12) =====
+   Clickable question map that replaces the linear progress bar. Framework-free —
+   rendered from `state.questionsProgress` via the unified template on BOTH hosts;
+   ported to template tokens from docs/wireframes/prd19-learner-real.html. */
+.tb-pills { display: flex; flex-direction: column; gap: 8px; margin: 0 0 20px; }
+.tb-pills__head { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: hsl(var(--muted-foreground)); }
+.tb-pills__head b { color: hsl(var(--foreground)); font-weight: 600; }
+.tb-pills__dots { display: flex; flex-wrap: wrap; gap: 6px; }
+.tb-pill { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); border: 0; cursor: pointer; font-family: inherit; }
+.tb-pill.is-answered { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+.tb-pill.is-current { background: hsl(var(--card)); color: hsl(var(--primary)); box-shadow: inset 0 0 0 2px hsl(var(--primary)), 0 0 0 3px hsl(var(--primary) / .2); }
+.tb-pill.is-skipped { background: transparent; color: hsl(var(--muted-foreground)); box-shadow: inset 0 0 0 1px hsl(var(--border)); }
+/* FR-10a review marking (only when showCorrectAnswers is on). */
+.tb-pill.is-correct { background: hsl(var(--success)); color: hsl(var(--primary-foreground)); }
+.tb-pill.is-incorrect { background: hsl(var(--destructive, 0 72% 51%)); color: hsl(var(--primary-foreground)); }
+.tb-pill.is-unanswered { background: transparent; color: hsl(var(--muted-foreground)); box-shadow: inset 0 0 0 1px hsl(var(--border)); }
+.tb-pill:disabled { opacity: .4; cursor: not-allowed; }
+.tb-pill:focus-visible { outline: 2px solid hsl(var(--primary)); outline-offset: 2px; }
+.tb-pills__legend { display: flex; flex-wrap: wrap; gap: 10px 16px; font-size: 12px; color: hsl(var(--muted-foreground)); }
+.tb-pills__legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.tb-pills__legend-dot { width: 10px; height: 10px; border-radius: 50%; background: hsl(var(--muted)); box-shadow: inset 0 0 0 1px hsl(var(--border)); }
+.tb-pills__legend-dot.is-answered { background: hsl(var(--primary)); box-shadow: none; }
+.tb-pills__legend-dot.is-current { background: hsl(var(--card)); box-shadow: inset 0 0 0 2px hsl(var(--primary)); }
+.tb-pills__legend-dot.is-skipped { background: transparent; box-shadow: inset 0 0 0 1px hsl(var(--border)); }
+.tb-pills__legend-dot.is-locked { opacity: .4; }
+
+/* ===== Review (обзор) screen + question actions (PRD-19 Block D, FR-04c/FR-08) =====
+   The обзор (section-finish / test-finish) screen: pills + explicit unanswered list
+   + «Завершить …». Ported to template tokens from docs/wireframes/prd19-learner-real.html. */
+.q-actions { display: flex; align-items: center; gap: 12px; margin-top: 22px; flex-wrap: wrap; }
+.q-actions__spacer { flex: 1; }
+.obzor-title { font-size: 18px; font-weight: 800; color: hsl(var(--foreground)); margin: 0 0 4px; }
+.obzor-sub { font-size: 14px; color: hsl(var(--muted-foreground)); margin: 0 0 18px; }
+.tb-unanswered { display: flex; flex-direction: column; gap: 8px; text-align: left; margin-top: 16px; }
+.tb-unanswered__head { font-size: 14px; font-weight: 600; color: hsl(var(--foreground)); margin-bottom: 4px; }
+.tb-unanswered__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 12px 16px; border: 1px solid hsl(var(--border)); border-radius: 10px; background: hsl(var(--card)); cursor: pointer; color: hsl(var(--foreground)); font-size: 14px; font-family: inherit; text-align: left; }
+.tb-unanswered__row:hover { border-color: hsl(var(--primary)); background: hsl(var(--accent)); }
+.tb-unanswered__go { color: hsl(var(--primary)); font-weight: 600; white-space: nowrap; }
+
+/* ===== Finish-confirm modal (PRD-19 Block D, FR-09) — host-chrome overlay,
+   styled with template tokens so it matches the active theme. ===== */
+.tb-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+.tb-modal { background: hsl(var(--card)); color: hsl(var(--card-foreground)); border: 1px solid hsl(var(--card-border)); border-radius: var(--radius); max-width: 440px; width: 100%; box-shadow: var(--shadow); overflow: hidden; }
+.tb-modal__head { display: flex; gap: 12px; padding: 20px 20px 8px; align-items: flex-start; }
+.tb-modal__icon { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: hsl(38 92% 50% / .15); color: hsl(38 92% 50%); }
+.tb-modal__title { font-size: 17px; font-weight: 700; margin: 0 0 4px; color: hsl(var(--foreground)); }
+.tb-modal__desc { font-size: 14px; color: hsl(var(--muted-foreground)); margin: 0; }
+.tb-modal__body { padding: 0 20px; font-size: 13px; color: hsl(var(--muted-foreground)); }
+.tb-modal__foot { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 20px 20px; }
+
 h1 {
   font-size: 28px;
   margin: 0 0 24px;
@@ -313,6 +380,11 @@ h1 {
   margin-right: 14px;
   width: 20px;
   height: 20px;
+  /* Fixed control size: as a flex item the radio/checkbox would otherwise shrink
+     (default flex-shrink:1) when the answer text wraps, so the circle drifted /
+     went oval with longer answers. `flex:0 0 20px` pins it regardless of text length
+     (alignment stays centered via the row's align-items: center). */
+  flex: 0 0 20px;
   cursor: pointer;
 }
 
@@ -443,9 +515,12 @@ h1 {
   user-select:none;
   width: 100%;
   padding: 10px 12px;
-  /* border-radius: 12px;
-  background: hsl(var(--muted) / .35);
-  border: 1px solid hsl(var(--border)); */
+  /* Flex row: grip (fixed) + gap + wrapping text. The grip/text rules below
+     (.match-grip flex:0 0 auto, .match-chip-text min-width:0) expect this — without
+     `display:flex` the grip fell inline to the top-left and stuck to the text. */
+  display: flex;
+  align-items: center;
+  gap: 12px;
   color: hsl(var(--foreground));
   cursor: grab;
   font-size: 14px;
@@ -496,6 +571,14 @@ h1 {
 .matching-line.incorrect-answer{
   border-color: hsl(var(--destructive));
   background: color-mix(in oklab, hsl(var(--destructive)) 10%, hsl(var(--card)));
+}
+/* Committed (submitted) accent — shown when the matching board is locked but
+   correctness is NOT revealed (showCorrectAnswers off), so the submitted answer is
+   visibly fixed, mirroring `.option.selected` on single/multiple. The green/red
+   correctness states win via :not(). */
+.matching-board.is-locked .matching-line.is-joined:not(.correct-answer):not(.incorrect-answer){
+  border-color: hsl(var(--primary));
+  background: color-mix(in oklab, hsl(var(--primary)) 8%, hsl(var(--card)));
 }
 
 .slot-placeholder{
@@ -574,6 +657,11 @@ h1 {
 .rank-item.incorrect-answer{
   border-color: hsl(var(--destructive));
   background: color-mix(in oklab, hsl(var(--destructive)) 10%, hsl(var(--card)));
+}
+/* Committed (submitted) accent for ranking — same rationale as matching above. */
+.ranking-board.is-locked .rank-item:not(.correct-answer):not(.incorrect-answer){
+  border-color: hsl(var(--primary));
+  background: color-mix(in oklab, hsl(var(--primary)) 8%, hsl(var(--card)));
 }
 
 /* ===== Loading State ===== */
@@ -705,6 +793,43 @@ h1 {
 .results-pill.is-pass{ background: hsl(var(--success)/.18); border-color: hsl(var(--success)/.35); color: hsl(var(--success)); }
 .results-pill.is-fail{ background: hsl(var(--destructive)/.18); border-color: hsl(var(--destructive)/.35); color: hsl(var(--destructive)); }
 
+/* PRD-19 FR-05a: computed section-results (итоги раздела) — a compact, centered
+   variant of the results card (ring + one-line summary + optional verdict tag +
+   «Продолжить»). Rendered from layouts/section-results.html on BOTH hosts. */
+.section-results{ max-width: 560px; }
+.section-results__card{
+  padding: 26px 22px 20px;
+  text-align:center;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap: 8px;
+}
+.section-results__eyebrow{ font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: hsl(var(--muted-foreground)); }
+.section-results__title{ font-size: 20px; font-weight: 800; margin: 0; }
+.section-results__summary{ font-size: 15px; color: hsl(var(--muted-foreground)); }
+.section-results .results-ring{ margin: 14px auto 6px; }
+.section-results .q-actions--center{ margin-top: 16px; }
+.q-actions--center{ justify-content:center; }
+
+/* PRD-1 §4.3: «Введение раздела» (section-intro) — topic name / description /
+   meta (questions + time) + author instruction at section start. Rendered from
+   layouts/section-intro.html. */
+.section-intro{ max-width: 600px; }
+.section-intro__card{ padding: 30px 26px 22px; text-align:center; }
+.section-intro__eyebrow{ font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: hsl(var(--muted-foreground)); margin-bottom: 6px; }
+.section-intro__title{ font-size: 28px; font-weight: 900; margin: 0 0 10px; line-height: 1.2; }
+.section-intro__desc{ font-size: 15px; line-height: 1.55; color: hsl(var(--muted-foreground)); margin: 0 auto 16px; max-width: 48ch; }
+.section-intro__meta{ display:flex; flex-wrap:wrap; justify-content:center; gap: 18px; margin: 4px 0 18px; }
+.section-intro__meta-item{ display:inline-flex; align-items:center; gap: 7px; font-size: 14px; font-weight: 600; color: hsl(var(--foreground)); }
+.section-intro__meta-dot{ width: 6px; height: 6px; border-radius: 50%; background: hsl(var(--primary)); display:inline-block; }
+.section-intro__instruction{ text-align:left; background: hsl(var(--muted)); border: 1px solid hsl(var(--border)); border-radius: 10px; padding: 14px 16px; margin: 4px 0 6px; }
+.section-intro__instruction-head{ font-size: 12px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: hsl(var(--muted-foreground)); margin-bottom: 6px; }
+.section-intro__instruction-body{ font-size: 15px; line-height: 1.55; color: hsl(var(--foreground)); }
+.section-intro__instruction-body > :first-child{ margin-top: 0; }
+.section-intro__instruction-body > :last-child{ margin-bottom: 0; }
+.section-intro .q-actions--center{ margin-top: 18px; }
+
 .results-section-title{
   margin: 28px 0 14px;
   font-size: 22px;
@@ -829,6 +954,18 @@ h1 {
   gap: 12px;
   margin-top: 24px;
 }
+/* The router is a HUB — navigation is the topic cards, not the content wrapper's
+   «Далее». The runtime removes that nav imperatively; this rule hides it in the
+   «Структура» preview (which renders the content layout verbatim) so run + preview
+   match. Scoped to a content wrapper that actually contains router cards. */
+.layout-content-wrap:has(.router-topic-cards) .navigation { display: none; }
+/* Required-section progress on the router hub («Разделы X / Y» + thin bar). */
+.router-progress { margin: 18px 0 4px; }
+.router-progress__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.router-progress__label { font-size: 13px; font-weight: 600; color: hsl(var(--muted-foreground)); }
+.router-progress__count { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; color: hsl(var(--foreground)); }
+.router-progress__bar { height: 6px; border-radius: 999px; background: hsl(var(--muted)); overflow: hidden; }
+.router-progress__fill { height: 100%; border-radius: 999px; background: hsl(var(--primary)); transition: width .25s ease; }
 .router-topic-card {
   display: flex;
   flex-direction: column;
@@ -1030,7 +1167,7 @@ a.results-rec-item:hover { text-decoration: underline; }
 .rank-draggable { cursor: grab; }
 .match-grip { flex: 0 0 auto; display: inline-flex; align-items: center; opacity: .55; }
 .match-chip:hover .match-grip { opacity: .85; }
-.match-chip-text { min-width: 0; }
+.match-chip-text { flex: 1 1 auto; min-width: 0; }
 .rank-draggable, .match-chip { touch-action: none; }
 .start-page { max-width: 600px; margin: 40px auto; padding: 0 18px; }
 .start-header { padding: 32px; text-align: center; margin-bottom: 24px; }
@@ -1052,6 +1189,21 @@ a.results-rec-item:hover { text-decoration: underline; }
 .start-btn { padding: 14px 40px; font-size: 16px; font-weight: 600; height: auto; }
 .start-actions-note { color: hsl(var(--destructive)); font-weight: 600; font-size: 14px; }
 .start-note { padding: 16px 20px; margin-bottom: 24px; border-left: 4px solid hsl(var(--primary)); background: hsl(var(--muted)); border-radius: 8px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; text-align: left; }
+/* PRD-19 Block F (FR-20): prior-attempt summary + cooldown state ON the start screen. */
+.start-prior { padding: 20px 24px; text-align: left; display: flex; flex-direction: column; gap: 12px; }
+.start-prior-row { font-size: 15px; color: hsl(var(--foreground)); }
+.start-prior-row strong { font-weight: 700; }
+.prior-fail { color: hsl(var(--destructive)); font-weight: 700; }
+.prior-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.prior-actions .btn { padding: 9px 16px; font-size: 14px; gap: 8px; height: auto; }
+.prior-actions .btn svg { flex-shrink: 0; }
+.start-cooldown { padding: 24px; text-align: left; display: flex; flex-direction: column; gap: 14px; }
+.cooldown-head { display: flex; align-items: center; gap: 14px; }
+.cooldown-ico { width: 48px; height: 48px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: hsl(var(--muted)); color: #f59e0b; flex-shrink: 0; }
+.cooldown-title { font-size: 17px; font-weight: 700; color: hsl(var(--foreground)); }
+.cooldown-sub { font-size: 14px; color: hsl(var(--muted-foreground)); margin-top: 2px; }
+.cooldown-when { background: hsl(var(--muted)); border: 1px solid hsl(var(--border)); border-radius: 10px; padding: 12px 16px; font-size: 14px; color: hsl(var(--foreground)); }
+.cooldown-when strong { font-weight: 700; }
 .layout-content-wrap { max-width: 680px; margin: 0 auto; padding: 36px 24px; }
 .layout-question-wrap { max-width: 680px; margin: 0 auto; padding: 36px 24px; }
 .layout-results-wrap { max-width: 600px; margin: 40px auto; padding: 0 18px; }

@@ -4,14 +4,18 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "../storage";
 import { db } from "../db";
-import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, retakePolicySchema } from "@shared/schema";
+import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, retakePolicySchema, questionScoringSchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { readScreenTemplate } from "../services/template-render";
-import { resolveTemplateDir } from "../services/template-dir";
-import { requireAuth, requirePermission } from "../middleware/auth";
+import { resolveTemplateDir, resolveSystemScreenDir } from "../services/template-dir";
+import { requirePermission, requireUserContext } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
-import { readableTestScope } from "../services/test-access";
+import { readableTestScope, canGrantAccess } from "../services/test-access";
+import { visibleTopic } from "../services/topic-access";
+import { assessTestPublish } from "../services/draw-feasibility";
+import { createTestSnapshot, getPublicationState } from "../services/test-snapshot";
 import { generateScormPackage } from "../scorm-exporter";
+import { buildScormExportData, ScormBuildError } from "../scorm/build-export-data";
 import { isSupportedTemplateApiVersion } from "../template-registry";
 import { logger } from "../logger";
 import {
@@ -22,6 +26,7 @@ import {
 } from "../services/test-settings";
 import { RequiredFieldsMissingError } from "../services/required-fields-validator";
 import { FlowPolicyValidationError } from "../services/flow-policy-validator";
+import { buildTestScoringContext } from "../services/effective-scoring";
 
 // ─── Validation schemas (PRD-7 §5.4) ─────────────────────────────────────────
 
@@ -40,6 +45,8 @@ const sectionBodySchema = z
     timeLimitMinutes: z.number().int().positive().nullable().optional(),
     feedbackJson: z.unknown().optional(),
     drawBlueprintJson: drawBlueprintSchema.nullish(),
+    // PRD-15 block D (FR-31): per-section default price; null = inherit test.
+    defaultPoints: z.number().int().min(0).nullable().optional(),
   })
   .superRefine((s, ctx) => {
     // PRD-11 FR-05: the quotas are minimums inside the topic's sample, so their
@@ -65,6 +72,10 @@ const testBodyBaseSchema = z.object({
   webhookUrl: z.union([z.string().url(), z.literal(""), z.null()]).optional(),
   sections: z.array(sectionBodySchema).optional(),
   showCorrectAnswers: z.boolean().optional(),
+  // PRD-19 (Блок A): правила навигации/завершения.
+  allowReturnToUnanswered: z.boolean().optional(),
+  allowAnswerChange: z.boolean().optional(),
+  showSectionResults: z.boolean().optional(),
   timeLimitMinutes: z.number().int().positive().nullable().optional(),
   maxAttempts: z.number().int().positive().nullable().optional(),
   startPageContent: z.string().nullable().optional(),
@@ -79,6 +90,8 @@ const testBodyBaseSchema = z.object({
   feedbackJson: feedbackContentSchema.nullable().optional(),
   flowPolicyJson: z.unknown().optional(),
   retakePolicyJson: retakePolicySchema.nullish(), // PRD-6
+  // PRD-15 block D (FR-31): test-wide default price; null = system default (1).
+  defaultQuestionPoints: z.number().int().min(0).nullable().optional(),
 
   /** Destination folder for create (PRD-7 §5.5 — FAB folder-pick modal). */
   folderId: z.string().nullable().optional(),
@@ -110,6 +123,40 @@ function logZodValidationFailure(route: string, err: z.ZodError) {
   logger.warn(`${route} validation failed: ${JSON.stringify(fields)}`, "tests");
 }
 
+/**
+ * PRD-15 block C (FR-22/E-13): a test may only reference topics its author can
+ * see. Validates every topic id referenced by the saved sections / adaptive
+ * settings against {@link visibleTopic}. Returns the first invisible topic id,
+ * or null when all are visible (or the actor is an admin, for whom every topic
+ * is visible). The delivery path is intentionally NOT gated this way — losing
+ * topic access must not break already published tests (FR-24).
+ *
+ * `exempt` carries the FR-25 derived in-context read: topics the test ALREADY
+ * references are kept even after a soft grant revoke, so the author can still
+ * re-save that test; only newly added references must be generally visible.
+ *
+ * @param roles - the actor's effective roles.
+ * @param userId - the actor's id.
+ * @param topicIds - the distinct topic ids referenced by the test body.
+ * @param exempt - topic ids already referenced by the test (in-context read).
+ * @returns the first topic id the actor cannot see, or null.
+ */
+async function firstInvisibleTopic(
+  roles: readonly import("@shared/access").Role[],
+  userId: string,
+  topicIds: readonly string[],
+  exempt: ReadonlySet<string> = new Set(),
+): Promise<string | null> {
+  for (const id of [...new Set(topicIds)]) {
+    if (exempt.has(id)) continue;
+    const topic = await storage.getTopic(id);
+    // A missing topic is left to the existing referential checks; only an
+    // existing-but-invisible topic is an access violation here.
+    if (topic && !(await visibleTopic(roles, userId, topic))) return id;
+  }
+  return null;
+}
+
 const router = Router();
 
 /**
@@ -131,6 +178,11 @@ async function loadFullTest(testId: string): Promise<Record<string, unknown> | n
   const topics = await storage.getTopics();
   const topicMap = new Map(topics.map((t) => [t.id, t]));
 
+  // PRD-15 block D: per-test scoring overrides — the editor needs the raw rows
+  // (override values + staleness pins), and maxPoints must sum EFFECTIVE prices.
+  const questionScoring = await storage.getTestQuestionScoring(test.id);
+  const scoringCtx = buildTestScoringContext(test, sections, questionScoring);
+
   const sectionsWithDetails = await Promise.all(
     sections.map(async (s) => {
       const topic = topicMap.get(s.topicId);
@@ -138,7 +190,14 @@ async function loadFullTest(testId: string): Promise<Record<string, unknown> | n
       return {
         ...s,
         topicName: topic?.name || "Unknown",
+        // PRD-2 §4.2: author-defined readable id for `topicById("<code>")`; null → UUID.
+        topicCode: topic?.code ?? null,
         maxQuestions: questions.length,
+        // PRD-10: the section's maximum attainable points (Σ points). Absolute
+        // pass thresholds are compared against earned POINTS at runtime, so the
+        // editor caps them by this, not by the question count. Block D: the sum
+        // is over EFFECTIVE prices (override -> defaults -> legacy -> system).
+        maxPoints: questions.reduce((sum, q) => sum + scoringCtx.resolve(q).points, 0),
       };
     }),
   );
@@ -176,7 +235,11 @@ async function loadFullTest(testId: string): Promise<Record<string, unknown> | n
   const scales = await storage.getScales(test.id);
   const measurements = await storage.getQuestionMeasurements(test.id);
 
-  return { ...test, sections: sectionsWithDetails, adaptiveSettings, resultVariables, scales, measurements };
+  // PRD-15 FR-12: publication state (draft / published / published_with_changes)
+  // for the editor's status indicator and the «Опубликовать изменения» action.
+  const publication = await getPublicationState(test.id);
+
+  return { ...test, sections: sectionsWithDetails, adaptiveSettings, resultVariables, scales, measurements, questionScoring, publication };
 }
 
 // GET /api/tests - Список тестов
@@ -198,13 +261,23 @@ router.get("/", requirePermission("tests.read"), async (req, res) => {
     const topics = await storage.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t]));
 
-    // PRD-13: resolve owner display names for the list "Владелец" column.
+    // PRD-13: resolve owner display names for the list "Владелец" column. Fall back
+    // to email for users WITHOUT a name — notably configured superadmins, which
+    // provisionSuperadmins creates with name=null. Their imported/created tests ARE
+    // owned (owner_id is set), but a null name made the column render «—» as if
+    // unowned. (getUsers decrypts emails, so u.email is plaintext here.)
     const allUsers = await storage.getUsers();
-    const ownerNameById = new Map(allUsers.map((u) => [u.id, u.name]));
+    const ownerNameById = new Map(allUsers.map((u) => [u.id, u.name || u.email]));
 
     const testsWithSections = await Promise.all(
       visibleTests.map(async (test) => {
         const sections = await storage.getTestSections(test.id);
+        // PRD-15 block D: maxPoints sums EFFECTIVE prices for this test.
+        const scoringCtx = buildTestScoringContext(
+          test,
+          sections,
+          await storage.getTestQuestionScoring(test.id),
+        );
         const sectionsWithDetails = await Promise.all(
           sections.map(async (s) => {
             const topic = topicMap.get(s.topicId);
@@ -213,6 +286,7 @@ router.get("/", requirePermission("tests.read"), async (req, res) => {
               ...s,
               topicName: topic?.name || "Unknown",
               maxQuestions: questions.length,
+              maxPoints: questions.reduce((sum, q) => sum + scoringCtx.resolve(q).points, 0),
             };
           })
         );
@@ -242,7 +316,10 @@ router.get("/", requirePermission("tests.read"), async (req, res) => {
         }
 
         const ownerName = test.ownerId ? ownerNameById.get(test.ownerId) ?? null : null;
-        return { ...test, ownerName, sections: sectionsWithDetails, adaptiveSettings };
+        // PRD-15 FR-12: publication state for the list badge ("опубликован,
+        // есть неопубликованные изменения"). Cheap for drafts (early return).
+        const publication = await getPublicationState(test.id);
+        return { ...test, ownerName, sections: sectionsWithDetails, adaptiveSettings, publication };
       })
     );
 
@@ -259,16 +336,39 @@ const SCREEN_LAYOUTS: Record<string, string> = {
   start: "start.html",
   blocked: "system.blocked.html",
   question: "question.html",
+  // PRD-19 Block D: обзор (section-finish / test-finish). No backing variant kind
+  // (runtime template layout, like blocked) — resolved straight from the template dir.
+  review: "review.html",
+  // PRD-19 D5 (FR-05a): computed итоги раздела (section-results). Runtime layout
+  // (no backing variant kind) — resolved straight from the template dir.
+  "section-results": "section-results.html",
 };
-router.get("/:id/screen-template/:screen", requireAuth, async (req, res) => {
+// System variant kind backing each screen (for the default-fallback resolution).
+// `blocked` is a pure system layout with no contentTemplate kind — never falls back.
+const SCREEN_KIND: Record<string, string | undefined> = {
+  start: "start",
+  question: "questions",
+};
+// PRD-15 FR-09: object-level read scope (owner/grant/admin/assigned learner)
+// instead of the bare session check.
+router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope("read"), async (req, res) => {
   try {
     const layoutFile = SCREEN_LAYOUTS[req.params.screen];
     if (!layoutFile) return res.status(400).json({ error: "Unknown screen" });
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
     const templateId = ((test.designSettingsJson as any)?.templateId as string) || "default";
-    const dir = await resolveTemplateDir(templateId);
-    const payload = readScreenTemplate(dir, layoutFile);
+    // Learner-facing render (PRD-12 web host): never serve a non-active template,
+    // and when the active template declares no contentTemplate of this screen's
+    // kind, render from `default` (same fallback as «Структура» / the preview).
+    const kind = SCREEN_KIND[req.params.screen];
+    const dir = kind
+      ? await resolveSystemScreenDir(templateId, kind, { activeOnly: true })
+      : await resolveTemplateDir(templateId, { activeOnly: true });
+    // cssVars/branding resolve against the ACTIVE template's manifest even when the
+    // layout dir fell back to `default` (a screen kind the active template doesn't own).
+    const paramsDir = await resolveTemplateDir(templateId, { activeOnly: true });
+    const payload = readScreenTemplate(dir, layoutFile, (test.designSettingsJson as any)?.params, paramsDir);
     if (!payload) return res.status(404).json({ error: "Template not found" });
     res.json(payload);
   } catch (error) {
@@ -357,6 +457,9 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       webhookUrl,
       sections,
       showCorrectAnswers,
+      allowReturnToUnanswered,
+      allowAnswerChange,
+      showSectionResults,
       timeLimitMinutes,
       maxAttempts,
       startPageContent,
@@ -370,12 +473,31 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       feedbackJson,
       flowPolicyJson,
       retakePolicyJson,
+      defaultQuestionPoints,
       folderId,
     } = parsed.data;
 
     // For standard mode, sections are required
     if (mode !== "adaptive" && (!sections || sections.length === 0)) {
       return res.status(400).json({ error: "Sections are required for standard tests" });
+    }
+
+    // PRD-15 block C (FR-22/E-13): sections/levels may only cite visible topics.
+    const referencedTopics = [
+      ...(sections ?? []).map((s) => s.topicId),
+      ...((adaptiveSettings ?? []) as AdaptiveTopicPayload[]).map((a) => a.topicId),
+    ];
+    const invisible = await firstInvisibleTopic(
+      req.effectiveRoles ?? [],
+      req.currentUser?.id ?? "",
+      referencedTopics,
+    );
+    if (invisible) {
+      return res.status(403).json({
+        error: "topic_forbidden",
+        message: "Тест ссылается на недоступную тему",
+        topicId: invisible,
+      });
     }
 
     const test = await testSettingsService.create({
@@ -387,6 +509,9 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         status,
         published,
         showCorrectAnswers,
+        allowReturnToUnanswered,
+        allowAnswerChange,
+        showSectionResults,
         timeLimitMinutes,
         maxAttempts,
         startPageContent,
@@ -397,7 +522,11 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         feedbackJson: feedbackJson ?? null,
         flowPolicyJson: flowPolicyJson ?? null,
         retakePolicyJson: retakePolicyJson ?? null,
+        defaultQuestionPoints: defaultQuestionPoints ?? null,
         folderId: folderId ?? null,
+        // PRD-13: creator owns the test atomically in the INSERT (the post-insert
+        // setTestOwner below is now a redundant safety net).
+        ownerId: req.currentUser?.id ?? req.session.userId ?? null,
       },
       sections: (sections ?? []) as SectionPayload[],
       adaptiveSettings: mode === "adaptive"
@@ -456,7 +585,8 @@ router.get("/:id/adaptive-settings", requirePermission("tests.read"), requireTes
 });
 
 // GET /api/tests/:id/design - Настройки оформления теста
-router.get("/:id/design", requireAuth, async (req, res) => {
+// PRD-15 FR-09: object-level read scope (owner/grant/admin/assigned learner).
+router.get("/:id/design", requireUserContext, requireTestScope("read"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
@@ -567,6 +697,9 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       webhookUrl,
       sections,
       showCorrectAnswers,
+      allowReturnToUnanswered,
+      allowAnswerChange,
+      showSectionResults,
       timeLimitMinutes,
       maxAttempts,
       startPageContent,
@@ -580,11 +713,37 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       feedbackJson,
       flowPolicyJson,
       retakePolicyJson,
+      defaultQuestionPoints,
     } = parsed.data;
 
     const expectedVersion = typeof (req.body as { expectedVersion?: unknown })?.expectedVersion === "number"
       ? (req.body as { expectedVersion: number }).expectedVersion
       : undefined;
+
+    // PRD-15 block C (FR-22/E-13): sections/levels may only cite visible topics.
+    // FR-25 derived in-context read: topics already referenced by this test are
+    // exempt, so a soft grant revoke does not block re-saving an existing test.
+    const referencedTopics = [
+      ...(mode === "standard" ? (sections ?? []).map((s) => s.topicId) : []),
+      ...(mode === "adaptive"
+        ? ((adaptiveSettings ?? []) as AdaptiveTopicPayload[]).map((a) => a.topicId)
+        : []),
+    ];
+    const existingSections = await storage.getTestSections(req.params.id);
+    const exempt = new Set(existingSections.map((s) => s.topicId));
+    const invisible = await firstInvisibleTopic(
+      req.effectiveRoles ?? [],
+      req.currentUser?.id ?? "",
+      referencedTopics,
+      exempt,
+    );
+    if (invisible) {
+      return res.status(403).json({
+        error: "topic_forbidden",
+        message: "Тест ссылается на недоступную тему",
+        topicId: invisible,
+      });
+    }
 
     const test = await testSettingsService.save(req.params.id, {
       test: {
@@ -593,6 +752,9 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
         overallPassRuleJson,
         webhookUrl: webhookUrl ?? undefined,
         showCorrectAnswers,
+        allowReturnToUnanswered,
+        allowAnswerChange,
+        showSectionResults,
         timeLimitMinutes,
         maxAttempts,
         startPageContent,
@@ -605,6 +767,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
         feedbackJson: feedbackJson ?? undefined,
         flowPolicyJson: flowPolicyJson ?? undefined,
         retakePolicyJson: retakePolicyJson ?? undefined,
+        defaultQuestionPoints,
       },
       // PRD-7 §6.3: sections live with the standard mode only. For adaptive,
       // sections come from the adaptive levels instead.
@@ -678,12 +841,70 @@ router.patch("/:id/status", requirePermission("tests.publish"), requireTestScope
       });
     }
 
+    // PRD-15 FR-06 (E-12): a test must not be published with an infeasible
+    // draw — pools, blueprint quotas and adaptive levels are checked against
+    // the current bank state.
+    if (status === "published") {
+      const findings = await assessTestPublish(req.params.id);
+      if (findings.length > 0) {
+        return res.status(409).json({
+          error: "publish_infeasible",
+          message: "Выдача вопросов невыполнима при текущем составе тем",
+          findings,
+        });
+      }
+    }
+
     const updated = await storage.patchTestStatus(req.params.id, status as "draft" | "published" | "archived");
     if (!updated) return res.status(404).json({ error: "Test not found" });
+
+    // PRD-15 FR-10: publishing (and re-publishing) freezes the test into a new
+    // snapshot. Delivery of this test now reads from the snapshot; edits to the
+    // bank do not affect it until the next publish. Draft/archive create none.
+    if (status === "published") {
+      await createTestSnapshot(req.params.id, req.currentUser?.id ?? null);
+    }
+
     res.json(updated);
   } catch (error) {
     logger.error("PATCH status error: " + (error as Error).message, "tests");
     res.status(500).json({ error: "Failed to update test status" });
+  }
+});
+
+// POST /api/tests/:id/republish-force — экстренная переопубликация (PRD-15 FR-14).
+// Freezes a new snapshot AND annuls in-progress attempts: they are deleted, so
+// they do not count toward the retake limit (the learner may pass again). For
+// incident response (leaked key, broken question), not the routine path —
+// routine "Опубликовать изменения" is PATCH /status published (keeps attempts).
+router.post("/:id/republish-force", requirePermission("tests.publish"), requireTestScope("edit"), async (req, res) => {
+  try {
+    const test = await storage.getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+    if (test.status !== "published") {
+      return res.status(400).json({ error: "Test is not published", code: "not_published" });
+    }
+
+    // Publish-time feasibility still applies (E-12): do not freeze an unplayable test.
+    const findings = await assessTestPublish(req.params.id);
+    if (findings.length > 0) {
+      return res.status(409).json({
+        error: "publish_infeasible",
+        message: "Выдача вопросов невыполнима при текущем составе тем",
+        findings,
+      });
+    }
+
+    const annulled = await storage.annulInProgressAttempts(req.params.id);
+    await createTestSnapshot(req.params.id, req.currentUser?.id ?? null);
+    logger.info(
+      `Force republish: test ${req.params.id} by ${req.currentUser?.id ?? "?"}, annulled ${annulled} in-progress attempts`,
+      "tests",
+    );
+    res.json({ ok: true, annulledAttempts: annulled });
+  } catch (error) {
+    logger.error("Force republish error: " + (error as Error).message, "tests");
+    res.status(500).json({ error: "Failed to force republish" });
   }
 });
 
@@ -731,80 +952,14 @@ router.delete("/:id", requirePermission("tests.delete"), requireTestScope("delet
 // GET /api/tests/:id/export/scorm - Экспорт SCORM
 router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), requireTestScope("edit"), async (req, res) => {
   try {
-    const test = await storage.getTest(req.params.id);
-    if (!test) {
-      return res.status(404).json({ error: "Test not found" });
-    }
+    // Assemble the deliverable via the shared builder (NFR-18: the debug player
+    // builds the SAME data the same way). Export uses the snapshot-aware source
+    // (published → active snapshot, draft → live).
+    const data = await buildScormExportData(req.params.id, { source: "export" });
+    const test = data.test;
 
-    const sections = await storage.getTestSections(test.id);
-    const exportSections = await Promise.all(
-      sections.map(async (s) => {
-        const topic = await storage.getTopic(s.topicId);
-        const questions = await storage.getQuestionsByTopic(s.topicId);
-        const courses = await storage.getTopicCourses(s.topicId);
-        const events = await storage.getTopicEvents(s.topicId);
-        return {
-          ...s,
-          topic: topic!,
-          questions,
-          courses,
-          events,
-        };
-      })
-    );
-
-    // Validate design template before packaging
-    const rawDesignSettings = test.designSettingsJson as Record<string, unknown> | null;
-    const designTemplateId = (rawDesignSettings?.templateId as string | undefined) || "default";
-    const designTemplateApiVersion = rawDesignSettings?.templateApiVersion as string | undefined;
-
-    if (designTemplateApiVersion && !isSupportedTemplateApiVersion(designTemplateApiVersion)) {
-      return res.status(422).json({
-        error: `Unsupported templateApiVersion in design settings: ${designTemplateApiVersion}`,
-        field: "templateApiVersion",
-      });
-    }
-
-    const designSettings = rawDesignSettings && Object.keys(rawDesignSettings).length > 0
-      ? {
-          templateId: designTemplateId,
-          templateVersion: rawDesignSettings.templateVersion as string | undefined,
-          templateApiVersion: rawDesignSettings.templateApiVersion as string | undefined,
-          params: (rawDesignSettings.params as Record<string, unknown>) ?? {},
-        }
-      : { templateId: "default", params: {} };
-
-    // Load content pages for this test
-    const contentPages = await storage.getContentPages(test.id);
-
-    // Load result variables (PRD-2) for this test
-    const resultVariables = await storage.getResultVariables(test.id);
-
-    // Load scales + measurements (PRD-5) for this test
-    const scales = await storage.getScales(test.id);
-    const measurements = await storage.getQuestionMeasurements(test.id);
-
-    // Load adaptive settings if test is adaptive
-    let adaptiveSettings = null;
-    if (test.mode === "adaptive") {
-      const topicSettings = await storage.getAdaptiveTopicSettingsByTest(test.id);
-      const levels = await storage.getAdaptiveLevelsByTest(test.id);
-
-      // Load links for each level
-      const levelsWithLinks = await Promise.all(
-        levels.map(async (level) => {
-          const links = await storage.getAdaptiveLevelLinks(level.id);
-          return { ...level, links };
-        })
-      );
-
-      adaptiveSettings = {
-        topicSettings,
-        levels: levelsWithLinks,
-      };
-    }
-
-    // Telemetry configuration
+    // Telemetry configuration (request-specific): an opt-in flag creates a
+    // scorm_package record so the in-LMS package can post back telemetry.
     let telemetryConfig = null;
     const enableTelemetry = req.query.telemetry === "true";
 
@@ -836,23 +991,7 @@ router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), require
       logger.info(`SCORM telemetry package created: ${packageId} test="${test.title}" (${test.id}) by user=${req.session.userId}`, "scorm-export");
     }
 
-    // Resolve the actual on-disk directory of the selected template (built-in or
-    // uploaded PRD-3) so the exporter copies the right files instead of falling
-    // back to `default` for uploaded ids (whose files live under uploads/templates).
-    const templateDir = await resolveTemplateDir(designTemplateId);
-
-    const buffer = await generateScormPackage({
-      test,
-      sections: exportSections,
-      adaptiveSettings,
-      contentPages,
-      resultVariables,
-      scales,
-      measurements,
-      designSettings,
-      templateDir,
-      telemetry: telemetryConfig,
-    });
+    const buffer = await generateScormPackage({ ...data, telemetry: telemetryConfig });
 
     res.setHeader("Content-Type", "application/zip");
     const safeTitle = test.title.replace(/[^a-zA-Zа-яА-ЯёЁ0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "") || "scorm_export";
@@ -862,10 +1001,108 @@ router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), require
     logger.info(`SCORM exported: test="${test.title}" (${test.id}) telemetry=${enableTelemetry} by user=${req.session.userId}`, "scorm-export");
     res.send(buffer);
   } catch (error) {
+    if (error instanceof ScormBuildError) {
+      return res
+        .status(error.status)
+        .json(error.field ? { error: error.message, field: error.field } : { error: error.message });
+    }
     logger.error("SCORM export error: " + (error as Error).message, "scorm-export");
     res.status(500).json({ error: "Failed to export SCORM package" });
   }
 });
+
+// ─── PRD-15 block D: per-(test, question) scoring overrides (FR-30/FR-35) ─────
+
+/** Override payload: each value is an independent link of the effective chain. */
+const questionScoringBodySchema = z.object({
+  points: z.number().int().min(0).nullable().optional(),
+  scoringJson: questionScoringSchema.nullable().optional(),
+  difficulty: z.number().int().min(0).max(100).nullable().optional(),
+});
+
+// GET /api/tests/:id/question-scoring — the test's override rows (the «Оценка»
+// tab reads them fresh, outside the editor draft).
+router.get(
+  "/:id/question-scoring",
+  requirePermission("tests.read"),
+  requireTestScope("read"),
+  async (req, res) => {
+    try {
+      const rows = await storage.getTestQuestionScoring(req.params.id);
+      res.json(rows);
+    } catch (error) {
+      logger.error("Get question scoring error: " + (error as Error).message, "tests");
+      res.status(500).json({ error: "Failed to fetch question scoring" });
+    }
+  },
+);
+
+// PUT /api/tests/:id/question-scoring/:questionId — upsert the override.
+// Pins the question's CURRENT contentHash (FR-30): saving from the editor
+// (including «Подтвердить актуальность», which re-sends the same values)
+// re-pins a stale override. An all-empty body clears the override instead of
+// storing a no-op row. Both writes bump the test version so a published test
+// flips to «Опубликован, есть изменения» (FR-12).
+router.put(
+  "/:id/question-scoring/:questionId",
+  requirePermission("tests.edit"),
+  requireTestScope("edit"),
+  async (req, res) => {
+    try {
+      const parsed = questionScoringBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Validation failed", fields: zodToFields(parsed.error) });
+      }
+      const { points, scoringJson, difficulty } = parsed.data;
+
+      const question = await storage.getQuestion(req.params.questionId);
+      if (!question) return res.status(404).json({ error: "Question not found" });
+
+      // The override only makes sense for a question of the test's own topics.
+      const sections = await storage.getTestSections(req.params.id);
+      if (!sections.some((s) => s.topicId === question.topicId)) {
+        return res.status(422).json({ error: "question_not_in_test", message: "Вопрос не входит в темы теста" });
+      }
+
+      if (points == null && scoringJson == null && difficulty == null) {
+        await storage.deleteTestQuestionScoring(req.params.id, question.id);
+        await storage.updateTest(req.params.id, {});
+        return res.json({ cleared: true });
+      }
+
+      const row = await storage.upsertTestQuestionScoring(req.params.id, question.id, {
+        points: points ?? null,
+        scoringJson: scoringJson ?? null,
+        difficulty: difficulty ?? null,
+        pinnedContentHash: question.contentHash ?? null,
+      });
+      await storage.updateTest(req.params.id, {});
+      res.json(row);
+    } catch (error) {
+      logger.error("Upsert question scoring error: " + (error as Error).message, "tests");
+      res.status(500).json({ error: "Failed to save question scoring" });
+    }
+  },
+);
+
+// DELETE /api/tests/:id/question-scoring/:questionId — reset to the default
+// chain («Сбросить настройку» in the row and in the override modal).
+router.delete(
+  "/:id/question-scoring/:questionId",
+  requirePermission("tests.edit"),
+  requireTestScope("edit"),
+  async (req, res) => {
+    try {
+      const deleted = await storage.deleteTestQuestionScoring(req.params.id, req.params.questionId);
+      if (!deleted) return res.status(404).json({ error: "Override not found" });
+      await storage.updateTest(req.params.id, {});
+      res.json({ success: true });
+    } catch (error) {
+      logger.error("Delete question scoring error: " + (error as Error).message, "tests");
+      res.status(500).json({ error: "Failed to delete question scoring" });
+    }
+  },
+);
 
 // ─── PRD-13: per-test access management (administrators / superadmin only) ────
 
@@ -874,6 +1111,9 @@ router.get("/:id/access", requirePermission("tests.access.grant"), async (req, r
   try {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
+    if (!canGrantAccess(req.effectiveRoles ?? [], req.currentUser?.id ?? "", test)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     const grants = await storage.getTestAccessGrants(test.id);
     res.json({ testId: test.id, ownerId: test.ownerId ?? null, grants });
   } catch (error) {
@@ -887,6 +1127,9 @@ router.post("/:id/access", requirePermission("tests.access.grant"), async (req, 
   try {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
+    if (!canGrantAccess(req.effectiveRoles ?? [], req.currentUser?.id ?? "", test)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     const { userId, accessLevel } = req.body ?? {};
     if (typeof userId !== "string" || !userId) {
       return res.status(400).json({ error: "userId required" });
@@ -912,6 +1155,11 @@ router.post("/:id/access", requirePermission("tests.access.grant"), async (req, 
 // DELETE /api/tests/:id/access/:userId — revoke a user's access grant.
 router.delete("/:id/access/:userId", requirePermission("tests.access.grant"), async (req, res) => {
   try {
+    const test = await storage.getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+    if (!canGrantAccess(req.effectiveRoles ?? [], req.currentUser?.id ?? "", test)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     const removed = await storage.removeTestAccessGrant(req.params.id, req.params.userId);
     if (!removed) return res.status(404).json({ error: "Grant not found" });
     res.status(204).end();

@@ -7,8 +7,9 @@
  * bespoke chrome for adaptive mode or when the design template is absent.
  */
 function renderStartPage() {
-  var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
-  var layout = layouts && layouts['start'];
+  // PRD-7 G21: `systemLayout('start')` is the bundled default's start when the
+  // active template doesn't declare a `start` contentTemplate.
+  var layout = (typeof systemLayout === 'function') ? systemLayout('start') : (state && state.templateLayouts && state.templateLayouts['start']);
   var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
   if (layout && TB && TB.renderScreenInto && TEST_DATA.mode !== 'adaptive') {
     renderStartPageTemplated();
@@ -28,6 +29,10 @@ function buildScormStartContext() {
   var hasLimit = !!TEST_DATA.maxAttempts;
   var hasCompleted = !!getAllAttempts() && getAllAttempts().length > 0;
   var canStartNew = hasAttemptsLeft();
+  // PRD-19 FR-19 «повтор: можно»: prior-attempt summary + downloadable report from
+  // the best saved attempt. Runs post-Initialize (suspend_data available); the
+  // pre-Initialize cooldown gate builds its own minimal context without this.
+  var best = (typeof getBestAttempt === 'function') ? getBestAttempt() : null;
 
   var suspendObj = readSuspendObj();
   var pendingSession = suspendObj.currentSession;
@@ -56,6 +61,13 @@ function buildScormStartContext() {
     resume: canResume ? { index: (pendingSession.currentIndex || 0), total: pendingSession.flatQuestions.length } : null,
     hasCompletedResults: hasCompleted,
     canStartNew: canStartNew,
+    priorResult: best ? {
+      percent: best.percent,
+      passed: best.passed,
+      attemptNumber: best.attemptNumber != null ? best.attemptNumber : null,
+      maxAttempts: hasLimit ? TEST_DATA.maxAttempts : null
+    } : null,
+    canDownloadReport: !!best,
     showBack: false
   });
 }
@@ -66,18 +78,43 @@ function wireStartAction(root, action, fn) {
   if (btn) btn.onclick = fn;
 }
 
+/**
+ * Resolve per-test branding for the render context (`design.*`, PRD-7). The logo
+ * param is baked into TEST_DATA as a media envelope `{ url, name, … }` (or a bare
+ * string for legacy values); the layout binds a plain URL string, so `.url` is
+ * unwrapped here — mirroring the web host's server-side `resolveLogoUrl`.
+ */
+function scormDesignContext() {
+  var p = (typeof TEST_DATA !== 'undefined' && TEST_DATA.designSettings) ? TEST_DATA.designSettings.params : null;
+  var logo = p ? p.logoUrl : null;
+  var url = '';
+  if (logo && typeof logo === 'object' && typeof logo.url === 'string') url = logo.url;
+  else if (typeof logo === 'string') url = logo;
+  return url ? { logoUrl: url } : {};
+}
+
 /** Build the start context (shared builder) and mount the shared layout (standard mode). */
 function renderStartPageTemplated() {
   var app = document.getElementById('app');
   var ctx = buildScormStartContext();
+  ctx.design = scormDesignContext();
+  // PRD-7 G21: when `start` falls back to default, mount default's layout AND
+  // activate default's stylesheet so the screen is fully styled.
+  var layout = (typeof systemLayout === 'function') ? systemLayout('start') : state.templateLayouts['start'];
+  if (typeof applySystemScreenStyles === 'function') applySystemScreenStyles('start');
   app.innerHTML = '';
   var wrap = document.createElement('div');
   app.appendChild(wrap);
-  window.TBTemplate.renderScreenInto(wrap, { layout: state.templateLayouts['start'], context: ctx });
+  window.TBTemplate.renderScreenInto(wrap, { layout: layout, context: ctx });
   wireStartAction(wrap, 'start-test', startTest);
   wireStartAction(wrap, 'resume', continueSession);
   wireStartAction(wrap, 'restart', startTest);
   wireStartAction(wrap, 'view-results', viewSavedResults);
+  // PRD-19 FR-19 «повтор: можно»: «Скачать отчёт» exports the BEST saved attempt
+  // (not the empty in-progress one) — the same PDF as the results view.
+  wireStartAction(wrap, 'download-report', function () {
+    if (typeof downloadPDF === 'function') downloadPDF(true);
+  });
 }
 
 function renderStartPageFallback() {
@@ -364,10 +401,7 @@ function restart() {
   state.matchingPools = {};
 
   // Сброс таймера
-  if (state.timerInterval) {
-    clearInterval(state.timerInterval);
-    state.timerInterval = null;
-  }
+  stopTestTimer();
   state.remainingSeconds = null;
 
   // Сброс adaptive state если есть
@@ -433,6 +467,21 @@ function continueSession() {
     return;
   }
   restoreSession(recovery.session);
+  // PRD-19 (Block B): mirror the bootstrap restore path — rebuild the page
+  // sequence and jump to the resumed question item so syncPhaseToCurrentPage
+  // re-establishes state.activeSectionTopic and the timer/freeze hooks. Without
+  // this the first post-restore section boundary fails to freeze the prior
+  // section (answerCommitScope='section').
+  if (typeof rebuildPageSequence === 'function') {
+    rebuildPageSequence();
+    var qIndex = state.currentIndex || 0;
+    var itemIndex = (state.pageSequence || []).findIndex(function (item) {
+      return item && item.kind === 'question' && item.questionIndex === qIndex;
+    });
+    if (typeof goToPageSequenceIndex === 'function') {
+      goToPageSequenceIndex(itemIndex >= 0 ? itemIndex : 0);
+    }
+  }
   render();
 }
 

@@ -10,34 +10,51 @@
  */
 
 import { ShieldAlert, LogOut } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Box,
+  Button,
+  Card,
+  CardBody,
+  Center,
+  IconBadge,
+  Stack,
+  Text,
+} from "@universityrt/ui-kit";
 import { useAuth } from "@/lib/auth";
 
 export default function NoAccessPage() {
   const { logout } = useAuth();
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardContent className="pt-6">
-          <div className="flex items-center mb-4 gap-2">
-            <ShieldAlert className="h-8 w-8 text-amber-500" />
-            <h1 className="text-2xl font-bold">Нет доступа</h1>
-          </div>
+    <Center minH="screen" pad={4}>
+      <Box full maxW="md">
+        <Card>
+          <CardBody>
+            <Stack gap={6}>
+              <Stack gap={3} align="center">
+                <IconBadge tone="warning" size="l" icon={<ShieldAlert />} />
+                <Text as="h1" variant="heading-m" weight="semibold">
+                  Нет доступа
+                </Text>
+                <Text variant="body-s" tone="muted" align="center">
+                  Вашей учётной записи не назначено ни одной роли, поэтому ни один
+                  раздел приложения сейчас недоступен. Обратитесь к
+                  администратору, чтобы он назначил вам роль.
+                </Text>
+              </Stack>
 
-          <p className="text-sm text-muted-foreground">
-            Вашей учётной записи не назначено ни одной роли, поэтому ни один раздел
-            приложения сейчас недоступен. Обратитесь к администратору, чтобы он
-            назначил вам роль.
-          </p>
-
-          <Button variant="outline" className="mt-6 w-full" onClick={() => logout()}>
-            <LogOut className="h-4 w-4 mr-2" />
-            Выйти
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
+              <Button
+                variant="secondary"
+                fullWidth
+                leadingIcon={<LogOut size={16} />}
+                onClick={() => logout()}
+              >
+                Выйти
+              </Button>
+            </Stack>
+          </CardBody>
+        </Card>
+      </Box>
+    </Center>
   );
 }

@@ -18,6 +18,8 @@
 import type {
   CtxCourse,
   CtxResult,
+  CtxSectionResult,
+  CtxSectionIntro,
   CtxTopicResultView,
   CtxAdaptiveTopicView,
   CtxRecommendation,
@@ -125,6 +127,100 @@ export function buildResultContext(
     result.backLabel = opts.backLabel;
   }
   return { course: { title }, result };
+}
+
+/** Normalized input for the staged section-results screen (PRD-19 FR-05a). */
+export interface SectionResultInput {
+  /** Section/topic name (heading). */
+  topicName: string;
+  correct: number;
+  total: number;
+  percent: number;
+  /** null = the section has no pass rule (no verdict tag). */
+  passed: boolean | null;
+  /** Override the «Продолжить» label (e.g. the last section before test-finish). */
+  continueLabel?: string;
+}
+
+/**
+ * Build the COMPUTED section-results context (`{ course, sectionResult }`, PRD-19
+ * FR-05a). Reuses the same ring geometry as the test results screen; the verdict
+ * tag is gated by `hasVerdict` so a section without a pass rule (passed === null)
+ * shows the score without a pass/fail label. Pure — both hosts call it on their
+ * own normalized section result so the numbers/markup cannot drift.
+ */
+export function buildSectionResultContext(input: SectionResultInput): {
+  course: CtxCourse;
+  sectionResult: CtxSectionResult;
+} {
+  const percent = Math.round(input.percent || 0);
+  const hasVerdict = input.passed === true || input.passed === false;
+  const sectionResult: CtxSectionResult = {
+    topicName: input.topicName || "",
+    scorePercent: percent,
+    ringDashoffset: Math.round(RING_CIRCUMFERENCE * (1 - percent / 100)),
+    passClass: input.passed === true ? "is-pass" : input.passed === false ? "is-fail" : "",
+    statusLabel: input.passed === true ? "Раздел пройден" : input.passed === false ? "Раздел не пройден" : "",
+    hasVerdict,
+    correct: input.correct != null ? input.correct : 0,
+    total: input.total,
+    summaryLabel: (input.correct != null ? input.correct : 0) + " из " + input.total + " верно · " + percent + "%",
+    continueLabel: input.continueLabel || "Продолжить",
+  };
+  return { course: { title: input.topicName || "" }, sectionResult };
+}
+
+/** Russian plural for «вопрос» (1 вопрос / 2 вопроса / 5 вопросов). */
+function pluralQuestions(n: number): string {
+  const abs = Math.abs(n) % 100;
+  const d = abs % 10;
+  if (abs > 10 && abs < 20) return "вопросов";
+  if (d === 1) return "вопрос";
+  if (d > 1 && d < 5) return "вопроса";
+  return "вопросов";
+}
+
+/** Normalized input for the «Введение раздела» screen (PRD-1 §4.3). */
+export interface SectionIntroInput {
+  /** 1-based section index (for the «Раздел N» eyebrow). */
+  sectionNumber: number;
+  topicName: string;
+  /** Topic description from its properties. */
+  description?: string | null;
+  questionCount: number;
+  timeLimitMinutes?: number | null;
+  /** Author instruction (HTML/text); non-empty → the instruction block shows. */
+  instruction?: string | null;
+  continueLabel?: string;
+}
+
+/**
+ * Build the «Введение раздела» context: `{ course, sectionIntro }`. The host injects
+ * the author instruction HTML via the layout's `instruction` slot; this builder only
+ * derives `hasInstruction` (gating the block) by stripping tags + whitespace.
+ */
+export function buildSectionIntroContext(input: SectionIntroInput): {
+  course: CtxCourse;
+  sectionIntro: CtxSectionIntro;
+} {
+  const count = Math.max(0, Math.round(input.questionCount || 0));
+  const desc = (input.description ?? "").trim();
+  const hasTime = !!(input.timeLimitMinutes && input.timeLimitMinutes > 0);
+  const instrRaw = typeof input.instruction === "string" ? input.instruction : "";
+  const instrText = instrRaw.replace(/<[^>]*>/g, "").trim();
+  const sectionIntro: CtxSectionIntro = {
+    eyebrow: "Раздел " + (input.sectionNumber || 1),
+    topicName: input.topicName || "",
+    description: desc,
+    hasDescription: desc.length > 0,
+    questionCount: count,
+    questionCountLabel: count + " " + pluralQuestions(count),
+    hasTimeLimit: hasTime,
+    timeLimitLabel: hasTime ? String(input.timeLimitMinutes) + " мин" : "",
+    hasInstruction: instrText.length > 0,
+    continueLabel: input.continueLabel || "Далее",
+  };
+  return { course: { title: input.topicName || "" }, sectionIntro };
 }
 
 /** Normalized adaptive per-topic input. */

@@ -7,7 +7,12 @@ function renderRankingQuestionInput(q, answer, locked, correct, shuffleMapping) 
     state.answers[q.id] = userOrder;
   }
 
-  var html = '<div class="ranking-board" data-qid="' + escapeHtml(q.id) + '">';
+  // `is-locked`: committed answer gets a neutral «зафиксировано» accent (CSS) even
+  // when showCorrectAnswers is off — parity with `.option.selected`. Driven by the
+  // committed status (not just draggability `locked`); confirmAnswer also adds it
+  // point-wise on submit.
+  var committed = !!(state.questionStatuses && state.questionStatuses[q.id] === 'answered') || locked;
+  var html = '<div class="ranking-board' + (committed ? ' is-locked' : '') + '" data-qid="' + escapeHtml(q.id) + '">';
 
   userOrder.forEach(function(itemIdx, pos){
     var text = (items[itemIdx] != null) ? String(items[itemIdx]) : ('#' + itemIdx);

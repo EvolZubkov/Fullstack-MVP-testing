@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-15: Имя темы — предупреждение и жёсткая одноимённость</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    .wf-state.active { display: block; }
+    .nw-form { display: flex; flex-direction: column; gap: var(--ou-space-4); }
+    .wf-sprite { display: none; }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+  <symbol id="i-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">PRD-15 · Имя темы:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this,'s-clean')">Без конфликта</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-warn')">Предупреждение (другой владелец)</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-block')">Блок (свой дубль 409)</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn" type="button" onclick="toggleTheme(this)">Dark</button>
+  <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
+</nav>
+
+<!-- s-clean: имя уникально -->
+<div class="wf-state active" id="s-clean">
+  <div class="ou-modal-root" role="dialog" aria-modal="true">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 class="ou-modal__title">Новая тема</h1>
+        </div>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="nw-form">
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="nw-name-1">Название темы</label>
+            <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="nw-name-1" type="text" value="Финансовое планирование" /></div></div>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="nw-folder-1">Папка</label>
+            <select class="ou-select ou-field--m" id="nw-folder-1"><option selected>Личные финансы</option><option>Без папки</option></select>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="nw-desc-1">Описание</label>
+            <div class="ou-textarea ou-textarea--m ou-textarea--full"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="nw-desc-1" rows="3" placeholder="Необязательно"></textarea></div></div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-modal__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Создать</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- s-warn: одноимённая в видимой области у другого владельца — предупреждение, не блок -->
+<div class="wf-state" id="s-warn">
+  <div class="ou-modal-root" role="dialog" aria-modal="true">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 class="ou-modal__title">Новая тема</h1>
+        </div>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="nw-form">
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="nw-name-2">Название темы</label>
+            <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="nw-name-2" type="text" value="Инвестиции" /></div></div>
+          </div>
+          <div class="ou-banner ou-banner--subtle ou-banner--warning" role="status">
+            <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-triangle"/></svg></div>
+            <div class="ou-banner__body"><div class="ou-banner__desc">Тема с таким названием уже есть в доступной вам области — «Инвестиции» (владелец Анна Лебедева). Можно создать свою: это не помешает.</div></div>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="nw-folder-2">Папка</label>
+            <select class="ou-select ou-field--m" id="nw-folder-2"><option selected>Без папки</option></select>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-modal__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Создать всё равно</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- s-block: у владельца уже есть тема с таким именем — жёсткая ошибка (409) -->
+<div class="wf-state" id="s-block">
+  <div class="ou-modal-root" role="dialog" aria-modal="true">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 class="ou-modal__title">Новая тема</h1>
+        </div>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="nw-form">
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="nw-name-3">Название темы</label>
+            <div class="ou-field ou-field--m ou-field--error"><div class="ou-field__box"><input class="ou-field__input" id="nw-name-3" type="text" value="налоги физлиц" aria-invalid="true" aria-describedby="nw-err-3" /></div></div>
+            <div class="ou-formfield__msg ou-formfield__msg--error" id="nw-err-3" role="alert">У вас уже есть тема с таким названием — «Налоги физлиц». Выберите другое имя.</div>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="nw-folder-3">Папка</label>
+            <select class="ou-select ou-field--m" id="nw-folder-3"><option selected>Без папки</option></select>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-modal__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled>Создать</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- Пояснения -->
+<section class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения</h3>
+  <table>
+    <thead><tr><th>Элемент</th><th>Поведение</th><th>Правило (PRD-15)</th></tr></thead>
+    <tbody>
+      <tr><td>Проверка имени</td><td>По мере ввода — запрос GET /api/topics/name-check; нормализация регистр/пробелы/ё→е</td><td>FR-27, normalizeTopicName</td></tr>
+      <tr><td>Предупреждение (warning)</td><td>Одноимённая тема есть в видимой области у ДРУГОГО владельца — баннер, кнопка «Создать всё равно». Не блокирует</td><td>FR-27, BRC-11 (предупреждение)</td></tr>
+      <tr><td>Блок (409)</td><td>У текущего владельца уже есть тема с таким нормализованным именем — ошибка поля, «Создать» недоступно</td><td>FR-27 уникальность в рамках владельца; POST → 409 duplicate_topic_name</td></tr>
+      <tr><td>Переименование</td><td>Тот же набор состояний в диалоге редактирования темы</td><td>PUT /api/topics/:id</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- DS Mapping -->
+<section class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping — UniversityRT</h2>
+  <table>
+    <thead><tr><th>Класс</th><th>Где используется</th><th>DS компонент</th><th>React (ui-kit)</th></tr></thead>
+    <tbody>
+      <tr><td><code>.ou-modal</code></td><td>Диалог темы</td><td>Modal</td><td><code>ModalDialog</code></td></tr>
+      <tr><td><code>.ou-field</code> / <code>.ou-field--error</code></td><td>Название (+ ошибка)</td><td>Field / Input</td><td><code>Input</code></td></tr>
+      <tr><td><code>.ou-formfield__msg--error</code></td><td>Текст ошибки имени</td><td>FormField message</td><td><code>FormMessage</code></td></tr>
+      <tr><td><code>.ou-banner--warning</code></td><td>Предупреждение об одноимённости</td><td>Banner</td><td><code>Banner</code> (--subtle --warning)</td></tr>
+      <tr><td><code>.ou-textarea</code></td><td>Описание</td><td>Textarea</td><td><code>Textarea</code></td></tr>
+      <tr><td><code>.ou-select</code></td><td>Папка</td><td>Select</td><td><code>Select</code></td></tr>
+      <tr><td><code>.ou-btn</code></td><td>Создать / Отмена</td><td>Button</td><td><code>Button</code></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById('wf-' + id) || document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+    document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) { button.classList.toggle('active', button === btn); });
+  };
+  window.toggleTheme = function toggleTheme(btn) {
+    var dark = document.body.classList.toggle('ou--dark');
+    document.body.classList.toggle('ou--light', !dark);
+    btn.textContent = dark ? 'Light' : 'Dark';
+    btn.classList.toggle('active', dark);
+  };
+  window.toggleDensity = function toggleDensity(btn) {
+    var compact = document.body.classList.toggle('ou--compact');
+    document.body.classList.toggle('ou--normal', !compact);
+    btn.textContent = compact ? 'Normal' : 'Compact';
+    btn.classList.toggle('active', compact);
+  };
+</script>
+</body>
+</html>

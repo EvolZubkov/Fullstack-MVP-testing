@@ -30,12 +30,16 @@
 ## О проекте
 
 **SCORM Test Constructor** -- полнофункциональное веб-приложение для создания интерактивных тестов с экспортом
-в формат SCORM 2004 4th Edition. Приложение разделено на две роли:
+в формат SCORM 2004 4th Edition. Доступ построен на ролевой модели (PRD-13): пользователь держит **набор**
+из пяти ролей (superuser, administrator, author, manager, learner), а эффективные права -- объединение по
+ролям плюс конфигурационный суперадмин. Условно роли делятся на две стороны:
 
-- **Авторы (Author)** -- создают банки вопросов, группируют их по темам, конструируют тесты с гибкими
-  правилами прохождения, управляют пользователями и группами, просматривают аналитику
-- **Учащиеся (Learner)** -- проходят тесты в стандартном или адаптивном режиме, получают детальные
-  результаты с рекомендациями курсов
+- **Контентные роли (author / manager / administrator)** -- создают банки вопросов, группируют их по темам,
+  конструируют тесты с гибкими правилами прохождения, публикуют их версиями-снапшотами, управляют
+  пользователями, группами и доступом, просматривают аналитику. Поверх ролей действуют объектные области:
+  владелец и гранты тестов, владелец/видимость и гранты тем.
+- **Учащиеся (learner)** -- проходят тесты в стандартном или адаптивном режиме, получают детальные
+  результаты с рекомендациями.
 
 ---
 
@@ -46,24 +50,28 @@
 #### Управление темами
 
 - Создание и организация тем с иерархией папок
-- Добавление описаний и обратной связи
-- Прикрепление рекомендованных курсов (название + URL)
+- Владение темами и видимость (`private` / `shared`), гранты доступа `use` / `manage` (PRD-15)
+- Богатая обратная связь темы (`feedback_json`): текст, ссылки на курсы, документы, мероприятия
+- Код темы (`topics.code`) -- короткий идентификатор для адресации в формулах показателей (PRD-2)
 - Дублирование тем вместе со всеми вопросами
-- Массовое удаление тем
+- **Групповые операции в дереве «Темы и вопросы»** -- два взаимоисключающих режима выделения
+  («Папки и темы» / «Вопросы»): массовый перенос (темы в папку, папки с reparent), выдача/отзыв
+  доступа и смена видимости/владельца пакетом, удаление через сводную защиту (partial-batch:
+  незаблокированные удаляются, используемые в опубликованных тестах пропускаются)
+- Двухрежимное удаление папки: «перенести содержимое» или «каскад» (с защитой контента)
 
 #### Банк вопросов
 
 - 4 типа вопросов: single choice, multiple choice, matching, ranking
-- Настройка баллов и уровня сложности
-- **Цена ответа** -- градуированный (частичный) балл за вопрос: веса опций (single) или ступенчатая
-  таблица «условие → балл» над счётчиками правильных/неправильных ответов (multiple/matching/ranking);
-  по умолчанию точное совпадение 0/1
+- Уровень сложности вопроса (0–100, опционально -- поле nullable, PRD-16); **оценка (цена ответа) --
+  свойство теста, а не вопроса** (PRD-15): вопрос несёт только контент, баллы и градуировка задаются
+  в редакторе теста (вкладка «Оценка»)
 - **Теги (подтемы)** -- метки вопроса для квот выдачи: chip-инпут с автодополнением из тегов банка
 - Медиа-вложения (изображения, аудио, видео) с загрузкой до 200 MB
 - Перемешивание вариантов ответов (опция)
 - Обратная связь: общая или условная (для правильного/неправильного ответа)
 - Дублирование и массовое удаление вопросов
-- Импорт/экспорт через Excel
+- Импорт/экспорт через Excel (книга с листами «Вопросы»/«Оценка»/«Шкалы»/«Показатели»/«Измерения»)
 
 #### Конструктор тестов
 
@@ -72,19 +80,38 @@
   - **Адаптивный** -- динамическая сложность с уровнями, порогами прохождения и связанными ресурсами
 - **Квоты выдачи по тегам** -- на теме опциональная стратифицированная выдача: гарантированное
   покрытие подтем (тегов) -- «ровно N» или «не менее N» вопросов с тегом внутри общей выборки
+- **Варианты теста (PRD-17)** -- фиксированные наборы форм (`form set`) на секции: выдача целым
+  предзаданным набором вместо случайной выборки, случайный порядок предъявления, ротация между попытками
+- **Оценка (PRD-15, вкладка «Оценка»)** -- умолчания цены вопроса на уровне теста и секции, переопределения
+  по конкретным вопросам, конструктор градуированного балла (веса опций / ступенчатая таблица «условие → балл»),
+  индикатор устаревших переопределений, пиктограммы типов вопросов в таблице
+- **Показатели и шкалы (PRD-2/5)** -- пользовательские итоговые показатели (DSL-формулы `result.*`),
+  многомерные шкалы компетенций и матрица вкладов вопросов; передача итогов в LMS без ручной постобработки.
+  Конструктор показателей построен на модели «объект · единица»: 4 шаблона (Порог / Категория /
+  Взвешенная сумма / Вердикт) на едином условии-примитиве (Элемент · Свойство · Оператор · Значение),
+  читаемые ссылки на темы (`topicById(код)` / `topicByName(имя)` без UUID), общий балл (`score`),
+  справочник функций со вставкой по курсору, опциональная метка показателя
+- **Контентные страницы (PRD-1)** -- стартовая, введения разделов, промежуточные и итоговые экраны
+  из дизайн-шаблонов; границы раздела -- системные узлы шаблона (введение / обзор / итоги раздела)
+- **Гибкий поток (PRD-4/8)** -- линейный поток, поток по темам или сценарий через страницу-маршрутизатор
+- **Навигация прохождения (PRD-19)** -- пропуск вопроса и возврат к нему в пределах попытки
+  (`allowReturnToUnanswered`), разрешение/запрет изменения данного ответа (`allowAnswerChange`),
+  промежуточные итоги раздела (`showSectionResults`), поэтапное завершение по разделам с обзорным экраном
 - Гибкие правила прохождения (по процентам или абсолютным числам) для каждой темы и теста в целом
-- Ограничение по времени и количеству попыток
+- Ограничение по времени и количеству попыток; гейт повторного прохождения / cooldown (PRD-6)
 - Показ правильных ответов после прохождения
-- Кастомный контент на стартовой странице
-- Публикация / снятие с публикации
+- **Публикация версиями-снапшотами (PRD-15)** -- опубликованный тест неизменен: попытки доигрываются на своей
+  версии, правки банка не влияют на выданные варианты до переопубликации; экстренная переопубликация и
+  обнаружение дрейфа контента
 
 #### Управление пользователями и группами
 
-- Создание и управление учетными записями учащихся
+- Создание и управление учётными записями; назначение набора ролей пользователю (мультироль)
 - Организация пользователей в группы
-- Назначение тестов пользователям и группам (с дедлайном)
+- Назначение тестов пользователям и группам (с дедлайном и magic-link доступом без пароля)
 - Статусы пользователей: pending, active, inactive
 - Принудительная смена пароля при первом входе
+- Панель «Общий доступ»: гранты на тесты (`edit` / `assign`) и темы (`use` / `manage`)
 
 #### Аналитика
 
@@ -102,6 +129,22 @@
 - Передача score, completion, success status в LMS
 - Детальные interactions по темам
 
+#### Тестирование и отладка (PRD-18)
+
+- **Тестовый прогон** -- встроенный плеер отладки прямо в сервисе: пункт меню «Тестовый прогон»
+  открывает отдельное окно, где тест собирается ТЕМ ЖЕ пайплайном, что и production-экспорт, и
+  проигрывается с SCORM 2004 RTE-шимом -- без скачивания ZIP и без CLI
+- Прогон идёт из ЖИВОГО состояния теста на применённом шаблоне оформления; прогоны одноразовые --
+  не создают попыток и не пишут телеметрию, не влияют на аналитику
+- **Инспектор реального времени** -- статусная панель над стейджем (прогресс, оценка, алярм ошибки
+  расчёта) + сворачивающийся сайдбар с 7 вкладками: Результаты, Протокол, Выдача, Шкалы, Показатели,
+  Состояние (cmi / suspend_data / runtime state), LMS-журнал
+- **Эталон** -- тоггл подсветки правильных ответов на реальном рендере вопроса (галочка для выбора,
+  верный номер для ранжирования, буквы пар для сопоставления); на баллы не влияет
+- Экспорт протокола прогона в CSV; сброс и пересборка прогона
+- Доступ = право на редактирование теста (как у экспорта SCORM); локальный CLI-плеер
+  (`npm run scorm:player`) сохраняется как dev-инструмент и делит с сервисом один источник логики
+
 ### Для учащихся
 
 #### Прохождение тестов
@@ -109,7 +152,10 @@
 - Просмотр доступных и назначенных тестов
 - Фокусный режим (один вопрос на экране)
 - Таймер обратного отсчета
-- Прогресс-бар и навигация вперед/назад
+- Прогресс-пиллы со статусами вопросов (отвечён / пропущен / текущий / не выдан / заблокирован)
+  и клик-навигация к выданным вопросам (PRD-19)
+- Пропуск вопроса и возврат к нему в пределах попытки; обзорный экран перед завершением раздела/теста
+- Поэтапное завершение по разделам с промежуточными итогами раздела
 - Адаптивное тестирование с динамическим уровнем сложности
 
 #### Результаты
@@ -127,8 +173,10 @@
 - Индикация устаревших версий тестов
 - Детальный просмотр каждой попытки
 
-### Безопасность и GDPR
+### Безопасность и доступ
 
+- Ролевая модель (PRD-13): 5 ролей, мультироль, объединение прав, конфигурационный суперадмин (`SUPERADMIN_EMAILS`)
+- Объектные области доступа: владелец и гранты тестов, владелец/видимость и гранты тем
 - Шифрование email-адресов в базе данных (AES)
 - Хеширование паролей (bcrypt)
 - Сброс пароля через email-токены (HMAC-SHA256)
@@ -145,13 +193,12 @@
 | --- | --- | --- |
 | React | 19.2 | UI-библиотека |
 | TypeScript | 6.0 | Типизация |
-| Vite | 8.0 | Сборщик и dev-сервер |
+| Vite | 8.1 | Сборщик и dev-сервер |
 | Wouter | 3.10 | Легковесный роутинг |
-| TanStack React Query | 5.100 | Управление серверным состоянием |
-| React Hook Form | 7.76 | Формы |
+| TanStack React Query | 5.101 | Управление серверным состоянием |
+| React Hook Form | 7.80 | Формы |
 | Zod | 4.4 | Валидация |
-| shadcn/ui (Radix UI) | -- | Компоненты UI |
-| Tailwind CSS | 4.3 | Стилизация (новый движок, `@tailwindcss/postcss`) |
+| @universityrt/ui-kit | -- | Дизайн-система (компоненты `ou-*` + слой `tb-*`/plain CSS); вендорится в `vendor/ui-kit/` |
 | Lucide React | -- | Иконки |
 | html2canvas + jsPDF | 1.4.1 / 2.5.1 | PDF-экспорт в SCORM-runtime; вендорятся в пакет из `assets/vendor/` (devDep-пин, без CDN) |
 
@@ -166,10 +213,11 @@
 | PostgreSQL | 14+ | База данных |
 | express-session | 1.19 | Управление сессиями |
 | bcryptjs | 3.0 | Хеширование паролей |
+| @vvlad1973/crypto | 2.3 | Шифрование email (AES) |
 | Nodemailer | 8.0 | Отправка email |
-| Multer | 2.1 | Загрузка файлов |
+| Multer | 2.2 | Загрузка файлов |
 | Archiver | 7.0 | Создание SCORM ZIP-пакетов |
-| XLSX | -- | Импорт/экспорт Excel |
+| ExcelJS | 4.4 | Импорт/экспорт Excel |
 
 ### Инструменты сборки
 
@@ -186,8 +234,8 @@
 
 ### Обязательно
 
-- **Node.js** >= 18.0.0
-- **npm** >= 8.0.0
+- **Node.js** >= 20.0.0 (React 19 + Vite 8 требуют современный Node)
+- **npm** >= 10.0.0
 - **PostgreSQL** >= 14.0
 
 ### Рекомендуется
@@ -248,10 +296,10 @@ DATABASE_URL=postgresql://postgres:your_password@localhost:5432/scorm_db
 npm run db:push
 ```
 
-При первом запуске автоматически создаются демо-пользователи:
+При первом запуске (пустая БД) автоматически создаются демо-пользователи и демо-контент. Вход по email:
 
-- **admin** / admin123 (role: author)
-- **learner** / learner123 (role: learner)
+- **<admin@test.com>** / admin123 (роль: administrator)
+- **<learner@test.com>** / learner123 (роль: learner)
 
 ### 5. Запуск
 
@@ -266,66 +314,57 @@ npm run dev
 ## Структура проекта
 
 ```text
-Fullstack-MVP-testing/
+test-builder/
 |-- client/                          # Frontend (React SPA)
 |   |-- src/
-|   |   |-- components/              # React-компоненты
-|   |   |   |-- ui/                  # shadcn/ui компоненты (47 штук)
+|   |   |-- components/              # Общие React-компоненты (DS @universityrt/ui-kit)
 |   |   |   |-- questions/           # Компоненты вопросов (media-uploader)
-|   |   |   |-- app-sidebar.tsx      # Боковая навигация
+|   |   |   |-- app-sidebar.tsx      # Боковая навигация (DS AppShell + Sidebar)
 |   |   |   |-- assign-test-dialog.tsx # Диалог назначения тестов
-|   |   |   |-- empty-state.tsx
-|   |   |   |-- loading-state.tsx
-|   |   |   |-- page-header.tsx
-|   |   |   |-- password-input.tsx
-|   |   |   |-- theme-provider.tsx
-|   |   |   +-- theme-toggle.tsx
+|   |   |   |-- role-picker.tsx      # Мультироль-редактор (PRD-13)
+|   |   |   |-- template-screen.tsx  # React-хост общего рендерера (PRD-12, Shadow DOM)
+|   |   |   |-- empty-state.tsx  loading-state.tsx  page-header.tsx
+|   |   |   |-- password-input.tsx  theme-provider.tsx  theme-toggle.tsx
+|   |   |-- features/                # Фичевые модули
+|   |   |   |-- tests/editor/        # Редактор теста (Drawer, секции, мапперы, валидация; PRD-7/15)
+|   |   |   |-- tests/debug-player/  # Окно встроенного плеера тестирования и отладки (PRD-18)
+|   |   |   |-- topics/              # Drawer темы: «Свойства» + «Доступ» (PRD-15)
+|   |   |   |-- templates/           # Админ-реестр шаблонов: список, загрузка, превью (PRD-3)
+|   |   |   +-- content-protection/  # UI защиты контента (409 + dry-run, PRD-15)
 |   |   |-- hooks/                   # Custom React hooks
-|   |   |   |-- use-mobile.tsx
-|   |   |   +-- use-toast.ts
 |   |   |-- lib/                     # Утилиты и конфигурация
 |   |   |   |-- auth.tsx             # Контекст аутентификации
-|   |   |   |-- i18n.ts             # Интернационализация (RU)
-|   |   |   |-- queryClient.ts      # React Query setup
-|   |   |   +-- utils.ts
+|   |   |   |-- roles.ts            # Клиентская модель ролей/прав (PRD-13)
+|   |   |   |-- i18n.ts  queryClient.ts  utils.ts
 |   |   |-- pages/                   # Страницы
-|   |   |   |-- author/              # Панель автора
-|   |   |   |   |-- analytics.tsx    # Общая аналитика
-|   |   |   |   |-- test-analytics.tsx # Аналитика по тесту
-|   |   |   |   |-- topics.tsx       # Управление темами
-|   |   |   |   |-- questions.tsx    # Банк вопросов
-|   |   |   |   |-- tests.tsx        # Конструктор тестов
-|   |   |   |   |-- users.tsx        # Управление пользователями
-|   |   |   |   |-- groups.tsx       # Управление группами
-|   |   |   |   +-- layout.tsx
+|   |   |   |-- author/              # Панель контентных ролей
+|   |   |   |   |-- topics.tsx  questions.tsx  tests.tsx  tags-input.tsx
+|   |   |   |   |-- users.tsx  groups.tsx  templates.tsx  import.tsx  logs.tsx
+|   |   |   |   |-- analytics.tsx  test-analytics.tsx  layout.tsx
 |   |   |   |-- learner/             # Панель учащегося
-|   |   |   |   |-- test-list.tsx    # Доступные тесты
-|   |   |   |   |-- take-test.tsx    # Прохождение теста
-|   |   |   |   |-- result.tsx       # Результаты
-|   |   |   |   |-- history.tsx      # История попыток
-|   |   |   |   +-- layout.tsx
-|   |   |   |-- login.tsx
-|   |   |   |-- first-login.tsx      # Первый вход (GDPR)
-|   |   |   |-- forgot-password.tsx  # Запрос сброса пароля
-|   |   |   |-- reset-password.tsx   # Сброс пароля
-|   |   |   +-- not-found.tsx
-|   |   |-- App.tsx                  # Главный компонент + роутинг
-|   |   |-- main.tsx                 # Entry point
-|   |   +-- index.css                # Глобальные стили
+|   |   |   |   |-- test-list.tsx  take-test.tsx  template-question-screen.tsx
+|   |   |   |   |-- result.tsx  history.tsx  use-section-timer.ts  layout.tsx
+|   |   |   |-- login.tsx  first-login.tsx  forgot-password.tsx  reset-password.tsx
+|   |   |   |-- no-access.tsx  not-found.tsx
+|   |   |-- styles/                  # tb-components.css, tb-tests-list.css, vendor/
+|   |   |-- App.tsx  main.tsx  index.css
 |   +-- index.html
 |
 |-- server/                          # Backend (Express)
 |   |-- routes/                      # Модульные роутеры по доменам (монтируются в routes.ts)
 |   |   |-- index.ts                # routerConfig: список path -> router
 |   |   |-- auth.ts  users.ts  groups.ts  topics.ts  questions.ts  tests.ts
-|   |   |-- attempts.ts  assignments.ts  folders.ts  test-folders.ts
-|   |   |-- content-pages.ts  result-variables.ts  scales.ts  templates.ts
-|   |   |-- access.ts  analytics/  scorm-telemetry.ts  logs.ts
+|   |   |-- attempts.ts  assignments.ts  folders.ts  test-folders.ts  access.ts
+|   |   |-- content-pages.ts  result-variables.ts  scales.ts
+|   |   |-- templates.ts  admin-templates.ts (PRD-3)  workbook.ts  tests-workbook.ts (PRD-14)
+|   |   |-- analytics/  scorm-telemetry.ts  logs.ts  debug-player.ts (PRD-18)
 |   |-- services/                    # Доменные сервисы (вне route-хендлеров)
-|   |   |-- result-compute.ts       # Серверный расчёт результата (PRD-2/5/10)
-|   |   |-- result-context.ts       # AttemptResult -> контекст экрана итогов
-|   |   |-- scoring-config.ts  retake-gate.ts (PRD-6)  template-render.ts
-|   |   |-- flow-policy-validator.ts  variant-binding.ts  test-settings.ts  ...
+|   |   |-- result-compute.ts  result-context.ts  scoring-config.ts  effective-scoring.ts
+|   |   |-- retake-gate.ts (PRD-6)  template-render.ts  flow-policy-validator.ts
+|   |   |-- variant-binding.ts  test-settings.ts  content-pages-lifecycle.ts
+|   |   |-- access.ts  test-access.ts  topic-access.ts (PRD-13/15)
+|   |   |-- content-guard.ts  draw-feasibility.ts  test-snapshot.ts (PRD-15)
+|   |   |-- workbook-import.ts  questions-import.ts  questions-export.ts (PRD-14)
 |   |-- scorm/                       # SCORM 2004 генератор
 |   |   |-- builders/                # Сборщики пакета (manifest, metadata, test-json,
 |   |   |                            #   media-assets, shared-runtime — esbuild-бандл @shared)
@@ -333,10 +372,15 @@ Fullstack-MVP-testing/
 |   |   |-- template/app/            # JS-логика пакета (adaptive, dnd, render, timer, telemetry)
 |   |   |-- templates/<id>/          # Дизайн-шаблоны: layouts + styles + manifest (PRD-7/12)
 |   |   |-- index.ts                # generateScormPackage
+|   |   |-- build-export-data.ts    # Общий сборщик ExportData: экспорт + отладка (PRD-18)
+|   |   |-- debug-player/           # Ассеты плеера отладки: shim + TBInspector compute + стор (PRD-18)
 |   |   +-- zip.ts                  # ZIP-упаковка
-|   |-- utils/                       # crypto.ts (email AES), mask-email.ts
+|   |-- middleware/                  # auth.ts, test-scope.ts, upload.ts (Multer)
+|   |-- utils/                       # crypto.ts (email AES), excel.ts, mask-email.ts
+|   |-- config.ts                    # Конфигурация (в т.ч. SUPERADMIN_EMAILS)
 |   |-- db.ts                        # Подключение к БД (Drizzle)
 |   |-- email.ts                     # Отправка email (сброс пароля)
+|   |-- logger.ts                    # Логирование
 |   |-- index.ts                     # Entry point сервера
 |   |-- routes.ts                    # registerRoutes — тонкий оркестратор (~100 строк)
 |   |-- scorm-exporter.ts            # Точка входа SCORM-экспорта
@@ -346,36 +390,33 @@ Fullstack-MVP-testing/
 |
 |-- shared/                          # Общий код (client + server + SCORM-пакет)
 |   |-- schema.ts                   # Drizzle-схема БД + Zod-типы
-|   |-- scoring/ scales/ formula/   # Чистые доменные движки (PRD-2/5/10)
+|   |-- scoring/ scales/ formula/   # Чистые доменные движки (PRD-2/5/10/15)
 |   |-- eligibility/ draw/ tags.ts  # Retake-eligibility (PRD-6), квоты выдачи (PRD-11)
+|   |-- access/                     # Модель ролей/прав (PRD-13)
 |   +-- template/                   # Единый рендерер (PRD-12): dsl, render-screen,
 |                                    #   renderers, context, *-context builders, dnd/
 |
-|-- script/                          # Утилиты
-|   |-- build.ts                    # Скрипт production-сборки
-|   |-- create-admin.ts             # Создание администратора
-|   |-- migrate-emails.ts           # Миграция email
-|   +-- test-crypto.ts              # Тесты шифрования
+|-- script/                          # Build + админ-утилиты (build.ts, create-admin.ts,
+|                                    #   migrate-emails.ts, reencrypt-emails.ts, test-crypto.ts)
+|-- scripts/                         # SCORM-тулинг + dev (scorm-player.mjs,
+|                                    #   generate-sample/template-scorm.ts, превью, check-wireframes-ds)
 |
-|-- docs/                            # Документация (PRD, ROADMAP, гайды, wireframes)
-|   |-- guides/                      # Гайды (DOCUMENTATION-GUIDELINES, design_guidelines, LOGGING)
-|   |-- prd-*.md                     # PRD-1..9
-|   |-- wireframes/                  # HTML-эскизы (PRD-7)
-|   +-- reports/                     # Аудиты зависимостей и LMS-анализы
+|-- docs/                            # Документация
+|   |-- specs/                       # BRD + PRD-1..19 + scoring-model + спецификации
+|   |-- architecture/                # service-architecture, test-editor-contracts, ...
+|   |-- guides/                      # design_guidelines, import-template-guide, template-development
+|   |-- wireframes/                  # HTML-эскизы
+|   |-- ROADMAP.md  RUNBOOK_*.md  AUDIT_*.md  PLAN_*.md
 |
-|-- migrations/                      # Drizzle-миграции БД
+|-- migrations/                      # Нумерованные SQL-миграции БД (001..035)
 |-- uploads/                         # Загруженные файлы
 |   |-- media/                      # Медиа-файлы вопросов
-|   +-- scorm/                      # Сгенерированные SCORM-пакеты
+|   |-- scorm/                      # Сгенерированные SCORM-пакеты
+|   +-- templates/                  # Распакованные загруженные шаблоны (PRD-3)
 |
 |-- .env.example                     # Шаблон переменных окружения
 |-- drizzle.config.ts               # Конфиг Drizzle Kit
-|-- package.json
-|-- tsconfig.json
-|-- tailwind.config.ts
-|-- vite.config.ts
-|-- components.json                  # Конфиг shadcn/ui
-+-- postcss.config.js
++-- package.json  tsconfig.json  vite.config.ts  postcss.config.js
 ```
 
 ---
@@ -387,7 +428,7 @@ Fullstack-MVP-testing/
 ```text
 +----------------------------------------------------------+
 |                     Browser (React SPA)                    |
-|   Wouter routing, TanStack Query, shadcn/ui, Tailwind     |
+|   Wouter routing, TanStack Query, @universityrt/ui-kit    |
 +----------------------------+-----------------------------+
                              |  HTTP/REST API
                              |  /api/*
@@ -431,26 +472,32 @@ Fullstack-MVP-testing/
 `TBTemplate`). CSS тоже единый: компонентный источник `server/scorm/templates/<id>/styles/`
 (`theme.css` + `base.css`), из которого на сборке генерируется `styles.css` пакета.
 
-### Ролевая модель
+### Ролевая модель (PRD-13)
+
+Пользователь держит **набор** ролей (`user_roles`); эффективные права -- объединение по ролям плюс
+конфигурационный суперадмин (`SUPERADMIN_EMAILS`). Поверх ролей действуют объектные области доступа.
 
 ```text
-+------------+
-|    User    |
-+-----+------+
-      |
-      +----------------+
-      |                |
-+-----v------+   +-----v------+
-|   Author   |   |  Learner   |
-|            |   |            |
-| - Topics   |   | - Tests    |
-| - Questions|   | - Attempts |
-| - Tests    |   | - Results  |
-| - Users    |   | - History  |
-| - Groups   |   |            |
-| - Analytics|   |            |
-+------------+   +------------+
+                          +------------+
+                          |    User    |  держит набор ролей (union прав)
+                          +-----+------+
+                                |
+   +-------------+--------------+--------------+--------------+-------------+
+   |             |              |              |              |             |
++--v------+ +----v-------+ +----v-----+ +------v-----+ +------v----+        |
+|superuser| |administrator| |  author  | |  manager   | |  learner  |        |
+| (всё)   | | (упр-е      | | (контент:| | (назначение| | (прохожд- |        |
+|         | |  польз./    | |  темы,   | |  тестов)   | |  ение,    |        |
+|         | |  доступ)    | |  вопросы,| |            | |  результ.,|        |
+|         | |             | |  тесты)  | |            | |  история) |        |
++---------+ +------------+ +----------+ +------------+ +-----------+        |
+                                                                            |
+   Объектные области доступа поверх ролей: -----------------------------+---+
+   - тест: владелец (owner_id) + гранты test_access_grants (edit / assign)
+   - тема: владелец + видимость (private/shared) + гранты topic_access_grants (use / manage)
 ```
+
+`superadmin` нигде не хранится -- вычисляется в рантайме из `SUPERADMIN_EMAILS`.
 
 ### Режимы тестирования
 
@@ -486,14 +533,22 @@ Test
 ### Процесс прохождения теста
 
 1. Учащийся выбирает тест
-2. Генерируется вариант теста (variantJson) -- случайная выборка вопросов по drawCount / адаптивным уровням
-3. Учащийся отвечает на вопросы (ответы сохраняются в answersJson)
-4. Отправка теста -- вычисление результатов, применение правил прохождения
-5. Результаты -- общий балл, разбивка по темам, рекомендации курсов
+2. Опубликованный тест доставляется из неизменного снапшота (`attempts.snapshot_id`); попытка
+   пинуется к своей версии и доигрывается на ней даже после правок банка (PRD-15)
+3. Генерируется вариант теста (variantJson) -- выборка вопросов по drawCount / квотам по тегам /
+   адаптивным уровням
+4. Учащийся отвечает на вопросы (ответы сохраняются в answersJson)
+5. Отправка теста -- серверный расчёт результата (баллы, шкалы `scale.*`, показатели `result.*`,
+   правила прохождения)
+6. Результаты -- общий балл, разбивка по темам, показатели и рекомендации
 
 ---
 
 ## База данных
+
+PostgreSQL + Drizzle ORM, **29 таблиц**. Схема и Zod-типы -- в [shared/schema.ts](shared/schema.ts).
+Изменения схемы применяются через `npm run db:push` (Drizzle Kit); история структурных изменений -- в
+нумерованных SQL-миграциях `migrations/` (001..035).
 
 ### Таблицы (Drizzle ORM, PostgreSQL)
 
@@ -503,10 +558,9 @@ Test
 | ---- | --- | -------- |
 | id | varchar(36) PK | UUID |
 | email | text | Зашифрованный email (AES) |
-| emailHash | text | SHA-256 хеш для поиска |
+| emailHash | varchar(64) | SHA-256 хеш для поиска |
 | passwordHash | text | bcrypt хеш пароля |
 | name | text | Отображаемое имя |
-| role | enum | author, learner |
 | status | enum | pending, active, inactive |
 | mustChangePassword | boolean | Принудительная смена пароля |
 | gdprConsent | boolean | Согласие GDPR |
@@ -514,7 +568,14 @@ Test
 | lastLoginAt | timestamp | Последний вход |
 | expiresAt | timestamp | Срок действия аккаунта |
 | createdAt | timestamp | Дата создания |
-| createdBy | varchar FK | Создатель (author) |
+| createdBy | varchar | Создатель |
+
+Столбец `role` удалён (миграция 017): роли живут в `user_roles` (см. ниже) + конфиг-суперадмин.
+
+#### userRoles
+
+Роли пользователя (многие-ко-многим, PRD-13): `userId`, `role` (superuser/administrator/author/manager/learner),
+`grantedBy`. Единственный источник хранимых ролей.
 
 #### groups
 
@@ -539,7 +600,7 @@ Test
 
 #### folders
 
-Иерархическая структура папок для тем (parentId -> folders.id).
+Иерархическая структура папок для тем (parentId -> folders.id, createdBy).
 
 #### topics
 
@@ -548,53 +609,80 @@ Test
 | id | varchar(36) PK | UUID |
 | name | text | Название темы |
 | description | text | Описание |
-| feedback | text | Обратная связь |
-| folderId | varchar FK | Папка |
+| feedback | text | Обратная связь (legacy text) |
+| feedbackJson | jsonb | Богатая обратная связь: текст, ссылки/курсы, документы, мероприятия (TD-02) |
+| folderId | varchar | Папка |
+| code | text | Короткий код темы для адресации в формулах показателей (PRD-2; nullable) |
+| createdBy | varchar | Создатель (аудит, PRD-15) |
+| ownerId | varchar | Владелец темы (NULL = legacy common pool) |
+| visibility | enum | private / shared (PRD-15) |
+| nameNormalized | text | Нормализованное имя для одноимённости в рамках владельца |
 
-#### topicCourses
+Таблицы `topic_courses` / `topic_events` удалены (миграция 024): рекомендации живут в `topics.feedback_json`.
 
-Рекомендованные курсы для темы (title + URL).
+#### topicAccessGrants
+
+Гранты доступа к теме для пользователя (PRD-15): `granteeId`, `accessLevel` (use / manage),
+`state` (active / revoked_in_use). Гранты адресуют только пользователей (TD-01).
 
 #### questions
 
 | Поле | Тип | Описание |
 | --- | --- | --- |
 | id | varchar(36) PK | UUID |
-| topicId | varchar FK | Тема |
+| topicId | varchar | Тема |
 | type | enum | single, multiple, matching, ranking |
 | prompt | text | Текст вопроса |
 | dataJson | jsonb | Варианты ответов |
 | correctJson | jsonb | Правильные ответы |
-| points | integer | Баллы (по умолчанию 1) |
-| difficulty | text | Уровень сложности |
+| difficulty | integer | Уровень сложности (0–100; nullable с PRD-16, миграция 029) |
+| tags | jsonb | Теги-подтемы (PRD-11/2) |
+| contentHash | text | Хеш контента (пин переопределений оценки, дрейф) |
 | mediaUrl | text | URL медиа-файла |
 | mediaType | enum | image, audio, video |
 | shuffleAnswers | boolean | Перемешивание ответов |
 | feedback | text | Обратная связь (общая) |
 | feedbackMode | enum | general, conditional |
-| feedbackCorrect | text | Для правильного ответа |
-| feedbackIncorrect | text | Для неправильного ответа |
+| feedbackCorrect / feedbackIncorrect | text | Условная обратная связь |
+| createdBy | varchar | Создатель (аудит, PRD-15) |
+
+Столбцы `points` / `scoring_json` удалены (миграция 028, T-40): **оценка -- свойство теста**, не вопроса.
+Вопрос несёт только контент; цена и градуировка резолвятся через `test_question_scoring` -> умолчания
+секции/теста -> системное (1 балл, точное совпадение) в [shared/scoring/effective-scoring](shared/scoring/).
 
 #### tests
 
 | Поле | Тип | Описание |
 | --- | --- | --- |
 | id | varchar(36) PK | UUID |
-| title | text | Название теста |
-| description | text | Описание |
+| ownerId | varchar | Владелец теста (PRD-13; NULL = legacy) |
+| title / description | text | Название / описание |
 | mode | enum | standard, adaptive |
 | showDifficultyLevel | boolean | Показывать сложность |
 | overallPassRuleJson | jsonb | Общее правило прохождения |
-| published | boolean | Опубликован |
+| status | enum | draft / published / archived (`published` boolean — deprecated) |
 | version | integer | Версия теста |
-| timeLimitMinutes | integer | Лимит времени |
-| maxAttempts | integer | Макс. попыток |
+| flowPolicyJson | jsonb | Политика потока (PRD-4/8) |
+| feedbackJson | jsonb | Обратная связь теста |
+| designSettingsJson | jsonb | Параметры дизайн-шаблона (PRD-7) |
+| retakePolicyJson | jsonb | Гейт повторного прохождения / cooldown (PRD-6) |
+| defaultQuestionPoints | integer | Умолчание цены вопроса для теста (PRD-15) |
+| allowReturnToUnanswered | boolean | Возврат к пропущенным вопросам в попытке (PRD-19; default true) |
+| allowAnswerChange | boolean | Разрешить менять уже данный ответ (PRD-19; default false) |
+| showSectionResults | boolean | Показывать промежуточные итоги раздела (PRD-19; default true) |
+| telemetryEnabled | boolean | Телеметрия SCORM |
+| timeLimitMinutes / maxAttempts | integer | Лимит времени / попыток |
 | showCorrectAnswers | boolean | Показывать ответы |
-| startPageContent | text | Контент стартовой страницы |
+
+#### testAccessGrants
+
+Гранты доступа к тесту для не-владельца (PRD-13): `userId`, `accessLevel` (edit / assign), `grantedBy`.
 
 #### testSections
 
-Секции теста в стандартном режиме (topicId, drawCount, topicPassRuleJson).
+Секции теста (topicId, drawCount, drawAll, topicPassRuleJson, required, sortOrder, timeLimitMinutes).
+`drawBlueprintJson` -- квоты выдачи по тегам (PRD-11); `defaultPoints` -- умолчание цены вопроса для секции (PRD-15);
+`formSetJson` -- фиксированные варианты выдачи (form set, PRD-17).
 
 #### adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks
 
@@ -605,14 +693,24 @@ Test
 | Поле | Тип | Описание |
 | --- | --- | --- |
 | id | varchar(36) PK | UUID |
-| userId | varchar FK | Учащийся |
-| testId | varchar FK | Тест |
+| userId | varchar | Учащийся |
+| testId | varchar | Тест |
 | testVersion | integer | Версия теста |
+| snapshotId | varchar | Снапшот доставки (PRD-15; NULL = live/legacy) |
 | variantJson | jsonb | Сгенерированный вариант |
 | answersJson | jsonb | Ответы учащегося |
 | resultJson | jsonb | Результаты проверки |
-| startedAt | timestamp | Начало |
-| finishedAt | timestamp | Завершение |
+| startedAt / finishedAt | timestamp | Начало / завершение |
+
+#### testSnapshots
+
+Неизменный снапшот теста на момент публикации (PRD-15): `version`, `contentJson` (полный
+доставляемый контент), `publishedAt`, `publishedBy`. Доставка опубликованного теста читает только снапшот.
+
+#### testQuestionScoring
+
+Переопределение оценки по паре (тест, вопрос) (PRD-15, блок D): `points`, `scoringJson` (градуированный балл),
+`difficulty`, `pinnedContentHash` (пин для индикатора устаревания). Оценка -- свойство теста.
 
 #### scormPackages
 
@@ -630,15 +728,27 @@ Test
 
 | Таблица / колонка | PRD | Назначение |
 | ----------------- | --- | ---------- |
-| `templates` | PRD-7 | Дизайн-шаблоны (layouts, стили, manifest-параметры) |
+| `templates` | PRD-7/3 | Дизайн-шаблоны (layouts, стили, manifest) + админ-реестр внешних ZIP |
 | `content_pages` | PRD-1 | Контентные страницы (intro/между темами/после итогов) |
 | `result_variables` | PRD-2 | Показатели результата (DSL-формулы `result.*`) |
 | `scales` + `question_measurements` | PRD-5 | Шкалы и вклады вопросов в шкалы (многомерные измерения) |
-| `test_folders`, `topic_events`, `assignment_access_tokens` | -- | Папки тестов, события темы, magic-link токены доступа |
-| `questions.scoring_json` | PRD-10 | Цена ответа: веса опций / ступенчатая таблица (иначе 0/1) |
+| `user_roles` | PRD-13 | Роли пользователя (мультироль; единственный источник хранимых ролей) |
+| `test_access_grants` | PRD-13 | Гранты доступа к тесту (edit / assign) |
+| `topic_access_grants` | PRD-15 | Гранты доступа к теме (use / manage) |
+| `test_snapshots` + `attempts.snapshot_id` | PRD-15 | Неизменные опубликованные версии + пин доставки попытки |
+| `test_question_scoring` | PRD-15 | Переопределение оценки по (тест, вопрос); оценка -- свойство теста |
+| `tests.default_question_points`, `test_sections.default_points` | PRD-15 | Умолчания цены вопроса (тест/секция) |
+| `topics.owner_id` / `visibility` / `feedback_json` / `name_normalized` | PRD-15 | Владение/видимость темы, богатая ОС, одноимённость |
+| `created_by` (folders/topics/questions/test_folders) | PRD-15 | Аудит авторства (NULL = legacy) |
+| `test_folders`, `assignment_access_tokens` | -- | Папки тестов, magic-link токены доступа |
 | `questions.tags` | PRD-11/2 | Теги-подтемы (квоты выдачи + источники формул показателей) |
 | `test_sections.draw_blueprint_json` | PRD-11 | Квоты выдачи по тегам (иначе равномерная выборка) |
 | `tests.retake_policy_json` | PRD-6 | Гейт повторного прохождения / cooldown (иначе только `maxAttempts`) |
+| `questions.difficulty` (nullable) | PRD-16 | Опциональная сложность вопроса (миграция 029) |
+| `test_sections.form_set_json` | PRD-17 | Фиксированные варианты выдачи (form set; иначе случайная выборка) |
+| `tests.allow_return_to_unanswered` / `allow_answer_change` / `show_section_results` | PRD-19 | Навигация прохождения: пропуск/возврат, смена ответа, промежуточные итоги раздела |
+| `topics.code` | PRD-2 | Код темы для читаемой адресации в формулах показателей (`topicById`) |
+| `content_pages.kind` (`intro` / `review` / `section-results`) | PRD-19/1 | Системные узлы границ раздела (миграции 034/035) |
 
 Все опциональные колонки nullable/с дефолтом: их отсутствие сохраняет легаси-поведение.
 
@@ -646,21 +756,26 @@ Test
 
 ```text
 users
-  +--- attempts (1:N)
+  +--- userRoles (1:N)            # роли (мультироль, PRD-13)
+  +--- attempts (1:N) --- testSnapshots (доставка из снапшота)
   +--- userGroups (N:M) --- groups
-  +--- testAssignments (1:N)
+  +--- testAssignments (1:N) --- assignmentAccessTokens (magic link)
   +--- passwordResetTokens (1:N)
 
 folders (self-referencing)
-  +--- topics (1:N)
-         +--- questions (1:N)
-         +--- topicCourses (1:N)
+  +--- topics (1:N)               # owner_id + visibility + feedback_json
+         +--- questions (1:N)     # контент; оценка — в тесте
+         +--- topicAccessGrants (1:N, use/manage)
 
-tests
+tests                              # owner_id + status + snapshots
   +--- testSections (1:N, standard) --- topics
   +--- adaptiveTopicSettings (1:N, adaptive) --- topics
   |      +--- adaptiveLevels (1:N)
   |             +--- adaptiveLevelLinks (1:N)
+  +--- testQuestionScoring (1:N) --- questions    # переопределение оценки (PRD-15)
+  +--- testSnapshots (1:N)        # неизменные версии
+  +--- testAccessGrants (1:N, edit/assign)
+  +--- scales (1:N) + resultVariables (1:N) + contentPages (1:N)
   +--- attempts (1:N)
   +--- testAssignments (1:N)
   +--- scormPackages (1:N)
@@ -672,25 +787,26 @@ tests
 
 ## API Reference
 
-### Аутентификация
+### Аутентификация (`/api/auth`)
 
 | Метод | Endpoint | Описание |
 | --- | --- | --- |
-| POST | `/api/login` | Вход в систему |
-| POST | `/api/logout` | Выход |
-| POST | `/api/register` | Регистрация пользователя |
+| POST | `/api/auth/login` | Вход в систему |
+| POST | `/api/auth/logout` | Выход |
 | GET | `/api/auth/me` | Текущий пользователь |
-| POST | `/api/request-password-reset` | Запрос сброса пароля |
-| POST | `/api/reset-password` | Сброс пароля по токену |
+| POST | `/api/auth/change-password` | Смена пароля |
+| POST | `/api/auth/forgot-password` | Запрос сброса пароля |
+| GET | `/api/auth/verify-reset-token` | Проверка токена сброса |
+| POST | `/api/auth/reset-password` | Сброс пароля по токену |
+| POST | `/api/auth/complete-first-login` | Первый вход (GDPR + смена пароля) |
 
-### Пользователи (Author)
+### Пользователи
 
 | Метод | Endpoint | Описание |
 | --- | --- | --- |
 | GET | `/api/users` | Список пользователей |
-| POST | `/api/users` | Создать пользователя |
-| GET | `/api/user/profile` | Профиль текущего пользователя |
-| PUT | `/api/user/password` | Смена пароля |
+| POST | `/api/users` | Создать пользователя (с набором ролей) |
+| PUT | `/api/users/:id` | Обновить пользователя / роли |
 
 ### Группы (Author)
 
@@ -711,22 +827,29 @@ tests
 | PUT | `/api/topics/:id` | Обновить тему |
 | DELETE | `/api/topics/:id` | Удалить тему |
 | POST | `/api/topics/:id/duplicate` | Дублировать тему |
-| POST | `/api/topics/bulk-delete` | Массовое удаление |
+| PATCH | `/api/topics/:id/visibility` | Сменить видимость темы (PRD-15) |
+| PATCH | `/api/topics/:id/owner` | Сменить владельца темы (PRD-15) |
+| POST | `/api/topics/bulk-delete` | Массовое удаление (partial-batch с защитой контента) |
+| POST | `/api/topics/bulk-move` | Групповой перенос тем в папку |
+| POST | `/api/topics/bulk-visibility` | Групповая смена видимости |
+| POST | `/api/topics/bulk-owner` | Групповая смена владельца |
+| POST | `/api/topics/bulk-grant` / `/api/topics/bulk-revoke` | Групповая выдача / отзыв доступа |
 
-### Вопросы (Author)
+### Вопросы
 
 | Метод | Endpoint | Описание |
 | --- | --- | --- |
 | GET | `/api/questions` | Список вопросов |
-| POST | `/api/questions` | Создать вопрос |
+| POST | `/api/questions` | Создать вопрос (только контент, без оценки) |
 | PUT | `/api/questions/:id` | Обновить вопрос |
 | DELETE | `/api/questions/:id` | Удалить вопрос |
 | POST | `/api/questions/:id/duplicate` | Дублировать вопрос |
 | POST | `/api/questions/bulk-delete` | Массовое удаление |
-| GET | `/api/questions/export` | Экспорт в Excel |
+| GET | `/api/questions/export` | Экспорт в Excel (без оценки, T-40) |
+| GET | `/api/questions/template` | Шаблон Excel-импорта |
 | POST | `/api/questions/import` | Импорт из Excel |
 
-### Тесты (Author)
+### Тесты
 
 | Метод | Endpoint | Описание |
 | --- | --- | --- |
@@ -734,27 +857,38 @@ tests
 | POST | `/api/tests` | Создать тест |
 | PUT | `/api/tests/:id` | Обновить тест |
 | DELETE | `/api/tests/:id` | Удалить тест |
-| PUT | `/api/tests/:id/publish` | Опубликовать / снять |
-| POST | `/api/tests/:id/assign` | Назначить тест |
-| POST | `/api/tests/:id/export-scorm` | Экспорт SCORM |
+| PATCH | `/api/tests/:id/status` | Сменить статус (опубликовать / в архив) |
+| POST | `/api/tests/:id/republish-force` | Экстренная переопубликация (PRD-15) |
+| POST | `/api/tests/:id/restore` | Восстановить из архива |
+| PUT | `/api/tests/:id/design` | Параметры дизайн-шаблона |
+| GET | `/api/tests/:id/export/scorm` | Экспорт SCORM |
+| POST/GET/DELETE | `/api/tests/:id/debug/...` | Встроенный плеер отладки: сборка / проигрывание / сброс прогона (PRD-18) |
+| GET/POST/DELETE | `/api/tests/:id/access` | Гранты доступа к тесту (PRD-13) |
+| PATCH | `/api/tests/:id/owner` | Сменить владельца теста |
 
-### Попытки (Learner)
+### Назначения и попытки (Learner)
 
 | Метод | Endpoint | Описание |
 | --- | --- | --- |
 | GET | `/api/learner/tests` | Доступные тесты |
-| POST | `/api/tests/:id/start` | Начать тест |
-| POST | `/api/attempts/:id/answer` | Сохранить ответ |
-| POST | `/api/attempts/:id/finish` | Завершить тест |
-| GET | `/api/attempts/:id` | Результат попытки |
-| GET | `/api/attempts` | История попыток |
+| GET | `/api/learner/assigned-tests` | Назначенные тесты |
+| POST | `/api/tests/:testId/attempts/start` | Начать тест |
+| POST | `/api/tests/:testId/attempts/start-adaptive` | Начать адаптивный тест |
+| POST | `/api/attempts/:attemptId/save-progress` | Сохранить прогресс |
+| GET | `/api/tests/:testId/resume` | Возобновить попытку |
+| POST | `/api/attempts/:attemptId/finish` | Завершить тест |
+| GET | `/api/attempts/:attemptId/result` | Результат попытки |
+| GET | `/api/learner/attempts` | История попыток |
+| GET/POST | `/api/tests/:id/assignments` | Назначения теста |
 
-### Аналитика (Author)
+### Аналитика
 
 | Метод | Endpoint | Описание |
 | --- | --- | --- |
 | GET | `/api/analytics` | Общая аналитика |
-| GET | `/api/analytics/:testId` | Аналитика по тесту |
+| GET | `/api/analytics/combined` | Сводная аналитика |
+| GET | `/api/analytics/tests/:testId/attempts` | Попытки по тесту |
+| GET | `/api/analytics/tests/:testId/export/excel` | Экспорт аналитики теста в Excel |
 
 ### Медиа
 
@@ -767,9 +901,11 @@ tests
 API разнесён по модульным роутерам (`server/routes/`). Помимо перечисленного выше, есть
 группы: `/api/folders` и `/api/test-folders` (иерархия), `/api/tests/:id/content-pages`
 (PRD-1), `/api/tests/:id/result-variables` (PRD-2), `/api/tests/:id/scales` (PRD-5),
-`/api/templates` (PRD-7), `/api/learner/...` (прохождение), `/access/*` (magic-link),
-телеметрия SCORM и логи. Полный список маршрутов -- `routerConfig` в
-[server/routes/index.ts](server/routes/index.ts).
+`/api/tests/:id/workbook/import|export` + `/api/workbook/*` (PRD-14 Excel), `/api/templates`
+(PRD-7) и `/api/admin/templates` (PRD-3 админ-реестр), `/api/tests/:id/debug/*` (PRD-18
+встроенный плеер отладки), `/api/groups`, `/api/analytics`, `/access/*` (magic-link, до
+session guard), телеметрия SCORM и `/api/logs`. Полный список маршрутов -- `routerConfig`
+в [server/routes/index.ts](server/routes/index.ts).
 
 ---
 
@@ -877,30 +1013,32 @@ scormAPI.terminate();
 2. Нажмите **"Добавить вопрос"**
 3. Выберите тему и тип вопроса
 4. Заполните текст, варианты ответов, правильные ответы
-5. Настройте баллы, сложность, перемешивание, обратную связь
+5. При необходимости укажите сложность (опционально), перемешивание ответов, обратную связь, теги.
+   Баллы (цена ответа) задаются не здесь, а в редакторе теста на вкладке «Оценка» (PRD-15)
 6. При необходимости прикрепите медиа-файл
 
 #### Шаг 3: Массовый импорт через Excel
 
-1. Экспортируйте шаблон: **"Экспорт в Excel"**
-2. Заполните файл по формату:
+1. Скачайте шаблон книги: **"Шаблон"** (лист-справка с форматом колонок)
+2. Заполните лист **«Вопросы»**: тема, тип, текст, варианты, правильные ответы, теги, условная обратная связь,
+   перемешивание. **Оценка (цена ответа) в листе «Вопросы» НЕ задаётся** (T-40) -- она живёт в test-scoped
+   листе **«Оценка»** книги конкретного теста (PRD-14/15)
+3. Проверьте импорт без записи: **предпросмотр (dry-run)** показывает изменения и построчные ошибки
+4. Импортируйте: **"Импорт из Excel"**
 
-| Тема | Тип | Текст | Балл | Варианты (#-разделитель) | Правильные | Перемешивание |
-| --- | --- | --- | --- | --- | --- | --- |
-| Математика | single | Сколько 2+2? | 1 | 3#4#5#6 | 1 | Random |
-| История | multiple | Страны Европы | 2 | Франция#Япония#Германия | 0,2 | Random |
-
-1. Импортируйте: **"Импорт из Excel"**
+Книга одного теста поддерживает листы `Вопросы` / `Оценка` / `Шкалы` / `Показатели` / `Измерения`
+с round-trip экспортом/импортом. Подробнее -- [docs/guides/import-template-guide.md](docs/guides/import-template-guide.md).
 
 #### Шаг 4: Создание теста
 
 1. Перейдите в **"Тесты"** и нажмите **"Создать тест"**
 2. Заполните название и описание
 3. Выберите режим: стандартный или адаптивный
-4. Для стандартного: выберите темы, укажите drawCount и правила прохождения
+4. Для стандартного: выберите темы, укажите drawCount (или квоты по тегам) и правила прохождения
 5. Для адаптивного: настройте уровни сложности и пороги
-6. Настройте лимит времени, количество попыток, показ ответов
-7. Опубликуйте тест
+6. На вкладке **«Оценка»** задайте умолчания цены вопроса и при необходимости переопределения по вопросам
+7. Настройте лимит времени, количество попыток, показ ответов, гейт повторного прохождения
+8. Опубликуйте тест -- создаётся неизменный снапшот версии; правки банка не затронут выданные попытки
 
 #### Шаг 5: Управление пользователями
 
@@ -948,11 +1086,14 @@ scormAPI.terminate();
 npm run dev          # Development-сервер (tsx + Vite HMR; tsx запускается БЕЗ --watch)
 npm run build        # Production-сборка (esbuild + Vite)
 npm start            # Запуск production-версии
-npm run check        # Проверка типов TypeScript
+npm run check        # Проверка типов TypeScript (tsc)
 npm test             # Запуск тестов (vitest)
-npm run db:push      # Применить изменения схемы к БД
+npm run db:push      # Применить изменения схемы к БД (Drizzle Kit)
+npm run create-admin # Создать администратора
+npm run lint:md      # Линт markdown-документации (markdownlint-cli2)
 
 # SCORM-инструменты (локальная приёмка):
+npm run scorm:sample    # Собрать демонстрационный SCORM-пакет в out/
 npm run scorm:template  # Собрать пакет дизайн-шаблона в out/
 npm run scorm:player    # Локальный SCORM-плеер на :5050 (грузит out/*.zip)
 ```
@@ -1102,6 +1243,7 @@ railway up
 | `SESSION_SECRET` | Нет | auto | Секрет для сессий |
 | `API_BASE_URL` | Нет | `http://localhost:PORT` | URL для SCORM-телеметрии |
 | `APP_NAME` | Нет | -- | Название приложения (в email) |
+| `SUPERADMIN_EMAILS` | Нет | -- | Email суперадминов через запятую (PRD-13); права вычисляются в рантайме, в БД не хранятся |
 | `ENCRYPTION_PASSWORD` | Да | -- | Ключ шифрования email |
 | `ENCRYPTION_SALT` | Да | -- | Соль шифрования email |
 | `SMTP_HOST` | Нет | -- | SMTP-сервер |

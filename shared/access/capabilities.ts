@@ -28,7 +28,11 @@ export const CAPABILITIES = [
   "attempts.take",
   "attempts.self.read",
   // Content authoring.
+  "topics.read",
   "topics.manage",
+  "topics.access.grant",
+  "topics.owner.change",
+  "questions.read",
   "questions.manage",
   "questions.importExport",
   "folders.manage",
@@ -70,6 +74,15 @@ export type Capability = (typeof CAPABILITIES)[number];
  * the actual scope check lives in the test-access service.
  */
 export const SCOPE_AWARE_CAPABILITIES: readonly Capability[] = [
+  // PRD-15 block C: topic visibility / ownership / grants.
+  "topics.read",
+  "topics.manage",
+  "topics.access.grant",
+  "questions.read",
+  "questions.manage",
+  "questions.importExport",
+  // PRD-15 BRC-27: a test owner may grant access to their own test.
+  "tests.access.grant",
   "tests.read",
   "tests.edit",
   "tests.publish",

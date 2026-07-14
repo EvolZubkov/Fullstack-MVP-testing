@@ -51,9 +51,14 @@ const escapeHtml = (s: unknown) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-/** Flush the microtask chain the gate schedules (no real timers involved). */
+/**
+ * Flush the microtask chain the gate schedules (no real timers involved). The
+ * cooldown path may chain two ensureTemplate() loads (cooldown-start → block-wall
+ * fallback) when a stub loadDesignTemplate never populates the layouts, so drain
+ * generously.
+ */
 async function flush() {
-  for (let i = 0; i < 8; i++) await Promise.resolve();
+  for (let i = 0; i < 24; i++) await Promise.resolve();
 }
 
 function gatedTestData(over: Record<string, unknown> = {}) {

@@ -7,6 +7,12 @@ export interface SelectOption<T extends string = string> {
   value: T;
   label: React.ReactNode;
   disabled?: boolean;
+  /**
+   * Optional group heading. Consecutive options sharing the same `group` render
+   * under one non-selectable header inside the menu. Options without `group`
+   * render flat (no header), so this is fully backward compatible.
+   */
+  group?: string;
 }
 
 export interface SelectProps<T extends string = string>
@@ -113,22 +119,29 @@ function SelectInner<T extends string = string>(
       )}
       {open && !disabled && (
         <ul className="ou-select__menu" role="listbox" aria-labelledby={fieldId}>
-          {options.map(o => (
-            <li
-              key={o.value}
-              role="option"
-              aria-selected={o.value === current ? 'true' : 'false'}
-              aria-disabled={o.disabled || undefined}
-              className={cn(
-                'ou-select__opt',
-                o.value === current && 'is-selected',
-                o.disabled && 'is-disabled',
-              )}
-              onClick={() => handleSelect(o)}
-            >
-              {o.label}
-            </li>
-          ))}
+          {options.map((o, i) => {
+            const showHeader = !!o.group && o.group !== (i > 0 ? options[i - 1].group : undefined);
+            return (
+              <React.Fragment key={o.value}>
+                {showHeader && (
+                  <li role="presentation" className="ou-select__optgroup">{o.group}</li>
+                )}
+                <li
+                  role="option"
+                  aria-selected={o.value === current ? 'true' : 'false'}
+                  aria-disabled={o.disabled || undefined}
+                  className={cn(
+                    'ou-select__opt',
+                    o.value === current && 'is-selected',
+                    o.disabled && 'is-disabled',
+                  )}
+                  onClick={() => handleSelect(o)}
+                >
+                  {o.label}
+                </li>
+              </React.Fragment>
+            );
+          })}
         </ul>
       )}
       {(error || hint) && (

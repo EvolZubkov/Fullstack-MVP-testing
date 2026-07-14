@@ -17,7 +17,7 @@ import {
   contentPages,
   templates,
 } from "@shared/schema";
-import type { Test, TemplateManifest, DrawBlueprint } from "@shared/schema";
+import type { Test, TemplateManifest, DrawBlueprint, FormSet } from "@shared/schema";
 import {
   planSystemPages,
   SYSTEM_KINDS,
@@ -60,27 +60,40 @@ function extractTemplateId(designSettingsJson: unknown): string {
  *  dropped in a future release (PRD-7 §1.12). */
 function legacyTypeForKind(kind: SystemKind): "intro" | "info" | "summary" | "html" {
   switch (kind) {
-    case "intro":   return "intro";
-    case "summary":
+    case "intro":   return "intro"; // section «Введение раздела»
+    case "section-results": // section «Итоги раздела» — results-shaped legacy type
     case "results": return "summary";
-    case "start":   // start/router/questions have no native legacy type (column is
-    case "router":  // deprecated, PRD-7 §1.12) — "info" is the neutral placeholder.
-    case "questions":
+    case "start":   // start/router/questions/review have no native legacy type
+    case "router":  // (column is deprecated, PRD-7 §1.12) — "info" is the neutral
+    case "questions": // placeholder.
+    case "review":
     default:        return "info";
   }
 }
 
 /** Position value for a system row. The position column was designed for
  *  content-page placement before/after a topic; system kinds reuse it on a
- *  best-fit basis (intro → "before", summary → "after_topic",
- *  router/questions → "before_topic"). */
+ *  best-fit basis (start/router → "before", results → "after",
+ *  summary → "after_topic", intro/questions → "before_topic").
+ *
+ *  `router` is test-scope (topicId = null): it is the «До теста» navigation hub
+ *  shown before the topics, so it MUST be "before" — the router runtime seeds the
+ *  initial pageSequence from the test-scope "before" pages (PRD-4 v1.1 §4.7;
+ *  contentFlow.rebuildPageSequence). Placing it at "before_topic" orphans the hub
+ *  (no per-topic loop matches a null topicId), so the flow skips straight to the
+ *  questions and the router page never renders. */
 function positionForKind(kind: SystemKind): "before" | "after" | "before_topic" | "after_topic" {
   switch (kind) {
     case "start":   return "before"; // test landing — «До теста», before everything
+    case "router":  return "before"; // router hub — test-scope «До теста», before the topics
     case "results": return "after";  // test final results — «После теста»
-    case "intro":   // section intro/summary are per-topic («Введение/Итоги раздела»)
-    case "summary": return kind === "summary" ? "after_topic" : "before_topic";
-    case "router":
+    // PRD-19 runtime nodes (обзор / итоги раздела): test-level singletons rendered
+    // by their own runtime phase and EXCLUDED from the content-page flow by kind
+    // (contentFlow.contentPagesFor), so the position is cosmetic — "after" keeps
+    // them out of the per-topic before/after zones.
+    case "review":
+    case "section-results": return "after";
+    case "intro":   // section «Введение раздела» — before the topic's questions
     case "questions":
     default:        return "before_topic";
   }
@@ -115,6 +128,10 @@ export interface SectionPayload {
   feedbackJson?: unknown;
   /** PRD-11: optional stratified-draw blueprint; null/absent = uniform draw. */
   drawBlueprintJson?: DrawBlueprint | null;
+  /** PRD-17 (BR-12): optional fixed-variant set; null/absent = legacy draw. */
+  formSetJson?: FormSet | null;
+  /** PRD-15 block D (FR-31): per-section default price; null = inherit test. */
+  defaultPoints?: number | null;
 }
 
 export interface AdaptiveLevelPayload {
@@ -152,11 +169,24 @@ export interface TestPayload {
   timeLimitMinutes?: number | null;
   maxAttempts?: number | null;
   showCorrectAnswers?: boolean;
+  // PRD-19 (Блок A): правила навигации/завершения.
+  allowReturnToUnanswered?: boolean;
+  allowAnswerChange?: boolean;
+  showSectionResults?: boolean;
   startPageContent?: string | null;
   mode?: "standard" | "adaptive";
   showDifficultyLevel?: boolean;
   designSettingsJson?: unknown;
   folderId?: string | null;
+  /** PRD-15 block D (FR-31): test-wide default price; null = system default. */
+  defaultQuestionPoints?: number | null;
+  /**
+   * PRD-13: test owner (= creator/importer). Written INSIDE the create INSERT so
+   * ownership is atomic with the row — not a fragile post-insert `setTestOwner`
+   * UPDATE that can be skipped (older deployment) or lost, which left imported
+   * tests ownerless («Владелец» = «—»).
+   */
+  ownerId?: string | null;
 }
 
 export interface CreatePayload {
@@ -203,6 +233,8 @@ export class TestSettingsService {
 
       const [newTest] = await tx.insert(tests).values({
         id,
+        // PRD-13: own the test atomically in the INSERT (no fragile post-insert UPDATE).
+        ownerId: payload.test.ownerId ?? null,
         title: payload.test.title ?? "",
         description: payload.test.description ?? null,
         overallPassRuleJson: payload.test.overallPassRuleJson ?? { type: "percent", value: 70 },
@@ -214,6 +246,10 @@ export class TestSettingsService {
         flowPolicyJson: payload.test.flowPolicyJson ?? null,
         retakePolicyJson: (payload.test.retakePolicyJson as never) ?? null,
         showCorrectAnswers: payload.test.showCorrectAnswers ?? false,
+        // PRD-19 (Блок A): новый тест — возврат ВКЛ по умолчанию (FR-01).
+        allowReturnToUnanswered: payload.test.allowReturnToUnanswered ?? true,
+        allowAnswerChange: payload.test.allowAnswerChange ?? false,
+        showSectionResults: payload.test.showSectionResults ?? true,
         timeLimitMinutes: payload.test.timeLimitMinutes ?? null,
         maxAttempts: payload.test.maxAttempts ?? null,
         startPageContent: payload.test.startPageContent ?? null,
@@ -222,6 +258,7 @@ export class TestSettingsService {
         showDifficultyLevel: payload.test.showDifficultyLevel ?? true,
         designSettingsJson: (payload.test.designSettingsJson as Record<string, unknown>) ?? {},
         folderId: payload.test.folderId ?? null,
+        defaultQuestionPoints: payload.test.defaultQuestionPoints ?? null,
       }).returning();
 
       await this._insertSections(tx, id, payload.sections);
@@ -584,6 +621,8 @@ export class TestSettingsService {
         timeLimitMinutes: s.timeLimitMinutes ?? null,
         feedbackJson: s.feedbackJson ?? null,
         drawBlueprintJson: s.drawBlueprintJson ?? null,
+        formSetJson: s.formSetJson ?? null,
+        defaultPoints: s.defaultPoints ?? null,
         sortOrder: i,
       });
     }

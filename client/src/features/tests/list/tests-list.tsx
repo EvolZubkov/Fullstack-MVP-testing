@@ -31,8 +31,13 @@ import {
   Archive,
   BarChart3,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   ClipboardList,
   Download,
+  Filter,
+  FileSpreadsheet,
+  FlaskConical,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -48,23 +53,47 @@ import {
   Search,
   Trash2,
   TriangleAlert,
+  Upload,
   Users,
   ArrowRight,
 } from "lucide-react";
 import {
+  Banner,
   Button,
+  Chip,
+  Cluster,
   Input,
+  Label,
   ModalDialog,
   Select,
   Skeleton,
+  Stack,
   Tag,
+  Text,
 } from "@universityrt/ui-kit";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { PageHeader } from "@/components/page-header";
+import { FolderTreeSelect } from "@/components/folder-tree-select";
+import { t } from "@/lib/i18n";
+import {
+  EMPTY_TEST_FILTER,
+  MODE_OPTS,
+  SCENARIO_OPTS,
+  STATUS_OPTS,
+  TEST_SCOPE_OPTS,
+  TestFilters,
+  testFacetMatch,
+  testFilterCount,
+  type TestFilterValue,
+} from "./tests-filters";
+import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
+import type { PublishCheckFinding, PublishInfeasibleError } from "@/features/content-protection/types";
 import { TestEditor } from "@/features/tests/editor/test-editor";
 import { TestAccessPanel } from "@/features/tests/access/test-access-panel";
 import { AssignTestDialog } from "@/components/assign-test-dialog";
 import { useAuth } from "@/lib/auth";
+import { ROLES } from "@shared/access";
 import type { Test, TestSection, TestFolder } from "@shared/schema";
 import {
   buildSearchRows,
@@ -102,6 +131,7 @@ function apiToEntry(row: ApiTestRow): TestListEntry {
     assignmentCount: (row as { assignmentCount?: number }).assignmentCount ?? 0,
     updatedAt: (row as { updatedAt?: string | Date | null }).updatedAt ?? null,
     createdAt: (row as { createdAt?: string | Date | null }).createdAt ?? null,
+    publicationState: (row as { publication?: { state?: TestListEntry["publicationState"] } }).publication?.state,
   };
 }
 
@@ -134,7 +164,7 @@ const EMPTY_FOLDERS: TestFolder[] = [];
 
 export function TestsListPage(): React.JSX.Element {
   const { toast } = useToast();
-  const { can } = useAuth();
+  const { can, hasRole, user } = useAuth();
 
   // Data ----------------------------------------------------------------------
   const {
@@ -186,6 +216,42 @@ export function TestsListPage(): React.JSX.Element {
     });
   }, [folders]);
 
+  // ─── Filter (mirrors the content section «Темы и вопросы») ────────────────
+  const userId = user?.id ?? "";
+  const [testFilter, setTestFilter] = useState<TestFilterValue>(EMPTY_TEST_FILTER); // applied
+  const [testDraft, setTestDraft] = useState<TestFilterValue>(EMPTY_TEST_FILTER); // edited in the panel
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  const authorOptions = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const e of entries) if (e.ownerId) names.set(e.ownerId, e.ownerName ?? e.ownerId);
+    return Array.from(names.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [entries]);
+
+  const filteredEntries = useMemo(
+    () =>
+      entries.filter(
+        (e) =>
+          testFacetMatch(e, testFilter) &&
+          (testFilter.scope === "all"
+            ? true
+            : testFilter.scope === "mine"
+              ? e.ownerId === userId
+              : e.ownerId !== userId),
+      ),
+    [entries, testFilter, userId],
+  );
+
+  const openFilters = () => { setTestDraft(testFilter); setFilterOpen(true); };
+  const applyFilters = () => { setTestFilter(testDraft); setFilterOpen(false); };
+  const resetFilters = () => { setTestDraft(EMPTY_TEST_FILTER); setTestFilter(EMPTY_TEST_FILTER); };
+  const commitFilter = (next: TestFilterValue) => { setTestFilter(next); setTestDraft(next); };
+
+  const expandAll = () => setExpandedFolderIds(new Set(folders.map((f) => f.id)));
+  const collapseAll = () => setExpandedFolderIds(new Set());
+
+  const filterActiveCount = testFilterCount(testFilter);
+
   const handleSortChange = (next: SortKey) => {
     setSortBy(next);
     localStorage.setItem("tests_sort", next);
@@ -200,6 +266,17 @@ export function TestsListPage(): React.JSX.Element {
     | { kind: "edit"; testId: string }
     | { kind: "create"; folderId: string | null }
   >(null);
+
+  // PRD-18 (FR-16): a `?edit=<id>` deep-link opens the editor Drawer for that test.
+  // The debug player's build-error «Открыть тест в редакторе» action points here so
+  // the author can fix the variant/состав and rebuild. The param is stripped after
+  // opening so a refresh/back doesn't re-open the Drawer.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("edit");
+    if (!id) return;
+    setEditorTarget({ kind: "edit", testId: id });
+    window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+  }, []);
 
   // More-menu --------------------------------------------------------------
   const [testMenu, setTestMenu] = useState<{ id: string } | null>(null);
@@ -244,9 +321,22 @@ export function TestsListPage(): React.JSX.Element {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignTest, setAssignTest] = useState<{ id: string; title: string } | null>(null);
 
-  // Access panel (PRD-13, WF-2) — admin/superadmin only ---------------------
+  // Access panel (PRD-13 / PRD-15 BRC-27) — admin on any test, author on owned.
   const [accessTest, setAccessTest] = useState<{ id: string; title: string } | null>(null);
-  const canGrantAccess = can("tests.access.grant");
+  const canGrantAccessCap = can("tests.access.grant");
+  const isAdmin = hasRole(ROLES.ADMINISTRATOR) || hasRole(ROLES.SUPERADMIN);
+  /** May this user grant access to THIS test (object scope, BRC-27). */
+  const canGrantAccessFor = (test: TestListEntry) =>
+    canGrantAccessCap && (isAdmin || test.ownerId === user?.id);
+
+  // PRD-15 T-12 (E-12): publish-infeasible findings to show in the impact dialog.
+  const [publishImpact, setPublishImpact] = useState<{
+    testId: string;
+    findings: PublishCheckFinding[];
+  } | null>(null);
+
+  // PRD-15 FR-14: emergency-republish confirm target.
+  const [forceRepublish, setForceRepublish] = useState<{ id: string; title: string } | null>(null);
 
   // ─── Mutations ───────────────────────────────────────────────────────────
   const statusMutation = useMutation({
@@ -254,6 +344,56 @@ export function TestsListPage(): React.JSX.Element {
       return apiRequest("PATCH", `/api/tests/${args.id}/status`, { status: args.status });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/tests"] }),
+    onError: (error: Error, args) => {
+      // apiRequest throws "409: <json>"; surface a publish-infeasible 409 as the
+      // content-impact dialog (PRD-15 FR-06), otherwise a generic toast.
+      const match = /^409:\s*([\s\S]+)$/.exec(error.message);
+      if (match) {
+        try {
+          const payload = JSON.parse(match[1]) as PublishInfeasibleError;
+          if (payload.error === "publish_infeasible") {
+            setPublishImpact({ testId: args.id, findings: payload.findings });
+            return;
+          }
+        } catch {
+          /* fall through to the toast */
+        }
+      }
+      toast({ variant: "destructive", title: "Ошибка", description: "Не удалось изменить статус теста" });
+    },
+  });
+
+  // PRD-15 FR-14: emergency re-publish — new snapshot + annul in-progress attempts.
+  const forceRepublishMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/tests/${id}/republish-force`);
+      return res.json() as Promise<{ annulledAttempts: number }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
+      setForceRepublish(null);
+      toast({
+        title: "Тест переопубликован",
+        description: `Прервано идущих попыток: ${data.annulledAttempts}`,
+      });
+    },
+    onError: (error: Error) => {
+      // A late-feasibility 409 (E-12) surfaces as the impact dialog.
+      const match = /^409:\s*([\s\S]+)$/.exec(error.message);
+      if (match && forceRepublish) {
+        try {
+          const payload = JSON.parse(match[1]) as PublishInfeasibleError;
+          if (payload.error === "publish_infeasible") {
+            setPublishImpact({ testId: forceRepublish.id, findings: payload.findings });
+            setForceRepublish(null);
+            return;
+          }
+        } catch {
+          /* fall through */
+        }
+      }
+      toast({ variant: "destructive", title: "Ошибка", description: "Не удалось переопубликовать тест" });
+    },
   });
 
   const moveMutation = useMutation({
@@ -306,15 +446,15 @@ export function TestsListPage(): React.JSX.Element {
     () =>
       isSearchMode
         ? []
-        : buildTreeRows({ tests: entries, folders, expandedFolderIds, sort: sortBy }),
-    [isSearchMode, entries, folders, expandedFolderIds, sortBy],
+        : buildTreeRows({ tests: filteredEntries, folders, expandedFolderIds, sort: sortBy }),
+    [isSearchMode, filteredEntries, folders, expandedFolderIds, sortBy],
   );
   const searchRows = useMemo(
     () =>
       isSearchMode
-        ? buildSearchRows({ tests: entries, folders, query: searchQuery, sort: sortBy })
+        ? buildSearchRows({ tests: filteredEntries, folders, query: searchQuery, sort: sortBy })
         : [],
-    [isSearchMode, entries, folders, searchQuery, sortBy],
+    [isSearchMode, filteredEntries, folders, searchQuery, sortBy],
   );
 
   // ─── Close dropdowns on outside-click / Escape ───────────────────────────
@@ -335,16 +475,77 @@ export function TestsListPage(): React.JSX.Element {
     };
   }, [testMenu, folderMenu]);
 
+  // Active-condition chips (driven by the applied filter).
+  const filterChips: { key: string; label: string; remove: () => void }[] = [];
+  for (const s of testFilter.statuses) filterChips.push({ key: `st-${s}`, label: `Статус: ${STATUS_OPTS.find((o) => o.value === s)?.label}`, remove: () => commitFilter({ ...testFilter, statuses: testFilter.statuses.filter((x) => x !== s) }) });
+  for (const m of testFilter.modes) filterChips.push({ key: `md-${m}`, label: `Режим: ${MODE_OPTS.find((o) => o.value === m)?.label}`, remove: () => commitFilter({ ...testFilter, modes: testFilter.modes.filter((x) => x !== m) }) });
+  for (const sc of testFilter.scenarios) filterChips.push({ key: `sc-${sc}`, label: `Сценарий: ${SCENARIO_OPTS.find((o) => o.value === sc)?.label}`, remove: () => commitFilter({ ...testFilter, scenarios: testFilter.scenarios.filter((x) => x !== sc) }) });
+  if (testFilter.author) filterChips.push({ key: "au", label: `Владелец: ${authorOptions.find((o) => o.value === testFilter.author)?.label ?? testFilter.author}`, remove: () => commitFilter({ ...testFilter, author: "" }) });
+  if (testFilter.scope !== "all") filterChips.push({ key: "sp", label: `Область: ${TEST_SCOPE_OPTS.find((o) => o.value === testFilter.scope)?.label}`, remove: () => commitFilter({ ...testFilter, scope: "all" }) });
+
   // ─── Render ──────────────────────────────────────────────────────────────
   return (
     <div className="tb-tests-list" data-testid="tests-list-page">
-      <Toolbar
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        sortBy={sortBy}
-        onSortChange={handleSortChange}
-        showSort={!isSearchMode}
-      />
+      <div className="tl-header">
+        <PageHeader title={t.tests.title} description={t.tests.description} />
+      </div>
+      <div className="toolbar" role="search">
+        <div className="tl-search">
+          <Input
+            iconLeft={<Search size={16} />}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Поиск по названию…"
+            aria-label="Поиск теста по названию"
+            fullWidth
+            data-testid="tests-list-search-input"
+          />
+        </div>
+        <Button
+          variant={filterOpen || filterActiveCount > 0 ? "secondary" : "ghost"}
+          leadingIcon={<Filter size={16} />}
+          onClick={() => (filterOpen ? setFilterOpen(false) : openFilters())}
+          data-testid="tests-list-filter"
+        >
+          {t.content.filters}{filterActiveCount > 0 ? ` (${filterActiveCount})` : ""}
+        </Button>
+        {!isSearchMode && (
+          <div className="toolbar-sort">
+            <span className="toolbar-sort__label">Сортировка:</span>
+            <Select<SortKey>
+              size="s"
+              value={sortBy}
+              options={[
+                { value: "created_desc", label: "Новые сначала" },
+                { value: "updated_desc", label: "Недавно изменённые" },
+                { value: "title_asc", label: "По названию (А→Я)" },
+              ]}
+              onChange={(value) => handleSortChange(value)}
+              aria-label="Сортировка тестов"
+              data-testid="tests-list-sort"
+            />
+          </div>
+        )}
+        <span className="tl-spacer" />
+        {!isSearchMode && (
+          <Button variant="ghost" leadingIcon={<ChevronsUpDown size={16} />} onClick={expandAll}>{t.content.expandAll}</Button>
+        )}
+        {!isSearchMode && (
+          <Button variant="ghost" leadingIcon={<ChevronsDownUp size={16} />} onClick={collapseAll}>{t.content.collapseAll}</Button>
+        )}
+        {filterOpen && (
+          <TestFilters value={testDraft} onChange={setTestDraft} onApply={applyFilters} onReset={resetFilters} authorOptions={authorOptions} />
+        )}
+      </div>
+
+      {filterChips.length > 0 && (
+        <div className="tl-chips">
+          <Cluster gap={2} wrap>
+            {filterChips.map((c) => <Chip key={c.key} size="s" onRemove={c.remove}>{c.label}</Chip>)}
+            <Button variant="ghost" size="s" onClick={resetFilters}>Очистить всё</Button>
+          </Cluster>
+        </div>
+      )}
 
       {isError ? (
         <ErrorPane onRetry={() => refetch()} />
@@ -367,7 +568,13 @@ export function TestsListPage(): React.JSX.Element {
             setAssignTest({ id, title });
             setAssignDialogOpen(true);
           }}
-          onOpenMore={(id) => setTestMenu({ id })}
+          onOpenMore={(id) => {
+            // Mutually exclusive with the folder menu + toggle on re-click,
+            // so at most one more-menu is ever open (the more-button stops
+            // propagation, so the outside-click handler can't do this for us).
+            setFolderMenu(null);
+            setTestMenu((cur) => (cur?.id === id ? null : { id }));
+          }}
           testMenu={testMenu}
           entriesById={byId(entries)}
           renderTestMenu={renderTestMenu}
@@ -390,8 +597,16 @@ export function TestsListPage(): React.JSX.Element {
             setAssignTest({ id, title });
             setAssignDialogOpen(true);
           }}
-          onOpenMore={(id) => setTestMenu({ id })}
-          onOpenFolderMore={(id) => setFolderMenu({ id })}
+          onOpenMore={(id) => {
+            // At most one more-menu open at a time: opening a test menu closes
+            // any folder menu; clicking the same button again toggles it shut.
+            setFolderMenu(null);
+            setTestMenu((cur) => (cur?.id === id ? null : { id }));
+          }}
+          onOpenFolderMore={(id) => {
+            setTestMenu(null);
+            setFolderMenu((cur) => (cur?.id === id ? null : { id }));
+          }}
           testMenu={testMenu}
           folderMenu={folderMenu}
           renderTestMenu={renderTestMenu}
@@ -582,6 +797,62 @@ export function TestsListPage(): React.JSX.Element {
 
       {/* Access panel (PRD-13, WF-2) ---------------------------------------- */}
       <TestAccessPanel test={accessTest} onClose={() => setAccessTest(null)} />
+
+      {/* PRD-15 T-12 (E-12): publish-infeasible impact dialog --------------- */}
+      <ContentImpactDialog
+        open={publishImpact !== null}
+        mode="publish"
+        title="Тест нельзя опубликовать: выдача вопросов невыполнима"
+        description="При текущем составе тем тест не сможет собрать вариант для прохождения."
+        findings={publishImpact?.findings ?? []}
+        onClose={() => setPublishImpact(null)}
+        onOpenStructure={() => {
+          if (publishImpact) setEditorTarget({ kind: "edit", testId: publishImpact.testId });
+          setPublishImpact(null);
+        }}
+      />
+
+      {/* PRD-15 FR-14: emergency re-publish confirm ------------------------- */}
+      <ModalDialog
+        open={forceRepublish !== null}
+        onClose={() => setForceRepublish(null)}
+        size="m"
+        icon={<RotateCw size={20} />}
+        iconTone="danger"
+        title="Экстренно переопубликовать тест?"
+        description={
+          forceRepublish
+            ? `Тест «${forceRepublish.title}» будет переопубликован немедленно, а идущие попытки — прерваны.`
+            : undefined
+        }
+        closeOnBackdrop={!forceRepublishMutation.isPending}
+        footer={
+          <div className="cp-foot cp-foot--between">
+            <Button
+              variant="destructive"
+              size="m"
+              loading={forceRepublishMutation.isPending}
+              onClick={() => forceRepublish && forceRepublishMutation.mutate(forceRepublish.id)}
+            >
+              Переопубликовать и прервать
+            </Button>
+            <Button
+              variant="ghost"
+              size="m"
+              disabled={forceRepublishMutation.isPending}
+              onClick={() => setForceRepublish(null)}
+            >
+              Отмена
+            </Button>
+          </div>
+        }
+      >
+        <Banner
+          tone="warning"
+          title="Что произойдёт"
+          description="Идущие попытки будут аннулированы и не засчитаны в лимит попыток — ученики смогут пройти заново. Завершённые результаты сохраняются. Действие записывается в журнал. Используйте только при инцидентах (утёкший ключ, грубая ошибка в вопросе)."
+        />
+      </ModalDialog>
     </div>
   );
 
@@ -605,10 +876,10 @@ export function TestsListPage(): React.JSX.Element {
           }}
           data-testid={`menu-edit-${test.id}`}
         >
-          <Pencil className="h-3.5 w-3.5" />
+          <Pencil size={14} />
           Редактировать
         </button>
-        {canGrantAccess && (
+        {canGrantAccessFor(test) && (
           <button
             type="button"
             className="dropdown-item"
@@ -619,10 +890,29 @@ export function TestsListPage(): React.JSX.Element {
             }}
             data-testid={`menu-access-${test.id}`}
           >
-            <KeyRound className="h-3.5 w-3.5" />
+            <KeyRound size={14} />
             Общий доступ
           </button>
         )}
+        <button
+          type="button"
+          className="dropdown-item"
+          role="menuitem"
+          onClick={() => {
+            setTestMenu(null);
+            // PRD-18: open the in-service debug player in a chromeless popup window
+            // (no address bar), sized to the screen, named per test so it's reused.
+            window.open(
+              `/author/tests/${test.id}/debug`,
+              `tb-debug-${test.id}`,
+              `popup=yes,width=${window.screen.availWidth},height=${window.screen.availHeight},left=0,top=0`,
+            );
+          }}
+          data-testid={`menu-debug-${test.id}`}
+        >
+          <FlaskConical size={14} />
+          Выполнить отладку
+        </button>
         <a
           className="dropdown-item"
           role="menuitem"
@@ -630,8 +920,18 @@ export function TestsListPage(): React.JSX.Element {
           onClick={() => setTestMenu(null)}
           data-testid={`menu-export-${test.id}`}
         >
-          <Download className="h-3.5 w-3.5" />
+          <Download size={14} />
           Экспорт SCORM
+        </a>
+        <a
+          className="dropdown-item"
+          role="menuitem"
+          href={`/api/tests/${test.id}/workbook/export`}
+          onClick={() => setTestMenu(null)}
+          data-testid={`menu-export-excel-${test.id}`}
+        >
+          <FileSpreadsheet size={14} />
+          Экспорт в Excel
         </a>
         <hr className="dropdown-sep" />
         <button
@@ -647,9 +947,42 @@ export function TestsListPage(): React.JSX.Element {
           }}
           data-testid={`menu-toggle-publish-${test.id}`}
         >
-          <Globe className="h-3.5 w-3.5" />
+          <Globe size={14} />
           {test.status === "published" ? "Снять с публикации" : "Опубликовать"}
         </button>
+        {/* PRD-15 FR-12: re-publish the working version (new snapshot); only
+            when the published test has diverged. */}
+        {test.publicationState === "published_with_changes" && (
+          <button
+            type="button"
+            className="dropdown-item"
+            role="menuitem"
+            onClick={() => {
+              setTestMenu(null);
+              statusMutation.mutate({ id: test.id, status: "published" });
+            }}
+            data-testid={`menu-republish-${test.id}`}
+          >
+            <Upload size={14} />
+            Опубликовать изменения
+          </button>
+        )}
+        {/* PRD-15 FR-14: emergency re-publish — annuls in-progress attempts. */}
+        {test.status === "published" && (
+          <button
+            type="button"
+            className="dropdown-item danger"
+            role="menuitem"
+            onClick={() => {
+              setTestMenu(null);
+              setForceRepublish({ id: test.id, title: test.title });
+            }}
+            data-testid={`menu-force-republish-${test.id}`}
+          >
+            <RotateCw size={14} />
+            Экстренная переопубликация...
+          </button>
+        )}
         <hr className="dropdown-sep" />
         <button
           type="button"
@@ -666,7 +999,7 @@ export function TestsListPage(): React.JSX.Element {
           }}
           data-testid={`menu-move-${test.id}`}
         >
-          <Folder className="h-3.5 w-3.5" />
+          <Folder size={14} />
           Переместить в папку
         </button>
         <button
@@ -679,7 +1012,7 @@ export function TestsListPage(): React.JSX.Element {
           }}
           data-testid={`menu-archive-${test.id}`}
         >
-          <Archive className="h-3.5 w-3.5" />
+          <Archive size={14} />
           Архивировать
         </button>
         <hr className="dropdown-sep" />
@@ -693,7 +1026,7 @@ export function TestsListPage(): React.JSX.Element {
           }}
           data-testid={`menu-delete-${test.id}`}
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 size={14} />
           Удалить тест...
         </button>
       </div>
@@ -718,7 +1051,7 @@ export function TestsListPage(): React.JSX.Element {
           }}
           data-testid={`folder-menu-rename-${folder.id}`}
         >
-          <Pencil className="h-3.5 w-3.5" />
+          <Pencil size={14} />
           Переименовать
         </button>
         <hr className="dropdown-sep" />
@@ -739,7 +1072,7 @@ export function TestsListPage(): React.JSX.Element {
           }}
           data-testid={`folder-menu-delete-${folder.id}`}
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 size={14} />
           Удалить папку...
         </button>
       </div>
@@ -748,58 +1081,6 @@ export function TestsListPage(): React.JSX.Element {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
-
-function Toolbar(props: {
-  searchQuery: string;
-  onSearchChange: (v: string) => void;
-  sortBy: SortKey;
-  onSortChange: (v: SortKey) => void;
-  showSort: boolean;
-}) {
-  return (
-    <div className="toolbar">
-      <div className="search-input-wrap" role="search">
-        <Search className="search-icon" aria-hidden="true" />
-        <input
-          className="ou-field__input"
-          type="text"
-          placeholder="Поиск по названию..."
-          aria-label="Поиск теста по названию"
-          value={props.searchQuery}
-          onChange={(e) => props.onSearchChange(e.target.value)}
-          data-testid="tests-list-search-input"
-        />
-      </div>
-      {props.searchQuery && (
-        <button
-          type="button"
-          className="search-clear"
-          onClick={() => props.onSearchChange("")}
-          data-testid="tests-list-search-clear"
-        >
-          Сбросить
-        </button>
-      )}
-      {props.showSort && (
-        <div className="toolbar-sort">
-          <span className="toolbar-sort__label">Сортировка:</span>
-          <Select<SortKey>
-            size="s"
-            value={props.sortBy}
-            options={[
-              { value: "created_desc", label: "Новые сначала" },
-              { value: "updated_desc", label: "Недавно изменённые" },
-              { value: "title_asc", label: "По названию (А→Я)" },
-            ]}
-            onChange={(value) => props.onSortChange(value)}
-            aria-label="Сортировка тестов"
-            data-testid="tests-list-sort"
-          />
-        </div>
-      )}
-    </div>
-  );
-}
 
 function TreeHeader() {
   return (
@@ -870,7 +1151,7 @@ function DefaultTree(props: {
             key={`test-${row.id}`}
             entry={row.entry}
             indented={row.depth >= 2}
-            onClick={() => props.onOpenTest(row.id)}
+            onOpen={() => props.onOpenTest(row.id)}
             onEdit={() => props.onOpenTest(row.id)}
             onAssign={() => props.onAssign(row.id, row.entry.title)}
             onMore={(e) => {
@@ -910,7 +1191,7 @@ function SearchTree(props: {
           entry={row.entry}
           indented={false}
           breadcrumb={row.folderName}
-          onClick={() => props.onOpenTest(row.id)}
+          onOpen={() => props.onOpenTest(row.id)}
           onEdit={() => props.onOpenTest(row.id)}
           onAssign={() => props.onAssign(row.id, row.entry.title)}
           onMore={(e) => {
@@ -983,7 +1264,7 @@ function TestRow(props: {
   entry: TestListEntry;
   indented: boolean;
   breadcrumb?: string | null;
-  onClick: () => void;
+  onOpen: () => void;
   onEdit: () => void;
   onAssign: () => void;
   onMore: (e: React.MouseEvent) => void;
@@ -1011,12 +1292,15 @@ function TestRow(props: {
     enabled: false,
     staleTime: Infinity,
   });
+  // Row body opens the editor Drawer on DOUBLE-click; the «Редактировать»
+  // (pencil) button still opens it on a single click and is the
+  // keyboard-accessible path.
   return (
     <div
       className={"tree-test" + (props.indented ? " indent-1" : "")}
       role="treeitem"
       aria-level={props.indented ? 3 : 2}
-      onClick={canEdit ? props.onClick : undefined}
+      onDoubleClick={canEdit ? props.onOpen : undefined}
       data-testid={`test-row-${e.id}`}
     >
       <div className="tree-test-name">
@@ -1045,7 +1329,7 @@ function TestRow(props: {
         <span>{e.ownerName ?? "—"}</span>
       </div>
       <div>
-        <StatusTag status={e.status} />
+        <StatusTag status={e.status} publicationState={e.publicationState} />
       </div>
       <div>
         <span className={"mode-badge " + e.mode} title={modeTitle(e.mode)}>
@@ -1121,9 +1405,25 @@ function TestRow(props: {
   );
 }
 
-function StatusTag({ status }: { status: TestListEntry["status"] }) {
+function StatusTag({
+  status,
+  publicationState,
+}: {
+  status: TestListEntry["status"];
+  publicationState?: TestListEntry["publicationState"];
+}) {
   if (status === "published") {
-    return <Tag tone="success" aria-label="Статус: опубликован">Опубликован</Tag>;
+    // PRD-15 FR-12: a published test whose working version diverged from the
+    // active snapshot stacks an "Есть изменения" warning chip (like prd7's
+    // "Требует обновления").
+    return (
+      <span className="tb-status-stack">
+        <Tag tone="success" aria-label="Статус: опубликован">Опубликован</Tag>
+        {publicationState === "published_with_changes" && (
+          <Tag tone="warning" aria-label="Есть неопубликованные изменения">Есть изменения</Tag>
+        )}
+      </span>
+    );
   }
   if (status === "archived") {
     return <Tag tone="neutral" aria-label="Статус: архив">Архив</Tag>;
@@ -1262,11 +1562,11 @@ function FabSpeedDial(props: {
       {props.open && (
         <div className="fab-actions">
           <div className="fab-action">
-            <span className="fab-action-label">Новая папка</span>
+            <span className="fab-action-label">Добавить папку</span>
             <button
               type="button"
               className="fab-action-btn"
-              aria-label="Новая папка"
+              aria-label="Добавить папку"
               onClick={props.onNewFolder}
               data-testid="fab-new-folder"
             >
@@ -1274,11 +1574,11 @@ function FabSpeedDial(props: {
             </button>
           </div>
           <div className="fab-action">
-            <span className="fab-action-label">Новый тест</span>
+            <span className="fab-action-label">Добавить тест</span>
             <button
               type="button"
               className="fab-action-btn"
-              aria-label="Новый тест"
+              aria-label="Добавить тест"
               onClick={props.onNewTest}
               data-testid="fab-new-test"
             >
@@ -1644,8 +1944,7 @@ function MoveFolderPickModal(props: {
       footer={
         <>
           <Button
-            variant="ghost"
-            size="s"
+            variant="secondary"
             onClick={props.onCancel}
             data-testid="move-folder-pick-cancel"
           >
@@ -1653,7 +1952,6 @@ function MoveFolderPickModal(props: {
           </Button>
           <Button
             variant="primary"
-            size="s"
             onClick={props.onMove}
             disabled={noChange}
             title={noChange ? "Тест уже в этой папке" : undefined}
@@ -1664,42 +1962,18 @@ function MoveFolderPickModal(props: {
         </>
       }
     >
-      <div className="fab-folder-list">
-        <label className="fab-folder-item">
-          <input
-            type="radio"
-            name="move-folder-pick"
-            checked={props.selected === null}
-            onChange={() => props.onSelect(null)}
-            data-testid="move-folder-pick-root"
-          />
-          <Folder className="fab-folder-item__ico" width={14} height={14} aria-hidden="true" />
-          Корень (без папки)
-          {props.current === null && (
-            <Tag tone="neutral" variant="outline" size="s">
-              Текущая
-            </Tag>
-          )}
-        </label>
-        {props.folders.map((f) => (
-          <label key={f.id} className="fab-folder-item">
-            <input
-              type="radio"
-              name="move-folder-pick"
-              checked={props.selected === f.id}
-              onChange={() => props.onSelect(f.id)}
-              data-testid={`move-folder-pick-folder-${f.id}`}
-            />
-            <Folder className="fab-folder-item__ico" width={14} height={14} aria-hidden="true" />
-            {f.name}
-            {props.current === f.id && (
-              <Tag tone="neutral" variant="outline" size="s">
-                Текущая
-              </Tag>
-            )}
-          </label>
-        ))}
-      </div>
+      <Stack gap={2}>
+        <Label>Папка назначения</Label>
+        <FolderTreeSelect
+          folders={props.folders}
+          value={props.selected}
+          onChange={props.onSelect}
+          rootLabel="Корень (без папки)"
+        />
+        <Text variant="body-xs" tone="muted">
+          Текущая: {props.current === null ? "Корень (без папки)" : (props.folders.find((f) => f.id === props.current)?.name ?? "—")}
+        </Text>
+      </Stack>
     </ModalDialog>
   );
 }
@@ -1720,12 +1994,11 @@ function FabFolderPickModal(props: {
       description="Выберите папку для размещения теста"
       footer={
         <>
-          <Button variant="ghost" size="s" onClick={props.onCancel}>
+          <Button variant="secondary" onClick={props.onCancel}>
             Отмена
           </Button>
           <Button
             variant="primary"
-            size="s"
             onClick={props.onCreate}
             data-testid="fab-pick-create"
           >
@@ -1734,32 +2007,15 @@ function FabFolderPickModal(props: {
         </>
       }
     >
-      <div className="fab-folder-list">
-        <label className="fab-folder-item">
-          <input
-            type="radio"
-            name="fab-pick"
-            checked={props.selected === null}
-            onChange={() => props.onSelect(null)}
-            data-testid="fab-pick-root"
-          />
-          <Folder className="fab-folder-item__ico" width={14} height={14} aria-hidden="true" />
-          Корень (без папки)
-        </label>
-        {props.folders.map((f) => (
-          <label key={f.id} className="fab-folder-item">
-            <input
-              type="radio"
-              name="fab-pick"
-              checked={props.selected === f.id}
-              onChange={() => props.onSelect(f.id)}
-              data-testid={`fab-pick-folder-${f.id}`}
-            />
-            <Folder className="fab-folder-item__ico" width={14} height={14} aria-hidden="true" />
-            {f.name}
-          </label>
-        ))}
-      </div>
+      <Stack gap={2}>
+        <Label>Папка</Label>
+        <FolderTreeSelect
+          folders={props.folders}
+          value={props.selected}
+          onChange={props.onSelect}
+          rootLabel="Корень (без папки)"
+        />
+      </Stack>
     </ModalDialog>
   );
 }

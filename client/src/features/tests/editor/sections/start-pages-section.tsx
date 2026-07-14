@@ -4,25 +4,35 @@
  * `prd7-structure-linear-flat.html`, `prd7-structure-linear-by-topics.html`,
  * `prd7-structure-router.html`; closeout of PRD-1 §4).
  *
- * Rendering is **kind-aware** (PRD-1 §4.3), not position-tuple-based: system
- * pages are placed by their `kind` into semantic zones, author pages by their
- * position/topic into editable groups.
- *   - `intro`   (singleton) → «До теста» zone, read-only + variant switch.
- *   - `summary` (singleton) → «После теста» zone, read-only + variant switch.
+ * Rendering is **kind-aware** (PRD-1 §4.3 / PRD-19 §3.2), not position-tuple-based:
+ * system pages are placed by their `kind` into semantic zones, author pages by
+ * their position/topic into editable groups.
+ *   - `start`   (singleton) → «До теста» zone, read-only + variant switch.
+ *   - `results` (singleton) → «После теста» zone, read-only + variant switch.
  *   - `router`  (singleton) → «Маршрутизатор» zone (router_by_topics).
  *   - `questions` → one row per topic (per-topic modes) or one flat row
  *     (linear_flat), enriched with the section's question count; read-only +
  *     variant switch. NOT duplicated with a synthetic row.
+ *   - `review` (singleton, PRD-19) → «Обзор раздела/теста» system node at the
+ *     section/test boundary — variant switch + preview; gated by «возврат к
+ *     неотвеченным» (dimmed + comment when off) and hidden for adaptive.
+ *   - `section-results` (singleton, PRD-19) → «Итоги раздела» system node, shown
+ *     in each section block when `showSectionResults` is ON; variant switch + preview.
  *   - `info` (author) → editable rows in «До/После теста» and per-topic
  *     before/after groups: add (insert-row + variant modal), inline-expand
  *     edit, drag-reorder, delete.
+ *
+ * The legacy per-topic `intro` («Введение раздела») / `summary` («Итоги раздела»)
+ * system pages were removed (PRD-19 contract §3.2): section intro/summary content
+ * is authored via the topic-before/after `info` zones, and the section boundary
+ * is the `review` + `section-results` nodes above.
  *
  * System rows expose «Сменить вариант» (FR-46 / PRD-1 §4.3.3) — disabled when
  * the active template declares a single variant of that kind. Structural
  * classes live in `client/src/styles/tb-components.css`; controls use
  * `@universityrt/ui-kit`.
  */
-import { createContext, Fragment, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, Fragment, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -30,17 +40,23 @@ import {
   FileText,
   GripVertical,
   HelpCircle,
+  Image as ImageIcon,
   Info,
   Layout,
+  List,
+  Lock,
   MoreHorizontal,
+  PieChart,
   Plus,
   Route,
   Search,
+  Upload,
   X,
 } from "lucide-react";
 import {
   Banner,
   Button,
+  IconButton,
   Input,
   Menu,
   MenuItem,
@@ -77,6 +93,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   useContentPages,
+  canonicalValues,
   type ContentPage,
   type ContentPageKind,
   type ContentPagePosition,
@@ -150,6 +167,9 @@ const KIND_LABEL: Record<string, string> = {
   results: "Итоги теста",
   router: "Маршрутизатор",
   questions: "Вопросы",
+  // PRD-19 section-boundary system nodes.
+  review: "Обзор",
+  "section-results": "Итоги раздела",
 };
 
 /** Placement of a not-yet-created author page, captured on insert-row click. */
@@ -169,6 +189,40 @@ type ReplaceContext = { page: ContentPage };
 /** Author-editable pages. System kinds are bound by the service. */
 function isAuthorPage(page: ContentPage): boolean {
   return page.kind === "info";
+}
+
+/**
+ * PRD-19: synthesize a display-only system-node page for `review` /
+ * `section-results` when the test has no persisted singleton row yet (legacy test
+ * not reconciled, or a pending save). It binds to the template's default variant
+ * of that kind so the row still renders the variant badge + «Предпросмотр»
+ * (the обзор/итоги must always be template-overridable — PRD-19 contract §5).
+ * A persisted row (created by the planner on save / by migration) takes precedence.
+ * Returns null when the template declares no variant of the kind (contract §7:
+ * an optional node absent from the template is simply not shown).
+ */
+function synthSystemNode(
+  kind: "review" | "section-results",
+  variants: ReadonlyArray<ContentTemplateVariant>,
+): ContentPage | null {
+  const variant = variants.find((v) => v.kind === kind);
+  if (!variant) return null;
+  return {
+    id: `__virtual-${kind}`,
+    testId: "",
+    topicId: null,
+    position: "after",
+    mode: "template",
+    type: kind === "section-results" ? "summary" : "info",
+    kind,
+    templateKey: variant.key,
+    sortOrder: 0,
+    valuesJson: { values: {} },
+    autoAdvance: false,
+    autoAdvanceDelayMs: null,
+    createdAt: "",
+    updatedAt: "",
+  };
 }
 
 function pageTitle(page: ContentPage): string {
@@ -299,6 +353,25 @@ const structureCollision: CollisionDetection = (args) => {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+/**
+ * Resolves which template the page-preview must render from. Mirrors the
+ * variant-binding fallback (PRD-7 G21 / PRD-1 §4.3.2): when the active template
+ * declares no `contentTemplate` of this page's kind, the planner binds the page
+ * to the built-in `default`, so the preview MUST render from `default` too —
+ * otherwise «Структура» shows «Из стандартного шаблона» while the preview renders
+ * the active template's own (or fallback) screen. Returns the draft template id
+ * when the active template owns a variant of the kind, else `"default"`.
+ */
+export function previewTemplateId(
+  cp: { contentTemplates: ReadonlyArray<{ kind?: string }> },
+  draftTemplateId: string | undefined,
+  page: { kind?: string | null },
+): string | undefined {
+  const hasOwnVariant =
+    page.kind != null && cp.contentTemplates.some((v) => v.kind === page.kind);
+  return hasOwnVariant ? draftTemplateId : "default";
+}
+
 export function StructureSection({ model, testId, content: contentProp, savedFlowMode, onGoToComposition, updateModel, readOnly = false, designDraft }: StructureSectionProps) {
   // Fallback hook so the section works standalone (component tests) when the
   // drawer has not hoisted the hook. Mirrors design-section's pattern.
@@ -370,10 +443,33 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
         <PagePreviewModal
           open
           onClose={() => setPreviewCtx(null)}
-          templateId={designDraft?.templateId}
+          // When the active template declares no variant of this page's kind, the
+          // planner binds the page to the built-in `default` (same rule as the
+          // «Из стандартного шаблона» badge). The preview MUST then render from
+          // `default` too — otherwise the structure says "standard" while the
+          // preview shows the active template (PRD-7 G21 consistency).
+          templateId={previewTemplateId(cp, designDraft?.templateId, previewCtx.page)}
           params={designDraft?.params ?? {}}
           page={previewCtx.page}
           pageTitle={pageTitle(previewCtx.page)}
+          // FR-44: preview from REAL test data where possible — real title, topics
+          // (router menu / section labels) and total question count. Demo fills
+          // the rest (e.g. example questions, not loaded in the structure editor).
+          realData={{
+            courseTitle: model.basic.title,
+            // FR-44: real test description → the «Старт» subtitle (not the demo's).
+            description: model.basic.description,
+            passPercent: model.passRules.overall.type === "percent" ? model.passRules.overall.value : null,
+            timeLimitMinutes: model.runtime.timeLimitMinutes,
+            maxAttempts: model.runtime.maxAttempts,
+            topics: model.sections.map((s) => ({ id: s.topicId, title: s.topicName })),
+            questionCount: model.sections.reduce((n, s) => n + s.drawCount, 0),
+            sections: model.sections.map((s) => ({
+              topicId: s.topicId,
+              topicName: s.topicName,
+              questionCount: s.drawCount,
+            })),
+          }}
         />
       )}
     </div>
@@ -388,7 +484,7 @@ export const StartPagesSection = StructureSection;
 function FlowModeBar({ mode }: { mode: TestEditorModel["flowMode"] }) {
   return (
     <div className="flow-mode-bar" data-testid="structure-mode-banner">
-      <Layout className="h-3.5 w-3.5" aria-hidden="true" />
+      <Layout size={14} aria-hidden="true" />
       <span>Режим:</span>
       <span className="flow-mode-label">{FLOW_LABEL[mode]}</span>
       <span className="flow-mode-hint">
@@ -468,12 +564,25 @@ function ZonesBlock(props: {
     pages.find((p) => p.kind === kind && p.topicId === null) ?? null;
   const questionsForTopic = (tid: string) =>
     pages.find((p) => p.kind === "questions" && p.topicId === tid) ?? null;
-  // Per-section system rows (PRD-1 §4.3 structure model): «Введение раздела» /
-  // «Итоги раздела» are one-per-topic in per-topic modes.
+  // PRD-1 §4.3: «Введение раздела» (intro) — a per-topic system node shown at the top
+  // of each section block. Carries the author instruction (editable inline); topic
+  // name / description / count / time are rendered from the section at runtime.
   const introForTopic = (tid: string) =>
     pages.find((p) => p.kind === "intro" && p.topicId === tid) ?? null;
-  const summaryForTopic = (tid: string) =>
-    pages.find((p) => p.kind === "summary" && p.topicId === tid) ?? null;
+  // PRD-19 §3.2: «Обзор раздела» (review) and «Итоги раздела» (section-results) are
+  // TEST-LEVEL design bindings (singletons, topicId=null) — the section boundary
+  // SYSTEM nodes, shown in every section block. They replace the legacy per-topic
+  // `intro`/`summary` content pages.
+  //   - review: design is always bindable; its DISPLAY is gated by «возврат к
+  //     неотвеченным» (reviewSlot below) and hidden for adaptive (FR-08a / FR-22).
+  //   - section-results: OPTIONAL, gated by the `showSectionResults` setting
+  //     (FR-05a). When OFF the runtime goes straight to the next section, so the
+  //     row is hidden.
+  const reviewPage =
+    systemSingleton("review") ?? synthSystemNode("review", handlers.cp.contentTemplates);
+  const sectionResultsPage = model.runtime.showSectionResults
+    ? (systemSingleton("section-results") ?? synthSystemNode("section-results", handlers.cp.contentTemplates))
+    : null;
 
   // «После теста» order list = author after-pages + «Итоги теста» (results), by
   // sortOrder. Reordering/adding here renumbers this combined list so «Итоги
@@ -629,6 +738,19 @@ function ZonesBlock(props: {
   const results = systemSingleton("results");
   const router = systemSingleton("router");
 
+  // PRD-19 FR-08a: the «Обзор» (section-finish / test-finish) system navigation
+  // slot. The обзор is a RUNTIME template screen (not a content_page), so its
+  // row is informational. Enabled when `allowReturnToUnanswered` is ON; otherwise
+  // DISABLED with a comment pointing to the setting. Hidden entirely for adaptive
+  // tests, where skip/return are impossible (FR-22). Independent of
+  // `showSectionResults` (which gates the «Итоги раздела» summary row).
+  const reviewSlot: "enabled" | "disabled" | null =
+    model.mode === "adaptive"
+      ? null
+      : model.runtime.allowReturnToUnanswered
+        ? "enabled"
+        : "disabled";
+
   return (
     <DndContext
       sensors={sensors}
@@ -665,6 +787,8 @@ function ZonesBlock(props: {
             handlers={handlers}
             testId="structure-flat-questions-row"
           />
+          {/* PRD-19 FR-08a: flat tests have a single test-level «Обзор теста». */}
+          <ReviewNodeRow state={reviewSlot} scope="test" page={reviewPage} handlers={handlers} testId="structure-review-slot" />
         </Zone>
       ) : (
         <SortableContext items={topicSortableIds} strategy={verticalListSortingStrategy}>
@@ -676,7 +800,9 @@ function ZonesBlock(props: {
               infoIn={infoIn}
               questionsForTopic={questionsForTopic}
               introForTopic={introForTopic}
-              summaryForTopic={summaryForTopic}
+              reviewPage={reviewPage}
+              sectionResultsPage={sectionResultsPage}
+              reviewSlot={reviewSlot}
               dragEnabled={Boolean(updateModel) && !handlers.readOnly}
               dimGrip={handlers.readOnly}
             />
@@ -687,10 +813,12 @@ function ZonesBlock(props: {
                 index={idx + 1}
                 section={section}
                 intro={introForTopic(section.topicId)}
-                summary={summaryForTopic(section.topicId)}
+                reviewPage={reviewPage}
+                sectionResultsPage={sectionResultsPage}
                 before={infoIn("before_topic", section.topicId)}
                 after={infoIn("after_topic", section.topicId)}
                 questions={questionsForTopic(section.topicId)}
+                reviewSlot={reviewSlot}
                 handlers={handlers}
                 dragEnabled={Boolean(updateModel) && !handlers.readOnly}
                 dimGrip={handlers.readOnly}
@@ -708,7 +836,7 @@ function ZonesBlock(props: {
         {activePage ? (
           <div className="page-row dragging" data-testid="structure-drag-overlay">
             <span className="drag-handle">
-              <GripVertical className="h-3.5 w-3.5" />
+              <GripVertical size={14} />
             </span>
             <span className="page-variant-badge">
               {handlers.cp.contentTemplates.find((v) => v.key === activePage.templateKey)?.label ??
@@ -735,7 +863,7 @@ function Zone(props: { title: string; testId: string; children: React.ReactNode 
   return (
     <section className="zone-block" data-testid={props.testId}>
       <div className="zone-header">
-        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+        <ChevronRight size={14} aria-hidden="true" />
         {props.title}
       </div>
       <div className="topic-body">{props.children}</div>
@@ -746,13 +874,19 @@ function Zone(props: { title: string; testId: string; children: React.ReactNode 
 function TopicBlock(props: {
   index: number;
   section: TestEditorModel["sections"][number];
-  /** Per-section «Введение раздела» (kind: intro), shown first. */
+  /** PRD-1 §4.3: per-topic «Введение раздела» (kind: intro), shown FIRST. */
   intro: ContentPage | null;
-  /** Per-section «Итоги раздела» (kind: summary), shown last. */
-  summary: ContentPage | null;
+  /** PRD-19: test-level «Обзор раздела» (kind: review) design binding, shown
+   *  after the questions/after-zone. `null` only if the singleton is missing. */
+  reviewPage: ContentPage | null;
+  /** PRD-19: test-level «Итоги раздела» (kind: section-results) design binding,
+   *  shown last. `null` when `showSectionResults` is OFF (node hidden). */
+  sectionResultsPage: ContentPage | null;
   before: ContentPage[];
   after: ContentPage[];
   questions: ContentPage | null;
+  /** PRD-19 FR-08a: «Обзор раздела» slot state (`null` = hidden, e.g. adaptive). */
+  reviewSlot: "enabled" | "disabled" | null;
   handlers: ZoneHandlers;
   /** When false, no grip is rendered (read-only or test harness without updateModel). */
   dragEnabled?: boolean;
@@ -789,7 +923,7 @@ function TopicBlock(props: {
             {...(dragEnabled ? sortable.attributes : {})}
             {...(dragEnabled ? sortable.listeners : {})}
           >
-            <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
+            <GripVertical size={14} aria-hidden="true" />
           </span>
         )}
         <span className="topic-name">
@@ -798,10 +932,14 @@ function TopicBlock(props: {
         <span className="topic-count">{section.drawCount} вопросов</span>
       </div>
       <div className="topic-body">
+        {/* PRD-1 §4.3: section-level «Введение раздела» (intro node) — shown first;
+            expand to edit the author instruction. Topic name/description/count/time
+            render from the section at runtime. */}
         {props.intro && (
           <SystemPageRow
             page={props.intro}
-            title={pageTitle(props.intro)}
+            title="Введение раздела"
+            icon="content"
             handlers={props.handlers}
             testId={`structure-system-intro-${section.topicId}`}
           />
@@ -826,16 +964,104 @@ function TopicBlock(props: {
           zoneLabel={`«${section.topicName}» — после темы`}
           handlers={props.handlers}
         />
-        {props.summary && (
+        {/* PRD-19 FR-08a: section-level «Обзор раздела» (section-finish node) —
+            design via template (variant + preview) when enabled; dimmed + comment
+            when «возврат к неотвеченным» is OFF; hidden for adaptive. */}
+        <ReviewNodeRow
+          state={props.reviewSlot}
+          scope="section"
+          page={props.reviewPage}
+          handlers={props.handlers}
+          testId={`structure-review-slot-${section.topicId}`}
+        />
+        {/* PRD-19 FR-05a: section-level «Итоги раздела» (section-results node) —
+            shown only when `showSectionResults` is ON; design via template. */}
+        {props.sectionResultsPage && (
           <SystemPageRow
-            page={props.summary}
-            title={pageTitle(props.summary)}
+            page={props.sectionResultsPage}
+            title="Итоги раздела"
+            icon="section-results"
             handlers={props.handlers}
-            testId={`structure-system-summary-${section.topicId}`}
+            testId={`structure-system-section-results-${section.topicId}`}
           />
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * PRD-19 FR-08a: «Обзор» (section-finish / test-finish) SYSTEM NODE row in the
+ * structure tree. Unlike the previous informational slot, the обзор is now a
+ * template-backed system node (`kind: review`), so when enabled it renders the
+ * SAME system row as questions/results — with a design-variant badge,
+ * «Сменить вариант» and «Предпросмотр» (PRD-19 contract §5: «Дизайн — через
+ * шаблон»). States:
+ *   - `enabled` (когда «возврат к неотвеченным» ВКЛ): full system row backed by
+ *     the test-level `review` design binding (`page`);
+ *   - `disabled` (возврат ВЫКЛ): dimmed row + comment pointing to the setting —
+ *     the обзор screen does not run in strict mode, so no design actions;
+ *   - `null` (adaptive): hidden entirely (skip/return impossible, FR-22).
+ */
+function ReviewNodeRow(props: {
+  state: "enabled" | "disabled" | null;
+  scope: "section" | "test";
+  /** Test-level `review` design binding (singleton); may be null on legacy data
+   *  not yet reconciled — then an informational accent row is shown. */
+  page: ContentPage | null;
+  handlers: ZoneHandlers;
+  testId: string;
+}) {
+  if (props.state === null) return null;
+  const noun = props.scope === "section" ? "раздела" : "теста";
+  const finishLabel = props.scope === "section" ? "«Завершить раздел»" : "«Завершить тест»";
+  const title = `Обзор ${noun} — навигация по вопросам и ${finishLabel}`;
+  if (props.state === "enabled") {
+    // Template-backed system node: variant badge + «Сменить вариант» + «Предпросмотр».
+    if (props.page) {
+      return (
+        <SystemPageRow
+          page={props.page}
+          title={title}
+          icon="review"
+          handlers={props.handlers}
+          testId={props.testId}
+        />
+      );
+    }
+    // Binding singleton missing (legacy test not yet reconciled) — informational.
+    return (
+      <div
+        className="page-row page-row--system page-row--obzor"
+        data-testid={props.testId}
+        data-kind="review-slot"
+      >
+        <List className="page-icon" size={14} aria-hidden="true" />
+        <span className="page-variant-badge">Обзор</span>
+        <span className="page-title">{title}</span>
+      </div>
+    );
+  }
+  return (
+    <>
+      <div
+        className="page-row page-row--system page-row--obzor page-row--disabled"
+        data-testid={props.testId}
+        data-kind="review-slot"
+        data-disabled="true"
+      >
+        <Lock className="page-icon" size={14} aria-hidden="true" />
+        <span className="page-variant-badge">Обзор</span>
+        <span className="page-title">Обзор {noun} — недоступен</span>
+      </div>
+      <div className="page-comment" data-testid={`${props.testId}-comment`}>
+        <Info size={13} aria-hidden="true" />
+        <span>
+          Экран обзора доступен только при включённом возврате к неотвеченным. Включите
+          «Возврат к неотвеченным» в разделе «Настройки › Правила прохождения».
+        </span>
+      </div>
+    </>
   );
 }
 
@@ -853,17 +1079,23 @@ function InsideTestZone(props: {
   sections: TestEditorModel["sections"];
   infoIn: (position: ContentPagePosition, topicId: string | null) => ContentPage[];
   questionsForTopic: (topicId: string) => ContentPage | null;
+  /** PRD-1 §4.3: per-topic «Введение раздела» resolver. */
   introForTopic: (topicId: string) => ContentPage | null;
-  summaryForTopic: (topicId: string) => ContentPage | null;
+  /** PRD-19: test-level «Обзор раздела» design binding (singleton). */
+  reviewPage: ContentPage | null;
+  /** PRD-19: test-level «Итоги раздела» design binding (null when hidden). */
+  sectionResultsPage: ContentPage | null;
+  /** PRD-19 FR-08a: «Обзор раздела» slot state (`null` = hidden, e.g. adaptive). */
+  reviewSlot: "enabled" | "disabled" | null;
   dragEnabled: boolean;
   /** PRD-7 G19 read-only: dim topic grips without removing them. */
   dimGrip?: boolean;
 }) {
-  const { router, handlers, sections, infoIn, questionsForTopic, introForTopic, summaryForTopic, dragEnabled, dimGrip } = props;
+  const { router, handlers, sections, infoIn, questionsForTopic, introForTopic, reviewPage, sectionResultsPage, reviewSlot, dragEnabled, dimGrip } = props;
   return (
     <section className="inside-test" data-testid="structure-inside-test">
       <div className="inside-test__label">
-        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+        <ChevronRight size={14} aria-hidden="true" />
         Внутри теста
       </div>
       <div className="inside-test__body">
@@ -883,10 +1115,12 @@ function InsideTestZone(props: {
                 index={idx + 1}
                 section={section}
                 intro={introForTopic(section.topicId)}
-                summary={summaryForTopic(section.topicId)}
+                reviewPage={reviewPage}
+                sectionResultsPage={sectionResultsPage}
                 before={infoIn("before_topic", section.topicId)}
                 after={infoIn("after_topic", section.topicId)}
                 questions={questionsForTopic(section.topicId)}
+                reviewSlot={reviewSlot}
                 handlers={handlers}
                 dragEnabled={dragEnabled}
                 dimGrip={dimGrip}
@@ -918,7 +1152,7 @@ function QuestionsRow(props: {
         data-testid={props.testId}
         data-kind="questions"
       >
-        <HelpCircle className="page-icon h-3.5 w-3.5" aria-hidden="true" />
+        <HelpCircle className="page-icon" size={14} aria-hidden="true" />
         <span className="page-variant-badge">Вопросы</span>
         <span className="page-title">{props.countLabel}</span>
       </div>
@@ -941,7 +1175,7 @@ function SystemPageRow(props: {
   page: ContentPage;
   title: string;
   handlers: ZoneHandlers;
-  icon?: "questions" | "router" | "content";
+  icon?: "questions" | "router" | "content" | "review" | "section-results";
   testId: string;
 }) {
   const { page, handlers } = props;
@@ -971,7 +1205,16 @@ function SystemPageRow(props: {
     (page.kind === "intro" || page.kind === "summary") &&
     Object.values(values).every((v) => v === null || v === undefined || v === "");
 
-  const Icon = props.icon === "router" ? Route : props.icon === "questions" ? HelpCircle : FileText;
+  const Icon =
+    props.icon === "router"
+      ? Route
+      : props.icon === "questions"
+        ? HelpCircle
+        : props.icon === "review"
+          ? List
+          : props.icon === "section-results"
+            ? PieChart
+            : FileText;
 
   return (
     <>
@@ -996,10 +1239,10 @@ function SystemPageRow(props: {
           onClick={() => setExpandedId(expanded ? null : page.id)}
           data-testid={`${props.testId}-expand`}
         >
-          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          <ChevronRight size={14} aria-hidden="true" />
         </button>
       )}
-      <Icon className="page-icon h-3.5 w-3.5" aria-hidden="true" />
+      <Icon className="page-icon" size={14} aria-hidden="true" />
       <span className="page-variant-badge">{badge}</span>
       <span className="page-title">
         {props.title}
@@ -1022,7 +1265,7 @@ function SystemPageRow(props: {
               aria-label={`Действия для системной страницы «${badge}»`}
               data-testid={`${props.testId}-actions`}
             >
-              <MoreHorizontal className="h-3 w-3" aria-hidden="true" />
+              <MoreHorizontal size={12} aria-hidden="true" />
             </button>
           }
         >
@@ -1047,19 +1290,19 @@ function SystemPageRow(props: {
         <div className="page-row__meta">
           {hasErr && (
             <Tag tone="error" size="s" data-testid={`${props.testId}-required-tag`}>
-              <AlertCircle className="h-3 w-3" aria-hidden="true" />
+              <AlertCircle size={12} aria-hidden="true" />
               Не заполнено обязательных полей: {missing.length}
             </Tag>
           )}
           {usingFallback && (
             <Tag tone="warning" size="s" data-testid={`${props.testId}-fallback-tag`}>
-              <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+              <AlertTriangle size={12} aria-hidden="true" />
               Из стандартного шаблона
             </Tag>
           )}
           {canSwitch && (
             <Tag tone="info" size="s" data-testid={`${props.testId}-variant-hint`}>
-              <Info className="h-3 w-3" aria-hidden="true" />
+              <Info size={12} aria-hidden="true" />
               Доступно вариантов: {variants.length}
             </Tag>
           )}
@@ -1241,7 +1484,7 @@ function InsertRow(props: { onClick: () => void; testId: string }) {
     <div className="insert-row">
       <div className="insert-row-line" aria-hidden="true" />
       <button type="button" className="insert-btn" onClick={props.onClick} data-testid={props.testId}>
-        <Plus className="h-3 w-3" aria-hidden="true" /> Добавить страницу
+        <Plus size={12} aria-hidden="true" /> Добавить страницу
       </button>
       <div className="insert-row-line" aria-hidden="true" />
     </div>
@@ -1305,7 +1548,7 @@ function AuthorPageRow(props: {
           aria-label={`Переместить страницу «${title}»`}
           {...props.dragHandleProps}
         >
-          <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
+          <GripVertical size={14} aria-hidden="true" />
         </span>
         <button
           type="button"
@@ -1315,7 +1558,7 @@ function AuthorPageRow(props: {
           onClick={props.onToggleExpand}
           data-testid={`structure-page-expand-${page.id}`}
         >
-          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          <ChevronRight size={14} aria-hidden="true" />
         </button>
         <span className="page-variant-badge">{badge}</span>
         <span className="page-title">{title}</span>
@@ -1330,7 +1573,7 @@ function AuthorPageRow(props: {
                   aria-label={`Действия для страницы ${title}`}
                   data-testid={`structure-page-actions-${page.id}`}
                 >
-                  <MoreHorizontal className="h-3 w-3" aria-hidden="true" />
+                  <MoreHorizontal size={12} aria-hidden="true" />
                 </button>
               }
             >
@@ -1390,13 +1633,13 @@ function AuthorPageRow(props: {
           <div className="page-row__meta">
             {page.templateKeyMissing && (
               <Tag tone="warning" size="s" data-testid={`structure-page-missing-${page.id}`}>
-                <Info className="h-3 w-3" aria-hidden="true" />
+                <Info size={12} aria-hidden="true" />
                 Шаблон страницы недоступен
               </Tag>
             )}
             {missing.length > 0 && (
               <Tag tone="error" size="s" data-testid={`structure-page-required-${page.id}`}>
-                <AlertCircle className="h-3 w-3" aria-hidden="true" />
+                <AlertCircle size={12} aria-hidden="true" />
                 Не заполнено обязательных полей: {missing.length}
               </Tag>
             )}
@@ -1404,7 +1647,7 @@ function AuthorPageRow(props: {
                 pages also surface that «Сменить вариант» (in the «...» menu) exists. */}
             {canReplaceVariant && (
               <Tag tone="info" size="s" data-testid={`structure-page-${page.id}-variant-hint`}>
-                <Info className="h-3 w-3" aria-hidden="true" />
+                <Info size={12} aria-hidden="true" />
                 Доступно вариантов: {variantsForKind.length}
               </Tag>
             )}
@@ -1455,9 +1698,20 @@ function PageEditForm(props: {
   const setValue = (key: string, v: unknown) => setValues((p) => ({ ...p, [key]: v }));
   const setStyle = (key: string, s: { fontSize?: number }) => setStyles((p) => ({ ...p, [key]: s }));
 
+  // True only when the form actually differs from the page's saved values — drives
+  // both the no-op save guard AND the Save-button disabled state, so «Сохранить» is
+  // OFF until the author really changes something (no false "unsaved" affordance).
+  const nextValuesJson = { values, placeholderStyles: styles };
+  const formDirty = canonicalValues(page.valuesJson) !== canonicalValues(nextValuesJson);
+
   const save = () => {
+    // No-op guard: if nothing actually changed, don't dirty the draft — just close.
+    if (!formDirty) {
+      props.onDone();
+      return;
+    }
     void cp
-      .update(page.id, { valuesJson: { values, placeholderStyles: styles } })
+      .update(page.id, { valuesJson: nextValuesJson })
       .then(() => props.onDone())
       .catch(() => {
         /* error surfaced via cp.mutationError banner */
@@ -1493,7 +1747,7 @@ function PageEditForm(props: {
           data-testid={`structure-page-edit-sanitize-${page.id}`}
         >
           <span className="validation-banner__ico" aria-hidden="true">
-            <AlertTriangle className="h-3.5 w-3.5" />
+            <AlertTriangle size={14} />
           </span>
           <div className="validation-banner__body">
             <div className="validation-banner__title">HTML санитизирован</div>
@@ -1522,7 +1776,7 @@ function PageEditForm(props: {
             onClick={() => cp.dismissSanitizeDiagnostics(page.id)}
             data-testid={`structure-page-edit-sanitize-dismiss-${page.id}`}
           >
-            <X className="h-3 w-3" aria-hidden="true" />
+            <X size={12} aria-hidden="true" />
           </button>
         </div>
       )}
@@ -1533,7 +1787,7 @@ function PageEditForm(props: {
           data-testid={`structure-page-edit-validation-${page.id}`}
         >
           <span className="validation-banner__ico" aria-hidden="true">
-            <AlertCircle className="h-3.5 w-3.5" />
+            <AlertCircle size={14} />
           </span>
           <div className="validation-banner__body">
             <div className="validation-banner__title">Заполните обязательные поля</div>
@@ -1587,7 +1841,7 @@ function PageEditForm(props: {
               variant="primary"
               size="s"
               onClick={save}
-              disabled={cp.isUpdating}
+              disabled={cp.isUpdating || !formDirty}
               loading={cp.isUpdating}
               data-testid={`structure-page-edit-save-${page.id}`}
             >
@@ -1659,6 +1913,8 @@ function PlaceholderControl(props: {
           data-testid={testId}
         />
       );
+    case "image":
+      return <ImagePlaceholderControl label={label} value={value} onChange={onChange} testId={testId} />;
     case "text":
     default:
       return (
@@ -1673,6 +1929,136 @@ function PlaceholderControl(props: {
         />
       );
   }
+}
+
+/** Best-effort human file name from an uploaded media URL (`/uploads/media/...`). */
+function imageNameFromUrl(url: string): string {
+  try {
+    const clean = url.split("?")[0].split("#")[0];
+    const seg = clean.substring(clean.lastIndexOf("/") + 1);
+    return decodeURIComponent(seg) || "изображение";
+  } catch {
+    return "изображение";
+  }
+}
+
+/**
+ * Upload control for `image`-typed page placeholders (PRD-1 content pages). Mirrors
+ * the «Оформление» {@link MediaParamRow} (hidden file input behind a DS Button +
+ * a filename chip with remove), but stores a PLAIN URL string — the unified
+ * renderer emits `String(value)` for image placeholders
+ * ({@link module:shared/template/render-screen}), so the design-section media
+ * ENVELOPE (`{ url, name, ... }`) would render as `[object Object]`. Upload goes
+ * through `POST /api/media/upload` (multer disk storage), the same endpoint the
+ * design tab uses.
+ */
+function ImagePlaceholderControl(props: {
+  label: string;
+  value: unknown;
+  onChange: (value: unknown) => void;
+  testId: string;
+}) {
+  const { value, onChange, testId } = props;
+  const fieldId = useId();
+  // Image placeholders store a PLAIN URL string. Be tolerant of a legacy media
+  // envelope `{ url, name }` (e.g. copied from «Оформление» params, imported, or
+  // hand-edited): surface its `.url` so the field isn't shown as empty, and heal
+  // it on mount so the stray object never survives to render as `[object Object]`.
+  const url =
+    typeof value === "string"
+      ? value
+      : value && typeof value === "object" && typeof (value as { url?: unknown }).url === "string"
+        ? (value as { url: string }).url
+        : "";
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploadedName, setUploadedName] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const maxSizeKb = 512;
+
+  useEffect(() => {
+    // Normalise a non-string value once, on mount (no-op for the common string case).
+    if (typeof value !== "string") onChange(url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleFile(file: File) {
+    setError(null);
+    if (file.size > maxSizeKb * 1024) {
+      setError(`Файл превышает ${maxSizeKb} КБ.`);
+      return;
+    }
+    const form = new FormData();
+    form.append("file", file);
+    setUploading(true);
+    try {
+      const res = await fetch("/api/media/upload", {
+        method: "POST",
+        credentials: "include",
+        body: form,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = (await res.json()) as { url: string; originalName?: string };
+      setUploadedName(body.originalName ?? null);
+      onChange(body.url);
+    } catch (err) {
+      setError((err as Error)?.message ?? "Не удалось загрузить изображение");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="ou-formfield" data-testid={testId}>
+      <label className="ou-formfield__lbl" htmlFor={fieldId}>
+        {props.label}
+      </label>
+      <div className="design-media-row">
+        <Button
+          id={fieldId}
+          variant="secondary"
+          size="s"
+          leadingIcon={<Upload width={12} height={12} aria-hidden="true" />}
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          loading={uploading}
+          data-testid={`${testId}-upload`}
+        >
+          {uploading ? "Загрузка…" : url ? "Заменить изображение" : "Загрузить изображение"}
+        </Button>
+        {url && (
+          <span className="design-media-chip" data-testid={`${testId}-chip`}>
+            <ImageIcon className="design-media-chip__ico" width={14} height={14} aria-hidden="true" />
+            <span className="design-media-chip__name">{uploadedName || imageNameFromUrl(url)}</span>
+            <IconButton
+              icon={<X width={12} height={12} aria-hidden="true" />}
+              aria-label="Удалить изображение"
+              variant="ghost"
+              size="s"
+              onClick={() => onChange("")}
+              data-testid={`${testId}-remove`}
+            />
+          </span>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/svg+xml,image/webp"
+          style={{ display: "none" }}
+          aria-hidden="true"
+          tabIndex={-1}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void handleFile(file);
+            e.target.value = "";
+          }}
+          data-testid={`${testId}-file`}
+        />
+      </div>
+      <div className="ou-formfield__desc">PNG, JPEG, SVG или WebP; до {maxSizeKb} КБ.</div>
+      {error && <Banner tone="error" size="sm" description={error} data-testid={`${testId}-error`} />}
+    </div>
+  );
 }
 
 // ─── Add page modal (variant picker) ─────────────────────────────────────────────

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-15: Отчёт о дублирующихся темах (админ)</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    .wf-state.active { display: block; }
+    .dr-wrap { max-width: 960px; margin: 0 auto; padding: var(--ou-space-6); display: flex; flex-direction: column; gap: var(--ou-space-5); }
+    .dr-head { display: flex; align-items: baseline; gap: var(--ou-space-3); }
+    .dr-title { font: var(--ou-text-heading-s); font-weight: 700; }
+    .dr-sub { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+    .dr-group { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+    .dr-group__key { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); display: flex; align-items: center; gap: var(--ou-space-2); }
+    .dr-id { display: flex; align-items: center; gap: var(--ou-space-2); }
+    .dr-empty { display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-8) var(--ou-space-4); text-align: center; color: var(--ou-fg-muted); border: 1px dashed var(--ou-border-default); border-radius: var(--ou-radius-m); }
+    .wf-sprite { display: none; }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">PRD-15 · Дубли тем (админ):</span>
+  <button class="wf-btn active" type="button" onclick="showState(this,'s-report')">Есть дубли</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-empty')">Дублей нет</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn" type="button" onclick="toggleTheme(this)">Dark</button>
+  <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
+</nav>
+
+<!-- s-report: группы одноимённых тем -->
+<div class="wf-state active" id="s-report">
+  <div class="dr-wrap">
+    <div class="dr-head">
+      <span class="dr-title">Дублирующиеся темы</span>
+      <span class="dr-sub">Группы тем с одинаковым нормализованным названием (регистр, пробелы, ё→е) по всей системе</span>
+    </div>
+
+    <div class="dr-group">
+      <div class="dr-group__key"><svg width="14" height="14"><use href="#i-copy"/></svg> «инвестиции» — 3 темы</div>
+      <div class="ou-table-wrap">
+        <table class="ou-table">
+          <thead><tr><th>Название</th><th>Владелец</th><th>Видимость</th><th>Папка</th><th>Вопросов</th><th aria-label="Действия"></th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Инвестиции</td>
+              <td><span class="dr-id"><span class="ou-shell__avatar">АЛ</span> Анна Лебедева</span></td>
+              <td><span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Приватная</span></td>
+              <td>Личные финансы</td>
+              <td>27</td>
+              <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Открыть тему"><svg width="14" height="14"><use href="#i-external"/></svg></button></td>
+            </tr>
+            <tr>
+              <td>инвестиции</td>
+              <td><span class="dr-id"><span class="ou-shell__avatar">МИ</span> Марина Иванова</span></td>
+              <td><span class="ou-tag ou-tag--info ou-tag--s">Общая</span></td>
+              <td>—</td>
+              <td>12</td>
+              <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Открыть тему"><svg width="14" height="14"><use href="#i-external"/></svg></button></td>
+            </tr>
+            <tr>
+              <td>Инвестиции </td>
+              <td><span class="dr-id"><span class="ou-shell__avatar"><svg width="14" height="14"><use href="#i-users"/></svg></span> Кафедра экономики</span></td>
+              <td><span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Приватная</span></td>
+              <td>Экономика</td>
+              <td>40</td>
+              <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Открыть тему"><svg width="14" height="14"><use href="#i-external"/></svg></button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="dr-group">
+      <div class="dr-group__key"><svg width="14" height="14"><use href="#i-copy"/></svg> «налоги физлиц» — 2 темы</div>
+      <div class="ou-table-wrap">
+        <table class="ou-table">
+          <thead><tr><th>Название</th><th>Владелец</th><th>Видимость</th><th>Папка</th><th>Вопросов</th><th aria-label="Действия"></th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Налоги физлиц</td>
+              <td><span class="dr-id"><span class="ou-shell__avatar">МИ</span> Марина Иванова</span></td>
+              <td><span class="ou-tag ou-tag--info ou-tag--s">Общая</span></td>
+              <td>Личные финансы</td>
+              <td>18</td>
+              <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Открыть тему"><svg width="14" height="14"><use href="#i-external"/></svg></button></td>
+            </tr>
+            <tr>
+              <td>Налоги Физлиц</td>
+              <td><span class="dr-id"><span class="ou-shell__avatar">ДО</span> Дмитрий Орлов</span></td>
+              <td><span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Приватная</span></td>
+              <td>—</td>
+              <td>9</td>
+              <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Открыть тему"><svg width="14" height="14"><use href="#i-external"/></svg></button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- s-empty: дублей нет -->
+<div class="wf-state" id="s-empty">
+  <div class="dr-wrap">
+    <div class="dr-head">
+      <span class="dr-title">Дублирующиеся темы</span>
+    </div>
+    <div class="dr-empty">
+      <svg width="24" height="24" aria-hidden="true"><use href="#i-check"/></svg>
+      <div>Одноимённых тем по системе не найдено</div>
+    </div>
+  </div>
+</div>
+
+<!-- Пояснения -->
+<section class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения</h3>
+  <table>
+    <thead><tr><th>Элемент</th><th>Поведение</th><th>Правило (PRD-15)</th></tr></thead>
+    <tbody>
+      <tr><td>Отчёт</td><td>Только администратор. Группирует темы с одинаковым нормализованным именем по всей системе</td><td>FR-27, BRC-12; GET /api/topics/duplicates-report (isAdminOrSuper)</td></tr>
+      <tr><td>Группа</td><td>Заголовок — нормализованный ключ и число тем; таблица — все темы группы с владельцем и видимостью</td><td>duplicateNameGroups</td></tr>
+      <tr><td>«Открыть тему»</td><td>Переход к теме (для ручного слияния/переименования; авто-слияние — будущий инструмент реорганизации)</td><td>см. инструмент реорганизации тем (BRD §6.2)</td></tr>
+      <tr><td>Пусто</td><td>Дублей нет — приходит при чистом банке</td><td>—</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- DS Mapping -->
+<section class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping — UniversityRT</h2>
+  <table>
+    <thead><tr><th>Класс</th><th>Где используется</th><th>DS компонент</th><th>React (ui-kit)</th></tr></thead>
+    <tbody>
+      <tr><td><code>.ou-table</code></td><td>Таблица тем группы</td><td>Table</td><td><code>Table</code></td></tr>
+      <tr><td><code>.ou-tag</code></td><td>Видимость темы</td><td>Tag</td><td><code>Tag</code></td></tr>
+      <tr><td><code>.ou-shell__avatar</code></td><td>Аватар владельца</td><td>Avatar</td><td><code>Avatar</code></td></tr>
+      <tr><td><code>.ou-btn</code></td><td>Открыть тему</td><td>Button</td><td><code>Button</code> (--ghost)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById('wf-' + id) || document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+    document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) { button.classList.toggle('active', button === btn); });
+  };
+  window.toggleTheme = function toggleTheme(btn) {
+    var dark = document.body.classList.toggle('ou--dark');
+    document.body.classList.toggle('ou--light', !dark);
+    btn.textContent = dark ? 'Light' : 'Dark';
+    btn.classList.toggle('active', dark);
+  };
+  window.toggleDensity = function toggleDensity(btn) {
+    var compact = document.body.classList.toggle('ou--compact');
+    document.body.classList.toggle('ou--normal', !compact);
+    btn.textContent = compact ? 'Normal' : 'Compact';
+    btn.classList.toggle('active', compact);
+  };
+</script>
+</body>
+</html>

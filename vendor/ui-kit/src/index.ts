@@ -8,6 +8,8 @@ import { Banner } from './components/Banner';
 import { Breadcrumbs } from './components/Breadcrumbs';
 import { Button } from './components/Button';
 import { Calendar } from './components/Calendar';
+import { Center } from './components/Center';
+import { IconBadge } from './components/IconBadge';
 import {
   Card, CardBody, CardDivider, CardFooter, CardHeader, CardKpi, CardMedia,
 } from './components/Card';
@@ -17,6 +19,8 @@ import {
 import { Checkbox } from './components/Checkbox';
 import { ChoiceCard, ChoiceCardGroup, ChoiceCardInset } from './components/ChoiceCard';
 import { Chip } from './components/Chip';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './components/Collapsible';
+import { Label } from './components/Label';
 import { ColorPicker } from './components/ColorPicker';
 import { Combobox } from './components/Combobox';
 import { CommandPalette } from './components/CommandPalette';
@@ -37,6 +41,8 @@ import {
 } from './components/GradientPicker';
 import { IconButton } from './components/IconButton';
 import { Input } from './components/Input';
+import { Box, Cluster, Grid, Stack } from './components/Layout';
+import { Text } from './components/Text';
 import {
   Kanban, KanbanAddCard, KanbanAddColumn, KanbanCard, KanbanCardFoot,
   KanbanCardFootStats, KanbanCardMeta, KanbanCardProgress, KanbanCardTags,
@@ -55,8 +61,10 @@ import {
   ProgressBar, ProgressSegmented, ProgressStacked,
 } from './components/ProgressBar';
 import { Radio, RadioGroup } from './components/Radio';
+import { ScrollArea } from './components/ScrollArea';
 import { Select } from './components/Select';
 import { SegmentedControl } from './components/SegmentedControl';
+import { Separator } from './components/Separator';
 import { Sidebar } from './components/Sidebar';
 import {
   Skeleton, SkeletonCard, SkeletonListRow, SkeletonRow, SkeletonStack,
@@ -68,6 +76,7 @@ import { Switch } from './components/Switch';
 import { Table, TableChip } from './components/Table';
 import { Tab, TabList, TabPanel, Tabs } from './components/Tabs';
 import { Tag } from './components/Tag';
+import { TagInput } from './components/TagInput';
 import { Textarea } from './components/Textarea';
 import { TimePicker } from './components/TimePicker';
 import { Timer, useCountdown } from './components/Timer';
@@ -86,11 +95,15 @@ export {
   Breadcrumbs,
   Button,
   Calendar,
+  Center,
+  IconBadge,
   Card, CardBody, CardDivider, CardFooter, CardHeader, CardKpi, CardMedia,
   BarChart, Chart, LineChart, ProgressRing,
   Checkbox,
   ChoiceCard, ChoiceCardGroup, ChoiceCardInset,
   Chip,
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+  Label,
   ColorPicker,
   Combobox,
   CommandPalette,
@@ -107,6 +120,8 @@ export {
   GradientPicker, buildGradientCss, makeDefaultGradientState,
   IconButton,
   Input,
+  Box, Cluster, Grid, Stack,
+  Text,
   Kanban, KanbanAddCard, KanbanAddColumn, KanbanCard, KanbanCardFoot,
   KanbanCardFootStats, KanbanCardMeta, KanbanCardProgress, KanbanCardTags,
   KanbanCardTitle, KanbanColumn, KanbanTag,
@@ -119,8 +134,10 @@ export {
   Popover, PopoverHeader, PopoverRow,
   ProgressBar, ProgressSegmented, ProgressStacked,
   Radio, RadioGroup,
+  ScrollArea,
   Select,
   SegmentedControl,
+  Separator,
   Sidebar,
   Skeleton, SkeletonCard, SkeletonListRow, SkeletonRow, SkeletonStack,
   Slider,
@@ -130,6 +147,7 @@ export {
   Table, TableChip,
   Tab, TabList, TabPanel, Tabs,
   Tag,
+  TagInput,
   Textarea,
   TimePicker,
   Timer, useCountdown,
@@ -150,6 +168,8 @@ export type { AvatarProps, AvatarColor } from './components/Avatar';
 export type { BannerProps, BannerVariant, BannerTone, BannerAction } from './components/Banner';
 export type { BreadcrumbsProps, BreadcrumbItem, BreadcrumbsSeparator } from './components/Breadcrumbs';
 export type { ButtonProps } from './components/Button';
+export type { CenterProps, CenterMinH } from './components/Center';
+export type { IconBadgeProps, IconBadgeTone, IconBadgeSize } from './components/IconBadge';
 export type {
   CalendarProps, CalendarDate, CalendarMode, CalendarView, CalendarPreset,
 } from './components/Calendar';
@@ -167,6 +187,10 @@ export type {
   ChoiceCardProps, ChoiceCardGroupProps, ChoiceCardTone,
 } from './components/ChoiceCard';
 export type { ChipProps, ChipSize } from './components/Chip';
+export type {
+  CollapsibleProps, CollapsibleTriggerProps, CollapsibleContentProps,
+} from './components/Collapsible';
+export type { LabelProps } from './components/Label';
 export type { ColorPickerProps, ColorPickerColor } from './components/ColorPicker';
 export type { ComboboxProps, ComboboxOption } from './components/Combobox';
 export type {
@@ -205,6 +229,13 @@ export type {
 export type { IconButtonProps } from './components/IconButton';
 export type { InputProps } from './components/Input';
 export type {
+  StackProps, ClusterProps, GridProps, BoxProps,
+  Space, StackAlign, StackJustify, GridMinItem, BoxSurface, BoxRadius,
+} from './components/Layout';
+export type {
+  TextProps, TextVariant, TextTone, TextWeight, TextAlign,
+} from './components/Text';
+export type {
   KanbanProps, KanbanColumnProps, KanbanColumnDot, KanbanCardProps,
   KanbanTagProps, KanbanTagTone, KanbanCardProgressProps,
 } from './components/Kanban';
@@ -231,10 +262,12 @@ export type {
   ProgressSize, ProgressTone, ProgressVariant,
 } from './components/ProgressBar';
 export type { RadioOption, RadioGroupProps, RadioProps } from './components/Radio';
+export type { ScrollAreaProps, ScrollAreaOrientation, ScrollAreaMaxH } from './components/ScrollArea';
 export type { SelectProps, SelectOption } from './components/Select';
 export type {
   SegmentedControlProps, SegmentedControlItem, SegmentedControlSize, SegmentedControlVariant,
 } from './components/SegmentedControl';
+export type { SeparatorProps, SeparatorOrientation } from './components/Separator';
 export type {
   SidebarProps, SidebarItem, SidebarGroup,
 } from './components/Sidebar';
@@ -255,6 +288,7 @@ export type {
   TabsProps, TabItem, TabsVariant, TabsSize, TabsAlign, TabProps,
 } from './components/Tabs';
 export type { TagProps, TagVariant, TagSize } from './components/Tag';
+export type { TagInputProps } from './components/TagInput';
 export type { TextareaProps } from './components/Textarea';
 export type { TimePickerProps, TimePickerValue } from './components/TimePicker';
 export type {

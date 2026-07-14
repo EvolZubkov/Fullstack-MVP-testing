@@ -76,7 +76,10 @@ export async function provisionSuperadmins(): Promise<void> {
         email,
         // Random, unusable password — the account sets one via password reset.
         passwordHash: randomBytes(24).toString("hex"),
-        name: null,
+        // Default the display name to the email so the superadmin is never nameless
+        // (a null name renders as «—»/blank wherever the account is shown, e.g. the
+        // «Владелец» column of tests they import). They can change it in the profile.
+        name: email,
         // Superadmin power comes from configuration; `user_roles` stays empty.
         status: "active",
         mustChangePassword: true,

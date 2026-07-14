@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Drawer, Button, IconButton, Avatar, Select, Combobox, EmptyState, Table } from "@universityrt/ui-kit";
+import { Drawer, Button, IconButton, Avatar, Select, Combobox, EmptyState, Table, Box, Stack, Cluster, Text } from "@universityrt/ui-kit";
 import { Trash2, KeyRound } from "lucide-react";
 import { formatRoles } from "@/lib/roles";
 import type { Role } from "@shared/access";
@@ -175,18 +175,18 @@ export function TestAccessPanel({
       title="Общий доступ"
       description={test?.title}
       footer={
-        <div className="flex justify-end gap-2">
+        <Cluster justify="end" gap={2} wrap={false}>
           <Button variant="ghost" onClick={onClose}>Отмена</Button>
           <Button variant="primary" loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
             Сохранить
           </Button>
-        </div>
+        </Cluster>
       }
     >
-      <div className="flex flex-col gap-6">
+      <Stack gap={6}>
         {/* Owner */}
-        <section className="flex flex-col gap-3">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Владелец</span>
+        <Stack as="section" gap={3}>
+          <Text variant="body-s" weight="semibold" tone="muted" className="tb-caps">Владелец</Text>
           {changingOwner ? (
             <Select
               aria-label="Владелец теста"
@@ -197,26 +197,26 @@ export function TestAccessPanel({
               onChange={(v) => setOwnerId(v || null)}
             />
           ) : (
-            <div className="flex items-center gap-3">
+            <Cluster gap={3} wrap={false}>
               {owner ? (
                 <>
                   <Avatar initials={initials(owner)} size="s" />
                   <span>{displayName(owner)}</span>
                 </>
               ) : (
-                <span className="text-muted-foreground">Владелец не назначен</span>
+                <Text tone="muted">Владелец не назначен</Text>
               )}
-              <span className="flex-1" />
+              <Box as="span" grow />
               <Button variant="secondary" size="s" onClick={() => setChangingOwner(true)}>
                 Сменить владельца
               </Button>
-            </div>
+            </Cluster>
           )}
-        </section>
+        </Stack>
 
         {/* Grants */}
-        <section className="flex flex-col gap-3">
-          <div className="flex items-end gap-3 flex-wrap">
+        <Stack as="section" gap={3}>
+          <Cluster align="end" gap={3}>
             <Combobox
               aria-label="Выбрать пользователя"
               placeholder="Выберите пользователя…"
@@ -238,7 +238,7 @@ export function TestAccessPanel({
             <Button variant="primary" disabled={!addUserId} onClick={addGrant}>
               Добавить
             </Button>
-          </div>
+          </Cluster>
 
           {grants.length === 0 ? (
             <EmptyState
@@ -262,10 +262,10 @@ export function TestAccessPanel({
                   render: (g) => {
                     const u = usersById.get(g.userId);
                     return (
-                      <span className="flex items-center gap-2">
+                      <Cluster as="span" gap={2} wrap={false}>
                         <Avatar initials={initials(u)} size="xs" />
                         <span>{displayName(u)}</span>
-                      </span>
+                      </Cluster>
                     );
                   },
                 },
@@ -300,8 +300,8 @@ export function TestAccessPanel({
               ]}
             />
           )}
-        </section>
-      </div>
+        </Stack>
+      </Stack>
     </Drawer>
   );
 }

@@ -1,11 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { ClipboardList, Clock, BookOpen, ArrowRight, AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import {
+  Box,
+  Button,
+  Card,
+  CardBody,
+  CardFooter,
+  CardHeader,
+  Cluster,
+  EmptyState,
+  Grid,
+  Stack,
+  Tag,
+  Text,
+} from "@universityrt/ui-kit";
 import { PageHeader } from "@/components/page-header";
-import { EmptyState } from "@/components/empty-state";
 import { LoadingState } from "@/components/loading-state";
 import { t, formatQuestions } from "@/lib/i18n";
 import type { Test, TestSection } from "@shared/schema";
@@ -30,7 +40,7 @@ export default function LearnerTestListPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8">
+    <Box maxW="4xl" padX={6} padY={8}>
       <PageHeader
         title={t.learnerTests.title}
         description={t.learnerTests.description}
@@ -38,18 +48,17 @@ export default function LearnerTestListPage() {
 
       {!tests || tests.length === 0 ? (
         <EmptyState
-          icon={ClipboardList}
+          art={<ClipboardList size={48} color="var(--ou-fg-muted)" />}
           title={t.learnerTests.noTests}
           description={t.learnerTests.noTests}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Grid minItem="lg" gap={1}>
           {tests.map((test) => {
             const isAdaptive = test.mode === "adaptive";
             const totalQuestions = test.sections.reduce((sum, s) => sum + s.drawCount, 0);
             const estimatedMinutes = Math.ceil(totalQuestions * 1.5);
 
-            // Проверяем ограничение попыток
             const maxAttempts = test.maxAttempts || null;
             const completedAttempts = test.completedAttempts || 0;
             const attemptsExhausted = maxAttempts !== null && completedAttempts >= maxAttempts;
@@ -57,88 +66,69 @@ export default function LearnerTestListPage() {
 
             return (
               <Card key={test.id} data-testid={`card-learner-test-${test.id}`}>
-                <CardHeader>
-                  <CardTitle className="text-lg">{test.title}</CardTitle>
-                  {test.description && (
-                    <CardDescription className="line-clamp-2">
-                      {test.description}
-                    </CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  {!isAdaptive && (
-                    <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <BookOpen className="h-4 w-4" />
-                        <span>{formatQuestions(totalQuestions)}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-4 w-4" />
-                        <span>~{estimatedMinutes} мин</span>
-                      </div>
-                    </div>
-                  )}
+                <CardHeader title={test.title} subtitle={test.description || undefined} />
+                <CardBody>
+                  <Stack gap={4}>
+                    {!isAdaptive && (
+                      <Cluster gap={3}>
+                        <Cluster gap={1}>
+                          <BookOpen size={16} color="var(--ou-fg-muted)" />
+                          <Text variant="body-s" tone="muted">{formatQuestions(totalQuestions)}</Text>
+                        </Cluster>
+                        <Cluster gap={1}>
+                          <Clock size={16} color="var(--ou-fg-muted)" />
+                          <Text variant="body-s" tone="muted">~{estimatedMinutes} мин</Text>
+                        </Cluster>
+                      </Cluster>
+                    )}
 
-                  {/* Информация о попытках */}
-                  {maxAttempts !== null && (
-                    <div className="mt-3">
-                      <div className={`text-sm ${attemptsExhausted ? "text-red-500" : "text-muted-foreground"}`}>
+                    {maxAttempts !== null && (
+                      <Text variant="body-s" tone={attemptsExhausted ? "error" : "muted"}>
                         Попыток: {completedAttempts} / {maxAttempts}
-                        {attemptsExhausted && (
-                          <span className="ml-2 font-medium">— Попытки закончились</span>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                        {attemptsExhausted && " — Попытки закончились"}
+                      </Text>
+                    )}
 
-                  <div className="mt-4">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                      Темы
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {test.sections.map((section) => (
-                        <Badge key={section.id} variant="secondary">
-                          {section.topicName}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </CardContent>
+                    <Stack gap={2}>
+                      <Text variant="body-xs" tone="muted" weight="medium">Темы</Text>
+                      <Cluster gap={2}>
+                        {test.sections.map((section) => (
+                          <Tag key={section.id}>{section.topicName}</Tag>
+                        ))}
+                      </Cluster>
+                    </Stack>
+                  </Stack>
+                </CardBody>
                 <CardFooter>
                   {attemptsExhausted ? (
-                    <Button
-                      className="w-full"
-                      variant="secondary"
-                      disabled
-                    >
-                      <AlertCircle className="h-4 w-4 mr-2" />
+                    <Button fullWidth variant="secondary" disabled leadingIcon={<AlertCircle size={16} />}>
                       Попытки закончились
                     </Button>
                   ) : hasInProgress ? (
                     <Button
-                      className="w-full"
+                      fullWidth
+                      trailingIcon={<ArrowRight size={16} />}
                       onClick={() => navigate(`/learner/test/${test.id}`)}
                       data-testid={`button-continue-test-${test.id}`}
                     >
                       Продолжить тест
-                      <ArrowRight className="h-4 w-4 ml-2" />
                     </Button>
                   ) : (
                     <Button
-                      className="w-full"
+                      fullWidth
+                      trailingIcon={<ArrowRight size={16} />}
                       onClick={() => navigate(`/learner/test/${test.id}`)}
                       data-testid={`button-start-test-${test.id}`}
                     >
                       {t.learnerTests.startTest}
-                      <ArrowRight className="h-4 w-4 ml-2" />
                     </Button>
                   )}
                 </CardFooter>
               </Card>
             );
           })}
-        </div>
+        </Grid>
       )}
-    </div>
+    </Box>
   );
 }

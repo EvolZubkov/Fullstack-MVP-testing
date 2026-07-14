@@ -16,20 +16,27 @@
  * yet compute scale-of-scales — so that source option is shown disabled.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Banner,
   Button,
   Checkbox,
+  Cluster,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
   EmptyState,
+  Grid,
   IconButton,
   Input,
   ModalDialog,
   SegmentedControl,
   Select,
+  Stack,
   Switch,
+  Tag,
 } from "@universityrt/ui-kit";
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Info, Plus, Trash2 } from "lucide-react";
 
 import type {
   QuestionMeasurementModel,
@@ -50,6 +57,11 @@ import {
   type ScalePreviewResult,
 } from "../scales-api";
 import type { FieldErrorIndex } from "../field-errors";
+import { FoldAllButtons, useSectionFold } from "./section-fold";
+
+// Вывод шкал ученику — отдельный PRD (дальняя перспектива). До него тогл
+// «Показывать результат обучающемуся» скрыт; поле showToLearner сохранено в модели.
+const SHOW_LEARNER_RESULT_TOGGLE: boolean = false;
 
 export type ScalesSectionProps = {
   model: TestEditorModel;
@@ -199,28 +211,37 @@ function bandErrorOf(s: ScaleModel): string | null {
 export function ScalesSection({ model, testId, updateModel, readOnly = false }: ScalesSectionProps) {
   const [subTab, setSubTab] = useState<ScalesSubTab>("list");
 
+  // «Вклады вопросов» is meaningless without at least one scale (nothing to
+  // contribute to), so its rail item is disabled until a scale exists. If the
+  // last scale is removed while on it, fall back to «Список шкал».
+  const hasScales = useMemo(() => model.scales.some((s) => s.key.trim() !== ""), [model.scales]);
+  const effectiveTab: ScalesSubTab = subTab === "contributions" && hasScales ? "contributions" : "list";
+
   return (
     <div className="ou-drawer__split" data-testid="scales-split">
       <nav className="ou-drawer__rail" aria-label="Подразделы шкал">
         <button
           type="button"
-          className={"ou-drawer__rail-item" + (subTab === "list" ? " is-active" : "")}
-          aria-current={subTab === "list" ? "page" : undefined}
+          className={"ou-drawer__rail-item" + (effectiveTab === "list" ? " is-active" : "")}
+          aria-current={effectiveTab === "list" ? "page" : undefined}
           onClick={() => setSubTab("list")}
         >
           Список шкал
         </button>
         <button
           type="button"
-          className={"ou-drawer__rail-item" + (subTab === "contributions" ? " is-active" : "")}
-          aria-current={subTab === "contributions" ? "page" : undefined}
+          className={"ou-drawer__rail-item" + (effectiveTab === "contributions" ? " is-active" : "")}
+          aria-current={effectiveTab === "contributions" ? "page" : undefined}
+          disabled={!hasScales}
+          title={!hasScales ? "Сначала добавьте шкалу в разделе «Список шкал»" : undefined}
           onClick={() => setSubTab("contributions")}
+          data-testid="scales-rail-contributions"
         >
           Вклады вопросов
         </button>
       </nav>
-      <div className="tb-settings-content" data-testid={`scales-pane-${subTab}`}>
-        {subTab === "list" ? (
+      <div className="tb-settings-content" data-testid={`scales-pane-${effectiveTab}`}>
+        {effectiveTab === "list" ? (
           <ScalesListPane model={model} testId={testId} updateModel={updateModel} readOnly={readOnly} />
         ) : (
           <ContributionsPane model={model} updateModel={updateModel} readOnly={readOnly} />
@@ -303,6 +324,7 @@ function ScalesListPane({
       <EmptyState
         layout="page"
         well
+        art={<Info aria-hidden="true" />}
         title="Пока нет шкал"
         description="Шкала измеряет компетенцию или признак: суммирует вклады вопросов, нормализует и даёт уровень. Добавьте первую шкалу теста."
         actions={
@@ -310,7 +332,7 @@ function ScalesListPane({
             <Button
               variant="primary"
               size="s"
-              leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
+              leadingIcon={<Plus size={16} aria-hidden="true" />}
               onClick={addScale}
               data-testid="scales-empty-add"
             >
@@ -325,9 +347,9 @@ function ScalesListPane({
 
   return (
     <>
-      <div className="flex items-center justify-between mb-3">
+      <Cluster justify="between" gap={0} wrap={false} style={{ marginBottom: "var(--ou-space-3)" }}>
         <div className="tb-section-label">Шкалы теста</div>
-        <div className="flex items-center gap-2">
+        <Cluster gap={2} wrap={false}>
           <Button
             variant="ghost"
             size="s"
@@ -341,15 +363,15 @@ function ScalesListPane({
             <Button
               variant="ghost"
               size="s"
-              leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
+              leadingIcon={<Plus size={16} aria-hidden="true" />}
               onClick={addScale}
               data-testid="scales-add"
             >
               Добавить шкалу
             </Button>
           )}
-        </div>
-      </div>
+        </Cluster>
+      </Cluster>
 
       {anyError && (
         <Banner
@@ -427,6 +449,7 @@ function ScaleCard({ index, scale: s, scales, coverage, readOnly, expanded, onTo
     <section
       className={"ou-card ou-card--outlined ou-card--sm tb-level-card" + (expanded ? "" : " is-collapsed")}
       data-testid={`scales-card-${index}`}
+      data-field={`scales[${index}]`}
     >
       <header className="ou-card__header tb-level-card__head">
         <span className={"tb-status-dot " + dotClass} aria-hidden="true"></span>
@@ -494,11 +517,12 @@ function ScaleForm({
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3">
+      <Grid cols={2} gap={3}>
         <Input
           size="m"
           fullWidth
-          label="Ключ *"
+          label="Ключ"
+          required
           value={s.key}
           disabled={readOnly}
           error={keyError ?? undefined}
@@ -539,6 +563,10 @@ function ScaleForm({
               /* composite scales (source = other scales) are deferred; questions only */
             }}
           />
+          <p className="ou-formfield__desc">
+            «Другие шкалы» пока недоступны — расчёт шкалы из других шкал ещё не
+            реализован.
+          </p>
         </div>
         <Select<RecalcValue>
           size="m"
@@ -560,7 +588,7 @@ function ScaleForm({
           onChange={(value) => onChange({ scormTarget: value })}
           data-testid={`scales-target-${index}`}
         />
-      </div>
+      </Grid>
 
       <hr className="wf-sep" />
       <div className="tb-section-label">Диапазоны (пороги) → уровень</div>
@@ -576,14 +604,18 @@ function ScaleForm({
         }
       />
 
-      <hr className="wf-sep" />
-      <Switch
-        label="Показывать результат обучающемуся"
-        checked={s.showToLearner}
-        disabled={readOnly}
-        onChange={(e) => onChange({ showToLearner: e.target.checked })}
-        data-testid={`scales-show-${index}`}
-      />
+      {SHOW_LEARNER_RESULT_TOGGLE && (
+        <>
+          <hr className="wf-sep" />
+          <Switch
+            label="Показывать результат обучающемуся"
+            checked={s.showToLearner}
+            disabled={readOnly}
+            onChange={(e) => onChange({ showToLearner: e.target.checked })}
+            data-testid={`scales-show-${index}`}
+          />
+        </>
+      )}
     </>
   );
 }
@@ -687,7 +719,7 @@ function BandsEditor({
         <Button
           variant="ghost"
           size="s"
-          leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
+          leadingIcon={<Plus size={16} aria-hidden="true" />}
           onClick={add}
           data-testid={`scales-band-add-${index}`}
         >
@@ -792,7 +824,7 @@ function ScalePreviewModal({ testId, onClose }: { testId: string; onClose: () =>
                   onChange={(value) => setSingle(q.id, value === "" ? null : Number(value))}
                 />
               ) : (
-                <div className="flex flex-col gap-1">
+                <Stack gap={1}>
                   {q.units.map((u) => {
                     const selected = Array.isArray(answers[q.id])
                       ? (answers[q.id] as number[]).includes(Number(u.sourceKey))
@@ -806,7 +838,7 @@ function ScalePreviewModal({ testId, onClose }: { testId: string; onClose: () =>
                       />
                     );
                   })}
-                </div>
+                </Stack>
               )}
             </div>
           ))}
@@ -941,6 +973,31 @@ function ContributionsPane({
     return map;
   }, [model.measurements]);
 
+  // Group the (flat) loaded questions by section, in section order, keeping a
+  // running global number for the card headings/testids. Empty sections are
+  // skipped. Folding mirrors the «Оценка» tab (shared `useSectionFold`).
+  const groups = useMemo(() => {
+    const byTopic = new Map<string, ContributionQuestion[]>();
+    for (const q of questions ?? []) {
+      const list = byTopic.get(q.topicId);
+      if (list) list.push(q);
+      else byTopic.set(q.topicId, [q]);
+    }
+    let counter = 0;
+    const out: { topicId: string; topicName: string; items: { q: ContributionQuestion; index: number }[] }[] = [];
+    for (const s of model.sections) {
+      const list = byTopic.get(s.topicId) ?? [];
+      if (list.length === 0) continue;
+      out.push({
+        topicId: s.topicId,
+        topicName: s.topicName,
+        items: list.map((q) => ({ q, index: counter++ })),
+      });
+    }
+    return out;
+  }, [questions, model.sections]);
+  const fold = useSectionFold(groups.map((g) => g.topicId));
+
   const setCell = useCallback(
     (questionId: string, unit: ContributionUnit, scaleKey: string, value: number | null) => {
       updateModel((m) => {
@@ -1008,20 +1065,65 @@ function ContributionsPane({
         )
       )}
 
-      {questions.map((q, index) => (
-        <QuestionContribCard
-          key={q.id}
-          index={index}
-          question={q}
-          scales={scales}
-          contributed={contributedByQ.get(q.id) ?? new Set()}
-          cellMap={cellMap}
-          readOnly={readOnly}
-          expanded={expandedId === q.id}
-          onToggle={() => setExpandedId((cur) => (cur === q.id ? null : q.id))}
-          onSetCell={setCell}
-        />
-      ))}
+      {groups.length > 0 && (
+        <div className="tb-fold-toolbar">
+          <FoldAllButtons fold={fold} testIdPrefix="contrib" />
+        </div>
+      )}
+
+      {groups.map((group) => {
+        const open = fold.isOpen(group.topicId);
+        // Coverage reflected at the section level (only meaningful with scales).
+        const sectionUncovered = group.items.filter(({ q }) => !contributedByQ.has(q.id)).length;
+        return (
+          <div className="tb-fold-sec" key={group.topicId} data-testid={`contrib-sec-${group.topicId}`}>
+            <Collapsible open={open} onOpenChange={() => fold.toggle(group.topicId)}>
+              <div className="tb-fold-sec-head">
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="tb-fold-trigger"
+                    aria-label={open ? `Свернуть секцию ${group.topicName}` : `Развернуть секцию ${group.topicName}`}
+                    data-testid={`contrib-sec-toggle-${group.topicId}`}
+                  >
+                    {open
+                      ? <ChevronDown className="tb-fold-chev" width={16} height={16} aria-hidden="true" />
+                      : <ChevronRight className="tb-fold-chev" width={16} height={16} aria-hidden="true" />}
+                    <span className="tb-fold-sec-name">{group.topicName}</span>
+                  </button>
+                </CollapsibleTrigger>
+                {scales.length > 0 && sectionUncovered > 0 && (
+                  <span
+                    className="ou-tag ou-tag--warning ou-tag--outline"
+                    data-testid={`contrib-sec-uncovered-${group.topicId}`}
+                  >
+                    {sectionUncovered} не привязано
+                  </span>
+                )}
+                <span className="ou-tag ou-tag--neutral ou-tag--outline">{pluralQuestions(group.items.length)}</span>
+              </div>
+              <CollapsibleContent>
+                <div className="tb-fold-sec__body">
+                  {group.items.map(({ q, index }) => (
+                    <QuestionContribCard
+                      key={q.id}
+                      index={index}
+                      question={q}
+                      scales={scales}
+                      contributed={contributedByQ.get(q.id) ?? new Set()}
+                      cellMap={cellMap}
+                      readOnly={readOnly}
+                      expanded={expandedId === q.id}
+                      onToggle={() => setExpandedId((cur) => (cur === q.id ? null : q.id))}
+                      onSetCell={setCell}
+                    />
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
+        );
+      })}
     </>
   );
 }
@@ -1049,6 +1151,9 @@ function QuestionContribCard({
   onToggle: () => void;
   onSetCell: (questionId: string, unit: ContributionUnit, scaleKey: string, value: number | null) => void;
 }) {
+  // The pane is reached only when the test has at least one scale (the rail item
+  // is disabled otherwise), so «не привязан» here is always actionable: amber if
+  // the question contributes to no scale, green once it contributes to ≥1.
   const measured = contributed.size > 0;
   const dotClass = measured ? "tb-status-dot--ok" : "tb-status-dot--warn";
   const heading = `${index + 1}. ${q.prompt}`;
@@ -1068,9 +1173,9 @@ function QuestionContribCard({
             {scales
               .filter((s) => contributed.has(s.key))
               .map((s) => (
-                <span key={s.key} className="ou-tag ou-tag--neutral ou-tag--outline ml-2" title={s.label}>
+                <Tag key={s.key} tone="neutral" variant="outline" style={{ marginInlineStart: "var(--ou-space-2)" }} title={s.label}>
                   {s.key.toUpperCase()}
-                </span>
+                </Tag>
               ))}
             {!measured && " · не привязан"}
           </p>
@@ -1095,38 +1200,48 @@ function QuestionContribCard({
           ) : q.units.length === 0 ? (
             <p className="tb-card-desc">У вопроса нет единиц ответа для измерения.</p>
           ) : (
-            <table className="tb-table tb-table--mb" data-testid={`contrib-grid-${index}`}>
-              <thead>
-                <tr>
-                  <th>{UNIT_HEADER[q.type]}</th>
-                  {scales.map((s) => (
-                    <th key={s.key} title={s.label}>{s.key.toUpperCase()}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {q.units.map((unit) => (
-                  <tr key={`${unit.sourceType}:${unit.sourceKey}`}>
-                    <td>
-                      {unit.label}
-                      {unit.correct && (
-                        <span className="ou-tag ou-tag--success ou-tag--outline ml-2">✓ верный</span>
-                      )}
-                    </td>
+            <div className="tb-contrib-grid-wrap">
+              <table
+                className="tb-table tb-table--mb tb-contrib-grid"
+                style={{ "--tb-contrib-cols": scales.length } as CSSProperties}
+                data-testid={`contrib-grid-${index}`}
+              >
+                <thead>
+                  <tr>
+                    <th className="tb-contrib-grid__unit-col">{UNIT_HEADER[q.type]}</th>
                     {scales.map((s) => (
-                      <td key={s.key}>
-                        <MatrixCell
-                          value={cellMap.get(cellKey(q.id, unit.sourceType, unit.sourceKey, s.key))}
-                          disabled={readOnly}
-                          ariaLabel={`Вклад «${unit.label}» в шкалу ${s.key}`}
-                          onCommit={(v) => onSetCell(q.id, unit, s.key, v)}
-                        />
-                      </td>
+                      <th key={s.key} className="tb-contrib-grid__val-col" title={s.label}>{s.key.toUpperCase()}</th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {q.units.map((unit) => (
+                    <tr key={`${unit.sourceType}:${unit.sourceKey}`}>
+                      <td className="tb-contrib-grid__unit-col">
+                        <span className="tb-contrib-grid__unit">
+                          <span className="tb-contrib-grid__check">
+                            {unit.correct && (
+                              <Check width={16} height={16} role="img" aria-label="Верный вариант" />
+                            )}
+                          </span>
+                          <span className="tb-contrib-grid__unit-text">{unit.label}</span>
+                        </span>
+                      </td>
+                      {scales.map((s) => (
+                        <td key={s.key} className="tb-contrib-grid__val-col">
+                          <MatrixCell
+                            value={cellMap.get(cellKey(q.id, unit.sourceType, unit.sourceKey, s.key))}
+                            disabled={readOnly}
+                            ariaLabel={`Вклад «${unit.label}» в шкалу ${s.key}`}
+                            onCommit={(v) => onSetCell(q.id, unit, s.key, v)}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
           {hint && q.units.length > 0 && scales.length > 0 && (
             <Banner tone="info" size="sm" description={hint} />
@@ -1162,6 +1277,7 @@ function MatrixCell({
   return (
     <Input
       size="s"
+      fullWidth
       value={text}
       disabled={disabled}
       aria-label={ariaLabel}

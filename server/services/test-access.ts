@@ -27,7 +27,11 @@ export function isAdminOrSuper(roles: readonly Role[]): boolean {
   return hasRole(roles, ROLES.SUPERADMIN) || hasRole(roles, ROLES.ADMINISTRATOR);
 }
 
-/** Can read the test: author edit-scope or manager assign-scope (plus admin/super). */
+/**
+ * Can read the test: author edit-scope, manager assign-scope, or the test is
+ * assigned to the user (role-model.md 6.4 `assignedToUser` branch — the
+ * learner runtime reads design/screen data of assigned tests; PRD-15 FR-09).
+ */
 export async function canReadTest(
   roles: readonly Role[],
   userId: string,
@@ -36,6 +40,7 @@ export async function canReadTest(
   if (isAdminOrSuper(roles)) return true;
   if (hasRole(roles, ROLES.AUTHOR) && (await canEditTest(roles, userId, test))) return true;
   if (hasRole(roles, ROLES.MANAGER) && (await canAssignTest(roles, userId, test))) return true;
+  if (await storage.isTestAssignedToUser(test.id, userId)) return true;
   return false;
 }
 
@@ -94,9 +99,15 @@ export async function canReadTestAnalytics(
   return false;
 }
 
-/** Granting access and changing the owner are admin/superadmin only. */
-export function canGrantAccess(roles: readonly Role[]): boolean {
-  return isAdminOrSuper(roles);
+/**
+ * Granting access to a test: the owner of that test (PRD-15 BRC-27) or an
+ * administrator/superadmin. The capability `tests.access.grant` is now held by
+ * authors too, so this object-level check is what stops an author granting on a
+ * test they do not own.
+ */
+export function canGrantAccess(roles: readonly Role[], userId: string, test: TestRef): boolean {
+  if (isAdminOrSuper(roles)) return true;
+  return hasRole(roles, ROLES.AUTHOR) && test.ownerId === userId;
 }
 
 /** Changing the test owner is admin/superadmin only. */

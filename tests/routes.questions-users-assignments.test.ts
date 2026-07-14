@@ -13,6 +13,10 @@ const { storageMock } = vi.hoisted(() => ({
     updateQuestion: vi.fn(), deleteQuestion: vi.fn(), deleteQuestionsBulk: vi.fn(),
     getQuestionsByTopic: vi.fn(), getTestSections: vi.fn(), getTest: vi.fn(),
     getTopics: vi.fn(),
+    // referential protection (PRD-15 FR-03..FR-05)
+    getTestsUsingTopic: vi.fn(), getTestSectionsByTopic: vi.fn(),
+    getMeasurementsForQuestions: vi.fn(), getTopicPageRefs: vi.fn(),
+    getAdaptiveLevels: vi.fn(),
     getUsers: vi.fn(), getUser: vi.fn(), getUserByEmail: vi.fn(), createUser: vi.fn(),
     getUserRoles: vi.fn().mockResolvedValue(["administrator"]), setUserRoles: vi.fn(),
     updateUser: vi.fn(), updateUserPassword: vi.fn(), deactivateUser: vi.fn(),
@@ -93,6 +97,14 @@ describe("Questions routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storageMock.getUser.mockResolvedValue(authorUser);
+    // PRD-15 FR-02/FR-05 defaults: the question exists and nothing depends on
+    // it, so the creator/feasibility guards let mutations through.
+    storageMock.getQuestion.mockResolvedValue(dbQuestion);
+    storageMock.getQuestionsByTopic.mockResolvedValue([]);
+    storageMock.getTestsUsingTopic.mockResolvedValue([]);
+    storageMock.getTestSectionsByTopic.mockResolvedValue([]);
+    storageMock.getMeasurementsForQuestions.mockResolvedValue([]);
+    storageMock.getTopicPageRefs.mockResolvedValue([]);
     app = makeApp(questionsRouter, "/api/questions");
   });
 

@@ -25,7 +25,7 @@ export type BinaryOp =
   | "/";
 
 /** Accessor sources of the form `fn("arg").prop` (PRD-2 §4.2). */
-export type AccessorFn = "topicById" | "tag" | "scaleById" | "sectionById";
+export type AccessorFn = "topicById" | "topicByName" | "tag" | "scaleById" | "sectionById";
 
 /** Zero-argument aggregate sources. */
 export type NullaryFn = "countPassed" | "countTopics" | "avgPercent";
@@ -36,6 +36,7 @@ export type CountFn = "countVars" | "countScales";
 /** Allowed properties per accessor source. */
 export const ACCESSOR_PROPS: Record<AccessorFn, readonly string[]> = {
   topicById: ["percent", "passed", "score"],
+  topicByName: ["percent", "passed", "score"],
   tag: ["percent", "score", "maxScore", "count"],
   scaleById: ["raw", "normalized", "percent", "level", "label", "hasValue"],
   sectionById: ["percent", "passed", "completed"],
@@ -47,6 +48,7 @@ export type Ast =
   | { type: "string"; value: string }
   | { type: "boolean"; value: boolean }
   | { type: "percent" }
+  | { type: "score" }
   | { type: "accessor"; fn: AccessorFn; arg: string; prop: string }
   | { type: "var"; name: string }
   | { type: "nullary"; fn: NullaryFn }
@@ -90,7 +92,18 @@ export interface SectionResult {
  */
 export interface EvalContext {
   percent: number;
+  /** Overall earned points across the test (Σ of per-topic earned points). */
+  score: number;
+  /**
+   * Per-topic results. Keyed by the topic's UUID AND its custom code (when set),
+   * so `topicById(...)` accepts either form.
+   */
   topics: Record<string, TopicResult>;
+  /**
+   * Per-topic results keyed by topic NAME (for `topicByName(...)`). Optional —
+   * an absent map resolves `topicByName` to neutral defaults.
+   */
+  topicsByName?: Record<string, TopicResult>;
   tags: Record<string, TagResult>;
   scales: Record<string, ScaleResult>;
   sections: Record<string, SectionResult>;
@@ -105,7 +118,10 @@ export type ValueType = "number" | "string" | "boolean";
  * warnings (Этап A: scales are not implemented yet — PRD-2 §4.2).
  */
 export interface ValidationRefs {
+  /** Valid `topicById` args: every topic's UUID plus its custom code (when set). */
   topicIds?: Set<string>;
+  /** Valid `topicByName` args: every topic's name. */
+  topicNames?: Set<string>;
   scaleKeys?: Set<string>;
   sectionKeys?: Set<string>;
   /** Variables with a SMALLER sort_order — the only ones `var()` may reference. */

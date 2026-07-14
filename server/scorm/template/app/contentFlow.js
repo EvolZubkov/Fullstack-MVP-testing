@@ -8,10 +8,17 @@
   function contentPagesFor(topicId, position) {
     return (TEST_DATA.contentPages || [])
       .filter(function (p) {
-        // `kind: "start"`/`"results"` are the landing and final-results screens,
-        // rendered separately by their own runtimes — they must never enter the
-        // content-page flow sequence.
-        return p.kind !== "start" && p.kind !== "results"
+        // Only AUTHOR content pages (`info`, legacy `intro`/`summary`) flow here.
+        // System design-bindings and runtime nodes are rendered by their own
+        // phases and must NEVER enter the content-page sequence as a page:
+        //   - `start`/`results` — landing / final-results screens;
+        //   - `questions` — the question-stream DESIGN BINDING (the «Вопросы» row);
+        //     leaking it renders a blank page with just «Далее» at the section start;
+        //   - `review`/`section-results` — PRD-19 обзор / итоги раздела nodes.
+        // `router` is intentionally NOT excluded — the hub legitimately enters the
+        // test-scope «before» sequence (rebuildPageSequence sets its isRouter flag).
+        return p.kind !== "start" && p.kind !== "results" && p.kind !== "questions"
+          && p.kind !== "review" && p.kind !== "section-results"
           && p.topicId === topicId && p.position === position;
       })
       .sort(function (a, b) {
@@ -137,6 +144,7 @@
     // carrying this topicId), stopped when transitioning to a different
     // topic or to the test-end content / results.
     maybeUpdateSectionTimer(item);
+    maybeFreezeSectionOnExit(item);
     if (item.kind === "content") {
       // PRD-4 v1.1 §4.7: router pages enter the dedicated 'router' phase
       // so mainRender.js routes to RouterFlow.renderRouterPage.
@@ -225,6 +233,7 @@
    */
   function skipSectionFromCurrent(topicId) {
     if (!state.pageSequence) return;
+    state.fromReview = false; // left the section — clear the «К обзору» review flag.
     var i = state.currentPageIndex || 0;
     while (
       i < state.pageSequence.length &&
@@ -303,6 +312,28 @@
     };
   }
 
+  /**
+   * PRD-19 (Block B / B4-freeze): when answerCommitScope === 'section', freeze a
+   * section's answers on exit so they can no longer be edited (isAnswerLocked in
+   * answers.js reads state.sectionCommitted). Detects the section boundary the
+   * same way the section timer does — a change in the item's topicId — so it
+   * works even for sections without an after_topic content page. Flat / adaptive
+   * tests (scope 'test') keep answers editable until submit and are skipped here.
+   * state.activeSectionTopic tracks the section currently being traversed; it is
+   * transient (re-derived after a restore, while sectionCommitted is persisted).
+   */
+  function maybeFreezeSectionOnExit(item) {
+    if (typeof TEST_DATA === "undefined" || TEST_DATA.answerCommitScope !== "section") return;
+    var currentTopicId = topicIdForItem(item);
+    var prev = state.activeSectionTopic || null;
+    if (prev === currentTopicId) return; // still inside the same section
+    if (prev) {
+      if (!state.sectionCommitted) state.sectionCommitted = {};
+      state.sectionCommitted[prev] = true;
+    }
+    state.activeSectionTopic = currentTopicId || null;
+  }
+
   function goToPageSequenceIndex(index) {
     if (!state.pageSequence || state.pageSequence.length === 0) rebuildPageSequence();
     state.currentPageIndex = Math.max(0, Math.min(index, Math.max(state.pageSequence.length - 1, 0)));
@@ -311,6 +342,14 @@
 
   function advancePageSequence() {
     if (!state.pageSequence || state.pageSequence.length === 0) rebuildPageSequence();
+
+    // PRD-19 D5 (FR-05): in flexible sectional flows, intercept the section
+    // boundary with the section обзор (section-finish) instead of crossing into
+    // the next section. goToReview() opens the обзор scoped to the current
+    // section; «Завершить раздел» commits + (optionally) shows section-results,
+    // then resumes via skipSectionFromCurrent. Strict / router / flat skip this.
+    if (stageSectionFinishIfBoundary()) return;
+
     if (state.currentPageIndex < state.pageSequence.length - 1) {
       state.currentPageIndex += 1;
       syncPhaseToCurrentPage();
@@ -327,10 +366,73 @@
       RouterFlow.isRouterMode() &&
       state.currentRouterTopic
     ) {
+      // PRD-19 D5 (FR-05b): in flexible mode, stage the section обзор («Завершить
+      // раздел») before returning to the router hub. finishSection → section-results
+      // → advanceAfterSection() calls returnFromTopic. Strict mode returns directly.
+      if (
+        TEST_DATA.allowReturnToUnanswered &&
+        !(state.sectionCommitted && state.sectionCommitted[state.currentRouterTopic]) &&
+        typeof goToReview === "function"
+      ) {
+        goToReview();
+        return;
+      }
       RouterFlow.returnFromTopic();
       return;
     }
+    // PRD-19 D5 (FR-05 flat): flexible flat tests finish through the single
+    // end-of-test обзор («Завершить тест») rather than submitting directly.
+    // Strict flat submits directly (unchanged behaviour).
+    if (
+      TEST_DATA.allowReturnToUnanswered &&
+      TEST_DATA.answerCommitScope !== "section" &&
+      state.phase !== "review" &&
+      typeof goToReview === "function"
+    ) {
+      goToReview();
+      return;
+    }
     submit(true);
+  }
+
+  /**
+   * PRD-19 D5 (FR-05/05a): intercept a section boundary when advancing would leave
+   * the current section (sectional flows, non-router). Boundary detection mirrors
+   * the section timer/freeze — a change in the item's topicId (or the test end) —
+   * so it fires after any after_topic content, exactly at the section seam. A
+   * section already committed is not re-staged. Returns true when it intercepts:
+   *   - flexible (allowReturn): the section обзор («Завершить раздел», + modal);
+   *   - strict + showSectionResults: the COMPUTED section-results directly (no
+   *     обзор/modal — strict has no skips, every question is answered), EXCEPT the
+   *     last section, which flows to the test results (already per-topic).
+   */
+  function stageSectionFinishIfBoundary() {
+    if (!TEST_DATA) return false;
+    if (TEST_DATA.answerCommitScope !== "section") return false;
+    if (typeof RouterFlow !== "undefined" && RouterFlow.isRouterMode()) return false;
+    if (!state.pageSequence || !state.pageSequence.length) return false;
+    var curTopic = topicIdForItem(state.pageSequence[state.currentPageIndex]);
+    if (!curTopic) return false;
+    if (state.sectionCommitted && state.sectionCommitted[curTopic]) return false;
+    var hasNext = state.currentPageIndex < state.pageSequence.length - 1;
+    var nextTopic = hasNext
+      ? topicIdForItem(state.pageSequence[state.currentPageIndex + 1])
+      : null;
+    if (hasNext && nextTopic === curTopic) return false; // still inside the section
+
+    if (TEST_DATA.allowReturnToUnanswered) {
+      if (typeof goToReview === "function") { goToReview(); return true; } // flexible → обзор
+      return false;
+    }
+    // Strict (no return): no обзор/modal, but show the computed section-results
+    // between sections when enabled (FR-05a). The last section flows to the test
+    // results (which already carries the per-topic breakdown).
+    var isLast = typeof isLastSectionTopic === "function" && isLastSectionTopic(curTopic);
+    if (TEST_DATA.showSectionResults && !isLast && typeof finishSection === "function") {
+      finishSection(curTopic, false, 0, true); // freeze + section-results, no confirm
+      return true;
+    }
+    return false;
   }
 
   function pageProgressPercent() {
@@ -389,6 +491,9 @@
   root.syncPhaseToCurrentPage = syncPhaseToCurrentPage;
   root.goToPageSequenceIndex = goToPageSequenceIndex;
   root.advancePageSequence = advancePageSequence;
+  // PRD-19 D5: section-finish «Продолжить» advances past the committed section
+  // (submits the attempt on the last section) — reused as the resume step.
+  root.skipSectionFromCurrent = skipSectionFromCurrent;
   root.pageProgressPercent = pageProgressPercent;
   root.getProgressMode = getProgressMode;
 })(typeof window !== "undefined" ? window : global);

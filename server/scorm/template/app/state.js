@@ -15,13 +15,26 @@ var state = {
   shuffleMappings: {},
   matchingPools: {},
   timerInterval: null,
+  timerStartPerfMs: null,
+  timerCommitInterval: null,
+  timerAnchorTampered: false,
   remainingSeconds: null,
   timeExpired: false,
   submitted: false,
   answerConfirmed: false,
   feedbackShown: false,
   attemptSavedForThisSession: false,
-  
+
+  // PRD-19 (Block B): per-question navigation status, keyed by question.id.
+  // 'unanswered' (initial) | 'answered' (explicit fixation via confirmAnswer)
+  // | 'skipped' (learner used «Пропустить»). Drives the progress pills and the
+  // обзор screen; seeded in generateVariant(), persisted inside suspend_data.
+  questionStatuses: {},
+  // PRD-19 (Block B): per-section answer-commit freeze, keyed by topicId. Set
+  // true on section exit when answerCommitScope === 'section' (sectional modes),
+  // locking that section's answers against further edits even if allowAnswerChange.
+  sectionCommitted: {},
+
   // Adaptive mode state
   adaptiveState: null, // Will be initialized for adaptive tests
 
@@ -48,7 +61,7 @@ var state = {
   // is inside a section with a non-null section.timeLimitMinutes. Started
   // by contentFlow / routerFlow at section entry; stopped on section exit
   // or expiry. Shape: { topicId, limitMinutes, remainingSeconds, expired,
-  // onExpire, intervalId } or null.
+  // onExpire, intervalId, startPerfMs } or null.
   sectionTimer: null,
 };
 

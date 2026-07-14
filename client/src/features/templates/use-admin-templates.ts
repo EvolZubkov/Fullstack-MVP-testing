@@ -93,6 +93,26 @@ export interface UploadOutcome {
 
 const LIST_KEY = ["/api/admin/templates"] as const;
 
+/**
+ * Author-facing template query prefix — the design-tab card
+ * (`["templates", <id>]`) and the «Заменить шаблон» gallery
+ * (`["templates", "list"]`). The global QueryClient runs `staleTime: Infinity`,
+ * so without an explicit invalidation these caches never refetch and a template
+ * activated/deactivated/re-uploaded in the admin registry stays invisible (or
+ * stale) in the test editor.
+ */
+const AUTHOR_TEMPLATES_KEY = ["templates"] as const;
+
+/**
+ * Invalidates BOTH the admin registry list and the author-facing template
+ * caches after any lifecycle change so the gallery + design tab pick the change
+ * up on their next render.
+ */
+function invalidateTemplateCaches(qc: ReturnType<typeof useQueryClient>): void {
+  qc.invalidateQueries({ queryKey: LIST_KEY });
+  qc.invalidateQueries({ queryKey: AUTHOR_TEMPLATES_KEY });
+}
+
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
 /** All templates (built-in + uploaded, including draft/invalid). */
@@ -148,7 +168,7 @@ export function useUploadTemplate() {
   const qc = useQueryClient();
   return useMutation<UploadOutcome, Error, File>({
     mutationFn: (file) => uploadRequest("POST", "/api/admin/templates", file),
-    onSuccess: () => qc.invalidateQueries({ queryKey: LIST_KEY }),
+    onSuccess: () => invalidateTemplateCaches(qc),
   });
 }
 
@@ -157,7 +177,7 @@ export function useUpdateTemplate(id: string) {
   const qc = useQueryClient();
   return useMutation<UploadOutcome, Error, File>({
     mutationFn: (file) => uploadRequest("PUT", `/api/admin/templates/${encodeURIComponent(id)}/update`, file),
-    onSuccess: () => qc.invalidateQueries({ queryKey: LIST_KEY }),
+    onSuccess: () => invalidateTemplateCaches(qc),
   });
 }
 
@@ -169,7 +189,7 @@ export function useActivateTemplate() {
       const res = await apiRequest("PUT", `/api/admin/templates/${encodeURIComponent(id)}/activate`);
       return res.json();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: LIST_KEY }),
+    onSuccess: () => invalidateTemplateCaches(qc),
   });
 }
 
@@ -181,7 +201,7 @@ export function useDeactivateTemplate() {
       const res = await apiRequest("PUT", `/api/admin/templates/${encodeURIComponent(id)}/deactivate`);
       return res.json();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: LIST_KEY }),
+    onSuccess: () => invalidateTemplateCaches(qc),
   });
 }
 
@@ -193,7 +213,7 @@ export function useDeleteTemplate() {
       const res = await apiRequest("DELETE", `/api/admin/templates/${encodeURIComponent(id)}`);
       return res.json();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: LIST_KEY }),
+    onSuccess: () => invalidateTemplateCaches(qc),
   });
 }
 

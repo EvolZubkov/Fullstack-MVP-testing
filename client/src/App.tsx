@@ -1,8 +1,8 @@
 import { Switch, Route, Redirect, useLocation } from "wouter";
+import { ToastProvider } from "@universityrt/ui-kit";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { ToastBridge } from "@/hooks/use-toast";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { LoadingState } from "@/components/loading-state";
@@ -13,14 +13,15 @@ import LoginPage from "@/pages/login";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
 import FirstLoginPage from "@/pages/first-login";
-import TopicsPage from "@/pages/author/topics";
-import QuestionsPage from "@/pages/author/questions";
+import ContentPage from "@/pages/author/content";
 import TestsPage from "@/pages/author/tests";
 import AuthorTemplatesPage from "@/pages/author/templates";
 import AnalyticsPage from "@/pages/author/analytics";
 import TestAnalyticsPage from "@/pages/author/test-analytics";
+import DebugPlayerPage from "@/features/tests/debug-player/debug-player-page";
 import UsersPage from "@/pages/author/users";
 import GroupsPage from "@/pages/author/groups";
+import ImportPage from "@/pages/author/import";
 import { AuthorLayout } from "@/pages/author/layout";
 import LearnerTestListPage from "@/pages/learner/test-list";
 import TakeTestPage from "@/pages/learner/take-test";
@@ -105,21 +106,18 @@ function Router() {
       <Route path="/forgot-password" component={ForgotPasswordPage} />
       <Route path="/reset-password" component={ResetPasswordPage} />
 
-      <Route path="/author/topics">
+      <Route path="/author/content">
         <ProtectedRoute requiredPermission="topics.manage">
           <AuthorLayout>
-            <TopicsPage />
+            <ContentPage />
           </AuthorLayout>
         </ProtectedRoute>
       </Route>
 
-      <Route path="/author/questions">
-        <ProtectedRoute requiredPermission="questions.manage">
-          <AuthorLayout>
-            <QuestionsPage />
-          </AuthorLayout>
-        </ProtectedRoute>
-      </Route>
+      {/* PRD-16: «Темы» и «Вопросы» объединены в единый раздел «Темы и вопросы».
+         Старые маршруты редиректят на /author/content (закладки/ссылки не падают). */}
+      <Route path="/author/topics"><Redirect to="/author/content" /></Route>
+      <Route path="/author/questions"><Redirect to="/author/content" /></Route>
 
       <Route path="/author/tests">
         <ProtectedRoute requiredPermission="tests.read">
@@ -153,6 +151,13 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
+      {/* PRD-18: in-service debug player — full-screen, no AuthorLayout (like take-test). */}
+      <Route path="/author/tests/:testId/debug">
+        <ProtectedRoute requiredPermission="tests.export.scorm">
+          <DebugPlayerPage />
+        </ProtectedRoute>
+      </Route>
+
       <Route path="/author/users">
         <ProtectedRoute requiredPermission="users.read">
           <AuthorLayout>
@@ -165,6 +170,14 @@ function Router() {
         <ProtectedRoute requiredPermission="groups.manage">
           <AuthorLayout>
             <GroupsPage />
+          </AuthorLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/author/import">
+        <ProtectedRoute requiredPermission="questions.importExport">
+          <AuthorLayout>
+            <ImportPage />
           </AuthorLayout>
         </ProtectedRoute>
       </Route>
@@ -216,12 +229,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <TooltipProvider>
+        <ToastProvider>
+          <ToastBridge />
           <AuthProvider>
-            <Toaster />
             <Router />
           </AuthProvider>
-        </TooltipProvider>
+        </ToastProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

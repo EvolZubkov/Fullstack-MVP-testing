@@ -157,6 +157,105 @@ function contentPublicContext() {
   return { course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") } };
 }
 
+/**
+ * PRD-1 §4.3: renders the «Введение раздела» (intro) page from its OWN section-intro
+ * layout — topic name / description / question count / time limit (auto from the
+ * section) + the author instruction (slot) — instead of the generic content wrapper.
+ * Returns true when it rendered; false (caller falls back to the wrapper) when the
+ * layout, the renderer, or the matching section is unavailable.
+ * @param {object} page  An intro content page (kind: "intro").
+ * @returns {boolean}
+ */
+function pluralQuestions(n) {
+  var abs = Math.abs(n) % 100;
+  var d = abs % 10;
+  if (abs > 10 && abs < 20) return "вопросов";
+  if (d === 1) return "вопрос";
+  if (d > 1 && d < 5) return "вопроса";
+  return "вопросов";
+}
+
+/**
+ * Plain-JS fallback for buildSectionIntroContext — used only when the shared
+ * builder is absent from the (per-process cached) TBTemplate bundle, e.g. in dev
+ * before a server restart picks up a newly-added export. Mirrors
+ * shared/template/result-context.buildSectionIntroContext exactly so the screen
+ * renders identically regardless of which path built the context.
+ */
+function buildSectionIntroFallback(inp) {
+  var count = Math.max(0, Math.round(inp.questionCount || 0));
+  var desc = (inp.description == null ? "" : String(inp.description)).trim();
+  var hasTime = !!(inp.timeLimitMinutes && inp.timeLimitMinutes > 0);
+  var instr = typeof inp.instruction === "string" ? inp.instruction : "";
+  var instrText = instr.replace(/<[^>]*>/g, "").trim();
+  return {
+    course: { title: inp.topicName || "" },
+    sectionIntro: {
+      eyebrow: "Раздел " + (inp.sectionNumber || 1),
+      topicName: inp.topicName || "",
+      description: desc,
+      hasDescription: desc.length > 0,
+      questionCount: count,
+      questionCountLabel: count + " " + pluralQuestions(count),
+      hasTimeLimit: hasTime,
+      timeLimitLabel: hasTime ? String(inp.timeLimitMinutes) + " мин" : "",
+      hasInstruction: instrText.length > 0,
+      continueLabel: inp.continueLabel || "Далее",
+    },
+  };
+}
+
+function renderSectionIntro(page) {
+  var layouts = (typeof state !== "undefined" && state) ? state.templateLayouts : null;
+  var layout = layouts && layouts["section-intro"];
+  var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
+  // NOTE: do NOT require TB.buildSectionIntroContext here — it is a recent export
+  // and may be missing from the per-process-cached runtime bundle in dev. Only
+  // TB.renderScreenInto (long-present) is required; the context is built via the
+  // shared builder when available, else the inline fallback above.
+  if (!layout || !TB || !TB.renderScreenInto) return false;
+
+  var sections = (typeof TEST_DATA !== "undefined" && TEST_DATA.sections) || [];
+  var section = null, idx = -1;
+  for (var i = 0; i < sections.length; i++) {
+    if (sections[i].topicId === page.topicId) { section = sections[i]; idx = i; break; }
+  }
+  if (!section) return false;
+
+  var values = getPageValues(page);
+  var instruction = values && values.instruction != null ? String(values.instruction) : "";
+  var introInput = {
+    sectionNumber: idx + 1,
+    topicName: section.topicName,
+    description: section.topicDescription,
+    questionCount: section.drawCount,
+    timeLimitMinutes: section.timeLimitMinutes,
+    instruction: instruction,
+    continueLabel: "Далее",
+  };
+  var built = TB.buildSectionIntroContext
+    ? TB.buildSectionIntroContext(introInput)
+    : buildSectionIntroFallback(introInput);
+  var context = {
+    course: built.course,
+    design: (typeof scormDesignContext === "function") ? scormDesignContext() : {},
+    sectionIntro: built.sectionIntro,
+  };
+
+  var app = document.getElementById("app");
+  app.innerHTML = "";
+  var wrap = document.createElement("div");
+  app.appendChild(wrap);
+  // The author instruction is sanitized rich text → injected raw via the slot (the
+  // same trust model as info-page bodies / the question-interaction slot).
+  TB.renderScreenInto(wrap, { layout: layout, context: context, slots: { instruction: instruction } });
+  var btn = wrap.querySelector('[data-action="section-intro-continue"]');
+  if (btn) btn.addEventListener("click", function () {
+    if (typeof advancePageSequence === "function") advancePageSequence();
+  });
+  return true;
+}
+
 function renderContentPage(page, contentTemplates) {
   var app = document.getElementById("app");
   if (!app) return;
@@ -164,6 +263,10 @@ function renderContentPage(page, contentTemplates) {
   // Cancel any previous autoAdvance timer
   var tb = typeof window !== "undefined" ? window.TestBuilder : null;
   if (tb && tb._internal) tb._internal.cancelAutoAdvance();
+
+  // PRD-1 §4.3: «Введение раздела» renders via its own section-intro layout
+  // (topic metadata + author instruction), not the generic content wrapper.
+  if (page && page.kind === "intro" && renderSectionIntro(page)) return;
 
   var contentTemplate = findContentTemplate(page, contentTemplates);
   var values = getPageValues(page);

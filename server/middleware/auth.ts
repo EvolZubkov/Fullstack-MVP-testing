@@ -32,6 +32,30 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 /**
+ * Middleware: authenticated user context WITHOUT a capability gate (PRD-15
+ * FR-09). Loads the user and effective roles so an object-level check
+ * (`requireTestScope`) can run on endpoints whose access is purely scope-based
+ * — e.g. test design/screen assets are readable by anyone who may READ the
+ * test, including learners it is assigned to (role-model.md 6.4).
+ */
+export async function requireUserContext(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  try {
+    const user = await storage.getUser(req.session.userId);
+    if (!user || user.status === "inactive") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    req.currentUser = user;
+    req.effectiveRoles = await getEffectiveRoles(user);
+    next();
+  } catch (error) {
+    return res.status(500).json({ error: "Authorization error" });
+  }
+}
+
+/**
  * Middleware factory: require the given capability (PRD-13). Loads the user and
  * their effective roles (stored roles plus the configuration superadmin) and
  * checks the role -> permission map. Object-level scope (test ownership and

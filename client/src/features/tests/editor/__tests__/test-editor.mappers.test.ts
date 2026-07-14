@@ -231,6 +231,70 @@ describe("PRD-11 draw blueprint mapping", () => {
   });
 });
 
+// ─── PRD-17 (BR-12): variant set round-trip ──────────────────────────────────
+
+describe("PRD-17 form set mapping", () => {
+  const formSet = {
+    forms: [
+      { id: "v1", label: "Вариант 1", questionIds: ["q1", "q2"] },
+      { id: "v2", label: "Вариант 2", questionIds: ["q3"] },
+    ],
+  };
+  const variantModel = (formSet: unknown) =>
+    makeStandardModel({
+      sections: [
+        {
+          topicId: "a",
+          topicName: "A",
+          maxQuestions: 10,
+          drawCount: 5,
+          required: true,
+          timeLimit: { source: "inherit_test" },
+          feedback: { format: "plain", text: "" },
+          feedbackLinks: [],
+          feedbackAssets: [],
+          formSet: formSet as never,
+        },
+      ],
+    });
+
+  it("apiToEditorModel parses a valid formSetJson into section.formSet", () => {
+    const api = {
+      id: "t",
+      version: 1,
+      title: "T",
+      mode: "standard",
+      status: "draft",
+      overallPassRuleJson: { type: "percent", value: 70 },
+      sections: [apiSection({ topicId: "a", formSetJson: formSet })],
+    };
+    expect(apiToEditorModel(api).sections[0].formSet).toEqual(formSet);
+  });
+
+  it("apiToEditorModel returns null for a malformed / single-variant formSetJson", () => {
+    const api = {
+      id: "t",
+      version: 1,
+      title: "T",
+      mode: "standard",
+      status: "draft",
+      overallPassRuleJson: { type: "percent", value: 70 },
+      sections: [
+        apiSection({ topicId: "a", formSetJson: { forms: [{ id: "v1", label: "Вариант 1", questionIds: ["q1"] }] } }),
+        apiSection({ topicId: "b", topicName: "B", formSetJson: "nope" }),
+      ],
+    };
+    const model = apiToEditorModel(api);
+    expect(model.sections[0].formSet).toBeNull();
+    expect(model.sections[1].formSet).toBeNull();
+  });
+
+  it("mapEditorSectionsToPayload serializes formSet, collapsing absent to null", () => {
+    expect(mapEditorSectionsToPayload(variantModel(formSet))[0].formSetJson).toEqual(formSet);
+    expect(mapEditorSectionsToPayload(variantModel(null))[0].formSetJson).toBeNull();
+  });
+});
+
 // ─── 2. apiToEditorModel — adaptive test ─────────────────────────────────────
 
 describe("2. apiToEditorModel — adaptive test", () => {
