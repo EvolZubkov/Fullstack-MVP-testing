@@ -223,6 +223,7 @@ export function PagePreviewModal({ open, onClose, templateId, params, page, page
               content={spec.input.content}
               css={bundle.css}
               cssVars={cssVars}
+              shell={(bundle.manifest as { mountShell?: boolean }).mountShell ? bundle.layouts.shell : undefined}
             />
           </div>
         ) : (

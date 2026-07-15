@@ -131,6 +131,7 @@ export function TemplatePreviewModal({ open, onClose, template, params }: Templa
                     content={selectedSpec.input.content}
                     css={bundle.css}
                     cssVars={cssVars}
+                    shell={(bundle.manifest as { mountShell?: boolean }).mountShell ? bundle.layouts.shell : undefined}
                   />
                 ) : (
                   <p className="tpl-upload-hint tpl-check-stage__empty">
