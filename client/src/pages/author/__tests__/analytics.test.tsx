@@ -145,14 +145,19 @@ const webDetail = () => ({
   possiblePoints: 20,
   passed: true,
   answers: [
-    { questionId: "q1", questionPrompt: "Single?", questionType: "single", topicId: "top1", topicName: "Тема1", difficulty: 1, userAnswer: 0, correctAnswer: { correctIndex: 1 }, options: ["A", "B"], isCorrect: false, earnedPoints: 0, possiblePoints: 1 },
-    { questionId: "q2", questionPrompt: "Multiple?", questionType: "multiple", topicId: "top1", topicName: "Тема1", difficulty: 1, userAnswer: [0, 1], correctAnswer: { correctIndices: [1] }, options: ["X", "Y", "Z"], isCorrect: false, earnedPoints: 0, possiblePoints: 1 },
-    { questionId: "q3", questionPrompt: "Matching?", questionType: "matching", topicId: "top1", topicName: "Тема1", difficulty: 1, userAnswer: { 0: 1, 1: 0 }, correctAnswer: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }] }, leftItems: ["L1", "L2"], rightItems: ["R1", "R2"], isCorrect: false, earnedPoints: 0, possiblePoints: 1, levelName: "Уровень 1" },
-    { questionId: "q4", questionPrompt: "Ranking?", questionType: "ranking", topicId: "top1", topicName: "Тема1", difficulty: 1, userAnswer: [2, 0, 1], correctAnswer: { correctOrder: [0, 1, 2] }, items: ["I1", "I2", "I3"], isCorrect: true, earnedPoints: 1, possiblePoints: 1 },
+    { questionId: "q1", questionPrompt: "Single?", questionType: "single", topicId: "top1", topicName: "Тема1", difficulty: 1, userAnswer: 0, correctAnswer: { correctIndex: 1 }, options: ["A", "B"], isCorrect: false, ratio: 0, earnedPoints: 0, possiblePoints: 1, contribs: [{ scaleKey: "ee", delta: 2 }] },
+    { questionId: "q2", questionPrompt: "Multiple?", questionType: "multiple", topicId: "top1", topicName: "Тема1", difficulty: 1, userAnswer: [0, 1], correctAnswer: { correctIndices: [1] }, options: ["X", "Y", "Z"], isCorrect: false, ratio: 0.5, earnedPoints: 0.5, possiblePoints: 1, contribs: [{ scaleKey: "ee", delta: 3 }, { scaleKey: "oc", delta: -1 }] },
+    { questionId: "q3", questionPrompt: "Matching?", questionType: "matching", topicId: "top1", topicName: "Тема1", difficulty: 1, userAnswer: { 0: 1, 1: 0 }, correctAnswer: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }] }, leftItems: ["L1", "L2"], rightItems: ["R1", "R2"], isCorrect: false, ratio: 0, earnedPoints: 0, possiblePoints: 1, levelName: "Уровень 1", contribs: [] },
+    { questionId: "q4", questionPrompt: "Ranking?", questionType: "ranking", topicId: "top1", topicName: "Тема1", difficulty: 1, userAnswer: [2, 0, 1], correctAnswer: { correctOrder: [0, 1, 2] }, items: ["I1", "I2", "I3"], isCorrect: true, ratio: 1, earnedPoints: 1, possiblePoints: 1, contribs: [] },
   ],
   topicResults: [
     { topicId: "top1", topicName: "Бюджетирование", percent: 85, passed: true, earnedPoints: 17, possiblePoints: 20 },
   ],
+  scaleResults: {
+    ee: { raw: 5, normalized: 62.5, percent: 62.5, level: "high", label: "Высокий", hasValue: true },
+    oc: { raw: -1, normalized: 0, percent: 0, level: "", label: "", hasValue: true },
+  },
+  resultVariables: { verdict: "passed", index: 3.5, flag: true },
   source: "web",
 });
 
@@ -466,6 +471,33 @@ describe("<AnalyticsPage />", () => {
     const row = screen.getByText("Иван Петров").closest("tr")!;
     fireEvent.click(within(row).getByLabelText("Скачать детали попытки"));
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+  });
+
+  it("includes points, scale contributions and computed sections in the attempt CSV", async () => {
+    let captured: Blob | null = null;
+    (URL.createObjectURL as ReturnType<typeof vi.fn>).mockImplementation((b: Blob) => {
+      captured = b;
+      return "blob:test";
+    });
+    await renderLoaded();
+    await openAttemptsTab();
+    const row = screen.getByText("Иван Петров").closest("tr")!;
+    fireEvent.click(within(row).getByLabelText("Скачать детали попытки"));
+    await waitFor(() => expect(captured).not.toBeNull());
+    const csv = await (captured as unknown as Blob).text();
+
+    // Per-question computed columns.
+    expect(csv).toContain("Вклады в шкалы");
+    expect(csv).toContain("ee +2"); // q1 single contribution
+    expect(csv).toContain("ee +3 | oc -1"); // q2 multi contributions, one entry per fired unit
+    expect(csv).toContain("50%"); // q2 ratio (доля верности)
+    // Attempt-level scale summary (raw / percent / уровень).
+    expect(csv).toContain("Шкалы");
+    expect(csv).toContain("Высокий");
+    // Показатели (result variables), incl. boolean formatting.
+    expect(csv).toContain("Показатели");
+    expect(csv).toContain("verdict");
+    expect(csv).toContain("да"); // flag: true → «да»
   });
 
   it("downloads an adaptive attempt as CSV (achieved-levels branch)", async () => {

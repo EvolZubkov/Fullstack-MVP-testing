@@ -6,6 +6,9 @@ import { requireTestScope } from "../../middleware/test-scope";
 import { canReadTestAnalytics } from "../../services/test-access";
 import { checkAnswer } from "../../utils/check-answer";
 import { loadTestScoringContext } from "../../services/effective-scoring";
+import { loadScoringConfig } from "../../services/scoring-config";
+import { computeAttemptResult, type AttemptResultBase } from "../../services/result-compute";
+import { computeAnswerContributions, type Answer, type QuestionType } from "@shared/scales/engine";
 
 const router = Router();
 
@@ -153,8 +156,16 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
     // PRD-15 block D (FR-32): the recompute mirrors delivery — price, graded
     // config and difficulty come from the test-effective chain.
     const scoring = await loadTestScoringContext(test.id, storage);
+    // Scale/indicator config (PRD-5/PRD-2) for the per-answer contributions and the
+    // attempt-level scale/indicator summary in the export. Recomputed from the test's
+    // CURRENT config (like the points recompute above); may drift if the test changed
+    // after the attempt — persisting-at-attempt-time would be a separate follow-up.
+    const scoringConfig = await loadScoringConfig(test.id, storage);
 
     const detailedAnswers: any[] = [];
+    // Raw (runtime-encoded) answers + question types, for the scale engine.
+    const rawAnswers: Record<string, Answer> = {};
+    const questionTypes: Record<string, QuestionType> = {};
 
     for (const [qId, userAnswer] of Object.entries(answers)) {
       const question = questionMap.get(qId);
@@ -166,6 +177,11 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       // stored attempt aggregate. `isCorrect` stays boolean only for the UI verdict label.
       const ratio = checkAnswer(question, userAnswer, effective.scoring);
       const isCorrect = ratio === 1;
+
+      rawAnswers[qId] = userAnswer as Answer;
+      questionTypes[qId] = question.type as QuestionType;
+      // PRD-5: how this answer moved each scale (value*weight of every fired unit).
+      const contribs = computeAnswerContributions(scoringConfig.measurements, qId, userAnswer as Answer, question.type as QuestionType);
 
       let levelName: string | undefined;
       let levelIndex: number | undefined;
@@ -222,14 +238,33 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
         correctAnswer: formattedCorrectAnswer,
         correctAnswerRaw: correctJson,
         isCorrect,
+        ratio,
         earnedPoints: ratio * effective.points,
         possiblePoints: effective.points,
         difficulty: scoring.difficultyOf(question) || 50,
+        contribs,
         levelName,
         levelIndex,
         questionData: dataJson,
       });
     }
+
+    // PRD-5/PRD-2: attempt-level scale results (raw/percent/level) and result
+    // variables (показатели), computed from the raw answers + the test config.
+    const gradedBase: AttemptResultBase = {
+      percent: result?.overallPercent || 0,
+      topicResults: (result?.topicResults || []).map((tr: any) => ({
+        topicId: tr.topicId,
+        percent: tr.percent || 0,
+        passed: tr.passed ?? null,
+        earnedPoints: tr.earnedPoints || 0,
+        topicName: tr.topicName,
+        code: tr.code ?? null,
+      })),
+    };
+    const graded = scoringConfig.scales.length || scoringConfig.resultVariables.length
+      ? computeAttemptResult(scoringConfig, rawAnswers, questionTypes, gradedBase)
+      : { scaleResults: {}, resultVariables: {}, status: {} };
 
     let trajectory: any[] | undefined;
     let achievedLevels: any[] | undefined;
@@ -289,6 +324,8 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       passed: result?.overallPassed || false,
       answers: detailedAnswers,
       topicResults: result?.topicResults || [],
+      scaleResults: graded.scaleResults,
+      resultVariables: graded.resultVariables,
       trajectory,
       achievedLevels,
     });
