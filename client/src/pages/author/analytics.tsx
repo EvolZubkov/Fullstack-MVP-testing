@@ -1458,6 +1458,13 @@ export default function AnalyticsPage() {
         [],
       ];
 
+      // Расчётная информация (баллы, вклады в шкалы) в выгрузке протокола.
+      const round2 = (n: unknown) => (typeof n === "number" ? String(Math.round(n * 100) / 100) : "");
+      const fmtContribs = (contribs: Array<{ scaleKey: string; delta: number }> | undefined) =>
+        (contribs || []).map(c => `${c.scaleKey} ${c.delta >= 0 ? "+" : ""}${c.delta}`).join(" | ");
+      const fmtVar = (v: unknown) =>
+        typeof v === "boolean" ? (v ? "да" : "нет") : typeof v === "number" ? round2(v) : String(v ?? "");
+
       if (attempt.isAdaptive) {
         rows.push(["Режим", "Адаптивный"]);
         rows.push([]);
@@ -1470,7 +1477,7 @@ export default function AnalyticsPage() {
         rows.push(["Баллы", `${details.earnedPoints} / ${details.possiblePoints}`]);
         rows.push(["Статус", details.passed ? "Сдан" : "Не сдан"]);
         rows.push([]);
-        rows.push(["Вопрос", "Тема", "Тип", "Ответ", "Правильный", "Результат", "Баллы"]);
+        rows.push(["Вопрос", "Тема", "Тип", "Ответ", "Правильный", "Результат", "Баллы", "Сложность", "Доля", "Вклады в шкалы"]);
         for (const ans of details.answers || []) {
           rows.push([
             ans.questionPrompt,
@@ -1480,7 +1487,40 @@ export default function AnalyticsPage() {
             JSON.stringify(ans.correctAnswer),
             ans.isCorrect ? "Верно" : "Неверно",
             `${ans.earnedPoints}/${ans.possiblePoints}`,
+            ans.difficulty ?? "",
+            typeof ans.ratio === "number" ? `${Math.round(ans.ratio * 100)}%` : "",
+            fmtContribs(ans.contribs),
           ]);
+        }
+      }
+
+      // Итоги по шкалам (PRD-5) — абсолютное значение (raw) + интерпретационный
+      // уровень (bands). Процент не выгружаем: это вспомогательное значение для
+      // формул показателей, а не результат шкалы.
+      const scaleEntries = Object.entries(details.scaleResults || {}) as Array<[string, {
+        raw?: number; level?: string; label?: string; hasValue?: boolean;
+      }]>;
+      if (scaleEntries.length) {
+        rows.push([]);
+        rows.push(["Шкалы"]);
+        rows.push(["Шкала", "Значение", "Уровень"]);
+        for (const [key, sc] of scaleEntries) {
+          rows.push([
+            key,
+            sc.hasValue ? round2(sc.raw) : "",
+            sc.label || sc.level || "",
+          ]);
+        }
+      }
+
+      // Показатели (PRD-2, result variables).
+      const varEntries = Object.entries(details.resultVariables || {});
+      if (varEntries.length) {
+        rows.push([]);
+        rows.push(["Показатели"]);
+        rows.push(["Показатель", "Значение"]);
+        for (const [name, val] of varEntries) {
+          rows.push([name, fmtVar(val)]);
         }
       }
 

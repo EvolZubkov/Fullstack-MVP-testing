@@ -3,6 +3,9 @@ import { logger } from "../../logger";
 import { storage } from "../../storage";
 import { requirePermission } from "../../middleware/auth";
 import { analyticsScope } from "./helpers";
+import { loadScoringConfig } from "../../services/scoring-config";
+import { computeAttemptResult, type AttemptResultBase } from "../../services/result-compute";
+import { computeAnswerContributions, type Answer, type QuestionType } from "@shared/scales/engine";
 
 const router = Router();
 
@@ -76,6 +79,20 @@ router.get("/scorm-attempts/:attemptId", requirePermission("analytics.read"), as
 
     const answers = await storage.getScormAnswersByAttempt(attempt.id);
 
+    // Scale/indicator config (PRD-5/PRD-2) for per-answer contributions and the
+    // attempt-level summary. Recomputed from the test's CURRENT config from the
+    // stored answers — may drift if the test changed after the attempt (unlike
+    // baked points, contributions are not persisted). Empty for a deleted test.
+    const scoringConfig = pkg?.testId
+      ? await loadScoringConfig(pkg.testId)
+      : { scales: [], measurements: [], resultVariables: [] };
+    const rawAnswers: Record<string, Answer> = {};
+    const questionTypes: Record<string, QuestionType> = {};
+    for (const a of answers) {
+      rawAnswers[a.questionId] = a.userAnswerJson as Answer;
+      questionTypes[a.questionId] = a.questionType as QuestionType;
+    }
+
     const duration = attempt.startedAt && attempt.finishedAt
       ? (new Date(attempt.finishedAt).getTime() - new Date(attempt.startedAt).getTime()) / 1000
       : null;
@@ -112,6 +129,11 @@ router.get("/scorm-attempts/:attemptId", requirePermission("analytics.read"), as
         topicResultsMap.set(a.topicId, existing);
       }
 
+      // PRD-5: how this answer moved each scale; PRD-18: graded ratio from the
+      // baked points (contributions are recomputed, points/ratio are as delivered).
+      const contribs = computeAnswerContributions(scoringConfig.measurements, a.questionId, a.userAnswerJson as Answer, a.questionType as QuestionType);
+      const ratio = (a.maxPoints || 0) > 0 ? (a.points || 0) / (a.maxPoints as number) : (a.isCorrect ? 1 : 0);
+
       return {
         questionId: a.questionId,
         questionPrompt: a.questionPrompt,
@@ -122,8 +144,10 @@ router.get("/scorm-attempts/:attemptId", requirePermission("analytics.read"), as
         userAnswer: a.userAnswerJson,
         correctAnswer: a.correctAnswerJson,
         isCorrect: a.isCorrect,
+        ratio,
         earnedPoints: a.points,
         possiblePoints: a.maxPoints,
+        contribs,
         options: a.optionsJson,
         leftItems: a.leftItemsJson,
         rightItems: a.rightItemsJson,
@@ -142,6 +166,22 @@ router.get("/scorm-attempts/:attemptId", requirePermission("analytics.read"), as
       earnedPoints: tr.earnedPoints,
       possiblePoints: tr.possiblePoints,
     }));
+
+    // PRD-5/PRD-2: attempt-level scale results + result variables (показатели).
+    const gradedBase: AttemptResultBase = {
+      percent: attempt.resultPercent || 0,
+      topicResults: topicResults.map(tr => ({
+        topicId: tr.topicId,
+        percent: tr.percent,
+        passed: tr.passed,
+        earnedPoints: tr.earnedPoints,
+        topicName: tr.topicName,
+        code: null,
+      })),
+    };
+    const graded = scoringConfig.scales.length || scoringConfig.resultVariables.length
+      ? computeAttemptResult(scoringConfig, rawAnswers, questionTypes, gradedBase)
+      : { scaleResults: {}, resultVariables: {}, status: {} };
 
     let achievedLevels = null;
     if (attempt.achievedLevelsJson) {
@@ -171,6 +211,8 @@ router.get("/scorm-attempts/:attemptId", requirePermission("analytics.read"), as
       passed: attempt.resultPassed || false,
       answers: detailedAnswers,
       topicResults,
+      scaleResults: graded.scaleResults,
+      resultVariables: graded.resultVariables,
       achievedLevels,
       source: "lms",
     });
