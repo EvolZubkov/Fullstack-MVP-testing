@@ -5,9 +5,9 @@
 **Дата актуализации:** 2026-06-16
 **Связанные документы:**
 [PRD-16](./prd-16/content-axis-and-question-model.md),
-[Аудит UX авторских разделов](../AUDIT_UX_AUTHOR_CONTENT.md),
+[Аудит UX авторских разделов](../reports/AUDIT_UX_AUTHOR_CONTENT.md),
 [Утверждённый эскиз](../wireframes/approved/content-bank-explorer.html),
-[План реализации](../PLAN_content_axis_implementation.md),
+[План реализации](../plans/PLAN_content_axis_implementation.md),
 [BRD владения контентом](./brd-content-ownership.md),
 [PRD-15](./prd-15/content-ownership.md),
 [PRD-10](./prd-10/graded-answer-scoring.md),

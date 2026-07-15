@@ -170,6 +170,13 @@
       .wf-price { font: var(--ou-text-caption); color: var(--ou-accent-default); }
       .wf-kv { display: flex; flex-direction: column; gap: var(--ou-space-1); }
       .wf-sum { display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-top: var(--ou-space-2); }
+      /* wireframe-only: closed DS Select shows only its trigger (menu is JS-toggled) */
+      .ou-select:not(.is-open) .ou-select__menu { display: none; }
+      /* wireframe-only: wf-utils.css skins a NATIVE <select.ou-select> (border/bg/padding);
+         the DS Select is a div.ou-select with a .ou-select__trigger child, so that skin
+         doubles the trigger's own border. Neutralize the outer box on DS instances (in
+         production wf-utils is not loaded, so there is no collision). */
+      .ou-select:has(.ou-select__trigger) { padding: 0; border: 0; border-radius: 0; background: transparent; cursor: default; }
       .wf-qico { color: var(--ou-fg-muted); vertical-align: middle; }
       /* Длинный текст вопроса переносится; ячейки таблиц инспектора выравниваем ПО ВЕРХУ.
          В «Протоколе» колонки «Вердикт»/«Балл» держим в одну строку. */
@@ -234,6 +241,7 @@
       <symbol id="i-braces" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1" /><path d="M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1" /></symbol>
       <symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6" /></symbol>
       <symbol id="i-chevron-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6" /></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></symbol>
       <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></symbol>
       <symbol id="i-grip" viewBox="0 0 20 20" fill="currentColor"><circle cx="7" cy="5" r="1.4" /><circle cx="13" cy="5" r="1.4" /><circle cx="7" cy="10" r="1.4" /><circle cx="13" cy="10" r="1.4" /><circle cx="7" cy="15" r="1.4" /><circle cx="13" cy="15" r="1.4" /></symbol>
       <symbol id="i-burger" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.99524H17.5" /><path d="M14.1667 9.9952H2.5" /><path d="M2.5 14.9951H10.8333" /></symbol>
@@ -461,6 +469,11 @@
                 <div class="wf-ins-panel" data-panel="draw">
                   <div data-draw="standard">
                   <div class="wf-ins-h"><svg width="14" height="14"><use href="#i-list" /></svg> Тема «О компании» — режим вариантов</div>
+                  <div class="wf-sum" style="margin-top:0;justify-content:flex-start;gap:var(--ou-space-2)">
+                    <span>Выдать вариант</span>
+                    <div class="ou-select ou-field--s" data-ou-options="Случайно (по умолчанию)|Вариант 1|Вариант 2|Вариант 3"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Вариант 2</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                  </div>
+                  <div class="wf-sum" style="margin-top:0"><span>Доступно ДО старта прогона (варианты фиксируются в момент старта); после «Начать» селекты недоступны — вернуть выбор можно «Сбросом». «Случайно» — обычная случайная выдача.</span></div>
                   <div class="wf-sum" style="margin-top:0"><span>Выпал <strong>Вариант 2</strong> из 3 · выдан целиком · 9 вопросов из банка 41</span></div>
                   <table class="tb-table">
                     <thead><tr><th>Подтема (тег)</th><th>Вопросов</th></tr></thead>
@@ -471,6 +484,21 @@
                     </tbody>
                   </table>
                   <div class="wf-sum" style="margin-top:0"><span>По типам: одиночный 5 · множественный 2 · ранжирование 2</span></div>
+                  <div class="wf-ins-h"><svg width="14" height="14"><use href="#i-list" /></svg> Тема «Продукты и сервисы» — режим вариантов</div>
+                  <div class="wf-sum" style="margin-top:0;justify-content:flex-start;gap:var(--ou-space-2)">
+                    <span>Выдать вариант</span>
+                    <div class="ou-select ou-field--s" data-ou-options="Случайно (по умолчанию)|Вариант 1|Вариант 2|Вариант 3|Вариант 4"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Случайно (по умолчанию)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                  </div>
+                  <div class="wf-sum" style="margin-top:0"><span>Выпал <strong>Вариант 4</strong> из 4 · выдан целиком · 8 вопросов из банка 30</span></div>
+                  <table class="tb-table">
+                    <thead><tr><th>Подтема (тег)</th><th>Вопросов</th></tr></thead>
+                    <tbody>
+                      <tr><td>Каталог</td><td>3</td></tr>
+                      <tr><td>Тарифы</td><td>3</td></tr>
+                      <tr><td>Кейсы</td><td>2</td></tr>
+                    </tbody>
+                  </table>
+                  <div class="wf-sum" style="margin-top:0"><span>По типам: одиночный 4 · множественный 3 · сопоставление 1</span></div>
                   <div class="wf-ins-h"><svg width="14" height="14"><use href="#i-layers" /></svg> Тема «Финансы» — тег-квоты (план vs факт)</div>
                   <table class="tb-table">
                     <thead><tr><th>Подтема (тег)</th><th>План</th><th>Факт</th></tr></thead>
@@ -481,7 +509,7 @@
                     </tbody>
                   </table>
                   <div class="wf-sum" style="margin-top:0"><span>7 вопросов из банка 28 · по типам: одиночный 4 · сопоставление 2 · множественный 1</span></div>
-                  <div class="wf-sum"><span>Итого выдано <strong>16</strong> (О компании 9 · Финансы 7)</span></div>
+                  <div class="wf-sum"><span>Итого выдано <strong>24</strong> (О компании 9 · Продукты и сервисы 8 · Финансы 7)</span></div>
                   </div>
                   <div data-draw="adaptive" hidden>
                     <div class="wf-ins-h"><svg width="14" height="14"><use href="#i-layers" /></svg> Тема «Стратегия» — подтверждён уровень <strong>высокий</strong></div>
@@ -672,7 +700,7 @@ Commit("") → "true"</div></details>
                 <tr><td>Статусная панель</td><td>FR-19; методологический минимум</td><td>Только то, что методологу нужно видеть НЕПРЕРЫВНО: <strong>Прогресс</strong> (где я — иначе числа двусмысленны) · <strong>Оценка</strong> (баллы · % · порог · вердикт «Не пройден» — главный методологический итог + калибровка порога). Алярм <strong>«Ошибка расчёта»</strong> всплывает ТОЛЬКО при сбое формулы шкалы/показателя (молчаливый мусор в LMS). Видна и при свёрнутом сайдбаре. Размещение — НАД СТЕЙДЖЕМ (левая колонка, не на всю ширину): весь статус-контент левым флангом; инспектор поднят к верху окна и занимает правую колонку с самого верха</td></tr>
                 <tr><td>Что НЕ на панели (и почему)</td><td>зона ответственности vs место</td><td>Статус-LMS (completion/success/entry) — плумбинг, не зона методолога → вкладка «LMS-журнал»; вердикт прохождения уже в «Оценке». Выдача (вариант/квоты/состав) → самодостаточная вкладка «Выдача». Значения шкал/показателей → их вкладки (на панель — только алярм ошибок). Версия/дисклеймер/шаблон — не метрики → заголовок окна (подзаголовок «живой черновик» + ⓘ)</td></tr>
                 <tr><td>Инспектор</td><td>FR-18; сворачивается</td><td>7 вкладок, порядок: «Результаты» (первой, открыта по умолчанию — главный методологический итог), Протокол, Выдача, Шкалы, Показатели, Состояние, «LMS-журнал» (последней). Переиспользуются из CLI-плеера: Протокол, Шкалы, Показатели, LMS-журнал, Состояние (бывш. Watch); НОВЫЕ: «Выдача» и «Результаты». Если подписи не влезают в ширину — лента прокручивается стрелками ‹/› (присутствуют всё время переполнения, на концах гаснут — чтобы их ширина не «съедала» только что показанную вкладку; клик по полускрытой вкладке доскролливает её ЦЕЛИКОМ и приоткрывает соседнюю наполовину). Сворачивается круглым краевым тогглом (DS ou-fab) на левом крае сайдбара, центр — по линии под вкладками</td></tr>
-                <tr><td>Выдача</td><td>состав выдачи (композиция + список)</td><td>ЧТО, СКОЛЬКО и ОТКУДА выдано, по темам: механизм (выпавший вариант «Вариант N» / план-vs-факт тег-квот) + распределение по тегам-подтемам и по типам + РАСКРЫВАЮЩИЙСЯ список вопросов выдачи со статусом доставки («выдан»/«не выдан») и живым счётчиком «выдано N из M», отмечаемым ПО МЕРЕ прохождения (по `currentIndex`). Структура — по сценарию: «по темам» — иерархия (тема с резюме раскрывается в свои вопросы); flat — резюме по темам + единый раскрывающийся раздел «Вопросы» в порядке выдачи. Сырые id (`formId` — внутренний ключ ротации) не выводятся на холсте</td></tr>
+                <tr><td>Выдача</td><td>состав выдачи (композиция + список)</td><td>ЧТО, СКОЛЬКО и ОТКУДА выдано, по темам: механизм (выпавший вариант «Вариант N» / план-vs-факт тег-квот) + распределение по тегам-подтемам и по типам + РАСКРЫВАЮЩИЙСЯ список вопросов выдачи со статусом доставки («выдан»/«не выдан») и живым счётчиком «выдано N из M», отмечаемым ПО МЕРЕ прохождения (по `currentIndex`). Структура — по сценарию: «по темам» — иерархия (тема с резюме раскрывается в свои вопросы); flat — резюме по темам + единый раскрывающийся раздел «Вопросы» в порядке выдачи. Сырые id (`formId` — внутренний ключ ротации) не выводятся на холсте. <strong>Фиксация варианта (отладка):</strong> у КАЖДОЙ темы в режиме вариантов — свой независимый селект «Выдать вариант» («Случайно» + «Вариант 1..N», где N — число вариантов ИМЕННО этой темы), позволяющий методологу закрепить, какой вариант выдать (иначе рантайм выбирает случайно). Тем в тесте может быть сколько угодно, у каждой — своё число вариантов; темы НЕ в режиме вариантов (тег-квоты / случайная выборка / все вопросы) селекта не имеют. Селекты активны ТОЛЬКО до старта прогона (все варианты фиксируются в момент старта): после «Начать» они disabled; «Сброс» возвращает старт-экран и снова делает выбор доступным. Применяется НА СТАРТЕ прогона; смена значения перезапускает стейдж (перевыдача из уже отгруженного банка форм — без пересборки пакета). Только debug: в проде (WebTutor) хук не срабатывает, выдача остаётся случайной</td></tr>
                 <tr><td>Шкалы</td><td>computeTestScales()</td><td>Колонки: Шкала · Значение (raw) · % · Уровень. «%» показывается только для шкал с процентной нормализацией (иначе «—»); уровень — по диапазонам-бэндам на raw. Что уходит в LMS (`scale_&lt;ключ&gt; = raw` + уровень-строкой, по настройке `scormTarget`; raw, НЕ %) — НЕ здесь, а во вкладке «LMS-журнал» (без дублирования). Ошибки формул шкал — алярм статусной панели</td></tr>
                 <tr><td>Показатели</td><td>computeTestResultVariables() (result.*, PRD-2)</td><td>Колонки: Имя · Значение. Пользовательские показатели (формулы PRD-2). Публикация в LMS (`var_&lt;имя&gt;`) — НЕ здесь, а во вкладке «LMS-журнал». Ошибки формул — алярм статусной панели</td></tr>
                 <tr><td>Прогресс — режимо-зависим</td><td>состояния «по темам» / «адаптив» в навбаре</td><td>Плоский поток (linear_flat) — «вопрос i из N» + тема (разделов-результатов нет). Секционный (linear_by_topics/router) — статус пройденных РАЗДЕЛОВ: подтверждённые (% + ✓/✗) + текущий как активный хвост «идёт»; деталь — во вкладке «Результаты» (результаты по разделам). Так панель не теряет статус пройденных тем при секционной выдаче. МАСШТАБ (состояние «много тем»): свёрнуто — первые чипы + «+N подтверждено» + текущий + «осталось K». Клик по «+N» РАСКРЫВАЕТ статусы всех тем ПРЯМО В СТАТУСНОЙ СТРОКЕ (строка переносится на ряды), «свернуть» — обратно. Не во вкладку</td></tr>
@@ -699,6 +727,7 @@ Commit("") → "true"</div></details>
                 <tr><td>Сворачивание инспектора (круглый тоггл на левом крае, центр по линии вкладок)</td><td><code>FAB</code> (<code>ou-fab--s ou-fab--neutral</code> — тон сайдбара); позиционирование/выступ/выравнивание — модульный CSS</td><td>существующий компонент</td></tr>
                 <tr><td>Эталон: маркеры правильных ответов в жёлобе варианта + тоггл «Эталон»</td><td>✓ — lucide <code>check</code>; номер/буква-метка — текст в accent-жёлобе; тоггл — <code>Button</code> (<code>aria-pressed</code>)</td><td>debug-флаг общего рендера; маркеры на токенах DS (success/accent)</td></tr>
                 <tr><td>Таблицы протокола/выдачи/шкал/показателей/журнала</td><td><code>Table</code> (<code>tb-table</code>)</td><td>существующий компонент</td></tr>
+                <tr><td>Фиксация варианта (вкладка «Выдача», debug)</td><td><code>Select</code> (<code>ou-select</code>); после старта — <code>disabled</code>-состояние</td><td>существующий компонент; хук выдачи — hash launch-URL стейджа, читается рантаймом под guard (инертен в проде); доступность селекта — по фазе прогона (<code>phase === 'start'</code>)</td></tr>
                 <tr><td>KPI вкладки «Результаты»</td><td><code>ou-kpi</code> (head + value)</td><td>существующий компонент</td></tr>
                 <tr><td>Сообщения сборки / границы точности</td><td><code>Banner</code> (<code>ou-banner</code>)</td><td>существующий компонент</td></tr>
                 <tr><td>Фильтр пути (вкладка «Состояние»)</td><td><code>Input</code> (<code>ou-field</code>)</td><td>существующий компонент</td></tr>

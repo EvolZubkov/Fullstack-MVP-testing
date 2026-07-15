@@ -29,7 +29,7 @@
   </div>
   {{/unless}}
   <div class="question-card">
-    <div class="question-meta" data-path="state.questionCounterLabel"></div>
+    <div class="question-meta"><span data-path="state.questionCounterLabel"></span>{{#if state.sectionName}} | <span data-path="state.sectionName"></span>{{/if}}</div>
     <div class="question-text" data-slot="question-text"></div>
     <div data-slot="question-media"></div>
     <div data-slot="question-interaction"></div>

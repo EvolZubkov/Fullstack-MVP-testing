@@ -1,0 +1,39 @@
+<div class="layout-question-wrap">
+  <div class="qbar">
+    <div class="qbar__l">
+      {{#if design.logoUrl}}<img class="qbar__logo" src="{{ design.logoUrl }}" alt="">{{/if}}
+      <span class="qbar__sec" data-path="state.sectionName"></span>
+    </div>
+    <div class="qbar__c">{{#if state.questionsProgress}}<b class="qbar__count">отвечено {{state.questionsProgress.answeredCount}} &middot; пропущено {{state.questionsProgress.skippedCount}}</b>{{/if}}</div>
+    <div class="qbar__r">
+      <span class="question-meta" data-path="state.questionCounterLabel"></span>
+      <div class="q-timer q-timer--hidden" id="timer-display"></div>
+    </div>
+  </div>
+
+  {{#if state.questionsProgress}}
+  <div class="tb-pills" role="group" aria-label="Карта вопросов">
+    <div class="tb-pills__dots">
+      {{#each state.questionsProgress.states}}
+      <button type="button" class="tb-pill {{statusClass}}" {{#unless clickable}}disabled{{/unless}} data-action="goto:{{index}}" aria-label="{{ariaLabel}}">{{number}}</button>
+      {{/each}}
+    </div>
+    <div class="tb-pills__legend">
+      <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-answered"></span>отвечен</span>
+      <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-skipped"></span>пропущен</span>
+      <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-current"></span>текущий</span>
+      <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-locked"></span>не выдан</span>
+    </div>
+  </div>
+  {{/if}}
+  {{#unless state.questionsProgress}}
+  <div class="progress-bar"><div class="progress-fill" id="q-progress-fill"></div></div>
+  {{/unless}}
+
+  <div class="question-card">
+    <div class="question-text" data-slot="question-text"></div>
+    <div data-slot="question-media"></div>
+    <div data-slot="question-interaction"></div>
+    <div data-slot="question-feedback"></div>
+  </div>
+</div>

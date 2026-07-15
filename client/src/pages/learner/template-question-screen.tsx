@@ -13,7 +13,7 @@
  * the same engine the SCORM host runs — so both hosts compute drops identically.
  */
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { TemplateScreen } from "@/components/template-screen";
 import type { Question } from "@shared/schema";
 import type { CtxQuestionsProgress } from "@shared/template/context";
@@ -291,6 +291,9 @@ export interface TemplateQuestionScreenProps {
   correctAnswer?: ReviewCorrect;
   /** Custom footer; when provided, replaces the default standard Назад/Далее nav. */
   footer?: ReactNode;
+  /** When false, the default footer's «Далее»/«Завершить» is disabled (no usable
+   *  answer yet) — parity with the custom footer's «Отправить ответ» gate. */
+  answerReady?: boolean;
   // Standard-mode nav (used only when `footer` is not provided):
   canPrev?: boolean;
   onPrev?: () => void;
@@ -316,14 +319,11 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
   const [poolByQ, setPoolByQ] = useState<Record<string, number[]>>({});
   const poolOrder = poolByQ[question.id] || [];
 
-  // Ranking: the given order is itself a valid answer — seed it once per question
-  // so submit-without-reorder is accepted (mirrors the React ranking input).
-  useEffect(() => {
-    if (question.type === "ranking" && (answer === undefined || answer === null)) {
-      onAnswer(rankingOrder(question, undefined, Array.isArray(shuffleMapping) ? shuffleMapping : undefined));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [question.id]);
+  // Ranking is NOT auto-seeded as an answer: the delivered order is guaranteed
+  // non-correct (createRankingMapping), so an untouched arrangement must not count
+  // and «Отправить ответ» stays disabled until the learner actually reorders (the
+  // answer is `undefined` until the first drag). The board still displays the
+  // shuffled order via rankingOrder's fallback to shuffleMapping.
 
   const css = `${tpl.css}\n#q-progress-fill{width:${Math.round(progressPercent)}%}`;
   const slots = {
@@ -442,7 +442,7 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
             <button
               type="button"
               onClick={props.isLast ? props.onSubmit : props.onNext}
-              disabled={props.isSubmitting}
+              disabled={props.isSubmitting || props.answerReady === false}
               className="tbh-primarybtn"
               style={{ background: "#2563eb" }}
             >

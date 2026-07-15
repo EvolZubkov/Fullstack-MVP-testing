@@ -111,9 +111,6 @@ function collectReferences(manifest: Record<string, unknown>): Array<{ ref: stri
   const preview = manifest.preview as Record<string, unknown> | undefined;
   if (preview) push(preview.demoData, "preview.demoData");
 
-  const rules = manifest.rules as Record<string, unknown> | undefined;
-  if (rules) push(rules.template, "rules.template");
-
   const systemPages = manifest.systemPages;
   if (Array.isArray(systemPages)) {
     systemPages.forEach((sp, i) => {
@@ -351,15 +348,7 @@ export function validateTemplatePackage(
     }
   }
 
-  // ── referenced JSON files must parse (rules, demo data) ───────────────────
-  const rulesRef = asString((manifest.rules as Record<string, unknown> | undefined)?.template);
-  if (rulesRef && entries.has(rulesRef)) {
-    try {
-      JSON.parse(text(entries, rulesRef)!);
-    } catch {
-      blocking.push({ code: "RULES_INVALID_JSON", message: `template-rules невалидный JSON: ${rulesRef}`, ref: "rules.template" });
-    }
-  }
+  // ── referenced JSON files must parse (demo data) ──────────────────────────
   const demoRef = asString((manifest.preview as Record<string, unknown> | undefined)?.demoData);
   if (demoRef && entries.has(demoRef)) {
     try {

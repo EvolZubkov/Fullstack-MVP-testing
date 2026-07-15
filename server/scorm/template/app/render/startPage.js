@@ -103,16 +103,16 @@ function renderStartPageTemplated() {
   var layout = (typeof systemLayout === 'function') ? systemLayout('start') : state.templateLayouts['start'];
   if (typeof applySystemScreenStyles === 'function') applySystemScreenStyles('start');
   app.innerHTML = '';
-  var wrap = document.createElement('div');
-  app.appendChild(wrap);
-  window.TBTemplate.renderScreenInto(wrap, { layout: layout, context: ctx });
-  wireStartAction(wrap, 'start-test', startTest);
-  wireStartAction(wrap, 'resume', continueSession);
-  wireStartAction(wrap, 'restart', startTest);
-  wireStartAction(wrap, 'view-results', viewSavedResults);
+  // Mount directly into #app so .tb-pad > .cover fills the fixed stage — mirrors
+  // renderGalleryPage (a wrapper div would defeat the child-combinator fill rule).
+  window.TBTemplate.renderScreenInto(app, { layout: layout, context: ctx });
+  wireStartAction(app, 'start-test', startTest);
+  wireStartAction(app, 'resume', continueSession);
+  wireStartAction(app, 'restart', startTest);
+  wireStartAction(app, 'view-results', viewSavedResults);
   // PRD-19 FR-19 «повтор: можно»: «Скачать отчёт» exports the BEST saved attempt
   // (not the empty in-progress one) — the same PDF as the results view.
-  wireStartAction(wrap, 'download-report', function () {
+  wireStartAction(app, 'download-report', function () {
     if (typeof downloadPDF === 'function') downloadPDF(true);
   });
 }
@@ -330,6 +330,7 @@ function startTest() {
     state.variant = null;
     state.flatQuestions = [];
     state.shuffleMappings = {};
+    state.rankingTouched = {};
 
     // Генерируем новый вариант
     generateVariant();
@@ -399,6 +400,7 @@ function restart() {
   state.flatQuestions = [];
   state.shuffleMappings = {};
   state.matchingPools = {};
+  state.rankingTouched = {};
 
   // Сброс таймера
   stopTestTimer();

@@ -60,7 +60,12 @@ function applyRankingDrop(dropId, dragId) {
   var current = state.answers[q.id];
   if (!Array.isArray(current)) return;
   state.answers[q.id] = __rankMoveInArray(current, from, to);
+  // Mark the ranking as actually interacted with so «Отправить ответ» enables
+  // (the delivered order is non-correct, so an untouched order must not count).
+  if (!state.rankingTouched) state.rankingTouched = {};
+  state.rankingTouched[q.id] = true;
   if (typeof rerenderCurrentQuestionInput === 'function') rerenderCurrentQuestionInput();
+  if (typeof refreshSubmitEnabled === 'function') refreshSubmitEnabled();
 }
 
 // Ranking drag now runs on the shared pointer engine (TBTemplate.attachPointerDnd),

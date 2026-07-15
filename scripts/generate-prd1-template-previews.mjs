@@ -1,7 +1,8 @@
 /**
  * @module generate-prd1-template-previews
  * @description Wrapper script that generates preview.html for every template
- * found under server/scorm/templates/. All HTML, CSS, JS, and data are read
+ * found under server/scorm/templates/ AND the repo-root templates/ dir (external
+ * PRD-3 packages, e.g. certification). All HTML, CSS, JS, and data are read
  * from the template directory and the PRD1 runtime; the script itself contains
  * no layout or styling logic.
  *
@@ -10,9 +11,15 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { buildSync } from "esbuild";
 
 const root = process.cwd();
-const templatesRoot = path.join(root, "server", "scorm", "templates");
+/** Roots scanned for template packages: the built-in dir and the repo-root
+ *  `templates/` dir (external packages validated via the PRD-3 admin lifecycle). */
+const TEMPLATE_ROOTS = [
+  path.join(root, "server", "scorm", "templates"),
+  path.join(root, "templates"),
+];
 const runtimeDir    = path.join(root, "server", "scorm", "template", "app");
 
 /** PRD1 runtime files inlined into every preview. */
@@ -20,6 +27,7 @@ const PRD1_RUNTIME_FILES = [
   path.join(runtimeDir, "templateCore.js"),
   path.join(runtimeDir, "render", "renderers.js"),
   path.join(runtimeDir, "render", "contentPage.js"),
+  path.join(runtimeDir, "routerFlow.js"),
 ];
 
 /** Shared browser bootstrap (route switching, DSL, question interactions). */
@@ -53,10 +61,20 @@ function escAttr(value) {
 
 // ─── Template discovery ───────────────────────────────────────────────────────
 
-function discoverTemplateIds() {
-  return fs.readdirSync(templatesRoot, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && fs.existsSync(path.join(templatesRoot, e.name, "manifest.json")))
-    .map((e) => e.name);
+function discoverTemplateDirs() {
+  const seen = new Set();
+  const out = [];
+  for (const base of TEMPLATE_ROOTS) {
+    if (!fs.existsSync(base)) continue;
+    for (const e of fs.readdirSync(base, { withFileTypes: true })) {
+      if (!e.isDirectory()) continue;
+      if (!fs.existsSync(path.join(base, e.name, "manifest.json"))) continue;
+      if (seen.has(e.name)) continue; // first root wins on id collision
+      seen.add(e.name);
+      out.push({ id: e.name, dir: path.join(base, e.name) });
+    }
+  }
+  return out;
 }
 
 // ─── Template file reading ────────────────────────────────────────────────────
@@ -154,6 +172,55 @@ function readBootstrap() {
   return readText(BOOTSTRAP_FILE);
 }
 
+/**
+ * Bundles the REAL shared DSL (shared/template/dsl.ts) into a browser IIFE exposed
+ * as `window.TBDsl`, so the preview renders with the SAME `renderTemplate` the
+ * SCORM/web hosts use — nested blocks and in-loop conditionals included — instead
+ * of a second, drifting regex DSL. dsl.ts is dependency-free, so the bundle is tiny.
+ */
+let _dslBundle = null;
+function readDslBundle() {
+  if (_dslBundle != null) return _dslBundle;
+  const dslPath = path.join(root, "shared", "template", "dsl.ts");
+  const result = buildSync({
+    entryPoints: [dslPath],
+    bundle: true,
+    format: "iife",
+    globalName: "TBDsl",
+    platform: "browser",
+    target: "es2018",
+    write: false,
+    logLevel: "silent",
+  });
+  _dslBundle = result.outputFiles[0].text;
+  return _dslBundle;
+}
+
+/**
+ * Bundles the REAL shared renderer (shared/template/render-screen.ts, which
+ * exports renderScreenInto) into a browser IIFE exposed as `window.TBTemplate`,
+ * so the runtime content renderers (renderContentPage / renderGalleryPage /
+ * renderSectionIntro) that call `window.TBTemplate.renderScreenInto` run in the
+ * preview exactly as in production — instead of falling back to the bare skeleton.
+ */
+let _tbtBundle = null;
+function readTbtBundle() {
+  if (_tbtBundle != null) return _tbtBundle;
+  const p = path.join(root, "shared", "template", "runtime-entry.ts");
+  const result = buildSync({
+    entryPoints: [p],
+    bundle: true,
+    format: "iife",
+    globalName: "TBTemplate",
+    platform: "browser",
+    target: "es2018",
+    write: false,
+    logLevel: "silent",
+  });
+  _tbtBundle = result.outputFiles[0].text;
+  return _tbtBundle;
+}
+
 // ─── Preview chrome CSS (builder UI mock + two-panel dialog) ─────────────────
 
 function previewChromeCss() {
@@ -174,6 +241,10 @@ function previewChromeCss() {
     .pv-dialog-head{padding:14px 20px;border-bottom:1px solid var(--pv-border);display:flex;align-items:center;gap:12px;flex-shrink:0}
     .pv-dialog-title{font-size:15px;font-weight:600}
     .pv-dialog-sub{font-size:12px;color:var(--pv-muted-fg)}
+    .pv-theme{margin-left:auto;display:inline-flex;gap:2px;background:var(--pv-muted);border-radius:6px;padding:2px}
+    .pv-theme-btn{border:0;background:transparent;color:var(--pv-fg);font:inherit;font-size:12px;padding:4px 10px;border-radius:4px;cursor:pointer;transition:background .12s}
+    .pv-theme-btn:hover:not(.pv-theme-active){background:rgba(0,0,0,.05)}
+    .pv-theme-btn.pv-theme-active{background:var(--pv-bg);box-shadow:0 1px 2px rgba(0,0,0,.14);font-weight:600}
     .pv-body{display:flex;flex:1;overflow:hidden;min-height:0}
     .pv-nav{width:220px;flex-shrink:0;border-right:1px solid var(--pv-border);overflow-y:auto;padding:6px 0;background:var(--pv-sidebar)}
     .pv-nav-item{display:block;width:calc(100% - 12px);margin:0 6px 1px;padding:7px 8px;border:0;border-radius:3px;background:transparent;color:var(--pv-fg);text-align:left;font:inherit;font-size:13px;cursor:pointer;transition:background .12s,color .12s}
@@ -243,6 +314,11 @@ function buildPreviewHtml(manifest, templateDir) {
       <div class="pv-dialog-head">
         <div class="pv-dialog-title">Шаблон «${escAttr(manifest.name)}» — элементы и их вид</div>
         <div class="pv-dialog-sub">Демо-данные · элементы управления работают</div>
+        <div class="pv-theme" id="pv-theme" role="group" aria-label="Тема оформления">
+          <button type="button" class="pv-theme-btn pv-theme-active" data-theme-set="auto">Авто</button>
+          <button type="button" class="pv-theme-btn" data-theme-set="light">Светлая</button>
+          <button type="button" class="pv-theme-btn" data-theme-set="dark">Тёмная</button>
+        </div>
       </div>
 
       <div class="pv-body">
@@ -282,6 +358,12 @@ function buildPreviewHtml(manifest, templateDir) {
 <!-- Template-specific script -->
 <script>${scriptSafe(templateScript)}</script>
 
+<!-- Shared DSL: the REAL renderer (shared/template/dsl.ts), bundled -->
+<script>${readDslBundle()}</script>
+
+<!-- Shared template renderer (renderScreenInto), bundled as window.TBTemplate -->
+<script>${readTbtBundle()}</script>
+
 <!-- Preview bootstrap: nav, routing, DSL, question interactions -->
 <script>${scriptSafe(bootstrap)}</script>
 </body>
@@ -290,11 +372,10 @@ function buildPreviewHtml(manifest, templateDir) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-const templateIds = discoverTemplateIds();
-console.log(`Found ${templateIds.length} template(s): ${templateIds.join(", ")}`);
+const templateDirs = discoverTemplateDirs();
+console.log(`Found ${templateDirs.length} template(s): ${templateDirs.map((t) => t.id).join(", ")}`);
 
-for (const id of templateIds) {
-  const templateDir = path.join(templatesRoot, id);
+for (const { id, dir: templateDir } of templateDirs) {
   try {
     const manifest = readJson(path.join(templateDir, "manifest.json"));
     const output   = path.join(templateDir, "preview.html");

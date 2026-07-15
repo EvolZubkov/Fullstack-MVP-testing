@@ -175,6 +175,15 @@ function pluralQuestions(n) {
   return "вопросов";
 }
 
+function pluralMinutes(n) {
+  var abs = Math.abs(n) % 100;
+  var d = abs % 10;
+  if (abs > 10 && abs < 20) return "минут";
+  if (d === 1) return "минута";
+  if (d > 1 && d < 5) return "минуты";
+  return "минут";
+}
+
 /**
  * Plain-JS fallback for buildSectionIntroContext — used only when the shared
  * builder is absent from the (per-process cached) TBTemplate bundle, e.g. in dev
@@ -188,6 +197,7 @@ function buildSectionIntroFallback(inp) {
   var hasTime = !!(inp.timeLimitMinutes && inp.timeLimitMinutes > 0);
   var instr = typeof inp.instruction === "string" ? inp.instruction : "";
   var instrText = instr.replace(/<[^>]*>/g, "").trim();
+  var illo = (inp.illustration == null ? "" : String(inp.illustration)).trim();
   return {
     course: { title: inp.topicName || "" },
     sectionIntro: {
@@ -198,8 +208,10 @@ function buildSectionIntroFallback(inp) {
       questionCount: count,
       questionCountLabel: count + " " + pluralQuestions(count),
       hasTimeLimit: hasTime,
-      timeLimitLabel: hasTime ? String(inp.timeLimitMinutes) + " мин" : "",
+      timeLimitLabel: hasTime ? String(inp.timeLimitMinutes) + " " + pluralMinutes(inp.timeLimitMinutes) : "",
       hasInstruction: instrText.length > 0,
+      illustrationUrl: illo,
+      hasIllustration: illo.length > 0,
       continueLabel: inp.continueLabel || "Далее",
     },
   };
@@ -224,6 +236,9 @@ function renderSectionIntro(page) {
 
   var values = getPageValues(page);
   var instruction = values && values.instruction != null ? String(values.instruction) : "";
+  // Author section illustration (image placeholder on the intro content template).
+  var illoRaw = values && values.illustration;
+  var illustrationUrl = illoRaw && typeof illoRaw === "object" ? (illoRaw.url || "") : (illoRaw || "");
   var introInput = {
     sectionNumber: idx + 1,
     topicName: section.topicName,
@@ -231,6 +246,7 @@ function renderSectionIntro(page) {
     questionCount: section.drawCount,
     timeLimitMinutes: section.timeLimitMinutes,
     instruction: instruction,
+    illustration: illustrationUrl,
     continueLabel: "Далее",
   };
   var built = TB.buildSectionIntroContext
@@ -244,15 +260,99 @@ function renderSectionIntro(page) {
 
   var app = document.getElementById("app");
   app.innerHTML = "";
-  var wrap = document.createElement("div");
-  app.appendChild(wrap);
+  // Mount the layout root DIRECTLY into #app (no intermediate wrapper) so the
+  // fixed-stage flex chain (.tb-pad > .section-intro-page) applies — mirrors
+  // renderGalleryPage. A wrapper div would make the root a grandchild of .tb-pad,
+  // defeating the child-combinator fill/anchor rule.
   // The author instruction is sanitized rich text → injected raw via the slot (the
   // same trust model as info-page bodies / the question-interaction slot).
-  TB.renderScreenInto(wrap, { layout: layout, context: context, slots: { instruction: instruction } });
-  var btn = wrap.querySelector('[data-action="section-intro-continue"]');
+  TB.renderScreenInto(app, { layout: layout, context: context, slots: { instruction: instruction } });
+  var btn = app.querySelector('[data-action="section-intro-continue"]');
   if (btn) btn.addEventListener("click", function () {
     if (typeof advancePageSequence === "function") advancePageSequence();
   });
+  // «Назад»: return to the ACTUAL previous screen via the recorded nav route
+  // (a preceding content page, or the router hub) instead of a hard-coded target
+  // — in router mode the section-intro is index 0 of a rebuilt topic chunk, so a
+  // plain currentPageIndex-1 clamps to itself and does nothing. Shown only when
+  // the layout renders the back button.
+  var back = app.querySelector('[data-action="section-intro-back"]');
+  if (back) back.addEventListener("click", function () {
+    if (typeof navigateBackOrPrevPage === "function") navigateBackOrPrevPage();
+  });
+  return true;
+}
+
+/**
+ * Renders a gallery card page (kind `gallery`) via its own layout variant
+ * (text / media / list). Header + subheader + card body + the round pill row +
+ * Назад/Далее. The pills are a per-page indicator: the two settings
+ * (pillsTotal, pillCurrent) are expanded here into a Core-prepared `pills` array
+ * the layout renders with `{{#each}}` (the DSL cannot loop over a raw count).
+ * «Назад» (shown only when the page's `showBack` setting is on) steps the page
+ * sequence back via goToPageSequenceIndex; «Далее» advances it as usual. Each
+ * card is a normal content page — no gallery controller / grouping.
+ */
+function renderGalleryPage(page, contentTemplate) {
+  var layouts = (typeof state !== "undefined" && state) ? state.templateLayouts : null;
+  var layout = layouts && contentTemplate ? layouts[contentTemplate.key] : null;
+  var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
+  if (!layout || !TB || !TB.renderScreenInto) return false;
+
+  var values = getPageValues(page) || {};
+  var total = parseInt(values.pillsTotal, 10);
+  if (!(total > 0)) total = 1;
+  var current = parseInt(values.pillCurrent, 10) || 1;
+  var pills = [];
+  for (var i = 1; i <= total; i++) {
+    pills.push({ statusClass: i === current ? "is-current" : "" });
+  }
+
+  var img = values.image;
+  var imageUrl = img && typeof img === "object" ? (img.url || "") : (img || "");
+  var bgRaw = values.backgroundImage;
+  var slideBgUrl = bgRaw && typeof bgRaw === "object" ? (bgRaw.url || "") : (bgRaw || "");
+
+  var context = {
+    design: (typeof scormDesignContext === "function") ? scormDesignContext() : {},
+    course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") },
+    gallery: {
+      header: values.header != null ? String(values.header) : "",
+      subheader: values.subheader != null ? String(values.subheader) : "",
+      imageUrl: imageUrl,
+      pills: pills,
+      showBack: values.showBack === true || values.showBack === "true",
+      nextLabel: (values.nextLabel != null && values.nextLabel !== "") ? String(values.nextLabel) : "Далее"
+    }
+  };
+
+  var app = document.getElementById("app");
+  app.innerHTML = "";
+  // cardText is sanitized rich text → injected raw via the slot (same trust model
+  // as info-page bodies / the section-intro instruction). Rendered directly into
+  // #app (no wrapper) so the fixed-stage flex chain (.tb-pad > .gallery) applies.
+  var cardText = values.cardText != null ? String(values.cardText) : "";
+  TB.renderScreenInto(app, { layout: layout, context: context, slots: { cardText: cardText } });
+
+  // Per-slide background image (variant-slide setting): applied to the slide root.
+  if (slideBgUrl) {
+    var slideEl = app.querySelector(".gallery");
+    if (slideEl) {
+      slideEl.classList.add("has-slide-bg");
+      slideEl.style.backgroundImage = 'url("' + String(slideBgUrl).replace(/"/g, "%22") + '")';
+    }
+  }
+
+  var nextBtn = app.querySelector('[data-nav="next"]');
+  if (nextBtn) nextBtn.onclick = function () {
+    if (typeof advancePageSequence === "function") advancePageSequence();
+  };
+  var prevBtn = app.querySelector('[data-nav="prev"]');
+  if (prevBtn) prevBtn.onclick = function () {
+    // «Назад» follows the recorded nav route (same as section-intro); the router
+    // hub fallback covers a gallery that is a topic chunk's first page.
+    if (typeof navigateBackOrPrevPage === "function") navigateBackOrPrevPage();
+  };
   return true;
 }
 
@@ -269,6 +369,8 @@ function renderContentPage(page, contentTemplates) {
   if (page && page.kind === "intro" && renderSectionIntro(page)) return;
 
   var contentTemplate = findContentTemplate(page, contentTemplates);
+  // Gallery pages render via their own layout (header/subheader/card + pills + Назад/Далее).
+  if (contentTemplate && contentTemplate.kind === "gallery" && renderGalleryPage(page, contentTemplate)) return;
   var values = getPageValues(page);
   var placeholderStyles = getPagePlaceholderStyles(page);
   var skeleton = buildContentPageSkeleton(page, contentTemplate);
@@ -282,15 +384,15 @@ function renderContentPage(page, contentTemplates) {
   var host;
   if (layout && TB && TB.renderScreenInto) {
     app.innerHTML = "";
-    var wrap = document.createElement("div");
-    app.appendChild(wrap);
-    TB.renderScreenInto(wrap, {
+    // Mount directly into #app (no wrapper) so .tb-pad > .layout-content-wrap fills
+    // the fixed stage and the bottom nav anchors — mirrors renderGalleryPage.
+    TB.renderScreenInto(app, {
       layout: layout,
       context: { course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") } },
       slots: { "page-content": skeleton }
     });
-    host = wrap.querySelector('[data-slot="page-content"]') || wrap;
-    var navBtn = wrap.querySelector('.navigation [data-nav="next"]');
+    host = app.querySelector('[data-slot="page-content"]') || app;
+    var navBtn = app.querySelector('.navigation [data-nav="next"]');
     if (navBtn) navBtn.onclick = function () { if (typeof advancePageSequence === "function") advancePageSequence(); };
   } else {
     app.innerHTML = skeleton;

@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "wouter";
 import {
-  Banner, Box, Button, EmptyState, Fab, IconButton, Input, ProgressBar, Stack, Switch, Table, Tabs, Tag, Text, Tree,
+  Banner, Box, Button, Cluster, EmptyState, Fab, IconButton, Input, ProgressBar, Select, Stack, Switch, Table, Tabs, Tag, Text, Tree,
   type TableColumn, type TreeNodeData,
 } from "@universityrt/ui-kit";
 import {
@@ -62,6 +62,21 @@ export default function DebugPlayerPage() {
   const [watchFilter, setWatchFilter] = useState("");
   const [reference, setReference] = useState(false);
   const [snap, setSnap] = useState<InspectorSnapshot>(EMPTY);
+  // PRD-18: per-topic pinned variants { topicId: formId } for variants-mode sections.
+  // Empty on mount (a fresh window starts unpinned). Passed to the stage as a
+  // launch-URL hash so the runtime delivers exactly the pinned form (tbDebugForcedForms
+  // in app.js). Survives «Сброс»/«Пересобрать» (it is page state). Editable only before
+  // start; changing a pin resets the run so the new variant is drawn from a clean slate.
+  const [pins, setPins] = useState<Record<string, string>>({});
+  const setPin = (topicId: string, formId: string | null) => {
+    setPins((prev) => {
+      const next = { ...prev };
+      if (formId) next[topicId] = formId;
+      else delete next[topicId];
+      return next;
+    });
+    reset();
+  };
 
   // Standalone window/tab title.
   useEffect(() => {
@@ -126,6 +141,9 @@ export default function DebugPlayerPage() {
   const building = state.status === "loading";
   const errored = state.status === "error";
   const openEditor = () => window.open(`/author/tests?edit=${testId}`, "_blank", "noopener");
+  // Variant pins ride on the stage launch-URL hash; the runtime reads `#tbff=` at draw time.
+  const pinHash = Object.keys(pins).length ? "#tbff=" + encodeURIComponent(JSON.stringify(pins)) : "";
+  const stageSrc = state.playUrl ? state.playUrl + pinHash : undefined;
 
   return (
     <div className={collapsed ? "dbg is-collapsed" : "dbg"}>
@@ -172,8 +190,8 @@ export default function DebugPlayerPage() {
                 </label>
               </div>
               <div className="dbg__frame-screen">
-                {state.playUrl ? (
-                  <iframe key={runKey} ref={iframeRef} className="dbg__iframe" title="Прогон отладки" src={state.playUrl} />
+                {stageSrc ? (
+                  <iframe key={runKey} ref={iframeRef} className="dbg__iframe" title="Прогон отладки" src={stageSrc} />
                 ) : null}
               </div>
             </div>
@@ -211,7 +229,7 @@ export default function DebugPlayerPage() {
             <div className="dbg__ins-body">
               {tab === "score" && <ScorePanel snap={snap} />}
               {tab === "protocol" && <ProtocolPanel snap={snap} />}
-              {tab === "draw" && <DrawPanel snap={snap} />}
+              {tab === "draw" && <DrawPanel snap={snap} pins={pins} onPin={setPin} />}
               {tab === "scales" && <ScalesPanel snap={snap} />}
               {tab === "results" && <ResultsPanel snap={snap} />}
               {tab === "state" && (
@@ -629,7 +647,53 @@ function QuestionDisclosure({ title, items, showTopic }: { title: string; items:
   );
 }
 
-function DrawSection({ s, showQuestions }: { s: DrawSectionVM; showQuestions: boolean }) {
+// PRD-18: per-topic variant pin (variants mode only). «Случайно» (value "") = the
+// normal random draw; a form id pins that exact variant. Locked once the run started
+// (all variants are fixed at draw time) — the methodologist unlocks it via «Сброс».
+function VariantPinControl({
+  s, pin, started, onPin,
+}: {
+  s: DrawSectionVM;
+  pin: string;
+  started: boolean;
+  onPin?: (topicId: string, formId: string | null) => void;
+}) {
+  const options = [
+    { value: "", label: "Случайно (по умолчанию)" },
+    ...s.forms.map((f) => ({ value: f.id, label: f.label })),
+  ];
+  return (
+    <Stack gap={1}>
+      <Cluster gap={2}>
+        <Text variant="body-s" tone="muted">Выдать вариант</Text>
+        <Select<string>
+          size="s"
+          value={pin}
+          disabled={started}
+          options={options}
+          onChange={(v) => onPin?.(s.topicId, v || null)}
+          aria-label={`Выдать вариант — тема «${s.topicName}»`}
+          data-testid={`variant-pin-${s.topicId}`}
+        />
+      </Cluster>
+      <Text variant="caption" tone="muted">
+        {started
+          ? "После старта прогона выбор зафиксирован — «Сброс» вернёт настройку."
+          : "Применяется при старте прогона. «Случайно» — обычная случайная выдача."}
+      </Text>
+    </Stack>
+  );
+}
+
+function DrawSection({
+  s, showQuestions, pin, started, onPin,
+}: {
+  s: DrawSectionVM;
+  showQuestions: boolean;
+  pin?: string;
+  started?: boolean;
+  onPin?: (topicId: string, formId: string | null) => void;
+}) {
   const types = byTypeSummary(s);
   return (
     <Box className="dbg__draw-section">
@@ -637,6 +701,9 @@ function DrawSection({ s, showQuestions }: { s: DrawSectionVM; showQuestions: bo
         {s.mode === "quota" ? <Layers size={14} /> : <List size={14} />}
         {`Тема «${s.topicName}» — ${drawModeLabel(s)}`}
       </div>
+      {s.mode === "variants" && s.forms.length ? (
+        <VariantPinControl s={s} pin={pin ?? ""} started={!!started} onPin={onPin} />
+      ) : null}
       {s.mode === "variants" ? (
         <div className="dbg__sum">
           <span>
@@ -673,12 +740,19 @@ function DrawSection({ s, showQuestions }: { s: DrawSectionVM; showQuestions: bo
   );
 }
 
-function DrawPanel({ snap }: { snap: InspectorSnapshot }) {
+function DrawPanel({
+  snap, pins, onPin,
+}: {
+  snap: InspectorSnapshot;
+  pins: Record<string, string>;
+  onPin: (topicId: string, formId: string | null) => void;
+}) {
   const d = snap.draw;
   if (!d.available) return <PanelEmpty text="Запустите пакет — здесь появится состав выдачи этого прогона." />;
   if (d.adaptive) return <DrawAdaptivePanel path={d.path} />;
   const secs = d.sections ?? [];
   const flat = d.flat ?? true;
+  const started = !!d.started;
   const total = secs.reduce((a, s) => a + s.count, 0);
   const delivered = secs.reduce((a, s) => a + s.delivered, 0);
   // «По темам»: each topic expands into its own questions. Flat: topic summaries
@@ -690,7 +764,9 @@ function DrawPanel({ snap }: { snap: InspectorSnapshot }) {
     .sort((a, b) => a.idx - b.idx);
   return (
     <Stack gap={3}>
-      {secs.map((s, i) => <DrawSection key={i} s={s} showQuestions={!flat} />)}
+      {secs.map((s, i) => (
+        <DrawSection key={i} s={s} showQuestions={!flat} pin={pins[s.topicId] ?? ""} started={started} onPin={onPin} />
+      ))}
       {flat ? (
         <Box className="dbg__draw-section">
           <div className="dbg__ins-h"><List size={14} />Состав выдачи</div>

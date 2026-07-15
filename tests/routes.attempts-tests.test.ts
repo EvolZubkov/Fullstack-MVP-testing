@@ -10,7 +10,7 @@ import session from "express-session";
 const { storageMock, serviceMock } = vi.hoisted(() => ({
   serviceMock: { create: vi.fn(), save: vi.fn() },
   storageMock: {
-    getTest: vi.fn(), getTests: vi.fn(), createTest: vi.fn(),
+    getTest: vi.fn(), getTests: vi.fn(),
     updateTest: vi.fn(), deleteTest: vi.fn(), getTestSections: vi.fn(),
     patchTestStatus: vi.fn(),
     getAttempt: vi.fn(), createAttempt: vi.fn(), updateAttempt: vi.fn(),

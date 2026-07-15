@@ -94,7 +94,6 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
           manifest: bundle.manifest,
           layouts: bundle.layouts,
           templateJs: bundle.templateJs,
-          rulesJson: bundle.rulesJson,
         });
         setReport(rep);
         const firstFail = rep.routes.find((r) => r.status === "fail");
@@ -299,6 +298,7 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
                   slots={selectedSpec.input.slots}
                   content={selectedSpec.input.content}
                   css={bundle.css}
+                  shell={bundle.manifest.mountShell ? bundle.layouts.shell : undefined}
                 />
               ) : (
                 <p className="tpl-upload-hint" style={{ padding: "var(--ou-space-5)" }}>

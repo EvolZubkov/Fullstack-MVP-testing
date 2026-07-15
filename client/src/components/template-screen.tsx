@@ -34,9 +34,19 @@ export interface TemplateScreenProps {
   /** Called with the `data-action` value when a button inside the screen is clicked. */
   onAction?: (action: string) => void;
   className?: string;
+  /**
+   * Optional design-template shell HTML (the `shell` layout, containing an `#app`
+   * mount). When provided, the screen is rendered INSIDE the shell instead of at the
+   * root — so FIXED-STAGE templates (whose screens use container-query units cqh/cqw
+   * relative to the shell's `container-type:size` stage) get their stage context and
+   * scale to the host WIDTH. Without it, container units resolve against the viewport
+   * and the screen renders at full-viewport size (unscaled). Pass it only for
+   * templates that ship a fixed-stage shell (manifest `mountShell`).
+   */
+  shell?: string;
 }
 
-export function TemplateScreen({ layout, context, css, slots, content, cssVars, onAction, className }: TemplateScreenProps) {
+export function TemplateScreen({ layout, context, css, slots, content, cssVars, onAction, className, shell }: TemplateScreenProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const shadowRef = useRef<ShadowRoot | null>(null);
   const screenRef = useRef<HTMLElement | null>(null);
@@ -107,9 +117,22 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
     const screen = document.createElement("div");
     shadow.appendChild(screen);
     screenRef.current = screen;
-    renderScreenInto(screen, { layout, context, slots, content });
-    fitToWidth();
-  }, [layout, context, css, slots, content, cssVars, fitToWidth]);
+    if (shell) {
+      // Fixed-stage: mount the screen inside the template's shell so its
+      // container-query stage (container-type:size) scales the cqh/cqw content to
+      // the host width. Override the shell's viewport-based stage sizing
+      // (e.g. max-width: calc(100dvh*16/9)) so the stage fits the preview container.
+      const fit = document.createElement("style");
+      fit.textContent = ":host *:has(> #app){max-width:100%!important;width:100%!important;margin:0 auto;}";
+      shadow.appendChild(fit);
+      screen.innerHTML = shell;
+      const app = screen.querySelector<HTMLElement>("#app");
+      renderScreenInto(app ?? screen, { layout, context, slots, content });
+    } else {
+      renderScreenInto(screen, { layout, context, slots, content });
+      fitToWidth();
+    }
+  }, [layout, context, css, slots, content, cssVars, fitToWidth, shell]);
 
   // Re-fit when the host (modal) width changes.
   useEffect(() => {

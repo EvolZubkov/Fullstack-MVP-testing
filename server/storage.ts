@@ -1,73 +1,64 @@
-import { randomUUID } from "crypto";
-import bcrypt from "bcryptjs";
-import { eq, inArray, and, sql, desc, isNull } from "drizzle-orm";
-import { db } from "./db";
-import { encryptEmail, decryptEmail, hashEmail } from "./utils/crypto";
-import {
-  users, topics, questions, tests, testSections, attempts, folders, testFolders,
-  adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
-  groups, userGroups, testAssignments, passwordResetTokens, assignmentAccessTokens,
-  contentPages, resultVariables, scales, questionMeasurements, testQuestionScoring,
-  userRoles, testAccessGrants, testSnapshots, topicAccessGrants,
-  type User, type InsertUser,
-  type Folder, type InsertFolder,
-  type TestFolder, type InsertTestFolder,
-  type Topic, type InsertTopic,
-  type TopicCourse,
-  type TopicEvent,
-  type Question, type InsertQuestion,
-  type Test, type InsertTest,
-  type TestSection, type InsertTestSection,
-  type Attempt, type InsertAttempt,
-  type AdaptiveTopicSettings, type InsertAdaptiveTopicSettings,
-  type AdaptiveLevel, type InsertAdaptiveLevel,
-  type AdaptiveLevelLink, type InsertAdaptiveLevelLink,
-  type ScormPackage, type InsertScormPackage,
-  type ScormAttempt, type InsertScormAttempt,
-  type ScormAnswer, type InsertScormAnswer,
-  type Group, type InsertGroup,
-  type UserGroup, type InsertUserGroup,
-  type TestAccessGrant, type InsertTestAccessGrant,
-  type TestSnapshot,
-  type TopicAccessGrant,
-  type TestAssignment, type InsertTestAssignment,
-  type PasswordResetToken, type InsertPasswordResetToken,
-  type AssignmentAccessToken, type InsertAssignmentAccessToken,
-  type ContentPage, type InsertContentPage,
-  type ResultVariable, type InsertResultVariable,
-  type Scale, type InsertScale,
-  type QuestionMeasurement, type InsertQuestionMeasurement,
-  type TestQuestionScoring, type InsertTestQuestionScoring,
+/**
+ * @module server/storage
+ * @description Data access layer for the whole application. Exposes the
+ * `IStorage` contract (the authoritative surface of all persistence operations)
+ * and its `DatabaseStorage` implementation. `DatabaseStorage` is a thin
+ * delegating facade: every method forwards to a per-domain repository under
+ * `server/storage/*` that owns the Drizzle ORM + PostgreSQL queries for its
+ * aggregate (transactions, whitelisting, cascades and the crypto seam all live
+ * in the repositories). This file holds no query logic of its own — it exists so
+ * routes depend only on `IStorage`, never on the concrete repositories.
+ */
+import { UsersRepository } from "./storage/users-repository";
+import { GroupsRepository } from "./storage/groups-repository";
+import { AccessRepository } from "./storage/access-repository";
+import { TopicsRepository } from "./storage/topics-repository";
+import { QuestionsRepository } from "./storage/questions-repository";
+import { ScormRepository } from "./storage/scorm-repository";
+import { AdaptiveRepository } from "./storage/adaptive-repository";
+import { AttemptsRepository } from "./storage/attempts-repository";
+import { ScalesVariablesRepository } from "./storage/scales-variables-repository";
+import { TestsRepository, type TestUsageRef } from "./storage/tests-repository";
+import { ContentPagesRepository } from "./storage/content-pages-repository";
+import { AssignmentsRepository } from "./storage/assignments-repository";
+import { FoldersRepository } from "./storage/folders-repository";
+
+export type { TestUsageRef };
+// Type-only imports: the facade names these in `IStorage` and its delegating
+// method signatures. Table objects and query helpers live in the repositories.
+import type {
+  User, InsertUser,
+  Folder, InsertFolder,
+  TestFolder, InsertTestFolder,
+  Topic, InsertTopic,
+  TopicCourse,
+  TopicEvent,
+  Question, InsertQuestion,
+  Test, InsertTest,
+  TestSection,
+  Attempt, InsertAttempt,
+  AdaptiveTopicSettings, InsertAdaptiveTopicSettings,
+  AdaptiveLevel, InsertAdaptiveLevel,
+  AdaptiveLevelLink, InsertAdaptiveLevelLink,
+  ScormPackage, InsertScormPackage,
+  ScormAttempt, InsertScormAttempt,
+  ScormAnswer, InsertScormAnswer,
+  Group, InsertGroup,
+  UserGroup,
+  TestAccessGrant, InsertTestAccessGrant,
+  TestSnapshot,
+  TopicAccessGrant,
+  TestAssignment, InsertTestAssignment,
+  PasswordResetToken,
+  AssignmentAccessToken,
+  ContentPage, InsertContentPage,
+  ResultVariable, InsertResultVariable,
+  Scale, InsertScale,
+  QuestionMeasurement, InsertQuestionMeasurement,
+  TestQuestionScoring, InsertTestQuestionScoring,
 } from "@shared/schema";
 import type { StoredRole } from "@shared/access";
-import { topicCoursesFromFeedback, topicEventsFromFeedback } from "@shared/topics/recommendations";
-import { validate, renameTopicByNameInFormula, type ValidationResult, type ValueType } from "@shared/formula";
-import { normalizeTopicName } from "@shared/topics/naming";
-
-/**
- * Normalizes a test row from the DB for backward compatibility (PRD-7 §1.11).
- * - If `status` is falsy (pre-migration row), derives it from `published`.
- * - Ensures `published` is always in sync with `status` when reading.
- */
-function mapLegacyTest(row: Test): Test {
-  const status = row.status || (row.published ? "published" : "draft");
-  const published = status === "published";
-  if (status === row.status && published === row.published) return row;
-  return { ...row, status: status as Test["status"], published };
-}
-
-/**
- * Minimal projection of a test that depends on a topic/question (PRD-15
- * FR-03): enough for the 409 referential-protection payload and for the
- * draw-feasibility policy (published vs draft, adaptive vs standard).
- */
-export interface TestUsageRef {
-  id: string;
-  title: string;
-  ownerId: string | null;
-  status: Test["status"];
-  mode: Test["mode"];
-}
+import { type ValidationResult, type ValueType } from "@shared/formula";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -158,31 +149,32 @@ export interface IStorage {
   createFolder(folder: InsertFolder): Promise<Folder>;
   updateFolder(id: string, folder: Partial<InsertFolder>): Promise<Folder | undefined>;
   /**
-   * Удаляет папку контента, предварительно переместив её темы и вложенные папки
-   * в указанное место (`moveTo`, по умолчанию `null` = корень) — вариант
-   * «Перенести содержимое» диалога удаления папки (s-folder-delete). Папки не
-   * несут прав, поэтому content-guard не нужен.
+   * Deletes a content folder after relocating its topics and nested folders
+   * to the given destination (`moveTo`, default `null` = root) — the
+   * "Move contents" variant of the folder-delete dialog (s-folder-delete).
+   * Folders carry no permissions, so no content-guard is needed.
    */
   deleteFolder(id: string, moveTo?: string | null): Promise<boolean>;
-  /** Идентификаторы папки и всех её потомков (включая саму), обход в ширину. */
+  /** IDs of the folder and all its descendants (including itself), BFS traversal. */
   getFolderSubtreeIds(id: string): Promise<string[]>;
-  /** Удаляет строки папок по id (судьбу их содержимого решает вызывающий). */
+  /** Deletes folder rows by id (the caller decides the fate of their contents). */
   deleteFoldersBulk(ids: string[]): Promise<number>;
 
   getTestFolders(): Promise<TestFolder[]>;
   createTestFolder(folder: InsertTestFolder): Promise<TestFolder>;
   updateTestFolder(id: string, updates: Partial<InsertTestFolder>): Promise<TestFolder | undefined>;
   /**
-   * Удаляет папку, предварительно переместив все тесты и вложенные папки
-   * в указанное место (`moveTo`, по умолчанию `null` = корень). Это вариант
-   * "Только папку" из эскиза prd7-tests-list.html (s-folder-delete-a).
+   * Deletes a folder after relocating all its tests and nested folders to the
+   * given destination (`moveTo`, default `null` = root). This is the
+   * "Folder only" variant from the prd7-tests-list.html wireframe
+   * (s-folder-delete-a).
    */
   deleteTestFolder(id: string, moveTo?: string | null): Promise<boolean>;
   /**
-   * Удаляет папку вместе со всеми тестами внутри неё (включая транзитивно
-   * через вложенные папки) и сами вложенные папки. Используется для варианта
-   * "Папку и все тесты" (s-folder-delete-b), требующего ввода точного имени
-   * для подтверждения на уровне route handler.
+   * Deletes a folder together with every test inside it (including transitively
+   * through nested folders) and the nested folders themselves. Used for the
+   * "Folder and all tests" variant (s-folder-delete-b), which requires typing
+   * the exact name to confirm at the route-handler level.
    */
   deleteTestFolderCascade(id: string): Promise<boolean>;
   moveTestToFolder(testId: string, folderId: string | null): Promise<boolean>;
@@ -194,8 +186,27 @@ export interface IStorage {
   renameTopicInFormulas(topicId: string, oldName: string, newName: string): Promise<void>;
   deleteTopic(id: string): Promise<boolean>;
   deleteTopicsBulk(ids: string[]): Promise<number>;
-  /** Массово переносит темы в папку (или в корень при `null`). Организационно. */
+  /** Bulk-moves topics into a folder (or to root when `null`). Organizational. */
   moveTopicsToFolder(ids: string[], folderId: string | null): Promise<number>;
+
+  // PRD-15 block C: topic ownership + access grants (grantees are users, TD-01).
+  setTopicOwner(topicId: string, ownerId: string | null): Promise<void>;
+  setTopicVisibility(topicId: string, visibility: "private" | "shared"): Promise<void>;
+  getTopicIdsByOwner(ownerId: string): Promise<string[]>;
+  getSharedTopicIds(): Promise<string[]>;
+  getTopicGrants(topicId: string): Promise<TopicAccessGrant[]>;
+  getActiveTopicGrantsForGrantees(userId: string): Promise<TopicAccessGrant[]>;
+  getTopicGrantForGrantee(topicId: string, granteeId: string): Promise<TopicAccessGrant | undefined>;
+  upsertTopicGrant(grant: {
+    topicId: string;
+    granteeId: string;
+    accessLevel: "use" | "manage";
+    grantedBy: string | null;
+  }): Promise<TopicAccessGrant>;
+  setTopicGrantState(id: string, state: "active" | "revoked_in_use"): Promise<void>;
+  removeTopicGrant(id: string): Promise<void>;
+  /** Duplicate a topic and its questions; the copy is owned by `createdBy`. */
+  duplicateTopicWithQuestions(id: string, createdBy?: string): Promise<{ topic: Topic; questions: Question[] } | undefined>;
 
   // TD-02 r.3: recommended courses/events are derived from topics.feedback_json
   // (write paths removed). Only the read accessors remain, kept for delivery.
@@ -214,12 +225,13 @@ export interface IStorage {
   updateQuestion(id: string, question: Partial<InsertQuestion>): Promise<Question | undefined>;
   deleteQuestion(id: string): Promise<boolean>;
   deleteQuestionsBulk(ids: string[]): Promise<number>;
+  /** Duplicate a single question within its topic (prompt gets a « (копия)» suffix). */
+  duplicateQuestion(id: string): Promise<Question | undefined>;
 
   getTests(): Promise<Test[]>;
   getTest(id: string): Promise<Test | undefined>;
   getMigrationHealth(): Promise<{ legacyStartPageCount: number }>;
-  createTest(test: InsertTest, sections: Omit<InsertTestSection, "testId">[]): Promise<Test>;
-  updateTest(id: string, test: Partial<InsertTest>, sections?: Omit<InsertTestSection, "testId">[]): Promise<Test | undefined>;
+  updateTest(id: string, test: Partial<InsertTest>): Promise<Test | undefined>;
   /** Updates only the status field without bumping the version counter (PRD-7 §9). */
   patchTestStatus(id: string, status: "draft" | "published" | "archived"): Promise<{ id: string; status: string; version: number } | undefined>;
   deleteTest(id: string): Promise<boolean>;
@@ -278,7 +290,7 @@ export interface IStorage {
   deleteContentPage(id: string): Promise<boolean>;
   reorderContentPages(updates: { id: string; sortOrder: number }[]): Promise<void>;
 
-  // PRD-2: user-defined result variables (показатели результата).
+  // PRD-2: user-defined result variables (result indicators).
   getResultVariables(testId: string): Promise<ResultVariable[]>;
   createResultVariable(rv: InsertResultVariable): Promise<ResultVariable>;
   updateResultVariable(id: string, updates: Partial<InsertResultVariable>): Promise<ResultVariable | undefined>;
@@ -318,1792 +330,808 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    if (user) {
-      return { ...user, email: await decryptEmail(user.email) };
-    }
-    return undefined;
+  // Domain repositories behind the facade. The split is incremental: methods of
+  // an extracted domain delegate here, the rest remain inline until migrated.
+  private readonly usersRepo = new UsersRepository();
+  private readonly groupsRepo = new GroupsRepository();
+  private readonly accessRepo = new AccessRepository();
+  private readonly topicsRepo = new TopicsRepository();
+  private readonly questionsRepo = new QuestionsRepository();
+  private readonly scormRepo = new ScormRepository();
+  private readonly adaptiveRepo = new AdaptiveRepository();
+  private readonly attemptsRepo = new AttemptsRepository();
+  private readonly scalesVariablesRepo = new ScalesVariablesRepository();
+  private readonly testsRepo = new TestsRepository();
+  private readonly contentPagesRepo = new ContentPagesRepository();
+  private readonly assignmentsRepo = new AssignmentsRepository();
+  private readonly foldersRepo = new FoldersRepository();
+
+  // ============================================
+  // Users (delegated to UsersRepository)
+  // ============================================
+
+  getUser(id: string): Promise<User | undefined> {
+    return this.usersRepo.getUser(id);
   }
 
-  async getUserByEmail(email: string): Promise<User | undefined> {
-    const emailHashValue = hashEmail(email);
-    const [user] = await db.select().from(users).where(eq(users.emailHash, emailHashValue));
-    if (user) {
-      return { ...user, email: await decryptEmail(user.email) };
-    }
-    return undefined;
+  getUserByEmail(email: string): Promise<User | undefined> {
+    return this.usersRepo.getUserByEmail(email);
   }
 
-  async createUser(insertUser: InsertUser & { createdBy?: string }): Promise<User> {
-    const id = randomUUID();
-    const hashedPassword = await bcrypt.hash(insertUser.passwordHash, 10);
-    const emailEncrypted = await encryptEmail(insertUser.email);
-    const emailHashValue = hashEmail(insertUser.email);
-
-    const [user] = await db.insert(users).values({
-      id,
-      email: emailEncrypted,
-      emailHash: emailHashValue,
-      passwordHash: hashedPassword,
-      name: insertUser.name || null,
-      status: insertUser.status || "pending",
-      mustChangePassword: insertUser.mustChangePassword ?? true,
-      gdprConsent: false,
-      createdAt: new Date(),
-      createdBy: insertUser.createdBy || null,
-    }).returning();
-
-    return { ...user, email: await decryptEmail(user.email) };
+  createUser(insertUser: InsertUser & { createdBy?: string }): Promise<User> {
+    return this.usersRepo.createUser(insertUser);
   }
 
-  async validatePassword(email: string, password: string): Promise<User | null> {
-    const user = await this.getUserByEmail(email);
-    if (!user) return null;
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    return valid ? user : null;
+  validatePassword(email: string, password: string): Promise<User | null> {
+    return this.usersRepo.validatePassword(email, password);
   }
 
-  async updateUserLastLogin(id: string): Promise<void> {
-    await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, id));
+  updateUserLastLogin(id: string): Promise<void> {
+    return this.usersRepo.updateUserLastLogin(id);
   }
 
-  async getUsers(): Promise<User[]> {
-    const allUsers = await db.select().from(users).orderBy(desc(users.createdAt));
-    return Promise.all(allUsers.map(async user => ({ ...user, email: await decryptEmail(user.email) })));
+  getUsers(): Promise<User[]> {
+    return this.usersRepo.getUsers();
   }
 
-  async updateUser(id: string, data: Partial<User>): Promise<User | undefined> {
-    const updateData: any = { ...data };
-    if (data.email) {
-      updateData.email = await encryptEmail(data.email);
-      updateData.emailHash = hashEmail(data.email);
-    }
-
-    const [updated] = await db.update(users)
-      .set(updateData)
-      .where(eq(users.id, id))
-      .returning();
-
-    if (updated) {
-      return { ...updated, email: await decryptEmail(updated.email) };
-    }
-    return undefined;
+  updateUser(id: string, data: Partial<User>): Promise<User | undefined> {
+    return this.usersRepo.updateUser(id, data);
   }
 
-  async updateUserPassword(id: string, newPasswordHash: string): Promise<void> {
-    const hashed = await bcrypt.hash(newPasswordHash, 10);
-    await db.update(users).set({ 
-      passwordHash: hashed,
-      mustChangePassword: false,
-    }).where(eq(users.id, id));
+  updateUserPassword(id: string, newPasswordHash: string): Promise<void> {
+    return this.usersRepo.updateUserPassword(id, newPasswordHash);
   }
 
-  async deactivateUser(id: string): Promise<User | undefined> {
-    const [updated] = await db.update(users)
-      .set({ status: "inactive" })
-      .where(eq(users.id, id))
-      .returning();
-    return updated || undefined;
+  deactivateUser(id: string): Promise<User | undefined> {
+    return this.usersRepo.deactivateUser(id);
   }
 
-  async activateUser(id: string): Promise<User | undefined> {
-    const [updated] = await db.update(users)
-      .set({ status: "active" })
-      .where(eq(users.id, id))
-      .returning();
-    return updated || undefined;
+  activateUser(id: string): Promise<User | undefined> {
+    return this.usersRepo.activateUser(id);
   }
 
   // ============================================
-  // Groups
+  // Groups + membership (delegated to GroupsRepository)
   // ============================================
 
-  async getGroups(): Promise<Group[]> {
-    return db.select().from(groups).orderBy(desc(groups.createdAt));
+  getGroups(): Promise<Group[]> {
+    return this.groupsRepo.getGroups();
   }
 
-  async getGroup(id: string): Promise<Group | undefined> {
-    const [group] = await db.select().from(groups).where(eq(groups.id, id));
-    return group || undefined;
+  getGroup(id: string): Promise<Group | undefined> {
+    return this.groupsRepo.getGroup(id);
   }
 
-  async createGroup(group: InsertGroup & { createdBy?: string }): Promise<Group> {
-    const id = randomUUID();
-    const [created] = await db.insert(groups).values({
-      id,
-      name: group.name,
-      description: group.description || null,
-      createdAt: new Date(),
-      createdBy: group.createdBy || null,
-    }).returning();
-    return created;
+  createGroup(group: InsertGroup & { createdBy?: string }): Promise<Group> {
+    return this.groupsRepo.createGroup(group);
   }
 
-  async updateGroup(id: string, data: Partial<Group>): Promise<Group | undefined> {
-    const [updated] = await db.update(groups).set(data).where(eq(groups.id, id)).returning();
-    return updated || undefined;
+  updateGroup(id: string, data: Partial<Group>): Promise<Group | undefined> {
+    return this.groupsRepo.updateGroup(id, data);
   }
 
-  async deleteGroup(id: string): Promise<boolean> {
-    // Сначала удаляем связи с пользователями
-    await db.delete(userGroups).where(eq(userGroups.groupId, id));
-    // Затем удаляем саму группу
-    const result = await db.delete(groups).where(eq(groups.id, id));
-    return (result.rowCount ?? 0) > 0;
+  deleteGroup(id: string): Promise<boolean> {
+    return this.groupsRepo.deleteGroup(id);
   }
 
-  // ============================================
-  // User-Group relations
-  // ============================================
-
-  async getUserGroups(userId: string): Promise<Group[]> {
-    const result = await db
-      .select({ group: groups })
-      .from(userGroups)
-      .innerJoin(groups, eq(userGroups.groupId, groups.id))
-      .where(eq(userGroups.userId, userId));
-    return result.map(r => r.group);
+  getUserGroups(userId: string): Promise<Group[]> {
+    return this.groupsRepo.getUserGroups(userId);
   }
 
-  async getGroupUsers(groupId: string): Promise<User[]> {
-    const result = await db
-      .select({ user: users })
-      .from(userGroups)
-      .innerJoin(users, eq(userGroups.userId, users.id))
-      .where(eq(userGroups.groupId, groupId));
-    return Promise.all(result.map(async r => ({ ...r.user, email: await decryptEmail(r.user.email) })));
+  getGroupUsers(groupId: string): Promise<User[]> {
+    return this.groupsRepo.getGroupUsers(groupId);
   }
 
-  async addUserToGroup(userId: string, groupId: string): Promise<UserGroup> {
-    const id = randomUUID();
-    const [created] = await db.insert(userGroups).values({
-      id,
-      userId,
-      groupId,
-      addedAt: new Date(),
-    }).returning();
-    return created;
+  addUserToGroup(userId: string, groupId: string): Promise<UserGroup> {
+    return this.groupsRepo.addUserToGroup(userId, groupId);
   }
 
-  async removeUserFromGroup(userId: string, groupId: string): Promise<boolean> {
-    const result = await db.delete(userGroups)
-      .where(and(eq(userGroups.userId, userId), eq(userGroups.groupId, groupId)));
-    return (result.rowCount ?? 0) > 0;
+  removeUserFromGroup(userId: string, groupId: string): Promise<boolean> {
+    return this.groupsRepo.removeUserFromGroup(userId, groupId);
   }
 
-  async setUserGroups(userId: string, groupIds: string[]): Promise<void> {
-    // Удаляем все текущие связи
-    await db.delete(userGroups).where(eq(userGroups.userId, userId));
-    
-    // Добавляем новые
-    if (groupIds.length > 0) {
-      const values = groupIds.map(groupId => ({
-        id: randomUUID(),
-        userId,
-        groupId,
-        addedAt: new Date(),
-      }));
-      await db.insert(userGroups).values(values);
-    }
+  setUserGroups(userId: string, groupIds: string[]): Promise<void> {
+    return this.groupsRepo.setUserGroups(userId, groupIds);
   }
 
   // ============================================
-  // User Roles (PRD-13 RBAC)
+  // Access: roles + test/topic ownership & grants (delegated to AccessRepository)
   // ============================================
 
-  async getUserRoles(userId: string): Promise<StoredRole[]> {
-    const rows = await db.select({ role: userRoles.role }).from(userRoles).where(eq(userRoles.userId, userId));
-    return rows.map((r) => r.role);
+  getUserRoles(userId: string): Promise<StoredRole[]> {
+    return this.accessRepo.getUserRoles(userId);
   }
 
-  async setUserRoles(userId: string, roles: StoredRole[], grantedBy: string | null = null): Promise<void> {
-    // Replace the whole role set (mirrors setUserGroups).
-    await db.delete(userRoles).where(eq(userRoles.userId, userId));
-    const unique = Array.from(new Set(roles));
-    if (unique.length > 0) {
-      await db.insert(userRoles).values(unique.map((role) => ({
-        id: randomUUID(),
-        userId,
-        role,
-        grantedBy,
-        grantedAt: new Date(),
-      })));
-    }
+  setUserRoles(userId: string, roles: StoredRole[], grantedBy: string | null = null): Promise<void> {
+    return this.accessRepo.setUserRoles(userId, roles, grantedBy);
   }
 
-  async addUserRole(userId: string, role: StoredRole, grantedBy: string | null = null): Promise<void> {
-    await db.insert(userRoles).values({
-      id: randomUUID(),
-      userId,
-      role,
-      grantedBy,
-      grantedAt: new Date(),
-    }).onConflictDoNothing();
+  addUserRole(userId: string, role: StoredRole, grantedBy: string | null = null): Promise<void> {
+    return this.accessRepo.addUserRole(userId, role, grantedBy);
   }
 
-  async removeUserRole(userId: string, role: StoredRole): Promise<void> {
-    await db.delete(userRoles).where(and(eq(userRoles.userId, userId), eq(userRoles.role, role)));
+  removeUserRole(userId: string, role: StoredRole): Promise<void> {
+    return this.accessRepo.removeUserRole(userId, role);
+  }
+
+  setTestOwner(testId: string, ownerId: string | null): Promise<void> {
+    return this.accessRepo.setTestOwner(testId, ownerId);
+  }
+
+  getTestIdsByOwner(ownerId: string): Promise<string[]> {
+    return this.accessRepo.getTestIdsByOwner(ownerId);
   }
 
   // ============================================
-  // Test access grants + owner (PRD-13 RBAC)
+  // Test usage refs + snapshots (delegated to TestsRepository)
   // ============================================
 
-  async setTestOwner(testId: string, ownerId: string | null): Promise<void> {
-    await db.update(tests).set({ ownerId }).where(eq(tests.id, testId));
+  getTestsUsingTopic(topicId: string): Promise<TestUsageRef[]> {
+    return this.testsRepo.getTestsUsingTopic(topicId);
   }
 
-  async getTestIdsByOwner(ownerId: string): Promise<string[]> {
-    const rows = await db.select({ id: tests.id }).from(tests).where(eq(tests.ownerId, ownerId));
-    return rows.map((r) => r.id);
+  getTestsUsingQuestion(questionId: string): Promise<TestUsageRef[]> {
+    return this.testsRepo.getTestsUsingQuestion(questionId);
   }
 
-  async getTestsUsingTopic(topicId: string): Promise<TestUsageRef[]> {
-    return db
-      .selectDistinct({
-        id: tests.id,
-        title: tests.title,
-        ownerId: tests.ownerId,
-        status: tests.status,
-        mode: tests.mode,
-      })
-      .from(testSections)
-      .innerJoin(tests, eq(testSections.testId, tests.id))
-      .where(eq(testSections.topicId, topicId));
-  }
-
-  async getTestsUsingQuestion(questionId: string): Promise<TestUsageRef[]> {
-    // A question is delivered through its topic's sections; scale contributions
-    // (question_measurements) add direct per-test dependencies (PRD-5).
-    const question = await this.getQuestion(questionId);
-    const byTopic = question ? await this.getTestsUsingTopic(question.topicId) : [];
-    const viaMeasurements = await db
-      .selectDistinct({
-        id: tests.id,
-        title: tests.title,
-        ownerId: tests.ownerId,
-        status: tests.status,
-        mode: tests.mode,
-      })
-      .from(questionMeasurements)
-      .innerJoin(tests, eq(questionMeasurements.testId, tests.id))
-      .where(eq(questionMeasurements.questionId, questionId));
-    const seen = new Map<string, TestUsageRef>();
-    for (const ref of [...byTopic, ...viaMeasurements]) seen.set(ref.id, ref);
-    return [...seen.values()];
-  }
-
-  async createTestSnapshot(snapshot: {
+  createTestSnapshot(snapshot: {
     testId: string;
     version: number;
     contentJson: unknown;
     publishedBy: string | null;
   }): Promise<TestSnapshot> {
-    const [row] = await db
-      .insert(testSnapshots)
-      .values({
-        id: randomUUID(),
-        testId: snapshot.testId,
-        version: snapshot.version,
-        contentJson: snapshot.contentJson,
-        publishedBy: snapshot.publishedBy,
-      })
-      .returning();
-    return row;
+    return this.testsRepo.createTestSnapshot(snapshot);
   }
 
-  async getLatestSnapshot(testId: string): Promise<TestSnapshot | undefined> {
-    const [row] = await db
-      .select()
-      .from(testSnapshots)
-      .where(eq(testSnapshots.testId, testId))
-      .orderBy(desc(testSnapshots.version))
-      .limit(1);
-    return row || undefined;
+  getLatestSnapshot(testId: string): Promise<TestSnapshot | undefined> {
+    return this.testsRepo.getLatestSnapshot(testId);
   }
 
-  async getSnapshot(id: string): Promise<TestSnapshot | undefined> {
-    const [row] = await db.select().from(testSnapshots).where(eq(testSnapshots.id, id));
-    return row || undefined;
+  getSnapshot(id: string): Promise<TestSnapshot | undefined> {
+    return this.testsRepo.getSnapshot(id);
   }
 
-  async getSnapshotsForTest(testId: string): Promise<TestSnapshot[]> {
-    return db
-      .select()
-      .from(testSnapshots)
-      .where(eq(testSnapshots.testId, testId))
-      .orderBy(desc(testSnapshots.version));
+  getSnapshotsForTest(testId: string): Promise<TestSnapshot[]> {
+    return this.testsRepo.getSnapshotsForTest(testId);
   }
 
-  async deleteSnapshotsForTest(testId: string): Promise<void> {
-    await db.delete(testSnapshots).where(eq(testSnapshots.testId, testId));
+  deleteSnapshotsForTest(testId: string): Promise<void> {
+    return this.testsRepo.deleteSnapshotsForTest(testId);
   }
 
-  async getReferencedSnapshotIds(testId: string): Promise<string[]> {
-    const rows = await db
-      .selectDistinct({ snapshotId: attempts.snapshotId })
-      .from(attempts)
-      .where(and(eq(attempts.testId, testId), sql`${attempts.snapshotId} IS NOT NULL`));
-    return rows.map((r) => r.snapshotId).filter((id): id is string => !!id);
+  getReferencedSnapshotIds(testId: string): Promise<string[]> {
+    return this.testsRepo.getReferencedSnapshotIds(testId);
   }
 
-  async deleteSnapshotById(id: string): Promise<void> {
-    await db.delete(testSnapshots).where(eq(testSnapshots.id, id));
+  deleteSnapshotById(id: string): Promise<void> {
+    return this.testsRepo.deleteSnapshotById(id);
   }
 
-  async getTestAccessGrants(testId: string): Promise<TestAccessGrant[]> {
-    return db.select().from(testAccessGrants).where(eq(testAccessGrants.testId, testId));
+  getTestAccessGrants(testId: string): Promise<TestAccessGrant[]> {
+    return this.accessRepo.getTestAccessGrants(testId);
   }
 
-  async getUserTestGrants(userId: string): Promise<TestAccessGrant[]> {
-    return db.select().from(testAccessGrants).where(eq(testAccessGrants.userId, userId));
+  getUserTestGrants(userId: string): Promise<TestAccessGrant[]> {
+    return this.accessRepo.getUserTestGrants(userId);
   }
 
-  async getTestGrantForUser(testId: string, userId: string): Promise<TestAccessGrant | undefined> {
-    const [grant] = await db.select().from(testAccessGrants)
-      .where(and(eq(testAccessGrants.testId, testId), eq(testAccessGrants.userId, userId)));
-    return grant || undefined;
+  getTestGrantForUser(testId: string, userId: string): Promise<TestAccessGrant | undefined> {
+    return this.accessRepo.getTestGrantForUser(testId, userId);
   }
 
-  async upsertTestAccessGrant(grant: InsertTestAccessGrant): Promise<TestAccessGrant> {
-    const [row] = await db.insert(testAccessGrants).values({
-      id: randomUUID(),
-      testId: grant.testId,
-      userId: grant.userId,
-      accessLevel: grant.accessLevel,
-      grantedBy: grant.grantedBy ?? null,
-      createdAt: new Date(),
-    }).onConflictDoUpdate({
-      target: [testAccessGrants.testId, testAccessGrants.userId],
-      set: { accessLevel: grant.accessLevel, grantedBy: grant.grantedBy ?? null },
-    }).returning();
-    return row;
+  upsertTestAccessGrant(grant: InsertTestAccessGrant): Promise<TestAccessGrant> {
+    return this.accessRepo.upsertTestAccessGrant(grant);
   }
 
-  async removeTestAccessGrant(testId: string, userId: string): Promise<boolean> {
-    const result = await db.delete(testAccessGrants)
-      .where(and(eq(testAccessGrants.testId, testId), eq(testAccessGrants.userId, userId)));
-    return (result.rowCount ?? 0) > 0;
+  removeTestAccessGrant(testId: string, userId: string): Promise<boolean> {
+    return this.accessRepo.removeTestAccessGrant(testId, userId);
   }
 
   // ============================================
-  // Test Assignments
+  // Test Assignments (delegated to AssignmentsRepository)
   // ============================================
 
-  async getAssignment(id: string): Promise<TestAssignment | undefined> {
-    const [a] = await db.select().from(testAssignments).where(eq(testAssignments.id, id));
-    return a;
+  getAssignment(id: string): Promise<TestAssignment | undefined> {
+    return this.assignmentsRepo.getAssignment(id);
   }
 
-  async getTestAssignments(testId: string): Promise<TestAssignment[]> {
-    return db.select().from(testAssignments).where(eq(testAssignments.testId, testId));
+  getTestAssignments(testId: string): Promise<TestAssignment[]> {
+    return this.assignmentsRepo.getTestAssignments(testId);
   }
 
-  async getUserAssignments(userId: string): Promise<TestAssignment[]> {
-    return db.select().from(testAssignments).where(eq(testAssignments.userId, userId));
+  getUserAssignments(userId: string): Promise<TestAssignment[]> {
+    return this.assignmentsRepo.getUserAssignments(userId);
   }
 
-  async getGroupAssignments(groupId: string): Promise<TestAssignment[]> {
-    return db.select().from(testAssignments).where(eq(testAssignments.groupId, groupId));
+  getGroupAssignments(groupId: string): Promise<TestAssignment[]> {
+    return this.assignmentsRepo.getGroupAssignments(groupId);
   }
 
-  async isTestAssignedToUser(testId: string, userId: string): Promise<boolean> {
-    // Direct assignment first (cheapest), then via the user's groups.
-    const [direct] = await db
-      .select({ id: testAssignments.id })
-      .from(testAssignments)
-      .where(and(eq(testAssignments.testId, testId), eq(testAssignments.userId, userId)))
-      .limit(1);
-    if (direct) return true;
-    const groupIds = (await this.getUserGroups(userId)).map((g) => g.id);
-    if (groupIds.length === 0) return false;
-    const [viaGroup] = await db
-      .select({ id: testAssignments.id })
-      .from(testAssignments)
-      .where(and(eq(testAssignments.testId, testId), inArray(testAssignments.groupId, groupIds)))
-      .limit(1);
-    return !!viaGroup;
+  isTestAssignedToUser(testId: string, userId: string): Promise<boolean> {
+    return this.assignmentsRepo.isTestAssignedToUser(testId, userId);
   }
 
-  async createTestAssignment(assignment: InsertTestAssignment & { assignedBy: string }): Promise<TestAssignment> {
-    const id = randomUUID();
-    const [created] = await db.insert(testAssignments).values({
-      id,
-      testId: assignment.testId,
-      userId: assignment.userId || null,
-      groupId: assignment.groupId || null,
-      dueDate: assignment.dueDate || null,
-      assignedAt: new Date(),
-      assignedBy: assignment.assignedBy,
-    }).returning();
-    return created;
+  createTestAssignment(assignment: InsertTestAssignment & { assignedBy: string }): Promise<TestAssignment> {
+    return this.assignmentsRepo.createTestAssignment(assignment);
   }
 
-  async deleteTestAssignment(id: string): Promise<boolean> {
-    const result = await db.delete(testAssignments).where(eq(testAssignments.id, id));
-    return (result.rowCount ?? 0) > 0;
+  deleteTestAssignment(id: string): Promise<boolean> {
+    return this.assignmentsRepo.deleteTestAssignment(id);
   }
 
-  async getAssignedTestsForUser(userId: string): Promise<Test[]> {
-    // Получаем группы пользователя
-    const userGroupsList = await this.getUserGroups(userId);
-    const groupIds = userGroupsList.map(g => g.id);
-
-    // Получаем назначения напрямую пользователю
-    const directAssignments = await db
-      .select({ testId: testAssignments.testId })
-      .from(testAssignments)
-      .where(eq(testAssignments.userId, userId));
-
-    // Получаем назначения через группы
-    let groupAssignments: { testId: string }[] = [];
-    if (groupIds.length > 0) {
-      groupAssignments = await db
-        .select({ testId: testAssignments.testId })
-        .from(testAssignments)
-        .where(inArray(testAssignments.groupId, groupIds));
-    }
-
-    // Собираем уникальные testId
-    const testIds = [...new Set([
-      ...directAssignments.map(a => a.testId),
-      ...groupAssignments.map(a => a.testId),
-    ])];
-
-    if (testIds.length === 0) {
-      return [];
-    }
-
-    // Получаем тесты
-    return db.select().from(tests).where(inArray(tests.id, testIds));
+  getAssignedTestsForUser(userId: string): Promise<Test[]> {
+    return this.assignmentsRepo.getAssignedTestsForUser(userId);
   }
 
   // ============================================
-  // Password Reset Tokens
+  // Password Reset Tokens (delegated to UsersRepository)
   // ============================================
 
-  async createPasswordResetToken(userId: string, tokenHash: string, requestIp: string, ttlMs?: number): Promise<PasswordResetToken> {
-    const id = randomUUID();
-    const expiresAt = new Date(Date.now() + (ttlMs ?? 30 * 60 * 1000)); // 30 минут по умолчанию
-    const [token] = await db.insert(passwordResetTokens).values({
-      id,
-      userId,
-      tokenHash,
-      expiresAt,
-      requestIp,
-      createdAt: new Date(),
-    }).returning();
-    return token;
+  createPasswordResetToken(userId: string, tokenHash: string, requestIp: string, ttlMs?: number): Promise<PasswordResetToken> {
+    return this.usersRepo.createPasswordResetToken(userId, tokenHash, requestIp, ttlMs);
   }
 
-  async getPasswordResetToken(tokenHash: string): Promise<PasswordResetToken | undefined> {
-    const [token] = await db.select().from(passwordResetTokens)
-      .where(eq(passwordResetTokens.tokenHash, tokenHash));
-    return token || undefined;
+  getPasswordResetToken(tokenHash: string): Promise<PasswordResetToken | undefined> {
+    return this.usersRepo.getPasswordResetToken(tokenHash);
   }
 
-  async markTokenAsUsed(id: string): Promise<void> {
-    await db.update(passwordResetTokens)
-      .set({ usedAt: new Date() })
-      .where(eq(passwordResetTokens.id, id));
+  markTokenAsUsed(id: string): Promise<void> {
+    return this.usersRepo.markTokenAsUsed(id);
   }
 
-  async getRecentTokensCount(userId: string, hours: number): Promise<number> {
-    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
-    const result = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(passwordResetTokens)
-      .where(and(
-        eq(passwordResetTokens.userId, userId),
-        sql`${passwordResetTokens.createdAt} > ${since}`
-      ));
-    return Number(result[0]?.count || 0);
+  getRecentTokensCount(userId: string, hours: number): Promise<number> {
+    return this.usersRepo.getRecentTokensCount(userId, hours);
   }
 
-  // ── Assignment Access Tokens (magic links) ──────────────────────────────────
+  // ── Assignment Access Tokens (magic links) (delegated to AssignmentsRepository) ─
 
-  async createAssignmentAccessToken(data: { assignmentId: string; userId: string; testId: string; tokenHash: string; expiresAt: Date }): Promise<AssignmentAccessToken> {
-    const [token] = await db.insert(assignmentAccessTokens).values({
-      id: randomUUID(),
-      assignmentId: data.assignmentId,
-      userId: data.userId,
-      testId: data.testId,
-      tokenHash: data.tokenHash,
-      expiresAt: data.expiresAt,
-    }).returning();
-    return token;
+  createAssignmentAccessToken(data: { assignmentId: string; userId: string; testId: string; tokenHash: string; expiresAt: Date }): Promise<AssignmentAccessToken> {
+    return this.assignmentsRepo.createAssignmentAccessToken(data);
   }
 
-  async getAssignmentAccessToken(tokenHash: string): Promise<AssignmentAccessToken | undefined> {
-    const [token] = await db.select().from(assignmentAccessTokens)
-      .where(eq(assignmentAccessTokens.tokenHash, tokenHash));
-    return token;
+  getAssignmentAccessToken(tokenHash: string): Promise<AssignmentAccessToken | undefined> {
+    return this.assignmentsRepo.getAssignmentAccessToken(tokenHash);
   }
 
-  async getAssignmentAccessTokensByAssignment(assignmentId: string): Promise<AssignmentAccessToken[]> {
-    return db.select().from(assignmentAccessTokens)
-      .where(eq(assignmentAccessTokens.assignmentId, assignmentId));
+  getAssignmentAccessTokensByAssignment(assignmentId: string): Promise<AssignmentAccessToken[]> {
+    return this.assignmentsRepo.getAssignmentAccessTokensByAssignment(assignmentId);
   }
 
-  async revokeAssignmentAccessToken(id: string): Promise<void> {
-    await db.update(assignmentAccessTokens)
-      .set({ revokedAt: new Date() })
-      .where(eq(assignmentAccessTokens.id, id));
+  revokeAssignmentAccessToken(id: string): Promise<void> {
+    return this.assignmentsRepo.revokeAssignmentAccessToken(id);
   }
 
-  async revokeAssignmentAccessTokensByAssignment(assignmentId: string): Promise<void> {
-    await db.update(assignmentAccessTokens)
-      .set({ revokedAt: new Date() })
-      .where(and(
-        eq(assignmentAccessTokens.assignmentId, assignmentId),
-        sql`${assignmentAccessTokens.revokedAt} IS NULL`,
-      ));
+  revokeAssignmentAccessTokensByAssignment(assignmentId: string): Promise<void> {
+    return this.assignmentsRepo.revokeAssignmentAccessTokensByAssignment(assignmentId);
   }
 
-  async revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId: string, userId: string): Promise<void> {
-    await db.update(assignmentAccessTokens)
-      .set({ revokedAt: new Date() })
-      .where(and(
-        eq(assignmentAccessTokens.assignmentId, assignmentId),
-        eq(assignmentAccessTokens.userId, userId),
-        sql`${assignmentAccessTokens.revokedAt} IS NULL`,
-      ));
+  revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId: string, userId: string): Promise<void> {
+    return this.assignmentsRepo.revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId, userId);
   }
 
-  async getFolders(): Promise<Folder[]> {
-    return db.select().from(folders);
+  // ============================================
+  // Folders: content + test trees (delegated to FoldersRepository)
+  // ============================================
+
+  getFolders(): Promise<Folder[]> {
+    return this.foldersRepo.getFolders();
   }
 
-  async getFolder(id: string): Promise<Folder | undefined> {
-    const [folder] = await db.select().from(folders).where(eq(folders.id, id));
-    return folder || undefined;
+  getFolder(id: string): Promise<Folder | undefined> {
+    return this.foldersRepo.getFolder(id);
   }
 
-  async createFolder(folder: InsertFolder): Promise<Folder> {
-    const id = randomUUID();
-    const [newFolder] = await db.insert(folders).values({
-      id,
-      name: folder.name,
-      parentId: folder.parentId || null,
-      createdBy: folder.createdBy || null,
-    }).returning();
-    return newFolder;
+  createFolder(folder: InsertFolder): Promise<Folder> {
+    return this.foldersRepo.createFolder(folder);
   }
 
-  async updateFolder(id: string, updates: Partial<InsertFolder>): Promise<Folder | undefined> {
-    const [updated] = await db.update(folders).set(updates).where(eq(folders.id, id)).returning();
-    return updated || undefined;
+  updateFolder(id: string, updates: Partial<InsertFolder>): Promise<Folder | undefined> {
+    return this.foldersRepo.updateFolder(id, updates);
   }
 
-  async deleteFolder(id: string, moveTo: string | null = null): Promise<boolean> {
-    // "Folder only" mode: reparent the folder's topics and direct sub-folders to
-    // the chosen destination (`moveTo`, default null = root), then drop the row.
-    // Purely organizational — folders carry no ownership, so no content guard.
-    await db.update(topics).set({ folderId: moveTo }).where(eq(topics.folderId, id));
-    await db.update(folders).set({ parentId: moveTo }).where(eq(folders.parentId, id));
-    const result = await db.delete(folders).where(eq(folders.id, id)).returning();
-    return result.length > 0;
+  deleteFolder(id: string, moveTo: string | null = null): Promise<boolean> {
+    return this.foldersRepo.deleteFolder(id, moveTo);
   }
 
-  async getFolderSubtreeIds(id: string): Promise<string[]> {
-    const all = await db.select({ id: folders.id, parentId: folders.parentId }).from(folders);
-    const childrenByParent = new Map<string | null, string[]>();
-    for (const f of all) {
-      const key = f.parentId ?? null;
-      if (!childrenByParent.has(key)) childrenByParent.set(key, []);
-      childrenByParent.get(key)!.push(f.id);
-    }
-    const out: string[] = [];
-    const queue: string[] = [id];
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      out.push(current);
-      queue.push(...(childrenByParent.get(current) ?? []));
-    }
-    return out;
+  getFolderSubtreeIds(id: string): Promise<string[]> {
+    return this.foldersRepo.getFolderSubtreeIds(id);
   }
 
-  async deleteFoldersBulk(ids: string[]): Promise<number> {
-    if (ids.length === 0) return 0;
-    const result = await db.delete(folders).where(inArray(folders.id, ids)).returning();
-    return result.length;
+  deleteFoldersBulk(ids: string[]): Promise<number> {
+    return this.foldersRepo.deleteFoldersBulk(ids);
   }
 
-  async getTestFolders(): Promise<TestFolder[]> {
-    return db.select().from(testFolders).orderBy(testFolders.name);
+  getTestFolders(): Promise<TestFolder[]> {
+    return this.foldersRepo.getTestFolders();
   }
 
-  async createTestFolder(folder: InsertTestFolder): Promise<TestFolder> {
-    const id = randomUUID();
-    const [newFolder] = await db.insert(testFolders).values({
-      id,
-      name: folder.name,
-      parentId: folder.parentId || null,
-      createdBy: folder.createdBy || null,
-    }).returning();
-    return newFolder;
+  createTestFolder(folder: InsertTestFolder): Promise<TestFolder> {
+    return this.foldersRepo.createTestFolder(folder);
   }
 
-  async updateTestFolder(id: string, updates: Partial<InsertTestFolder>): Promise<TestFolder | undefined> {
-    const [updated] = await db.update(testFolders).set(updates).where(eq(testFolders.id, id)).returning();
-    return updated || undefined;
+  updateTestFolder(id: string, updates: Partial<InsertTestFolder>): Promise<TestFolder | undefined> {
+    return this.foldersRepo.updateTestFolder(id, updates);
   }
 
-  async deleteTestFolder(id: string, moveTo: string | null = null): Promise<boolean> {
-    // Move direct tests to the requested destination (root by default).
-    await db.update(tests).set({ folderId: moveTo }).where(eq(tests.folderId, id));
-    // Reparent child folders to the requested destination.
-    await db.update(testFolders).set({ parentId: moveTo }).where(eq(testFolders.parentId, id));
-    const result = await db.delete(testFolders).where(eq(testFolders.id, id)).returning();
-    return result.length > 0;
+  deleteTestFolder(id: string, moveTo: string | null = null): Promise<boolean> {
+    return this.foldersRepo.deleteTestFolder(id, moveTo);
   }
 
-  /**
-   * Recursively delete a folder, its sub-folders and every test inside them.
-   * Test-side soft cleanup (adaptive levels/links/topic-settings) is the
-   * caller's responsibility (route handler), keeping this method focused on
-   * the folder/test row deletion.
-   */
-  async deleteTestFolderCascade(id: string): Promise<boolean> {
-    // Collect all descendant folder ids breadth-first.
-    const allFolders = await db.select().from(testFolders);
-    const childrenByParent = new Map<string | null, string[]>();
-    for (const f of allFolders) {
-      const key = f.parentId ?? null;
-      if (!childrenByParent.has(key)) childrenByParent.set(key, []);
-      childrenByParent.get(key)!.push(f.id);
-    }
-    const descendantIds: string[] = [];
-    const queue: string[] = [id];
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      descendantIds.push(current);
-      const children = childrenByParent.get(current) ?? [];
-      queue.push(...children);
-    }
-
-    // Delete every test in any of those folders. Adaptive children rows are
-    // assumed cleaned up by the route handler before this call.
-    if (descendantIds.length > 0) {
-      await db.delete(tests).where(inArray(tests.folderId, descendantIds));
-      const result = await db.delete(testFolders).where(inArray(testFolders.id, descendantIds)).returning();
-      return result.length > 0;
-    }
-    return false;
+  deleteTestFolderCascade(id: string): Promise<boolean> {
+    return this.foldersRepo.deleteTestFolderCascade(id);
   }
 
-  async moveTestToFolder(testId: string, folderId: string | null): Promise<boolean> {
-    const result = await db.update(tests).set({ folderId }).where(eq(tests.id, testId)).returning();
-    return result.length > 0;
+  moveTestToFolder(testId: string, folderId: string | null): Promise<boolean> {
+    return this.foldersRepo.moveTestToFolder(testId, folderId);
   }
 
-  async getTopics(): Promise<Topic[]> {
-    return db.select().from(topics);
+  // ============================================
+  // Topics (delegated to TopicsRepository)
+  // ============================================
+
+  getTopics(): Promise<Topic[]> {
+    return this.topicsRepo.getTopics();
   }
 
-  async getTopic(id: string): Promise<Topic | undefined> {
-    const [topic] = await db.select().from(topics).where(eq(topics.id, id));
-    return topic || undefined;
+  getTopic(id: string): Promise<Topic | undefined> {
+    return this.topicsRepo.getTopic(id);
   }
 
-  async createTopic(topic: InsertTopic): Promise<Topic> {
-    const id = randomUUID();
-    const [newTopic] = await db.insert(topics).values({
-      id,
-      name: topic.name,
-      code: topic.code ?? null,
-      description: topic.description || null,
-      feedback: topic.feedback || null,
-      feedbackJson: topic.feedbackJson ?? null,
-      folderId: topic.folderId || null,
-      createdBy: topic.createdBy || null,
-      // PRD-15 block C: a new topic is owned by its creator and private by
-      // default (F-10). Legacy rows keep owner NULL / visibility shared.
-      ownerId: topic.ownerId ?? topic.createdBy ?? null,
-      visibility: topic.visibility ?? "private",
-      // PRD-15 FR-27: keep the normalized name in sync with `name`.
-      nameNormalized: normalizeTopicName(topic.name),
-    }).returning();
-    return newTopic;
+  createTopic(topic: InsertTopic): Promise<Topic> {
+    return this.topicsRepo.createTopic(topic);
   }
 
-  async updateTopic(id: string, updates: Partial<InsertTopic>): Promise<Topic | undefined> {
-    // PRD-15 FR-27: a rename must refresh the normalized name too.
-    const patch =
-      typeof updates.name === "string"
-        ? { ...updates, nameNormalized: normalizeTopicName(updates.name) }
-        : updates;
-    const [updated] = await db.update(topics).set(patch).where(eq(topics.id, id)).returning();
-    return updated || undefined;
+  updateTopic(id: string, updates: Partial<InsertTopic>): Promise<Topic | undefined> {
+    return this.topicsRepo.updateTopic(id, updates);
   }
 
-  /**
-   * Keep `topicByName("…")` formula references consistent after a topic rename
-   * (PRD-2 §4.2). Scoped to LIVE result variables of tests that USE this topic —
-   * a formula may only reference its own test's topics, so the rename resolves
-   * unambiguously. Published snapshots are frozen and intentionally untouched.
-   */
-  async renameTopicInFormulas(topicId: string, oldName: string, newName: string): Promise<void> {
-    if (oldName === newName) return;
-    const sections = await db
-      .select({ testId: testSections.testId })
-      .from(testSections)
-      .where(eq(testSections.topicId, topicId));
-    const testIds = [...new Set(sections.map((s) => s.testId))];
-    if (testIds.length === 0) return;
-    const rvs = await db.select().from(resultVariables).where(inArray(resultVariables.testId, testIds));
-    for (const rv of rvs) {
-      const next = renameTopicByNameInFormula(rv.formula, oldName, newName);
-      if (next !== rv.formula) {
-        await db
-          .update(resultVariables)
-          .set({ formula: next, updatedAt: new Date() })
-          .where(eq(resultVariables.id, rv.id));
-      }
-    }
+  renameTopicInFormulas(topicId: string, oldName: string, newName: string): Promise<void> {
+    return this.topicsRepo.renameTopicInFormulas(topicId, oldName, newName);
   }
 
-  // ─── Topic ownership and access grants (PRD-15 block C) ────────────────────
+  // ─── Topic ownership and access grants (delegated to AccessRepository) ─────
 
-  async setTopicOwner(topicId: string, ownerId: string | null): Promise<void> {
-    await db.update(topics).set({ ownerId }).where(eq(topics.id, topicId));
+  setTopicOwner(topicId: string, ownerId: string | null): Promise<void> {
+    return this.accessRepo.setTopicOwner(topicId, ownerId);
   }
 
-  async setTopicVisibility(topicId: string, visibility: "private" | "shared"): Promise<void> {
-    await db.update(topics).set({ visibility }).where(eq(topics.id, topicId));
+  setTopicVisibility(topicId: string, visibility: "private" | "shared"): Promise<void> {
+    return this.accessRepo.setTopicVisibility(topicId, visibility);
   }
 
-  async getTopicIdsByOwner(ownerId: string): Promise<string[]> {
-    const rows = await db.select({ id: topics.id }).from(topics).where(eq(topics.ownerId, ownerId));
-    return rows.map((r) => r.id);
+  getTopicIdsByOwner(ownerId: string): Promise<string[]> {
+    return this.accessRepo.getTopicIdsByOwner(ownerId);
   }
 
-  async getSharedTopicIds(): Promise<string[]> {
-    const rows = await db.select({ id: topics.id }).from(topics).where(eq(topics.visibility, "shared"));
-    return rows.map((r) => r.id);
+  getSharedTopicIds(): Promise<string[]> {
+    return this.accessRepo.getSharedTopicIds();
   }
 
-  async getTopicGrants(topicId: string): Promise<TopicAccessGrant[]> {
-    return db.select().from(topicAccessGrants).where(eq(topicAccessGrants.topicId, topicId));
+  getTopicGrants(topicId: string): Promise<TopicAccessGrant[]> {
+    return this.accessRepo.getTopicGrants(topicId);
   }
 
-  /** Active grants addressed to a user (TD-01: user-only, no group resolution). */
-  async getActiveTopicGrantsForGrantees(userId: string): Promise<TopicAccessGrant[]> {
-    return db
-      .select()
-      .from(topicAccessGrants)
-      .where(and(
-        eq(topicAccessGrants.state, "active"),
-        eq(topicAccessGrants.granteeId, userId),
-      ));
+  getActiveTopicGrantsForGrantees(userId: string): Promise<TopicAccessGrant[]> {
+    return this.accessRepo.getActiveTopicGrantsForGrantees(userId);
   }
 
-  async getTopicGrantForGrantee(
-    topicId: string,
-    granteeId: string,
-  ): Promise<TopicAccessGrant | undefined> {
-    const [row] = await db
-      .select()
-      .from(topicAccessGrants)
-      .where(and(
-        eq(topicAccessGrants.topicId, topicId),
-        eq(topicAccessGrants.granteeId, granteeId),
-      ));
-    return row || undefined;
+  getTopicGrantForGrantee(topicId: string, granteeId: string): Promise<TopicAccessGrant | undefined> {
+    return this.accessRepo.getTopicGrantForGrantee(topicId, granteeId);
   }
 
-  async upsertTopicGrant(grant: {
+  upsertTopicGrant(grant: {
     topicId: string;
     granteeId: string;
     accessLevel: "use" | "manage";
     grantedBy: string | null;
   }): Promise<TopicAccessGrant> {
-    const [row] = await db
-      .insert(topicAccessGrants)
-      .values({
-        id: randomUUID(),
-        topicId: grant.topicId,
-        granteeId: grant.granteeId,
-        accessLevel: grant.accessLevel,
-        state: "active",
-        grantedBy: grant.grantedBy,
-      })
-      .onConflictDoUpdate({
-        target: [topicAccessGrants.topicId, topicAccessGrants.granteeId],
-        set: { accessLevel: grant.accessLevel, state: "active", grantedBy: grant.grantedBy },
-      })
-      .returning();
-    return row;
+    return this.accessRepo.upsertTopicGrant(grant);
   }
 
-  async setTopicGrantState(id: string, state: "active" | "revoked_in_use"): Promise<void> {
-    await db.update(topicAccessGrants).set({ state }).where(eq(topicAccessGrants.id, id));
+  setTopicGrantState(id: string, state: "active" | "revoked_in_use"): Promise<void> {
+    return this.accessRepo.setTopicGrantState(id, state);
   }
 
-  async removeTopicGrant(id: string): Promise<void> {
-    await db.delete(topicAccessGrants).where(eq(topicAccessGrants.id, id));
+  removeTopicGrant(id: string): Promise<void> {
+    return this.accessRepo.removeTopicGrant(id);
   }
 
-  async deleteTopic(id: string): Promise<boolean> {
-    // Full cascade (PRD-15 FR-07, audit F-8/F-4): questions, dangling test
-    // sections and topic-scoped content pages all go with the topic.
-    // Recommended courses/events live in topics.feedback_json (deleted with the
-    // row). Deletion while published tests depend on it is gated upstream by the
-    // draw-feasibility check (FR-05), so reaching this point means the caller
-    // accepted the consequences.
-    await db.delete(questions).where(eq(questions.topicId, id));
-    await db.delete(testSections).where(eq(testSections.topicId, id));
-    await db.delete(contentPages).where(eq(contentPages.topicId, id));
-    const result = await db.delete(topics).where(eq(topics.id, id)).returning();
-    return result.length > 0;
+  deleteTopic(id: string): Promise<boolean> {
+    return this.topicsRepo.deleteTopic(id);
   }
 
-  async deleteTopicsBulk(ids: string[]): Promise<number> {
-    if (ids.length === 0) return 0;
-    // Same full cascade as deleteTopic (PRD-15 FR-07).
-    await db.delete(questions).where(inArray(questions.topicId, ids));
-    await db.delete(testSections).where(inArray(testSections.topicId, ids));
-    await db.delete(contentPages).where(inArray(contentPages.topicId, ids));
-    const result = await db.delete(topics).where(inArray(topics.id, ids)).returning();
-    return result.length;
+  deleteTopicsBulk(ids: string[]): Promise<number> {
+    return this.topicsRepo.deleteTopicsBulk(ids);
   }
 
-  async moveTopicsToFolder(ids: string[], folderId: string | null): Promise<number> {
-    if (ids.length === 0) return 0;
-    const result = await db.update(topics).set({ folderId }).where(inArray(topics.id, ids)).returning();
-    return result.length;
+  moveTopicsToFolder(ids: string[], folderId: string | null): Promise<number> {
+    return this.topicsRepo.moveTopicsToFolder(ids, folderId);
   }
 
-  // TD-02 r.3: recommended courses/events are now sourced from the topic's rich
-  // feedback (topics.feedback_json: links → courses, events → events), NOT the
-  // legacy topic_courses/topic_events tables (write paths removed in D1/D2). The
-  // accessor names/shapes are kept so delivery callers (attempts, SCORM export,
-  // snapshot capture, GET /api/topics) stay unchanged. The tables are write-dead
-  // and read-dead and will be dropped by a later migration.
-  async getTopicCourses(topicId: string): Promise<TopicCourse[]> {
-    const topic = await this.getTopic(topicId);
-    return topicCoursesFromFeedback(topic);
+  getTopicCourses(topicId: string): Promise<TopicCourse[]> {
+    return this.topicsRepo.getTopicCourses(topicId);
   }
 
-  async getTopicEvents(topicId: string): Promise<TopicEvent[]> {
-    const topic = await this.getTopic(topicId);
-    return topicEventsFromFeedback(topic);
+  getTopicEvents(topicId: string): Promise<TopicEvent[]> {
+    return this.topicsRepo.getTopicEvents(topicId);
   }
 
-  async getQuestions(): Promise<Question[]> {
-    return db.select().from(questions);
+  // ============================================
+  // Questions (delegated to QuestionsRepository)
+  // ============================================
+
+  getQuestions(): Promise<Question[]> {
+    return this.questionsRepo.getQuestions();
   }
 
-  async getQuestionsByTopic(topicId: string): Promise<Question[]> {
-    return db.select().from(questions).where(eq(questions.topicId, topicId));
+  getQuestionsByTopic(topicId: string): Promise<Question[]> {
+    return this.questionsRepo.getQuestionsByTopic(topicId);
   }
 
-  async getContentHashesByTopic(topicId: string): Promise<Set<string>> {
-    const rows = await db
-      .select({ contentHash: questions.contentHash })
-      .from(questions)
-      .where(and(eq(questions.topicId, topicId), sql`${questions.contentHash} IS NOT NULL`));
-    return new Set(rows.map((r) => r.contentHash!));
+  getContentHashesByTopic(topicId: string): Promise<Set<string>> {
+    return this.questionsRepo.getContentHashesByTopic(topicId);
   }
 
-  async getQuestion(id: string): Promise<Question | undefined> {
-    const [question] = await db.select().from(questions).where(eq(questions.id, id));
-    return question || undefined;
+  getQuestion(id: string): Promise<Question | undefined> {
+    return this.questionsRepo.getQuestion(id);
   }
 
-  async getQuestionsByIds(ids: string[]): Promise<Question[]> {
-    if (ids.length === 0) return [];
-    return db.select().from(questions).where(inArray(questions.id, ids));
+  getQuestionsByIds(ids: string[]): Promise<Question[]> {
+    return this.questionsRepo.getQuestionsByIds(ids);
   }
 
-  async createQuestion(question: InsertQuestion): Promise<Question> {
-    const id = randomUUID();
-    const [newQuestion] = await db.insert(questions).values({
-      id,
-      topicId: question.topicId,
-      type: question.type,
-      prompt: question.prompt,
-      dataJson: question.dataJson,
-      correctJson: question.correctJson,
-      difficulty: question.difficulty ?? 50,
-      mediaUrl: question.mediaUrl || null,
-      mediaType: question.mediaType || null,
-      shuffleAnswers: question.shuffleAnswers ?? true,
-      feedback: question.feedback || null,
-      feedbackMode: question.feedbackMode || "general",
-      feedbackCorrect: question.feedbackCorrect || null,
-      feedbackIncorrect: question.feedbackIncorrect || null,
-      contentHash: question.contentHash || null,
-      tags: question.tags ?? [],
-      createdBy: question.createdBy || null,
-    }).returning();
-    return newQuestion;
+  createQuestion(question: InsertQuestion): Promise<Question> {
+    return this.questionsRepo.createQuestion(question);
   }
 
-  async duplicateQuestion(id: string): Promise<Question | undefined> {
-    const original = await this.getQuestion(id);
-    if (!original) return undefined;
-
-    const newId = randomUUID();
-    const [newQuestion] = await db.insert(questions).values({
-      id: newId,
-      topicId: original.topicId,
-      type: original.type,
-      prompt: original.prompt + " (копия)",
-      dataJson: original.dataJson,
-      correctJson: original.correctJson,
-      difficulty: original.difficulty,
-      feedback: original.feedback,
-      feedbackMode: original.feedbackMode,
-      feedbackCorrect: original.feedbackCorrect,
-      feedbackIncorrect: original.feedbackIncorrect,
-      mediaUrl: original.mediaUrl,
-      mediaType: original.mediaType,
-      shuffleAnswers: original.shuffleAnswers,
-      tags: original.tags,
-    }).returning();
-    return newQuestion;
+  duplicateQuestion(id: string): Promise<Question | undefined> {
+    return this.questionsRepo.duplicateQuestion(id);
   }
 
-  async duplicateTopicWithQuestions(id: string): Promise<{ topic: Topic; questions: Question[] } | undefined> {
-    const originalTopic = await this.getTopic(id);
-    if (!originalTopic) return undefined;
-
-    const newTopicId = randomUUID();
-    const [newTopic] = await db.insert(topics).values({
-      id: newTopicId,
-      name: originalTopic.name + " (копия)",
-      description: originalTopic.description,
-      feedback: originalTopic.feedback,
-      // TD-02 r.3: rich feedback (incl. recommended courses/events) travels with
-      // the copy; the legacy topic_courses copy is gone.
-      feedbackJson: originalTopic.feedbackJson,
-    }).returning();
-
-    const originalQuestions = await this.getQuestionsByTopic(id);
-    const newQuestions: Question[] = [];
-
-    for (const q of originalQuestions) {
-      const [newQ] = await db.insert(questions).values({
-        id: randomUUID(),
-        topicId: newTopicId,
-        type: q.type,
-        prompt: q.prompt,
-        dataJson: q.dataJson,
-        correctJson: q.correctJson,
-        difficulty: q.difficulty,
-        mediaUrl: q.mediaUrl,
-        mediaType: q.mediaType,
-        shuffleAnswers: q.shuffleAnswers,
-        feedback: q.feedback,
-        feedbackMode: q.feedbackMode,
-        feedbackCorrect: q.feedbackCorrect,
-        feedbackIncorrect: q.feedbackIncorrect,
-        tags: q.tags,
-      }).returning();
-      newQuestions.push(newQ);
-    }
-
-    return { topic: newTopic, questions: newQuestions };
+  duplicateTopicWithQuestions(
+    id: string,
+    createdBy?: string,
+  ): Promise<{ topic: Topic; questions: Question[] } | undefined> {
+    return this.topicsRepo.duplicateTopicWithQuestions(id, createdBy);
   }
 
-  async getTopicByName(name: string): Promise<Topic | undefined> {
-    const [topic] = await db.select().from(topics).where(eq(topics.name, name));
-    return topic || undefined;
+  updateQuestion(id: string, updates: Partial<InsertQuestion>): Promise<Question | undefined> {
+    return this.questionsRepo.updateQuestion(id, updates);
   }
 
-  async updateQuestion(id: string, updates: Partial<InsertQuestion>): Promise<Question | undefined> {
-    const [updated] = await db.update(questions).set(updates).where(eq(questions.id, id)).returning();
-    return updated || undefined;
+  deleteQuestion(id: string): Promise<boolean> {
+    return this.questionsRepo.deleteQuestion(id);
   }
 
-  async deleteQuestion(id: string): Promise<boolean> {
-    const result = await db.delete(questions).where(eq(questions.id, id)).returning();
-    return result.length > 0;
+  deleteQuestionsBulk(ids: string[]): Promise<number> {
+    return this.questionsRepo.deleteQuestionsBulk(ids);
   }
 
-  async deleteQuestionsBulk(ids: string[]): Promise<number> {
-    if (ids.length === 0) return 0;
-    const result = await db.delete(questions).where(inArray(questions.id, ids)).returning();
-    return result.length;
+  // ============================================
+  // Tests (delegated to TestsRepository)
+  // ============================================
+
+  getTests(): Promise<Test[]> {
+    return this.testsRepo.getTests();
   }
 
-  async getTests(): Promise<Test[]> {
-    const rows = await db.select().from(tests);
-    return rows.map(mapLegacyTest);
+  getTest(id: string): Promise<Test | undefined> {
+    return this.testsRepo.getTest(id);
   }
 
-  async getTest(id: string): Promise<Test | undefined> {
-    const [row] = await db.select().from(tests).where(eq(tests.id, id));
-    return row ? mapLegacyTest(row) : undefined;
+  getMigrationHealth(): Promise<{ legacyStartPageCount: number }> {
+    return this.testsRepo.getMigrationHealth();
   }
 
-  /**
-   * Returns counts of legacy rows not yet covered by migration 003.
-   * `legacyStartPageCount` — tests with non-empty `start_page_content` that have
-   * no intro `content_pages` row (position='before', topic_id IS NULL).
-   */
-  async getMigrationHealth(): Promise<{ legacyStartPageCount: number }> {
-    const [{ count }] = await db.select({ count: sql<number>`count(*)::int` })
-      .from(tests)
-      .where(
-        and(
-          sql`${tests.startPageContent} IS NOT NULL`,
-          sql`length(trim(coalesce(${tests.startPageContent}, ''))) > 0`,
-          sql`NOT EXISTS (
-            SELECT 1 FROM content_pages cp
-            WHERE cp.test_id = ${tests.id}
-              AND cp.type = 'intro'
-              AND cp.topic_id IS NULL
-          )`,
-        ),
-      );
-    return { legacyStartPageCount: count ?? 0 };
+  updateTest(id: string, updates: Partial<InsertTest>): Promise<Test | undefined> {
+    return this.testsRepo.updateTest(id, updates);
   }
 
-  async createTest(test: InsertTest, sections: Omit<InsertTestSection, "testId">[]): Promise<Test> {
-    return db.transaction(async (tx) => {
-      const id = randomUUID();
-      // PRD-7 §4.1: status is the source of truth; sync published from it.
-      const status = test.status ?? (test.published ? "published" : "draft");
-      const [newTest] = await tx.insert(tests).values({
-        id,
-        title: test.title,
-        description: test.description || null,
-        overallPassRuleJson: test.overallPassRuleJson,
-        webhookUrl: test.webhookUrl || null,
-        status,
-        published: status === "published",
-        telemetryEnabled: test.telemetryEnabled ?? false,
-        feedbackJson: test.feedbackJson ?? null,
-        flowPolicyJson: test.flowPolicyJson ?? null,
-        showCorrectAnswers: test.showCorrectAnswers || false,
-        timeLimitMinutes: test.timeLimitMinutes || null,
-        maxAttempts: test.maxAttempts || null,
-        startPageContent: test.startPageContent || null,
-        feedback: test.feedback || null,
-        mode: test.mode || "standard",
-        showDifficultyLevel: test.showDifficultyLevel ?? true,
-      }).returning();
-
-      for (const section of sections) {
-        await tx.insert(testSections).values({
-          id: randomUUID(),
-          testId: id,
-          topicId: section.topicId,
-          drawCount: section.drawCount,
-          drawAll: section.drawAll ?? false,
-          topicPassRuleJson: section.topicPassRuleJson ?? null,
-          required: section.required ?? true,
-          timeLimitMinutes: section.timeLimitMinutes ?? null,
-          feedbackJson: section.feedbackJson ?? null,
-          drawBlueprintJson: section.drawBlueprintJson ?? null,
-          formSetJson: section.formSetJson ?? null,
-          defaultPoints: section.defaultPoints ?? null,
-        });
-      }
-
-      // Safety net (§1.11): if legacy client passes startPageContent, create an
-      // intro content_page so new code can use it even without migration 003.
-      if (test.startPageContent?.trim()) {
-        await tx.insert(contentPages).values({
-          id: randomUUID(),
-          testId: id,
-          topicId: null,
-          position: "before",
-          mode: "html",
-          type: "intro",
-          kind: "intro",
-          templateKey: null,
-          sortOrder: 0,
-          valuesJson: { values: { html: test.startPageContent } },
-          autoAdvance: false,
-          autoAdvanceDelayMs: null,
-        });
-      }
-
-      return newTest;
-    });
+  patchTestStatus(id: string, status: "draft" | "published" | "archived"): Promise<{ id: string; status: string; version: number } | undefined> {
+    return this.testsRepo.patchTestStatus(id, status);
   }
 
-  async updateTest(id: string, updates: Partial<InsertTest>, sections?: Omit<InsertTestSection, "testId">[]): Promise<Test | undefined> {
-    return db.transaction(async (tx) => {
-      // PRD-7 §4.1: keep status and published in sync on every write.
-      const patch: Partial<InsertTest> = { ...updates };
-      if (patch.status !== undefined) {
-        patch.published = patch.status === "published";
-      } else if (patch.published !== undefined) {
-        patch.status = patch.published ? "published" : "draft";
-      }
-
-      const [updated] = await tx.update(tests)
-        .set({ ...patch, version: sql`${tests.version} + 1`, updatedAt: new Date() })
-        .where(eq(tests.id, id))
-        .returning();
-      if (!updated) return undefined;
-
-      if (sections) {
-        await tx.delete(testSections).where(eq(testSections.testId, id));
-        for (const section of sections) {
-          await tx.insert(testSections).values({
-            id: randomUUID(),
-            testId: id,
-            topicId: section.topicId,
-            drawCount: section.drawCount,
-            drawAll: section.drawAll ?? false,
-            topicPassRuleJson: section.topicPassRuleJson ?? null,
-            required: section.required ?? true,
-            timeLimitMinutes: section.timeLimitMinutes ?? null,
-            feedbackJson: section.feedbackJson ?? null,
-            drawBlueprintJson: section.drawBlueprintJson ?? null,
-            defaultPoints: section.defaultPoints ?? null,
-          });
-        }
-      }
-
-      return updated;
-    });
+  deleteTest(id: string): Promise<boolean> {
+    return this.testsRepo.deleteTest(id);
   }
 
-  async patchTestStatus(id: string, status: "draft" | "published" | "archived"): Promise<{ id: string; status: string; version: number } | undefined> {
-    const [row] = await db.update(tests)
-      .set({ status, published: status === "published", updatedAt: new Date() })
-      .where(eq(tests.id, id))
-      .returning({ id: tests.id, status: tests.status, version: tests.version });
-    return row ?? undefined;
+  getTestSections(testId: string): Promise<TestSection[]> {
+    return this.testsRepo.getTestSections(testId);
   }
 
-  async deleteTest(id: string): Promise<boolean> {
-    await db.delete(testSections).where(eq(testSections.testId, id));
-    const result = await db.delete(tests).where(eq(tests.id, id)).returning();
-    return result.length > 0;
+  getTestSectionsByTopic(topicId: string): Promise<TestSection[]> {
+    return this.testsRepo.getTestSectionsByTopic(topicId);
   }
 
-  async getTestSections(testId: string): Promise<TestSection[]> {
-    return db
-      .select()
-      .from(testSections)
-      .where(eq(testSections.testId, testId))
-      .orderBy(testSections.sortOrder);
-  }
-
-  async getTestSectionsByTopic(topicId: string): Promise<TestSection[]> {
-    return db.select().from(testSections).where(eq(testSections.topicId, topicId));
-  }
-
-  async getMeasurementsForQuestions(
+  getMeasurementsForQuestions(
     questionIds: string[],
   ): Promise<Array<{ testId: string; questionId: string }>> {
-    if (questionIds.length === 0) return [];
-    return db
-      .select({ testId: questionMeasurements.testId, questionId: questionMeasurements.questionId })
-      .from(questionMeasurements)
-      .where(inArray(questionMeasurements.questionId, questionIds));
+    return this.scalesVariablesRepo.getMeasurementsForQuestions(questionIds);
   }
 
-  async getTopicPageRefs(topicId: string): Promise<Array<{ testId: string }>> {
-    return db
-      .select({ testId: contentPages.testId })
-      .from(contentPages)
-      .where(eq(contentPages.topicId, topicId));
-  }
-
-  async createAttempt(attempt: InsertAttempt): Promise<Attempt> {
-    const id = randomUUID();
-    const [newAttempt] = await db.insert(attempts).values({
-      id,
-      userId: attempt.userId,
-      testId: attempt.testId,
-      testVersion: attempt.testVersion || 1,
-      snapshotId: attempt.snapshotId ?? null,
-      variantJson: attempt.variantJson,
-      answersJson: attempt.answersJson || null,
-      resultJson: attempt.resultJson || null,
-      startedAt: new Date(attempt.startedAt),
-      finishedAt: attempt.finishedAt ? new Date(attempt.finishedAt) : null,
-    }).returning();
-    return newAttempt;
-  }
-
-  async getAttempt(id: string): Promise<Attempt | undefined> {
-    const [attempt] = await db.select().from(attempts).where(eq(attempts.id, id));
-    return attempt || undefined;
-  }
-
-  async updateAttempt(id: string, updates: Partial<Attempt>): Promise<Attempt | undefined> {
-    const [updated] = await db.update(attempts).set(updates).where(eq(attempts.id, id)).returning();
-    return updated || undefined;
-  }
-
-  async getAttemptsByUser(userId: string): Promise<Attempt[]> {
-    return db.select().from(attempts).where(eq(attempts.userId, userId));
-  }
-
-  async getAttemptsByUserAndTest(userId: string, testId: string): Promise<Attempt[]> {
-    return db.select().from(attempts).where(
-      and(eq(attempts.userId, userId), eq(attempts.testId, testId))
-    );
-  }
-
-  async deleteAttemptsByUserAndTest(userId: string, testId: string): Promise<void> {
-    await db.delete(attempts).where(
-      and(eq(attempts.userId, userId), eq(attempts.testId, testId))
-    );
-  }
-
-  async annulInProgressAttempts(testId: string): Promise<number> {
-    // In-progress = finishedAt IS NULL. These were never completed, so they do
-    // not count toward the retake limit (PRD-6 counts completed only) — deleting
-    // them annuls without consuming an attempt (PRD-15 FR-14).
-    const result = await db
-      .delete(attempts)
-      .where(and(eq(attempts.testId, testId), isNull(attempts.finishedAt)));
-    return result.rowCount ?? 0;
-  }
-
-  async getAllAttempts(): Promise<Attempt[]> {
-    return db.select().from(attempts);
-  }
-
-  // === Adaptive Testing Methods ===
-
-  async getAdaptiveTopicSettings(testId: string, topicId: string): Promise<AdaptiveTopicSettings | undefined> {
-    const [settings] = await db.select().from(adaptiveTopicSettings)
-      .where(and(eq(adaptiveTopicSettings.testId, testId), eq(adaptiveTopicSettings.topicId, topicId)));
-    return settings || undefined;
-  }
-
-  async getAdaptiveTopicSettingsByTest(testId: string): Promise<AdaptiveTopicSettings[]> {
-    return db.select().from(adaptiveTopicSettings).where(eq(adaptiveTopicSettings.testId, testId));
-  }
-
-  async createAdaptiveTopicSettings(settings: InsertAdaptiveTopicSettings): Promise<AdaptiveTopicSettings> {
-    const id = randomUUID();
-    const [newSettings] = await db.insert(adaptiveTopicSettings).values({ id, ...settings }).returning();
-    return newSettings;
-  }
-
-  async updateAdaptiveTopicSettings(id: string, settings: Partial<InsertAdaptiveTopicSettings>): Promise<AdaptiveTopicSettings | undefined> {
-    const [updated] = await db.update(adaptiveTopicSettings).set(settings).where(eq(adaptiveTopicSettings.id, id)).returning();
-    return updated || undefined;
-  }
-
-  async deleteAdaptiveTopicSettingsByTest(testId: string): Promise<void> {
-    await db.delete(adaptiveTopicSettings).where(eq(adaptiveTopicSettings.testId, testId));
-  }
-
-  async getAdaptiveLevels(testId: string, topicId: string): Promise<AdaptiveLevel[]> {
-    return db.select().from(adaptiveLevels)
-      .where(and(eq(adaptiveLevels.testId, testId), eq(adaptiveLevels.topicId, topicId)))
-      .orderBy(adaptiveLevels.levelIndex);
-  }
-
-  async getAdaptiveLevelsByTest(testId: string): Promise<AdaptiveLevel[]> {
-    return db.select().from(adaptiveLevels)
-      .where(eq(adaptiveLevels.testId, testId))
-      .orderBy(adaptiveLevels.levelIndex);
-  }
-
-  async createAdaptiveLevel(level: InsertAdaptiveLevel): Promise<AdaptiveLevel> {
-    const id = randomUUID();
-    const [newLevel] = await db.insert(adaptiveLevels).values({ id, ...level }).returning();
-    return newLevel;
-  }
-
-  async updateAdaptiveLevel(id: string, level: Partial<InsertAdaptiveLevel>): Promise<AdaptiveLevel | undefined> {
-    const [updated] = await db.update(adaptiveLevels).set(level).where(eq(adaptiveLevels.id, id)).returning();
-    return updated || undefined;
-  }
-
-  async deleteAdaptiveLevelsByTest(testId: string): Promise<void> {
-    // First delete all links for levels of this test
-    const levels = await this.getAdaptiveLevelsByTest(testId);
-    for (const level of levels) {
-      await this.deleteAdaptiveLevelLinksByLevel(level.id);
-    }
-    await db.delete(adaptiveLevels).where(eq(adaptiveLevels.testId, testId));
-  }
-
-  async getAdaptiveLevelLinks(levelId: string): Promise<AdaptiveLevelLink[]> {
-    return db.select().from(adaptiveLevelLinks).where(eq(adaptiveLevelLinks.levelId, levelId));
-  }
-
-  async createAdaptiveLevelLink(link: InsertAdaptiveLevelLink): Promise<AdaptiveLevelLink> {
-    const id = randomUUID();
-    const [newLink] = await db.insert(adaptiveLevelLinks).values({ id, ...link }).returning();
-    return newLink;
-  }
-
-  async deleteAdaptiveLevelLinksByLevel(levelId: string): Promise<void> {
-    await db.delete(adaptiveLevelLinks).where(eq(adaptiveLevelLinks.levelId, levelId));
-  }
-
-  async deleteAdaptiveLevelLinksByTest(testId: string): Promise<void> {
-    const levels = await this.getAdaptiveLevelsByTest(testId);
-    for (const level of levels) {
-      await this.deleteAdaptiveLevelLinksByLevel(level.id);
-    }
-  }
-
-  async createScormPackage(pkg: InsertScormPackage & { id: string }): Promise<ScormPackage> {
-    const [created] = await db.insert(scormPackages).values(pkg).returning();
-    return created;
-  }
-
-  async getScormPackage(id: string): Promise<ScormPackage | undefined> {
-    const [pkg] = await db.select().from(scormPackages).where(eq(scormPackages.id, id));
-    return pkg || undefined;
-  }
-
-  async getScormPackagesByTest(testId: string): Promise<ScormPackage[]> {
-    return db.select().from(scormPackages).where(eq(scormPackages.testId, testId));
-  }
-
-  async getScormPackages(): Promise<ScormPackage[]> {
-    return db.select().from(scormPackages);
-  }
-
-  async updateScormPackage(id: string, data: Partial<ScormPackage>): Promise<ScormPackage | undefined> {
-    const [updated] = await db.update(scormPackages)
-      .set(data)
-      .where(eq(scormPackages.id, id))
-      .returning();
-    return updated || undefined;
+  getTopicPageRefs(topicId: string): Promise<Array<{ testId: string }>> {
+    return this.testsRepo.getTopicPageRefs(topicId);
   }
 
   // ============================================
-  // SCORM Attempts
+  // Attempts (delegated to AttemptsRepository)
   // ============================================
 
-  async createScormAttempt(attempt: InsertScormAttempt & { id: string }): Promise<ScormAttempt> {
-    const [created] = await db.insert(scormAttempts).values(attempt).returning();
-    return created;
+  createAttempt(attempt: InsertAttempt): Promise<Attempt> {
+    return this.attemptsRepo.createAttempt(attempt);
   }
 
-  async getScormAttempt(id: string): Promise<ScormAttempt | undefined> {
-    const [attempt] = await db.select().from(scormAttempts).where(eq(scormAttempts.id, id));
-    return attempt || undefined;
+  getAttempt(id: string): Promise<Attempt | undefined> {
+    return this.attemptsRepo.getAttempt(id);
   }
 
-  async getScormAttemptBySession(
-    packageId: string, 
-    sessionId: string, 
-    attemptNumber?: number
+  updateAttempt(id: string, updates: Partial<Attempt>): Promise<Attempt | undefined> {
+    return this.attemptsRepo.updateAttempt(id, updates);
+  }
+
+  getAttemptsByUser(userId: string): Promise<Attempt[]> {
+    return this.attemptsRepo.getAttemptsByUser(userId);
+  }
+
+  getAttemptsByUserAndTest(userId: string, testId: string): Promise<Attempt[]> {
+    return this.attemptsRepo.getAttemptsByUserAndTest(userId, testId);
+  }
+
+  deleteAttemptsByUserAndTest(userId: string, testId: string): Promise<void> {
+    return this.attemptsRepo.deleteAttemptsByUserAndTest(userId, testId);
+  }
+
+  annulInProgressAttempts(testId: string): Promise<number> {
+    return this.attemptsRepo.annulInProgressAttempts(testId);
+  }
+
+  getAllAttempts(): Promise<Attempt[]> {
+    return this.attemptsRepo.getAllAttempts();
+  }
+
+  // ============================================
+  // Adaptive delivery (delegated to AdaptiveRepository)
+  // ============================================
+
+  getAdaptiveTopicSettings(testId: string, topicId: string): Promise<AdaptiveTopicSettings | undefined> {
+    return this.adaptiveRepo.getAdaptiveTopicSettings(testId, topicId);
+  }
+
+  getAdaptiveTopicSettingsByTest(testId: string): Promise<AdaptiveTopicSettings[]> {
+    return this.adaptiveRepo.getAdaptiveTopicSettingsByTest(testId);
+  }
+
+  createAdaptiveTopicSettings(settings: InsertAdaptiveTopicSettings): Promise<AdaptiveTopicSettings> {
+    return this.adaptiveRepo.createAdaptiveTopicSettings(settings);
+  }
+
+  updateAdaptiveTopicSettings(id: string, settings: Partial<InsertAdaptiveTopicSettings>): Promise<AdaptiveTopicSettings | undefined> {
+    return this.adaptiveRepo.updateAdaptiveTopicSettings(id, settings);
+  }
+
+  deleteAdaptiveTopicSettingsByTest(testId: string): Promise<void> {
+    return this.adaptiveRepo.deleteAdaptiveTopicSettingsByTest(testId);
+  }
+
+  getAdaptiveLevels(testId: string, topicId: string): Promise<AdaptiveLevel[]> {
+    return this.adaptiveRepo.getAdaptiveLevels(testId, topicId);
+  }
+
+  getAdaptiveLevelsByTest(testId: string): Promise<AdaptiveLevel[]> {
+    return this.adaptiveRepo.getAdaptiveLevelsByTest(testId);
+  }
+
+  createAdaptiveLevel(level: InsertAdaptiveLevel): Promise<AdaptiveLevel> {
+    return this.adaptiveRepo.createAdaptiveLevel(level);
+  }
+
+  updateAdaptiveLevel(id: string, level: Partial<InsertAdaptiveLevel>): Promise<AdaptiveLevel | undefined> {
+    return this.adaptiveRepo.updateAdaptiveLevel(id, level);
+  }
+
+  deleteAdaptiveLevelsByTest(testId: string): Promise<void> {
+    return this.adaptiveRepo.deleteAdaptiveLevelsByTest(testId);
+  }
+
+  getAdaptiveLevelLinks(levelId: string): Promise<AdaptiveLevelLink[]> {
+    return this.adaptiveRepo.getAdaptiveLevelLinks(levelId);
+  }
+
+  createAdaptiveLevelLink(link: InsertAdaptiveLevelLink): Promise<AdaptiveLevelLink> {
+    return this.adaptiveRepo.createAdaptiveLevelLink(link);
+  }
+
+  deleteAdaptiveLevelLinksByLevel(levelId: string): Promise<void> {
+    return this.adaptiveRepo.deleteAdaptiveLevelLinksByLevel(levelId);
+  }
+
+  deleteAdaptiveLevelLinksByTest(testId: string): Promise<void> {
+    return this.adaptiveRepo.deleteAdaptiveLevelLinksByTest(testId);
+  }
+
+  // ============================================
+  // SCORM telemetry (delegated to ScormRepository)
+  // ============================================
+
+  createScormPackage(pkg: InsertScormPackage & { id: string }): Promise<ScormPackage> {
+    return this.scormRepo.createScormPackage(pkg);
+  }
+
+  getScormPackage(id: string): Promise<ScormPackage | undefined> {
+    return this.scormRepo.getScormPackage(id);
+  }
+
+  getScormPackagesByTest(testId: string): Promise<ScormPackage[]> {
+    return this.scormRepo.getScormPackagesByTest(testId);
+  }
+
+  getScormPackages(): Promise<ScormPackage[]> {
+    return this.scormRepo.getScormPackages();
+  }
+
+  updateScormPackage(id: string, data: Partial<ScormPackage>): Promise<ScormPackage | undefined> {
+    return this.scormRepo.updateScormPackage(id, data);
+  }
+
+  createScormAttempt(attempt: InsertScormAttempt & { id: string }): Promise<ScormAttempt> {
+    return this.scormRepo.createScormAttempt(attempt);
+  }
+
+  getScormAttempt(id: string): Promise<ScormAttempt | undefined> {
+    return this.scormRepo.getScormAttempt(id);
+  }
+
+  getScormAttemptBySession(
+    packageId: string,
+    sessionId: string,
+    attemptNumber?: number,
   ): Promise<ScormAttempt | undefined> {
-    if (attemptNumber !== undefined) {
-      // Ищем конкретную попытку по номеру
-      const [attempt] = await db.select().from(scormAttempts)
-        .where(and(
-          eq(scormAttempts.packageId, packageId),
-          eq(scormAttempts.sessionId, sessionId),
-          eq(scormAttempts.attemptNumber, attemptNumber)
-        ));
-      return attempt || undefined;
-    }
-    
-    // Если attemptNumber не указан - вернуть последнюю попытку
-    const [attempt] = await db.select().from(scormAttempts)
-      .where(and(
-        eq(scormAttempts.packageId, packageId),
-        eq(scormAttempts.sessionId, sessionId)
-      ))
-      .orderBy(desc(scormAttempts.attemptNumber));
-    return attempt || undefined;
+    return this.scormRepo.getScormAttemptBySession(packageId, sessionId, attemptNumber);
   }
 
-  async getNextAttemptNumber(packageId: string, sessionId: string): Promise<number> {
-    const [result] = await db
-      .select({ maxNum: sql<number>`COALESCE(MAX(${scormAttempts.attemptNumber}), 0)` })
-      .from(scormAttempts)
-      .where(and(
-        eq(scormAttempts.packageId, packageId),
-        eq(scormAttempts.sessionId, sessionId)
-      ));
-    return (result?.maxNum || 0) + 1;
+  getNextAttemptNumber(packageId: string, sessionId: string): Promise<number> {
+    return this.scormRepo.getNextAttemptNumber(packageId, sessionId);
   }
 
-  async getScormAttemptsByPackage(packageId: string): Promise<ScormAttempt[]> {
-    return db.select().from(scormAttempts).where(eq(scormAttempts.packageId, packageId));
+  getScormAttemptsByPackage(packageId: string): Promise<ScormAttempt[]> {
+    return this.scormRepo.getScormAttemptsByPackage(packageId);
   }
 
-  async updateScormAttempt(id: string, data: Partial<ScormAttempt>): Promise<ScormAttempt | undefined> {
-    const [updated] = await db.update(scormAttempts)
-      .set(data)
-      .where(eq(scormAttempts.id, id))
-      .returning();
-    return updated || undefined;
+  updateScormAttempt(id: string, data: Partial<ScormAttempt>): Promise<ScormAttempt | undefined> {
+    return this.scormRepo.updateScormAttempt(id, data);
   }
 
-  async getAllScormAttempts(): Promise<ScormAttempt[]> {
-    return db.select().from(scormAttempts);
+  getAllScormAttempts(): Promise<ScormAttempt[]> {
+    return this.scormRepo.getAllScormAttempts();
+  }
+
+  createScormAnswer(answer: InsertScormAnswer & { id: string }): Promise<ScormAnswer> {
+    return this.scormRepo.createScormAnswer(answer);
+  }
+
+  getScormAnswersByAttempt(attemptId: string): Promise<ScormAnswer[]> {
+    return this.scormRepo.getScormAnswersByAttempt(attemptId);
   }
 
   // ============================================
-  // SCORM Answers
+  // Content Pages (PRD-1) (delegated to ContentPagesRepository)
   // ============================================
 
-  async createScormAnswer(answer: InsertScormAnswer & { id: string }): Promise<ScormAnswer> {
-    const [created] = await db.insert(scormAnswers).values(answer).returning();
-    return created;
+  getContentPages(testId: string): Promise<ContentPage[]> {
+    return this.contentPagesRepo.getContentPages(testId);
   }
 
-  async getScormAnswersByAttempt(attemptId: string): Promise<ScormAnswer[]> {
-    return db.select().from(scormAnswers).where(eq(scormAnswers.attemptId, attemptId));
+  getContentPage(id: string): Promise<ContentPage | undefined> {
+    return this.contentPagesRepo.getContentPage(id);
+  }
+
+  createContentPage(page: InsertContentPage): Promise<ContentPage> {
+    return this.contentPagesRepo.createContentPage(page);
+  }
+
+  updateContentPage(id: string, updates: Partial<InsertContentPage>): Promise<ContentPage | undefined> {
+    return this.contentPagesRepo.updateContentPage(id, updates);
+  }
+
+  deleteContentPage(id: string): Promise<boolean> {
+    return this.contentPagesRepo.deleteContentPage(id);
+  }
+
+  reorderContentPages(updates: { id: string; sortOrder: number }[]): Promise<void> {
+    return this.contentPagesRepo.reorderContentPages(updates);
   }
 
   // ============================================
-  // Content Pages (PRD-1)
+  // Scales / result variables / scoring (delegated to ScalesVariablesRepository)
   // ============================================
 
-  async getContentPages(testId: string): Promise<ContentPage[]> {
-    return db.select().from(contentPages)
-      .where(eq(contentPages.testId, testId))
-      .orderBy(contentPages.topicId, contentPages.position, contentPages.sortOrder);
+  getResultVariables(testId: string): Promise<ResultVariable[]> {
+    return this.scalesVariablesRepo.getResultVariables(testId);
   }
 
-  async getContentPage(id: string): Promise<ContentPage | undefined> {
-    const [page] = await db.select().from(contentPages).where(eq(contentPages.id, id));
-    return page;
+  createResultVariable(rv: InsertResultVariable): Promise<ResultVariable> {
+    return this.scalesVariablesRepo.createResultVariable(rv);
   }
 
-  async createContentPage(page: InsertContentPage): Promise<ContentPage> {
-    const [created] = await db.insert(contentPages).values(page).returning();
-    return created;
+  updateResultVariable(id: string, updates: Partial<InsertResultVariable>): Promise<ResultVariable | undefined> {
+    return this.scalesVariablesRepo.updateResultVariable(id, updates);
   }
 
-  async updateContentPage(id: string, updates: Partial<InsertContentPage>): Promise<ContentPage | undefined> {
-    const [updated] = await db.update(contentPages)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(contentPages.id, id))
-      .returning();
-    return updated;
+  deleteResultVariable(id: string): Promise<boolean> {
+    return this.scalesVariablesRepo.deleteResultVariable(id);
   }
 
-  async deleteContentPage(id: string): Promise<boolean> {
-    const result = await db.delete(contentPages).where(eq(contentPages.id, id)).returning();
-    return result.length > 0;
+  reorderResultVariables(updates: { id: string; sortOrder: number }[]): Promise<void> {
+    return this.scalesVariablesRepo.reorderResultVariables(updates);
   }
 
-  async reorderContentPages(updates: { id: string; sortOrder: number }[]): Promise<void> {
-    await db.transaction(async (tx) => {
-      for (const { id, sortOrder } of updates) {
-        await tx.update(contentPages)
-          .set({ sortOrder, updatedAt: new Date() })
-          .where(eq(contentPages.id, id));
-      }
-    });
-  }
-
-  // ─── Result variables (PRD-2) ──────────────────────────────────────────────
-  async getResultVariables(testId: string): Promise<ResultVariable[]> {
-    return db.select().from(resultVariables)
-      .where(eq(resultVariables.testId, testId))
-      .orderBy(resultVariables.sortOrder);
-  }
-
-  async createResultVariable(rv: InsertResultVariable): Promise<ResultVariable> {
-    const [created] = await db.insert(resultVariables).values(rv).returning();
-    return created;
-  }
-
-  async updateResultVariable(id: string, updates: Partial<InsertResultVariable>): Promise<ResultVariable | undefined> {
-    const [updated] = await db.update(resultVariables)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(resultVariables.id, id))
-      .returning();
-    return updated;
-  }
-
-  async deleteResultVariable(id: string): Promise<boolean> {
-    const result = await db.delete(resultVariables).where(eq(resultVariables.id, id)).returning();
-    return result.length > 0;
-  }
-
-  async reorderResultVariables(updates: { id: string; sortOrder: number }[]): Promise<void> {
-    await db.transaction(async (tx) => {
-      for (const { id, sortOrder } of updates) {
-        await tx.update(resultVariables)
-          .set({ sortOrder, updatedAt: new Date() })
-          .where(eq(resultVariables.id, id));
-      }
-    });
-  }
-
-  /**
-   * Validate a result-variable formula against a test's reference sets using the
-   * shared DSL. `topicById` resolves to the test's topics; `var()` may reference
-   * only variables with a smaller `sort_order` (DAG, scoring-model §10.9).
-   * `scaleById`/`countScales` resolve against the test's scales (PRD-5, B2).
-   */
-  async validateResultVariableFormula(
+  validateResultVariableFormula(
     testId: string,
     formula: string,
     type: ValueType,
     opts: { sortOrder?: number; excludeId?: string; extraScaleKeys?: string[]; extraVarNames?: string[] } = {},
   ): Promise<ValidationResult> {
-    const sections = await db.select().from(testSections).where(eq(testSections.testId, testId));
-    const sectionTopicIds = sections.map((s) => s.topicId);
-    // Valid `topicById` args = topic UUIDs plus their custom codes; `topicByName`
-    // args = topic names.
-    const topicRows = sectionTopicIds.length
-      ? await db
-          .select({ id: topics.id, name: topics.name, code: topics.code })
-          .from(topics)
-          .where(inArray(topics.id, sectionTopicIds))
-      : [];
-    const topicIds = new Set<string>(sectionTopicIds);
-    const topicNames = new Set<string>();
-    for (const t of topicRows) {
-      if (t.code) topicIds.add(t.code);
-      if (t.name) topicNames.add(t.name);
-    }
-    const existing = await this.getResultVariables(testId);
-    const prior = existing.filter(
-      (rv) => rv.id !== opts.excludeId && (opts.sortOrder === undefined || rv.sortOrder < opts.sortOrder),
-    );
-    // `extraScaleKeys`/`extraVarNames`: scales/variables defined in the SAME
-    // workbook but not yet persisted (PRD-14 FR-15 dry-run, and a brand-new
-    // target test). Without them, a formula referencing a fresh scale/variable
-    // would falsely fail validation while the plan is computed without writes.
-    const priorVarNames = new Set([...prior.map((rv) => rv.name), ...(opts.extraVarNames ?? [])]);
-    const scaleRows = await db.select().from(scales).where(eq(scales.testId, testId));
-    const scaleKeys = new Set([...scaleRows.map((s) => s.key), ...(opts.extraScaleKeys ?? [])]);
-    return validate(formula, type, { topicIds, topicNames, priorVarNames, scaleKeys });
+    return this.scalesVariablesRepo.validateResultVariableFormula(testId, formula, type, opts);
   }
 
-  // ─── PRD-5: scales ──────────────────────────────────────────────────────────
-
-  async getScales(testId: string): Promise<Scale[]> {
-    return db.select().from(scales)
-      .where(eq(scales.testId, testId))
-      .orderBy(scales.sortOrder);
+  getScales(testId: string): Promise<Scale[]> {
+    return this.scalesVariablesRepo.getScales(testId);
   }
 
-  async createScale(scale: InsertScale): Promise<Scale> {
-    const [created] = await db.insert(scales).values(scale).returning();
-    return created;
+  createScale(scale: InsertScale): Promise<Scale> {
+    return this.scalesVariablesRepo.createScale(scale);
   }
 
-  async updateScale(id: string, updates: Partial<InsertScale>): Promise<Scale | undefined> {
-    const [updated] = await db.update(scales)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(scales.id, id))
-      .returning();
-    return updated;
+  updateScale(id: string, updates: Partial<InsertScale>): Promise<Scale | undefined> {
+    return this.scalesVariablesRepo.updateScale(id, updates);
   }
 
-  async deleteScale(id: string): Promise<boolean> {
-    const result = await db.delete(scales).where(eq(scales.id, id)).returning();
-    return result.length > 0;
+  deleteScale(id: string): Promise<boolean> {
+    return this.scalesVariablesRepo.deleteScale(id);
   }
 
-  async reorderScales(updates: { id: string; sortOrder: number }[]): Promise<void> {
-    await db.transaction(async (tx) => {
-      for (const { id, sortOrder } of updates) {
-        await tx.update(scales)
-          .set({ sortOrder, updatedAt: new Date() })
-          .where(eq(scales.id, id));
-      }
-    });
+  reorderScales(updates: { id: string; sortOrder: number }[]): Promise<void> {
+    return this.scalesVariablesRepo.reorderScales(updates);
   }
 
-  // ─── PRD-5: per-question measurements ─────────────────────────────────────────
-
-  async getQuestionMeasurements(testId: string): Promise<QuestionMeasurement[]> {
-    return db.select().from(questionMeasurements)
-      .where(eq(questionMeasurements.testId, testId))
-      .orderBy(questionMeasurements.sortOrder);
+  getQuestionMeasurements(testId: string): Promise<QuestionMeasurement[]> {
+    return this.scalesVariablesRepo.getQuestionMeasurements(testId);
   }
 
-  async getQuestionMeasurementsByQuestion(
-    testId: string,
-    questionId: string,
-  ): Promise<QuestionMeasurement[]> {
-    return db.select().from(questionMeasurements)
-      .where(and(
-        eq(questionMeasurements.testId, testId),
-        eq(questionMeasurements.questionId, questionId),
-      ))
-      .orderBy(questionMeasurements.sortOrder);
+  getQuestionMeasurementsByQuestion(testId: string, questionId: string): Promise<QuestionMeasurement[]> {
+    return this.scalesVariablesRepo.getQuestionMeasurementsByQuestion(testId, questionId);
   }
 
-  /**
-   * Replace all measurements of one question in one test with `rows`
-   * (delete-then-insert in a transaction). Returns the persisted rows. An empty
-   * `rows` clears the question's contributions.
-   */
-  async upsertQuestionMeasurements(
+  upsertQuestionMeasurements(
     testId: string,
     questionId: string,
     rows: InsertQuestionMeasurement[],
   ): Promise<QuestionMeasurement[]> {
-    return db.transaction(async (tx) => {
-      await tx.delete(questionMeasurements).where(and(
-        eq(questionMeasurements.testId, testId),
-        eq(questionMeasurements.questionId, questionId),
-      ));
-      if (rows.length === 0) return [];
-      return tx.insert(questionMeasurements)
-        .values(rows.map((r) => ({ ...r, testId, questionId })))
-        .returning();
-    });
+    return this.scalesVariablesRepo.upsertQuestionMeasurements(testId, questionId, rows);
   }
 
-  // ─── PRD-15 block D: per-(test, question) scoring overrides (FR-30) ──────────
-
-  async getTestQuestionScoring(testId: string): Promise<TestQuestionScoring[]> {
-    return db.select().from(testQuestionScoring)
-      .where(eq(testQuestionScoring.testId, testId));
+  getTestQuestionScoring(testId: string): Promise<TestQuestionScoring[]> {
+    return this.scalesVariablesRepo.getTestQuestionScoring(testId);
   }
 
-  /**
-   * Insert or update the single override row of one question in one test.
-   * All value columns are replaced as a unit — a null/undefined value clears
-   * that link of the chain.
-   */
-  async upsertTestQuestionScoring(
+  upsertTestQuestionScoring(
     testId: string,
     questionId: string,
     values: Omit<InsertTestQuestionScoring, "testId" | "questionId">,
   ): Promise<TestQuestionScoring> {
-    const patch = {
-      points: values.points ?? null,
-      scoringJson: values.scoringJson ?? null,
-      difficulty: values.difficulty ?? null,
-      pinnedContentHash: values.pinnedContentHash ?? null,
-    };
-    const [row] = await db.insert(testQuestionScoring)
-      .values({ testId, questionId, ...patch })
-      .onConflictDoUpdate({
-        target: [testQuestionScoring.testId, testQuestionScoring.questionId],
-        set: { ...patch, updatedAt: new Date() },
-      })
-      .returning();
-    return row;
+    return this.scalesVariablesRepo.upsertTestQuestionScoring(testId, questionId, values);
   }
 
-  async deleteTestQuestionScoring(testId: string, questionId: string): Promise<boolean> {
-    const result = await db.delete(testQuestionScoring)
-      .where(and(
-        eq(testQuestionScoring.testId, testId),
-        eq(testQuestionScoring.questionId, questionId),
-      ))
-      .returning();
-    return result.length > 0;
+  deleteTestQuestionScoring(testId: string, questionId: string): Promise<boolean> {
+    return this.scalesVariablesRepo.deleteTestQuestionScoring(testId, questionId);
   }
 
-  /**
-   * Replace ALL scoring overrides of a test with `rows` (delete-then-insert in
-   * a transaction) — the workbook «Оценка» sheet is authoritative for the
-   * test's override set (PRD-14/PRD-15 FR-36 round-trip). An empty `rows`
-   * clears every override.
-   */
-  async replaceTestQuestionScoring(
+  replaceTestQuestionScoring(
     testId: string,
     rows: Omit<InsertTestQuestionScoring, "testId">[],
   ): Promise<TestQuestionScoring[]> {
-    return db.transaction(async (tx) => {
-      await tx.delete(testQuestionScoring).where(eq(testQuestionScoring.testId, testId));
-      if (rows.length === 0) return [];
-      return tx.insert(testQuestionScoring)
-        .values(rows.map((r) => ({ ...r, testId })))
-        .returning();
-    });
+    return this.scalesVariablesRepo.replaceTestQuestionScoring(testId, rows);
   }
 }
 
 export const storage = new DatabaseStorage();
-
-export async function seedDatabase() {
-  const existingUsers = await db.select().from(users);
-  if (existingUsers.length > 0) return;
-
-  const adminPassword = await bcrypt.hash("admin123", 10);
-  const learnerPassword = await bcrypt.hash("learner123", 10);
-  const adminEmail = "admin@test.com";
-  const learnerEmail = "learner@test.com";
-
-  const adminId = randomUUID();
-  const learnerId = randomUUID();
-
-  await db.insert(users).values([
-    {
-      id: adminId,
-      email: await encryptEmail(adminEmail),
-      emailHash: hashEmail(adminEmail),
-      passwordHash: adminPassword,
-      name: "Администратор",
-      status: "active",
-      mustChangePassword: false,
-      gdprConsent: true,
-      gdprConsentAt: new Date(),
-      createdAt: new Date(),
-    },
-    {
-      id: learnerId,
-      email: await encryptEmail(learnerEmail),
-      emailHash: hashEmail(learnerEmail),
-      passwordHash: learnerPassword,
-      name: "Тестовый ученик",
-      status: "active",
-      mustChangePassword: false,
-      gdprConsent: true,
-      gdprConsentAt: new Date(),
-      createdAt: new Date(),
-    },
-  ]);
-
-  // PRD-13: roles live in `user_roles` (the legacy `users.role` column was dropped).
-  await db.insert(userRoles).values([
-    { id: randomUUID(), userId: adminId, role: "administrator" },
-    { id: randomUUID(), userId: learnerId, role: "learner" },
-  ]);
-
-  const iptvTopicId = randomUUID();
-  const wifiTopicId = randomUUID();
-
-  // TD-02 r.3: recommended courses live in the topic's rich feedback, not the
-  // legacy topic_courses table (which delivery no longer reads).
-  await db.insert(topics).values([
-    {
-      id: iptvTopicId, name: "IPTV",
-      description: "Internet Protocol Television fundamentals and configuration",
-      feedbackJson: {
-        format: "plain", text: "", assets: [], events: [],
-        links: [{ title: "IPTV Fundamentals Course", url: "https://example.com/iptv-course" }],
-      },
-    },
-    {
-      id: wifiTopicId, name: "WiFi",
-      description: "Wireless networking standards and troubleshooting",
-      feedbackJson: {
-        format: "plain", text: "", assets: [], events: [],
-        links: [{ title: "WiFi Troubleshooting Guide", url: "https://example.com/wifi-course" }],
-      },
-    },
-  ]);
-
-  // T-40: scoring is a property of the test — seed questions carry content only.
-  const iptvQuestions = [
-    { topicId: iptvTopicId, type: "single" as const, prompt: "What does IPTV stand for?", dataJson: { options: ["Internet Protocol Television", "Internal Protocol TV", "Integrated Platform TV", "Internet Provider Television"] }, correctJson: { correctIndex: 0 } },
-    { topicId: iptvTopicId, type: "single" as const, prompt: "Which protocol is commonly used for IPTV streaming?", dataJson: { options: ["HTTP", "RTSP", "FTP", "SMTP"] }, correctJson: { correctIndex: 1 } },
-    { topicId: iptvTopicId, type: "multiple" as const, prompt: "Select all valid IPTV delivery methods:", dataJson: { options: ["Unicast", "Multicast", "Broadcast", "Anycast"] }, correctJson: { correctIndices: [0, 1] } },
-    { topicId: iptvTopicId, type: "matching" as const, prompt: "Match the IPTV term with its definition:", dataJson: { left: ["STB", "EPG", "VOD"], right: ["Set-Top Box", "Electronic Program Guide", "Video on Demand"] }, correctJson: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }, { left: 2, right: 2 }] } },
-    { topicId: iptvTopicId, type: "ranking" as const, prompt: "Rank these IPTV setup steps in correct order:", dataJson: { items: ["Connect STB to network", "Configure network settings", "Authenticate with provider", "Start watching channels"] }, correctJson: { correctOrder: [0, 1, 2, 3] } },
-    { topicId: iptvTopicId, type: "single" as const, prompt: "What is the typical bandwidth required for HD IPTV?", dataJson: { options: ["1 Mbps", "5 Mbps", "8-10 Mbps", "50 Mbps"] }, correctJson: { correctIndex: 2 } },
-  ];
-
-  const wifiQuestions = [
-    { topicId: wifiTopicId, type: "single" as const, prompt: "What does WiFi stand for?", dataJson: { options: ["Wireless Fidelity", "Wired Fiber", "Wireless Fiber", "Wide Fidelity"] }, correctJson: { correctIndex: 0 } },
-    { topicId: wifiTopicId, type: "single" as const, prompt: "Which frequency band provides faster speeds but shorter range?", dataJson: { options: ["2.4 GHz", "5 GHz", "900 MHz", "60 GHz"] }, correctJson: { correctIndex: 1 } },
-    { topicId: wifiTopicId, type: "multiple" as const, prompt: "Select all valid WiFi security protocols:", dataJson: { options: ["WPA2", "WPA3", "WEP", "HTTP"] }, correctJson: { correctIndices: [0, 1, 2] } },
-    { topicId: wifiTopicId, type: "matching" as const, prompt: "Match the WiFi standard with its maximum theoretical speed:", dataJson: { left: ["802.11n", "802.11ac", "802.11ax"], right: ["600 Mbps", "6.9 Gbps", "9.6 Gbps"] }, correctJson: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }, { left: 2, right: 2 }] } },
-    { topicId: wifiTopicId, type: "ranking" as const, prompt: "Rank WiFi security protocols from least to most secure:", dataJson: { items: ["WEP", "WPA", "WPA2", "WPA3"] }, correctJson: { correctOrder: [0, 1, 2, 3] } },
-    { topicId: wifiTopicId, type: "single" as const, prompt: "What is the main advantage of mesh WiFi systems?", dataJson: { options: ["Lower cost", "Better coverage", "Higher speeds", "Less power consumption"] }, correctJson: { correctIndex: 1 } },
-  ];
-
-  for (const q of [...iptvQuestions, ...wifiQuestions]) {
-    await db.insert(questions).values({ id: randomUUID(), ...q });
-  }
-}

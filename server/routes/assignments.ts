@@ -1,14 +1,13 @@
 import { Router } from "express";
 import { createHash, randomBytes } from "crypto";
 import { logger } from "../logger";
+import { appBaseUrl } from "../config";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { requireTestScope, requireAssignmentScope } from "../middleware/test-scope";
 import { sendAssignmentEmail } from "../email";
 
 const router = Router();
-
-const APP_URL = (process.env.APP_URL || process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`).replace(/\/$/, '');
 
 // ─── Вычислить срок жизни magic link ─────────────────────────────────────────
 function resolveTokenExpiry(linkExpiresAt?: Date | null, dueDate?: Date | null): Date {
@@ -77,7 +76,7 @@ async function notifyUser(opts: {
     expiresAt: opts.expiresAt,
   });
 
-  const magicLink = `${APP_URL}/access/${rawToken}`;
+  const magicLink = `${appBaseUrl()}/access/${rawToken}`;
   logger.info(`Assignment link generated for user ${opts.userId}, test "${opts.testTitle}", expires ${opts.expiresAt.toISOString()}`, "assignments");
 
   await sendAssignmentEmail({
@@ -348,7 +347,7 @@ router.post("/assignments/:id/resend", requirePermission("assignments.manage"), 
       return res.status(400).json({ error: "Cannot decrypt user email" });
     }
 
-    const magicLink = `${APP_URL}/access/${rawToken}`;
+    const magicLink = `${appBaseUrl()}/access/${rawToken}`;
     await sendAssignmentEmail({
       to: email,
       userName: user.name || undefined,
@@ -437,7 +436,7 @@ router.post("/assignments/:id/resend-group", requirePermission("assignments.mana
         }
       } catch { continue; }
 
-      const magicLink = `${APP_URL}/access/${rawToken}`;
+      const magicLink = `${appBaseUrl()}/access/${rawToken}`;
       await sendAssignmentEmail({
         to: email,
         userName: u.name || undefined,
@@ -484,7 +483,7 @@ router.post("/assignments/:id/resend-user/:userId", requirePermission("assignmen
       if (user.email && !user.email.includes("@")) email = await decryptEmail(user.email);
     } catch { return res.status(400).json({ error: "Cannot decrypt user email" }); }
 
-    const magicLink = `${APP_URL}/access/${rawToken}`;
+    const magicLink = `${appBaseUrl()}/access/${rawToken}`;
     await sendAssignmentEmail({
       to: email,
       userName: user.name || undefined,

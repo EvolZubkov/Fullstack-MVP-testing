@@ -53,8 +53,22 @@
   }
 
   // ─── DSL renderer ────────────────────────────────────────────────────────────
-  /** Renders the path-only DSL (`{{ path }}`, `{{#if}}`, `{{#unless}}`) in an HTML string. */
+  /**
+   * Renders the path-only DSL in an HTML string. Delegates to the REAL shared
+   * renderer (`shared/template/dsl.ts`, bundled by the generator as `window.TBDsl`)
+   * so nested `{{#if}}`/`{{#unless}}`/`{{#each}}` and in-loop blocks behave exactly
+   * as they do on the SCORM/web hosts — no second, drifting DSL. The legacy
+   * non-recursive regex below is a best-effort fallback only if the bundle is
+   * absent or a template trips the strict parser.
+   */
   function renderDsl(html, data) {
+    if (root.TBDsl && typeof root.TBDsl.renderTemplate === "function") {
+      try {
+        return root.TBDsl.renderTemplate(html, data);
+      } catch (e) {
+        if (root.console) root.console.warn("[preview] real DSL failed, falling back:", e && e.message);
+      }
+    }
     // {{#unless path}}...{{/unless}}
     html = html.replace(/\{\{#unless ([^}]+)\}\}([\s\S]*?)\{\{\/unless\}\}/g, function (_, p, inner) {
       var v = resolvePath(data, p.trim());
@@ -165,7 +179,24 @@
   // ─── TEST_DATA for contentPage.js / renderers.js ────────────────────────────
   function buildTestData() {
     var runtime = demoData.runtime || {};
+    var course = demoData.course || {};
+    var sections = (course.topics || []).map(function (t) {
+      return {
+        topicId: t.id,
+        topicName: t.title || "",
+        topicDescription: t.description || null,
+        required: t.required !== false,
+        timeLimitMinutes: t.timeLimitMinutes || null,
+        drawCount: t.questionCount || null,
+        image: t.image || null
+      };
+    });
     return Object.assign({}, runtime, {
+      title: course.title || "",
+      sections: sections,
+      contentPages: course.contentPages || [],
+      deadline: course.deadline || null,
+      flowPolicy: { mode: "router_by_topics" },
       designSettings: {
         templateId: manifest.id,
         params: demoData.params || paramDefaults()
@@ -211,6 +242,10 @@
       renderQuestionRoute(routeDef, route);
     } else if (route === "results") {
       renderLayoutPage("results", buildDslData());
+    } else if (route === "review") {
+      renderReviewRoute();
+    } else if (route === "section-results") {
+      renderSectionResultsRoute();
     } else if (route === "system.blocked" || route === "system.locked" ||
                route.indexOf("system.") === 0) {
       var systemData = Object.assign({}, buildDslData(), {
@@ -246,6 +281,15 @@
     }
     if (!page) return;
 
+    // Router page → dedicated renderer (topic cards + progress + «Завершить»).
+    var _ct = null;
+    (manifest.contentTemplates || []).forEach(function (c) { if (c.key === page.templateKey) _ct = c; });
+    if (((_ct && _ct.kind === "router") || page.kind === "router") &&
+        root.RouterFlow && typeof root.RouterFlow.renderRouterPage === "function") {
+      root.RouterFlow.renderRouterPage(page);
+      return;
+    }
+
     // If the template has a layout with data-slot="content-body" (rtk-style), render it directly.
     // Otherwise fall back to the PRD1 renderContentPage skeleton.
     var layoutHtml = layouts[route] || "";
@@ -270,6 +314,53 @@
     if (typeof renderContentPage === "function") {
       renderContentPage(page, manifest.contentTemplates || []);
     }
+  }
+
+  // ─── Review / section-results rendering ─────────────────────────────────────
+  // These two routes have no pageId; they bind top-level `review.*` /
+  // `sectionResult.*` / `state.questionsProgress` namespaces that buildDslData does
+  // NOT surface. Build the context via the SAME shared builders production uses
+  // (window.TBTemplate.buildReviewContext / buildSectionResultContext) so the
+  // offline preview mirrors the learner screen instead of rendering blank.
+  function renderReviewRoute() {
+    var TBt = (typeof window !== "undefined") ? window.TBTemplate : null;
+    var base = buildDslData();
+    var questions = ((demoData.course || {}).questions || []).map(function (q) {
+      return { id: q.id, topicId: q.topicId, prompt: q.prompt };
+    });
+    // Demo statuses: leave every 3rd question skipped so the обзор shows the
+    // «вернуться к пропущенным» list + pill map populated.
+    var statuses = {};
+    questions.forEach(function (q, i) { statuses[q.id] = (i % 3 === 2) ? "skipped" : "answered"; });
+    var built = (TBt && TBt.buildReviewContext) ? TBt.buildReviewContext({
+      questions: questions, statuses: statuses, commitScope: "test", isTest: true,
+      scopeLabel: "Вопросы теста", finishLabel: "Завершить тест"
+    }) : null;
+    var data = Object.assign({}, base, {
+      review: built ? built.review : {},
+      state: Object.assign({}, base.state, { questionsProgress: built ? built.questionsProgress : null })
+    });
+    renderLayoutPage("review", data);
+  }
+
+  function renderSectionResultsRoute() {
+    var TBt = (typeof window !== "undefined") ? window.TBTemplate : null;
+    var base = buildDslData();
+    var topic = ((demoData.course || {}).topics || [])[0] || {};
+    var sr = (demoData.runtime || {}).sectionResult || {};
+    var built = (TBt && TBt.buildSectionResultContext) ? TBt.buildSectionResultContext({
+      topicName: topic.title || "Раздел",
+      correct: sr.score != null ? sr.score : 7,
+      total: sr.maxScore != null ? sr.maxScore : 8,
+      percent: sr.scorePercent != null ? sr.scorePercent : 88,
+      passed: sr.status ? sr.status === "passed" : true,
+      continueLabel: "Продолжить"
+    }) : null;
+    var data = Object.assign({}, base, {
+      course: built ? built.course : (demoData.course || {}),
+      sectionResult: built ? built.sectionResult : {}
+    });
+    renderLayoutPage("section-results", data);
   }
 
   // ─── Question rendering ───────────────────────────────────────────────────────
@@ -310,14 +401,32 @@
         if (topics[t].id === q.topicId) { topicTitle = topics[t].title || ""; break; }
       }
     }
-    var counterLabel = q
-      ? ("Вопрос " + (qIndex + 1) + " из " + questions.length + (topicTitle ? " | " + topicTitle : ""))
-      : "";
+    var counterLabel = q ? ("Вопрос " + (qIndex + 1) + " из " + questions.length) : "";
 
     var customState = Object.assign({}, dslData.state, {
       questionCounterLabel: counterLabel,
+      sectionName: topicTitle,
       currentTopicTitle: topicTitle
     });
+    // PRD-19 Block C: build the progress-pills indicator so the question layout's pill
+    // map renders in the preview (skip/return progress), matching production.
+    var TBt = (typeof window !== "undefined") ? window.TBTemplate : null;
+    if (TBt && typeof TBt.buildQuestionProgress === "function" && q) {
+      var qList = questions.map(function (qq) { return { id: qq.id, topicId: qq.topicId }; });
+      var demoStatuses = {};
+      for (var s = 0; s < questions.length; s++) {
+        if (s < qIndex) demoStatuses[questions[s].id] = (s === qIndex - 1) ? "skipped" : "answered";
+      }
+      customState.questionsProgress = TBt.buildQuestionProgress({
+        questions: qList,
+        statuses: demoStatuses,
+        currentIndex: qIndex,
+        commitScope: "test",
+        sectionCommitted: {},
+        allowReturn: true,
+        scopeLabel: "Вопросы теста"
+      });
+    }
     var qDslData = Object.assign({}, dslData, {
       state: customState,
       page: {
@@ -336,6 +445,23 @@
     if (interSlot  && q) interSlot.innerHTML  = buildInteractionHtml(q);
 
     fillDataPaths(app, qDslData);
+
+    // Reveal the timer with a demo value (production reveals it from remainingSeconds).
+    var _timer = app.querySelector("#timer-display");
+    if (_timer) { _timer.classList.remove("q-timer--hidden"); _timer.textContent = "44:51"; }
+
+    // Stepped text-fit (mirrors the runtime): shrink the prompt/options via --q-fit to
+    // fit the fixed stage before the card's overflow scroll kicks in. Lower bound 0.7.
+    var _card = app.querySelector(".question-card");
+    if (_card && _card.style) {
+      _card.classList.remove("question-card--scroll");
+      var _steps = [1, 0.94, 0.88, 0.82, 0.76, 0.7], _fits = false;
+      for (var _i = 0; _i < _steps.length; _i++) {
+        _card.style.setProperty("--q-fit", String(_steps[_i]));
+        if (_card.scrollHeight <= _card.clientHeight + 1) { _fits = true; break; }
+      }
+      if (!_fits) _card.classList.add("question-card--scroll");
+    }
   }
 
   // ─── Interaction HTML builders ────────────────────────────────────────────────
@@ -921,13 +1047,37 @@
     var vars = tb._internal.buildCssVarDeclarations(params, manifest.params || []);
     var stage = getStage();
     if (!stage) return;
+    // Apply tokens as the RAW HSL components buildCssVarDeclarations returns (matching
+    // the real host's buildTemplateCssVars). The template CSS composes them via
+    // hsl(var(--token)); wrapping the triple in hsl() here would double-wrap it
+    // (hsl(hsl(...)) → invalid), silently killing every hsl(var(--token)) rule.
     Object.keys(vars).forEach(function (name) {
-      var value = String(vars[name]);
-      // Wrap bare HSL triples in hsl()
-      if (/^\d/.test(value.trim()) || /^[0-9]/.test(value)) {
-        value = "hsl(" + value + ")";
-      }
-      stage.style.setProperty(name, value);
+      stage.style.setProperty(name, String(vars[name]));
+    });
+  }
+
+  // ─── Theme toggle (preview chrome) ──────────────────────────────────────────
+  /**
+   * Wires the Авто/Светлая/Тёмная segmented control in the preview head: sets
+   * data-theme on the document root (Авто removes it → the template follows the
+   * host prefers-color-scheme). Only the previewed template (theme.css) reacts;
+   * the preview chrome stays neutral.
+   */
+  function wireThemeToggle() {
+    var group = document.getElementById("pv-theme");
+    if (!group) return;
+    function apply(mode) {
+      var el = document.documentElement;
+      if (mode === "light" || mode === "dark") el.setAttribute("data-theme", mode);
+      else el.removeAttribute("data-theme");
+      var btns = group.querySelectorAll(".pv-theme-btn");
+      Array.prototype.forEach.call(btns, function (b) {
+        b.classList.toggle("pv-theme-active", b.getAttribute("data-theme-set") === mode);
+      });
+    }
+    group.addEventListener("click", function (e) {
+      var b = e.target.closest ? e.target.closest(".pv-theme-btn") : null;
+      if (b) apply(b.getAttribute("data-theme-set"));
     });
   }
 
@@ -937,6 +1087,23 @@
     root.TEST_DATA = buildTestData();
     root.advancePageSequence = function () {};
 
+    // Expose a minimal runtime state so the REAL content renderers
+    // (renderContentPage / renderGalleryPage / renderSectionIntro) resolve template
+    // layouts by key — mirrors production (templateLoader sets these). Without it,
+    // content pages fall back to the bare skeleton, which no longer matches the
+    // layout-driven runtime.
+    root.state = root.state || {};
+    root.state.templateLayouts = layouts;
+    root.state.currentPageIndex = 0;
+    root.state.templateManifest = manifest;
+    // Router demo state: per-topic status for the router card map.
+    root.state.routerTopicStates = {};
+    ((demoData.course || {}).topics || []).forEach(function (t) {
+      root.state.routerTopicStates[t.id] =
+        t.status === "completed" ? "completed" :
+        (t.status === "inProgress" ? "inProgress" : "notStarted");
+    });
+
     // Init TestBuilder CSS vars
     if (root.TestBuilder && root.TestBuilder._init) {
       root.TestBuilder._init(manifest.params || []);
@@ -945,6 +1112,7 @@
     buildShell();
     applyTemplateVars();
     buildNav();
+    wireThemeToggle();
 
     // Bind interaction handlers once at startup (global document listeners)
     bindChoiceClicksOnce();

@@ -1,23 +1,54 @@
 # PRD-9: Доработка @vvlad1973/crypto и отказ от bcryptjs
 
-**Версия:** 1.1
-**Статус:** Утверждено 2026-06-02 — post-MVP, tech debt (ROADMAP §0.2); шаг 8
-**Дата актуализации:** 2026-06-02 (закрыты вопросы §7, добавлен ADR; статус -> «Утверждено»)
+**Версия:** 1.2
+**Статус:** ЭТАПЫ 1-2 РЕАЛИЗОВАНЫ 2026-07-05 (Этап 3 — удаление `bcryptjs` — по дренажу
+метрики); post-MVP, tech debt (ROADMAP §0.2); шаг 8
+**Дата актуализации:** 2026-07-05 (реализованы Этапы 1-2: scrypt-шов + ленивый rehash)
 **Связанные документы:** [Service Architecture](../../architecture/service-architecture.md),
 [ROADMAP](../../ROADMAP.md)
 **Зависимости:** npm-пакет `@vvlad1973/crypto` (внешний, владелец — тот же автор),
 `server/storage.ts`, `server/utils/crypto.ts`, `script/create-admin.ts`
 
-## Статус реализации (на 2026-05-26)
+## Статус реализации (на 2026-07-05)
 
-**Не начато**. Tech debt, добавлен в [ROADMAP](../../ROADMAP.md) шагом 8. БД-миграция не
-требуется (колонка `passwordHash` имеет тип `text`). Legacy bcrypt-хеши поддерживаются
-через lazy rehash при логине. Не блокирует другие PRD; может выполняться параллельно
-с PRD-3 после стабилизации PRD-7 S9-S11.
+**ЭТАПЫ 1-2 РЕАЛИЗОВАНЫ** (коммит `feat(auth): PRD-9 — хеширование паролей scrypt`).
 
-**Текущие файлы с `bcryptjs`**: `server/storage.ts` (`createUser`, `validatePassword`,
-`updateUserPassword`, demo seeder), `script/create-admin.ts`, тесты `tests/storage*.test.ts`,
-`script/build.ts` (forceExternal).
+- **Этап 1 (шов):** единый шов хеширования пароля в `server/utils/crypto.ts` —
+  `hashPassword` / `verifyPassword` / `isLegacyBcryptHash` / `dummyVerifyPassword`. Все точки
+  (`createUser`, `validatePassword`, `updateUserPassword`, `script/create-admin.ts`,
+  `script/seed-db.ts`) проведены через шов; прямой импорт `bcryptjs` из DAL убран (шов
+  подготовлен рефакторингом слоя доступа к данным). Новые пароли хешируются `scrypt` из
+  `@vvlad1973/crypto` по фиксированному профилю OWASP; параметры записаны в каждый хеш, поэтому
+  проверка не требует внешней конфигурации. Тестовый knob `PASSWORD_SCRYPT_TEST_N` удешевляет
+  хеширование под параллельными воркерами (в проде не выставляется — прод-хеширование неизменно).
+- **Этап 2 (совместимость):** `verifyPassword` прозрачно проверяет и scrypt, и старые
+  bcrypt-хеши (`$2a$` / `$2b$` / `$2y$`); при успешной сверке legacy-хеша пароль лениво
+  перехешируется в scrypt при логине (`validatePassword` в `UsersRepository`), с логом
+  `auth.legacy_bcrypt_rehash`. Ветка «пользователь не найден» вызывает `dummyVerifyPassword` той
+  же стоимости — время ответа не выдаёт существование аккаунта (защита от timing-based
+  enumeration).
+
+БД-миграция не потребовалась (`passwordHash` — `text`, вмещает оба формата). Не блокирует
+другие PRD.
+
+**Этап 3 (остаток):** `bcryptjs` остаётся временной, динамически импортируемой зависимостью
+(external в `script/build.ts`) только для проверки старых `$2a$…`-хешей. Пакет `bcryptjs` +
+`@types/bcryptjs` и legacy-ветка `verifyLegacyBcrypt` удаляются, когда в БД не остаётся
+bcrypt-хешей.
+
+**Гейт Этапа 3 — durable-запрос остатка `npm run bcrypt:residual`
+([script/bcrypt-residual.ts](../../../script/bcrypt-residual.ts)), а НЕ метрика
+`auth.legacy_bcrypt_rehash`.** Счётчик `auth.legacy_bcrypt_rehash` — in-process (см.
+`server/metrics.ts`), обнуляется при рестарте и считает только rehash с момента старта процесса,
+поэтому его нуль ничего не гарантирует; для решения об удалении bcrypt нужен прямой read-only
+подсчёт по БД. Скрипт печатает: сколько аккаунтов ещё на bcrypt (с разбивкой по статусу и
+активности) и вердикт SAFE/HOLD. Запускать против ПРОД-БД (`DATABASE_URL`).
+
+Важно: ленивый rehash мигрирует только тех, кто логинится — спящие / `pending` / истёкшие
+аккаунты сами не мигрируют. Их нужно форс-ресетнуть (`mustChangePassword` / reset-токены) или
+удалить перед удалением bcrypt-пути; пакетно пересчитать bcrypt→scrypt нельзя (нужен plaintext,
+которого в bcrypt-хеше нет). Хард-катофф на проде без обработки остатка уронит логин спящих
+пользователей.
 
 ---
 

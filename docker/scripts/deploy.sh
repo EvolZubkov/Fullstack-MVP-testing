@@ -135,6 +135,13 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Non-secret configuration is committed and baked into the image
+# (config/production.config.jsonc, selected by NODE_ENV=production). It is not
+# generated or mounted here — edit it in the repo and rebuild. Only secrets are
+# host-side (env/.env, deployed above).
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
 # 5. Generate docker-compose.yml from template
 # ---------------------------------------------------------------------------
 info "Generating docker-compose.yml..."

@@ -1,0 +1,27 @@
+<div class="results-page section-results">
+  <div class="section-results__card">
+    <span class="section-results__eyebrow">Раздел завершён</span>
+
+    <div class="results-ring">
+      <svg viewBox="0 0 140 140" width="140" height="140">
+        <circle cx="70" cy="70" r="63" class="ring-bg" stroke-width="14" fill="none"></circle>
+        <circle cx="70" cy="70" r="63" class="ring-fg {{ sectionResult.passClass }}" stroke-width="14" fill="none" stroke-linecap="round" style="stroke-dasharray:395.84;stroke-dashoffset:{{ sectionResult.ringDashoffset }}"></circle>
+      </svg>
+      <div class="results-ring-center">
+        <div class="results-ring-pct"><span data-path="sectionResult.scorePercent"></span>%</div>
+        <div class="results-ring-label">Баллы</div>
+      </div>
+    </div>
+
+    <div class="section-results__title" data-path="sectionResult.topicName"></div>
+    <div class="section-results__summary" data-path="sectionResult.summaryLabel"></div>
+
+    {{#if sectionResult.hasVerdict}}
+    <span class="badge {{ sectionResult.passClass }}" data-path="sectionResult.statusLabel"></span>
+    {{/if}}
+
+    <div class="navigation">
+      <button type="button" class="btn" data-action="section-continue">{{ sectionResult.continueLabel }}</button>
+    </div>
+  </div>
+</div>

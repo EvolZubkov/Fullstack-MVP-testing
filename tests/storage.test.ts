@@ -4,14 +4,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ─── Hoist mocks so they're available before imports ─────────────────────────
-const { dbMock } = vi.hoisted(() => {
-  const dbMock = {
+const { dbMock, dummyVerifySpy } = vi.hoisted(() => {
+  const dbMock: any = {
     select: vi.fn(),
     insert: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
   };
-  return { dbMock };
+  // Multi-step methods run inside db.transaction; pass the mock itself as the tx
+  // so tx.delete/insert/update reuse the same chain stubs (individual tests may
+  // still override transaction with a bespoke tx).
+  dbMock.transaction = vi.fn(async (cb: (tx: unknown) => unknown) => cb(dbMock));
+  return { dbMock, dummyVerifySpy: vi.fn(async () => {}) };
 });
 
 vi.mock("../server/db", () => ({ db: dbMock }));
@@ -20,14 +24,12 @@ vi.mock("../server/utils/crypto", () => ({
   encryptEmail: (e: string) => `enc:${e}`,
   decryptEmail: (e: string) => e.replace("enc:", ""),
   hashEmail: (e: string) => `hash:${e}`,
-}));
-
-vi.mock("bcryptjs", () => ({
-  default: {
-    hash: async (_pwd: string, _rounds: number) => "hashed_password",
-    compare: async (plain: string, hashed: string) =>
-      hashed === "hashed_password" && plain === "correct",
-  },
+  // Password hashing goes through the crypto seam (storage no longer touches the
+  // primitive directly); a scrypt-shaped stand-in output keeps assertions simple.
+  hashPassword: async (_pwd: string) => "hashed_password",
+  verifyPassword: async (plain: string, _stored: string) => plain === "correct",
+  dummyVerifyPassword: dummyVerifySpy,
+  isLegacyBcryptHash: (stored: string) => /^\$2[aby]\$/.test(stored),
 }));
 
 // Chainable mock — supports both await chain (thenable) and await chain.returning()
@@ -48,6 +50,7 @@ const makeChain = (returnValue: any) => {
 
 // ─── import after mocks ───────────────────────────────────────────────────────
 import { DatabaseStorage } from "../server/storage";
+import { getCounter } from "../server/metrics";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 const now = new Date("2024-01-01T00:00:00Z");
@@ -241,6 +244,33 @@ describe("DatabaseStorage — users", () => {
     setupSelectReturning([]);
     const user = await storage.validatePassword("nobody@test.com", "any");
     expect(user).toBeNull();
+    // A dummy verify still runs, so response time does not leak account existence.
+    expect(dummyVerifySpy).toHaveBeenCalled();
+  });
+
+  it("validatePassword — lazily rehashes a legacy bcrypt hash to scrypt on success", async () => {
+    // PRD-9 Этап 2: a user still on a bcrypt hash logs in, and the hash is migrated
+    // in place, the metric ticks up, and the returned user carries the new hash.
+    const legacyUser = { ...dbUser, passwordHash: "$2a$10$legacyhashvalue" };
+    setupSelectReturning([legacyUser]);
+    setupUpdateReturning(legacyUser);
+
+    const before = getCounter("auth.legacy_bcrypt_rehash");
+    const user = await storage.validatePassword("kate@example.com", "correct");
+
+    expect(user).not.toBeNull();
+    expect(dbMock.update).toHaveBeenCalled();            // hash migrated in place
+    expect(user!.passwordHash).toBe("hashed_password");  // scrypt stand-in from the mock
+    expect(getCounter("auth.legacy_bcrypt_rehash")).toBe(before + 1);
+  });
+
+  it("validatePassword — does NOT rehash a current scrypt hash", async () => {
+    setupSelectReturning([dbUser]); // passwordHash "hashed_password" (not bcrypt)
+    const before = getCounter("auth.legacy_bcrypt_rehash");
+    const user = await storage.validatePassword("kate@example.com", "correct");
+    expect(user).not.toBeNull();
+    expect(dbMock.update).not.toHaveBeenCalled();
+    expect(getCounter("auth.legacy_bcrypt_rehash")).toBe(before);
   });
 
   it("getUsers — decrypts all emails", async () => {
@@ -584,8 +614,8 @@ describe("DatabaseStorage — attempts", () => {
   });
 
   it("updateAttempt — returns updated attempt", async () => {
-    setupUpdateReturning({ ...dbAttempt, score: 95 });
-    const a = await storage.updateAttempt("a1", { score: 95 });
+    setupUpdateReturning({ ...dbAttempt, finishedAt: now });
+    const a = await storage.updateAttempt("a1", { finishedAt: now });
     expect(a).toBeDefined();
   });
 

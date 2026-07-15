@@ -92,10 +92,10 @@ function renderViewResultsTemplated(app, results) {
   var layout = (typeof systemLayout === 'function') ? systemLayout('results') : state.templateLayouts['results'];
   if (typeof applySystemScreenStyles === 'function') applySystemScreenStyles('results');
   app.innerHTML = '';
-  var wrap = document.createElement('div');
-  app.appendChild(wrap);
-  window.TBTemplate.renderScreenInto(wrap, { layout: layout, context: ctx });
-  var backBtn = wrap.querySelector('[data-action="back-to-start"]');
+  // Mount directly into #app so .tb-pad > .results-page fills the fixed stage —
+  // mirrors renderGalleryPage (a wrapper div would defeat the child-combinator rule).
+  window.TBTemplate.renderScreenInto(app, { layout: layout, context: ctx });
+  var backBtn = app.querySelector('[data-action="back-to-start"]');
   if (backBtn) backBtn.onclick = backToStart;
 }
 

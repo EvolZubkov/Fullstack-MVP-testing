@@ -1,0 +1,31 @@
+<div class="transition-page">
+  <div class="transition-icon {{ transition.iconClass }}">
+    {{#if transition.isCorrect}}
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>
+    {{/if}}
+    {{#unless transition.isCorrect}}
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    {{/unless}}
+  </div>
+
+  <div class="transition-title">{{ transition.title }}</div>
+
+  {{#if transition.level}}
+  <div class="transition-level {{ transition.level.class }}">
+    {{#if transition.level.isUp}}<svg class="transition-level-icon" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>{{/if}}
+    {{#if transition.level.isDown}}<svg class="transition-level-icon" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>{{/if}}
+    {{#if transition.level.isComplete}}<svg class="transition-level-icon" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>{{/if}}
+    <span class="transition-level-msg" data-path="transition.level.message"></span>
+  </div>
+  {{/if}}
+
+  {{#if transition.topic}}
+  <div class="transition-topic">Переход к теме: <strong data-path="transition.topic.toTopic"></strong></div>
+  {{/if}}
+
+  {{#if transition.showContinue}}
+  <div class="transition-actions">
+    <button type="button" class="btn" data-action="continue">Продолжить</button>
+  </div>
+  {{/if}}
+</div>

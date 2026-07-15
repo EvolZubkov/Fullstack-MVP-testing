@@ -12,6 +12,7 @@
  * unit choices) plus question type/prompt.
  */
 
+import { parseAuthorNumber } from "./numeric-input";
 import type { QuestionMeasurementModel, ScaleBandModel, ScaleModel } from "./test-editor.types";
 
 // ─── Persisted payload + diff ───────────────────────────────────────────────────
@@ -26,9 +27,9 @@ function bandsToPayload(bands: ScaleBandModel[]): BandPayload[] {
     const minRaw = b.min.trim();
     const maxRaw = b.max.trim();
     if (minRaw === "" && maxRaw === "" && b.label.trim() === "" && b.level.trim() === "") continue;
-    const min = Number(minRaw);
-    const max = Number(maxRaw);
-    if (Number.isNaN(min) || Number.isNaN(max)) continue;
+    const min = parseAuthorNumber(minRaw);
+    const max = parseAuthorNumber(maxRaw);
+    if (min === null || max === null) continue;
     const payload: BandPayload = { min, max, level: b.level.trim() };
     if (b.label.trim() !== "") payload.label = b.label.trim();
     out.push(payload);

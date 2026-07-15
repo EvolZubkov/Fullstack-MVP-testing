@@ -15,7 +15,7 @@
 :: How it works:
 ::   1. Reads the new password silently (no echo, no shell history).
 ::   2. Uploads set-password.mjs to the server and into the container.
-::   3. Runs it inside the container (reuses DATABASE_URL / bcryptjs / pg).
+::   3. Runs it inside the container (reuses DATABASE_URL / @vvlad1973/crypto / pg).
 ::
 :: The password is passed base64-encoded end-to-end to avoid shell-quoting
 :: issues with special characters.

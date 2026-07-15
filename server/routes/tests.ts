@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "../storage";
 import { db } from "../db";
-import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, retakePolicySchema, questionScoringSchema } from "@shared/schema";
+import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, questionScoringSchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { readScreenTemplate } from "../services/template-render";
 import { resolveTemplateDir, resolveSystemScreenDir } from "../services/template-dir";
@@ -18,6 +18,7 @@ import { generateScormPackage } from "../scorm-exporter";
 import { buildScormExportData, ScormBuildError } from "../scorm/build-export-data";
 import { isSupportedTemplateApiVersion } from "../template-registry";
 import { logger } from "../logger";
+import { appBaseUrl } from "../config";
 import {
   testSettingsService,
   VersionConflictError,
@@ -45,6 +46,10 @@ const sectionBodySchema = z
     timeLimitMinutes: z.number().int().positive().nullable().optional(),
     feedbackJson: z.unknown().optional(),
     drawBlueprintJson: drawBlueprintSchema.nullish(),
+    // PRD-17 (BR-12): fixed-variant set. MUST be listed here — Zod strips unknown
+    // keys, so without this the editor's saved form set is silently dropped before
+    // it reaches the storage layer (200 OK, but nothing persisted). null = legacy draw.
+    formSetJson: formSetSchema.nullish(),
     // PRD-15 block D (FR-31): per-section default price; null = inherit test.
     defaultPoints: z.number().int().min(0).nullable().optional(),
   })
@@ -938,9 +943,8 @@ router.delete("/:id", requirePermission("tests.delete"), requireTestScope("delet
       return res.status(400).json({ error: "title_mismatch", field: "confirmTitle" });
     }
 
-    await storage.deleteAdaptiveLevelLinksByTest(req.params.id);
-    await storage.deleteAdaptiveLevelsByTest(req.params.id);
-    await storage.deleteAdaptiveTopicSettingsByTest(req.params.id);
+    // deleteTest is now the single, atomic owner of test deletion (adaptive rows,
+    // sections, assignments, grants, attempts and snapshots all go with it).
     await storage.deleteTest(req.params.id);
     res.status(204).end();
   } catch (error) {
@@ -966,7 +970,7 @@ router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), require
     if (enableTelemetry) {
       const packageId = crypto.randomUUID();
       const secretKey = crypto.randomBytes(32).toString("hex");
-      const apiBaseUrl = (process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`).replace(/\/$/, '');
+      const apiBaseUrl = appBaseUrl();
 
       // Create scorm_package record
       await storage.createScormPackage({

@@ -27,7 +27,9 @@ services:
       - /srv/logs/PROJECT_NAME_PLACEHOLDER:/app/logs
       # Media and SCORM uploads
       - /srv/data/PROJECT_NAME_PLACEHOLDER/uploads:/app/uploads
-      # Env file (read-only)
+      # Env file — SECRETS only (read-only). loadEnv falls back to /app/.env when
+      # /app/.env.production is absent; non-secret config is baked into the image
+      # (config/production.config.jsonc, selected by NODE_ENV=production).
       - ./env/.env:/app/.env:ro
 
     environment:

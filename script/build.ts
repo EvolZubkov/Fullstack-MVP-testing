@@ -10,6 +10,14 @@ import { buildSharedRuntimeBundle, SHARED_RUNTIME_FILENAME } from "../server/sco
 // Note: archiver and bcryptjs excluded due to ESM/CJS interop issues
 const allowlist = [
   "@google/generative-ai",
+  // ESM-only wrapper: bundle it into the CJS output so the production build does
+  // not `require()` an ES module at runtime. Its only runtime dependency, `pino`,
+  // stays external (kept in node_modules) so pino's own runtime file resolution
+  // is not disturbed by the bundler.
+  "@vvlad1973/pino-logger-tree",
+  // ESM-only config utilities (getConfig). Bundled so the CJS app does not
+  // `require()` an ES module (Node 20 in the image cannot require ESM).
+  "@vvlad1973/utils",
   "axios",
   "cors",
   "date-fns",
@@ -30,8 +38,13 @@ const allowlist = [
   "zod",
 ];
 
-// Force these to be external even if in allowlist (ESM/CJS issues)
-const forceExternal = ["archiver", "bcryptjs", "@vvlad1973/crypto"];
+// Force these to be external even if in allowlist (ESM/CJS issues).
+// `pino` is a transitive dependency (pulled in by @vvlad1973/pino-logger-tree, not a
+// direct dependency), so it is not part of the computed externals list. It must be
+// pinned external explicitly: the wrapper is bundled, and esbuild would otherwise
+// follow its `import 'pino'` and bundle pino too — breaking pino's runtime resolution
+// of its own worker/transport internals. Kept external, pino resolves normally at runtime.
+const forceExternal = ["archiver", "bcryptjs", "@vvlad1973/crypto", "pino"];
 
 async function buildAll() {
   await rm("dist", { recursive: true, force: true });

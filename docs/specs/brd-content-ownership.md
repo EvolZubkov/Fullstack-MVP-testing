@@ -4,8 +4,7 @@
 **Статус:** Согласован (2026-06-11)
 **Дата актуализации:** 2026-06-11
 **Связанные документы:** [PRD-15](./prd-15/content-ownership.md),
-[План реализации](./prd-15/implementation-plan.md),
-[Аудит владения данными](../AUDIT_DATA_OWNERSHIP.md),
+[Аудит владения данными](../reports/AUDIT_DATA_OWNERSHIP.md),
 [BRD ролевой модели](./brd-access-control.md),
 [Ролевая модель и матрица](./access-control/role-model.md),
 [PRD-13](./prd-13/role-based-access-control.md),

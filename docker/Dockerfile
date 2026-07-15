@@ -53,6 +53,10 @@ COPY --chown=nodejs:nodejs drizzle.config.ts ./
 # container and the DB is external (no psql/tsx available here).
 COPY --chown=nodejs:nodejs migrations ./migrations
 COPY --chown=nodejs:nodejs script/run-sql.cjs ./script/run-sql.cjs
+# Shared config loader (server/config-loader.mjs) — required at runtime by
+# run-sql.cjs (dynamic import) and the set-password tool. server/ is otherwise
+# excluded from the image, so copy this one file explicitly.
+COPY --chown=nodejs:nodejs server/config-loader.mjs ./server/config-loader.mjs
 # PRD-15 pre-push safety gate (run via run-sql.cjs before drizzle-kit push).
 COPY --chown=nodejs:nodejs script/verify-prd15-pre-push.sql ./script/verify-prd15-pre-push.sql
 
@@ -60,6 +64,11 @@ COPY --chown=nodejs:nodejs script/verify-prd15-pre-push.sql ./script/verify-prd1
 # server/template-registry.ts and the preview routes (process.cwd()/server/scorm/templates).
 # Without these the templates table stays empty and every test reports "template missing".
 COPY --chown=nodejs:nodejs server/scorm/templates ./server/scorm/templates
+
+# Non-secret application config (config/config.jsonc). Committed defaults baked
+# into the image; a per-instance config/production.config.jsonc is mounted at
+# runtime by deploy.sh and, under NODE_ENV=production, wins over these defaults.
+COPY --chown=nodejs:nodejs config ./config
 
 COPY docker/entrypoint.sh ./docker/entrypoint.sh
 

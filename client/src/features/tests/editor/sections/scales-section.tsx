@@ -57,6 +57,7 @@ import {
   type ScalePreviewResult,
 } from "../scales-api";
 import type { FieldErrorIndex } from "../field-errors";
+import { formatAuthorNumber, parseAuthorNumber, sanitizeAuthorNumberInput } from "../numeric-input";
 import { FoldAllButtons, useSectionFold } from "./section-fold";
 
 // Вывод шкал ученику — отдельный PRD (дальняя перспектива). До него тогл
@@ -194,9 +195,9 @@ function bandErrorOf(s: ScaleModel): string | null {
     const minRaw = b.min.trim();
     const maxRaw = b.max.trim();
     if (minRaw === "" && maxRaw === "" && b.label.trim() === "" && b.level.trim() === "") continue;
-    const min = Number(minRaw);
-    const max = Number(maxRaw);
-    if (minRaw === "" || maxRaw === "" || Number.isNaN(min) || Number.isNaN(max)) {
+    const min = parseAuthorNumber(minRaw);
+    const max = parseAuthorNumber(maxRaw);
+    if (min === null || max === null) {
       return `Диапазон ${j + 1}: укажите числовые min и max.`;
     }
     if (min > max) return `Диапазон ${j + 1}: min не может быть больше max.`;
@@ -640,7 +641,14 @@ function BandsEditor({
 
   return (
     <>
-      <table className="tb-table tb-table--mb" data-testid={`scales-bands-${index}`}>
+      <table className="tb-table tb-table--mb tb-bands-table" data-testid={`scales-bands-${index}`}>
+        <colgroup>
+          <col />
+          <col />
+          <col />
+          <col />
+          <col className="tb-bands-table__act" />
+        </colgroup>
         <thead>
           <tr>
             <th>min</th>
@@ -1254,8 +1262,12 @@ function QuestionContribCard({
 
 /**
  * One numeric contribution cell. Holds local text so intermediate states ("-",
- * "1.") are typable; commits a parsed number (or null to clear) to the model and
- * resyncs when the model value changes externally (reset / reload).
+ * "0,", "-0") are typable; the author enters fractional values with a comma
+ * decimal separator (ru locale — a dot is accepted and shown as a comma) and
+ * negatives are preserved. Commits a parsed number (or null to clear) to the
+ * model. The external re-sync only fires when the model value differs from what
+ * the field already denotes, so a live commit never clobbers an in-progress
+ * edit (which previously flipped e.g. "-0" back to "0").
  */
 function MatrixCell({
   value,
@@ -1268,10 +1280,14 @@ function MatrixCell({
   ariaLabel: string;
   onCommit: (value: number | null) => void;
 }) {
-  const [text, setText] = useState(value === undefined ? "" : String(value));
+  const [text, setText] = useState(value === undefined ? "" : formatAuthorNumber(value));
 
   useEffect(() => {
-    setText(value === undefined ? "" : String(value));
+    const current = text.trim() === "" ? null : parseAuthorNumber(text);
+    const target = value === undefined ? null : value;
+    if (current !== target) setText(value === undefined ? "" : formatAuthorNumber(value));
+    // Only `value` drives the re-sync; `text` is the live buffer we protect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   return (
@@ -1280,17 +1296,17 @@ function MatrixCell({
       fullWidth
       value={text}
       disabled={disabled}
+      inputMode="decimal"
       aria-label={ariaLabel}
       onChange={(e) => {
-        const t = e.target.value;
+        const t = sanitizeAuthorNumberInput(e.target.value);
         setText(t);
-        const trimmed = t.trim();
-        if (trimmed === "") {
+        if (t.trim() === "") {
           onCommit(null);
           return;
         }
-        const n = Number(trimmed);
-        if (!Number.isNaN(n)) onCommit(n);
+        const n = parseAuthorNumber(t);
+        if (n !== null) onCommit(n);
       }}
     />
   );

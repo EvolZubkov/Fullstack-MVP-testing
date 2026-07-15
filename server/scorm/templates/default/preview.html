@@ -21,6 +21,10 @@
     .pv-dialog-head{padding:14px 20px;border-bottom:1px solid var(--pv-border);display:flex;align-items:center;gap:12px;flex-shrink:0}
     .pv-dialog-title{font-size:15px;font-weight:600}
     .pv-dialog-sub{font-size:12px;color:var(--pv-muted-fg)}
+    .pv-theme{margin-left:auto;display:inline-flex;gap:2px;background:var(--pv-muted);border-radius:6px;padding:2px}
+    .pv-theme-btn{border:0;background:transparent;color:var(--pv-fg);font:inherit;font-size:12px;padding:4px 10px;border-radius:4px;cursor:pointer;transition:background .12s}
+    .pv-theme-btn:hover:not(.pv-theme-active){background:rgba(0,0,0,.05)}
+    .pv-theme-btn.pv-theme-active{background:var(--pv-bg);box-shadow:0 1px 2px rgba(0,0,0,.14);font-weight:600}
     .pv-body{display:flex;flex:1;overflow:hidden;min-height:0}
     .pv-nav{width:220px;flex-shrink:0;border-right:1px solid var(--pv-border);overflow-y:auto;padding:6px 0;background:var(--pv-sidebar)}
     .pv-nav-item{display:block;width:calc(100% - 12px);margin:0 6px 1px;padding:7px 8px;border:0;border-radius:3px;background:transparent;color:var(--pv-fg);text-align:left;font:inherit;font-size:13px;cursor:pointer;transition:background .12s,color .12s}
@@ -1081,6 +1085,27 @@ h1 {
   font-size: 11px;
   color: hsl(0 0% 50%);
 }
+/* Enriched router-card rows (shared runtime): topic+image row, meta chips, status+CTA,
+   deadline stat boxes. The certification template styles these richly in its own
+   base.css; the default template needs at least layout + gaps + image constraint so
+   the spans don't run together ("Не начатаначать") or blow out the 220px grid. */
+.router-topic-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.router-topic-card__img { flex: 0 0 auto; }
+.router-topic-card__img img { display: block; width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+.router-topic-card__meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.router-topic-card__chip {
+  font-size: 11px; color: hsl(0 0% 30%); background: hsl(0 0% 94%);
+  border-radius: 999px; padding: 2px 8px;
+}
+.router-topic-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.router-topic-card__go { font-size: 12px; font-weight: 600; color: hsl(217 91% 50%); }
+.router-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; }
+.router-stat {
+  display: flex; flex-direction: column; gap: 2px;
+  border: 1px solid hsl(0 0% 88%); border-radius: 8px; padding: 8px 12px; background: hsl(0 0% 99%);
+}
+.router-stat__label { font-size: 11px; color: hsl(0 0% 45%); }
+.router-stat__value { font-size: 14px; font-weight: 700; color: hsl(0 0% 13%); font-variant-numeric: tabular-nums; }
 
 
 /* ===== PRD-6 retake gate: block-wall + neutral start shell ===== */
@@ -1355,6 +1380,11 @@ a.results-rec-item:hover { text-decoration: underline; }
       <div class="pv-dialog-head">
         <div class="pv-dialog-title">Шаблон «Стандартный» — элементы и их вид</div>
         <div class="pv-dialog-sub">Демо-данные · элементы управления работают</div>
+        <div class="pv-theme" id="pv-theme" role="group" aria-label="Тема оформления">
+          <button type="button" class="pv-theme-btn pv-theme-active" data-theme-set="auto">Авто</button>
+          <button type="button" class="pv-theme-btn" data-theme-set="light">Светлая</button>
+          <button type="button" class="pv-theme-btn" data-theme-set="dark">Тёмная</button>
+        </div>
       </div>
 
       <div class="pv-body">
@@ -2052,7 +2082,7 @@ a.results-rec-item:hover { text-decoration: underline; }
   "shell": "<div class=\"tb-player\" data-template=\"default\">\n  <div class=\"tb-progress-wrap\">\n    <div class=\"tb-progress-bar\" id=\"tb-progress-fill\"></div>\n  </div>\n  <main id=\"app\" class=\"tb-content\" data-slot=\"page\" tabindex=\"-1\"></main>\n</div>\n",
   "start": "<div class=\"start-page\">\n  {{#if design.logoUrl}}<div class=\"tb-brand\"><img class=\"tb-brand__logo\" src=\"{{ design.logoUrl }}\" alt=\"\"></div>{{/if}}\n  <div class=\"card start-header\">\n    <h1 class=\"start-title\" data-path=\"course.title\">Тест</h1>\n    <p class=\"start-description\" data-path=\"course.description\"></p>\n  </div>\n  <div class=\"card start-info\">\n    <h2 class=\"start-info-heading\">Информация о тесте</h2>\n    <div class=\"start-info-grid\">\n      <div class=\"info-row\">\n        <span class=\"info-icon info-icon--blue\" aria-hidden=\"true\">\n          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z\"/><polyline points=\"14 2 14 8 20 8\"/><line x1=\"16\" y1=\"13\" x2=\"8\" y2=\"13\"/><line x1=\"16\" y1=\"17\" x2=\"8\" y2=\"17\"/><line x1=\"10\" y1=\"9\" x2=\"8\" y2=\"9\"/></svg>\n        </span>\n        <div class=\"info-row-body\">\n          <div class=\"info-row-label\">Количество вопросов</div>\n          <div class=\"info-row-value\" data-path=\"course.questionCount\"></div>\n        </div>\n      </div>\n      <div class=\"info-row\">\n        <span class=\"info-icon info-icon--green\" aria-hidden=\"true\">\n          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 11.08V12a10 10 0 1 1-5.93-9.14\"/><polyline points=\"22 4 12 14.01 9 11.01\"/></svg>\n        </span>\n        <div class=\"info-row-body\">\n          <div class=\"info-row-label\">Проходной балл</div>\n          <div class=\"info-row-value\"><span data-path=\"course.passPercent\"></span>%</div>\n        </div>\n      </div>\n      {{#if course.timeLimitMinutes}}\n      <div class=\"info-row\">\n        <span class=\"info-icon info-icon--amber\" aria-hidden=\"true\">\n          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><polyline points=\"12 6 12 12 16 14\"/></svg>\n        </span>\n        <div class=\"info-row-body\">\n          <div class=\"info-row-label\">Ограничение времени</div>\n          <div class=\"info-row-value\"><span data-path=\"course.timeLimitMinutes\"></span> мин</div>\n        </div>\n      </div>\n      {{/if}}\n      {{#if course.maxAttempts}}\n      <div class=\"info-row\">\n        <span class=\"info-icon info-icon--purple\" aria-hidden=\"true\">\n          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"1 4 1 10 7 10\"/><path d=\"M3.51 15a9 9 0 1 0 .49-3.5\"/></svg>\n        </span>\n        <div class=\"info-row-body\">\n          <div class=\"info-row-label\">Попыток разрешено</div>\n          <div class=\"info-row-value\" data-path=\"course.maxAttempts\"></div>\n        </div>\n      </div>\n      {{/if}}\n    </div>\n  </div>\n  {{#if course.startPageContent}}\n  <div class=\"card start-note\">{{course.startPageContent}}</div>\n  {{/if}}\n  {{#if state.cooldown}}\n  <div class=\"card start-cooldown\">\n    <div class=\"cooldown-head\">\n      <span class=\"cooldown-ico\" aria-hidden=\"true\">\n        <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><polyline points=\"12 6 12 12 16 14\"/></svg>\n      </span>\n      <div>\n        <div class=\"cooldown-title\">Повторное прохождение пока недоступно</div>\n        <div class=\"cooldown-sub\">Действует период ожидания между попытками.</div>\n      </div>\n    </div>\n    <div class=\"cooldown-when\">Повторный запуск будет доступен с <strong><span data-path=\"state.cooldown.availableDateHuman\"></span></strong>{{#if state.cooldown.daysUntil}} &middot; через <span data-path=\"state.cooldown.daysUntil\"></span> дн.{{/if}}</div>\n    {{#if state.priorResult}}\n    <div class=\"start-prior-row\">Прошлая попытка: <strong><span data-path=\"state.priorResult.percent\"></span>%</strong>{{#if state.priorResult.verdictLabel}} &middot; <span class=\"{{state.priorResult.verdictClass}}\" data-path=\"state.priorResult.verdictLabel\"></span>{{/if}}{{#if state.priorResult.attemptsLabel}} &middot; <span data-path=\"state.priorResult.attemptsLabel\"></span>{{/if}}</div>\n    <div class=\"prior-actions\">\n      {{#if state.canViewResults}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"view-results\">Мой результат</button>{{/if}}\n      {{#if state.canDownloadReport}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"download-report\">Скачать отчёт</button>{{/if}}\n    </div>\n    {{/if}}\n  </div>\n  {{/if}}\n  {{#unless state.cooldown}}{{#if state.priorResult}}\n  <div class=\"card start-prior\">\n    <div class=\"start-prior-row\">Прошлая попытка: <strong><span data-path=\"state.priorResult.percent\"></span>%</strong>{{#if state.priorResult.verdictLabel}} &middot; <span class=\"{{state.priorResult.verdictClass}}\" data-path=\"state.priorResult.verdictLabel\"></span>{{/if}}{{#if state.priorResult.attemptsLabel}} &middot; <span data-path=\"state.priorResult.attemptsLabel\"></span>{{/if}}</div>\n    <div class=\"prior-actions\">\n      {{#if state.canViewResults}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"view-results\">Мой результат</button>{{/if}}\n      {{#if state.canDownloadReport}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"download-report\">Скачать отчёт</button>{{/if}}\n    </div>\n  </div>\n  {{/if}}{{/unless}}\n  <div class=\"start-actions\">\n    {{#if state.resumeNote}}<div class=\"start-resume-note\">{{state.resumeNote}}</div>{{/if}}\n    {{#if state.exhausted}}<div class=\"start-actions-note\">Попытки закончились</div>{{/if}}\n    {{#if state.canResume}}<button type=\"button\" class=\"btn start-btn\" data-action=\"resume\">{{state.resumeLabel}}</button>{{/if}}\n    {{#if state.cooldown}}<button type=\"button\" class=\"btn start-btn\" disabled aria-disabled=\"true\">Начать тестирование</button>{{/if}}\n    {{#if state.canStart}}<button type=\"button\" class=\"btn start-btn\" data-action=\"start-test\">{{state.startLabel}}</button>{{/if}}\n    {{#if state.canRestart}}<button type=\"button\" class=\"btn btn--outline start-btn\" data-action=\"restart\">Начать заново</button>{{/if}}\n    {{#unless state.priorResult}}{{#if state.canViewResults}}<button type=\"button\" class=\"btn btn--outline start-btn\" data-action=\"view-results\">Мой результат</button>{{/if}}{{/unless}}\n    {{#if state.showBack}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"back\">К списку тестов</button>{{/if}}\n  </div>\n</div>\n",
   "content": "<div class=\"layout-content-wrap\">\n  <div data-slot=\"page-content\"></div>\n  <div class=\"navigation\">\n    <button type=\"button\" class=\"btn\" data-nav=\"next\">Далее</button>\n  </div>\n</div>\n",
-  "question": "<div class=\"layout-question-wrap\">\n  {{#if design.logoUrl}}<div class=\"tb-brand\"><img class=\"tb-brand__logo\" src=\"{{ design.logoUrl }}\" alt=\"\"></div>{{/if}}\n  <div class=\"q-header\">\n    <h1 class=\"q-title\" data-path=\"course.title\"></h1>\n    <div class=\"q-timer q-timer--hidden\" id=\"timer-display\"></div>\n  </div>\n  {{#if state.questionsProgress}}\n  <div class=\"tb-pills\" role=\"group\" aria-label=\"Карта вопросов\">\n    <div class=\"tb-pills__head\">\n      <span>{{state.questionsProgress.scopeLabel}}</span>\n      <b>отвечено {{state.questionsProgress.answeredCount}} · пропущено {{state.questionsProgress.skippedCount}}</b>\n    </div>\n    <div class=\"tb-pills__dots\">\n      {{#each state.questionsProgress.states}}\n      <button type=\"button\" class=\"tb-pill {{statusClass}}\" {{#unless clickable}}disabled{{/unless}} data-action=\"goto:{{index}}\" aria-label=\"{{ariaLabel}}\">{{number}}</button>\n      {{/each}}\n    </div>\n    <div class=\"tb-pills__legend\">\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-answered\"></span>отвечен</span>\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-skipped\"></span>пропущен</span>\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-current\"></span>текущий</span>\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-locked\"></span>не выдан</span>\n    </div>\n  </div>\n  {{/if}}\n  {{#unless state.questionsProgress}}\n  <div class=\"progress-bar\">\n    <div class=\"progress-fill\" id=\"q-progress-fill\"></div>\n  </div>\n  {{/unless}}\n  <div class=\"question-card\">\n    <div class=\"question-meta\" data-path=\"state.questionCounterLabel\"></div>\n    <div class=\"question-text\" data-slot=\"question-text\"></div>\n    <div data-slot=\"question-media\"></div>\n    <div data-slot=\"question-interaction\"></div>\n    <div data-slot=\"question-feedback\"></div>\n  </div>\n</div>\n",
+  "question": "<div class=\"layout-question-wrap\">\n  {{#if design.logoUrl}}<div class=\"tb-brand\"><img class=\"tb-brand__logo\" src=\"{{ design.logoUrl }}\" alt=\"\"></div>{{/if}}\n  <div class=\"q-header\">\n    <h1 class=\"q-title\" data-path=\"course.title\"></h1>\n    <div class=\"q-timer q-timer--hidden\" id=\"timer-display\"></div>\n  </div>\n  {{#if state.questionsProgress}}\n  <div class=\"tb-pills\" role=\"group\" aria-label=\"Карта вопросов\">\n    <div class=\"tb-pills__head\">\n      <span>{{state.questionsProgress.scopeLabel}}</span>\n      <b>отвечено {{state.questionsProgress.answeredCount}} · пропущено {{state.questionsProgress.skippedCount}}</b>\n    </div>\n    <div class=\"tb-pills__dots\">\n      {{#each state.questionsProgress.states}}\n      <button type=\"button\" class=\"tb-pill {{statusClass}}\" {{#unless clickable}}disabled{{/unless}} data-action=\"goto:{{index}}\" aria-label=\"{{ariaLabel}}\">{{number}}</button>\n      {{/each}}\n    </div>\n    <div class=\"tb-pills__legend\">\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-answered\"></span>отвечен</span>\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-skipped\"></span>пропущен</span>\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-current\"></span>текущий</span>\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-locked\"></span>не выдан</span>\n    </div>\n  </div>\n  {{/if}}\n  {{#unless state.questionsProgress}}\n  <div class=\"progress-bar\">\n    <div class=\"progress-fill\" id=\"q-progress-fill\"></div>\n  </div>\n  {{/unless}}\n  <div class=\"question-card\">\n    <div class=\"question-meta\"><span data-path=\"state.questionCounterLabel\"></span>{{#if state.sectionName}} | <span data-path=\"state.sectionName\"></span>{{/if}}</div>\n    <div class=\"question-text\" data-slot=\"question-text\"></div>\n    <div data-slot=\"question-media\"></div>\n    <div data-slot=\"question-interaction\"></div>\n    <div data-slot=\"question-feedback\"></div>\n  </div>\n</div>\n",
   "results": "<div class=\"results-page\">\n  {{#if design.logoUrl}}<div class=\"tb-brand\"><img class=\"tb-brand__logo\" src=\"{{ design.logoUrl }}\" alt=\"\"></div>{{/if}}\n  <div class=\"results-hero\">\n    {{#if result.passed}}\n    <div class=\"results-hero-icon is-pass\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M8 21h8\"/><path d=\"M12 17v4\"/><path d=\"M7 4h10\"/><path d=\"M17 4v5a5 5 0 0 1-10 0V4\"/><path d=\"M5 6h2\"/><path d=\"M17 6h2\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Поздравляем!</div>\n    <div class=\"results-hero-sub\">Вы успешно прошли тест.</div>\n    {{/if}}\n    {{#unless result.passed}}\n    <div class=\"results-hero-icon is-fail\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M9 9l6 6\"/><path d=\"M15 9l-6 6\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Тест не пройден</div>\n    <div class=\"results-hero-sub\">Попробуйте ещё раз.</div>\n    {{/unless}}\n  </div>\n\n  <div class=\"card results-main-card\">\n    <div class=\"results-main-title\" data-path=\"course.title\"></div>\n    <div class=\"results-main-sub\">Результаты теста</div>\n\n    <div class=\"results-ring\" data-ring-offset=\"{{ result.ringDashoffset }}\" style=\"--ring-offset: {{ result.ringDashoffset }}\">\n      <svg viewBox=\"0 0 140 140\" width=\"140\" height=\"140\">\n        <circle cx=\"70\" cy=\"70\" r=\"63\" class=\"ring-bg\" stroke-width=\"14\" fill=\"none\"></circle>\n        <circle cx=\"70\" cy=\"70\" r=\"63\" class=\"ring-fg {{ result.passClass }}\" stroke-width=\"14\" fill=\"none\" stroke-linecap=\"round\"></circle>\n      </svg>\n      <div class=\"results-ring-center\">\n        <div class=\"results-ring-pct\"><span data-path=\"result.scorePercent\"></span>%</div>\n        <div class=\"results-ring-label\">Баллы</div>\n      </div>\n    </div>\n\n    <div class=\"results-stats\">\n      <div class=\"results-stat\">\n        <div class=\"v\" data-path=\"result.totalQuestions\"></div>\n        <div class=\"l\">Вопросов</div>\n      </div>\n      <div class=\"results-stat\">\n        <div class=\"v\"><span data-path=\"result.correct\"></span>/<span data-path=\"result.totalQuestions\"></span></div>\n        <div class=\"l\">Верно</div>\n      </div>\n      <div class=\"results-stat\">\n        <div class=\"v\" data-path=\"result.earnedPoints\"></div>\n        <div class=\"l\">Баллов</div>\n      </div>\n      <div class=\"results-pill {{ result.passClass }}\" data-path=\"result.statusLabel\"></div>\n    </div>\n  </div>\n\n  {{#if result.topicResults}}\n  <div class=\"results-section-title\">Результаты по темам</div>\n  <div class=\"results-topics-grid\">\n    {{#each result.topicResults}}\n    <div class=\"card topic-card\">\n      <div class=\"topic-head\">\n        <div class=\"topic-name\">{{topicName}}</div>\n        <div class=\"results-pill {{passClass}}\">{{statusLabel}}</div>\n      </div>\n      <div class=\"topic-bar {{passClass}}\" data-bar-width=\"{{percent}}\"><div class=\"topic-bar-fill\" style=\"width: {{percent}}%\"></div></div>\n      <div class=\"topic-row\">\n        <div class=\"k\">Правильно</div>\n        <div class=\"val\">{{correct}} / {{total}}</div>\n      </div>\n      {{#if pointsLabel}}\n      <div class=\"topic-row\">\n        <div class=\"k\">Баллов</div>\n        <div class=\"val\">{{pointsLabel}}</div>\n      </div>\n      {{/if}}\n      {{#if requiredLabel}}<div class=\"topic-required\">{{requiredLabel}}</div>{{/if}}\n      {{#if topicFeedback}}<div class=\"topic-feedback\"><div class=\"topic-feedback-text\">{{topicFeedback}}</div></div>{{/if}}\n    </div>\n    {{/each}}\n  </div>\n  {{/if}}\n\n  {{#if result.recommendedCourses}}\n  <div class=\"results-section-title\">Рекомендуемые курсы</div>\n  <div class=\"results-rec-list\">\n    {{#each result.recommendedCourses}}<a class=\"results-rec-item\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}\n  </div>\n  {{/if}}\n  {{#if result.recommendedEvents}}\n  <div class=\"results-section-title\">Рекомендуемые мероприятия</div>\n  <div class=\"results-rec-list\">\n    {{#each result.recommendedEvents}}<div class=\"results-rec-item\">{{title}}</div>{{/each}}\n  </div>\n  {{/if}}\n\n  <div class=\"results-actions\">\n    {{#if result.backAction}}<button type=\"button\" class=\"btn\" data-action=\"{{result.backAction}}\">{{result.backLabel}}</button>{{/if}}\n    {{#unless result.backAction}}<button type=\"button\" class=\"btn\" data-action=\"restart\">Пройти снова</button>{{/unless}}\n  </div>\n</div>\n",
   "results.adaptive": "<div class=\"results-page\">\n  <div class=\"results-hero\">\n    <div class=\"results-hero-icon is-info\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M8 21h8\"/><path d=\"M12 17v4\"/><path d=\"M7 4h10\"/><path d=\"M17 4v5a5 5 0 0 1-10 0V4\"/><path d=\"M5 6h2\"/><path d=\"M17 6h2\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Тест завершён</div>\n    <div class=\"results-hero-sub\" data-path=\"course.title\"></div>\n  </div>\n\n  <div class=\"results-section-title\">Результаты по темам</div>\n  <div class=\"results-topics-grid\">\n    {{#each result.topicResults}}\n    <div class=\"card topic-card\">\n      <div class=\"topic-head\">\n        <div class=\"topic-name\">{{topicName}}</div>\n        <div class=\"results-pill {{levelClass}}\">{{levelLabel}}</div>\n      </div>\n      {{#if hasFeedback}}\n      <div class=\"topic-feedback\">{{feedback}}</div>\n      {{/if}}\n      {{#if hasLinks}}\n      <div class=\"topic-links\">\n        {{#each links}}\n        <a class=\"topic-link\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>\n        {{/each}}\n      </div>\n      {{/if}}\n    </div>\n    {{/each}}\n  </div>\n\n  <div class=\"results-actions\">\n    {{#if result.showPdf}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"download-pdf\">Скачать PDF</button>{{/if}}\n    {{#if result.canRetry}}<button type=\"button\" class=\"btn\" data-action=\"restart-adaptive\">Пройти заново</button>{{/if}}\n    {{#if result.showFinish}}<button type=\"button\" class=\"btn\" data-action=\"finish\">Завершить тест</button>{{/if}}\n    {{#unless result.hasScormActions}}<button type=\"button\" class=\"btn\" data-action=\"restart\">Пройти снова</button>{{/unless}}\n  </div>\n</div>\n",
   "review": "<div class=\"results-page\">\n  {{#if design.logoUrl}}<div class=\"tb-brand\"><img class=\"tb-brand__logo\" src=\"{{ design.logoUrl }}\" alt=\"\"></div>{{/if}}\n  <div class=\"card\">\n    <div class=\"obzor-title\">{{review.scopeLabel}}</div>\n    <div class=\"obzor-sub\">{{review.hint}}</div>\n    {{#if state.questionsProgress}}\n    <div class=\"tb-pills\" role=\"group\" aria-label=\"Карта вопросов\">\n      <div class=\"tb-pills__head\">\n        <span>{{state.questionsProgress.scopeLabel}}</span>\n        <b>отвечено {{state.questionsProgress.answeredCount}} из {{state.questionsProgress.total}}</b>\n      </div>\n      <div class=\"tb-pills__dots\">\n        {{#each state.questionsProgress.states}}\n        <button type=\"button\" class=\"tb-pill {{statusClass}}\" {{#unless clickable}}disabled{{/unless}} data-action=\"goto:{{index}}\" aria-label=\"{{ariaLabel}}\">{{number}}</button>\n        {{/each}}\n      </div>\n      <div class=\"tb-pills__legend\">\n        <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-answered\"></span>отвечен</span>\n        <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-skipped\"></span>не отвечен</span>\n      </div>\n    </div>\n    {{/if}}\n    {{#if review.unansweredCount}}\n    <div class=\"tb-unanswered\">\n      <div class=\"tb-unanswered__head\">Без ответа ({{review.unansweredCount}}) — ответьте перед завершением:</div>\n      {{#each review.unanswered}}\n      <button type=\"button\" class=\"tb-unanswered__row\" data-action=\"goto:{{index}}\">\n        <span><strong>Вопрос {{number}}</strong> · {{prompt}}</span>\n        <span class=\"tb-unanswered__go\">Перейти →</span>\n      </button>\n      {{/each}}\n    </div>\n    {{/if}}\n    <div class=\"q-actions\">\n      <span class=\"q-actions__spacer\"></span>\n      <button type=\"button\" class=\"btn\" data-action=\"finish-review\">{{review.finishLabel}}</button>\n    </div>\n  </div>\n</div>\n",
@@ -2938,6 +2968,15 @@ function pluralQuestions(n) {
   return "вопросов";
 }
 
+function pluralMinutes(n) {
+  var abs = Math.abs(n) % 100;
+  var d = abs % 10;
+  if (abs > 10 && abs < 20) return "минут";
+  if (d === 1) return "минута";
+  if (d > 1 && d < 5) return "минуты";
+  return "минут";
+}
+
 /**
  * Plain-JS fallback for buildSectionIntroContext — used only when the shared
  * builder is absent from the (per-process cached) TBTemplate bundle, e.g. in dev
@@ -2951,6 +2990,7 @@ function buildSectionIntroFallback(inp) {
   var hasTime = !!(inp.timeLimitMinutes && inp.timeLimitMinutes > 0);
   var instr = typeof inp.instruction === "string" ? inp.instruction : "";
   var instrText = instr.replace(/<[^>]*>/g, "").trim();
+  var illo = (inp.illustration == null ? "" : String(inp.illustration)).trim();
   return {
     course: { title: inp.topicName || "" },
     sectionIntro: {
@@ -2961,8 +3001,10 @@ function buildSectionIntroFallback(inp) {
       questionCount: count,
       questionCountLabel: count + " " + pluralQuestions(count),
       hasTimeLimit: hasTime,
-      timeLimitLabel: hasTime ? String(inp.timeLimitMinutes) + " мин" : "",
+      timeLimitLabel: hasTime ? String(inp.timeLimitMinutes) + " " + pluralMinutes(inp.timeLimitMinutes) : "",
       hasInstruction: instrText.length > 0,
+      illustrationUrl: illo,
+      hasIllustration: illo.length > 0,
       continueLabel: inp.continueLabel || "Далее",
     },
   };
@@ -2987,6 +3029,9 @@ function renderSectionIntro(page) {
 
   var values = getPageValues(page);
   var instruction = values && values.instruction != null ? String(values.instruction) : "";
+  // Author section illustration (image placeholder on the intro content template).
+  var illoRaw = values && values.illustration;
+  var illustrationUrl = illoRaw && typeof illoRaw === "object" ? (illoRaw.url || "") : (illoRaw || "");
   var introInput = {
     sectionNumber: idx + 1,
     topicName: section.topicName,
@@ -2994,6 +3039,7 @@ function renderSectionIntro(page) {
     questionCount: section.drawCount,
     timeLimitMinutes: section.timeLimitMinutes,
     instruction: instruction,
+    illustration: illustrationUrl,
     continueLabel: "Далее",
   };
   var built = TB.buildSectionIntroContext
@@ -3007,15 +3053,99 @@ function renderSectionIntro(page) {
 
   var app = document.getElementById("app");
   app.innerHTML = "";
-  var wrap = document.createElement("div");
-  app.appendChild(wrap);
+  // Mount the layout root DIRECTLY into #app (no intermediate wrapper) so the
+  // fixed-stage flex chain (.tb-pad > .section-intro-page) applies — mirrors
+  // renderGalleryPage. A wrapper div would make the root a grandchild of .tb-pad,
+  // defeating the child-combinator fill/anchor rule.
   // The author instruction is sanitized rich text → injected raw via the slot (the
   // same trust model as info-page bodies / the question-interaction slot).
-  TB.renderScreenInto(wrap, { layout: layout, context: context, slots: { instruction: instruction } });
-  var btn = wrap.querySelector('[data-action="section-intro-continue"]');
+  TB.renderScreenInto(app, { layout: layout, context: context, slots: { instruction: instruction } });
+  var btn = app.querySelector('[data-action="section-intro-continue"]');
   if (btn) btn.addEventListener("click", function () {
     if (typeof advancePageSequence === "function") advancePageSequence();
   });
+  // «Назад»: return to the ACTUAL previous screen via the recorded nav route
+  // (a preceding content page, or the router hub) instead of a hard-coded target
+  // — in router mode the section-intro is index 0 of a rebuilt topic chunk, so a
+  // plain currentPageIndex-1 clamps to itself and does nothing. Shown only when
+  // the layout renders the back button.
+  var back = app.querySelector('[data-action="section-intro-back"]');
+  if (back) back.addEventListener("click", function () {
+    if (typeof navigateBackOrPrevPage === "function") navigateBackOrPrevPage();
+  });
+  return true;
+}
+
+/**
+ * Renders a gallery card page (kind `gallery`) via its own layout variant
+ * (text / media / list). Header + subheader + card body + the round pill row +
+ * Назад/Далее. The pills are a per-page indicator: the two settings
+ * (pillsTotal, pillCurrent) are expanded here into a Core-prepared `pills` array
+ * the layout renders with `{{#each}}` (the DSL cannot loop over a raw count).
+ * «Назад» (shown only when the page's `showBack` setting is on) steps the page
+ * sequence back via goToPageSequenceIndex; «Далее» advances it as usual. Each
+ * card is a normal content page — no gallery controller / grouping.
+ */
+function renderGalleryPage(page, contentTemplate) {
+  var layouts = (typeof state !== "undefined" && state) ? state.templateLayouts : null;
+  var layout = layouts && contentTemplate ? layouts[contentTemplate.key] : null;
+  var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
+  if (!layout || !TB || !TB.renderScreenInto) return false;
+
+  var values = getPageValues(page) || {};
+  var total = parseInt(values.pillsTotal, 10);
+  if (!(total > 0)) total = 1;
+  var current = parseInt(values.pillCurrent, 10) || 1;
+  var pills = [];
+  for (var i = 1; i <= total; i++) {
+    pills.push({ statusClass: i === current ? "is-current" : "" });
+  }
+
+  var img = values.image;
+  var imageUrl = img && typeof img === "object" ? (img.url || "") : (img || "");
+  var bgRaw = values.backgroundImage;
+  var slideBgUrl = bgRaw && typeof bgRaw === "object" ? (bgRaw.url || "") : (bgRaw || "");
+
+  var context = {
+    design: (typeof scormDesignContext === "function") ? scormDesignContext() : {},
+    course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") },
+    gallery: {
+      header: values.header != null ? String(values.header) : "",
+      subheader: values.subheader != null ? String(values.subheader) : "",
+      imageUrl: imageUrl,
+      pills: pills,
+      showBack: values.showBack === true || values.showBack === "true",
+      nextLabel: (values.nextLabel != null && values.nextLabel !== "") ? String(values.nextLabel) : "Далее"
+    }
+  };
+
+  var app = document.getElementById("app");
+  app.innerHTML = "";
+  // cardText is sanitized rich text → injected raw via the slot (same trust model
+  // as info-page bodies / the section-intro instruction). Rendered directly into
+  // #app (no wrapper) so the fixed-stage flex chain (.tb-pad > .gallery) applies.
+  var cardText = values.cardText != null ? String(values.cardText) : "";
+  TB.renderScreenInto(app, { layout: layout, context: context, slots: { cardText: cardText } });
+
+  // Per-slide background image (variant-slide setting): applied to the slide root.
+  if (slideBgUrl) {
+    var slideEl = app.querySelector(".gallery");
+    if (slideEl) {
+      slideEl.classList.add("has-slide-bg");
+      slideEl.style.backgroundImage = 'url("' + String(slideBgUrl).replace(/"/g, "%22") + '")';
+    }
+  }
+
+  var nextBtn = app.querySelector('[data-nav="next"]');
+  if (nextBtn) nextBtn.onclick = function () {
+    if (typeof advancePageSequence === "function") advancePageSequence();
+  };
+  var prevBtn = app.querySelector('[data-nav="prev"]');
+  if (prevBtn) prevBtn.onclick = function () {
+    // «Назад» follows the recorded nav route (same as section-intro); the router
+    // hub fallback covers a gallery that is a topic chunk's first page.
+    if (typeof navigateBackOrPrevPage === "function") navigateBackOrPrevPage();
+  };
   return true;
 }
 
@@ -3032,6 +3162,8 @@ function renderContentPage(page, contentTemplates) {
   if (page && page.kind === "intro" && renderSectionIntro(page)) return;
 
   var contentTemplate = findContentTemplate(page, contentTemplates);
+  // Gallery pages render via their own layout (header/subheader/card + pills + Назад/Далее).
+  if (contentTemplate && contentTemplate.kind === "gallery" && renderGalleryPage(page, contentTemplate)) return;
   var values = getPageValues(page);
   var placeholderStyles = getPagePlaceholderStyles(page);
   var skeleton = buildContentPageSkeleton(page, contentTemplate);
@@ -3045,15 +3177,15 @@ function renderContentPage(page, contentTemplates) {
   var host;
   if (layout && TB && TB.renderScreenInto) {
     app.innerHTML = "";
-    var wrap = document.createElement("div");
-    app.appendChild(wrap);
-    TB.renderScreenInto(wrap, {
+    // Mount directly into #app (no wrapper) so .tb-pad > .layout-content-wrap fills
+    // the fixed stage and the bottom nav anchors — mirrors renderGalleryPage.
+    TB.renderScreenInto(app, {
       layout: layout,
       context: { course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") } },
       slots: { "page-content": skeleton }
     });
-    host = wrap.querySelector('[data-slot="page-content"]') || wrap;
-    var navBtn = wrap.querySelector('.navigation [data-nav="next"]');
+    host = app.querySelector('[data-slot="page-content"]') || app;
+    var navBtn = app.querySelector('.navigation [data-nav="next"]');
     if (navBtn) navBtn.onclick = function () { if (typeof advancePageSequence === "function") advancePageSequence(); };
   } else {
     app.innerHTML = skeleton;
@@ -3080,6 +3212,605 @@ function renderContentPage(page, contentTemplates) {
     tb.template.emit("page:enter", { page: page });
   }
 }
+
+
+/* server\scorm\template\app\routerFlow.js */
+/**
+ * @module routerFlow
+ * @description PRD-4 v1.1 §4.7 router_by_topics runtime: state machine
+ * around the linear pageSequence. Loaded only when
+ * `TEST_DATA.flowPolicy.mode === "router_by_topics"`.
+ *
+ * Learner flow:
+ *   1. Test-before content pages run linearly (existing pageSequence logic).
+ *   2. Router page renders; learner picks a topic card.
+ *   3. {@link selectRouterTopic} swaps pageSequence to that topic's chunk
+ *      (before_topic content → questions → after_topic content).
+ *   4. {@link returnFromTopic} fires when the chunk's last page advances;
+ *      marks the topic completed, re-enters the router page.
+ *   5. When `routerCompletionPolicy` is satisfied, {@link finishRouter}
+ *      switches to the post-router sequence (test-after + results).
+ *
+ * Phase 4c-ii/iii contract. Phase 4c-iv adds completion policy + unlock
+ * rules. Phase 4d wires adaptive sessions inside topic chunks.
+ */
+(function (root) {
+  "use strict";
+
+  /**
+   * True if the test runs in router_by_topics mode and the router runtime
+   * should take over navigation. Other modes ignore this module.
+   */
+  function isRouterMode() {
+    return (
+      typeof TEST_DATA !== "undefined" &&
+      TEST_DATA.flowPolicy &&
+      TEST_DATA.flowPolicy.mode === "router_by_topics"
+    );
+  }
+
+  /**
+   * Lists the questions for a single topic in the order generateVariant
+   * produced them (which, in router/linear-by-topics modes, preserves
+   * section order). The mapping back to flatQuestions index is what
+   * downstream answer/feedback flow expects.
+   */
+  function indicesForTopic(topicId) {
+    var out = [];
+    for (var i = 0; i < state.flatQuestions.length; i++) {
+      if (state.flatQuestions[i].topicId === topicId) out.push(i);
+    }
+    return out;
+  }
+
+  /** True when `p` is an AUTHOR content page that may flow in a sequence — i.e.
+   *  NOT a system design-binding (`questions`/`start`/`results`/`router`) nor a
+   *  PRD-19 section node (`review`/`section-results`), all of which render via
+   *  their own phases. Mirrors contentFlow.contentPagesFor so the router topic
+   *  chunks never show a blank «Далее» page from the «Вопросы» binding row. */
+  function isFlowContentPage(p) {
+    return p && p.kind !== "start" && p.kind !== "results" && p.kind !== "questions"
+      && p.kind !== "router" && p.kind !== "review" && p.kind !== "section-results";
+  }
+
+  /** Lists per-topic content pages at the given position, in sortOrder. */
+  function contentPagesForRouter(topicId, position) {
+    return (TEST_DATA.contentPages || [])
+      .filter(function (p) {
+        return isFlowContentPage(p) && p.topicId === topicId && p.position === position;
+      })
+      .sort(function (a, b) {
+        return (a.sortOrder || 0) - (b.sortOrder || 0);
+      });
+  }
+
+  /**
+   * Builds the pageSequence chunk for one topic: before_topic content →
+   * questions for that topic → after_topic content. Reused by
+   * {@link selectRouterTopic} every time the learner picks a topic.
+   */
+  function buildTopicChunk(topicId) {
+    var seq = [];
+    contentPagesForRouter(topicId, "before_topic").forEach(function (page) {
+      seq.push({ kind: "content", page: page });
+    });
+    indicesForTopic(topicId).forEach(function (questionIndex) {
+      seq.push({ kind: "question", questionIndex: questionIndex });
+    });
+    contentPagesForRouter(topicId, "after_topic").forEach(function (page) {
+      seq.push({ kind: "content", page: page });
+    });
+    return seq;
+  }
+
+  /**
+   * Builds the post-router test-end sequence: test-scope «after» content,
+   * with the same summary-boundary semantics as the existing
+   * rebuildPageSequence logic (a `summary` page splits pre-results vs
+   * post-results pages).
+   */
+  function buildPostRouterSequence() {
+    var seq = [];
+    var postResults = [];
+    var seenSummary = false;
+    (TEST_DATA.contentPages || [])
+      .filter(function (p) { return isFlowContentPage(p) && p.topicId === null && p.position === "after"; })
+      .sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); })
+      .forEach(function (page) {
+        if (page.type === "summary") { seenSummary = true; return; }
+        if (seenSummary) postResults.push(page);
+        else seq.push({ kind: "content", page: page });
+      });
+    state.postResultsPages = postResults;
+    return seq;
+  }
+
+  /**
+   * PRD-4 v1.1 §4.7: evaluates whether `section` is unlocked given the
+   * current routerTopicStates. Reads `flowPolicy.sectionUnlockRules`
+   * (per-section rule keyed by topicId). Default rule is `always`.
+   *
+   * Supported rule modes:
+   *   - { mode: "always" }                                   — unconditional
+   *   - { mode: "after_sections_completed", sectionIds: [] } — all listed
+   *     sections must be in 'completed' state (any achievedLevel/result)
+   *   - { mode: "after_sections_passed", sectionIds: [] }    — same, but
+   *     sectionResults[id].passed must be true (or null when the section
+   *     has no pass rule; null is treated as passed in this MVP)
+   */
+  function isSectionUnlocked(section) {
+    var rules =
+      (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.sectionUnlockRules) || {};
+    var rule = rules[section.topicId];
+    if (!rule || !rule.mode || rule.mode === "always") return true;
+    if (rule.mode === "after_sections_completed") {
+      return (rule.sectionIds || []).every(function (id) {
+        return state.routerTopicStates[id] === "completed";
+      });
+    }
+    if (rule.mode === "after_sections_passed") {
+      return (rule.sectionIds || []).every(function (id) {
+        if (state.routerTopicStates[id] !== "completed") return false;
+        var result = state.sectionResults && state.sectionResults[id];
+        // null passed (no passRule) is treated as passed for navigation;
+        // strict pass mode would reject it — see PRD-4 §4.6.
+        return !result || result.passed !== false;
+      });
+    }
+    return true; // Unknown rule mode: fail-open (don't block the learner).
+  }
+
+  /**
+   * PRD-4 v1.1 §4.7: evaluates whether the router can show «Завершить».
+   * Reads `flowPolicy.routerCompletionPolicy` (default
+   * 'all_required_completed'). Optional sections never block completion.
+   */
+  function isRouterReadyToFinish() {
+    var policy =
+      (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.routerCompletionPolicy) ||
+      "all_required_completed";
+    var requiredSections = (TEST_DATA.sections || []).filter(function (s) {
+      return s.required !== false;
+    });
+    if (requiredSections.length === 0) {
+      // No required sections — learner can finish at any time.
+      return true;
+    }
+    return requiredSections.every(function (s) {
+      if (state.routerTopicStates[s.topicId] !== "completed") return false;
+      if (policy === "all_required_passed") {
+        var result = state.sectionResults && state.sectionResults[s.topicId];
+        // No-result safeguard: treat as not-passed under strict policy.
+        if (!result) return false;
+        // null `passed` (no passRule) → not strictly passed under the
+        // 'all_required_passed' policy; author must define passRules to
+        // use this policy.
+        return result.passed === true;
+      }
+      // all_required_completed: any completion is sufficient.
+      return true;
+    });
+  }
+
+  /**
+   * Renders the router page using the existing renderContentPage flow and
+   * then augments the resulting DOM with clickable topic cards. The card
+   * list reads TEST_DATA.sections (topic order, name) and per-topic state
+   * from state.routerTopicStates. Phase 4c-iv adds `locked` state from
+   * sectionUnlockRules and gates «Завершить» behind
+   * routerCompletionPolicy.
+   */
+  function renderRouterPage(page) {
+    var manifest = state.templateManifest || {};
+    if (typeof renderContentPage === "function") {
+      renderContentPage(page, manifest.contentTemplates || []);
+    }
+    var app = document.getElementById("app");
+    if (!app) return;
+    // The router is a HUB — navigation is via the topic cards, not the content
+    // wrapper's «Далее». Remove that nav so the run matches the «Структура» preview.
+    var nav = app.querySelector(".navigation");
+    if (nav && nav.parentNode) nav.parentNode.removeChild(nav);
+    // Cards (and the «Завершить» action) live INSIDE the content wrapper's
+    // page-content slot — the SAME DOM the preview builds (buildRouterCards into
+    // page-content) — so the run and the structure preview look identical.
+    var host = app.querySelector('[data-slot="page-content"]') || app;
+    var existing = host.querySelector(".router-topic-cards");
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+    var cards = document.createElement("div");
+    cards.className = "router-topic-cards";
+    cards.setAttribute("role", "list");
+    cards.setAttribute("aria-label", "Доступные темы");
+
+    (TEST_DATA.sections || []).forEach(function (section) {
+      var status = state.routerTopicStates[section.topicId] || "notStarted";
+      var unlocked = isSectionUnlocked(section);
+      var lockedClass = !unlocked && status !== "completed" ? " router-topic-card--locked" : "";
+      var card = document.createElement("button");
+      card.type = "button";
+      card.className =
+        "router-topic-card router-topic-card--" + status + lockedClass;
+      card.setAttribute("role", "listitem");
+      card.setAttribute("data-topic-id", section.topicId);
+      card.setAttribute("data-router-status", status);
+      if (!unlocked) card.setAttribute("data-router-locked", "true");
+      // Completed cards stay disabled to prevent re-entry; locked cards are
+      // disabled because their unlock-rule prerequisites aren't met yet.
+      card.disabled = status === "completed" || !unlocked;
+      var _meta = [];
+      if (section.drawCount) _meta.push(section.drawCount + " " + pluralQuestions(section.drawCount));
+      if (section.timeLimitMinutes) _meta.push(section.timeLimitMinutes + " мин");
+      var _metaHtml = _meta.length
+        ? '<span class="router-topic-card__meta">' + _meta.map(function (m) {
+            return '<span class="router-topic-card__chip">' + escapeHtml(m) + "</span>";
+          }).join("") + "</span>"
+        : "";
+      var _goHtml = (unlocked && status !== "completed")
+        ? '<span class="router-topic-card__go">начать</span>' : "";
+      var _imgUrl = section.image && typeof section.image === "object"
+        ? (section.image.url || "") : (section.image || "");
+      var _imgHtml = _imgUrl
+        ? '<span class="router-topic-card__img"><img src="' + escapeHtml(_imgUrl) + '" alt=""></span>'
+        : "";
+      card.innerHTML =
+        '<span class="router-topic-card__top">' +
+        '<span class="router-topic-card__name">' +
+        escapeHtml(section.topicName || section.topicId) +
+        (section.required === false
+          ? ' <span class="router-topic-card__optional">(необязательная)</span>'
+          : "") +
+        "</span>" +
+        _imgHtml +
+        "</span>" +
+        _metaHtml +
+        '<span class="router-topic-card__foot">' +
+        '<span class="router-topic-card__status">' +
+        escapeHtml(unlocked ? statusLabel(status) : "Недоступна") +
+        "</span>" +
+        _goHtml +
+        "</span>";
+      card.onclick = function () {
+        if (card.disabled) return;
+        selectRouterTopic(section.topicId);
+      };
+      cards.appendChild(card);
+    });
+
+    // Top stats: deadline date/time (mirrors the original's top boxes). Additive —
+    // only rendered when the test carries a deadline; the default template omits it.
+    var prevStats = host.querySelector(".router-stats");
+    if (prevStats && prevStats.parentNode) prevStats.parentNode.removeChild(prevStats);
+    var deadline = TEST_DATA.deadline || {};
+    if (deadline.date || deadline.time) {
+      var stats = document.createElement("div");
+      stats.className = "router-stats";
+      var _sb = "";
+      if (deadline.date) _sb += '<div class="router-stat"><span class="router-stat__label">Дата завершения теста</span><span class="router-stat__value">' + escapeHtml(deadline.date) + "</span></div>";
+      if (deadline.time) _sb += '<div class="router-stat"><span class="router-stat__label">Время завершения теста</span><span class="router-stat__value">' + escapeHtml(deadline.time) + "</span></div>";
+      stats.innerHTML = _sb;
+      host.appendChild(stats);
+    }
+
+    // Progress counter «Разделы X / Y» + thin bar, above the cards. Y counts ONLY
+    // required sections (the ones that gate «Перейти к результатам»); hidden when
+    // there are no required sections.
+    var prevProg = host.querySelector(".router-progress");
+    if (prevProg && prevProg.parentNode) prevProg.parentNode.removeChild(prevProg);
+    var reqSections = (TEST_DATA.sections || []).filter(function (s) { return s.required !== false; });
+    var reqTotal = reqSections.length;
+    if (reqTotal > 0) {
+      var reqDone = reqSections.filter(function (s) {
+        return state.routerTopicStates[s.topicId] === "completed";
+      }).length;
+      var pct = Math.round((reqDone / reqTotal) * 100);
+      var prog = document.createElement("div");
+      prog.className = "router-progress";
+      prog.setAttribute("role", "group");
+      prog.setAttribute("aria-label", "Прогресс по разделам");
+      prog.innerHTML =
+        '<div class="router-progress__head">' +
+          '<span class="router-progress__label">Разделы</span>' +
+          '<span class="router-progress__count">' + reqDone + " / " + reqTotal + "</span>" +
+        "</div>" +
+        '<div class="router-progress__bar"><div class="router-progress__fill" style="width:' + pct + '%"></div></div>';
+      host.appendChild(prog);
+    }
+
+    host.appendChild(cards);
+
+    // PRD-4 v1.1 §4.7: «Завершить» is gated by routerCompletionPolicy
+    // (all required sections completed, optionally also passed). Optional
+    // sections never block.
+    // «Завершить» is always shown but disabled until the completion policy is met
+    // (mirrors the original — the button greys out until all sections are done).
+    var ready = isRouterReadyToFinish();
+    var finishBtn = document.createElement("button");
+    finishBtn.type = "button";
+    finishBtn.className = "btn router-finish" + (ready ? "" : " router-finish--disabled");
+    finishBtn.setAttribute("data-action", "router-finish");
+    finishBtn.textContent = "Завершить";
+    finishBtn.disabled = !ready;
+    if (ready) finishBtn.onclick = finishRouter;
+    host.appendChild(finishBtn);
+
+    // PRD-8 FR-18: emit router lifecycle events for diagnostics + template
+    // extensions. The first time the «Завершить» action becomes available
+    // we additionally emit router:finalResultUnlocked so templates can
+    // highlight the transition (e.g. animate the button into view).
+    emitRouterEvent("router:shown", {
+      sections: (TEST_DATA.sections || []).map(function (s) {
+        return {
+          topicId: s.topicId,
+          topicName: s.topicName,
+          required: s.required !== false,
+          status: state.routerTopicStates[s.topicId] || "notStarted",
+          unlocked: isSectionUnlocked(s),
+        };
+      }),
+      readyToFinish: ready,
+    });
+    if (ready && !state._routerFinalUnlockedFired) {
+      state._routerFinalUnlockedFired = true;
+      emitRouterEvent("router:finalResultUnlocked", {});
+    }
+  }
+
+  /**
+   * PRD-8 FR-18: thin helper around TestBuilder.template.emit that
+   * tolerates missing TestBuilder instance (defensive in case the
+   * runtime bundle skipped templateCore for any reason).
+   */
+  function emitRouterEvent(name, data) {
+    var tb = typeof window !== "undefined" ? window.TestBuilder : null;
+    if (tb && tb.template && typeof tb.template.emit === "function") {
+      tb.template.emit(name, data || {});
+    }
+  }
+
+  function statusLabel(status) {
+    if (status === "completed") return "Пройдена";
+    if (status === "inProgress") return "В процессе";
+    return "Не начата";
+  }
+
+  /** Russian plural for «вопрос» (n вопрос / вопроса / вопросов). */
+  function pluralQuestions(n) {
+    var m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return "вопрос";
+    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return "вопроса";
+    return "вопросов";
+  }
+
+  /**
+   * Marks the topic as in-progress and starts the topic's runtime. In
+   * standard mode this is a linear chunk (before_topic content → questions
+   * → after_topic content). In adaptive mode (PRD-4 v1.1 §4.7), a
+   * single-topic adaptive session takes over — content pages around the
+   * adaptive session are NOT rendered in this slice (Phase 4d-iii adds
+   * that for the (adaptive, linear_by_topics) combo; router adaptive
+   * fires the engine directly and returns to router on completion).
+   * Picking a completed topic is a no-op (button also disabled).
+   */
+  function selectRouterTopic(topicId) {
+    if (!isRouterMode()) return;
+    if (state.routerTopicStates[topicId] === "completed") return;
+    // Record the router hub on the nav route BEFORE mutating state, so the
+    // topic's «Назад» (section-intro / first page) returns to the hub instead of
+    // dead-ending at the rebuilt chunk's index 0. Captures the clean hub state
+    // (this topic not yet 'inProgress', currentRouterTopic still null).
+    if (typeof pushNavHistory === "function") pushNavHistory();
+    state.routerTopicStates[topicId] = "inProgress";
+    state.currentRouterTopic = topicId;
+    // PRD-8 FR-18: section selection event for diagnostics + template
+    // hooks (e.g. transition animations).
+    emitRouterEvent("router:sectionSelected", { topicId: topicId });
+
+    // PRD-4 v1.1 §3.2 (Phase 4e): start the per-section timer on entry.
+    // Stopped by returnFromTopic (normal completion) or by the timer's
+    // own expiry handler. Sections without a custom limit (null/inherit_test)
+    // skip startSectionTimer's no-op early return.
+    var section = (TEST_DATA.sections || []).find(function (s) {
+      return s.topicId === topicId;
+    });
+    if (
+      section &&
+      section.timeLimitMinutes &&
+      typeof startSectionTimer === "function"
+    ) {
+      startSectionTimer(topicId, section.timeLimitMinutes, function () {
+        // On expiry mark the topic completed (with whatever was answered)
+        // and return to the router. The completion still feeds the
+        // sectionResults snapshot via Phase 4b on the next render — for
+        // adaptive sessions the AdaptiveSession callback has already
+        // populated it.
+        returnFromTopic();
+      });
+    }
+
+    // PRD-4 v1.1 §4.7: adaptive + router_by_topics — launch a single-topic
+    // adaptive session via the AdaptiveSession wrapper. On completion
+    // (engine's «all topics done» branch fires the callback), freeze the
+    // topic's achievedLevel in sectionResults and return to router.
+    if (
+      TEST_DATA.mode === "adaptive" &&
+      typeof AdaptiveSession !== "undefined" &&
+      AdaptiveSession.runAdaptiveSession
+    ) {
+      var ok = AdaptiveSession.runAdaptiveSession(topicId, function (topicResult) {
+        // topicResult is the adaptive engine's per-topic entry:
+        // { topicId, topicName, finalLevelIndex, finalLevelName,
+        //   answeredQuestions, achievedLevel, passed, ... }
+        // Mirror onto sectionResults for templates that bind
+        // data-path="section.current.result.*" (consistent with Phase 4b).
+        if (topicResult) {
+          if (!state.sectionResults) state.sectionResults = {};
+          state.sectionResults[topicId] = topicResult;
+        }
+        returnFromTopic();
+      });
+      if (!ok) {
+        // Defensive: strict gating (Phase 1 L2/L3) should prevent this,
+        // but if a malformed package reaches the runtime, fall back to a
+        // standard topic chunk so the learner can still navigate.
+        console.warn(
+          "[PRD-4] Adaptive session for topic " +
+            topicId +
+            " failed to start (no levels?). Falling back to standard topic chunk.",
+        );
+        state.pageSequence = buildTopicChunk(topicId);
+        state.currentPageIndex = 0;
+        if (typeof syncPhaseToCurrentPage === "function") syncPhaseToCurrentPage();
+        if (typeof render === "function") render();
+      }
+      return;
+    }
+
+    // Standard mode (mode='standard', router_by_topics): linear topic chunk.
+    state.pageSequence = buildTopicChunk(topicId);
+    state.currentPageIndex = 0;
+    if (typeof syncPhaseToCurrentPage === "function") syncPhaseToCurrentPage();
+    if (typeof render === "function") render();
+  }
+
+  /**
+   * Called by `advancePageSequence` when the learner finishes the last
+   * page of a topic chunk. Freezes the topic state as completed and
+   * re-enters the router page so the learner picks the next topic (or
+   * triggers «Завершить» if completionPolicy is satisfied).
+   */
+  function returnFromTopic() {
+    if (!isRouterMode()) return;
+    // PRD-4 v1.1 §3.2 (Phase 4e): tear down the per-section timer regardless
+    // of whether it fired naturally or the learner finished the section
+    // ahead of time. Safe to call when no timer is active.
+    if (typeof stopSectionTimer === "function") stopSectionTimer();
+    var topicId = state.currentRouterTopic;
+    if (topicId) {
+      state.routerTopicStates[topicId] = "completed";
+    }
+    state.currentRouterTopic = null;
+    // PRD-4 v1.1 §3.2 / Phase 4f — checkpoint the sectional state on
+    // every section completion so a SCO reload can resume with completed
+    // topics intact (beforeunload also saves, but explicit checkpoints
+    // protect against unexpected browser kills).
+    if (typeof saveCurrentSession === "function") saveCurrentSession();
+    // Find and re-enter the router page (typically before/topicId=null).
+    var routerPage = (TEST_DATA.contentPages || []).find(function (p) {
+      return p.kind === "router";
+    });
+    if (!routerPage) {
+      // No router page declared; fall through to finish.
+      finishRouter();
+      return;
+    }
+    state.pageSequence = [{ kind: "content", page: routerPage, isRouter: true }];
+    state.currentPageIndex = 0;
+    state.phase = "router";
+    if (typeof render === "function") render();
+  }
+
+  /**
+   * PRD-20 (2e): resume INTO an unfinished topic on reload — reconstruct its
+   * chunk and enter at the saved page position instead of dropping the learner
+   * back on the router page. Adaptive topics cannot resume (their state is not
+   * persisted) — the caller excludes them. Returns true on success.
+   */
+  function resumeRouterTopic(topicId, pageIndex) {
+    if (!isRouterMode() || !topicId) return false;
+    if (TEST_DATA.mode === "adaptive") return false;
+    var chunk = buildTopicChunk(topicId);
+    if (!chunk || chunk.length === 0) return false;
+    state.routerTopicStates[topicId] = "inProgress";
+    state.currentRouterTopic = topicId;
+    state.pageSequence = chunk;
+    var idx = (typeof pageIndex === "number" && pageIndex >= 0 && pageIndex < chunk.length)
+      ? pageIndex : 0;
+    state.currentPageIndex = idx;
+    // Section timers are not persisted (PRD-4 §3.2): restart fresh on re-entry.
+    var section = (TEST_DATA.sections || []).find(function (s) {
+      return s.topicId === topicId;
+    });
+    if (section && section.timeLimitMinutes && typeof startSectionTimer === "function") {
+      startSectionTimer(topicId, section.timeLimitMinutes, function () {
+        returnFromTopic();
+      });
+    }
+    if (typeof syncPhaseToCurrentPage === "function") syncPhaseToCurrentPage();
+    if (typeof render === "function") render();
+    return true;
+  }
+
+  /**
+   * Triggered by the «Завершить тест» action on the router. Switches the
+   * page sequence to the post-router test-end content (test-scope after,
+   * minus the summary boundary which gates post-results). Then advances
+   * to the first page; the existing post-results infrastructure handles
+   * pages after the summary boundary.
+   */
+  function finishRouter() {
+    if (!isRouterMode()) return;
+    state.routerFinished = true;
+    state.currentRouterTopic = null;
+    // PRD-8 FR-18: final-result open event — fires when the learner
+    // actively triggers «Завершить» (after completionPolicy is met).
+    emitRouterEvent("router:finalResultOpened", {});
+    var postRouter = buildPostRouterSequence();
+    if (postRouter.length === 0) {
+      // No test-scope after content (other than maybe a summary) →
+      // submit and let the existing results flow take over.
+      if (typeof submit === "function") submit(true);
+      return;
+    }
+    state.pageSequence = postRouter;
+    state.currentPageIndex = 0;
+    if (typeof syncPhaseToCurrentPage === "function") syncPhaseToCurrentPage();
+    if (typeof render === "function") render();
+  }
+
+  /**
+   * Return to the router hub WITHOUT completing the current topic — the resume-
+   * safe «Назад» fallback from a topic's first page when no nav history exists
+   * (e.g. a reloaded SCO). Reverts the topic to 'notStarted', stops its section
+   * timer and re-renders the hub. Live sessions use navigateBack, which restores
+   * the exact hub snapshot; this reconstructs an equivalent hub.
+   */
+  function returnToHub() {
+    if (!isRouterMode()) return false;
+    if (typeof stopSectionTimer === "function") stopSectionTimer();
+    var topicId = state.currentRouterTopic;
+    if (topicId && state.routerTopicStates[topicId] === "inProgress") {
+      delete state.routerTopicStates[topicId];
+    }
+    state.currentRouterTopic = null;
+    var routerPage = (TEST_DATA.contentPages || []).find(function (p) {
+      return p.kind === "router";
+    });
+    if (!routerPage) return false;
+    state.pageSequence = [{ kind: "content", page: routerPage, isRouter: true }];
+    state.currentPageIndex = 0;
+    state.phase = "router";
+    if (typeof render === "function") render();
+    return true;
+  }
+
+  root.RouterFlow = {
+    isRouterMode: isRouterMode,
+    buildTopicChunk: buildTopicChunk,
+    buildPostRouterSequence: buildPostRouterSequence,
+    renderRouterPage: renderRouterPage,
+    selectRouterTopic: selectRouterTopic,
+    resumeRouterTopic: resumeRouterTopic,
+    returnFromTopic: returnFromTopic,
+    returnToHub: returnToHub,
+    finishRouter: finishRouter,
+    isSectionUnlocked: isSectionUnlocked,
+    isRouterReadyToFinish: isRouterReadyToFinish,
+  };
+  root.selectRouterTopic = selectRouterTopic;
+  root.returnFromTopic = returnFromTopic;
+  root.finishRouter = finishRouter;
+})(typeof window !== "undefined" ? window : global);
 </script>
 
 <!-- Template-specific script -->
@@ -3113,6 +3844,1477 @@ function renderContentPage(page, contentTemplates) {
     if (tb._init) tb._init(window.PRD1_TEMPLATE_MANIFEST ? window.PRD1_TEMPLATE_MANIFEST.params : []);
     updateProgress();
   });
+})();
+</script>
+
+<!-- Shared DSL: the REAL renderer (shared/template/dsl.ts), bundled -->
+<script>"use strict";
+var TBDsl = (() => {
+  var __defProp = Object.defineProperty;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
+  var __copyProps = (to, from, except, desc) => {
+    if (from && typeof from === "object" || typeof from === "function") {
+      for (let key of __getOwnPropNames(from))
+        if (!__hasOwnProp.call(to, key) && key !== except)
+          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    }
+    return to;
+  };
+  var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+  // shared/template/dsl.ts
+  var dsl_exports = {};
+  __export(dsl_exports, {
+    compileTemplate: () => compileTemplate,
+    renderTemplate: () => renderTemplate
+  });
+  function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function stringify(v) {
+    if (v === null || v === void 0) return "";
+    const t = typeof v;
+    if (t === "string") return v;
+    if (t === "number" || t === "boolean" || t === "bigint") return String(v);
+    return "";
+  }
+  function truthy(v) {
+    if (Array.isArray(v)) return v.length > 0;
+    return Boolean(v);
+  }
+  function resolvePath(obj, path) {
+    if (path === "" || path === "this" || path === ".") return obj;
+    let cur = obj;
+    for (const part of path.split(".")) {
+      if (part === "this") continue;
+      if (cur === null || cur === void 0 || typeof cur !== "object") return void 0;
+      cur = cur[part];
+    }
+    return cur;
+  }
+  function resolveInScope(path, scope) {
+    if (path === "@root") return scope.root;
+    if (path.startsWith("@root.")) return resolvePath(scope.root, path.slice("@root.".length));
+    if (path === "@index" || path === "@number" || path === "@first" || path === "@last") {
+      return scope.meta[path];
+    }
+    return resolvePath(scope.data, path);
+  }
+  function assertPath(raw, where) {
+    if (raw === "" || /\s/.test(raw)) {
+      throw new Error(`Invalid ${where} "${raw}": expressions and helpers are not supported`);
+    }
+  }
+  function tokenize(tpl) {
+    const tokens = [];
+    let i = 0;
+    while (i < tpl.length) {
+      const open = tpl.indexOf("{{", i);
+      if (open === -1) {
+        if (i < tpl.length) tokens.push({ kind: "text", value: tpl.slice(i) });
+        break;
+      }
+      if (open > i) tokens.push({ kind: "text", value: tpl.slice(i, open) });
+      if (tpl[open + 2] === "{") {
+        throw new Error("Raw HTML interpolation ({{{ }}}) is not supported");
+      }
+      const close = tpl.indexOf("}}", open + 2);
+      if (close === -1) throw new Error("Unclosed {{ in template");
+      tokens.push(classify(tpl.slice(open + 2, close).trim()));
+      i = close + 2;
+    }
+    return tokens;
+  }
+  function classify(raw) {
+    if (raw.startsWith("#")) {
+      const m = /^#(if|unless|each)\b([\s\S]*)$/.exec(raw);
+      if (!m) throw new Error(`Unknown block helper "{{${raw}}}"`);
+      const path = m[2].trim();
+      assertPath(path, "block path");
+      return { kind: "open", type: m[1], path };
+    }
+    if (raw.startsWith("/")) {
+      const m = /^\/(if|unless|each)$/.exec(raw);
+      if (!m) throw new Error(`Invalid closing tag "{{${raw}}}"`);
+      return { kind: "close", type: m[1] };
+    }
+    if (raw.startsWith(">")) {
+      const name = raw.slice(1).trim();
+      assertPath(name, "partial name");
+      return { kind: "partial", name };
+    }
+    assertPath(raw, "interpolation path");
+    return { kind: "interp", path: raw };
+  }
+  function parse(tokens) {
+    let pos = 0;
+    function parseNodes(stop) {
+      const nodes = [];
+      while (pos < tokens.length) {
+        const tok = tokens[pos];
+        if (tok.kind === "close") {
+          if (tok.type === stop) {
+            pos++;
+            return nodes;
+          }
+          throw new Error(`Unexpected closing tag {{/${tok.type}}}`);
+        }
+        pos++;
+        if (tok.kind === "text") nodes.push({ t: "text", v: tok.value });
+        else if (tok.kind === "interp") nodes.push({ t: "interp", path: tok.path });
+        else if (tok.kind === "partial") nodes.push({ t: "partial", name: tok.name });
+        else {
+          const body = parseNodes(tok.type);
+          nodes.push({ t: tok.type, path: tok.path, body });
+        }
+      }
+      if (stop !== void 0) throw new Error(`Unclosed {{#${stop}}} block`);
+      return nodes;
+    }
+    return parseNodes();
+  }
+  function getPartialAst(name, options, cache) {
+    const cached = cache.get(name);
+    if (cached) return cached;
+    let src;
+    if (options.partials && Object.prototype.hasOwnProperty.call(options.partials, name)) {
+      src = options.partials[name];
+    } else if (options.resolvePartial) {
+      src = options.resolvePartial(name);
+    }
+    const ast = src === null || src === void 0 ? [] : parse(tokenize(src));
+    cache.set(name, ast);
+    return ast;
+  }
+  function renderNodes(nodes, scope, options, partialCache, stack) {
+    let out = "";
+    for (const node of nodes) {
+      switch (node.t) {
+        case "text":
+          out += node.v;
+          break;
+        case "interp":
+          out += escapeHtml(stringify(resolveInScope(node.path, scope)));
+          break;
+        case "if":
+          if (truthy(resolveInScope(node.path, scope))) {
+            out += renderNodes(node.body, scope, options, partialCache, stack);
+          }
+          break;
+        case "unless":
+          if (!truthy(resolveInScope(node.path, scope))) {
+            out += renderNodes(node.body, scope, options, partialCache, stack);
+          }
+          break;
+        case "each": {
+          const arr = resolveInScope(node.path, scope);
+          if (Array.isArray(arr)) {
+            for (let idx = 0; idx < arr.length; idx++) {
+              const child = {
+                data: arr[idx],
+                root: scope.root,
+                meta: {
+                  "@index": idx,
+                  "@number": idx + 1,
+                  "@first": idx === 0,
+                  "@last": idx === arr.length - 1
+                }
+              };
+              out += renderNodes(node.body, child, options, partialCache, stack);
+            }
+          }
+          break;
+        }
+        case "partial": {
+          if (stack.has(node.name)) throw new Error(`Partial recursion: ${node.name}`);
+          const ast = getPartialAst(node.name, options, partialCache);
+          if (ast.length) {
+            stack.add(node.name);
+            out += renderNodes(ast, scope, options, partialCache, stack);
+            stack.delete(node.name);
+          }
+          break;
+        }
+      }
+    }
+    return out;
+  }
+  function compileTemplate(template) {
+    const ast = parse(tokenize(template));
+    return (context, options = {}) => {
+      const scope = { data: context, root: context, meta: {} };
+      return renderNodes(ast, scope, options, /* @__PURE__ */ new Map(), /* @__PURE__ */ new Set());
+    };
+  }
+  function renderTemplate(template, context, options) {
+    return compileTemplate(template)(context, options);
+  }
+  return __toCommonJS(dsl_exports);
+})();
+</script>
+
+<!-- Shared template renderer (renderScreenInto), bundled as window.TBTemplate -->
+<script>"use strict";
+var TBTemplate = (() => {
+  var __defProp = Object.defineProperty;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
+  var __copyProps = (to, from, except, desc) => {
+    if (from && typeof from === "object" || typeof from === "function") {
+      for (let key of __getOwnPropNames(from))
+        if (!__hasOwnProp.call(to, key) && key !== except)
+          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    }
+    return to;
+  };
+  var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+  // shared/template/runtime-entry.ts
+  var runtime_entry_exports = {};
+  __export(runtime_entry_exports, {
+    CORE_RENDERER_IDS: () => CORE_RENDERER_IDS,
+    DEFAULT_PARAM_CSS_VARS: () => DEFAULT_PARAM_CSS_VARS,
+    aggregateAdaptiveResult: () => aggregateAdaptiveResult,
+    aggregateStandardResult: () => aggregateStandardResult,
+    attachPointerDnd: () => attachPointerDnd,
+    buildAdaptiveResultContext: () => buildAdaptiveResultContext,
+    buildQuestionProgress: () => buildQuestionProgress,
+    buildResultContext: () => buildResultContext,
+    buildReviewContext: () => buildReviewContext,
+    buildSectionIntroContext: () => buildSectionIntroContext,
+    buildSectionResultContext: () => buildSectionResultContext,
+    buildStartState: () => buildStartState,
+    buildTemplateCssVars: () => buildTemplateCssVars,
+    buildTransitionContext: () => buildTransitionContext,
+    checkPassRule: () => checkPassRule,
+    compileTemplate: () => compileTemplate,
+    dropOnPoolSlot: () => dropOnPoolSlot,
+    dropOnRight: () => dropOnRight,
+    normalizePool: () => normalizePool,
+    renderResultField: () => renderResultField,
+    renderScreenInto: () => renderScreenInto,
+    renderTemplate: () => renderTemplate,
+    resolveOverallRule: () => resolveOverallRule,
+    resolveTopicRule: () => resolveTopicRule,
+    returnToPool: () => returnToPool
+  });
+
+  // shared/template/dsl.ts
+  function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function stringify(v) {
+    if (v === null || v === void 0) return "";
+    const t = typeof v;
+    if (t === "string") return v;
+    if (t === "number" || t === "boolean" || t === "bigint") return String(v);
+    return "";
+  }
+  function truthy(v) {
+    if (Array.isArray(v)) return v.length > 0;
+    return Boolean(v);
+  }
+  function resolvePath(obj, path) {
+    if (path === "" || path === "this" || path === ".") return obj;
+    let cur = obj;
+    for (const part of path.split(".")) {
+      if (part === "this") continue;
+      if (cur === null || cur === void 0 || typeof cur !== "object") return void 0;
+      cur = cur[part];
+    }
+    return cur;
+  }
+  function resolveInScope(path, scope) {
+    if (path === "@root") return scope.root;
+    if (path.startsWith("@root.")) return resolvePath(scope.root, path.slice("@root.".length));
+    if (path === "@index" || path === "@number" || path === "@first" || path === "@last") {
+      return scope.meta[path];
+    }
+    return resolvePath(scope.data, path);
+  }
+  function assertPath(raw, where) {
+    if (raw === "" || /\s/.test(raw)) {
+      throw new Error(`Invalid ${where} "${raw}": expressions and helpers are not supported`);
+    }
+  }
+  function tokenize(tpl) {
+    const tokens = [];
+    let i = 0;
+    while (i < tpl.length) {
+      const open = tpl.indexOf("{{", i);
+      if (open === -1) {
+        if (i < tpl.length) tokens.push({ kind: "text", value: tpl.slice(i) });
+        break;
+      }
+      if (open > i) tokens.push({ kind: "text", value: tpl.slice(i, open) });
+      if (tpl[open + 2] === "{") {
+        throw new Error("Raw HTML interpolation ({{{ }}}) is not supported");
+      }
+      const close = tpl.indexOf("}}", open + 2);
+      if (close === -1) throw new Error("Unclosed {{ in template");
+      tokens.push(classify(tpl.slice(open + 2, close).trim()));
+      i = close + 2;
+    }
+    return tokens;
+  }
+  function classify(raw) {
+    if (raw.startsWith("#")) {
+      const m = /^#(if|unless|each)\b([\s\S]*)$/.exec(raw);
+      if (!m) throw new Error(`Unknown block helper "{{${raw}}}"`);
+      const path = m[2].trim();
+      assertPath(path, "block path");
+      return { kind: "open", type: m[1], path };
+    }
+    if (raw.startsWith("/")) {
+      const m = /^\/(if|unless|each)$/.exec(raw);
+      if (!m) throw new Error(`Invalid closing tag "{{${raw}}}"`);
+      return { kind: "close", type: m[1] };
+    }
+    if (raw.startsWith(">")) {
+      const name = raw.slice(1).trim();
+      assertPath(name, "partial name");
+      return { kind: "partial", name };
+    }
+    assertPath(raw, "interpolation path");
+    return { kind: "interp", path: raw };
+  }
+  function parse(tokens) {
+    let pos = 0;
+    function parseNodes(stop) {
+      const nodes = [];
+      while (pos < tokens.length) {
+        const tok = tokens[pos];
+        if (tok.kind === "close") {
+          if (tok.type === stop) {
+            pos++;
+            return nodes;
+          }
+          throw new Error(`Unexpected closing tag {{/${tok.type}}}`);
+        }
+        pos++;
+        if (tok.kind === "text") nodes.push({ t: "text", v: tok.value });
+        else if (tok.kind === "interp") nodes.push({ t: "interp", path: tok.path });
+        else if (tok.kind === "partial") nodes.push({ t: "partial", name: tok.name });
+        else {
+          const body = parseNodes(tok.type);
+          nodes.push({ t: tok.type, path: tok.path, body });
+        }
+      }
+      if (stop !== void 0) throw new Error(`Unclosed {{#${stop}}} block`);
+      return nodes;
+    }
+    return parseNodes();
+  }
+  function getPartialAst(name, options, cache) {
+    const cached = cache.get(name);
+    if (cached) return cached;
+    let src;
+    if (options.partials && Object.prototype.hasOwnProperty.call(options.partials, name)) {
+      src = options.partials[name];
+    } else if (options.resolvePartial) {
+      src = options.resolvePartial(name);
+    }
+    const ast = src === null || src === void 0 ? [] : parse(tokenize(src));
+    cache.set(name, ast);
+    return ast;
+  }
+  function renderNodes(nodes, scope, options, partialCache, stack) {
+    let out = "";
+    for (const node of nodes) {
+      switch (node.t) {
+        case "text":
+          out += node.v;
+          break;
+        case "interp":
+          out += escapeHtml(stringify(resolveInScope(node.path, scope)));
+          break;
+        case "if":
+          if (truthy(resolveInScope(node.path, scope))) {
+            out += renderNodes(node.body, scope, options, partialCache, stack);
+          }
+          break;
+        case "unless":
+          if (!truthy(resolveInScope(node.path, scope))) {
+            out += renderNodes(node.body, scope, options, partialCache, stack);
+          }
+          break;
+        case "each": {
+          const arr = resolveInScope(node.path, scope);
+          if (Array.isArray(arr)) {
+            for (let idx = 0; idx < arr.length; idx++) {
+              const child = {
+                data: arr[idx],
+                root: scope.root,
+                meta: {
+                  "@index": idx,
+                  "@number": idx + 1,
+                  "@first": idx === 0,
+                  "@last": idx === arr.length - 1
+                }
+              };
+              out += renderNodes(node.body, child, options, partialCache, stack);
+            }
+          }
+          break;
+        }
+        case "partial": {
+          if (stack.has(node.name)) throw new Error(`Partial recursion: ${node.name}`);
+          const ast = getPartialAst(node.name, options, partialCache);
+          if (ast.length) {
+            stack.add(node.name);
+            out += renderNodes(ast, scope, options, partialCache, stack);
+            stack.delete(node.name);
+          }
+          break;
+        }
+      }
+    }
+    return out;
+  }
+  function compileTemplate(template) {
+    const ast = parse(tokenize(template));
+    return (context, options = {}) => {
+      const scope = { data: context, root: context, meta: {} };
+      return renderNodes(ast, scope, options, /* @__PURE__ */ new Map(), /* @__PURE__ */ new Set());
+    };
+  }
+  function renderTemplate(template, context, options) {
+    return compileTemplate(template)(context, options);
+  }
+
+  // shared/template/renderers.ts
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function clamp(v, min, max) {
+    return Math.min(Math.max(Number(v) || 0, min), max);
+  }
+  function resolvePath2(obj, path) {
+    if (!path) return void 0;
+    let cur = obj;
+    for (const part of path.split(".")) {
+      if (cur === null || cur === void 0 || typeof cur !== "object") return void 0;
+      cur = cur[part];
+    }
+    return cur;
+  }
+  function textMetric(value, rendererOptions) {
+    const opts = rendererOptions || {};
+    const label = opts.label ? esc(String(opts.label)) : "";
+    const suffix = opts.suffix ? esc(String(opts.suffix)) : "";
+    const decimals = opts.decimals !== void 0 ? Number(opts.decimals) : null;
+    const display = value === null || value === void 0 ? "\u2014" : decimals !== null ? esc(Number(value).toFixed(decimals)) : esc(String(value));
+    return '<div class="renderer renderer--text-metric">' + (label ? '<div class="renderer__label">' + label + "</div>" : "") + '<div class="renderer__value">' + display + (suffix ? '<span class="renderer__suffix">&thinsp;' + suffix + "</span>" : "") + "</div></div>";
+  }
+  function badge(value, rendererOptions) {
+    const opts = rendererOptions || {};
+    const strValue = String(value);
+    let tone = "neutral";
+    let label = esc(strValue);
+    if (opts.passed && String(opts.passed.value) === strValue) {
+      tone = "passed";
+      label = opts.passed.label ? esc(String(opts.passed.label)) : label;
+    } else if (opts.failed && String(opts.failed.value) === strValue) {
+      tone = "failed";
+      label = opts.failed.label ? esc(String(opts.failed.label)) : label;
+    } else if (opts.default) {
+      label = esc(String(opts.default));
+    }
+    return '<span class="renderer renderer--badge renderer--badge-' + esc(tone) + '">' + label + "</span>";
+  }
+  function progressBar(value, rendererOptions) {
+    const opts = rendererOptions || {};
+    const pct = clamp(value, 0, 100);
+    const label = opts.label ? esc(String(opts.label)) : "";
+    const decimals = opts.decimals !== void 0 ? Number(opts.decimals) : 0;
+    const display = pct.toFixed(decimals) + "%";
+    return '<div class="renderer renderer--progress-bar">' + (label ? '<div class="renderer__label">' + label + "</div>" : "") + '<div class="renderer__track"><div class="renderer__fill" style="width:' + pct.toFixed(2) + '%"></div></div>' + (opts.showValue ? '<div class="renderer__value">' + esc(display) + "</div>" : "") + "</div>";
+  }
+  function ringChart(value, rendererOptions) {
+    const opts = rendererOptions || {};
+    const pct = clamp(value, 0, 100);
+    const size = Number(opts.size) || 120;
+    const sw = Number(opts.strokeWidth) || 10;
+    const r = (size - sw) / 2;
+    const circumference = 2 * Math.PI * r;
+    const filled = pct / 100 * circumference;
+    const label = opts.label ? esc(String(opts.label)) : "";
+    const decimals = opts.decimals !== void 0 ? Number(opts.decimals) : 0;
+    const display = pct.toFixed(decimals) + "%";
+    const cx = size / 2;
+    const cy = size / 2;
+    return '<div class="renderer renderer--ring-chart">' + (label ? '<div class="renderer__label">' + label + "</div>" : "") + '<svg class="renderer__ring" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + " " + size + '" aria-hidden="true"><circle class="renderer__ring-track" cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke-width="' + sw + '"/><circle class="renderer__ring-fill" cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke-width="' + sw + '" stroke-dasharray="' + filled.toFixed(2) + " " + circumference.toFixed(2) + '" stroke-dashoffset="0" transform="rotate(-90 ' + cx + " " + cy + ')"/></svg>' + (opts.showValue ? '<div class="renderer__value">' + esc(display) + "</div>" : "") + "</div>";
+  }
+  function segmentedProgress(value, rendererOptions) {
+    const opts = rendererOptions || {};
+    const pct = clamp(value, 0, 100);
+    const total = Math.max(Number(opts.segments) || 10, 1);
+    const filled = Math.round(pct / 100 * total);
+    const label = opts.label ? esc(String(opts.label)) : "";
+    let segs = "";
+    for (let i = 0; i < total; i++) {
+      segs += '<span class="renderer__segment' + (i < filled ? " is-filled" : "") + '"></span>';
+    }
+    return '<div class="renderer renderer--segmented-progress">' + (label ? '<div class="renderer__label">' + label + "</div>" : "") + '<div class="renderer__segments">' + segs + "</div>" + (opts.showValue ? '<div class="renderer__value">' + esc(pct.toFixed(0) + "%") + "</div>" : "") + "</div>";
+  }
+  var builtins = {
+    "core.textMetric": textMetric,
+    "core.badge": badge,
+    "core.progressBar": progressBar,
+    "core.ringChart": ringChart,
+    "core.segmentedProgress": segmentedProgress
+  };
+  var CORE_RENDERER_IDS = Object.keys(builtins);
+  function renderResultField(fieldValue, context, allowedRenderers) {
+    if (!fieldValue) return "";
+    let rId = fieldValue.renderer || "core.textMetric";
+    const opts = { ...fieldValue.rendererOptions || {} };
+    if (fieldValue.label) opts.label = opts.label || fieldValue.label;
+    if (allowedRenderers && !allowedRenderers.has(rId)) rId = "core.textMetric";
+    if (fieldValue.allowedPaths && fieldValue.path && fieldValue.allowedPaths.indexOf(fieldValue.path) === -1) {
+      return builtins["core.textMetric"](null, opts);
+    }
+    const value = fieldValue.path ? resolvePath2(context, fieldValue.path) : null;
+    const fn = builtins[rId] || builtins["core.textMetric"];
+    try {
+      return fn(value, opts);
+    } catch (e) {
+      return builtins["core.textMetric"](value, opts);
+    }
+  }
+
+  // shared/template/render-screen.ts
+  function escHtml(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function renderPlaceholderHtml(type, value) {
+    if (value === null || value === void 0 || value === "") return "";
+    switch (type) {
+      case "text":
+      case "textarea":
+        return escHtml(String(value)).replace(/\n/g, "<br>");
+      case "richText":
+      case "html":
+        return String(value);
+      case "number":
+        return escHtml(String(value));
+      case "image": {
+        const src = typeof value === "string" ? value : value && typeof value === "object" && typeof value.url === "string" ? value.url : "";
+        return src ? '<img src="' + escHtml(src) + '" alt="" style="max-width:100%;max-height:100%;">' : "";
+      }
+      case "boolean":
+        return value ? "&#10003;" : "";
+      default:
+        return escHtml(String(value));
+    }
+  }
+  function resolvePath3(obj, path) {
+    if (!path) return void 0;
+    let cur = obj;
+    for (const part of path.split(".")) {
+      if (cur === null || cur === void 0 || typeof cur !== "object") return void 0;
+      cur = cur[part];
+    }
+    return cur;
+  }
+  function toText(v) {
+    if (v === null || v === void 0) return "";
+    const t = typeof v;
+    return t === "string" || t === "number" || t === "boolean" || t === "bigint" ? String(v) : "";
+  }
+  function bindDataPaths(root, context) {
+    root.querySelectorAll("[data-path]").forEach((el) => {
+      el.textContent = toText(resolvePath3(context, el.getAttribute("data-path") || ""));
+    });
+  }
+  function fillSlots(root, slots) {
+    var _a;
+    for (const name of Object.keys(slots)) {
+      const el = root.querySelector(`[data-slot="${name}"]`);
+      if (el) el.innerHTML = (_a = slots[name]) != null ? _a : "";
+    }
+  }
+  function fillContentPlaceholders(root, content, context) {
+    var _a, _b;
+    for (const ph of (_a = content.template.placeholders) != null ? _a : []) {
+      const el = root.querySelector(`[data-placeholder="${ph.key}"]`);
+      if (!el) continue;
+      if (ph.type === "resultField") {
+        const allowed = ph.allowedRenderers ? new Set(ph.allowedRenderers) : void 0;
+        const fieldValue = {
+          ...(_b = content.values[ph.key]) != null ? _b : {},
+          allowedPaths: ph.allowedPaths
+        };
+        el.innerHTML = renderResultField(fieldValue, context, allowed);
+      } else {
+        el.innerHTML = renderPlaceholderHtml(ph.type, content.values[ph.key]);
+      }
+    }
+  }
+  function renderScreenInto(root, input) {
+    root.innerHTML = renderTemplate(input.layout, input.context, { partials: input.partials });
+    bindDataPaths(root, input.context);
+    if (input.slots) fillSlots(root, input.slots);
+    if (input.content) fillContentPlaceholders(root, input.content, input.context);
+  }
+
+  // shared/template/dnd/matching-model.ts
+  function clonePairs(pairs) {
+    const out = {};
+    for (const k of Object.keys(pairs || {})) {
+      const li = parseInt(k, 10);
+      if (!Number.isNaN(li)) out[li] = pairs[k];
+    }
+    return out;
+  }
+  function removeLeft(pairs, leftIdx) {
+    delete pairs[leftIdx];
+    delete pairs[String(leftIdx)];
+  }
+  function leftForRight(pairs, rightIdx) {
+    for (const k of Object.keys(pairs || {})) {
+      if (pairs[k] === rightIdx) {
+        const li = parseInt(k, 10);
+        return Number.isNaN(li) ? null : li;
+      }
+    }
+    return null;
+  }
+  function removeFromPool(pool, leftIdx, poolIndex) {
+    if (typeof poolIndex === "number" && poolIndex >= 0 && poolIndex < pool.length && pool[poolIndex] === leftIdx) {
+      pool.splice(poolIndex, 1);
+      return poolIndex;
+    }
+    const idx = pool.indexOf(leftIdx);
+    if (idx >= 0) {
+      pool.splice(idx, 1);
+      return idx;
+    }
+    return -1;
+  }
+  function insertIntoPool(pool, leftIdx, index) {
+    let i = typeof index === "number" ? index : pool.length;
+    if (i < 0) i = 0;
+    if (i > pool.length) i = pool.length;
+    pool.splice(i, 0, leftIdx);
+  }
+  function normalizePool(pool, pairs, leftMapping) {
+    const used = {};
+    for (const k of Object.keys(pairs || {})) {
+      const li = parseInt(k, 10);
+      if (!Number.isNaN(li)) used[li] = true;
+    }
+    const next = [];
+    for (let i = 0; i < pool.length; i++) {
+      if (!used[pool[i]]) next.push(pool[i]);
+    }
+    for (let j = 0; j < leftMapping.length; j++) {
+      const li = leftMapping[j];
+      if (used[li]) continue;
+      if (next.indexOf(li) === -1) next.push(li);
+    }
+    return next;
+  }
+  function dropOnRight(state, payload, targetRight) {
+    const pairs = clonePairs(state.pairs);
+    const pool = (state.pool || []).slice();
+    const { leftIdx, from, poolIndex } = payload;
+    if (from === "pool") removeFromPool(pool, leftIdx, poolIndex);
+    else removeLeft(pairs, leftIdx);
+    const oldLeft = leftForRight(pairs, targetRight);
+    if (oldLeft !== null) {
+      removeLeft(pairs, oldLeft);
+      if (from === "pool" && typeof poolIndex === "number") {
+        insertIntoPool(pool, oldLeft, poolIndex);
+      } else {
+        insertIntoPool(pool, oldLeft, pool.length);
+      }
+    }
+    pairs[leftIdx] = targetRight;
+    for (const k of Object.keys(pairs)) {
+      const li = parseInt(k, 10);
+      if (li !== leftIdx && pairs[k] === targetRight) {
+        delete pairs[k];
+      }
+    }
+    return { pairs, pool };
+  }
+  function dropOnPoolSlot(state, payload, targetSlot) {
+    const pairs = clonePairs(state.pairs);
+    const pool = (state.pool || []).slice();
+    const { leftIdx, from, poolIndex } = payload;
+    let slot = targetSlot;
+    if (from === "pool") {
+      const removedAt = removeFromPool(pool, leftIdx, poolIndex);
+      if (removedAt >= 0 && removedAt < slot) slot = slot - 1;
+    } else {
+      removeLeft(pairs, leftIdx);
+    }
+    insertIntoPool(pool, leftIdx, slot);
+    return { pairs, pool };
+  }
+  function returnToPool(state, leftIdx) {
+    const pairs = clonePairs(state.pairs);
+    const pool = (state.pool || []).slice();
+    removeLeft(pairs, leftIdx);
+    if (pool.indexOf(leftIdx) === -1) insertIntoPool(pool, leftIdx, pool.length);
+    return { pairs, pool };
+  }
+
+  // shared/template/dnd/pointer-dnd.ts
+  function attachPointerDnd(root, config) {
+    const cardSelector = config.cardSelector || ".match-tile, .rank-item";
+    const threshold = typeof config.overlapThreshold === "number" ? config.overlapThreshold : 0.1;
+    const ghostParent = root.nodeType === 9 ? root.body : root;
+    let dragState = null;
+    const clearOver = () => root.querySelectorAll(".is-over").forEach((n) => n.classList.remove("is-over"));
+    const overlapDropZone = (st) => {
+      if (!st.ghost) return null;
+      const g = st.ghost.getBoundingClientRect();
+      const cardArea = g.width * g.height;
+      if (cardArea <= 0) return null;
+      let best = null;
+      let bestArea = 0;
+      root.querySelectorAll("[data-drop]").forEach((dz) => {
+        if (dz === st.sourceDrop) return;
+        const r = dz.getBoundingClientRect();
+        const ix = Math.max(0, Math.min(g.right, r.right) - Math.max(g.left, r.left));
+        const iy = Math.max(0, Math.min(g.bottom, r.bottom) - Math.max(g.top, r.top));
+        const area = ix * iy;
+        if (area > bestArea) {
+          bestArea = area;
+          best = dz;
+        }
+      });
+      return bestArea >= threshold * cardArea ? best : null;
+    };
+    const beginGhost = (st) => {
+      const ghost = st.card.cloneNode(true);
+      ghost.removeAttribute("data-drag");
+      ghost.removeAttribute("data-drop");
+      ghost.querySelectorAll("[data-drop],[data-drag]").forEach((n) => {
+        n.removeAttribute("data-drop");
+        n.removeAttribute("data-drag");
+      });
+      ghost.setAttribute("data-drag-ghost", "");
+      ghost.style.position = "fixed";
+      ghost.style.zIndex = "9999";
+      ghost.style.margin = "0";
+      ghost.style.width = `${st.width}px`;
+      ghost.style.opacity = "0.6";
+      ghost.style.pointerEvents = "none";
+      ghost.style.background = "var(--card)";
+      ghost.style.border = "1px solid var(--border)";
+      ghost.style.borderRadius = "12px";
+      ghost.style.boxShadow = "var(--shadow)";
+      ghost.style.color = "var(--foreground)";
+      ghostParent.appendChild(ghost);
+      st.ghost = ghost;
+      st.card.classList.add("dragging");
+    };
+    const onPointerDown = (e) => {
+      var _a, _b;
+      const pe = e;
+      if (pe.button) return;
+      const el = (_b = (_a = pe.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, "[data-drag]");
+      if (!el) return;
+      pe.preventDefault();
+      const card = el.closest(cardSelector) || el;
+      const rect = card.getBoundingClientRect();
+      dragState = {
+        dragId: el.getAttribute("data-drag") || "",
+        card,
+        ghost: null,
+        started: false,
+        startX: pe.clientX,
+        startY: pe.clientY,
+        grabX: pe.clientX - rect.left,
+        grabY: pe.clientY - rect.top,
+        width: rect.width,
+        sourceDrop: el.closest("[data-drop]")
+      };
+      try {
+        el.setPointerCapture(pe.pointerId);
+      } catch (e2) {
+      }
+    };
+    const onPointerMove = (e) => {
+      const st = dragState;
+      if (!st) return;
+      const pe = e;
+      if (!st.started) {
+        if (Math.hypot(pe.clientX - st.startX, pe.clientY - st.startY) < 4) return;
+        st.started = true;
+        beginGhost(st);
+      }
+      if (st.ghost) {
+        st.ghost.style.left = `${pe.clientX - st.grabX}px`;
+        st.ghost.style.top = `${pe.clientY - st.grabY}px`;
+      }
+      clearOver();
+      const dz = overlapDropZone(st);
+      if (dz) dz.classList.add("is-over");
+    };
+    const finish = () => {
+      const st = dragState;
+      if (!st) return;
+      dragState = null;
+      const dz = st.started ? overlapDropZone(st) : null;
+      if (st.ghost) st.ghost.remove();
+      st.card.classList.remove("dragging");
+      clearOver();
+      if (st.started) config.onDrop({ dropId: dz ? dz.getAttribute("data-drop") || "" : "", dragId: st.dragId });
+    };
+    root.addEventListener("pointerdown", onPointerDown);
+    root.addEventListener("pointermove", onPointerMove);
+    root.addEventListener("pointerup", finish);
+    root.addEventListener("pointercancel", finish);
+    return () => {
+      root.removeEventListener("pointerdown", onPointerDown);
+      root.removeEventListener("pointermove", onPointerMove);
+      root.removeEventListener("pointerup", finish);
+      root.removeEventListener("pointercancel", finish);
+      if (dragState == null ? void 0 : dragState.ghost) dragState.ghost.remove();
+    };
+  }
+
+  // shared/template/result-context.ts
+  var RING_RADIUS = 63;
+  var RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+  function round1(n) {
+    return Math.round((Number(n) || 0) * 10) / 10;
+  }
+  function topicView(t, withPoints) {
+    const passed = t.passed;
+    const view = {
+      topicId: t.topicId,
+      topicName: t.topicName || "",
+      correct: t.correct != null ? t.correct : 0,
+      total: t.total,
+      percent: Math.round(t.percent || 0),
+      passClass: passed === true ? "is-pass" : passed === false ? "is-fail" : "",
+      statusLabel: passed === true ? "\u041F\u0440\u043E\u0439\u0434\u0435\u043D\u043E" : passed === false ? "\u041D\u0435 \u043F\u0440\u043E\u0439\u0434\u0435\u043D\u043E" : ""
+    };
+    if (withPoints) view.pointsLabel = round1(t.earnedPoints) + " / " + round1(t.possiblePoints);
+    if (t.requiredLabel) view.requiredLabel = t.requiredLabel;
+    if (t.topicFeedback && String(t.topicFeedback).trim()) view.topicFeedback = t.topicFeedback;
+    return view;
+  }
+  function buildResultContext(input, title, opts = {}) {
+    const passed = !!input.passed;
+    const percent = Math.round(input.percent || 0);
+    const result = {
+      passed,
+      passClass: passed ? "is-pass" : "is-fail",
+      statusLabel: passed ? "\u041F\u0440\u043E\u0439\u0434\u0435\u043D" : "\u041D\u0435 \u043F\u0440\u043E\u0439\u0434\u0435\u043D",
+      scorePercent: percent,
+      ringDashoffset: Math.round(RING_CIRCUMFERENCE * (1 - percent / 100)),
+      totalQuestions: input.totalQuestions,
+      correct: input.correct,
+      earnedPoints: round1(input.earnedPoints),
+      possiblePoints: round1(input.possiblePoints),
+      topicResults: (input.topicResults || []).map((t) => topicView(t, !!opts.withTopicPoints))
+    };
+    if (opts.recommendedCourses && opts.recommendedCourses.length) result.recommendedCourses = opts.recommendedCourses;
+    if (opts.recommendedEvents && opts.recommendedEvents.length) result.recommendedEvents = opts.recommendedEvents;
+    if (opts.backAction) {
+      result.backAction = opts.backAction;
+      result.backLabel = opts.backLabel;
+    }
+    return { course: { title }, result };
+  }
+  function buildSectionResultContext(input) {
+    const percent = Math.round(input.percent || 0);
+    const hasVerdict = input.passed === true || input.passed === false;
+    const sectionResult = {
+      topicName: input.topicName || "",
+      scorePercent: percent,
+      ringDashoffset: Math.round(RING_CIRCUMFERENCE * (1 - percent / 100)),
+      passClass: input.passed === true ? "is-pass" : input.passed === false ? "is-fail" : "",
+      statusLabel: input.passed === true ? "\u0420\u0430\u0437\u0434\u0435\u043B \u043F\u0440\u043E\u0439\u0434\u0435\u043D" : input.passed === false ? "\u0420\u0430\u0437\u0434\u0435\u043B \u043D\u0435 \u043F\u0440\u043E\u0439\u0434\u0435\u043D" : "",
+      hasVerdict,
+      correct: input.correct != null ? input.correct : 0,
+      total: input.total,
+      summaryLabel: (input.correct != null ? input.correct : 0) + " \u0438\u0437 " + input.total + " \u0432\u0435\u0440\u043D\u043E \xB7 " + percent + "%",
+      continueLabel: input.continueLabel || "\u041F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C"
+    };
+    return { course: { title: input.topicName || "" }, sectionResult };
+  }
+  function pluralQuestions(n) {
+    const abs = Math.abs(n) % 100;
+    const d = abs % 10;
+    if (abs > 10 && abs < 20) return "\u0432\u043E\u043F\u0440\u043E\u0441\u043E\u0432";
+    if (d === 1) return "\u0432\u043E\u043F\u0440\u043E\u0441";
+    if (d > 1 && d < 5) return "\u0432\u043E\u043F\u0440\u043E\u0441\u0430";
+    return "\u0432\u043E\u043F\u0440\u043E\u0441\u043E\u0432";
+  }
+  function pluralMinutes(n) {
+    const abs = Math.abs(n) % 100;
+    const d = abs % 10;
+    if (abs > 10 && abs < 20) return "\u043C\u0438\u043D\u0443\u0442";
+    if (d === 1) return "\u043C\u0438\u043D\u0443\u0442\u0430";
+    if (d > 1 && d < 5) return "\u043C\u0438\u043D\u0443\u0442\u044B";
+    return "\u043C\u0438\u043D\u0443\u0442";
+  }
+  function buildSectionIntroContext(input) {
+    var _a, _b;
+    const count = Math.max(0, Math.round(input.questionCount || 0));
+    const desc = ((_a = input.description) != null ? _a : "").trim();
+    const hasTime = !!(input.timeLimitMinutes && input.timeLimitMinutes > 0);
+    const instrRaw = typeof input.instruction === "string" ? input.instruction : "";
+    const instrText = instrRaw.replace(/<[^>]*>/g, "").trim();
+    const illo = ((_b = input.illustration) != null ? _b : "").trim();
+    const sectionIntro = {
+      eyebrow: "\u0420\u0430\u0437\u0434\u0435\u043B " + (input.sectionNumber || 1),
+      topicName: input.topicName || "",
+      description: desc,
+      hasDescription: desc.length > 0,
+      questionCount: count,
+      questionCountLabel: count + " " + pluralQuestions(count),
+      hasTimeLimit: hasTime,
+      timeLimitLabel: hasTime ? String(input.timeLimitMinutes) + " " + pluralMinutes(input.timeLimitMinutes) : "",
+      hasInstruction: instrText.length > 0,
+      illustrationUrl: illo,
+      hasIllustration: illo.length > 0,
+      continueLabel: input.continueLabel || "\u0414\u0430\u043B\u0435\u0435"
+    };
+    return { course: { title: input.topicName || "" }, sectionIntro };
+  }
+  function adaptiveTopicView(t) {
+    const achieved = t.achievedLevelIndex !== null && t.achievedLevelIndex !== void 0;
+    const links = (t.recommendedLinks || []).map((l) => ({ title: l.title, url: l.url }));
+    return {
+      topicName: t.topicName || "",
+      levelLabel: achieved ? t.achievedLevelName : "\u041D\u0435 \u0434\u043E\u0441\u0442\u0438\u0433\u043D\u0443\u0442",
+      levelClass: achieved ? "is-info" : "is-fail",
+      feedback: t.feedback || "",
+      hasFeedback: !!(t.feedback && String(t.feedback).trim()),
+      hasLinks: links.length > 0,
+      links
+    };
+  }
+  function buildAdaptiveResultContext(input, title, opts = {}) {
+    const result = {
+      passed: !!input.passed,
+      adaptive: true,
+      topicResults: (input.topicResults || []).map(adaptiveTopicView)
+    };
+    if (opts.hasScormActions) {
+      result.hasScormActions = true;
+      result.showPdf = !!opts.showPdf;
+      result.canRetry = !!opts.canRetry;
+      result.showFinish = !!opts.showFinish;
+    }
+    return { course: { title }, result };
+  }
+
+  // shared/scoring/engine.ts
+  function clamp01(v) {
+    return Math.max(0, Math.min(1, v));
+  }
+  function maxOf(nums) {
+    return nums.reduce((m, v) => v > m ? v : m, 0);
+  }
+  function exactCorrect(type, correct, answer) {
+    if (answer === null || answer === void 0) return 0;
+    if (type === "single") {
+      return answer === correct.correctIndex ? 1 : 0;
+    }
+    if (type === "multiple") {
+      const want = Array.isArray(correct.correctIndices) ? correct.correctIndices.slice() : [];
+      const got = Array.isArray(answer) ? answer.slice() : [];
+      if (want.length === 0) return 0;
+      if (got.length !== want.length) return 0;
+      want.sort((a, b) => a - b);
+      got.sort((a, b) => a - b);
+      for (let i = 0; i < want.length; i++) if (want[i] !== got[i]) return 0;
+      return 1;
+    }
+    if (type === "matching") {
+      const pairs = answer && typeof answer === "object" && !Array.isArray(answer) ? answer : {};
+      const want = Array.isArray(correct.pairs) ? correct.pairs : [];
+      if (Object.keys(pairs).length !== want.length) return 0;
+      for (const p of want) if (pairs[p.left] !== p.right) return 0;
+      return 1;
+    }
+    if (type === "ranking") {
+      const order = Array.isArray(answer) ? answer : [];
+      const want = Array.isArray(correct.correctOrder) ? correct.correctOrder : [];
+      if (order.length !== want.length) return 0;
+      for (let i = 0; i < want.length; i++) if (order[i] !== want[i]) return 0;
+      return 1;
+    }
+    return 0;
+  }
+  function countTallies(type, correct, answer) {
+    if (type === "multiple") {
+      const want = Array.isArray(correct.correctIndices) ? correct.correctIndices : [];
+      const got = Array.isArray(answer) ? answer : [];
+      let c2 = 0;
+      let x = 0;
+      for (const i of got) want.indexOf(i) !== -1 ? c2 += 1 : x += 1;
+      return { c: c2, x, total: want.length };
+    }
+    if (type === "matching") {
+      const want = Array.isArray(correct.pairs) ? correct.pairs : [];
+      const map = answer && typeof answer === "object" && !Array.isArray(answer) ? answer : {};
+      let c2 = 0;
+      let x = 0;
+      for (const p of want) {
+        const got = map[p.left];
+        if (got === void 0 || got === null) continue;
+        got === p.right ? c2 += 1 : x += 1;
+      }
+      return { c: c2, x, total: want.length };
+    }
+    if (type === "ranking") {
+      const want = Array.isArray(correct.correctOrder) ? correct.correctOrder : [];
+      const order = Array.isArray(answer) ? answer : [];
+      let c2 = 0;
+      let x = 0;
+      for (let i = 0; i < want.length; i++) {
+        const got = order[i];
+        if (got === void 0 || got === null) continue;
+        got === want[i] ? c2 += 1 : x += 1;
+      }
+      return { c: c2, x, total: want.length };
+    }
+    const c = exactCorrect("single", correct, answer);
+    return { c, x: answer !== null && answer !== void 0 ? 1 - c : 0, total: 1 };
+  }
+  function evalPredicate(pred, t) {
+    return pred.all.every((cond) => {
+      const lhs = cond.lhs === "c" ? t.c : t.x;
+      const rhs = typeof cond.rhs === "number" ? cond.rhs : t.total;
+      switch (cond.op) {
+        case "==":
+          return lhs === rhs;
+        case ">=":
+          return lhs >= rhs;
+        case "<=":
+          return lhs <= rhs;
+        case "<":
+          return lhs < rhs;
+        case ">":
+          return lhs > rhs;
+        default:
+          return false;
+      }
+    });
+  }
+  function scoreAnswer(input) {
+    var _a;
+    const { type, correct, answer, scoring } = input;
+    const kind = (_a = scoring == null ? void 0 : scoring.kind) != null ? _a : "exact";
+    if (kind === "weighted") {
+      const weights = scoring && scoring.kind === "weighted" ? scoring.weights : [];
+      const sMax = scoring && scoring.kind === "weighted" && scoring.sMax || maxOf(weights);
+      let score2 = 0;
+      if (typeof answer === "number" && answer >= 0 && answer < weights.length) {
+        score2 = weights[answer];
+      }
+      score2 = Math.max(0, score2);
+      return { score: score2, sMax, ratio: sMax > 0 ? clamp01(score2 / sMax) : 0 };
+    }
+    if (kind === "tiered") {
+      const tiers = scoring && scoring.kind === "tiered" ? scoring.tiers : [];
+      const sMax = scoring && scoring.kind === "tiered" && scoring.sMax || maxOf(tiers.map((t) => t.score));
+      let score2 = 0;
+      if (answer !== null && answer !== void 0) {
+        const counters = countTallies(type, correct, answer);
+        const hit = tiers.find((tier) => evalPredicate(tier.when, counters));
+        if (hit) score2 = hit.score;
+      }
+      score2 = Math.max(0, score2);
+      return { score: score2, sMax, ratio: sMax > 0 ? clamp01(score2 / sMax) : 0 };
+    }
+    const score = exactCorrect(type, correct, answer);
+    return { score, sMax: 1, ratio: score };
+  }
+
+  // shared/scoring/pass-rule.ts
+  function resolveOverallRule(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    const r = raw;
+    if (r.type === "none") return null;
+    if (r.type === "percent") return { type: "percent", value: Number(r.value) || 0 };
+    if (typeof r.value === "number") return { type: "count", value: r.value };
+    return null;
+  }
+  function resolveTopicRule(raw, overall) {
+    if (!raw || typeof raw !== "object") return null;
+    const r = raw;
+    if (r.source === "inherit_overall") return overall;
+    if (r.source === "none") return null;
+    if (r.source === "custom") {
+      return r.type === "percent" ? { type: "percent", value: Number(r.value) || 0 } : { type: "count", value: Number(r.value) || 0 };
+    }
+    if (r.type === "none") return null;
+    if (r.type === "percent") return { type: "percent", value: Number(r.value) || 0 };
+    if (typeof r.value === "number") return { type: "count", value: r.value };
+    return null;
+  }
+  function checkPassRule(rule, percent, earnedScore) {
+    if (!rule) return true;
+    if (rule.type === "percent") return percent >= rule.value;
+    return earnedScore >= rule.value;
+  }
+
+  // shared/scoring/aggregate.ts
+  function aggregateStandardResult(input) {
+    const overall = resolveOverallRule(input.overallPassRule);
+    let tEarned = 0;
+    let tPossible = 0;
+    let tCorrect = 0;
+    let tQuestions = 0;
+    let allTopicsPassed = true;
+    const topicResults = input.sections.map((sec) => {
+      let earned = 0;
+      let possible = 0;
+      let correct = 0;
+      for (const q of sec.questions) {
+        const ratio = q.answer === void 0 || q.answer === null ? 0 : scoreAnswer({ type: q.type, correct: q.correct || {}, answer: q.answer, scoring: q.scoring }).ratio;
+        possible += q.points;
+        earned += q.points * ratio;
+        if (ratio === 1) correct++;
+      }
+      const total = sec.questions.length;
+      const percent2 = possible > 0 ? earned / possible * 100 : 0;
+      const resolved = resolveTopicRule(sec.topicPassRule, overall);
+      const passed = resolved ? checkPassRule(resolved, percent2, earned) : null;
+      if (passed === false) allTopicsPassed = false;
+      tEarned += earned;
+      tPossible += possible;
+      tCorrect += correct;
+      tQuestions += total;
+      return {
+        topicId: sec.topicId,
+        topicName: sec.topicName,
+        correct,
+        total,
+        earnedPoints: earned,
+        possiblePoints: possible,
+        percent: percent2,
+        passed,
+        passRule: sec.topicPassRule,
+        extra: sec.extra
+      };
+    });
+    const percent = tPossible > 0 ? tEarned / tPossible * 100 : 0;
+    const overallPassed = checkPassRule(overall, percent, tEarned);
+    return {
+      correct: tCorrect,
+      totalQuestions: tQuestions,
+      earnedPoints: tEarned,
+      possiblePoints: tPossible,
+      percent,
+      overallPassed,
+      passed: overallPassed && allTopicsPassed,
+      topicResults
+    };
+  }
+  function aggregateAdaptiveResult(input) {
+    let overallPassed = true;
+    const topicResults = input.topics.map((topic) => {
+      var _a, _b, _c, _d, _e, _f, _g;
+      let totalQuestionsAnswered = 0;
+      let totalCorrect = 0;
+      const levelsAttempted = [];
+      for (const lvl of topic.levelsState) {
+        if (lvl.status === "passed" || lvl.status === "failed") {
+          totalQuestionsAnswered += lvl.answeredCount;
+          totalCorrect += lvl.correctCount;
+          levelsAttempted.push({
+            levelIndex: lvl.levelIndex,
+            levelName: lvl.levelName,
+            questionsAnswered: lvl.answeredCount,
+            correctCount: lvl.correctCount,
+            status: lvl.status
+          });
+        }
+      }
+      const achievedLevelIndex = topic.finalLevelIndex;
+      let achievedLevelName = null;
+      let levelPercent = 0;
+      let feedback = null;
+      let recommendedLinks = [];
+      if (achievedLevelIndex !== null) {
+        const achievedState = (_a = topic.levelsState[achievedLevelIndex]) != null ? _a : null;
+        const achievedMeta = (_b = topic.levels[achievedLevelIndex]) != null ? _b : null;
+        achievedLevelName = achievedState ? achievedState.levelName : (_c = achievedMeta == null ? void 0 : achievedMeta.levelName) != null ? _c : null;
+        if (achievedState && achievedState.answeredCount > 0) {
+          levelPercent = achievedState.correctCount / achievedState.answeredCount * 100;
+        }
+        feedback = achievedMeta ? (_d = achievedMeta.feedback) != null ? _d : null : null;
+        recommendedLinks = achievedMeta ? (_e = achievedMeta.links) != null ? _e : [] : [];
+      } else {
+        overallPassed = false;
+        feedback = (_f = topic.failureFeedback) != null ? _f : null;
+        recommendedLinks = (_g = topic.failureLinks) != null ? _g : [];
+      }
+      return {
+        topicId: topic.topicId,
+        topicName: topic.topicName,
+        achievedLevelIndex,
+        achievedLevelName,
+        levelPercent,
+        totalQuestionsAnswered,
+        totalCorrect,
+        levelsAttempted,
+        feedback,
+        recommendedLinks,
+        extra: topic.extra
+      };
+    });
+    return { mode: "adaptive", overallPassed, topicResults };
+  }
+
+  // shared/template/start-state.ts
+  function buildStartState(input) {
+    const noAttempts = input.maxAttempts != null && input.completedAttempts >= input.maxAttempts;
+    const hasCompleted = input.hasCompletedResults;
+    const blocked = !!input.cooldown;
+    const canResume = !!input.resume && !blocked;
+    const state = {
+      exhausted: false,
+      canStart: false,
+      startLabel: "",
+      canResume: false,
+      resumeLabel: "",
+      resumeNote: "",
+      canRestart: false,
+      canViewResults: false,
+      showBack: !!input.showBack
+    };
+    if (blocked) {
+      state.cooldown = input.cooldown;
+      state.canViewResults = hasCompleted;
+    } else if (noAttempts && !hasCompleted) {
+      state.exhausted = true;
+    } else if (noAttempts && hasCompleted) {
+      state.canViewResults = true;
+    } else if (canResume) {
+      const r = input.resume;
+      state.canResume = true;
+      state.resumeLabel = "\u041F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C \u0441 \u043C\u0435\u0441\u0442\u0430 \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043A\u0438";
+      state.resumeNote = "\u041D\u0435\u0437\u0430\u0432\u0435\u0440\u0448\u0451\u043D\u043D\u044B\u0439 \u0442\u0435\u0441\u0442 \u2014 \u0432\u043E\u043F\u0440\u043E\u0441 " + (r.index + 1) + " \u0438\u0437 " + r.total;
+      state.canRestart = true;
+      state.canViewResults = hasCompleted;
+    } else if (input.canStartNew && hasCompleted) {
+      state.canStart = true;
+      state.startLabel = "\u041D\u0430\u0447\u0430\u0442\u044C \u0442\u0435\u0441\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0437\u0430\u043D\u043E\u0432\u043E";
+      state.canViewResults = true;
+    } else {
+      if (noAttempts) state.exhausted = true;
+      else {
+        state.canStart = true;
+        state.startLabel = "\u041D\u0430\u0447\u0430\u0442\u044C \u0442\u0435\u0441\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435";
+      }
+    }
+    if (input.priorResult) {
+      const p = input.priorResult;
+      state.priorResult = {
+        percent: Math.round(p.percent),
+        verdictLabel: p.passed === null ? "" : p.passed ? "\u043F\u0440\u043E\u0439\u0434\u0435\u043D\u043E" : "\u043D\u0435 \u043F\u0440\u043E\u0439\u0434\u0435\u043D\u043E",
+        verdictClass: p.passed === false ? "prior-fail" : "",
+        attemptsLabel: p.attemptNumber != null && p.maxAttempts != null ? "\u043F\u043E\u043F\u044B\u0442\u043A\u0430 " + p.attemptNumber + " \u0438\u0437 " + p.maxAttempts : ""
+      };
+      if (input.canDownloadReport) state.canDownloadReport = true;
+    }
+    const i = input.info;
+    const course = {
+      title: i.title,
+      description: i.description || "",
+      questionCount: i.questionCount,
+      passPercent: i.passPercent,
+      timeLimitMinutes: i.timeLimitMinutes,
+      maxAttempts: i.maxAttempts,
+      startPageContent: i.startPageContent || ""
+    };
+    return { course, state };
+  }
+
+  // shared/template/transition-context.ts
+  function buildTransitionContext(input) {
+    const ok = !!input.isCorrect;
+    const t = {
+      isCorrect: ok,
+      iconClass: ok ? "is-pass" : "is-fail",
+      title: ok ? "\u041F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u043E!" : "\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u043E",
+      showContinue: !!input.showContinue
+    };
+    if (input.levelTransition) {
+      const type = input.levelTransition.type;
+      const isUp = type === "up";
+      const isDown = type === "down";
+      t.level = {
+        class: isUp ? "is-up" : isDown ? "is-down" : "is-complete",
+        isUp,
+        isDown,
+        isComplete: !isUp && !isDown,
+        message: input.levelTransition.message
+      };
+    }
+    if (input.topicTransition) t.topic = { toTopic: input.topicTransition.toTopic };
+    return { transition: t };
+  }
+
+  // shared/template/params-css.ts
+  var DEFAULT_PARAM_CSS_VARS = {
+    primaryColor: "--primary",
+    backgroundColor: "--background",
+    foregroundColor: "--foreground",
+    cardColor: "--card",
+    cardBorderColor: "--card-border",
+    borderColor: "--border",
+    mutedColor: "--muted",
+    accentColor: "--accent",
+    fontFamily: "--font-sans"
+  };
+  function resolvePath4(obj, path) {
+    if (!obj || !path) return void 0;
+    const parts = path.split(".");
+    let cur = obj;
+    for (const part of parts) {
+      if (cur === null || cur === void 0) return void 0;
+      cur = cur[part];
+    }
+    return cur;
+  }
+  function buildTemplateCssVars(params, manifestParams) {
+    const result = {};
+    if (!manifestParams || !params) return result;
+    for (const def of manifestParams) {
+      const cssVar = def.cssVar || DEFAULT_PARAM_CSS_VARS[def.key];
+      if (!cssVar) continue;
+      let value = resolvePath4(params, def.key);
+      if (value === null || value === void 0) value = def.default;
+      if (value === null || value === void 0) continue;
+      result[cssVar] = typeof value === "number" ? String(value) + (def.cssUnit || "px") : String(value);
+    }
+    return result;
+  }
+
+  // shared/template/question-progress-context.ts
+  var STATUS_WORD = {
+    "is-current": "\u0442\u0435\u043A\u0443\u0449\u0438\u0439",
+    "is-answered": "\u043E\u0442\u0432\u0435\u0447\u0435\u043D",
+    "is-skipped": "\u043F\u0440\u043E\u043F\u0443\u0449\u0435\u043D",
+    "is-correct": "\u0432\u0435\u0440\u043D\u043E",
+    "is-incorrect": "\u043D\u0435\u0432\u0435\u0440\u043D\u043E",
+    "is-unanswered": "\u0431\u0435\u0437 \u043E\u0442\u0432\u0435\u0442\u0430",
+    "": "\u043D\u0435 \u043E\u0442\u0432\u0435\u0447\u0435\u043D"
+  };
+  function buildQuestionProgress(input) {
+    var _a, _b, _c, _d;
+    const { questions, statuses, currentIndex, commitScope } = input;
+    if (!Array.isArray(questions) || questions.length === 0) return null;
+    if (currentIndex < 0 || currentIndex >= questions.length) {
+      if (!input.allIssued) return null;
+    }
+    const currentTopicId = input.scopeTopicId !== void 0 ? input.scopeTopicId : (_b = (_a = questions[currentIndex]) == null ? void 0 : _a.topicId) != null ? _b : null;
+    const inScope = [];
+    questions.forEach((q, index) => {
+      var _a2;
+      if (commitScope === "section") {
+        if (((_a2 = q.topicId) != null ? _a2 : null) === currentTopicId) inScope.push({ index, q });
+      } else {
+        inScope.push({ index, q });
+      }
+    });
+    if (inScope.length === 0) return null;
+    const sectionLocked = commitScope === "section" && currentTopicId != null && ((_c = input.sectionCommitted) == null ? void 0 : _c[currentTopicId]) === true;
+    let answeredCount = 0;
+    let skippedCount = 0;
+    const states = inScope.map(({ index, q }, pos) => {
+      var _a2, _b2, _c2, _d2;
+      const status = (_a2 = statuses[q.id]) != null ? _a2 : "unanswered";
+      if (status === "answered") answeredCount++;
+      else if (status === "skipped") skippedCount++;
+      let statusClass = "";
+      if (input.reviewMarking) {
+        const c = (_b2 = input.correctness) == null ? void 0 : _b2[q.id];
+        statusClass = c === "correct" ? "is-correct" : c === "incorrect" ? "is-incorrect" : "is-unanswered";
+      } else if (index === currentIndex) {
+        statusClass = "is-current";
+      } else if (status === "answered") {
+        statusClass = "is-answered";
+      } else if (status === "skipped") {
+        statusClass = "is-skipped";
+      }
+      if (!input.reviewMarking && index === currentIndex) statusClass = "is-current";
+      const issued = input.allIssued || index <= currentIndex || status === "answered" || status === "skipped";
+      const clickable = ((_c2 = input.allowReturn) != null ? _c2 : true) && issued && !sectionLocked;
+      const number = pos + 1;
+      const word = (_d2 = STATUS_WORD[statusClass]) != null ? _d2 : STATUS_WORD[""];
+      return {
+        index,
+        number,
+        statusClass,
+        ariaLabel: `\u0412\u043E\u043F\u0440\u043E\u0441 ${number}, ${clickable || statusClass ? word : "\u043D\u0435 \u0432\u044B\u0434\u0430\u043D"}`,
+        clickable
+      };
+    });
+    return {
+      scopeLabel: (_d = input.scopeLabel) != null ? _d : commitScope === "section" ? "\u0412\u043E\u043F\u0440\u043E\u0441\u044B \u0440\u0430\u0437\u0434\u0435\u043B\u0430" : "\u0412\u043E\u043F\u0440\u043E\u0441\u044B \u0442\u0435\u0441\u0442\u0430",
+      total: states.length,
+      answeredCount,
+      skippedCount,
+      states
+    };
+  }
+
+  // shared/template/review-context.ts
+  function buildReviewContext(input) {
+    var _a;
+    const sectionScope = input.commitScope === "section";
+    const scopeTopicId = sectionScope ? (_a = input.scopeTopicId) != null ? _a : null : null;
+    const questionsProgress = buildQuestionProgress({
+      questions: input.questions,
+      statuses: input.statuses,
+      currentIndex: -1,
+      // обзор has no «current» pill
+      commitScope: input.commitScope,
+      scopeTopicId: sectionScope ? scopeTopicId : void 0,
+      allIssued: true,
+      allowReturn: true,
+      scopeLabel: input.scopeLabel
+    });
+    let answeredCount = 0;
+    const unanswered = [];
+    let pos = 0;
+    input.questions.forEach((q, index) => {
+      var _a2, _b;
+      if (sectionScope && ((_a2 = q.topicId) != null ? _a2 : null) !== scopeTopicId) return;
+      pos += 1;
+      const status = (_b = input.statuses[q.id]) != null ? _b : "unanswered";
+      if (status === "answered") answeredCount++;
+      else unanswered.push({ index, number: pos, prompt: q.prompt });
+    });
+    const review = {
+      scopeLabel: input.scopeLabel,
+      isTest: input.isTest,
+      finishLabel: input.finishLabel,
+      unanswered,
+      unansweredCount: unanswered.length,
+      answeredCount,
+      total: pos,
+      hint: unanswered.length > 0 ? "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u043F\u0435\u0440\u0435\u0434 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u0435\u043C. \u041D\u0435\u043E\u0442\u0432\u0435\u0447\u0435\u043D\u043D\u044B\u0435 \u0437\u0430\u0441\u0447\u0438\u0442\u044B\u0432\u0430\u044E\u0442\u0441\u044F \u043A\u0430\u043A \u043D\u0435\u0432\u0435\u0440\u043D\u044B\u0435." : "\u0412\u0441\u0435 \u0432\u043E\u043F\u0440\u043E\u0441\u044B \u043E\u0442\u0432\u0435\u0447\u0435\u043D\u044B."
+    };
+    return { questionsProgress, review };
+  }
+  return __toCommonJS(runtime_entry_exports);
 })();
 </script>
 
@@ -3172,8 +5374,22 @@ function renderContentPage(page, contentTemplates) {
   }
 
   // ─── DSL renderer ────────────────────────────────────────────────────────────
-  /** Renders the path-only DSL (`{{ path }}`, `{{#if}}`, `{{#unless}}`) in an HTML string. */
+  /**
+   * Renders the path-only DSL in an HTML string. Delegates to the REAL shared
+   * renderer (`shared/template/dsl.ts`, bundled by the generator as `window.TBDsl`)
+   * so nested `{{#if}}`/`{{#unless}}`/`{{#each}}` and in-loop blocks behave exactly
+   * as they do on the SCORM/web hosts — no second, drifting DSL. The legacy
+   * non-recursive regex below is a best-effort fallback only if the bundle is
+   * absent or a template trips the strict parser.
+   */
   function renderDsl(html, data) {
+    if (root.TBDsl && typeof root.TBDsl.renderTemplate === "function") {
+      try {
+        return root.TBDsl.renderTemplate(html, data);
+      } catch (e) {
+        if (root.console) root.console.warn("[preview] real DSL failed, falling back:", e && e.message);
+      }
+    }
     // {{#unless path}}...{{/unless}}
     html = html.replace(/\{\{#unless ([^}]+)\}\}([\s\S]*?)\{\{\/unless\}\}/g, function (_, p, inner) {
       var v = resolvePath(data, p.trim());
@@ -3284,7 +5500,24 @@ function renderContentPage(page, contentTemplates) {
   // ─── TEST_DATA for contentPage.js / renderers.js ────────────────────────────
   function buildTestData() {
     var runtime = demoData.runtime || {};
+    var course = demoData.course || {};
+    var sections = (course.topics || []).map(function (t) {
+      return {
+        topicId: t.id,
+        topicName: t.title || "",
+        topicDescription: t.description || null,
+        required: t.required !== false,
+        timeLimitMinutes: t.timeLimitMinutes || null,
+        drawCount: t.questionCount || null,
+        image: t.image || null
+      };
+    });
     return Object.assign({}, runtime, {
+      title: course.title || "",
+      sections: sections,
+      contentPages: course.contentPages || [],
+      deadline: course.deadline || null,
+      flowPolicy: { mode: "router_by_topics" },
       designSettings: {
         templateId: manifest.id,
         params: demoData.params || paramDefaults()
@@ -3330,6 +5563,10 @@ function renderContentPage(page, contentTemplates) {
       renderQuestionRoute(routeDef, route);
     } else if (route === "results") {
       renderLayoutPage("results", buildDslData());
+    } else if (route === "review") {
+      renderReviewRoute();
+    } else if (route === "section-results") {
+      renderSectionResultsRoute();
     } else if (route === "system.blocked" || route === "system.locked" ||
                route.indexOf("system.") === 0) {
       var systemData = Object.assign({}, buildDslData(), {
@@ -3365,6 +5602,15 @@ function renderContentPage(page, contentTemplates) {
     }
     if (!page) return;
 
+    // Router page → dedicated renderer (topic cards + progress + «Завершить»).
+    var _ct = null;
+    (manifest.contentTemplates || []).forEach(function (c) { if (c.key === page.templateKey) _ct = c; });
+    if (((_ct && _ct.kind === "router") || page.kind === "router") &&
+        root.RouterFlow && typeof root.RouterFlow.renderRouterPage === "function") {
+      root.RouterFlow.renderRouterPage(page);
+      return;
+    }
+
     // If the template has a layout with data-slot="content-body" (rtk-style), render it directly.
     // Otherwise fall back to the PRD1 renderContentPage skeleton.
     var layoutHtml = layouts[route] || "";
@@ -3389,6 +5635,53 @@ function renderContentPage(page, contentTemplates) {
     if (typeof renderContentPage === "function") {
       renderContentPage(page, manifest.contentTemplates || []);
     }
+  }
+
+  // ─── Review / section-results rendering ─────────────────────────────────────
+  // These two routes have no pageId; they bind top-level `review.*` /
+  // `sectionResult.*` / `state.questionsProgress` namespaces that buildDslData does
+  // NOT surface. Build the context via the SAME shared builders production uses
+  // (window.TBTemplate.buildReviewContext / buildSectionResultContext) so the
+  // offline preview mirrors the learner screen instead of rendering blank.
+  function renderReviewRoute() {
+    var TBt = (typeof window !== "undefined") ? window.TBTemplate : null;
+    var base = buildDslData();
+    var questions = ((demoData.course || {}).questions || []).map(function (q) {
+      return { id: q.id, topicId: q.topicId, prompt: q.prompt };
+    });
+    // Demo statuses: leave every 3rd question skipped so the обзор shows the
+    // «вернуться к пропущенным» list + pill map populated.
+    var statuses = {};
+    questions.forEach(function (q, i) { statuses[q.id] = (i % 3 === 2) ? "skipped" : "answered"; });
+    var built = (TBt && TBt.buildReviewContext) ? TBt.buildReviewContext({
+      questions: questions, statuses: statuses, commitScope: "test", isTest: true,
+      scopeLabel: "Вопросы теста", finishLabel: "Завершить тест"
+    }) : null;
+    var data = Object.assign({}, base, {
+      review: built ? built.review : {},
+      state: Object.assign({}, base.state, { questionsProgress: built ? built.questionsProgress : null })
+    });
+    renderLayoutPage("review", data);
+  }
+
+  function renderSectionResultsRoute() {
+    var TBt = (typeof window !== "undefined") ? window.TBTemplate : null;
+    var base = buildDslData();
+    var topic = ((demoData.course || {}).topics || [])[0] || {};
+    var sr = (demoData.runtime || {}).sectionResult || {};
+    var built = (TBt && TBt.buildSectionResultContext) ? TBt.buildSectionResultContext({
+      topicName: topic.title || "Раздел",
+      correct: sr.score != null ? sr.score : 7,
+      total: sr.maxScore != null ? sr.maxScore : 8,
+      percent: sr.scorePercent != null ? sr.scorePercent : 88,
+      passed: sr.status ? sr.status === "passed" : true,
+      continueLabel: "Продолжить"
+    }) : null;
+    var data = Object.assign({}, base, {
+      course: built ? built.course : (demoData.course || {}),
+      sectionResult: built ? built.sectionResult : {}
+    });
+    renderLayoutPage("section-results", data);
   }
 
   // ─── Question rendering ───────────────────────────────────────────────────────
@@ -3429,14 +5722,32 @@ function renderContentPage(page, contentTemplates) {
         if (topics[t].id === q.topicId) { topicTitle = topics[t].title || ""; break; }
       }
     }
-    var counterLabel = q
-      ? ("Вопрос " + (qIndex + 1) + " из " + questions.length + (topicTitle ? " | " + topicTitle : ""))
-      : "";
+    var counterLabel = q ? ("Вопрос " + (qIndex + 1) + " из " + questions.length) : "";
 
     var customState = Object.assign({}, dslData.state, {
       questionCounterLabel: counterLabel,
+      sectionName: topicTitle,
       currentTopicTitle: topicTitle
     });
+    // PRD-19 Block C: build the progress-pills indicator so the question layout's pill
+    // map renders in the preview (skip/return progress), matching production.
+    var TBt = (typeof window !== "undefined") ? window.TBTemplate : null;
+    if (TBt && typeof TBt.buildQuestionProgress === "function" && q) {
+      var qList = questions.map(function (qq) { return { id: qq.id, topicId: qq.topicId }; });
+      var demoStatuses = {};
+      for (var s = 0; s < questions.length; s++) {
+        if (s < qIndex) demoStatuses[questions[s].id] = (s === qIndex - 1) ? "skipped" : "answered";
+      }
+      customState.questionsProgress = TBt.buildQuestionProgress({
+        questions: qList,
+        statuses: demoStatuses,
+        currentIndex: qIndex,
+        commitScope: "test",
+        sectionCommitted: {},
+        allowReturn: true,
+        scopeLabel: "Вопросы теста"
+      });
+    }
     var qDslData = Object.assign({}, dslData, {
       state: customState,
       page: {
@@ -3455,6 +5766,23 @@ function renderContentPage(page, contentTemplates) {
     if (interSlot  && q) interSlot.innerHTML  = buildInteractionHtml(q);
 
     fillDataPaths(app, qDslData);
+
+    // Reveal the timer with a demo value (production reveals it from remainingSeconds).
+    var _timer = app.querySelector("#timer-display");
+    if (_timer) { _timer.classList.remove("q-timer--hidden"); _timer.textContent = "44:51"; }
+
+    // Stepped text-fit (mirrors the runtime): shrink the prompt/options via --q-fit to
+    // fit the fixed stage before the card's overflow scroll kicks in. Lower bound 0.7.
+    var _card = app.querySelector(".question-card");
+    if (_card && _card.style) {
+      _card.classList.remove("question-card--scroll");
+      var _steps = [1, 0.94, 0.88, 0.82, 0.76, 0.7], _fits = false;
+      for (var _i = 0; _i < _steps.length; _i++) {
+        _card.style.setProperty("--q-fit", String(_steps[_i]));
+        if (_card.scrollHeight <= _card.clientHeight + 1) { _fits = true; break; }
+      }
+      if (!_fits) _card.classList.add("question-card--scroll");
+    }
   }
 
   // ─── Interaction HTML builders ────────────────────────────────────────────────
@@ -4040,13 +6368,37 @@ function renderContentPage(page, contentTemplates) {
     var vars = tb._internal.buildCssVarDeclarations(params, manifest.params || []);
     var stage = getStage();
     if (!stage) return;
+    // Apply tokens as the RAW HSL components buildCssVarDeclarations returns (matching
+    // the real host's buildTemplateCssVars). The template CSS composes them via
+    // hsl(var(--token)); wrapping the triple in hsl() here would double-wrap it
+    // (hsl(hsl(...)) → invalid), silently killing every hsl(var(--token)) rule.
     Object.keys(vars).forEach(function (name) {
-      var value = String(vars[name]);
-      // Wrap bare HSL triples in hsl()
-      if (/^\d/.test(value.trim()) || /^[0-9]/.test(value)) {
-        value = "hsl(" + value + ")";
-      }
-      stage.style.setProperty(name, value);
+      stage.style.setProperty(name, String(vars[name]));
+    });
+  }
+
+  // ─── Theme toggle (preview chrome) ──────────────────────────────────────────
+  /**
+   * Wires the Авто/Светлая/Тёмная segmented control in the preview head: sets
+   * data-theme on the document root (Авто removes it → the template follows the
+   * host prefers-color-scheme). Only the previewed template (theme.css) reacts;
+   * the preview chrome stays neutral.
+   */
+  function wireThemeToggle() {
+    var group = document.getElementById("pv-theme");
+    if (!group) return;
+    function apply(mode) {
+      var el = document.documentElement;
+      if (mode === "light" || mode === "dark") el.setAttribute("data-theme", mode);
+      else el.removeAttribute("data-theme");
+      var btns = group.querySelectorAll(".pv-theme-btn");
+      Array.prototype.forEach.call(btns, function (b) {
+        b.classList.toggle("pv-theme-active", b.getAttribute("data-theme-set") === mode);
+      });
+    }
+    group.addEventListener("click", function (e) {
+      var b = e.target.closest ? e.target.closest(".pv-theme-btn") : null;
+      if (b) apply(b.getAttribute("data-theme-set"));
     });
   }
 
@@ -4056,6 +6408,23 @@ function renderContentPage(page, contentTemplates) {
     root.TEST_DATA = buildTestData();
     root.advancePageSequence = function () {};
 
+    // Expose a minimal runtime state so the REAL content renderers
+    // (renderContentPage / renderGalleryPage / renderSectionIntro) resolve template
+    // layouts by key — mirrors production (templateLoader sets these). Without it,
+    // content pages fall back to the bare skeleton, which no longer matches the
+    // layout-driven runtime.
+    root.state = root.state || {};
+    root.state.templateLayouts = layouts;
+    root.state.currentPageIndex = 0;
+    root.state.templateManifest = manifest;
+    // Router demo state: per-topic status for the router card map.
+    root.state.routerTopicStates = {};
+    ((demoData.course || {}).topics || []).forEach(function (t) {
+      root.state.routerTopicStates[t.id] =
+        t.status === "completed" ? "completed" :
+        (t.status === "inProgress" ? "inProgress" : "notStarted");
+    });
+
     // Init TestBuilder CSS vars
     if (root.TestBuilder && root.TestBuilder._init) {
       root.TestBuilder._init(manifest.params || []);
@@ -4064,6 +6433,7 @@ function renderContentPage(page, contentTemplates) {
     buildShell();
     applyTemplateVars();
     buildNav();
+    wireThemeToggle();
 
     // Bind interaction handlers once at startup (global document listeners)
     bindChoiceClicksOnce();

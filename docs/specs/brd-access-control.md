@@ -5,8 +5,8 @@
 **Дата актуализации:** 2026-06-07
 **Связанные документы:** [PRD-13](./prd-13/role-based-access-control.md),
 [Ролевая модель и матрица](./access-control/role-model.md),
-[Аудит требований архитектуры](../AUDIT_ARCHITECTURE_REQUIREMENTS.md),
-[План требований архитектуры](../PLAN_ARCHITECTURE_REQUIREMENTS.md)
+[Аудит требований архитектуры](../reports/AUDIT_ARCHITECTURE_REQUIREMENTS.md),
+[План требований архитектуры](../plans/PLAN_ARCHITECTURE_REQUIREMENTS.md)
 
 ---
 

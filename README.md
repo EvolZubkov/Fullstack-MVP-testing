@@ -151,7 +151,11 @@
 
 - Просмотр доступных и назначенных тестов
 - Фокусный режим (один вопрос на экране)
-- Таймер обратного отсчета
+- Таймер обратного отсчёта на монотонном `performance.now()` (устойчив к фоновой вкладке и
+  переводу системных часов); секционные таймеры (PRD-4) — на том же примитиве (PRD-20)
+- Возобновление прерванной timed-попытки после перезагрузки/сбоя: активное время
+  восстанавливается из anchor в `suspend_data` + `cmi.total_time`, периодический commit даёт
+  kill-устойчивость, tamper-evidence защищает от «фри тайма» (PRD-20; adaptive — исключение)
 - Прогресс-пиллы со статусами вопросов (отвечён / пропущен / текущий / не выдан / заблокирован)
   и клик-навигация к выданным вопросам (PRD-19)
 - Пропуск вопроса и возврат к нему в пределах попытки; обзорный экран перед завершением раздела/теста
@@ -178,7 +182,9 @@
 - Ролевая модель (PRD-13): 5 ролей, мультироль, объединение прав, конфигурационный суперадмин (`SUPERADMIN_EMAILS`)
 - Объектные области доступа: владелец и гранты тестов, владелец/видимость и гранты тем
 - Шифрование email-адресов в базе данных (AES)
-- Хеширование паролей (bcrypt)
+- Хеширование паролей scrypt по профилю OWASP (`@vvlad1973/crypto`, PRD-9); единый шов
+  `server/utils/crypto.ts`; ленивый rehash старых bcrypt-хешей при первом успешном логине;
+  фиктивная сверка при отсутствии аккаунта (защита от timing-based enumeration)
 - Сброс пароля через email-токены (HMAC-SHA256)
 - Отслеживание согласия GDPR при первом входе
 - Маскирование email при отображении
@@ -212,9 +218,9 @@
 | Drizzle ORM | 0.45 | Работа с БД |
 | PostgreSQL | 14+ | База данных |
 | express-session | 1.19 | Управление сессиями |
-| bcryptjs | 3.0 | Хеширование паролей |
-| @vvlad1973/crypto | 2.3 | Шифрование email (AES) |
-| Nodemailer | 8.0 | Отправка email |
+| @vvlad1973/crypto | 2.4 | Хеширование паролей (scrypt, профиль OWASP; PRD-9) + шифрование email (AES) |
+| bcryptjs | 3.0 | Legacy-проверка старых bcrypt-хешей паролей (динамический импорт; удаляется после дренажа rehash, PRD-9 Этап 3) |
+| Nodemailer | 9.0 | Отправка email |
 | Multer | 2.2 | Загрузка файлов |
 | Archiver | 7.0 | Создание SCORM ZIP-пакетов |
 | ExcelJS | 4.4 | Импорт/экспорт Excel |
@@ -293,10 +299,14 @@ DATABASE_URL=postgresql://postgres:your_password@localhost:5432/scorm_db
 ### 4. Инициализация базы данных
 
 ```bash
-npm run db:push
+npm run db:push        # применить схему к БД
+npm run seed           # (опционально) наполнить пустую dev-БД демо-данными
 ```
 
-При первом запуске (пустая БД) автоматически создаются демо-пользователи и демо-контент. Вход по email:
+Демо-данные **больше не создаются автоматически** при старте сервера (гейт против production —
+прод-БД не получает демо-аккаунтов). Наполните пустую dev-БД вручную командой `npm run seed`:
+она создаёт демо-пользователей и демо-контент (только если БД пуста). Вход по email
+(креды переопределяются через `SEED_ADMIN_*` / `SEED_LEARNER_*`):
 
 - **<admin@test.com>** / admin123 (роль: administrator)
 - **<learner@test.com>** / learner123 (роль: learner)
@@ -376,7 +386,7 @@ test-builder/
 |   |   |-- debug-player/           # Ассеты плеера отладки: shim + TBInspector compute + стор (PRD-18)
 |   |   +-- zip.ts                  # ZIP-упаковка
 |   |-- middleware/                  # auth.ts, test-scope.ts, upload.ts (Multer)
-|   |-- utils/                       # crypto.ts (email AES), excel.ts, mask-email.ts
+|   |-- utils/                       # crypto.ts (email AES + scrypt-хеш паролей PRD-9), excel.ts, mask-email.ts
 |   |-- config.ts                    # Конфигурация (в т.ч. SUPERADMIN_EMAILS)
 |   |-- db.ts                        # Подключение к БД (Drizzle)
 |   |-- email.ts                     # Отправка email (сброс пароля)
@@ -386,7 +396,11 @@ test-builder/
 |   |-- scorm-exporter.ts            # Точка входа SCORM-экспорта
 |   |-- template-registry.ts         # Реестр дизайн-шаблонов
 |   |-- static.ts                    # Раздача статики (production)
-|   +-- storage.ts                   # Data Access Layer (Repository pattern)
+|   |-- storage.ts                   # Тонкий делегирующий фасад IStorage (DAL)
+|   +-- storage/                     # 14 доменных репозиториев за фасадом IStorage:
+|                                    #   users, groups, access, topics, questions, tests,
+|                                    #   attempts, scorm, adaptive, scales-variables,
+|                                    #   content-pages, assignments, folders (+ shared.ts)
 |
 |-- shared/                          # Общий код (client + server + SCORM-пакет)
 |   |-- schema.ts                   # Drizzle-схема БД + Zod-типы
@@ -402,11 +416,14 @@ test-builder/
 |                                    #   generate-sample/template-scorm.ts, превью, check-wireframes-ds)
 |
 |-- docs/                            # Документация
-|   |-- specs/                       # BRD + PRD-1..19 + scoring-model + спецификации
+|   |-- specs/                       # BRD + PRD-1..20 + сквозные спецификации (scoring-model, ...)
 |   |-- architecture/                # service-architecture, test-editor-contracts, ...
-|   |-- guides/                      # design_guidelines, import-template-guide, template-development
+|   |-- guides/                      # design-guidelines, import-template-guide, template-development
+|   |-- runbooks/                    # secret-rotation, prd13-rbac, prd15-content-ownership
+|   |-- plans/                       # Активные планы реализации
+|   |-- reports/                     # Аудиты-снимки (исторические)
 |   |-- wireframes/                  # HTML-эскизы
-|   |-- ROADMAP.md  RUNBOOK_*.md  AUDIT_*.md  PLAN_*.md
+|   +-- ROADMAP.md
 |
 |-- migrations/                      # Нумерованные SQL-миграции БД (001..035)
 |-- uploads/                         # Загруженные файлы
@@ -462,6 +479,13 @@ test-builder/
   рендер-пейлоад и валидаторы вынесены из route-хендлеров.
 - **Доменные движки** (`shared/`): scoring/scales/formula/eligibility/draw/tags — чистые
   модули, общие для клиента, сервера и SCORM-пакета (единый источник логики, без копий).
+- **Слой доступа к данным (DAL)**: `server/storage.ts` — тонкий делегирующий фасад над
+  контрактом `IStorage`; вся query-логика разнесена по 14 доменным репозиториям в
+  `server/storage/*` (users, groups, access, topics, questions, tests, attempts, scorm,
+  adaptive, scales-variables, content-pages, assignments, folders). Многошаговые мутации —
+  в транзакциях (атомарность/каскады), запись через белый список колонок (защита от
+  mass-assignment), индексы на горячих колонках. Интеграционные тесты — на `pglite`
+  (`npm run test:it`).
 
 ### Единый рендерер ученических экранов (PRD-12)
 
@@ -559,7 +583,7 @@ PostgreSQL + Drizzle ORM, **29 таблиц**. Схема и Zod-типы -- в 
 | id | varchar(36) PK | UUID |
 | email | text | Зашифрованный email (AES) |
 | emailHash | varchar(64) | SHA-256 хеш для поиска |
-| passwordHash | text | bcrypt хеш пароля |
+| passwordHash | text | scrypt-хеш пароля (PRD-9; legacy bcrypt до ленивого rehash при логине) |
 | name | text | Отображаемое имя |
 | status | enum | pending, active, inactive |
 | mustChangePassword | boolean | Принудительная смена пароля |
@@ -1087,8 +1111,10 @@ npm run dev          # Development-сервер (tsx + Vite HMR; tsx запус�
 npm run build        # Production-сборка (esbuild + Vite)
 npm start            # Запуск production-версии
 npm run check        # Проверка типов TypeScript (tsc)
-npm test             # Запуск тестов (vitest)
+npm test             # Запуск юнит-тестов (vitest; порог покрытия 80%)
+npm run test:it      # Интеграционные тесты слоя данных на pglite (vitest.it.config.ts)
 npm run db:push      # Применить изменения схемы к БД (Drizzle Kit)
+npm run seed         # Наполнить dev-БД демо-данными (гейт против production)
 npm run create-admin # Создать администратора
 npm run lint:md      # Линт markdown-документации (markdownlint-cli2)
 

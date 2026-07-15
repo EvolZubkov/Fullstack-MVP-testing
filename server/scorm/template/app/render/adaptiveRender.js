@@ -38,7 +38,8 @@ function ensureAdaptiveShuffleMapping(q) {
   } else if (q.type === 'ranking') {
     var itemCount = q.data.items ? q.data.items.length : 0;
     if (itemCount > 0) {
-      state.shuffleMappings[q.id] = createShuffleMapping(itemCount);
+      // Guaranteed non-correct delivery order (see createRankingOrder).
+      state.shuffleMappings[q.id] = createRankingOrder(itemCount, q.correct && q.correct.correctOrder);
       if (!state.answers[q.id]) state.answers[q.id] = state.shuffleMappings[q.id].slice();
     }
   }
@@ -59,9 +60,14 @@ function buildAdaptiveFeedbackHtml(q) {
 
 /** Adaptive navigation HTML (Принять / Далее), onclick-wired. */
 function buildAdaptiveNavHtml() {
+  // Gate «Принять» on a usable answer for the current adaptive question (same rule
+  // as the standard flow; refreshSubmitEnabled keeps it in sync on selection).
+  var aq = typeof currentAnsweringQuestion === 'function' ? currentAnsweringQuestion() : null;
+  var aReady = !aq || typeof hasAnswer !== 'function' ? true : hasAnswer(aq, state.answers[aq.id]);
+  var aDisabled = aReady ? '' : ' disabled';
   var html = '<div class="navigation" style="justify-content:flex-end">';
   if (TEST_DATA.showCorrectAnswers) {
-    if (!state.feedbackShown) html += '<button class="btn" data-action="answer-submit" onclick="confirmAdaptiveAnswer()">Принять</button>';
+    if (!state.feedbackShown) html += '<button class="btn" data-action="answer-submit" onclick="confirmAdaptiveAnswer()"' + aDisabled + '>Принять</button>';
     else html += '<button class="btn" data-nav="next" onclick="continueAfterFeedback()">Далее</button>';
   } else {
     html += '<button class="btn" data-nav="next" onclick="submitAdaptiveAnswerAndContinue()">Далее</button>';
@@ -83,9 +89,9 @@ function renderAdaptiveQuestionTemplated(app, qData) {
     'question-feedback': showFeedback ? buildAdaptiveFeedbackHtml(q) : ''
   };
   app.innerHTML = '';
-  var wrap = document.createElement('div');
-  app.appendChild(wrap);
-  window.TBTemplate.renderScreenInto(wrap, {
+  // Mount directly into #app so .tb-pad > .layout-question-wrap fills the fixed
+  // stage and the appended nav anchors — mirrors renderGalleryPage (no wrapper div).
+  window.TBTemplate.renderScreenInto(app, {
     layout: state.templateLayouts['question'],
     context: {
       course: { title: TEST_DATA.title },
@@ -94,9 +100,9 @@ function renderAdaptiveQuestionTemplated(app, qData) {
     },
     slots: slots
   });
-  var fill = wrap.querySelector('#q-progress-fill');
+  var fill = app.querySelector('#q-progress-fill');
   if (fill) fill.style.width = ((qData.questionNumber / qData.totalInLevel) * 100) + '%';
-  var timerEl = wrap.querySelector('#timer-display');
+  var timerEl = app.querySelector('#timer-display');
   if (timerEl && state.remainingSeconds !== null) {
     timerEl.classList.remove('q-timer--hidden');
     timerEl.textContent = formatTime(state.remainingSeconds);
@@ -336,10 +342,10 @@ function renderAdaptiveTransitionTemplated(app, result) {
     showContinue: true
   });
   app.innerHTML = '';
-  var wrap = document.createElement('div');
-  app.appendChild(wrap);
-  window.TBTemplate.renderScreenInto(wrap, { layout: state.templateLayouts['system.transition'], context: ctx });
-  var cont = wrap.querySelector('[data-action="continue"]');
+  // Mount directly into #app so .tb-pad > .transition-page fills the fixed stage —
+  // mirrors renderGalleryPage (no wrapper div).
+  window.TBTemplate.renderScreenInto(app, { layout: state.templateLayouts['system.transition'], context: ctx });
+  var cont = app.querySelector('[data-action="continue"]');
   if (cont) cont.onclick = continueAfterTransition;
 }
 
@@ -470,14 +476,14 @@ function renderAdaptiveResultsTemplated(app, result) {
     showFinish: (!hasLimit) || (!canRetry)
   });
   app.innerHTML = '';
-  var wrap = document.createElement('div');
-  app.appendChild(wrap);
-  window.TBTemplate.renderScreenInto(wrap, { layout: state.templateLayouts['results.adaptive'], context: ctx });
-  var pdf = wrap.querySelector('[data-action="download-pdf"]');
+  // Mount directly into #app so .tb-pad > .results-page fills the fixed stage —
+  // mirrors renderGalleryPage (no wrapper div).
+  window.TBTemplate.renderScreenInto(app, { layout: state.templateLayouts['results.adaptive'], context: ctx });
+  var pdf = app.querySelector('[data-action="download-pdf"]');
   if (pdf) pdf.onclick = function () { if (typeof downloadPDF === 'function') downloadPDF(); };
-  var retry = wrap.querySelector('[data-action="restart-adaptive"]');
+  var retry = app.querySelector('[data-action="restart-adaptive"]');
   if (retry) retry.onclick = restartAdaptive;
-  var finish = wrap.querySelector('[data-action="finish"]');
+  var finish = app.querySelector('[data-action="finish"]');
   if (finish) finish.onclick = finishAndClose;
 }
 

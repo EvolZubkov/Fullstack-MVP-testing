@@ -53,8 +53,6 @@ export interface SmokeRunOptions {
   partials?: Record<string, string>;
   /** `template.js` source — compiled (not executed) to catch syntax errors. */
   templateJs?: string;
-  /** `template-rules.json` source — JSON-parsed to catch malformed rules. */
-  rulesJson?: string;
   /** Isolated container factory; default: a detached `<div>` on the global document. */
   createContainer?: () => HTMLElement;
   /** Renderer override (default {@link renderScreenInto}); injectable for tests. */
@@ -135,20 +133,9 @@ function checkTemplateJs(src: string): SmokeRouteResult {
   return { id: "template.js", route: "template.js", label: "Скрипт шаблона", status: rowStatus(errors, []), errors, warnings: [] };
 }
 
-/** JSON-parse the course rules file. */
-function checkRules(src: string): SmokeRouteResult {
-  const errors: string[] = [];
-  try {
-    JSON.parse(src);
-  } catch (e) {
-    errors.push("Невалидный JSON правил: " + ((e as Error)?.message ?? String(e)));
-  }
-  return { id: "rules", route: "rules", label: "Правила шаблона", status: rowStatus(errors, []), errors, warnings: [] };
-}
-
 /**
- * Run the browser smoke-test across all preview screens (+ optional template.js /
- * rules checks) and return the aggregate {@link SmokeReport}. `ok` is the activation
+ * Run the browser smoke-test across all preview screens (+ optional template.js
+ * check) and return the aggregate {@link SmokeReport}. `ok` is the activation
  * gate signal the server persists and enforces (NFR-01).
  */
 export function runSmokeChecks(opts: SmokeRunOptions): SmokeReport {
@@ -157,7 +144,6 @@ export function runSmokeChecks(opts: SmokeRunOptions): SmokeReport {
   const routes: SmokeRouteResult[] = specs.map((spec) => checkScreen(spec, opts, render));
 
   if (opts.templateJs != null) routes.push(checkTemplateJs(opts.templateJs));
-  if (opts.rulesJson != null) routes.push(checkRules(opts.rulesJson));
 
   const failed = routes.filter((r) => r.status === "fail").length;
   const warned = routes.filter((r) => r.status === "warn").length;

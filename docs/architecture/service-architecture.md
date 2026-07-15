@@ -4,13 +4,20 @@
 > (`server/routes/`), выделен слой сервисов (`server/services/`), добавлены доменные движки
 > в `shared/` и единый шаблонный рендерер `shared/template/` (PRD-12). Списки роутеров и
 > сервисов в §6 приведены в соответствие с актуальным составом (PRD-13/14/15/18).
+>
+> Актуализировано 2026-07-05: слой доступа к данным (`DatabaseStorage`) разбит на 14 доменных
+> репозиториев за фасадом `IStorage` (`server/storage/*`); многошаговые мутации переведены в
+> транзакции, добавлен белый список записываемых колонок и индексы на горячих колонках.
+> Хеширование паролей переведено на scrypt (`@vvlad1973/crypto`, PRD-9) — `bcryptjs` остаётся
+> legacy-only для проверки старых хешей.
 
 ## Обзор
 
 Серверная часть проекта построена на Express.js с TypeScript, с выделенным слоем доступа
 к данным (Repository pattern). Основные компоненты:
 
-- **DatabaseStorage** -- единственная реализация интерфейса `IStorage`, инкапсулирующая все операции с БД
+- **DatabaseStorage** -- тонкий делегирующий фасад интерфейса `IStorage`; query-логика разнесена
+  по 14 доменным репозиториям в `server/storage/*`
 - **Routes** -- модульные роутеры по доменам в `server/routes/`, смонтированные тонким
   `server/routes.ts` (`registerRoutes`)
 - **Services** -- доменные сервисы (`server/services/`): расчёт результата, контекст итогов,
@@ -55,25 +62,32 @@
 
 ---
 
-## 1. DatabaseStorage
+## 1. DatabaseStorage (фасад) + доменные репозитории
 
-**Файл:** [storage.ts](../../server/storage.ts)
+**Файлы:** [storage.ts](../../server/storage.ts) (фасад) +
+[storage/](../../server/storage/) (14 доменных репозиториев + `shared.ts`).
 
-### Интерфейс IStorage (строки 30--145)
+### Интерфейс IStorage
 
-Определяет контракт для всех операций с базой данных. Содержит ~80 методов,
-сгруппированных по доменным сущностям.
+Определяет контракт для всех операций с базой данных (~80 методов, сгруппированных по
+доменным сущностям). Маршруты и сервисы зависят только от `IStorage`, а не от конкретных
+репозиториев.
 
-### Класс DatabaseStorage (строки 146--983)
+### Класс DatabaseStorage
 
-**Паттерны:** Repository, Singleton (экспортируется единственный экземпляр `storage`).
+**Паттерны:** Facade + Repository (композиция-делегирование), Singleton (экспортируется
+единственный экземпляр `storage`). Фасад не содержит собственной query-логики: каждый метод
+делегирует в per-domain репозиторий под `server/storage/*` (users, groups, access, topics,
+questions, tests, attempts, scorm, adaptive, scales-variables, content-pages, assignments,
+folders; общие хелперы — `shared.ts`). Транзакции многошаговых мутаций (атомарность/каскады),
+белый список записываемых колонок (защита от mass-assignment) и крипто-шов живут в
+репозиториях; корневой агрегат владеет каскадами своих дочерних таблиц.
 
-**Зависимости:**
+**Зависимости (репозиториев):**
 
 - `drizzle-orm` -- построение запросов
-- `bcryptjs` -- хеширование паролей
+- `server/utils/crypto.ts` -- шов хеширования пароля (scrypt, PRD-9) + шифрование/хеширование email
 - `crypto.randomUUID()` -- генерация идентификаторов
-- `server/utils/crypto.ts` -- шифрование/хеширование email
 - `@shared/schema` -- определения таблиц
 
 **Группы методов:**
@@ -389,11 +403,11 @@ SCORM-пакета: `scoring/` (цена ответа PRD-10 + эффектив�
 
 | Паттерн | Применение |
 | --- | --- |
-| **Repository** | `IStorage` / `DatabaseStorage` -- инкапсуляция доступа к данным |
+| **Facade + Repository** | `IStorage` / `DatabaseStorage` (фасад) над 14 доменными репозиториями `server/storage/*` |
 | **Singleton** | `storage`, `db`, `pool`, email transporter |
 | **Builder** | SCORM пакеты собираются поэтапно через цепочку builders |
 | **Factory** | `buildZip()`, `buildManifest()`, `buildTestJson()` |
-| **Middleware** | `requireAuth`, `requireAuthor`, `requireLearner` |
+| **Middleware** | `requireAuth`, `requirePermission` (PRD-13) + scope-мидлвары теста/темы |
 | **Strategy** | standard vs adaptive режимы, percent vs absolute pass rules |
 | **Template Method** | `readAsset()` -- поиск файла по нескольким путям |
 
@@ -403,7 +417,7 @@ SCORM-пакета: `scoring/` (цена ответа PRD-10 + эффектив�
 
 | Аспект | Реализация |
 | --- | --- |
-| Аутентификация | Express-session, bcrypt, 24h TTL |
+| Аутентификация | Express-session, scrypt (PRD-9; legacy bcrypt через ленивый rehash при логине), 24h TTL |
 | Авторизация | Ролевая модель PRD-13 (5 ролей, мультироль, `requirePermission`) + объектные области (владелец/гранты теста и темы) |
 | Email | AES шифрование в БД, SHA-256 хеш для поиска |
 | Сброс пароля | HMAC-SHA256 токены, 30 мин TTL, rate limit 3/час |

@@ -10,6 +10,12 @@ server/scorm-exporter.ts.bak
 components.zip
 .env*
 !.env.example
+
+# App config: config/config.jsonc (base) and config/{development,test,production}
+# .config.jsonc (per-environment, non-secret) ARE committed. Only personal local
+# overrides are ignored.
+config/*.local.jsonc
+
 CLAUDE.md
 tmp/
 logs/

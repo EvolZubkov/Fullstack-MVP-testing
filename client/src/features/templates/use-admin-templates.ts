@@ -27,6 +27,9 @@ export interface AdminTemplateManifest extends PreviewManifest {
   description?: string;
   version?: string;
   templateApiVersion?: string;
+  /** Fixed-stage templates set this: the runtime + previews mount screens inside the
+   *  template's own shell (a container-query 16:9 stage) instead of a bare container. */
+  mountShell?: boolean;
   assets?: { preview?: string; styles?: string[]; scripts?: string[]; images?: string[] };
   params?: Array<{ key: string; type?: string; label?: string }>;
 }
@@ -72,7 +75,6 @@ export interface SmokeBundle {
   layouts: Record<string, string>;
   css: string;
   templateJs?: string;
-  rulesJson?: string;
 }
 
 export interface TemplateDetails {

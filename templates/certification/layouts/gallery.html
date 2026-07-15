@@ -1,0 +1,19 @@
+<div class="gallery">
+  <header class="gallery__head">
+    <h1 class="gallery__title">{{gallery.header}}</h1>
+    {{#if gallery.subheader}}<p class="gallery__hint">{{gallery.subheader}}</p>{{/if}}
+  </header>
+  <div class="gallery__card">
+    <div class="gallery__body" data-slot="cardText"></div>
+    {{#if gallery.imageUrl}}<div class="gallery__media"><img src="{{gallery.imageUrl}}" alt=""></div>{{/if}}
+  </div>
+  <div class="gallery__foot">
+    <div class="gallery__dots" role="group" aria-label="Навигация галереи">
+      {{#each gallery.pills}}<span class="tb-pill tb-pill--dot {{statusClass}}"></span>{{/each}}
+    </div>
+    <div class="gallery__nav">
+      {{#if gallery.showBack}}<button type="button" class="btn btn-outline" data-nav="prev">Назад</button>{{/if}}
+      <button type="button" class="btn" data-nav="next">{{gallery.nextLabel}}</button>
+    </div>
+  </div>
+</div>

@@ -1,34 +1,30 @@
+/**
+ * @module server/routes/logs
+ * @description Read-only API over the in-memory ring buffer of recent server events.
+ * There is no historical/file-based log access here by design: rotation, retention
+ * and full-log search are handled outside the application (container log driver /
+ * logrotate). This endpoint only surfaces the last N events kept in memory.
+ */
 import { Router } from "express";
 import { requirePermission } from "../middleware/auth";
-import { getAvailableLogDates, readLogFile } from "../logger";
+import { getRecentLogs, type LogFilter } from "../logger";
 
 const router = Router();
 
-// Только author имеет доступ
-// GET /api/logs/dates — список доступных дат
-router.get("/dates", requirePermission("logs.read"), (_req, res) => {
-  res.json(getAvailableLogDates());
-});
-
-// GET /api/logs?date=2026-03-19&level=error&search=database
+// Author-only access.
+// GET /api/logs?level=error&search=database&limit=100
 router.get("/", requirePermission("logs.read"), (req, res) => {
-  const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
-  const level = req.query.level as string | undefined;
+  const level = req.query.level as LogFilter["level"] | undefined;
   const search = req.query.search as string | undefined;
+  const limitRaw = Number.parseInt(req.query.limit as string, 10);
 
-  let lines = readLogFile(date);
+  const result = getRecentLogs({
+    level: level ?? "all",
+    search: search || undefined,
+    limit: Number.isFinite(limitRaw) ? limitRaw : undefined,
+  });
 
-  if (level && level !== "all") {
-    lines = lines.filter(l => l.includes(`[${level.toUpperCase()}`));
-  }
-  if (search) {
-    const q = search.toLowerCase();
-    lines = lines.filter(l => l.toLowerCase().includes(q));
-  }
-
-  const LIMIT = 100;
-  const trimmed = lines.slice(-LIMIT);
-  res.json({ date, total: lines.length, shown: trimmed.length, lines: trimmed });
+  res.json(result);
 });
 
 export default router;

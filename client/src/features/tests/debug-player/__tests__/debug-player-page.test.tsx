@@ -6,7 +6,7 @@
  * access/error/loading states, reset, and CSV export.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { DebugSessionState } from "../use-debug-session";
 import type { ProtocolRow, TBInspectorApi } from "../inspector-snapshot";
 
@@ -50,8 +50,8 @@ function installTB(over: Partial<TBInspectorApi> = {}) {
     buildDraw: vi.fn(() => ({
       available: true, adaptive: false,
       sections: [{
-        topicName: "Алгебра", count: 2, mode: "quota" as const, formId: null, formIndex: null, formCount: null,
-        bankSize: 5, byTag: [{ tag: "Дроби", count: 1 }], byType: [{ type: "single", typeLabel: "Один ответ", count: 2 }],
+        topicId: "topic-alg", topicName: "Алгебра", count: 2, mode: "quota" as const, formId: null, formIndex: null, formCount: null,
+        forms: [], bankSize: 5, byTag: [{ tag: "Дроби", count: 1 }], byType: [{ type: "single", typeLabel: "Один ответ", count: 2 }],
         quotas: [{ tag: "Дроби", planned: 2, actual: 1, mode: "exact", short: true }],
         questions: [{ id: "q1", idx: 0, prompt: "2+2?", type: "single", typeLabel: "Один ответ", topicName: "Алгебра", delivered: true }],
         delivered: 1,
@@ -71,6 +71,31 @@ function installTB(over: Partial<TBInspectorApi> = {}) {
     getSuspendAttempts: vi.fn(() => []),
     ...over,
   };
+}
+
+/** A `buildDraw` override with ONE variants-mode topic (2 forms) for the pin tests. */
+function variantsDraw(started: boolean): Partial<TBInspectorApi> {
+  return {
+    buildDraw: vi.fn(() => ({
+      available: true, adaptive: false, flat: false, started,
+      sections: [{
+        topicId: "topic-vars", topicName: "О компании", count: 2, mode: "variants" as const,
+        formId: "f1", formIndex: 1, formCount: 2,
+        forms: [{ id: "f1", label: "Вариант 1", index: 1 }, { id: "f2", label: "Вариант 2", index: 2 }],
+        bankSize: 10, byTag: [], byType: [{ type: "single", typeLabel: "Один ответ", count: 2 }],
+        quotas: null,
+        questions: [{ id: "q1", idx: 0, prompt: "?", type: "single", typeLabel: "Один ответ", topicName: "О компании", delivered: false }],
+        delivered: 0,
+      }],
+    })),
+  };
+}
+
+/** Open a ui-kit Select (testid on the wrapper div, click target is the inner button). */
+function selectOption(selectTestId: string, optionLabel: string | RegExp) {
+  const wrap = screen.getByTestId(selectTestId);
+  fireEvent.click(within(wrap).getByRole("button"));
+  fireEvent.click(screen.getByRole("option", { name: optionLabel }));
 }
 
 beforeEach(() => {
@@ -191,5 +216,44 @@ describe("DebugPlayerPage — ready", () => {
     installTB({ readPkg: vi.fn(() => ({ hasData: true, mode: "standard", state: {}, engineError: "formula broke" })) });
     render(<DebugPlayerPage />);
     expect(screen.getByText("formula broke")).toBeInTheDocument();
+  });
+});
+
+// ─── PRD-18: per-topic variant pinning on the «Выдача» tab ───────────────────────
+
+describe("DebugPlayerPage — variant pins", () => {
+  it("offers a per-topic «Выдать вариант» selector for a variants-mode section", () => {
+    installTB(variantsDraw(false));
+    render(<DebugPlayerPage />);
+    fireEvent.click(screen.getByRole("tab", { name: "Выдача" }));
+    expect(screen.getByText("Выдать вариант")).toBeInTheDocument();
+    expect(screen.getByTestId("variant-pin-topic-vars")).toBeInTheDocument();
+    // The drawn variant is still summarised below the control.
+    expect(screen.getByText(/Выпал/)).toBeInTheDocument();
+  });
+
+  it("does NOT show a selector for a non-variants (quota) section", () => {
+    render(<DebugPlayerPage />); // default install → quota section, forms: []
+    fireEvent.click(screen.getByRole("tab", { name: "Выдача" }));
+    expect(screen.queryByText("Выдать вариант")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("variant-pin-topic-alg")).not.toBeInTheDocument();
+  });
+
+  it("pins a variant → resets the run and passes it to the stage via the launch hash", () => {
+    installTB(variantsDraw(false));
+    render(<DebugPlayerPage />);
+    fireEvent.click(screen.getByRole("tab", { name: "Выдача" }));
+    selectOption("variant-pin-topic-vars", "Вариант 2");
+    expect(resetMock).toHaveBeenCalled();
+    const expected = "/play/x#tbff=" + encodeURIComponent(JSON.stringify({ "topic-vars": "f2" }));
+    expect(screen.getByTitle("Прогон отладки")).toHaveAttribute("src", expected);
+  });
+
+  it("disables the selector once the run has started (variants locked at draw time)", () => {
+    installTB(variantsDraw(true));
+    render(<DebugPlayerPage />);
+    fireEvent.click(screen.getByRole("tab", { name: "Выдача" }));
+    expect(within(screen.getByTestId("variant-pin-topic-vars")).getByRole("button")).toBeDisabled();
+    expect(screen.getByText(/После старта прогона выбор зафиксирован/)).toBeInTheDocument();
   });
 });

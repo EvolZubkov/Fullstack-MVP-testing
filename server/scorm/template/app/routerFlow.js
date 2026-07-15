@@ -221,15 +221,37 @@
       // Completed cards stay disabled to prevent re-entry; locked cards are
       // disabled because their unlock-rule prerequisites aren't met yet.
       card.disabled = status === "completed" || !unlocked;
+      var _meta = [];
+      if (section.drawCount) _meta.push(section.drawCount + " " + pluralQuestions(section.drawCount));
+      if (section.timeLimitMinutes) _meta.push(section.timeLimitMinutes + " мин");
+      var _metaHtml = _meta.length
+        ? '<span class="router-topic-card__meta">' + _meta.map(function (m) {
+            return '<span class="router-topic-card__chip">' + escapeHtml(m) + "</span>";
+          }).join("") + "</span>"
+        : "";
+      var _goHtml = (unlocked && status !== "completed")
+        ? '<span class="router-topic-card__go">начать</span>' : "";
+      var _imgUrl = section.image && typeof section.image === "object"
+        ? (section.image.url || "") : (section.image || "");
+      var _imgHtml = _imgUrl
+        ? '<span class="router-topic-card__img"><img src="' + escapeHtml(_imgUrl) + '" alt=""></span>'
+        : "";
       card.innerHTML =
+        '<span class="router-topic-card__top">' +
         '<span class="router-topic-card__name">' +
         escapeHtml(section.topicName || section.topicId) +
         (section.required === false
           ? ' <span class="router-topic-card__optional">(необязательная)</span>'
           : "") +
         "</span>" +
+        _imgHtml +
+        "</span>" +
+        _metaHtml +
+        '<span class="router-topic-card__foot">' +
         '<span class="router-topic-card__status">' +
         escapeHtml(unlocked ? statusLabel(status) : "Недоступна") +
+        "</span>" +
+        _goHtml +
         "</span>";
       card.onclick = function () {
         if (card.disabled) return;
@@ -237,6 +259,21 @@
       };
       cards.appendChild(card);
     });
+
+    // Top stats: deadline date/time (mirrors the original's top boxes). Additive —
+    // only rendered when the test carries a deadline; the default template omits it.
+    var prevStats = host.querySelector(".router-stats");
+    if (prevStats && prevStats.parentNode) prevStats.parentNode.removeChild(prevStats);
+    var deadline = TEST_DATA.deadline || {};
+    if (deadline.date || deadline.time) {
+      var stats = document.createElement("div");
+      stats.className = "router-stats";
+      var _sb = "";
+      if (deadline.date) _sb += '<div class="router-stat"><span class="router-stat__label">Дата завершения теста</span><span class="router-stat__value">' + escapeHtml(deadline.date) + "</span></div>";
+      if (deadline.time) _sb += '<div class="router-stat"><span class="router-stat__label">Время завершения теста</span><span class="router-stat__value">' + escapeHtml(deadline.time) + "</span></div>";
+      stats.innerHTML = _sb;
+      host.appendChild(stats);
+    }
 
     // Progress counter «Разделы X / Y» + thin bar, above the cards. Y counts ONLY
     // required sections (the ones that gate «Перейти к результатам»); hidden when
@@ -268,16 +305,17 @@
     // PRD-4 v1.1 §4.7: «Завершить» is gated by routerCompletionPolicy
     // (all required sections completed, optionally also passed). Optional
     // sections never block.
+    // «Завершить» is always shown but disabled until the completion policy is met
+    // (mirrors the original — the button greys out until all sections are done).
     var ready = isRouterReadyToFinish();
-    if (ready) {
-      var finishBtn = document.createElement("button");
-      finishBtn.type = "button";
-      finishBtn.className = "btn router-finish";
-      finishBtn.setAttribute("data-action", "router-finish");
-      finishBtn.textContent = "Перейти к результатам";
-      finishBtn.onclick = finishRouter;
-      host.appendChild(finishBtn);
-    }
+    var finishBtn = document.createElement("button");
+    finishBtn.type = "button";
+    finishBtn.className = "btn router-finish" + (ready ? "" : " router-finish--disabled");
+    finishBtn.setAttribute("data-action", "router-finish");
+    finishBtn.textContent = "Завершить";
+    finishBtn.disabled = !ready;
+    if (ready) finishBtn.onclick = finishRouter;
+    host.appendChild(finishBtn);
 
     // PRD-8 FR-18: emit router lifecycle events for diagnostics + template
     // extensions. The first time the «Завершить» action becomes available
@@ -319,6 +357,14 @@
     return "Не начата";
   }
 
+  /** Russian plural for «вопрос» (n вопрос / вопроса / вопросов). */
+  function pluralQuestions(n) {
+    var m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return "вопрос";
+    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return "вопроса";
+    return "вопросов";
+  }
+
   /**
    * Marks the topic as in-progress and starts the topic's runtime. In
    * standard mode this is a linear chunk (before_topic content → questions
@@ -332,6 +378,11 @@
   function selectRouterTopic(topicId) {
     if (!isRouterMode()) return;
     if (state.routerTopicStates[topicId] === "completed") return;
+    // Record the router hub on the nav route BEFORE mutating state, so the
+    // topic's «Назад» (section-intro / first page) returns to the hub instead of
+    // dead-ending at the rebuilt chunk's index 0. Captures the clean hub state
+    // (this topic not yet 'inProgress', currentRouterTopic still null).
+    if (typeof pushNavHistory === "function") pushNavHistory();
     state.routerTopicStates[topicId] = "inProgress";
     state.currentRouterTopic = topicId;
     // PRD-8 FR-18: section selection event for diagnostics + template
@@ -500,6 +551,32 @@
     if (typeof render === "function") render();
   }
 
+  /**
+   * Return to the router hub WITHOUT completing the current topic — the resume-
+   * safe «Назад» fallback from a topic's first page when no nav history exists
+   * (e.g. a reloaded SCO). Reverts the topic to 'notStarted', stops its section
+   * timer and re-renders the hub. Live sessions use navigateBack, which restores
+   * the exact hub snapshot; this reconstructs an equivalent hub.
+   */
+  function returnToHub() {
+    if (!isRouterMode()) return false;
+    if (typeof stopSectionTimer === "function") stopSectionTimer();
+    var topicId = state.currentRouterTopic;
+    if (topicId && state.routerTopicStates[topicId] === "inProgress") {
+      delete state.routerTopicStates[topicId];
+    }
+    state.currentRouterTopic = null;
+    var routerPage = (TEST_DATA.contentPages || []).find(function (p) {
+      return p.kind === "router";
+    });
+    if (!routerPage) return false;
+    state.pageSequence = [{ kind: "content", page: routerPage, isRouter: true }];
+    state.currentPageIndex = 0;
+    state.phase = "router";
+    if (typeof render === "function") render();
+    return true;
+  }
+
   root.RouterFlow = {
     isRouterMode: isRouterMode,
     buildTopicChunk: buildTopicChunk,
@@ -508,6 +585,7 @@
     selectRouterTopic: selectRouterTopic,
     resumeRouterTopic: resumeRouterTopic,
     returnFromTopic: returnFromTopic,
+    returnToHub: returnToHub,
     finishRouter: finishRouter,
     isSectionUnlocked: isSectionUnlocked,
     isRouterReadyToFinish: isRouterReadyToFinish,

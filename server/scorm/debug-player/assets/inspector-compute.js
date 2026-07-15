@@ -712,8 +712,8 @@
           topicName: vs.topicName, delivered: delivered };
       });
       var out = {
-        topicName: vs.topicName, count: drawnIds.length, mode: "all",
-        formId: null, formIndex: null, formCount: null, quotas: null,
+        topicId: vs.topicId, topicName: vs.topicName, count: drawnIds.length, mode: "all",
+        formId: null, formIndex: null, formCount: null, forms: [], quotas: null,
         bankSize: (def.questions && def.questions.length) || drawnIds.length,
         byTag: composeByTag(drawn), byType: composeByType(drawn),
         questions: qlist,
@@ -722,6 +722,11 @@
       if (def.formSet && def.formSet.forms && def.formSet.forms.length) {
         out.mode = "variants";
         out.formCount = def.formSet.forms.length;
+        // PRD-18 debug: the full variant list (id + label + 1-based index) so the
+        // «Выдача» tab can offer a per-topic pin selector (before the run starts).
+        out.forms = def.formSet.forms.map(function (f, i) {
+          return { id: f.id, label: f.label || ("Вариант " + (i + 1)), index: i + 1 };
+        });
         var set = {};
         drawnIds.forEach(function (id) { set[id] = 1; });
         for (var i = 0; i < def.formSet.forms.length; i++) {
@@ -746,7 +751,9 @@
       return out;
     });
     var dFlow = (pkg.TEST_DATA && pkg.TEST_DATA.flowPolicy && pkg.TEST_DATA.flowPolicy.mode) || "linear_flat";
-    return { available: true, adaptive: false, sections: sections, flat: dFlow === "linear_flat" };
+    // PRD-18 debug: `started` (phase !== 'start') drives the variant pin selectors —
+    // they lock once the run began (all variants fixed at generateVariant time).
+    return { available: true, adaptive: false, sections: sections, flat: dFlow === "linear_flat", started: !!pkg.started };
   }
 
   // ═══ «Эталон» — highlight the correct answers ON the real question render in the

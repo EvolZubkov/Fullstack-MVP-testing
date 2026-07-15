@@ -58,6 +58,11 @@ if "%TEST_PROJECT%"=="" set "TEST_PROJECT=%PROJECT_NAME%_test"
 if "%TEST_PORT%"==""    set "TEST_PORT=8082"
 
 set "REMOTE_SCRIPT=/tmp/deploy-test-%PROJECT_NAME%.sh"
+:: Optional operator secrets: the project's .env.test (git-ignored). When present it
+:: is shipped and becomes the test instance's .env (server aligns DATABASE_URL +
+:: ENCRYPTION_* to the prod clone). Absent -> the server copies secrets from prod .env.
+set "REMOTE_ENV=/tmp/deploy-test-%PROJECT_NAME%.env.test"
+set "LOCAL_ENV=%SCRIPT_DIR%..\..\.env.test"
 
 echo.
 echo ===================================================
@@ -85,6 +90,14 @@ if not exist "%SCRIPT_DIR%deploy-test.sh" (
 echo [1/2] Uploading deploy-test.sh to %DEPLOY_TARGET%...
 scp "%SCRIPT_DIR%deploy-test.sh" "%DEPLOY_TARGET%:%REMOTE_SCRIPT%"
 if errorlevel 1 ( echo ERROR: scp failed & exit /b 1 )
+
+if exist "%LOCAL_ENV%" (
+    echo   Shipping .env.test ^(operator secrets^)...
+    scp "%LOCAL_ENV%" "%DEPLOY_TARGET%:%REMOTE_ENV%"
+    if errorlevel 1 ( echo ERROR: scp of .env.test failed & exit /b 1 )
+) else (
+    echo   No .env.test in project root — server will copy secrets from prod .env.
+)
 echo [1/2] OK
 echo.
 
