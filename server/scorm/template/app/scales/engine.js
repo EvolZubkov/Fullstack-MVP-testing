@@ -51,10 +51,17 @@ var ScaleEngine = (function () {
     }
   }
 
-  function rawRange(scaleMeasurements, agg, questionTypes) {
+  // PRD-5 §5.2 minPossible / maxPossible for THIS attempt. Only DELIVERED questions
+  // (those present in `answers`) bound the range — a bank question the draw did not
+  // deliver contributes 0 to `raw`, so counting its extremes would push raw outside
+  // [min, max] and make percent negative / >100. single: one unit fires, other
+  // option = 0 -> [min(0,vals), max(0,vals)]; multiple/matching/ranking: several
+  // units fire together -> sum of negative / positive units (as `raw` sums actives).
+  function rawRange(scaleMeasurements, agg, questionTypes, answers) {
     var byQuestion = {};
     for (var i = 0; i < scaleMeasurements.length; i++) {
       var m = scaleMeasurements[i];
+      if (!Object.prototype.hasOwnProperty.call(answers, m.questionId)) continue;
       (byQuestion[m.questionId] = byQuestion[m.questionId] || []).push(m);
     }
     var mins = [];
@@ -63,12 +70,12 @@ var ScaleEngine = (function () {
     Object.keys(byQuestion).forEach(function (questionId) {
       var ms = byQuestion[questionId];
       var vals = ms.map(function (m) { return m.value * m.weight; });
-      if (questionTypes[questionId] === 'multiple') {
+      if (questionTypes[questionId] === 'single') {
+        mins.push(Math.min.apply(null, [0].concat(vals)));
+        maxes.push(Math.max.apply(null, [0].concat(vals)));
+      } else {
         mins.push(vals.filter(function (v) { return v < 0; }).reduce(function (s, v) { return s + v; }, 0));
         maxes.push(vals.filter(function (v) { return v > 0; }).reduce(function (s, v) { return s + v; }, 0));
-      } else {
-        mins.push(Math.min.apply(null, vals));
-        maxes.push(Math.max.apply(null, vals));
       }
       weights.push(ms.reduce(function (s, m) { return s + m.weight; }, 0) / ms.length);
     });
@@ -113,12 +120,15 @@ var ScaleEngine = (function () {
         var normalized = raw;
         var percent = 0;
         if (scale.normalization === 'percent') {
-          var range = rawRange(scaleMeasurements, scale.aggregation, questionTypes);
+          var range = rawRange(scaleMeasurements, scale.aggregation, questionTypes, answers);
           var span = range.max - range.min;
-          if (span !== 0) {
+          if (span > 0) {
             percent = scale.direction === 'inverse'
               ? ((range.max - raw) / span) * 100
               : ((raw - range.min) / span) * 100;
+          } else {
+            // PRD-5 §5.2: impossible / zero range — diagnostic, not a meaningless number.
+            errors.push({ key: scale.key, message: 'percent: диапазон нормализации невозможен или нулевой' });
           }
           normalized = percent;
         }

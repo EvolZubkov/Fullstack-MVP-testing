@@ -93,6 +93,41 @@ function isActive(m: MeasurementSpec, answer: Answer, qType: QuestionType | unde
   return false;
 }
 
+/** One fired measurement unit's contribution to a scale, for a single answer. */
+export interface AnswerContribution {
+  scaleKey: string;
+  /** The realised `value * weight` of the measurement unit. */
+  delta: number;
+}
+
+/**
+ * Per-answer scale contributions: for one question's answer, the `value * weight`
+ * of every measurement unit that fired, tagged by scale. Mirrors the SCORM/debug
+ * inspector's `contributionsFor` (one entry per active unit — NOT summed per
+ * scale), so a multi-select answer can contribute several deltas to the same
+ * scale. Used by the analytics per-attempt export to show how each answer moved
+ * the scales, recomputed from the stored answer + the test's measurements.
+ *
+ * @param measurements - The test's measurement specs (all questions).
+ * @param questionId - The question whose answer is scored.
+ * @param answer - The learner's answer (runtime encoding).
+ * @param qType - The question type (drives unit-firing for option/pair/position).
+ * @returns One `{ scaleKey, delta }` per fired unit, in measurement order.
+ */
+export function computeAnswerContributions(
+  measurements: MeasurementSpec[],
+  questionId: string,
+  answer: Answer,
+  qType: QuestionType | undefined,
+): AnswerContribution[] {
+  const out: AnswerContribution[] = [];
+  for (const m of measurements) {
+    if (m.questionId !== questionId) continue;
+    if (isActive(m, answer, qType)) out.push({ scaleKey: m.scaleKey, delta: m.value * m.weight });
+  }
+  return out;
+}
+
 function aggregate(contribs: number[], agg: ScaleAggregation, weights: number[]): number {
   if (contribs.length === 0) return 0;
   const total = contribs.reduce((s, v) => s + v, 0);
@@ -115,18 +150,29 @@ function aggregate(contribs: number[], agg: ScaleAggregation, weights: number[])
 }
 
 /**
- * The min/max raw a scale can take, used for percent normalization. Per question
- * the learner realises one option's value (single), any subset (multiple → 0..Σ
- * positives / Σ negatives..0), or a unit value (matching/ranking, best effort);
- * the per-question extremes are aggregated the same way as the live value.
+ * The min/max raw a scale can take on THIS attempt (PRD-5 §5.2 minPossible /
+ * maxPossible), used for percent normalization. Only questions actually delivered
+ * to the learner bound the range: a bank question the draw did not deliver
+ * contributes 0 to `raw`, so counting its extremes would push `raw` outside
+ * [min, max] and make percent go negative / exceed 100 (the reported defect). A
+ * question is "delivered" when it has an entry in `answers`.
+ *
+ * Per-question achievable contribution:
+ * - single: exactly one unit fires and an unmeasured/other option scores 0, so the
+ *   range is `[min(0, …vals), max(0, …vals)]`.
+ * - multiple / matching / ranking: several units can fire together (a subset of
+ *   options, every formed pair, every placement), so the extremes are the sums of
+ *   the negative / positive units — the same way `raw` sums the active ones.
  */
 function rawRange(
   scaleMeasurements: MeasurementSpec[],
   agg: ScaleAggregation,
   questionTypes: Record<string, QuestionType>,
+  answers: Record<string, Answer>,
 ): { min: number; max: number } {
   const byQuestion = new Map<string, MeasurementSpec[]>();
   for (const m of scaleMeasurements) {
+    if (!Object.prototype.hasOwnProperty.call(answers, m.questionId)) continue;
     const list = byQuestion.get(m.questionId) ?? [];
     list.push(m);
     byQuestion.set(m.questionId, list);
@@ -137,13 +183,12 @@ function rawRange(
   const weights: number[] = [];
   for (const [questionId, ms] of byQuestion) {
     const vals = ms.map((m) => m.value * m.weight);
-    const qType = questionTypes[questionId];
-    if (qType === "multiple") {
+    if (questionTypes[questionId] === "single") {
+      mins.push(Math.min(0, ...vals));
+      maxes.push(Math.max(0, ...vals));
+    } else {
       mins.push(vals.filter((v) => v < 0).reduce((s, v) => s + v, 0));
       maxes.push(vals.filter((v) => v > 0).reduce((s, v) => s + v, 0));
-    } else {
-      mins.push(Math.min(...vals));
-      maxes.push(Math.max(...vals));
     }
     weights.push(ms.reduce((s, m) => s + m.weight, 0) / ms.length);
   }
@@ -195,13 +240,17 @@ export function computeScales(
       let normalized = raw;
       let percent = 0;
       if (scale.normalization === "percent") {
-        const { min, max } = rawRange(scaleMeasurements, scale.aggregation, questionTypes);
+        const { min, max } = rawRange(scaleMeasurements, scale.aggregation, questionTypes, answers);
         const span = max - min;
-        if (span !== 0) {
+        if (span > 0) {
           percent =
             scale.direction === "inverse"
               ? ((max - raw) / span) * 100
               : ((raw - min) / span) * 100;
+        } else {
+          // PRD-5 §5.2: the range is impossible / zero — percent is undefined, so
+          // report it as a diagnostic rather than emitting a meaningless number.
+          errors.push({ key: scale.key, message: "percent: диапазон нормализации невозможен или нулевой" });
         }
         normalized = percent;
       } else {

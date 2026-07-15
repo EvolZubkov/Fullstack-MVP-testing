@@ -9,6 +9,7 @@
 import { describe, it, expect } from "vitest";
 import {
   computeScales,
+  computeAnswerContributions,
   type ScaleSpec,
   type MeasurementSpec,
   type Answer,
@@ -105,6 +106,60 @@ describe("computeScales — percent normalization & inversion (MBI)", () => {
   });
 });
 
+describe("computeScales — percent range is over DELIVERED questions (PRD-5 §5.2)", () => {
+  // A scale measured across a bank of questions; the test delivers a SUBSET. All
+  // contributions are positive and every delivered answer is correct — this is the
+  // РТК-cert regression: pre-fix, `rawRange` summed per-question minima over the
+  // whole bank, so raw < min and percent went NEGATIVE. It must be 100%.
+  const bankMeasurements: MeasurementSpec[] = [
+    // delivered:
+    { questionId: "d1", scaleKey: "s", sourceType: "option", sourceKey: "0", value: 1, weight: 1 }, // single
+    { questionId: "d2", scaleKey: "s", sourceType: "option", sourceKey: "0", value: 0.5, weight: 1 }, // multiple
+    { questionId: "d2", scaleKey: "s", sourceType: "option", sourceKey: "1", value: 0.5, weight: 1 },
+    { questionId: "d3", scaleKey: "s", sourceType: "matching_pair", sourceKey: "0:0", value: 0.25, weight: 1 }, // matching
+    { questionId: "d3", scaleKey: "s", sourceType: "matching_pair", sourceKey: "1:1", value: 0.25, weight: 1 },
+    { questionId: "d3", scaleKey: "s", sourceType: "matching_pair", sourceKey: "2:2", value: 0.25, weight: 1 },
+    { questionId: "d3", scaleKey: "s", sourceType: "matching_pair", sourceKey: "3:3", value: 0.25, weight: 1 },
+    // undelivered bank questions (each a +1 single) — must NOT widen the range:
+    { questionId: "b4", scaleKey: "s", sourceType: "option", sourceKey: "0", value: 1, weight: 1 },
+    { questionId: "b5", scaleKey: "s", sourceType: "option", sourceKey: "0", value: 1, weight: 1 },
+    { questionId: "b6", scaleKey: "s", sourceType: "option", sourceKey: "0", value: 1, weight: 1 },
+  ];
+  const qTypes: Record<string, QuestionType> = {
+    d1: "single", d2: "multiple", d3: "matching", b4: "single", b5: "single", b6: "single",
+  };
+
+  it("all-correct on the delivered subset yields 100%, never negative", () => {
+    const answers: Record<string, Answer> = { d1: 0, d2: [0, 1], d3: { 0: 0, 1: 1, 2: 2, 3: 3 } };
+    const out = computeScales([scale({ key: "s", normalization: "percent" })], bankMeasurements, answers, qTypes);
+    expect(out.values.s.raw).toBe(3); // 1 (single) + (0.5+0.5) (multiple) + (0.25*4) (matching)
+    expect(out.values.s.percent).toBe(100);
+    expect(out.errors).toHaveLength(0);
+  });
+
+  it("a fully-correct matching question reaches its max (pairs sum, not one pair)", () => {
+    const ms = bankMeasurements.filter((m) => m.questionId === "d3");
+    const out = computeScales([scale({ key: "s", normalization: "percent" })], ms, { d3: { 0: 0, 1: 1, 2: 2, 3: 3 } }, qTypes);
+    expect(out.values.s.raw).toBe(1); // 0.25 * 4
+    expect(out.values.s.percent).toBe(100);
+  });
+
+  it("a wrong single answer scores 0%, not a negative", () => {
+    // Only d1 delivered; learner picks an unmeasured option (contributes 0).
+    const ms = bankMeasurements.filter((m) => m.questionId === "d1");
+    const out = computeScales([scale({ key: "s", normalization: "percent" })], ms, { d1: 9 }, qTypes);
+    expect(out.values.s.raw).toBe(0);
+    expect(out.values.s.percent).toBe(0);
+  });
+
+  it("reports a diagnostic (not a number) when the delivered range is degenerate", () => {
+    // The only delivered contribution is a fixed 0 → min === max === 0 → span 0.
+    const ms: MeasurementSpec[] = [{ questionId: "d1", scaleKey: "s", sourceType: "question", sourceKey: null, value: 0, weight: 1 }];
+    const out = computeScales([scale({ key: "s", normalization: "percent" })], ms, { d1: 1 }, { d1: "single" });
+    expect(out.errors.some((e) => e.key === "s")).toBe(true);
+  });
+});
+
 describe("computeScales — bands apply to raw", () => {
   it("derives level/label from the band the raw falls into", () => {
     const bands = [
@@ -184,5 +239,47 @@ describe("computeScales — edge cases", () => {
     const a = computeScales(...args);
     const b = computeScales(...args);
     expect(b).toEqual(a);
+  });
+});
+
+describe("computeAnswerContributions", () => {
+  const ms: MeasurementSpec[] = [
+    { questionId: "q1", scaleKey: "ee", sourceType: "option", sourceKey: "0", value: 2, weight: 1 },
+    { questionId: "q1", scaleKey: "ee", sourceType: "option", sourceKey: "1", value: 3, weight: 2 },
+    { questionId: "q1", scaleKey: "oc", sourceType: "option", sourceKey: "1", value: -1, weight: 1 },
+    { questionId: "q2", scaleKey: "ee", sourceType: "question", sourceKey: null, value: 5, weight: 1 },
+  ];
+
+  it("returns only the fired unit for a single-choice answer", () => {
+    expect(computeAnswerContributions(ms, "q1", 0, "single")).toEqual([{ scaleKey: "ee", delta: 2 }]);
+  });
+
+  it("applies weight to the delta (value * weight)", () => {
+    expect(computeAnswerContributions(ms, "q1", 1, "single")).toEqual([
+      { scaleKey: "ee", delta: 6 },
+      { scaleKey: "oc", delta: -1 },
+    ]);
+  });
+
+  it("lists one entry per fired unit for a multi-select answer (not summed)", () => {
+    expect(computeAnswerContributions(ms, "q1", [0, 1], "multiple")).toEqual([
+      { scaleKey: "ee", delta: 2 },
+      { scaleKey: "ee", delta: 6 },
+      { scaleKey: "oc", delta: -1 },
+    ]);
+  });
+
+  it("fires a whole-question unit whenever the question is answered", () => {
+    expect(computeAnswerContributions(ms, "q2", 0, "single")).toEqual([{ scaleKey: "ee", delta: 5 }]);
+  });
+
+  it("returns nothing for an unanswered question", () => {
+    expect(computeAnswerContributions(ms, "q1", null, "single")).toEqual([]);
+    expect(computeAnswerContributions(ms, "q2", undefined, "single")).toEqual([]);
+  });
+
+  it("ignores measurements of other questions", () => {
+    expect(computeAnswerContributions(ms, "q1", 0, "single").every((c) => c.scaleKey !== undefined)).toBe(true);
+    expect(computeAnswerContributions([], "q1", 0, "single")).toEqual([]);
   });
 });
