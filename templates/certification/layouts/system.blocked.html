@@ -1,0 +1,20 @@
+<div class="results-page">
+  <div class="blocked-card" data-testid="retake-wall">
+    <div class="blocked-lock" role="img" aria-label="Доступ заблокирован">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+    </div>
+    <div data-retake-branch="default">
+      <h1 class="blocked-title">Доступ к тесту ограничен</h1>
+      <p class="blocked-description">Для этого теста больше нет доступных попыток.</p>
+    </div>
+    <div data-retake-branch="cooldown" hidden>
+      <h1 class="blocked-title">Повторная попытка недоступна</h1>
+      <p class="blocked-description">Этот тест можно проходить не чаще, чем раз в <span data-path="retake.cooldownPeriodDays">&mdash;</span> дн.</p>
+      <div class="blocked-date" data-retake-available>Доступно с <strong data-path="retake.availableDateHuman">&mdash;</strong></div>
+    </div>
+    <div data-retake-branch="error" hidden>
+      <h1 class="blocked-title">Не удалось проверить доступ</h1>
+      <p class="blocked-description">Не удалось проверить доступность повторного прохождения. Обратитесь к администратору курса.</p>
+    </div>
+  </div>
+</div>

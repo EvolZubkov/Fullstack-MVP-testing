@@ -1,0 +1,80 @@
+/*
+ * RTK certification — design tokens (PRD-7 branding).
+ *
+ * TWO layers, by design:
+ *   1. The TEMPLATE ships a full light + dark palette here. It follows the viewer's
+ *      SYSTEM theme (@media prefers-color-scheme) and an explicit override
+ *      (:root[data-theme="light|dark"]) that always wins over the media query.
+ *   2. The AUTHOR may still override any colour via design params — those are applied
+ *      as inline CSS vars on the stage and win over this file. The params default to
+ *      EMPTY (manifest `default: null`), so when the author sets nothing, this theme
+ *      drives; when they set a colour, it overrides (in both light and dark).
+ *
+ * Colours are HSL COMPONENTS (bare triples, no hsl()) — base.css composes them as
+ * hsl(var(--token)) so params and theme can both feed the same tokens.
+ */
+
+/* ── LIGHT (default) ───────────────────────────────────────────────────────── */
+:root,
+:root[data-theme="light"] {
+  --frame: 240 5% 86%;              /* letterbox gutter */
+  --background: 240 4% 93%;         /* stage */
+  --foreground: 240 7% 11%;
+  --border: 260 5% 90%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 7% 11%;
+  --card-border: 260 5% 90%;
+  --primary: 15 100% 45%;          /* RTK #E33A00 */
+  --primary-foreground: 0 0% 100%;
+  --muted: 260 4% 89%;
+  --muted-foreground: 217 6% 45%;
+  --accent: 18 80% 96%;
+  --destructive: 353 98% 41%;
+  --success: 120 51% 38%;
+  --lock: 240 3% 55%;
+  --font-sans: 'Rostelecom Basis', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  --radius: 12px;
+  --shadow: 0 2px 10px rgba(60, 40, 20, 0.10);
+}
+
+/* ── DARK — the token overrides (system preference) ────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --frame: 240 10% 4%;
+    --background: 240 10% 10%;
+    --foreground: 240 15% 92%;
+    --border: 240 8% 24%;
+    --card: 240 10% 14%;
+    --card-foreground: 240 15% 92%;
+    --card-border: 240 8% 26%;
+    --primary: 15 100% 52%;
+    --primary-foreground: 0 0% 100%;
+    --muted: 240 8% 22%;
+    --muted-foreground: 240 8% 64%;
+    --accent: 15 40% 20%;
+    --destructive: 353 75% 58%;
+    --success: 120 40% 55%;
+    --lock: 240 6% 48%;
+    --shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* ── DARK — explicit override (viewer toggle), wins over the media query ───── */
+:root[data-theme="dark"] {
+  --frame: 240 10% 4%;
+  --background: 240 10% 10%;
+  --foreground: 240 15% 92%;
+  --border: 240 8% 24%;
+  --card: 240 10% 14%;
+  --card-foreground: 240 15% 92%;
+  --card-border: 240 8% 26%;
+  --primary: 15 100% 52%;
+  --primary-foreground: 0 0% 100%;
+  --muted: 240 8% 22%;
+  --muted-foreground: 240 8% 64%;
+  --accent: 15 40% 20%;
+  --destructive: 353 75% 58%;
+  --success: 120 40% 55%;
+  --lock: 240 6% 48%;
+  --shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+}

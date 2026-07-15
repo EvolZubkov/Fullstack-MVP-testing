@@ -1,0 +1,417 @@
+{
+  "id": "certification",
+  "name": "Сертификация (РТК)",
+  "version": "1.0.0",
+  "templateApiVersion": "1.0",
+  "mountShell": true,
+  "description": "Сертификационный тест РТК: системная тема (светлая и тёмная) с переопределяемыми цветами, брендовый акцент, страница-роутер, кнопки навигации, пропуск и возврат к неотвеченным, экран обзора.",
+  "params": [
+    {
+      "key": "primaryColor",
+      "type": "color",
+      "label": "Основной цвет",
+      "default": null,
+      "group": "Цвета",
+      "section": "branding"
+    },
+    {
+      "key": "backgroundColor",
+      "type": "color",
+      "label": "Цвет фона",
+      "default": null,
+      "group": "Цвета",
+      "section": "branding"
+    },
+    {
+      "key": "foregroundColor",
+      "type": "color",
+      "label": "Цвет текста",
+      "default": null,
+      "group": "Цвета",
+      "section": "branding"
+    },
+    {
+      "key": "cardColor",
+      "type": "color",
+      "label": "Цвет карточек",
+      "default": null,
+      "group": "Цвета",
+      "section": "branding"
+    },
+    {
+      "key": "cardBorderColor",
+      "type": "color",
+      "label": "Граница карточек",
+      "default": null,
+      "group": "Цвета",
+      "section": "branding"
+    },
+    {
+      "key": "borderColor",
+      "type": "color",
+      "label": "Цвет границ",
+      "default": null,
+      "group": "Цвета",
+      "section": "branding"
+    },
+    {
+      "key": "mutedColor",
+      "type": "color",
+      "label": "Приглушённый цвет",
+      "default": null,
+      "group": "Цвета",
+      "section": "branding"
+    },
+    {
+      "key": "accentColor",
+      "type": "color",
+      "label": "Акцентный цвет",
+      "default": null,
+      "group": "Цвета",
+      "section": "branding"
+    },
+    {
+      "key": "fontFamily",
+      "type": "select",
+      "label": "Шрифт",
+      "default": "Rostelecom Basis",
+      "group": "Оформление",
+      "section": "branding",
+      "options": [
+        "Rostelecom Basis",
+        "Inter",
+        "Roboto",
+        "Arial"
+      ]
+    },
+    {
+      "key": "logoUrl",
+      "type": "image",
+      "label": "Логотип",
+      "default": null,
+      "group": "Оформление",
+      "section": "branding"
+    },
+    {
+      "key": "progress.mode",
+      "type": "select",
+      "label": "Режим прогресса",
+      "default": "questions",
+      "group": "Навигация",
+      "section": "progress",
+      "options": [
+        "questions",
+        "pages",
+        "hidden"
+      ],
+      "optionLabels": {
+        "questions": "По вопросам",
+        "pages": "По страницам",
+        "hidden": "Не показывать"
+      }
+    },
+    {
+      "key": "showProgressBar",
+      "type": "boolean",
+      "label": "Показывать прогресс-бар",
+      "default": true,
+      "group": "Навигация",
+      "section": "progress"
+    }
+  ],
+  "contentTemplates": [
+    {
+      "key": "start.standard",
+      "label": "Старт: стандартный",
+      "kind": "start",
+      "pageKind": "start",
+      "layoutFile": "layouts/start.html",
+      "placeholders": []
+    },
+    {
+      "key": "results.standard",
+      "label": "Итоги теста: стандартные",
+      "kind": "results",
+      "pageKind": "results",
+      "layoutFile": "layouts/results.html",
+      "placeholders": []
+    },
+    {
+      "key": "intro.standard",
+      "label": "Введение раздела: стандартное",
+      "kind": "intro",
+      "pageKind": "content.intro",
+      "layoutFile": "layouts/section-intro.html",
+      "isDefault": true,
+      "placeholders": [
+        {
+          "key": "instruction",
+          "type": "richText",
+          "label": "Краткая инструкция к разделу",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          },
+          "allowedMarks": [
+            "bold",
+            "italic",
+            "link"
+          ],
+          "allowedBlocks": [
+            "paragraph",
+            "bulletedList",
+            "numberedList"
+          ]
+        },
+        {
+          "key": "illustration",
+          "type": "image",
+          "label": "Иллюстрация раздела",
+          "required": false
+        }
+      ]
+    },
+    {
+      "key": "info.text",
+      "label": "Информация: текст",
+      "kind": "info",
+      "pageKind": "content.info",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "richText",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          },
+          "allowedMarks": [
+            "bold",
+            "italic",
+            "link"
+          ],
+          "allowedBlocks": [
+            "paragraph",
+            "bulletedList",
+            "numberedList"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "review.standard",
+      "label": "Обзор раздела: стандартный",
+      "kind": "review",
+      "pageKind": "review",
+      "layoutFile": "layouts/review.html",
+      "isDefault": true,
+      "placeholders": []
+    },
+    {
+      "key": "section-results.standard",
+      "label": "Итоги раздела: стандартные",
+      "kind": "section-results",
+      "pageKind": "section-results",
+      "layoutFile": "layouts/section-results.html",
+      "isDefault": true,
+      "placeholders": []
+    },
+    {
+      "key": "question.standard",
+      "label": "Стандартный макет вопроса",
+      "kind": "questions",
+      "isDefault": true,
+      "placeholders": []
+    },
+    {
+      "key": "router.menu",
+      "label": "Меню карточек",
+      "kind": "router",
+      "pageKind": "content.router",
+      "isDefault": true,
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок меню",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "instruction",
+          "type": "textarea",
+          "label": "Инструкция",
+          "required": false,
+          "maxLength": 600
+        }
+      ]
+    },
+    {
+      "key": "gallery.card",
+      "label": "Галерея: карточка",
+      "kind": "gallery",
+      "pageKind": "content.gallery",
+      "layoutFile": "layouts/gallery.html",
+      "isDefault": true,
+      "placeholders": [
+        { "key": "header", "type": "text", "label": "Заголовок", "required": false, "maxLength": 160 },
+        { "key": "subheader", "type": "text", "label": "Подзаголовок", "required": false, "maxLength": 160 },
+        { "key": "cardText", "type": "richText", "label": "Текст карточки", "required": false,
+          "allowedMarks": ["bold", "italic", "link"],
+          "allowedBlocks": ["paragraph", "bulletedList", "numberedList"] },
+        { "key": "image", "type": "image", "label": "Изображение (необязательно)", "required": false }
+      ]
+    }
+  ],
+  "rendererPlugins": [],
+  "layouts": {
+    "shell": "shell.html",
+    "start": "layouts/start.html",
+    "content": "layouts/content.html",
+    "question": "layouts/question.html",
+    "results": "layouts/results.html",
+    "results.adaptive": "layouts/results.adaptive.html",
+    "review": "layouts/review.html",
+    "section-results": "layouts/section-results.html",
+    "section-intro": "layouts/section-intro.html",
+    "system.blocked": "layouts/system.blocked.html",
+    "system.transition": "layouts/system.transition.html",
+    "gallery.card": "layouts/gallery.html"
+  },
+  "assets": {
+    "styles": [
+      "styles/theme.css",
+      "styles/base.css"
+    ],
+    "scripts": [
+      "scripts/template.js"
+    ],
+    "images": [],
+    "preview": "preview.svg"
+  },
+  "capabilities": {
+    "navigation": [
+      "linear",
+      "locked"
+    ],
+    "sidebar": false,
+    "progress": [
+      "questions",
+      "pages",
+      "hidden"
+    ],
+    "timer": true,
+    "contentPages": [
+      "start",
+      "intro",
+      "info",
+      "html"
+    ],
+    "questionTypes": [
+      "single",
+      "multiple",
+      "matching",
+      "ranking"
+    ],
+    "customInteractions": false,
+    "runtimeApi": "1.0"
+  },
+  "preview": {
+    "demoData": "demo/course.json",
+    "defaultRoute": "start",
+    "routes": [
+      {
+        "route": "start",
+        "label": "Старт"
+      },
+      {
+        "route": "content.gallery.1",
+        "pageId": "gallery-1",
+        "label": "Галерея: список на всю ширину"
+      },
+      {
+        "route": "content.gallery.2",
+        "pageId": "gallery-2",
+        "label": "Галерея: текст + изображение"
+      },
+      {
+        "route": "content.router",
+        "pageId": "router-menu",
+        "label": "Роутер: меню разделов"
+      },
+      {
+        "route": "content.intro",
+        "pageId": "demo-intro",
+        "templateKey": "intro.standard",
+        "label": "Введение раздела"
+      },
+      {
+        "route": "content.info",
+        "pageId": "demo-info",
+        "templateKey": "info.text",
+        "label": "Информация: текст"
+      },
+      {
+        "route": "question.single",
+        "questionId": "demo-single",
+        "label": "Вопрос: одиночный выбор"
+      },
+      {
+        "route": "question.multiple",
+        "questionId": "demo-multiple",
+        "label": "Вопрос: множественный выбор"
+      },
+      {
+        "route": "question.matching",
+        "questionId": "demo-matching",
+        "label": "Вопрос: сопоставление"
+      },
+      {
+        "route": "question.ranking",
+        "questionId": "demo-ranking",
+        "label": "Вопрос: ранжирование"
+      },
+      {
+        "route": "review",
+        "label": "Обзор раздела"
+      },
+      {
+        "route": "section-results",
+        "label": "Итоги раздела"
+      },
+      {
+        "route": "results",
+        "label": "Результаты"
+      },
+      {
+        "route": "system.blocked",
+        "label": "Системная: доступ ограничен"
+      }
+    ]
+  }
+}

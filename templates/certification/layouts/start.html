@@ -1,0 +1,50 @@
+<div class="cover">
+  <div class="cover-grid">
+    <div class="cover-col">
+      {{#if design.logoUrl}}<div class="tb-brand"><img class="tb-brand__logo" src="{{ design.logoUrl }}" alt=""></div>{{/if}}
+      <div class="cover-eyebrow">Сертификация</div>
+      <h1 class="cover-title" data-path="course.title">Тест</h1>
+      {{#if course.description}}<p class="cover-desc" data-path="course.description"></p>{{/if}}
+
+      {{#if state.cooldown}}
+      <div class="start-state">
+        <div class="start-state__title">Повторное прохождение пока недоступно</div>
+        <div class="start-state__sub">Действует период ожидания между попытками.</div>
+        <div class="start-state__row">Доступно с <strong><span data-path="state.cooldown.availableDateHuman"></span></strong>{{#if state.cooldown.daysUntil}} &middot; через <span data-path="state.cooldown.daysUntil"></span> дн.{{/if}}</div>
+        {{#if state.priorResult}}
+        <div class="start-state__row">Прошлая попытка: <strong><span data-path="state.priorResult.percent"></span>%</strong>{{#if state.priorResult.verdictLabel}} &middot; <span class="{{state.priorResult.verdictClass}}" data-path="state.priorResult.verdictLabel"></span>{{/if}}{{#if state.priorResult.attemptsLabel}} &middot; <span data-path="state.priorResult.attemptsLabel"></span>{{/if}}</div>
+        <div class="prior-actions">
+          {{#if state.canViewResults}}<button type="button" class="btn btn--outline" data-action="view-results">Мой результат</button>{{/if}}
+          {{#if state.canDownloadReport}}<button type="button" class="btn btn--outline" data-action="download-report">Скачать отчёт</button>{{/if}}
+        </div>
+        {{/if}}
+      </div>
+      {{/if}}
+
+      {{#unless state.cooldown}}{{#if state.priorResult}}
+      <div class="start-state">
+        <div class="start-state__row">Прошлая попытка: <strong><span data-path="state.priorResult.percent"></span>%</strong>{{#if state.priorResult.verdictLabel}} &middot; <span class="{{state.priorResult.verdictClass}}" data-path="state.priorResult.verdictLabel"></span>{{/if}}{{#if state.priorResult.attemptsLabel}} &middot; <span data-path="state.priorResult.attemptsLabel"></span>{{/if}}</div>
+        <div class="prior-actions">
+          {{#if state.canViewResults}}<button type="button" class="btn btn--outline" data-action="view-results">Мой результат</button>{{/if}}
+          {{#if state.canDownloadReport}}<button type="button" class="btn btn--outline" data-action="download-report">Скачать отчёт</button>{{/if}}
+        </div>
+      </div>
+      {{/if}}{{/unless}}
+
+      <div class="cover-actions">
+        {{#if state.resumeNote}}<div class="start-state__sub">{{state.resumeNote}}</div>{{/if}}
+        {{#if state.exhausted}}<div class="cover-note">Попытки закончились</div>{{/if}}
+        {{#if state.canResume}}<button type="button" class="btn" data-action="resume">{{state.resumeLabel}}</button>{{/if}}
+        {{#if state.cooldown}}<button type="button" class="btn" disabled aria-disabled="true">Начать тестирование</button>{{/if}}
+        {{#if state.canStart}}<button type="button" class="btn" data-action="start-test">{{state.startLabel}}</button>{{/if}}
+        {{#if state.canRestart}}<button type="button" class="btn btn--outline" data-action="restart">Начать заново</button>{{/if}}
+        {{#unless state.priorResult}}{{#if state.canViewResults}}<button type="button" class="btn btn--outline" data-action="view-results">Мой результат</button>{{/if}}{{/unless}}
+        {{#if state.showBack}}<button type="button" class="btn btn--outline" data-action="back">К списку тестов</button>{{/if}}
+      </div>
+    </div>
+
+    <div class="cover-brand" aria-hidden="true">
+      <span class="cover-brand__ring"></span>
+    </div>
+  </div>
+</div>
