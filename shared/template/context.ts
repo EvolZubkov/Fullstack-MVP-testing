@@ -290,6 +290,10 @@ export interface CtxSectionIntro {
   timeLimitLabel: string;
   /** Gates the author instruction block (set when the instruction is non-empty). */
   hasInstruction: boolean;
+  /** Author section illustration URL; empty string when absent. */
+  illustrationUrl: string;
+  /** Gates the illustration column. */
+  hasIllustration: boolean;
   /** «Далее» action label. */
   continueLabel: string;
 }

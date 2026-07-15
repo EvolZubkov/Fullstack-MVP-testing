@@ -1347,7 +1347,7 @@ export type ScormAnswer = typeof scormAnswers.$inferSelect;
  * PRD-1 §4.3: variant.kind — functional role of a template variant.
  * Drives variant binding rules in PRD-7 §1.4 (silent binding for system kinds).
  */
-export const variantKindSchema = z.enum(["start", "questions", "router", "summary", "results", "intro", "info", "review", "section-results"]);
+export const variantKindSchema = z.enum(["start", "questions", "router", "summary", "results", "intro", "info", "review", "section-results", "gallery"]);
 export type VariantKind = z.infer<typeof variantKindSchema>;
 
 /**

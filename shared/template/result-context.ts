@@ -180,6 +180,16 @@ function pluralQuestions(n: number): string {
   return "вопросов";
 }
 
+/** Russian plural for «минута» (1 минута / 2 минуты / 5 минут). */
+function pluralMinutes(n: number): string {
+  const abs = Math.abs(n) % 100;
+  const d = abs % 10;
+  if (abs > 10 && abs < 20) return "минут";
+  if (d === 1) return "минута";
+  if (d > 1 && d < 5) return "минуты";
+  return "минут";
+}
+
 /** Normalized input for the «Введение раздела» screen (PRD-1 §4.3). */
 export interface SectionIntroInput {
   /** 1-based section index (for the «Раздел N» eyebrow). */
@@ -191,6 +201,8 @@ export interface SectionIntroInput {
   timeLimitMinutes?: number | null;
   /** Author instruction (HTML/text); non-empty → the instruction block shows. */
   instruction?: string | null;
+  /** Author section illustration URL; non-empty → the illustration column shows. */
+  illustration?: string | null;
   continueLabel?: string;
 }
 
@@ -208,6 +220,7 @@ export function buildSectionIntroContext(input: SectionIntroInput): {
   const hasTime = !!(input.timeLimitMinutes && input.timeLimitMinutes > 0);
   const instrRaw = typeof input.instruction === "string" ? input.instruction : "";
   const instrText = instrRaw.replace(/<[^>]*>/g, "").trim();
+  const illo = (input.illustration ?? "").trim();
   const sectionIntro: CtxSectionIntro = {
     eyebrow: "Раздел " + (input.sectionNumber || 1),
     topicName: input.topicName || "",
@@ -216,8 +229,10 @@ export function buildSectionIntroContext(input: SectionIntroInput): {
     questionCount: count,
     questionCountLabel: count + " " + pluralQuestions(count),
     hasTimeLimit: hasTime,
-    timeLimitLabel: hasTime ? String(input.timeLimitMinutes) + " мин" : "",
+    timeLimitLabel: hasTime ? String(input.timeLimitMinutes) + " " + pluralMinutes(input.timeLimitMinutes as number) : "",
     hasInstruction: instrText.length > 0,
+    illustrationUrl: illo,
+    hasIllustration: illo.length > 0,
     continueLabel: input.continueLabel || "Далее",
   };
   return { course: { title: input.topicName || "" }, sectionIntro };
