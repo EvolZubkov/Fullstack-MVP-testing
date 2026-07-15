@@ -347,17 +347,32 @@ describe("<TakeTestPage /> showCorrectAnswers per type", () => {
     await confirmAndFinish("qs-ans-rank-wrong", qRanking("rk1", "Ранж."), "rk1");
   });
 
-  it("blocks «Принять» with a toast when nothing is answered", async () => {
+  it("«Принять» is disabled until the question is answered", async () => {
     await renderToQuestion({ startAttempt: feedbackAttempt(qSingle("q1", "В1"), "q1") });
-    fireEvent.click(await screen.findByText("Принять"));
-    expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Требуется ответ" }));
+    // Unified gate: the submit button is disabled (not a toast) while empty.
+    expect(await screen.findByText("Принять")).toBeDisabled();
   });
 
-  it("blocks «Принять» on an empty multiple selection", async () => {
+  it("«Принять» stays disabled on an empty multiple selection", async () => {
     await renderToQuestion({ startAttempt: feedbackAttempt(qMultiple("m1", "Множ."), "m1") });
-    fireEvent.click(screen.getByTestId("qs-ans-multi-empty"));
-    fireEvent.click(await screen.findByText("Принять"));
-    expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Требуется ответ" }));
+    fireEvent.click(screen.getByTestId("qs-ans-multi-empty")); // onAnswer([])
+    expect(await screen.findByText("Принять")).toBeDisabled();
+  });
+
+  it("«Принять» is disabled while a matching answer is incomplete, enables when full", async () => {
+    await renderToQuestion({ startAttempt: feedbackAttempt(qMatching("mt1", "Соп."), "mt1") });
+    fireEvent.click(screen.getByTestId("qs-ans-match-partial")); // { 0: 0 } — left 1 unmatched
+    expect(await screen.findByText("Принять")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("qs-ans-match-full")); // { 0: 0, 1: 1 }
+    expect(await screen.findByText("Принять")).toBeEnabled();
+  });
+
+  it("«Принять» is disabled for an untouched ranking, enables after a reorder", async () => {
+    await renderToQuestion({ startAttempt: feedbackAttempt(qRanking("rk1", "Ранж."), "rk1") });
+    // No mount-seed anymore → an untouched ranking has no answer.
+    expect(await screen.findByText("Принять")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("qs-ans-rank")); // onAnswer([0, 1, 2])
+    expect(await screen.findByText("Принять")).toBeEnabled();
   });
 });
 

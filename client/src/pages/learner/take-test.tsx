@@ -7,6 +7,7 @@ import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
 import { TemplateQuestionScreen } from "./template-question-screen";
 import { fmtIsoDateHuman, daysUntilIsoDate } from "./cooldown-format";
+import { hasAnswer, rankingDeliveryOrder } from "./answer-gate";
 import { buildStartState } from "@shared/template/start-state";
 import { buildQuestionProgress } from "@shared/template/question-progress-context";
 import { buildReviewContext } from "@shared/template/review-context";
@@ -303,6 +304,8 @@ export default function TakeTestPage() {
     return shuffleArray(indices);
   };
 
+  // hasAnswer + rankingDeliveryOrder live in ./answer-gate (pure + unit-tested).
+
   const createAdaptiveShuffleMapping = (question: any): any => {
     if (!question || question.shuffleAnswers === false) return null;
     const type = question.type;
@@ -317,7 +320,7 @@ export default function TakeTestPage() {
       };
     }
     if (type === "ranking") {
-      return createShuffleMapping(data.items.length);
+      return rankingDeliveryOrder(data.items.length, (question.correctJson as any)?.correctOrder);
     }
     return null;
   };
@@ -645,7 +648,7 @@ export default function TakeTestPage() {
               } else if (question.type === "ranking") {
                 const itemCount = qData.items?.length || 0;
                 if (itemCount > 0) {
-                  mappings[question.id] = createShuffleMapping(itemCount);
+                  mappings[question.id] = rankingDeliveryOrder(itemCount, (question.correctJson as any)?.correctOrder);
                 }
               }
             }
@@ -754,7 +757,7 @@ export default function TakeTestPage() {
             } else if (question.type === "ranking") {
               const itemCount = qData.items?.length || 0;
               if (itemCount > 0) {
-                mappings[question.id] = createShuffleMapping(itemCount);
+                mappings[question.id] = rankingDeliveryOrder(itemCount, (question.correctJson as any)?.correctOrder);
               }
             }
           }
@@ -2056,10 +2059,15 @@ export default function TakeTestPage() {
       setCurrentIndex(idx);
       saveProgress(answers, idx, questionStatus);
     };
+    // «Отправить ответ»/«Принять»/«Далее» is gated on a usable answer for every
+    // question type (parity with the SCORM runtime). `submitModeCurrent` is true
+    // while the button still fixes the answer (not yet committed / no feedback).
+    const submitModeCurrent = !(standardFeedbackShown || committedCurrent);
+    const answerReady = hasAnswer(currentQ.question, answers[currentQ.question.id]);
     // PRD-19 (Block B): the two-step footer (explicit «Отправить ответ»/«Принять»
     // fixation → «Далее»/«Завершить») is used for BOTH showCorrectAnswers AND any
     // flexible test (allowReturnToUnanswered), mirroring the SCORM «Отправить
-    // ответ»+«Пропустить» nav. Strict non-feedback tests keep the default footer.
+    // ответ»+«Пропуск» nav. Strict non-feedback tests keep the default footer.
     const reviewFooter = (showCorrectAnswers || navSettings.allowReturnToUnanswered) ? (
       <>
         <button
@@ -2093,7 +2101,7 @@ export default function TakeTestPage() {
                 ? handleSubmit
                 : handleStandardContinue
           }
-          disabled={isSubmitting}
+          disabled={isSubmitting || (submitModeCurrent && !answerReady)}
           className="tbh-primarybtn"
           style={{ background: "#2563eb" }}
         >
@@ -2128,6 +2136,7 @@ export default function TakeTestPage() {
             : undefined
         }
         footer={reviewFooter}
+        answerReady={answerReady}
         questionsProgress={questionsProgress}
         onNavigateToQuestion={navigateToQuestion}
         canPrev={prevIdx !== null}

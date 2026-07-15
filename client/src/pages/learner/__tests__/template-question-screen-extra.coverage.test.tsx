@@ -177,13 +177,15 @@ describe("TemplateQuestionScreen — choice review + multiple toggle", () => {
 // ─── ranking: render, seed effect, review, reorder drop ───────────────────────
 
 describe("TemplateQuestionScreen — ranking", () => {
-  it("seeds the identity order once when a ranking question has no answer", () => {
+  it("does NOT auto-seed a ranking answer on mount (submit stays gated until reorder)", () => {
     const onAnswer = vi.fn();
     render(
       <TemplateQuestionScreen {...base} question={ranking()} answer={undefined} onAnswer={onAnswer} footer={<span />} />,
     );
-    // The mount effect seeds the ranking answer (submit-without-reorder accepted).
-    expect(onAnswer).toHaveBeenCalledWith([0, 1, 2]);
+    // The delivered order is guaranteed non-correct, so an untouched ranking must
+    // NOT count as an answer — no mount seed; the answer stays undefined until the
+    // learner reorders (the board still displays the order via the mapping fallback).
+    expect(onAnswer).not.toHaveBeenCalled();
   });
 
   it("renders the ranking board with a draggable row per item", () => {
