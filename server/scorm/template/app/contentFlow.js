@@ -340,8 +340,101 @@
     syncPhaseToCurrentPage();
   }
 
+  // -- Navigation history (nav route) --------------------------------------
+  // Records the real page-level route the learner walked (content pages,
+  // section-intro, router hub) so a «Назад» affordance returns to the ACTUAL
+  // previous screen instead of a hard-coded target. Router mode rebuilds
+  // state.pageSequence per topic chunk (selectRouterTopic sets currentPageIndex
+  // to 0), so a plain currentPageIndex-1 can never cross back to the hub — the
+  // snapshot captures the full screen-defining state, incl. the pageSequence
+  // array reference. Transient (not persisted): a resumed SCO starts with an
+  // empty stack and the caller's fallback takes over. Within-section question
+  // stepping is NOT tracked here — it keeps its own section-bounded rule
+  // (prevAccessibleQuestionIndex, PRD-19 Block B).
+  function cloneRouterStates(states) {
+    if (!states) return null;
+    var out = {};
+    for (var key in states) {
+      if (Object.prototype.hasOwnProperty.call(states, key)) out[key] = states[key];
+    }
+    return out;
+  }
+
+  function navSnapshot() {
+    return {
+      phase: state.phase,
+      pageSequence: state.pageSequence,
+      currentPageIndex: state.currentPageIndex,
+      currentIndex: state.currentIndex,
+      currentRouterTopic: state.currentRouterTopic || null,
+      routerTopicStates: cloneRouterStates(state.routerTopicStates),
+      sectionResultsTopicId: state.sectionResultsTopicId,
+      sectionResultsIsLast: state.sectionResultsIsLast,
+      fromReview: state.fromReview,
+    };
+  }
+
+  function pushNavHistory() {
+    if (!state.navStack) state.navStack = [];
+    state.navStack.push(navSnapshot());
+  }
+
+  function canNavigateBack() {
+    return !!(state.navStack && state.navStack.length);
+  }
+
+  function navigateBack() {
+    if (!state.navStack || !state.navStack.length) return false;
+    var snap = state.navStack.pop();
+    // Leaving a router topic (e.g. section-intro → router hub): tear down its
+    // per-section timer so it does not keep ticking on the hub.
+    if (
+      state.currentRouterTopic &&
+      snap.currentRouterTopic !== state.currentRouterTopic &&
+      typeof stopSectionTimer === "function"
+    ) {
+      stopSectionTimer();
+    }
+    state.phase = snap.phase;
+    state.pageSequence = snap.pageSequence;
+    state.currentPageIndex = snap.currentPageIndex;
+    state.currentIndex = snap.currentIndex;
+    state.currentRouterTopic = snap.currentRouterTopic;
+    if (snap.routerTopicStates) state.routerTopicStates = snap.routerTopicStates;
+    state.sectionResultsTopicId = snap.sectionResultsTopicId;
+    state.sectionResultsIsLast = snap.sectionResultsIsLast;
+    state.fromReview = snap.fromReview;
+    if (typeof render === "function") render();
+    return true;
+  }
+
+  // Shared «Назад» affordance for page-level screens (section-intro, gallery):
+  // prefer the recorded nav route; else step to the previous page in THIS
+  // sequence; else (at a router chunk's first page, e.g. a resumed SCO with no
+  // history) return to the router hub. In router mode a plain currentPageIndex-1
+  // clamps to itself (the chunk starts at 0) — hence the hub fallback.
+  function navigateBackOrPrevPage() {
+    if (navigateBack()) return;
+    if ((state.currentPageIndex || 0) > 0) {
+      goToPageSequenceIndex(state.currentPageIndex - 1);
+      if (typeof render === "function") render();
+      return;
+    }
+    if (
+      typeof RouterFlow !== "undefined" &&
+      RouterFlow.isRouterMode && RouterFlow.isRouterMode() &&
+      typeof RouterFlow.returnToHub === "function"
+    ) {
+      RouterFlow.returnToHub();
+    }
+  }
+
   function advancePageSequence() {
     if (!state.pageSequence || state.pageSequence.length === 0) rebuildPageSequence();
+
+    // Record the current screen on the nav route before leaving it, so a «Назад»
+    // affordance downstream returns here (see navigateBack).
+    pushNavHistory();
 
     // PRD-19 D5 (FR-05): in flexible sectional flows, intercept the section
     // boundary with the section обзор (section-finish) instead of crossing into
@@ -491,6 +584,10 @@
   root.syncPhaseToCurrentPage = syncPhaseToCurrentPage;
   root.goToPageSequenceIndex = goToPageSequenceIndex;
   root.advancePageSequence = advancePageSequence;
+  root.pushNavHistory = pushNavHistory;
+  root.navigateBack = navigateBack;
+  root.canNavigateBack = canNavigateBack;
+  root.navigateBackOrPrevPage = navigateBackOrPrevPage;
   // PRD-19 D5: section-finish «Продолжить» advances past the committed section
   // (submits the attempt on the last section) — reused as the resume step.
   root.skipSectionFromCurrent = skipSectionFromCurrent;

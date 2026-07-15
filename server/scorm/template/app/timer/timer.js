@@ -143,6 +143,7 @@ function paintTimer(elementId, seconds) {
   var critical = seconds <= TIMER_WARN_AT;
   el.style.color = critical ? '#dc2626' : '';
   el.style.fontWeight = critical ? 'bold' : '';
+  if (critical) el.classList.add('q-timer--urgent'); else el.classList.remove('q-timer--urgent');
 }
 
 // --- Test-wide timer -------------------------------------------------------

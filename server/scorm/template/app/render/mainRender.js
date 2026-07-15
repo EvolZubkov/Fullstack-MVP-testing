@@ -247,10 +247,10 @@ function renderReviewScreen() {
         review: built.review
     };
     app.innerHTML = '';
-    var wrap = document.createElement('div');
-    app.appendChild(wrap);
-    TB.renderScreenInto(wrap, { layout: layout, context: context });
-    var actionEls = wrap.querySelectorAll('[data-action]');
+    // Mount directly into #app so .tb-pad > .review-page fills the fixed stage
+    // and the bottom nav anchors — mirrors renderGalleryPage (no wrapper div).
+    TB.renderScreenInto(app, { layout: layout, context: context });
+    var actionEls = app.querySelectorAll('[data-action]');
     Array.prototype.forEach.call(actionEls, function (el) {
         var a = el.getAttribute('data-action') || '';
         if (a.indexOf('goto:') === 0) {
@@ -355,10 +355,10 @@ function renderSectionResults(topicId, isLast) {
         sectionResult: built.sectionResult
     };
     app.innerHTML = '';
-    var wrap = document.createElement('div');
-    app.appendChild(wrap);
-    TB.renderScreenInto(wrap, { layout: layout, context: context });
-    var btn = wrap.querySelector('[data-action="section-continue"]');
+    // Mount directly into #app so .tb-pad > .results-page fills the fixed stage
+    // (section-results ring centered) — mirrors renderGalleryPage (no wrapper div).
+    TB.renderScreenInto(app, { layout: layout, context: context });
+    var btn = app.querySelector('[data-action="section-continue"]');
     if (btn) btn.addEventListener('click', advance);
 }
 
@@ -374,10 +374,19 @@ function buildQuestionNavHtml(current, total) {
     var hasNext = current < total - 1 ||
         (state.pageSequence && state.currentPageIndex < state.pageSequence.length - 1);
 
+    // «Отправить ответ»/«Принять» is available only when the current question has
+    // a usable answer (same gate as requireAnswerOrToast). The selection handlers
+    // keep this in sync at runtime via refreshSubmitEnabled.
+    var navFq = state.flatQuestions[current];
+    var submitReady = !navFq || typeof hasAnswer !== 'function'
+        ? true
+        : hasAnswer(navFq.question, state.answers[navFq.question.id]);
+    var submitDisabledAttr = submitReady ? '' : ' disabled';
+
     if (!TEST_DATA.allowReturnToUnanswered) {
         var sh = '<div class="navigation" style="justify-content:flex-end">';
         if (TEST_DATA.showCorrectAnswers && !state.feedbackShown) {
-            sh += '<button class="btn" data-action="answer-submit" onclick="confirmAnswer()">Принять</button>';
+            sh += '<button class="btn" data-action="answer-submit" onclick="confirmAnswer()"' + submitDisabledAttr + '>Принять</button>';
         } else if (hasNext) {
             sh += '<button class="btn" data-nav="next" onclick="next()">Далее</button>';
         } else {
@@ -403,7 +412,7 @@ function buildQuestionNavHtml(current, total) {
     left += '<button class="btn btn-outline" data-action="answer-back" onclick="goBack()"' + (prevIdx < 0 ? ' disabled' : '') + '>← Назад</button>';
     if (!committed) {
         left += '<button class="btn btn-outline" data-action="answer-skip" onclick="skipQuestion()">Пропустить</button>';
-        right += '<button class="btn" data-action="answer-submit" onclick="confirmAnswer()">Отправить ответ</button>';
+        right += '<button class="btn" data-action="answer-submit" onclick="confirmAnswer()"' + submitDisabledAttr + '>Отправить ответ</button>';
     } else {
         // PRD-19 (Block D / FR-16): the question page has NO finish button — «Далее»
         // always advances; завершение happens on the обзор (section-finish/test-finish).
@@ -425,6 +434,31 @@ function buildQuestionNavHtml(current, total) {
 }
 
 /**
+ * Stepped text-fit for the fixed-stage question body: when the prompt + options
+ * overflow `.question-card`, lower the `--q-fit` multiplier (which the template CSS
+ * applies to the prompt/option font + spacing) one discrete step at a time until it
+ * fits — so content shrinks BEFORE the card scrolls. There is a LOWER BOUND: once the
+ * smallest step is reached, stepping stops and the card's own overflow-y:auto takes
+ * over (scroll is the fallback below the minimum readable size). No-op for cards that
+ * do not overflow (e.g. scrolling, non-fixed-stage templates) — the first step fits.
+ * @param {Element|null} card  The `.question-card` (or null → no-op).
+ */
+function fitQuestionText(card) {
+  if (!card || !card.style) return;
+  card.classList.remove('question-card--scroll'); // measure with overflow visible
+  // 1 → 0.7: at most a 30% shrink; below that the text gets too small, so scroll.
+  var steps = [1, 0.94, 0.88, 0.82, 0.76, 0.7];
+  var fits = false;
+  for (var i = 0; i < steps.length; i++) {
+    card.style.setProperty('--q-fit', String(steps[i]));
+    if (card.scrollHeight <= card.clientHeight + 1) { fits = true; break; } // fits at this step
+  }
+  // Turn on scroll ONLY when even the smallest step overflows — scroll (overflow:hidden on
+  // x) clips the «Эталон» debug markers drawn in a left gutter, so keep it off otherwise.
+  if (!fits) card.classList.add('question-card--scroll');
+}
+
+/**
  * Renders the standard question screen. Primary path renders the shared template
  * `question` layout via the SHARED renderer (TBTemplate.renderScreenInto) — the
  * SAME layout + renderer the web host mounts — filling the question chrome from a
@@ -442,7 +476,7 @@ function renderStandardQuestion(qData, current, total, progress) {
     var progressMode = typeof getProgressMode === 'function' ? getProgressMode() : 'questions';
 
     if (layout && TB && TB.renderScreenInto) {
-        var counterLabel = 'Вопрос ' + (current + 1) + ' из ' + total + ' | ' + qData.topicName;
+        var counterLabel = 'Вопрос ' + (current + 1) + ' из ' + total;
         // PRD-19 Block C: progress-pills map for the current scope (replaces the bar).
         var sectionScope = TEST_DATA.answerCommitScope === 'section';
         var qProgress = (TB.buildQuestionProgress) ? TB.buildQuestionProgress({
@@ -456,7 +490,7 @@ function renderStandardQuestion(qData, current, total, progress) {
         }) : null;
         var context = {
             course: { title: TEST_DATA.title },
-            state: { questionCounterLabel: counterLabel },
+            state: { questionCounterLabel: counterLabel, sectionName: (qData.topicName || '') },
             design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {}
         };
         if (qProgress) context.state.questionsProgress = qProgress;
@@ -467,13 +501,14 @@ function renderStandardQuestion(qData, current, total, progress) {
             'question-feedback': showFeedback ? buildQuestionFeedbackHtml(q) : ''
         };
         app.innerHTML = '';
-        var wrap = document.createElement('div');
-        app.appendChild(wrap);
-        TB.renderScreenInto(wrap, { layout: layout, context: context, slots: slots });
+        // Mount directly into #app so .tb-pad > .layout-question-wrap fills the
+        // fixed stage and the appended nav row anchors at the bottom — mirrors
+        // renderGalleryPage (a wrapper div would defeat the child-combinator rule).
+        TB.renderScreenInto(app, { layout: layout, context: context, slots: slots });
 
         // PRD-19 Block C: wire pill clicks → goToQuestionIndex (frontier enforced
         // by the `disabled` attribute the builder set on non-reachable pills).
-        var pills = wrap.querySelectorAll('.tb-pill[data-action]');
+        var pills = app.querySelectorAll('.tb-pill[data-action]');
         Array.prototype.forEach.call(pills, function (btn) {
             btn.addEventListener('click', function () {
                 if (btn.disabled) return;
@@ -485,11 +520,11 @@ function renderStandardQuestion(qData, current, total, progress) {
         });
 
         // Progress fill (or hide the bar when progress is suppressed).
-        var pb = wrap.querySelector('.progress-bar');
+        var pb = app.querySelector('.progress-bar');
         if (progressMode === 'hidden') {
             if (pb) pb.style.display = 'none';
         } else {
-            var fill = wrap.querySelector('#q-progress-fill');
+            var fill = app.querySelector('#q-progress-fill');
             if (fill) {
                 var pv = progressMode === 'pages' && typeof pageProgressPercent === 'function' ? pageProgressPercent() : progress;
                 fill.style.width = pv + '%';
@@ -497,11 +532,11 @@ function renderStandardQuestion(qData, current, total, progress) {
         }
 
         // Timer — the layout ships #timer-display hidden; reveal when a timer runs.
-        var timerEl = wrap.querySelector('#timer-display');
+        var timerEl = app.querySelector('#timer-display');
         if (timerEl && state.remainingSeconds !== null) {
             timerEl.classList.remove('q-timer--hidden');
             timerEl.textContent = formatTime(state.remainingSeconds);
-            if (state.remainingSeconds <= 60) { timerEl.style.color = '#dc2626'; timerEl.style.fontWeight = 'bold'; }
+            if (state.remainingSeconds <= 60) { timerEl.style.color = '#dc2626'; timerEl.style.fontWeight = 'bold'; timerEl.classList.add('q-timer--urgent'); }
         }
 
         // Nav row below the card (kept onclick-wired; no global delegator needed).
@@ -510,6 +545,10 @@ function renderStandardQuestion(qData, current, total, progress) {
         if (navWrap.firstChild) app.appendChild(navWrap.firstChild);
 
         syncMatchingHeights();
+        // Stepped text-fit: shrink the prompt/options to fit the fixed stage before
+        // falling back to the card's internal scroll. Measured AFTER the nav is in
+        // place (so the card's available height is final).
+        fitQuestionText(app.querySelector('.question-card'));
         return;
     }
 

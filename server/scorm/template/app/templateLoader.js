@@ -86,6 +86,32 @@
       });
   }
 
+  /**
+   * Applies the design template's own shell (manifest layouts.shell -> state.templateShell)
+   * as the SCORM package chrome, when the manifest opts in via `mountShell: true`.
+   * The base index.html ships a generic `.container > #app`; a template whose CSS keys on
+   * its own shell structure (e.g. certification's fixed 16:9 `.tb-frame > .tb-stage >
+   * #app.tb-pad`) sets `mountShell` so the package matches the web host / offline preview /
+   * PRD-3 admin preview, which already render through shell.html. Templates without the flag
+   * (e.g. the built-in `default`, whose base.css targets the base `.container`) keep the base
+   * shell unchanged. The shell must contain an element with id="app" (the new mount point);
+   * any existing #app content (the loading placeholder) is moved into it. No-op when the flag
+   * is off, the shell is empty, or it carries no #app.
+   */
+  function applyTemplateShell() {
+    var manifest = state.templateManifest;
+    if (!manifest || manifest.mountShell !== true || !state.templateShell) return;
+    var oldApp = document.getElementById("app");
+    if (!oldApp || !oldApp.parentNode) return;
+    var tmp = document.createElement("div");
+    tmp.innerHTML = state.templateShell;
+    var shellRoot = tmp.firstElementChild;
+    var shellApp = tmp.querySelector("#app");
+    if (!shellRoot || !shellApp) return; // malformed shell -> keep the base mount
+    while (oldApp.firstChild) shellApp.appendChild(oldApp.firstChild); // preserve #loading etc.
+    oldApp.parentNode.replaceChild(shellRoot, oldApp);
+  }
+
   function loadDesignTemplate() {
     var manifestPromise = fetchJson("template/manifest.json");
     var shellPromise = fetchText("template/shell.html").catch(function () {
@@ -96,6 +122,7 @@
       .then(function (parts) {
         state.templateManifest = parts[0] || null;
         state.templateShell = parts[1] || "";
+        applyTemplateShell();
         var layouts = (state.templateManifest && state.templateManifest.layouts) || {};
         var layoutKeys = Object.keys(layouts);
         return Promise.all(

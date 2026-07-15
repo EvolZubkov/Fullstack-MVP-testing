@@ -14,6 +14,11 @@ var state = {
   templateLayouts: {},
   shuffleMappings: {},
   matchingPools: {},
+  // Ranking questions whose order the learner has actually reordered at least
+  // once, keyed by question.id. The delivered order is guaranteed non-correct
+  // (createRankingOrder), so «Отправить ответ» stays disabled until a real
+  // reorder — parity with single/multiple needing a selection.
+  rankingTouched: {},
   timerInterval: null,
   timerStartPerfMs: null,
   timerCommitInterval: null,

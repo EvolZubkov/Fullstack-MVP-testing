@@ -145,8 +145,10 @@ function generateVariant() {
       } else if (q.type === 'ranking') {
         var itemCount = q.data.items ? q.data.items.length : 0;
         if (itemCount > 0) {
-          state.shuffleMappings[q.id] = createShuffleMapping(itemCount);
-          // Initialize ranking with shuffled order
+          // Guaranteed non-correct delivery order: an untouched arrangement can
+          // never score correct by luck (see createRankingOrder).
+          state.shuffleMappings[q.id] = createRankingOrder(itemCount, q.correct && q.correct.correctOrder);
+          // Initialize ranking with the (non-correct) delivered order
           if (!state.answers[q.id]) {
             state.answers[q.id] = state.shuffleMappings[q.id].slice();
           }

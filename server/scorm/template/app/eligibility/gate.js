@@ -299,9 +299,9 @@ var RetakeGate = (function () {
       ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
       if (typeof applySystemScreenStyles === 'function') applySystemScreenStyles('start');
       el.innerHTML = '';
-      var wrap = document.createElement('div');
-      el.appendChild(wrap);
-      TB.renderScreenInto(wrap, { layout: layout, context: ctx });
+      // Mount directly into #app so .tb-pad > .cover fills the fixed stage — mirrors
+      // renderGalleryPage (a wrapper div would defeat the child-combinator rule).
+      TB.renderScreenInto(el, { layout: layout, context: ctx });
       // No action wiring: the start button is disabled and nothing else is
       // clickable pre-Initialize, so the SCORM session stays unopened.
     });

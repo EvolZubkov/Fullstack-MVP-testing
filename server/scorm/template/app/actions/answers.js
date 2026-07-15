@@ -89,8 +89,14 @@ function hasAnswer(q, answer) {
     });
   }
 
-  // ranking: порядок всегда есть (дефолтный тоже), считаем ответом
-  if (q.type === 'ranking') return true;
+  // ranking: the delivered order is guaranteed non-correct (createRankingOrder),
+  // so an untouched arrangement is never right — require an actual reorder before
+  // it counts as an answer (parity with single/multiple). A ranking that was
+  // already committed stays answerable when the learner returns to it.
+  if (q.type === 'ranking') {
+    if (state.questionStatuses && state.questionStatuses[q.id] === 'answered') return true;
+    return !!(state.rankingTouched && state.rankingTouched[q.id]);
+  }
 
   return answer !== undefined && answer !== null;
 }
@@ -107,6 +113,29 @@ function requireAnswerOrToast() {
     return false;
   }
   return true;
+}
+
+// Resolve the question currently being answered (adaptive-aware), mirroring
+// rerenderCurrentQuestionInput. Used to gate «Отправить ответ»/«Принять».
+function currentAnsweringQuestion() {
+  if (TEST_DATA.mode === 'adaptive' && state.adaptiveState) {
+    var qData = typeof getCurrentAdaptiveQuestion === 'function' ? getCurrentAdaptiveQuestion() : null;
+    return qData ? qData.question : null;
+  }
+  var fq = state.flatQuestions[state.currentIndex];
+  return fq ? fq.question : null;
+}
+
+// «Отправить ответ»/«Принять» is enabled only once the current question has a
+// usable answer (the same gate as requireAnswerOrToast). The selection handlers
+// patch the DOM in place without a full re-render, so call this after every
+// answer change to keep the submit button's disabled state in sync.
+function refreshSubmitEnabled() {
+  var btn = document.querySelector('[data-action="answer-submit"]');
+  if (!btn) return;
+  var q = currentAnsweringQuestion();
+  if (!q) return;
+  btn.disabled = !hasAnswer(q, state.answers[q.id]);
 }
 
 // PRD-19 (Block B): is the current question's answer locked against edits?
@@ -158,6 +187,8 @@ function selectSingle(qId, idx) {
     var radio = selectedOption.querySelector('input[type="radio"]');
     if (radio) radio.checked = true;
   }
+
+  refreshSubmitEnabled();
 }
 
 function toggleMultiple(qId, idx) {
@@ -181,6 +212,8 @@ function toggleMultiple(qId, idx) {
     if (cb) cb.checked = checked;
     opt.classList.toggle('selected', checked);
   }
+
+  refreshSubmitEnabled();
 }
 
 function setMatch(qId, leftIdx, rightVal) {
@@ -199,6 +232,7 @@ function setMatch(qId, leftIdx, rightVal) {
   }
 
   state.answers[qId] = pairs;
+  refreshSubmitEnabled();
 }
 
 

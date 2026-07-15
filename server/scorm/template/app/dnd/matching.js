@@ -90,6 +90,9 @@ function bindMatchingDnDOnce() {
     state.answers[q.id] = next.pairs;
     state.matchingPools[q.id] = next.pool;
     if (typeof rerenderCurrentQuestionInput === 'function') rerenderCurrentQuestionInput();
+    // The nav row is not re-rendered here — sync «Отправить ответ» explicitly so it
+    // enables once every pair is matched (matching's hasAnswer needs all pairs).
+    if (typeof refreshSubmitEnabled === 'function') refreshSubmitEnabled();
   }
 
   // Maps a completed drag to a model transition. `dropId` is the zone's

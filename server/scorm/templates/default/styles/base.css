@@ -1025,6 +1025,27 @@ h1 {
   font-size: 11px;
   color: hsl(0 0% 50%);
 }
+/* Enriched router-card rows (shared runtime): topic+image row, meta chips, status+CTA,
+   deadline stat boxes. The certification template styles these richly in its own
+   base.css; the default template needs at least layout + gaps + image constraint so
+   the spans don't run together ("Не начатаначать") or blow out the 220px grid. */
+.router-topic-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.router-topic-card__img { flex: 0 0 auto; }
+.router-topic-card__img img { display: block; width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+.router-topic-card__meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.router-topic-card__chip {
+  font-size: 11px; color: hsl(0 0% 30%); background: hsl(0 0% 94%);
+  border-radius: 999px; padding: 2px 8px;
+}
+.router-topic-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.router-topic-card__go { font-size: 12px; font-weight: 600; color: hsl(217 91% 50%); }
+.router-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; }
+.router-stat {
+  display: flex; flex-direction: column; gap: 2px;
+  border: 1px solid hsl(0 0% 88%); border-radius: 8px; padding: 8px 12px; background: hsl(0 0% 99%);
+}
+.router-stat__label { font-size: 11px; color: hsl(0 0% 45%); }
+.router-stat__value { font-size: 14px; font-weight: 700; color: hsl(0 0% 13%); font-variant-numeric: tabular-nums; }
 
 
 /* ===== PRD-6 retake gate: block-wall + neutral start shell ===== */
