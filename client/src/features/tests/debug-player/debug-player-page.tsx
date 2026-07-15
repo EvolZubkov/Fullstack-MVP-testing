@@ -782,12 +782,13 @@ function ScalesPanel({ snap }: { snap: InspectorSnapshot }) {
   if (!snap.scales.length) {
     return <PanelEmpty text={snap.hasData ? "В тесте нет шкал." : "Запустите пакет. Значения шкал считаются вживую по ответам."} />;
   }
-  // Per the wireframe: Шкала · Значение (raw) · % · Уровень. What goes to the LMS
-  // lives in the «LMS» tab, NOT here (no «Опубликовано» column).
+  // Шкала · Значение (raw, абсолютный набранный балл) · Уровень (интерпретационный
+  // диапазон `bands`). Процент не показываем — на верном прогоне он всегда 100% и
+  // несёт лишь визуальный шум; для формул показателей `scale.*.percent` он остаётся
+  // в движке. Публикация в LMS — во вкладке «LMS».
   const columns: TableColumn<ScaleRow>[] = [
     { key: "key", header: "Шкала", render: (r) => r.key },
-    { key: "raw", header: "Значение", width: "104px", render: (r) => (r.raw == null ? "—" : String(r.raw)) },
-    { key: "percent", header: "%", width: "64px", render: (r) => (r.percent == null ? "—" : `${r.percent}%`) },
+    { key: "raw", header: "Значение", width: "120px", render: (r) => (r.raw == null ? "—" : String(r.raw)) },
     { key: "level", header: "Уровень", render: (r) => (r.level ? <Tag size="s" variant="outline">{r.levelLabel}</Tag> : <Text tone="muted">—</Text>) },
   ];
   return <Table columns={columns} rows={snap.scales} rowKey={(r) => r.key} />;
