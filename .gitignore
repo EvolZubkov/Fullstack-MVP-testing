@@ -44,3 +44,6 @@ docs/references/main/
 docs/references/Обновление сертификации для руководителей.zip
 docs/references/Обновление сертификации для руководителей/
 uploads/
+templates/certification/certification-*.zip
+# HAR captures may carry live session cookies / personal data — never commit.
+*.har
