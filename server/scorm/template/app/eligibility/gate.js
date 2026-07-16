@@ -317,9 +317,11 @@ var RetakeGate = (function () {
   }
 
   function renderBlockWall(retake, td) {
-    var el = appEl();
-    if (!el) return;
     ensureTemplate().then(function (layouts) {
+      // Re-fetch #app AFTER the template loads: applyTemplateShell (mountShell) may
+      // have REPLACED #app with the shell's node, detaching the one captured earlier.
+      var el = appEl();
+      if (!el) return;
       var html = layouts && layouts[blockedLayoutKey(td)];
       if (!html) { renderBlockWallBuiltin(retake, el); return; }
       el.innerHTML = html;
@@ -344,23 +346,33 @@ var RetakeGate = (function () {
   // builder gets no prior facts. Falls back to the block-wall if the active
   // template ships no `start` layout (every conformant template does).
   function renderCooldownStart(retake, td) {
-    var el = appEl();
-    if (!el) return;
+    if (typeof document === 'undefined') return;
     glog('rendering cooldown state...');
     // Last-resort safety net: whatever hangs or throws below (template fetch stall,
     // renderScreenInto error), guarantee the learner sees the cooldown message rather
     // than an endless «Загрузка теста…». Fires the built-in wall if nothing rendered.
+    // Always re-fetch #app at write time: applyTemplateShell (mountShell) REPLACES
+    // #app with the shell's node — writing to a pre-captured reference renders into a
+    // detached node (visible symptom: content invisible, «Загрузка теста…» stays).
     var rendered = false;
+    function fallbackWall() {
+      if (rendered) return;
+      var elw = appEl();
+      if (!elw) return;
+      try { renderBlockWallBuiltin(retake, elw); rendered = true; } catch (e) { glog('built-in wall failed:', (e && e.message) || e); }
+    }
     setTimeout(function () {
       if (rendered) return;
       glog('cooldown render did not complete in time — forcing built-in wall');
-      try { renderBlockWallBuiltin(retake, el); rendered = true; } catch (e) { glog('built-in wall failed:', (e && e.message) || e); }
+      fallbackWall();
     }, 4500);
     ensureTemplate().then(function (layouts) {
       if (rendered) return;
+      var el = appEl(); // fresh: #app may have been replaced by the shell mount
+      if (!el) return;
       var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
       var layout = layouts && layouts['start'];
-      glog('template ready. start layout:', !!layout, '| TBTemplate:', !!(TB && TB.renderScreenInto));
+      glog('template ready. start layout:', !!layout, '| TBTemplate:', !!(TB && TB.renderScreenInto), '| #app:', !!el);
       if (!layout || !TB || !TB.renderScreenInto || !TB.buildStartState) {
         renderBlockWall(retake, td);
         rendered = true;
@@ -399,7 +411,7 @@ var RetakeGate = (function () {
       // A throw here (renderScreenInto / buildStartState) was previously an unhandled
       // rejection: no log, learner stuck on the loading text. Fall back to the wall.
       glog('cooldown render error:', (e && e.message) || e);
-      if (!rendered) { try { renderBlockWallBuiltin(retake, el); rendered = true; } catch (e2) { glog('built-in wall failed:', (e2 && e2.message) || e2); } }
+      fallbackWall();
     });
   }
 
