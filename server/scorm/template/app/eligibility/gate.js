@@ -10,6 +10,19 @@
 var RetakeGate = (function () {
   var GATE_TIMEOUT_MS = 5000; // NFR-06
 
+  // Diagnostics. The gate used to emit ONE line, after deciding, carrying only the
+  // normalized reason — so a broken integration was indistinguishable from a
+  // non-gated package: `failPolicy` defaults to failOpen, which turns every error
+  // (object_id/SECID not resolved, HTTP 403, timeout) into a plain `allowed`, and
+  // the underlying message never left `result.data.error`. These trace the whole
+  // resolution chain so a live WebTutor run can be read straight from the console.
+  function glog() {
+    if (typeof console === 'undefined' || !console.log) return;
+    var args = ['[PRD-6 gate]'];
+    for (var i = 0; i < arguments.length; i++) args.push(arguments[i]);
+    console.log.apply(console, args);
+  }
+
   function esc(s) {
     return typeof escapeHtml === 'function' ? escapeHtml(String(s == null ? '' : s)) : String(s == null ? '' : s);
   }
@@ -45,73 +58,119 @@ var RetakeGate = (function () {
     };
   }
 
-  // Resolve the WebTutor course object_id from the launch context (confirmed on
-  // the live portal: present in the course-card referer / launch path).
-  function resolveObjectId(config) {
-    var pats = config.objectIdPatterns || ['object_id=(\\d{6,})', '_wt/course/(\\d{6,})', 'cplayer2/(\\d{6,})'];
-    function safeUrl(getter) { try { return getter() || ''; } catch (e) { return ''; } }
-    // Our SCO runs nested inside WebTutor's cplayer2; object_id lives in the
-    // parent/top URL (confirmed on the live portal across ≥2 modules), and the
-    // frames are same-origin, so top/parent.location are readable.
-    var sources = [
-      typeof location !== 'undefined' ? location.href : '',
-      typeof document !== 'undefined' ? document.referrer : '',
-      safeUrl(function () { return window.top.location.href; }),
-      safeUrl(function () { return window.parent.location.href; })
-    ];
-    for (var i = 0; i < sources.length; i++) {
-      for (var j = 0; j < pats.length; j++) {
-        var m = new RegExp(pats[j]).exec(sources[i] || '');
-        if (m) return m[1];
-      }
-    }
-    return config.objectIdFallback || null;
+  // Normalize the WebTutor collection response to a flat array of records. The
+  // ExtJS json collection returns them under `results` ({success, total, results}).
+  function extractRecords(json) {
+    if (Array.isArray(json)) return json;
+    if (!json || typeof json !== 'object') return [];
+    return json.results || json.data || json.rows || json.records || json.items || [];
   }
 
-  // webtutor_cooldown adapter — confirmed against the live RT portal. The course
-  // completion date is NOT in SCORM (no adl.data) and NOT in server HTML; it is
-  // served by the ClientBridge `get_metadata` SOAP (the course-card screen), which
-  // needs a per-page SECID scraped from the course card. So the gate, same-origin
-  // with the learner session: (1) GET course card -> scrape SECID; (2) POST SOAP
-  // get_metadata{form_url, wsparams(object_id, SECID)}; (3) parse «Курс был пройден
-  // ДД.ММ.ГГГГ». All endpoints/markers are admin-config (PRD-6 §4.2/NFR-03); the
-  // local scorm-player mock answers both calls for verification.
-  function webtutorEvaluate(ctx, config) {
-    var oid = resolveObjectId(config);
-    if (!oid) return Promise.reject(new Error('object_id_not_resolved'));
-    var origin = typeof location !== 'undefined' ? location.origin : '';
-    var coursePageUrl = (config.coursePageUrlTemplate || '/view_doc.html?mode=course&object_id={{oid}}').replace(/\{\{oid\}\}/g, oid);
-    return fetch(coursePageUrl, { credentials: 'include' })
+  function resolveTemplate(tpl, ctx, personId) {
+    return String(tpl == null ? '' : tpl)
+      .replace(/\{\{\s*test\.title\s*\}\}/g, ctx.test.title)
+      .replace(/\{\{\s*personId\s*\}\}/g, personId || '');
+  }
+
+  // Scrape the session SECID (32-hex) the collection POST requires. It is present in
+  // the portal chrome; `secidSource.endpoint` (default "/") is fetched same-origin.
+  function resolveSecid(config) {
+    var src = config.secidSource || {};
+    var url = src.endpoint || '/';
+    var pattern = src.pattern || '[A-F0-9]{32}';
+    return fetch(url, { credentials: 'include' })
       .then(function (r) { return r.text(); })
       .then(function (html) {
-        var secid = EligibilityPlugins.extractSecid(html, config.secidPattern);
-        if (!secid) throw new Error('secid_not_found');
-        var ws = 'PAGEURL=' + encodeURIComponent(origin + '/_wt/course/' + oid)
-          + '&REQUESTURL=' + encodeURIComponent(origin + '/view_doc.html?mode=course&object_id=' + oid)
-          + '&CLIENTWINDOWSIZE=1000,800&SECID=' + secid
-          + '&sysparam=&parent_template_id=' + (config.parentTemplateId || '') + '&playerid=extjs5';
-        var soap = '<?xml version="1.0" encoding="utf-8"?>'
-          + '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>'
-          + '<get_metadata xmlns="http://www.datex-soft.com/"><form_url>' + (config.formUrl || '') + '</form_url>'
-          + '<wsparams>' + ws.replace(/&/g, '&amp;') + '</wsparams></get_metadata></soap:Body></soap:Envelope>';
-        return fetch(config.endpoint || '/services/ClientBridgeService', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'text/xml; charset=UTF-8', 'SOAPAction': config.soapAction || 'http://www.datex-soft.com/get_metadata' },
-          body: soap
-        });
+        var m = new RegExp(pattern).exec(html || '');
+        return m ? m[0] : '';
       })
-      .then(function (r) {
-        if (!r.ok) throw new Error('webtutor_http_' + r.status);
-        return r.text();
+      .catch(function () { return ''; });
+  }
+
+  // Resolve cur_person_id. WebTutor's collection query is scoped to the learner by
+  // `cur_person_id`; it is not in SCORM (pre-Initialize) so it is scraped from the
+  // portal chrome via `personIdSource.pattern`, with an optional config override.
+  function resolvePersonId(config) {
+    if (config.personId) return Promise.resolve(String(config.personId));
+    var src = config.personIdSource || {};
+    if (!src.pattern) return Promise.resolve('');
+    var url = src.endpoint || '/';
+    return fetch(url, { credentials: 'include' })
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var m = new RegExp(src.pattern).exec(html || '');
+        return m ? (m[1] || m[0]) : '';
       })
-      .then(function (xml) {
-        var date = EligibilityPlugins.extractCourseCompletionDate(xml, {
-          completionMarker: config.completionMarker,
-          dateFormat: config.dateFormat
-        });
-        return EligibilityPlugins.cooldownDecideFromDate(date, ctx, 'webtutor_cooldown');
+      .catch(function () { return ''; });
+  }
+
+  function formEncode(obj) {
+    var out = [];
+    for (var k in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, k)) {
+        out.push(encodeURIComponent(k) + '=' + encodeURIComponent(obj[k]));
+      }
+    }
+    return out.join('&');
+  }
+
+  // webtutor_cooldown adapter — reads the learner's LEARNING RECORDS (all attempts,
+  // any outcome) from WebTutor's ExtJS json collection endpoint, same-origin with the
+  // learner session, and decides the cooldown from the latest FINISHED record's date
+  // (PRD-6 §3.3/§4.2). This is the correct source per the requirement "cooldown fires
+  // after ANY completion, passed OR failed": the course CARD only carries a date for a
+  // PASSED course, so it can never gate a failed attempt — the records grid carries
+  // `last_usage_date` + `state` («Пройден»/«Не пройден») for every attempt.
+  //
+  // The request contract (confirmed against the live RT portal, «Мои обучения» grid):
+  // POST form fields `secid`, `collection_code`, `parameters` (a `;`-joined string with
+  // cur_person_id + sCatalogName), `referer_url`, `page`, `start`, header
+  // `X-Requested-With: XMLHttpRequest`. Records come back under `results`, sorted
+  // last_usage_date DESC; all assignments of one course share `name` (matched via the
+  // filter's nameField = the test title). Endpoint/collection/filter are admin-config.
+  function webtutorEvaluate(ctx, config) {
+    var endpoint = config.collectionEndpoint || '';
+    if (!endpoint) return Promise.reject(new Error('collection_endpoint_not_configured'));
+    return Promise.all([resolveSecid(config), resolvePersonId(config)]).then(function (ids) {
+      var secid = ids[0], personId = ids[1];
+      glog('secid:', secid ? 'found' : '(NOT FOUND)', '| cur_person_id:', personId || '(session-scoped)');
+      if (!secid) throw new Error('secid_not_resolved');
+      var refererUrl = typeof location !== 'undefined' ? location.href : '';
+      var body = formEncode({
+        secid: secid,
+        limit: config.limit || 500,
+        collection_code: config.collectionCode || '',
+        parameters: resolveTemplate(config.parametersTemplate || '', ctx, personId),
+        referer_url: refererUrl,
+        page: 1,
+        start: 0
       });
+      var url = endpoint + (endpoint.indexOf('?') === -1 ? '?' : '&') + '_dc=' + (ctx.runtime.todayDate || '');
+      glog('collection POST:', endpoint, '| collection_code:', config.collectionCode);
+      return fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json'
+        },
+        body: body
+      }).then(function (r) {
+        glog('collection HTTP', r.status);
+        if (!r.ok) throw new Error('webtutor_http_' + r.status);
+        return r.json();
+      }).then(function (json) {
+        if (json && json.success === false) throw new Error('collection_error: ' + (json.messageText || 'unknown'));
+        var records = extractRecords(json);
+        glog('records:', records.length, '| total:', (json && json.total), '| course:', ctx.test.title,
+          '| filter:', JSON.stringify(config.attemptFilter || {}));
+        var result = EligibilityPlugins.webtutorCooldownDecide(records, config.attemptFilter || {}, ctx, ctx.test.title);
+        glog('selected lastAttemptDate:',
+          (result.data && result.data.lastAttemptDate) || '(none — no finished attempt for this course)');
+        return result;
+      });
+    });
   }
 
   // suspend_data_cooldown adapter — best-effort read of a date carried in
@@ -146,7 +205,12 @@ var RetakeGate = (function () {
     });
     return Promise.race([work, timeout])
       .then(function (v) { return EligibilityEngine.normalizeVerdict(v); })
-      .catch(function (e) { return EligibilityEngine.applyFailPolicy(failPolicy, (e && e.message) ? e.message : String(e)); });
+      .catch(function (e) {
+        var msg = (e && e.message) ? e.message : String(e);
+        glog('plugin FAILED:', msg, '- applying failPolicy:', failPolicy,
+          failPolicy === 'failClosed' ? '(blocked)' : '(ALLOWED — the gate is now inert)');
+        return EligibilityEngine.applyFailPolicy(failPolicy, msg);
+      });
   }
 
   function appEl() {
@@ -309,6 +373,9 @@ var RetakeGate = (function () {
 
   function run(td, onAllowedStart) {
     var ctx = buildContext(td);
+    glog('gated. plugin:', td.retakePlugin.runtimeEntry,
+      '| cooldownPeriodDays:', ctx.retakePolicy.cooldownPeriodDays,
+      '| today:', ctx.runtime.todayDate);
     evaluate(td, ctx).then(function (result) {
       var retake = EligibilityEngine.buildRetakeState(result, {
         todayDate: ctx.runtime.todayDate,
@@ -319,6 +386,11 @@ var RetakeGate = (function () {
         console.log('PRD-6 retake gate:', result.allowed ? 'allowed' : 'blocked',
           '(' + (retake.reason || '') + (retake.availableDate ? ', available ' + retake.availableDate : '') + ')');
       }
+      // buildRetakeState drops `data`, so the underlying error would otherwise be
+      // lost even though the verdict was decided by failPolicy rather than by data.
+      if (result.data && result.data.error) glog('decided by failPolicy. error was:', result.data.error);
+      glog('lastAttemptDate:', (result.data && result.data.lastAttemptDate) || '(none)',
+        '| availableDate:', retake.availableDate || '(none)');
       // PRD-19 FR-19: eligible => NO gate-shell. Hand straight to the normal
       // course (onAllowedStart = runCourse: Initialize + the standard start page),
       // so an elapsed-cooldown test is indistinguishable from an ordinary one.
@@ -326,6 +398,12 @@ var RetakeGate = (function () {
       // (pre-Initialize), not a separate wall — NFR-01/02 still hold.
       if (!result.allowed) renderCooldownStart(retake, td);
       else onAllowedStart();
+    }).catch(function (e) {
+      // evaluate() already absorbs plugin errors via failPolicy, so reaching here
+      // means the GATE itself broke (state build / template render). Previously this
+      // was an unhandled rejection: no log, and a learner left on a blank #app.
+      glog('GATE CRASHED after the verdict:', (e && e.stack) || e, '- starting the course (failOpen spirit)');
+      try { onAllowedStart(); } catch (e2) { glog('course start also failed:', (e2 && e2.stack) || e2); }
     });
   }
 

@@ -21,15 +21,44 @@ import type { EligibilityContext, EligibilityResult } from "./types";
 export interface WebtutorAttemptFilter {
   /** Field holding the record state/status; default "state". */
   stateField?: string;
+  /**
+   * States that count as a FINISHED attempt (any outcome). On the RT portal the
+   * learning-record grid reports `state` as «Пройден» / «Не пройден» — BOTH are
+   * finished attempts, so both must be listed here. The cooldown fires after any
+   * finished attempt (requirement), so this must NOT be pass-only.
+   */
   stateIn?: string[];
   excludeStateIn?: string[];
-  /** Field holding the progress value; default "progress". */
+  /**
+   * Field holding the progress value; default "progress". Only enforced when
+   * `progressCompletePattern` is set. On the RT grid `progress` is «X из Y баллов»
+   * (not a percent), so completion is decided by `state`, not progress — leave
+   * `progressCompletePattern` unset there.
+   */
   progressField?: string;
   progressCompletePattern?: string;
   /** Field holding the usage/completion date. */
   dateField: string;
   /** Date format of `dateField`; default "dd.MM.yyyy". */
   dateFormat?: string;
+  /**
+   * Field holding the course NAME. When set together with a `courseName` argument,
+   * only records whose name matches (normalized) are considered — so all ASSIGNMENTS
+   * of the same course (separate records, distinct object_ids, same name) are treated
+   * as ONE course and their latest attempt wins.
+   */
+  nameField?: string;
+  /**
+   * Raw date values to treat as "no real attempt" sentinels (e.g. «31.12.9999» that
+   * WebTutor uses for an open-ended assignment that was never actually taken). Matched
+   * as substrings against the raw date; such records are skipped.
+   */
+  excludeDateValues?: string[];
+}
+
+/** Normalize a course name for tolerant matching (trim + collapse ws + lowercase). */
+function normalizeName(s: string): string {
+  return String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 export type WebtutorRecord = Record<string, unknown>;
@@ -50,22 +79,35 @@ export function parseFlexibleDate(value: string, format: string): string | null 
 }
 
 /**
- * Select the latest "full attempt" date from WebTutor records by applying the
- * configurable filter (state/progress/date). Returns ISO `YYYY-MM-DD` or null.
+ * Select the latest FINISHED-attempt date from WebTutor records by applying the
+ * configurable filter (state/name/date). Returns ISO `YYYY-MM-DD` or null.
+ *
+ * When `filter.nameField` and `courseName` are both given, only records for that
+ * course (by normalized name) are considered — every ASSIGNMENT of the course is a
+ * separate record with its own object_id but the same name, and they are one course
+ * (per requirement), so the latest date across all of them wins.
  */
 export function selectLastAttemptDate(
   records: WebtutorRecord[] | null | undefined,
   filter: WebtutorAttemptFilter,
+  courseName?: string,
 ): string | null {
   const stateField = filter.stateField || "state";
   const progressField = filter.progressField || "progress";
   const fmt = filter.dateFormat || "dd.MM.yyyy";
   const excl = filter.excludeStateIn || [];
   const progRe = filter.progressCompletePattern ? new RegExp(filter.progressCompletePattern) : null;
+  const wantName = filter.nameField && courseName ? normalizeName(courseName) : null;
+  const sentinels = filter.excludeDateValues || [];
   let bestEpoch: number | null = null;
   let bestStr: string | null = null;
   for (const rec of records || []) {
     if (!rec) continue;
+    // Same-course match across assignments: keep only records for this course.
+    if (wantName) {
+      const name = normalizeName(rec[filter.nameField as string] != null ? String(rec[filter.nameField as string]) : "");
+      if (name !== wantName) continue;
+    }
     const state = rec[stateField] != null ? String(rec[stateField]) : "";
     if (filter.stateIn && filter.stateIn.indexOf(state) === -1) continue;
     if (excl.indexOf(state) !== -1) continue;
@@ -74,6 +116,8 @@ export function selectLastAttemptDate(
       if (!progRe.test(prog)) continue;
     }
     const raw = rec[filter.dateField] != null ? String(rec[filter.dateField]) : "";
+    // Skip open-ended / sentinel dates (e.g. «31.12.9999» = assigned, never taken).
+    if (sentinels.some((s) => raw.indexOf(s) !== -1)) continue;
     const iso = parseFlexibleDate(raw, fmt);
     if (!iso) continue;
     const epoch = parseIsoDate(iso);
@@ -112,13 +156,16 @@ function cooldownResult(
 /**
  * `webtutor_cooldown` decision from already-fetched records (PRD-6 §3.6).
  * The runtime fetches `records` from WebTutor endpoints, then calls this.
+ * `courseName` (the test title) scopes the selection to one course across all its
+ * assignments when the filter declares a `nameField`.
  */
 export function webtutorCooldownDecide(
   records: WebtutorRecord[] | null | undefined,
   filter: WebtutorAttemptFilter,
   context: EligibilityContext,
+  courseName?: string,
 ): EligibilityResult {
-  return cooldownResult(selectLastAttemptDate(records, filter), context, "webtutor_cooldown");
+  return cooldownResult(selectLastAttemptDate(records, filter, courseName), context, "webtutor_cooldown");
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   extractSecid,
   type WebtutorAttemptFilter,
 } from "../shared/eligibility/plugins";
+import { findEligibilityConfig } from "../shared/eligibility/registry";
 import type { EligibilityContext } from "../shared/eligibility/types";
 
 const ctx: EligibilityContext = {
@@ -80,6 +81,56 @@ describe("webtutorCooldownDecide", () => {
     expect(r.allowed).toBe(true);
     expect(r.reason).toBe("no_prior_attempt");
     expect(r.availableDate).toBeNull();
+  });
+});
+
+// REQUIREMENT GUARD (do not delete). The cooldown MUST fire after ANY completed
+// attempt, passed OR failed — not only a passed one. This is asserted against the
+// SHIPPED registry filter (not a local fixture), because the historical regression
+// was exactly a shipped filter that only recognised a passed attempt: the runtime
+// was switched from the learning-records collection to scraping the course card's
+// "passed" marker, so a failed attempt left no date and the gate never engaged.
+// If someone narrows the shipped `attemptFilter` back to passed-only (e.g. a
+// pass-restrictive `stateIn`), THIS test fails — the behaviour cannot silently
+// regress again.
+describe("webtutor_cooldown REQUIREMENT: a FAILED completed attempt blocks the retake", () => {
+  const shipped = findEligibilityConfig("webtutor_cooldown", "webtutor_catalog_default");
+  const shippedFilter = (shipped?.config as { attemptFilter?: WebtutorAttemptFilter } | undefined)?.attemptFilter;
+
+  it("ships a records-collection filter that counts BOTH outcomes (not passed-only)", () => {
+    expect(shippedFilter).toBeDefined();
+    expect(shippedFilter?.dateField).toBe("last_usage_date");
+    // The requirement forbids pass-only: «Не пройден» (failed) must be counted too.
+    // On the live RT grid the finished states are «Пройден» / «Не пройден».
+    expect(shippedFilter?.stateIn).toContain("Не пройден");
+    expect(shippedFilter?.stateIn).toContain("Пройден");
+  });
+
+  it("selects the date of a completed-but-FAILED attempt and blocks", () => {
+    const failed = [{ name: "Курс", state: "Не пройден", progress: "0 из 100 баллов", last_usage_date: "08.05.2026" }];
+    const r = webtutorCooldownDecide(failed, shippedFilter as WebtutorAttemptFilter, ctx, "Курс");
+    expect(r.data?.lastAttemptDate).toBe("2026-05-08"); // the failed date WAS selected
+    expect(r.allowed).toBe(false); // 2026-05-20 - 2026-05-08 = 12 < 30 -> blocked
+    expect(r.reason).toBe("cooldown_active");
+  });
+
+  it("treats all ASSIGNMENTS of one course (same name, different object_id) as one course", () => {
+    // Three assignments of «Курс»; latest finished date must win regardless of object_id.
+    const recs = [
+      { name: "Курс", object_id: "1", state: "Пройден", last_usage_date: "01.05.2026" },
+      { name: "Курс", object_id: "2", state: "Не пройден", last_usage_date: "18.05.2026" },
+      { name: "Другой курс", object_id: "3", state: "Пройден", last_usage_date: "19.05.2026" }, // different course
+    ];
+    const r = webtutorCooldownDecide(recs, shippedFilter as WebtutorAttemptFilter, ctx, "Курс");
+    expect(r.data?.lastAttemptDate).toBe("2026-05-18"); // latest assignment of «Курс», not the other course
+    expect(r.allowed).toBe(false);
+  });
+
+  it("ignores an open-ended assignment never taken (sentinel date «31.12.9999»)", () => {
+    const recs = [{ name: "Курс", state: "Не пройден", last_usage_date: "31.12.9999" }];
+    const r = webtutorCooldownDecide(recs, shippedFilter as WebtutorAttemptFilter, ctx, "Курс");
+    expect(r.allowed).toBe(true);
+    expect(r.reason).toBe("no_prior_attempt");
   });
 });
 

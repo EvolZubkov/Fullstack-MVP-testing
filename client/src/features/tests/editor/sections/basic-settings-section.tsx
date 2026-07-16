@@ -678,6 +678,15 @@ function RetakePane({ model, updateModel }: SettingsSectionProps) {
             />
           )}
 
+          {currentKey === "webtutor_cooldown" && (
+            <Banner
+              tone="warning"
+              size="sm"
+              description="Проверка через WebTutor находит прошлые попытки по НАЗВАНИЮ курса. Ограничение сработает только если название курса (модуля) в WebTutor точно совпадает с названием этого теста. Если при загрузке в LMS курс назван иначе — период охлаждения применяться не будет."
+              data-testid="settings-retake-webtutor-name-warning"
+            />
+          )}
+
           <div
             className="ou-formfield"
             data-testid="settings-retake-failpolicy-group"
