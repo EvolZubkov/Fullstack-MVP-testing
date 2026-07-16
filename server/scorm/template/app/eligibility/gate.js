@@ -250,12 +250,24 @@ var RetakeGate = (function () {
     // fetch, no SCORM). Treating {} as loaded made the gate render its built-in wall
     // instead of the template's system.blocked / start screens.
     if (layouts && Object.keys(layouts).length > 0) return Promise.resolve(layouts);
-    if (typeof loadDesignTemplate === 'function') {
-      return loadDesignTemplate()
-        .then(function () { return (typeof state !== 'undefined' && state) ? state.templateLayouts : null; })
-        .catch(function () { return null; });
-    }
-    return Promise.resolve(null);
+    if (typeof loadDesignTemplate !== 'function') return Promise.resolve(null);
+    var settled = false;
+    var load = loadDesignTemplate()
+      .then(function () { settled = true; return (typeof state !== 'undefined' && state) ? state.templateLayouts : null; })
+      .catch(function () { settled = true; return null; });
+    // Safety net: the template fetch can HANG (not reject) on WebTutor's cplayer —
+    // the SCO runs in a sandboxed iframe and package-local fetches may stall with no
+    // response and no error, leaving the learner on «Загрузка теста…» forever. Cap it
+    // so the blocked screen always renders (null => built-in wall fallback). `settled`
+    // keeps the timer quiet once the load has already resolved (setTimeout still fires).
+    var timeout = new Promise(function (resolve) {
+      setTimeout(function () {
+        if (settled) return;
+        glog('ensureTemplate timed out — falling back to built-in wall');
+        resolve(null);
+      }, 4000);
+    });
+    return Promise.race([load, timeout]);
   }
 
   function blockedLayoutKey(td) {
@@ -334,11 +346,24 @@ var RetakeGate = (function () {
   function renderCooldownStart(retake, td) {
     var el = appEl();
     if (!el) return;
+    glog('rendering cooldown state...');
+    // Last-resort safety net: whatever hangs or throws below (template fetch stall,
+    // renderScreenInto error), guarantee the learner sees the cooldown message rather
+    // than an endless «Загрузка теста…». Fires the built-in wall if nothing rendered.
+    var rendered = false;
+    setTimeout(function () {
+      if (rendered) return;
+      glog('cooldown render did not complete in time — forcing built-in wall');
+      try { renderBlockWallBuiltin(retake, el); rendered = true; } catch (e) { glog('built-in wall failed:', (e && e.message) || e); }
+    }, 4500);
     ensureTemplate().then(function (layouts) {
+      if (rendered) return;
       var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
       var layout = layouts && layouts['start'];
+      glog('template ready. start layout:', !!layout, '| TBTemplate:', !!(TB && TB.renderScreenInto));
       if (!layout || !TB || !TB.renderScreenInto || !TB.buildStartState) {
         renderBlockWall(retake, td);
+        rendered = true;
         return;
       }
       var ctx = TB.buildStartState({
@@ -366,8 +391,15 @@ var RetakeGate = (function () {
       // Mount directly into #app so .tb-pad > .cover fills the fixed stage — mirrors
       // renderGalleryPage (a wrapper div would defeat the child-combinator rule).
       TB.renderScreenInto(el, { layout: layout, context: ctx });
+      rendered = true;
+      glog('cooldown state rendered on start page');
       // No action wiring: the start button is disabled and nothing else is
       // clickable pre-Initialize, so the SCORM session stays unopened.
+    }).catch(function (e) {
+      // A throw here (renderScreenInto / buildStartState) was previously an unhandled
+      // rejection: no log, learner stuck on the loading text. Fall back to the wall.
+      glog('cooldown render error:', (e && e.message) || e);
+      if (!rendered) { try { renderBlockWallBuiltin(retake, el); rendered = true; } catch (e2) { glog('built-in wall failed:', (e2 && e2.message) || e2); } }
     });
   }
 
