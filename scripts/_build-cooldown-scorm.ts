@@ -36,7 +36,7 @@ const fixture = {
       enabled: true,
       cooldownPeriodDays: 30,
       gateMode: "before_internal_start",
-      eligibilityPlugin: { key: "webtutor_cooldown", configId: "webtutor_clientbridge_rt", failPolicy: "failOpen" },
+      eligibilityPlugin: { key: "webtutor_cooldown", configId: "webtutor_catalog_default", failPolicy: "failOpen" },
     },
     createdAt: new Date(), updatedAt: new Date(),
   },
