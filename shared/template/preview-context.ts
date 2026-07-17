@@ -10,14 +10,20 @@
  * carries: a unique `id`, the resolved layout key, the public render context (built via
  * the shared {@link module:shared/template/start-state}/{@link module:shared/template/result-context}/
  * {@link module:shared/template/transition-context} builders), the controlled slots
- * (question interaction, content skeleton) and the slots the smoke-runner must find
- * filled.
+ * (question interaction, content skeleton) and the slots the engine fills
+ * ({@link ScreenSpec.expectedSlots} — warnings, never blockers).
  *
  * Pure — no DOM, no Node — so it is unit-testable and safe to bundle for the browser.
  */
 
 import { buildStartState } from "./start-state";
-import { buildResultContext, buildAdaptiveResultContext, buildSectionResultContext, type ResultInput } from "./result-context";
+import {
+  buildResultContext,
+  buildAdaptiveResultContext,
+  buildSectionResultContext,
+  buildSectionIntroContext,
+  type ResultInput,
+} from "./result-context";
 import { buildTransitionContext } from "./transition-context";
 import { buildReviewContext } from "./review-context";
 import type { ScreenRenderInput, PlaceholderDef } from "./render-screen";
@@ -37,6 +43,14 @@ export interface PreviewContentTemplate {
   label?: string;
   kind?: string;
   pageKind?: string;
+  /**
+   * Path to this variant's layout inside the package (spec §8.2) — the CANONICAL
+   * way a variant-backed screen names its layout. Absent when the variant renders
+   * through a generic layout (`content` / `question`), as `info`/`summary`/`router`/
+   * `questions` do in the shipping `default`.
+   */
+  layoutFile?: string;
+  isDefault?: boolean;
   placeholders?: PlaceholderDef[];
 }
 
@@ -105,8 +119,14 @@ export interface ScreenSpec {
   label?: string;
   /** Layout key to look up in the layouts map (resolved with fallback, §5.3). */
   layoutKey: string;
-  /** Slots the smoke-runner requires present and filled for this screen. */
-  requiredSlots: string[];
+  /**
+   * Slots the engine fills on this screen. Their ABSENCE never blocks activation
+   * (spec §17.1/§17.2, PRD-3 §4.2/§4.3): a screen whose layout omits a slot is
+   * rendered from the standard template instead, so the smoke-runner reports a
+   * warning, not an error. Declaring them is still the right thing — a template
+   * that omits one hands its screen (and its styling) to the standard template.
+   */
+  expectedSlots: string[];
   /** Render input minus `layout` (the runner attaches the layout HTML). */
   input: Omit<ScreenRenderInput, "layout">;
 }
@@ -126,20 +146,82 @@ function normalizeTarget(t: string | PreviewRouteTarget): PreviewRouteTarget {
 }
 
 /**
- * Resolve a route to a layout key present in `manifest.layouts`, following the
- * spec §5.3 fallback (specific → general): `question.single → question`,
- * `content.intro → content`, `start → content`, `system.* → content`.
+ * Resolve the layout reference for a screen — the key the host looks up in its
+ * layouts map (which is keyed by BOTH `manifest.layouts` key and `layoutFile` path).
+ *
+ * The contract (spec §8.2, audit rule 6.3): a screen backed by a `contentTemplates[]`
+ * variant takes its layout from that variant's `layoutFile`; `layouts[]` keys serve
+ * only system screens WITHOUT a variant. A key named after a page kind — e.g.
+ * `layouts["content.intro"]` — is NOT part of the contract and is deliberately never
+ * consulted: the runtime does not read it either (`contentPage.js` renders content
+ * pages through `layouts["content"]`), so honouring it here would make the check
+ * exercise a layout the learner never sees.
+ *
+ * Without a `layoutFile` the variant renders through the generic layout of its route
+ * family (`question.* → question`, `content.* → content`), mirroring the runtime.
  */
-function resolveLayoutKey(route: string, manifest: PreviewManifest): string {
+function resolveLayoutKey(route: string, manifest: PreviewManifest, variant?: PreviewContentTemplate): string {
   const layouts = manifest.layouts ?? {};
-  if (layouts[route]) return route;
+  // «Введение раздела» is looked up by the FIXED `section-intro` key, exactly as the
+  // runtime does — not by the intro variant's layoutFile.
+  if (isSectionIntroScreen(route, variant?.kind, manifest)) return "section-intro";
+  if (variant?.layoutFile) return variant.layoutFile;
+  // The runtime also resolves a variant's layout by its KEY (`contentPage.js →
+  // renderGalleryPage` reads `layouts[contentTemplate.key]`), so honour that too —
+  // otherwise a gallery declared that way previews through the generic layout.
+  if (variant && layouts[variant.key]) return variant.key;
   if (route === "results.adaptive") return layouts["results.adaptive"] ? "results.adaptive" : "results";
   if (route === "results") return "results";
   if (route.startsWith("question")) return "question";
   if (route.startsWith("content")) return "content";
   if (route === "start") return layouts.start ? "start" : "content";
-  if (route.startsWith("system.")) return layouts[route] ? route : "content";
+  // System screens without a variant (`system.*`, `review`, `section-results`).
+  if (layouts[route]) return route;
+  if (route.startsWith("system.")) return "content";
   return route;
+}
+
+/** Pick a variant list's default (`isDefault`, else first) — PRD-1 §4.3.2. */
+function selectDefaultVariant(list: PreviewContentTemplate[]): PreviewContentTemplate | undefined {
+  return list.find((c) => c.isDefault) ?? list[0];
+}
+
+/**
+ * Find the `contentTemplates[]` variant backing a screen: the explicitly bound key
+ * when the demo page/route names one, else the default variant declared for this
+ * route's `pageKind` (or the `questions` kind for question routes).
+ */
+function findVariantForRoute(
+  manifest: PreviewManifest,
+  route: string,
+  explicitKey?: string,
+): PreviewContentTemplate | undefined {
+  const cts = manifest.contentTemplates ?? [];
+  if (explicitKey) {
+    const bound = cts.find((c) => c.key === explicitKey);
+    if (bound) return bound;
+  }
+  const byPageKind = cts.filter((c) => c.pageKind === route);
+  if (byPageKind.length > 0) return selectDefaultVariant(byPageKind);
+  if (route.startsWith("question")) return selectDefaultVariant(cts.filter((c) => c.kind === "questions"));
+  return undefined;
+}
+
+/**
+ * True when this screen renders through the section-intro pipeline: an `intro` screen
+ * whose template declares the `section-intro` LAYOUT KEY.
+ *
+ * That key — not the variant's `layoutFile` — is what the runtime reads
+ * (`contentPage.js → renderSectionIntro` calls `systemLayout("section-intro")`). When
+ * it is absent the runtime bails out and the page falls through to the GENERIC content
+ * render (placeholder skeleton in `page-content`), so the preview must do the same.
+ * Keying this on `layoutFile` instead would feed a `sectionIntro` context to a plain
+ * content layout — an author whose intro variant is an ordinary page (as in a
+ * builder-exported template) would preview an empty screen.
+ */
+function isSectionIntroScreen(route: string, kind: string | undefined, manifest: PreviewManifest): boolean {
+  const isIntro = route === "content.intro" || kind === "intro";
+  return isIntro && !!(manifest.layouts ?? {})["section-intro"];
 }
 
 /** Build a minimal content-page skeleton (one `data-placeholder` host per field). */
@@ -366,11 +448,117 @@ function resultInputFromRuntime(dataset: PreviewDemoDataset): ResultInput {
   };
 }
 
+/** Section-intro demo inputs (topic/section facts the computed context needs). */
+interface SectionIntroFacts {
+  sectionNumber: number;
+  topicName: string;
+  questionCount: number;
+  description?: string;
+  timeLimitMinutes?: number | null;
+}
+
+/** Render input + slot expectations for one screen (the `ScreenSpec` tail). */
+type ScreenParts = Pick<ScreenSpec, "expectedSlots" | "input">;
+
+/**
+ * Build the «Введение раздела» screen the way the RUNTIME builds it
+ * (`contentPage.js → renderSectionIntro`): a COMPUTED `sectionIntro` context plus the
+ * author instruction injected as a slot — NOT the generic `page-content` skeleton.
+ * Keeping the two pipelines identical is what makes the check exercise the screen the
+ * learner actually sees; feeding this screen a page-content skeleton (as the preview
+ * used to) fails templates whose intro layout is correct.
+ *
+ * The layout renders the instruction slot only under `{{#if sectionIntro.hasInstruction}}`,
+ * so the slot is expected only when the demo supplies an instruction.
+ */
+function buildSectionIntroParts(values: Record<string, unknown>, facts: SectionIntroFacts): ScreenParts {
+  const instruction = typeof values.instruction === "string" ? values.instruction : "";
+  const illoRaw = values.illustration;
+  const illustration =
+    illoRaw && typeof illoRaw === "object"
+      ? String((illoRaw as { url?: unknown }).url ?? "")
+      : String(illoRaw ?? "");
+  const built = buildSectionIntroContext({
+    sectionNumber: facts.sectionNumber,
+    topicName: facts.topicName,
+    description: facts.description,
+    questionCount: facts.questionCount,
+    timeLimitMinutes: facts.timeLimitMinutes ?? undefined,
+    instruction,
+    illustration,
+  });
+  return {
+    expectedSlots: built.sectionIntro.hasInstruction ? ["instruction"] : [],
+    input: {
+      context: { course: built.course, sectionIntro: built.sectionIntro },
+      slots: { instruction },
+    },
+  };
+}
+
+/**
+ * True when this screen renders through the gallery pipeline: a gallery slide whose
+ * variant has a DEDICATED layout (by `layoutFile` or by the variant KEY, both of which
+ * the runtime honours). Without one, `renderGalleryPage` bails out and the page falls
+ * through to the generic content render — so the preview must do the same.
+ */
+function isGalleryScreen(
+  route: string,
+  kind: string | undefined,
+  variant: PreviewContentTemplate | undefined,
+  manifest: PreviewManifest,
+): boolean {
+  const isGallery = route === "content.gallery" || route.startsWith("content.gallery.") || kind === "gallery";
+  if (!isGallery || !variant) return false;
+  return !!variant.layoutFile || !!(manifest.layouts ?? {})[variant.key];
+}
+
+/** Unwrap a media value stored either as a bare URL or as a `{ url, … }` envelope. */
+function mediaUrl(v: unknown): string {
+  if (v && typeof v === "object") return String((v as { url?: unknown }).url ?? "");
+  return String(v ?? "");
+}
+
+/**
+ * Build a gallery slide the way the RUNTIME builds it (`contentPage.js →
+ * renderGalleryPage`): a `gallery` context (header/subheader/image/pills/nav) plus the
+ * author card text as a slot — NOT the generic `page-content` skeleton. Without this
+ * the slide renders as an empty card: its layout declares `data-slot="cardText"` and
+ * binds `gallery.*`, so a page-content skeleton fills nothing.
+ */
+function buildGalleryParts(values: Record<string, unknown>, courseTitle: string): ScreenParts {
+  const total = Math.max(1, parseInt(String(values.pillsTotal ?? ""), 10) || 1);
+  const current = parseInt(String(values.pillCurrent ?? ""), 10) || 1;
+  const pills = Array.from({ length: total }, (_, i) => ({
+    statusClass: i + 1 === current ? "is-current" : "",
+  }));
+  const cardText = values.cardText != null ? String(values.cardText) : "";
+  return {
+    expectedSlots: cardText.trim() ? ["cardText"] : [],
+    input: {
+      context: {
+        course: { title: courseTitle },
+        gallery: {
+          header: values.header != null ? String(values.header) : "",
+          subheader: values.subheader != null ? String(values.subheader) : "",
+          imageUrl: mediaUrl(values.image),
+          pills,
+          showBack: values.showBack === true || values.showBack === "true",
+          nextLabel: values.nextLabel != null && values.nextLabel !== "" ? String(values.nextLabel) : "Далее",
+        },
+      },
+      slots: { cardText },
+    },
+  };
+}
+
 /** Build the {@link ScreenSpec} for one route target. */
 function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manifest: PreviewManifest): ScreenSpec {
   const route = target.route;
-  const layoutKey = resolveLayoutKey(route, manifest);
   const c = dataset.course;
+  const boundPage = route.startsWith("content") ? findContentPage(dataset, target) : undefined;
+  const variant = findVariantForRoute(manifest, route, boundPage?.templateKey ?? target.templateKey);
+  const layoutKey = resolveLayoutKey(route, manifest, variant);
   const base = { id: route, route, label: target.label, layoutKey };
 
   if (route === "start") {
@@ -388,7 +576,7 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
       hasCompletedResults: false,
       canStartNew: true,
     });
-    return { ...base, requiredSlots: [], input: { context: { course, state } } };
+    return { ...base, expectedSlots: [], input: { context: { course, state } } };
   }
 
   if (route === "results" || route === "results.adaptive") {
@@ -399,7 +587,7 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
             c.title,
           )
         : buildResultContext(resultInputFromRuntime(dataset), c.title);
-    return { ...base, requiredSlots: [], input: { context } };
+    return { ...base, expectedSlots: [], input: { context } };
   }
 
   if (route.startsWith("question")) {
@@ -412,13 +600,44 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
     const slots = q
       ? { "question-text": esc(q.prompt), "question-media": "", "question-interaction": buildInteraction(q) }
       : { "question-text": "", "question-media": "", "question-interaction": "" };
-    return { ...base, requiredSlots: ["question-text", "question-interaction"], input: { context, slots } };
+    return { ...base, expectedSlots: ["question-text", "question-interaction"], input: { context, slots } };
   }
 
   if (route.startsWith("content")) {
-    const page = findContentPage(dataset, target);
+    const page = boundPage;
     const variantKey = page?.templateKey ?? target.templateKey;
-    const tpl = findContentTemplate(manifest, variantKey);
+    const tpl = variant;
+
+    // Identity must be UNIQUE — it keys the preview rail and the smoke status map.
+    // The bound demo page is the finest-grained identity: a template may list SEVERAL
+    // screens that share ONE variant (`certification` previews two gallery cards, both
+    // bound to `gallery.card`), and keying on the variant alone collides. The variant
+    // key still serves when a route binds no page — it keeps two render variants of the
+    // same kind (both route `content.intro`) distinguishable.
+    const screenId = target.pageId ?? variantKey ?? route;
+
+    // Gallery slides render through their own pipeline (see buildGalleryParts).
+    if (isGalleryScreen(route, tpl?.kind ?? page?.type, tpl, manifest)) {
+      return { ...base, id: screenId, ...buildGalleryParts(page?.values ?? {}, c.title) };
+    }
+
+    // «Введение раздела» renders through the section-intro pipeline, not the
+    // generic content one (see buildSectionIntroParts).
+    if (isSectionIntroScreen(route, tpl?.kind ?? page?.type, manifest)) {
+      const topic = c.topics?.[0];
+      return {
+        ...base,
+        id: screenId,
+        ...buildSectionIntroParts(page?.values ?? {}, {
+          sectionNumber: 1,
+          topicName: topic?.title ?? "Раздел",
+          questionCount: c.questionCount ?? c.questions?.length ?? 0,
+          description: c.description,
+          timeLimitMinutes: c.timeLimitMinutes,
+        }),
+      };
+    }
+
     const placeholders = tpl?.placeholders ?? [];
     const skeleton = buildSkeleton(placeholders);
     // The «Итог раздела» page (content.summary, after_topic) reflects the SECTION
@@ -433,10 +652,8 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
       : skeleton;
     return {
       ...base,
-      // A content screen is identified by its bound variant key, so two variants
-      // of the same kind (both route `content.intro`) remain distinct in the rail.
-      id: variantKey ?? route,
-      requiredSlots: ["page-content"],
+      id: screenId,
+      expectedSlots: ["page-content"],
       input: {
         context,
         slots: { "page-content": pageContent },
@@ -464,7 +681,7 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
       state: { questionsProgress: built.questionsProgress },
       review: built.review,
     };
-    return { ...base, requiredSlots: [], input: { context } };
+    return { ...base, expectedSlots: [], input: { context } };
   }
 
   // PRD-19 FR-05a: «Итоги раздела» (computed section-results). Demo score from the
@@ -483,7 +700,7 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
       passed,
       continueLabel: "Продолжить",
     });
-    return { ...base, requiredSlots: [], input: { context: { course: built.course, sectionResult: built.sectionResult } } };
+    return { ...base, expectedSlots: [], input: { context: { course: built.course, sectionResult: built.sectionResult } } };
   }
 
   if (route === "system.transition") {
@@ -492,17 +709,17 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
       levelTransition: { type: "up", message: "Уровень повышен" },
       showContinue: true,
     });
-    return { ...base, requiredSlots: [], input: { context } };
+    return { ...base, expectedSlots: [], input: { context } };
   }
 
   // Other system.* screens (e.g. system.blocked): retake context.
   if (route.startsWith("system.")) {
     const context = { retake: { cooldownPeriodDays: 7, availableDateHuman: "через 7 дней" } };
-    return { ...base, requiredSlots: [], input: { context } };
+    return { ...base, expectedSlots: [], input: { context } };
   }
 
   // Fallback: render with course title only.
-  return { ...base, requiredSlots: [], input: { context: { course: { title: c.title } } } };
+  return { ...base, expectedSlots: [], input: { context: { course: { title: c.title } } } };
 }
 
 /** Content-page kinds the preview enumerates per variant (вводные/учебные/итог/маршрутизатор). */
@@ -529,11 +746,31 @@ function buildContentVariant(
   manifest: PreviewManifest,
 ): ScreenSpec {
   const route = ct.pageKind ?? `content.${kind}`;
-  const layoutKey = resolveLayoutKey(route, manifest);
+  const layoutKey = resolveLayoutKey(route, manifest, ct);
   const placeholders = ct.placeholders ?? [];
   const skeleton = buildSkeleton(placeholders);
   const pages = dataset.course.contentPages ?? [];
   const page = pages.find((p) => p.templateKey === ct.key) ?? pages.find((p) => p.route === route);
+
+  // «Введение раздела» renders through the section-intro pipeline (see buildOne).
+  if (isSectionIntroScreen(route, kind, manifest)) {
+    const c = dataset.course;
+    const topic = c.topics?.[0];
+    return {
+      id: ct.key,
+      route,
+      label: ct.label,
+      layoutKey,
+      ...buildSectionIntroParts(page?.values ?? {}, {
+        sectionNumber: 1,
+        topicName: topic?.title ?? "Раздел",
+        questionCount: c.questionCount ?? c.questions?.length ?? 0,
+        description: c.description,
+        timeLimitMinutes: c.timeLimitMinutes,
+      }),
+    };
+  }
+
   const isSummary = route === "content.summary" || kind === "summary";
   const result = isSummary ? sectionResultContextFromRuntime(dataset) : resultContextFromRuntime(dataset);
   // Router variants append the runtime topic-menu on the demo topics (see buildOne).
@@ -545,7 +782,7 @@ function buildContentVariant(
     route,
     label: ct.label,
     layoutKey,
-    requiredSlots: ["page-content"],
+    expectedSlots: ["page-content"],
     input: {
       context: { course: { title: dataset.course.title }, result },
       slots: { "page-content": pageContent },
@@ -619,9 +856,14 @@ export interface ContentPageScreenInput {
  * feeds the page's saved values into the renderer's `content` channel. Reuses the
  * same primitives as {@link buildScreenInputs}, so the page renders identically to
  * the runtime — no second renderer.
+ *
+ * NOT for the «Введение раздела» (`intro`) screen: that one renders through the
+ * section-intro pipeline off REAL section facts (topic name, question count) the
+ * caller owns, so the caller builds it — see `page-preview-modal`.
  */
 export function buildContentPageScreen(inp: ContentPageScreenInput): ScreenSpec {
-  const layoutKey = resolveLayoutKey(inp.route, inp.manifest);
+  const variant = findVariantForRoute(inp.manifest, inp.route, inp.templateKey);
+  const layoutKey = resolveLayoutKey(inp.route, inp.manifest, variant);
   const tpl = findContentTemplate(inp.manifest, inp.templateKey);
   const placeholders = tpl?.placeholders ?? [];
   const skeleton = buildSkeleton(placeholders);
@@ -636,7 +878,7 @@ export function buildContentPageScreen(inp: ContentPageScreenInput): ScreenSpec 
     id: inp.templateKey ?? inp.route,
     route: inp.route,
     layoutKey,
-    requiredSlots: ["page-content"],
+    expectedSlots: ["page-content"],
     input: {
       context: { course: { title: inp.courseTitle }, result },
       slots: { "page-content": pageContent },
