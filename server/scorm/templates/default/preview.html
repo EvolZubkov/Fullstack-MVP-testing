@@ -3173,11 +3173,15 @@ function renderContentPage(page, contentTemplates) {
   var placeholderStyles = getPagePlaceholderStyles(page);
   var skeleton = buildContentPageSkeleton(page, contentTemplate);
 
-  // Primary path: render the shared `content` layout (wrapper + nav) and fill the
-  // page-content slot with the placeholder skeleton — the SAME layout/renderer the
-  // web host uses. Falls back to mounting the skeleton directly when absent.
+  // Primary path: render the page's layout and fill the page-content slot with the
+  // placeholder skeleton — the SAME layout/renderer the web host uses. The variant's
+  // own `layoutFile` wins (spec §8.2): a template may ship one layout per page, and
+  // resolving everything through the single `content` key would render them all as
+  // whichever page that key happens to point at. Falls back to `content`, then to
+  // mounting the skeleton directly.
   var layouts = (typeof state !== "undefined" && state) ? state.templateLayouts : null;
-  var layout = layouts && layouts["content"];
+  var layout = (layouts && contentTemplate && contentTemplate.layoutFile && layouts[contentTemplate.layoutFile])
+    || (layouts && layouts["content"]);
   var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
   var host;
   if (layout && TB && TB.renderScreenInto) {
