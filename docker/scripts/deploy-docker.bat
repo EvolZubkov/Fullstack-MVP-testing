@@ -117,18 +117,26 @@ if errorlevel 1 ( echo ERROR: tar package creation failed & exit /b 1 )
 echo [1/2] OK: %PACKAGE_FILE%
 
 :: ---------------------------------------------------------------------------
-:: Step 2: Upload the package
+:: Step 2: Upload the package and run the deploy on the server
 :: ---------------------------------------------------------------------------
-echo [2/2] Uploading %PACKAGE_FILE% to %DEPLOY_TARGET%...
+echo [2/3] Uploading %PACKAGE_FILE% to %DEPLOY_TARGET%...
 scp "%PACKAGE_FILE%" "%DEPLOY_TARGET%:/tmp/%REMOTE_PACKAGE%"
 if errorlevel 1 ( echo ERROR: scp failed & exit /b 1 )
-echo [2/2] OK
+echo [2/3] OK
+
+:: Unpack and run the privileged deploy on the server, same as build-test.bat does
+:: for the test instance - no manual server step. -tt forces a TTY so drizzle-kit's
+:: interactive prompts (unique-constraint truncate confirmation, which --force does
+:: NOT suppress - drizzle bug #4531) render live and can be answered during deploy.
+echo [3/3] Deploying on %DEPLOY_TARGET%...
+ssh -tt "%DEPLOY_TARGET%" "cd /tmp && rm -rf %REMOTE_DEPLOY_DIR% && mkdir -p %REMOTE_DEPLOY_DIR% && tar -xf /tmp/%REMOTE_PACKAGE% -C %REMOTE_DEPLOY_DIR% && bash %REMOTE_DEPLOY_DIR%/run-deploy.sh %PROJECT_NAME% %EXPOSE_PORT% %REMOTE_DEPLOY_DIR%/%IMAGE_FILE%"
+if errorlevel 1 ( echo ERROR: remote deploy failed & exit /b 1 )
+echo [3/3] OK
 
 echo.
 echo ===================================================
-echo  Upload complete: %DEPLOY_TARGET%:/tmp/%REMOTE_PACKAGE%
-echo  Run on server:
-echo    bash -c 'cd /tmp ^&^& rm -rf %REMOTE_DEPLOY_DIR% ^&^& mkdir -p %REMOTE_DEPLOY_DIR% ^&^& tar -xf /tmp/%REMOTE_PACKAGE% -C %REMOTE_DEPLOY_DIR% ^&^& bash %REMOTE_DEPLOY_DIR%/run-deploy.sh %PROJECT_NAME% %EXPOSE_PORT% %REMOTE_DEPLOY_DIR%/%IMAGE_FILE%'
+echo  Deployment complete: %PROJECT_NAME% on %DEPLOY_TARGET%
+echo  URL: http://^<server^>:%EXPOSE_PORT%
 echo ===================================================
 goto :end
 
