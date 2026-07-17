@@ -3011,8 +3011,12 @@ function buildSectionIntroFallback(inp) {
 }
 
 function renderSectionIntro(page) {
-  var layouts = (typeof state !== "undefined" && state) ? state.templateLayouts : null;
-  var layout = layouts && layouts["section-intro"];
+  // Falls back to the standard template's section-intro when this template declares
+  // no `intro` variant (PRD-1 §4.3.2); returning false below drops the page to the
+  // generic content render, which is what a template without the screen should get.
+  var layout = (typeof systemLayout === "function")
+    ? systemLayout("section-intro")
+    : ((typeof state !== "undefined" && state && state.templateLayouts) || {})["section-intro"];
   var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
   // NOTE: do NOT require TB.buildSectionIntroContext here — it is a recent export
   // and may be missing from the per-process-cached runtime bundle in dev. Only
@@ -3059,6 +3063,7 @@ function renderSectionIntro(page) {
   // defeating the child-combinator fill/anchor rule.
   // The author instruction is sanitized rich text → injected raw via the slot (the
   // same trust model as info-page bodies / the question-interaction slot).
+  if (typeof applySystemScreenStyles === "function") applySystemScreenStyles("section-intro");
   TB.renderScreenInto(app, { layout: layout, context: context, slots: { instruction: instruction } });
   var btn = app.querySelector('[data-action="section-intro-continue"]');
   if (btn) btn.addEventListener("click", function () {

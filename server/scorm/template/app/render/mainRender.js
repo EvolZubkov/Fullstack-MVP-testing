@@ -1,22 +1,25 @@
 /**
- * PRD-7 G21 fallback helpers. When the active template doesn't declare a system
- * kind (start/results), the exporter bundles the `default` template under
- * `template-default/` + `styles-default.css`; these helpers let the start/results
- * renderers mount default's layout with default's CSS so the SCORM package matches
+ * Fallback helpers (PRD-1 §4.3.2, PRD-3 NFR-06). When the active template doesn't
+ * declare a system screen, the exporter bundles the `default` template under
+ * `template-default/` + `styles-default.css`; these helpers let each system renderer
+ * mount default's layout with default's CSS, so the SCORM package matches
  * «Структура» / the editor preview («Из стандартного шаблона»).
+ *
+ * Keyed by LAYOUT KEY (`start`, `results`, `question`, `section-intro`, `review`,
+ * `section-results`) — the same key the renderers pass to `systemLayout`.
  */
-function isFallbackKind(kind) {
+function isFallbackLayout(layoutKey) {
     var ds = (typeof TEST_DATA !== 'undefined' && TEST_DATA.designSettings) || null;
-    var list = (ds && ds.fallbackKinds) || [];
-    return !!kind && list.indexOf(kind) >= 0;
+    var list = (ds && ds.fallbackLayoutKeys) || [];
+    return !!layoutKey && list.indexOf(layoutKey) >= 0;
 }
 
-/** Layout HTML for a system kind — the bundled default's when it's a fallback kind. */
-function systemLayout(kind) {
-    if (isFallbackKind(kind) && state.fallbackLayouts && state.fallbackLayouts[kind]) {
-        return state.fallbackLayouts[kind];
+/** Layout HTML for a system screen — the bundled default's when it's a fallback. */
+function systemLayout(layoutKey) {
+    if (isFallbackLayout(layoutKey) && state.fallbackLayouts && state.fallbackLayouts[layoutKey]) {
+        return state.fallbackLayouts[layoutKey];
     }
-    return state.templateLayouts && state.templateLayouts[kind];
+    return state.templateLayouts && state.templateLayouts[layoutKey];
 }
 
 /**
@@ -25,11 +28,11 @@ function systemLayout(kind) {
  * package ships no fallback (the `styles-fallback` link is absent). The package
  * shows one full screen at a time, so a global stylesheet swap is conflict-free.
  */
-function applySystemScreenStyles(kind) {
+function applySystemScreenStyles(layoutKey) {
     if (typeof document === 'undefined') return;
     var alt = document.getElementById('styles-fallback');
     if (!alt) return;
-    var useFallback = isFallbackKind(kind);
+    var useFallback = isFallbackLayout(layoutKey);
     var main = document.getElementById('styles-main');
     alt.disabled = !useFallback;
     if (main) main.disabled = useFallback;
@@ -208,7 +211,8 @@ function isLastSectionTopic(topicId) {
 function renderReviewScreen() {
     var app = document.getElementById('app');
     var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
-    var layout = state.templateLayouts && state.templateLayouts['review'];
+    var layout = systemLayout('review');
+    applySystemScreenStyles('review');
     var sectionScope = TEST_DATA.answerCommitScope === 'section';
     var isRouterMode = (typeof RouterFlow !== 'undefined' && RouterFlow.isRouterMode());
     var curFq = state.flatQuestions[state.currentIndex];
@@ -331,7 +335,8 @@ function finishSection(topicId, isLast, unansweredCount, skipConfirm) {
 function renderSectionResults(topicId, isLast) {
     var app = document.getElementById('app');
     var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
-    var layout = state.templateLayouts && state.templateLayouts['section-results'];
+    var layout = systemLayout('section-results');
+    applySystemScreenStyles('section-results');
     var sr = (typeof computeSectionResult === 'function') ? computeSectionResult(topicId) : null;
     var advance = function () { advanceAfterSection(topicId); };
     if (!sr || !layout || !TB || !TB.renderScreenInto || !TB.buildSectionResultContext) {
@@ -469,8 +474,8 @@ function fitQuestionText(card) {
 function renderStandardQuestion(qData, current, total, progress) {
     var app = document.getElementById('app');
     var q = qData.question;
-    var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
-    var layout = layouts && layouts['question'];
+    var layout = systemLayout('question');
+    applySystemScreenStyles('question');
     var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
     var showFeedback = TEST_DATA.showCorrectAnswers && state.feedbackShown;
     var progressMode = typeof getProgressMode === 'function' ? getProgressMode() : 'questions';

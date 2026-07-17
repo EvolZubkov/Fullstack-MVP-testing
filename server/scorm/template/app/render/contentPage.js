@@ -218,8 +218,12 @@ function buildSectionIntroFallback(inp) {
 }
 
 function renderSectionIntro(page) {
-  var layouts = (typeof state !== "undefined" && state) ? state.templateLayouts : null;
-  var layout = layouts && layouts["section-intro"];
+  // Falls back to the standard template's section-intro when this template declares
+  // no `intro` variant (PRD-1 §4.3.2); returning false below drops the page to the
+  // generic content render, which is what a template without the screen should get.
+  var layout = (typeof systemLayout === "function")
+    ? systemLayout("section-intro")
+    : ((typeof state !== "undefined" && state && state.templateLayouts) || {})["section-intro"];
   var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
   // NOTE: do NOT require TB.buildSectionIntroContext here — it is a recent export
   // and may be missing from the per-process-cached runtime bundle in dev. Only
@@ -266,6 +270,7 @@ function renderSectionIntro(page) {
   // defeating the child-combinator fill/anchor rule.
   // The author instruction is sanitized rich text → injected raw via the slot (the
   // same trust model as info-page bodies / the question-interaction slot).
+  if (typeof applySystemScreenStyles === "function") applySystemScreenStyles("section-intro");
   TB.renderScreenInto(app, { layout: layout, context: context, slots: { instruction: instruction } });
   var btn = app.querySelector('[data-action="section-intro-continue"]');
   if (btn) btn.addEventListener("click", function () {
@@ -375,11 +380,15 @@ function renderContentPage(page, contentTemplates) {
   var placeholderStyles = getPagePlaceholderStyles(page);
   var skeleton = buildContentPageSkeleton(page, contentTemplate);
 
-  // Primary path: render the shared `content` layout (wrapper + nav) and fill the
-  // page-content slot with the placeholder skeleton — the SAME layout/renderer the
-  // web host uses. Falls back to mounting the skeleton directly when absent.
+  // Primary path: render the page's layout and fill the page-content slot with the
+  // placeholder skeleton — the SAME layout/renderer the web host uses. The variant's
+  // own `layoutFile` wins (spec §8.2): a template may ship one layout per page, and
+  // resolving everything through the single `content` key would render them all as
+  // whichever page that key happens to point at. Falls back to `content`, then to
+  // mounting the skeleton directly.
   var layouts = (typeof state !== "undefined" && state) ? state.templateLayouts : null;
-  var layout = layouts && layouts["content"];
+  var layout = (layouts && contentTemplate && contentTemplate.layoutFile && layouts[contentTemplate.layoutFile])
+    || (layouts && layouts["content"]);
   var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
   var host;
   if (layout && TB && TB.renderScreenInto) {
