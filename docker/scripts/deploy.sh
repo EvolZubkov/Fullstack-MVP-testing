@@ -181,7 +181,7 @@ docker compose down --remove-orphans 2>/dev/null || true
 # ORDER (backfill strictly before its drop) in one invocation; any failure aborts
 # the deploy before push, so a drop never runs after a failed backfill.
 info "Applying pre-push data migrations (push cannot run these)..."
-docker compose run --rm --no-deps --entrypoint sh app -c "node script/run-sql.cjs \
+docker compose run --rm --no-deps --entrypoint sh "${PROJECT_NAME}" -c "node script/run-sql.cjs \
   migrations/016_prd13_rbac_roles.sql \
   migrations/023_td02_topic_feedback_json.sql \
   migrations/024_td02_drop_topic_courses_events.sql \
@@ -195,12 +195,12 @@ ok "Data migrations applied"
 # "create vs rename test_question_scoring" and --force would DROP source
 # tables/columns without backfill. This turns that into a loud failure.
 info "Verifying schema is migrated before push (PRD-15 gate)..."
-docker compose run --rm --no-deps --entrypoint sh app -c "node script/run-sql.cjs script/verify-prd15-pre-push.sql" \
+docker compose run --rm --no-deps --entrypoint sh "${PROJECT_NAME}" -c "node script/run-sql.cjs script/verify-prd15-pre-push.sql" \
     || error "Pre-push gate failed: PRD-15 data migrations did not take effect. NOT running push (would risk data loss). See message above."
 ok "Schema gate passed"
 
 info "Applying DB schema (drizzle-kit push)..."
-docker compose run --rm --no-deps --entrypoint sh app -c "npx drizzle-kit push --force"
+docker compose run --rm --no-deps --entrypoint sh "${PROJECT_NAME}" -c "npx drizzle-kit push --force"
 ok "DB schema up to date"
 
 # ---------------------------------------------------------------------------
