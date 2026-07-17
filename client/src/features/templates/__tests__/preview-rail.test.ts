@@ -19,7 +19,7 @@ function spec(route: string, id: string = route, label?: string): ScreenSpec {
     route,
     label,
     layoutKey: "x",
-    requiredSlots: [],
+    expectedSlots: [],
     input: { context: {}, slots: {}, content: {} },
   } as unknown as ScreenSpec;
 }
@@ -44,6 +44,30 @@ describe("classify — route → (section, type) grouping", () => {
     expect(section.label).toBe("Старт");
     expect(type.key).toBe("start");
     expect(type.label).toBe("Старт");
+  });
+
+  // Regression: PRD-19 nodes had no TYPE_LABELS entry, so the rail fell back to the
+  // raw route key and showed the author `review` / `section-results` in English.
+  it("PRD-19 section nodes are labelled in Russian, not by their route key", () => {
+    const review = single("review", "review", "Обзор раздела");
+    expect(review.section.key).toBe("system");
+    expect(review.type.label).toBe("Обзор раздела");
+
+    const sectionResults = single("section-results", "section-results", "Итоги раздела");
+    expect(sectionResults.section.key).toBe("system");
+    expect(sectionResults.type.label).toBe("Итоги раздела");
+  });
+
+  // Same defect for the gallery group («certification» previews two slides).
+  it("gallery slides group under a Russian label", () => {
+    const rail = buildRail([
+      spec("content.gallery.1", "gallery-1", "Галерея: список"),
+      spec("content.gallery.2", "gallery-2", "Галерея: текст"),
+    ]);
+    const type = rail[0].types[0];
+    expect(type.key).toBe("content.gallery");
+    expect(type.label).toBe("Галерея");
+    expect(type.variants.map((v) => v.id)).toEqual(["gallery-1", "gallery-2"]);
   });
 
   it("content.intro → intro section", () => {

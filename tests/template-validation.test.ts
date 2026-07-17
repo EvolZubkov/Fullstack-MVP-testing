@@ -102,12 +102,18 @@ describe("validateTemplatePackage — blocking errors (§4.1)", () => {
     expect(codes(r)).toContain("ID_MISMATCH");
   });
 
-  it("rejects a missing required layout", () => {
+  // A missing layout does NOT block (spec §17.1, PRD-1 §4.3.2, PRD-3 NFR-06): the
+  // screen renders from the standard template. Covered as a warning below.
+  it("does not reject a missing layout — it warns and falls back", () => {
     const r = validateTemplatePackage(
       validPackage({ manifest: { layouts: { shell: "shell.html", question: "layouts/question.html", content: "layouts/content.html" } } }),
       { mode: "create" },
     );
-    expect(codes(r)).toContain("REQUIRED_FIELD_MISSING");
+    expect(codes(r)).not.toContain("REQUIRED_FIELD_MISSING");
+    expect(r.ok).toBe(true);
+    const w = r.warnings.filter((i) => i.code === "OPTIONAL_LAYOUT_MISSING");
+    expect(w.map((i) => i.ref)).toContain("layouts.results");
+    expect(w.map((i) => i.message).join(" ")).toContain("стандартного шаблона");
   });
 
   it("rejects a referenced file that is absent", () => {
@@ -141,20 +147,28 @@ describe("validateTemplatePackage — blocking errors (§4.1)", () => {
     expect(codes(r)).toContain("EXTERNAL_URL");
   });
 
-  it("rejects a shell without data-slot=\"page\"", () => {
+  // Slot contracts are warnings, not blockers: the renderer skips an absent slot
+  // rather than throwing, and the hosts render such a screen from the standard
+  // template (spec §17.2, PRD-3 §4.2).
+  it("warns — does not reject — a shell without data-slot=\"page\"", () => {
     const r = validateTemplatePackage(
       validPackage({ files: { "shell.html": "<main></main>" } }),
       { mode: "create" },
     );
-    expect(codes(r)).toContain("SHELL_CONTRACT");
+    expect(codes(r)).not.toContain("SHELL_CONTRACT");
+    expect(r.ok).toBe(true);
+    expect(r.warnings.map((i) => i.code)).toContain("SHELL_CONTRACT");
   });
 
-  it("rejects a question layout missing a required slot", () => {
+  it("warns — does not reject — a question layout missing a slot", () => {
     const r = validateTemplatePackage(
       validPackage({ files: { "layouts/question.html": '<div data-slot="question-text"></div>' } }),
       { mode: "create" },
     );
-    expect(codes(r)).toContain("QUESTION_CONTRACT");
+    expect(codes(r)).not.toContain("QUESTION_CONTRACT");
+    expect(r.ok).toBe(true);
+    const w = r.warnings.filter((i) => i.code === "QUESTION_CONTRACT");
+    expect(w.map((i) => i.message).join(" ")).toContain("question-interaction");
   });
 
   it("rejects a layout whose mustache does not compile (empty {{}})", () => {
