@@ -146,48 +146,66 @@ app.get("/play/:token/*splat", (req, res) => {
 // object_id is fixed for the local demo (real WebTutor assigns it on upload);
 // the player injects it into the launch URL so the gate's resolveObjectId picks it up.
 const MOCK_OBJECT_ID = "1234567890";
-let webtutorMock = { lastDate: null };
+// Markers the gate scrapes from the portal chrome («/»): a 32-hex SECID and a
+// cur_person_id. On the live RT portal these live in the page; here they are injected
+// into the player HTML so resolveSecid / resolvePersonId succeed locally.
+const MOCK_SECID = "ABCDEF0123456789ABCDEF0123456789";
+const MOCK_PERSON_ID = "1234567890";
+// The mock models ONE learning record. `state` lets a local run exercise the
+// "failed but finished" case (state «Не пройден») — the very case the course card
+// could not express — so the collection-source gate is verifiable without a live
+// portal. Empty lastDate => no record => no prior attempt => allowed.
+let webtutorMock = { lastDate: null, state: "Не пройден" };
 
 app.get("/api/mock-webtutor", (_req, res) => res.json({ mock: webtutorMock }));
 
 app.post("/api/mock-webtutor", express.json(), (req, res) => {
   const b = req.body || {};
-  webtutorMock = { lastDate: typeof b.lastDate === "string" && b.lastDate ? b.lastDate : null };
+  webtutorMock = {
+    lastDate: typeof b.lastDate === "string" && b.lastDate ? b.lastDate : null,
+    state: typeof b.state === "string" && b.state ? b.state : "Не пройден",
+    // `progress` kept for the mock panel input; the collection filter ignores it.
+    progress: typeof b.progress === "string" && b.progress ? b.progress : "0 из 100 баллов",
+  };
   res.json({ ok: true, mock: webtutorMock });
 });
 
-// Mock the WebTutor course card — the gate scrapes a 32-hex SECID from it.
-app.get("/view_doc.html", (_req, res) => {
-  res.type("html").send(
-    '<!doctype html><html><head><meta charset="utf-8"></head><body>' +
-    '<div data-secid="ABCDEF0123456789ABCDEF0123456789">course card</div>' +
-    '</body></html>',
-  );
-});
-
-// Mock ClientBridge get_metadata — returns the course-card XAML carrying the
-// «Курс был пройден ДД.ММ.ГГГГ» block when a last-completion date is set.
-app.post("/services/ClientBridgeService", express.text({ type: () => true }), (_req, res) => {
-  let passedBlock = "";
+// Mock WebTutor's ExtJS json collection endpoint (POST) — the gate reads the learner's
+// learning records here (all attempts, any outcome) and picks the latest FINISHED one
+// by the filter. Mirrors the live shape {success,total,results:[…]}: the record's
+// `name` echoes sSearchWord (the course title) so the nameField match selects it.
+function serveCollection(req, res) {
+  const body = typeof req.body === "string" ? req.body : "";
+  const params = decodeURIComponent((body.match(/(?:^|&)parameters=([^&]*)/) || [])[1] || "");
+  const search = (params.match(/sSearchWord=([^;]*)/) || [])[1] || "Демо-курс";
+  const results = [];
   if (webtutorMock.lastDate) {
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(webtutorMock.lastDate);
-    const dd = m ? `${m[3]}.${m[2]}.${m[1]}` : webtutorMock.lastDate;
-    passedBlock =
-      '&lt;Label Class="XAML-block-best_learn_step_success"&gt;Курс был пройден&lt;/Label&gt;' +
-      '&lt;Button Class="XAML-block-best_learn_step"&gt;' + dd + " &amp;rarr;&lt;/Button&gt;";
+    const ddmmyyyy = m ? `${m[3]}.${m[2]}.${m[1]}` : webtutorMock.lastDate;
+    results.push({
+      id: "9000000000000000001",
+      object_id: "9000000000000000001",
+      name: search,
+      name_catalog: "course",
+      state: webtutorMock.state,
+      progress: webtutorMock.progress || "0 из 100 баллов",
+      start_usage_date: "01.01.2026",
+      last_usage_date: ddmmyyyy,
+    });
   }
-  const xaml = "&lt;SPXMLScreen&gt;" + passedBlock + "&lt;/SPXMLScreen&gt;";
-  res.type("text/xml").send(
-    '<?xml version="1.0" encoding="utf-8"?>' +
-    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>' +
-    '<get_metadataResponse xmlns="http://www.datex-soft.com/"><result>' + xaml + "</result>" +
-    "<error>0</error></get_metadataResponse></soap:Body></soap:Envelope>",
-  );
-});
+  res.json({ success: true, messageText: "", total: results.length, results });
+}
+app.post("/pp/Ext5/extjs_json_collection_data.html", express.text({ type: () => true }), serveCollection);
+app.get("/pp/Ext5/extjs_json_collection_data.html", (req, res) => serveCollection({ body: "" }, res));
 
 app.get("/", (_req, res) => {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.send(PLAYER_HTML);
+  // Inject the scrape markers the gate reads (secid + cur_person_id).
+  const marked = PLAYER_HTML.replace(
+    "</head>",
+    `<!-- secid=${MOCK_SECID} cur_person_id=${MOCK_PERSON_ID} --></head>`,
+  );
+  res.send(marked);
 });
 
 app.listen(PORT, () => {

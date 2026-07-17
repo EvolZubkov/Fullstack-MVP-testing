@@ -43,25 +43,55 @@ export const ELIGIBILITY_PLUGINS: EligibilityPluginEntry[] = [
     bestEffort: false,
     configs: [
       {
-        id: "webtutor_clientbridge_rt",
-        name: "Ростелеком · ClientBridge (карточка курса)",
+        id: "webtutor_catalog_default",
+        name: "Ростелеком · каталог обучения (записи попыток)",
         version: "1.0.0",
         isActive: true,
-        // Confirmed against the live RT portal (university.rt.ru): the completion
-        // date is served by the ClientBridge `get_metadata` SOAP of the course
-        // card. SECID is scraped from the course page; object_id from the launch
-        // context. form_url / parent_template_id are portal-specific (admin-tuned).
+        // Reads the learner's LEARNING RECORDS from WebTutor's ExtJS JSON collection
+        // endpoint (same-origin, learner session). This — not the course card — is the
+        // source that satisfies the requirement "cooldown fires after ANY completion,
+        // passed OR failed": the card only carries a date for a PASSED course, so it
+        // can never gate a failed attempt. The collection carries state/progress/
+        // last_usage_date for EVERY attempt.
+        //
+        // The `attemptFilter` counts a record as a completed attempt by PROGRESS
+        // (100%), regardless of pass/fail state, excluding only not-started records —
+        // so a failed-but-finished attempt starts the cooldown too. Exact WebTutor
+        // state/progress field names + values are portal-specific (admin-tuned,
+        // NFR-03) and MUST be confirmed against the live catalog response before
+        // rollout; the gate logs the raw records + applied filter for that.
         config: {
-          source: "client_bridge_metadata",
-          endpoint: "/services/ClientBridgeService",
-          soapAction: "http://www.datex-soft.com/get_metadata",
-          formUrl: "6691716539494374357",
-          parentTemplateId: "6691717076983772556",
-          coursePageUrlTemplate: "/view_doc.html?mode=course&object_id={{oid}}",
-          secidPattern: "[A-F0-9]{32}",
-          objectIdPatterns: ["object_id=(\\d{6,})", "_wt/course/(\\d{6,})", "cplayer2/(\\d{6,})"],
-          completionMarker: "best_learn_step_success",
-          dateFormat: "dd.MM.yyyy",
+          source: "extjs_collection_records",
+          // Confirmed against the live RT portal («Мои обучения» grid). POST form:
+          // secid + collection_code + parameters + referer_url + page/start, header
+          // X-Requested-With. Records under `results` (last_usage_date DESC).
+          collectionEndpoint: "/pp/Ext5/extjs_json_collection_data.html",
+          collectionCode: "rostelecom_catalog_data_grid",
+          // `parameters` is one `;`-joined string. cur_person_id is left EMPTY: the
+          // endpoint scopes to the learner by the SESSION COOKIE (confirmed live — the
+          // request returns the caller's 384 records with cur_person_id= empty), so no
+          // fragile person_id scraping is needed. {{personId}} stays for deployments
+          // that DO require it (set personIdSource); with none it resolves to "".
+          parametersTemplate:
+            "cur_person_id={{personId}};sSearchWord={{test.title}};sRoles=all;iCount=;sCatalogName=learning",
+          // Only the SECID (session token) is scraped from the portal chrome (32-hex on
+          // «/»); it is not in SCORM pre-Initialize. No personIdSource — session-scoped.
+          secidSource: { endpoint: "/", pattern: "[A-F0-9]{32}" },
+          limit: 500,
+          attemptFilter: {
+            // A record is a FINISHED attempt (any outcome) when state is «Пройден» OR
+            // «Не пройден» — the RT grid uses these for pass/fail; BOTH start the
+            // cooldown. Completion is decided by `state`, NOT progress («X из Y баллов»
+            // is not a percent), so no progressCompletePattern.
+            stateField: "state",
+            stateIn: ["Пройден", "Не пройден"],
+            dateField: "last_usage_date",
+            dateFormat: "dd.MM.yyyy",
+            // Assignments of one course share `name`; match all of them (one course).
+            nameField: "name",
+            // «31.12.9999» = open-ended assignment never actually taken -> not an attempt.
+            excludeDateValues: ["31.12.9999", "9999"],
+          },
         },
       },
     ],

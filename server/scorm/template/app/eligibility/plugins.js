@@ -16,18 +16,29 @@ var EligibilityPlugins = (function () {
     return null;
   }
 
-  function selectLastAttemptDate(records, filter) {
+  function normalizeName(s) {
+    return String(s || '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '').toLowerCase();
+  }
+
+  function selectLastAttemptDate(records, filter, courseName) {
     var stateField = filter.stateField || 'state';
     var progressField = filter.progressField || 'progress';
     var fmt = filter.dateFormat || 'dd.MM.yyyy';
     var excl = filter.excludeStateIn || [];
     var progRe = filter.progressCompletePattern ? new RegExp(filter.progressCompletePattern) : null;
+    var wantName = (filter.nameField && courseName) ? normalizeName(courseName) : null;
+    var sentinels = filter.excludeDateValues || [];
     var bestEpoch = null;
     var bestStr = null;
     var list = records || [];
     for (var i = 0; i < list.length; i++) {
       var rec = list[i];
       if (!rec) continue;
+      // Same-course match across assignments.
+      if (wantName) {
+        var nm = normalizeName(rec[filter.nameField] != null ? String(rec[filter.nameField]) : '');
+        if (nm !== wantName) continue;
+      }
       var st = rec[stateField] != null ? String(rec[stateField]) : '';
       if (filter.stateIn && filter.stateIn.indexOf(st) === -1) continue;
       if (excl.indexOf(st) !== -1) continue;
@@ -36,6 +47,10 @@ var EligibilityPlugins = (function () {
         if (!progRe.test(prog)) continue;
       }
       var raw = rec[filter.dateField] != null ? String(rec[filter.dateField]) : '';
+      // Skip open-ended / sentinel dates (e.g. «31.12.9999» = assigned, never taken).
+      var skip = false;
+      for (var s = 0; s < sentinels.length; s++) { if (raw.indexOf(sentinels[s]) !== -1) { skip = true; break; } }
+      if (skip) continue;
       var iso = parseFlexibleDate(raw, fmt);
       if (!iso) continue;
       var epoch = EligibilityEngine.parseIsoDate(iso);
@@ -63,8 +78,8 @@ var EligibilityPlugins = (function () {
     };
   }
 
-  function webtutorCooldownDecide(records, filter, context) {
-    return cooldownResult(selectLastAttemptDate(records, filter), context, 'webtutor_cooldown');
+  function webtutorCooldownDecide(records, filter, context, courseName) {
+    return cooldownResult(selectLastAttemptDate(records, filter, courseName), context, 'webtutor_cooldown');
   }
 
   function suspendDataCooldownDecide(lastCompletedDate, context) {

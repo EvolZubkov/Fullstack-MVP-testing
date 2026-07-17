@@ -183,6 +183,14 @@
     if (typeof RetakeGate !== "undefined" && RetakeGate.isGated(TEST_DATA)) {
       RetakeGate.run(TEST_DATA, runCourse);
     } else {
+      // Say WHY the gate is skipped. A gated package that silently boots straight
+      // into the course is the hard-to-read failure: it looks identical to a test
+      // with no policy, which is exactly what an export from a snapshot published
+      // BEFORE the policy was configured produces (the package then carries no
+      // retakePolicy at all).
+      console.log('[PRD-6 gate] not gated — retakePolicy:',
+        (TEST_DATA.retakePolicy ? 'present' : 'ABSENT from package'),
+        '| retakePlugin:', (TEST_DATA.retakePlugin ? TEST_DATA.retakePlugin.runtimeEntry : 'ABSENT from package'));
       runCourse();
     }
   }
