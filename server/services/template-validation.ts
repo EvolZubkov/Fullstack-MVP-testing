@@ -5,8 +5,8 @@
  * operates on an already-extracted entry map and never executes template code
  * (NFR-02).
  *
- * The slot/layout contract enforced here is the one the REAL renderer
- * (`shared/template/render-screen.ts` + `server/scorm/template/app/`) requires,
+ * The slot/layout contract checked here is the one the REAL renderer
+ * (`shared/template/render-screen.ts` + `server/scorm/template/app/`) uses,
  * NOT the aspirational button markers in spec-template-platform.md §7. The
  * engine mounts page content into `data-slot="page"` and fills question
  * prompt/input into `data-slot="question-text"`/`"question-interaction"`;
@@ -14,6 +14,12 @@
  * presence is not a structural requirement. Validating against the spec's
  * `data-nav`/`data-action` markers would reject the shipping `default`
  * template, which does not declare them.
+ *
+ * BLOCKING is reserved for package integrity and security (§17.1): a missing or
+ * broken manifest, an unsupported API version, a missing referenced file, an
+ * external URL/CDN, an oversized ZIP, invalid DSL. A missing LAYOUT or SLOT does
+ * NOT block (PRD-1 §4.3.2, PRD-3 NFR-06) — that screen renders from the standard
+ * template, so it is reported as a warning naming the consequence.
  */
 import { templateManifestSchema, isSupportedTemplateApiVersion } from "@shared/schema";
 // The path-only DSL is a pure `string -> string` compiler with no DOM/Node deps,
@@ -246,11 +252,18 @@ export function validateTemplatePackage(
     }
   }
 
-  // ── required manifest fields (spec-template-platform §5.2) ────────────────
+  // ── declared layouts (spec-template-platform §17.1) ───────────────────────
+  // A layout the template omits does NOT block: the screen falls back to the
+  // standard template with a warning (PRD-1 §4.3.2, PRD-3 NFR-06). Only integrity
+  // and security block — there is nothing to substitute for those.
   const layouts = (manifest.layouts as Record<string, unknown> | undefined) ?? {};
   for (const key of ["shell", "question", "content", "results"]) {
     if (!asString(layouts[key])) {
-      blocking.push({ code: "REQUIRED_FIELD_MISSING", message: `Отсутствует обязательный layout "${key}"`, ref: `layouts.${key}` });
+      warnings.push({
+        code: "OPTIONAL_LAYOUT_MISSING",
+        message: `Не объявлен layout "${key}" — экран будет отрисован из стандартного шаблона`,
+        ref: `layouts.${key}`,
+      });
     }
   }
   const assets = manifest.assets as Record<string, unknown> | undefined;
@@ -308,13 +321,16 @@ export function validateTemplatePackage(
   }
 
   // ── shell / question layout contract (real engine contract) ───────────────
+  // Warnings, not blockers: the renderer skips an absent slot rather than throwing
+  // (`render-screen.ts` fillSlots), and the hosts render such a screen from the
+  // standard template (spec §17.2, PRD-3 §4.2).
   const shellPath = asString(layouts.shell);
   if (shellPath) {
     const shell = text(entries, shellPath);
     if (shell && !/data-slot\s*=\s*["']page["']/.test(shell)) {
-      blocking.push({
+      warnings.push({
         code: "SHELL_CONTRACT",
-        message: 'shell не содержит обязательный data-slot="page"',
+        message: 'shell не содержит data-slot="page" — оболочка будет взята из стандартного шаблона',
         ref: `layouts.shell (${shellPath})`,
       });
     }
@@ -325,9 +341,9 @@ export function validateTemplatePackage(
     if (q) {
       for (const slot of ["question-text", "question-interaction"]) {
         if (!new RegExp(`data-slot\\s*=\\s*["']${slot}["']`).test(q)) {
-          blocking.push({
+          warnings.push({
             code: "QUESTION_CONTRACT",
-            message: `question layout не содержит обязательный data-slot="${slot}"`,
+            message: `question layout не содержит data-slot="${slot}" — экран вопроса будет отрисован из стандартного шаблона`,
             ref: `layouts.question (${questionPath})`,
           });
         }
