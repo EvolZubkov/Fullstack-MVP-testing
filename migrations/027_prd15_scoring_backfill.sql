@@ -27,15 +27,28 @@
 
 BEGIN;
 
--- Guarded on the source columns existing so the file is idempotent AFTER T-40
--- (028) has dropped questions.points/scoring_json: the backfill SELECT reads
--- those columns, so an unguarded re-run would error with "column does not
--- exist". plpgsql only plans the branch when entered, so a post-drop re-run is
--- a clean no-op.
+-- Guarded PER COLUMN, not on `points` alone: `questions.points` and
+-- `questions.scoring_json` can be dropped INDEPENDENTLY (drizzle-kit push --force
+-- syncs to shared/schema.ts, which no longer declares either — a past push can
+-- remove one before this chain runs and drop the other). The backfill SELECT
+-- reads BOTH, so a guard on `points` alone lets the branch enter on a
+-- points-present / scoring_json-dropped DB and then errors "column scoring_json
+-- does not exist". plpgsql plans each branch only when entered, so a branch that
+-- names a dropped column is never planned when its guard is false.
 DO $$
+DECLARE
+  has_points  boolean;
+  has_scoring boolean;
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.columns
-             WHERE table_name = 'questions' AND column_name = 'points') THEN
+  SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'questions' AND column_name = 'points')
+    INTO has_points;
+  SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'questions' AND column_name = 'scoring_json')
+    INTO has_scoring;
+
+  IF has_points AND has_scoring THEN
+    -- Normal pre-drop state: one override row carrying both values.
     INSERT INTO "test_question_scoring"
       ("test_id", "question_id", "points", "scoring_json", "pinned_content_hash")
     SELECT DISTINCT
@@ -47,6 +60,32 @@ BEGIN
     FROM "test_sections" ts
     JOIN "questions" q ON q."topic_id" = ts."topic_id"
     WHERE q."points" NOT IN (0, 1) OR q."scoring_json" IS NOT NULL
+    ON CONFLICT ("test_id", "question_id") DO NOTHING;
+  ELSIF has_points THEN
+    -- scoring_json already dropped: materialize the non-default points only.
+    INSERT INTO "test_question_scoring"
+      ("test_id", "question_id", "points", "pinned_content_hash")
+    SELECT DISTINCT
+      ts."test_id",
+      q."id",
+      q."points",
+      q."content_hash"
+    FROM "test_sections" ts
+    JOIN "questions" q ON q."topic_id" = ts."topic_id"
+    WHERE q."points" NOT IN (0, 1)
+    ON CONFLICT ("test_id", "question_id") DO NOTHING;
+  ELSIF has_scoring THEN
+    -- points already dropped: materialize the graded config only.
+    INSERT INTO "test_question_scoring"
+      ("test_id", "question_id", "scoring_json", "pinned_content_hash")
+    SELECT DISTINCT
+      ts."test_id",
+      q."id",
+      q."scoring_json",
+      q."content_hash"
+    FROM "test_sections" ts
+    JOIN "questions" q ON q."topic_id" = ts."topic_id"
+    WHERE q."scoring_json" IS NOT NULL
     ON CONFLICT ("test_id", "question_id") DO NOTHING;
   END IF;
 END $$;
