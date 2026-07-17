@@ -61,6 +61,7 @@ const TYPE_LABELS: Record<string, string> = {
   "content.info": "Учебный материал",
   "content.summary": "Итог",
   "content.router": "Маршрутизатор",
+  "content.gallery": "Галерея",
   content: "Контент",
   "question.single": "Один вариант",
   "question.multiple": "Несколько вариантов",
@@ -69,6 +70,10 @@ const TYPE_LABELS: Record<string, string> = {
   question: "Вопрос",
   results: "Результаты",
   "results.adaptive": "Адаптивные результаты",
+  // PRD-19 section-boundary nodes. Without these the rail falls back to the raw
+  // route key and shows the author `review` / `section-results` in English.
+  review: "Обзор раздела",
+  "section-results": "Итоги раздела",
   "system.blocked": "Доступ ограничен",
   "system.transition": "Переход",
 };
@@ -95,6 +100,11 @@ function classify(route: string): { section: string; typeKey: string } {
   }
   if (route === "results" || route.startsWith("results")) {
     return { section: "results", typeKey: route === "results.adaptive" ? "results.adaptive" : "results" };
+  }
+  // PRD-19 «Обзор» / «Итоги раздела»: Core-generated section-boundary screens with
+  // no author content — grouped with the other system surfaces.
+  if (route === "review" || route === "section-results") {
+    return { section: "system", typeKey: route };
   }
   if (route.startsWith("system.")) {
     return { section: "system", typeKey: route };
