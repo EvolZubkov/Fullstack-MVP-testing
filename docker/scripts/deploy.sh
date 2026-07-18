@@ -166,42 +166,21 @@ ok "docker-compose.yml generated at ${APP_DIR}/docker-compose.yml"
 cd "${APP_DIR}"
 docker compose down --remove-orphans 2>/dev/null || true
 
-# Data migrations that `drizzle-kit push` cannot perform must run FIRST, while
-# legacy columns/tables still exist. push syncs SCHEMA only — it never runs these
-# backfills, and would DROP source tables/columns before the data is migrated:
-#   - PRD-13 (016): users.role -> user_roles, before push drops users.role;
-#   - PRD-15 TD-02 (023 -> 024): topic_courses/topic_events -> topics.feedback_json,
-#     before the tables are dropped;
-#   - PRD-15 D (026): create test_question_scoring BEFORE push, so push does not
-#     prompt "create vs rename" / mis-map it onto a dropped table;
-#   - PRD-15 D (027 -> 028): questions.points/scoring_json -> test_question_scoring
-#     overrides, before the columns are dropped.
-# All are guarded/idempotent (IF [NOT] EXISTS, ON CONFLICT DO NOTHING, backfill
-# only by NULL/absence), so they are safe no-ops on a DB already migrated. Run in
-# ORDER (backfill strictly before its drop) in one invocation; any failure aborts
-# the deploy before push, so a drop never runs after a failed backfill.
-info "Applying pre-push data migrations (push cannot run these)..."
-docker compose run --rm --no-deps --entrypoint sh "${PROJECT_NAME}" -c "node script/run-sql.cjs \
-  migrations/016_prd13_rbac_roles.sql \
-  migrations/023_td02_topic_feedback_json.sql \
-  migrations/024_td02_drop_topic_courses_events.sql \
-  migrations/026_prd15_test_question_scoring.sql \
-  migrations/027_prd15_scoring_backfill.sql \
-  migrations/028_prd15_drop_question_scoring_columns.sql"
-ok "Data migrations applied"
-
-# Safety gate: assert the destructive/ambiguous PRD-15 migrations took effect
-# BEFORE push runs. If the chain silently did not apply, push would prompt
-# "create vs rename test_question_scoring" and --force would DROP source
-# tables/columns without backfill. This turns that into a loud failure.
-info "Verifying schema is migrated before push (PRD-15 gate)..."
-docker compose run --rm --no-deps --entrypoint sh "${PROJECT_NAME}" -c "node script/run-sql.cjs script/verify-prd15-pre-push.sql" \
-    || error "Pre-push gate failed: PRD-15 data migrations did not take effect. NOT running push (would risk data loss). See message above."
-ok "Schema gate passed"
-
-info "Applying DB schema (drizzle-kit push)..."
-docker compose run --rm --no-deps --entrypoint sh "${PROJECT_NAME}" -c "npx drizzle-kit push --force"
-ok "DB schema up to date"
+# Apply pending schema migrations with `drizzle-kit migrate`. Migrations are
+# versioned SQL under drizzle/ (created by `drizzle-kit generate`), applied in
+# order, each in its own transaction, tracked in drizzle.__drizzle_migrations.
+# Unlike the former `push --force`, migrate NEVER diffs the live DB and never
+# silently drops/recreates/truncates on an ambiguous or drifted diff — it runs
+# exactly the reviewed SQL. That is the whole point of this change: a deploy can
+# no longer wipe rows behind a schema change (see git history / drizzle/README.md).
+#
+# A pre-existing database must be BASELINED ONCE before its first migrate-deploy
+# (mark 0000_baseline as already applied) — otherwise migrate would try to CREATE
+# tables that already exist. See drizzle/README.md and drizzle/baseline-existing-db.sql.
+# A fresh (empty) database instead gets the full baseline schema from 0000.
+info "Applying DB migrations (drizzle-kit migrate)..."
+docker compose run --rm --no-deps --entrypoint sh "${PROJECT_NAME}" -c "npx drizzle-kit migrate"
+ok "DB migrations applied"
 
 # ---------------------------------------------------------------------------
 # 7. Start service via docker compose
