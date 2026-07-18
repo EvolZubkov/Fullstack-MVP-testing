@@ -129,7 +129,11 @@ echo [2/3] OK
 :: interactive prompts (unique-constraint truncate confirmation, which --force does
 :: NOT suppress - drizzle bug #4531) render live and can be answered during deploy.
 echo [3/3] Deploying on %DEPLOY_TARGET%...
-ssh -tt "%DEPLOY_TARGET%" "cd /tmp && rm -rf %REMOTE_DEPLOY_DIR% && mkdir -p %REMOTE_DEPLOY_DIR% && tar -xf /tmp/%REMOTE_PACKAGE% -C %REMOTE_DEPLOY_DIR% && bash %REMOTE_DEPLOY_DIR%/run-deploy.sh %PROJECT_NAME% %EXPOSE_PORT% %REMOTE_DEPLOY_DIR%/%IMAGE_FILE%"
+:: `sudo rm` because a prior manual run as root can leave a root-owned
+:: %REMOTE_DEPLOY_DIR%; /tmp is sticky, so a non-root re-run cannot remove it
+:: ("Operation not permitted"). The deploy is privileged anyway (run-deploy.sh
+:: -> sudo), so cleaning the staging dir with sudo is consistent.
+ssh -tt "%DEPLOY_TARGET%" "cd /tmp && sudo rm -rf %REMOTE_DEPLOY_DIR% && mkdir -p %REMOTE_DEPLOY_DIR% && tar -xf /tmp/%REMOTE_PACKAGE% -C %REMOTE_DEPLOY_DIR% && bash %REMOTE_DEPLOY_DIR%/run-deploy.sh %PROJECT_NAME% %EXPOSE_PORT% %REMOTE_DEPLOY_DIR%/%IMAGE_FILE%"
 if errorlevel 1 ( echo ERROR: remote deploy failed & exit /b 1 )
 echo [3/3] OK
 
