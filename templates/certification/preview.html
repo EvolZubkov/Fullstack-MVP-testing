@@ -2266,75 +2266,37 @@ a.results-rec-item { color: hsl(var(--primary)); }
  */
 
 /**
- * Finds the content template definition for a given page.
+ * Content-page assembly is SHARED with the web host — the rules live in
+ * `shared/template/content-page` and reach this runtime through the `TBTemplate`
+ * bundle. These wrappers keep the historical global names (renderSectionIntro,
+ * renderGalleryPage and the offline preview generator call them) while holding no
+ * logic of their own: a second copy here is exactly what let the two hosts drift
+ * until the web could not render content pages at all (PRD-12 FR-6).
  * @param {object} page  A content page from TEST_DATA.contentPages
  * @param {Array}  contentTemplates  From the design template manifest
  * @returns {object|null}
  */
 function findContentTemplate(page, contentTemplates) {
-  if (!page || !contentTemplates) return null;
-  var key = page.templateKey;
-  if (!key) return null;
-  for (var i = 0; i < contentTemplates.length; i++) {
-    if (contentTemplates[i].key === key) return contentTemplates[i];
-  }
-  return null;
+  return TBTemplate.findContentTemplate(page, contentTemplates);
 }
 
 /**
- * Builds a fallback HTML structure for a content page when no content
- * template definition is available.
+ * Fallback markup for a page with no usable content template.
  * @param {object} page
  * @returns {string}
  */
 function buildFallbackContentHtml(page) {
-  var typeLabel = page.type || "content";
-  var values = getPageValues(page);
-  if (page.mode === "html" && values.__html) {
-    return '<div class="content-page content-page--html">' + String(values.__html) + "</div>";
-  }
-  var title = values.title || values.heading || typeLabel;
-  var body = values.body || values.text || values.subtitle || "";
-  return (
-    '<div class="content-page content-page--fallback" data-page-type="' +
-    escapeHtml(typeLabel) +
-    '">' +
-    '<div class="card">' +
-    '<h1>' + escapeHtml(String(title)) + '</h1>' +
-    (body ? '<div style="color:hsl(var(--muted-foreground));">' + String(body) + '</div>' : '') +
-    '</div>' +
-    "</div>"
-  );
+  return TBTemplate.buildFallbackContentHtml(page);
 }
 
 /**
- * Builds the HTML skeleton for a content page based on its content template
- * placeholders. Each placeholder becomes a [data-placeholder] div that will
- * be filled by fillPlaceholders().
+ * Builds the [data-placeholder] skeleton for a page from its content template.
  * @param {object} page
  * @param {object} contentTemplate
  * @returns {string}
  */
 function buildContentPageSkeleton(page, contentTemplate) {
-  if (!contentTemplate || !contentTemplate.placeholders) {
-    return buildFallbackContentHtml(page);
-  }
-  var html =
-    '<div class="content-page content-page--' +
-    escapeHtml(page.type || "info") +
-    '" data-template-key="' +
-    escapeHtml(contentTemplate.key) +
-    '">';
-  contentTemplate.placeholders.forEach(function (phDef) {
-    html +=
-      '<div class="content-placeholder content-placeholder--' +
-      escapeHtml(phDef.key) +
-      '" data-placeholder="' +
-      escapeHtml(phDef.key) +
-      '"></div>';
-  });
-  html += "</div>";
-  return html;
+  return TBTemplate.buildContentPageSkeleton(page, contentTemplate);
 }
 
 /**
@@ -2368,15 +2330,11 @@ function fillResultFieldPlaceholder(el, phDef, value, contentTemplate) {
 }
 
 function getPageValues(page) {
-  if (!page) return {};
-  if (page.valuesJson && page.valuesJson.values) return page.valuesJson.values;
-  return page.values || {};
+  return TBTemplate.getPageValues(page);
 }
 
 function getPagePlaceholderStyles(page) {
-  if (!page) return {};
-  if (page.valuesJson && page.valuesJson.placeholderStyles) return page.valuesJson.placeholderStyles;
-  return page.placeholderStyles || {};
+  return TBTemplate.getPagePlaceholderStyles(page);
 }
 
 /**
@@ -2643,7 +2601,14 @@ function renderContentPage(page, contentTemplates) {
   // whichever page that key happens to point at. Falls back to `content`, then to
   // mounting the skeleton directly.
   var layouts = (typeof state !== "undefined" && state) ? state.templateLayouts : null;
-  var layout = (layouts && contentTemplate && contentTemplate.layoutFile && layouts[contentTemplate.layoutFile])
+  // A variant's own layout is only usable when THIS path can supply the context it
+  // binds against. `intro` variants render section-intro, which needs `sectionIntro.*`
+  // — built by renderSectionIntro from the page's section. When that declined (an
+  // `intro` page with no matching section, e.g. a test-scope one), rendering its
+  // layout here produced a blank card: every binding empty and the continue button
+  // unwired. The generic wrapper at least shows the author's content and navigates.
+  var declinedOwnLayout = page && page.kind === "intro";
+  var layout = (layouts && !declinedOwnLayout && contentTemplate && contentTemplate.layoutFile && layouts[contentTemplate.layoutFile])
     || (layouts && layouts["content"]);
   var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
   var host;
@@ -2735,133 +2700,56 @@ function renderContentPage(page, contentTemplates) {
     return out;
   }
 
-  /** True when `p` is an AUTHOR content page that may flow in a sequence — i.e.
-   *  NOT a system design-binding (`questions`/`start`/`results`/`router`) nor a
-   *  PRD-19 section node (`review`/`section-results`), all of which render via
-   *  their own phases. Mirrors contentFlow.contentPagesFor so the router topic
-   *  chunks never show a blank «Далее» page from the «Вопросы» binding row. */
-  function isFlowContentPage(p) {
-    return p && p.kind !== "start" && p.kind !== "results" && p.kind !== "questions"
-      && p.kind !== "router" && p.kind !== "review" && p.kind !== "section-results";
-  }
-
-  /** Lists per-topic content pages at the given position, in sortOrder. */
-  function contentPagesForRouter(topicId, position) {
-    return (TEST_DATA.contentPages || [])
-      .filter(function (p) {
-        return isFlowContentPage(p) && p.topicId === topicId && p.position === position;
-      })
-      .sort(function (a, b) {
-        return (a.sortOrder || 0) - (b.sortOrder || 0);
-      });
-  }
-
   /**
    * Builds the pageSequence chunk for one topic: before_topic content →
    * questions for that topic → after_topic content. Reused by
    * {@link selectRouterTopic} every time the learner picks a topic.
+   *
+   * Delegates to the shared builder (`shared/flow/page-sequence`, exposed as
+   * `TBTemplate`) so a topic chunk here is assembled by exactly the same rules
+   * as the linear flow and the web host — including the filter that keeps system
+   * design-bindings (`questions`, `start`, `results`) and PRD-19 section nodes
+   * out of the sequence, which is what stops a blank «Далее» page appearing at
+   * the section start.
    */
   function buildTopicChunk(topicId) {
-    var seq = [];
-    contentPagesForRouter(topicId, "before_topic").forEach(function (page) {
-      seq.push({ kind: "content", page: page });
-    });
-    indicesForTopic(topicId).forEach(function (questionIndex) {
-      seq.push({ kind: "question", questionIndex: questionIndex });
-    });
-    contentPagesForRouter(topicId, "after_topic").forEach(function (page) {
-      seq.push({ kind: "content", page: page });
-    });
-    return seq;
+    return TBTemplate.buildTopicChunk(
+      TEST_DATA.contentPages,
+      topicId,
+      indicesForTopic(topicId),
+    );
   }
 
   /**
-   * Builds the post-router test-end sequence: test-scope «after» content,
-   * with the same summary-boundary semantics as the existing
-   * rebuildPageSequence logic (a `summary` page splits pre-results vs
-   * post-results pages).
+   * Builds the post-router test-end sequence: test-scope «after» content, split
+   * at the `summary` boundary (pages past it are deferred to
+   * state.postResultsPages and render after the results screen).
    */
   function buildPostRouterSequence() {
-    var seq = [];
-    var postResults = [];
-    var seenSummary = false;
-    (TEST_DATA.contentPages || [])
-      .filter(function (p) { return isFlowContentPage(p) && p.topicId === null && p.position === "after"; })
-      .sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); })
-      .forEach(function (page) {
-        if (page.type === "summary") { seenSummary = true; return; }
-        if (seenSummary) postResults.push(page);
-        else seq.push({ kind: "content", page: page });
-      });
-    state.postResultsPages = postResults;
-    return seq;
+    var after = TBTemplate.buildAfterZone(TEST_DATA.contentPages);
+    state.postResultsPages = after.postResultsPages;
+    return after.preResults;
   }
 
-  /**
-   * PRD-4 v1.1 §4.7: evaluates whether `section` is unlocked given the
-   * current routerTopicStates. Reads `flowPolicy.sectionUnlockRules`
-   * (per-section rule keyed by topicId). Default rule is `always`.
-   *
-   * Supported rule modes:
-   *   - { mode: "always" }                                   — unconditional
-   *   - { mode: "after_sections_completed", sectionIds: [] } — all listed
-   *     sections must be in 'completed' state (any achievedLevel/result)
-   *   - { mode: "after_sections_passed", sectionIds: [] }    — same, but
-   *     sectionResults[id].passed must be true (or null when the section
-   *     has no pass rule; null is treated as passed in this MVP)
-   */
+  /** The hub state the shared rules read (topic states + frozen results + policy). */
+  function hubState() {
+    return {
+      topicStates: state.routerTopicStates || {},
+      sectionResults: state.sectionResults || {},
+      unlockRules: (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.sectionUnlockRules) || {},
+      completionPolicy:
+        (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.routerCompletionPolicy) || null,
+    };
+  }
+
+  /** PRD-4 v1.1 §4.7 — delegated to shared/flow/router-hub (single source). */
   function isSectionUnlocked(section) {
-    var rules =
-      (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.sectionUnlockRules) || {};
-    var rule = rules[section.topicId];
-    if (!rule || !rule.mode || rule.mode === "always") return true;
-    if (rule.mode === "after_sections_completed") {
-      return (rule.sectionIds || []).every(function (id) {
-        return state.routerTopicStates[id] === "completed";
-      });
-    }
-    if (rule.mode === "after_sections_passed") {
-      return (rule.sectionIds || []).every(function (id) {
-        if (state.routerTopicStates[id] !== "completed") return false;
-        var result = state.sectionResults && state.sectionResults[id];
-        // null passed (no passRule) is treated as passed for navigation;
-        // strict pass mode would reject it — see PRD-4 §4.6.
-        return !result || result.passed !== false;
-      });
-    }
-    return true; // Unknown rule mode: fail-open (don't block the learner).
+    return TBTemplate.isSectionUnlocked(section, hubState());
   }
 
-  /**
-   * PRD-4 v1.1 §4.7: evaluates whether the router can show «Завершить».
-   * Reads `flowPolicy.routerCompletionPolicy` (default
-   * 'all_required_completed'). Optional sections never block completion.
-   */
+  /** PRD-4 v1.1 §4.7 — delegated to shared/flow/router-hub (single source). */
   function isRouterReadyToFinish() {
-    var policy =
-      (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.routerCompletionPolicy) ||
-      "all_required_completed";
-    var requiredSections = (TEST_DATA.sections || []).filter(function (s) {
-      return s.required !== false;
-    });
-    if (requiredSections.length === 0) {
-      // No required sections — learner can finish at any time.
-      return true;
-    }
-    return requiredSections.every(function (s) {
-      if (state.routerTopicStates[s.topicId] !== "completed") return false;
-      if (policy === "all_required_passed") {
-        var result = state.sectionResults && state.sectionResults[s.topicId];
-        // No-result safeguard: treat as not-passed under strict policy.
-        if (!result) return false;
-        // null `passed` (no passRule) → not strictly passed under the
-        // 'all_required_passed' policy; author must define passRules to
-        // use this policy.
-        return result.passed === true;
-      }
-      // all_required_completed: any completion is sufficient.
-      return true;
-    });
+    return TBTemplate.isRouterReadyToFinish(TEST_DATA.sections || [], hubState());
   }
 
   /**
@@ -2887,124 +2775,33 @@ function renderContentPage(page, contentTemplates) {
     // page-content slot — the SAME DOM the preview builds (buildRouterCards into
     // page-content) — so the run and the structure preview look identical.
     var host = app.querySelector('[data-slot="page-content"]') || app;
-    var existing = host.querySelector(".router-topic-cards");
-    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
-
-    var cards = document.createElement("div");
-    cards.className = "router-topic-cards";
-    cards.setAttribute("role", "list");
-    cards.setAttribute("aria-label", "Доступные темы");
-
-    (TEST_DATA.sections || []).forEach(function (section) {
-      var status = state.routerTopicStates[section.topicId] || "notStarted";
-      var unlocked = isSectionUnlocked(section);
-      var lockedClass = !unlocked && status !== "completed" ? " router-topic-card--locked" : "";
-      var card = document.createElement("button");
-      card.type = "button";
-      card.className =
-        "router-topic-card router-topic-card--" + status + lockedClass;
-      card.setAttribute("role", "listitem");
-      card.setAttribute("data-topic-id", section.topicId);
-      card.setAttribute("data-router-status", status);
-      if (!unlocked) card.setAttribute("data-router-locked", "true");
-      // Completed cards stay disabled to prevent re-entry; locked cards are
-      // disabled because their unlock-rule prerequisites aren't met yet.
-      card.disabled = status === "completed" || !unlocked;
-      var _meta = [];
-      if (section.drawCount) _meta.push(section.drawCount + " " + pluralQuestions(section.drawCount));
-      if (section.timeLimitMinutes) _meta.push(section.timeLimitMinutes + " мин");
-      var _metaHtml = _meta.length
-        ? '<span class="router-topic-card__meta">' + _meta.map(function (m) {
-            return '<span class="router-topic-card__chip">' + escapeHtml(m) + "</span>";
-          }).join("") + "</span>"
-        : "";
-      var _goHtml = (unlocked && status !== "completed")
-        ? '<span class="router-topic-card__go">начать</span>' : "";
-      var _imgUrl = section.image && typeof section.image === "object"
-        ? (section.image.url || "") : (section.image || "");
-      var _imgHtml = _imgUrl
-        ? '<span class="router-topic-card__img"><img src="' + escapeHtml(_imgUrl) + '" alt=""></span>'
-        : "";
-      card.innerHTML =
-        '<span class="router-topic-card__top">' +
-        '<span class="router-topic-card__name">' +
-        escapeHtml(section.topicName || section.topicId) +
-        (section.required === false
-          ? ' <span class="router-topic-card__optional">(необязательная)</span>'
-          : "") +
-        "</span>" +
-        _imgHtml +
-        "</span>" +
-        _metaHtml +
-        '<span class="router-topic-card__foot">' +
-        '<span class="router-topic-card__status">' +
-        escapeHtml(unlocked ? statusLabel(status) : "Недоступна") +
-        "</span>" +
-        _goHtml +
-        "</span>";
-      card.onclick = function () {
-        if (card.disabled) return;
-        selectRouterTopic(section.topicId);
-      };
-      cards.appendChild(card);
+    // Cards / progress / «Завершить» come from the SHARED builder — the same
+    // markup and the same open/locked rules the web host renders, so a section
+    // cannot be clickable in one runtime and dead in the other.
+    var prev = host.querySelector(".router-hub");
+    if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+    var hub = document.createElement("div");
+    hub.className = "router-hub";
+    hub.innerHTML = TBTemplate.buildRouterHubHtml(TEST_DATA.sections || [], hubState(), {
+      deadline: TEST_DATA.deadline || null,
     });
+    host.appendChild(hub);
 
-    // Top stats: deadline date/time (mirrors the original's top boxes). Additive —
-    // only rendered when the test carries a deadline; the default template omits it.
-    var prevStats = host.querySelector(".router-stats");
-    if (prevStats && prevStats.parentNode) prevStats.parentNode.removeChild(prevStats);
-    var deadline = TEST_DATA.deadline || {};
-    if (deadline.date || deadline.time) {
-      var stats = document.createElement("div");
-      stats.className = "router-stats";
-      var _sb = "";
-      if (deadline.date) _sb += '<div class="router-stat"><span class="router-stat__label">Дата завершения теста</span><span class="router-stat__value">' + escapeHtml(deadline.date) + "</span></div>";
-      if (deadline.time) _sb += '<div class="router-stat"><span class="router-stat__label">Время завершения теста</span><span class="router-stat__value">' + escapeHtml(deadline.time) + "</span></div>";
-      stats.innerHTML = _sb;
-      host.appendChild(stats);
-    }
+    // Delegate the builder's data-action contract onto this runtime's handlers.
+    Array.prototype.forEach.call(
+      hub.querySelectorAll('[data-action]'),
+      function (el) {
+        var action = el.getAttribute("data-action") || "";
+        if (action.indexOf("router-select:") === 0) {
+          var topicId = action.slice("router-select:".length);
+          el.onclick = function () { selectRouterTopic(topicId); };
+        } else if (action === "router-finish") {
+          el.onclick = finishRouter;
+        }
+      },
+    );
 
-    // Progress counter «Разделы X / Y» + thin bar, above the cards. Y counts ONLY
-    // required sections (the ones that gate «Перейти к результатам»); hidden when
-    // there are no required sections.
-    var prevProg = host.querySelector(".router-progress");
-    if (prevProg && prevProg.parentNode) prevProg.parentNode.removeChild(prevProg);
-    var reqSections = (TEST_DATA.sections || []).filter(function (s) { return s.required !== false; });
-    var reqTotal = reqSections.length;
-    if (reqTotal > 0) {
-      var reqDone = reqSections.filter(function (s) {
-        return state.routerTopicStates[s.topicId] === "completed";
-      }).length;
-      var pct = Math.round((reqDone / reqTotal) * 100);
-      var prog = document.createElement("div");
-      prog.className = "router-progress";
-      prog.setAttribute("role", "group");
-      prog.setAttribute("aria-label", "Прогресс по разделам");
-      prog.innerHTML =
-        '<div class="router-progress__head">' +
-          '<span class="router-progress__label">Разделы</span>' +
-          '<span class="router-progress__count">' + reqDone + " / " + reqTotal + "</span>" +
-        "</div>" +
-        '<div class="router-progress__bar"><div class="router-progress__fill" style="width:' + pct + '%"></div></div>';
-      host.appendChild(prog);
-    }
-
-    host.appendChild(cards);
-
-    // PRD-4 v1.1 §4.7: «Завершить» is gated by routerCompletionPolicy
-    // (all required sections completed, optionally also passed). Optional
-    // sections never block.
-    // «Завершить» is always shown but disabled until the completion policy is met
-    // (mirrors the original — the button greys out until all sections are done).
     var ready = isRouterReadyToFinish();
-    var finishBtn = document.createElement("button");
-    finishBtn.type = "button";
-    finishBtn.className = "btn router-finish" + (ready ? "" : " router-finish--disabled");
-    finishBtn.setAttribute("data-action", "router-finish");
-    finishBtn.textContent = "Завершить";
-    finishBtn.disabled = !ready;
-    if (ready) finishBtn.onclick = finishRouter;
-    host.appendChild(finishBtn);
 
     // PRD-8 FR-18: emit router lifecycle events for diagnostics + template
     // extensions. The first time the «Завершить» action becomes available
@@ -3040,19 +2837,8 @@ function renderContentPage(page, contentTemplates) {
     }
   }
 
-  function statusLabel(status) {
-    if (status === "completed") return "Пройдена";
-    if (status === "inProgress") return "В процессе";
-    return "Не начата";
-  }
-
-  /** Russian plural for «вопрос» (n вопрос / вопроса / вопросов). */
-  function pluralQuestions(n) {
-    var m10 = n % 10, m100 = n % 100;
-    if (m10 === 1 && m100 !== 11) return "вопрос";
-    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return "вопроса";
-    return "вопросов";
-  }
+  // statusLabel / pluralQuestions moved to shared/flow/router-hub with the hub
+  // markup that used them — no local copies to drift.
 
   /**
    * Marks the topic as in-progress and starts the topic's runtime. In
@@ -3561,25 +3347,43 @@ var TBTemplate = (() => {
     aggregateStandardResult: () => aggregateStandardResult,
     attachPointerDnd: () => attachPointerDnd,
     buildAdaptiveResultContext: () => buildAdaptiveResultContext,
+    buildAfterZone: () => buildAfterZone,
+    buildBeforeZone: () => buildBeforeZone,
+    buildContentPageRender: () => buildContentPageRender,
+    buildContentPageSkeleton: () => buildContentPageSkeleton,
+    buildFallbackContentHtml: () => buildFallbackContentHtml,
+    buildPageSequence: () => buildPageSequence,
     buildQuestionProgress: () => buildQuestionProgress,
     buildResultContext: () => buildResultContext,
     buildReviewContext: () => buildReviewContext,
+    buildRouterHubHtml: () => buildRouterHubHtml,
     buildSectionIntroContext: () => buildSectionIntroContext,
     buildSectionResultContext: () => buildSectionResultContext,
     buildStartState: () => buildStartState,
     buildTemplateCssVars: () => buildTemplateCssVars,
+    buildTopicChunk: () => buildTopicChunk,
     buildTransitionContext: () => buildTransitionContext,
     checkPassRule: () => checkPassRule,
     compileTemplate: () => compileTemplate,
+    contentPagesFor: () => contentPagesFor,
     dropOnPoolSlot: () => dropOnPoolSlot,
     dropOnRight: () => dropOnRight,
+    findContentTemplate: () => findContentTemplate,
+    getPagePlaceholderStyles: () => getPagePlaceholderStyles,
+    getPageValues: () => getPageValues,
+    isFlowContentPage: () => isFlowContentPage,
+    isRouterReadyToFinish: () => isRouterReadyToFinish,
+    isSectionUnlocked: () => isSectionUnlocked,
     normalizePool: () => normalizePool,
+    pluralQuestions: () => pluralQuestions2,
+    questionIndicesByTopic: () => questionIndicesByTopic,
     renderResultField: () => renderResultField,
     renderScreenInto: () => renderScreenInto,
     renderTemplate: () => renderTemplate,
     resolveOverallRule: () => resolveOverallRule,
     resolveTopicRule: () => resolveTopicRule,
-    returnToPool: () => returnToPool
+    returnToPool: () => returnToPool,
+    statusLabel: () => statusLabel
   });
 
   // shared/template/dsl.ts
@@ -4785,6 +4589,279 @@ var TBTemplate = (() => {
       hint: unanswered.length > 0 ? "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u043F\u0435\u0440\u0435\u0434 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u0435\u043C. \u041D\u0435\u043E\u0442\u0432\u0435\u0447\u0435\u043D\u043D\u044B\u0435 \u0437\u0430\u0441\u0447\u0438\u0442\u044B\u0432\u0430\u044E\u0442\u0441\u044F \u043A\u0430\u043A \u043D\u0435\u0432\u0435\u0440\u043D\u044B\u0435." : "\u0412\u0441\u0435 \u0432\u043E\u043F\u0440\u043E\u0441\u044B \u043E\u0442\u0432\u0435\u0447\u0435\u043D\u044B."
     };
     return { questionsProgress, review };
+  }
+
+  // shared/template/content-page.ts
+  function escHtml2(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function getPageValues(page) {
+    if (!page) return {};
+    if (page.valuesJson && page.valuesJson.values) return page.valuesJson.values;
+    return page.values || {};
+  }
+  function getPagePlaceholderStyles(page) {
+    if (!page) return {};
+    if (page.valuesJson && page.valuesJson.placeholderStyles) return page.valuesJson.placeholderStyles;
+    return page.placeholderStyles || {};
+  }
+  function findContentTemplate(page, contentTemplates) {
+    if (!page || !contentTemplates) return null;
+    const key = page.templateKey;
+    if (!key) return null;
+    for (const template of contentTemplates) {
+      if (template.key === key) return template;
+    }
+    return null;
+  }
+  function buildFallbackContentHtml(page) {
+    const typeLabel = page.type || "content";
+    const values = getPageValues(page);
+    if (page.mode === "html" && values.__html) {
+      return '<div class="content-page content-page--html">' + String(values.__html) + "</div>";
+    }
+    const title = values.title || values.heading || typeLabel;
+    const body = values.body || values.text || values.subtitle || "";
+    return '<div class="content-page content-page--fallback" data-page-type="' + escHtml2(typeLabel) + '"><div class="card"><h1>' + escHtml2(String(title)) + "</h1>" + (body ? '<div style="color:hsl(var(--muted-foreground));">' + String(body) + "</div>" : "") + "</div></div>";
+  }
+  function buildContentPageSkeleton(page, contentTemplate) {
+    if (!contentTemplate || !contentTemplate.placeholders) {
+      return buildFallbackContentHtml(page);
+    }
+    let html = '<div class="content-page content-page--' + escHtml2(page.type || "info") + '" data-template-key="' + escHtml2(contentTemplate.key) + '">';
+    for (const phDef of contentTemplate.placeholders) {
+      html += '<div class="content-placeholder content-placeholder--' + escHtml2(phDef.key) + '" data-placeholder="' + escHtml2(phDef.key) + '"></div>';
+    }
+    html += "</div>";
+    return html;
+  }
+  function buildContentPageRender(page, contentTemplates) {
+    const contentTemplate = findContentTemplate(page, contentTemplates);
+    return {
+      layoutKey: contentTemplate && contentTemplate.layoutFile || "content",
+      skeleton: buildContentPageSkeleton(page, contentTemplate),
+      content: {
+        template: { placeholders: contentTemplate == null ? void 0 : contentTemplate.placeholders },
+        values: getPageValues(page)
+      },
+      placeholderStyles: getPagePlaceholderStyles(page),
+      contentTemplate
+    };
+  }
+
+  // shared/flow/router-hub.ts
+  function escHtml3(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function pluralQuestions2(n) {
+    const m10 = n % 10;
+    const m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return "\u0432\u043E\u043F\u0440\u043E\u0441";
+    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return "\u0432\u043E\u043F\u0440\u043E\u0441\u0430";
+    return "\u0432\u043E\u043F\u0440\u043E\u0441\u043E\u0432";
+  }
+  function isSectionUnlocked(section, state) {
+    const rule = (state.unlockRules || {})[section.topicId];
+    if (!rule || !rule.mode || rule.mode === "always") return true;
+    const ids = rule.sectionIds || [];
+    if (rule.mode === "after_sections_completed") {
+      return ids.every((id) => state.topicStates[id] === "completed");
+    }
+    if (rule.mode === "after_sections_passed") {
+      return ids.every((id) => {
+        if (state.topicStates[id] !== "completed") return false;
+        const result = (state.sectionResults || {})[id];
+        return !result || result.passed !== false;
+      });
+    }
+    return true;
+  }
+  function isRouterReadyToFinish(sections, state) {
+    const policy = state.completionPolicy || "all_required_completed";
+    const required = (sections || []).filter((s) => s.required !== false);
+    if (required.length === 0) return true;
+    return required.every((s) => {
+      if (state.topicStates[s.topicId] !== "completed") return false;
+      if (policy === "all_required_passed") {
+        const result = (state.sectionResults || {})[s.topicId];
+        if (!result) return false;
+        return result.passed === true;
+      }
+      return true;
+    });
+  }
+  function statusLabel(status) {
+    if (status === "completed") return "\u041F\u0440\u043E\u0439\u0434\u0435\u043D\u0430";
+    if (status === "inProgress") return "\u0412 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0435";
+    return "\u041D\u0435 \u043D\u0430\u0447\u0430\u0442\u0430";
+  }
+  function buildRouterHubHtml(sections, state, options) {
+    const list = sections || [];
+    let html = "";
+    const deadline = options == null ? void 0 : options.deadline;
+    if (deadline && (deadline.date || deadline.time)) {
+      let stats = "";
+      if (deadline.date) {
+        stats += '<div class="router-stat"><span class="router-stat__label">\u0414\u0430\u0442\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u044F \u0442\u0435\u0441\u0442\u0430</span><span class="router-stat__value">' + escHtml3(deadline.date) + "</span></div>";
+      }
+      if (deadline.time) {
+        stats += '<div class="router-stat"><span class="router-stat__label">\u0412\u0440\u0435\u043C\u044F \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u044F \u0442\u0435\u0441\u0442\u0430</span><span class="router-stat__value">' + escHtml3(deadline.time) + "</span></div>";
+      }
+      html += '<div class="router-stats">' + stats + "</div>";
+    }
+    const required = list.filter((s) => s.required !== false);
+    if (required.length > 0) {
+      const done = required.filter((s) => state.topicStates[s.topicId] === "completed").length;
+      const pct = Math.round(done / required.length * 100);
+      html += '<div class="router-progress" role="group" aria-label="\u041F\u0440\u043E\u0433\u0440\u0435\u0441\u0441 \u043F\u043E \u0440\u0430\u0437\u0434\u0435\u043B\u0430\u043C"><div class="router-progress__head"><span class="router-progress__label">\u0420\u0430\u0437\u0434\u0435\u043B\u044B</span><span class="router-progress__count">' + done + " / " + required.length + '</span></div><div class="router-progress__bar"><div class="router-progress__fill" style="width:' + pct + '%"></div></div></div>';
+    }
+    let cards = "";
+    for (const section of list) {
+      const status = state.topicStates[section.topicId] || "notStarted";
+      const unlocked = isSectionUnlocked(section, state);
+      const locked = !unlocked && status !== "completed";
+      const disabled = status === "completed" || !unlocked;
+      const meta = [];
+      if (section.drawCount) meta.push(section.drawCount + " " + pluralQuestions2(section.drawCount));
+      if (section.timeLimitMinutes) meta.push(section.timeLimitMinutes + " \u043C\u0438\u043D");
+      const metaHtml = meta.length ? '<span class="router-topic-card__meta">' + meta.map((m) => '<span class="router-topic-card__chip">' + escHtml3(m) + "</span>").join("") + "</span>" : "";
+      const imgUrl = section.image && typeof section.image === "object" ? section.image.url || "" : section.image || "";
+      const imgHtml = imgUrl ? '<span class="router-topic-card__img"><img src="' + escHtml3(imgUrl) + '" alt=""></span>' : "";
+      const goHtml = unlocked && status !== "completed" ? '<span class="router-topic-card__go">\u043D\u0430\u0447\u0430\u0442\u044C</span>' : "";
+      cards += '<button type="button" role="listitem" class="router-topic-card router-topic-card--' + status + (locked ? " router-topic-card--locked" : "") + '" data-topic-id="' + escHtml3(section.topicId) + '" data-router-status="' + status + '"' + (locked ? ' data-router-locked="true"' : "") + (disabled ? " disabled" : ' data-action="router-select:' + escHtml3(section.topicId) + '"') + '><span class="router-topic-card__top"><span class="router-topic-card__name">' + escHtml3(section.topicName || section.topicId) + (section.required === false ? ' <span class="router-topic-card__optional">(\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u0430\u044F)</span>' : "") + "</span>" + imgHtml + "</span>" + metaHtml + '<span class="router-topic-card__foot"><span class="router-topic-card__status">' + escHtml3(unlocked ? statusLabel(status) : "\u041D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430") + "</span>" + goHtml + "</span></button>";
+    }
+    html += '<div class="router-topic-cards" role="list" aria-label="\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0435 \u0442\u0435\u043C\u044B">' + cards + "</div>";
+    const ready = isRouterReadyToFinish(list, state);
+    html += '<button type="button" class="btn router-finish' + (ready ? "" : " router-finish--disabled") + '"' + (ready ? ' data-action="router-finish"' : " disabled") + ">\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C</button>";
+    return html;
+  }
+
+  // shared/flow/page-sequence.ts
+  var SYSTEM_FLOW_KINDS = [
+    "start",
+    "results",
+    "questions",
+    "review",
+    "section-results"
+  ];
+  function isSystemKind(kind) {
+    return SYSTEM_FLOW_KINDS.indexOf(kind != null ? kind : "") !== -1;
+  }
+  function isFlowContentPage(page) {
+    return !!page && !isSystemKind(page.kind) && page.kind !== "router";
+  }
+  function contentPagesFor(contentPages, topicId, position) {
+    return (contentPages || []).filter(
+      (p) => {
+        var _a;
+        return !isSystemKind(p.kind) && ((_a = p.topicId) != null ? _a : null) === topicId && p.position === position;
+      }
+    ).slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  }
+  function buildBeforeZone(contentPages, flowMode) {
+    let pages = contentPagesFor(contentPages, null, "before");
+    if (flowMode === "router_by_topics") {
+      pages = pages.filter((p) => p.kind !== "router").concat(pages.filter((p) => p.kind === "router"));
+    }
+    return pages.map((page) => ({
+      kind: "content",
+      page,
+      isRouter: page.kind === "router"
+    }));
+  }
+  function buildAfterZone(contentPages) {
+    const preResults = [];
+    const postResultsPages = [];
+    let seenSummary = false;
+    for (const page of contentPagesFor(contentPages, null, "after")) {
+      if (page.type === "summary") {
+        seenSummary = true;
+        continue;
+      }
+      if (seenSummary) postResultsPages.push(page);
+      else preResults.push({ kind: "content", page, isRouter: false });
+    }
+    return { preResults, postResultsPages };
+  }
+  function buildTopicChunk(contentPages, topicId, questionIndices) {
+    const seq = [];
+    for (const page of contentPagesFor(contentPages, topicId, "before_topic")) {
+      seq.push({ kind: "content", page, isRouter: false });
+    }
+    for (const questionIndex of questionIndices) {
+      seq.push({ kind: "question", questionIndex });
+    }
+    for (const page of contentPagesFor(contentPages, topicId, "after_topic")) {
+      seq.push({ kind: "content", page, isRouter: false });
+    }
+    return seq;
+  }
+  function questionIndicesByTopic(flatQuestions) {
+    const out = {};
+    (flatQuestions || []).forEach((fq, index) => {
+      const key = fq.topicId;
+      if (!out[key]) out[key] = [];
+      out[key].push(index);
+    });
+    return out;
+  }
+  function buildPageSequence(input) {
+    const flowMode = input.flowMode || "linear_flat";
+    const contentPages = input.contentPages || [];
+    const sections = input.sections || [];
+    const flatQuestions = input.flatQuestions || [];
+    const sequence = buildBeforeZone(contentPages, flowMode);
+    if (flowMode === "router_by_topics") {
+      return { sequence, postResultsPages: [] };
+    }
+    const byTopic = questionIndicesByTopic(flatQuestions);
+    if (flowMode === "linear_by_topics" && sections.length) {
+      const placed = {};
+      const adaptive = input.testMode === "adaptive";
+      for (const section of sections) {
+        placed[section.topicId] = true;
+        if (adaptive) {
+          for (const page of contentPagesFor(contentPages, section.topicId, "before_topic")) {
+            sequence.push({ kind: "content", page, isRouter: false });
+          }
+          sequence.push({ kind: "adaptive-session", topicId: section.topicId });
+          for (const page of contentPagesFor(contentPages, section.topicId, "after_topic")) {
+            sequence.push({ kind: "content", page, isRouter: false });
+          }
+          continue;
+        }
+        for (const item of buildTopicChunk(contentPages, section.topicId, byTopic[section.topicId] || [])) {
+          sequence.push(item);
+        }
+      }
+      flatQuestions.forEach((fq, index) => {
+        if (!placed[fq.topicId]) sequence.push({ kind: "question", questionIndex: index });
+      });
+    } else {
+      const remaining = {};
+      const started = {};
+      for (const fq of flatQuestions) {
+        remaining[fq.topicId] = (remaining[fq.topicId] || 0) + 1;
+      }
+      flatQuestions.forEach((fq, index) => {
+        if (!started[fq.topicId]) {
+          started[fq.topicId] = true;
+          for (const page of contentPagesFor(contentPages, fq.topicId, "before_topic")) {
+            sequence.push({ kind: "content", page, isRouter: false });
+          }
+        }
+        sequence.push({ kind: "question", questionIndex: index });
+        remaining[fq.topicId] -= 1;
+        if (remaining[fq.topicId] === 0) {
+          for (const page of contentPagesFor(contentPages, fq.topicId, "after_topic")) {
+            sequence.push({ kind: "content", page, isRouter: false });
+          }
+        }
+      });
+    }
+    const after = buildAfterZone(contentPages);
+    for (const item of after.preResults) sequence.push(item);
+    return { sequence, postResultsPages: after.postResultsPages };
   }
   return __toCommonJS(runtime_entry_exports);
 })();
