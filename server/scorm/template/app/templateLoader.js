@@ -52,27 +52,28 @@
   }
 
   /**
-   * PRD-7 G21: loads the bundled `default` template's layouts for the system
-   * kinds the active template doesn't declare (TEST_DATA.designSettings
-   * .fallbackKinds). Stored in state.fallbackLayouts so the start/results
-   * renderers can mount default's screen with default's CSS. No-op when there
-   * are no fallback kinds (the package then ships no template-default/).
+   * PRD-1 §4.3.2 / PRD-3 NFR-06: loads the bundled `default` template's layouts for
+   * the system screens the active template doesn't declare (TEST_DATA.designSettings
+   * .fallbackLayoutKeys — LAYOUT KEYS, the same keys `systemLayout()` looks up).
+   * Stored in state.fallbackLayouts so each system renderer can mount default's
+   * screen with default's CSS. No-op when there are none (the package then ships no
+   * template-default/).
    */
   function loadFallbackTemplate() {
     var ds = (typeof TEST_DATA !== "undefined" && TEST_DATA.designSettings) || null;
-    var fallbackKinds = (ds && ds.fallbackKinds) || [];
+    var fallbackLayoutKeys = (ds && ds.fallbackLayoutKeys) || [];
     state.fallbackLayouts = {};
-    if (!fallbackKinds.length) return Promise.resolve();
+    if (!fallbackLayoutKeys.length) return Promise.resolve();
     return fetchJson("template-default/manifest.json")
       .then(function (manifest) {
         state.fallbackManifest = manifest || null;
         var layouts = (manifest && manifest.layouts) || {};
         return Promise.all(
-          fallbackKinds.map(function (kind) {
-            var rel = layouts[kind];
+          fallbackLayoutKeys.map(function (key) {
+            var rel = layouts[key];
             if (!rel) return null;
             return fetchText("template-default/" + rel)
-              .then(function (html) { return [kind, html]; })
+              .then(function (html) { return [key, html]; })
               .catch(function () { return null; });
           })
         ).then(function (entries) {
@@ -124,10 +125,19 @@
         state.templateShell = parts[1] || "";
         applyTemplateShell();
         var layouts = (state.templateManifest && state.templateManifest.layouts) || {};
-        var layoutKeys = Object.keys(layouts);
+        // A variant names its layout by `contentTemplates[].layoutFile` (spec §8.2) —
+        // load those under their PATH as the key, so `renderContentPage` can resolve a
+        // page to its own layout. Without this a template built one-layout-per-page
+        // renders every content page through the single `content` layout.
+        var refs = {};
+        Object.keys(layouts).forEach(function (k) { refs[k] = layouts[k]; });
+        ((state.templateManifest && state.templateManifest.contentTemplates) || []).forEach(function (ct) {
+          if (ct && ct.layoutFile && !refs[ct.layoutFile]) refs[ct.layoutFile] = ct.layoutFile;
+        });
+        var layoutKeys = Object.keys(refs);
         return Promise.all(
           layoutKeys.map(function (key) {
-            return fetchText("template/" + layouts[key])
+            return fetchText("template/" + refs[key])
               .then(function (html) {
                 return [key, html];
               })

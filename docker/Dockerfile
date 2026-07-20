@@ -37,8 +37,9 @@ RUN groupadd -r -g 1500 nodejs && \
 WORKDIR /app
 
 COPY package*.json ./
-# drizzle-kit is a production dependency in this deployment: migrations run via
-# `drizzle-kit push` inside the container, and drizzle.config.ts imports it.
+# drizzle-kit is a production dependency in this deployment: schema migrations are
+# applied via `drizzle-kit migrate` inside the container, and drizzle.config.ts
+# imports it.
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy compiled application artifacts (source excluded via .dockerignore)
@@ -46,18 +47,22 @@ COPY --chown=nodejs:nodejs dist ./dist
 COPY --chown=nodejs:nodejs shared ./shared
 COPY --chown=nodejs:nodejs drizzle.config.ts ./
 
-# SQL migrations + a tiny runner. `drizzle-kit push` syncs SCHEMA only; data
-# migrations (e.g. the PRD-13 role backfill in migrations/016) are applied by the
-# deploy scripts via `node script/run-sql.cjs <file>` BEFORE push drops legacy
-# columns. Both must be in the image because the deploy runs them in a one-off
-# container and the DB is external (no psql/tsx available here).
+# Versioned schema migrations + journal (drizzle-kit generate). The deploy applies
+# them with `drizzle-kit migrate` in a one-off container before the app boots.
+# Required in the image because the DB is external (no psql/tsx available here).
+COPY --chown=nodejs:nodejs drizzle ./drizzle
+
+# Legacy hand-written data/DDL migrations, kept as a historical record and for
+# ad-hoc fixes via `node script/run-sql.cjs <file>`. The deploy no longer runs
+# these — schema is applied by drizzle-kit migrate (drizzle/ above).
 COPY --chown=nodejs:nodejs migrations ./migrations
 COPY --chown=nodejs:nodejs script/run-sql.cjs ./script/run-sql.cjs
 # Shared config loader (server/config-loader.mjs) — required at runtime by
 # run-sql.cjs (dynamic import) and the set-password tool. server/ is otherwise
 # excluded from the image, so copy this one file explicitly.
 COPY --chown=nodejs:nodejs server/config-loader.mjs ./server/config-loader.mjs
-# PRD-15 pre-push safety gate (run via run-sql.cjs before drizzle-kit push).
+# Legacy PRD-15 schema gate (was run before the removed drizzle-kit push; kept for
+# reference / ad-hoc verification via run-sql.cjs).
 COPY --chown=nodejs:nodejs script/verify-prd15-pre-push.sql ./script/verify-prd15-pre-push.sql
 
 # Built-in design template manifests/previews — read from disk at runtime by

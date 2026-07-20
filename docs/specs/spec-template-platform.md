@@ -186,8 +186,9 @@ template-id/
 Внешние URL запрещены. Все CSS, JS, шрифты, изображения, иконки и другие ресурсы должны быть
 локальными файлами внутри SCORM ZIP.
 
-Сгенерированный SCORM-пакет включает только выбранный шаблон, а не полную библиотеку шаблонов
-и не резервный default-шаблон.
+Сгенерированный SCORM-пакет включает выбранный шаблон, а не полную библиотеку шаблонов. Кроме
+него в пакет попадают резервные макеты и стили стандартного шаблона — но только для системных
+экранов, которые выбранный шаблон не объявляет (PRD-3 NFR-05, PRD-1 §4.3.2).
 
 ## 5. Манифест
 
@@ -207,19 +208,18 @@ template-id/
     "content": "layouts/content.html",
     "results": "layouts/results.html",
     "start": "layouts/start.html",
-    "content.intro": "layouts/content-intro.html",
-    "content.info": "layouts/content-info.html",
-    "content.summary": "layouts/content-summary.html",
-    "content.html": "layouts/content-html.html",
-    "question.single": "layouts/question-single.html"
+    "review": "layouts/review.html",
+    "section-results": "layouts/section-results.html",
+    "system.blocked": "layouts/system-blocked.html"
   },
 
   "contentTemplates": [
     {
       "key": "intro.hero",
       "label": "Введение: крупный заголовок и изображение",
+      "kind": "intro",
       "pageKind": "content.intro",
-      "layout": "content.intro",
+      "layoutFile": "layouts/content-intro.html",
       "placeholders": [
         {
           "key": "title",
@@ -261,8 +261,9 @@ template-id/
     {
       "key": "info.textWithImage",
       "label": "Информация: текст и изображение",
+      "kind": "info",
       "pageKind": "content.info",
-      "layout": "content.info",
+      "layoutFile": "layouts/content-info.html",
       "placeholders": [
         { "key": "title", "type": "text", "label": "Заголовок", "required": true },
         { "key": "lead", "type": "text", "label": "Вводный текст", "required": false },
@@ -273,8 +274,9 @@ template-id/
     {
       "key": "summary.progressRing",
       "label": "Итог: кольцевая диаграмма прогресса",
+      "kind": "summary",
       "pageKind": "content.summary",
-      "layout": "content.summary",
+      "layoutFile": "layouts/content-summary.html",
       "placeholders": [
         { "key": "title", "type": "text", "label": "Заголовок", "required": true },
         {
@@ -769,6 +771,20 @@ UI должен показывать отчёт:
 локальные кнопки. Если для страницы существуют локальные действия, Core может скрыть или
 отключить резервные кнопки оболочки на этой странице.
 
+### 7.1 Монтирование оболочки (`mountShell`)
+
+По умолчанию Core монтирует экраны в собственный базовый контейнер, а `shell.html` служит только
+внешним каркасом. Флаг манифеста `"mountShell": true` включает ПРЯМОЕ монтирование оболочки: Core
+подставляет `shell.html` целиком и рендерит каждый экран внутрь её `#app`
+(`data-slot="page"`), заменяя базовый контейнер.
+
+Флаг обязателен для шаблонов с ФИКС-СЦЕНОЙ — когда CSS шаблона привязан к структуре оболочки
+(например `.tb-frame > .tb-stage > #app`, сцена фиксированного размера или на container-query
+единицах `cqh`/`cqw`). Без `mountShell` такой шаблон рендерится вне своей сцены, и его оформление
+не применяется. То же монтирование выполняет и веб-хост в предпросмотре: оба хоста читают
+`mountShell` из манифеста, поэтому автор видит фикс-сцену одинаково в SCORM и в превью. Шаблон без
+фикс-сцены (как встроенный `default`) флаг не объявляет.
+
 Пример локального действия:
 
 ```html
@@ -853,18 +869,44 @@ Core вставляет:
 
 Поддерживаемые kinds контентных страниц:
 
-| Page kind | Назначение | Специфичный layout | Fallback |
+Откуда экран берёт макет — зависит от его класса (см. три класса ниже таблицы). Системные экраны
+резолвятся по фиксированным ключам `layouts[]`; галерея — по ключу своего варианта; прочие
+контентные страницы — по `layoutFile` варианта, иначе по общему `layouts["content"]`. Когда
+шаблон не объявляет нужный системный экран, применяется fallback на стандартный шаблон с
+предупреждением в UI (PRD-1 §4.3.2, PRD-3 NFR-06) — колонка «Fallback» ниже.
+
+Резолвинг макета делится на три класса (по фактическому рантайму
+`server/scorm/template/app/render/`).
+
+- **Системные экраны** (`start`, `results`, `question`, `review`, `section-results`,
+  «Введение раздела», `system.blocked`) резолвятся по ФИКСИРОВАННОМУ ключу `layouts[<key>]`.
+  Вариант в `contentTemplates[]` для них не задаёт макет — он нужен лишь для привязки страницы и
+  для определения fallback (объявлен ли `kind`). В частности «Введение раздела» рендерится по
+  ключу `layouts["section-intro"]`, а НЕ по `layoutFile` варианта `intro`; если этого ключа нет,
+  экран падает в общий контентный рендер.
+- **Галерея** резолвится по ключу ВАРИАНТА — `layouts[<ключ contentTemplate>]`.
+- **Прочие контентные страницы** (`info` / `summary` / `router` / `html`) резолвятся по
+  `layoutFile` варианта, иначе по общему `layouts["content"]`.
+
+| Page kind | Назначение | Откуда макет | Fallback на стандартный шаблон |
 | --- | --- | --- | --- |
-| `start` | Стартовый экран теста (лендинг) — тест-уровневый, всегда | `layouts.start` | `layouts.content` |
-| `content.intro` | «Введение раздела» (`before_topic`) — по одной на тему | `layouts["content.intro"]` | `layouts.content` |
-| `content.info` | Информационная/учебная страница | `layouts["content.info"]` | `layouts.content` |
-| `content.summary` | «Итог раздела» (`after_topic`) — по одной на тему; показывает результат РАЗДЕЛА | `layouts["content.summary"]` | `layouts.content` |
-| `content.router` | Меню тем (`router_by_topics`) | `layouts["content.router"]` | `layouts.content` |
-| `results` | «Итоги теста» — итоговый результат всего теста, тест-уровневый, всегда | `layouts.results` | — |
-| `review` | «Обзор раздела/теста» перед завершением (PRD-19) — системный узел | `layouts.review` | — |
-| `section-results` | Вычисляемые «Итоги раздела» (PRD-19) — системный узел | `layouts["section-results"]` | — |
-| `content.html` | Санитизированный HTML-блок | `layouts["content.html"]` | `layouts.content` |
-| `system.blocked` | Системная страница блокировки | `systemPages[].layout` / `layouts["system.blocked"]` | `layouts.content` |
+| `start` | Стартовый экран теста (лендинг) — тест-уровневый, всегда | `layouts["start"]` | Да |
+| `question` | Экран вопроса | `layouts["question"]` | Да |
+| `results` | «Итоги теста» — итоговый результат всего теста, тест-уровневый, всегда | `layouts["results"]` | Да |
+| `review` | «Обзор раздела/теста» перед завершением (PRD-19) — системный узел | `layouts["review"]` | Да |
+| `section-results` | Вычисляемые «Итоги раздела» (PRD-19) — системный узел | `layouts["section-results"]` | Да |
+| `content.intro` | «Введение раздела» (`before_topic`) — по одной на тему | `layouts["section-intro"]`, иначе общий контентный рендер | Да |
+| `system.blocked` | Системная страница блокировки | `systemPages[].layout` / `layouts["system.blocked"]` | Да (файловый) |
+| `content.gallery` | Слайд галереи | `layouts[<ключ варианта>]` | Нет: рендерится общим контентным рендером |
+| `content.info` | Информационная/учебная страница | `layoutFile` варианта, иначе `layouts["content"]` | Нет: несовместимость разрешает автор через диалог маппинга (PRD-1 §4.3.2) |
+| `content.summary` | «Итог раздела» (`after_topic`) — по одной на тему; показывает результат РАЗДЕЛА | `layoutFile` варианта, иначе `layouts["content"]` | Нет: общий контентный рендер |
+| `content.router` | Меню тем (`router_by_topics`) | `layoutFile` варианта, иначе `layouts["content"]` | Нет: общий контентный рендер |
+| `content.html` | Санитизированный HTML-блок | `layouts["content"]` | Нет: общий контентный рендер |
+
+Fallback на стандартный шаблон (PRD-1 §4.3.2) применяется только к экранам с ВЫДЕЛЕННЫМ макетом
+(`start`, `results`, `question`, `intro`, `review`, `section-results`, `system.blocked`). Экраны,
+которые рендерятся общим `layouts["content"]` (`info` / `summary` / `router` / `html` / галерея),
+подменять нечем — их «резервом» служит сам общий контентный макет.
 
 `start` и `results` — тест-уровневые системные экраны (по одному на тест, в любом режиме).
 `review` и `section-results` (PRD-19) — системные узлы раздела: «Обзор» перед завершением и
@@ -906,8 +948,9 @@ PRD-19; `summary` остаётся валидным `kind` для обратно
 {
   "key": "info.textWithImage",
   "label": "Информация: текст и изображение",
+  "kind": "info",
   "pageKind": "content.info",
-  "layout": "content.info",
+  "layoutFile": "layouts/content-info.html",
   "description": "Страница с заголовком, основным текстом и иллюстрацией",
   "placeholders": [
     {
@@ -953,9 +996,11 @@ PRD-19; `summary` остаётся валидным `kind` для обратно
 
 > **Реализация.** Схема манифеста (`contentTemplateEntrySchema`) требует у элемента `key`,
 > `label` и `kind` (виды из §8.2 / PRD-1); `pageKind` и `placeholders[]` опциональны. Путь к
-> макету указывается полем `layoutFile` (относительный путь к файлу, напр.
-> `"layouts/start.html"`), а не ключом `layout`, показанным в примерах выше. См. эталонный
-> `server/scorm/templates/default/manifest.json`.
+> макету указывается полем `layoutFile` — относительным путём к файлу, напр.
+> `"layouts/content-info.html"`. Ключа `layout` в контракте нет. `layoutFile` читается рантаймом
+> только для НЕсистемных контентных страниц (`info` / `summary` / `router` / `html`); системные
+> экраны и «Введение раздела» резолвятся по фиксированным ключам `layouts[]`, а галерея — по ключу
+> варианта (см. таблицу выше). См. эталонный `server/scorm/templates/default/manifest.json`.
 
 Поддерживаемые типы placeholders MVP:
 
@@ -1823,18 +1868,17 @@ MVP не требует строгого закрепления файловой
 
 Блокирующие ошибки:
 
+Блокируют только нарушения целостности пакета и безопасности — то, при чём шаблон нечитаем или
+небезопасен и подставить вместо него нечего:
+
 - невалидный ZIP;
 - отсутствующий или невалидный `manifest.json`;
 - отсутствующие обязательные поля манифеста;
 - неподдерживаемый `templateApiVersion`;
-- отсутствующие обязательные макеты;
-- отсутствующие обязательные хуки/действия `shell.html`;
-- отсутствующие обязательные слоты вопросов;
 - отсутствующие файлы, на которые ссылается манифест;
 - отсутствующий или невалидный `assets.preview`;
 - отсутствующий или невалидный `preview`;
 - отсутствующий, невалидный или несовместимый `preview.demoData`;
-- route в `preview.routes`, для которого нет layout/template/capability;
 - внешние URL в ресурсах/макетах/скриптах/стилях, на которые ссылается манифест;
 - невалидный DSL в макете (незакрытый блок, `{{{ }}}`, выражение) — код `LAYOUT_TEMPLATE_SYNTAX`;
 - невалидные `contentTemplates[]`: отсутствует `key`, `label` или `kind` (по схеме манифеста);
@@ -1844,8 +1888,10 @@ MVP не требует строгого закрепления файловой
 
 - неиспользуемые параметры;
 - неиспользуемые ресурсы;
-- отсутствующие опциональные макеты;
-- отсутствующие опциональные слоты;
+- отсутствующий макет — экран рендерится из стандартного шаблона (§8.2, PRD-1 §4.3.2);
+- отсутствующий слот, включая слоты вопросов и `page-content`;
+- отсутствующие хуки/действия `shell.html`;
+- route в `preview.routes`, для которого нет layout/template/capability;
 - предупреждения консоли в браузерной smoke-проверке;
 - fallback renderer в live preview, если страница осталась работоспособной;
 - отсутствующее покрытие необязательного route в demo dataset;
@@ -1854,19 +1900,23 @@ MVP не требует строгого закрепления файловой
 > **Реализация.** Фактические блокирующие коды структурного валидатора
 > (`server/services/template-validation.ts`): `ZIP_TOO_LARGE`, `MANIFEST_MISSING`,
 > `MANIFEST_INVALID_JSON`, `MANIFEST_SCHEMA`, `ID_PATTERN`, `API_VERSION_UNSUPPORTED`,
-> `ID_EXISTS`, `ID_MISMATCH`, `REQUIRED_FIELD_MISSING`, `FILE_MISSING`, `LAYOUT_TEMPLATE_SYNTAX`,
-> `SHELL_CONTRACT`, `QUESTION_CONTRACT`, `EXTERNAL_URL`, `DEMODATA_INVALID_JSON`.
-> Предупреждения: `CONTENT_CONTRACT` (нет `data-slot="page-content"`),
-> `OPTIONAL_LAYOUT_MISSING` (нет `layouts.start`), `UNUSED_FILE`. Определения `params` и
-> объявления `systemPages` схемно НЕ валидируются (проходят через `passthrough`); их наличие в
-> списках выше — целевой контракт. Полное описание — в
-> [руководстве §13](../guides/template-development.md).
+> `ID_EXISTS`, `ID_MISMATCH`, `REQUIRED_FIELD_MISSING` (только `assets.preview` / `preview` /
+> `params` / `capabilities`), `FILE_MISSING`, `LAYOUT_TEMPLATE_SYNTAX`, `EXTERNAL_URL`,
+> `DEMODATA_INVALID_JSON`.
+> Предупреждения: `SHELL_CONTRACT`, `QUESTION_CONTRACT`, `CONTENT_CONTRACT` (нет
+> `data-slot="page-content"`), `OPTIONAL_LAYOUT_MISSING` (не объявлен макет экрана),
+> `UNUSED_FILE`. Определения `params` и объявления `systemPages` схемно НЕ валидируются
+> (проходят через `passthrough`); их наличие в списках выше — целевой контракт. Полное
+> описание — в [руководстве §13](../guides/template-development.md).
 
 ### 17.2 Валидация макетов
 
-Реально проверяемые структурным валидатором обязательные элементы (согласовано с §7 и §8.1).
+Слоты, которые проверяет структурный валидатор (согласовано с §7 и §8.1). **Ни один из них не
+блокирует активацию**: их отсутствие даёт предупреждение и fallback экрана на стандартный шаблон
+(§17.1, PRD-1 §4.3.2). Объявлять их всё равно следует — иначе шаблон отдаёт свой экран
+стандартному и теряет оформление.
 
-Оболочка `shell.html` — только область страницы (иначе `SHELL_CONTRACT`):
+Оболочка `shell.html` — область страницы (иначе `SHELL_CONTRACT`):
 
 ```html
 <div data-slot="page"></div>
@@ -1879,11 +1929,17 @@ MVP не требует строгого закрепления файловой
 <div data-slot="question-interaction"></div>
 ```
 
+Контентная страница — слот `page-content` (иначе `CONTENT_CONTRACT`):
+
+```html
+<div data-slot="page-content"></div>
+```
+
 Кнопки `data-nav="next"` / `data-action="answer-submit"` / `data-action="test-finish"`
 валидатор в оболочке **не требует** (Core привязывает их делегированием, когда они есть) —
 это целевой контракт фазы расширенных интерактивов. Дополнительно валидатор компилирует
 каждый макет: невалидный DSL (незакрытый блок, `{{{ }}}`, выражение) даёт блокирующую
-ошибку `LAYOUT_TEMPLATE_SYNTAX`. Слоты контентных страниц и результатов опциональны.
+ошибку `LAYOUT_TEMPLATE_SYNTAX` — это единственная блокирующая проверка макета.
 
 ### 17.3 Браузерная smoke-проверка
 
@@ -1912,16 +1968,19 @@ progress.active
 
 ```text
 нет необработанных ошибок
-обязательные слоты заполнены
 next/answer-submit/test-finish привязаны
 ответы сохранены в состояние Core
 страница результатов открывается
 ```
 
+Незаполненный слот критерием прохождения не является: он даёт предупреждение и fallback экрана
+на стандартный шаблон (§17.1).
+
 > **Реализация.** Фактическая smoke-проверка рендерит каждый маршрут из `preview.routes` на
 > демо-данных общим рендерером и помечает экран проваленным при исключении рендера, пустом
-> результате, незаполненном обязательном слоте или `console.error` (`console.warn` —
-> предупреждение). Дополнительно компилируется `template.js`. Привязка
+> результате или `console.error` (`console.warn` — предупреждение). Отсутствующий слот и
+> необъявленный макет дают предупреждение: если хосту передан вход `fallbackLayouts`, экран
+> рендерится из стандартного шаблона. Дополнительно компилируется `template.js`. Привязка
 > `next/answer-submit/test-finish` критерием прохождения НЕ является (целевой контракт фазы
 > расширенных интерактивов).
 
@@ -1951,7 +2010,8 @@ Core должен логировать детали в:
 - диагностику `suspend_data`, где возможно;
 - telemetry, если включена.
 
-Пакет не включает резервный default-шаблон в MVP.
+Пакет не включает стандартный шаблон целиком: в него добавляются только резервные макеты и стили
+стандартного шаблона для системных экранов, не объявленных выбранным шаблоном (PRD-3 NFR-05).
 
 ## 19. Зона ответственности SCORM
 

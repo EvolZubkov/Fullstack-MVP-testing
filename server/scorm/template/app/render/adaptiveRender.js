@@ -92,7 +92,7 @@ function renderAdaptiveQuestionTemplated(app, qData) {
   // Mount directly into #app so .tb-pad > .layout-question-wrap fills the fixed
   // stage and the appended nav anchors — mirrors renderGalleryPage (no wrapper div).
   window.TBTemplate.renderScreenInto(app, {
-    layout: state.templateLayouts['question'],
+    layout: (typeof systemLayout === 'function') ? systemLayout('question') : state.templateLayouts['question'],
     context: {
       course: { title: TEST_DATA.title },
       state: { questionCounterLabel: counter },

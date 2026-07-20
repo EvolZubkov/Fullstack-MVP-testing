@@ -1,13 +1,17 @@
 /**
  * @module tests/scorm-fallback-screens
- * @description Acceptance test for the PRD-7 G21 SCORM fallback: when the active
- * template declares no `contentTemplate` of a system kind (start/results) — even
- * if it ships that LAYOUT — the package must bundle the `default` template under
- * `template-default/` + `styles-default.css`, flag `designSettings.fallbackKinds`
- * in TEST_DATA, and inject the `styles-fallback` stylesheet link, so the runtime
- * renders those screens from `default` (matching «Структура» / the editor preview).
+ * @description Acceptance test for the SCORM fallback (PRD-1 §4.3.2, PRD-3
+ * NFR-05/NFR-06): when the active template declares no `contentTemplate` of a system
+ * kind — even if it ships that LAYOUT — the package must bundle the `default`
+ * template under `template-default/` + `styles-default.css`, flag
+ * `designSettings.fallbackLayoutKeys` in TEST_DATA, and inject the `styles-fallback`
+ * stylesheet link, so the runtime renders those screens from `default` (matching
+ * «Структура» / the editor preview).
  *
- * A template that DOES declare start/results gets none of this.
+ * The flag carries LAYOUT KEYS, not kinds — kind `questions` renders through
+ * `layouts.question` and kind `intro` through `layouts["section-intro"]`.
+ *
+ * A template that declares every system kind gets none of this.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import JSZip from "jszip";
@@ -104,7 +108,7 @@ describe("SCORM fallback screens (PRD-7 G21)", () => {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   });
 
-  it("bundles default + flags fallbackKinds when the template declares no start/results", async () => {
+  it("bundles default + flags the missing screens' layout keys", async () => {
     const dir = path.join(tmpRoot, "no-sysscreens");
     // Declares only intro/questions — NOT start/results (though it ships the layouts).
     writeTemplate(dir, "no-sysscreens", ["intro", "questions"]);
@@ -124,14 +128,26 @@ describe("SCORM fallback screens (PRD-7 G21)", () => {
     expect(indexHtml).toContain('id="styles-fallback"');
     expect(indexHtml).toContain('id="styles-main"');
 
-    // TEST_DATA flags both system kinds as fallback.
+    // TEST_DATA flags the missing screens by LAYOUT KEY. `question` and
+    // `section-intro` are absent: their kinds (questions/intro) ARE declared.
     const td = await readTestData(zip);
-    expect(td.designSettings.fallbackKinds).toEqual(expect.arrayContaining(["start", "results"]));
+    expect(td.designSettings.fallbackLayoutKeys).toEqual(
+      expect.arrayContaining(["start", "results", "review", "section-results"]),
+    );
+    expect(td.designSettings.fallbackLayoutKeys).not.toContain("question");
+    expect(td.designSettings.fallbackLayoutKeys).not.toContain("section-intro");
   });
 
-  it("does NOT bundle default when the template declares start AND results", async () => {
+  it("does NOT bundle default when the template declares every system kind", async () => {
     const dir = path.join(tmpRoot, "has-sysscreens");
-    writeTemplate(dir, "has-sysscreens", ["start", "results", "questions"]);
+    writeTemplate(dir, "has-sysscreens", [
+      "start",
+      "results",
+      "questions",
+      "intro",
+      "review",
+      "section-results",
+    ]);
 
     const buffer = await generateScormPackage(buildFixture(dir, "has-sysscreens") as any);
     const zip = await JSZip.loadAsync(buffer);
@@ -142,18 +158,24 @@ describe("SCORM fallback screens (PRD-7 G21)", () => {
     expect(indexHtml).not.toContain("styles-fallback");
 
     const td = await readTestData(zip);
-    expect(td.designSettings.fallbackKinds).toBeUndefined();
+    expect(td.designSettings.fallbackLayoutKeys).toBeUndefined();
   });
 
-  it("bundles only the missing kind when the template declares start but not results", async () => {
+  it("bundles only the missing screen when the template declares all but results", async () => {
     const dir = path.join(tmpRoot, "partial-sysscreens");
-    writeTemplate(dir, "partial-sysscreens", ["start", "questions"]);
+    writeTemplate(dir, "partial-sysscreens", [
+      "start",
+      "questions",
+      "intro",
+      "review",
+      "section-results",
+    ]);
 
     const buffer = await generateScormPackage(buildFixture(dir, "partial-sysscreens") as any);
     const zip = await JSZip.loadAsync(buffer);
 
     const td = await readTestData(zip);
-    expect(td.designSettings.fallbackKinds).toEqual(["results"]);
+    expect(td.designSettings.fallbackLayoutKeys).toEqual(["results"]);
     expect(zip.file("template-default/manifest.json")).toBeTruthy();
   });
 });

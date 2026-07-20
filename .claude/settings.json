@@ -22,7 +22,8 @@
       "Bash(npx vitest *)",
       "Bash(npm run *)",
       "Bash(npm test *)",
-      "Bash(echo \"build started \\(pid $!\\)\")"
+      "Bash(echo \"build started \\(pid $!\\)\")",
+      "mcp__playwright__browser_file_upload"
     ]
   }
 }

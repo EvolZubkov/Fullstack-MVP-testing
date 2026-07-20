@@ -1,5 +1,6 @@
 import { Router } from "express";
 import crypto from "node:crypto";
+import path from "node:path";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "../storage";
@@ -349,10 +350,13 @@ const SCREEN_LAYOUTS: Record<string, string> = {
   "section-results": "section-results.html",
 };
 // System variant kind backing each screen (for the default-fallback resolution).
-// `blocked` is a pure system layout with no contentTemplate kind — never falls back.
+// `blocked` is a pure system layout with no contentTemplate kind, so it has no
+// variant-level fallback — the file-level fallback below covers it instead.
 const SCREEN_KIND: Record<string, string | undefined> = {
   start: "start",
   question: "questions",
+  review: "review",
+  "section-results": "section-results",
 };
 // PRD-15 FR-09: object-level read scope (owner/grant/admin/assigned learner)
 // instead of the bare session check.
@@ -373,7 +377,17 @@ router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope(
     // cssVars/branding resolve against the ACTIVE template's manifest even when the
     // layout dir fell back to `default` (a screen kind the active template doesn't own).
     const paramsDir = await resolveTemplateDir(templateId, { activeOnly: true });
-    const payload = readScreenTemplate(dir, layoutFile, (test.designSettingsJson as any)?.params, paramsDir);
+    let payload = readScreenTemplate(dir, layoutFile, (test.designSettingsJson as any)?.params, paramsDir);
+    // File-level fallback (PRD-1 §4.3.2, PRD-3 NFR-06): a template that simply does
+    // not ship this layout still renders — from the standard template — instead of
+    // 404-ing the learner's screen. This is the only fallback `blocked` gets (it has
+    // no variant kind), and it also catches a declared-but-absent layout file.
+    if (!payload) {
+      const fallbackDir = await resolveTemplateDir("default", { activeOnly: false });
+      if (path.resolve(fallbackDir) !== path.resolve(dir)) {
+        payload = readScreenTemplate(fallbackDir, layoutFile, (test.designSettingsJson as any)?.params, paramsDir);
+      }
+    }
     if (!payload) return res.status(404).json({ error: "Template not found" });
     res.json(payload);
   } catch (error) {

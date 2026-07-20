@@ -152,7 +152,7 @@ export function PagePreviewModal({ open, onClose, templateId, params, page, page
         id: page.id,
         route: "content.intro",
         layoutKey: "section-intro",
-        requiredSlots: [],
+        expectedSlots: [],
         input: {
           context: { course: built.course, sectionIntro: built.sectionIntro },
           slots: { instruction: instr },

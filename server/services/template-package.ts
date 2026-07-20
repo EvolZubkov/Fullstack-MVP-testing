@@ -145,7 +145,11 @@ export interface TemplateBundle {
   manifest: Record<string, unknown>;
   /** Parsed `preview.demoData` dataset, or null when the template declares none. */
   demo: unknown | null;
-  /** Inner layout HTML keyed by `manifest.layouts` key (the `shell` is skipped). */
+  /**
+   * Inner layout HTML keyed by BOTH `manifest.layouts` key and
+   * `contentTemplates[].layoutFile` path (the `shell` is skipped) — the two ways a
+   * screen names its layout (spec §8.2). One map serves both lookups.
+   */
   layouts: Record<string, string>;
   /** Concatenated `manifest.assets.styles` (theme + base), the unified host CSS. */
   css: string;
@@ -166,15 +170,30 @@ export async function readTemplateBundle(sourceDir: string): Promise<TemplateBun
   const manifest = (manifestRaw ? JSON.parse(manifestRaw) : {}) as Record<string, unknown>;
   const m = manifest as {
     layouts?: Record<string, string>;
+    contentTemplates?: Array<{ layoutFile?: string }>;
     assets?: { styles?: string[] };
     preview?: { demoData?: string };
   };
 
+  // Every declared layout, INCLUDING the shell. No screen ever resolves to the
+  // `shell` key (resolveLayoutKey returns route keys / layoutFile paths), but the
+  // hosts need the shell itself to mount a fixed-stage template (manifest
+  // `mountShell`): without it a template whose CSS is scoped to its stage
+  // (`.tb-frame > .tb-stage > #app.tb-pad`) previews unscoped — nothing like its
+  // real design.
   const layouts: Record<string, string> = {};
   for (const [key, rel] of Object.entries(m.layouts ?? {})) {
-    if (key === "shell") continue; // per-screen rendering uses the inner layouts
     const html = read(rel);
     if (html != null) layouts[key] = html;
+  }
+  // Variant-backed screens name their layout by `contentTemplates[].layoutFile`
+  // (spec §8.2), so the map is keyed by that path too — the resolver
+  // (`preview-context.resolveLayoutKey`) returns whichever the screen declares.
+  for (const ct of m.contentTemplates ?? []) {
+    const rel = ct?.layoutFile;
+    if (!rel || layouts[rel] != null) continue;
+    const html = read(rel);
+    if (html != null) layouts[rel] = html;
   }
 
   let demo: unknown = null;

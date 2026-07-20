@@ -34,14 +34,28 @@
 
 BEGIN;
 
--- Step 1: idempotent re-backfill (mirrors migration 027). Guarded on the source
--- columns existing so a re-run AFTER the drop below is a clean no-op (the SELECT
--- reads questions.points/scoring_json; unguarded it would error once dropped).
--- plpgsql plans the branch only when entered.
+-- Step 1: idempotent re-backfill (mirrors migration 027). Guarded PER COLUMN,
+-- not on `points` alone: questions.points and questions.scoring_json can be
+-- dropped INDEPENDENTLY (a prior drizzle-kit push --force syncing to
+-- shared/schema.ts may remove one before this chain runs), and the SELECT reads
+-- BOTH. A guard on `points` alone would enter on a points-present /
+-- scoring_json-dropped DB and error "column scoring_json does not exist".
+-- plpgsql plans each branch only when entered, so a branch naming a dropped
+-- column is never planned when its guard is false. A re-run after step 2 (both
+-- gone) enters no branch — a clean no-op.
 DO $$
+DECLARE
+  has_points  boolean;
+  has_scoring boolean;
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.columns
-             WHERE table_name = 'questions' AND column_name = 'points') THEN
+  SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'questions' AND column_name = 'points')
+    INTO has_points;
+  SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'questions' AND column_name = 'scoring_json')
+    INTO has_scoring;
+
+  IF has_points AND has_scoring THEN
     INSERT INTO "test_question_scoring"
       ("test_id", "question_id", "points", "scoring_json", "pinned_content_hash")
     SELECT DISTINCT
@@ -53,6 +67,30 @@ BEGIN
     FROM "test_sections" ts
     JOIN "questions" q ON q."topic_id" = ts."topic_id"
     WHERE q."points" NOT IN (0, 1) OR q."scoring_json" IS NOT NULL
+    ON CONFLICT ("test_id", "question_id") DO NOTHING;
+  ELSIF has_points THEN
+    INSERT INTO "test_question_scoring"
+      ("test_id", "question_id", "points", "pinned_content_hash")
+    SELECT DISTINCT
+      ts."test_id",
+      q."id",
+      q."points",
+      q."content_hash"
+    FROM "test_sections" ts
+    JOIN "questions" q ON q."topic_id" = ts."topic_id"
+    WHERE q."points" NOT IN (0, 1)
+    ON CONFLICT ("test_id", "question_id") DO NOTHING;
+  ELSIF has_scoring THEN
+    INSERT INTO "test_question_scoring"
+      ("test_id", "question_id", "scoring_json", "pinned_content_hash")
+    SELECT DISTINCT
+      ts."test_id",
+      q."id",
+      q."scoring_json",
+      q."content_hash"
+    FROM "test_sections" ts
+    JOIN "questions" q ON q."topic_id" = ts."topic_id"
+    WHERE q."scoring_json" IS NOT NULL
     ON CONFLICT ("test_id", "question_id") DO NOTHING;
   END IF;
 END $$;

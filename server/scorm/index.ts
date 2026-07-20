@@ -68,12 +68,36 @@ function tryReadBinaryAsset(relativePath: string): Buffer | null {
 }
 
 /**
- * System variant kinds (`start`/`results`) the active template does NOT declare
- * in its `contentTemplates` — those screens fall back to the `default` template
- * (PRD-7 G21). Returns `[]` when the active template IS `default` or its manifest
- * cannot be read (never force a fallback in that case).
+ * System screens that fall back to the `default` template when the active template
+ * does not declare them (PRD-1 §4.3.2, PRD-3 NFR-06), mapped to the layout key the
+ * runtime looks the screen up by.
+ *
+ * The key is NOT always the kind: the runtime renders `questions` through
+ * `layouts.question` and `intro` through `layouts["section-intro"]`. `router`/
+ * `summary` are absent on purpose — they render through the GENERIC `content`
+ * layout, so swapping in the standard template's identical generic layout would buy
+ * nothing; their real fallback is at the variant level (`variant-binding.ts`).
  */
-function computeFallbackKinds(templateDir: string, defaultDir: string): string[] {
+const FALLBACK_KIND_LAYOUT: Record<string, string> = {
+  start: "start",
+  results: "results",
+  questions: "question",
+  intro: "section-intro",
+  review: "review",
+  "section-results": "section-results",
+};
+
+/**
+ * LAYOUT KEYS of the system screens the active template does not declare — those
+ * render from the bundled `default` template. Layout keys (not kinds) because that
+ * is what the runtime looks a screen up by (`systemLayout`), and the two differ:
+ * kind `questions` → layout `question`, kind `intro` → layout `section-intro`.
+ *
+ * Returns `[]` when the active template IS `default`. A manifest that cannot be read
+ * declares nothing, so every screen falls back (fail-safe: a standard screen beats a
+ * missing one).
+ */
+function computeFallbackLayoutKeys(templateDir: string, defaultDir: string): string[] {
   if (path.resolve(templateDir) === path.resolve(defaultDir)) return [];
   let declared: Set<string>;
   try {
@@ -86,16 +110,18 @@ function computeFallbackKinds(templateDir: string, defaultDir: string): string[]
         .filter((k): k is string => typeof k === "string"),
     );
   } catch {
-    return [];
+    declared = new Set();
   }
-  return ["start", "results"].filter((k) => !declared.has(k));
+  return Object.entries(FALLBACK_KIND_LAYOUT)
+    .filter(([kind]) => !declared.has(kind))
+    .map(([, layoutKey]) => layoutKey);
 }
 
 export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   // Resolve the template directory up-front so we can detect which system screens
-  // (start/results) the active template doesn't declare and must fall back to the
-  // bundled `default` template for (PRD-7 G21). Mutating designSettings here lets
-  // the flag flow through buildTestJson into TEST_DATA for the runtime.
+  // the active template doesn't declare and must fall back to the bundled `default`
+  // template for (PRD-1 §4.3.2, PRD-3 NFR-05/NFR-06). Mutating designSettings here
+  // lets the flag flow through buildTestJson into TEST_DATA for the runtime.
   const templateId = data.designSettings?.templateId ?? "default";
   const builtinRoot = getTemplatesRootDir();
   const templateDir =
@@ -103,9 +129,9 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
       ? data.templateDir
       : path.join(builtinRoot, fs.existsSync(path.join(builtinRoot, templateId)) ? templateId : "default");
   const defaultDir = path.join(builtinRoot, "default");
-  const fallbackKinds = computeFallbackKinds(templateDir, defaultDir);
-  if (data.designSettings && fallbackKinds.length > 0) {
-    data.designSettings.fallbackKinds = fallbackKinds;
+  const fallbackLayoutKeys = computeFallbackLayoutKeys(templateDir, defaultDir);
+  if (data.designSettings && fallbackLayoutKeys.length > 0) {
+    data.designSettings.fallbackLayoutKeys = fallbackLayoutKeys;
   }
 
   const testJson = buildTestJson(data);
@@ -114,7 +140,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     .replace("__TITLE__", escapeXml(data.test.title))
     .replace(
       "__FALLBACK_STYLES__",
-      fallbackKinds.length > 0
+      fallbackLayoutKeys.length > 0
         ? '<link rel="stylesheet" href="styles-default.css" id="styles-fallback" disabled />'
         : "",
     );
@@ -353,7 +379,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     }
   });
 
-  // templateId / builtinRoot / templateDir / defaultDir / fallbackKinds were
+  // templateId / builtinRoot / templateDir / defaultDir / fallbackLayoutKeys were
   // resolved at the top of the function (needed before buildTestJson).
   const templateFiles: Record<string, string | Buffer> = {};
   if (fs.existsSync(templateDir)) {
@@ -364,7 +390,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   // PRD-7 G21: bundle the `default` template under `template-default/` so the
   // runtime can render fallback system screens (start/results the active template
   // doesn't declare) from default's own layout + CSS.
-  if (fallbackKinds.length > 0 && fs.existsSync(defaultDir) && path.resolve(defaultDir) !== path.resolve(templateDir)) {
+  if (fallbackLayoutKeys.length > 0 && fs.existsSync(defaultDir) && path.resolve(defaultDir) !== path.resolve(templateDir)) {
     copyDirToFiles(defaultDir, "template-default", templateFiles);
   }
   const manifestHrefs = mediaHrefs.concat(Object.keys(templateFiles));
@@ -394,7 +420,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     }
   };
   const stylesDefaultCss =
-    fallbackKinds.length > 0 ? readDefaultStyle("theme.css") + "\n" + readDefaultStyle("base.css") : "";
+    fallbackLayoutKeys.length > 0 ? readDefaultStyle("theme.css") + "\n" + readDefaultStyle("base.css") : "";
 
   // Vendored PDF-export libraries (no CDN — the package must work offline inside the LMS).
   // html2canvas + jsPDF are shipped in the package (from server/scorm/assets/vendor/) and

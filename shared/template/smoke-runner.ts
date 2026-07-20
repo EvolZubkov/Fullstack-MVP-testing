@@ -8,10 +8,12 @@
  * ({@link module:shared/template/render-screen}) the runtime hosts use, in an isolated
  * container, and collects a {@link SmokeReport}.
  *
- * Per screen it flags a blocking error on: an unhandled render exception, a missing
- * or unfilled required slot, a console error during render, an empty render. Console
- * warnings are non-blocking warnings (§4.2). Optionally it syntax-checks `template.js`
- * and JSON-parses the course rules (§4.3) as separate report rows.
+ * Per screen it flags a blocking error on: an unhandled render exception, a console
+ * error during render, an empty render. Blocking is reserved for what makes a package
+ * unusable; a missing layout or slot is NOT blocking (spec §17.1/§17.2, PRD-3
+ * §4.2/§4.3/NFR-06) — such a screen falls back to the standard template and is
+ * reported as a warning. Console warnings are warnings too (§4.2). Optionally it
+ * syntax-checks `template.js` as a separate report row.
  *
  * Environment-agnostic and DOM-only: it runs in the admin's browser (the host passes
  * `createContainer` returning an isolated iframe body) and under jsdom in tests
@@ -49,6 +51,13 @@ export interface SmokeRunOptions {
   manifest: PreviewManifest;
   /** Layout HTML by layout key (`manifest.layouts` values, pre-loaded by the host). */
   layouts: Record<string, string>;
+  /**
+   * The STANDARD template's layouts, same keying. Optional: when supplied, a screen
+   * whose layout this template omits is rendered from here — the fallback the hosts
+   * apply (PRD-1 §4.3.2, PRD-3 NFR-06) — so the check exercises the screen the
+   * learner actually gets. Without it such a screen is only reported as a warning.
+   */
+  fallbackLayouts?: Record<string, string>;
   /** Partial templates for `{{> name}}`. */
   partials?: Record<string, string>;
   /** `template.js` source — compiled (not executed) to catch syntax errors. */
@@ -79,10 +88,22 @@ function checkScreen(
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const layout = opts.layouts[spec.layoutKey];
+  // A layout the template does not declare is NOT a failure (spec §17.1, PRD-3
+  // NFR-06): the screen falls back to the standard template. When the host supplies
+  // the standard template's layouts we render THAT — so the check exercises what the
+  // learner will actually see — and warn either way.
+  let layout = opts.layouts[spec.layoutKey];
   if (layout == null) {
-    errors.push(`Не найден макет «${spec.layoutKey}»`);
-    return { id: spec.id, route: spec.route, label: spec.label, status: "fail", errors, warnings };
+    const fallback = opts.fallbackLayouts?.[spec.layoutKey];
+    warnings.push(
+      fallback != null
+        ? `Макет «${spec.layoutKey}» не объявлен — экран отрисован из стандартного шаблона`
+        : `Макет «${spec.layoutKey}» не объявлен — экран будет отрисован из стандартного шаблона`,
+    );
+    if (fallback == null) {
+      return { id: spec.id, route: spec.route, label: spec.label, status: "warn", errors, warnings };
+    }
+    layout = fallback;
   }
 
   const root = (opts.createContainer ?? defaultContainer)();
@@ -110,10 +131,17 @@ function checkScreen(
     if (!root.innerHTML.trim()) {
       errors.push("Экран отрисован пустым");
     }
-    for (const slot of spec.requiredSlots) {
+    // A missing/unfilled slot never blocks activation (spec §17.1/§17.2, PRD-3
+    // §4.2/§4.3): the engine skips an absent slot (render-screen `fillSlots`) and
+    // the hosts render such a screen from the standard template instead. Report it
+    // as a warning naming the consequence, so the author can see what they lose.
+    for (const slot of spec.expectedSlots) {
       const el = root.querySelector(`[data-slot="${slot}"]`);
-      if (!el) errors.push(`Нет обязательного слота data-slot="${slot}"`);
-      else if (!el.innerHTML.trim()) errors.push(`Не заполнен обязательный слот data-slot="${slot}"`);
+      if (!el) {
+        warnings.push(`Нет слота data-slot="${slot}" — экран будет отрисован из стандартного шаблона`);
+      } else if (!el.innerHTML.trim()) {
+        warnings.push(`Не заполнен слот data-slot="${slot}"`);
+      }
     }
   }
 

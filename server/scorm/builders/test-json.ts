@@ -24,7 +24,13 @@ interface DesignSettingsExport {
    * `default` template (PRD-7 G21). Set by the exporter when it bundles the
    * `template-default/` files; absent/empty means no fallback.
    */
-  fallbackKinds?: string[];
+  /**
+   * LAYOUT KEYS of the system screens the active template does not declare; the
+   * runtime renders these from the bundled `default` template (PRD-1 §4.3.2,
+   * PRD-3 NFR-05/NFR-06). Layout keys, not variant kinds — that is what
+   * `systemLayout()` looks up.
+   */
+  fallbackLayoutKeys?: string[];
 }
 
 interface ExportData {
@@ -318,8 +324,8 @@ export function buildTestJson(data: ExportData): string {
       templateVersion: data.designSettings.templateVersion,
       templateApiVersion: data.designSettings.templateApiVersion,
       params: data.designSettings.params,
-      ...(data.designSettings.fallbackKinds && data.designSettings.fallbackKinds.length > 0
-        ? { fallbackKinds: data.designSettings.fallbackKinds }
+      ...(data.designSettings.fallbackLayoutKeys && data.designSettings.fallbackLayoutKeys.length > 0
+        ? { fallbackLayoutKeys: data.designSettings.fallbackLayoutKeys }
         : {}),
     };
   }

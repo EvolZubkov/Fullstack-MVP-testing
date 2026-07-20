@@ -93,7 +93,15 @@ export async function resolveTemplateDir(
   return defaultTemplateDir();
 }
 
-/** True when the template's manifest declares ≥1 `contentTemplate` of `kind`. */
+/**
+ * True when the template's manifest declares ≥1 `contentTemplate` of `kind`.
+ *
+ * Fails SAFE: a template whose manifest cannot be read owns nothing, so the screen
+ * falls back to the standard template rather than rendering from a template that may
+ * not define it. The opposite (fail-open) chose a broken screen over a working one
+ * whenever the DB hiccuped. A manifest with NO `contentTemplates` at all is treated
+ * the same way — it declares no kinds, so every system screen falls back.
+ */
 async function templateOwnsKind(templateId: string, kind: string): Promise<boolean> {
   try {
     const [row] = await db
@@ -102,10 +110,9 @@ async function templateOwnsKind(templateId: string, kind: string): Promise<boole
       .where(eq(templates.id, templateId));
     const cts = (row?.manifest as { contentTemplates?: Array<{ kind?: string }> } | null | undefined)
       ?.contentTemplates;
-    return Array.isArray(cts) ? cts.some((c) => c?.kind === kind) : true;
+    return Array.isArray(cts) && cts.some((c) => c?.kind === kind);
   } catch {
-    // DB error — don't force the fallback; keep the requested template.
-    return true;
+    return false;
   }
 }
 

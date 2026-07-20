@@ -403,6 +403,7 @@ router.post("/:id/validate", requirePermission("adminTemplates.manage"), async (
 /** Manifest subset the smoke-bundle reads (paths into the package). */
 interface BundleManifest {
   layouts?: Record<string, string>;
+  contentTemplates?: Array<{ key?: string; layoutFile?: string }>;
   assets?: { styles?: string[]; scripts?: string[]; preview?: string };
   preview?: { demoData?: string };
 }
@@ -473,13 +474,23 @@ router.get("/:id/smoke-bundle", requirePermission("adminTemplates.manage"), asyn
     const manifest = (row.manifest ?? {}) as BundleManifest;
     const layoutPaths = manifest.layouts ?? {};
 
-    // Layout HTML keyed by manifest layout key (skip the shell — per-screen
-    // rendering uses the inner layouts, mirroring the unified web host).
+    // Layout HTML keyed by manifest layout key, INCLUDING the shell: no screen
+    // resolves to the `shell` key, but the preview must mount it for a fixed-stage
+    // template (manifest `mountShell`) or the screen renders outside the stage its
+    // CSS is scoped to (see readTemplateBundle).
     const layouts: Record<string, string> = {};
     for (const [key, rel] of Object.entries(layoutPaths)) {
-      if (key === "shell") continue;
       const html = read(rel);
       if (html != null) layouts[key] = html;
+    }
+    // ALSO key each variant's `layoutFile` by its path: that field — not a layouts[]
+    // key — is how a variant-backed screen names its layout (spec §8.2), so the
+    // resolver (`preview-context.resolveLayoutKey`) looks it up by path.
+    for (const ct of manifest.contentTemplates ?? []) {
+      const rel = ct?.layoutFile;
+      if (!rel || layouts[rel] != null) continue;
+      const html = read(rel);
+      if (html != null) layouts[rel] = html;
     }
 
     const demoRel = manifest.preview?.demoData;

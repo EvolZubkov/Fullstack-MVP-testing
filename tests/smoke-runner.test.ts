@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { buildScreenInputs } from "../shared/template/preview-context";
+import { buildScreenInputs, type PreviewManifest } from "../shared/template/preview-context";
 import { runSmokeChecks } from "../shared/template/smoke-runner";
 
 const DEFAULT_DIR = path.resolve(process.cwd(), "server", "scorm", "templates", "default");
@@ -18,12 +18,21 @@ function readJson(rel: string): any {
   return JSON.parse(fs.readFileSync(path.join(DEFAULT_DIR, rel), "utf-8"));
 }
 
-/** Load layout HTML keyed by the manifest layout key (the keys resolveLayoutKey returns). */
+/**
+ * Load layout HTML the way the real bundle readers do (`readTemplateBundle` /
+ * the admin smoke-bundle): keyed by BOTH the `manifest.layouts` key and each
+ * `contentTemplates[].layoutFile` path — the two ways a screen names its layout
+ * (spec §8.2), and the two kinds of key `resolveLayoutKey` returns.
+ */
 function loadLayouts(manifest: any): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, rel] of Object.entries(manifest.layouts as Record<string, string>)) {
     if (key === "shell") continue;
     out[key] = fs.readFileSync(path.join(DEFAULT_DIR, rel), "utf-8");
+  }
+  for (const ct of (manifest.contentTemplates ?? []) as Array<{ layoutFile?: string }>) {
+    if (!ct.layoutFile || out[ct.layoutFile] != null) continue;
+    out[ct.layoutFile] = fs.readFileSync(path.join(DEFAULT_DIR, ct.layoutFile), "utf-8");
   }
   return out;
 }
@@ -49,30 +58,111 @@ describe("buildScreenInputs (demo dataset → screen specs)", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("resolves layout keys with fallback (specific → general)", () => {
+  // Regression: `certification` previews TWO gallery screens (gallery-1 / gallery-2)
+  // bound to ONE variant (`gallery.card`). Keying identity on the variant collided —
+  // duplicate ids break the rail's per-screen status and React keys.
+  it("keeps screens that share one variant distinct (id from the bound page)", () => {
+    const manifestTwoPages: PreviewManifest = {
+      layouts: { shell: "shell.html", content: "layouts/content.html" },
+      contentTemplates: [
+        { key: "gallery.card", label: "Галерея", kind: "gallery", pageKind: "content.gallery" },
+      ],
+      preview: {
+        routes: [
+          { route: "content.gallery.1", pageId: "gallery-1", label: "Галерея 1" },
+          { route: "content.gallery.2", pageId: "gallery-2", label: "Галерея 2" },
+        ],
+      },
+    };
+    const ds = {
+      course: {
+        title: "T",
+        contentPages: [
+          { id: "gallery-1", type: "gallery", route: "content.gallery", templateKey: "gallery.card", values: {} },
+          { id: "gallery-2", type: "gallery", route: "content.gallery", templateKey: "gallery.card", values: {} },
+        ],
+      },
+    } as any;
+    const ids = buildScreenInputs(ds, manifestTwoPages)
+      .filter((s) => s.route.startsWith("content.gallery"))
+      .map((s) => s.id);
+    expect(ids).toEqual(["gallery-1", "gallery-2"]);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("resolves a variant-backed screen through its layoutFile, not a page-kind key", () => {
+    // Rule §8.2: the variant's `layoutFile` names the layout. A key named after the
+    // page kind (`layouts["content.intro"]`) is NOT part of the contract — the
+    // runtime never reads one either.
     const byRoute = Object.fromEntries(specs.map((s) => [s.route, s.layoutKey]));
-    expect(byRoute["start"]).toBe("start");
-    expect(byRoute["content.intro"]).toBe("content");
+    expect(byRoute["start"]).toBe("layouts/start.html"); // start.standard.layoutFile
+    expect(byRoute["results"]).toBe("layouts/results.html"); // results.standard
+  });
+
+  it("resolves «Введение раздела» by the fixed section-intro key, as the runtime does", () => {
+    // `contentPage.js → renderSectionIntro` reads `layouts["section-intro"]`, NOT the
+    // intro variant's layoutFile — the resolver must not diverge from it.
+    const byRoute = Object.fromEntries(specs.map((s) => [s.route, s.layoutKey]));
+    expect(byRoute["content.intro"]).toBe("section-intro");
+  });
+
+  it("an intro variant without a section-intro layout renders as a plain content page", () => {
+    // Builder-exported templates bind `kind: intro` to an ordinary page layout and
+    // declare no `section-intro` key. The runtime falls through to the generic content
+    // render; keying the pipeline on layoutFile would preview an empty screen.
+    const plainIntro: PreviewManifest = {
+      layouts: { shell: "shell.html", content: "layouts/content.html" },
+      contentTemplates: [
+        {
+          key: "intro.builder",
+          label: "Введение",
+          kind: "intro",
+          pageKind: "content.intro",
+          layoutFile: "layouts/page-1.html",
+          placeholders: [{ key: "title", type: "text" } as any],
+        },
+      ],
+      preview: { routes: [{ route: "content.intro", label: "Введение" }] },
+    };
+    const spec = buildScreenInputs({ course: { title: "T" } } as any, plainIntro)[0];
+    expect(spec.layoutKey).toBe("layouts/page-1.html");
+    expect(spec.expectedSlots).toEqual(["page-content"]);
+  });
+
+  it("falls back to the generic layout when the variant declares no layoutFile", () => {
+    // info/summary/router/questions ship without a layoutFile in the default and
+    // render through the generic `content`/`question` layouts — as the runtime does.
+    const byRoute = Object.fromEntries(specs.map((s) => [s.route, s.layoutKey]));
     expect(byRoute["question.single"]).toBe("question");
     expect(byRoute["question.matching"]).toBe("question");
-    expect(byRoute["results"]).toBe("results");
+    expect(byRoute["content.info"]).toBe("content");
     expect(byRoute["system.blocked"]).toBe("system.blocked");
   });
 
-  it("question screens require the prompt + interaction slots, filled", () => {
+  it("question screens expect the prompt + interaction slots, filled", () => {
     const q = specs.find((s) => s.route === "question.single")!;
-    expect(q.requiredSlots).toEqual(["question-text", "question-interaction"]);
+    expect(q.expectedSlots).toEqual(["question-text", "question-interaction"]);
     expect(q.input.slots!["question-text"]).toContain("пароль");
     expect(q.input.slots!["question-interaction"]).toContain("radio");
   });
 
-  it("content screens carry a placeholder skeleton in page-content", () => {
-    // PRD-1 §4.3: the default intro variant (intro.standard) carries a single
-    // `instruction` author placeholder (topic name/count/time render from the section).
+  it("the intro screen renders through the section-intro pipeline, as the runtime does", () => {
+    // PRD-1 §4.3 / PRD-19: «Введение раздела» is NOT a generic content page — the
+    // runtime (`contentPage.js → renderSectionIntro`) feeds it a computed
+    // `sectionIntro` context plus the author instruction as a slot. Feeding it a
+    // page-content skeleton (as the preview used to) checks a screen nobody renders.
     const intro = specs.find((s) => s.route === "content.intro")!;
-    expect(intro.requiredSlots).toEqual(["page-content"]);
-    expect(intro.input.slots!["page-content"]).toContain('data-placeholder="instruction"');
-    expect(String(intro.input.content!.values.instruction)).toContain("ответьте внимательно");
+    expect(intro.expectedSlots).toEqual(["instruction"]);
+    expect(intro.input.slots!["instruction"]).toContain("ответьте внимательно");
+    const ctx = intro.input.context as { sectionIntro: { topicName: string; hasInstruction: boolean } };
+    expect(ctx.sectionIntro.hasInstruction).toBe(true);
+    expect(ctx.sectionIntro.topicName).toBe("Базовые угрозы");
+  });
+
+  it("generic content screens carry a placeholder skeleton in page-content", () => {
+    const info = specs.find((s) => s.route === "content.info")!;
+    expect(info.expectedSlots).toEqual(["page-content"]);
+    expect(info.input.slots!["page-content"]).toContain('data-placeholder="body"');
   });
 });
 
@@ -210,30 +300,53 @@ describe("runSmokeChecks — default template passes its own smoke-test", () => 
 // ─── smoke-runner: broken fixtures fail ─────────────────────────────────────
 
 describe("runSmokeChecks — broken templates fail", () => {
-  it("fails a question screen whose layout drops the interaction slot", () => {
+  // A missing slot/layout is NOT blocking (spec §17.1/§17.2, PRD-3 NFR-06): such a
+  // screen renders from the standard template, so it warns instead of failing.
+  it("warns — does not fail — when a question layout drops the interaction slot", () => {
     const broken = { ...layouts, question: '<div class="q"><div data-slot="question-text"></div></div>' };
     const report = runSmokeChecks({ dataset: demo, manifest, layouts: broken });
-    expect(report.ok).toBe(false);
     const q = report.routes.find((r) => r.route === "question.single")!;
-    expect(q.status).toBe("fail");
-    expect(q.errors.join(" ")).toContain("question-interaction");
+    expect(q.status).toBe("warn");
+    expect(q.errors).toEqual([]);
+    expect(q.warnings.join(" ")).toContain("question-interaction");
+    expect(q.warnings.join(" ")).toContain("стандартного шаблона");
+    expect(report.ok).toBe(true);
   });
 
   it("fails a screen whose layout throws on bad DSL", () => {
-    const broken = { ...layouts, start: "{{#if state.canStart}} нет закрывающего тега" };
+    // Invalid DSL stays blocking — the package is broken, not merely incomplete.
+    const broken = { ...layouts, "layouts/start.html": "{{#if state.canStart}} нет закрывающего тега" };
     const report = runSmokeChecks({ dataset: demo, manifest, layouts: broken });
     const start = report.routes.find((r) => r.route === "start")!;
     expect(start.status).toBe("fail");
     expect(start.errors.join(" ")).toContain("Ошибка отрисовки");
+    expect(report.ok).toBe(false);
   });
 
-  it("fails when a layout is missing entirely", () => {
+  it("warns — does not fail — when a layout is missing entirely", () => {
     const broken = { ...layouts };
-    delete broken.results;
+    delete broken["layouts/results.html"];
     const report = runSmokeChecks({ dataset: demo, manifest, layouts: broken });
     const res = report.routes.find((r) => r.route === "results")!;
-    expect(res.status).toBe("fail");
-    expect(res.errors.join(" ")).toContain("макет");
+    expect(res.status).toBe("warn");
+    expect(res.errors).toEqual([]);
+    expect(res.warnings.join(" ")).toContain("не объявлен");
+    expect(report.ok).toBe(true);
+  });
+
+  it("renders a missing screen from the standard template when its layouts are supplied", () => {
+    const broken = { ...layouts };
+    delete broken["layouts/results.html"];
+    const report = runSmokeChecks({
+      dataset: demo,
+      manifest,
+      layouts: broken,
+      fallbackLayouts: layouts, // the standard template's layouts
+    });
+    const res = report.routes.find((r) => r.route === "results")!;
+    expect(res.status).toBe("warn");
+    expect(res.warnings.join(" ")).toContain("отрисован из стандартного шаблона");
+    expect(report.ok).toBe(true);
   });
 
   it("fails on a template.js syntax error", () => {

@@ -25,10 +25,19 @@ masked.password = masked.password ? "******" : "";
 console.log("DATABASE_URL:", masked.toString());
 
 export default defineConfig({
-  out: "./migrations",
+  // Versioned migrations live here (drizzle-kit generate) and are applied with
+  // drizzle-kit migrate. The legacy hand-written data/DDL steps stay under
+  // ./migrations as a historical record; they are NOT part of this journal.
+  out: "./drizzle",
   schema: "./shared/schema.ts",
   dialect: "postgresql",
   dbCredentials: {
     url: databaseUrl,
+  },
+  // Explicit tracking-table location so the one-time baseline of pre-existing
+  // databases (mark 0000 as applied) targets exactly what migrate reads.
+  migrations: {
+    table: "__drizzle_migrations",
+    schema: "drizzle",
   },
 });
