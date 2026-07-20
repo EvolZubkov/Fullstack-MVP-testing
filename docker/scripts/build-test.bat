@@ -105,6 +105,14 @@ echo.
 :: Step 4: Upload and reload on server
 :: ---------------------------------------------------------------------------
 echo [4/4] Uploading to %DEPLOY_TARGET% and reloading...
+
+:: Drop a stale remote tar first: a prior run as root leaves a root-owned
+:: %REMOTE_TAR%, and /tmp is sticky, so a non-root scp can neither overwrite
+:: nor unlink it ("dest open ... Permission denied"). The trailing rm below
+:: only runs when the whole remote step succeeds, so leftovers do happen.
+ssh -tt "%DEPLOY_TARGET%" "sudo rm -f %REMOTE_TAR%"
+if errorlevel 1 ( echo ERROR: remote cleanup failed & exit /b 1 )
+
 scp "%IMAGE_FILE%" "%DEPLOY_TARGET%:%REMOTE_TAR%"
 if errorlevel 1 ( echo ERROR: scp failed & exit /b 1 )
 
