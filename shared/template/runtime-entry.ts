@@ -31,3 +31,33 @@ export { buildTemplateCssVars, DEFAULT_PARAM_CSS_VARS } from "./params-css";
 export { buildQuestionProgress } from "./question-progress-context";
 // PRD-19 Block D: review/finish (обзор) screen builder.
 export { buildReviewContext } from "./review-context";
+// PRD-12 FR-6: the SINGLE content-page assembler (skeleton + values), so a content
+// page is built identically on both hosts.
+export {
+  buildContentPageSkeleton,
+  buildFallbackContentHtml,
+  buildContentPageRender,
+  findContentTemplate,
+  getPageValues,
+  getPagePlaceholderStyles,
+} from "./content-page";
+// PRD-12 FR-6: the SINGLE router-hub rules + markup, so a section is open (or not)
+// identically in the LMS and on the web.
+export {
+  buildRouterHubHtml,
+  isSectionUnlocked,
+  isRouterReadyToFinish,
+  statusLabel,
+  pluralQuestions,
+} from "../flow/router-hub";
+// PRD-12 FR-6: the SINGLE page-sequence builder — which screens the learner gets
+// and in what order. Both hosts consume it so «Структура» and the run cannot drift.
+export {
+  buildPageSequence,
+  buildBeforeZone,
+  buildAfterZone,
+  buildTopicChunk,
+  contentPagesFor,
+  questionIndicesByTopic,
+  isFlowContentPage,
+} from "../flow/page-sequence";
