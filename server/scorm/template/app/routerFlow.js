@@ -46,133 +46,56 @@
     return out;
   }
 
-  /** True when `p` is an AUTHOR content page that may flow in a sequence — i.e.
-   *  NOT a system design-binding (`questions`/`start`/`results`/`router`) nor a
-   *  PRD-19 section node (`review`/`section-results`), all of which render via
-   *  their own phases. Mirrors contentFlow.contentPagesFor so the router topic
-   *  chunks never show a blank «Далее» page from the «Вопросы» binding row. */
-  function isFlowContentPage(p) {
-    return p && p.kind !== "start" && p.kind !== "results" && p.kind !== "questions"
-      && p.kind !== "router" && p.kind !== "review" && p.kind !== "section-results";
-  }
-
-  /** Lists per-topic content pages at the given position, in sortOrder. */
-  function contentPagesForRouter(topicId, position) {
-    return (TEST_DATA.contentPages || [])
-      .filter(function (p) {
-        return isFlowContentPage(p) && p.topicId === topicId && p.position === position;
-      })
-      .sort(function (a, b) {
-        return (a.sortOrder || 0) - (b.sortOrder || 0);
-      });
-  }
-
   /**
    * Builds the pageSequence chunk for one topic: before_topic content →
    * questions for that topic → after_topic content. Reused by
    * {@link selectRouterTopic} every time the learner picks a topic.
+   *
+   * Delegates to the shared builder (`shared/flow/page-sequence`, exposed as
+   * `TBTemplate`) so a topic chunk here is assembled by exactly the same rules
+   * as the linear flow and the web host — including the filter that keeps system
+   * design-bindings (`questions`, `start`, `results`) and PRD-19 section nodes
+   * out of the sequence, which is what stops a blank «Далее» page appearing at
+   * the section start.
    */
   function buildTopicChunk(topicId) {
-    var seq = [];
-    contentPagesForRouter(topicId, "before_topic").forEach(function (page) {
-      seq.push({ kind: "content", page: page });
-    });
-    indicesForTopic(topicId).forEach(function (questionIndex) {
-      seq.push({ kind: "question", questionIndex: questionIndex });
-    });
-    contentPagesForRouter(topicId, "after_topic").forEach(function (page) {
-      seq.push({ kind: "content", page: page });
-    });
-    return seq;
+    return TBTemplate.buildTopicChunk(
+      TEST_DATA.contentPages,
+      topicId,
+      indicesForTopic(topicId),
+    );
   }
 
   /**
-   * Builds the post-router test-end sequence: test-scope «after» content,
-   * with the same summary-boundary semantics as the existing
-   * rebuildPageSequence logic (a `summary` page splits pre-results vs
-   * post-results pages).
+   * Builds the post-router test-end sequence: test-scope «after» content, split
+   * at the `summary` boundary (pages past it are deferred to
+   * state.postResultsPages and render after the results screen).
    */
   function buildPostRouterSequence() {
-    var seq = [];
-    var postResults = [];
-    var seenSummary = false;
-    (TEST_DATA.contentPages || [])
-      .filter(function (p) { return isFlowContentPage(p) && p.topicId === null && p.position === "after"; })
-      .sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); })
-      .forEach(function (page) {
-        if (page.type === "summary") { seenSummary = true; return; }
-        if (seenSummary) postResults.push(page);
-        else seq.push({ kind: "content", page: page });
-      });
-    state.postResultsPages = postResults;
-    return seq;
+    var after = TBTemplate.buildAfterZone(TEST_DATA.contentPages);
+    state.postResultsPages = after.postResultsPages;
+    return after.preResults;
   }
 
-  /**
-   * PRD-4 v1.1 §4.7: evaluates whether `section` is unlocked given the
-   * current routerTopicStates. Reads `flowPolicy.sectionUnlockRules`
-   * (per-section rule keyed by topicId). Default rule is `always`.
-   *
-   * Supported rule modes:
-   *   - { mode: "always" }                                   — unconditional
-   *   - { mode: "after_sections_completed", sectionIds: [] } — all listed
-   *     sections must be in 'completed' state (any achievedLevel/result)
-   *   - { mode: "after_sections_passed", sectionIds: [] }    — same, but
-   *     sectionResults[id].passed must be true (or null when the section
-   *     has no pass rule; null is treated as passed in this MVP)
-   */
+  /** The hub state the shared rules read (topic states + frozen results + policy). */
+  function hubState() {
+    return {
+      topicStates: state.routerTopicStates || {},
+      sectionResults: state.sectionResults || {},
+      unlockRules: (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.sectionUnlockRules) || {},
+      completionPolicy:
+        (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.routerCompletionPolicy) || null,
+    };
+  }
+
+  /** PRD-4 v1.1 §4.7 — delegated to shared/flow/router-hub (single source). */
   function isSectionUnlocked(section) {
-    var rules =
-      (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.sectionUnlockRules) || {};
-    var rule = rules[section.topicId];
-    if (!rule || !rule.mode || rule.mode === "always") return true;
-    if (rule.mode === "after_sections_completed") {
-      return (rule.sectionIds || []).every(function (id) {
-        return state.routerTopicStates[id] === "completed";
-      });
-    }
-    if (rule.mode === "after_sections_passed") {
-      return (rule.sectionIds || []).every(function (id) {
-        if (state.routerTopicStates[id] !== "completed") return false;
-        var result = state.sectionResults && state.sectionResults[id];
-        // null passed (no passRule) is treated as passed for navigation;
-        // strict pass mode would reject it — see PRD-4 §4.6.
-        return !result || result.passed !== false;
-      });
-    }
-    return true; // Unknown rule mode: fail-open (don't block the learner).
+    return TBTemplate.isSectionUnlocked(section, hubState());
   }
 
-  /**
-   * PRD-4 v1.1 §4.7: evaluates whether the router can show «Завершить».
-   * Reads `flowPolicy.routerCompletionPolicy` (default
-   * 'all_required_completed'). Optional sections never block completion.
-   */
+  /** PRD-4 v1.1 §4.7 — delegated to shared/flow/router-hub (single source). */
   function isRouterReadyToFinish() {
-    var policy =
-      (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.routerCompletionPolicy) ||
-      "all_required_completed";
-    var requiredSections = (TEST_DATA.sections || []).filter(function (s) {
-      return s.required !== false;
-    });
-    if (requiredSections.length === 0) {
-      // No required sections — learner can finish at any time.
-      return true;
-    }
-    return requiredSections.every(function (s) {
-      if (state.routerTopicStates[s.topicId] !== "completed") return false;
-      if (policy === "all_required_passed") {
-        var result = state.sectionResults && state.sectionResults[s.topicId];
-        // No-result safeguard: treat as not-passed under strict policy.
-        if (!result) return false;
-        // null `passed` (no passRule) → not strictly passed under the
-        // 'all_required_passed' policy; author must define passRules to
-        // use this policy.
-        return result.passed === true;
-      }
-      // all_required_completed: any completion is sufficient.
-      return true;
-    });
+    return TBTemplate.isRouterReadyToFinish(TEST_DATA.sections || [], hubState());
   }
 
   /**
@@ -198,124 +121,33 @@
     // page-content slot — the SAME DOM the preview builds (buildRouterCards into
     // page-content) — so the run and the structure preview look identical.
     var host = app.querySelector('[data-slot="page-content"]') || app;
-    var existing = host.querySelector(".router-topic-cards");
-    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
-
-    var cards = document.createElement("div");
-    cards.className = "router-topic-cards";
-    cards.setAttribute("role", "list");
-    cards.setAttribute("aria-label", "Доступные темы");
-
-    (TEST_DATA.sections || []).forEach(function (section) {
-      var status = state.routerTopicStates[section.topicId] || "notStarted";
-      var unlocked = isSectionUnlocked(section);
-      var lockedClass = !unlocked && status !== "completed" ? " router-topic-card--locked" : "";
-      var card = document.createElement("button");
-      card.type = "button";
-      card.className =
-        "router-topic-card router-topic-card--" + status + lockedClass;
-      card.setAttribute("role", "listitem");
-      card.setAttribute("data-topic-id", section.topicId);
-      card.setAttribute("data-router-status", status);
-      if (!unlocked) card.setAttribute("data-router-locked", "true");
-      // Completed cards stay disabled to prevent re-entry; locked cards are
-      // disabled because their unlock-rule prerequisites aren't met yet.
-      card.disabled = status === "completed" || !unlocked;
-      var _meta = [];
-      if (section.drawCount) _meta.push(section.drawCount + " " + pluralQuestions(section.drawCount));
-      if (section.timeLimitMinutes) _meta.push(section.timeLimitMinutes + " мин");
-      var _metaHtml = _meta.length
-        ? '<span class="router-topic-card__meta">' + _meta.map(function (m) {
-            return '<span class="router-topic-card__chip">' + escapeHtml(m) + "</span>";
-          }).join("") + "</span>"
-        : "";
-      var _goHtml = (unlocked && status !== "completed")
-        ? '<span class="router-topic-card__go">начать</span>' : "";
-      var _imgUrl = section.image && typeof section.image === "object"
-        ? (section.image.url || "") : (section.image || "");
-      var _imgHtml = _imgUrl
-        ? '<span class="router-topic-card__img"><img src="' + escapeHtml(_imgUrl) + '" alt=""></span>'
-        : "";
-      card.innerHTML =
-        '<span class="router-topic-card__top">' +
-        '<span class="router-topic-card__name">' +
-        escapeHtml(section.topicName || section.topicId) +
-        (section.required === false
-          ? ' <span class="router-topic-card__optional">(необязательная)</span>'
-          : "") +
-        "</span>" +
-        _imgHtml +
-        "</span>" +
-        _metaHtml +
-        '<span class="router-topic-card__foot">' +
-        '<span class="router-topic-card__status">' +
-        escapeHtml(unlocked ? statusLabel(status) : "Недоступна") +
-        "</span>" +
-        _goHtml +
-        "</span>";
-      card.onclick = function () {
-        if (card.disabled) return;
-        selectRouterTopic(section.topicId);
-      };
-      cards.appendChild(card);
+    // Cards / progress / «Завершить» come from the SHARED builder — the same
+    // markup and the same open/locked rules the web host renders, so a section
+    // cannot be clickable in one runtime and dead in the other.
+    var prev = host.querySelector(".router-hub");
+    if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+    var hub = document.createElement("div");
+    hub.className = "router-hub";
+    hub.innerHTML = TBTemplate.buildRouterHubHtml(TEST_DATA.sections || [], hubState(), {
+      deadline: TEST_DATA.deadline || null,
     });
+    host.appendChild(hub);
 
-    // Top stats: deadline date/time (mirrors the original's top boxes). Additive —
-    // only rendered when the test carries a deadline; the default template omits it.
-    var prevStats = host.querySelector(".router-stats");
-    if (prevStats && prevStats.parentNode) prevStats.parentNode.removeChild(prevStats);
-    var deadline = TEST_DATA.deadline || {};
-    if (deadline.date || deadline.time) {
-      var stats = document.createElement("div");
-      stats.className = "router-stats";
-      var _sb = "";
-      if (deadline.date) _sb += '<div class="router-stat"><span class="router-stat__label">Дата завершения теста</span><span class="router-stat__value">' + escapeHtml(deadline.date) + "</span></div>";
-      if (deadline.time) _sb += '<div class="router-stat"><span class="router-stat__label">Время завершения теста</span><span class="router-stat__value">' + escapeHtml(deadline.time) + "</span></div>";
-      stats.innerHTML = _sb;
-      host.appendChild(stats);
-    }
+    // Delegate the builder's data-action contract onto this runtime's handlers.
+    Array.prototype.forEach.call(
+      hub.querySelectorAll('[data-action]'),
+      function (el) {
+        var action = el.getAttribute("data-action") || "";
+        if (action.indexOf("router-select:") === 0) {
+          var topicId = action.slice("router-select:".length);
+          el.onclick = function () { selectRouterTopic(topicId); };
+        } else if (action === "router-finish") {
+          el.onclick = finishRouter;
+        }
+      },
+    );
 
-    // Progress counter «Разделы X / Y» + thin bar, above the cards. Y counts ONLY
-    // required sections (the ones that gate «Перейти к результатам»); hidden when
-    // there are no required sections.
-    var prevProg = host.querySelector(".router-progress");
-    if (prevProg && prevProg.parentNode) prevProg.parentNode.removeChild(prevProg);
-    var reqSections = (TEST_DATA.sections || []).filter(function (s) { return s.required !== false; });
-    var reqTotal = reqSections.length;
-    if (reqTotal > 0) {
-      var reqDone = reqSections.filter(function (s) {
-        return state.routerTopicStates[s.topicId] === "completed";
-      }).length;
-      var pct = Math.round((reqDone / reqTotal) * 100);
-      var prog = document.createElement("div");
-      prog.className = "router-progress";
-      prog.setAttribute("role", "group");
-      prog.setAttribute("aria-label", "Прогресс по разделам");
-      prog.innerHTML =
-        '<div class="router-progress__head">' +
-          '<span class="router-progress__label">Разделы</span>' +
-          '<span class="router-progress__count">' + reqDone + " / " + reqTotal + "</span>" +
-        "</div>" +
-        '<div class="router-progress__bar"><div class="router-progress__fill" style="width:' + pct + '%"></div></div>';
-      host.appendChild(prog);
-    }
-
-    host.appendChild(cards);
-
-    // PRD-4 v1.1 §4.7: «Завершить» is gated by routerCompletionPolicy
-    // (all required sections completed, optionally also passed). Optional
-    // sections never block.
-    // «Завершить» is always shown but disabled until the completion policy is met
-    // (mirrors the original — the button greys out until all sections are done).
     var ready = isRouterReadyToFinish();
-    var finishBtn = document.createElement("button");
-    finishBtn.type = "button";
-    finishBtn.className = "btn router-finish" + (ready ? "" : " router-finish--disabled");
-    finishBtn.setAttribute("data-action", "router-finish");
-    finishBtn.textContent = "Завершить";
-    finishBtn.disabled = !ready;
-    if (ready) finishBtn.onclick = finishRouter;
-    host.appendChild(finishBtn);
 
     // PRD-8 FR-18: emit router lifecycle events for diagnostics + template
     // extensions. The first time the «Завершить» action becomes available
@@ -351,19 +183,8 @@
     }
   }
 
-  function statusLabel(status) {
-    if (status === "completed") return "Пройдена";
-    if (status === "inProgress") return "В процессе";
-    return "Не начата";
-  }
-
-  /** Russian plural for «вопрос» (n вопрос / вопроса / вопросов). */
-  function pluralQuestions(n) {
-    var m10 = n % 10, m100 = n % 100;
-    if (m10 === 1 && m100 !== 11) return "вопрос";
-    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return "вопроса";
-    return "вопросов";
-  }
+  // statusLabel / pluralQuestions moved to shared/flow/router-hub with the hub
+  // markup that used them — no local copies to drift.
 
   /**
    * Marks the topic as in-progress and starts the topic's runtime. In
