@@ -119,7 +119,14 @@ if errorlevel 1 ( echo ERROR: scp failed & exit /b 1 )
 :: -tt forces a TTY so the sudo commands below can prompt for a password when
 :: passwordless sudo is not configured. drizzle-kit migrate is non-interactive
 :: (no diff prompts, unlike the former push --force).
-ssh -tt "%DEPLOY_TARGET%" "docker load -i %REMOTE_TAR% && sudo sed -i 's|image: .*:latest|image: %IMAGE_NAME%:latest|' %TEST_APP_DIR%/docker-compose.yml && cd %TEST_APP_DIR% && sudo docker compose up -d --force-recreate && echo 'Waiting for container...' && sleep 5 && echo 'Applying DB migrations (drizzle-kit migrate)...' && sudo docker exec %IMAGE_NAME% npx drizzle-kit migrate && rm -f %REMOTE_TAR%"
+::
+:: The migrate step redirects to a file inside the container and prints it back.
+:: Without that its failure is INVISIBLE: drizzle-kit ends a failed run with
+:: process.exit(1), which truncates pending writes to a pipe (Node pipe writes are
+:: async), so the deploy just stopped after the spinner with no error at all — the
+:: same trap already fixed in deploy.sh for the production path. Writes to a FILE
+:: are synchronous and survive the exit.
+ssh -tt "%DEPLOY_TARGET%" "docker load -i %REMOTE_TAR% && sudo sed -i 's|image: .*:latest|image: %IMAGE_NAME%:latest|' %TEST_APP_DIR%/docker-compose.yml && cd %TEST_APP_DIR% && sudo docker compose up -d --force-recreate && echo 'Waiting for container...' && sleep 5 && echo 'Applying DB migrations (drizzle-kit migrate)...' && { sudo docker exec %IMAGE_NAME% sh -c 'npx drizzle-kit migrate > /tmp/migrate.log 2>&1; ec=$?; cat /tmp/migrate.log; exit $ec' || { echo ''; echo 'drizzle-kit migrate FAILED - see the error above.'; echo 'If it says a relation/table already exists: this test DB is a clone taken BEFORE prod was baselined, so it carries the schema but no baseline row. Run ONCE, then redeploy:'; echo '  sudo docker exec %IMAGE_NAME% node script/run-sql.cjs drizzle/baseline-existing-db.sql'; exit 1; }; } && rm -f %REMOTE_TAR%"
 if errorlevel 1 ( echo ERROR: remote reload failed & exit /b 1 )
 
 echo.
