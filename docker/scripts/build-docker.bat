@@ -168,6 +168,15 @@ tar -cf "%PACKAGE_FILE%" -C "%PACKAGE_STAGE%" .
 if errorlevel 1 ( echo ERROR: tar package creation failed & exit /b 1 )
 
 echo       Package created: %PACKAGE_FILE%
+
+:: Drop a stale remote package first. A prior run as root leaves a root-owned
+:: /tmp/%REMOTE_PACKAGE%; /tmp is sticky, so scp as a non-root user cannot
+:: reopen it for writing ("dest open ... Permission denied") and cannot unlink
+:: it either. Same reason the staging dir below is removed with sudo.
+echo       Cleaning stale remote package on %DEPLOY_TARGET%...
+ssh -tt "%DEPLOY_TARGET%" "sudo rm -f /tmp/%REMOTE_PACKAGE%"
+if errorlevel 1 ( echo ERROR: remote cleanup failed & exit /b 1 )
+
 echo       Uploading to %DEPLOY_TARGET%...
 scp "%PACKAGE_FILE%" "%DEPLOY_TARGET%:/tmp/%REMOTE_PACKAGE%"
 if errorlevel 1 ( echo ERROR: scp failed & exit /b 1 )
