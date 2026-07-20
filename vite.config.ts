@@ -1,8 +1,38 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+
+// Build stamp shown in the author sidebar footer. The semver answers «which
+// version», the short SHA answers «which exact build» — the recurring question
+// when verifying that a deploy actually shipped the code you expect. `-dirty`
+// flags a build made with uncommitted changes. Resolved at config load (build /
+// dev-server start); if git is unavailable the SHA is simply omitted.
+const pkgVersion = JSON.parse(
+  readFileSync(path.resolve(import.meta.dirname, "package.json"), "utf8"),
+).version as string;
+
+function gitStamp(): string {
+  try {
+    const sha = execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
+    const dirty =
+      execSync("git status --porcelain", { stdio: ["ignore", "pipe", "ignore"] })
+        .toString()
+        .trim().length > 0;
+    return sha + (dirty ? "-dirty" : "");
+  } catch {
+    return "";
+  }
+}
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(pkgVersion),
+    __GIT_SHA__: JSON.stringify(gitStamp()),
+  },
   plugins: [react()],
   resolve: {
     alias: {

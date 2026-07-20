@@ -8,8 +8,9 @@
  *
  * Nav items are gated by capability (PRD-13): each entry is shown only when the
  * current user `can(perm)`. The active item is derived from the current route
- * (wouter); selecting an item performs SPA navigation. The footer holds the
- * signed-in user and the logout action.
+ * (wouter); selecting an item performs SPA navigation. The footer shows the build
+ * stamp (app version + short git SHA) so a deployed instance advertises exactly
+ * what it runs — the quick answer to «did this deploy actually ship the new code».
  */
 import { useLocation } from "wouter";
 import {
@@ -86,6 +87,16 @@ export function AppSidebar() {
             <Text weight="semibold">{t.auth.appName}</Text>
           </Cluster>
         </a>
+      }
+      footer={
+        <Text
+          variant="caption"
+          tone="subtle"
+          truncate
+          title={`Версия ${__APP_VERSION__}${__GIT_SHA__ ? ` · сборка ${__GIT_SHA__}` : ""}`}
+        >
+          {`v${__APP_VERSION__}${__GIT_SHA__ ? ` · ${__GIT_SHA__}` : ""}`}
+        </Text>
       }
     />
   );
