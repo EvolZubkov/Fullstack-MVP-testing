@@ -5,127 +5,37 @@
 (function (root) {
   "use strict";
 
-  function contentPagesFor(topicId, position) {
-    return (TEST_DATA.contentPages || [])
-      .filter(function (p) {
-        // Only AUTHOR content pages (`info`, legacy `intro`/`summary`) flow here.
-        // System design-bindings and runtime nodes are rendered by their own
-        // phases and must NEVER enter the content-page sequence as a page:
-        //   - `start`/`results` — landing / final-results screens;
-        //   - `questions` — the question-stream DESIGN BINDING (the «Вопросы» row);
-        //     leaking it renders a blank page with just «Далее» at the section start;
-        //   - `review`/`section-results` — PRD-19 обзор / итоги раздела nodes.
-        // `router` is intentionally NOT excluded — the hub legitimately enters the
-        // test-scope «before» sequence (rebuildPageSequence sets its isRouter flag).
-        return p.kind !== "start" && p.kind !== "results" && p.kind !== "questions"
-          && p.kind !== "review" && p.kind !== "section-results"
-          && p.topicId === topicId && p.position === position;
-      })
-      .sort(function (a, b) {
-        return (a.sortOrder || 0) - (b.sortOrder || 0);
-      });
-  }
-
+  /**
+   * Builds the run from the test structure. The RULES live in
+   * `shared/flow/page-sequence` and are shared verbatim with the web host
+   * (exposed here as `TBTemplate`, bundled by shared/template/runtime-entry) —
+   * this function only plumbs them into the runtime's `state`. Keeping one
+   * implementation is the point: the two hosts drifted badly when each carried
+   * its own (PRD-12 FR-6).
+   */
   function rebuildPageSequence() {
-    var seq = [];
     var flowMode =
       (TEST_DATA && TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode) ||
       "linear_flat";
-
-    // Test-scope «До теста» content (intro/info): topicId = null, position 'before'.
-    // Rendered before the question stream (PRD-1 §1.9 / BR-02). Items with
-    // `page.kind === "router"` carry an `isRouter` flag so the router runtime
-    // can intercept navigation (Phase 4c).
-    contentPagesFor(null, "before").forEach(function (page) {
-      seq.push({
-        kind: "content",
-        page: page,
-        isRouter: page.kind === "router",
-      });
+    var built = TBTemplate.buildPageSequence({
+      flowMode: flowMode,
+      testMode: TEST_DATA.mode,
+      sections: TEST_DATA.sections,
+      contentPages: TEST_DATA.contentPages,
+      flatQuestions: state.flatQuestions,
     });
-
-    // PRD-4 v1.1 §4.7 router_by_topics: in router mode the linear sequence
-    // stops here — the router page becomes the hub. Topic chunks are built
-    // on demand by RouterFlow.selectRouterTopic when the learner picks a
-    // card; test-scope «after» content is built by RouterFlow.finishRouter.
-    if (flowMode === "router_by_topics") {
-      state.pageSequence = seq;
-      state.currentPageIndex = 0;
-      state.postResultsPages = [];
-      return seq;
-    }
-
-    // PRD-4 v1.1 §4.6 (adaptive, linear_by_topics): per-topic question stretch
-    // is replaced by a single `{kind: "adaptive-session", topicId}` marker.
-    // syncPhaseToCurrentPage launches AdaptiveSession.runAdaptiveSession on
-    // entry; on completion the callback advances pageSequence past the
-    // marker into that topic's after_topic content. Test-scope «after» is
-    // handled by the same legacy summary-boundary logic.
-    if (flowMode === "linear_by_topics" && TEST_DATA.mode === "adaptive") {
-      (TEST_DATA.sections || []).forEach(function (section) {
-        contentPagesFor(section.topicId, "before_topic").forEach(function (page) {
-          seq.push({ kind: "content", page: page });
-        });
-        seq.push({ kind: "adaptive-session", topicId: section.topicId });
-        contentPagesFor(section.topicId, "after_topic").forEach(function (page) {
-          seq.push({ kind: "content", page: page });
-        });
-      });
-      var seenSummaryAdaptive = false;
-      var postResultsAdaptive = [];
-      contentPagesFor(null, "after").forEach(function (page) {
-        if (page.type === "summary") { seenSummaryAdaptive = true; return; }
-        if (seenSummaryAdaptive) postResultsAdaptive.push(page);
-        else seq.push({ kind: "content", page: page });
-      });
-      state.postResultsPages = postResultsAdaptive;
-      state.pageSequence = seq;
-      state.currentPageIndex = Math.min(state.currentPageIndex || 0, Math.max(seq.length - 1, 0));
-      return seq;
-    }
-
-    var remainingByTopic = {};
-    var startedTopic = {};
-
-    state.flatQuestions.forEach(function (fq) {
-      remainingByTopic[fq.topicId] = (remainingByTopic[fq.topicId] || 0) + 1;
-    });
-
-    state.flatQuestions.forEach(function (fq, questionIndex) {
-      if (!startedTopic[fq.topicId]) {
-        startedTopic[fq.topicId] = true;
-        contentPagesFor(fq.topicId, "before_topic").forEach(function (page) {
-          seq.push({ kind: "content", page: page });
-        });
-      }
-
-      seq.push({ kind: "question", questionIndex: questionIndex });
-      remainingByTopic[fq.topicId] -= 1;
-
-      if (remainingByTopic[fq.topicId] === 0) {
-        contentPagesFor(fq.topicId, "after_topic").forEach(function (page) {
-          seq.push({ kind: "content", page: page });
-        });
-      }
-    });
-
-    // Test-scope «После теста» content: topicId = null, position 'after'.
-    // The first `summary` page marks the results boundary — the built-in results
-    // screen IS the score page. Pages before it render before results
-    // (pre-results); pages after it are deferred to `state.postResultsPages`
-    // and rendered after the results screen.
-    var seenSummary = false;
-    var postResults = [];
-    contentPagesFor(null, "after").forEach(function (page) {
-      if (page.type === "summary") { seenSummary = true; return; }
-      if (seenSummary) postResults.push(page);
-      else seq.push({ kind: "content", page: page });
-    });
-    state.postResultsPages = postResults;
-
-    state.pageSequence = seq;
-    state.currentPageIndex = Math.min(state.currentPageIndex || 0, Math.max(seq.length - 1, 0));
-    return seq;
+    state.pageSequence = built.sequence;
+    state.postResultsPages = built.postResultsPages;
+    // Router mode enters at the top of the «До теста» zone every rebuild (the hub
+    // is its terminus); linear modes keep the learner where they were, clamped.
+    state.currentPageIndex =
+      flowMode === "router_by_topics"
+        ? 0
+        : Math.min(
+            state.currentPageIndex || 0,
+            Math.max(built.sequence.length - 1, 0),
+          );
+    return built.sequence;
   }
 
   function currentPageItem() {

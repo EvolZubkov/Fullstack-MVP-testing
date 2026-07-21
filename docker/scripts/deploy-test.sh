@@ -176,6 +176,14 @@ else
     # constraints during migrations. Reassign ownership of every object in public.
     info "Reassigning ownership of '${TEST_DB_NAME}' objects to '${DB_USER}'..."
     sudo -u postgres psql "${TEST_DB_NAME}" << SQL
+-- CREATE on the DATABASE (not just the public schema): drizzle-kit migrate keeps
+-- its ledger in a SEPARATE `drizzle` schema, and CREATE SCHEMA needs this
+-- privilege. The database is owned by postgres here (createdb above ran as
+-- postgres), so without this the app user hits "permission denied for database"
+-- the moment migrate — or the one-time baseline — tries to create that schema.
+-- The old `push` never created a schema, so this gap only surfaced after the
+-- push->migrate switch.
+GRANT CREATE ON DATABASE "${TEST_DB_NAME}" TO "${DB_USER}";
 GRANT USAGE, CREATE ON SCHEMA public TO "${DB_USER}";
 DO \$\$
 DECLARE r RECORD;

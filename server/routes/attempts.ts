@@ -46,6 +46,37 @@ function prd19RuntimeSettings(test: Test) {
 }
 
 /**
+ * PRD-12 FR-6: the author's structure — content pages in all four placements
+ * («До теста» / «После теста» / перед темой / после темы) plus the flow mode —
+ * delivered to the web learner host so it can build the SAME run as the SCORM
+ * package (`shared/flow/page-sequence`). Without this the web host only ever saw
+ * the drawn questions, and every content page the author placed was silently
+ * skipped at run time while «Структура» kept promising it.
+ *
+ * Read through `src`, not `storage`, so a snapshot-pinned attempt (PRD-15 block B)
+ * gets the PUBLISHED structure rather than today's live edits.
+ */
+async function flowPayload(src: TestDataSource, test: Test) {
+  const contentPages = await src.getContentPages(test.id);
+  return {
+    flowMode: (test.flowPolicyJson as { mode?: string } | null)?.mode ?? "linear_flat",
+    contentPages: contentPages.map((p) => ({
+      id: p.id,
+      kind: p.kind,
+      type: p.type,
+      topicId: p.topicId,
+      position: p.position,
+      sortOrder: p.sortOrder,
+      mode: p.mode,
+      templateKey: p.templateKey,
+      valuesJson: p.valuesJson,
+      autoAdvance: p.autoAdvance,
+      autoAdvanceDelayMs: p.autoAdvanceDelayMs,
+    })),
+  };
+}
+
+/**
  * Resolves the data source for STARTING an attempt (PRD-15 block B). A published
  * test with a snapshot is delivered frozen — the attempt is pinned to that
  * snapshot and every read (sections, questions, scales, ...) comes from it.
@@ -294,6 +325,9 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
       timeLimitMinutes: test.timeLimitMinutes || null,
       // PRD-19 (Block B): runtime navigation settings for the web host.
       ...prd19RuntimeSettings(test),
+      // PRD-12 (FR-6): the author's content pages + flow mode, so the web run
+      // follows the same structure as the SCORM package.
+      ...(await flowPayload(src, test)),
       questions: questionsForClient,
     });
   } catch (error) {
@@ -830,6 +864,8 @@ router.get("/tests/:testId/resume", requirePermission("attempts.take"), async (r
         timeLimitMinutes: test.timeLimitMinutes || null,
         // PRD-19 (Block B): runtime navigation settings for the web host.
         ...prd19RuntimeSettings(test),
+        // PRD-12 (FR-6): structure (content pages + flow mode) for the resumed run.
+        ...(await flowPayload(src, test)),
         questions: questionsForClient,
       },
       savedAnswers: inProgressAttempt.answersJson || {},

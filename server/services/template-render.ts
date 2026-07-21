@@ -91,6 +91,26 @@ function readManifestParams(dir: string): TemplateParamDef[] {
 }
 
 /**
+ * Read a template's manifest `contentTemplates[]` — the per-variant placeholder
+ * declarations a content page is authored against.
+ *
+ * PRD-12 FR-6: the web host needs these to build the SAME page skeleton the SCORM
+ * runtime builds (`shared/template/content-page`). In the SCORM package the array
+ * ships inside the bundle; on the web it has to travel with the screen assets, or
+ * the host can only ever render the untemplated fallback.
+ */
+export function readManifestContentTemplates(dir: string): unknown[] {
+  try {
+    const raw = readFileSafe(path.join(dir, "manifest.json"));
+    if (!raw) return [];
+    const manifest = JSON.parse(raw) as { contentTemplates?: unknown[] };
+    return Array.isArray(manifest.contentTemplates) ? manifest.contentTemplates : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Read a named screen's template ASSETS (layout HTML + css + theme tokens) without
  * building a context — for screens whose context the client assembles itself
  * (e.g. the start screen). Returns null when the layout file is missing.

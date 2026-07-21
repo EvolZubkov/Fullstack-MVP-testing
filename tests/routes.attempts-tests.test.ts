@@ -23,6 +23,9 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
     getTopicEvents: vi.fn().mockResolvedValue([]),
     getAssignedTestsForUser: vi.fn(),
     getAdaptiveTopicSettingsByTest: vi.fn(), getAdaptiveLevelsByTest: vi.fn(),
+    // PRD-12 FR-6: attempt start/resume now deliver the author's structure
+    // (content pages) so the web host builds the same run as the SCORM package.
+    getContentPages: vi.fn().mockResolvedValue([]),
     getResultVariables: vi.fn().mockResolvedValue([]),
     getScales: vi.fn().mockResolvedValue([]),
     getQuestionMeasurements: vi.fn().mockResolvedValue([]),
@@ -160,6 +163,54 @@ describe("Attempts routes — start attempt", () => {
     vi.clearAllMocks();
     storageMock.getUser.mockResolvedValue(learnerUser);
     app = makeApp(attemptsRouter);
+  });
+
+  // PRD-12 FR-6: without the structure in the payload the web host can only ever
+  // render the question stream, and every content page the author placed is
+  // silently skipped at run time while «Структура» keeps promising it.
+  it("POST /tests/:testId/attempts/start — delivers content pages and flow mode", async () => {
+    storageMock.getTest.mockResolvedValue({
+      ...dbTest,
+      flowPolicyJson: { mode: "router_by_topics" },
+    });
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 1 }]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([dbQuestion]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.createAttempt.mockResolvedValue(dbAttempt);
+    storageMock.getContentPages.mockResolvedValue([
+      { id: "p1", kind: "info", type: "info", topicId: null, position: "before",
+        sortOrder: 0, mode: "template", templateKey: "text", valuesJson: { values: {} },
+        autoAdvance: false, autoAdvanceDelayMs: null },
+    ]);
+
+    const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+    expect(res.status).toBe(201);
+    expect(res.body.flowMode).toBe("router_by_topics");
+    expect(res.body.contentPages).toHaveLength(1);
+    expect(res.body.contentPages[0]).toMatchObject({ id: "p1", position: "before", kind: "info" });
+    // Read through the attempt's data source, so a snapshot-pinned attempt gets
+    // the PUBLISHED structure rather than today's live edits.
+    expect(storageMock.getContentPages).toHaveBeenCalledWith("test1");
+  });
+
+  it("POST /tests/:testId/attempts/start — defaults flowMode when the test declares none", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 1 }]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([dbQuestion]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.createAttempt.mockResolvedValue(dbAttempt);
+    // clearAllMocks resets calls, not implementations — re-arm explicitly so the
+    // previous case's pages do not leak in.
+    storageMock.getContentPages.mockResolvedValue([]);
+
+    const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+    expect(res.status).toBe(201);
+    expect(res.body.flowMode).toBe("linear_flat");
+    expect(res.body.contentPages).toEqual([]);
   });
 
   it("POST /tests/:testId/attempts/start — creates attempt", async () => {

@@ -7,7 +7,7 @@ import { storage } from "../storage";
 import { db } from "../db";
 import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, questionScoringSchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
-import { readScreenTemplate } from "../services/template-render";
+import { readScreenTemplate, readManifestContentTemplates } from "../services/template-render";
 import { resolveTemplateDir, resolveSystemScreenDir } from "../services/template-dir";
 import { requirePermission, requireUserContext } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
@@ -348,6 +348,13 @@ const SCREEN_LAYOUTS: Record<string, string> = {
   // PRD-19 D5 (FR-05a): computed итоги раздела (section-results). Runtime layout
   // (no backing variant kind) — resolved straight from the template dir.
   "section-results": "section-results.html",
+  // PRD-12 FR-6: author content pages («До теста» / «После теста» / перед темой /
+  // после темы) and the router hub, which renders through the same wrapper. Served
+  // with the manifest's contentTemplates below, since the skeleton is built from
+  // the placeholder declarations.
+  content: "content.html",
+  // PRD-1 §4.3: «Введение раздела» has its own layout rather than the generic wrapper.
+  "section-intro": "section-intro.html",
 };
 // System variant kind backing each screen (for the default-fallback resolution).
 // `blocked` is a pure system layout with no contentTemplate kind, so it has no
@@ -357,6 +364,7 @@ const SCREEN_KIND: Record<string, string | undefined> = {
   question: "questions",
   review: "review",
   "section-results": "section-results",
+  "section-intro": "intro",
 };
 // PRD-15 FR-09: object-level read scope (owner/grant/admin/assigned learner)
 // instead of the bare session check.
@@ -389,6 +397,18 @@ router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope(
       }
     }
     if (!payload) return res.status(404).json({ error: "Template not found" });
+    // PRD-12 FR-6: the content screen also carries the manifest's placeholder
+    // declarations — the web host builds its page skeleton from them through the
+    // shared assembler, exactly as the SCORM runtime does from the bundled copy.
+    // Read from the ACTIVE template (paramsDir), not a fallen-back layout dir.
+    if (req.params.screen === "content") {
+      const contentTemplates = readManifestContentTemplates(paramsDir);
+      res.json({
+        ...payload,
+        contentTemplates: contentTemplates.length ? contentTemplates : readManifestContentTemplates(dir),
+      });
+      return;
+    }
     res.json(payload);
   } catch (error) {
     logger.error("Get screen template error: " + (error as Error).message, "tests");

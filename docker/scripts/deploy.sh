@@ -179,7 +179,26 @@ docker compose down --remove-orphans 2>/dev/null || true
 # tables that already exist. See drizzle/README.md and drizzle/baseline-existing-db.sql.
 # A fresh (empty) database instead gets the full baseline schema from 0000.
 info "Applying DB migrations (drizzle-kit migrate)..."
-docker compose run --rm --no-deps --entrypoint sh "${PROJECT_NAME}" -c "npx drizzle-kit migrate"
+# -T is essential here, not cosmetic. Without it `docker compose run` attaches to
+# the terminal (which `ssh -tt` provides) and tears the attach stream down the
+# moment the container exits — the container's final stderr is lost. A failing
+# migrate then looks like the deploy simply stopped after drizzle's banner, with
+# no error at all, because `set -e` below aborts silently too.
+# The inner redirect-then-cat is what makes a failure legible. drizzle-kit ends a
+# failed run with process.exit(1), which truncates pending writes to a PIPE (Node
+# pipe writes are async) — so under -T the error text is lost. Writes to a FILE are
+# synchronous, so the log survives the exit and we replay it afterwards.
+if ! docker compose run --rm -T --no-deps --entrypoint sh "${PROJECT_NAME}" \
+    -c 'npx drizzle-kit migrate > /tmp/migrate.log 2>&1; ec=$?; cat /tmp/migrate.log; exit $ec'; then
+    echo ""
+    warn "drizzle-kit migrate FAILED — see the error above."
+    warn "If it says a relation/table already exists, this database predates the"
+    warn "migrate era and was never baselined. Run ONCE, then redeploy:"
+    warn "  cd ${APP_DIR} && docker compose run --rm -T --no-deps --entrypoint sh \\"
+    warn "    ${PROJECT_NAME} -c 'node script/run-sql.cjs drizzle/baseline-existing-db.sql'"
+    warn "See drizzle/README.md."
+    error "Aborting before start — the schema is not in a known state."
+fi
 ok "DB migrations applied"
 
 # ---------------------------------------------------------------------------

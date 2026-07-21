@@ -144,6 +144,12 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
   }, [fitToWidth]);
 
   // Delegate clicks on [data-action] elements to the host (bound once).
+  //
+  // `[data-nav]` is delegated too, as the action `"nav:<value>"`. Content-page
+  // layouts express their «Далее» as `data-nav="next"` (the SCORM runtime wires
+  // that attribute directly), so without this the web host would have to rewrite
+  // the template's own navigation markup to make the same layout clickable —
+  // i.e. diverge from the layout the package renders (PRD-12 FR-6).
   useEffect(() => {
     const shadow = shadowRef.current;
     if (!shadow) return;
@@ -151,7 +157,13 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
       const target = e.target as Element | null;
       const actionEl = target?.closest?.("[data-action]");
       const action = actionEl?.getAttribute("data-action");
-      if (action) onActionRef.current?.(action);
+      if (action) {
+        onActionRef.current?.(action);
+        return;
+      }
+      const navEl = target?.closest?.("[data-nav]");
+      const nav = navEl?.getAttribute("data-nav");
+      if (nav) onActionRef.current?.("nav:" + nav);
     };
     shadow.addEventListener("click", handler);
     return () => shadow.removeEventListener("click", handler);

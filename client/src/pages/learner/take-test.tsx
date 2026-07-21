@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw } from "lucide-react";
 import { Banner, Box, Button, Card, CardBody, CardHeader, Center, Cluster, ModalDialog, Stack, Tag, Text } from "@universityrt/ui-kit";
@@ -11,7 +11,16 @@ import { hasAnswer, rankingDeliveryOrder } from "./answer-gate";
 import { buildStartState } from "@shared/template/start-state";
 import { buildQuestionProgress } from "@shared/template/question-progress-context";
 import { buildReviewContext } from "@shared/template/review-context";
-import { buildSectionResultContext } from "@shared/template/result-context";
+import { buildSectionResultContext, buildSectionIntroContext } from "@shared/template/result-context";
+// PRD-12 FR-6: content pages render on the web from the SAME structure rules and
+// the SAME assembler as the SCORM package — no web-only copy of either.
+import { TemplateContentScreen, type ContentScreenTemplate } from "./template-content-screen";
+import { buildPageSequence, contentPagesFor, type FlowContentPage } from "@shared/flow/page-sequence";
+import {
+  buildRouterHubHtml,
+  type RouterTopicStatus,
+} from "@shared/flow/router-hub";
+import type { RenderableContentPage } from "@shared/template/content-page";
 import {
   useSectionTimer,
   useAdaptiveSectionTimer,
@@ -25,6 +34,80 @@ import type { Question, Attempt, Test } from "@shared/schema";
 interface AttemptWithQuestions extends Attempt {
   questions: Question[];
   testTitle: string;
+}
+
+/**
+ * PRD-12 FR-6: the author content pages that fall between two questions of the
+ * run — or, with `null` bounds, before the first question / after the last one.
+ *
+ * Derived from the SHARED sequence (`shared/flow/page-sequence`), the same one the
+ * SCORM runtime walks, so «Структура» and the web run cannot disagree about which
+ * pages exist or where they sit.
+ *
+ * The router hub is skipped here: it is a navigation screen, not a content page,
+ * and the web host does not implement the hub yet — see the FR-6 note in the
+ * PRD-12 track. Skipping it keeps the linear zones correct instead of rendering
+ * the hub as a dead «Далее» page.
+ */
+/**
+ * Splits the zone between two questions at the SECTION BOUNDARY.
+ *
+ * The boundary screens (обзор раздела / итоги раздела) sit *inside* the gap
+ * between two questions of different sections, so the gap cannot be played as one
+ * block: the pages of the section being LEFT («после темы», and the test-scope
+ * «После теста» at the end of the run) belong before those screens, and the pages
+ * of the section being ENTERED («перед темой») belong after them. Playing the gap
+ * whole put the next section's «Введение раздела» ahead of the previous section's
+ * «Итоги раздела» — verified in the browser.
+ */
+export function splitZoneAtBoundary(
+  sequence: ReturnType<typeof buildPageSequence>["sequence"],
+  fromQuestionIndex: number | null,
+  toQuestionIndex: number | null,
+  topicOf: (questionIndex: number) => string | null,
+): { departure: RenderableContentPage[]; arrival: RenderableContentPage[] } {
+  const pages = contentPagesBetween(sequence, fromQuestionIndex, toQuestionIndex);
+  const fromTopic = fromQuestionIndex === null ? null : topicOf(fromQuestionIndex);
+  const toTopic = toQuestionIndex === null ? null : topicOf(toQuestionIndex);
+  // Same section (or no crossing at all): nothing is gated by a boundary.
+  if (fromTopic === toTopic) return { departure: pages, arrival: [] };
+  // Heading to the END of the run: there is no arrival to wait for, so everything
+  // left in the gap must play now. Holding pages back here silently dropped the
+  // zones of a section that drew NO questions and sat last — the learner never saw
+  // «перед темой»/«после темы» for it, which is the very case the section-driven
+  // sequence exists to preserve.
+  if (toQuestionIndex === null) return { departure: pages, arrival: [] };
+  return {
+    // Test-scope pages (topicId null) ride with the departure: they are the
+    // «После теста» zone, which precedes the results screen.
+    departure: pages.filter((p) => {
+      const t = (p as { topicId?: string | null }).topicId ?? null;
+      return t === fromTopic || t === null;
+    }),
+    arrival: pages.filter((p) => {
+      const t = (p as { topicId?: string | null }).topicId ?? null;
+      return t !== fromTopic && t !== null;
+    }),
+  };
+}
+
+export function contentPagesBetween(
+  sequence: ReturnType<typeof buildPageSequence>["sequence"],
+  fromQuestionIndex: number | null,
+  toQuestionIndex: number | null,
+): RenderableContentPage[] {
+  const positionOf = (qi: number) =>
+    sequence.findIndex((item) => item.kind === "question" && item.questionIndex === qi);
+  const rawStart = fromQuestionIndex === null ? -1 : positionOf(fromQuestionIndex);
+  const rawEnd = toQuestionIndex === null ? sequence.length : positionOf(toQuestionIndex);
+  const start = rawStart < 0 ? -1 : rawStart;
+  const end = rawEnd < 0 ? sequence.length : rawEnd;
+  const pages: RenderableContentPage[] = [];
+  for (let i = start + 1; i < end; i += 1) {
+    const item = sequence[i];
+    if (item.kind === "content" && !item.isRouter) pages.push(item.page as RenderableContentPage);
+  }
+  return pages;
 }
 
 interface FlatQuestion {
@@ -137,7 +220,71 @@ export default function TakeTestPage() {
   const [isStarting, setIsStarting] = useState(true);
   const [testMode, setTestMode] = useState<"standard" | "adaptive" | null>(null);
   const [testInfo, setTestInfo] = useState<Test | null>(null);
-  const [phase, setPhase] = useState<"loading" | "start" | "question" | "finished" | "blocked">("loading");
+  const [phase, setPhase] = useState<"loading" | "start" | "question" | "content" | "finished" | "blocked">("loading");
+  // PRD-12 FR-6: the author's structure, delivered with the attempt. `pageQueue`
+  // holds the content pages due BEFORE the next question (or before the results);
+  // it is walked one page at a time in the "content" phase. Empty structure ⇒ the
+  // queue is never filled and the run behaves exactly as before.
+  const [flowStructure, setFlowStructure] = useState<{
+    flowMode: string;
+    contentPages: FlowContentPage[];
+  }>({ flowMode: "linear_flat", contentPages: [] });
+  const [contentTpl, setContentTpl] = useState<ContentScreenTemplate | null>(null);
+  const [pageQueue, setPageQueue] = useState<RenderableContentPage[]>([]);
+  /** Section order from the variant — the anchor for the per-topic zones. */
+  const [sections, setSections] = useState<{ topicId: string }[]>([]);
+  /**
+   * The question advance deferred while a content zone plays. Applied verbatim
+   * once the queue drains, so the boundary logic (section обзор / итоги раздела)
+   * still runs — and runs AFTER the «после темы» pages, as it does in SCORM.
+   */
+  const [pendingAdvance, setPendingAdvance] = useState<{
+    nextIdx: number | null;
+    answers: Record<string, any>;
+    status: Record<string, "unanswered" | "answered" | "skipped">;
+  } | null>(null);
+  /**
+   * The «После теста» pre-results zone plays exactly once. It is reachable from two
+   * paths — walking off the last question, and «Завершить тест» in the обзор — and
+   * showing it twice would make the learner dismiss the same screens again.
+   */
+  const [afterZonePlayed, setAfterZonePlayed] = useState(false);
+  /** Submit deferred while that zone plays; fired when the queue drains. */
+  const [pendingSubmit, setPendingSubmit] = useState(false);
+  /**
+   * Pages owed to the learner on ARRIVAL at a question — the entered section's
+   * «перед темой» zone. Held until `currentIndex` actually reaches that question,
+   * so the boundary screens of the section just left come first.
+   */
+  const [arrivalZone, setArrivalZone] = useState<{
+    forIndex: number;
+    pages: RenderableContentPage[];
+  } | null>(null);
+
+  // ─── router_by_topics hub ──────────────────────────────────────────────────
+  // The hub is a navigation screen: the learner picks a section, runs it, and is
+  // returned here. Section state and the open/finish rules come from the SHARED
+  // `shared/flow/router-hub`, so a card that is open in the LMS is open here.
+  const [routerTopicStates, setRouterTopicStates] = useState<
+    Record<string, RouterTopicStatus | undefined>
+  >({});
+  const [currentRouterTopic, setCurrentRouterTopic] = useState<string | null>(null);
+  const [showHub, setShowHub] = useState(false);
+  /** Set while a section's «после темы» zone plays on the way back to the hub. */
+  const [pendingHubReturn, setPendingHubReturn] = useState<string | null>(null);
+
+  // Defensive: never strand the learner on a content phase with nothing to render
+  // (the template fetch failed, or the queue drained through another path). Falling
+  // through to the questions is always safe — a missing page costs a screen, a
+  // blank screen costs the attempt.
+  useEffect(() => {
+    // `pendingSubmit` is excluded: the queue is empty on purpose while the attempt
+    // is being sent, and bouncing to the question phase would flash that screen
+    // between the last content page and the results.
+    if (phase === "content" && !pendingSubmit && (!contentTpl || pageQueue.length === 0)) {
+      setPhase("question");
+    }
+  }, [phase, contentTpl, pageQueue.length, pendingSubmit]);
   const [testMetadata, setTestMetadata] = useState<{
     totalQuestions: number;
     completedAttempts: number;
@@ -461,6 +608,21 @@ export default function TakeTestPage() {
           // PRD-19 D5: section-results (итоги раздела) screen layout.
           const srRes = await fetch(`/api/tests/${testId}/screen-template/section-results`, { credentials: "include" });
           if (srRes.ok) setSectionResultsTpl(await srRes.json());
+          // PRD-12 FR-6: author content-page wrapper + the manifest's placeholder
+          // declarations, so content pages render from the template rather than
+          // being skipped.
+          const cRes = await fetch(`/api/tests/${testId}/screen-template/content`, { credentials: "include" });
+          if (cRes.ok) {
+            const contentPayload = await cRes.json();
+            // «Введение раздела» owns a dedicated layout; without it the intro page
+            // renders through the generic wrapper as a blank screen with «Далее».
+            const siRes = await fetch(`/api/tests/${testId}/screen-template/section-intro`, { credentials: "include" });
+            const sectionIntro = siRes.ok ? await siRes.json() : null;
+            setContentTpl({
+              ...contentPayload,
+              variantLayouts: sectionIntro ? { "layouts/section-intro.html": sectionIntro.layout } : {},
+            });
+          }
         } catch {
           /* fall back to React markup */
         }
@@ -491,10 +653,17 @@ export default function TakeTestPage() {
     try {
       if (testMode === "adaptive") {
         await startAdaptiveAttempt();
+        setPhase("question");
       } else {
-        await startStandardAttempt();
+        // PRD-12 FR-6: enter the «До теста» content zone when the author placed
+        // pages there. With no pages, a router test opens on its hub and a linear
+        // one goes straight into the questions, as before.
+        const started = await startStandardAttempt();
+        const lead = started?.leadPages ?? [];
+        if (lead.length) setPhase("content");
+        else if (started?.flowMode === "router_by_topics") setShowHub(true);
+        else setPhase("question");
       }
-      setPhase("question");
     } catch (err) {
       const retake = (err as { retake?: { cooldownPeriodDays?: number; availableDate?: string | null } }).retake;
       if ((err as Error)?.message === "RETAKE_COOLDOWN") {
@@ -658,6 +827,21 @@ export default function TakeTestPage() {
 
       setFlatQuestions(questions);
       setShuffleMappings(mappings);
+
+      // PRD-12 FR-6: restore the STRUCTURE on resume too. Without it the resumed
+      // run carried no content pages at all, so every zone still ahead of the
+      // learner — «перед темой», «после темы», «После теста» — silently vanished
+      // for the rest of the attempt, not just the ones already passed.
+      //
+      // The pages BEFORE the resume point are deliberately not replayed: the
+      // learner has already walked them, and the attempt persists a question
+      // index, not a page position, so re-showing them would add screens the
+      // learner already dismissed.
+      setFlowStructure({
+        flowMode: (data.attempt.flowMode as string) ?? "linear_flat",
+        contentPages: (data.attempt.contentPages as FlowContentPage[]) ?? [],
+      });
+      setSections((variant.sections || []).map((s: any) => ({ topicId: s.topicId })));
       setPhase("question");
 
       toast({
@@ -768,6 +952,27 @@ export default function TakeTestPage() {
     setFlatQuestions(questions);
     setShuffleMappings(mappings);
 
+    // PRD-12 FR-6: the author's structure arrives with the attempt. Build the run
+    // through the SHARED sequence builder and queue whatever content pages precede
+    // the first question — the «До теста» zone. Returned to the caller so it can
+    // enter the content phase instead of jumping straight into the questions.
+    const structure = {
+      flowMode: (data.flowMode as string) ?? "linear_flat",
+      contentPages: (data.contentPages as FlowContentPage[]) ?? [],
+    };
+    setFlowStructure(structure);
+    const variantSections = (variant.sections || []).map((s: any) => ({ topicId: s.topicId }));
+    setSections(variantSections);
+    const built = buildPageSequence({
+      flowMode: structure.flowMode,
+      testMode: "standard",
+      sections: variantSections,
+      contentPages: structure.contentPages,
+      flatQuestions: questions,
+    });
+    const leadPages = contentPagesBetween(built.sequence, null, questions.length ? 0 : null);
+    setPageQueue(leadPages);
+
     // Сохраняем shuffle mappings в варианте для восстановления
     fetch(`/api/attempts/${data.id}/save-progress`, {
       method: "POST",
@@ -779,6 +984,8 @@ export default function TakeTestPage() {
         shuffleMappings: mappings,
       }),
     }).catch(err => console.error("Save mappings error:", err));
+
+    return { leadPages: leadPages, flowMode: structure.flowMode };
   };
 
   // Adaptive attempt start
@@ -1065,12 +1272,179 @@ export default function TakeTestPage() {
   };
 
   /**
+   * The run as «Структура» declares it, from the SHARED builder — the same
+   * sequence the SCORM package walks. Used to find which author pages fall
+   * between two questions.
+   */
+  const pageSequence = useMemo(
+    () =>
+      buildPageSequence({
+        flowMode: flowStructure.flowMode,
+        testMode: "standard",
+        sections,
+        contentPages: flowStructure.contentPages,
+        flatQuestions,
+      }).sequence,
+    [flowStructure, sections, flatQuestions],
+  );
+
+  // Deliver the entered section's «перед темой» zone once the learner has actually
+  // arrived at its first question — i.e. after the previous section's обзор /
+  // итоги раздела, whichever path led here.
+  useEffect(() => {
+    if (phase !== "question" || !contentTpl || showReview || sectionResultView) return;
+    if (!arrivalZone || arrivalZone.forIndex !== currentIndex) return;
+    setPageQueue(arrivalZone.pages);
+    setArrivalZone(null);
+    setPhase("content");
+  }, [phase, contentTpl, arrivalZone, currentIndex, showReview, sectionResultView]);
+
+  const isRouterMode = flowStructure.flowMode === "router_by_topics";
+  /** The hub page itself (the `router` content page the author placed). */
+  const hubPage = useMemo(
+    () => flowStructure.contentPages.find((p) => p.kind === "router") as RenderableContentPage | undefined,
+    [flowStructure.contentPages],
+  );
+
+  /** Section list for the hub, enriched from the drawn variant. */
+  const hubSections = useMemo(
+    () =>
+      sections.map((s) => {
+        const q = flatQuestions.find((fq) => fq.topicId === s.topicId);
+        return {
+          topicId: s.topicId,
+          topicName: q?.topicName || s.topicId,
+          drawCount: flatQuestions.filter((fq) => fq.topicId === s.topicId).length,
+          timeLimitMinutes: q?.sectionTimeLimitMinutes ?? null,
+        };
+      }),
+    [sections, flatQuestions],
+  );
+
+  /** Enters a section from the hub: its «перед темой» zone, then its questions. */
+  const selectRouterTopic = (topicId: string) => {
+    const first = flatQuestions.findIndex((q) => q.topicId === topicId);
+    setRouterTopicStates((prev) => ({ ...prev, [topicId]: "inProgress" }));
+    setCurrentRouterTopic(topicId);
+    setShowHub(false);
+    const pre = contentPagesFor(flowStructure.contentPages, topicId, "before_topic") as RenderableContentPage[];
+    if (pre.length > 0 && contentTpl) {
+      setPageQueue(pre);
+      setPendingAdvance({ nextIdx: first < 0 ? null : first, answers, status: questionStatus });
+      setPhase("content");
+      return;
+    }
+    if (first >= 0) setCurrentIndex(first);
+    setPhase("question");
+  };
+
+  /** Marks a section completed, freezes it, and re-enters the hub. */
+  const returnToHub = (topicId: string) => {
+    setRouterTopicStates((prev) => ({ ...prev, [topicId]: "completed" }));
+    // PRD-19 (FR-06): a finished section is frozen — its answers stop being
+    // editable, the same as the SCORM runtime does in returnFromTopic.
+    setSectionCommitted((prev) => ({ ...prev, [topicId]: true }));
+    setCurrentRouterTopic(null);
+    setPendingHubReturn(null);
+    // Clear any staged in-section screens so the hub is what actually renders.
+    setShowReview(false);
+    setSectionResultView(null);
+    setShowHub(true);
+  };
+
+  /** «Завершить» on the hub: the «После теста» zone, then submit. */
+  const finishFromHub = () => {
+    setShowHub(false);
+    const after = contentTpl && !afterZonePlayed
+      ? (contentPagesFor(flowStructure.contentPages, null, "after") as RenderableContentPage[])
+          .filter((p) => (p as { type?: string }).type !== "summary")
+      : [];
+    if (after.length > 0) {
+      setAfterZonePlayed(true);
+      setPageQueue(after);
+      setPendingSubmit(true);
+      setPhase("content");
+      return;
+    }
+    void submitAttempt();
+  };
+
+  /**
+   * PRD-12 FR-6: play the author's content zone before crossing to `nextIdx`.
+   *
+   * The advance itself is DEFERRED (not dropped) — {@link applyAdvance} runs once
+   * the queue drains, so the PRD-19 boundary logic still fires, and fires after the
+   * «после темы» pages exactly as in the SCORM runtime (where those pages belong to
+   * the section chunk and the boundary is detected past them).
+   */
+  const advanceOrStageFinish = (
+    nextIdx: number | null,
+    nextAnswers: Record<string, any>,
+    nextStatus: Record<string, "unanswered" | "answered" | "skipped">,
+  ) => {
+    // Router mode: finishing a section returns to the hub instead of crossing into
+    // whatever question happens to be next — the hub, not the question order, is
+    // what decides where the learner goes.
+    const curTopicId = flatQuestions[currentIndex]?.topicId ?? null;
+    if (isRouterMode && currentRouterTopic && curTopicId === currentRouterTopic) {
+      const leavingSection = nextIdx === null || flatQuestions[nextIdx]?.topicId !== currentRouterTopic;
+      if (leavingSection) {
+        // Persist directly, NOT through applyAdvance: its PRD-19 boundary logic
+        // would stage the section обзор, and that flag then survives the return to
+        // the hub — the next section opened onto a stale обзор instead of its
+        // first question. In router mode the hub IS the boundary screen.
+        saveProgress(nextAnswers, currentIndex, nextStatus);
+        const post = contentTpl
+          ? (contentPagesFor(flowStructure.contentPages, currentRouterTopic, "after_topic") as RenderableContentPage[])
+          : [];
+        if (post.length > 0) {
+          setPendingHubReturn(currentRouterTopic);
+          setPageQueue(post);
+          setPhase("content");
+          return;
+        }
+        returnToHub(currentRouterTopic);
+        return;
+      }
+    }
+
+    const split = contentTpl
+      ? splitZoneAtBoundary(
+          pageSequence,
+          currentIndex,
+          nextIdx,
+          (i) => flatQuestions[i]?.topicId ?? null,
+        )
+      : { departure: [], arrival: [] };
+
+    // Pages of the section being ENTERED wait for the learner to actually get
+    // there — after any boundary screens (обзор / итоги раздела), and regardless
+    // of which path delivered them.
+    setArrivalZone(
+      nextIdx !== null && split.arrival.length > 0
+        ? { forIndex: nextIdx, pages: split.arrival }
+        : null,
+    );
+
+    if (split.departure.length > 0) {
+      // Walking off the last question plays the «После теста» zone here; mark it so
+      // «Завершить тест» in the обзор does not replay it.
+      if (nextIdx === null) setAfterZonePlayed(true);
+      setPageQueue(split.departure);
+      setPendingAdvance({ nextIdx, answers: nextAnswers, status: nextStatus });
+      setPhase("content");
+      return;
+    }
+    applyAdvance(nextIdx, nextAnswers, nextStatus);
+  };
+
+  /**
    * PRD-19 D5 (FR-05): advance after a commit/skip, but intercept a section
    * boundary (flexible sectional) or the test end (flexible flat) with the staged
    * обзор instead of crossing straight on. `nextIdx === null` = no further question
    * (test end). Strict mode keeps the plain advance (no обзор, FR-02/FR-08a).
    */
-  const advanceOrStageFinish = (
+  const applyAdvance = (
     nextIdx: number | null,
     nextAnswers: Record<string, any>,
     nextStatus: Record<string, "unanswered" | "answered" | "skipped">,
@@ -1179,6 +1553,26 @@ export default function TakeTestPage() {
       return;
     }
 
+    // PRD-12 FR-6: the «После теста» pages that precede the results screen play
+    // before the attempt is sent, mirroring the SCORM runtime (where they sit at
+    // the tail of the sequence, ahead of the built-in results screen).
+    if (!afterZonePlayed && contentTpl && flatQuestions.length > 0) {
+      const zone = contentPagesBetween(pageSequence, flatQuestions.length - 1, null);
+      if (zone.length > 0) {
+        setAfterZonePlayed(true);
+        setPageQueue(zone);
+        setPendingSubmit(true);
+        setPhase("content");
+        return;
+      }
+    }
+
+    await submitAttempt();
+  };
+
+  /** Sends the attempt and moves to the results page. */
+  const submitAttempt = async () => {
+    if (!attempt) return;
     setIsSubmitting(true);
     try {
       const res = await fetch(`/api/attempts/${attempt.id}/finish`, {
@@ -1618,6 +2012,112 @@ export default function TakeTestPage() {
   // Context comes from the SHARED start-state builder (PRD-12 §10) — the same model
   // the SCORM host produces: resume-with-position, "Начать заново" and "Мой результат"
   // now appear on the web start too (parity), gated by the same flags.
+  // PRD-12 FR-6: an author content page — rendered from the design template's own
+  // content layout through the shared assembler, so the web shows exactly what the
+  // SCORM package shows. Walked one page at a time; when the queue drains, the run
+  // continues into the questions.
+  // PRD-12 FR-6: the router hub. Rendered through the design template's content
+  // wrapper with the SHARED hub markup in its page-content slot — the same cards,
+  // classes and open/locked rules the SCORM package renders.
+  if (showHub && contentTpl && hubPage) {
+    return (
+      <TemplateContentScreen
+        page={hubPage}
+        template={contentTpl}
+        courseTitle={testInfo?.title || attempt?.testTitle || ""}
+        bodyHtml={buildRouterHubHtml(hubSections, {
+          topicStates: routerTopicStates,
+          sectionResults: {},
+          unlockRules: {},
+          completionPolicy: null,
+        })}
+        onBodyAction={(action) => {
+          if (action.startsWith("router-select:")) {
+            selectRouterTopic(action.slice("router-select:".length));
+            return;
+          }
+          if (action === "router-finish") finishFromHub();
+        }}
+        onNext={() => {}}
+      />
+    );
+  }
+
+  if (phase === "content" && contentTpl && pageQueue.length > 0) {
+    const page = pageQueue[0];
+    // «Введение раздела» binds `sectionIntro.*`, built by the SHARED builder from
+    // the section it introduces — the same context the SCORM runtime feeds it.
+    const introTopicId = (page as { topicId?: string | null }).topicId ?? null;
+    const introContext =
+      page.kind === "intro" && introTopicId
+        ? buildSectionIntroContext({
+            topicName: flatQuestions.find((q) => q.topicId === introTopicId)?.topicName || "",
+            description: "",
+            questionCount: flatQuestions.filter((q) => q.topicId === introTopicId).length,
+            timeLimitMinutes:
+              flatQuestions.find((q) => q.topicId === introTopicId)?.sectionTimeLimitMinutes ?? null,
+            sectionNumber: Math.max(1, sections.findIndex((s) => s.topicId === introTopicId) + 1),
+            instruction: String((page.valuesJson?.values as any)?.instruction ?? ""),
+          })
+        : undefined;
+    return (
+      <TemplateContentScreen
+        page={page}
+        template={contentTpl}
+        extraContext={introContext}
+        courseTitle={testInfo?.title || attempt?.testTitle || ""}
+        onBack={
+          // «Назад» from a section's intro returns to the hub WITHOUT completing
+          // the section — it reverts to «Не начата», mirroring the SCORM runtime.
+          isRouterMode && currentRouterTopic
+            ? () => {
+                const topicId = currentRouterTopic;
+                setRouterTopicStates((prev) => {
+                  const next = { ...prev };
+                  if (next[topicId] === "inProgress") delete next[topicId];
+                  return next;
+                });
+                setCurrentRouterTopic(null);
+                setPageQueue([]);
+                setPendingAdvance(null);
+                setShowHub(true);
+              }
+            : undefined
+        }
+        onNext={() => {
+          const rest = pageQueue.slice(1);
+          setPageQueue(rest);
+          if (rest.length > 0) return;
+          // The zone played before submitting — finish now, without flashing the
+          // question screen on the way out.
+          if (pendingSubmit) {
+            setPendingSubmit(false);
+            void submitAttempt();
+            return;
+          }
+          // The section's «после темы» zone played on the way back to the hub.
+          if (pendingHubReturn) {
+            returnToHub(pendingHubReturn);
+            return;
+          }
+          // «До теста» finished in a router test: the hub is what comes next, not
+          // the first question — the learner chooses the section.
+          if (isRouterMode && !currentRouterTopic && !pendingAdvance) {
+            setShowHub(true);
+            return;
+          }
+          setPhase("question");
+          // Apply the advance this zone interrupted, so the section boundary
+          // (обзор / итоги раздела) is evaluated now, after the zone — not skipped.
+          const pending = pendingAdvance;
+          if (pending) {
+            setPendingAdvance(null);
+            applyAdvance(pending.nextIdx, pending.answers, pending.status);
+          }
+        }}
+      />
+    );
+  }
   if (phase === "start" && testInfo && testMetadata && testMode === "standard" && startTpl) {
     const exhausted =
       testMetadata.maxAttempts !== null && testMetadata.completedAttempts >= testMetadata.maxAttempts;

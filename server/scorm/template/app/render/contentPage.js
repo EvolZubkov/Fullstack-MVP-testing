@@ -10,75 +10,37 @@
  */
 
 /**
- * Finds the content template definition for a given page.
+ * Content-page assembly is SHARED with the web host — the rules live in
+ * `shared/template/content-page` and reach this runtime through the `TBTemplate`
+ * bundle. These wrappers keep the historical global names (renderSectionIntro,
+ * renderGalleryPage and the offline preview generator call them) while holding no
+ * logic of their own: a second copy here is exactly what let the two hosts drift
+ * until the web could not render content pages at all (PRD-12 FR-6).
  * @param {object} page  A content page from TEST_DATA.contentPages
  * @param {Array}  contentTemplates  From the design template manifest
  * @returns {object|null}
  */
 function findContentTemplate(page, contentTemplates) {
-  if (!page || !contentTemplates) return null;
-  var key = page.templateKey;
-  if (!key) return null;
-  for (var i = 0; i < contentTemplates.length; i++) {
-    if (contentTemplates[i].key === key) return contentTemplates[i];
-  }
-  return null;
+  return TBTemplate.findContentTemplate(page, contentTemplates);
 }
 
 /**
- * Builds a fallback HTML structure for a content page when no content
- * template definition is available.
+ * Fallback markup for a page with no usable content template.
  * @param {object} page
  * @returns {string}
  */
 function buildFallbackContentHtml(page) {
-  var typeLabel = page.type || "content";
-  var values = getPageValues(page);
-  if (page.mode === "html" && values.__html) {
-    return '<div class="content-page content-page--html">' + String(values.__html) + "</div>";
-  }
-  var title = values.title || values.heading || typeLabel;
-  var body = values.body || values.text || values.subtitle || "";
-  return (
-    '<div class="content-page content-page--fallback" data-page-type="' +
-    escapeHtml(typeLabel) +
-    '">' +
-    '<div class="card">' +
-    '<h1>' + escapeHtml(String(title)) + '</h1>' +
-    (body ? '<div style="color:hsl(var(--muted-foreground));">' + String(body) + '</div>' : '') +
-    '</div>' +
-    "</div>"
-  );
+  return TBTemplate.buildFallbackContentHtml(page);
 }
 
 /**
- * Builds the HTML skeleton for a content page based on its content template
- * placeholders. Each placeholder becomes a [data-placeholder] div that will
- * be filled by fillPlaceholders().
+ * Builds the [data-placeholder] skeleton for a page from its content template.
  * @param {object} page
  * @param {object} contentTemplate
  * @returns {string}
  */
 function buildContentPageSkeleton(page, contentTemplate) {
-  if (!contentTemplate || !contentTemplate.placeholders) {
-    return buildFallbackContentHtml(page);
-  }
-  var html =
-    '<div class="content-page content-page--' +
-    escapeHtml(page.type || "info") +
-    '" data-template-key="' +
-    escapeHtml(contentTemplate.key) +
-    '">';
-  contentTemplate.placeholders.forEach(function (phDef) {
-    html +=
-      '<div class="content-placeholder content-placeholder--' +
-      escapeHtml(phDef.key) +
-      '" data-placeholder="' +
-      escapeHtml(phDef.key) +
-      '"></div>';
-  });
-  html += "</div>";
-  return html;
+  return TBTemplate.buildContentPageSkeleton(page, contentTemplate);
 }
 
 /**
@@ -112,15 +74,11 @@ function fillResultFieldPlaceholder(el, phDef, value, contentTemplate) {
 }
 
 function getPageValues(page) {
-  if (!page) return {};
-  if (page.valuesJson && page.valuesJson.values) return page.valuesJson.values;
-  return page.values || {};
+  return TBTemplate.getPageValues(page);
 }
 
 function getPagePlaceholderStyles(page) {
-  if (!page) return {};
-  if (page.valuesJson && page.valuesJson.placeholderStyles) return page.valuesJson.placeholderStyles;
-  return page.placeholderStyles || {};
+  return TBTemplate.getPagePlaceholderStyles(page);
 }
 
 /**
@@ -387,7 +345,14 @@ function renderContentPage(page, contentTemplates) {
   // whichever page that key happens to point at. Falls back to `content`, then to
   // mounting the skeleton directly.
   var layouts = (typeof state !== "undefined" && state) ? state.templateLayouts : null;
-  var layout = (layouts && contentTemplate && contentTemplate.layoutFile && layouts[contentTemplate.layoutFile])
+  // A variant's own layout is only usable when THIS path can supply the context it
+  // binds against. `intro` variants render section-intro, which needs `sectionIntro.*`
+  // — built by renderSectionIntro from the page's section. When that declined (an
+  // `intro` page with no matching section, e.g. a test-scope one), rendering its
+  // layout here produced a blank card: every binding empty and the continue button
+  // unwired. The generic wrapper at least shows the author's content and navigates.
+  var declinedOwnLayout = page && page.kind === "intro";
+  var layout = (layouts && !declinedOwnLayout && contentTemplate && contentTemplate.layoutFile && layouts[contentTemplate.layoutFile])
     || (layouts && layouts["content"]);
   var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
   var host;
