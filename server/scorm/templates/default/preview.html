@@ -1354,6 +1354,49 @@ a.results-rec-item:hover { text-decoration: underline; }
   font-size: 30px; font-weight: 800;
 }
 .renderer--ring-chart .renderer__label { position: absolute; left: 0; right: 0; bottom: -22px; text-align: center; }
+
+/* ===== Content page layouts (PRD-22) =====
+   One card, six shapes: text alone or text beside an image (left / right), each
+   with or without a subtitle. The gallery family adds the navigation dots and
+   «Назад» around the SAME card. The dots come from the core (`page.dots`), so a
+   page outside a sequence simply renders none and the row collapses. */
+.page-card { display: flex; flex-direction: column; gap: 16px; }
+.page-card__text { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.page-card__title { font-size: 28px; font-weight: 700; line-height: 1.2; color: hsl(var(--foreground)); margin: 0; }
+.page-card__lead { font-size: 17px; line-height: 1.55; color: hsl(var(--muted-foreground)); margin: 0; }
+.page-card__body { font-size: 15px; line-height: 1.65; color: hsl(var(--foreground)); }
+.page-card__body p { margin-bottom: 12px; }
+.page-card__body p:last-child { margin-bottom: 0; }
+.page-card__media img { max-width: 100%; border-radius: 8px; display: block; }
+/* Placeholder regions are always in the markup, so empty ones must collapse
+   instead of reserving space. */
+.page-card__title:empty,
+.page-card__lead:empty,
+.page-card__media:empty { display: none; }
+
+/* Text beside an image. The image takes half the card; the DOM order decides the
+   side, so no direction override is needed. An empty image region collapses
+   (rule above) and the text simply takes the whole width. */
+.page-card--split { flex-direction: row; align-items: flex-start; gap: 24px; }
+.page-card--split > .page-card__media { flex: 0 0 50%; max-width: 50%; }
+.page-card--split > .page-card__text { flex: 1 1 auto; }
+/* The card is narrow on a phone: side by side leaves neither column readable, so
+   the image goes above the text regardless of the chosen side. */
+@media (max-width: 560px) {
+  .page-card--split { flex-direction: column; }
+  .page-card--split > .page-card__media { flex: 0 0 auto; max-width: 100%; }
+  .page-card--image-right > .page-card__media { order: -1; }
+}
+
+.gallery-nav { align-items: center; }
+.gallery-nav__buttons { display: flex; gap: 8px; margin-left: auto; }
+.gallery-dots { display: flex; align-items: center; gap: 8px; }
+.gallery-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: hsl(var(--muted-foreground) / 0.35);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.gallery-dot.is-current { background: hsl(var(--primary)); transform: scale(1.35); }
 </style>
   <style id="pv-fixes">
     /* Undo template global resets that break the preview chrome */
@@ -1397,7 +1440,7 @@ a.results-rec-item:hover { text-decoration: underline; }
       </div>
 
       <div class="pv-dialog-foot">
-        <span>12 экранов · 9 шаблонов контента · шаблон «Стандартный» v1.2.0</span>
+        <span>11 экранов · 20 шаблонов контента · шаблон «Стандартный» v1.3.0</span>
         <button type="button" class="pv-btn">Закрыть</button>
       </div>
     </div>
@@ -1409,73 +1452,81 @@ a.results-rec-item:hover { text-decoration: underline; }
   window.PRD1_PREVIEW_MANIFEST  = {
   "id": "default",
   "name": "Стандартный",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "templateApiVersion": "1.0",
   "description": "Базовый одноколоночный плеер. Используется по умолчанию для обратной совместимости.",
   "params": [
     {
       "key": "primaryColor",
       "type": "color",
-      "label": "Основной цвет",
+      "label": "Цвет кнопок и активных элементов",
       "default": "217 91% 42%",
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Кнопки «Далее» и «Начать», выбранный вариант ответа, пройденные точки прогресса, рамка фокуса."
     },
     {
       "key": "backgroundColor",
       "type": "color",
-      "label": "Цвет фона",
+      "label": "Фон экрана",
       "default": "225 7% 7%",
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Подложка всего экрана — то, что видно под карточками и текстом."
     },
     {
       "key": "foregroundColor",
       "type": "color",
-      "label": "Цвет текста",
+      "label": "Цвет основного текста",
       "default": "0 0% 98%",
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Заголовки, текст вопроса и текст учебных страниц на фоне экрана."
     },
     {
       "key": "cardColor",
       "type": "color",
-      "label": "Цвет карточек",
+      "label": "Фон карточки",
       "default": "225 14% 14%",
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Заливка карточек: учебная страница, карточка вопроса, окно подтверждения, итоги."
     },
     {
       "key": "cardBorderColor",
       "type": "color",
-      "label": "Граница карточек",
+      "label": "Граница карточки",
       "default": "0 0% 24%",
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Контур карточек и модальных окон."
     },
     {
       "key": "borderColor",
       "type": "color",
-      "label": "Цвет границ",
+      "label": "Границы элементов",
       "default": "0 0% 22%",
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Рамки вариантов ответа и полей, разделители внутри карточек."
     },
     {
       "key": "mutedColor",
       "type": "color",
-      "label": "Приглушённый цвет",
+      "label": "Фон вспомогательных блоков",
       "default": "225 10% 20%",
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Заливка невыполненных точек прогресса, вставки с пояснением, дорожки шкал."
     },
     {
       "key": "accentColor",
       "type": "color",
-      "label": "Акцентный цвет",
+      "label": "Подсветка при наведении",
       "default": "225 8% 22%",
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Заливка варианта ответа и ссылки под курсором мыши."
     },
     {
       "key": "fontFamily",
@@ -1488,7 +1539,8 @@ a.results-rec-item:hover { text-decoration: underline; }
         "Inter",
         "Roboto",
         "Arial"
-      ]
+      ],
+      "description": "Гарнитура всего текста пакета."
     },
     {
       "key": "logoUrl",
@@ -1496,7 +1548,8 @@ a.results-rec-item:hover { text-decoration: underline; }
       "label": "Логотип",
       "default": null,
       "group": "Оформление",
-      "section": "branding"
+      "section": "branding",
+      "description": "Показывается в шапке экранов старта и итогов."
     },
     {
       "key": "progress.mode",
@@ -1514,7 +1567,8 @@ a.results-rec-item:hover { text-decoration: underline; }
         "questions": "По вопросам",
         "pages": "По страницам",
         "hidden": "Не показывать"
-      }
+      },
+      "description": "Что считает индикатор в шапке: выданные вопросы, страницы или ничего."
     },
     {
       "key": "showProgressBar",
@@ -1522,7 +1576,8 @@ a.results-rec-item:hover { text-decoration: underline; }
       "label": "Показывать прогресс-бар",
       "default": true,
       "group": "Навигация",
-      "section": "progress"
+      "section": "progress",
+      "description": "Полоса заполнения под счётчиком в шапке."
     }
   ],
   "contentTemplates": [
@@ -1559,25 +1614,17 @@ a.results-rec-item:hover { text-decoration: underline; }
             "mode": "growBox",
             "defaultFontSize": 16,
             "overflow": "warn"
-          },
-          "allowedMarks": [
-            "bold",
-            "italic",
-            "link"
-          ],
-          "allowedBlocks": [
-            "paragraph",
-            "bulletedList",
-            "numberedList"
-          ]
+          }
         }
       ]
     },
     {
       "key": "info.text",
-      "label": "Информация: текст",
+      "label": "Текст",
       "kind": "info",
       "pageKind": "content.info",
+      "layoutFile": "layouts/content.text.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
       "placeholders": [
         {
           "key": "title",
@@ -1596,24 +1643,717 @@ a.results-rec-item:hover { text-decoration: underline; }
         },
         {
           "key": "body",
-          "type": "richText",
+          "type": "html",
           "label": "Текст",
           "required": false,
           "textFit": {
             "mode": "growBox",
             "defaultFontSize": 16,
             "overflow": "warn"
-          },
-          "allowedMarks": [
-            "bold",
-            "italic",
-            "link"
-          ],
-          "allowedBlocks": [
-            "paragraph",
-            "bulletedList",
-            "numberedList"
-          ]
+          }
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ],
+      "isDefault": true
+    },
+    {
+      "key": "info.text-lead",
+      "label": "Текст с подзаголовком",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/content.text.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "info.image-left",
+      "label": "Текст, изображение слева",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/content.image-left.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "info.image-left-lead",
+      "label": "Текст с подзаголовком, изображение слева",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/content.image-left.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "info.image-right",
+      "label": "Текст, изображение справа",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/content.image-right.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "info.image-right-lead",
+      "label": "Текст с подзаголовком, изображение справа",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/content.image-right.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.text",
+      "label": "Галерея: текст",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.text.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.text-lead",
+      "label": "Галерея: текст с подзаголовком",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.text.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.image-left",
+      "label": "Галерея: текст, изображение слева",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.image-left.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.image-left-lead",
+      "label": "Галерея: текст с подзаголовком, изображение слева",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.image-left.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.image-right",
+      "label": "Галерея: текст, изображение справа",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.image-right.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.image-right-lead",
+      "label": "Галерея: текст с подзаголовком, изображение справа",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.image-right.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
         }
       ]
     },
@@ -1778,12 +2518,6 @@ a.results-rec-item:hover { text-decoration: underline; }
         "label": "Введение раздела"
       },
       {
-        "route": "content.info",
-        "pageId": "demo-info",
-        "templateKey": "info.text",
-        "label": "Информация: текст"
-      },
-      {
         "route": "question.single",
         "questionId": "demo-single",
         "label": "Вопрос: одиночный выбор"
@@ -1876,17 +2610,6 @@ a.results-rec-item:hover { text-decoration: underline; }
         }
       },
       {
-        "id": "demo-info",
-        "type": "info",
-        "route": "content.info",
-        "templateKey": "info.text",
-        "topicId": "topic-1",
-        "values": {
-          "title": "Перед началом",
-          "body": "<p>Короткий учебный блок с <strong>важным акцентом</strong> и понятным следующим шагом.</p><p>Внимательно читайте каждый вопрос перед тем, как выбирать ответ.</p>"
-        }
-      },
-      {
         "id": "demo-summary",
         "type": "summary",
         "route": "content.summary",
@@ -1905,6 +2628,212 @@ a.results-rec-item:hover { text-decoration: underline; }
             },
             "label": ""
           }
+        }
+      },
+      {
+        "id": "demo-info-text",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.text",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 11,
+        "values": {
+          "title": "Как устроен тест",
+          "body": "<p>Тест состоит из нескольких разделов. Отвечайте по порядку — к пропущенным вопросам можно вернуться до завершения раздела.</p>"
+        }
+      },
+      {
+        "id": "demo-info-text-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.text-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 12,
+        "values": {
+          "title": "Что важно знать",
+          "lead": "Перед началом",
+          "body": "<ul><li>ответы можно менять до завершения раздела;</li><li>результат виден сразу после завершения.</li></ul>"
+        }
+      },
+      {
+        "id": "demo-info-image-left",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.image-left",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 13,
+        "values": {
+          "title": "Как читать результат",
+          "body": "<p>Итоговый балл переводится в проценты и сравнивается с порогом. Ниже порога раздел считается непройденным.</p>",
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNDAwIiB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MDAiIHJ4PSIxNiIgZmlsbD0iI2U4ZWVmNyIvPjxjaXJjbGUgY3g9IjE1MCIgY3k9IjEzMCIgcj0iNTgiIGZpbGw9IiM4ZmI0ZTMiLz48cmVjdCB4PSIyNTAiIHk9Ijk2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2I5Y2JlNiIvPjxyZWN0IHg9IjI1MCIgeT0iMTM0IiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxyZWN0IHg9IjI1MCIgeT0iMTcyIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxwYXRoIGQ9Ik02MCAzNDAgTDE5MCAyNDAgTDMwMCAzMDAgTDQzMCAxOTAgTDU4MCAyNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzViOGFjNyIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+        }
+      },
+      {
+        "id": "demo-info-image-left-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.image-left-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 14,
+        "values": {
+          "title": "Из чего складывается балл",
+          "lead": "Цена ответа",
+          "body": "<p>У каждого вопроса своя цена. Частично верный ответ приносит часть баллов, если так настроен тест.</p>",
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNDAwIiB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MDAiIHJ4PSIxNiIgZmlsbD0iI2U4ZWVmNyIvPjxjaXJjbGUgY3g9IjE1MCIgY3k9IjEzMCIgcj0iNTgiIGZpbGw9IiM4ZmI0ZTMiLz48cmVjdCB4PSIyNTAiIHk9Ijk2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2I5Y2JlNiIvPjxyZWN0IHg9IjI1MCIgeT0iMTM0IiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxyZWN0IHg9IjI1MCIgeT0iMTcyIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxwYXRoIGQ9Ik02MCAzNDAgTDE5MCAyNDAgTDMwMCAzMDAgTDQzMCAxOTAgTDU4MCAyNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzViOGFjNyIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+        }
+      },
+      {
+        "id": "demo-info-image-right",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.image-right",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 15,
+        "values": {
+          "title": "Сколько попыток",
+          "body": "<p>Число попыток задаёт автор теста. Между попытками может действовать перерыв.</p>",
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNDAwIiB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MDAiIHJ4PSIxNiIgZmlsbD0iI2U4ZWVmNyIvPjxjaXJjbGUgY3g9IjE1MCIgY3k9IjEzMCIgcj0iNTgiIGZpbGw9IiM4ZmI0ZTMiLz48cmVjdCB4PSIyNTAiIHk9Ijk2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2I5Y2JlNiIvPjxyZWN0IHg9IjI1MCIgeT0iMTM0IiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxyZWN0IHg9IjI1MCIgeT0iMTcyIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxwYXRoIGQ9Ik02MCAzNDAgTDE5MCAyNDAgTDMwMCAzMDAgTDQzMCAxOTAgTDU4MCAyNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzViOGFjNyIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+        }
+      },
+      {
+        "id": "demo-info-image-right-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.image-right-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 16,
+        "values": {
+          "title": "Что дальше",
+          "lead": "После теста",
+          "body": "<p>По итогам теста показывается сводка по разделам и рекомендации, если автор их подготовил.</p>",
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNDAwIiB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MDAiIHJ4PSIxNiIgZmlsbD0iI2U4ZWVmNyIvPjxjaXJjbGUgY3g9IjE1MCIgY3k9IjEzMCIgcj0iNTgiIGZpbGw9IiM4ZmI0ZTMiLz48cmVjdCB4PSIyNTAiIHk9Ijk2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2I5Y2JlNiIvPjxyZWN0IHg9IjI1MCIgeT0iMTM0IiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxyZWN0IHg9IjI1MCIgeT0iMTcyIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxwYXRoIGQ9Ik02MCAzNDAgTDE5MCAyNDAgTDMwMCAzMDAgTDQzMCAxOTAgTDU4MCAyNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzViOGFjNyIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+        }
+      },
+      {
+        "id": "demo-gallery-text",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.text",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 17,
+        "values": {
+          "title": "Как устроен тест",
+          "body": "<p>Тест состоит из нескольких разделов. Отвечайте по порядку — к пропущенным вопросам можно вернуться до завершения раздела.</p>"
+        },
+        "settings": {
+          "sequenceId": "Демо-галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-text-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.text-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 18,
+        "values": {
+          "title": "Что важно знать",
+          "lead": "Перед началом",
+          "body": "<ul><li>ответы можно менять до завершения раздела;</li><li>результат виден сразу после завершения.</li></ul>"
+        },
+        "settings": {
+          "sequenceId": "Демо-галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-image-left",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.image-left",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 19,
+        "values": {
+          "title": "Как читать результат",
+          "body": "<p>Итоговый балл переводится в проценты и сравнивается с порогом. Ниже порога раздел считается непройденным.</p>",
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNDAwIiB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MDAiIHJ4PSIxNiIgZmlsbD0iI2U4ZWVmNyIvPjxjaXJjbGUgY3g9IjE1MCIgY3k9IjEzMCIgcj0iNTgiIGZpbGw9IiM4ZmI0ZTMiLz48cmVjdCB4PSIyNTAiIHk9Ijk2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2I5Y2JlNiIvPjxyZWN0IHg9IjI1MCIgeT0iMTM0IiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxyZWN0IHg9IjI1MCIgeT0iMTcyIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxwYXRoIGQ9Ik02MCAzNDAgTDE5MCAyNDAgTDMwMCAzMDAgTDQzMCAxOTAgTDU4MCAyNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzViOGFjNyIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+        },
+        "settings": {
+          "sequenceId": "Демо-галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-image-left-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.image-left-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 20,
+        "values": {
+          "title": "Из чего складывается балл",
+          "lead": "Цена ответа",
+          "body": "<p>У каждого вопроса своя цена. Частично верный ответ приносит часть баллов, если так настроен тест.</p>",
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNDAwIiB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MDAiIHJ4PSIxNiIgZmlsbD0iI2U4ZWVmNyIvPjxjaXJjbGUgY3g9IjE1MCIgY3k9IjEzMCIgcj0iNTgiIGZpbGw9IiM4ZmI0ZTMiLz48cmVjdCB4PSIyNTAiIHk9Ijk2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2I5Y2JlNiIvPjxyZWN0IHg9IjI1MCIgeT0iMTM0IiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxyZWN0IHg9IjI1MCIgeT0iMTcyIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxwYXRoIGQ9Ik02MCAzNDAgTDE5MCAyNDAgTDMwMCAzMDAgTDQzMCAxOTAgTDU4MCAyNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzViOGFjNyIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+        },
+        "settings": {
+          "sequenceId": "Демо-галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-image-right",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.image-right",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 21,
+        "values": {
+          "title": "Сколько попыток",
+          "body": "<p>Число попыток задаёт автор теста. Между попытками может действовать перерыв.</p>",
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNDAwIiB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MDAiIHJ4PSIxNiIgZmlsbD0iI2U4ZWVmNyIvPjxjaXJjbGUgY3g9IjE1MCIgY3k9IjEzMCIgcj0iNTgiIGZpbGw9IiM4ZmI0ZTMiLz48cmVjdCB4PSIyNTAiIHk9Ijk2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2I5Y2JlNiIvPjxyZWN0IHg9IjI1MCIgeT0iMTM0IiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxyZWN0IHg9IjI1MCIgeT0iMTcyIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxwYXRoIGQ9Ik02MCAzNDAgTDE5MCAyNDAgTDMwMCAzMDAgTDQzMCAxOTAgTDU4MCAyNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzViOGFjNyIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+        },
+        "settings": {
+          "sequenceId": "Демо-галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-image-right-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.image-right-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 22,
+        "values": {
+          "title": "Что дальше",
+          "lead": "После теста",
+          "body": "<p>По итогам теста показывается сводка по разделам и рекомендации, если автор их подготовил.</p>",
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNDAwIiB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MDAiIHJ4PSIxNiIgZmlsbD0iI2U4ZWVmNyIvPjxjaXJjbGUgY3g9IjE1MCIgY3k9IjEzMCIgcj0iNTgiIGZpbGw9IiM4ZmI0ZTMiLz48cmVjdCB4PSIyNTAiIHk9Ijk2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2I5Y2JlNiIvPjxyZWN0IHg9IjI1MCIgeT0iMTM0IiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxyZWN0IHg9IjI1MCIgeT0iMTcyIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxwYXRoIGQ9Ik02MCAzNDAgTDE5MCAyNDAgTDMwMCAzMDAgTDQzMCAxOTAgTDU4MCAyNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzViOGFjNyIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+        },
+        "settings": {
+          "sequenceId": "Демо-галерея",
+          "nextLabel": "Начать"
         }
       }
     ],
@@ -2081,7 +3010,7 @@ a.results-rec-item:hover { text-decoration: underline; }
   window.PRD1_PREVIEW_LAYOUTS   = {
   "shell": "<div class=\"tb-player\" data-template=\"default\">\n  <div class=\"tb-progress-wrap\">\n    <div class=\"tb-progress-bar\" id=\"tb-progress-fill\"></div>\n  </div>\n  <main id=\"app\" class=\"tb-content\" data-slot=\"page\" tabindex=\"-1\"></main>\n</div>\n",
   "start": "<div class=\"start-page\">\n  {{#if design.logoUrl}}<div class=\"tb-brand\"><img class=\"tb-brand__logo\" src=\"{{ design.logoUrl }}\" alt=\"\"></div>{{/if}}\n  <div class=\"card start-header\">\n    <h1 class=\"start-title\" data-path=\"course.title\">Тест</h1>\n    <p class=\"start-description\" data-path=\"course.description\"></p>\n  </div>\n  <div class=\"card start-info\">\n    <h2 class=\"start-info-heading\">Информация о тесте</h2>\n    <div class=\"start-info-grid\">\n      <div class=\"info-row\">\n        <span class=\"info-icon info-icon--blue\" aria-hidden=\"true\">\n          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z\"/><polyline points=\"14 2 14 8 20 8\"/><line x1=\"16\" y1=\"13\" x2=\"8\" y2=\"13\"/><line x1=\"16\" y1=\"17\" x2=\"8\" y2=\"17\"/><line x1=\"10\" y1=\"9\" x2=\"8\" y2=\"9\"/></svg>\n        </span>\n        <div class=\"info-row-body\">\n          <div class=\"info-row-label\">Количество вопросов</div>\n          <div class=\"info-row-value\" data-path=\"course.questionCount\"></div>\n        </div>\n      </div>\n      <div class=\"info-row\">\n        <span class=\"info-icon info-icon--green\" aria-hidden=\"true\">\n          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 11.08V12a10 10 0 1 1-5.93-9.14\"/><polyline points=\"22 4 12 14.01 9 11.01\"/></svg>\n        </span>\n        <div class=\"info-row-body\">\n          <div class=\"info-row-label\">Проходной балл</div>\n          <div class=\"info-row-value\"><span data-path=\"course.passPercent\"></span>%</div>\n        </div>\n      </div>\n      {{#if course.timeLimitMinutes}}\n      <div class=\"info-row\">\n        <span class=\"info-icon info-icon--amber\" aria-hidden=\"true\">\n          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><polyline points=\"12 6 12 12 16 14\"/></svg>\n        </span>\n        <div class=\"info-row-body\">\n          <div class=\"info-row-label\">Ограничение времени</div>\n          <div class=\"info-row-value\"><span data-path=\"course.timeLimitMinutes\"></span> мин</div>\n        </div>\n      </div>\n      {{/if}}\n      {{#if course.maxAttempts}}\n      <div class=\"info-row\">\n        <span class=\"info-icon info-icon--purple\" aria-hidden=\"true\">\n          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"1 4 1 10 7 10\"/><path d=\"M3.51 15a9 9 0 1 0 .49-3.5\"/></svg>\n        </span>\n        <div class=\"info-row-body\">\n          <div class=\"info-row-label\">Попыток разрешено</div>\n          <div class=\"info-row-value\" data-path=\"course.maxAttempts\"></div>\n        </div>\n      </div>\n      {{/if}}\n    </div>\n  </div>\n  {{#if course.startPageContent}}\n  <div class=\"card start-note\">{{course.startPageContent}}</div>\n  {{/if}}\n  {{#if state.cooldown}}\n  <div class=\"card start-cooldown\">\n    <div class=\"cooldown-head\">\n      <span class=\"cooldown-ico\" aria-hidden=\"true\">\n        <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><polyline points=\"12 6 12 12 16 14\"/></svg>\n      </span>\n      <div>\n        <div class=\"cooldown-title\">Повторное прохождение пока недоступно</div>\n        <div class=\"cooldown-sub\">Действует период ожидания между попытками.</div>\n      </div>\n    </div>\n    <div class=\"cooldown-when\">Повторный запуск будет доступен с <strong><span data-path=\"state.cooldown.availableDateHuman\"></span></strong>{{#if state.cooldown.daysUntil}} &middot; через <span data-path=\"state.cooldown.daysUntil\"></span> дн.{{/if}}</div>\n    {{#if state.priorResult}}\n    <div class=\"start-prior-row\">Прошлая попытка: <strong><span data-path=\"state.priorResult.percent\"></span>%</strong>{{#if state.priorResult.verdictLabel}} &middot; <span class=\"{{state.priorResult.verdictClass}}\" data-path=\"state.priorResult.verdictLabel\"></span>{{/if}}{{#if state.priorResult.attemptsLabel}} &middot; <span data-path=\"state.priorResult.attemptsLabel\"></span>{{/if}}</div>\n    <div class=\"prior-actions\">\n      {{#if state.canViewResults}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"view-results\">Мой результат</button>{{/if}}\n      {{#if state.canDownloadReport}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"download-report\">Скачать отчёт</button>{{/if}}\n    </div>\n    {{/if}}\n  </div>\n  {{/if}}\n  {{#unless state.cooldown}}{{#if state.priorResult}}\n  <div class=\"card start-prior\">\n    <div class=\"start-prior-row\">Прошлая попытка: <strong><span data-path=\"state.priorResult.percent\"></span>%</strong>{{#if state.priorResult.verdictLabel}} &middot; <span class=\"{{state.priorResult.verdictClass}}\" data-path=\"state.priorResult.verdictLabel\"></span>{{/if}}{{#if state.priorResult.attemptsLabel}} &middot; <span data-path=\"state.priorResult.attemptsLabel\"></span>{{/if}}</div>\n    <div class=\"prior-actions\">\n      {{#if state.canViewResults}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"view-results\">Мой результат</button>{{/if}}\n      {{#if state.canDownloadReport}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"download-report\">Скачать отчёт</button>{{/if}}\n    </div>\n  </div>\n  {{/if}}{{/unless}}\n  <div class=\"start-actions\">\n    {{#if state.resumeNote}}<div class=\"start-resume-note\">{{state.resumeNote}}</div>{{/if}}\n    {{#if state.exhausted}}<div class=\"start-actions-note\">Попытки закончились</div>{{/if}}\n    {{#if state.canResume}}<button type=\"button\" class=\"btn start-btn\" data-action=\"resume\">{{state.resumeLabel}}</button>{{/if}}\n    {{#if state.cooldown}}<button type=\"button\" class=\"btn start-btn\" disabled aria-disabled=\"true\">Начать тестирование</button>{{/if}}\n    {{#if state.canStart}}<button type=\"button\" class=\"btn start-btn\" data-action=\"start-test\">{{state.startLabel}}</button>{{/if}}\n    {{#if state.canRestart}}<button type=\"button\" class=\"btn btn--outline start-btn\" data-action=\"restart\">Начать заново</button>{{/if}}\n    {{#unless state.priorResult}}{{#if state.canViewResults}}<button type=\"button\" class=\"btn btn--outline start-btn\" data-action=\"view-results\">Мой результат</button>{{/if}}{{/unless}}\n    {{#if state.showBack}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"back\">К списку тестов</button>{{/if}}\n  </div>\n</div>\n",
-  "content": "<div class=\"layout-content-wrap\">\n  <div data-slot=\"page-content\"></div>\n  <div class=\"navigation\">\n    <button type=\"button\" class=\"btn\" data-nav=\"next\">Далее</button>\n  </div>\n</div>\n",
+  "content": "<div class=\"layout-content-wrap\">\n  <div data-slot=\"page-content\"></div>\n  <div class=\"navigation\">\n    <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n  </div>\n</div>\n",
   "question": "<div class=\"layout-question-wrap\">\n  {{#if design.logoUrl}}<div class=\"tb-brand\"><img class=\"tb-brand__logo\" src=\"{{ design.logoUrl }}\" alt=\"\"></div>{{/if}}\n  <div class=\"q-header\">\n    <h1 class=\"q-title\" data-path=\"course.title\"></h1>\n    <div class=\"q-timer q-timer--hidden\" id=\"timer-display\"></div>\n  </div>\n  {{#if state.questionsProgress}}\n  <div class=\"tb-pills\" role=\"group\" aria-label=\"Карта вопросов\">\n    <div class=\"tb-pills__head\">\n      <span>{{state.questionsProgress.scopeLabel}}</span>\n      <b>отвечено {{state.questionsProgress.answeredCount}} · пропущено {{state.questionsProgress.skippedCount}}</b>\n    </div>\n    <div class=\"tb-pills__dots\">\n      {{#each state.questionsProgress.states}}\n      <button type=\"button\" class=\"tb-pill {{statusClass}}\" {{#unless clickable}}disabled{{/unless}} data-action=\"goto:{{index}}\" aria-label=\"{{ariaLabel}}\">{{number}}</button>\n      {{/each}}\n    </div>\n    <div class=\"tb-pills__legend\">\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-answered\"></span>отвечен</span>\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-skipped\"></span>пропущен</span>\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-current\"></span>текущий</span>\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-locked\"></span>не выдан</span>\n    </div>\n  </div>\n  {{/if}}\n  {{#unless state.questionsProgress}}\n  <div class=\"progress-bar\">\n    <div class=\"progress-fill\" id=\"q-progress-fill\"></div>\n  </div>\n  {{/unless}}\n  <div class=\"question-card\">\n    <div class=\"question-meta\"><span data-path=\"state.questionCounterLabel\"></span>{{#if state.sectionName}} | <span data-path=\"state.sectionName\"></span>{{/if}}</div>\n    <div class=\"question-text\" data-slot=\"question-text\"></div>\n    <div data-slot=\"question-media\"></div>\n    <div data-slot=\"question-interaction\"></div>\n    <div data-slot=\"question-feedback\"></div>\n  </div>\n</div>\n",
   "results": "<div class=\"results-page\">\n  {{#if design.logoUrl}}<div class=\"tb-brand\"><img class=\"tb-brand__logo\" src=\"{{ design.logoUrl }}\" alt=\"\"></div>{{/if}}\n  <div class=\"results-hero\">\n    {{#if result.passed}}\n    <div class=\"results-hero-icon is-pass\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M8 21h8\"/><path d=\"M12 17v4\"/><path d=\"M7 4h10\"/><path d=\"M17 4v5a5 5 0 0 1-10 0V4\"/><path d=\"M5 6h2\"/><path d=\"M17 6h2\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Поздравляем!</div>\n    <div class=\"results-hero-sub\">Вы успешно прошли тест.</div>\n    {{/if}}\n    {{#unless result.passed}}\n    <div class=\"results-hero-icon is-fail\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M9 9l6 6\"/><path d=\"M15 9l-6 6\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Тест не пройден</div>\n    <div class=\"results-hero-sub\">Попробуйте ещё раз.</div>\n    {{/unless}}\n  </div>\n\n  <div class=\"card results-main-card\">\n    <div class=\"results-main-title\" data-path=\"course.title\"></div>\n    <div class=\"results-main-sub\">Результаты теста</div>\n\n    <div class=\"results-ring\" data-ring-offset=\"{{ result.ringDashoffset }}\" style=\"--ring-offset: {{ result.ringDashoffset }}\">\n      <svg viewBox=\"0 0 140 140\" width=\"140\" height=\"140\">\n        <circle cx=\"70\" cy=\"70\" r=\"63\" class=\"ring-bg\" stroke-width=\"14\" fill=\"none\"></circle>\n        <circle cx=\"70\" cy=\"70\" r=\"63\" class=\"ring-fg {{ result.passClass }}\" stroke-width=\"14\" fill=\"none\" stroke-linecap=\"round\"></circle>\n      </svg>\n      <div class=\"results-ring-center\">\n        <div class=\"results-ring-pct\"><span data-path=\"result.scorePercent\"></span>%</div>\n        <div class=\"results-ring-label\">Баллы</div>\n      </div>\n    </div>\n\n    <div class=\"results-stats\">\n      <div class=\"results-stat\">\n        <div class=\"v\" data-path=\"result.totalQuestions\"></div>\n        <div class=\"l\">Вопросов</div>\n      </div>\n      <div class=\"results-stat\">\n        <div class=\"v\"><span data-path=\"result.correct\"></span>/<span data-path=\"result.totalQuestions\"></span></div>\n        <div class=\"l\">Верно</div>\n      </div>\n      <div class=\"results-stat\">\n        <div class=\"v\" data-path=\"result.earnedPoints\"></div>\n        <div class=\"l\">Баллов</div>\n      </div>\n      <div class=\"results-pill {{ result.passClass }}\" data-path=\"result.statusLabel\"></div>\n    </div>\n  </div>\n\n  {{#if result.topicResults}}\n  <div class=\"results-section-title\">Результаты по темам</div>\n  <div class=\"results-topics-grid\">\n    {{#each result.topicResults}}\n    <div class=\"card topic-card\">\n      <div class=\"topic-head\">\n        <div class=\"topic-name\">{{topicName}}</div>\n        <div class=\"results-pill {{passClass}}\">{{statusLabel}}</div>\n      </div>\n      <div class=\"topic-bar {{passClass}}\" data-bar-width=\"{{percent}}\"><div class=\"topic-bar-fill\" style=\"width: {{percent}}%\"></div></div>\n      <div class=\"topic-row\">\n        <div class=\"k\">Правильно</div>\n        <div class=\"val\">{{correct}} / {{total}}</div>\n      </div>\n      {{#if pointsLabel}}\n      <div class=\"topic-row\">\n        <div class=\"k\">Баллов</div>\n        <div class=\"val\">{{pointsLabel}}</div>\n      </div>\n      {{/if}}\n      {{#if requiredLabel}}<div class=\"topic-required\">{{requiredLabel}}</div>{{/if}}\n      {{#if topicFeedback}}<div class=\"topic-feedback\"><div class=\"topic-feedback-text\">{{topicFeedback}}</div></div>{{/if}}\n    </div>\n    {{/each}}\n  </div>\n  {{/if}}\n\n  {{#if result.recommendedCourses}}\n  <div class=\"results-section-title\">Рекомендуемые курсы</div>\n  <div class=\"results-rec-list\">\n    {{#each result.recommendedCourses}}<a class=\"results-rec-item\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}\n  </div>\n  {{/if}}\n  {{#if result.recommendedEvents}}\n  <div class=\"results-section-title\">Рекомендуемые мероприятия</div>\n  <div class=\"results-rec-list\">\n    {{#each result.recommendedEvents}}<div class=\"results-rec-item\">{{title}}</div>{{/each}}\n  </div>\n  {{/if}}\n\n  <div class=\"results-actions\">\n    {{#if result.backAction}}<button type=\"button\" class=\"btn\" data-action=\"{{result.backAction}}\">{{result.backLabel}}</button>{{/if}}\n    {{#unless result.backAction}}<button type=\"button\" class=\"btn\" data-action=\"restart\">Пройти снова</button>{{/unless}}\n  </div>\n</div>\n",
   "results.adaptive": "<div class=\"results-page\">\n  <div class=\"results-hero\">\n    <div class=\"results-hero-icon is-info\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M8 21h8\"/><path d=\"M12 17v4\"/><path d=\"M7 4h10\"/><path d=\"M17 4v5a5 5 0 0 1-10 0V4\"/><path d=\"M5 6h2\"/><path d=\"M17 6h2\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Тест завершён</div>\n    <div class=\"results-hero-sub\" data-path=\"course.title\"></div>\n  </div>\n\n  <div class=\"results-section-title\">Результаты по темам</div>\n  <div class=\"results-topics-grid\">\n    {{#each result.topicResults}}\n    <div class=\"card topic-card\">\n      <div class=\"topic-head\">\n        <div class=\"topic-name\">{{topicName}}</div>\n        <div class=\"results-pill {{levelClass}}\">{{levelLabel}}</div>\n      </div>\n      {{#if hasFeedback}}\n      <div class=\"topic-feedback\">{{feedback}}</div>\n      {{/if}}\n      {{#if hasLinks}}\n      <div class=\"topic-links\">\n        {{#each links}}\n        <a class=\"topic-link\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>\n        {{/each}}\n      </div>\n      {{/if}}\n    </div>\n    {{/each}}\n  </div>\n\n  <div class=\"results-actions\">\n    {{#if result.showPdf}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"download-pdf\">Скачать PDF</button>{{/if}}\n    {{#if result.canRetry}}<button type=\"button\" class=\"btn\" data-action=\"restart-adaptive\">Пройти заново</button>{{/if}}\n    {{#if result.showFinish}}<button type=\"button\" class=\"btn\" data-action=\"finish\">Завершить тест</button>{{/if}}\n    {{#unless result.hasScormActions}}<button type=\"button\" class=\"btn\" data-action=\"restart\">Пройти снова</button>{{/unless}}\n  </div>\n</div>\n",
@@ -2814,7 +3743,12 @@ a.results-rec-item:hover { text-decoration: underline; }
  * @returns {object|null}
  */
 function findContentTemplate(page, contentTemplates) {
-  return TBTemplate.findContentTemplate(page, contentTemplates);
+  // PRD-22 (plan Э5): a page whose variant this template does not declare renders
+  // through the kind's DEFAULT variant instead of the untemplated fallback card —
+  // the binding in the database is untouched, so the author still decides via
+  // «Сменить вариант». Returns null only when the template declares no variant of
+  // the kind at all.
+  return TBTemplate.resolveContentTemplate(page, contentTemplates).template;
 }
 
 /**
@@ -3039,77 +3973,83 @@ function renderSectionIntro(page) {
   return true;
 }
 
+
 /**
- * Renders a gallery card page (kind `gallery`) via its own layout variant
- * (text / media / list). Header + subheader + card body + the round pill row +
- * Назад/Далее. The pills are a per-page indicator: the two settings
- * (pillsTotal, pillCurrent) are expanded here into a Core-prepared `pills` array
- * the layout renders with `{{#each}}` (the DSL cannot loop over a raw count).
- * «Назад» (shown only when the page's `showBack` setting is on) steps the page
- * sequence back via goToPageSequenceIndex; «Далее» advances it as usual. Each
- * card is a normal content page — no gallery controller / grouping.
+ * PRD-22 FR-36: resolves relative links in author values against the template's
+ * assets, which the package stores under `template/`. Without a base a link like
+ * `images/diagram.png` would resolve next to index.html, where nothing lives.
+ * @param {object} values  Author values of a content page
+ * @returns {object} the same values with relative src/href prefixed
  */
-function renderGalleryPage(page, contentTemplate) {
-  var layouts = (typeof state !== "undefined" && state) ? state.templateLayouts : null;
-  var layout = layouts && contentTemplate ? layouts[contentTemplate.key] : null;
+function withTemplateAssets(values) {
   var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
-  if (!layout || !TB || !TB.renderScreenInto) return false;
+  if (!TB || !TB.withTemplateAssetBaseInValues) return values;
+  return TB.withTemplateAssetBaseInValues(values, "template/");
+}
 
-  var values = getPageValues(page) || {};
-  var total = parseInt(values.pillsTotal, 10);
-  if (!(total > 0)) total = 1;
-  var current = parseInt(values.pillCurrent, 10) || 1;
-  var pills = [];
-  for (var i = 1; i <= total; i++) {
-    pills.push({ statusClass: i === current ? "is-current" : "" });
+/**
+ * PRD-22: the `page.*` context of a content page — navigation dots of its
+ * sequence plus the back affordance. Sequences are computed by the SHARED core
+ * from the test's structure, so the LMS package, the web host and the preview
+ * count identically; `canGoBack` is host state and is supplied here, because only
+ * the runtime knows whether there is a screen to return to (in router mode the
+ * first page of a topic returns to the hub).
+ * @param {object} page  A content page from TEST_DATA.contentPages
+ * @returns {object} `{ dots, dotIndex, dotsTotal, canGoBack }`
+ */
+function buildPageRenderContext(page) {
+  var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
+  var canGoBack =
+    (typeof canNavigateBack === "function" && canNavigateBack()) ||
+    (typeof state !== "undefined" && state && (state.currentPageIndex || 0) > 0) ||
+    (typeof RouterFlow !== "undefined" && RouterFlow.isRouterMode && RouterFlow.isRouterMode());
+  if (!TB || !TB.buildPageContextFor || !page) {
+    return { dots: [], dotIndex: 0, dotsTotal: 0, canGoBack: !!canGoBack };
   }
+  var pages = (typeof TEST_DATA !== "undefined" && TEST_DATA.contentPages) ? TEST_DATA.contentPages : [];
+  return TB.buildPageContextFor(page.id, pages, { canGoBack: !!canGoBack });
+}
 
-  var img = values.image;
-  var imageUrl = img && typeof img === "object" ? (img.url || "") : (img || "");
-  var bgRaw = values.backgroundImage;
-  var slideBgUrl = bgRaw && typeof bgRaw === "object" ? (bgRaw.url || "") : (bgRaw || "");
+/**
+ * Applies the page's `backgroundImage` setting (PRD-22 FR-27) to the screen root.
+ * A background is a page PROPERTY, not content: it never goes through a
+ * placeholder region, so the core applies it directly.
+ * @param {Element} app   The #app element the screen was rendered into
+ * @param {object}  page  A content page from TEST_DATA.contentPages
+ */
+function applyPageBackground(app, page) {
+  var settings = (page && (page.settings || page.settingsJson)) || {};
+  var raw = settings.backgroundImage;
+  var url = raw && typeof raw === "object" ? (raw.url || "") : (raw || "");
+  if (!url) return;
+  var root = app.firstElementChild || app;
+  root.classList.add("has-slide-bg");
+  root.style.backgroundImage = 'url("' + String(url).replace(/"/g, "%22") + '")';
+}
 
-  var context = {
-    design: (typeof scormDesignContext === "function") ? scormDesignContext() : {},
-    course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") },
-    gallery: {
-      header: values.header != null ? String(values.header) : "",
-      subheader: values.subheader != null ? String(values.subheader) : "",
-      imageUrl: imageUrl,
-      pills: pills,
-      showBack: values.showBack === true || values.showBack === "true",
-      nextLabel: (values.nextLabel != null && values.nextLabel !== "") ? String(values.nextLabel) : "Далее"
-    }
-  };
-
-  var app = document.getElementById("app");
-  app.innerHTML = "";
-  // cardText is sanitized rich text → injected raw via the slot (same trust model
-  // as info-page bodies / the section-intro instruction). Rendered directly into
-  // #app (no wrapper) so the fixed-stage flex chain (.tb-pad > .gallery) applies.
-  var cardText = values.cardText != null ? String(values.cardText) : "";
-  TB.renderScreenInto(app, { layout: layout, context: context, slots: { cardText: cardText } });
-
-  // Per-slide background image (variant-slide setting): applied to the slide root.
-  if (slideBgUrl) {
-    var slideEl = app.querySelector(".gallery");
-    if (slideEl) {
-      slideEl.classList.add("has-slide-bg");
-      slideEl.style.backgroundImage = 'url("' + String(slideBgUrl).replace(/"/g, "%22") + '")';
-    }
+/**
+ * Finds the layout's OWN navigation button for a direction (`next` / `prev`).
+ *
+ * The contract is the `data-nav` attribute, not the wrapper's class: a layout is
+ * free to name its footer whatever it likes (`.navigation`, `.gallery__nav`, …),
+ * and the certification gallery does exactly that. Keying the lookup on
+ * `.navigation` left such a layout with a dead «Далее».
+ *
+ * Buttons INSIDE the page-content slot belong to the author's content, not to the
+ * screen chrome, so they are skipped — a stray `data-nav` in pasted markup must
+ * not become the screen's navigation.
+ * @param {Element} app  The #app element the screen was rendered into
+ * @param {string}  dir  Navigation direction: `"next"` or `"prev"`
+ * @returns {Element|null}
+ */
+function findScreenNavButton(app, dir) {
+  var nodes = app.querySelectorAll('[data-nav="' + dir + '"]');
+  for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i];
+    if (node.closest && node.closest('[data-slot="page-content"]')) continue;
+    return node;
   }
-
-  var nextBtn = app.querySelector('[data-nav="next"]');
-  if (nextBtn) nextBtn.onclick = function () {
-    if (typeof advancePageSequence === "function") advancePageSequence();
-  };
-  var prevBtn = app.querySelector('[data-nav="prev"]');
-  if (prevBtn) prevBtn.onclick = function () {
-    // «Назад» follows the recorded nav route (same as section-intro); the router
-    // hub fallback covers a gallery that is a topic chunk's first page.
-    if (typeof navigateBackOrPrevPage === "function") navigateBackOrPrevPage();
-  };
-  return true;
+  return null;
 }
 
 function renderContentPage(page, contentTemplates) {
@@ -3125,9 +4065,10 @@ function renderContentPage(page, contentTemplates) {
   if (page && page.kind === "intro" && renderSectionIntro(page)) return;
 
   var contentTemplate = findContentTemplate(page, contentTemplates);
-  // Gallery pages render via their own layout (header/subheader/card + pills + Назад/Далее).
-  if (contentTemplate && contentTemplate.kind === "gallery" && renderGalleryPage(page, contentTemplate)) return;
-  var values = getPageValues(page);
+  // PRD-22 FR-36: relative links in author content point at the TEMPLATE's files,
+  // which live under `template/` inside the package. The stored value is
+  // host-independent, so the base is applied here, at render time.
+  var values = withTemplateAssets(getPageValues(page));
   var placeholderStyles = getPagePlaceholderStyles(page);
   var skeleton = buildContentPageSkeleton(page, contentTemplate);
 
@@ -3152,15 +4093,28 @@ function renderContentPage(page, contentTemplates) {
   if (layout && TB && TB.renderScreenInto) {
     app.innerHTML = "";
     // Mount directly into #app (no wrapper) so .tb-pad > .layout-content-wrap fills
-    // the fixed stage and the bottom nav anchors — mirrors renderGalleryPage.
+    // the fixed stage and the bottom nav anchors.
     TB.renderScreenInto(app, {
       layout: layout,
-      context: { course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") } },
+      context: {
+        course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") },
+        // PRD-22: navigation dots of the page sequence, computed by the shared
+        // core from the structure — the author supplies only the identifier.
+        // A layout without an indicator simply ignores the block.
+        page: buildPageRenderContext(page)
+      },
       slots: { "page-content": skeleton }
     });
     host = app.querySelector('[data-slot="page-content"]') || app;
-    var navBtn = app.querySelector('.navigation [data-nav="next"]');
+    var navBtn = findScreenNavButton(app, "next");
     if (navBtn) navBtn.onclick = function () { if (typeof advancePageSequence === "function") advancePageSequence(); };
+    // «Назад» is optional: only layouts that render it get it wired, and it
+    // follows the recorded nav route (router hub fallback included).
+    var prevBtn = findScreenNavButton(app, "prev");
+    if (prevBtn) prevBtn.onclick = function () {
+      if (typeof navigateBackOrPrevPage === "function") navigateBackOrPrevPage();
+    };
+    applyPageBackground(app, page);
   } else {
     app.innerHTML = skeleton;
     host = app;
@@ -3308,6 +4262,13 @@ function renderContentPage(page, contentTemplates) {
     // wrapper's «Далее». Remove that nav so the run matches the «Структура» preview.
     var nav = app.querySelector(".navigation");
     if (nav && nav.parentNode) nav.parentNode.removeChild(nav);
+    // A layout free to name its footer otherwise (`.gallery__nav`) would keep a
+    // live «Далее» next to the cards and let the learner walk past the hub, so
+    // the button is also dropped by its `data-nav` contract.
+    var strayNext = typeof findScreenNavButton === "function"
+      ? findScreenNavButton(app, "next")
+      : null;
+    if (strayNext && strayNext.parentNode) strayNext.parentNode.removeChild(strayNext);
     // Cards (and the «Завершить» action) live INSIDE the content wrapper's
     // page-content slot — the SAME DOM the preview builds (buildRouterCards into
     // page-content) — so the run and the structure preview look identical.
@@ -3880,6 +4841,10 @@ var TBTemplate = (() => {
   __export(runtime_entry_exports, {
     CORE_RENDERER_IDS: () => CORE_RENDERER_IDS,
     DEFAULT_PARAM_CSS_VARS: () => DEFAULT_PARAM_CSS_VARS,
+    INPUT_MODES: () => INPUT_MODES,
+    PLACEHOLDER_TYPES: () => PLACEHOLDER_TYPES,
+    SEQUENCE_SETTING_KEY: () => SEQUENCE_SETTING_KEY,
+    SETTING_TYPES: () => SETTING_TYPES,
     aggregateAdaptiveResult: () => aggregateAdaptiveResult,
     aggregateStandardResult: () => aggregateStandardResult,
     attachPointerDnd: () => attachPointerDnd,
@@ -3889,6 +4854,8 @@ var TBTemplate = (() => {
     buildContentPageRender: () => buildContentPageRender,
     buildContentPageSkeleton: () => buildContentPageSkeleton,
     buildFallbackContentHtml: () => buildFallbackContentHtml,
+    buildPageContext: () => buildPageContext,
+    buildPageContextFor: () => buildPageContextFor,
     buildPageSequence: () => buildPageSequence,
     buildQuestionProgress: () => buildQuestionProgress,
     buildResultContext: () => buildResultContext,
@@ -3896,31 +4863,42 @@ var TBTemplate = (() => {
     buildRouterHubHtml: () => buildRouterHubHtml,
     buildSectionIntroContext: () => buildSectionIntroContext,
     buildSectionResultContext: () => buildSectionResultContext,
+    buildSequencePlacements: () => buildSequencePlacements,
     buildStartState: () => buildStartState,
     buildTemplateCssVars: () => buildTemplateCssVars,
     buildTopicChunk: () => buildTopicChunk,
     buildTransitionContext: () => buildTransitionContext,
     checkPassRule: () => checkPassRule,
+    collectSequenceIds: () => collectSequenceIds,
     compileTemplate: () => compileTemplate,
     contentPagesFor: () => contentPagesFor,
     dropOnPoolSlot: () => dropOnPoolSlot,
     dropOnRight: () => dropOnRight,
     findContentTemplate: () => findContentTemplate,
+    findDefaultContentTemplate: () => findDefaultContentTemplate,
     getPagePlaceholderStyles: () => getPagePlaceholderStyles,
     getPageValues: () => getPageValues,
+    inputModesFor: () => inputModesFor,
     isFlowContentPage: () => isFlowContentPage,
+    isPlaceholderType: () => isPlaceholderType,
     isRouterReadyToFinish: () => isRouterReadyToFinish,
     isSectionUnlocked: () => isSectionUnlocked,
+    isSettingType: () => isSettingType,
     normalizePool: () => normalizePool,
     pluralQuestions: () => pluralQuestions2,
     questionIndicesByTopic: () => questionIndicesByTopic,
     renderResultField: () => renderResultField,
     renderScreenInto: () => renderScreenInto,
     renderTemplate: () => renderTemplate,
+    resolveContentTemplate: () => resolveContentTemplate,
     resolveOverallRule: () => resolveOverallRule,
     resolveTopicRule: () => resolveTopicRule,
     returnToPool: () => returnToPool,
-    statusLabel: () => statusLabel
+    sequenceIdOf: () => sequenceIdOf,
+    statusLabel: () => statusLabel,
+    validateVariantFields: () => validateVariantFields,
+    withTemplateAssetBase: () => withTemplateAssetBase,
+    withTemplateAssetBaseInValues: () => withTemplateAssetBaseInValues
   });
 
   // shared/template/dsl.ts
@@ -5151,6 +6129,23 @@ var TBTemplate = (() => {
     }
     return null;
   }
+  function findDefaultContentTemplate(kind, contentTemplates) {
+    if (!contentTemplates || !kind) return null;
+    let first = null;
+    for (const template of contentTemplates) {
+      if (template.kind !== kind) continue;
+      if (template.isDefault) return template;
+      if (!first) first = template;
+    }
+    return first;
+  }
+  function resolveContentTemplate(page, contentTemplates) {
+    var _a;
+    const bound = findContentTemplate(page, contentTemplates);
+    if (bound) return { template: bound, substituted: false };
+    const fallback = findDefaultContentTemplate((_a = page == null ? void 0 : page.kind) != null ? _a : page == null ? void 0 : page.type, contentTemplates);
+    return { template: fallback, substituted: fallback !== null };
+  }
   function buildFallbackContentHtml(page) {
     const typeLabel = page.type || "content";
     const values = getPageValues(page);
@@ -5173,7 +6168,7 @@ var TBTemplate = (() => {
     return html;
   }
   function buildContentPageRender(page, contentTemplates) {
-    const contentTemplate = findContentTemplate(page, contentTemplates);
+    const { template: contentTemplate, substituted } = resolveContentTemplate(page, contentTemplates);
     return {
       layoutKey: contentTemplate && contentTemplate.layoutFile || "content",
       skeleton: buildContentPageSkeleton(page, contentTemplate),
@@ -5182,95 +6177,9 @@ var TBTemplate = (() => {
         values: getPageValues(page)
       },
       placeholderStyles: getPagePlaceholderStyles(page),
-      contentTemplate
+      contentTemplate,
+      substituted
     };
-  }
-
-  // shared/flow/router-hub.ts
-  function escHtml3(s) {
-    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  }
-  function pluralQuestions2(n) {
-    const m10 = n % 10;
-    const m100 = n % 100;
-    if (m10 === 1 && m100 !== 11) return "\u0432\u043E\u043F\u0440\u043E\u0441";
-    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return "\u0432\u043E\u043F\u0440\u043E\u0441\u0430";
-    return "\u0432\u043E\u043F\u0440\u043E\u0441\u043E\u0432";
-  }
-  function isSectionUnlocked(section, state) {
-    const rule = (state.unlockRules || {})[section.topicId];
-    if (!rule || !rule.mode || rule.mode === "always") return true;
-    const ids = rule.sectionIds || [];
-    if (rule.mode === "after_sections_completed") {
-      return ids.every((id) => state.topicStates[id] === "completed");
-    }
-    if (rule.mode === "after_sections_passed") {
-      return ids.every((id) => {
-        if (state.topicStates[id] !== "completed") return false;
-        const result = (state.sectionResults || {})[id];
-        return !result || result.passed !== false;
-      });
-    }
-    return true;
-  }
-  function isRouterReadyToFinish(sections, state) {
-    const policy = state.completionPolicy || "all_required_completed";
-    const required = (sections || []).filter((s) => s.required !== false);
-    if (required.length === 0) return true;
-    return required.every((s) => {
-      if (state.topicStates[s.topicId] !== "completed") return false;
-      if (policy === "all_required_passed") {
-        const result = (state.sectionResults || {})[s.topicId];
-        if (!result) return false;
-        return result.passed === true;
-      }
-      return true;
-    });
-  }
-  function statusLabel(status) {
-    if (status === "completed") return "\u041F\u0440\u043E\u0439\u0434\u0435\u043D\u0430";
-    if (status === "inProgress") return "\u0412 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0435";
-    return "\u041D\u0435 \u043D\u0430\u0447\u0430\u0442\u0430";
-  }
-  function buildRouterHubHtml(sections, state, options) {
-    const list = sections || [];
-    let html = "";
-    const deadline = options == null ? void 0 : options.deadline;
-    if (deadline && (deadline.date || deadline.time)) {
-      let stats = "";
-      if (deadline.date) {
-        stats += '<div class="router-stat"><span class="router-stat__label">\u0414\u0430\u0442\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u044F \u0442\u0435\u0441\u0442\u0430</span><span class="router-stat__value">' + escHtml3(deadline.date) + "</span></div>";
-      }
-      if (deadline.time) {
-        stats += '<div class="router-stat"><span class="router-stat__label">\u0412\u0440\u0435\u043C\u044F \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u044F \u0442\u0435\u0441\u0442\u0430</span><span class="router-stat__value">' + escHtml3(deadline.time) + "</span></div>";
-      }
-      html += '<div class="router-stats">' + stats + "</div>";
-    }
-    const required = list.filter((s) => s.required !== false);
-    if (required.length > 0) {
-      const done = required.filter((s) => state.topicStates[s.topicId] === "completed").length;
-      const pct = Math.round(done / required.length * 100);
-      html += '<div class="router-progress" role="group" aria-label="\u041F\u0440\u043E\u0433\u0440\u0435\u0441\u0441 \u043F\u043E \u0440\u0430\u0437\u0434\u0435\u043B\u0430\u043C"><div class="router-progress__head"><span class="router-progress__label">\u0420\u0430\u0437\u0434\u0435\u043B\u044B</span><span class="router-progress__count">' + done + " / " + required.length + '</span></div><div class="router-progress__bar"><div class="router-progress__fill" style="width:' + pct + '%"></div></div></div>';
-    }
-    let cards = "";
-    for (const section of list) {
-      const status = state.topicStates[section.topicId] || "notStarted";
-      const unlocked = isSectionUnlocked(section, state);
-      const locked = !unlocked && status !== "completed";
-      const disabled = status === "completed" || !unlocked;
-      const meta = [];
-      if (section.drawCount) meta.push(section.drawCount + " " + pluralQuestions2(section.drawCount));
-      if (section.timeLimitMinutes) meta.push(section.timeLimitMinutes + " \u043C\u0438\u043D");
-      const metaHtml = meta.length ? '<span class="router-topic-card__meta">' + meta.map((m) => '<span class="router-topic-card__chip">' + escHtml3(m) + "</span>").join("") + "</span>" : "";
-      const imgUrl = section.image && typeof section.image === "object" ? section.image.url || "" : section.image || "";
-      const imgHtml = imgUrl ? '<span class="router-topic-card__img"><img src="' + escHtml3(imgUrl) + '" alt=""></span>' : "";
-      const goHtml = unlocked && status !== "completed" ? '<span class="router-topic-card__go">\u043D\u0430\u0447\u0430\u0442\u044C</span>' : "";
-      cards += '<button type="button" role="listitem" class="router-topic-card router-topic-card--' + status + (locked ? " router-topic-card--locked" : "") + '" data-topic-id="' + escHtml3(section.topicId) + '" data-router-status="' + status + '"' + (locked ? ' data-router-locked="true"' : "") + (disabled ? " disabled" : ' data-action="router-select:' + escHtml3(section.topicId) + '"') + '><span class="router-topic-card__top"><span class="router-topic-card__name">' + escHtml3(section.topicName || section.topicId) + (section.required === false ? ' <span class="router-topic-card__optional">(\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u0430\u044F)</span>' : "") + "</span>" + imgHtml + "</span>" + metaHtml + '<span class="router-topic-card__foot"><span class="router-topic-card__status">' + escHtml3(unlocked ? statusLabel(status) : "\u041D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430") + "</span>" + goHtml + "</span></button>";
-    }
-    html += '<div class="router-topic-cards" role="list" aria-label="\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0435 \u0442\u0435\u043C\u044B">' + cards + "</div>";
-    const ready = isRouterReadyToFinish(list, state);
-    html += '<button type="button" class="btn router-finish' + (ready ? "" : " router-finish--disabled") + '"' + (ready ? ' data-action="router-finish"' : " disabled") + ">\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C</button>";
-    return html;
   }
 
   // shared/flow/page-sequence.ts
@@ -5399,6 +6308,299 @@ var TBTemplate = (() => {
     const after = buildAfterZone(contentPages);
     for (const item of after.preResults) sequence.push(item);
     return { sequence, postResultsPages: after.postResultsPages };
+  }
+
+  // shared/template/page-sequences.ts
+  var SEQUENCE_SETTING_KEY = "sequenceId";
+  var NEXT_LABEL_SETTING_KEY = "nextLabel";
+  var DEFAULT_NEXT_LABEL = "\u0414\u0430\u043B\u0435\u0435";
+  function settingsOf(page) {
+    var _a, _b;
+    if (!page) return null;
+    return (_b = (_a = page.settingsJson) != null ? _a : page.settings) != null ? _b : null;
+  }
+  function sequenceIdOf(page) {
+    const bag = settingsOf(page);
+    const raw = bag ? bag[SEQUENCE_SETTING_KEY] : void 0;
+    return typeof raw === "string" ? raw.trim() : "";
+  }
+  function nextLabelOf(page) {
+    const bag = settingsOf(page);
+    const raw = bag ? bag[NEXT_LABEL_SETTING_KEY] : void 0;
+    return (typeof raw === "string" ? raw.trim() : "") || DEFAULT_NEXT_LABEL;
+  }
+  function segmentKeyOf(page, afterResults) {
+    var _a, _b;
+    const topic = (_a = page.topicId) != null ? _a : "";
+    const position = (_b = page.position) != null ? _b : "";
+    return position === "after" ? `${topic}|after|${afterResults ? 1 : 0}` : `${topic}|${position}`;
+  }
+  function bySortOrder(a, b) {
+    return (a.sortOrder || 0) - (b.sortOrder || 0);
+  }
+  function groupIntoSegments(pages) {
+    const segments = /* @__PURE__ */ new Map();
+    const authorPages = pages.filter((p) => isFlowContentPage(p) && p.kind !== "router");
+    const afterZone = authorPages.filter((p) => {
+      var _a, _b;
+      return ((_a = p.position) != null ? _a : "") === "after" && ((_b = p.topicId) != null ? _b : null) === null;
+    }).slice().sort(bySortOrder);
+    const afterResults = /* @__PURE__ */ new Set();
+    let seenResultsBoundary = false;
+    for (const page of afterZone) {
+      if (page.type === "summary") {
+        seenResultsBoundary = true;
+        continue;
+      }
+      if (seenResultsBoundary) afterResults.add(page.id);
+    }
+    for (const page of authorPages) {
+      if (page.type === "summary") continue;
+      const key = segmentKeyOf(page, afterResults.has(page.id));
+      const bucket = segments.get(key);
+      if (bucket) bucket.push(page);
+      else segments.set(key, [page]);
+    }
+    for (const bucket of segments.values()) bucket.sort(bySortOrder);
+    return segments;
+  }
+  function buildSequencePlacements(pages) {
+    const placements = /* @__PURE__ */ new Map();
+    if (!pages || pages.length === 0) return placements;
+    for (const segment of groupIntoSegments(pages).values()) {
+      let runStart = 0;
+      while (runStart < segment.length) {
+        const id = sequenceIdOf(segment[runStart]);
+        if (!id) {
+          runStart += 1;
+          continue;
+        }
+        let runEnd = runStart + 1;
+        while (runEnd < segment.length && sequenceIdOf(segment[runEnd]) === id) runEnd += 1;
+        const total = runEnd - runStart;
+        if (total >= 2) {
+          for (let i = runStart; i < runEnd; i++) {
+            placements.set(segment[i].id, { index: i - runStart + 1, total, sequenceId: id });
+          }
+        }
+        runStart = runEnd;
+      }
+    }
+    return placements;
+  }
+  function buildPageContext(placement, options) {
+    var _a;
+    const canGoBack = (options == null ? void 0 : options.canGoBack) === true;
+    const nextLabel = ((_a = options == null ? void 0 : options.nextLabel) == null ? void 0 : _a.trim()) || DEFAULT_NEXT_LABEL;
+    if (!placement) return { dots: [], dotIndex: 0, dotsTotal: 0, canGoBack, nextLabel };
+    const dots = [];
+    for (let i = 1; i <= placement.total; i++) {
+      dots.push({ statusClass: i === placement.index ? "is-current" : "" });
+    }
+    return { dots, dotIndex: placement.index, dotsTotal: placement.total, canGoBack, nextLabel };
+  }
+  function buildPageContextFor(pageId, pages, options) {
+    var _a;
+    const page = (pages != null ? pages : []).find((p) => p.id === pageId);
+    return buildPageContext(buildSequencePlacements(pages).get(pageId), {
+      ...options,
+      nextLabel: (_a = options == null ? void 0 : options.nextLabel) != null ? _a : nextLabelOf(page)
+    });
+  }
+  function collectSequenceIds(pages) {
+    const seen = [];
+    for (const page of pages != null ? pages : []) {
+      const id = sequenceIdOf(page);
+      if (id && seen.indexOf(id) === -1) seen.push(id);
+    }
+    return seen;
+  }
+
+  // shared/template/asset-base.ts
+  var URL_ATTRS = /\s(src|href)\s*=\s*("([^"]*)"|'([^']*)')/gi;
+  function isAbsoluteRef(url) {
+    const v = url.trim();
+    if (v === "") return true;
+    return v.startsWith("/") || v.startsWith("#") || v.startsWith("data:") || v.startsWith("blob:") || // Any scheme: http(s), mailto, tel — the sanitiser handles what is allowed.
+    /^[a-z][a-z0-9+.-]*:/i.test(v);
+  }
+  function joinBase(base, path) {
+    if (!base) return path;
+    return base.endsWith("/") ? base + path.replace(/^\/+/, "") : `${base}/${path.replace(/^\/+/, "")}`;
+  }
+  function withTemplateAssetBase(html, base) {
+    if (!html || !base) return html;
+    return html.replace(URL_ATTRS, (match, attr, _quoted, dq, sq) => {
+      const url = dq !== void 0 ? dq : sq != null ? sq : "";
+      if (isAbsoluteRef(url)) return match;
+      const quote = dq !== void 0 ? '"' : "'";
+      return ` ${attr}=${quote}${joinBase(base, url)}${quote}`;
+    });
+  }
+  function withTemplateAssetBaseInValues(values, base) {
+    const out = { ...values != null ? values : {} };
+    if (!base) return out;
+    for (const [key, value] of Object.entries(out)) {
+      if (typeof value === "string") out[key] = withTemplateAssetBase(value, base);
+    }
+    return out;
+  }
+
+  // shared/template/field-types.ts
+  var PLACEHOLDER_TYPES = [
+    "text",
+    "textarea",
+    "richText",
+    "html",
+    "image",
+    "resultField"
+  ];
+  var SETTING_TYPES = [
+    "number",
+    "boolean",
+    "select",
+    "text",
+    "image",
+    /** Identifier of a page sequence; drives the navigation indicator (PRD-22). */
+    "sequence"
+  ];
+  var INPUT_MODES = ["plain", "rich", "html"];
+  var MODES_BY_PLACEHOLDER_TYPE = {
+    text: ["plain"],
+    textarea: ["plain"],
+    richText: ["plain", "rich"],
+    html: ["plain", "rich", "html"]
+  };
+  function isPlaceholderType(value) {
+    return typeof value === "string" && PLACEHOLDER_TYPES.indexOf(value) !== -1;
+  }
+  function isSettingType(value) {
+    return typeof value === "string" && SETTING_TYPES.indexOf(value) !== -1;
+  }
+  function inputModesFor(type) {
+    var _a;
+    return (_a = MODES_BY_PLACEHOLDER_TYPE[type]) != null ? _a : [];
+  }
+  function fieldLabel(field, index) {
+    return typeof field.key === "string" && field.key.length > 0 ? field.key : `#${index + 1}`;
+  }
+  function validateVariantFields(variant) {
+    const issues = [];
+    const check = (list, raw, isValidType, allowed) => {
+      if (raw === void 0 || raw === null) return;
+      if (!Array.isArray(raw)) {
+        issues.push({ list, field: "", message: `${list} \u0434\u043E\u043B\u0436\u0435\u043D \u0431\u044B\u0442\u044C \u043C\u0430\u0441\u0441\u0438\u0432\u043E\u043C` });
+        return;
+      }
+      raw.forEach((entry, index) => {
+        const field = entry != null ? entry : {};
+        const label = fieldLabel(field, index);
+        if (!isValidType(field.type)) {
+          issues.push({
+            list,
+            field: label,
+            message: `\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u044B\u0439 \u0442\u0438\u043F "${String(field.type)}"; \u0434\u043E\u043F\u0443\u0441\u0442\u0438\u043C\u044B: ${allowed.join(", ")}`
+          });
+          return;
+        }
+        if (field.type === "select") {
+          const options = field.options;
+          if (!Array.isArray(options) || options.length === 0) {
+            issues.push({ list, field: label, message: '\u0442\u0438\u043F "select" \u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u043D\u0435\u043F\u0443\u0441\u0442\u043E\u0439 \u0441\u043F\u0438\u0441\u043E\u043A options' });
+          }
+        }
+      });
+    };
+    check("placeholders", variant.placeholders, isPlaceholderType, PLACEHOLDER_TYPES);
+    check("settings", variant.settings, isSettingType, SETTING_TYPES);
+    return issues;
+  }
+
+  // shared/flow/router-hub.ts
+  function escHtml3(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function pluralQuestions2(n) {
+    const m10 = n % 10;
+    const m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return "\u0432\u043E\u043F\u0440\u043E\u0441";
+    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return "\u0432\u043E\u043F\u0440\u043E\u0441\u0430";
+    return "\u0432\u043E\u043F\u0440\u043E\u0441\u043E\u0432";
+  }
+  function isSectionUnlocked(section, state) {
+    const rule = (state.unlockRules || {})[section.topicId];
+    if (!rule || !rule.mode || rule.mode === "always") return true;
+    const ids = rule.sectionIds || [];
+    if (rule.mode === "after_sections_completed") {
+      return ids.every((id) => state.topicStates[id] === "completed");
+    }
+    if (rule.mode === "after_sections_passed") {
+      return ids.every((id) => {
+        if (state.topicStates[id] !== "completed") return false;
+        const result = (state.sectionResults || {})[id];
+        return !result || result.passed !== false;
+      });
+    }
+    return true;
+  }
+  function isRouterReadyToFinish(sections, state) {
+    const policy = state.completionPolicy || "all_required_completed";
+    const required = (sections || []).filter((s) => s.required !== false);
+    if (required.length === 0) return true;
+    return required.every((s) => {
+      if (state.topicStates[s.topicId] !== "completed") return false;
+      if (policy === "all_required_passed") {
+        const result = (state.sectionResults || {})[s.topicId];
+        if (!result) return false;
+        return result.passed === true;
+      }
+      return true;
+    });
+  }
+  function statusLabel(status) {
+    if (status === "completed") return "\u041F\u0440\u043E\u0439\u0434\u0435\u043D\u0430";
+    if (status === "inProgress") return "\u0412 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0435";
+    return "\u041D\u0435 \u043D\u0430\u0447\u0430\u0442\u0430";
+  }
+  function buildRouterHubHtml(sections, state, options) {
+    const list = sections || [];
+    let html = "";
+    const deadline = options == null ? void 0 : options.deadline;
+    if (deadline && (deadline.date || deadline.time)) {
+      let stats = "";
+      if (deadline.date) {
+        stats += '<div class="router-stat"><span class="router-stat__label">\u0414\u0430\u0442\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u044F \u0442\u0435\u0441\u0442\u0430</span><span class="router-stat__value">' + escHtml3(deadline.date) + "</span></div>";
+      }
+      if (deadline.time) {
+        stats += '<div class="router-stat"><span class="router-stat__label">\u0412\u0440\u0435\u043C\u044F \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u044F \u0442\u0435\u0441\u0442\u0430</span><span class="router-stat__value">' + escHtml3(deadline.time) + "</span></div>";
+      }
+      html += '<div class="router-stats">' + stats + "</div>";
+    }
+    const required = list.filter((s) => s.required !== false);
+    if (required.length > 0) {
+      const done = required.filter((s) => state.topicStates[s.topicId] === "completed").length;
+      const pct = Math.round(done / required.length * 100);
+      html += '<div class="router-progress" role="group" aria-label="\u041F\u0440\u043E\u0433\u0440\u0435\u0441\u0441 \u043F\u043E \u0440\u0430\u0437\u0434\u0435\u043B\u0430\u043C"><div class="router-progress__head"><span class="router-progress__label">\u0420\u0430\u0437\u0434\u0435\u043B\u044B</span><span class="router-progress__count">' + done + " / " + required.length + '</span></div><div class="router-progress__bar"><div class="router-progress__fill" style="width:' + pct + '%"></div></div></div>';
+    }
+    let cards = "";
+    for (const section of list) {
+      const status = state.topicStates[section.topicId] || "notStarted";
+      const unlocked = isSectionUnlocked(section, state);
+      const locked = !unlocked && status !== "completed";
+      const disabled = status === "completed" || !unlocked;
+      const meta = [];
+      if (section.drawCount) meta.push(section.drawCount + " " + pluralQuestions2(section.drawCount));
+      if (section.timeLimitMinutes) meta.push(section.timeLimitMinutes + " \u043C\u0438\u043D");
+      const metaHtml = meta.length ? '<span class="router-topic-card__meta">' + meta.map((m) => '<span class="router-topic-card__chip">' + escHtml3(m) + "</span>").join("") + "</span>" : "";
+      const imgUrl = section.image && typeof section.image === "object" ? section.image.url || "" : section.image || "";
+      const imgHtml = imgUrl ? '<span class="router-topic-card__img"><img src="' + escHtml3(imgUrl) + '" alt=""></span>' : "";
+      const goHtml = unlocked && status !== "completed" ? '<span class="router-topic-card__go">\u043D\u0430\u0447\u0430\u0442\u044C</span>' : "";
+      cards += '<button type="button" role="listitem" class="router-topic-card router-topic-card--' + status + (locked ? " router-topic-card--locked" : "") + '" data-topic-id="' + escHtml3(section.topicId) + '" data-router-status="' + status + '"' + (locked ? ' data-router-locked="true"' : "") + (disabled ? " disabled" : ' data-action="router-select:' + escHtml3(section.topicId) + '"') + '><span class="router-topic-card__top"><span class="router-topic-card__name">' + escHtml3(section.topicName || section.topicId) + (section.required === false ? ' <span class="router-topic-card__optional">(\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u0430\u044F)</span>' : "") + "</span>" + imgHtml + "</span>" + metaHtml + '<span class="router-topic-card__foot"><span class="router-topic-card__status">' + escHtml3(unlocked ? statusLabel(status) : "\u041D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430") + "</span>" + goHtml + "</span></button>";
+    }
+    html += '<div class="router-topic-cards" role="list" aria-label="\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0435 \u0442\u0435\u043C\u044B">' + cards + "</div>";
+    const ready = isRouterReadyToFinish(list, state);
+    html += '<button type="button" class="btn router-finish' + (ready ? "" : " router-finish--disabled") + '"' + (ready ? ' data-action="router-finish"' : " disabled") + ">\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C</button>";
+    return html;
   }
   return __toCommonJS(runtime_entry_exports);
 })();
@@ -5653,6 +6855,8 @@ var TBTemplate = (() => {
       renderReviewRoute();
     } else if (route === "section-results") {
       renderSectionResultsRoute();
+    } else if (route === "system.transition") {
+      renderTransitionRoute();
     } else if (route === "system.blocked" || route === "system.locked" ||
                route.indexOf("system.") === 0) {
       var systemData = Object.assign({}, buildDslData(), {
@@ -5768,6 +6972,40 @@ var TBTemplate = (() => {
       sectionResult: built ? built.sectionResult : {}
     });
     renderLayoutPage("section-results", data);
+  }
+
+  /**
+   * PRD-12 §10: the adaptive «Правильно/Неправильно + смена уровня» interstitial.
+   * Like review / section-results, this screen binds a TOP-LEVEL namespace
+   * (`transition.*`) that buildDslData does not surface, so without a context of
+   * its own every `{{#if}}` in the layout is false and the screen renders as a bare
+   * icon with an empty title — a template defect that is not one.
+   *
+   * The facts come from the template's demo dataset (`runtime.transition`) when it
+   * supplies them, else from defaults that exercise every branch of the layout
+   * (correct answer + level change + topic change + «Продолжить»). A template may
+   * set any field to `null` to hide that block. Built through the SAME shared
+   * builder production uses, so the preview mirrors the learner screen.
+   */
+  function renderTransitionRoute() {
+    var TBt = (typeof window !== "undefined") ? window.TBTemplate : null;
+    var base = buildDslData();
+    var demo = (demoData.runtime || {}).transition || {};
+    var topics = (demoData.course || {}).topics || [];
+    var input = {
+      isCorrect: demo.isCorrect != null ? !!demo.isCorrect : true,
+      // `undefined` = not declared → default; explicit `null` = intentionally absent.
+      levelTransition: demo.levelTransition !== undefined
+        ? demo.levelTransition
+        : { type: "up", message: "Уровень повышен" },
+      topicTransition: demo.topicTransition !== undefined
+        ? demo.topicTransition
+        : (topics[1] ? { toTopic: topics[1].title || "" } : null),
+      showContinue: demo.showContinue != null ? !!demo.showContinue : true
+    };
+    var built = (TBt && TBt.buildTransitionContext) ? TBt.buildTransitionContext(input) : null;
+    var data = Object.assign({}, base, { transition: built ? built.transition : {} });
+    renderLayoutPage("system.transition", data);
   }
 
   // ─── Question rendering ───────────────────────────────────────────────────────

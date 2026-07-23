@@ -191,7 +191,7 @@ body {
 .tb-pad > .centered,
 .tb-pad > .review-page,
 .tb-pad > .content-page,
-.tb-pad > .gallery,
+.tb-pad > .slide,
 .tb-pad > .section-intro-page,
 .tb-pad > .results-page,
 .tb-pad > .transition-page,
@@ -500,6 +500,10 @@ body {
 .topic-bar.is-fail .topic-bar-fill { background: hsl(var(--destructive)); }
 .topic-required, .topic-feedback, .topic-feedback-text { font-size: 1.9cqh; color: hsl(var(--muted-foreground)); margin-top: 1cqh; }
 .results-actions { display: flex; justify-content: center; gap: 2cqw; margin-top: 2.4cqh; flex-wrap: wrap; }
+/* Adaptive results: per-topic recommendation links (results.adaptive layout). */
+.topic-links { display: flex; flex-direction: column; gap: .8cqh; margin-top: 1cqh; }
+.topic-link { font-size: 2cqh; color: hsl(var(--primary)); text-decoration: none; }
+.topic-link:hover { text-decoration: underline; }
 .results-rec-list { display: flex; flex-direction: column; gap: 1cqh; }
 .results-rec-item { display: block; padding: 1.2cqh 2cqw; background: hsl(var(--muted) / .5); border-radius: 1cqh; font-size: 2.1cqh; color: hsl(var(--foreground)); text-decoration: none; }
 a.results-rec-item { color: hsl(var(--primary)); }
@@ -514,7 +518,10 @@ a.results-rec-item { color: hsl(var(--primary)); }
 .transition-level.is-up { border-color: hsl(var(--success)); color: hsl(var(--success)); background: hsl(var(--success) / .12); }
 .transition-level.is-down { border-color: hsl(var(--destructive)); color: hsl(var(--destructive)); background: hsl(var(--destructive) / .12); }
 .transition-level.is-complete { border-color: hsl(var(--primary)); color: hsl(var(--primary)); background: hsl(var(--primary) / .12); }
+.transition-level-icon { flex: 0 0 auto; width: 2.8cqh; height: 2.8cqh; }
+.transition-level-msg { min-width: 0; }
 .transition-topic { font-size: 2.4cqh; color: hsl(var(--muted-foreground)); }
+.transition-actions { display: flex; justify-content: center; gap: 2cqw; margin-top: 1cqh; }
 
 /* ===== BLOCKED (retake gate) ===== */
 .blocked-card { margin: auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2.2cqh; }
@@ -651,48 +658,80 @@ a.results-rec-item { color: hsl(var(--primary)); }
 .tb-modal__foot [data-modal="confirm"] { background: hsl(var(--primary)); border-color: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
 #center-toast { position: fixed; left: 50%; top: 24px; transform: translateX(-50%); z-index: 1100; background: hsl(var(--foreground)); color: hsl(var(--background)); padding: 10px 18px; border-radius: 999px; font-size: 14px; font-weight: 600; }
 
-/* ===== GALLERY (content-page carousel: header + card + round dot pills + Назад/Далее) ===== */
-.gallery { gap: 3cqh; }
-/* Optional per-slide background image (variant-slide setting). Applied to the slide
-   root; the white card keeps content readable on top. */
-.gallery.has-slide-bg { position: relative; background-size: cover; background-position: center; background-repeat: no-repeat; border-radius: 2cqh; }
-/* Theme-adaptive scrim over the author's slide image: the header/footer text follows
-   the theme (light in dark theme), so a bare light image would render that text
+/* ===== SLIDE — the author content page (учебная страница) =====
+   ONE component behind every `info.*` and `gallery.*` variant, because the two are
+   the same screen: heading block, a content card (text, optionally split with an
+   image), and a footer with the navigation. The `gallery.*` variants add the
+   sequence dots — that is the ONLY structural difference, so a page keeps its look
+   when the author moves it in or out of a sequence.
+
+   The variant keys, the placeholder keys (title/lead/body/image) and the settings
+   (sequenceId/nextLabel/backgroundImage) are IDENTICAL to the standard template's,
+   so a test switches between the two templates without re-binding its pages; only
+   the appearance below is RTK. */
+.slide { display: flex; flex-direction: column; gap: 3cqh; flex: 1 1 auto; min-height: 0; }
+/* Optional per-page background image (the `backgroundImage` setting). Applied by the
+   core to the screen root; the card keeps content readable on top. */
+.slide.has-slide-bg { position: relative; background-size: cover; background-position: center; background-repeat: no-repeat; border-radius: 2cqh; }
+/* Theme-adaptive scrim over the author's image: the heading/footer text follows the
+   theme (light in dark theme), so a bare light image would render that text
    invisible. The scrim (theme background at ~82%) guarantees contrast in BOTH themes
    while the image still shows through; the card keeps its own solid surface. */
-.gallery.has-slide-bg::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: hsl(var(--background) / .82); z-index: 0; }
-.gallery.has-slide-bg > * { position: relative; z-index: 1; }
-.gallery__head { flex: 0 0 auto; }
-.gallery__title { font-size: 5cqh; font-weight: 800; line-height: 1.1; letter-spacing: -.01em; color: hsl(var(--foreground)); margin: 0; }
-.gallery__hint { font-size: 2.4cqh; font-weight: 650; color: hsl(var(--primary)); margin: 1cqh 0 0; }
-.gallery__card { flex: 1 1 auto; min-height: 0; overflow-y: auto; background: hsl(var(--card)); border: 1px solid hsl(var(--card-border)); border-radius: 2.4cqh; padding: 3.4cqh 3.4cqw; box-shadow: var(--shadow); }
-/* One adaptive card: split into text + image only when the page carries an image;
-   full-width text otherwise. Keyed on the presence of .gallery__media (no layout variant). */
-.gallery__card:has(.gallery__media) { display: grid; grid-template-columns: 1fr 1fr; gap: 4cqw; align-items: center; }
-.gallery__body { font-size: 2.5cqh; line-height: 1.55; color: hsl(var(--foreground)); }
-.gallery__body > :first-child { margin-top: 0; }
-.gallery__body p { margin-bottom: 1.6cqh; }
-.gallery__body p:last-child { margin-bottom: 0; }
-.gallery__body a { color: hsl(var(--primary)); }
-.gallery__body ol, .gallery__body ul { list-style: none; display: flex; flex-direction: column; gap: 1.4cqh; margin: 0 0 1.6cqh; }
-.gallery__body ol:last-child, .gallery__body ul:last-child { margin-bottom: 0; }
-.gallery__body li { position: relative; padding-left: 6cqw; line-height: 1.4; }
-.gallery__body ol { counter-reset: g-step; }
-.gallery__body ol > li { counter-increment: g-step; }
-.gallery__body ol > li::before { content: counter(g-step); position: absolute; left: 0; top: -.1cqh; width: 4.2cqh; height: 4.2cqh; border-radius: 50%; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); font-size: 2.1cqh; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
-.gallery__body ul > li::before { content: ""; position: absolute; left: 1.2cqw; top: .6em; width: 1.3cqh; height: 1.3cqh; border-radius: 50%; background: hsl(var(--primary)); }
+.slide.has-slide-bg::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: hsl(var(--background) / .82); z-index: 0; }
+.slide.has-slide-bg > * { position: relative; z-index: 1; }
+
+.slide__head { flex: 0 0 auto; display: flex; flex-direction: column; gap: 1cqh; }
+/* A variant without a title/lead (or a page the author left blank) must not leave a
+   gap where the heading block would be. */
+.slide__head:not(:has(*:not(:empty))) { display: none; }
+.slide__title { font-size: 5cqh; font-weight: 800; line-height: 1.1; letter-spacing: -.01em; color: hsl(var(--foreground)); margin: 0; }
+.slide__lead { font-size: 2.4cqh; font-weight: 650; color: hsl(var(--primary)); margin: 0; }
+.slide__title:empty, .slide__lead:empty, .slide__media:empty { display: none; }
+
+.slide__card { flex: 1 1 auto; min-height: 0; overflow-y: auto; background: hsl(var(--card)); border: 1px solid hsl(var(--card-border)); border-radius: 2.4cqh; padding: 3.4cqh 3.4cqw; box-shadow: var(--shadow); }
+.slide__card::-webkit-scrollbar { width: 8px; }
+.slide__card::-webkit-scrollbar-thumb { background: hsl(var(--muted)); border-radius: 4px; }
+/* Split variants (image left / image right): two columns, but ONLY when the page
+   actually carries an image. The media region is always present in the markup (the
+   core fills it), so the split keys on a NON-EMPTY region — an image-variant page
+   with no picture reads as a plain full-width card instead of a half-empty one.
+   Column order comes from the layout file, not from a modifier. */
+.slide--split .slide__card:has(.slide__media:not(:empty)) { display: grid; grid-template-columns: 1fr 1fr; gap: 4cqw; align-items: center; }
 /* Theme-adaptive media frame (a muted panel that reads in BOTH themes) — the image
    sits inside it. Author images should be transparent PNG/SVG; a baked-in light/dark
    background would clash with the opposite theme. */
-.gallery__media { display: flex; align-items: center; justify-content: center; background: hsl(var(--muted) / .45); border: 1px solid hsl(var(--border)); border-radius: 2.4cqh; padding: 2.6cqh 2.6cqw; }
-.gallery__media img { max-width: 100%; max-height: 48cqh; object-fit: contain; }
-.gallery__foot { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 2cqw; margin-top: 1cqh; }
-.gallery__dots { display: flex; align-items: center; gap: 1.6cqw; }
+.slide__media { display: flex; align-items: center; justify-content: center; background: hsl(var(--muted) / .45); border: 1px solid hsl(var(--border)); border-radius: 2.4cqh; padding: 2.6cqh 2.6cqw; }
+.slide__media img { max-width: 100%; max-height: 48cqh; object-fit: contain; }
+
+.slide__body { font-size: 2.5cqh; line-height: 1.55; color: hsl(var(--foreground)); }
+.slide__body > :first-child { margin-top: 0; }
+.slide__body p { margin-bottom: 1.6cqh; }
+.slide__body p:last-child { margin-bottom: 0; }
+.slide__body a { color: hsl(var(--primary)); }
+.slide__body ol, .slide__body ul { list-style: none; display: flex; flex-direction: column; gap: 1.4cqh; margin: 0 0 1.6cqh; }
+.slide__body ol:last-child, .slide__body ul:last-child { margin-bottom: 0; }
+.slide__body li { position: relative; padding-left: 6cqw; line-height: 1.4; }
+.slide__body ol { counter-reset: g-step; }
+.slide__body ol > li { counter-increment: g-step; }
+.slide__body ol > li::before { content: counter(g-step); position: absolute; left: 0; top: -.1cqh; width: 4.2cqh; height: 4.2cqh; border-radius: 50%; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); font-size: 2.1cqh; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.slide__body ul > li::before { content: ""; position: absolute; left: 1.2cqw; top: .6em; width: 1.3cqh; height: 1.3cqh; border-radius: 50%; background: hsl(var(--primary)); }
+
+/* Footer: dots pushed left, actions right. A page outside a sequence renders no
+   dots, and `margin-right:auto` on the (empty) dot row keeps the buttons where a
+   gallery page has them — the two variants stay visually aligned. */
+.slide__foot { flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-end; gap: 2cqw; margin-top: auto; }
+.slide__dots { display: flex; align-items: center; gap: 1.6cqw; margin-right: auto; }
 .tb-pill--dot { width: 2cqh; height: 2cqh; min-width: 2cqh; font-size: 0; cursor: default; background: hsl(var(--muted)); border: 1.5px solid hsl(var(--border)); }
 .tb-pill--dot.is-current { background: hsl(var(--primary)); border-color: hsl(var(--primary)); }
 .tb-pill--dot:hover { transform: none; }
-.gallery__nav { display: flex; align-items: center; gap: 2cqw; }
-.gallery__nav .btn { font-size: 2.4cqh; padding: 1.5cqh 3.6cqw; }
+.slide__nav { display: flex; align-items: center; gap: 2cqw; }
+.slide__nav .btn { font-size: 2.4cqh; padding: 1.5cqh 3.6cqw; }
+
+/* «Итог раздела» (summary.result): the result renderer on a centred card. */
+.slide--summary .summary-card { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 2cqh; text-align: center; background: hsl(var(--card)); border: 1px solid hsl(var(--card-border)); border-radius: 2.4cqh; padding: 4cqh 5cqw; box-shadow: var(--shadow); }
+.summary-card__title { font-size: 4.4cqh; font-weight: 800; line-height: 1.1; margin: 0; }
+.summary-card__title:empty { display: none; }
+.summary-card__result { display: flex; align-items: center; justify-content: center; }
 
 /* ===== loading ===== */
 #loading { text-align: center; padding: 20cqh 5cqw; color: hsl(var(--muted-foreground)); font-size: 2.6cqh; }
@@ -739,7 +778,7 @@ a.results-rec-item { color: hsl(var(--primary)); }
       </div>
 
       <div class="pv-dialog-foot">
-        <span>14 экранов · 9 шаблонов контента · шаблон «Сертификация (РТК)» v1.0.0</span>
+        <span>26 экранов · 20 шаблонов контента · шаблон «Сертификация (РТК)» v1.2.1</span>
         <button type="button" class="pv-btn">Закрыть</button>
       </div>
     </div>
@@ -751,74 +790,82 @@ a.results-rec-item { color: hsl(var(--primary)); }
   window.PRD1_PREVIEW_MANIFEST  = {
   "id": "certification",
   "name": "Сертификация (РТК)",
-  "version": "1.0.0",
+  "version": "1.2.1",
   "templateApiVersion": "1.0",
   "mountShell": true,
-  "description": "Сертификационный тест РТК: системная тема (светлая и тёмная) с переопределяемыми цветами, брендовый акцент, страница-роутер, кнопки навигации, пропуск и возврат к неотвеченным, экран обзора.",
+  "description": "Сертификационный тест РТК: фиксированная сцена 16:9, системная тема (светлая и тёмная) с переопределяемыми цветами, брендовый акцент, страница-роутер, кнопки навигации, пропуск и возврат к неотвеченным, экран обзора. Набор вариантов страниц совпадает со стандартным шаблоном — тест переключается между ними без переназначения страниц.",
   "params": [
     {
       "key": "primaryColor",
       "type": "color",
-      "label": "Основной цвет",
+      "label": "Цвет кнопок и активных элементов",
       "default": null,
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Кнопки «Далее» и «Начать», выбранный вариант ответа, пройденные точки прогресса, рамка фокуса."
     },
     {
       "key": "backgroundColor",
       "type": "color",
-      "label": "Цвет фона",
+      "label": "Фон экрана",
       "default": null,
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Подложка всего экрана — то, что видно под карточками и текстом."
     },
     {
       "key": "foregroundColor",
       "type": "color",
-      "label": "Цвет текста",
+      "label": "Цвет основного текста",
       "default": null,
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Заголовки, текст вопроса и текст учебных страниц на фоне экрана."
     },
     {
       "key": "cardColor",
       "type": "color",
-      "label": "Цвет карточек",
+      "label": "Фон карточки",
       "default": null,
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Заливка карточек: учебная страница, карточка вопроса, окно подтверждения, итоги."
     },
     {
       "key": "cardBorderColor",
       "type": "color",
-      "label": "Граница карточек",
+      "label": "Граница карточки",
       "default": null,
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Контур карточек и модальных окон."
     },
     {
       "key": "borderColor",
       "type": "color",
-      "label": "Цвет границ",
+      "label": "Границы элементов",
       "default": null,
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Рамки вариантов ответа и полей, разделители внутри карточек."
     },
     {
       "key": "mutedColor",
       "type": "color",
-      "label": "Приглушённый цвет",
+      "label": "Фон вспомогательных блоков",
       "default": null,
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Заливка невыполненных точек прогресса, вставки с пояснением, дорожки шкал."
     },
     {
       "key": "accentColor",
       "type": "color",
-      "label": "Акцентный цвет",
+      "label": "Подсветка при наведении",
       "default": null,
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Заливка варианта ответа и ссылки под курсором мыши."
     },
     {
       "key": "fontFamily",
@@ -832,7 +879,8 @@ a.results-rec-item { color: hsl(var(--primary)); }
         "Inter",
         "Roboto",
         "Arial"
-      ]
+      ],
+      "description": "Гарнитура всего текста пакета."
     },
     {
       "key": "logoUrl",
@@ -840,7 +888,8 @@ a.results-rec-item { color: hsl(var(--primary)); }
       "label": "Логотип",
       "default": null,
       "group": "Оформление",
-      "section": "branding"
+      "section": "branding",
+      "description": "Показывается в шапке экранов старта и итогов."
     },
     {
       "key": "progress.mode",
@@ -858,7 +907,8 @@ a.results-rec-item { color: hsl(var(--primary)); }
         "questions": "По вопросам",
         "pages": "По страницам",
         "hidden": "Не показывать"
-      }
+      },
+      "description": "Что считает индикатор в шапке: выданные вопросы, страницы или ничего."
     },
     {
       "key": "showProgressBar",
@@ -866,7 +916,8 @@ a.results-rec-item { color: hsl(var(--primary)); }
       "label": "Показывать прогресс-бар",
       "default": true,
       "group": "Навигация",
-      "section": "progress"
+      "section": "progress",
+      "description": "Полоса заполнения под счётчиком в шапке."
     }
   ],
   "contentTemplates": [
@@ -903,17 +954,7 @@ a.results-rec-item { color: hsl(var(--primary)); }
             "mode": "growBox",
             "defaultFontSize": 16,
             "overflow": "warn"
-          },
-          "allowedMarks": [
-            "bold",
-            "italic",
-            "link"
-          ],
-          "allowedBlocks": [
-            "paragraph",
-            "bulletedList",
-            "numberedList"
-          ]
+          }
         },
         {
           "key": "illustration",
@@ -925,9 +966,11 @@ a.results-rec-item { color: hsl(var(--primary)); }
     },
     {
       "key": "info.text",
-      "label": "Информация: текст",
+      "label": "Текст",
       "kind": "info",
       "pageKind": "content.info",
+      "layoutFile": "layouts/content.text.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
       "placeholders": [
         {
           "key": "title",
@@ -946,24 +989,756 @@ a.results-rec-item { color: hsl(var(--primary)); }
         },
         {
           "key": "body",
-          "type": "richText",
+          "type": "html",
           "label": "Текст",
           "required": false,
           "textFit": {
             "mode": "growBox",
             "defaultFontSize": 16,
             "overflow": "warn"
-          },
-          "allowedMarks": [
-            "bold",
-            "italic",
-            "link"
+          }
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ],
+      "isDefault": true
+    },
+    {
+      "key": "info.text-lead",
+      "label": "Текст с подзаголовком",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/content.text.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "info.image-left",
+      "label": "Текст, изображение слева",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/content.image-left.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "info.image-left-lead",
+      "label": "Текст с подзаголовком, изображение слева",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/content.image-left.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "info.image-right",
+      "label": "Текст, изображение справа",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/content.image-right.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "info.image-right-lead",
+      "label": "Текст с подзаголовком, изображение справа",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/content.image-right.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.text",
+      "label": "Галерея: текст",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.text.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.text-lead",
+      "label": "Галерея: текст с подзаголовком",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.text.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.image-left",
+      "label": "Галерея: текст, изображение слева",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.image-left.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.image-left-lead",
+      "label": "Галерея: текст с подзаголовком, изображение слева",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.image-left.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.image-right",
+      "label": "Галерея: текст, изображение справа",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.image-right.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.image-right-lead",
+      "label": "Галерея: текст с подзаголовком, изображение справа",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.image-right.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "summary.result",
+      "label": "Итог: результат",
+      "kind": "summary",
+      "pageKind": "content.summary",
+      "layoutFile": "layouts/summary.html",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "result",
+          "type": "resultField",
+          "label": "Результат",
+          "required": false,
+          "allowedPaths": [
+            "result.scorePercent",
+            "progress.question.percent"
           ],
-          "allowedBlocks": [
-            "paragraph",
-            "bulletedList",
-            "numberedList"
-          ]
+          "defaultPath": "result.scorePercent",
+          "allowedRenderers": [
+            "core.ringChart",
+            "core.textMetric",
+            "core.progressBar"
+          ],
+          "defaultRenderer": "core.ringChart"
         }
       ]
     },
@@ -1020,52 +1795,6 @@ a.results-rec-item { color: hsl(var(--primary)); }
           "maxLength": 600
         }
       ]
-    },
-    {
-      "key": "gallery.card",
-      "label": "Галерея: карточка",
-      "kind": "gallery",
-      "pageKind": "content.gallery",
-      "layoutFile": "layouts/gallery.html",
-      "isDefault": true,
-      "placeholders": [
-        {
-          "key": "header",
-          "type": "text",
-          "label": "Заголовок",
-          "required": false,
-          "maxLength": 160
-        },
-        {
-          "key": "subheader",
-          "type": "text",
-          "label": "Подзаголовок",
-          "required": false,
-          "maxLength": 160
-        },
-        {
-          "key": "cardText",
-          "type": "richText",
-          "label": "Текст карточки",
-          "required": false,
-          "allowedMarks": [
-            "bold",
-            "italic",
-            "link"
-          ],
-          "allowedBlocks": [
-            "paragraph",
-            "bulletedList",
-            "numberedList"
-          ]
-        },
-        {
-          "key": "image",
-          "type": "image",
-          "label": "Изображение (необязательно)",
-          "required": false
-        }
-      ]
     }
   ],
   "rendererPlugins": [],
@@ -1081,7 +1810,13 @@ a.results-rec-item { color: hsl(var(--primary)); }
     "section-intro": "layouts/section-intro.html",
     "system.blocked": "layouts/system.blocked.html",
     "system.transition": "layouts/system.transition.html",
-    "gallery.card": "layouts/gallery.html"
+    "layouts/content.text.html": "layouts/content.text.html",
+    "layouts/content.image-left.html": "layouts/content.image-left.html",
+    "layouts/content.image-right.html": "layouts/content.image-right.html",
+    "layouts/gallery.text.html": "layouts/gallery.text.html",
+    "layouts/gallery.image-left.html": "layouts/gallery.image-left.html",
+    "layouts/gallery.image-right.html": "layouts/gallery.image-right.html",
+    "layouts/summary.html": "layouts/summary.html"
   },
   "assets": {
     "styles": [
@@ -1110,6 +1845,7 @@ a.results-rec-item { color: hsl(var(--primary)); }
       "start",
       "intro",
       "info",
+      "summary",
       "html"
     ],
     "questionTypes": [
@@ -1130,31 +1866,88 @@ a.results-rec-item { color: hsl(var(--primary)); }
         "label": "Старт"
       },
       {
-        "route": "content.gallery.1",
-        "pageId": "gallery-1",
-        "label": "Галерея: список на всю ширину"
-      },
-      {
-        "route": "content.gallery.2",
-        "pageId": "gallery-2",
-        "label": "Галерея: текст + изображение"
-      },
-      {
         "route": "content.router",
         "pageId": "router-menu",
+        "templateKey": "router.menu",
         "label": "Роутер: меню разделов"
+      },
+      {
+        "route": "content.gallery.text",
+        "pageId": "demo-gallery-text",
+        "templateKey": "gallery.text",
+        "label": "Галерея: текст"
+      },
+      {
+        "route": "content.gallery.text-lead",
+        "pageId": "demo-gallery-text-lead",
+        "templateKey": "gallery.text-lead",
+        "label": "Галерея: текст с подзаголовком"
+      },
+      {
+        "route": "content.gallery.image-left",
+        "pageId": "demo-gallery-image-left",
+        "templateKey": "gallery.image-left",
+        "label": "Галерея: текст, изображение слева"
+      },
+      {
+        "route": "content.gallery.image-left-lead",
+        "pageId": "demo-gallery-image-left-lead",
+        "templateKey": "gallery.image-left-lead",
+        "label": "Галерея: текст с подзаголовком, изображение слева"
+      },
+      {
+        "route": "content.gallery.image-right",
+        "pageId": "demo-gallery-image-right",
+        "templateKey": "gallery.image-right",
+        "label": "Галерея: текст, изображение справа"
+      },
+      {
+        "route": "content.gallery.image-right-lead",
+        "pageId": "demo-gallery-image-right-lead",
+        "templateKey": "gallery.image-right-lead",
+        "label": "Галерея: текст с подзаголовком, изображение справа"
+      },
+      {
+        "route": "content.info.text",
+        "pageId": "demo-info-text",
+        "templateKey": "info.text",
+        "label": "Текст"
+      },
+      {
+        "route": "content.info.text-lead",
+        "pageId": "demo-info-text-lead",
+        "templateKey": "info.text-lead",
+        "label": "Текст с подзаголовком"
+      },
+      {
+        "route": "content.info.image-left",
+        "pageId": "demo-info-image-left",
+        "templateKey": "info.image-left",
+        "label": "Текст, изображение слева"
+      },
+      {
+        "route": "content.info.image-left-lead",
+        "pageId": "demo-info-image-left-lead",
+        "templateKey": "info.image-left-lead",
+        "label": "Текст с подзаголовком, изображение слева"
+      },
+      {
+        "route": "content.info.image-right",
+        "pageId": "demo-info-image-right",
+        "templateKey": "info.image-right",
+        "label": "Текст, изображение справа"
+      },
+      {
+        "route": "content.info.image-right-lead",
+        "pageId": "demo-info-image-right-lead",
+        "templateKey": "info.image-right-lead",
+        "label": "Текст с подзаголовком, изображение справа"
       },
       {
         "route": "content.intro",
         "pageId": "demo-intro",
         "templateKey": "intro.standard",
         "label": "Введение раздела"
-      },
-      {
-        "route": "content.info",
-        "pageId": "demo-info",
-        "templateKey": "info.text",
-        "label": "Информация: текст"
       },
       {
         "route": "question.single",
@@ -1177,6 +1970,12 @@ a.results-rec-item { color: hsl(var(--primary)); }
         "label": "Вопрос: ранжирование"
       },
       {
+        "route": "content.summary",
+        "pageId": "demo-summary",
+        "templateKey": "summary.result",
+        "label": "Итог: результат"
+      },
+      {
         "route": "review",
         "label": "Обзор раздела"
       },
@@ -1187,6 +1986,14 @@ a.results-rec-item { color: hsl(var(--primary)); }
       {
         "route": "results",
         "label": "Результаты"
+      },
+      {
+        "route": "results.adaptive",
+        "label": "Результаты: адаптивные"
+      },
+      {
+        "route": "system.transition",
+        "label": "Системная: переход"
       },
       {
         "route": "system.blocked",
@@ -1283,45 +2090,235 @@ a.results-rec-item { color: hsl(var(--primary)); }
         "templateKey": "router.menu",
         "topicId": null,
         "position": "before",
+        "sortOrder": 1,
         "values": {
-          "title": "Выберите раздел"
+          "title": "Выберите раздел",
+          "instruction": "Разделы можно проходить в любом порядке. После завершения раздела вы вернётесь в это меню."
         }
       },
       {
-        "id": "gallery-1",
-        "type": "gallery",
-        "kind": "gallery",
-        "route": "content.gallery",
-        "templateKey": "gallery.card",
+        "id": "demo-info-text",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.text",
         "topicId": null,
         "position": "before",
+        "sortOrder": 11,
         "values": {
-          "header": "Прежде, чем начать — несколько слов о тесте:",
-          "subheader": "Листайте галерею.",
-          "pillsTotal": 2,
-          "pillCurrent": 1,
-          "showBack": false,
-          "cardText": "<p>Карьера руководителя может складываться по-разному. Но что нужно, чтобы стать успешным лидером в «Ростелекоме»?</p><p>Тест состоит из 6 разделов и охватывает темы:</p><ol><li>Компетенции руководителя (часть 1)</li><li>Компетенции руководителя (часть 2)</li><li>Корпоративные финансы</li><li>Знания о компании</li><li>Технологии и их понимание</li><li>Правовые основы</li></ol>"
+          "title": "Как проходит сертификация",
+          "body": "<p>Тест поможет оценить вашу готовность к роли руководителя. В основе вопросов — опыт десятков успешных лидеров компании.</p><ol><li>Тест состоит из шести разделов; на каждый раздел отведено своё время.</li><li>Отвечайте на вопросы внимательно — таймер раздела нельзя приостановить.</li><li>Повторное прохождение доступно через 14 дней после последней попытки.</li><li>Результаты сертификационного теста действительны 1 год.</li></ol>"
+        },
+        "settings": {
+          "nextLabel": "Далее"
         }
       },
       {
-        "id": "gallery-2",
-        "type": "gallery",
-        "kind": "gallery",
-        "route": "content.gallery",
-        "templateKey": "gallery.card",
+        "id": "demo-info-text-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.text-lead",
         "topicId": null,
         "position": "before",
+        "sortOrder": 12,
         "values": {
-          "header": "Прежде, чем начать — несколько слов о тесте:",
-          "subheader": "Листайте галерею.",
-          "pillsTotal": 2,
-          "pillCurrent": 2,
-          "showBack": true,
+          "title": "Что важно знать",
+          "lead": "Перед началом",
+          "body": "<ul><li>вернуться к пропущенному вопросу можно до завершения раздела;</li><li>результат раздела виден сразу после его завершения;</li><li>перерыв между разделами не ограничен.</li></ul>"
+        },
+        "settings": {
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-info-image-left",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.image-left",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 13,
+        "values": {
+          "title": "Компетенции руководителя",
+          "body": "<p>Компетенция — это поведение, которое приводит к успеху. Корпоративные компетенции руководителя — поведение, которое компания ожидает от своих лидеров.</p>",
+          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%232f8f8f'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%2355b3b3'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%231f6666'/%3E%3C/svg%3E"
+        },
+        "settings": {
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-info-image-left-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.image-left-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 14,
+        "values": {
+          "title": "Как читать результат",
+          "lead": "Порог прохождения — 80 %",
+          "body": "<p>Итоговый балл переводится в проценты и сравнивается с порогом. Ниже порога раздел считается непройденным, и его можно перепройти после периода ожидания.</p>",
+          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%236C4AA6'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%23926fca'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%234e3480'/%3E%3C/svg%3E"
+        },
+        "settings": {
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-info-image-right",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.image-right",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 15,
+        "values": {
+          "title": "Технологии компании",
+          "body": "<p>Раздел проверяет понимание продуктов и технологической платформы «Ростелекома» — от инфраструктуры до сервисов для клиентов.</p>",
+          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%23E33A00'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%23ff7a4d'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%23c22f00'/%3E%3C/svg%3E"
+        },
+        "settings": {
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-info-image-right-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.image-right-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 16,
+        "values": {
+          "title": "Правовые основы",
+          "lead": "10 вопросов, 17 минут",
+          "body": "<p>Проверяются знания трудового и договорного права в объёме, необходимом руководителю для повседневных решений.</p>",
+          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%232f8f8f'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%2355b3b3'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%231f6666'/%3E%3C/svg%3E"
+        },
+        "settings": {
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-text",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.text",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 17,
+        "values": {
+          "title": "Прежде, чем начать — несколько слов о тесте",
+          "body": "<p>Карьера руководителя может складываться по-разному. Но что нужно, чтобы стать успешным лидером в «Ростелекоме»?</p><p>Тест состоит из 6 разделов и охватывает темы:</p><ol><li>Компетенции руководителя (часть 1)</li><li>Компетенции руководителя (часть 2)</li><li>Корпоративные финансы</li><li>Знания о компании</li><li>Технологии и их понимание</li><li>Правовые основы</li></ol>"
+        },
+        "settings": {
+          "sequenceId": "Вводная галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-text-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.text-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 18,
+        "values": {
+          "title": "Как проходить тест",
+          "lead": "Листайте галерею",
+          "body": "<p>Вам понадобится около 2 часов. После назначения тест доступен для прохождения в течение 14 дней.</p><p>Активировав тест, вы попадёте в меню, где можно выбрать любой из 6 разделов. Начать можно с любого.</p>"
+        },
+        "settings": {
+          "sequenceId": "Вводная галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-image-left",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.image-left",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 19,
+        "values": {
+          "title": "Что оценивает тест",
+          "body": "<p>Управленческие решения в реальных ситуациях, знание компании и её технологий, а также правовые и финансовые основы работы руководителя.</p>",
+          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%23E33A00'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%23ff7a4d'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%23c22f00'/%3E%3C/svg%3E"
+        },
+        "settings": {
+          "sequenceId": "Вводная галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-image-left-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.image-left-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 20,
+        "values": {
+          "title": "Сколько это займёт",
+          "lead": "Около двух часов",
+          "body": "<p>Каждый раздел ограничен по времени. Между разделами можно сделать перерыв и вернуться позже — прогресс сохранится.</p>",
+          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%236C4AA6'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%23926fca'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%234e3480'/%3E%3C/svg%3E"
+        },
+        "settings": {
+          "sequenceId": "Вводная галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-image-right",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.image-right",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 21,
+        "values": {
+          "title": "Если раздел не сдан",
+          "body": "<p>Непройденный раздел можно перепройти после периода ожидания. Результаты остальных разделов при этом сохраняются.</p>",
+          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%232f8f8f'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%2355b3b3'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%231f6666'/%3E%3C/svg%3E"
+        },
+        "settings": {
+          "sequenceId": "Вводная галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-image-right-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.image-right-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 22,
+        "values": {
+          "title": "Готовы?",
+          "lead": "Последний слайд",
+          "body": "<p>Дальше — меню разделов. Выберите любой и начните: таймер запускается только внутри раздела.</p>",
+          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%23E33A00'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%23ff7a4d'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%23c22f00'/%3E%3C/svg%3E"
+        },
+        "settings": {
+          "sequenceId": "Вводная галерея",
           "nextLabel": "Начать",
-          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%23E33A00'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%23ff7a4d'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%23c22f00'/%3E%3C/svg%3E",
-          "backgroundImage": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%209'%3E%3Cdefs%3E%3ClinearGradient%20id='g'%20x1='0'%20y1='0'%20x2='1'%20y2='1'%3E%3Cstop%20offset='0'%20stop-color='%23eef1f6'/%3E%3Cstop%20offset='1'%20stop-color='%23ffe9de'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width='16'%20height='9'%20fill='url(%23g)'/%3E%3C/svg%3E",
-          "cardText": "<p><strong>Как проходить тест?</strong></p><p>Вам понадобится около 2 часов. После назначения тест доступен для прохождения в течение 14 дней.</p><p>Активировав тест, вы попадёте в меню, где можно выбрать любой из 6 разделов. Начать можно с любого. После завершения раздела можно сделать перерыв и вернуться позже.</p>"
+          "backgroundImage": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%209'%3E%3Cdefs%3E%3ClinearGradient%20id='g'%20x1='0'%20y1='0'%20x2='1'%20y2='1'%3E%3Cstop%20offset='0'%20stop-color='%23eef1f6'/%3E%3Cstop%20offset='1'%20stop-color='%23ffe9de'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width='16'%20height='9'%20fill='url(%23g)'/%3E%3C/svg%3E"
         }
       },
       {
@@ -1332,19 +2329,30 @@ a.results-rec-item { color: hsl(var(--primary)); }
         "templateKey": "intro.standard",
         "topicId": "topic-1",
         "values": {
-          "instruction": "<p>Ответьте на все вопросы блока в отведённое время. Вернуться к пропущенным вопросам можно до завершения блока.</p>",
+          "instruction": "<p>Ответьте на все вопросы раздела в отведённое время. Вернуться к пропущенным вопросам можно до завершения раздела.</p>",
           "illustration": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20400%20420'%3E%3Cg%20transform='translate%2840,180%29%20scale%280.8%29'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%232f8f8f'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%2355b3b3'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%231f6666'/%3E%3C/g%3E%3Cg%20transform='translate%28150,90%29%20scale%280.95%29'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%236C4AA6'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%23926fca'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%234e3480'/%3E%3C/g%3E%3Cg%20transform='translate%2890,10%29%20scale%281.1%29'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%23E33A00'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%23ff7a4d'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%23c22f00'/%3E%3C/g%3E%3C/svg%3E"
         }
       },
       {
-        "id": "demo-info",
-        "type": "info",
-        "route": "content.info",
-        "templateKey": "info.text",
+        "id": "demo-summary",
+        "type": "summary",
+        "kind": "summary",
+        "route": "content.summary",
+        "templateKey": "summary.result",
         "topicId": "topic-1",
         "values": {
-          "title": "Как проходит сертификация",
-          "body": "<p>Тест поможет оценить вашу готовность к роли руководителя. В основе вопросов — опыт десятков успешных лидеров компании.</p><ol><li>Тест состоит из шести блоков; на каждый блок отведено своё время.</li><li>Отвечайте на вопросы внимательно — таймер блока нельзя приостановить.</li><li>Повторное прохождение доступно через 14 дней после последней попытки.</li><li>Результаты сертификационного теста действительны 1 год.</li></ol>"
+          "title": "Итоги раздела",
+          "result": {
+            "path": "result.scorePercent",
+            "renderer": "core.ringChart",
+            "rendererOptions": {
+              "showValue": true,
+              "decimals": 0,
+              "size": 150,
+              "strokeWidth": 14
+            },
+            "label": ""
+          }
         }
       }
     ],
@@ -1543,7 +2551,7 @@ a.results-rec-item { color: hsl(var(--primary)); }
   window.PRD1_PREVIEW_LAYOUTS   = {
   "shell": "<div class=\"tb-frame\" data-template=\"certification\">\n  <div class=\"tb-stage\">\n    <main id=\"app\" class=\"tb-pad\" data-slot=\"page\" tabindex=\"-1\"></main>\n  </div>\n</div>\n",
   "start": "<div class=\"cover\">\n  <div class=\"cover-grid\">\n    <div class=\"cover-col\">\n      {{#if design.logoUrl}}<div class=\"tb-brand\"><img class=\"tb-brand__logo\" src=\"{{ design.logoUrl }}\" alt=\"\"></div>{{/if}}\n      <div class=\"cover-eyebrow\">Сертификация</div>\n      <h1 class=\"cover-title\" data-path=\"course.title\">Тест</h1>\n      {{#if course.description}}<p class=\"cover-desc\" data-path=\"course.description\"></p>{{/if}}\n\n      {{#if state.cooldown}}\n      <div class=\"start-state\">\n        <div class=\"start-state__title\">Повторное прохождение пока недоступно</div>\n        <div class=\"start-state__sub\">Действует период ожидания между попытками.</div>\n        <div class=\"start-state__row\">Доступно с <strong><span data-path=\"state.cooldown.availableDateHuman\"></span></strong>{{#if state.cooldown.daysUntil}} &middot; через <span data-path=\"state.cooldown.daysUntil\"></span> дн.{{/if}}</div>\n        {{#if state.priorResult}}\n        <div class=\"start-state__row\">Прошлая попытка: <strong><span data-path=\"state.priorResult.percent\"></span>%</strong>{{#if state.priorResult.verdictLabel}} &middot; <span class=\"{{state.priorResult.verdictClass}}\" data-path=\"state.priorResult.verdictLabel\"></span>{{/if}}{{#if state.priorResult.attemptsLabel}} &middot; <span data-path=\"state.priorResult.attemptsLabel\"></span>{{/if}}</div>\n        <div class=\"prior-actions\">\n          {{#if state.canViewResults}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"view-results\">Мой результат</button>{{/if}}\n          {{#if state.canDownloadReport}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"download-report\">Скачать отчёт</button>{{/if}}\n        </div>\n        {{/if}}\n      </div>\n      {{/if}}\n\n      {{#unless state.cooldown}}{{#if state.priorResult}}\n      <div class=\"start-state\">\n        <div class=\"start-state__row\">Прошлая попытка: <strong><span data-path=\"state.priorResult.percent\"></span>%</strong>{{#if state.priorResult.verdictLabel}} &middot; <span class=\"{{state.priorResult.verdictClass}}\" data-path=\"state.priorResult.verdictLabel\"></span>{{/if}}{{#if state.priorResult.attemptsLabel}} &middot; <span data-path=\"state.priorResult.attemptsLabel\"></span>{{/if}}</div>\n        <div class=\"prior-actions\">\n          {{#if state.canViewResults}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"view-results\">Мой результат</button>{{/if}}\n          {{#if state.canDownloadReport}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"download-report\">Скачать отчёт</button>{{/if}}\n        </div>\n      </div>\n      {{/if}}{{/unless}}\n\n      <div class=\"cover-actions\">\n        {{#if state.resumeNote}}<div class=\"start-state__sub\">{{state.resumeNote}}</div>{{/if}}\n        {{#if state.exhausted}}<div class=\"cover-note\">Попытки закончились</div>{{/if}}\n        {{#if state.canResume}}<button type=\"button\" class=\"btn\" data-action=\"resume\">{{state.resumeLabel}}</button>{{/if}}\n        {{#if state.cooldown}}<button type=\"button\" class=\"btn\" disabled aria-disabled=\"true\">Начать тестирование</button>{{/if}}\n        {{#if state.canStart}}<button type=\"button\" class=\"btn\" data-action=\"start-test\">{{state.startLabel}}</button>{{/if}}\n        {{#if state.canRestart}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"restart\">Начать заново</button>{{/if}}\n        {{#unless state.priorResult}}{{#if state.canViewResults}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"view-results\">Мой результат</button>{{/if}}{{/unless}}\n        {{#if state.showBack}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"back\">К списку тестов</button>{{/if}}\n      </div>\n    </div>\n\n    <div class=\"cover-brand\" aria-hidden=\"true\">\n      <span class=\"cover-brand__ring\"></span>\n    </div>\n  </div>\n</div>\n",
-  "content": "<div class=\"layout-content-wrap\">\n  <div data-slot=\"page-content\"></div>\n  <div class=\"navigation\">\n    <button type=\"button\" class=\"btn\" data-nav=\"next\">Далее</button>\n  </div>\n</div>\n",
+  "content": "<div class=\"layout-content-wrap\">\n  <div data-slot=\"page-content\"></div>\n  <div class=\"navigation\">\n    <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n  </div>\n</div>\n",
   "question": "<div class=\"layout-question-wrap\">\n  <div class=\"qbar\">\n    <div class=\"qbar__l\">\n      {{#if design.logoUrl}}<img class=\"qbar__logo\" src=\"{{ design.logoUrl }}\" alt=\"\">{{/if}}\n      <span class=\"qbar__sec\" data-path=\"state.sectionName\"></span>\n    </div>\n    <div class=\"qbar__c\">{{#if state.questionsProgress}}<b class=\"qbar__count\">отвечено {{state.questionsProgress.answeredCount}} &middot; пропущено {{state.questionsProgress.skippedCount}}</b>{{/if}}</div>\n    <div class=\"qbar__r\">\n      <span class=\"question-meta\" data-path=\"state.questionCounterLabel\"></span>\n      <div class=\"q-timer q-timer--hidden\" id=\"timer-display\"></div>\n    </div>\n  </div>\n\n  {{#if state.questionsProgress}}\n  <div class=\"tb-pills\" role=\"group\" aria-label=\"Карта вопросов\">\n    <div class=\"tb-pills__dots\">\n      {{#each state.questionsProgress.states}}\n      <button type=\"button\" class=\"tb-pill {{statusClass}}\" {{#unless clickable}}disabled{{/unless}} data-action=\"goto:{{index}}\" aria-label=\"{{ariaLabel}}\">{{number}}</button>\n      {{/each}}\n    </div>\n    <div class=\"tb-pills__legend\">\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-answered\"></span>отвечен</span>\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-skipped\"></span>пропущен</span>\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-current\"></span>текущий</span>\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-locked\"></span>не выдан</span>\n    </div>\n  </div>\n  {{/if}}\n  {{#unless state.questionsProgress}}\n  <div class=\"progress-bar\"><div class=\"progress-fill\" id=\"q-progress-fill\"></div></div>\n  {{/unless}}\n\n  <div class=\"question-card\">\n    <div class=\"question-text\" data-slot=\"question-text\"></div>\n    <div data-slot=\"question-media\"></div>\n    <div data-slot=\"question-interaction\"></div>\n    <div data-slot=\"question-feedback\"></div>\n  </div>\n</div>\n",
   "results": "<div class=\"results-page\">\n  {{#if design.logoUrl}}<div class=\"tb-brand\"><img class=\"tb-brand__logo\" src=\"{{ design.logoUrl }}\" alt=\"\"></div>{{/if}}\n  <div class=\"results-hero\">\n    {{#if result.passed}}\n    <div class=\"results-hero-icon is-pass\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M8 21h8\"/><path d=\"M12 17v4\"/><path d=\"M7 4h10\"/><path d=\"M17 4v5a5 5 0 0 1-10 0V4\"/><path d=\"M5 6h2\"/><path d=\"M17 6h2\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Поздравляем!</div>\n    <div class=\"results-hero-sub\">Вы успешно прошли тест.</div>\n    {{/if}}\n    {{#unless result.passed}}\n    <div class=\"results-hero-icon is-fail\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M9 9l6 6\"/><path d=\"M15 9l-6 6\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Тест не пройден</div>\n    <div class=\"results-hero-sub\">Попробуйте ещё раз.</div>\n    {{/unless}}\n  </div>\n\n  <div class=\"card results-main-card\">\n    <div class=\"results-main-title\" data-path=\"course.title\"></div>\n    <div class=\"results-main-sub\">Результаты теста</div>\n\n    <div class=\"results-ring\" data-ring-offset=\"{{ result.ringDashoffset }}\" style=\"--ring-offset: {{ result.ringDashoffset }}\">\n      <svg viewBox=\"0 0 140 140\" width=\"140\" height=\"140\">\n        <circle cx=\"70\" cy=\"70\" r=\"63\" class=\"ring-bg\" stroke-width=\"14\" fill=\"none\"></circle>\n        <circle cx=\"70\" cy=\"70\" r=\"63\" class=\"ring-fg {{ result.passClass }}\" stroke-width=\"14\" fill=\"none\" stroke-linecap=\"round\" style=\"stroke-dasharray:395.84;stroke-dashoffset:{{ result.ringDashoffset }}\"></circle>\n      </svg>\n      <div class=\"results-ring-center\">\n        <div class=\"results-ring-pct\"><span data-path=\"result.scorePercent\"></span>%</div>\n        <div class=\"results-ring-label\">Баллы</div>\n      </div>\n    </div>\n\n    <div class=\"results-stats\">\n      <div class=\"results-stat\">\n        <div class=\"v\" data-path=\"result.totalQuestions\"></div>\n        <div class=\"l\">Вопросов</div>\n      </div>\n      <div class=\"results-stat\">\n        <div class=\"v\"><span data-path=\"result.correct\"></span>/<span data-path=\"result.totalQuestions\"></span></div>\n        <div class=\"l\">Верно</div>\n      </div>\n      <div class=\"results-stat\">\n        <div class=\"v\" data-path=\"result.earnedPoints\"></div>\n        <div class=\"l\">Баллов</div>\n      </div>\n      <div class=\"results-pill {{ result.passClass }}\" data-path=\"result.statusLabel\"></div>\n    </div>\n  </div>\n\n  {{#if result.topicResults}}\n  <div class=\"results-section-title\">Результаты по темам</div>\n  <div class=\"results-topics-grid\">\n    {{#each result.topicResults}}\n    <div class=\"card topic-card\">\n      <div class=\"topic-head\">\n        <div class=\"topic-name\">{{topicName}}</div>\n        <div class=\"results-pill {{passClass}}\">{{statusLabel}}</div>\n      </div>\n      <div class=\"topic-bar {{passClass}}\" data-bar-width=\"{{percent}}\"><div class=\"topic-bar-fill\" style=\"width: {{percent}}%\"></div></div>\n      <div class=\"topic-row\">\n        <div class=\"k\">Правильно</div>\n        <div class=\"val\">{{correct}} / {{total}}</div>\n      </div>\n      {{#if pointsLabel}}\n      <div class=\"topic-row\">\n        <div class=\"k\">Баллов</div>\n        <div class=\"val\">{{pointsLabel}}</div>\n      </div>\n      {{/if}}\n      {{#if requiredLabel}}<div class=\"topic-required\">{{requiredLabel}}</div>{{/if}}\n      {{#if topicFeedback}}<div class=\"topic-feedback\"><div class=\"topic-feedback-text\">{{topicFeedback}}</div></div>{{/if}}\n    </div>\n    {{/each}}\n  </div>\n  {{/if}}\n\n  {{#if result.recommendedCourses}}\n  <div class=\"results-section-title\">Рекомендуемые курсы</div>\n  <div class=\"results-rec-list\">\n    {{#each result.recommendedCourses}}<a class=\"results-rec-item\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}\n  </div>\n  {{/if}}\n  {{#if result.recommendedEvents}}\n  <div class=\"results-section-title\">Рекомендуемые мероприятия</div>\n  <div class=\"results-rec-list\">\n    {{#each result.recommendedEvents}}<div class=\"results-rec-item\">{{title}}</div>{{/each}}\n  </div>\n  {{/if}}\n\n  <div class=\"results-actions\">\n    {{#if result.backAction}}<button type=\"button\" class=\"btn\" data-action=\"{{result.backAction}}\">{{result.backLabel}}</button>{{/if}}\n    {{#unless result.backAction}}<button type=\"button\" class=\"btn\" data-action=\"restart\">Пройти снова</button>{{/unless}}\n  </div>\n</div>\n",
   "results.adaptive": "<div class=\"results-page\">\n  <div class=\"results-hero\">\n    <div class=\"results-hero-icon is-info\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M8 21h8\"/><path d=\"M12 17v4\"/><path d=\"M7 4h10\"/><path d=\"M17 4v5a5 5 0 0 1-10 0V4\"/><path d=\"M5 6h2\"/><path d=\"M17 6h2\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Тест завершён</div>\n    <div class=\"results-hero-sub\" data-path=\"course.title\"></div>\n  </div>\n\n  <div class=\"results-section-title\">Результаты по темам</div>\n  <div class=\"results-topics-grid\">\n    {{#each result.topicResults}}\n    <div class=\"card topic-card\">\n      <div class=\"topic-head\">\n        <div class=\"topic-name\">{{topicName}}</div>\n        <div class=\"results-pill {{levelClass}}\">{{levelLabel}}</div>\n      </div>\n      {{#if hasFeedback}}\n      <div class=\"topic-feedback\">{{feedback}}</div>\n      {{/if}}\n      {{#if hasLinks}}\n      <div class=\"topic-links\">\n        {{#each links}}\n        <a class=\"topic-link\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>\n        {{/each}}\n      </div>\n      {{/if}}\n    </div>\n    {{/each}}\n  </div>\n\n  <div class=\"results-actions\">\n    {{#if result.showPdf}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"download-pdf\">Скачать PDF</button>{{/if}}\n    {{#if result.canRetry}}<button type=\"button\" class=\"btn\" data-action=\"restart-adaptive\">Пройти заново</button>{{/if}}\n    {{#if result.showFinish}}<button type=\"button\" class=\"btn\" data-action=\"finish\">Завершить тест</button>{{/if}}\n    {{#unless result.hasScormActions}}<button type=\"button\" class=\"btn\" data-action=\"restart\">Пройти снова</button>{{/unless}}\n  </div>\n</div>\n",
@@ -1552,7 +2560,13 @@ a.results-rec-item { color: hsl(var(--primary)); }
   "section-intro": "<div class=\"section-intro-page\">\n  <div class=\"si-head\">\n    <span class=\"eyebrow\">{{ sectionIntro.eyebrow }}</span>\n    <h1 class=\"si-title\" data-path=\"sectionIntro.topicName\"></h1>\n  </div>\n\n  <div class=\"si-main\">\n    <div class=\"si-content\">\n      {{#if sectionIntro.hasDescription}}\n      <div class=\"si-desc\" data-path=\"sectionIntro.description\"></div>\n      {{/if}}\n\n      <div class=\"si-panels\">\n        {{#if sectionIntro.hasTimeLimit}}\n        <div class=\"si-panel\">\n          <div class=\"si-panel__big\">{{ sectionIntro.timeLimitLabel }}</div>\n          <div class=\"si-panel__sub\">Время прохождения раздела.</div>\n        </div>\n        {{/if}}\n        <div class=\"si-panel\">\n          <div class=\"si-panel__big\">{{ sectionIntro.questionCountLabel }}</div>\n          <div class=\"si-panel__sub\">В разделе вам нужно ответить на {{ sectionIntro.questionCountLabel }} по теме «<span data-path=\"sectionIntro.topicName\"></span>».</div>\n        </div>\n      </div>\n    </div>\n\n    {{#if sectionIntro.hasIllustration}}\n    <div class=\"si-illustration\"><img src=\"{{ sectionIntro.illustrationUrl }}\" alt=\"\"></div>\n    {{/if}}\n  </div>\n\n  <div class=\"si-notes\">\n    {{#if sectionIntro.hasInstruction}}\n    <div class=\"si-instruction\">\n      <div class=\"si-instruction__head\">Инструкция</div>\n      <div data-slot=\"instruction\"></div>\n    </div>\n    {{/if}}\n\n    {{#if sectionIntro.hasTimeLimit}}\n    <div class=\"si-important\">\n      <div class=\"si-important__head\">Важно!</div>\n      <p class=\"si-important__body\">После нажатия «Начать» таймер начнёт отсчёт — поставить тест на паузу нельзя.</p>\n    </div>\n    {{/if}}\n  </div>\n\n  <div class=\"navigation navigation--end navigation--bottom\">\n    <button type=\"button\" class=\"btn btn-outline\" data-action=\"section-intro-back\">Назад</button>\n    <button type=\"button\" class=\"btn\" data-action=\"section-intro-continue\">Начать</button>\n  </div>\n</div>\n",
   "system.blocked": "<div class=\"results-page\">\n  <div class=\"blocked-card\" data-testid=\"retake-wall\">\n    <div class=\"blocked-lock\" role=\"img\" aria-label=\"Доступ заблокирован\">\n      <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"5\" y=\"11\" width=\"14\" height=\"9\" rx=\"2\"/><path d=\"M8 11V8a4 4 0 0 1 8 0v3\"/></svg>\n    </div>\n    <div data-retake-branch=\"default\">\n      <h1 class=\"blocked-title\">Доступ к тесту ограничен</h1>\n      <p class=\"blocked-description\">Для этого теста больше нет доступных попыток.</p>\n    </div>\n    <div data-retake-branch=\"cooldown\" hidden>\n      <h1 class=\"blocked-title\">Повторная попытка недоступна</h1>\n      <p class=\"blocked-description\">Этот тест можно проходить не чаще, чем раз в <span data-path=\"retake.cooldownPeriodDays\">&mdash;</span> дн.</p>\n      <div class=\"blocked-date\" data-retake-available>Доступно с <strong data-path=\"retake.availableDateHuman\">&mdash;</strong></div>\n    </div>\n    <div data-retake-branch=\"error\" hidden>\n      <h1 class=\"blocked-title\">Не удалось проверить доступ</h1>\n      <p class=\"blocked-description\">Не удалось проверить доступность повторного прохождения. Обратитесь к администратору курса.</p>\n    </div>\n  </div>\n</div>\n",
   "system.transition": "<div class=\"transition-page\">\n  <div class=\"transition-icon {{ transition.iconClass }}\">\n    {{#if transition.isCorrect}}\n    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M20 6 9 17l-5-5\"/></svg>\n    {{/if}}\n    {{#unless transition.isCorrect}}\n    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/></svg>\n    {{/unless}}\n  </div>\n\n  <div class=\"transition-title\">{{ transition.title }}</div>\n\n  {{#if transition.level}}\n  <div class=\"transition-level {{ transition.level.class }}\">\n    {{#if transition.level.isUp}}<svg class=\"transition-level-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M12 19V5M5 12l7-7 7 7\"/></svg>{{/if}}\n    {{#if transition.level.isDown}}<svg class=\"transition-level-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M12 5v14M5 12l7 7 7-7\"/></svg>{{/if}}\n    {{#if transition.level.isComplete}}<svg class=\"transition-level-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 16v-4M12 8h.01\"/></svg>{{/if}}\n    <span class=\"transition-level-msg\" data-path=\"transition.level.message\"></span>\n  </div>\n  {{/if}}\n\n  {{#if transition.topic}}\n  <div class=\"transition-topic\">Переход к теме: <strong data-path=\"transition.topic.toTopic\"></strong></div>\n  {{/if}}\n\n  {{#if transition.showContinue}}\n  <div class=\"transition-actions\">\n    <button type=\"button\" class=\"btn\" data-action=\"continue\">Продолжить</button>\n  </div>\n  {{/if}}\n</div>\n",
-  "gallery.card": "<div class=\"gallery\">\n  <header class=\"gallery__head\">\n    <h1 class=\"gallery__title\">{{gallery.header}}</h1>\n    {{#if gallery.subheader}}<p class=\"gallery__hint\">{{gallery.subheader}}</p>{{/if}}\n  </header>\n  <div class=\"gallery__card\">\n    <div class=\"gallery__body\" data-slot=\"cardText\"></div>\n    {{#if gallery.imageUrl}}<div class=\"gallery__media\"><img src=\"{{gallery.imageUrl}}\" alt=\"\"></div>{{/if}}\n  </div>\n  <div class=\"gallery__foot\">\n    <div class=\"gallery__dots\" role=\"group\" aria-label=\"Навигация галереи\">\n      {{#each gallery.pills}}<span class=\"tb-pill tb-pill--dot {{statusClass}}\"></span>{{/each}}\n    </div>\n    <div class=\"gallery__nav\">\n      {{#if gallery.showBack}}<button type=\"button\" class=\"btn btn-outline\" data-nav=\"prev\">Назад</button>{{/if}}\n      <button type=\"button\" class=\"btn\" data-nav=\"next\">{{gallery.nextLabel}}</button>\n    </div>\n  </div>\n</div>\n"
+  "layouts/content.text.html": "<div class=\"slide\">\n  <header class=\"slide__head\">\n    <h1 class=\"slide__title\" data-placeholder=\"title\"></h1>\n    <p class=\"slide__lead\" data-placeholder=\"lead\"></p>\n  </header>\n  <div class=\"slide__card\">\n    <div class=\"slide__body\" data-placeholder=\"body\"></div>\n  </div>\n  <div class=\"slide__foot\">\n    <div class=\"slide__nav\">\n      <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n    </div>\n  </div>\n</div>\n",
+  "layouts/content.image-left.html": "<div class=\"slide slide--split\">\n  <header class=\"slide__head\">\n    <h1 class=\"slide__title\" data-placeholder=\"title\"></h1>\n    <p class=\"slide__lead\" data-placeholder=\"lead\"></p>\n  </header>\n  <div class=\"slide__card\">\n    <div class=\"slide__media\" data-placeholder=\"image\"></div>\n    <div class=\"slide__body\" data-placeholder=\"body\"></div>\n  </div>\n  <div class=\"slide__foot\">\n    <div class=\"slide__nav\">\n      <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n    </div>\n  </div>\n</div>\n",
+  "layouts/content.image-right.html": "<div class=\"slide slide--split\">\n  <header class=\"slide__head\">\n    <h1 class=\"slide__title\" data-placeholder=\"title\"></h1>\n    <p class=\"slide__lead\" data-placeholder=\"lead\"></p>\n  </header>\n  <div class=\"slide__card\">\n    <div class=\"slide__body\" data-placeholder=\"body\"></div>\n    <div class=\"slide__media\" data-placeholder=\"image\"></div>\n  </div>\n  <div class=\"slide__foot\">\n    <div class=\"slide__nav\">\n      <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n    </div>\n  </div>\n</div>\n",
+  "layouts/gallery.text.html": "<div class=\"slide slide--gallery\">\n  <header class=\"slide__head\">\n    <h1 class=\"slide__title\" data-placeholder=\"title\"></h1>\n    <p class=\"slide__lead\" data-placeholder=\"lead\"></p>\n  </header>\n  <div class=\"slide__card\">\n    <div class=\"slide__body\" data-placeholder=\"body\"></div>\n  </div>\n  <div class=\"slide__foot\">\n    <div class=\"slide__dots\" role=\"group\" aria-label=\"Навигация по страницам\">\n      {{#each page.dots}}<span class=\"tb-pill tb-pill--dot {{statusClass}}\"></span>{{/each}}\n    </div>\n    <div class=\"slide__nav\">\n      {{#if page.canGoBack}}<button type=\"button\" class=\"btn btn-outline\" data-nav=\"prev\">Назад</button>{{/if}}\n      <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n    </div>\n  </div>\n</div>\n",
+  "layouts/gallery.image-left.html": "<div class=\"slide slide--gallery slide--split\">\n  <header class=\"slide__head\">\n    <h1 class=\"slide__title\" data-placeholder=\"title\"></h1>\n    <p class=\"slide__lead\" data-placeholder=\"lead\"></p>\n  </header>\n  <div class=\"slide__card\">\n    <div class=\"slide__media\" data-placeholder=\"image\"></div>\n    <div class=\"slide__body\" data-placeholder=\"body\"></div>\n  </div>\n  <div class=\"slide__foot\">\n    <div class=\"slide__dots\" role=\"group\" aria-label=\"Навигация по страницам\">\n      {{#each page.dots}}<span class=\"tb-pill tb-pill--dot {{statusClass}}\"></span>{{/each}}\n    </div>\n    <div class=\"slide__nav\">\n      {{#if page.canGoBack}}<button type=\"button\" class=\"btn btn-outline\" data-nav=\"prev\">Назад</button>{{/if}}\n      <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n    </div>\n  </div>\n</div>\n",
+  "layouts/gallery.image-right.html": "<div class=\"slide slide--gallery slide--split\">\n  <header class=\"slide__head\">\n    <h1 class=\"slide__title\" data-placeholder=\"title\"></h1>\n    <p class=\"slide__lead\" data-placeholder=\"lead\"></p>\n  </header>\n  <div class=\"slide__card\">\n    <div class=\"slide__body\" data-placeholder=\"body\"></div>\n    <div class=\"slide__media\" data-placeholder=\"image\"></div>\n  </div>\n  <div class=\"slide__foot\">\n    <div class=\"slide__dots\" role=\"group\" aria-label=\"Навигация по страницам\">\n      {{#each page.dots}}<span class=\"tb-pill tb-pill--dot {{statusClass}}\"></span>{{/each}}\n    </div>\n    <div class=\"slide__nav\">\n      {{#if page.canGoBack}}<button type=\"button\" class=\"btn btn-outline\" data-nav=\"prev\">Назад</button>{{/if}}\n      <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n    </div>\n  </div>\n</div>\n",
+  "layouts/summary.html": "<div class=\"slide slide--summary\">\n  <div class=\"summary-card\">\n    <span class=\"eyebrow\">Итог</span>\n    <h1 class=\"summary-card__title\" data-placeholder=\"title\"></h1>\n    <div class=\"summary-card__result\" data-placeholder=\"result\"></div>\n  </div>\n  <div class=\"slide__foot\">\n    <div class=\"slide__nav\">\n      <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n    </div>\n  </div>\n</div>\n"
 };
 
   /* ── Shared helpers expected by contentPage.js ── */
@@ -2277,7 +3291,12 @@ a.results-rec-item { color: hsl(var(--primary)); }
  * @returns {object|null}
  */
 function findContentTemplate(page, contentTemplates) {
-  return TBTemplate.findContentTemplate(page, contentTemplates);
+  // PRD-22 (plan Э5): a page whose variant this template does not declare renders
+  // through the kind's DEFAULT variant instead of the untemplated fallback card —
+  // the binding in the database is untouched, so the author still decides via
+  // «Сменить вариант». Returns null only when the template declares no variant of
+  // the kind at all.
+  return TBTemplate.resolveContentTemplate(page, contentTemplates).template;
 }
 
 /**
@@ -2502,77 +3521,83 @@ function renderSectionIntro(page) {
   return true;
 }
 
+
 /**
- * Renders a gallery card page (kind `gallery`) via its own layout variant
- * (text / media / list). Header + subheader + card body + the round pill row +
- * Назад/Далее. The pills are a per-page indicator: the two settings
- * (pillsTotal, pillCurrent) are expanded here into a Core-prepared `pills` array
- * the layout renders with `{{#each}}` (the DSL cannot loop over a raw count).
- * «Назад» (shown only when the page's `showBack` setting is on) steps the page
- * sequence back via goToPageSequenceIndex; «Далее» advances it as usual. Each
- * card is a normal content page — no gallery controller / grouping.
+ * PRD-22 FR-36: resolves relative links in author values against the template's
+ * assets, which the package stores under `template/`. Without a base a link like
+ * `images/diagram.png` would resolve next to index.html, where nothing lives.
+ * @param {object} values  Author values of a content page
+ * @returns {object} the same values with relative src/href prefixed
  */
-function renderGalleryPage(page, contentTemplate) {
-  var layouts = (typeof state !== "undefined" && state) ? state.templateLayouts : null;
-  var layout = layouts && contentTemplate ? layouts[contentTemplate.key] : null;
+function withTemplateAssets(values) {
   var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
-  if (!layout || !TB || !TB.renderScreenInto) return false;
+  if (!TB || !TB.withTemplateAssetBaseInValues) return values;
+  return TB.withTemplateAssetBaseInValues(values, "template/");
+}
 
-  var values = getPageValues(page) || {};
-  var total = parseInt(values.pillsTotal, 10);
-  if (!(total > 0)) total = 1;
-  var current = parseInt(values.pillCurrent, 10) || 1;
-  var pills = [];
-  for (var i = 1; i <= total; i++) {
-    pills.push({ statusClass: i === current ? "is-current" : "" });
+/**
+ * PRD-22: the `page.*` context of a content page — navigation dots of its
+ * sequence plus the back affordance. Sequences are computed by the SHARED core
+ * from the test's structure, so the LMS package, the web host and the preview
+ * count identically; `canGoBack` is host state and is supplied here, because only
+ * the runtime knows whether there is a screen to return to (in router mode the
+ * first page of a topic returns to the hub).
+ * @param {object} page  A content page from TEST_DATA.contentPages
+ * @returns {object} `{ dots, dotIndex, dotsTotal, canGoBack }`
+ */
+function buildPageRenderContext(page) {
+  var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
+  var canGoBack =
+    (typeof canNavigateBack === "function" && canNavigateBack()) ||
+    (typeof state !== "undefined" && state && (state.currentPageIndex || 0) > 0) ||
+    (typeof RouterFlow !== "undefined" && RouterFlow.isRouterMode && RouterFlow.isRouterMode());
+  if (!TB || !TB.buildPageContextFor || !page) {
+    return { dots: [], dotIndex: 0, dotsTotal: 0, canGoBack: !!canGoBack };
   }
+  var pages = (typeof TEST_DATA !== "undefined" && TEST_DATA.contentPages) ? TEST_DATA.contentPages : [];
+  return TB.buildPageContextFor(page.id, pages, { canGoBack: !!canGoBack });
+}
 
-  var img = values.image;
-  var imageUrl = img && typeof img === "object" ? (img.url || "") : (img || "");
-  var bgRaw = values.backgroundImage;
-  var slideBgUrl = bgRaw && typeof bgRaw === "object" ? (bgRaw.url || "") : (bgRaw || "");
+/**
+ * Applies the page's `backgroundImage` setting (PRD-22 FR-27) to the screen root.
+ * A background is a page PROPERTY, not content: it never goes through a
+ * placeholder region, so the core applies it directly.
+ * @param {Element} app   The #app element the screen was rendered into
+ * @param {object}  page  A content page from TEST_DATA.contentPages
+ */
+function applyPageBackground(app, page) {
+  var settings = (page && (page.settings || page.settingsJson)) || {};
+  var raw = settings.backgroundImage;
+  var url = raw && typeof raw === "object" ? (raw.url || "") : (raw || "");
+  if (!url) return;
+  var root = app.firstElementChild || app;
+  root.classList.add("has-slide-bg");
+  root.style.backgroundImage = 'url("' + String(url).replace(/"/g, "%22") + '")';
+}
 
-  var context = {
-    design: (typeof scormDesignContext === "function") ? scormDesignContext() : {},
-    course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") },
-    gallery: {
-      header: values.header != null ? String(values.header) : "",
-      subheader: values.subheader != null ? String(values.subheader) : "",
-      imageUrl: imageUrl,
-      pills: pills,
-      showBack: values.showBack === true || values.showBack === "true",
-      nextLabel: (values.nextLabel != null && values.nextLabel !== "") ? String(values.nextLabel) : "Далее"
-    }
-  };
-
-  var app = document.getElementById("app");
-  app.innerHTML = "";
-  // cardText is sanitized rich text → injected raw via the slot (same trust model
-  // as info-page bodies / the section-intro instruction). Rendered directly into
-  // #app (no wrapper) so the fixed-stage flex chain (.tb-pad > .gallery) applies.
-  var cardText = values.cardText != null ? String(values.cardText) : "";
-  TB.renderScreenInto(app, { layout: layout, context: context, slots: { cardText: cardText } });
-
-  // Per-slide background image (variant-slide setting): applied to the slide root.
-  if (slideBgUrl) {
-    var slideEl = app.querySelector(".gallery");
-    if (slideEl) {
-      slideEl.classList.add("has-slide-bg");
-      slideEl.style.backgroundImage = 'url("' + String(slideBgUrl).replace(/"/g, "%22") + '")';
-    }
+/**
+ * Finds the layout's OWN navigation button for a direction (`next` / `prev`).
+ *
+ * The contract is the `data-nav` attribute, not the wrapper's class: a layout is
+ * free to name its footer whatever it likes (`.navigation`, `.gallery__nav`, …),
+ * and the certification gallery does exactly that. Keying the lookup on
+ * `.navigation` left such a layout with a dead «Далее».
+ *
+ * Buttons INSIDE the page-content slot belong to the author's content, not to the
+ * screen chrome, so they are skipped — a stray `data-nav` in pasted markup must
+ * not become the screen's navigation.
+ * @param {Element} app  The #app element the screen was rendered into
+ * @param {string}  dir  Navigation direction: `"next"` or `"prev"`
+ * @returns {Element|null}
+ */
+function findScreenNavButton(app, dir) {
+  var nodes = app.querySelectorAll('[data-nav="' + dir + '"]');
+  for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i];
+    if (node.closest && node.closest('[data-slot="page-content"]')) continue;
+    return node;
   }
-
-  var nextBtn = app.querySelector('[data-nav="next"]');
-  if (nextBtn) nextBtn.onclick = function () {
-    if (typeof advancePageSequence === "function") advancePageSequence();
-  };
-  var prevBtn = app.querySelector('[data-nav="prev"]');
-  if (prevBtn) prevBtn.onclick = function () {
-    // «Назад» follows the recorded nav route (same as section-intro); the router
-    // hub fallback covers a gallery that is a topic chunk's first page.
-    if (typeof navigateBackOrPrevPage === "function") navigateBackOrPrevPage();
-  };
-  return true;
+  return null;
 }
 
 function renderContentPage(page, contentTemplates) {
@@ -2588,9 +3613,10 @@ function renderContentPage(page, contentTemplates) {
   if (page && page.kind === "intro" && renderSectionIntro(page)) return;
 
   var contentTemplate = findContentTemplate(page, contentTemplates);
-  // Gallery pages render via their own layout (header/subheader/card + pills + Назад/Далее).
-  if (contentTemplate && contentTemplate.kind === "gallery" && renderGalleryPage(page, contentTemplate)) return;
-  var values = getPageValues(page);
+  // PRD-22 FR-36: relative links in author content point at the TEMPLATE's files,
+  // which live under `template/` inside the package. The stored value is
+  // host-independent, so the base is applied here, at render time.
+  var values = withTemplateAssets(getPageValues(page));
   var placeholderStyles = getPagePlaceholderStyles(page);
   var skeleton = buildContentPageSkeleton(page, contentTemplate);
 
@@ -2615,15 +3641,28 @@ function renderContentPage(page, contentTemplates) {
   if (layout && TB && TB.renderScreenInto) {
     app.innerHTML = "";
     // Mount directly into #app (no wrapper) so .tb-pad > .layout-content-wrap fills
-    // the fixed stage and the bottom nav anchors — mirrors renderGalleryPage.
+    // the fixed stage and the bottom nav anchors.
     TB.renderScreenInto(app, {
       layout: layout,
-      context: { course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") } },
+      context: {
+        course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") },
+        // PRD-22: navigation dots of the page sequence, computed by the shared
+        // core from the structure — the author supplies only the identifier.
+        // A layout without an indicator simply ignores the block.
+        page: buildPageRenderContext(page)
+      },
       slots: { "page-content": skeleton }
     });
     host = app.querySelector('[data-slot="page-content"]') || app;
-    var navBtn = app.querySelector('.navigation [data-nav="next"]');
+    var navBtn = findScreenNavButton(app, "next");
     if (navBtn) navBtn.onclick = function () { if (typeof advancePageSequence === "function") advancePageSequence(); };
+    // «Назад» is optional: only layouts that render it get it wired, and it
+    // follows the recorded nav route (router hub fallback included).
+    var prevBtn = findScreenNavButton(app, "prev");
+    if (prevBtn) prevBtn.onclick = function () {
+      if (typeof navigateBackOrPrevPage === "function") navigateBackOrPrevPage();
+    };
+    applyPageBackground(app, page);
   } else {
     app.innerHTML = skeleton;
     host = app;
@@ -2771,6 +3810,13 @@ function renderContentPage(page, contentTemplates) {
     // wrapper's «Далее». Remove that nav so the run matches the «Структура» preview.
     var nav = app.querySelector(".navigation");
     if (nav && nav.parentNode) nav.parentNode.removeChild(nav);
+    // A layout free to name its footer otherwise (`.gallery__nav`) would keep a
+    // live «Далее» next to the cards and let the learner walk past the hub, so
+    // the button is also dropped by its `data-nav` contract.
+    var strayNext = typeof findScreenNavButton === "function"
+      ? findScreenNavButton(app, "next")
+      : null;
+    if (strayNext && strayNext.parentNode) strayNext.parentNode.removeChild(strayNext);
     // Cards (and the «Завершить» action) live INSIDE the content wrapper's
     // page-content slot — the SAME DOM the preview builds (buildRouterCards into
     // page-content) — so the run and the structure preview look identical.
@@ -3343,6 +4389,10 @@ var TBTemplate = (() => {
   __export(runtime_entry_exports, {
     CORE_RENDERER_IDS: () => CORE_RENDERER_IDS,
     DEFAULT_PARAM_CSS_VARS: () => DEFAULT_PARAM_CSS_VARS,
+    INPUT_MODES: () => INPUT_MODES,
+    PLACEHOLDER_TYPES: () => PLACEHOLDER_TYPES,
+    SEQUENCE_SETTING_KEY: () => SEQUENCE_SETTING_KEY,
+    SETTING_TYPES: () => SETTING_TYPES,
     aggregateAdaptiveResult: () => aggregateAdaptiveResult,
     aggregateStandardResult: () => aggregateStandardResult,
     attachPointerDnd: () => attachPointerDnd,
@@ -3352,6 +4402,8 @@ var TBTemplate = (() => {
     buildContentPageRender: () => buildContentPageRender,
     buildContentPageSkeleton: () => buildContentPageSkeleton,
     buildFallbackContentHtml: () => buildFallbackContentHtml,
+    buildPageContext: () => buildPageContext,
+    buildPageContextFor: () => buildPageContextFor,
     buildPageSequence: () => buildPageSequence,
     buildQuestionProgress: () => buildQuestionProgress,
     buildResultContext: () => buildResultContext,
@@ -3359,31 +4411,42 @@ var TBTemplate = (() => {
     buildRouterHubHtml: () => buildRouterHubHtml,
     buildSectionIntroContext: () => buildSectionIntroContext,
     buildSectionResultContext: () => buildSectionResultContext,
+    buildSequencePlacements: () => buildSequencePlacements,
     buildStartState: () => buildStartState,
     buildTemplateCssVars: () => buildTemplateCssVars,
     buildTopicChunk: () => buildTopicChunk,
     buildTransitionContext: () => buildTransitionContext,
     checkPassRule: () => checkPassRule,
+    collectSequenceIds: () => collectSequenceIds,
     compileTemplate: () => compileTemplate,
     contentPagesFor: () => contentPagesFor,
     dropOnPoolSlot: () => dropOnPoolSlot,
     dropOnRight: () => dropOnRight,
     findContentTemplate: () => findContentTemplate,
+    findDefaultContentTemplate: () => findDefaultContentTemplate,
     getPagePlaceholderStyles: () => getPagePlaceholderStyles,
     getPageValues: () => getPageValues,
+    inputModesFor: () => inputModesFor,
     isFlowContentPage: () => isFlowContentPage,
+    isPlaceholderType: () => isPlaceholderType,
     isRouterReadyToFinish: () => isRouterReadyToFinish,
     isSectionUnlocked: () => isSectionUnlocked,
+    isSettingType: () => isSettingType,
     normalizePool: () => normalizePool,
     pluralQuestions: () => pluralQuestions2,
     questionIndicesByTopic: () => questionIndicesByTopic,
     renderResultField: () => renderResultField,
     renderScreenInto: () => renderScreenInto,
     renderTemplate: () => renderTemplate,
+    resolveContentTemplate: () => resolveContentTemplate,
     resolveOverallRule: () => resolveOverallRule,
     resolveTopicRule: () => resolveTopicRule,
     returnToPool: () => returnToPool,
-    statusLabel: () => statusLabel
+    sequenceIdOf: () => sequenceIdOf,
+    statusLabel: () => statusLabel,
+    validateVariantFields: () => validateVariantFields,
+    withTemplateAssetBase: () => withTemplateAssetBase,
+    withTemplateAssetBaseInValues: () => withTemplateAssetBaseInValues
   });
 
   // shared/template/dsl.ts
@@ -4614,6 +5677,23 @@ var TBTemplate = (() => {
     }
     return null;
   }
+  function findDefaultContentTemplate(kind, contentTemplates) {
+    if (!contentTemplates || !kind) return null;
+    let first = null;
+    for (const template of contentTemplates) {
+      if (template.kind !== kind) continue;
+      if (template.isDefault) return template;
+      if (!first) first = template;
+    }
+    return first;
+  }
+  function resolveContentTemplate(page, contentTemplates) {
+    var _a;
+    const bound = findContentTemplate(page, contentTemplates);
+    if (bound) return { template: bound, substituted: false };
+    const fallback = findDefaultContentTemplate((_a = page == null ? void 0 : page.kind) != null ? _a : page == null ? void 0 : page.type, contentTemplates);
+    return { template: fallback, substituted: fallback !== null };
+  }
   function buildFallbackContentHtml(page) {
     const typeLabel = page.type || "content";
     const values = getPageValues(page);
@@ -4636,7 +5716,7 @@ var TBTemplate = (() => {
     return html;
   }
   function buildContentPageRender(page, contentTemplates) {
-    const contentTemplate = findContentTemplate(page, contentTemplates);
+    const { template: contentTemplate, substituted } = resolveContentTemplate(page, contentTemplates);
     return {
       layoutKey: contentTemplate && contentTemplate.layoutFile || "content",
       skeleton: buildContentPageSkeleton(page, contentTemplate),
@@ -4645,95 +5725,9 @@ var TBTemplate = (() => {
         values: getPageValues(page)
       },
       placeholderStyles: getPagePlaceholderStyles(page),
-      contentTemplate
+      contentTemplate,
+      substituted
     };
-  }
-
-  // shared/flow/router-hub.ts
-  function escHtml3(s) {
-    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  }
-  function pluralQuestions2(n) {
-    const m10 = n % 10;
-    const m100 = n % 100;
-    if (m10 === 1 && m100 !== 11) return "\u0432\u043E\u043F\u0440\u043E\u0441";
-    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return "\u0432\u043E\u043F\u0440\u043E\u0441\u0430";
-    return "\u0432\u043E\u043F\u0440\u043E\u0441\u043E\u0432";
-  }
-  function isSectionUnlocked(section, state) {
-    const rule = (state.unlockRules || {})[section.topicId];
-    if (!rule || !rule.mode || rule.mode === "always") return true;
-    const ids = rule.sectionIds || [];
-    if (rule.mode === "after_sections_completed") {
-      return ids.every((id) => state.topicStates[id] === "completed");
-    }
-    if (rule.mode === "after_sections_passed") {
-      return ids.every((id) => {
-        if (state.topicStates[id] !== "completed") return false;
-        const result = (state.sectionResults || {})[id];
-        return !result || result.passed !== false;
-      });
-    }
-    return true;
-  }
-  function isRouterReadyToFinish(sections, state) {
-    const policy = state.completionPolicy || "all_required_completed";
-    const required = (sections || []).filter((s) => s.required !== false);
-    if (required.length === 0) return true;
-    return required.every((s) => {
-      if (state.topicStates[s.topicId] !== "completed") return false;
-      if (policy === "all_required_passed") {
-        const result = (state.sectionResults || {})[s.topicId];
-        if (!result) return false;
-        return result.passed === true;
-      }
-      return true;
-    });
-  }
-  function statusLabel(status) {
-    if (status === "completed") return "\u041F\u0440\u043E\u0439\u0434\u0435\u043D\u0430";
-    if (status === "inProgress") return "\u0412 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0435";
-    return "\u041D\u0435 \u043D\u0430\u0447\u0430\u0442\u0430";
-  }
-  function buildRouterHubHtml(sections, state, options) {
-    const list = sections || [];
-    let html = "";
-    const deadline = options == null ? void 0 : options.deadline;
-    if (deadline && (deadline.date || deadline.time)) {
-      let stats = "";
-      if (deadline.date) {
-        stats += '<div class="router-stat"><span class="router-stat__label">\u0414\u0430\u0442\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u044F \u0442\u0435\u0441\u0442\u0430</span><span class="router-stat__value">' + escHtml3(deadline.date) + "</span></div>";
-      }
-      if (deadline.time) {
-        stats += '<div class="router-stat"><span class="router-stat__label">\u0412\u0440\u0435\u043C\u044F \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u044F \u0442\u0435\u0441\u0442\u0430</span><span class="router-stat__value">' + escHtml3(deadline.time) + "</span></div>";
-      }
-      html += '<div class="router-stats">' + stats + "</div>";
-    }
-    const required = list.filter((s) => s.required !== false);
-    if (required.length > 0) {
-      const done = required.filter((s) => state.topicStates[s.topicId] === "completed").length;
-      const pct = Math.round(done / required.length * 100);
-      html += '<div class="router-progress" role="group" aria-label="\u041F\u0440\u043E\u0433\u0440\u0435\u0441\u0441 \u043F\u043E \u0440\u0430\u0437\u0434\u0435\u043B\u0430\u043C"><div class="router-progress__head"><span class="router-progress__label">\u0420\u0430\u0437\u0434\u0435\u043B\u044B</span><span class="router-progress__count">' + done + " / " + required.length + '</span></div><div class="router-progress__bar"><div class="router-progress__fill" style="width:' + pct + '%"></div></div></div>';
-    }
-    let cards = "";
-    for (const section of list) {
-      const status = state.topicStates[section.topicId] || "notStarted";
-      const unlocked = isSectionUnlocked(section, state);
-      const locked = !unlocked && status !== "completed";
-      const disabled = status === "completed" || !unlocked;
-      const meta = [];
-      if (section.drawCount) meta.push(section.drawCount + " " + pluralQuestions2(section.drawCount));
-      if (section.timeLimitMinutes) meta.push(section.timeLimitMinutes + " \u043C\u0438\u043D");
-      const metaHtml = meta.length ? '<span class="router-topic-card__meta">' + meta.map((m) => '<span class="router-topic-card__chip">' + escHtml3(m) + "</span>").join("") + "</span>" : "";
-      const imgUrl = section.image && typeof section.image === "object" ? section.image.url || "" : section.image || "";
-      const imgHtml = imgUrl ? '<span class="router-topic-card__img"><img src="' + escHtml3(imgUrl) + '" alt=""></span>' : "";
-      const goHtml = unlocked && status !== "completed" ? '<span class="router-topic-card__go">\u043D\u0430\u0447\u0430\u0442\u044C</span>' : "";
-      cards += '<button type="button" role="listitem" class="router-topic-card router-topic-card--' + status + (locked ? " router-topic-card--locked" : "") + '" data-topic-id="' + escHtml3(section.topicId) + '" data-router-status="' + status + '"' + (locked ? ' data-router-locked="true"' : "") + (disabled ? " disabled" : ' data-action="router-select:' + escHtml3(section.topicId) + '"') + '><span class="router-topic-card__top"><span class="router-topic-card__name">' + escHtml3(section.topicName || section.topicId) + (section.required === false ? ' <span class="router-topic-card__optional">(\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u0430\u044F)</span>' : "") + "</span>" + imgHtml + "</span>" + metaHtml + '<span class="router-topic-card__foot"><span class="router-topic-card__status">' + escHtml3(unlocked ? statusLabel(status) : "\u041D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430") + "</span>" + goHtml + "</span></button>";
-    }
-    html += '<div class="router-topic-cards" role="list" aria-label="\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0435 \u0442\u0435\u043C\u044B">' + cards + "</div>";
-    const ready = isRouterReadyToFinish(list, state);
-    html += '<button type="button" class="btn router-finish' + (ready ? "" : " router-finish--disabled") + '"' + (ready ? ' data-action="router-finish"' : " disabled") + ">\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C</button>";
-    return html;
   }
 
   // shared/flow/page-sequence.ts
@@ -4862,6 +5856,299 @@ var TBTemplate = (() => {
     const after = buildAfterZone(contentPages);
     for (const item of after.preResults) sequence.push(item);
     return { sequence, postResultsPages: after.postResultsPages };
+  }
+
+  // shared/template/page-sequences.ts
+  var SEQUENCE_SETTING_KEY = "sequenceId";
+  var NEXT_LABEL_SETTING_KEY = "nextLabel";
+  var DEFAULT_NEXT_LABEL = "\u0414\u0430\u043B\u0435\u0435";
+  function settingsOf(page) {
+    var _a, _b;
+    if (!page) return null;
+    return (_b = (_a = page.settingsJson) != null ? _a : page.settings) != null ? _b : null;
+  }
+  function sequenceIdOf(page) {
+    const bag = settingsOf(page);
+    const raw = bag ? bag[SEQUENCE_SETTING_KEY] : void 0;
+    return typeof raw === "string" ? raw.trim() : "";
+  }
+  function nextLabelOf(page) {
+    const bag = settingsOf(page);
+    const raw = bag ? bag[NEXT_LABEL_SETTING_KEY] : void 0;
+    return (typeof raw === "string" ? raw.trim() : "") || DEFAULT_NEXT_LABEL;
+  }
+  function segmentKeyOf(page, afterResults) {
+    var _a, _b;
+    const topic = (_a = page.topicId) != null ? _a : "";
+    const position = (_b = page.position) != null ? _b : "";
+    return position === "after" ? `${topic}|after|${afterResults ? 1 : 0}` : `${topic}|${position}`;
+  }
+  function bySortOrder(a, b) {
+    return (a.sortOrder || 0) - (b.sortOrder || 0);
+  }
+  function groupIntoSegments(pages) {
+    const segments = /* @__PURE__ */ new Map();
+    const authorPages = pages.filter((p) => isFlowContentPage(p) && p.kind !== "router");
+    const afterZone = authorPages.filter((p) => {
+      var _a, _b;
+      return ((_a = p.position) != null ? _a : "") === "after" && ((_b = p.topicId) != null ? _b : null) === null;
+    }).slice().sort(bySortOrder);
+    const afterResults = /* @__PURE__ */ new Set();
+    let seenResultsBoundary = false;
+    for (const page of afterZone) {
+      if (page.type === "summary") {
+        seenResultsBoundary = true;
+        continue;
+      }
+      if (seenResultsBoundary) afterResults.add(page.id);
+    }
+    for (const page of authorPages) {
+      if (page.type === "summary") continue;
+      const key = segmentKeyOf(page, afterResults.has(page.id));
+      const bucket = segments.get(key);
+      if (bucket) bucket.push(page);
+      else segments.set(key, [page]);
+    }
+    for (const bucket of segments.values()) bucket.sort(bySortOrder);
+    return segments;
+  }
+  function buildSequencePlacements(pages) {
+    const placements = /* @__PURE__ */ new Map();
+    if (!pages || pages.length === 0) return placements;
+    for (const segment of groupIntoSegments(pages).values()) {
+      let runStart = 0;
+      while (runStart < segment.length) {
+        const id = sequenceIdOf(segment[runStart]);
+        if (!id) {
+          runStart += 1;
+          continue;
+        }
+        let runEnd = runStart + 1;
+        while (runEnd < segment.length && sequenceIdOf(segment[runEnd]) === id) runEnd += 1;
+        const total = runEnd - runStart;
+        if (total >= 2) {
+          for (let i = runStart; i < runEnd; i++) {
+            placements.set(segment[i].id, { index: i - runStart + 1, total, sequenceId: id });
+          }
+        }
+        runStart = runEnd;
+      }
+    }
+    return placements;
+  }
+  function buildPageContext(placement, options) {
+    var _a;
+    const canGoBack = (options == null ? void 0 : options.canGoBack) === true;
+    const nextLabel = ((_a = options == null ? void 0 : options.nextLabel) == null ? void 0 : _a.trim()) || DEFAULT_NEXT_LABEL;
+    if (!placement) return { dots: [], dotIndex: 0, dotsTotal: 0, canGoBack, nextLabel };
+    const dots = [];
+    for (let i = 1; i <= placement.total; i++) {
+      dots.push({ statusClass: i === placement.index ? "is-current" : "" });
+    }
+    return { dots, dotIndex: placement.index, dotsTotal: placement.total, canGoBack, nextLabel };
+  }
+  function buildPageContextFor(pageId, pages, options) {
+    var _a;
+    const page = (pages != null ? pages : []).find((p) => p.id === pageId);
+    return buildPageContext(buildSequencePlacements(pages).get(pageId), {
+      ...options,
+      nextLabel: (_a = options == null ? void 0 : options.nextLabel) != null ? _a : nextLabelOf(page)
+    });
+  }
+  function collectSequenceIds(pages) {
+    const seen = [];
+    for (const page of pages != null ? pages : []) {
+      const id = sequenceIdOf(page);
+      if (id && seen.indexOf(id) === -1) seen.push(id);
+    }
+    return seen;
+  }
+
+  // shared/template/asset-base.ts
+  var URL_ATTRS = /\s(src|href)\s*=\s*("([^"]*)"|'([^']*)')/gi;
+  function isAbsoluteRef(url) {
+    const v = url.trim();
+    if (v === "") return true;
+    return v.startsWith("/") || v.startsWith("#") || v.startsWith("data:") || v.startsWith("blob:") || // Any scheme: http(s), mailto, tel — the sanitiser handles what is allowed.
+    /^[a-z][a-z0-9+.-]*:/i.test(v);
+  }
+  function joinBase(base, path) {
+    if (!base) return path;
+    return base.endsWith("/") ? base + path.replace(/^\/+/, "") : `${base}/${path.replace(/^\/+/, "")}`;
+  }
+  function withTemplateAssetBase(html, base) {
+    if (!html || !base) return html;
+    return html.replace(URL_ATTRS, (match, attr, _quoted, dq, sq) => {
+      const url = dq !== void 0 ? dq : sq != null ? sq : "";
+      if (isAbsoluteRef(url)) return match;
+      const quote = dq !== void 0 ? '"' : "'";
+      return ` ${attr}=${quote}${joinBase(base, url)}${quote}`;
+    });
+  }
+  function withTemplateAssetBaseInValues(values, base) {
+    const out = { ...values != null ? values : {} };
+    if (!base) return out;
+    for (const [key, value] of Object.entries(out)) {
+      if (typeof value === "string") out[key] = withTemplateAssetBase(value, base);
+    }
+    return out;
+  }
+
+  // shared/template/field-types.ts
+  var PLACEHOLDER_TYPES = [
+    "text",
+    "textarea",
+    "richText",
+    "html",
+    "image",
+    "resultField"
+  ];
+  var SETTING_TYPES = [
+    "number",
+    "boolean",
+    "select",
+    "text",
+    "image",
+    /** Identifier of a page sequence; drives the navigation indicator (PRD-22). */
+    "sequence"
+  ];
+  var INPUT_MODES = ["plain", "rich", "html"];
+  var MODES_BY_PLACEHOLDER_TYPE = {
+    text: ["plain"],
+    textarea: ["plain"],
+    richText: ["plain", "rich"],
+    html: ["plain", "rich", "html"]
+  };
+  function isPlaceholderType(value) {
+    return typeof value === "string" && PLACEHOLDER_TYPES.indexOf(value) !== -1;
+  }
+  function isSettingType(value) {
+    return typeof value === "string" && SETTING_TYPES.indexOf(value) !== -1;
+  }
+  function inputModesFor(type) {
+    var _a;
+    return (_a = MODES_BY_PLACEHOLDER_TYPE[type]) != null ? _a : [];
+  }
+  function fieldLabel(field, index) {
+    return typeof field.key === "string" && field.key.length > 0 ? field.key : `#${index + 1}`;
+  }
+  function validateVariantFields(variant) {
+    const issues = [];
+    const check = (list, raw, isValidType, allowed) => {
+      if (raw === void 0 || raw === null) return;
+      if (!Array.isArray(raw)) {
+        issues.push({ list, field: "", message: `${list} \u0434\u043E\u043B\u0436\u0435\u043D \u0431\u044B\u0442\u044C \u043C\u0430\u0441\u0441\u0438\u0432\u043E\u043C` });
+        return;
+      }
+      raw.forEach((entry, index) => {
+        const field = entry != null ? entry : {};
+        const label = fieldLabel(field, index);
+        if (!isValidType(field.type)) {
+          issues.push({
+            list,
+            field: label,
+            message: `\u043D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u044B\u0439 \u0442\u0438\u043F "${String(field.type)}"; \u0434\u043E\u043F\u0443\u0441\u0442\u0438\u043C\u044B: ${allowed.join(", ")}`
+          });
+          return;
+        }
+        if (field.type === "select") {
+          const options = field.options;
+          if (!Array.isArray(options) || options.length === 0) {
+            issues.push({ list, field: label, message: '\u0442\u0438\u043F "select" \u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u043D\u0435\u043F\u0443\u0441\u0442\u043E\u0439 \u0441\u043F\u0438\u0441\u043E\u043A options' });
+          }
+        }
+      });
+    };
+    check("placeholders", variant.placeholders, isPlaceholderType, PLACEHOLDER_TYPES);
+    check("settings", variant.settings, isSettingType, SETTING_TYPES);
+    return issues;
+  }
+
+  // shared/flow/router-hub.ts
+  function escHtml3(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function pluralQuestions2(n) {
+    const m10 = n % 10;
+    const m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return "\u0432\u043E\u043F\u0440\u043E\u0441";
+    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return "\u0432\u043E\u043F\u0440\u043E\u0441\u0430";
+    return "\u0432\u043E\u043F\u0440\u043E\u0441\u043E\u0432";
+  }
+  function isSectionUnlocked(section, state) {
+    const rule = (state.unlockRules || {})[section.topicId];
+    if (!rule || !rule.mode || rule.mode === "always") return true;
+    const ids = rule.sectionIds || [];
+    if (rule.mode === "after_sections_completed") {
+      return ids.every((id) => state.topicStates[id] === "completed");
+    }
+    if (rule.mode === "after_sections_passed") {
+      return ids.every((id) => {
+        if (state.topicStates[id] !== "completed") return false;
+        const result = (state.sectionResults || {})[id];
+        return !result || result.passed !== false;
+      });
+    }
+    return true;
+  }
+  function isRouterReadyToFinish(sections, state) {
+    const policy = state.completionPolicy || "all_required_completed";
+    const required = (sections || []).filter((s) => s.required !== false);
+    if (required.length === 0) return true;
+    return required.every((s) => {
+      if (state.topicStates[s.topicId] !== "completed") return false;
+      if (policy === "all_required_passed") {
+        const result = (state.sectionResults || {})[s.topicId];
+        if (!result) return false;
+        return result.passed === true;
+      }
+      return true;
+    });
+  }
+  function statusLabel(status) {
+    if (status === "completed") return "\u041F\u0440\u043E\u0439\u0434\u0435\u043D\u0430";
+    if (status === "inProgress") return "\u0412 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0435";
+    return "\u041D\u0435 \u043D\u0430\u0447\u0430\u0442\u0430";
+  }
+  function buildRouterHubHtml(sections, state, options) {
+    const list = sections || [];
+    let html = "";
+    const deadline = options == null ? void 0 : options.deadline;
+    if (deadline && (deadline.date || deadline.time)) {
+      let stats = "";
+      if (deadline.date) {
+        stats += '<div class="router-stat"><span class="router-stat__label">\u0414\u0430\u0442\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u044F \u0442\u0435\u0441\u0442\u0430</span><span class="router-stat__value">' + escHtml3(deadline.date) + "</span></div>";
+      }
+      if (deadline.time) {
+        stats += '<div class="router-stat"><span class="router-stat__label">\u0412\u0440\u0435\u043C\u044F \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u044F \u0442\u0435\u0441\u0442\u0430</span><span class="router-stat__value">' + escHtml3(deadline.time) + "</span></div>";
+      }
+      html += '<div class="router-stats">' + stats + "</div>";
+    }
+    const required = list.filter((s) => s.required !== false);
+    if (required.length > 0) {
+      const done = required.filter((s) => state.topicStates[s.topicId] === "completed").length;
+      const pct = Math.round(done / required.length * 100);
+      html += '<div class="router-progress" role="group" aria-label="\u041F\u0440\u043E\u0433\u0440\u0435\u0441\u0441 \u043F\u043E \u0440\u0430\u0437\u0434\u0435\u043B\u0430\u043C"><div class="router-progress__head"><span class="router-progress__label">\u0420\u0430\u0437\u0434\u0435\u043B\u044B</span><span class="router-progress__count">' + done + " / " + required.length + '</span></div><div class="router-progress__bar"><div class="router-progress__fill" style="width:' + pct + '%"></div></div></div>';
+    }
+    let cards = "";
+    for (const section of list) {
+      const status = state.topicStates[section.topicId] || "notStarted";
+      const unlocked = isSectionUnlocked(section, state);
+      const locked = !unlocked && status !== "completed";
+      const disabled = status === "completed" || !unlocked;
+      const meta = [];
+      if (section.drawCount) meta.push(section.drawCount + " " + pluralQuestions2(section.drawCount));
+      if (section.timeLimitMinutes) meta.push(section.timeLimitMinutes + " \u043C\u0438\u043D");
+      const metaHtml = meta.length ? '<span class="router-topic-card__meta">' + meta.map((m) => '<span class="router-topic-card__chip">' + escHtml3(m) + "</span>").join("") + "</span>" : "";
+      const imgUrl = section.image && typeof section.image === "object" ? section.image.url || "" : section.image || "";
+      const imgHtml = imgUrl ? '<span class="router-topic-card__img"><img src="' + escHtml3(imgUrl) + '" alt=""></span>' : "";
+      const goHtml = unlocked && status !== "completed" ? '<span class="router-topic-card__go">\u043D\u0430\u0447\u0430\u0442\u044C</span>' : "";
+      cards += '<button type="button" role="listitem" class="router-topic-card router-topic-card--' + status + (locked ? " router-topic-card--locked" : "") + '" data-topic-id="' + escHtml3(section.topicId) + '" data-router-status="' + status + '"' + (locked ? ' data-router-locked="true"' : "") + (disabled ? " disabled" : ' data-action="router-select:' + escHtml3(section.topicId) + '"') + '><span class="router-topic-card__top"><span class="router-topic-card__name">' + escHtml3(section.topicName || section.topicId) + (section.required === false ? ' <span class="router-topic-card__optional">(\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u0430\u044F)</span>' : "") + "</span>" + imgHtml + "</span>" + metaHtml + '<span class="router-topic-card__foot"><span class="router-topic-card__status">' + escHtml3(unlocked ? statusLabel(status) : "\u041D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430") + "</span>" + goHtml + "</span></button>";
+    }
+    html += '<div class="router-topic-cards" role="list" aria-label="\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0435 \u0442\u0435\u043C\u044B">' + cards + "</div>";
+    const ready = isRouterReadyToFinish(list, state);
+    html += '<button type="button" class="btn router-finish' + (ready ? "" : " router-finish--disabled") + '"' + (ready ? ' data-action="router-finish"' : " disabled") + ">\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C</button>";
+    return html;
   }
   return __toCommonJS(runtime_entry_exports);
 })();
@@ -5116,6 +6403,8 @@ var TBTemplate = (() => {
       renderReviewRoute();
     } else if (route === "section-results") {
       renderSectionResultsRoute();
+    } else if (route === "system.transition") {
+      renderTransitionRoute();
     } else if (route === "system.blocked" || route === "system.locked" ||
                route.indexOf("system.") === 0) {
       var systemData = Object.assign({}, buildDslData(), {
@@ -5231,6 +6520,40 @@ var TBTemplate = (() => {
       sectionResult: built ? built.sectionResult : {}
     });
     renderLayoutPage("section-results", data);
+  }
+
+  /**
+   * PRD-12 §10: the adaptive «Правильно/Неправильно + смена уровня» interstitial.
+   * Like review / section-results, this screen binds a TOP-LEVEL namespace
+   * (`transition.*`) that buildDslData does not surface, so without a context of
+   * its own every `{{#if}}` in the layout is false and the screen renders as a bare
+   * icon with an empty title — a template defect that is not one.
+   *
+   * The facts come from the template's demo dataset (`runtime.transition`) when it
+   * supplies them, else from defaults that exercise every branch of the layout
+   * (correct answer + level change + topic change + «Продолжить»). A template may
+   * set any field to `null` to hide that block. Built through the SAME shared
+   * builder production uses, so the preview mirrors the learner screen.
+   */
+  function renderTransitionRoute() {
+    var TBt = (typeof window !== "undefined") ? window.TBTemplate : null;
+    var base = buildDslData();
+    var demo = (demoData.runtime || {}).transition || {};
+    var topics = (demoData.course || {}).topics || [];
+    var input = {
+      isCorrect: demo.isCorrect != null ? !!demo.isCorrect : true,
+      // `undefined` = not declared → default; explicit `null` = intentionally absent.
+      levelTransition: demo.levelTransition !== undefined
+        ? demo.levelTransition
+        : { type: "up", message: "Уровень повышен" },
+      topicTransition: demo.topicTransition !== undefined
+        ? demo.topicTransition
+        : (topics[1] ? { toTopic: topics[1].title || "" } : null),
+      showContinue: demo.showContinue != null ? !!demo.showContinue : true
+    };
+    var built = (TBt && TBt.buildTransitionContext) ? TBt.buildTransitionContext(input) : null;
+    var data = Object.assign({}, base, { transition: built ? built.transition : {} });
+    renderLayoutPage("system.transition", data);
   }
 
   // ─── Question rendering ───────────────────────────────────────────────────────
