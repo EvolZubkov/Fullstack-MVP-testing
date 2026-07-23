@@ -43,6 +43,7 @@ import {
 import {
   validateTemplatePackage,
   collectFieldTypeIssues,
+  collectThemeIssues,
   MAX_TEMPLATE_ZIP_BYTES,
   type TemplateValidationReport,
 } from "../services/template-validation";
@@ -192,6 +193,18 @@ router.put("/:id/activate", requirePermission("adminTemplates.manage"), async (r
       return res.status(409).json({
         error: "Активация запрещена: недопустимые типы полей в манифесте",
         issues: fieldIssues,
+      });
+    }
+
+    // PRD-23 (FR-04): same reasoning for the theme declaration — a package
+    // uploaded before the closed theme registry carries a passing report from its
+    // own era. Only the declaration is checked here: the stylesheet lives in the
+    // package, which the gate does not open (the token-sync check runs at upload).
+    const themeIssues = collectThemeIssues((row.manifest ?? {}) as Record<string, unknown>).blocking;
+    if (themeIssues.length > 0) {
+      return res.status(409).json({
+        error: "Активация запрещена: недопустимое объявление тем в манифесте",
+        issues: themeIssues,
       });
     }
 

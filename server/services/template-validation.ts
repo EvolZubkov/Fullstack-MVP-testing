@@ -29,6 +29,7 @@ import { templateManifestSchema, isSupportedTemplateApiVersion } from "@shared/s
 // preview/runtime — we reject it at import instead (see the layout-syntax pass).
 import { compileTemplate } from "@shared/template/dsl";
 import { validateVariantFields } from "@shared/template/field-types";
+import { validateManifestThemes } from "@shared/template/themes";
 import type { TemplateEntries } from "./template-package";
 
 /** Default ZIP size ceiling (PRD-3 §8): 20 MB. */
@@ -205,6 +206,55 @@ export function collectFieldTypeIssues(manifest: Record<string, unknown>): Valid
 }
 
 /**
+ * Concatenated text of every stylesheet the manifest declares. Empty when the
+ * template declares none or the entries are missing — callers treat that as «no
+ * evidence» and skip the checks that need the palette.
+ */
+export function stylesheetText(
+  entries: TemplateEntries,
+  manifest: Record<string, unknown>,
+): string {
+  const assets = manifest.assets as { styles?: unknown } | undefined;
+  const declared = Array.isArray(assets?.styles) ? (assets?.styles as unknown[]) : [];
+  const parts: string[] = [];
+  for (const entry of declared) {
+    const path = asString(entry);
+    if (!path) continue;
+    const body = text(entries, path);
+    if (body) parts.push(body);
+  }
+  return parts.join("\n");
+}
+
+/**
+ * Theme-declaration problems of a manifest (PRD-23), split by severity.
+ *
+ * Exported so the activation gate can re-check an ALREADY installed template:
+ * a package uploaded before PRD-23 carries a passing report from its own era, and
+ * an id outside the closed registry must not become active through it. The gate
+ * has no package files, so it calls this WITHOUT `css` and gets the declaration
+ * checks only; reconciling the declaration with the palette needs the stylesheet
+ * and therefore happens at upload/validate.
+ */
+export function collectThemeIssues(
+  manifest: Record<string, unknown>,
+  css?: string,
+): { blocking: ValidationIssue[]; warnings: ValidationIssue[] } {
+  const blocking: ValidationIssue[] = [];
+  const warnings: ValidationIssue[] = [];
+  for (const issue of validateManifestThemes(manifest, css)) {
+    const where = issue.theme ? `Тема "${issue.theme}": ` : "";
+    const entry: ValidationIssue = {
+      code: issue.level === "blocking" ? "THEME_INVALID" : "THEME_ADVISORY",
+      message: `${where}${issue.message}`,
+      ref: issue.theme ? `themes.${issue.theme}` : "themes",
+    };
+    (issue.level === "blocking" ? blocking : warnings).push(entry);
+  }
+  return { blocking, warnings };
+}
+
+/**
  * Validates an extracted template package. Returns a structured report; the
  * caller persists it as `validation_json` and gates activation on `ok`.
  */
@@ -256,6 +306,16 @@ export function validateTemplatePackage(
   // variants the schema pass already rejected for another reason.
   for (const issue of collectFieldTypeIssues(manifest)) {
     blocking.push(issue);
+  }
+
+  // ── themes declared by the manifest (PRD-23) ──────────────────────────────
+  // Reconciled with the template's own stylesheet: a declared theme with no
+  // tokens would give the test author a colour column that paints nothing, and a
+  // second palette shipped WITHOUT a declaration is unreachable for them.
+  {
+    const themeIssues = collectThemeIssues(manifest, stylesheetText(entries, manifest));
+    blocking.push(...themeIssues.blocking);
+    warnings.push(...themeIssues.warnings);
   }
 
   const id = asString(manifest.id);

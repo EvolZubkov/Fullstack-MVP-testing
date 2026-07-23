@@ -1465,11 +1465,21 @@ export function isSupportedTemplateApiVersion(version: string): boolean {
   return (SUPPORTED_TEMPLATE_API_VERSIONS as readonly string[]).includes(version);
 }
 
+/**
+ * PRD-23: `theme` and `paramsByTheme` are optional — a template that declares no
+ * themes keeps exactly the shape it had before, so no stored test needs migrating.
+ * `params` stays the flat map: it holds everything for a themeless template and the
+ * non-colour params for a themed one.
+ */
 export const designSettingsSchema = z.object({
   templateId: z.string(),
   templateVersion: z.string(),
   templateApiVersion: z.string(),
   params: z.record(z.string(), z.unknown()),
+  theme: z.enum(["light", "dark", "auto"]).optional(),
+  paramsByTheme: z
+    .record(z.enum(["light", "dark"]), z.record(z.string(), z.unknown()))
+    .optional(),
 });
 
 export type DesignSettings = z.infer<typeof designSettingsSchema>;

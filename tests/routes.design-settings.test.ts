@@ -249,3 +249,108 @@ describe("PUT /api/tests/:id/design", () => {
     expect(res.status).toBe(200);
   });
 });
+
+// ─── PRD-23: theme choice and per-theme colours ───────────────────────────────
+
+/** Same params as `corporate`, plus a declared pair of palettes. */
+const themedTemplate = {
+  ...corporateTemplate,
+  id: "certification",
+  manifest: {
+    ...corporateTemplate.manifest,
+    themes: [
+      { id: "light", label: "Светлая" },
+      { id: "dark", label: "Тёмная" },
+    ],
+  },
+};
+
+describe("PUT /api/tests/:id/design — themes (PRD-23)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getTest.mockResolvedValue(baseTest);
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.updateTest.mockResolvedValue({ ...baseTest });
+    dbMock.select.mockReturnValue(dbMock._makeChain([themedTemplate]));
+  });
+
+  it("stores the theme choice and the colours of each palette", async () => {
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/design")
+      .send({
+        templateId: "certification",
+        params: { "progress.mode": "questions" },
+        theme: "dark",
+        paramsByTheme: { light: { primaryColor: "L" }, dark: { primaryColor: "D" } },
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.theme).toBe("dark");
+    expect(res.body.paramsByTheme).toEqual({
+      light: { primaryColor: "L" },
+      dark: { primaryColor: "D" },
+    });
+  });
+
+  it("defaults the choice to auto when the template has themes and the body has none", async () => {
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/design")
+      .send({ templateId: "certification", params: {} });
+    expect(res.status).toBe(200);
+    expect(res.body.theme).toBe("auto");
+  });
+
+  it("refuses an unknown theme instead of dropping it", async () => {
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/design")
+      .send({ templateId: "certification", params: {}, theme: "sepia" });
+    expect(res.status).toBe(422);
+    expect(res.body.field).toBe("theme");
+  });
+
+  it("refuses a palette the template does not declare", async () => {
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/design")
+      .send({
+        templateId: "certification",
+        params: {},
+        paramsByTheme: { sepia: { primaryColor: "S" } },
+      });
+    expect(res.status).toBe(422);
+    expect(res.body.unknownThemes).toEqual(["sepia"]);
+  });
+
+  it("refuses a non-colour param inside a palette — nothing would ever read it", async () => {
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/design")
+      .send({
+        templateId: "certification",
+        params: {},
+        paramsByTheme: { light: { "progress.mode": "pages" } },
+      });
+    expect(res.status).toBe(422);
+    expect(res.body.extraKeys).toEqual(["progress.mode"]);
+  });
+
+  it("refuses per-theme colours for a template without themes", async () => {
+    dbMock.select.mockReturnValue(dbMock._makeChain([corporateTemplate]));
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/design")
+      .send({
+        templateId: "corporate",
+        params: {},
+        paramsByTheme: { light: { primaryColor: "L" } },
+      });
+    expect(res.status).toBe(422);
+    expect(res.body.field).toBe("paramsByTheme");
+  });
+
+  it("keeps the pre-PRD-23 JSON shape for a template without themes", async () => {
+    dbMock.select.mockReturnValue(dbMock._makeChain([corporateTemplate]));
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/design")
+      .send({ templateId: "corporate", params: { primaryColor: "#fff" } });
+    expect(res.status).toBe(200);
+    expect(res.body).not.toHaveProperty("theme");
+    expect(res.body).not.toHaveProperty("paramsByTheme");
+  });
+});

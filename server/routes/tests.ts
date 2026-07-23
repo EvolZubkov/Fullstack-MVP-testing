@@ -9,6 +9,8 @@ import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, 
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { readScreenTemplate, readManifestContentTemplates, readVariantLayouts } from "../services/template-render";
 import { withTemplateAssetBase } from "@shared/template/asset-base";
+import { declaredThemes, isTestTheme, supportsThemes, TEST_THEMES } from "@shared/template/themes";
+import { colorParamKeys } from "@shared/template/theme-params";
 import { resolveTemplateDir, resolveSystemScreenDir } from "../services/template-dir";
 import { requirePermission, requireUserContext } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
@@ -399,7 +401,7 @@ router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope(
     // cssVars/branding resolve against the ACTIVE template's manifest even when the
     // layout dir fell back to `default` (a screen kind the active template doesn't own).
     const paramsDir = await resolveTemplateDir(templateId, { activeOnly: true });
-    let payload = readScreenTemplate(dir, layoutFile, (test.designSettingsJson as any)?.params, paramsDir);
+    let payload = readScreenTemplate(dir, layoutFile, test.designSettingsJson as any, paramsDir);
     // File-level fallback (PRD-1 §4.3.2, PRD-3 NFR-06): a template that simply does
     // not ship this layout still renders — from the standard template — instead of
     // 404-ing the learner's screen. This is the only fallback `blocked` gets (it has
@@ -407,7 +409,7 @@ router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope(
     if (!payload) {
       const fallbackDir = await resolveTemplateDir("default", { activeOnly: false });
       if (path.resolve(fallbackDir) !== path.resolve(dir)) {
-        payload = readScreenTemplate(fallbackDir, layoutFile, (test.designSettingsJson as any)?.params, paramsDir);
+        payload = readScreenTemplate(fallbackDir, layoutFile, test.designSettingsJson as any, paramsDir);
       }
     }
     if (!payload) return res.status(404).json({ error: "Template not found" });
@@ -692,11 +694,22 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
       return res.json({ templateId: "default" });
     }
 
-    const { templateId, templateVersion, templateApiVersion, params = {} } = body as {
+    const {
+      templateId,
+      templateVersion,
+      templateApiVersion,
+      params = {},
+      theme,
+      paramsByTheme = {},
+    } = body as {
       templateId?: string;
       templateVersion?: string;
       templateApiVersion?: string;
       params?: Record<string, unknown>;
+      /** PRD-23: `light` | `dark` | `auto`; absent reads as `auto`. */
+      theme?: unknown;
+      /** PRD-23: colour overrides per declared theme. */
+      paramsByTheme?: Record<string, Record<string, unknown>>;
     };
 
     if (!templateId) {
@@ -735,12 +748,70 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
       });
     }
 
-    const designSettings = {
+    // ── PRD-23: theme choice and per-theme colours ──────────────────────────
+    // Rejected rather than dropped: a silently ignored field would let the editor
+    // believe a palette was saved and repaint the learner's screen with the other
+    // one. Every refusal names the field and the reason.
+    if (theme !== undefined && !isTestTheme(theme)) {
+      return res.status(422).json({
+        error: `Unknown theme: ${String(theme)}. Expected one of: ${TEST_THEMES.join(", ")}`,
+        field: "theme",
+      });
+    }
+    const themed = supportsThemes(manifest);
+    const themeIds = new Set<string>(declaredThemes(manifest).map((t) => t.id));
+    const byTheme = paramsByTheme ?? {};
+    if (!themed) {
+      if (Object.keys(byTheme).length > 0) {
+        return res.status(422).json({
+          error: `Template "${templateId}" declares no themes; paramsByTheme is not applicable`,
+          field: "paramsByTheme",
+        });
+      }
+      if (theme !== undefined && theme !== "auto") {
+        return res.status(422).json({
+          error: `Template "${templateId}" declares no themes; only "auto" is applicable`,
+          field: "theme",
+        });
+      }
+    } else {
+      const unknownThemes = Object.keys(byTheme).filter((t) => !themeIds.has(t as never));
+      if (unknownThemes.length > 0) {
+        return res.status(422).json({
+          error: `Unknown themes: ${unknownThemes.join(", ")}`,
+          field: "paramsByTheme",
+          unknownThemes,
+        });
+      }
+      // Only a colour splits per theme: a font or a logo paints the same in both,
+      // and accepting one here would create a value nothing ever reads.
+      const colorKeys = colorParamKeys(manifest.params as Array<{ key: string; type?: string }>);
+      for (const [themeId, values] of Object.entries(byTheme)) {
+        const bad = Object.keys((values ?? {}) as Record<string, unknown>).filter(
+          (k) => !colorKeys.has(k),
+        );
+        if (bad.length > 0) {
+          return res.status(422).json({
+            error: `Params not settable per theme: ${bad.join(", ")}`,
+            field: `paramsByTheme.${themeId}`,
+            extraKeys: bad,
+          });
+        }
+      }
+    }
+
+    const designSettings: Record<string, unknown> = {
       templateId,
       templateVersion: templateVersion ?? template.version,
       templateApiVersion: templateApiVersion ?? template.templateApiVersion,
       params: params ?? {},
     };
+    // Written only when they carry meaning, so a themeless test keeps the exact
+    // JSON shape it had before PRD-23.
+    if (themed) {
+      designSettings.theme = theme ?? "auto";
+      if (Object.keys(byTheme).length > 0) designSettings.paramsByTheme = byTheme;
+    }
 
     await storage.updateTest(testId, { designSettingsJson: designSettings });
     res.json(designSettings);
