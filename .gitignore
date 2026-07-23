@@ -47,7 +47,8 @@ uploads/
 templates/certification/certification-*.zip
 # HAR captures may carry live session cookies / personal data — never commit.
 *.har
-templates/certification2-1.2.0.zip
-templates/my-template-1.0.1.zip
-templates/certification2-1.2.1.zip
+# Locally built template packages for upload/acceptance runs. The template
+# SOURCE lives under templates/<id>/; the ZIP is a build artefact, and the list
+# of one-off names below had to grow with every test run.
+templates/*.zip
 .claude/settings.json
