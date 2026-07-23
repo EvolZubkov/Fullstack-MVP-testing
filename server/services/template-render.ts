@@ -19,7 +19,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { buildResultContext, buildAdaptiveResultContext } from "./result-context";
 import { buildTemplateCssVars, type TemplateParamDef } from "@shared/template/params-css";
+import { baseParams, buildTemplateThemeCss, sceneThemeAttribute } from "@shared/template/theme-css";
+import type { StoredDesignSettings } from "@shared/template/theme-params";
 import type { AttemptResult } from "@shared/schema";
+
+/**
+ * The test's stored design settings, as the routes read them off the test row.
+ * PRD-23 widened this from a bare param map: colours now live per theme.
+ */
+export type DesignSettingsInput = StoredDesignSettings;
 
 /** What the web host needs to render one screen via the unified renderer. */
 export interface ScreenRenderPayload {
@@ -37,6 +45,20 @@ export interface ScreenRenderPayload {
    * no param resolves a CSS variable.
    */
   cssVars?: Record<string, string>;
+  /**
+   * PRD-23: the test's per-theme colour overrides as a CSS block, printed by the
+   * SHARED {@link module:shared/template/theme-css buildTemplateThemeCss} against
+   * the `:host` selector (the web host renders inside a shadow root). Injected
+   * AFTER the template stylesheet so the test's palette wins. Omitted for a
+   * template that declares no themes — its colours travel in `cssVars` as before.
+   */
+  themeCss?: string;
+  /**
+   * PRD-23: the palette the author pinned, put on the scene root as `data-theme`.
+   * Omitted for «Авто» — the attribute must be ABSENT for the template's own
+   * `prefers-color-scheme` rules to decide.
+   */
+  dataTheme?: "light" | "dark";
   /**
    * Per-test branding for the render context (`design.*`, PRD-7). The client spreads
    * this into the context it builds for client-built screens (start/question/blocked);
@@ -80,13 +102,25 @@ function readFileSafe(p: string): string {
  * Empty on any read/parse failure — branding then simply falls back to theme.css.
  */
 function readManifestParams(dir: string): TemplateParamDef[] {
+  return readBrandingManifest(dir).params ?? [];
+}
+
+/**
+ * Read the part of a template's manifest that branding needs: `params[]` (the
+ * CSS-var definitions) and `themes[]` (PRD-23, which palettes exist). Empty on any
+ * read/parse failure — branding then simply falls back to theme.css.
+ */
+function readBrandingManifest(dir: string): { params?: TemplateParamDef[]; themes?: unknown } {
   try {
     const raw = readFileSafe(path.join(dir, "manifest.json"));
-    if (!raw) return [];
-    const manifest = JSON.parse(raw) as { params?: TemplateParamDef[] };
-    return Array.isArray(manifest.params) ? manifest.params : [];
+    if (!raw) return {};
+    const manifest = JSON.parse(raw) as { params?: TemplateParamDef[]; themes?: unknown };
+    return {
+      params: Array.isArray(manifest.params) ? manifest.params : [],
+      themes: manifest.themes,
+    };
   } catch {
-    return [];
+    return {};
   }
 }
 
@@ -152,7 +186,11 @@ export function readVariantLayouts(dir: string): Record<string, string> {
 export function readScreenTemplate(
   dir: string,
   layoutFile: string,
-  designParams?: Record<string, unknown> | null,
+  /**
+   * The test's WHOLE design settings, not just `params`: PRD-23 splits colours
+   * across `paramsByTheme` and the pinned `theme` lives beside them.
+   */
+  design?: DesignSettingsInput | null,
   paramsDir?: string,
 ): Omit<ScreenRenderPayload, "context"> | null {
   try {
@@ -171,13 +209,24 @@ export function readScreenTemplate(
     // The manifest comes from `paramsDir` (the active template the params were set
     // against) so a screen whose LAYOUT falls back to `default` still resolves the
     // active template's params — parity with SCORM's global cssVar application.
-    const cssVars = buildTemplateCssVars(designParams, readManifestParams(paramsDir || dir));
-    const logoUrl = resolveLogoUrl(designParams);
+    //
+    // PRD-23: a template with themes paints its colours per palette, so those keys
+    // leave `cssVars` (inline, unscopable) and become a CSS block instead. For a
+    // template without themes `baseParams` is the whole param set and `themeCss` is
+    // empty — the payload is byte-identical to what it was before.
+    const manifest = readBrandingManifest(paramsDir || dir);
+    const base = baseParams(design, manifest);
+    const cssVars = buildTemplateCssVars(base, manifest.params);
+    const themeCss = buildTemplateThemeCss(design, manifest, { rootSelector: ":host" });
+    const dataTheme = sceneThemeAttribute(design, manifest);
+    const logoUrl = resolveLogoUrl(base);
     return {
       layout,
       css,
       theme: { background: cssVar(css, "background"), foreground: cssVar(css, "foreground") },
       ...(Object.keys(cssVars).length > 0 ? { cssVars } : {}),
+      ...(themeCss ? { themeCss } : {}),
+      ...(dataTheme ? { dataTheme } : {}),
       ...(logoUrl ? { design: { logoUrl } } : {}),
     };
   } catch {
@@ -194,7 +243,7 @@ export function readResultsRenderPayload(
   dir: string,
   result: AttemptResult | (Record<string, unknown> & { mode?: string }),
   testTitle: string,
-  designParams?: Record<string, unknown> | null,
+  design?: DesignSettingsInput | null,
   paramsDir?: string,
 ): ScreenRenderPayload | null {
   try {
@@ -202,7 +251,7 @@ export function readResultsRenderPayload(
     const base = readScreenTemplate(
       dir,
       isAdaptive ? "results.adaptive.html" : "results.html",
-      designParams,
+      design,
       paramsDir,
     );
     if (!base) return null;

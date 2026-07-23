@@ -309,6 +309,10 @@ export default function TakeTestPage() {
     css: string;
     theme?: { background: string; foreground: string };
     cssVars?: Record<string, string>;
+    /** PRD-23: per-theme colour overrides, printed as CSS. */
+    themeCss?: string;
+    /** PRD-23: palette pinned by the author; absent means «Авто». */
+    dataTheme?: "light" | "dark";
     design?: { logoUrl?: string };
   } | null>(null);
   // PRD-12 / PRD-6: retake block-wall template + cooldown data (set on 403).
@@ -317,6 +321,10 @@ export default function TakeTestPage() {
     css: string;
     theme?: { background: string; foreground: string };
     cssVars?: Record<string, string>;
+    /** PRD-23: per-theme colour overrides, printed as CSS. */
+    themeCss?: string;
+    /** PRD-23: palette pinned by the author; absent means «Авто». */
+    dataTheme?: "light" | "dark";
     design?: { logoUrl?: string };
   } | null>(null);
   const [blockData, setBlockData] = useState<{ cooldownPeriodDays?: number; availableDate?: string | null } | null>(null);
@@ -326,6 +334,10 @@ export default function TakeTestPage() {
     css: string;
     theme?: { background: string; foreground: string };
     cssVars?: Record<string, string>;
+    /** PRD-23: per-theme colour overrides, printed as CSS. */
+    themeCss?: string;
+    /** PRD-23: palette pinned by the author; absent means «Авто». */
+    dataTheme?: "light" | "dark";
     design?: { logoUrl?: string };
   } | null>(null);
   // PRD-19 Block D: обзор (review) screen template + visibility flag.
@@ -334,6 +346,10 @@ export default function TakeTestPage() {
     css: string;
     theme?: { background: string; foreground: string };
     cssVars?: Record<string, string>;
+    /** PRD-23: per-theme colour overrides, printed as CSS. */
+    themeCss?: string;
+    /** PRD-23: palette pinned by the author; absent means «Авто». */
+    dataTheme?: "light" | "dark";
     design?: { logoUrl?: string };
   } | null>(null);
   const [showReview, setShowReview] = useState(false);
@@ -346,6 +362,10 @@ export default function TakeTestPage() {
     css: string;
     theme?: { background: string; foreground: string };
     cssVars?: Record<string, string>;
+    /** PRD-23: per-theme colour overrides, printed as CSS. */
+    themeCss?: string;
+    /** PRD-23: palette pinned by the author; absent means «Авто». */
+    dataTheme?: "light" | "dark";
     design?: { logoUrl?: string };
   } | null>(null);
   // PRD-19 D5: per-section freeze map (web analogue of SCORM state.sectionCommitted).
@@ -2003,6 +2023,8 @@ export default function TakeTestPage() {
           layout={blockedTpl.layout}
           css={blockCss}
           cssVars={blockedTpl.cssVars}
+          themeCss={blockedTpl.themeCss}
+          dataTheme={blockedTpl.dataTheme}
           context={{ retake: { cooldownPeriodDays: blockData.cooldownPeriodDays, availableDateHuman }, ...(blockedTpl.design ? { design: blockedTpl.design } : {}) }}
         />
         <div className="tbh-center-foot">
@@ -2176,6 +2198,8 @@ export default function TakeTestPage() {
           layout={startTpl.layout}
           css={startTpl.css}
           cssVars={startTpl.cssVars}
+          themeCss={startTpl.themeCss}
+          dataTheme={startTpl.dataTheme}
           context={{ ...startContext, ...(startTpl.design ? { design: startTpl.design } : {}) }}
           onAction={(action) => {
             if (action === "start-test" || action === "restart") handleStartTest();
@@ -2392,6 +2416,8 @@ export default function TakeTestPage() {
           layout={reviewTpl.layout}
           css={reviewTpl.css}
           cssVars={reviewTpl.cssVars}
+          themeCss={reviewTpl.themeCss}
+          dataTheme={reviewTpl.dataTheme}
           context={{
             course: { title: attempt.testTitle },
             design: reviewTpl.design,
@@ -2478,6 +2504,8 @@ export default function TakeTestPage() {
           layout={sectionResultsTpl.layout}
           css={sectionResultsTpl.css}
           cssVars={sectionResultsTpl.cssVars}
+          themeCss={sectionResultsTpl.themeCss}
+          dataTheme={sectionResultsTpl.dataTheme}
           context={{
             course: built.course,
             design: sectionResultsTpl.design,

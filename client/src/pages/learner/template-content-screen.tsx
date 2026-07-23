@@ -26,6 +26,14 @@ export interface ContentScreenTemplate {
   layout: string;
   css?: string;
   cssVars?: Record<string, string>;
+
+  /** PRD-23: per-theme colour overrides, printed as CSS. */
+
+  themeCss?: string;
+
+  /** PRD-23: palette pinned by the author; absent means «Авто». */
+
+  dataTheme?: "light" | "dark";
   contentTemplates?: ContentTemplateDef[];
   design?: { logoUrl?: string };
   /**
@@ -157,6 +165,10 @@ export function TemplateContentScreen({
       layout={layout}
       css={template.css}
       cssVars={template.cssVars}
+
+      themeCss={template.themeCss}
+
+      dataTheme={template.dataTheme}
       context={context}
       slots={{
         // The hub's cards live INSIDE the page-content slot, next to the page's own

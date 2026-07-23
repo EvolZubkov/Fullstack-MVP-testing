@@ -1128,7 +1128,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       // Branding/cssVars resolve against the ACTIVE template manifest even when the
       // results layout falls back to `default` (active template owns no `results`).
       const paramsDir = await resolveTemplateDir(templateId, { activeOnly: true });
-      render = readResultsRenderPayload(dir, resultJson, test?.title || "", (test?.designSettingsJson as any)?.params, paramsDir);
+      render = readResultsRenderPayload(dir, resultJson, test?.title || "", test?.designSettingsJson as any, paramsDir);
       // File-level fallback (PRD-1 §4.3.2, PRD-3 NFR-06): a template that declares a
       // `results` variant but ships no results layout still renders — from the
       // standard template — instead of dropping to the legacy React markup.
@@ -1139,7 +1139,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
             fallbackDir,
             resultJson,
             test?.title || "",
-            (test?.designSettingsJson as any)?.params,
+            test?.designSettingsJson as any,
             paramsDir,
           );
         }

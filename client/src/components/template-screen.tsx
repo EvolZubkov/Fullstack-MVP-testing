@@ -31,6 +31,21 @@ export interface TemplateScreenProps {
    * how per-test branding renders in the preview, the SAME mapping the runtime uses.
    */
   cssVars?: Record<string, string>;
+  /**
+   * PRD-23: per-theme colour overrides as a CSS block (built by the shared
+   * {@link module:shared/template/theme-css buildTemplateThemeCss} against `:host`).
+   * Injected as the LAST stylesheet in the shadow root, so at equal specificity the
+   * test's palette wins over the template's own `theme.css`. Unlike {@link cssVars}
+   * these cannot be inline custom properties: a media query cannot scope those, and
+   * scoping to `prefers-color-scheme` is the entire point of a themed template.
+   */
+  themeCss?: string;
+  /**
+   * PRD-23: the palette the author pinned, set as `data-theme` on the shadow host.
+   * Leave undefined for «Авто» — the attribute must be absent for the template's own
+   * `prefers-color-scheme` rules to decide.
+   */
+  dataTheme?: "light" | "dark";
   /** Called with the `data-action` value when a button inside the screen is clicked. */
   onAction?: (action: string) => void;
   className?: string;
@@ -46,7 +61,7 @@ export interface TemplateScreenProps {
   shell?: string;
 }
 
-export function TemplateScreen({ layout, context, css, slots, content, cssVars, onAction, className, shell }: TemplateScreenProps) {
+export function TemplateScreen({ layout, context, css, slots, content, cssVars, themeCss, dataTheme, onAction, className, shell }: TemplateScreenProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const shadowRef = useRef<ShadowRoot | null>(null);
   const screenRef = useRef<HTMLElement | null>(null);
@@ -98,10 +113,28 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
       style.textContent =
         ":host{display:block;background:hsl(var(--background));color:hsl(var(--foreground));" +
         "font-family:var(--font-sans);line-height:1.55;min-height:100%;padding:0;}\n" +
-        css.replace(/:root/g, ":host").replace(/\bbody\b(?=\s*\{)/g, ":host") +
+        // `:root[data-theme="dark"]` must become `:host([data-theme="dark"])`, not
+        // `:host[...]` — the suffix form is invalid on a shadow host and the browser
+        // drops the whole rule, which is how a themed template lost its dark palette
+        // on the web while keeping it in the package (PRD-23).
+        css
+          .replace(/:root((?:\[[^\]]*\]|:not\([^)]*\))+)/g, ":host($1)")
+          .replace(/:root/g, ":host")
+          .replace(/\bbody\b(?=\s*\{)/g, ":host") +
         "\n:host{padding:0;}";
       shadow.appendChild(style);
     }
+    // PRD-23: per-theme colours go in AFTER the template stylesheet — same
+    // specificity, later wins — and the pinned palette goes on the host, where the
+    // `:host[data-theme="…"]` rules (the template's own and ours) can see it.
+    if (themeCss) {
+      const themeStyle = document.createElement("style");
+      themeStyle.setAttribute("data-tb-theme", "");
+      themeStyle.textContent = themeCss;
+      shadow.appendChild(themeStyle);
+    }
+    if (dataTheme) host.setAttribute("data-theme", dataTheme);
+    else host.removeAttribute("data-theme");
     // Apply design-param overrides on the host element. Inline custom properties
     // on the host win over the template's `:host{}` (`:root`-mapped) tokens and
     // inherit into the shadow tree — so per-test branding overrides theme.css.
@@ -132,7 +165,7 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
       renderScreenInto(screen, { layout, context, slots, content });
       fitToWidth();
     }
-  }, [layout, context, css, slots, content, cssVars, fitToWidth, shell]);
+  }, [layout, context, css, slots, content, cssVars, themeCss, dataTheme, fitToWidth, shell]);
 
   // Re-fit when the host (modal) width changes.
   useEffect(() => {

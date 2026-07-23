@@ -52,3 +52,52 @@ describe("TemplateScreen", () => {
     cleanup();
   });
 });
+
+// ─── PRD-23: themed templates ────────────────────────────────────────────────
+
+describe("TemplateScreen — themes (PRD-23)", () => {
+  it("rewrites :root WITH a condition into the functional :host(...) form", () => {
+    // `:host[data-theme="dark"]` is invalid — the browser drops the whole rule and
+    // the template's dark palette silently never applies. Caught in a real browser
+    // after the naive `:root` → `:host` replacement; pinned here so it stays fixed.
+    const css =
+      ':root { --a: 1 }\n' +
+      ':root[data-theme="dark"] { --a: 2 }\n' +
+      '@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --a: 3 } }';
+    const { container } = render(<TemplateScreen layout="<div>x</div>" context={{}} css={css} />);
+    const text = shadowOf(container).querySelector("style")!.textContent!;
+    expect(text).toContain(':host([data-theme="dark"])');
+    expect(text).toContain(':host(:not([data-theme="light"]))');
+    expect(text).not.toContain(":host[");
+    expect(text).not.toContain(":host:not(");
+    cleanup();
+  });
+
+  it("puts the per-theme block after the template stylesheet and pins the palette", () => {
+    const { container } = render(
+      <TemplateScreen
+        layout="<div>x</div>"
+        context={{}}
+        css=":root { --a: 1 }"
+        themeCss=':host { --a: 9 }'
+        dataTheme="dark"
+      />,
+    );
+    const shadow = shadowOf(container);
+    const styles = [...shadow.querySelectorAll("style")];
+    // Equal specificity → the LAST rule wins, so the test's palette must come last.
+    expect(styles.at(-1)?.getAttribute("data-tb-theme")).not.toBeNull();
+    const host = container.querySelector("[data-template-screen]") as HTMLElement;
+    expect(host.getAttribute("data-theme")).toBe("dark");
+    cleanup();
+  });
+
+  it("leaves data-theme off for «Авто» so the media query decides", () => {
+    const { container } = render(
+      <TemplateScreen layout="<div>x</div>" context={{}} css=":root { --a: 1 }" themeCss=":host { --a: 9 }" />,
+    );
+    const host = container.querySelector("[data-template-screen]") as HTMLElement;
+    expect(host.hasAttribute("data-theme")).toBe(false);
+    cleanup();
+  });
+});
