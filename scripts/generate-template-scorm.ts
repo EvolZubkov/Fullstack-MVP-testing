@@ -16,6 +16,12 @@
  *   npm run scorm:template -- corporate    # built-in id
  *   npm run scorm:template -- ./path/to/template-folder
  *   npm run scorm:template -- ./path/to/manifest.json
+ *   npm run scorm:template -- ./templates/certification --theme dark --theme-colors
+ *
+ * PRD-23 options:
+ *   --theme <light|dark|auto>  pin the palette the package opens in
+ *   --theme-colors             seed a foreign colour per palette, so the acceptance
+ *                              shows whether per-theme overrides reach the screen
  *
  * External templates (outside server/scorm/templates) are staged into the
  * registry under a temporary id for the duration of the export, then removed.
@@ -281,6 +287,36 @@ function buildParams(manifest: any): Record<string, unknown> {
   return params;
 }
 
+/** CLI flag with a value: `--theme dark`. */
+function flagValue(name: string): string | undefined {
+  const i = process.argv.indexOf(`--${name}`);
+  if (i === -1) return undefined;
+  const v = process.argv[i + 1];
+  return v && !v.startsWith("--") ? v : undefined;
+}
+
+/**
+ * PRD-23 acceptance seed. A themed template ships its own palettes, so an export
+ * with no overrides proves nothing about the printer — both palettes would simply
+ * be the template's own. `--theme-colors` therefore seeds an obviously foreign
+ * colour per palette: if the package paints THOSE, the per-theme block reached the
+ * screen; if the two differ when the palette changes, scoping works.
+ */
+function buildParamsByTheme(
+  manifest: any,
+): Record<string, Record<string, unknown>> | undefined {
+  if (process.argv.indexOf("--theme-colors") === -1) return undefined;
+  const themes: string[] = (manifest.themes || []).map((t: any) => t && t.id).filter(Boolean);
+  if (themes.length < 2) return undefined;
+  const colourKey = (manifest.params || []).find((p: any) => p.type === "color")?.key;
+  if (!colourKey) return undefined;
+  const seeded: Record<string, Record<string, unknown>> = {};
+  // Deep green vs bright cyan — neither occurs in the shipped templates.
+  const byTheme: Record<string, string> = { light: "150 80% 28%", dark: "185 100% 60%" };
+  for (const id of themes) if (byTheme[id]) seeded[id] = { [colourKey]: byTheme[id] };
+  return Object.keys(seeded).length > 0 ? seeded : undefined;
+}
+
 async function main() {
   const arg = process.argv[2] || "default";
   const resolved = resolveTemplate(arg);
@@ -291,6 +327,14 @@ async function main() {
       (manifest.capabilities && manifest.capabilities.questionTypes) || ["single", "multiple", "matching", "ranking"];
     const questions = buildQuestions(supportedTypes);
     const { pages, counts } = buildContentPages(manifest);
+
+    // PRD-23: what the package should paint with. Absent flags keep the previous
+    // behaviour exactly — a themeless export is byte-identical to before.
+    const paramsByTheme = buildParamsByTheme(manifest);
+    const themeSettings = {
+      ...(flagValue("theme") ? { theme: flagValue("theme") } : {}),
+      ...(paramsByTheme ? { paramsByTheme } : {}),
+    };
 
     const topic = { id: TOPIC_ID, name: "Демо-тема", description: "Моковая тема для приёмки шаблона", feedback: null, createdAt: new Date(), updatedAt: new Date() };
     const test = {
@@ -309,7 +353,7 @@ async function main() {
       published: true,
       status: "published",
       folderId: null,
-      designSettingsJson: { templateId: resolved.templateId, params: buildParams(manifest) },
+      designSettingsJson: { templateId: resolved.templateId, params: buildParams(manifest), ...themeSettings },
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -322,7 +366,7 @@ async function main() {
       sections,
       adaptiveSettings: null,
       contentPages: pages,
-      designSettings: { templateId: resolved.templateId, params: buildParams(manifest) },
+      designSettings: { templateId: resolved.templateId, params: buildParams(manifest), ...themeSettings },
       telemetry: null,
     };
 
