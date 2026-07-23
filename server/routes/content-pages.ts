@@ -50,11 +50,21 @@ type PlaceholderDefinition = {
   defaultRenderer?: string;
 };
 
+/** One `settings[]` declaration of a variant (PRD-22): a PROPERTY of the page. */
+type SettingDefinition = {
+  key: string;
+  type: string;
+  options?: string[];
+  default?: unknown;
+  required?: boolean;
+};
+
 type ContentTemplateEntry = {
   key: string;
   label?: string;
   kind?: "questions" | "router" | "summary" | "intro" | "info";
   placeholders?: PlaceholderDefinition[];
+  settings?: SettingDefinition[];
 };
 
 /**
@@ -170,6 +180,70 @@ function normalizeValuesForTemplate(
   }
 
   return { values, placeholderStyles, sanitizeDiagnostics };
+}
+
+/**
+ * Normalises the page's SETTINGS against the variant's `settings[]` (PRD-22).
+ *
+ * Kept apart from {@link normalizeValuesForTemplate} because settings obey their
+ * own rules: only declared keys are stored, values are coerced to the declared
+ * type, a declared `default` fills an absent value, and `text` settings are
+ * sanitised (they reach the layout as a caption, e.g. the «Далее» button).
+ *
+ * `sequence` values survive a variant that no longer declares the setting
+ * (FR-29): the caller passes the previously stored settings as `existing`, and
+ * an undeclared sequence identifier is carried over rather than dropped — an
+ * author who switches a page to another variant and back keeps its place in the
+ * sequence.
+ */
+function normalizeSettingsForTemplate(
+  incoming: Record<string, unknown> | undefined,
+  declared: SettingDefinition[] | undefined,
+  existing?: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const source = incoming ?? existing ?? {};
+
+  for (const def of declared ?? []) {
+    const raw = source[def.key];
+    let value: unknown = raw;
+
+    if (raw === undefined || raw === null || raw === "") {
+      if (def.default === undefined) continue;
+      value = def.default;
+    } else if (def.type === "number") {
+      const n = typeof raw === "number" ? raw : Number(raw);
+      if (!Number.isFinite(n)) continue;
+      value = n;
+    } else if (def.type === "boolean") {
+      value = raw === true || raw === "true";
+    } else if (def.type === "select") {
+      // A value outside the declared choices is dropped, not stored blindly.
+      if (Array.isArray(def.options) && !def.options.includes(String(raw))) continue;
+      value = String(raw);
+    } else if (def.type === "text" || def.type === "sequence") {
+      value = sanitizeHtmlWithDiagnostics(String(raw)).value;
+    }
+
+    out[def.key] = value;
+  }
+
+  // FR-29: keep a stored sequence identifier the current variant does not declare.
+  const declaredKeys = new Set((declared ?? []).map((d) => d.key));
+  for (const [key, value] of Object.entries(existing ?? {})) {
+    if (!declaredKeys.has(key) && !(key in out) && isSequenceKey(key)) out[key] = value;
+  }
+
+  return out;
+}
+
+/**
+ * Keys that carry a sequence identifier and therefore survive undeclared. The
+ * setting is identified by its stored key: the variant that declared it is gone,
+ * so its type declaration is unavailable at this point.
+ */
+function isSequenceKey(key: string): boolean {
+  return key === "sequenceId";
 }
 
 // ─── GET /api/tests/:id/content-pages/:pageId/preview-page ───────────────────
@@ -360,13 +434,14 @@ router.post("/:id/content-pages", requirePermission("tests.edit"), requireTestSc
     const test = await storage.getTest(testId);
     if (!test) return res.status(404).json({ error: "Test not found" });
 
-    const { topicId, position, mode, type, templateKey, valuesJson, autoAdvance, autoAdvanceDelayMs, sortOrder } = req.body as {
+    const { topicId, position, mode, type, templateKey, valuesJson, settingsJson, autoAdvance, autoAdvanceDelayMs, sortOrder } = req.body as {
       topicId?: string;
       position?: string;
       mode?: string;
       type?: string;
       templateKey?: string;
       valuesJson?: { values?: Record<string, unknown>; placeholderStyles?: Record<string, unknown> };
+      settingsJson?: Record<string, unknown>;
       autoAdvance?: boolean;
       autoAdvanceDelayMs?: number;
       sortOrder?: number;
@@ -399,6 +474,9 @@ router.post("/:id/content-pages", requirePermission("tests.edit"), requireTestSc
       values: sanitizeAllStringValues(valuesJson?.values),
       placeholderStyles: {},
     } as { values: Record<string, unknown>; placeholderStyles: Record<string, unknown> };
+    // PRD-22: settings live in their own column and are normalised against the
+    // variant's `settings[]`; an undeclared key never reaches the database.
+    let normalizedSettings: Record<string, unknown> = {};
     if (mode === "template" || (!mode && templateKey)) {
       const contentTemplates = await getTestContentTemplates(test, draftTemplateIdFrom(req));
       if (contentTemplates !== null) {
@@ -407,6 +485,7 @@ router.post("/:id/content-pages", requirePermission("tests.edit"), requireTestSc
           return res.status(422).json({ error: "templateKey not found in current template", field: "templateKey" });
         }
         normalizedValues = normalizeValuesForTemplate(valuesJson, ct.placeholders ?? []);
+        normalizedSettings = normalizeSettingsForTemplate(settingsJson, ct.settings);
       }
     }
 
@@ -425,6 +504,7 @@ router.post("/:id/content-pages", requirePermission("tests.edit"), requireTestSc
       templateKey: templateKey ?? null,
       sortOrder: sortOrder ?? 0,
       valuesJson: normalizedValues,
+      settingsJson: normalizedSettings,
       autoAdvance: autoAdvance ?? false,
       autoAdvanceDelayMs: autoAdvanceDelayMs ?? null,
     });
@@ -476,13 +556,14 @@ router.put("/:id/content-pages/:pageId", requirePermission("tests.edit"), requir
       return res.status(404).json({ error: "Content page not found" });
     }
 
-    const { topicId, position, mode, type, templateKey, valuesJson, autoAdvance, autoAdvanceDelayMs, sortOrder } = req.body as {
+    const { topicId, position, mode, type, templateKey, valuesJson, settingsJson, autoAdvance, autoAdvanceDelayMs, sortOrder } = req.body as {
       topicId?: string;
       position?: string;
       mode?: string;
       type?: string;
       templateKey?: string;
       valuesJson?: { values?: Record<string, unknown>; placeholderStyles?: Record<string, unknown> };
+      settingsJson?: Record<string, unknown>;
       autoAdvance?: boolean;
       autoAdvanceDelayMs?: number;
       sortOrder?: number;
@@ -506,19 +587,34 @@ router.put("/:id/content-pages/:pageId", requirePermission("tests.edit"), requir
     // PRD-7 S13.4-G18: collect what the sanitiser stripped so the UI can show
     // a per-placeholder warning banner. Empty -> nothing was removed.
     let sanitizeDiagnostics: SanitizeDiagnostics = {};
+    // PRD-22: settings are normalised whenever they are sent OR the variant
+    // changes — the latter re-runs defaults of the new variant and preserves the
+    // sequence identifier (FR-29).
+    let normalizedSettings: Record<string, unknown> | undefined;
     const effectiveMode = mode ?? existing.mode;
     const effectiveTemplateKey = templateKey !== undefined ? templateKey : existing.templateKey;
 
-    if (effectiveMode === "template" && effectiveTemplateKey && valuesJson?.values !== undefined) {
+    if (
+      effectiveMode === "template" &&
+      effectiveTemplateKey &&
+      (valuesJson?.values !== undefined || settingsJson !== undefined || templateKey !== undefined)
+    ) {
       const contentTemplates = await getTestContentTemplates(test, draftTemplateIdFrom(req));
       if (contentTemplates !== null) {
         const ct = contentTemplates.find((c) => c.key === effectiveTemplateKey);
         if (!ct) {
           return res.status(422).json({ error: "templateKey not found in current template", field: "templateKey" });
         }
-        const normalized = normalizeValuesForTemplate(valuesJson, ct.placeholders ?? []);
-        normalizedValues = { values: normalized.values, placeholderStyles: normalized.placeholderStyles };
-        sanitizeDiagnostics = normalized.sanitizeDiagnostics;
+        if (valuesJson?.values !== undefined) {
+          const normalized = normalizeValuesForTemplate(valuesJson, ct.placeholders ?? []);
+          normalizedValues = { values: normalized.values, placeholderStyles: normalized.placeholderStyles };
+          sanitizeDiagnostics = normalized.sanitizeDiagnostics;
+        }
+        normalizedSettings = normalizeSettingsForTemplate(
+          settingsJson,
+          ct.settings,
+          (existing.settingsJson ?? {}) as Record<string, unknown>,
+        );
       }
     } else if (valuesJson !== undefined) {
       const { values: cleaned, diagnostics } = sanitizeAllStringValuesWithDiagnostics(valuesJson.values);
@@ -538,6 +634,7 @@ router.put("/:id/content-pages/:pageId", requirePermission("tests.edit"), requir
     if (valuesJson !== undefined) {
       updates.valuesJson = normalizedValues ?? { values: valuesJson.values ?? {}, placeholderStyles: {} };
     }
+    if (normalizedSettings !== undefined) updates.settingsJson = normalizedSettings;
 
     const updated = await storage.updateContentPage(pageId, updates as Parameters<typeof storage.updateContentPage>[1]);
     // sanitizeDiagnostics is a sibling field, not persisted - the UI consumes

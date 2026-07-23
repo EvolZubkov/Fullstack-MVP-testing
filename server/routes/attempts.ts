@@ -70,6 +70,10 @@ async function flowPayload(src: TestDataSource, test: Test) {
       mode: p.mode,
       templateKey: p.templateKey,
       valuesJson: p.valuesJson,
+      // PRD-22: page PROPERTIES (sequence identifier, «Далее» caption, background).
+      // The SCORM package has shipped them since FR-20; without them here the web
+      // run computed no sequence at all, so a gallery lost its indicator.
+      settingsJson: p.settingsJson,
       autoAdvance: p.autoAdvance,
       autoAdvanceDelayMs: p.autoAdvanceDelayMs,
     })),
