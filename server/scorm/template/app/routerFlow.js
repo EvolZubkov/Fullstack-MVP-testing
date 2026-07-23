@@ -117,6 +117,13 @@
     // wrapper's «Далее». Remove that nav so the run matches the «Структура» preview.
     var nav = app.querySelector(".navigation");
     if (nav && nav.parentNode) nav.parentNode.removeChild(nav);
+    // A layout free to name its footer otherwise (`.gallery__nav`) would keep a
+    // live «Далее» next to the cards and let the learner walk past the hub, so
+    // the button is also dropped by its `data-nav` contract.
+    var strayNext = typeof findScreenNavButton === "function"
+      ? findScreenNavButton(app, "next")
+      : null;
+    if (strayNext && strayNext.parentNode) strayNext.parentNode.removeChild(strayNext);
     // Cards (and the «Завершить» action) live INSIDE the content wrapper's
     // page-content slot — the SAME DOM the preview builds (buildRouterCards into
     // page-content) — so the run and the structure preview look identical.

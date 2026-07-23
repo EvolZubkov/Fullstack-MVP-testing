@@ -477,12 +477,30 @@
     renderContentPage(page, manifest.contentTemplates || []);
     // Replace the content page's default «Далее» (which advances pageSequence)
     // with post-results navigation: «Далее» through the pages, then «Завершить».
+    // The button is found by its `data-nav` contract, not by a `.navigation`
+    // wrapper: a layout may name its footer anything (the certification gallery
+    // uses `.gallery__nav`), and keying on the class left such a page wired to
+    // the ordinary page advance — which walks out of the post-results chain.
     var app = document.getElementById("app");
+    var last = idx >= pages.length - 1;
     var nav = app ? app.querySelector(".navigation") : null;
     if (nav) {
-      nav.innerHTML = idx >= pages.length - 1
+      nav.innerHTML = last
         ? '<button class="btn" data-action="test-finish" onclick="finishAndClose()">Завершить тест</button>'
         : '<button class="btn" data-nav="next" onclick="nextPostResults()">Далее</button>';
+      return;
+    }
+    var btn = app && typeof findScreenNavButton === "function"
+      ? findScreenNavButton(app, "next")
+      : null;
+    if (!btn) return;
+    // The layout's own button keeps its place and styling; only its wiring and
+    // (on the last page) its label change.
+    btn.onclick = last ? finishAndClose : nextPostResults;
+    if (last) {
+      btn.textContent = "Завершить тест";
+      btn.removeAttribute("data-nav");
+      btn.setAttribute("data-action", "test-finish");
     }
   }
 

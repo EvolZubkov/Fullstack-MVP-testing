@@ -21,7 +21,12 @@
  * @returns {object|null}
  */
 function findContentTemplate(page, contentTemplates) {
-  return TBTemplate.findContentTemplate(page, contentTemplates);
+  // PRD-22 (plan Э5): a page whose variant this template does not declare renders
+  // through the kind's DEFAULT variant instead of the untemplated fallback card —
+  // the binding in the database is untouched, so the author still decides via
+  // «Сменить вариант». Returns null only when the template declares no variant of
+  // the kind at all.
+  return TBTemplate.resolveContentTemplate(page, contentTemplates).template;
 }
 
 /**
@@ -246,77 +251,83 @@ function renderSectionIntro(page) {
   return true;
 }
 
+
 /**
- * Renders a gallery card page (kind `gallery`) via its own layout variant
- * (text / media / list). Header + subheader + card body + the round pill row +
- * Назад/Далее. The pills are a per-page indicator: the two settings
- * (pillsTotal, pillCurrent) are expanded here into a Core-prepared `pills` array
- * the layout renders with `{{#each}}` (the DSL cannot loop over a raw count).
- * «Назад» (shown only when the page's `showBack` setting is on) steps the page
- * sequence back via goToPageSequenceIndex; «Далее» advances it as usual. Each
- * card is a normal content page — no gallery controller / grouping.
+ * PRD-22 FR-36: resolves relative links in author values against the template's
+ * assets, which the package stores under `template/`. Without a base a link like
+ * `images/diagram.png` would resolve next to index.html, where nothing lives.
+ * @param {object} values  Author values of a content page
+ * @returns {object} the same values with relative src/href prefixed
  */
-function renderGalleryPage(page, contentTemplate) {
-  var layouts = (typeof state !== "undefined" && state) ? state.templateLayouts : null;
-  var layout = layouts && contentTemplate ? layouts[contentTemplate.key] : null;
+function withTemplateAssets(values) {
   var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
-  if (!layout || !TB || !TB.renderScreenInto) return false;
+  if (!TB || !TB.withTemplateAssetBaseInValues) return values;
+  return TB.withTemplateAssetBaseInValues(values, "template/");
+}
 
-  var values = getPageValues(page) || {};
-  var total = parseInt(values.pillsTotal, 10);
-  if (!(total > 0)) total = 1;
-  var current = parseInt(values.pillCurrent, 10) || 1;
-  var pills = [];
-  for (var i = 1; i <= total; i++) {
-    pills.push({ statusClass: i === current ? "is-current" : "" });
+/**
+ * PRD-22: the `page.*` context of a content page — navigation dots of its
+ * sequence plus the back affordance. Sequences are computed by the SHARED core
+ * from the test's structure, so the LMS package, the web host and the preview
+ * count identically; `canGoBack` is host state and is supplied here, because only
+ * the runtime knows whether there is a screen to return to (in router mode the
+ * first page of a topic returns to the hub).
+ * @param {object} page  A content page from TEST_DATA.contentPages
+ * @returns {object} `{ dots, dotIndex, dotsTotal, canGoBack }`
+ */
+function buildPageRenderContext(page) {
+  var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
+  var canGoBack =
+    (typeof canNavigateBack === "function" && canNavigateBack()) ||
+    (typeof state !== "undefined" && state && (state.currentPageIndex || 0) > 0) ||
+    (typeof RouterFlow !== "undefined" && RouterFlow.isRouterMode && RouterFlow.isRouterMode());
+  if (!TB || !TB.buildPageContextFor || !page) {
+    return { dots: [], dotIndex: 0, dotsTotal: 0, canGoBack: !!canGoBack };
   }
+  var pages = (typeof TEST_DATA !== "undefined" && TEST_DATA.contentPages) ? TEST_DATA.contentPages : [];
+  return TB.buildPageContextFor(page.id, pages, { canGoBack: !!canGoBack });
+}
 
-  var img = values.image;
-  var imageUrl = img && typeof img === "object" ? (img.url || "") : (img || "");
-  var bgRaw = values.backgroundImage;
-  var slideBgUrl = bgRaw && typeof bgRaw === "object" ? (bgRaw.url || "") : (bgRaw || "");
+/**
+ * Applies the page's `backgroundImage` setting (PRD-22 FR-27) to the screen root.
+ * A background is a page PROPERTY, not content: it never goes through a
+ * placeholder region, so the core applies it directly.
+ * @param {Element} app   The #app element the screen was rendered into
+ * @param {object}  page  A content page from TEST_DATA.contentPages
+ */
+function applyPageBackground(app, page) {
+  var settings = (page && (page.settings || page.settingsJson)) || {};
+  var raw = settings.backgroundImage;
+  var url = raw && typeof raw === "object" ? (raw.url || "") : (raw || "");
+  if (!url) return;
+  var root = app.firstElementChild || app;
+  root.classList.add("has-slide-bg");
+  root.style.backgroundImage = 'url("' + String(url).replace(/"/g, "%22") + '")';
+}
 
-  var context = {
-    design: (typeof scormDesignContext === "function") ? scormDesignContext() : {},
-    course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") },
-    gallery: {
-      header: values.header != null ? String(values.header) : "",
-      subheader: values.subheader != null ? String(values.subheader) : "",
-      imageUrl: imageUrl,
-      pills: pills,
-      showBack: values.showBack === true || values.showBack === "true",
-      nextLabel: (values.nextLabel != null && values.nextLabel !== "") ? String(values.nextLabel) : "Далее"
-    }
-  };
-
-  var app = document.getElementById("app");
-  app.innerHTML = "";
-  // cardText is sanitized rich text → injected raw via the slot (same trust model
-  // as info-page bodies / the section-intro instruction). Rendered directly into
-  // #app (no wrapper) so the fixed-stage flex chain (.tb-pad > .gallery) applies.
-  var cardText = values.cardText != null ? String(values.cardText) : "";
-  TB.renderScreenInto(app, { layout: layout, context: context, slots: { cardText: cardText } });
-
-  // Per-slide background image (variant-slide setting): applied to the slide root.
-  if (slideBgUrl) {
-    var slideEl = app.querySelector(".gallery");
-    if (slideEl) {
-      slideEl.classList.add("has-slide-bg");
-      slideEl.style.backgroundImage = 'url("' + String(slideBgUrl).replace(/"/g, "%22") + '")';
-    }
+/**
+ * Finds the layout's OWN navigation button for a direction (`next` / `prev`).
+ *
+ * The contract is the `data-nav` attribute, not the wrapper's class: a layout is
+ * free to name its footer whatever it likes (`.navigation`, `.gallery__nav`, …),
+ * and the certification gallery does exactly that. Keying the lookup on
+ * `.navigation` left such a layout with a dead «Далее».
+ *
+ * Buttons INSIDE the page-content slot belong to the author's content, not to the
+ * screen chrome, so they are skipped — a stray `data-nav` in pasted markup must
+ * not become the screen's navigation.
+ * @param {Element} app  The #app element the screen was rendered into
+ * @param {string}  dir  Navigation direction: `"next"` or `"prev"`
+ * @returns {Element|null}
+ */
+function findScreenNavButton(app, dir) {
+  var nodes = app.querySelectorAll('[data-nav="' + dir + '"]');
+  for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i];
+    if (node.closest && node.closest('[data-slot="page-content"]')) continue;
+    return node;
   }
-
-  var nextBtn = app.querySelector('[data-nav="next"]');
-  if (nextBtn) nextBtn.onclick = function () {
-    if (typeof advancePageSequence === "function") advancePageSequence();
-  };
-  var prevBtn = app.querySelector('[data-nav="prev"]');
-  if (prevBtn) prevBtn.onclick = function () {
-    // «Назад» follows the recorded nav route (same as section-intro); the router
-    // hub fallback covers a gallery that is a topic chunk's first page.
-    if (typeof navigateBackOrPrevPage === "function") navigateBackOrPrevPage();
-  };
-  return true;
+  return null;
 }
 
 function renderContentPage(page, contentTemplates) {
@@ -332,9 +343,10 @@ function renderContentPage(page, contentTemplates) {
   if (page && page.kind === "intro" && renderSectionIntro(page)) return;
 
   var contentTemplate = findContentTemplate(page, contentTemplates);
-  // Gallery pages render via their own layout (header/subheader/card + pills + Назад/Далее).
-  if (contentTemplate && contentTemplate.kind === "gallery" && renderGalleryPage(page, contentTemplate)) return;
-  var values = getPageValues(page);
+  // PRD-22 FR-36: relative links in author content point at the TEMPLATE's files,
+  // which live under `template/` inside the package. The stored value is
+  // host-independent, so the base is applied here, at render time.
+  var values = withTemplateAssets(getPageValues(page));
   var placeholderStyles = getPagePlaceholderStyles(page);
   var skeleton = buildContentPageSkeleton(page, contentTemplate);
 
@@ -359,15 +371,28 @@ function renderContentPage(page, contentTemplates) {
   if (layout && TB && TB.renderScreenInto) {
     app.innerHTML = "";
     // Mount directly into #app (no wrapper) so .tb-pad > .layout-content-wrap fills
-    // the fixed stage and the bottom nav anchors — mirrors renderGalleryPage.
+    // the fixed stage and the bottom nav anchors.
     TB.renderScreenInto(app, {
       layout: layout,
-      context: { course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") } },
+      context: {
+        course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") },
+        // PRD-22: navigation dots of the page sequence, computed by the shared
+        // core from the structure — the author supplies only the identifier.
+        // A layout without an indicator simply ignores the block.
+        page: buildPageRenderContext(page)
+      },
       slots: { "page-content": skeleton }
     });
     host = app.querySelector('[data-slot="page-content"]') || app;
-    var navBtn = app.querySelector('.navigation [data-nav="next"]');
+    var navBtn = findScreenNavButton(app, "next");
     if (navBtn) navBtn.onclick = function () { if (typeof advancePageSequence === "function") advancePageSequence(); };
+    // «Назад» is optional: only layouts that render it get it wired, and it
+    // follows the recorded nav route (router hub fallback included).
+    var prevBtn = findScreenNavButton(app, "prev");
+    if (prevBtn) prevBtn.onclick = function () {
+      if (typeof navigateBackOrPrevPage === "function") navigateBackOrPrevPage();
+    };
+    applyPageBackground(app, page);
   } else {
     app.innerHTML = skeleton;
     host = app;

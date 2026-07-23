@@ -59,6 +59,22 @@
    * screen with default's CSS. No-op when there are none (the package then ships no
    * template-default/).
    */
+  /**
+   * PRD-22 FR-36: a layout may reference the template's own files by a RELATIVE
+   * path (`<img src="assets/images/logo.png">`), exactly as they sit in the ZIP.
+   * Inside the package those files live under `template/` while the page itself
+   * is `index.html` in the root, so an untouched relative path resolves to
+   * nothing. The base is applied here, once per loaded layout, using the SHARED
+   * rewriter — the same one the web host and the content pipeline use.
+   * @param {string} html  Layout markup as shipped in the package
+   * @param {string} base  Package directory of the template files
+   * @returns {string}
+   */
+  function withAssetBase(html, base) {
+    var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
+    return (TB && TB.withTemplateAssetBase) ? TB.withTemplateAssetBase(html, base) : html;
+  }
+
   function loadFallbackTemplate() {
     var ds = (typeof TEST_DATA !== "undefined" && TEST_DATA.designSettings) || null;
     var fallbackLayoutKeys = (ds && ds.fallbackLayoutKeys) || [];
@@ -73,7 +89,7 @@
             var rel = layouts[key];
             if (!rel) return null;
             return fetchText("template-default/" + rel)
-              .then(function (html) { return [key, html]; })
+              .then(function (html) { return [key, withAssetBase(html, "template-default/")]; })
               .catch(function () { return null; });
           })
         ).then(function (entries) {
@@ -139,7 +155,7 @@
           layoutKeys.map(function (key) {
             return fetchText("template/" + refs[key])
               .then(function (html) {
-                return [key, html];
+                return [key, withAssetBase(html, "template/")];
               })
               .catch(function () {
                 return [key, ""];

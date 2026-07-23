@@ -340,6 +340,15 @@ export function buildTestJson(data: ExportData): string {
       for (const [k, v] of Object.entries(values)) {
         sanitizedValues[k] = typeof v === "string" ? sanitizeHtml(v) : v;
       }
+      // PRD-22 FR-30: page SETTINGS travel with the page. Without this the LMS
+      // package loses the sequence identifier (no navigation dots) and the media
+      // packer never sees the background image, leaving a dead link to /uploads.
+      const rawSettings = (page.settingsJson ?? {}) as Record<string, unknown>;
+      const sanitizedSettings: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(rawSettings)) {
+        sanitizedSettings[k] = typeof v === "string" ? sanitizeHtml(v) : v;
+      }
+
       return {
         id: page.id,
         topicId: page.topicId,
@@ -355,6 +364,7 @@ export function buildTestJson(data: ExportData): string {
         sortOrder: page.sortOrder,
         values: sanitizedValues,
         placeholderStyles: rawValues.placeholderStyles ?? {},
+        settings: sanitizedSettings,
         autoAdvance: page.autoAdvance,
         autoAdvanceDelayMs: page.autoAdvanceDelayMs,
       };
