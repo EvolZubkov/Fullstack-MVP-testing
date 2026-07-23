@@ -24,6 +24,12 @@ const { storageMock } = vi.hoisted(() => ({
     getScormAttempt: vi.fn(),
     getScormPackage: vi.fn(),
     // Object-level scope resolution (author owner/grant paths).
+    // PRD-2/PRD-5: analytics recomputes scale contributions and indicators from
+    // the test's CURRENT config, so `loadScoringConfig` reads these three. Absent
+    // stubs made every detail route answer 500 (`source.getScales is not a function`).
+    getScales: vi.fn().mockResolvedValue([]),
+    getQuestionMeasurements: vi.fn().mockResolvedValue([]),
+    getResultVariables: vi.fn().mockResolvedValue([]),
     getTestIdsByOwner: vi.fn().mockResolvedValue([]),
     getUserTestGrants: vi.fn().mockResolvedValue([]),
   },
