@@ -10,7 +10,10 @@ psychoHash); детали схемы импорта — на этапе PRD
 [PRD-10 Градуированная оценка](./prd-10/graded-answer-scoring.md),
 [PRD-11 Квоты выдачи по тегам](./prd-11/tag-draw-quotas.md),
 [PRD-15 Владение контентом и снапшоты](./prd-15/content-ownership.md),
-[PRD-17 Варианты выдачи](./prd-17/question-set-variants.md)
+[PRD-17 Варианты выдачи](./prd-17/question-set-variants.md),
+[PRD-24 Пороги прохождения по вариантам](./prd-24/variant-pass-thresholds.md)
+(источник данных: пин выданного варианта в попытке; отчёт «проходимость по вариантам» —
+здесь, D-9 PRD-24)
 
 ---
 
