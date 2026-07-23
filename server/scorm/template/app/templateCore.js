@@ -89,6 +89,36 @@
     });
   }
 
+  /**
+   * PRD-23: paints a themed template. The per-theme colours go in as a stylesheet
+   * appended LAST (a media query cannot scope inline custom properties, and the
+   * dark value must apply only under the dark palette), and the author's pinned
+   * palette goes on `<html data-theme>`. «Авто» leaves the attribute off so the
+   * template's own `prefers-color-scheme` rules decide.
+   *
+   * No-ops without the shared bundle: printing is not something to duplicate by
+   * hand here, and a package built by this codebase always ships it.
+   * @param {object} design    TEST_DATA.designSettings
+   * @param {object} manifest  Template manifest (params[] + themes[])
+   */
+  function applyThemeCss(design, manifest) {
+    if (typeof document === "undefined") return;
+    if (!root.TBTemplate || typeof root.TBTemplate.buildTemplateThemeCss !== "function") return;
+    var css = root.TBTemplate.buildTemplateThemeCss(design, manifest);
+    var pinned = root.TBTemplate.sceneThemeAttribute(design, manifest);
+    var el = document.documentElement;
+    if (pinned) el.setAttribute("data-theme", pinned);
+    else el.removeAttribute("data-theme");
+    if (!css) return;
+    var style = document.getElementById("tb-theme-vars");
+    if (!style) {
+      style = document.createElement("style");
+      style.id = "tb-theme-vars";
+      (document.head || el).appendChild(style);
+    }
+    style.textContent = css;
+  }
+
   // ─── textFit ──────────────────────────────────────────────────────────────
 
   /**
@@ -318,6 +348,16 @@
     return {};
   }
 
+  /** The whole baked design settings — PRD-23 reads `theme`/`paramsByTheme` too. */
+  function _readDesignSettings() {
+    try {
+      if (typeof TEST_DATA !== "undefined" && TEST_DATA.designSettings) {
+        return TEST_DATA.designSettings;
+      }
+    } catch (_) {}
+    return {};
+  }
+
   root.TestBuilder = {
     /** Read-only context for template scripts. */
     context: {
@@ -351,11 +391,23 @@
     /**
      * Called by bootstrap once TEST_DATA is available and the design template
      * manifest has been loaded/embedded.
-     * @param {Array} manifestParams  Param definitions from the template manifest
+     * @param {Array}  manifestParams  Param definitions from the template manifest
+     * @param {object} [manifest]      Whole manifest — PRD-23 needs `themes[]` to
+     *                                 know whether colours split per palette.
      */
-    _init: function (manifestParams) {
+    _init: function (manifestParams, manifest) {
+      var design = _readDesignSettings();
+      var mf = manifest || { params: manifestParams || [] };
       _contextParams = _readParams();
-      applyCssVarsToRoot(_contextParams, manifestParams || []);
+      // A themed template's colours must NOT go in as inline custom properties:
+      // inline beats every stylesheet, so the dark palette would never get its
+      // turn. `baseParams` keeps only what paints the same in both palettes.
+      var inlineParams = _contextParams;
+      if (root.TBTemplate && typeof root.TBTemplate.baseParams === "function") {
+        inlineParams = root.TBTemplate.baseParams(design, mf);
+      }
+      applyCssVarsToRoot(inlineParams, manifestParams || []);
+      applyThemeCss(design, mf);
     },
 
     /** Pure helpers exposed for unit testing. */
@@ -363,6 +415,7 @@
       resolvePath: resolvePath,
       buildCssVarDeclarations: buildCssVarDeclarations,
       applyCssVarsToRoot: applyCssVarsToRoot,
+      applyThemeCss: applyThemeCss,
       applyTextFit: applyTextFit,
       isOverflowing: isOverflowing,
       renderPlaceholderHtml: renderPlaceholderHtml,

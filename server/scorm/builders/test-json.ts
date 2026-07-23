@@ -18,6 +18,10 @@ interface DesignSettingsExport {
   templateVersion?: string;
   templateApiVersion?: string;
   params: Record<string, unknown>;
+  /** PRD-23: palette the author pinned (`light`/`dark`/`auto`). */
+  theme?: string;
+  /** PRD-23: colour overrides per declared palette. */
+  paramsByTheme?: Record<string, Record<string, unknown>>;
   /**
    * System variant kinds (`start`/`results`) the active template does NOT declare
    * in its `contentTemplates`, so the runtime must render them from the bundled
@@ -324,6 +328,12 @@ export function buildTestJson(data: ExportData): string {
       templateVersion: data.designSettings.templateVersion,
       templateApiVersion: data.designSettings.templateApiVersion,
       params: data.designSettings.params,
+      // PRD-23: omitted for a template without themes, so a themeless package keeps
+      // exactly the TEST_DATA shape it had before.
+      ...(data.designSettings.theme ? { theme: data.designSettings.theme } : {}),
+      ...(data.designSettings.paramsByTheme
+        ? { paramsByTheme: data.designSettings.paramsByTheme }
+        : {}),
       ...(data.designSettings.fallbackLayoutKeys && data.designSettings.fallbackLayoutKeys.length > 0
         ? { fallbackLayoutKeys: data.designSettings.fallbackLayoutKeys }
         : {}),

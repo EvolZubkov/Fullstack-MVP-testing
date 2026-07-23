@@ -24,7 +24,7 @@
   });
 
   document.addEventListener("DOMContentLoaded", function () {
-    if (tb._init) tb._init(window.PRD1_TEMPLATE_MANIFEST ? window.PRD1_TEMPLATE_MANIFEST.params : []);
+    if (tb._init) tb._init(window.PRD1_TEMPLATE_MANIFEST ? window.PRD1_TEMPLATE_MANIFEST.params : [], window.PRD1_TEMPLATE_MANIFEST);
     updateProgress();
   });
 })();

@@ -169,7 +169,11 @@
           return loadFallbackTemplate().then(function () {
             return loadRendererPlugins(state.templateManifest).then(function () {
               if (root.TestBuilder && root.TestBuilder._init) {
-                root.TestBuilder._init((state.templateManifest && state.templateManifest.params) || []);
+                root.TestBuilder._init(
+                  (state.templateManifest && state.templateManifest.params) || [],
+                  // PRD-23: the whole manifest, so `themes[]` reaches the painter.
+                  state.templateManifest
+                );
               }
               return state.templateManifest;
             });
