@@ -966,7 +966,7 @@ describe("<SettingsSection /> — правило «По вариантам» (PR
     expect(screen.getByText("Вариант 2")).toBeInTheDocument();
   });
 
-  it("shows the variant's attainable points next to an absolute threshold", () => {
+  it("hints the attainable points an absolute threshold is capped by", () => {
     const model = variantsModel(
       { "top-1": { source: "by_variant", byForm: { v1: { type: "absolute", value: 2 }, v2: { type: "percent", value: 60 } } } },
       { scoring: { defaultQuestionPoints: null, questionOverrides: [{ questionId: "q1", points: 5, scoringJson: null, difficulty: null, pinnedContentHash: null }] } },
@@ -974,7 +974,18 @@ describe("<SettingsSection /> — правило «По вариантам» (PR
     render(<SettingsSection model={model} updateModel={() => {}} />);
     openPane();
     // q1 overridden to 5 + q2 at the system default 1 → 6, not "2 questions"
-    expect(screen.getByText(/Вариант 1: макс\. 6 баллов/)).toBeInTheDocument();
+    expect(screen.getByText(/макс\. 6 баллов/)).toBeInTheDocument();
+  });
+
+  it("spells the maxima out per variant only when they differ", () => {
+    const model = variantsModel(
+      { "top-1": { source: "by_variant", byForm: { v1: { type: "absolute", value: 2 }, v2: { type: "absolute", value: 1 } } } },
+      { scoring: { defaultQuestionPoints: null, questionOverrides: [{ questionId: "q1", points: 5, scoringJson: null, difficulty: null, pinnedContentHash: null }] } },
+    );
+    render(<SettingsSection model={model} updateModel={() => {}} />);
+    openPane();
+    // v1 = q1(5) + q2(1) = 6, v2 = q3(1) = 1
+    expect(screen.getByText(/Вариант 1 — 6, Вариант 2 — 1/)).toBeInTheDocument();
   });
 
   it("patches only the edited variant's threshold", () => {

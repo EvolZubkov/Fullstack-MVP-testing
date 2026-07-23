@@ -348,11 +348,18 @@
   font: var(--ou-text-body-s); font-weight: 500; color: var(--ou-fg-default);
   white-space: nowrap;
 }
-/* Field cells inside the grid: label sits inline before the control (как detail-inner). */
+/* Field cells inside the grid: label sits inline before the control (как detail-inner).
+   DS `.ou-select` is a flex COLUMN (label above the trigger) and renders its label
+   inside itself as `.ou-field__lbl`, so the row layout is applied to the control
+   itself — not to a wrapper — otherwise «Тип» stacks above and breaks the grid rows. */
 .tb-pass-table__variants .ou-formfield {
   display: inline-flex; flex-direction: row; align-items: center;
   gap: var(--ou-space-2); margin-bottom: 0; min-width: 0;
 }
+.tb-pass-table__variants .ou-select {
+  flex-direction: row; align-items: center; gap: var(--ou-space-2);
+}
+.tb-pass-table__variants .ou-field__lbl,
 .tb-pass-table__variants .ou-formfield__lbl {
   font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0; flex-shrink: 0;
 }

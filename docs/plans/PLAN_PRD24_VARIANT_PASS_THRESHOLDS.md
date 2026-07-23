@@ -657,10 +657,12 @@ it("rejects a by_variant absolute threshold above the variant's max points (PRD-
 });
 ```
 
-(`makeModel` — существующий хелпер файла; при отсутствии `maxPoints`/`formSet` в фабрике —
-расширить её опции. Максимум варианта считать как `questionIds.length` при отсутствии
-per-question points в модели редактора — редактор не хранит поштучные цены, поэтому
-верхняя граница = число вопросов варианта, как и у секции сегодня.)
+(`makeModel` — существующий хелпер файла; при отсутствии `formSet` в фабрике — расширить
+её опции. Максимум варианта считается ТОЧНО: `resolveEffectiveScoring` из
+`@shared/scoring/effective-scoring` по цепочке override -> умолчание секции -> умолчание
+теста -> системная 1. Все звенья есть в модели: `model.scoring.questionOverrides`,
+`section.defaultPoints`, `model.scoring.defaultQuestionPoints`; `contentHash` влияет только
+на флаг `stale`, не на цену.)
 
 - [ ] **Step 7: Запустить — падают**
 
@@ -703,7 +705,7 @@ Expected: FAIL.
       }
       if (entry.type === "absolute") {
         const form = forms.find((f) => f.id === formId)!;
-        const variantMax = form.questionIds.length; // editor upper bound: 1 pt/question
+        const variantMax = variantMaxPoints(model, section, form); // Σ эффективных цен варианта
         if (entry.value > variantMax) {
           errors.push({ field: `passRules.byTopic[${topicId}].byForm[${formId}].value`, code: "range",
             message: `Порог варианта (${entry.value}) не может превышать макс. баллов варианта (${variantMax}).`, severity: "error" });
@@ -1043,9 +1045,10 @@ git commit -m "docs(prd24): mark variant pass thresholds delivered"
 
 - **Проброс, а не новая логика.** Любой разбор `source === "by_variant"` ВНЕ `resolveTopicRule`
   (кроме манифеста §5.4, редактора и Excel — там это неизбежно) — ошибка проектирования.
-- **Максимум варианта.** В веб-грейдинге и манифесте — через эффективную цену
-  (`shared/scoring/effective-scoring`), т.к. цена — свойство теста (PRD-15 блок D). В редакторе
-  верхняя граница = число вопросов варианта (редактор не хранит поштучные цены).
+- **Максимум варианта.** Везде через эффективную цену (`shared/scoring/effective-scoring`),
+  т.к. цена — свойство теста (PRD-15 блок D). Это касается и редактора: цепочка цен целиком
+  доступна из модели (`scoring.questionOverrides` + умолчания секции/теста), как её уже
+  считает вкладка «Оценка».
 - **`suspend_data`.** Новое поле `formId` в состоянии рантайма читается под guard — старое
   состояние без пина даёт `null` → деградация, не падение.
 - **Порядок листов Excel.** Пороги привязываются к номерам ПОСЛЕ сборки `form_set_json`.
