@@ -41,6 +41,12 @@ export type TestListEntry = {
   createdAt?: string | Date | null;
   /** PRD-15 FR-12: publication state for the "Есть изменения" badge / action. */
   publicationState?: "draft" | "published" | "published_with_changes" | "archived";
+  /**
+   * PRD-22 (plan Э6): content pages bound to a variant the test's design template
+   * no longer declares. They still render — through a substitute — so nothing in
+   * the run says so; the list is where the author learns a decision is pending.
+   */
+  unmappedPageCount?: number;
 };
 
 export type FolderEntry = {

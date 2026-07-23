@@ -391,3 +391,37 @@ describe("<TestsListPage /> — empty state", () => {
     expect(screen.getByTestId("tests-list-empty-new-test")).toBeInTheDocument();
   });
 });
+
+// ─── PRD-22 (plan Э6): pages needing a variant mapping ────────────────────────
+
+describe("<TestsListPage /> — unmapped-page mark", () => {
+  it("marks a test whose pages need mapping and opens «Структура» on click", async () => {
+    mockMany({
+      "/api/tests": [buildApiTestRow({ unmappedPageCount: 3 })],
+      "/api/test-folders": [],
+    });
+    renderPage();
+    await waitFor(() => screen.getByText("Основы информационной безопасности"));
+
+    // A bare pictogram — the count is in the tooltip, not on screen.
+    const mark = screen.getByTestId("test-unmapped-t-1");
+    expect(mark).toHaveTextContent("");
+    expect(mark).toHaveAttribute("title", expect.stringContaining("Страниц с недоступным вариантом: 3"));
+
+    // The editor Drawer opens on «Структура», where the mapping is made — the row
+    // click alone would land the author on «Состав».
+    fireEvent.click(mark);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Структура/ })).toHaveAttribute("aria-selected", "true"));
+  });
+
+  it("shows no mark when nothing needs mapping", async () => {
+    mockMany({
+      "/api/tests": [buildApiTestRow({ unmappedPageCount: 0 })],
+      "/api/test-folders": [],
+    });
+    renderPage();
+    await waitFor(() => screen.getByText("Основы информационной безопасности"));
+
+    expect(screen.queryByTestId("test-unmapped-t-1")).toBeNull();
+  });
+});

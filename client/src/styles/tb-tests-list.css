@@ -59,6 +59,31 @@
 /* PRD-15 FR-12: stacked status tags (Опубликован + Есть изменения). */
 .tb-status-stack { display: flex; flex-direction: column; gap: var(--ou-space-1); align-items: flex-start; }
 
+/* Status tag + the PRD-22 «недоступный вариант» pictogram share ONE line — the
+   icon must not wrap below the status. */
+.tb-status-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  flex-wrap: nowrap;
+}
+
+/* PRD-22: pages bound to a variant the design template no longer declares. A bare
+   warning pictogram (no chip, no visible count — the count is in the tooltip). It
+   still opens «Структура», where the mapping is made. */
+.tb-unmapped-mark {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ou-warning-default);
+  cursor: pointer;
+  flex: 0 0 auto;
+  line-height: 0;
+}
+.tb-unmapped-mark:hover { color: var(--ou-warning-strong, var(--ou-warning-default)); }
+
 /* ─── Toolbar (search + sort) ────────────────────────────────────────────── */
 .tb-tests-list .toolbar {
   display: flex; align-items: center; gap: var(--ou-space-2);
