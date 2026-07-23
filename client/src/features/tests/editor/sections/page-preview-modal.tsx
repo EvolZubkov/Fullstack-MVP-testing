@@ -18,6 +18,7 @@ import { useMemo } from "react";
 import { Banner, Button, ModalDialog } from "@universityrt/ui-kit";
 import { TemplateScreen } from "@/components/template-screen";
 import { buildContentPageScreen, buildScreenInputs, type PreviewDemoDataset } from "@shared/template/preview-context";
+import type { SequencePlacement } from "@shared/template/page-sequences";
 import { buildSectionIntroContext } from "@shared/template/result-context";
 import { buildTemplateCssVars } from "@shared/template/params-css";
 import { useTemplateBundle } from "./use-template-bundle";
@@ -33,6 +34,8 @@ export interface PagePreviewPage {
   topicId?: string | null;
   templateKey?: string | null;
   valuesJson?: unknown;
+  /** PRD-22 page settings — the `page.*` properties the layout binds (e.g. `nextLabel`). */
+  settingsJson?: Record<string, unknown> | null;
 }
 
 export type PagePreviewModalProps = {
@@ -65,11 +68,26 @@ export type PagePreviewModalProps = {
     /** Per-section data for the «Введение раздела» preview (topic name + count). */
     sections?: Array<{ topicId: string; topicName: string; questionCount: number }>;
   };
+  /**
+   * PRD-22: the page's place in its sequence, computed by the editor over the whole
+   * test. Supplied ⇒ the preview shows the navigation indicator the learner sees;
+   * absent ⇒ none, since a single page cannot imply a sequence.
+   */
+  sequencePlacement?: SequencePlacement | null;
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function PagePreviewModal({ open, onClose, templateId, params, page, pageTitle, realData }: PagePreviewModalProps) {
+export function PagePreviewModal({
+  open,
+  onClose,
+  templateId,
+  params,
+  page,
+  pageTitle,
+  realData,
+  sequencePlacement,
+}: PagePreviewModalProps) {
   const bundleQuery = useTemplateBundle(templateId, open);
   const bundle = bundleQuery.data;
 
@@ -172,6 +190,8 @@ export function PagePreviewModal({ open, onClose, templateId, params, page, page
       route,
       templateKey: page.templateKey ?? undefined,
       values,
+      settings: page.settingsJson ?? null,
+      sequencePlacement,
       courseTitle: realData?.courseTitle ?? effectiveDemo?.course.title ?? "",
       result,
       // Real topics → the router preview renders the actual topic-menu cards.
@@ -181,7 +201,7 @@ export function PagePreviewModal({ open, onClose, templateId, params, page, page
         status: t.status,
       })),
     });
-  }, [bundle, page, effectiveDemo, realData]);
+  }, [bundle, page, effectiveDemo, realData, sequencePlacement]);
 
   // Draft branding → CSS variables, via the SAME mapping the runtime uses.
   const cssVars = useMemo(() => buildTemplateCssVars(params, bundle?.manifest.params), [params, bundle]);

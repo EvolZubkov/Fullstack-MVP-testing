@@ -37,6 +37,7 @@ import {
   AlertCircle,
   AlertTriangle,
   ChevronRight,
+  Eye,
   FileText,
   GripVertical,
   HelpCircle,
@@ -56,6 +57,7 @@ import {
 import {
   Banner,
   Button,
+  Combobox,
   IconButton,
   Input,
   Menu,
@@ -63,10 +65,12 @@ import {
   MenuTrigger,
   ModalDialog,
   NumberInput,
+  RichTextEditor,
   Select,
   Switch,
   Tag,
   Textarea,
+  type RichTextMode,
 } from "@universityrt/ui-kit";
 import {
   DndContext,
@@ -93,15 +97,17 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   useContentPages,
-  canonicalValues,
   type ContentPage,
   type ContentPageKind,
   type ContentPagePosition,
   type ContentPageMode,
   type ContentTemplatePlaceholder,
+  type ContentTemplateSetting,
   type ContentTemplateVariant,
   type UseContentPagesResult,
 } from "../use-content-pages";
+import { isPlaceholderType, isSettingType, inputModesFor } from "@shared/template/field-types";
+import { sanitizeHtml as sanitizeContentHtml } from "@shared/security/html-sanitize";
 import type { TestEditorModel } from "../test-editor.types";
 import { PagePreviewModal } from "./page-preview-modal";
 
@@ -232,6 +238,40 @@ function pageTitle(page: ContentPage): string {
     (values.heading as string | undefined) ||
     KIND_LABEL[page.kind] ||
     "Страница"
+  );
+}
+
+/** How many pages the summary banner offers to map before it stops listing them. */
+const UNMAPPED_LISTED = 5;
+
+/**
+ * Plan Э5: after switching the test's design template, every page bound to a
+ * variant the new template does not declare needs the author's decision. Each
+ * such page already carries a marker, but they can sit anywhere in a long
+ * structure — this states the count once, at the top, and takes the author to
+ * each one. Nothing is rewritten: the mapping happens in «Сменить вариант».
+ */
+function UnmappedPagesBanner(props: { pages: ContentPage[]; onMap: (page: ContentPage) => void }) {
+  const unmapped = props.pages.filter((p) => p.templateKeyMissing);
+  if (unmapped.length === 0) return null;
+  const listed = unmapped.slice(0, UNMAPPED_LISTED);
+  const rest = unmapped.length - listed.length;
+  return (
+    <Banner
+      tone="warning"
+      stacked
+      title={`Страниц требуют сопоставления: ${unmapped.length}`}
+      description={
+        "Выбранный шаблон оформления не содержит вариантов, к которым привязаны эти страницы. " +
+        "До сопоставления они показываются вариантом по умолчанию — привязка сохранена." +
+        (rest > 0 ? ` Показаны первые ${listed.length}, ещё ${rest} — по отметке в списке.` : "")
+      }
+      actions={listed.map((page) => ({
+        label: pageTitle(page),
+        onClick: () => props.onMap(page),
+      }))}
+      data-testid="structure-unmapped-banner"
+    />
   );
 }
 
@@ -405,6 +445,8 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
       )}
       <FlowModeBar mode={model.flowMode} />
 
+      <UnmappedPagesBanner pages={cp.pages} onMap={(page) => setReplaceCtx({ page })} />
+
       {testId === undefined ? (
         <CreateModeNotice />
       ) : cp.isLoading ? (
@@ -452,6 +494,9 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
           params={designDraft?.params ?? {}}
           page={previewCtx.page}
           pageTitle={pageTitle(previewCtx.page)}
+          // PRD-22: the indicator a sequence page carries is computed over the whole
+          // test, so the preview must be told where this page sits.
+          sequencePlacement={cp.sequencePlacements.get(previewCtx.page.id) ?? null}
           // FR-44: preview from REAL test data where possible — real title, topics
           // (router menu / section labels) and total question count. Demo fills
           // the rest (e.g. example questions, not loaded in the structure editor).
@@ -1256,6 +1301,17 @@ function SystemPageRow(props: {
         )}
       </span>
       <div className="page-actions">
+        {/* Предпросмотр — прямой кнопкой перед меню: смотреть страницу приходится
+            чаще, чем менять её вариант, и прятать это за меню незачем. */}
+        <button
+          type="button"
+          className="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s"
+          aria-label={`Предпросмотр системной страницы «${badge}»`}
+          onClick={() => handlers.onPreview(page)}
+          data-testid={`${props.testId}-preview-inline`}
+        >
+          <Eye size={12} aria-hidden="true" />
+        </button>
         <MenuTrigger
           placement="bottom-end"
           trigger={
@@ -1314,7 +1370,6 @@ function SystemPageRow(props: {
         page={page}
         variant={variant}
         cp={cp}
-        onDone={() => setExpandedId(null)}
         missingLabels={missing
           .map((k) => variant.placeholders.find((ph) => ph.key === k)?.label ?? k)}
         readOnly={handlers.readOnly}
@@ -1525,7 +1580,12 @@ function AuthorPageRow(props: {
   // kind — the SAME rule the system row uses (`canSwitch`), so every page type
   // surfaces variant availability consistently.
   const variantsForKind = cp.contentTemplates.filter((v) => v.kind === page.kind);
-  const canReplaceVariant = variantsForKind.length > 1 && !props.readOnly;
+  const showVariantHint = variantsForKind.length > 1;
+  // Plan Э5: a page whose variant is unavailable must be mappable even when the
+  // template offers a single one — otherwise the only page that NEEDS the dialog
+  // is the one page that cannot open it.
+  const canReplaceVariant =
+    !props.readOnly && (showVariantHint || (hasWarn && variantsForKind.length > 0));
 
   const title = pageTitle(page);
   const badge = variant?.label ?? KIND_LABEL[page.kind] ?? page.kind;
@@ -1563,6 +1623,20 @@ function AuthorPageRow(props: {
         <span className="page-variant-badge">{badge}</span>
         <span className="page-title">{title}</span>
         <div className="page-actions">
+          {/* Предпросмотр — прямой кнопкой перед меню. Показывается и в
+              опубликованном тесте: смотреть страницу можно всегда, это ничего не
+              меняет, а меню действий там скрыто целиком. */}
+          {!confirming && (
+            <button
+              type="button"
+              className="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s"
+              aria-label={`Предпросмотр страницы ${title}`}
+              onClick={() => props.onPreview(page)}
+              data-testid={`structure-page-preview-inline-${page.id}`}
+            >
+              <Eye size={12} aria-hidden="true" />
+            </button>
+          )}
           {props.readOnly ? null : !confirming ? (
             <MenuTrigger
               placement="bottom-end"
@@ -1645,7 +1719,7 @@ function AuthorPageRow(props: {
             )}
             {/* Same variant-availability hint as the system row, so author info
                 pages also surface that «Сменить вариант» (in the «...» menu) exists. */}
-            {canReplaceVariant && (
+            {showVariantHint && (
               <Tag tone="info" size="s" data-testid={`structure-page-${page.id}-variant-hint`}>
                 <Info size={12} aria-hidden="true" />
                 Доступно вариантов: {variantsForKind.length}
@@ -1660,7 +1734,6 @@ function AuthorPageRow(props: {
           page={page}
           variant={variant}
           cp={cp}
-          onDone={props.onToggleExpand}
           readOnly={props.readOnly}
         />
       )}
@@ -1674,48 +1747,42 @@ function PageEditForm(props: {
   page: ContentPage;
   variant: ContentTemplateVariant | undefined;
   cp: UseContentPagesResult;
-  onDone: () => void;
   /**
    * Labels of currently-empty required placeholders. When non-empty, renders
    * the PRD-7 G27 validation banner at the top of the expand (red banner with
-   * a bulleted list); also drives Save-disabled affordance via {@link hasErr}.
+   * a bulleted list). Required-empty pages also block the drawer's «Сохранить»
+   * (via `hasStructureErrors`).
    */
   missingLabels?: string[];
-  /** When true, fields are disabled and Save is replaced by «Закрыть» (G19). */
+  /** When true, fields are disabled (published / snapshot view). */
   readOnly?: boolean;
 }) {
   const { page, variant, cp } = props;
   const missingLabels = props.missingLabels ?? [];
   const hasErr = missingLabels.length > 0;
   const readOnly = Boolean(props.readOnly);
-  const [values, setValues] = useState<Record<string, unknown>>(
-    () => ({ ...(page.valuesJson?.values ?? {}) }),
-  );
-  const [styles, setStyles] = useState<Record<string, { fontSize?: number }>>(
-    () => ({ ...((page.valuesJson?.placeholderStyles as Record<string, { fontSize?: number }>) ?? {}) }),
-  );
 
-  const setValue = (key: string, v: unknown) => setValues((p) => ({ ...p, [key]: v }));
-  const setStyle = (key: string, s: { fontSize?: number }) => setStyles((p) => ({ ...p, [key]: s }));
+  // Single-save model: the form has no local buffer and no «Сохранить»/«Отмена» of
+  // its own. Every edit is written STRAIGHT into the «Структура» draft (the same
+  // draft the composition/settings tabs use), so an edit can never be lost by
+  // forgetting a second button and the row does not collapse on typing. The drawer
+  // footer «Сохранить» commits the draft; the drawer «Отмена» discards it. Values
+  // are therefore read from the draft page each render, not from local state.
+  const values = (page.valuesJson?.values ?? {}) as Record<string, unknown>;
+  const styles = (page.valuesJson?.placeholderStyles ?? {}) as Record<string, { fontSize?: number }>;
+  const settings = (page.settingsJson ?? {}) as Record<string, unknown>;
 
-  // True only when the form actually differs from the page's saved values — drives
-  // both the no-op save guard AND the Save-button disabled state, so «Сохранить» is
-  // OFF until the author really changes something (no false "unsaved" affordance).
-  const nextValuesJson = { values, placeholderStyles: styles };
-  const formDirty = canonicalValues(page.valuesJson) !== canonicalValues(nextValuesJson);
-
-  const save = () => {
-    // No-op guard: if nothing actually changed, don't dirty the draft — just close.
-    if (!formDirty) {
-      props.onDone();
-      return;
-    }
-    void cp
-      .update(page.id, { valuesJson: nextValuesJson })
-      .then(() => props.onDone())
-      .catch(() => {
-        /* error surfaced via cp.mutationError banner */
-      });
+  const writeValues = (nextValues: Record<string, unknown>, nextStyles: Record<string, { fontSize?: number }>) => {
+    if (readOnly) return;
+    void cp.update(page.id, { valuesJson: { values: nextValues, placeholderStyles: nextStyles } });
+  };
+  const setValue = (key: string, v: unknown) => writeValues({ ...values, [key]: v }, styles);
+  const setStyle = (key: string, s: { fontSize?: number }) => writeValues(values, { ...styles, [key]: s });
+  // PRD-22: page PROPERTIES are edited alongside content but stored separately, so
+  // they go to the draft through their own field.
+  const setSetting = (key: string, v: unknown) => {
+    if (readOnly) return;
+    void cp.updateSettings(page.id, { ...settings, [key]: v });
   };
 
   const placeholders: ContentTemplatePlaceholder[] =
@@ -1816,40 +1883,24 @@ function PageEditForm(props: {
             />
           </div>
         ))}
+        {/* PRD-22: page properties follow the content fields in the same list —
+            the form layout does not change, only its contents. */}
+        {(variant?.settings ?? []).map((st) => (
+          <div className="ou-formfield" key={`setting-${st.key}`}>
+            <SettingControl
+              setting={st}
+              value={settings[st.key]}
+              onChange={(v) => setSetting(st.key, v)}
+              sequenceIds={cp.sequenceIds}
+              sequenceTotal={cp.sequencePlacements.get(page.id)?.total ?? 0}
+              testId={`structure-page-setting-${page.id}-${st.key}`}
+            />
+          </div>
+        ))}
       </fieldset>
-      <div className="page-row-expand-actions">
-        {readOnly ? (
-          <Button
-            variant="ghost"
-            size="s"
-            onClick={props.onDone}
-            data-testid={`structure-page-edit-close-${page.id}`}
-          >
-            Закрыть
-          </Button>
-        ) : (
-          <>
-            <Button
-              variant="ghost"
-              size="s"
-              onClick={props.onDone}
-              data-testid={`structure-page-edit-cancel-${page.id}`}
-            >
-              Отмена
-            </Button>
-            <Button
-              variant="primary"
-              size="s"
-              onClick={save}
-              disabled={cp.isUpdating || !formDirty}
-              loading={cp.isUpdating}
-              data-testid={`structure-page-edit-save-${page.id}`}
-            >
-              {cp.isUpdating ? "Сохранение…" : "Сохранить"}
-            </Button>
-          </>
-        )}
-      </div>
+      {/* No per-form «Сохранить»/«Отмена»: edits are already in the draft (see
+          above). The row collapses via the header chevron; the single save is the
+          drawer footer «Сохранить». */}
     </div>
   );
 }
@@ -1867,19 +1918,105 @@ function PlaceholderControl(props: {
   const { placeholder: ph, value, onChange, testId } = props;
   const label = ph.label + (ph.required ? " *" : "");
 
+  // PRD-22 FR-10: content types come from the closed registry and every one of
+  // them is handled here. The former `default` branch silently turned an unknown
+  // type into a single-line input; now an unknown type is a template error caught
+  // at upload, and a page that still carries one shows a diagnostic instead.
+  if (!isPlaceholderType(ph.type)) {
+    return (
+      <div className="ou-formfield" data-testid={testId}>
+        <span className="ou-formfield__lbl">{ph.label}</span>
+        <Banner
+          tone="warning"
+          size="sm"
+          description={`Тип поля «${ph.type}» не поддерживается. Сохранённое значение не изменяется и остаётся в тесте.`}
+          data-testid={`${testId}-unknown-type`}
+        />
+      </div>
+    );
+  }
+
   switch (ph.type) {
     case "textarea":
     case "richText":
     case "html":
+      // PRD-22 FR-32/33: the declared type is the CEILING of what the author may
+      // enter; within it they pick the mode. Formatted mode shows the result, not
+      // the markup, and pasted fragments are normalised on arrival (FR-34), so a
+      // save error can only come from HTML the author typed themselves.
       return (
-        <Textarea
+        <RichTextEditor
           label={label}
           value={(value as string) || ""}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(next) => onChange(next)}
+          modes={inputModesFor(ph.type) as RichTextMode[]}
+          sanitize={sanitizeContentHtml}
           rows={ph.type === "html" ? 6 : 5}
           fullWidth
-          placeholder={ph.type === "html" ? "<p>Введите HTML</p>" : "Поддерживается базовый HTML"}
           data-testid={testId}
+        />
+      );
+    case "image":
+      return <ImagePlaceholderControl label={label} value={value} onChange={onChange} testId={testId} />;
+    case "resultField":
+    case "text":
+      return (
+        <Input
+          label={label}
+          size="m"
+          fullWidth
+          value={typeof value === "string" ? value : value == null ? "" : String(value)}
+          maxLength={ph.maxLength}
+          onChange={(e) => onChange(e.target.value)}
+          data-testid={testId}
+        />
+      );
+  }
+}
+
+/**
+ * Control for one page PROPERTY (`settings[]`, PRD-22). Property types are their
+ * own closed registry — `number` / `boolean` / `select` live here rather than
+ * among placeholders, because they configure the page instead of filling the
+ * layout. `sequence` gets the identifier picker.
+ */
+function SettingControl(props: {
+  setting: ContentTemplateSetting;
+  value: unknown;
+  onChange: (value: unknown) => void;
+  /** Identifiers already used in the test — choices for the `sequence` type. */
+  sequenceIds: string[];
+  /** Size of the run this page currently belongs to (0 = not in a sequence). */
+  sequenceTotal: number;
+  testId: string;
+}) {
+  const { setting: st, value, onChange, testId } = props;
+  const label = (st.label ?? st.key) + (st.required ? " *" : "");
+
+  if (!isSettingType(st.type)) {
+    return (
+      <div className="ou-formfield" data-testid={testId}>
+        <span className="ou-formfield__lbl">{st.label ?? st.key}</span>
+        <Banner
+          tone="warning"
+          size="sm"
+          description={`Тип свойства «${st.type}» не поддерживается. Сохранённое значение не изменяется и остаётся в тесте.`}
+          data-testid={`${testId}-unknown-type`}
+        />
+      </div>
+    );
+  }
+
+  switch (st.type) {
+    case "sequence":
+      return (
+        <SequenceSettingControl
+          label={label}
+          value={typeof value === "string" ? value : ""}
+          onChange={(next) => onChange(next)}
+          sequenceIds={props.sequenceIds}
+          total={props.sequenceTotal}
+          testId={testId}
         />
       );
     case "number":
@@ -1908,7 +2045,7 @@ function PlaceholderControl(props: {
           size="m"
           fullWidth
           value={(value as string) || ""}
-          options={(ph.options ?? []).map((o) => ({ value: o, label: o }))}
+          options={(st.options ?? []).map((o) => ({ value: o, label: o }))}
           onChange={(next) => onChange(next)}
           data-testid={testId}
         />
@@ -1916,19 +2053,83 @@ function PlaceholderControl(props: {
     case "image":
       return <ImagePlaceholderControl label={label} value={value} onChange={onChange} testId={testId} />;
     case "text":
-    default:
       return (
         <Input
           label={label}
           size="m"
           fullWidth
           value={typeof value === "string" ? value : value == null ? "" : String(value)}
-          maxLength={ph.maxLength}
+          placeholder={typeof st.default === "string" ? st.default : undefined}
           onChange={(e) => onChange(e.target.value)}
           data-testid={testId}
         />
       );
   }
+}
+
+/**
+ * The sequence identifier: chosen from what the test already uses, or created.
+ * Free text was rejected on purpose — a typo (`Галерея` / `Галерея `) silently
+ * splits the run in two and the author sees broken dots with no cause. The hint
+ * reports the size of the current run, including the «одна страница» state where
+ * no indicator is drawn yet (FR-19).
+ */
+function SequenceSettingControl(props: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  sequenceIds: string[];
+  total: number;
+  testId: string;
+}) {
+  const { value, onChange, sequenceIds, total, testId } = props;
+  const [query, setQuery] = useState("");
+
+  const options = useMemo(() => {
+    const ids = new Set(sequenceIds);
+    if (value) ids.add(value);
+    return Array.from(ids).map((id) => ({ value: id, label: id }));
+  }, [sequenceIds, value]);
+
+  const trimmed = query.trim();
+  const canCreate = trimmed.length > 0 && !options.some((o) => o.value === trimmed);
+
+  const hint = !value
+    ? "Пусто — страница не входит в последовательность."
+    : total >= 2
+      ? `Подряд идущих страниц: ${total} — точки показываются`
+      : "В последовательности 1 страница — точки не показываются. Добавьте рядом ещё одну страницу с тем же значением.";
+
+  return (
+    <Combobox<string>
+      label={props.label}
+      value={value || null}
+      options={options}
+      query={query}
+      onQueryChange={setQuery}
+      onChange={(next) => onChange(next ?? "")}
+      placeholder="Не задана"
+      hint={hint}
+      fullWidth
+      emptyMessage="Пока нет последовательностей"
+      footerAction={
+        canCreate ? (
+          <button
+            type="button"
+            className="ou-combo__footer-action"
+            onClick={() => {
+              onChange(trimmed);
+              setQuery("");
+            }}
+            data-testid={`${testId}-create`}
+          >
+            + Создать «{trimmed}»
+          </button>
+        ) : undefined
+      }
+      data-testid={testId}
+    />
+  );
 }
 
 /** Best-effort human file name from an uploaded media URL (`/uploads/media/...`). */
@@ -2014,6 +2215,16 @@ function ImagePlaceholderControl(props: {
         {props.label}
       </label>
       <div className="design-media-row">
+        {/* PRD-22: a thumbnail of what is actually loaded. The file name alone
+            told the author nothing — least of all for a background image. */}
+        <span
+          className="image-field__preview"
+          style={url ? { backgroundImage: `url("${url.replace(/"/g, "%22")}")` } : undefined}
+          role={url ? "img" : undefined}
+          aria-label={url ? "Предпросмотр изображения" : undefined}
+          aria-hidden={url ? undefined : true}
+          data-testid={`${testId}-preview`}
+        />
         <Button
           id={fieldId}
           variant="secondary"
@@ -2263,11 +2474,15 @@ function ReplaceVariantModal(props: {
     }
   }, [page?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const effectiveKey = selectedKey ?? page?.templateKey ?? variants[0]?.key ?? null;
   const currentVariant = useMemo(
     () => variants.find((v) => v.key === page?.templateKey) ?? null,
     [variants, page?.templateKey],
   );
+  // Plan Э5: when the page's own variant is unavailable, the modal opens on the
+  // FIRST offered one (the substitute the learner hosts already render through)
+  // instead of on a key that is not in the list — which left «Применить» disabled
+  // and the page unmappable, the exact case the modal exists for.
+  const effectiveKey = selectedKey ?? currentVariant?.key ?? variants[0]?.key ?? null;
   const selectedVariant = useMemo(
     () => variants.find((v) => v.key === effectiveKey) ?? null,
     [variants, effectiveKey],
@@ -2280,17 +2495,20 @@ function ReplaceVariantModal(props: {
   // ones in the warning diff-block; preserved values are shown silently in
   // the page expand after the switch.
   const lostFields = useMemo(() => {
-    if (!page || !selectedVariant || !currentVariant) return [];
+    if (!page || !selectedVariant) return [];
     if (selectedVariant.key === page.templateKey) return [];
     const newKeys = new Set(selectedVariant.placeholders.map((p) => p.key));
     const currentValues = (page.valuesJson?.values ?? {}) as Record<string, unknown>;
-    return currentVariant.placeholders
+    // Normally the fields at risk are those the CURRENT variant declares. When that
+    // variant is unavailable (plan Э5) its declaration is unreachable, so the stored
+    // values themselves are the source — otherwise the author would be asked to
+    // confirm a switch whose losses could not be listed at all.
+    const declared = currentVariant
+      ? currentVariant.placeholders.map((ph) => ({ key: ph.key, label: ph.label ?? ph.key }))
+      : Object.keys(currentValues).map((key) => ({ key, label: key }));
+    return declared
       .filter((ph) => !newKeys.has(ph.key))
-      .map((ph) => ({
-        key: ph.key,
-        label: ph.label ?? ph.key,
-        value: currentValues[ph.key],
-      }))
+      .map((ph) => ({ ...ph, value: currentValues[ph.key] }))
       .filter((f) => hasPlaceholderValue(f.value));
   }, [page, currentVariant, selectedVariant]);
 

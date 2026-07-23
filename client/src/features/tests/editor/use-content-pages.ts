@@ -21,6 +21,12 @@
  */
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  SEQUENCE_SETTING_KEY,
+  buildSequencePlacements,
+  collectSequenceIds,
+  type SequencePlacement,
+} from "@shared/template/page-sequences";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,6 +49,8 @@ export type ContentPage = {
     values?: Record<string, unknown>;
     placeholderStyles?: Record<string, unknown>;
   };
+  /** PRD-22: values of the variant's `settings[]` — properties of the page. */
+  settingsJson?: Record<string, unknown>;
   autoAdvance: boolean;
   autoAdvanceDelayMs: number | null;
   createdAt: string;
@@ -75,6 +83,19 @@ export type ContentTemplatePlaceholder = {
   };
 };
 
+/**
+ * A page-PROPERTY declaration from `contentTemplates[].settings` (PRD-22): it
+ * drives the page's behaviour or styling and never renders as content.
+ */
+export type ContentTemplateSetting = {
+  key: string;
+  type: string;
+  label?: string;
+  required?: boolean;
+  options?: string[];
+  default?: unknown;
+};
+
 /** A content-page variant declared in `manifest.contentTemplates[]`. */
 export type ContentTemplateVariant = {
   key: string;
@@ -83,6 +104,8 @@ export type ContentTemplateVariant = {
   kind?: ContentPageKind;
   description?: string;
   placeholders: ContentTemplatePlaceholder[];
+  /** PRD-22 page properties; absent ⇒ the variant has none. */
+  settings?: ContentTemplateSetting[];
 };
 
 /** Payload for creating a content page (POST). */
@@ -96,6 +119,8 @@ export type ContentPageInput = {
     values?: Record<string, unknown>;
     placeholderStyles?: Record<string, unknown>;
   };
+  /** PRD-22 page properties; the server drops keys the variant does not declare. */
+  settingsJson?: Record<string, unknown>;
   autoAdvance?: boolean;
   autoAdvanceDelayMs?: number | null;
   sortOrder?: number;
@@ -227,10 +252,50 @@ function pageToInput(page: ContentPage): ContentPageInput {
     type: page.type,
     templateKey: page.templateKey,
     valuesJson: page.valuesJson,
+    settingsJson: page.settingsJson,
     autoAdvance: page.autoAdvance,
     autoAdvanceDelayMs: page.autoAdvanceDelayMs,
     sortOrder: page.sortOrder,
   };
+}
+
+/**
+ * Settings a freshly created page starts with: every declared `default`
+ * (PRD-22 FR-08). Settings without a default stay unset — «пусто» is a valid
+ * state for them.
+ */
+export function defaultSettingsFor(
+  variant: ContentTemplateVariant | undefined,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const s of variant?.settings ?? []) {
+    if (s.default !== undefined) out[s.key] = s.default;
+  }
+  return out;
+}
+
+/**
+ * Settings a page keeps when it switches to another variant.
+ *
+ * Declared settings keep their value or fall back to the new variant's default;
+ * the sequence identifier is carried over even when the new variant does not
+ * declare it (FR-29), so a round trip through another variant does not silently
+ * drop the page out of its sequence.
+ */
+export function migrateSettings(
+  current: Record<string, unknown> | undefined,
+  newVariant: ContentTemplateVariant | undefined,
+): Record<string, unknown> {
+  const prev = current ?? {};
+  const out: Record<string, unknown> = {};
+  for (const s of newVariant?.settings ?? []) {
+    if (prev[s.key] !== undefined) out[s.key] = prev[s.key];
+    else if (s.default !== undefined) out[s.key] = s.default;
+  }
+  if (out[SEQUENCE_SETTING_KEY] === undefined && prev[SEQUENCE_SETTING_KEY] !== undefined) {
+    out[SEQUENCE_SETTING_KEY] = prev[SEQUENCE_SETTING_KEY];
+  }
+  return out;
 }
 
 /** Stable JSON stringify with sorted keys — order-insensitive value comparison. */
@@ -271,7 +336,11 @@ function pageChanged(a: ContentPage, b: ContentPage): boolean {
     a.type !== b.type ||
     a.autoAdvance !== b.autoAdvance ||
     a.autoAdvanceDelayMs !== b.autoAdvanceDelayMs ||
-    canonicalValues(a.valuesJson) !== canonicalValues(b.valuesJson)
+    canonicalValues(a.valuesJson) !== canonicalValues(b.valuesJson) ||
+    // PRD-22: settings are a separate field with their own rules, so an edit that
+    // touches only a page property (e.g. the sequence identifier) must still count
+    // as a change — otherwise «Сохранить» stays inert and the edit is lost.
+    stableStringify(a.settingsJson ?? {}) !== stableStringify(b.settingsJson ?? {})
   );
 }
 
@@ -318,6 +387,16 @@ export type UseContentPagesResult = {
   infoVariants: ContentTemplateVariant[];
   isLoading: boolean;
   error: Error | null;
+  /**
+   * PRD-22: where each page sits in its sequence, keyed by page id. Computed from
+   * the DRAFT, so the size shown next to the identifier follows edits before save.
+   * A page outside a sequence is simply absent.
+   */
+  sequencePlacements: Map<string, SequencePlacement>;
+  /** Identifiers already used in this test — the choices offered to the author (FR-16). */
+  sequenceIds: string[];
+  /** Replaces a page's settings in the draft (PRD-22 page properties). */
+  updateSettings: (pageId: string, settings: Record<string, unknown>) => Promise<void>;
   create: (input: ContentPageInput) => Promise<ContentPage>;
   isCreating: boolean;
   update: (pageId: string, input: Partial<ContentPageInput>) => Promise<ContentPage>;
@@ -481,6 +560,28 @@ export function useContentPages(
     [draftPages, validKeys, contentTemplates.length],
   );
 
+  // PRD-22: sequences are derived from the DRAFT, so the hint next to the
+  // identifier («подряд идущих страниц: N») tracks the author's edits before save.
+  // Only pages whose CURRENT variant declares the setting take part (FR-15/FR-16):
+  // an identifier left over from another variant must not resurrect a sequence or
+  // pad the choice list.
+  const sequenceAwarePages = useMemo(() => {
+    const declaring = new Set(
+      contentTemplates
+        .filter((v) => (v.settings ?? []).some((s) => s.type === "sequence"))
+        .map((v) => v.key),
+    );
+    return pages.map((p) =>
+      p.templateKey && declaring.has(p.templateKey) ? p : { ...p, settingsJson: {} },
+    );
+  }, [pages, contentTemplates]);
+
+  const sequencePlacements = useMemo(
+    () => buildSequencePlacements(sequenceAwarePages),
+    [sequenceAwarePages],
+  );
+  const sequenceIds = useMemo(() => collectSequenceIds(sequenceAwarePages), [sequenceAwarePages]);
+
   // ── Local mutators — mutate the draft only; no network until commit() ─────
   const create = useCallback(
     async (input: ContentPageInput): Promise<ContentPage> => {
@@ -496,6 +597,9 @@ export function useContentPages(
         templateKey: input.templateKey ?? null,
         sortOrder: input.sortOrder ?? draftPages.length,
         valuesJson: input.valuesJson ?? { values: {} },
+        // PRD-22 FR-08: declared defaults are seeded at creation, so the author
+        // sees the value the page will actually behave with (e.g. «Далее»).
+        settingsJson: input.settingsJson ?? defaultSettingsFor(variant),
         autoAdvance: input.autoAdvance ?? false,
         autoAdvanceDelayMs: input.autoAdvanceDelayMs ?? null,
         createdAt: "",
@@ -506,6 +610,16 @@ export function useContentPages(
       return page;
     },
     [contentTemplates, draftPages.length, testId],
+  );
+
+  const updateSettings = useCallback(
+    async (pageId: string, settings: Record<string, unknown>): Promise<void> => {
+      setDraftPages((prev) =>
+        prev.map((p) => (p.id === pageId ? { ...p, settingsJson: settings } : p)),
+      );
+      setDirty(true);
+    },
+    [],
   );
 
   const update = useCallback(
@@ -522,6 +636,7 @@ export function useContentPages(
             ...(input.type !== undefined ? { type: input.type } : {}),
             ...(input.templateKey !== undefined ? { templateKey: input.templateKey } : {}),
             ...(input.valuesJson !== undefined ? { valuesJson: input.valuesJson } : {}),
+            ...(input.settingsJson !== undefined ? { settingsJson: input.settingsJson } : {}),
             ...(input.autoAdvance !== undefined ? { autoAdvance: input.autoAdvance } : {}),
             ...(input.autoAdvanceDelayMs !== undefined
               ? { autoAdvanceDelayMs: input.autoAdvanceDelayMs }
@@ -562,7 +677,12 @@ export function useContentPages(
           const placeholderStyles: Record<string, unknown> = {};
           for (const k of Object.keys(oldValues)) if (newKeys.has(k)) values[k] = oldValues[k];
           for (const k of Object.keys(oldStyles)) if (newKeys.has(k)) placeholderStyles[k] = oldStyles[k];
-          return { ...p, templateKey: newTemplateKey, valuesJson: { values, placeholderStyles } };
+          // PRD-22: settings follow their OWN rule, not the shared-keys one —
+          // declared settings of the new variant keep their value (or take its
+          // default), and the sequence identifier survives regardless (FR-29), so
+          // switching a page away and back keeps its place in the sequence.
+          const settingsJson = migrateSettings(p.settingsJson, newVariant);
+          return { ...p, templateKey: newTemplateKey, valuesJson: { values, placeholderStyles }, settingsJson };
         }),
       );
       setDirty(true);
@@ -648,6 +768,9 @@ export function useContentPages(
     infoVariants,
     isLoading: pagesQuery.isLoading,
     error: (pagesQuery.error as Error | null) ?? null,
+    sequencePlacements,
+    sequenceIds,
+    updateSettings,
     create,
     isCreating: false,
     update,
