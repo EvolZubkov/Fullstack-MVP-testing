@@ -1,0 +1,716 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: раздел «Цвета» и поддержка тем шаблоном
+    Файл: docs/wireframes/branding-theme-colors.html
+
+    ДИЗАЙН НЕ ПЕРЕИЗОБРЕТАЕТСЯ. Каркас вкладки «Оформление» — рельса подразделов,
+    список `.ou-formfield`, `.ou-color-trigger` у цвета, описание параметра под
+    контролом, подвал редактора — взят из approved/prd7-design-tab.html без
+    изменений. Меняется состав рельсы и содержимое одного раздела.
+
+    Требования, которые покрывает эскиз:
+      0) цвета выносятся из «Брендирования» в собственный раздел «Цвета»:
+         у них логика сложнее, чем «значение параметра → рендер»;
+      1) у шаблона есть признак поддержки тем; если темы есть — в разделе
+         «Цвета» показывается переключатель «Светлая / Тёмная / Авто»;
+      2) если тем нет — раздел плоский, просто список цветовых параметров;
+      3) если темы есть — цвета ВСЕГДА показываются таблицей «параметр × тема»,
+         значение задаётся для каждой темы независимо от выбора переключателя;
+      4) раздел, в котором шаблон не объявил ни одного параметра, в рельсе
+         не показывается.
+
+    Состояния:
+      s-flat      — шаблон без тем: плоский список (треб. 2) + рельса без пустых
+                    разделов (треб. 4)
+      s-pinned    — шаблон с темами, выбрана «Светлая» (треб. 1, 3)
+      s-auto      — шаблон с темами, выбрано «Авто» (треб. 1, 3)
+      s-branding  — что осталось в «Брендировании» после выноса цветов (треб. 0)
+
+    Разбор состояний, дельта и соответствие контролов — в таблицах под холстом.
+  -->
+  <title>Раздел «Цвета» и темы шаблона</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    /* ─── Реализованное сегодня ────────────────────────────────────────────
+       Перенесено без изменений из client/src/styles/tb-components.css. */
+    .design-color-field { display: flex; align-items: center; gap: var(--ou-space-2); }
+    .design-color-field__origin { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+    /* ─── Дельта: значение цвета на каждую тему ─────────────────────────────
+       При теме «Авто» цвета показываются таблицей: строка — параметр, колонки —
+       темы. Обе палитры видны сразу, поэтому пропущенное значение заметно без
+       подсказок. Ячейка держит контрол и — только у переопределённого цвета —
+       возврат к цвету шаблона. */
+    /* Колонка параметра держит описание и потому «жадная»: без фиксированной
+       раскладки таблица распирает панель и колонка последней темы обрезается
+       (`.ou-table-wrap` не прокручивается). Темам хватает узких колонок. */
+    .design-colors-table { table-layout: fixed; width: 100%; }
+    .design-colors-table td, .design-colors-table th { vertical-align: middle; }
+    .design-colors-table th:first-child { width: 46%; }
+    /* `.ou-table` держит ячейки в одну строку — описание параметра длинное и
+       иначе уезжает под соседние колонки. Переносим только эту колонку. */
+    .design-colors-table tbody th { white-space: normal; }
+    .design-colors-table__hint { white-space: normal; }
+    .design-colors-table__param { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-default); }
+    .design-colors-table__hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--wf-space-tiny); }
+    /* Шапка раздела: переключатель темы и предпросмотр в одну строку. */
+    .design-theme-head { display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-3); }
+
+    /* ─── Каркас эскиза ────────────────────────────────────────────────────── */
+    .wf-notes { max-width: var(--wf-size-1080); margin: var(--ou-space-7) auto; padding: 0 var(--ou-space-4); }
+    .wf-notes-title { font: var(--ou-text-body-m); font-weight: 700; margin: var(--ou-space-5) 0 var(--ou-space-2); }
+    .wf-notes-intro { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-3); }
+    .wf-notes-table { width: 100%; border-collapse: collapse; margin-bottom: var(--ou-space-7); }
+    .wf-notes-table th, .wf-notes-table td { border: var(--wf-border-w) solid var(--ou-border-soft); padding: var(--ou-space-2) var(--ou-space-3); font: var(--ou-text-body-s); text-align: left; vertical-align: top; }
+    .wf-notes-table th { background: var(--ou-bg-surface-3); font-weight: 600; }
+    .wf-notes-table tr:nth-child(even) td { background: var(--ou-bg-elevated); }
+    .wf-notes-table code { font: var(--ou-text-code-s); background: var(--ou-bg-surface-3); padding: 0 var(--wf-space-tiny); border-radius: var(--wf-space-1q); }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+    .wf-state.active { display: block; }
+    :root { --wf-nav-h: 0px; }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-x"            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+  <symbol id="i-info"         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
+  <symbol id="i-warn"         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-eye"          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-rotate-ccw"   viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+</svg>
+
+<!-- ─── State switcher ─────────────────────────────────────────────────────── -->
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">Раздел «Цвета»:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this, 's-flat')">Шаблон без тем</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-pinned')">Тема выбрана</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-auto')">«Авто» · таблица тем</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-branding')">Что осталось в «Брендировании»</button>
+  <a class="wf-nav-link" href="approved/prd7-design-tab.html">&larr; вкладка «Оформление» (каркас не меняется)</a>
+
+  <div class="wf-nav-sep"></div>
+  <button type="button" class="ou-btn ou-btn--secondary" onclick="toggleTheme(this)">Dark</button>
+  <button type="button" class="ou-btn ou-btn--secondary" onclick="toggleDensity(this)">Compact</button>
+  <button type="button" class="ou-btn ou-btn--secondary" onclick="toggleAnnots(this)">Аннотации</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-flat — шаблон «Стандартный»: тем не поддерживает.
+     Раздел «Цвета» плоский: ни переключателя темы, ни подписей палитр.
+     В рельсе нет «Макета» — шаблон не объявил в нём ни одного параметра.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-flat" class="wf-state shell active" data-state="flat">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="cl-flat-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="cl-flat-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--neutral ou-tag--outline" aria-label="Статус теста: Черновик">Черновик</span>
+        <span class="ou-tag ou-tag--info ou-tag--outline">v3</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+        <div class="ou-drawer__split">
+          <nav class="ou-drawer__rail" aria-label="Подразделы оформления">
+            <button type="button" class="ou-drawer__rail-item">Шаблон</button>
+            <button type="button" class="ou-drawer__rail-item">Брендирование</button>
+            <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Цвета</button>
+            <button type="button" class="ou-drawer__rail-item">Прогресс и шапка</button>
+          </nav>
+          <div class="tb-settings-content">
+
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl">Цвет кнопок и активных элементов</label>
+              <div class="design-color-field">
+                <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Выбрать цвет кнопок">
+                  <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #1E60D6;"></span>
+                  <span class="ou-color-trigger__value">#1E60D6</span>
+                </button>
+                <span class="design-color-field__origin">из шаблона</span>
+              </div>
+              <div class="ou-formfield__desc">Кнопки «Далее» и «Начать», выбранный вариант ответа, пройденные точки прогресса, рамка фокуса.</div>
+            </div>
+
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl">Фон экрана</label>
+              <div class="design-color-field">
+                <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Выбрать фон экрана">
+                  <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #101114;"></span>
+                  <span class="ou-color-trigger__value">#101114</span>
+                </button>
+                <span class="design-color-field__origin">из шаблона</span>
+              </div>
+              <div class="ou-formfield__desc">Подложка всего экрана — то, что видно под карточками и текстом.</div>
+            </div>
+
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl">Цвет основного текста</label>
+              <div class="design-color-field">
+                <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Выбрать цвет основного текста">
+                  <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #FAFAFA;"></span>
+                  <span class="ou-color-trigger__value">#FAFAFA</span>
+                </button>
+                <span class="design-color-field__origin">из шаблона</span>
+              </div>
+              <div class="ou-formfield__desc">Заголовки, текст вопроса и текст учебных страниц на фоне экрана.</div>
+            </div>
+
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl">Фон карточки</label>
+              <div class="design-color-field">
+                <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Выбрать фон карточки">
+                  <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #1C1F26;"></span>
+                  <span class="ou-color-trigger__value">#1C1F26</span>
+                </button>
+                <span class="design-color-field__origin">из шаблона</span>
+              </div>
+              <div class="ou-formfield__desc">Заливка карточек: учебная страница, карточка вопроса, окно подтверждения, итоги.</div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Закрыть</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-pinned — шаблон «Сертификация (РТК)» умеет светлую и тёмную.
+     Автор выбрал «Светлую»: тест у всех выглядит одинаково. Таблица цветов та
+     же, что и при «Авто», — она зависит от поддержки тем шаблоном, а не от
+     выбора автора, поэтому вторая палитра остаётся заполненной и готовой.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-pinned" class="wf-state shell" data-state="pinned">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="cl-pinned-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="cl-pinned-title" class="ou-drawer__title">Сертификационный тест для руководителей</h1></div>
+        <span class="ou-tag ou-tag--neutral ou-tag--outline" aria-label="Статус теста: Черновик">Черновик</span>
+        <span class="ou-tag ou-tag--info ou-tag--outline">v12</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+        <div class="ou-drawer__split">
+          <nav class="ou-drawer__rail" aria-label="Подразделы оформления">
+            <button type="button" class="ou-drawer__rail-item">Шаблон</button>
+            <button type="button" class="ou-drawer__rail-item">Брендирование</button>
+            <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Цвета</button>
+            <button type="button" class="ou-drawer__rail-item">Прогресс и шапка</button>
+          </nav>
+          <div class="tb-settings-content">
+
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl">Тема теста</label>
+              <div class="design-theme-head">
+              <div class="ou-seg" role="group" aria-label="Тема теста">
+                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Светлая</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false">Тёмная</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false">Авто</button>
+              </div>
+              <button class="ou-btn ou-btn--ghost ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+              </div>
+              <div class="ou-formfield__desc">Тест открывается в светлой теме у всех участников независимо от их системных настроек.</div>
+            </div>
+
+            <div class="ou-table-wrap">
+              <table class="ou-table design-colors-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Параметр</th>
+                    <th scope="col">Светлая</th>
+                    <th scope="col">Тёмная</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row">
+                      <span class="design-colors-table__param">Цвет кнопок и активных элементов</span>
+                      <div class="design-colors-table__hint">Кнопки «Далее» и «Начать», выбранный вариант ответа, пройденные точки прогресса, рамка фокуса.</div>
+                    </th>
+                    <td>
+                      <div class="design-color-field">
+                        <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Цвет кнопок и активных элементов, светлая тема">
+                          <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #E63900;"></span>
+                          <span class="ou-color-trigger__value">#E63900</span>
+                        </button>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="design-color-field">
+                        <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Цвет кнопок и активных элементов, тёмная тема">
+                          <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #FF4A0A;"></span>
+                          <span class="ou-color-trigger__value">#FF4A0A</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row">
+                      <span class="design-colors-table__param">Фон экрана</span>
+                      <div class="design-colors-table__hint">Подложка всего экрана — то, что видно под карточками и текстом.</div>
+                    </th>
+                    <td>
+                      <div class="design-color-field">
+                        <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Фон экрана, светлая тема">
+                          <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #F7F4F1;"></span>
+                          <span class="ou-color-trigger__value">#F7F4F1</span>
+                        </button>
+                        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Вернуть цвет шаблона: фон экрана, светлая тема" title="Вернуть цвет шаблона"><svg width="14" height="14"><use href="#i-rotate-ccw"/></svg></button>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="design-color-field">
+                        <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Фон экрана, тёмная тема">
+                          <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #1A1A1E;"></span>
+                          <span class="ou-color-trigger__value">#1A1A1E</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row">
+                      <span class="design-colors-table__param">Цвет основного текста</span>
+                      <div class="design-colors-table__hint">Заголовки, текст вопроса и текст учебных страниц на фоне экрана.</div>
+                    </th>
+                    <td>
+                      <div class="design-color-field">
+                        <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Цвет основного текста, светлая тема">
+                          <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #1A1A1E;"></span>
+                          <span class="ou-color-trigger__value">#1A1A1E</span>
+                        </button>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="design-color-field">
+                        <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Цвет основного текста, тёмная тема">
+                          <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #E8E8ED;"></span>
+                          <span class="ou-color-trigger__value">#E8E8ED</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row">
+                      <span class="design-colors-table__param">Фон карточки</span>
+                      <div class="design-colors-table__hint">Заливка карточек: учебная страница, карточка вопроса, окно подтверждения, итоги.</div>
+                    </th>
+                    <td>
+                      <div class="design-color-field">
+                        <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Фон карточки, светлая тема">
+                          <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #FFFFFF;"></span>
+                          <span class="ou-color-trigger__value">#FFFFFF</span>
+                        </button>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="design-color-field">
+                        <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Фон карточки, тёмная тема">
+                          <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #22222A;"></span>
+                          <span class="ou-color-trigger__value">#22222A</span>
+                        </button>
+                        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Вернуть цвет шаблона: фон карточки, тёмная тема" title="Вернуть цвет шаблона"><svg width="14" height="14"><use href="#i-rotate-ccw"/></svg></button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Закрыть</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-auto — тема «Авто»: тест рисуется той палитрой, что выбрана у
+     участника. Таблица идентична состоянию s-pinned; меняется только активный
+     пункт переключателя и пояснение под ним.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-auto" class="wf-state shell" data-state="auto">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="cl-auto-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="cl-auto-title" class="ou-drawer__title">Сертификационный тест для руководителей</h1></div>
+        <span class="ou-tag ou-tag--neutral ou-tag--outline" aria-label="Статус теста: Черновик">Черновик</span>
+        <span class="ou-tag ou-tag--info ou-tag--outline">v12</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+        <div class="ou-drawer__split">
+          <nav class="ou-drawer__rail" aria-label="Подразделы оформления">
+            <button type="button" class="ou-drawer__rail-item">Шаблон</button>
+            <button type="button" class="ou-drawer__rail-item">Брендирование</button>
+            <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Цвета</button>
+            <button type="button" class="ou-drawer__rail-item">Прогресс и шапка</button>
+          </nav>
+          <div class="tb-settings-content">
+
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl">Тема теста</label>
+              <div class="design-theme-head">
+              <div class="ou-seg" role="group" aria-label="Тема теста">
+                <button type="button" class="ou-seg__item" aria-pressed="false">Светлая</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false">Тёмная</button>
+                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Авто</button>
+              </div>
+              <button class="ou-btn ou-btn--ghost ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+              </div>
+              <div class="ou-formfield__desc">Тест открывается в теме, выбранной у участника. Задайте цвета для обеих — иначе часть участников увидит не то, что вы задумали.</div>
+            </div>
+
+            <div class="ou-table-wrap">
+              <table class="ou-table design-colors-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Параметр</th>
+                    <th scope="col">Светлая</th>
+                    <th scope="col">Тёмная</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row">
+                      <span class="design-colors-table__param">Цвет кнопок и активных элементов</span>
+                      <div class="design-colors-table__hint">Кнопки «Далее» и «Начать», выбранный вариант ответа, пройденные точки прогресса, рамка фокуса.</div>
+                    </th>
+                    <td>
+                      <div class="design-color-field">
+                        <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Цвет кнопок и активных элементов, светлая тема">
+                          <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #E63900;"></span>
+                          <span class="ou-color-trigger__value">#E63900</span>
+                        </button>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="design-color-field">
+                        <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Цвет кнопок и активных элементов, тёмная тема">
+                          <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #FF4A0A;"></span>
+                          <span class="ou-color-trigger__value">#FF4A0A</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row">
+                      <span class="design-colors-table__param">Фон экрана</span>
+                      <div class="design-colors-table__hint">Подложка всего экрана — то, что видно под карточками и текстом.</div>
+                    </th>
+                    <td>
+                      <div class="design-color-field">
+                        <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Фон экрана, светлая тема">
+                          <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #F7F4F1;"></span>
+                          <span class="ou-color-trigger__value">#F7F4F1</span>
+                        </button>
+                        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Вернуть цвет шаблона: фон экрана, светлая тема" title="Вернуть цвет шаблона"><svg width="14" height="14"><use href="#i-rotate-ccw"/></svg></button>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="design-color-field">
+                        <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Фон экрана, тёмная тема">
+                          <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #1A1A1E;"></span>
+                          <span class="ou-color-trigger__value">#1A1A1E</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row">
+                      <span class="design-colors-table__param">Цвет основного текста</span>
+                      <div class="design-colors-table__hint">Заголовки, текст вопроса и текст учебных страниц на фоне экрана.</div>
+                    </th>
+                    <td>
+                      <div class="design-color-field">
+                        <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Цвет основного текста, светлая тема">
+                          <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #1A1A1E;"></span>
+                          <span class="ou-color-trigger__value">#1A1A1E</span>
+                        </button>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="design-color-field">
+                        <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Цвет основного текста, тёмная тема">
+                          <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #E8E8ED;"></span>
+                          <span class="ou-color-trigger__value">#E8E8ED</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row">
+                      <span class="design-colors-table__param">Фон карточки</span>
+                      <div class="design-colors-table__hint">Заливка карточек: учебная страница, карточка вопроса, окно подтверждения, итоги.</div>
+                    </th>
+                    <td>
+                      <div class="design-color-field">
+                        <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Фон карточки, светлая тема">
+                          <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #FFFFFF;"></span>
+                          <span class="ou-color-trigger__value">#FFFFFF</span>
+                        </button>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="design-color-field">
+                        <button class="ou-color-trigger" type="button" aria-expanded="false" aria-label="Фон карточки, тёмная тема">
+                          <span class="ou-color-trigger__swatch" data-wf-demo style="--swatch: #22222A;"></span>
+                          <span class="ou-color-trigger__value">#22222A</span>
+                        </button>
+                        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Вернуть цвет шаблона: фон карточки, тёмная тема" title="Вернуть цвет шаблона"><svg width="14" height="14"><use href="#i-rotate-ccw"/></svg></button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Закрыть</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-branding — «Брендирование» после выноса цветов.
+     Остаются нецветовые параметры. Раздел «Макет» шаблон не наполняет —
+     в рельсе его нет.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-branding" class="wf-state shell" data-state="branding">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="cl-br-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="cl-br-title" class="ou-drawer__title">Сертификационный тест для руководителей</h1></div>
+        <span class="ou-tag ou-tag--neutral ou-tag--outline" aria-label="Статус теста: Черновик">Черновик</span>
+        <span class="ou-tag ou-tag--info ou-tag--outline">v12</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+        <div class="ou-drawer__split">
+          <nav class="ou-drawer__rail" aria-label="Подразделы оформления">
+            <button type="button" class="ou-drawer__rail-item">Шаблон</button>
+            <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Брендирование</button>
+            <button type="button" class="ou-drawer__rail-item">Цвета</button>
+            <button type="button" class="ou-drawer__rail-item">Прогресс и шапка</button>
+          </nav>
+          <div class="tb-settings-content">
+
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl">Шрифт</label>
+              <div class="ou-select ou-field--m" data-ou-options="Rostelecom Basis|Inter|Roboto|Arial">
+                <button type="button" class="ou-select__trigger">
+                  <span class="ou-select__value">Rostelecom Basis</span>
+                  <svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down"/></svg>
+                </button>
+              </div>
+              <div class="ou-formfield__desc">Гарнитура всего текста пакета.</div>
+            </div>
+
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl">Логотип</label>
+              <div class="file-row"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Загрузить изображение</button><span class="file-chip">logo-rtk.svg <span class="rm">&#x2715;</span></span></div>
+              <div class="ou-formfield__desc">Показывается в шапке экранов старта и итогов.</div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Закрыть</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     Пояснения
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<section class="wf-notes" aria-label="Пояснения">
+  <h2 class="wf-notes-title">Состояния</h2>
+  <p class="wf-notes-intro">Холст показывает вкладку «Оформление». Каркас вкладки, подвал редактора и раздел «Шаблон» не меняются — см. approved/prd7-design-tab.html.</p>
+  <table class="wf-notes-table">
+    <thead><tr><th>Состояние</th><th>Что показано</th><th>Требование</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>s-flat</code></td>
+        <td>Шаблон тем не поддерживает: раздел «Цвета» — плоский список параметров, переключателя темы нет. В рельсе нет «Макета»: шаблон не объявил там ни одного параметра.</td>
+        <td>2, 4</td>
+      </tr>
+      <tr>
+        <td><code>s-pinned</code></td>
+        <td>Шаблон умеет обе темы, автор выбрал «Светлую»: тест у всех открывается светлым. Таблица цветов — та же: она следует поддержке тем шаблоном, а не выбору автора.</td>
+        <td>1, 3</td>
+      </tr>
+      <tr>
+        <td><code>s-auto</code></td>
+        <td>Тема «Авто»: тест открывается в теме участника. Таблица идентична состоянию <code>s-pinned</code> — меняется активный пункт переключателя и пояснение под ним.</td>
+        <td>1, 3</td>
+      </tr>
+      <tr>
+        <td><code>s-branding</code></td>
+        <td>«Брендирование» после выноса цветов: остаются шрифт и логотип.</td>
+        <td>0</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="wf-notes-title">Дельта к реализованному</h2>
+  <table class="wf-notes-table">
+    <thead><tr><th>Что меняется</th><th>Где</th><th>Зачем</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Новый раздел рельсы «Цвета»</td>
+        <td>Между «Брендированием» и «Макетом»</td>
+        <td>У цвета логика сложнее переноса значения в рендер: наследование из темы шаблона, формат хранения, значение на каждую тему. В общем списке параметров это не выражается.</td>
+      </tr>
+      <tr>
+        <td>Раздел без параметров не выводится</td>
+        <td>Рельса подразделов</td>
+        <td>Сейчас пустой раздел показывается и открывается баннером «в шаблоне нет параметров» — пункт, который ничего не делает.</td>
+      </tr>
+      <tr>
+        <td>Переключатель темы теста</td>
+        <td>Первым в разделе «Цвета», только у шаблона с темами</td>
+        <td>Автор решает, фиксировать вид теста или отдать его системной теме участника.</td>
+      </tr>
+      <tr>
+        <td>Значение цвета на каждую тему</td>
+        <td>Раздел «Цвета» при теме «Авто»</td>
+        <td>Одно значение не обслуживает две палитры: светлый фон с тёмным текстом даёт нечитаемый экран у части участников.</td>
+      </tr>
+      <tr>
+        <td>Происхождение значения: «из шаблона» / «Вернуть из шаблона»</td>
+        <td>Строка цвета</td>
+        <td>Уже реализовано; в шаблоне с темами применяется к каждой теме отдельно.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="wf-notes-title">Соответствие контролов</h2>
+  <table class="wf-notes-table">
+    <thead><tr><th>Элемент</th><th>Компонент DS</th><th>Примечание</th></tr></thead>
+    <tbody>
+      <tr><td>Выбор цвета</td><td><code>ColorPicker</code> (<code>.ou-color-trigger</code>)</td><td>Уже используется. Палитра и ввод HEX — внутри поповера компонента.</td></tr>
+      <tr><td>Тема теста</td><td><code>SegmentedControl</code> (<code>.ou-seg</code>)</td><td>Три значения в одну строку. Не выводится, если шаблон тем не заявляет.</td></tr>
+      <tr><td>Таблица цветов по темам</td><td><code>Table</code> (<code>.ou-table</code> в <code>.ou-table-wrap</code>)</td><td>У шаблона с темами — всегда. Заголовок строки — название параметра, под ним описание из манифеста; по колонке на каждую тему, которую шаблон объявил.</td></tr>
+      <tr><td>Сброс переопределения</td><td><code>IconButton</code> <code>ghost</code> <code>s</code>, иконка <code>rotate-ccw</code></td><td>Есть только у переопределённого цвета — его наличие и отмечает изменённые значения. У цвета из шаблона возвращать нечего, поэтому кнопки нет.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="wf-notes-title">Что требуется вне панели</h2>
+  <table class="wf-notes-table">
+    <thead><tr><th>Где</th><th>Что</th></tr></thead>
+    <tbody>
+      <tr><td>Манифест шаблона</td><td>Признак поддержки тем — перечень тем, которые шаблон умеет. Без него платформе неоткуда узнать, показывать ли переключатель и вторую палитру.</td></tr>
+      <tr><td>Раскладка параметров по разделам</td><td>Цветовые параметры попадают в «Цвета» по ТИПУ параметра, а не по объявленному разделу: иначе каждый уже загруженный шаблон пришлось бы переиздавать.</td></tr>
+      <tr><td>Хранение значений</td><td>У шаблона с темами цвет хранит значение на каждую тему, независимо от выбора переключателя: сменив тему, автор не теряет уже подобранную палитру. У шаблона без тем значение одно.</td></tr>
+      <tr><td>Отрисовка</td><td>Выбранная тема ставится на сцену; при «Авто» переопределения печатаются двумя наборами, под светлую и под тёмную.</td></tr>
+      <tr><td>Предпросмотр</td><td>Показывает выбранную тему; при «Авто» — обе, переключением.</td></tr>
+      <tr><td>Шаблон «Сертификация»</td><td>Декоративная плашка обложки залита фиксированным оранжевым мимо токена основного цвета: при смене цвета кнопок обложка расходится с остальным экраном.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+  /* Wireframe-only controls, идентичны approved/prd22-page-fields-sequences.html. */
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+    document.documentElement.style.setProperty('--wf-nav-h', nav.offsetHeight + 'px');
+  }
+
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (b) {
+      b.classList.toggle('active', b === btn);
+    });
+    document.body.classList.toggle('has-active-shell', !!target && target.classList.contains('shell'));
+    updateWireframeNavOffset();
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  window.toggleAnnots = function toggleAnnots(btn) {
+    var on = document.body.classList.toggle('wf-annots-on');
+    if (btn) btn.classList.toggle('active', on);
+  };
+
+  window.addEventListener('load', updateWireframeNavOffset);
+  window.addEventListener('resize', updateWireframeNavOffset);
+  document.body.classList.add('has-active-shell');
+</script>
+</body>
+</html>
