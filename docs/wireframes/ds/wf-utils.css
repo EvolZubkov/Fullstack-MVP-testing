@@ -270,6 +270,15 @@ body {
   cursor: pointer;
 }
 
+/* Wireframe-only visibility gate for the option menu. The DS `.ou-select__menu`
+   has no closed-state rule because the real React component mounts the menu into
+   the DOM only while open. The wireframe `initSelect` (prd7-shared.js) instead
+   appends the menu once and keeps it in the DOM, so without this gate every
+   select renders its menu permanently and they overlap. Menus open on click via
+   the `.is-open` class. Portal-injected menus (document.body) are unaffected —
+   they are not descendants of `.ou-select`. */
+.ou-select:not(.is-open) .ou-select__menu { display: none; }
+
 /* ── Button ──────────────────────────────────────────────────────────────── */
 .ou-button {
   display: inline-flex;
