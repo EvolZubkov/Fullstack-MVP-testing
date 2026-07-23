@@ -1294,3 +1294,46 @@ a.results-rec-item:hover { text-decoration: underline; }
   font-size: 30px; font-weight: 800;
 }
 .renderer--ring-chart .renderer__label { position: absolute; left: 0; right: 0; bottom: -22px; text-align: center; }
+
+/* ===== Content page layouts (PRD-22) =====
+   One card, six shapes: text alone or text beside an image (left / right), each
+   with or without a subtitle. The gallery family adds the navigation dots and
+   «Назад» around the SAME card. The dots come from the core (`page.dots`), so a
+   page outside a sequence simply renders none and the row collapses. */
+.page-card { display: flex; flex-direction: column; gap: 16px; }
+.page-card__text { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.page-card__title { font-size: 28px; font-weight: 700; line-height: 1.2; color: hsl(var(--foreground)); margin: 0; }
+.page-card__lead { font-size: 17px; line-height: 1.55; color: hsl(var(--muted-foreground)); margin: 0; }
+.page-card__body { font-size: 15px; line-height: 1.65; color: hsl(var(--foreground)); }
+.page-card__body p { margin-bottom: 12px; }
+.page-card__body p:last-child { margin-bottom: 0; }
+.page-card__media img { max-width: 100%; border-radius: 8px; display: block; }
+/* Placeholder regions are always in the markup, so empty ones must collapse
+   instead of reserving space. */
+.page-card__title:empty,
+.page-card__lead:empty,
+.page-card__media:empty { display: none; }
+
+/* Text beside an image. The image takes half the card; the DOM order decides the
+   side, so no direction override is needed. An empty image region collapses
+   (rule above) and the text simply takes the whole width. */
+.page-card--split { flex-direction: row; align-items: flex-start; gap: 24px; }
+.page-card--split > .page-card__media { flex: 0 0 50%; max-width: 50%; }
+.page-card--split > .page-card__text { flex: 1 1 auto; }
+/* The card is narrow on a phone: side by side leaves neither column readable, so
+   the image goes above the text regardless of the chosen side. */
+@media (max-width: 560px) {
+  .page-card--split { flex-direction: column; }
+  .page-card--split > .page-card__media { flex: 0 0 auto; max-width: 100%; }
+  .page-card--image-right > .page-card__media { order: -1; }
+}
+
+.gallery-nav { align-items: center; }
+.gallery-nav__buttons { display: flex; gap: 8px; margin-left: auto; }
+.gallery-dots { display: flex; align-items: center; gap: 8px; }
+.gallery-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: hsl(var(--muted-foreground) / 0.35);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.gallery-dot.is-current { background: hsl(var(--primary)); transform: scale(1.35); }

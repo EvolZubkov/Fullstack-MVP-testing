@@ -1,0 +1,19 @@
+<div class="layout-content-wrap gallery-page">
+  <div class="card page-card page-card--split page-card--image-right">
+    <div class="page-card__text">
+      <h1 class="page-card__title" data-placeholder="title"></h1>
+      <p class="page-card__lead" data-placeholder="lead"></p>
+      <div class="page-card__body" data-placeholder="body"></div>
+    </div>
+    <div class="page-card__media" data-placeholder="image"></div>
+  </div>
+  <div class="navigation gallery-nav">
+    <div class="gallery-dots" role="group" aria-label="Навигация по страницам">
+      {{#each page.dots}}<span class="gallery-dot {{statusClass}}"></span>{{/each}}
+    </div>
+    <div class="gallery-nav__buttons">
+      {{#if page.canGoBack}}<button type="button" class="btn btn-outline" data-nav="prev">Назад</button>{{/if}}
+      <button type="button" class="btn" data-nav="next">{{page.nextLabel}}</button>
+    </div>
+  </div>
+</div>

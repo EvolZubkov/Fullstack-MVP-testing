@@ -69,7 +69,7 @@ body {
 .tb-pad > .centered,
 .tb-pad > .review-page,
 .tb-pad > .content-page,
-.tb-pad > .gallery,
+.tb-pad > .slide,
 .tb-pad > .section-intro-page,
 .tb-pad > .results-page,
 .tb-pad > .transition-page,
@@ -378,6 +378,10 @@ body {
 .topic-bar.is-fail .topic-bar-fill { background: hsl(var(--destructive)); }
 .topic-required, .topic-feedback, .topic-feedback-text { font-size: 1.9cqh; color: hsl(var(--muted-foreground)); margin-top: 1cqh; }
 .results-actions { display: flex; justify-content: center; gap: 2cqw; margin-top: 2.4cqh; flex-wrap: wrap; }
+/* Adaptive results: per-topic recommendation links (results.adaptive layout). */
+.topic-links { display: flex; flex-direction: column; gap: .8cqh; margin-top: 1cqh; }
+.topic-link { font-size: 2cqh; color: hsl(var(--primary)); text-decoration: none; }
+.topic-link:hover { text-decoration: underline; }
 .results-rec-list { display: flex; flex-direction: column; gap: 1cqh; }
 .results-rec-item { display: block; padding: 1.2cqh 2cqw; background: hsl(var(--muted) / .5); border-radius: 1cqh; font-size: 2.1cqh; color: hsl(var(--foreground)); text-decoration: none; }
 a.results-rec-item { color: hsl(var(--primary)); }
@@ -392,7 +396,10 @@ a.results-rec-item { color: hsl(var(--primary)); }
 .transition-level.is-up { border-color: hsl(var(--success)); color: hsl(var(--success)); background: hsl(var(--success) / .12); }
 .transition-level.is-down { border-color: hsl(var(--destructive)); color: hsl(var(--destructive)); background: hsl(var(--destructive) / .12); }
 .transition-level.is-complete { border-color: hsl(var(--primary)); color: hsl(var(--primary)); background: hsl(var(--primary) / .12); }
+.transition-level-icon { flex: 0 0 auto; width: 2.8cqh; height: 2.8cqh; }
+.transition-level-msg { min-width: 0; }
 .transition-topic { font-size: 2.4cqh; color: hsl(var(--muted-foreground)); }
+.transition-actions { display: flex; justify-content: center; gap: 2cqw; margin-top: 1cqh; }
 
 /* ===== BLOCKED (retake gate) ===== */
 .blocked-card { margin: auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2.2cqh; }
@@ -529,48 +536,80 @@ a.results-rec-item { color: hsl(var(--primary)); }
 .tb-modal__foot [data-modal="confirm"] { background: hsl(var(--primary)); border-color: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
 #center-toast { position: fixed; left: 50%; top: 24px; transform: translateX(-50%); z-index: 1100; background: hsl(var(--foreground)); color: hsl(var(--background)); padding: 10px 18px; border-radius: 999px; font-size: 14px; font-weight: 600; }
 
-/* ===== GALLERY (content-page carousel: header + card + round dot pills + Назад/Далее) ===== */
-.gallery { gap: 3cqh; }
-/* Optional per-slide background image (variant-slide setting). Applied to the slide
-   root; the white card keeps content readable on top. */
-.gallery.has-slide-bg { position: relative; background-size: cover; background-position: center; background-repeat: no-repeat; border-radius: 2cqh; }
-/* Theme-adaptive scrim over the author's slide image: the header/footer text follows
-   the theme (light in dark theme), so a bare light image would render that text
+/* ===== SLIDE — the author content page (учебная страница) =====
+   ONE component behind every `info.*` and `gallery.*` variant, because the two are
+   the same screen: heading block, a content card (text, optionally split with an
+   image), and a footer with the navigation. The `gallery.*` variants add the
+   sequence dots — that is the ONLY structural difference, so a page keeps its look
+   when the author moves it in or out of a sequence.
+
+   The variant keys, the placeholder keys (title/lead/body/image) and the settings
+   (sequenceId/nextLabel/backgroundImage) are IDENTICAL to the standard template's,
+   so a test switches between the two templates without re-binding its pages; only
+   the appearance below is RTK. */
+.slide { display: flex; flex-direction: column; gap: 3cqh; flex: 1 1 auto; min-height: 0; }
+/* Optional per-page background image (the `backgroundImage` setting). Applied by the
+   core to the screen root; the card keeps content readable on top. */
+.slide.has-slide-bg { position: relative; background-size: cover; background-position: center; background-repeat: no-repeat; border-radius: 2cqh; }
+/* Theme-adaptive scrim over the author's image: the heading/footer text follows the
+   theme (light in dark theme), so a bare light image would render that text
    invisible. The scrim (theme background at ~82%) guarantees contrast in BOTH themes
    while the image still shows through; the card keeps its own solid surface. */
-.gallery.has-slide-bg::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: hsl(var(--background) / .82); z-index: 0; }
-.gallery.has-slide-bg > * { position: relative; z-index: 1; }
-.gallery__head { flex: 0 0 auto; }
-.gallery__title { font-size: 5cqh; font-weight: 800; line-height: 1.1; letter-spacing: -.01em; color: hsl(var(--foreground)); margin: 0; }
-.gallery__hint { font-size: 2.4cqh; font-weight: 650; color: hsl(var(--primary)); margin: 1cqh 0 0; }
-.gallery__card { flex: 1 1 auto; min-height: 0; overflow-y: auto; background: hsl(var(--card)); border: 1px solid hsl(var(--card-border)); border-radius: 2.4cqh; padding: 3.4cqh 3.4cqw; box-shadow: var(--shadow); }
-/* One adaptive card: split into text + image only when the page carries an image;
-   full-width text otherwise. Keyed on the presence of .gallery__media (no layout variant). */
-.gallery__card:has(.gallery__media) { display: grid; grid-template-columns: 1fr 1fr; gap: 4cqw; align-items: center; }
-.gallery__body { font-size: 2.5cqh; line-height: 1.55; color: hsl(var(--foreground)); }
-.gallery__body > :first-child { margin-top: 0; }
-.gallery__body p { margin-bottom: 1.6cqh; }
-.gallery__body p:last-child { margin-bottom: 0; }
-.gallery__body a { color: hsl(var(--primary)); }
-.gallery__body ol, .gallery__body ul { list-style: none; display: flex; flex-direction: column; gap: 1.4cqh; margin: 0 0 1.6cqh; }
-.gallery__body ol:last-child, .gallery__body ul:last-child { margin-bottom: 0; }
-.gallery__body li { position: relative; padding-left: 6cqw; line-height: 1.4; }
-.gallery__body ol { counter-reset: g-step; }
-.gallery__body ol > li { counter-increment: g-step; }
-.gallery__body ol > li::before { content: counter(g-step); position: absolute; left: 0; top: -.1cqh; width: 4.2cqh; height: 4.2cqh; border-radius: 50%; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); font-size: 2.1cqh; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
-.gallery__body ul > li::before { content: ""; position: absolute; left: 1.2cqw; top: .6em; width: 1.3cqh; height: 1.3cqh; border-radius: 50%; background: hsl(var(--primary)); }
+.slide.has-slide-bg::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: hsl(var(--background) / .82); z-index: 0; }
+.slide.has-slide-bg > * { position: relative; z-index: 1; }
+
+.slide__head { flex: 0 0 auto; display: flex; flex-direction: column; gap: 1cqh; }
+/* A variant without a title/lead (or a page the author left blank) must not leave a
+   gap where the heading block would be. */
+.slide__head:not(:has(*:not(:empty))) { display: none; }
+.slide__title { font-size: 5cqh; font-weight: 800; line-height: 1.1; letter-spacing: -.01em; color: hsl(var(--foreground)); margin: 0; }
+.slide__lead { font-size: 2.4cqh; font-weight: 650; color: hsl(var(--primary)); margin: 0; }
+.slide__title:empty, .slide__lead:empty, .slide__media:empty { display: none; }
+
+.slide__card { flex: 1 1 auto; min-height: 0; overflow-y: auto; background: hsl(var(--card)); border: 1px solid hsl(var(--card-border)); border-radius: 2.4cqh; padding: 3.4cqh 3.4cqw; box-shadow: var(--shadow); }
+.slide__card::-webkit-scrollbar { width: 8px; }
+.slide__card::-webkit-scrollbar-thumb { background: hsl(var(--muted)); border-radius: 4px; }
+/* Split variants (image left / image right): two columns, but ONLY when the page
+   actually carries an image. The media region is always present in the markup (the
+   core fills it), so the split keys on a NON-EMPTY region — an image-variant page
+   with no picture reads as a plain full-width card instead of a half-empty one.
+   Column order comes from the layout file, not from a modifier. */
+.slide--split .slide__card:has(.slide__media:not(:empty)) { display: grid; grid-template-columns: 1fr 1fr; gap: 4cqw; align-items: center; }
 /* Theme-adaptive media frame (a muted panel that reads in BOTH themes) — the image
    sits inside it. Author images should be transparent PNG/SVG; a baked-in light/dark
    background would clash with the opposite theme. */
-.gallery__media { display: flex; align-items: center; justify-content: center; background: hsl(var(--muted) / .45); border: 1px solid hsl(var(--border)); border-radius: 2.4cqh; padding: 2.6cqh 2.6cqw; }
-.gallery__media img { max-width: 100%; max-height: 48cqh; object-fit: contain; }
-.gallery__foot { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 2cqw; margin-top: 1cqh; }
-.gallery__dots { display: flex; align-items: center; gap: 1.6cqw; }
+.slide__media { display: flex; align-items: center; justify-content: center; background: hsl(var(--muted) / .45); border: 1px solid hsl(var(--border)); border-radius: 2.4cqh; padding: 2.6cqh 2.6cqw; }
+.slide__media img { max-width: 100%; max-height: 48cqh; object-fit: contain; }
+
+.slide__body { font-size: 2.5cqh; line-height: 1.55; color: hsl(var(--foreground)); }
+.slide__body > :first-child { margin-top: 0; }
+.slide__body p { margin-bottom: 1.6cqh; }
+.slide__body p:last-child { margin-bottom: 0; }
+.slide__body a { color: hsl(var(--primary)); }
+.slide__body ol, .slide__body ul { list-style: none; display: flex; flex-direction: column; gap: 1.4cqh; margin: 0 0 1.6cqh; }
+.slide__body ol:last-child, .slide__body ul:last-child { margin-bottom: 0; }
+.slide__body li { position: relative; padding-left: 6cqw; line-height: 1.4; }
+.slide__body ol { counter-reset: g-step; }
+.slide__body ol > li { counter-increment: g-step; }
+.slide__body ol > li::before { content: counter(g-step); position: absolute; left: 0; top: -.1cqh; width: 4.2cqh; height: 4.2cqh; border-radius: 50%; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); font-size: 2.1cqh; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.slide__body ul > li::before { content: ""; position: absolute; left: 1.2cqw; top: .6em; width: 1.3cqh; height: 1.3cqh; border-radius: 50%; background: hsl(var(--primary)); }
+
+/* Footer: dots pushed left, actions right. A page outside a sequence renders no
+   dots, and `margin-right:auto` on the (empty) dot row keeps the buttons where a
+   gallery page has them — the two variants stay visually aligned. */
+.slide__foot { flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-end; gap: 2cqw; margin-top: auto; }
+.slide__dots { display: flex; align-items: center; gap: 1.6cqw; margin-right: auto; }
 .tb-pill--dot { width: 2cqh; height: 2cqh; min-width: 2cqh; font-size: 0; cursor: default; background: hsl(var(--muted)); border: 1.5px solid hsl(var(--border)); }
 .tb-pill--dot.is-current { background: hsl(var(--primary)); border-color: hsl(var(--primary)); }
 .tb-pill--dot:hover { transform: none; }
-.gallery__nav { display: flex; align-items: center; gap: 2cqw; }
-.gallery__nav .btn { font-size: 2.4cqh; padding: 1.5cqh 3.6cqw; }
+.slide__nav { display: flex; align-items: center; gap: 2cqw; }
+.slide__nav .btn { font-size: 2.4cqh; padding: 1.5cqh 3.6cqw; }
+
+/* «Итог раздела» (summary.result): the result renderer on a centred card. */
+.slide--summary .summary-card { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 2cqh; text-align: center; background: hsl(var(--card)); border: 1px solid hsl(var(--card-border)); border-radius: 2.4cqh; padding: 4cqh 5cqw; box-shadow: var(--shadow); }
+.summary-card__title { font-size: 4.4cqh; font-weight: 800; line-height: 1.1; margin: 0; }
+.summary-card__title:empty { display: none; }
+.summary-card__result { display: flex; align-items: center; justify-content: center; }
 
 /* ===== loading ===== */
 #loading { text-align: center; padding: 20cqh 5cqw; color: hsl(var(--muted-foreground)); font-size: 2.6cqh; }

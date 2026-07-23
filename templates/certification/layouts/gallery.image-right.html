@@ -1,0 +1,19 @@
+<div class="slide slide--gallery slide--split">
+  <header class="slide__head">
+    <h1 class="slide__title" data-placeholder="title"></h1>
+    <p class="slide__lead" data-placeholder="lead"></p>
+  </header>
+  <div class="slide__card">
+    <div class="slide__body" data-placeholder="body"></div>
+    <div class="slide__media" data-placeholder="image"></div>
+  </div>
+  <div class="slide__foot">
+    <div class="slide__dots" role="group" aria-label="Навигация по страницам">
+      {{#each page.dots}}<span class="tb-pill tb-pill--dot {{statusClass}}"></span>{{/each}}
+    </div>
+    <div class="slide__nav">
+      {{#if page.canGoBack}}<button type="button" class="btn btn-outline" data-nav="prev">Назад</button>{{/if}}
+      <button type="button" class="btn" data-nav="next">{{page.nextLabel}}</button>
+    </div>
+  </div>
+</div>
