@@ -16,6 +16,11 @@ import {
   type ContentTemplateDef,
   type RenderableContentPage,
 } from "@shared/template/content-page";
+import {
+  buildPageContextFor,
+  type SequenceContentPage,
+} from "@shared/template/page-sequences";
+import { withTemplateAssetBaseInValues } from "@shared/template/asset-base";
 
 export interface ContentScreenTemplate {
   layout: string;
@@ -32,6 +37,12 @@ export interface ContentScreenTemplate {
    * wrapper knows how to fill.
    */
   variantLayouts?: Record<string, string>;
+  /**
+   * PRD-22 FR-36: prefix for RELATIVE links in author content (`images/x.png`)
+   * pointing at the template's own files. Absent ⇒ such links are left as they
+   * are, which is the pre-PRD-22 behaviour.
+   */
+  assetsBase?: string;
 }
 
 export interface TemplateContentScreenProps {
@@ -59,6 +70,12 @@ export interface TemplateContentScreenProps {
    * is inert, as it was before — never a dead-end, just no reverse.
    */
   onBack?: () => void;
+  /**
+   * All content pages of the test — the structure the navigation dots are
+   * computed from (PRD-22). Omitted ⇒ no page belongs to a sequence, so a layout
+   * with an indicator simply renders none.
+   */
+  allPages?: SequenceContentPage[];
   className?: string;
 }
 
@@ -76,6 +93,7 @@ export function TemplateContentScreen({
   bodyHtml,
   onBodyAction,
   onBack,
+  allPages,
   className,
 }: TemplateContentScreenProps) {
   const built = useMemo(
@@ -101,13 +119,37 @@ export function TemplateContentScreen({
     }
   }, [built.layoutKey, template.variantLayouts, template.layout, bodyHtml]);
 
+  // PRD-22: navigation dots of the page's sequence, computed by the SHARED core
+  // from the test structure — the same call the SCORM runtime makes, so the two
+  // hosts cannot count differently. `canGoBack` is host state: the web run knows
+  // whether a previous screen exists, the structure does not.
+  const pageContext = useMemo(
+    () => buildPageContextFor(String(page.id ?? ""), allPages ?? [], { canGoBack: Boolean(onBack) }),
+    [page.id, allPages, onBack],
+  );
+
+  // PRD-22 FR-36: a relative link in author content points at the TEMPLATE's
+  // files. The stored value is host-independent, so the base is applied here,
+  // right before rendering, with the route this host serves them from.
+  const contentWithAssetBase = useMemo(
+    () =>
+      template.assetsBase
+        ? {
+            ...built.content,
+            values: withTemplateAssetBaseInValues(built.content.values, template.assetsBase),
+          }
+        : built.content,
+    [built.content, template.assetsBase],
+  );
+
   const context = useMemo(
     () => ({
       course: { title: courseTitle },
+      page: pageContext,
       ...(template.design ? { design: template.design } : {}),
       ...(extraContext || {}),
     }),
-    [courseTitle, template.design, extraContext],
+    [courseTitle, pageContext, template.design, extraContext],
   );
 
   return (
@@ -122,7 +164,7 @@ export function TemplateContentScreen({
         // the template's content styling around identical markup.
         "page-content": bodyHtml ? built.skeleton + bodyHtml : built.skeleton,
       }}
-      content={built.content}
+      content={contentWithAssetBase}
       className={className}
       onAction={(action) => {
         if (bodyHtml && onBodyAction && action !== "nav:next") {

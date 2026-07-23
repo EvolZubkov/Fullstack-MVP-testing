@@ -618,9 +618,15 @@ export default function TakeTestPage() {
             // renders through the generic wrapper as a blank screen with «Далее».
             const siRes = await fetch(`/api/tests/${testId}/screen-template/section-intro`, { credentials: "include" });
             const sectionIntro = siRes.ok ? await siRes.json() : null;
+            // The server ships every variant's own layout (keyed by `layoutFile`);
+            // «Введение раздела» is resolved by a fixed layouts[] key instead, so it
+            // is merged in separately.
             setContentTpl({
               ...contentPayload,
-              variantLayouts: sectionIntro ? { "layouts/section-intro.html": sectionIntro.layout } : {},
+              variantLayouts: {
+                ...(contentPayload.variantLayouts ?? {}),
+                ...(sectionIntro ? { "layouts/section-intro.html": sectionIntro.layout } : {}),
+              },
             });
           }
         } catch {
@@ -2066,6 +2072,9 @@ export default function TakeTestPage() {
         template={contentTpl}
         extraContext={introContext}
         courseTitle={testInfo?.title || attempt?.testTitle || ""}
+        // PRD-22: the whole structure, so the navigation dots of a sequence are
+        // computed by the shared core exactly as the SCORM runtime computes them.
+        allPages={flowStructure.contentPages}
         onBack={
           // «Назад» from a section's intro returns to the hub WITHOUT completing
           // the section — it reverts to «Не начата», mirroring the SCORM runtime.
