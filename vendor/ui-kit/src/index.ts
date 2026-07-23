@@ -77,6 +77,7 @@ import { Table, TableChip } from './components/Table';
 import { Tab, TabList, TabPanel, Tabs } from './components/Tabs';
 import { Tag } from './components/Tag';
 import { TagInput } from './components/TagInput';
+import { RichTextEditor } from './components/RichTextEditor';
 import { Textarea } from './components/Textarea';
 import { TimePicker } from './components/TimePicker';
 import { Timer, useCountdown } from './components/Timer';
@@ -146,6 +147,7 @@ export {
   Switch,
   Table, TableChip,
   Tab, TabList, TabPanel, Tabs,
+  RichTextEditor,
   Tag,
   TagInput,
   Textarea,
@@ -289,6 +291,7 @@ export type {
 } from './components/Tabs';
 export type { TagProps, TagVariant, TagSize } from './components/Tag';
 export type { TagInputProps } from './components/TagInput';
+export type { RichTextEditorProps, RichTextMode } from './components/RichTextEditor';
 export type { TextareaProps } from './components/Textarea';
 export type { TimePickerProps, TimePickerValue } from './components/TimePicker';
 export type {

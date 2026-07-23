@@ -1,7 +1,8 @@
 import React, {
-  forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,
+  forwardRef, useEffect, useImperativeHandle, useRef, useState,
 } from 'react';
 import { cn, cssStyleClass } from '../utils';
+import { Popover } from './Popover';
 
 export type ColorPickerColor = string; // '#RRGGBB' or 'transparent'
 
@@ -70,32 +71,11 @@ export const ColorPicker = forwardRef<HTMLButtonElement, ColorPickerProps>(
     const [open, setOpen] = useState(false);
     const [draft, setDraft] = useState<string>(value);
     const [custom, setCustom] = useState<string[]>(() => readCustom(customStorageKey));
-    const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
-    // Reset draft when opening, position popover.
+    // Reset the draft each time the palette opens.
     useEffect(() => {
-      if (!open) return;
-      setDraft(value);
-      const r = triggerRef.current?.getBoundingClientRect();
-      if (r) setPos({ top: r.bottom + window.scrollY + 6, left: r.left + window.scrollX });
-
-      const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-      document.addEventListener('keydown', onKey);
-      return () => document.removeEventListener('keydown', onKey);
+      if (open) setDraft(value);
     }, [open, value]);
-
-    // Outside click.
-    const popoverRef = useRef<HTMLDivElement>(null);
-    useEffect(() => {
-      if (!open) return;
-      const onDown = (e: MouseEvent) => {
-        if (popoverRef.current?.contains(e.target as Node)) return;
-        if (triggerRef.current?.contains(e.target as Node)) return;
-        setOpen(false);
-      };
-      document.addEventListener('mousedown', onDown);
-      return () => document.removeEventListener('mousedown', onDown);
-    }, [open]);
 
     const triggerIsTransparent = isTransparent(value);
     const draftIsTransparent = isTransparent(draft);
@@ -128,14 +108,19 @@ export const ColorPicker = forwardRef<HTMLButtonElement, ColorPickerProps>(
       );
     };
 
-    const popover = open && !disabled ? (
-      <div
-        ref={popoverRef}
-        className={cn(
-          'ou-color-pop',
-          cssStyleClass({ position: 'absolute', top: pos.top, left: pos.left, zIndex: 1000 }, 'ou-color-pop-pos'),
-        )}
-        role="dialog"
+    // Positioning, portal and dismissal come from the shared Popover: rendered
+    // inline, the palette was laid out in PAGE coordinates inside whatever
+    // positioned or clipping ancestor the form happened to have, so it drifted
+    // away from its button and was cut off by the form's edges. `chrome={false}`
+    // keeps `ou-color-pop` as the surface — the Popover contributes no second one.
+    const popover = (
+      <Popover
+        open={open && !disabled}
+        onClose={() => setOpen(false)}
+        anchorRef={triggerRef}
+        placement="bottom"
+        chrome={false}
+        className="ou-color-pop"
         aria-label="Выбор цвета"
       >
         <div className="ou-color-pop__section">
@@ -225,8 +210,8 @@ export const ColorPicker = forwardRef<HTMLButtonElement, ColorPickerProps>(
           <button type="button" className="ou-btn ou-btn--ghost ou-btn--s" onClick={cancel}>Отмена</button>
           <button type="button" className="ou-btn ou-btn--primary ou-btn--s" onClick={apply}>Применить</button>
         </div>
-      </div>
-    ) : null;
+      </Popover>
+    );
 
     return (
       <>
