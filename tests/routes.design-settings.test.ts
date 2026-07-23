@@ -344,6 +344,15 @@ describe("PUT /api/tests/:id/design — themes (PRD-23)", () => {
     expect(res.body.field).toBe("paramsByTheme");
   });
 
+  it("refuses a pinned theme for a template without themes — only «Авто» applies", async () => {
+    dbMock.select.mockReturnValue(dbMock._makeChain([corporateTemplate]));
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/design")
+      .send({ templateId: "corporate", params: {}, theme: "dark" });
+    expect(res.status).toBe(422);
+    expect(res.body.field).toBe("theme");
+  });
+
   it("keeps the pre-PRD-23 JSON shape for a template without themes", async () => {
     dbMock.select.mockReturnValue(dbMock._makeChain([corporateTemplate]));
     const res = await request(makeApp())

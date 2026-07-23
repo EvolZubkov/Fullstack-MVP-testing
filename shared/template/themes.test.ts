@@ -152,3 +152,16 @@ describe("validateManifestThemes", () => {
     ]);
   });
 });
+
+describe("пустая запись в themes[]", () => {
+  it("declaredThemes пропускает null, не падая на нём", () => {
+    expect(declaredThemes({ themes: [null, { id: "light", label: "Светлая" }] })).toEqual([
+      { id: "light", label: "Светлая" },
+    ]);
+  });
+
+  it("validateManifestThemes называет пустую запись её номером", () => {
+    const issues = validateManifestThemes({ themes: [null, { id: "dark", label: "Тёмная" }] });
+    expect(issues.some((i) => i.theme === "#1" && i.level === "blocking")).toBe(true);
+  });
+});

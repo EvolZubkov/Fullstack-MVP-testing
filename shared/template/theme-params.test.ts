@@ -99,3 +99,12 @@ describe("paramsForTheme", () => {
     expect(paramsForTheme(r, "light")).toEqual({ fontFamily: "Inter" });
   });
 });
+
+describe("paramsForTheme — палитра, которой нет в хранении", () => {
+  it("возвращает базовые параметры, а не падает", () => {
+    // Шаблон без тем: byTheme пуст, но спросить про палитру можно — так делает
+    // предпросмотр, пока автор не переключил шаблон.
+    const flat = resolveThemeParams({ params: { fontFamily: "Inter" } }, MANIFEST_FLAT);
+    expect(paramsForTheme(flat, "dark")).toEqual({ fontFamily: "Inter" });
+  });
+});

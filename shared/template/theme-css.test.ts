@@ -140,3 +140,26 @@ describe("buildTemplateThemeCss — only what the palette actually sets", () => 
     expect(buildTemplateThemeCss({ params: { fontFamily: "Inter" } }, WITH_DEFAULTS)).toBe("");
   });
 });
+
+// Defensive fallbacks: a manifest may arrive without `params`, and a declared
+// palette may have no entry in the stored overrides at all. Neither is exotic —
+// the first is any template that declares themes before declaring colours, the
+// second is every template the moment the author pins a theme without editing it.
+describe("buildTemplateThemeCss — неполные входные данные", () => {
+  const THEMES_ONLY = {
+    themes: [
+      { id: "light", label: "Светлая" },
+      { id: "dark", label: "Тёмная" },
+    ],
+  };
+
+  it("шаблон объявил темы, но ни одного параметра — печатать нечего", () => {
+    expect(buildTemplateThemeCss({ paramsByTheme: { dark: { primaryColor: "D" } } }, THEMES_ONLY)).toBe("");
+  });
+
+  it("палитра без единого переопределения не даёт своего правила", () => {
+    const css = buildTemplateThemeCss({ paramsByTheme: { light: { primaryColor: "L" } } }, THEMED);
+    expect(css).toBe(":root { --primary: L; }");
+    expect(css).not.toContain("data-theme");
+  });
+});

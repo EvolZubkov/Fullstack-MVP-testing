@@ -143,8 +143,9 @@ describe("<DesignSection /> — null template", () => {
     renderSection(makeDesign({ template: null }));
     // Template pane sub-component returns null.
     expect(screen.queryByTestId("design-template-pane")).toBeNull();
-    // Visiting each content rail computes its emptyDesc with the `?? ""` fallback.
-    for (const rail of ["branding", "layout", "progress"] as const) {
+    // Visiting each content rail computes its emptyDesc with the `?? ""` fallback;
+    // «Цвета» takes the `if (!tpl) return null` guard of ColorsPane.
+    for (const rail of ["branding", "colors", "layout", "progress"] as const) {
       fireEvent.click(screen.getByTestId(`design-rail-${rail}`));
       expect(screen.queryByTestId(`design-${rail}-pane`)).toBeNull();
     }
