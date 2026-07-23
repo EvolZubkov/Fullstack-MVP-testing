@@ -915,6 +915,8 @@ router.post("/attempts/:attemptId/section-result", requirePermission("attempts.t
       topicId: variantSection.topicId,
       topicName: variantSection.topicName,
       topicPassRule: section?.topicPassRuleJson ?? null,
+      // PRD-24: the variant delivered for this topic decides which threshold gates it.
+      formId: variantSection.formId ?? null,
       questions: questions.map((q) => {
         const effective = scoring.resolve(q);
         return {
@@ -995,6 +997,8 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
         topicId: variantSection.topicId,
         topicName: variantSection.topicName,
         topicPassRule: section?.topicPassRuleJson ?? null,
+        // PRD-24: the variant delivered for this topic decides which threshold gates it.
+        formId: variantSection.formId ?? null,
         questions: questions.map((q) => {
           questionTypes[q.id] = q.type as QuestionType;
           const effective = scoring.resolve(q);

@@ -727,6 +727,60 @@ describe("Attempts routes — finish attempt", () => {
     expect(res.body.result.overallPassed).toBe(true);
   });
 
+  // PRD-24: a topic in variants mode is gated by the threshold of the variant the
+  // learner actually got (pinned in variant_json.sections[].formId), not by a single
+  // rule shared by all variants.
+  describe("POST .../finish — by_variant thresholds (PRD-24)", () => {
+    const byVariantSection = {
+      topicId: "t1",
+      topicPassRuleJson: {
+        source: "by_variant",
+        byForm: { fA: { type: "percent", value: 50 }, fB: { type: "percent", value: 100 } },
+      },
+    };
+    const q2 = { ...dbQuestion, id: "q2" };
+    /** 1 correct of 2 → topic percent = 50. Overall 40 so an unpinned attempt would pass. */
+    const attemptWithForm = (formId: string) => ({
+      ...dbAttempt,
+      variantJson: { sections: [{ topicId: "t1", topicName: "JS", questionIds: ["q1", "q2"], formId }] },
+    });
+
+    beforeEach(() => {
+      storageMock.getTest.mockResolvedValue({ ...dbTest, overallPassRuleJson: { type: "percent", value: 40 } });
+      storageMock.getTestSections.mockResolvedValue([byVariantSection]);
+      storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion, q2]);
+      storageMock.getTopicCourses.mockResolvedValue([]);
+      storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
+    });
+
+    it("passes the topic when the delivered variant's threshold is met", async () => {
+      storageMock.getAttempt.mockResolvedValue(attemptWithForm("fA"));
+      const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+        .send({ answers: { q1: 0, q2: 1 } }));
+      expect(res.status).toBe(200);
+      expect(res.body.result.topicResults[0].passed).toBe(true); // 50% >= 50 (fA)
+    });
+
+    it("fails the topic when the delivered variant demands more, though another variant would pass", async () => {
+      storageMock.getAttempt.mockResolvedValue(attemptWithForm("fB"));
+      const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+        .send({ answers: { q1: 0, q2: 1 } }));
+      expect(res.status).toBe(200);
+      expect(res.body.result.topicResults[0].passed).toBe(false); // 50% < 100 (fB)
+    });
+
+    it("degrades to the overall rule for a legacy attempt without a pinned variant", async () => {
+      storageMock.getAttempt.mockResolvedValue({
+        ...dbAttempt,
+        variantJson: { sections: [{ topicId: "t1", topicName: "JS", questionIds: ["q1", "q2"] }] },
+      });
+      const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+        .send({ answers: { q1: 0, q2: 1 } }));
+      expect(res.status).toBe(200);
+      expect(res.body.result.topicResults[0].passed).toBe(true); // 50% >= 40 (overall)
+    });
+  });
+
   it("POST /attempts/:id/finish — returns 404 when attempt not found", async () => {
     storageMock.getAttempt.mockResolvedValue(undefined);
     const res = await asLearner(request(app).post("/api/attempts/x/finish").send({ answers: {} }));
