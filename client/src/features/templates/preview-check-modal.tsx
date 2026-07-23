@@ -7,9 +7,12 @@
  * (NFR-03). A passing report is posted to the server and unlocks activation
  * (NFR-01); the server re-enforces the gate.
  *
- * Left: a three-level rail (Раздел → Тип → Вариант отрисовки) with a status dot
- * on each variant leaf. Right: the live preview of the selected variant plus the
- * check summary and, for a failing variant, its blocking errors.
+ * Left: a three-level rail (Раздел → Вариант → демонстрации) with a status dot on
+ * every level that can be selected — the group dot is the worst status of its
+ * demonstrations. Right: the live preview of the selected screen plus the
+ * check summary and the selected variant's messages — blocking errors and
+ * non-blocking warnings are both spelled out, so a yellow dot is readable and
+ * not just countable.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -25,7 +28,7 @@ import {
   type AdminTemplate,
   type SmokeBundle,
 } from "./use-admin-templates";
-import { buildRail } from "./preview-rail";
+import { buildRail, variantStatus, type RailVariant } from "./preview-rail";
 
 export interface PreviewCheckModalProps {
   open: boolean;
@@ -52,7 +55,7 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
   const [report, setReport] = useState<SmokeReport | null>(template.smokeTestJson ?? null);
   const [running, setRunning] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [openTypes, setOpenTypes] = useState<Set<string>>(new Set());
+  const [openVariants, setOpenVariants] = useState<Set<string>>(new Set());
 
   // Reset per open / template switch.
   useEffect(() => {
@@ -74,9 +77,21 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
         specs.find((s) => s.route === wanted)?.id ??
         specs[0].id;
       setSelectedId(initial);
-      setOpenTypes(new Set(rail.flatMap((s) => s.types.map((t) => t.key))));
+      setOpenVariants(new Set(rail.flatMap((s) => s.variants.map((v) => v.key))));
     }
   }, [open, specs, rail, selectedId, bundle]);
+
+  // Where the selected screen sits: its variant group and its index among that
+  // variant's demonstrations. Drives the slide counter and the stage navigation.
+  const placeById = useMemo(() => {
+    const map = new Map<string, { variant: RailVariant; index: number }>();
+    for (const section of rail) {
+      for (const variant of section.variants) {
+        variant.screens.forEach((screen, index) => map.set(screen.id, { variant, index }));
+      }
+    }
+    return map;
+  }, [rail]);
 
   const statusById = useMemo(
     () => new Map<string, SmokeRouteResult>((report?.routes ?? []).map((r) => [r.id ?? r.route, r])),
@@ -106,8 +121,8 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
     }, 30);
   };
 
-  const toggleType = (key: string) => {
-    setOpenTypes((prev) => {
+  const toggleVariant = (key: string) => {
+    setOpenVariants((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -115,20 +130,41 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
     });
   };
 
-  const dotClass = (id: string): string => {
-    if (running) return "tpl-check-dot tpl-check-dot--run";
-    const s = statusById.get(id)?.status;
-    return "tpl-check-dot" + (s ? ` tpl-check-dot--${s}` : "");
-  };
+  const dotClassFor = (status?: string): string =>
+    running ? "tpl-check-dot tpl-check-dot--run" : "tpl-check-dot" + (status ? ` tpl-check-dot--${status}` : "");
+
+  const dotClass = (id: string): string => dotClassFor(statusById.get(id)?.status);
 
   const selectedSpec = selectedId ? specById.get(selectedId) : undefined;
   const selectedLayout = selectedSpec && bundle ? bundle.layouts[selectedSpec.layoutKey] : undefined;
   const selectedResult = selectedId ? statusById.get(selectedId) : undefined;
-  const selectedLabel = selectedSpec
-    ? rail
-        .flatMap((sec) => sec.types.flatMap((t) => t.variants))
-        .find((v) => v.id === selectedId)?.label ?? selectedSpec.route
-    : "";
+  const selectedPlace = selectedId ? placeById.get(selectedId) : undefined;
+  const slideCount = selectedPlace?.variant.screens.length ?? 0;
+  // A variant with one demonstration IS its variant — name it from the manifest.
+  // With several, the demonstration's own name is what tells them apart.
+  const selectedLabel = selectedPlace
+    ? slideCount > 1
+      ? selectedPlace.variant.screens[selectedPlace.index].label
+      : selectedPlace.variant.label
+    : selectedSpec?.route ?? "";
+
+  /**
+   * The layout's own «Далее»/«Назад» leaf through the variant's demonstrations, so
+   * a gallery previews the way a learner walks it. Wraps around: the preview has
+   * no run state to end on.
+   */
+  const handleStageAction = (action: string) => {
+    if (!selectedPlace || slideCount < 2) return;
+    const step = action === "nav:next" ? 1 : action === "nav:prev" ? -1 : 0;
+    if (step === 0) return;
+    const next = (selectedPlace.index + step + slideCount) % slideCount;
+    setSelectedId(selectedPlace.variant.screens[next].id);
+  };
+
+  // Reports persisted before warnings existed carry no `warnings` array — read
+  // both lists defensively so an old `templates.smoke_test_json` still renders.
+  const selectedErrors = selectedResult?.errors ?? [];
+  const selectedWarnings = selectedResult?.warnings ?? [];
 
   const isAlreadyActive = template.status === "active" || template.isActive === true;
   const canActivateNow = !isAlreadyActive && (template.isBuiltin || (report?.ok ?? false));
@@ -156,7 +192,11 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
       <Banner
         tone={report.warned > 0 ? "warning" : "success"}
         title={`Проверка пройдена · ${report.passed} из ${report.total} экранов`}
-        description={report.warned > 0 ? `${report.warned} предупреждение(й). Шаблон можно активировать.` : "Шаблон можно активировать."}
+        description={
+          report.warned > 0
+            ? `${report.warned} предупреждение(й) — выберите вариант с жёлтой отметкой, чтобы прочитать текст. Шаблон можно активировать.`
+            : "Шаблон можно активировать."
+        }
       />
     );
   } else if (report && !report.ok) {
@@ -216,51 +256,54 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
             {rail.map((section) => (
               <div key={section.key}>
                 <div className="tpl-check-rail__section">{section.label}</div>
-                {section.types.map((type) => {
-                  // Two-level rail: a type with a single render variant is shown as
+                {section.variants.map((variant) => {
+                  // Two-level rail: a variant with a single demonstration is shown as
                   // the screen itself (no redundant middle level). The collapsible
-                  // type group appears ONLY when a type has 2+ render variants.
-                  if (type.variants.length === 1) {
-                    const v = type.variants[0];
+                  // group appears ONLY when a variant has 2+ demonstrations.
+                  if (variant.screens.length === 1) {
+                    const screen = variant.screens[0];
                     return (
                       <button
-                        key={v.id}
+                        key={screen.id}
                         type="button"
-                        className={"tpl-check-rail__var tpl-check-rail__var--top" + (v.id === selectedId ? " is-active" : "")}
-                        aria-current={v.id === selectedId ? "page" : undefined}
-                        onClick={() => setSelectedId(v.id)}
+                        className={"tpl-check-rail__var tpl-check-rail__var--top" + (screen.id === selectedId ? " is-active" : "")}
+                        aria-current={screen.id === selectedId ? "page" : undefined}
+                        onClick={() => setSelectedId(screen.id)}
                       >
-                        <span>{type.label}</span>
-                        <span className={dotClass(v.id)} aria-hidden="true" />
+                        <span>{variant.label}</span>
+                        <span className={dotClass(screen.id)} aria-hidden="true" />
                       </button>
                     );
                   }
-                  const isOpen = openTypes.has(type.key);
+                  const isOpen = openVariants.has(variant.key);
                   return (
-                    <div key={type.key}>
+                    <div key={variant.key}>
                       <button
                         type="button"
                         className={"tpl-check-rail__type" + (isOpen ? " is-open" : "")}
-                        onClick={() => toggleType(type.key)}
+                        onClick={() => toggleVariant(variant.key)}
                         aria-expanded={isOpen ? "true" : "false"}
                       >
                         <ChevronRight size={14} className="tpl-check-rail__chevron" aria-hidden="true" />
-                        <span className="tpl-check-rail__type-label">{type.label}</span>
-                        <span className="tpl-check-rail__type-n" aria-label={`вариантов: ${type.variants.length}`}>
-                          {type.variants.length}
+                        <span className="tpl-check-rail__type-label">{variant.label}</span>
+                        {/* The group dot carries the WORST status of its demonstrations,
+                            so a collapsed variant never hides a failing slide. */}
+                        <span className={dotClassFor(variantStatus(variant, statusById))} aria-hidden="true" />
+                        <span className="tpl-check-rail__type-n" aria-label={`демонстраций: ${variant.screens.length}`}>
+                          {variant.screens.length}
                         </span>
                       </button>
                       {isOpen &&
-                        type.variants.map((v) => (
+                        variant.screens.map((screen) => (
                           <button
-                            key={v.id}
+                            key={screen.id}
                             type="button"
-                            className={"tpl-check-rail__var" + (v.id === selectedId ? " is-active" : "")}
-                            aria-current={v.id === selectedId ? "page" : undefined}
-                            onClick={() => setSelectedId(v.id)}
+                            className={"tpl-check-rail__var" + (screen.id === selectedId ? " is-active" : "")}
+                            aria-current={screen.id === selectedId ? "page" : undefined}
+                            onClick={() => setSelectedId(screen.id)}
                           >
-                            <span>{v.label}</span>
-                            <span className={dotClass(v.id)} aria-hidden="true" />
+                            <span>{screen.label}</span>
+                            <span className={dotClass(screen.id)} aria-hidden="true" />
                           </button>
                         ))}
                     </div>
@@ -273,17 +316,38 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
           <div className="tpl-check-stage">
             {summary}
 
-            {selectedResult && selectedResult.status === "fail" && selectedResult.errors.length > 0 && (
+            {selectedErrors.length > 0 && (
               <div className="tpl-check-errors">
                 <div className="tpl-check-errors__head">
                   <AlertTriangle size={16} aria-hidden="true" />
-                  {selectedLabel} — {selectedResult.errors.length} блокирующая(их) ошибка(и)
+                  {selectedLabel} — {selectedErrors.length} блокирующая(их) ошибка(и)
                 </div>
                 <ul className="tpl-check-errors__list">
-                  {selectedResult.errors.map((e, i) => (
+                  {selectedErrors.map((e, i) => (
                     <li className="tpl-check-errors__item" key={i}>
                       <X size={16} style={{ color: "var(--ou-error-default)", flex: "0 0 auto" }} aria-hidden="true" />
                       <span>{e}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {selectedWarnings.length > 0 && (
+              <div className="tpl-check-errors tpl-check-errors--warn">
+                <div className="tpl-check-errors__head">
+                  <AlertTriangle size={16} aria-hidden="true" />
+                  {selectedLabel} — {selectedWarnings.length} предупреждение(й)
+                </div>
+                <ul className="tpl-check-errors__list">
+                  {selectedWarnings.map((w, i) => (
+                    <li className="tpl-check-errors__item" key={i}>
+                      <AlertTriangle
+                        size={16}
+                        style={{ color: "var(--ou-warning-default)", flex: "0 0 auto" }}
+                        aria-hidden="true"
+                      />
+                      <span>{w}</span>
                     </li>
                   ))}
                 </ul>
@@ -299,6 +363,7 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
                   content={selectedSpec.input.content}
                   css={bundle.css}
                   shell={bundle.manifest.mountShell ? bundle.layouts.shell : undefined}
+                  onAction={handleStageAction}
                 />
               ) : (
                 <p className="tpl-upload-hint" style={{ padding: "var(--ou-space-5)" }}>
@@ -308,6 +373,7 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
             </div>
             <div className="tpl-check-stage__caption">
               {selectedLabel}
+              {slideCount > 1 && selectedPlace ? ` · слайд ${selectedPlace.index + 1} из ${slideCount}` : null}
               {selectedSpec ? (
                 <>
                   {" · экран "}

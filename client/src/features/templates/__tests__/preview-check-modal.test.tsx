@@ -34,9 +34,25 @@ vi.mock("@shared/template/preview-context", () => ({
 vi.mock("@shared/template/smoke-runner", () => ({
   runSmokeChecks: (...args: unknown[]) => h.runSmokeChecks(...args),
 }));
-vi.mock("../preview-rail", () => ({ buildRail: (...args: unknown[]) => h.buildRail(...args) }));
+// Only the grouping builder is stubbed; the worst-of roll-up (`variantStatus`) is
+// the real one, so the group dot is exercised rather than mocked away.
+vi.mock("../preview-rail", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../preview-rail")>()),
+  buildRail: (...args: unknown[]) => h.buildRail(...args),
+}));
+// The stub stands in for the rendered screen's own «Далее»/«Назад», which the real
+// renderer delegates to `onAction` as `nav:next` / `nav:prev`.
 vi.mock("@/components/template-screen", () => ({
-  TemplateScreen: () => <div data-testid="template-screen" />,
+  TemplateScreen: ({ onAction }: { onAction?: (action: string) => void }) => (
+    <div data-testid="template-screen">
+      <button type="button" onClick={() => onAction?.("nav:next")}>
+        demo-next
+      </button>
+      <button type="button" onClick={() => onAction?.("nav:prev")}>
+        demo-prev
+      </button>
+    </div>
+  ),
 }));
 
 import { PreviewCheckModal } from "../preview-check-modal";
@@ -49,22 +65,32 @@ const specs = [
   { id: "q-single-b", route: "question", layoutKey: "question", input: { context: {}, slots: {}, content: {} } },
 ];
 
+// Раздел → Вариант → демонстрации. «Начало» holds a one-demo variant (rendered as
+// a leaf); «Вопросы» holds a variant with two demonstrations (collapsible group).
 const rail = [
   {
     key: "sec-start",
     label: "Начало",
-    types: [{ key: "t-start", label: "Старт", variants: [{ id: "start", label: "Старт" }] }],
+    variants: [
+      {
+        key: "t-start",
+        label: "Старт",
+        fromManifest: false,
+        screens: [{ id: "start", route: "start", label: "Экран старта", spec: specs[0] }],
+      },
+    ],
   },
   {
     key: "sec-q",
     label: "Вопросы",
-    types: [
+    variants: [
       {
-        key: "t-q",
-        label: "Один ответ",
-        variants: [
-          { id: "q-single", label: "Один ответ" },
-          { id: "q-single-b", label: "Вариант B" },
+        key: "v:q.card",
+        label: "Один ответ карточками",
+        fromManifest: true,
+        screens: [
+          { id: "q-single", route: "question", label: "Один ответ", spec: specs[1] },
+          { id: "q-single-b", route: "question", label: "Вариант B", spec: specs[2] },
         ],
       },
     ],
@@ -98,7 +124,25 @@ const failReport = {
   failed: 1,
   routes: [
     { id: "start", route: "start", status: "pass", errors: [] },
-    { id: "q-single", route: "question", status: "fail", errors: ["Блок «content» не найден"] },
+    {
+      id: "q-single",
+      route: "question",
+      status: "fail",
+      errors: ["Блок «content» не найден"],
+      warnings: ["Поле «title» не попадёт на экран"],
+    },
+  ],
+};
+const warnReport = {
+  ok: true,
+  passed: 2,
+  total: 3,
+  warned: 1,
+  failed: 0,
+  routes: [
+    { id: "start", route: "start", status: "warn", errors: [], warnings: ["Макет не объявляет область для поля «lead»"] },
+    { id: "q-single", route: "question", status: "pass", errors: [], warnings: [] },
+    { id: "q-single-b", route: "question", status: "pass", errors: [], warnings: [] },
   ],
 };
 
@@ -200,6 +244,71 @@ describe("<PreviewCheckModal /> rendered bundle", () => {
   });
 });
 
+describe("<PreviewCheckModal /> variant rail (Э3)", () => {
+  it("names the middle rail level after the manifest variant", async () => {
+    renderModal();
+    expect(await screen.findByText("Один ответ карточками")).toBeInTheDocument();
+    // A one-demonstration variant IS the leaf: it carries the variant name, not
+    // the name of its single demonstration.
+    expect(screen.getByText("Старт")).toBeInTheDocument();
+    expect(screen.queryByText("Экран старта")).not.toBeInTheDocument();
+  });
+
+  it("counts the demonstrations of the selected variant under the stage", async () => {
+    renderModal();
+    await screen.findByText("Вариант B");
+    // The default screen's variant has a single demonstration — no counter.
+    expect(screen.queryByText(/слайд/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Один ответ"));
+    expect(await screen.findByText(/слайд 1 из 2/)).toBeInTheDocument();
+  });
+
+  it("the screen's own «Далее»/«Назад» leaf through the demonstrations, wrapping around", async () => {
+    renderModal();
+    await screen.findByText("Вариант B");
+    fireEvent.click(screen.getByText("Один ответ"));
+    await screen.findByText(/слайд 1 из 2/);
+
+    fireEvent.click(screen.getByRole("button", { name: "demo-next" }));
+    expect(await screen.findByText(/слайд 2 из 2/)).toBeInTheDocument();
+    // Wrap forward, then step back the other way.
+    fireEvent.click(screen.getByRole("button", { name: "demo-next" }));
+    expect(await screen.findByText(/слайд 1 из 2/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "demo-prev" }));
+    expect(await screen.findByText(/слайд 2 из 2/)).toBeInTheDocument();
+  });
+
+  it("navigation is inert on a variant with a single demonstration", async () => {
+    renderModal();
+    await screen.findByText("Старт");
+    fireEvent.click(screen.getByRole("button", { name: "demo-next" }));
+    await waitFor(() => expect(screen.getByText("start")).toBeInTheDocument());
+    expect(screen.queryByText(/слайд/)).not.toBeInTheDocument();
+  });
+
+  it("the variant dot reports the worst status of its demonstrations", async () => {
+    h.runSmokeChecks.mockReturnValue({
+      ok: false,
+      passed: 2,
+      total: 3,
+      warned: 0,
+      failed: 1,
+      routes: [
+        { id: "start", route: "start", status: "pass", errors: [], warnings: [] },
+        { id: "q-single", route: "question", status: "pass", errors: [], warnings: [] },
+        { id: "q-single-b", route: "question", status: "fail", errors: ["Нет блока"], warnings: [] },
+      ],
+    });
+    renderModal();
+    await screen.findByText("Вариант B");
+    fireEvent.click(screen.getByRole("button", { name: "Проверить работоспособность" }));
+    await screen.findByText(/Проверка не пройдена/);
+    // The group is collapsible, so a failing slide must not hide behind a green dot.
+    const groupDot = document.querySelector(".tpl-check-rail__type .tpl-check-dot");
+    expect(groupDot?.className).toContain("tpl-check-dot--fail");
+  });
+});
+
 describe("<PreviewCheckModal /> health check", () => {
   it("runs a passing check, posts the report and unlocks activation", async () => {
     renderModal();
@@ -223,6 +332,35 @@ describe("<PreviewCheckModal /> health check", () => {
     // The first failing variant is auto-selected and its errors are shown.
     expect(await screen.findByText("Блок «content» не найден")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Активировать/ })).toBeDisabled();
+  });
+
+  it("lists the warnings of the selected variant (Э2: warn text is readable)", async () => {
+    h.runSmokeChecks.mockReturnValue(warnReport);
+    renderModal();
+    await screen.findByText("Начало");
+    fireEvent.click(screen.getByRole("button", { name: "Проверить работоспособность" }));
+    expect(await screen.findByText(/Проверка пройдена/)).toBeInTheDocument();
+    // The default-selected screen is the warned one — its warnings are spelled out,
+    // not merely counted by the summary banner.
+    expect(await screen.findByText("Макет не объявляет область для поля «lead»")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Активировать/ })).not.toBeDisabled();
+  });
+
+  it("shows errors and warnings side by side on a failing variant", async () => {
+    h.runSmokeChecks.mockReturnValue(failReport);
+    renderModal();
+    await screen.findByText("Начало");
+    fireEvent.click(screen.getByRole("button", { name: "Проверить работоспособность" }));
+    expect(await screen.findByText("Блок «content» не найден")).toBeInTheDocument();
+    expect(screen.getByText("Поле «title» не попадёт на экран")).toBeInTheDocument();
+  });
+
+  it("tolerates a legacy report whose routes carry no warnings array", async () => {
+    h.runSmokeChecks.mockReturnValue(passReport);
+    renderModal();
+    await screen.findByText("Начало");
+    fireEvent.click(screen.getByRole("button", { name: "Проверить работоспособность" }));
+    expect(await screen.findByText(/Проверка пройдена/)).toBeInTheDocument();
   });
 
   it("shows «Перепроверить» once a report exists", async () => {

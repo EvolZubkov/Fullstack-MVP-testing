@@ -271,6 +271,15 @@
   gap: var(--ou-space-2);
   font: var(--ou-text-body-s);
 }
+/* Non-blocking variant: same block, warning tone (Э2 — the warn text is shown,
+   not only counted by the summary banner). */
+.tpl-check-errors--warn {
+  border-color: var(--ou-warning-border, var(--ou-warning-default));
+}
+.tpl-check-errors--warn .tpl-check-errors__head {
+  background: var(--ou-warning-soft);
+  color: var(--ou-warning-strong, var(--ou-warning-default));
+}
 .tpl-check-errors__item code {
   font-family: var(--ou-font-mono, monospace);
   background: var(--ou-bg-muted);
