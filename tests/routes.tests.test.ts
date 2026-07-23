@@ -48,6 +48,7 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
     getTestIdsByOwner: vi.fn().mockResolvedValue([]),
     // snapshot build on publish (PRD-15 block B)
     getContentPages: vi.fn().mockResolvedValue([]),
+    getContentPageBindings: vi.fn().mockResolvedValue([]),
     getTopicCourses: vi.fn().mockResolvedValue([]),
     getTopicEvents: vi.fn().mockResolvedValue([]),
     getLatestSnapshot: vi.fn().mockResolvedValue(undefined),
@@ -73,7 +74,9 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("../server/storage", () => ({ storage: storageMock }));
-vi.mock("../server/db", () => ({ db: {} }));
+vi.mock("../server/db", () => ({
+  db: { select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }) },
+}));
 vi.mock("../server/scorm-exporter", () => ({ generateScormPackage: vi.fn() }));
 vi.mock("../server/template-registry", () => ({ isSupportedTemplateApiVersion: vi.fn().mockReturnValue(true) }));
 // Mock the TestSettingsService singleton at the route boundary. Keep the

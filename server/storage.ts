@@ -19,7 +19,7 @@ import { AdaptiveRepository } from "./storage/adaptive-repository";
 import { AttemptsRepository } from "./storage/attempts-repository";
 import { ScalesVariablesRepository } from "./storage/scales-variables-repository";
 import { TestsRepository, type TestUsageRef } from "./storage/tests-repository";
-import { ContentPagesRepository } from "./storage/content-pages-repository";
+import { ContentPagesRepository, type ContentPageBinding } from "./storage/content-pages-repository";
 import { AssignmentsRepository } from "./storage/assignments-repository";
 import { FoldersRepository } from "./storage/folders-repository";
 
@@ -283,6 +283,8 @@ export interface IStorage {
   getScormAnswersByAttempt(attemptId: string): Promise<ScormAnswer[]>;
 
   // Content Pages (PRD-1)
+  /** PRD-22: variant bindings of many tests in ONE query (tests-list audit). */
+  getContentPageBindings(testIds: string[]): Promise<ContentPageBinding[]>;
   getContentPages(testId: string): Promise<ContentPage[]>;
   getContentPage(id: string): Promise<ContentPage | undefined>;
   createContentPage(page: InsertContentPage): Promise<ContentPage>;
@@ -1016,6 +1018,10 @@ export class DatabaseStorage implements IStorage {
   // ============================================
   // Content Pages (PRD-1) (delegated to ContentPagesRepository)
   // ============================================
+
+  getContentPageBindings(testIds: string[]): Promise<ContentPageBinding[]> {
+    return this.contentPagesRepo.getContentPageBindings(testIds);
+  }
 
   getContentPages(testId: string): Promise<ContentPage[]> {
     return this.contentPagesRepo.getContentPages(testId);

@@ -57,6 +57,7 @@ const {
     getActiveTopicGrantsForGrantees: vi.fn().mockResolvedValue([]),
     // snapshot build on publish (PRD-15 block B).
     getContentPages: vi.fn().mockResolvedValue([]),
+    getContentPageBindings: vi.fn().mockResolvedValue([]),
     getTopicCourses: vi.fn().mockResolvedValue([]),
     getTopicEvents: vi.fn().mockResolvedValue([]),
     getQuestionsByIds: vi.fn().mockResolvedValue([]),

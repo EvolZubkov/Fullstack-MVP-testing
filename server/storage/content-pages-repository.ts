@@ -8,12 +8,36 @@
  * deleted (see `TestsRepository.deleteTest`), so no cascade lives here. Exposed
  * through the `IStorage` facade, never imported by routes.
  */
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { contentPages, type ContentPage, type InsertContentPage } from "@shared/schema";
 
+/** A page's variant binding — all the tests list needs to audit them (PRD-22). */
+export interface ContentPageBinding {
+  testId: string;
+  templateKey: string | null;
+  kind: string;
+}
+
 /** Repository for the `content_pages` table (PRD-1 intro/content pages). */
 export class ContentPagesRepository {
+  /**
+   * Variant bindings of MANY tests in one query — the tests list flags every test
+   * holding a page whose variant its design template no longer declares, and one
+   * query per row would have cost the list its speed.
+   */
+  async getContentPageBindings(testIds: string[]): Promise<ContentPageBinding[]> {
+    if (testIds.length === 0) return [];
+    return db
+      .select({
+        testId: contentPages.testId,
+        templateKey: contentPages.templateKey,
+        kind: contentPages.kind,
+      })
+      .from(contentPages)
+      .where(inArray(contentPages.testId, testIds));
+  }
+
   async getContentPages(testId: string): Promise<ContentPage[]> {
     return db.select().from(contentPages)
       .where(eq(contentPages.testId, testId))

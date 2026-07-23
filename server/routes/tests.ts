@@ -7,7 +7,8 @@ import { storage } from "../storage";
 import { db } from "../db";
 import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, questionScoringSchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
-import { readScreenTemplate, readManifestContentTemplates } from "../services/template-render";
+import { readScreenTemplate, readManifestContentTemplates, readVariantLayouts } from "../services/template-render";
+import { withTemplateAssetBase } from "@shared/template/asset-base";
 import { resolveTemplateDir, resolveSystemScreenDir } from "../services/template-dir";
 import { requirePermission, requireUserContext } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
@@ -15,6 +16,7 @@ import { readableTestScope, canGrantAccess } from "../services/test-access";
 import { visibleTopic } from "../services/topic-access";
 import { assessTestPublish } from "../services/draw-feasibility";
 import { createTestSnapshot, getPublicationState } from "../services/test-snapshot";
+import { countUnmappedPages } from "../services/page-variant-audit";
 import { generateScormPackage } from "../scorm-exporter";
 import { buildScormExportData, ScormBuildError } from "../scorm/build-export-data";
 import { isSupportedTemplateApiVersion } from "../template-registry";
@@ -275,6 +277,11 @@ router.get("/", requirePermission("tests.read"), async (req, res) => {
     const allUsers = await storage.getUsers();
     const ownerNameById = new Map(allUsers.map((u) => [u.id, u.name || u.email]));
 
+    // PRD-22 (plan Э6): pages bound to a variant the test's design template no
+    // longer declares. Audited for the whole page of the list at once — see the
+    // service note on why this is not a per-test query.
+    const unmappedPages = await countUnmappedPages(visibleTests, storage);
+
     const testsWithSections = await Promise.all(
       visibleTests.map(async (test) => {
         const sections = await storage.getTestSections(test.id);
@@ -325,7 +332,14 @@ router.get("/", requirePermission("tests.read"), async (req, res) => {
         // PRD-15 FR-12: publication state for the list badge ("опубликован,
         // есть неопубликованные изменения"). Cheap for drafts (early return).
         const publication = await getPublicationState(test.id);
-        return { ...test, ownerName, sections: sectionsWithDetails, adaptiveSettings, publication };
+        return {
+          ...test,
+          ownerName,
+          sections: sectionsWithDetails,
+          adaptiveSettings,
+          publication,
+          unmappedPageCount: unmappedPages.get(test.id) ?? 0,
+        };
       })
     );
 
@@ -397,15 +411,37 @@ router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope(
       }
     }
     if (!payload) return res.status(404).json({ error: "Template not found" });
+    // PRD-22 FR-36: a layout may point at the template's own files by a relative
+    // path. In a SCORM package those files sit next to the page; on the web they
+    // are served by the template-assets route, so the base is applied here —
+    // otherwise every such image renders broken.
+    const assetsBase = `/api/templates/${encodeURIComponent(templateId)}/assets/`;
+    payload = { ...payload, layout: withTemplateAssetBase(payload.layout, assetsBase) };
     // PRD-12 FR-6: the content screen also carries the manifest's placeholder
     // declarations — the web host builds its page skeleton from them through the
     // shared assembler, exactly as the SCORM runtime does from the bundled copy.
     // Read from the ACTIVE template (paramsDir), not a fallen-back layout dir.
     if (req.params.screen === "content") {
       const contentTemplates = readManifestContentTemplates(paramsDir);
+      const variantDir = contentTemplates.length ? paramsDir : dir;
+      // PRD-12 FR-6 / PRD-22: a variant with its own `layoutFile` must render
+      // through THAT layout on the web too. Serving only the generic wrapper made
+      // every variant of the grid look alike in the web run.
+      const variantLayouts = Object.fromEntries(
+        Object.entries(readVariantLayouts(variantDir)).map(([rel, html]) => [
+          rel,
+          withTemplateAssetBase(html, assetsBase),
+        ]),
+      );
       res.json({
         ...payload,
         contentTemplates: contentTemplates.length ? contentTemplates : readManifestContentTemplates(dir),
+        variantLayouts,
+        // PRD-22 FR-36: base for relative links in author CONTENT (the layout is
+        // already rewritten above). The stored value is host-independent
+        // (`images/x.png`); the web host prefixes it with this route, the SCORM
+        // runtime with the package's `template/`.
+        assetsBase,
       });
       return;
     }
