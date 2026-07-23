@@ -62,6 +62,7 @@ CREATE TABLE "content_pages" (
 	"template_key" text,
 	"sort_order" integer DEFAULT 0 NOT NULL,
 	"values_json" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"settings_json" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"auto_advance" boolean DEFAULT false NOT NULL,
 	"auto_advance_delay_ms" integer,
 	"created_at" timestamp DEFAULT now() NOT NULL,

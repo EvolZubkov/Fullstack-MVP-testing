@@ -4,6 +4,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { normalizeTag, normalizeTags, TAG_MAX_LENGTH } from "./tags";
 import { STORED_ROLES } from "./access/roles";
+import { PLACEHOLDER_TYPES, SETTING_TYPES } from "./template/field-types";
 
 export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey(),
@@ -1312,6 +1313,12 @@ export const contentPages = pgTable("content_pages", {
   templateKey: text("template_key"),
   sortOrder: integer("sort_order").notNull().default(0),
   valuesJson: jsonb("values_json").notNull().default({}),
+  /** PRD-22: values of the variant's `settings[]` — PROPERTIES of the page
+   *  (sequence identifier, button caption, background), kept apart from the
+   *  authored CONTENT in `values_json` so the two have their own rules: content
+   *  migrates by shared placeholder keys on variant replace, while a setting like
+   *  the sequence identifier survives even a variant that no longer declares it. */
+  settingsJson: jsonb("settings_json").notNull().default({}),
   autoAdvance: boolean("auto_advance").notNull().default(false),
   autoAdvanceDelayMs: integer("auto_advance_delay_ms"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -1347,13 +1354,49 @@ export type ScormAnswer = typeof scormAnswers.$inferSelect;
  * PRD-1 §4.3: variant.kind — functional role of a template variant.
  * Drives variant binding rules in PRD-7 §1.4 (silent binding for system kinds).
  */
-export const variantKindSchema = z.enum(["start", "questions", "router", "summary", "results", "intro", "info", "review", "section-results", "gallery"]);
+/**
+ * PRD-22: `gallery` is NOT a kind. A gallery slide is a variant of the author
+ * page kind `info` with its own `layoutFile`; the navigation indicator comes from
+ * the `sequence` setting, not from a separate page kind.
+ */
+export const variantKindSchema = z.enum(["start", "questions", "router", "summary", "results", "intro", "info", "review", "section-results"]);
 export type VariantKind = z.infer<typeof variantKindSchema>;
 
 /**
+ * One field declaration inside a variant. `type` is checked against the shared
+ * registry (`shared/template/field-types`); everything template-specific
+ * (`textFit`, `constraints`, `allowedRenderers`, …) passes through untouched.
+ *
+ * PRD-22: the type used to be `z.unknown()`, so a typo like `richtext` reached the
+ * editor and silently became a single-line input. Attribute-level checks (e.g.
+ * `select` without `options`) live in `validateVariantFields` — they need the
+ * whole field, and the manifest validator reports them with variant + field key.
+ */
+const placeholderDeclSchema = z.object({
+  key: z.string().min(1),
+  type: z.enum(PLACEHOLDER_TYPES),
+  label: z.string().optional(),
+  required: z.boolean().optional(),
+}).passthrough();
+
+/**
+ * One page-PROPERTY declaration (PRD-22). Unlike a placeholder it never renders
+ * into the layout: it drives behaviour (`sequence`) or styling (`image` used as a
+ * background). May carry a default value and be required.
+ */
+const settingDeclSchema = z.object({
+  key: z.string().min(1),
+  type: z.enum(SETTING_TYPES),
+  label: z.string().optional(),
+  required: z.boolean().optional(),
+  default: z.unknown().optional(),
+  options: z.array(z.string()).optional(),
+}).passthrough();
+
+/**
  * Single entry in `manifest.contentTemplates[]`. Schema is intentionally narrow:
- * it locks the variant-binding contract (key/label/kind) and lets template-specific
- * shape (placeholders, pageKind, textFit, etc.) pass through unchanged.
+ * it locks the variant-binding contract (key/label/kind) plus the closed field-type
+ * registry, and lets template-specific shape (pageKind, textFit, etc.) pass through.
  */
 export const contentTemplateEntrySchema = z.object({
   key: z.string().min(1),
@@ -1361,7 +1404,8 @@ export const contentTemplateEntrySchema = z.object({
   kind: variantKindSchema,
   pageKind: z.string().optional(),
   isDefault: z.boolean().optional(),
-  placeholders: z.array(z.unknown()).optional(),
+  placeholders: z.array(placeholderDeclSchema).optional(),
+  settings: z.array(settingDeclSchema).optional(),
 }).passthrough();
 
 /**
