@@ -28,6 +28,7 @@ import { templateManifestSchema, isSupportedTemplateApiVersion } from "@shared/s
 // both runtime hosts use, so a layout it rejects would throw unhandled in the
 // preview/runtime — we reject it at import instead (see the layout-syntax pass).
 import { compileTemplate } from "@shared/template/dsl";
+import { validateVariantFields } from "@shared/template/field-types";
 import type { TemplateEntries } from "./template-package";
 
 /** Default ZIP size ceiling (PRD-3 §8): 20 MB. */
@@ -179,6 +180,31 @@ function collectTemplateSources(manifest: Record<string, unknown>): Array<{ ref:
 }
 
 /**
+ * Field-type problems across all variants of a manifest, as blocking issues
+ * (PRD-22). Exported so the activation gate can re-check an ALREADY installed
+ * template — one that predates the closed registry and would otherwise stay
+ * active with a field the editor cannot render.
+ */
+export function collectFieldTypeIssues(manifest: Record<string, unknown>): ValidationIssue[] {
+  const variants = manifest.contentTemplates;
+  if (!Array.isArray(variants)) return [];
+  const out: ValidationIssue[] = [];
+  variants.forEach((raw, index) => {
+    const variant = (raw ?? {}) as { key?: unknown; placeholders?: unknown; settings?: unknown };
+    const variantKey =
+      typeof variant.key === "string" && variant.key.length > 0 ? variant.key : `#${index + 1}`;
+    for (const issue of validateVariantFields(variant)) {
+      out.push({
+        code: "FIELD_TYPE_UNKNOWN",
+        message: `Вариант "${variantKey}", поле "${issue.field}": ${issue.message}`,
+        ref: `contentTemplates.${variantKey}.${issue.list}.${issue.field}`,
+      });
+    }
+  });
+  return out;
+}
+
+/**
  * Validates an extracted template package. Returns a structured report; the
  * caller persists it as `validation_json` and gates activation on `ok`.
  */
@@ -221,6 +247,15 @@ export function validateTemplatePackage(
         ref: issue.path.join(".") || "<root>",
       });
     }
+  }
+
+  // ── field types of every variant (PRD-22) ─────────────────────────────────
+  // Reported separately from MANIFEST_SCHEMA so the message names the VARIANT and
+  // the FIELD: a template author fixing `richtext` needs to know where it sits,
+  // not just that some enum failed. Runs on the raw manifest, so it also reports
+  // variants the schema pass already rejected for another reason.
+  for (const issue of collectFieldTypeIssues(manifest)) {
+    blocking.push(issue);
   }
 
   const id = asString(manifest.id);

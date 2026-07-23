@@ -16,6 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import JSZip from "jszip";
 import { buildZip } from "../scorm/zip";
+import { withTemplateAssetBase } from "@shared/template/asset-base";
 
 /** Root directory for extracted uploaded template packages. */
 export const uploadedTemplatesDir = path.resolve(process.cwd(), "uploads", "templates");
@@ -162,7 +163,10 @@ export interface TemplateBundle {
  * ONE bundle reader — no per-host copy. `sourceDir` is resolved by the caller via
  * {@link module:server/services/template-dir} (built-in or uploaded path).
  */
-export async function readTemplateBundle(sourceDir: string): Promise<TemplateBundle> {
+export async function readTemplateBundle(
+  sourceDir: string,
+  options?: { assetsBase?: string },
+): Promise<TemplateBundle> {
   const entries = await readDirEntries(sourceDir);
   const read = (rel: string): string | undefined => entries.get(rel)?.toString("utf8");
 
@@ -181,10 +185,17 @@ export async function readTemplateBundle(sourceDir: string): Promise<TemplateBun
   // `mountShell`): without it a template whose CSS is scoped to its stage
   // (`.tb-frame > .tb-stage > #app.tb-pad`) previews unscoped — nothing like its
   // real design.
+  // PRD-22 FR-36: a layout may reference the template's own files by a relative
+  // path. The preview renders inside the app, not next to those files, so the
+  // caller passes the route they are served from — without it every such image
+  // previews broken, and the author sees a design the learner will not get.
+  const withBase = (html: string): string =>
+    options?.assetsBase ? withTemplateAssetBase(html, options.assetsBase) : html;
+
   const layouts: Record<string, string> = {};
   for (const [key, rel] of Object.entries(m.layouts ?? {})) {
     const html = read(rel);
-    if (html != null) layouts[key] = html;
+    if (html != null) layouts[key] = withBase(html);
   }
   // Variant-backed screens name their layout by `contentTemplates[].layoutFile`
   // (spec §8.2), so the map is keyed by that path too — the resolver
@@ -193,7 +204,7 @@ export async function readTemplateBundle(sourceDir: string): Promise<TemplateBun
     const rel = ct?.layoutFile;
     if (!rel || layouts[rel] != null) continue;
     const html = read(rel);
-    if (html != null) layouts[rel] = html;
+    if (html != null) layouts[rel] = withBase(html);
   }
 
   let demo: unknown = null;

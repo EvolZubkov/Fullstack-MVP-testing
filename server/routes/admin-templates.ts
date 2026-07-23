@@ -42,6 +42,7 @@ import {
 } from "../services/template-package";
 import {
   validateTemplatePackage,
+  collectFieldTypeIssues,
   MAX_TEMPLATE_ZIP_BYTES,
   type TemplateValidationReport,
 } from "../services/template-validation";
@@ -55,6 +56,7 @@ import {
 // Type-only: the smoke-runner is a browser/jsdom module; the server never executes
 // it (NFR-02), it only persists and gates on the report the admin browser produces.
 import type { SmokeReport } from "@shared/template/smoke-runner";
+import { withTemplateAssetBase } from "@shared/template/asset-base";
 
 const router = Router();
 
@@ -178,6 +180,19 @@ router.put("/:id/activate", requirePermission("adminTemplates.manage"), async (r
     }
     if (!row.isBuiltin && !(smoke?.ok ?? false)) {
       return res.status(409).json({ error: "Активация запрещена: проверка работоспособности не пройдена" });
+    }
+
+    // PRD-22 (FR-12): field types are re-checked HERE, against the stored manifest,
+    // not only at upload. A template installed before the closed registry carries a
+    // passing `validation_json` from its own era, so without this gate it would
+    // activate with a field the editor cannot render. Applies to built-ins too —
+    // they skip the upload path entirely.
+    const fieldIssues = collectFieldTypeIssues((row.manifest ?? {}) as Record<string, unknown>);
+    if (fieldIssues.length > 0) {
+      return res.status(409).json({
+        error: "Активация запрещена: недопустимые типы полей в манифесте",
+        issues: fieldIssues,
+      });
     }
 
     const [updated] = await db
@@ -478,10 +493,19 @@ router.get("/:id/smoke-bundle", requirePermission("adminTemplates.manage"), asyn
     // resolves to the `shell` key, but the preview must mount it for a fixed-stage
     // template (manifest `mountShell`) or the screen renders outside the stage its
     // CSS is scoped to (see readTemplateBundle).
+    // PRD-22 FR-36: a layout may point at the template's OWN files by a relative
+    // path (`<img src="assets/images/hero.png">`), exactly as they sit in the ZIP.
+    // The preview renders inside the admin page, not next to those files, so the
+    // base is substituted here with the route that serves them — otherwise every
+    // such image previews broken and the admin judges a design the learner never
+    // sees. Same shared rewriter the web host and the SCORM runtime use.
+    const assetsBase = `/api/templates/${encodeURIComponent(req.params.id)}/assets/`;
+    const withBase = (html: string): string => withTemplateAssetBase(html, assetsBase);
+
     const layouts: Record<string, string> = {};
     for (const [key, rel] of Object.entries(layoutPaths)) {
       const html = read(rel);
-      if (html != null) layouts[key] = html;
+      if (html != null) layouts[key] = withBase(html);
     }
     // ALSO key each variant's `layoutFile` by its path: that field — not a layouts[]
     // key — is how a variant-backed screen names its layout (spec §8.2), so the
@@ -490,7 +514,7 @@ router.get("/:id/smoke-bundle", requirePermission("adminTemplates.manage"), asyn
       const rel = ct?.layoutFile;
       if (!rel || layouts[rel] != null) continue;
       const html = read(rel);
-      if (html != null) layouts[rel] = html;
+      if (html != null) layouts[rel] = withBase(html);
     }
 
     const demoRel = manifest.preview?.demoData;

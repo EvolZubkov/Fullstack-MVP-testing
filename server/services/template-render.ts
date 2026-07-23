@@ -111,6 +111,36 @@ export function readManifestContentTemplates(dir: string): unknown[] {
 }
 
 /**
+ * Read the layout HTML of every variant that names one, keyed by its `layoutFile`
+ * path — the key the shared resolver looks a variant-backed layout up by (spec
+ * §8.2, `shared/template/content-page`).
+ *
+ * PRD-12 FR-6 parity: the SCORM package ships all of these, so a variant with its
+ * own layout renders through it in the package. The web host was served only the
+ * generic `content.html` wrapper, which meant every such variant — the whole PRD-22
+ * variant grid — collapsed into one look in the web run. Reading them here is what
+ * lets the two hosts render the same page the same way.
+ *
+ * `layoutFile` comes from a manifest, which for an uploaded template is untrusted
+ * input, so a path that escapes the template directory is dropped rather than read.
+ * @param dir  Resolved template directory
+ * @returns layout HTML keyed by the declared `layoutFile` path (empty on failure)
+ */
+export function readVariantLayouts(dir: string): Record<string, string> {
+  const layouts: Record<string, string> = {};
+  const root = path.resolve(dir);
+  for (const raw of readManifestContentTemplates(dir)) {
+    const rel = (raw as { layoutFile?: unknown })?.layoutFile;
+    if (typeof rel !== "string" || !rel || layouts[rel] != null) continue;
+    const full = path.resolve(root, rel);
+    if (full !== root && !full.startsWith(root + path.sep)) continue;
+    const html = readFileSafe(full);
+    if (html) layouts[rel] = html;
+  }
+  return layouts;
+}
+
+/**
  * Read a named screen's template ASSETS (layout HTML + css + theme tokens) without
  * building a context — for screens whose context the client assembles itself
  * (e.g. the start screen). Returns null when the layout file is missing.
