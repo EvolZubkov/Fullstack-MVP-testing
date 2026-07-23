@@ -958,6 +958,58 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
 // ─── Exported phase-2B helpers ────────────────────────────────────────────────
 
 /**
+ * PRD-24: change a topic's variant set and keep its per-variant pass rule in step,
+ * in ONE model update so the two can never be observed out of sync.
+ *
+ * - variant added → seed a threshold for it (from an existing entry, else from the
+ *   test's overall rule) — an uncovered variant is a blocking validation error;
+ * - variant removed → drop its entry, so no orphan threshold blocks the save;
+ * - variants mode switched off → the rule falls back to «Как у теста», since
+ *   `by_variant` is meaningless without a variant set.
+ *
+ * Rules with any other source are left untouched.
+ */
+export function applyFormSetChange(
+  model: TestEditorModel,
+  topicId: string,
+  formSet: FormSet | null,
+): TestEditorModel {
+  const sections = model.sections.map((s) => (s.topicId === topicId ? { ...s, formSet } : s));
+  const rule = model.passRules.byTopic[topicId];
+  if (rule?.source !== "by_variant") {
+    return { ...model, sections };
+  }
+
+  const forms = formSet?.forms ?? [];
+  let nextRule: TopicPassRule;
+  if (!formSet) {
+    // Variants mode switched off — the rule has nothing left to key on.
+    // NB: a set that merely dropped below two variants is an intermediate editing
+    // state (validation already flags it), so the authored thresholds are KEPT
+    // rather than silently discarded.
+    nextRule = { source: "inherit_overall" };
+  } else {
+    const seed =
+      Object.values(rule.byForm)[0] ??
+      (model.passRules.overall.type === "percent"
+        ? { type: "percent" as const, value: model.passRules.overall.value }
+        : { type: "percent" as const, value: 70 });
+    const byForm: Record<string, { type: "percent" | "absolute"; value: number }> = {};
+    for (const form of forms) byForm[form.id] = rule.byForm[form.id] ?? seed;
+    nextRule = { source: "by_variant", byForm };
+  }
+
+  return {
+    ...model,
+    sections,
+    passRules: {
+      ...model.passRules,
+      byTopic: { ...model.passRules.byTopic, [topicId]: nextRule },
+    },
+  };
+}
+
+/**
  * Build `TestSectionPayload[]` from the editor model.
  *
  * FR-45 / decisions §6.1: `required` is taken from `sections[].required`, not

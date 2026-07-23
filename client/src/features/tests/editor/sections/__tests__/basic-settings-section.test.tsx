@@ -889,3 +889,105 @@ describe("<SettingsSection /> — Повторное прохождение pane
     expect(next.retakePolicy.eligibilityPlugin?.failPolicy).toBe("failClosed");
   });
 });
+
+// ─── PRD-24: «По вариантам» ──────────────────────────────────────────────────
+
+describe("<SettingsSection /> — правило «По вариантам» (PRD-24)", () => {
+  const forms = [
+    { id: "v1", label: "Вариант 1", questionIds: ["q1", "q2"] },
+    { id: "v2", label: "Вариант 2", questionIds: ["q3"] },
+  ];
+  const section = (over: Record<string, unknown> = {}) => ({
+    topicId: "top-1",
+    topicName: "Topic 1",
+    maxQuestions: 10,
+    drawCount: 3,
+    drawAll: false,
+    required: false,
+    timeLimit: { source: "inherit_test" as const },
+    feedback: { format: "plain" as const, text: "" },
+    feedbackLinks: [],
+    feedbackAssets: [],
+    feedbackEvents: [],
+    defaultPoints: null,
+    ...over,
+  });
+  const variantsModel = (byTopic: Record<string, unknown> = {}, over: Record<string, unknown> = {}) =>
+    baseModel({
+      sections: [section({ formSet: { forms } })],
+      passRules: {
+        decisionPolicy: "overall_only",
+        overall: { type: "percent", value: 65 },
+        byTopic,
+      },
+      ...over,
+    } as never);
+
+  const openPane = () => fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+
+  it("offers «По вариантам» only for a topic delivered as variants", () => {
+    render(<SettingsSection model={variantsModel()} updateModel={() => {}} />);
+    openPane();
+    fireEvent.click(within(screen.getByTestId("pass-topic-source-top-1")).getByRole("button"));
+    expect(screen.getByRole("option", { name: "По вариантам" })).toBeInTheDocument();
+  });
+
+  it("hides «По вариантам» for a topic without variants", () => {
+    const model = baseModel({ sections: [section()] } as never);
+    render(<SettingsSection model={model} updateModel={() => {}} />);
+    openPane();
+    fireEvent.click(within(screen.getByTestId("pass-topic-source-top-1")).getByRole("button"));
+    expect(screen.queryByRole("option", { name: "По вариантам" })).not.toBeInTheDocument();
+  });
+
+  it("seeds a threshold for every variant when the source is picked", () => {
+    const updateModel = vi.fn();
+    const model = variantsModel();
+    render(<SettingsSection model={model} updateModel={updateModel} />);
+    openPane();
+    selectOption("pass-topic-source-top-1", "По вариантам");
+    // seeded from the test's overall percent so the rule is valid immediately
+    expect(runUpdater(updateModel, model).passRules.byTopic["top-1"]).toEqual({
+      source: "by_variant",
+      byForm: { v1: { type: "percent", value: 65 }, v2: { type: "percent", value: 65 } },
+    });
+  });
+
+  it("renders one row per variant with its own threshold", () => {
+    const model = variantsModel({
+      "top-1": { source: "by_variant", byForm: { v1: { type: "percent", value: 60 }, v2: { type: "absolute", value: 1 } } },
+    });
+    render(<SettingsSection model={model} updateModel={() => {}} />);
+    openPane();
+    expect(screen.getByTestId("pass-topic-variants-top-1")).toBeInTheDocument();
+    expect(screen.getByTestId("pass-variant-value-top-1-v1")).toBeInTheDocument();
+    expect(screen.getByTestId("pass-variant-value-top-1-v2")).toBeInTheDocument();
+    expect(screen.getByText("Вариант 1")).toBeInTheDocument();
+    expect(screen.getByText("Вариант 2")).toBeInTheDocument();
+  });
+
+  it("shows the variant's attainable points next to an absolute threshold", () => {
+    const model = variantsModel(
+      { "top-1": { source: "by_variant", byForm: { v1: { type: "absolute", value: 2 }, v2: { type: "percent", value: 60 } } } },
+      { scoring: { defaultQuestionPoints: null, questionOverrides: [{ questionId: "q1", points: 5, scoringJson: null, difficulty: null, pinnedContentHash: null }] } },
+    );
+    render(<SettingsSection model={model} updateModel={() => {}} />);
+    openPane();
+    // q1 overridden to 5 + q2 at the system default 1 → 6, not "2 questions"
+    expect(screen.getByText(/Вариант 1: макс\. 6 баллов/)).toBeInTheDocument();
+  });
+
+  it("patches only the edited variant's threshold", () => {
+    const updateModel = vi.fn();
+    const model = variantsModel({
+      "top-1": { source: "by_variant", byForm: { v1: { type: "percent", value: 60 }, v2: { type: "percent", value: 80 } } },
+    });
+    render(<SettingsSection model={model} updateModel={updateModel} />);
+    openPane();
+    selectOption("pass-variant-type-top-1-v1", "Сумма баллов");
+    expect(runUpdater(updateModel, model).passRules.byTopic["top-1"]).toEqual({
+      source: "by_variant",
+      byForm: { v1: { type: "absolute", value: 60 }, v2: { type: "percent", value: 80 } },
+    });
+  });
+});

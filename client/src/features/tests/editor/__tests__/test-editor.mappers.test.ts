@@ -21,6 +21,7 @@ import {
   editorModelToPayload,
   mapEditorAdaptiveToPayload,
   mapEditorSectionsToPayload,
+  applyFormSetChange,
 } from "../test-editor.mappers";
 import type { TestEditorModel } from "../test-editor.types";
 
@@ -865,5 +866,70 @@ describe("PRD-6 — retakePolicy mapping", () => {
       cooldownPeriodDays: 30,
       eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" },
     });
+  });
+});
+
+// ─── PRD-24: keeping the per-variant rule in step with the variant set ────────
+
+describe("applyFormSetChange", () => {
+  const forms = (...ids: string[]) =>
+    ids.map((id, i) => ({ id, label: `Вариант ${i + 1}`, questionIds: [`q${i}`] }));
+  const model = (byTopic: Record<string, unknown>, formSet: unknown) =>
+    ({
+      passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 65 }, byTopic },
+      sections: [{ topicId: "t", topicName: "T", maxQuestions: 4, drawCount: 2, formSet }],
+    }) as never;
+
+  it("seeds a threshold for a newly added variant, keeping the existing ones", () => {
+    const before = model(
+      { t: { source: "by_variant", byForm: { v1: { type: "absolute", value: 3 } } } },
+      { forms: forms("v1") },
+    );
+    const after = applyFormSetChange(before, "t", { forms: forms("v1", "v2") });
+    expect(after.passRules.byTopic["t"]).toEqual({
+      source: "by_variant",
+      byForm: {
+        v1: { type: "absolute", value: 3 }, // untouched
+        v2: { type: "absolute", value: 3 }, // seeded from the existing entry
+      },
+    });
+    expect(after.sections[0].formSet?.forms).toHaveLength(2);
+  });
+
+  it("drops the threshold of a removed variant so no orphan blocks the save", () => {
+    const before = model(
+      { t: { source: "by_variant", byForm: { v1: { type: "percent", value: 50 }, v2: { type: "percent", value: 80 } } } },
+      { forms: forms("v1", "v2") },
+    );
+    const after = applyFormSetChange(before, "t", { forms: forms("v1") });
+    expect(after.passRules.byTopic["t"]).toEqual({
+      source: "by_variant",
+      byForm: { v1: { type: "percent", value: 50 } },
+    });
+  });
+
+  it("normalises the rule when variants mode is switched off", () => {
+    const before = model(
+      { t: { source: "by_variant", byForm: { v1: { type: "percent", value: 50 } } } },
+      { forms: forms("v1", "v2") },
+    );
+    const after = applyFormSetChange(before, "t", null);
+    expect(after.passRules.byTopic["t"]).toEqual({ source: "inherit_overall" });
+    expect(after.sections[0].formSet).toBeNull();
+  });
+
+  it("seeds from the overall rule when the topic had no per-variant thresholds yet", () => {
+    const before = model({ t: { source: "by_variant", byForm: {} } }, { forms: forms("v1") });
+    const after = applyFormSetChange(before, "t", { forms: forms("v1", "v2") });
+    expect(after.passRules.byTopic["t"]).toEqual({
+      source: "by_variant",
+      byForm: { v1: { type: "percent", value: 65 }, v2: { type: "percent", value: 65 } },
+    });
+  });
+
+  it("leaves other rule sources alone", () => {
+    const before = model({ t: { source: "custom", type: "percent", value: 55 } }, { forms: forms("v1") });
+    const after = applyFormSetChange(before, "t", { forms: forms("v1", "v2") });
+    expect(after.passRules.byTopic["t"]).toEqual({ source: "custom", type: "percent", value: 55 });
   });
 });

@@ -44,6 +44,7 @@ import type {
   EditorSection,
   TestEditorModel,
 } from "../test-editor.types";
+import { applyFormSetChange } from "../test-editor.mappers";
 import { EMPTY_FIELD_ERRORS, type FieldErrorIndex } from "../field-errors";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -192,7 +193,11 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
             updateSection(section.topicId, { required })
           }
           onChangeBlueprint={(bp) => updateSection(section.topicId, { drawBlueprint: bp })}
-          onChangeFormSet={(formSet) => updateSection(section.topicId, { formSet })}
+          // PRD-24: changing the variant set also re-syncs the topic's per-variant
+          // pass rule (seed added / drop removed / normalise when mode goes off).
+          onChangeFormSet={(formSet) =>
+            updateModel((m) => applyFormSetChange(m, section.topicId, formSet))
+          }
           onRemove={() => removeSection(section.topicId)}
           onSaveFeedback={(patch) => updateSection(section.topicId, patch)}
         />

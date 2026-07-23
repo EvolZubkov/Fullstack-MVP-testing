@@ -332,6 +332,41 @@
 .tb-pass-table__detail-inner .ou-select { width: auto; min-width: 0; }
 .tb-pass-table__detail-inner .ou-select__trigger { min-width: var(--tb-input-w-sm); }
 
+/* PRD-24: expand-row правила «По вариантам». Grid [метка | Тип | Порог]:
+   колонка «Порог» = 1fr тянется до правого края ячейки (правый край совпадает с
+   full-width Select строки темы), колонка «Тип» = auto выравнивается по самому
+   широкому значению между строками, метки — в общей колонке. */
+.tb-pass-table__variants {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--ou-space-3);
+  row-gap: var(--ou-space-2);
+  min-width: 0;
+}
+.tb-pass-table__variant-label {
+  font: var(--ou-text-body-s); font-weight: 500; color: var(--ou-fg-default);
+  white-space: nowrap;
+}
+/* Field cells inside the grid: label sits inline before the control (как detail-inner). */
+.tb-pass-table__variants .ou-formfield {
+  display: inline-flex; flex-direction: row; align-items: center;
+  gap: var(--ou-space-2); margin-bottom: 0; min-width: 0;
+}
+.tb-pass-table__variants .ou-formfield__lbl {
+  font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0; flex-shrink: 0;
+}
+.tb-pass-table__variants .ou-select { width: auto; min-width: 0; }
+.tb-pass-table__variants .ou-select__trigger { min-width: var(--tb-input-w-sm); }
+/* «Порог» stretches to the right edge of its column so all rows align right. */
+.tb-pass-table__variants .ou-number,
+.tb-pass-table__variants .ou-number__box { width: 100%; }
+/* Hint spans the full width under the grid rows. */
+.tb-pass-table__variant-hint {
+  grid-column: 1 / -1;
+  font: var(--ou-text-body-xs); color: var(--ou-fg-muted);
+}
+
 /* Адаптив переехал в единый @container ниже (см. в конце файла). */
 
 /* ── Status dot (универсальный индикатор состояния) ──────────────────── */
