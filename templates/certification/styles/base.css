@@ -137,12 +137,19 @@ body {
 .cover-actions { display: flex; flex-direction: column; gap: 1.6cqh; align-items: flex-start; margin-top: 1cqh; }
 .cover-note { font-size: 2.05cqh; color: hsl(var(--destructive)); font-weight: 600; }
 /* Right column — decorative brand panel (no start-image data field exists). */
+/* Заливка ведётся от --primary: до PRD-23 градиент был прибит к фирменному
+   оранжевому, и стоило автору сменить цвет кнопок, как обложка расходилась с
+   остальным экраном. Оттенок и насыщенность берутся из токена, а объём даёт
+   разная светлота — так плашка следует за палитрой и за темой. */
 .cover-brand {
   align-self: stretch; min-height: 74cqh; border-radius: 3cqh;
   background:
-    radial-gradient(120% 120% at 80% 15%, hsl(15 100% 55% / .95), hsl(15 100% 42%) 55%, hsl(14 90% 32%) 100%);
+    radial-gradient(120% 120% at 80% 15%,
+      hsl(var(--primary) / .95),
+      hsl(var(--primary)) 55%,
+      color-mix(in srgb, hsl(var(--primary)) 70%, #000) 100%);
   position: relative; overflow: hidden; display: grid; place-items: center;
-  box-shadow: inset 0 0 0 1px hsl(15 100% 30% / .25);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, hsl(var(--primary)) 60%, #000);
 }
 .cover-brand__mark { font-size: 12cqh; font-weight: 900; color: #fff; opacity: .96; letter-spacing: -.02em; }
 .cover-brand__ring { position: absolute; width: 46cqh; aspect-ratio: 1; border-radius: 50%; border: 2.4cqh solid rgba(255,255,255,.16); right: -12cqh; bottom: -14cqh; }

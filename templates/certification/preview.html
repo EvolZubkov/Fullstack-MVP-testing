@@ -259,12 +259,19 @@ body {
 .cover-actions { display: flex; flex-direction: column; gap: 1.6cqh; align-items: flex-start; margin-top: 1cqh; }
 .cover-note { font-size: 2.05cqh; color: hsl(var(--destructive)); font-weight: 600; }
 /* Right column — decorative brand panel (no start-image data field exists). */
+/* Заливка ведётся от --primary: до PRD-23 градиент был прибит к фирменному
+   оранжевому, и стоило автору сменить цвет кнопок, как обложка расходилась с
+   остальным экраном. Оттенок и насыщенность берутся из токена, а объём даёт
+   разная светлота — так плашка следует за палитрой и за темой. */
 .cover-brand {
   align-self: stretch; min-height: 74cqh; border-radius: 3cqh;
   background:
-    radial-gradient(120% 120% at 80% 15%, hsl(15 100% 55% / .95), hsl(15 100% 42%) 55%, hsl(14 90% 32%) 100%);
+    radial-gradient(120% 120% at 80% 15%,
+      hsl(var(--primary) / .95),
+      hsl(var(--primary)) 55%,
+      color-mix(in srgb, hsl(var(--primary)) 70%, #000) 100%);
   position: relative; overflow: hidden; display: grid; place-items: center;
-  box-shadow: inset 0 0 0 1px hsl(15 100% 30% / .25);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, hsl(var(--primary)) 60%, #000);
 }
 .cover-brand__mark { font-size: 12cqh; font-weight: 900; color: #fff; opacity: .96; letter-spacing: -.02em; }
 .cover-brand__ring { position: absolute; width: 46cqh; aspect-ratio: 1; border-radius: 50%; border: 2.4cqh solid rgba(255,255,255,.16); right: -12cqh; bottom: -14cqh; }
@@ -778,7 +785,7 @@ a.results-rec-item { color: hsl(var(--primary)); }
       </div>
 
       <div class="pv-dialog-foot">
-        <span>26 экранов · 20 шаблонов контента · шаблон «Сертификация (РТК)» v1.2.1</span>
+        <span>26 экранов · 20 шаблонов контента · шаблон «Сертификация (РТК)» v1.3.0</span>
         <button type="button" class="pv-btn">Закрыть</button>
       </div>
     </div>
@@ -790,10 +797,20 @@ a.results-rec-item { color: hsl(var(--primary)); }
   window.PRD1_PREVIEW_MANIFEST  = {
   "id": "certification",
   "name": "Сертификация (РТК)",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "templateApiVersion": "1.0",
   "mountShell": true,
   "description": "Сертификационный тест РТК: фиксированная сцена 16:9, системная тема (светлая и тёмная) с переопределяемыми цветами, брендовый акцент, страница-роутер, кнопки навигации, пропуск и возврат к неотвеченным, экран обзора. Набор вариантов страниц совпадает со стандартным шаблоном — тест переключается между ними без переназначения страниц.",
+  "themes": [
+    {
+      "id": "light",
+      "label": "Светлая"
+    },
+    {
+      "id": "dark",
+      "label": "Тёмная"
+    }
+  ],
   "params": [
     {
       "key": "primaryColor",
@@ -2670,6 +2687,36 @@ a.results-rec-item { color: hsl(var(--primary)); }
     });
   }
 
+  /**
+   * PRD-23: paints a themed template. The per-theme colours go in as a stylesheet
+   * appended LAST (a media query cannot scope inline custom properties, and the
+   * dark value must apply only under the dark palette), and the author's pinned
+   * palette goes on `<html data-theme>`. «Авто» leaves the attribute off so the
+   * template's own `prefers-color-scheme` rules decide.
+   *
+   * No-ops without the shared bundle: printing is not something to duplicate by
+   * hand here, and a package built by this codebase always ships it.
+   * @param {object} design    TEST_DATA.designSettings
+   * @param {object} manifest  Template manifest (params[] + themes[])
+   */
+  function applyThemeCss(design, manifest) {
+    if (typeof document === "undefined") return;
+    if (!root.TBTemplate || typeof root.TBTemplate.buildTemplateThemeCss !== "function") return;
+    var css = root.TBTemplate.buildTemplateThemeCss(design, manifest);
+    var pinned = root.TBTemplate.sceneThemeAttribute(design, manifest);
+    var el = document.documentElement;
+    if (pinned) el.setAttribute("data-theme", pinned);
+    else el.removeAttribute("data-theme");
+    if (!css) return;
+    var style = document.getElementById("tb-theme-vars");
+    if (!style) {
+      style = document.createElement("style");
+      style.id = "tb-theme-vars";
+      (document.head || el).appendChild(style);
+    }
+    style.textContent = css;
+  }
+
   // ─── textFit ──────────────────────────────────────────────────────────────
 
   /**
@@ -2899,6 +2946,16 @@ a.results-rec-item { color: hsl(var(--primary)); }
     return {};
   }
 
+  /** The whole baked design settings — PRD-23 reads `theme`/`paramsByTheme` too. */
+  function _readDesignSettings() {
+    try {
+      if (typeof TEST_DATA !== "undefined" && TEST_DATA.designSettings) {
+        return TEST_DATA.designSettings;
+      }
+    } catch (_) {}
+    return {};
+  }
+
   root.TestBuilder = {
     /** Read-only context for template scripts. */
     context: {
@@ -2932,11 +2989,23 @@ a.results-rec-item { color: hsl(var(--primary)); }
     /**
      * Called by bootstrap once TEST_DATA is available and the design template
      * manifest has been loaded/embedded.
-     * @param {Array} manifestParams  Param definitions from the template manifest
+     * @param {Array}  manifestParams  Param definitions from the template manifest
+     * @param {object} [manifest]      Whole manifest — PRD-23 needs `themes[]` to
+     *                                 know whether colours split per palette.
      */
-    _init: function (manifestParams) {
+    _init: function (manifestParams, manifest) {
+      var design = _readDesignSettings();
+      var mf = manifest || { params: manifestParams || [] };
       _contextParams = _readParams();
-      applyCssVarsToRoot(_contextParams, manifestParams || []);
+      // A themed template's colours must NOT go in as inline custom properties:
+      // inline beats every stylesheet, so the dark palette would never get its
+      // turn. `baseParams` keeps only what paints the same in both palettes.
+      var inlineParams = _contextParams;
+      if (root.TBTemplate && typeof root.TBTemplate.baseParams === "function") {
+        inlineParams = root.TBTemplate.baseParams(design, mf);
+      }
+      applyCssVarsToRoot(inlineParams, manifestParams || []);
+      applyThemeCss(design, mf);
     },
 
     /** Pure helpers exposed for unit testing. */
@@ -2944,6 +3013,7 @@ a.results-rec-item { color: hsl(var(--primary)); }
       resolvePath: resolvePath,
       buildCssVarDeclarations: buildCssVarDeclarations,
       applyCssVarsToRoot: applyCssVarsToRoot,
+      applyThemeCss: applyThemeCss,
       applyTextFit: applyTextFit,
       isOverflowing: isOverflowing,
       renderPlaceholderHtml: renderPlaceholderHtml,
@@ -4145,7 +4215,7 @@ function renderContentPage(page, contentTemplates) {
   });
 
   document.addEventListener("DOMContentLoaded", function () {
-    if (tb._init) tb._init(window.PRD1_TEMPLATE_MANIFEST ? window.PRD1_TEMPLATE_MANIFEST.params : []);
+    if (tb._init) tb._init(window.PRD1_TEMPLATE_MANIFEST ? window.PRD1_TEMPLATE_MANIFEST.params : [], window.PRD1_TEMPLATE_MANIFEST);
     updateProgress();
   });
 })();
@@ -4393,9 +4463,12 @@ var TBTemplate = (() => {
     PLACEHOLDER_TYPES: () => PLACEHOLDER_TYPES,
     SEQUENCE_SETTING_KEY: () => SEQUENCE_SETTING_KEY,
     SETTING_TYPES: () => SETTING_TYPES,
+    TEST_THEMES: () => TEST_THEMES,
+    THEME_IDS: () => THEME_IDS,
     aggregateAdaptiveResult: () => aggregateAdaptiveResult,
     aggregateStandardResult: () => aggregateStandardResult,
     attachPointerDnd: () => attachPointerDnd,
+    baseParams: () => baseParams,
     buildAdaptiveResultContext: () => buildAdaptiveResultContext,
     buildAfterZone: () => buildAfterZone,
     buildBeforeZone: () => buildBeforeZone,
@@ -4414,12 +4487,15 @@ var TBTemplate = (() => {
     buildSequencePlacements: () => buildSequencePlacements,
     buildStartState: () => buildStartState,
     buildTemplateCssVars: () => buildTemplateCssVars,
+    buildTemplateThemeCss: () => buildTemplateThemeCss,
     buildTopicChunk: () => buildTopicChunk,
     buildTransitionContext: () => buildTransitionContext,
     checkPassRule: () => checkPassRule,
     collectSequenceIds: () => collectSequenceIds,
+    colorParamKeys: () => colorParamKeys,
     compileTemplate: () => compileTemplate,
     contentPagesFor: () => contentPagesFor,
+    declaredThemes: () => declaredThemes,
     dropOnPoolSlot: () => dropOnPoolSlot,
     dropOnRight: () => dropOnRight,
     findContentTemplate: () => findContentTemplate,
@@ -4432,18 +4508,25 @@ var TBTemplate = (() => {
     isRouterReadyToFinish: () => isRouterReadyToFinish,
     isSectionUnlocked: () => isSectionUnlocked,
     isSettingType: () => isSettingType,
+    isTestTheme: () => isTestTheme,
     normalizePool: () => normalizePool,
+    paramsForTheme: () => paramsForTheme,
+    paramsOfTheme: () => paramsOfTheme,
     pluralQuestions: () => pluralQuestions2,
     questionIndicesByTopic: () => questionIndicesByTopic,
+    readTestTheme: () => readTestTheme,
     renderResultField: () => renderResultField,
     renderScreenInto: () => renderScreenInto,
     renderTemplate: () => renderTemplate,
     resolveContentTemplate: () => resolveContentTemplate,
     resolveOverallRule: () => resolveOverallRule,
+    resolveThemeParams: () => resolveThemeParams,
     resolveTopicRule: () => resolveTopicRule,
     returnToPool: () => returnToPool,
+    sceneThemeAttribute: () => sceneThemeAttribute,
     sequenceIdOf: () => sequenceIdOf,
     statusLabel: () => statusLabel,
+    supportsThemes: () => supportsThemes,
     validateVariantFields: () => validateVariantFields,
     withTemplateAssetBase: () => withTemplateAssetBase,
     withTemplateAssetBaseInValues: () => withTemplateAssetBaseInValues
@@ -5543,6 +5626,119 @@ var TBTemplate = (() => {
       result[cssVar] = typeof value === "number" ? String(value) + (def.cssUnit || "px") : String(value);
     }
     return result;
+  }
+
+  // shared/template/themes.ts
+  var THEME_IDS = ["light", "dark"];
+  var TEST_THEMES = ["light", "dark", "auto"];
+  function isThemeId(value) {
+    return typeof value === "string" && THEME_IDS.indexOf(value) !== -1;
+  }
+  function isTestTheme(value) {
+    return typeof value === "string" && TEST_THEMES.indexOf(value) !== -1;
+  }
+  function readTestTheme(value) {
+    return isTestTheme(value) ? value : "auto";
+  }
+  function declaredThemes(manifest) {
+    const raw = manifest == null ? void 0 : manifest.themes;
+    if (!Array.isArray(raw)) return [];
+    const out = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const entry of raw) {
+      const def = entry != null ? entry : {};
+      if (!isThemeId(def.id) || seen.has(def.id)) continue;
+      if (typeof def.label !== "string" || def.label.length === 0) continue;
+      seen.add(def.id);
+      out.push({ id: def.id, label: def.label });
+    }
+    return out;
+  }
+  function supportsThemes(manifest) {
+    return declaredThemes(manifest).length >= 2;
+  }
+
+  // shared/template/theme-params.ts
+  function colorParamKeys(params) {
+    const out = /* @__PURE__ */ new Set();
+    for (const def of params != null ? params : []) {
+      if (def && def.type === "color" && typeof def.key === "string") out.add(def.key);
+    }
+    return out;
+  }
+  function resolveThemeParams(design, manifest) {
+    var _a, _b, _c;
+    const theme = readTestTheme(design == null ? void 0 : design.theme);
+    const flat = (_a = design == null ? void 0 : design.params) != null ? _a : {};
+    if (!supportsThemes(manifest)) {
+      return { theme, themed: false, base: { ...flat }, byTheme: {} };
+    }
+    const colors = colorParamKeys(manifest == null ? void 0 : manifest.params);
+    const base = {};
+    const flatColors = {};
+    for (const [key, value] of Object.entries(flat)) {
+      if (colors.has(key)) flatColors[key] = value;
+      else base[key] = value;
+    }
+    const stored = (_b = design == null ? void 0 : design.paramsByTheme) != null ? _b : {};
+    const byTheme = {};
+    for (const { id } of declaredThemes(manifest)) {
+      byTheme[id] = { ...flatColors, ...(_c = stored[id]) != null ? _c : {} };
+    }
+    return { theme, themed: true, base, byTheme };
+  }
+  function paramsForTheme(resolved, themeId) {
+    var _a;
+    return { ...resolved.base, ...(_a = resolved.byTheme[themeId]) != null ? _a : {} };
+  }
+
+  // shared/template/theme-css.ts
+  function declarations(vars) {
+    return Object.entries(vars).map(([name, value]) => `${name}: ${value};`).join(" ");
+  }
+  function withCondition(root, condition) {
+    return root.trim() === ":host" ? `:host(${condition})` : `${root}${condition}`;
+  }
+  function buildTemplateThemeCss(design, manifest, options) {
+    var _a;
+    const resolved = resolveThemeParams(design, manifest);
+    if (!resolved.themed) return "";
+    const root = (options == null ? void 0 : options.rootSelector) || ":root";
+    const manifestParams = (_a = manifest == null ? void 0 : manifest.params) != null ? _a : [];
+    const ids = declaredThemes(manifest).map((t) => t.id);
+    const varsOf = (id) => {
+      var _a2;
+      const values = (_a2 = resolved.byTheme[id]) != null ? _a2 : {};
+      const defs = manifestParams.filter((def) => values[def.key] !== void 0);
+      return buildTemplateCssVars(values, defs);
+    };
+    const out = [];
+    if (ids.includes("light")) {
+      const light = varsOf("light");
+      if (Object.keys(light).length > 0) out.push(`${root} { ${declarations(light)} }`);
+    }
+    if (ids.includes("dark")) {
+      const dark = varsOf("dark");
+      if (Object.keys(dark).length > 0) {
+        const body = declarations(dark);
+        out.push(
+          `@media (prefers-color-scheme: dark) { ${withCondition(root, ':not([data-theme="light"])')} { ${body} } }`
+        );
+        out.push(`${withCondition(root, '[data-theme="dark"]')} { ${body} }`);
+      }
+    }
+    return out.join("\n");
+  }
+  function sceneThemeAttribute(design, manifest) {
+    const resolved = resolveThemeParams(design, manifest);
+    if (!resolved.themed || resolved.theme === "auto") return null;
+    return resolved.theme;
+  }
+  function baseParams(design, manifest) {
+    return resolveThemeParams(design, manifest).base;
+  }
+  function paramsOfTheme(design, manifest, themeId) {
+    return paramsForTheme(resolveThemeParams(design, manifest), themeId);
   }
 
   // shared/template/question-progress-context.ts
