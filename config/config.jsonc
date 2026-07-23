@@ -82,11 +82,11 @@
   // referenced from .env. When host/user/pass are not configured, email sending
   // is disabled and password-reset links are logged instead.
   "email": {
-    "host": "",
-    "port": 587,
-    "secure": false,
+    "host": "smtp.yandex.ru",
+    "port": 465,
+    "secure": true,
     // Envelope "from" address. Empty -> falls back to the SMTP user.
-    "from": "",
+    "from": "skillum@yandex.com",
     "auth": {
       "user": { "env": "SMTP_USER" },
       "pass": { "env": "SMTP_PASS" }

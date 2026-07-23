@@ -24,11 +24,15 @@
     "salt": { "env": "ENCRYPTION_SALT" }
   },
   "email": {
-    "host": "",
-    "port": 587,
-    "secure": false,
-    "from": "",
-    "auth": { "user": { "env": "SMTP_USER" }, "pass": { "env": "SMTP_PASS" } }
+    "host": "smtp.yandex.ru",
+    "port": 465,
+    "secure": true,
+    // Envelope "from" address. Empty -> falls back to the SMTP user.
+    "from": "skillum@yandex.com",
+    "auth": {
+      "user": { "env": "SMTP_USER" },
+      "pass": { "env": "SMTP_PASS" }
+    }
   },
   "access": { "superadminEmails": ["admin@test.com", "vvlad1973@gmail.com"] }
 }
