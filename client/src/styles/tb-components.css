@@ -1825,6 +1825,33 @@
   color: var(--ou-fg-muted);
 }
 
+/* PRD-23 «Цвета» — theme switch and per-theme colour table.
+   The switch and the preview action share one row: the author picks how the test
+   looks and checks the result without leaving the field. */
+.design-theme-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ou-space-3);
+}
+
+/* The parameter column carries the description and is therefore greedy: without a
+   fixed layout it pushes the palette columns out of the pane. Palettes need only
+   enough width for a swatch and its reset action. */
+.design-colors-table table {
+  table-layout: fixed;
+}
+.design-colors-table__param {
+  font: var(--ou-text-body-s);
+  font-weight: 600;
+  color: var(--ou-fg-default);
+}
+.design-colors-table__hint {
+  font: var(--ou-text-caption);
+  color: var(--ou-fg-muted);
+  margin-top: var(--ou-space-1);
+}
+
 /* Preview sketch — schematic template thumbnail with header/progress/body. */
 .preview-sketch {
   width: 100%;

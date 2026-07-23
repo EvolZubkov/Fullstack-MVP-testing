@@ -21,6 +21,13 @@
  */
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { resolveThemeParams } from "@shared/template/theme-params";
+import {
+  declaredThemes,
+  type TemplateThemeDef,
+  type TestTheme,
+  type ThemeId,
+} from "@shared/template/themes";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -118,6 +125,8 @@ export type TemplateRow = {
      * `/api/templates/:id/assets/*`.
      */
     assets?: { preview?: string | null } | null;
+    /** PRD-23: palettes the template ships. Absent/short = no choice of theme. */
+    themes?: TemplateThemeDef[];
   };
   /**
    * NOT the thumbnail: the `templates.preview_path` column is never populated by
@@ -132,6 +141,10 @@ export type DesignSettings = {
   templateVersion?: string;
   templateApiVersion?: string;
   params?: Record<string, unknown>;
+  /** PRD-23: palette pinned by the author; absent reads as «Авто». */
+  theme?: TestTheme;
+  /** PRD-23: colour overrides per palette. Only for a template with themes. */
+  paramsByTheme?: Partial<Record<ThemeId, Record<string, unknown>>>;
 };
 
 export type UseDesignSettingsResult = {
@@ -165,6 +178,25 @@ export type UseDesignSettingsResult = {
   setParam: (key: string, value: unknown) => void;
   /** Remove an override so the template's own value applies again. */
   clearParam: (key: string) => void;
+  /**
+   * PRD-23: palettes the current template declares, in manifest order. Empty when
+   * the template offers no choice — then the colour section stays a flat list.
+   */
+  themes: TemplateThemeDef[];
+  /** The author's choice; `auto` when nothing is pinned. */
+  theme: TestTheme;
+  /** Pin the test to a palette, or hand it back to the viewer's setting. */
+  setTheme: (theme: TestTheme) => void;
+  /**
+   * Colour overrides per palette, WITH the FR-17 read rule applied: a colour saved
+   * flat before PRD-23 shows up as the value of every palette, so the author sees
+   * what the learner sees instead of an empty cell.
+   */
+  themeParams: Partial<Record<ThemeId, Record<string, unknown>>>;
+  /** Set one colour of one palette. */
+  setThemeParam: (theme: ThemeId, key: string, value: unknown) => void;
+  /** Drop one colour of one palette; the other palettes keep theirs. */
+  clearThemeParam: (theme: ThemeId, key: string) => void;
   /** Reset the draft to the manifest's defaults (clearing all params). */
   resetToDefaults: () => void;
   /**
@@ -291,7 +323,7 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
   };
 
   const resetToDefaults = () => {
-    setDraft((d) => ({ ...d, params: {} }));
+    setDraft((d) => ({ ...d, params: {}, paramsByTheme: undefined }));
   };
 
   const setTemplate = (templateId: string) => {
@@ -299,6 +331,59 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
     // manifest hydration). Drops templateVersion/templateApiVersion so the
     // server re-stamps them from the chosen template during PUT.
     setDraft(() => ({ templateId, params: {} }));
+  };
+
+  // ─── PRD-23: themes ─────────────────────────────────────────────────────────
+
+  const manifest = templateQuery.data?.manifest;
+  const themes = useMemo(() => declaredThemes(manifest), [manifest]);
+  const resolvedThemes = useMemo(
+    () => resolveThemeParams(draft, manifest),
+    [draft, manifest],
+  );
+
+  const setTheme = (theme: TestTheme) => {
+    setDraft((d) => ({ ...d, theme }));
+  };
+
+  /**
+   * Moves a colour saved FLAT (pre-PRD-23) onto every palette, then drops the flat
+   * key. Called before any per-palette edit: leaving the flat value behind would
+   * keep feeding the palettes the author is not editing from two places at once.
+   * Purely a shape change — {@link resolveThemeParams} already reads it this way,
+   * so what the learner sees does not move.
+   */
+  const materialiseFlatColour = (d: DesignSettings, key: string): DesignSettings => {
+    const flat = d.params?.[key];
+    if (flat === undefined) return d;
+    const params = { ...(d.params ?? {}) };
+    delete params[key];
+    const byTheme: Partial<Record<ThemeId, Record<string, unknown>>> = { ...(d.paramsByTheme ?? {}) };
+    for (const t of themes) {
+      const cur = byTheme[t.id] ?? {};
+      if (cur[key] === undefined) byTheme[t.id] = { ...cur, [key]: flat };
+    }
+    return { ...d, params, paramsByTheme: byTheme };
+  };
+
+  const setThemeParam = (theme: ThemeId, key: string, value: unknown) => {
+    setDraft((d0) => {
+      const d = materialiseFlatColour(d0, key);
+      const byTheme = { ...(d.paramsByTheme ?? {}) };
+      byTheme[theme] = { ...(byTheme[theme] ?? {}), [key]: value };
+      return { ...d, paramsByTheme: byTheme };
+    });
+  };
+
+  const clearThemeParam = (theme: ThemeId, key: string) => {
+    setDraft((d0) => {
+      const d = materialiseFlatColour(d0, key);
+      const byTheme = { ...(d.paramsByTheme ?? {}) };
+      const values = { ...(byTheme[theme] ?? {}) };
+      delete values[key];
+      byTheme[theme] = values;
+      return { ...d, paramsByTheme: byTheme };
+    });
   };
 
   const applyDefaultTemplate = () => {
@@ -371,6 +456,12 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
     templateOutdated,
     setParam,
     clearParam,
+    themes,
+    theme: resolvedThemes.theme,
+    setTheme,
+    themeParams: resolvedThemes.byTheme,
+    setThemeParam,
+    clearThemeParam,
     resetToDefaults,
     setTemplate,
     applyDefaultTemplate,

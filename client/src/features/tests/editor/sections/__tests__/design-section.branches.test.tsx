@@ -61,6 +61,12 @@ function makeDesign(over: Partial<UseDesignSettingsResult> = {}): UseDesignSetti
     templateOutdated: false,
     setParam: vi.fn(),
     clearParam: vi.fn(),
+    themes: [],
+    theme: "auto",
+    setTheme: vi.fn(),
+    themeParams: {},
+    setThemeParam: vi.fn(),
+    clearThemeParam: vi.fn(),
     resetToDefaults: vi.fn(),
     setTemplate: vi.fn(),
     applyDefaultTemplate: vi.fn(),
@@ -82,14 +88,23 @@ function renderSection(design: UseDesignSettingsResult) {
   );
 }
 
-/** Render a branding-only template with the given params + preloaded draft values. */
-function renderBranding(params: TemplateParam[], params_values: Record<string, unknown> = {}) {
+/**
+ * Render a template with the given params + preloaded draft values, and open the
+ * section that holds them. PRD-23 split the old single «Брендирование» pane: a
+ * colour param now lives in «Цвета», everything else stays put — so a fixture of
+ * colours alone opens on «Цвета».
+ */
+function renderBranding(
+  params: TemplateParam[],
+  params_values: Record<string, unknown> = {},
+  rail: "branding" | "colors" = params.every((p) => p.type === "color") ? "colors" : "branding",
+) {
   const design = makeDesign({
     template: templateRow({}, { params }),
     draft: { templateId: "corporate", params: params_values },
   });
   const result = renderSection(design);
-  fireEvent.click(screen.getByTestId("design-rail-branding"));
+  fireEvent.click(screen.getByTestId(`design-rail-${rail}`));
   return { design, ...result };
 }
 
@@ -180,9 +195,8 @@ describe("<DesignSection /> — explicit param sections", () => {
       }),
     });
     renderSection(design);
-    // Branding is empty (param is assigned to layout).
-    fireEvent.click(screen.getByTestId("design-rail-branding"));
-    expect(screen.getByTestId("design-branding-pane-empty")).toBeInTheDocument();
+    // PRD-23: branding holds nothing, so it is not offered at all.
+    expect(screen.queryByTestId("design-rail-branding")).toBeNull();
     // Layout carries the param row.
     fireEvent.click(screen.getByTestId("design-rail-layout"));
     expect(screen.getByTestId("design-param-row-cols")).toBeInTheDocument();
@@ -272,8 +286,11 @@ describe("<DesignSection /> — ParamRow default-value branches", () => {
       ],
       { hue: "120 50% 50%", flag: true, size: "M" },
     );
-    // Stored string colour is used verbatim (the `typeof value === "string" && value` branch).
+    // Stored string colour is used verbatim (the `typeof value === "string" && value` branch)
+    // — in «Цвета», where PRD-23 moved every colour.
+    fireEvent.click(screen.getByTestId("design-rail-colors"));
     expect(screen.getByTestId("design-param-row-hue")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("design-rail-branding"));
     // Stored boolean value wins over the default.
     expect((screen.getByTestId("design-param-input-flag") as HTMLInputElement).checked).toBe(true);
     // Stored select value shown in the trigger.

@@ -238,6 +238,12 @@
   font: var(--ou-text-body-s);
   color: var(--ou-fg-muted);
 }
+/* PRD-23: palette switch above the stage. Only for a template with themes —
+   otherwise there is nothing to switch between. */
+.tpl-check-stage__themes {
+  display: flex;
+  justify-content: flex-end;
+}
 .tpl-check-stage__empty {
   padding: var(--ou-space-5);
 }

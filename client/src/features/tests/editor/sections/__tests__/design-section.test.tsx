@@ -106,15 +106,19 @@ afterEach(() => {
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe("<DesignSection /> — rail navigation", () => {
-  it("renders all four rail items", async () => {
+  it("renders only the sections the template puts params in (PRD-23)", async () => {
     renderWithClient(<DesignSection testId={TEST_ID} />);
-    expect(screen.getByTestId("design-rail-template")).toBeInTheDocument();
-    expect(screen.getByTestId("design-rail-branding")).toBeInTheDocument();
-    expect(screen.getByTestId("design-rail-layout")).toBeInTheDocument();
-    expect(screen.getByTestId("design-rail-progress")).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
     );
+    expect(screen.getByTestId("design-rail-template")).toBeInTheDocument();
+    expect(screen.getByTestId("design-rail-branding")).toBeInTheDocument();
+    // The fixture declares a colour, so «Цвета» is there…
+    expect(screen.getByTestId("design-rail-colors")).toBeInTheDocument();
+    // …and nothing for layout/progress, so those items are not shown at all
+    // (before PRD-23 they opened on a banner saying there is nothing here).
+    expect(screen.queryByTestId("design-rail-layout")).toBeNull();
+    expect(screen.queryByTestId("design-rail-progress")).toBeNull();
   });
 
   it("switches pane when a rail item is clicked", async () => {
@@ -128,24 +132,23 @@ describe("<DesignSection /> — rail navigation", () => {
     );
   });
 
-  it("renders empty-section info-banner for Layout and Progress panes when the template declares no params there (S12 G1)", async () => {
-    // Fixture `TEMPLATE` declares params without an explicit `section` — all
-    // fall back to `branding`, so layout and progress panes must render their
-    // own empty-state banners (paramsBySection filters to []).
+  it("keeps colours out of «Брендирование» and puts them in «Цвета» (PRD-23)", async () => {
     renderWithClient(<DesignSection testId={TEST_ID} />);
     await waitFor(() =>
       expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
     );
-    fireEvent.click(screen.getByTestId("design-rail-layout"));
+    fireEvent.click(screen.getByTestId("design-rail-branding"));
     await waitFor(() =>
-      expect(screen.getByTestId("design-layout-pane")).toBeInTheDocument(),
+      expect(screen.getByTestId("design-branding-pane")).toBeInTheDocument(),
     );
-    expect(screen.getByTestId("design-layout-pane-empty")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("design-rail-progress"));
+    expect(screen.queryByTestId("design-param-row-primaryColor")).toBeNull();
+    expect(screen.getByTestId("design-param-row-companyName")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("design-rail-colors"));
     await waitFor(() =>
-      expect(screen.getByTestId("design-progress-pane")).toBeInTheDocument(),
+      expect(screen.getByTestId("design-colors-pane")).toBeInTheDocument(),
     );
-    expect(screen.getByTestId("design-progress-pane-empty")).toBeInTheDocument();
+    expect(screen.getByTestId("design-param-row-primaryColor")).toBeInTheDocument();
   });
 });
 
@@ -253,7 +256,8 @@ describe("<DesignSection /> — Брендирование pane", () => {
       expect(screen.getByTestId("design-branding-pane")).toBeInTheDocument(),
     );
     expect(screen.getByTestId("design-param-row-companyName")).toBeInTheDocument();
-    expect(screen.getByTestId("design-param-row-primaryColor")).toBeInTheDocument();
+    // PRD-23: the colour moved to «Цвета» and is asserted there.
+    expect(screen.queryByTestId("design-param-row-primaryColor")).toBeNull();
     expect(screen.getByTestId("design-param-row-showProgressBar")).toBeInTheDocument();
     expect(screen.getByTestId("design-param-row-fontFamily")).toBeInTheDocument();
     // S12-G4 (2026-05-28): image params now render as a media-row with an
@@ -270,13 +274,17 @@ describe("<DesignSection /> — Брендирование pane", () => {
     await waitFor(() =>
       expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
     );
+    fireEvent.click(screen.getByTestId("design-rail-colors"));
+    await waitFor(() =>
+      expect(screen.getByTestId("design-colors-pane")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("design-param-desc-primaryColor")).toHaveTextContent(
+      "Кнопки «Далее» и выбранный вариант ответа.",
+    );
+
     fireEvent.click(screen.getByTestId("design-rail-branding"));
     await waitFor(() =>
       expect(screen.getByTestId("design-branding-pane")).toBeInTheDocument(),
-    );
-
-    expect(screen.getByTestId("design-param-desc-primaryColor")).toHaveTextContent(
-      "Кнопки «Далее» и выбранный вариант ответа.",
     );
     expect(screen.queryByTestId("design-param-desc-companyName")).toBeNull();
   });
