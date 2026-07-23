@@ -57,7 +57,8 @@ Task 1 — обязательный пререквизит. Task 2, 3, 6, 7 по
 
 - Modify: `shared/schema.ts` (рядом с `passRuleSchema`, ~строка 701)
 - Modify: `shared/scoring/pass-rule.ts`
-- Test: `tests/scoring-pass-rule.test.ts`
+- Test: `tests/scoring-aggregate.test.ts` (там живут тесты `resolveTopicRule`;
+  `tests/scoring-pass-rule.test.ts` — про легаси `checkPassRuleWithPartial` из `resultsPage.js`)
 
 - [ ] **Step 1: Добавить схему и типы в `shared/schema.ts`**
 
@@ -92,7 +93,8 @@ export type TopicPassRuleJson = z.infer<typeof topicPassRuleSchema>;
 
 - [ ] **Step 2: Написать падающие тесты резолвера**
 
-В `tests/scoring-pass-rule.test.ts` добавить блок (импорт `resolveTopicRule` там уже есть):
+В `tests/scoring-aggregate.test.ts` добавить блок рядом с существующим
+`describe("resolveTopicRule")` (импорт резолвера там уже есть):
 
 ```ts
 describe("resolveTopicRule — by_variant (PRD-24)", () => {
@@ -124,7 +126,7 @@ describe("resolveTopicRule — by_variant (PRD-24)", () => {
 
 - [ ] **Step 3: Запустить тесты — убедиться, что падают**
 
-Run: `npx vitest run tests/scoring-pass-rule.test.ts -t "by_variant"`
+Run: `npx vitest run tests/scoring-aggregate.test.ts -t "by_variant"`
 Expected: FAIL (ветка `by_variant` ещё не обрабатывается — резолвер вернёт `null`).
 
 - [ ] **Step 4: Реализовать ветку и контекст в `shared/scoring/pass-rule.ts`**
@@ -171,7 +173,7 @@ export function resolveTopicRule(
 
 - [ ] **Step 5: Запустить весь suite резолвера — убедиться, что зелёный**
 
-Run: `npx vitest run tests/scoring-pass-rule.test.ts`
+Run: `npx vitest run tests/scoring-aggregate.test.ts`
 Expected: PASS (новые + существующие ветки `inherit_overall`/`custom`/`none`/legacy).
 
 - [ ] **Step 6: Type-check**
@@ -182,7 +184,7 @@ Expected: без ошибок.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add shared/schema.ts shared/scoring/pass-rule.ts tests/scoring-pass-rule.test.ts
+git add shared/schema.ts shared/scoring/pass-rule.ts tests/scoring-aggregate.test.ts
 git commit -m "feat(prd24): by_variant topic pass-rule schema + delivery-context resolver"
 ```
 
@@ -430,7 +432,7 @@ Expected: PASS (пин `formId` не ломает выбор/порт; данн�
 
 - [ ] **Step 7: Добавить parity-тест веб↔SCORM для `by_variant`**
 
-В `tests/scoring-pass-rule.test.ts` (движок общий для обоих хостов) уже покрыты обе стороны
+В `tests/scoring-aggregate.test.ts` (движок общий для обоих хостов) уже покрыты обе стороны
 через один резолвер (Task 1). Дополнительно добавить в `tests/forms-port.test.ts` (или новый
 `tests/scorm-variant-threshold.test.ts`) сценарий: TEST_DATA с секцией `by_variant`, состояние
 с `formId=fB`, прогнать `aggregateStandardResult` с `sections:[{...formId:'fB'}]` и сверить
