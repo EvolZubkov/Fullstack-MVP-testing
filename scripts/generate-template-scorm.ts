@@ -153,6 +153,8 @@ function makeContentPage(args: {
   templateKey: string;
   sortOrder: number;
   values: Record<string, unknown>;
+  /** PRD-22 page settings (sequence identifier, caption, background). */
+  settings?: Record<string, unknown>;
 }) {
   cpSeq += 1;
   return {
@@ -166,6 +168,7 @@ function makeContentPage(args: {
     templateKey: args.templateKey,
     sortOrder: args.sortOrder,
     valuesJson: { values: args.values, placeholderStyles: {} },
+    settingsJson: args.settings ?? {},
     autoAdvance: false,
     autoAdvanceDelayMs: null,
     createdAt: new Date(),
@@ -238,9 +241,29 @@ function buildContentPages(manifest: any) {
   // intro variants → test-scope «До теста»
   intro.forEach((v, i) =>
     pages.push(makeContentPage({ topicId: null, position: "before", kind: "intro", type: "intro", templateKey: v.key, sortOrder: i, values: mockValuesFor(v) })));
-  // info variants → before_topic AND after_topic (so both topic zones render)
-  info.forEach((v, i) =>
-    pages.push(makeContentPage({ topicId: TOPIC_ID, position: "before_topic", kind: "info", type: "info", templateKey: v.key, sortOrder: i, values: mockValuesFor(v) })));
+  // info variants → before_topic AND after_topic (so both topic zones render).
+  // PRD-22: a variant that declares a `sequence` setting gets THREE adjacent pages
+  // sharing one identifier — otherwise the navigation indicator has nothing to
+  // count and the acceptance package could not show it at all.
+  info.forEach((v, i) => {
+    const seqKey = (v.settings ?? []).find((s: any) => s?.type === "sequence")?.key;
+    if (!seqKey) {
+      pages.push(makeContentPage({ topicId: TOPIC_ID, position: "before_topic", kind: "info", type: "info", templateKey: v.key, sortOrder: i * 10, values: mockValuesFor(v) }));
+      return;
+    }
+    for (let n = 0; n < 3; n++) {
+      pages.push(makeContentPage({
+        topicId: TOPIC_ID,
+        position: "before_topic",
+        kind: "info",
+        type: "info",
+        templateKey: v.key,
+        sortOrder: i * 10 + n,
+        values: mockValuesFor(v),
+        settings: { [seqKey]: `seq-${v.key}` },
+      }));
+    }
+  });
   info.forEach((v, i) =>
     pages.push(makeContentPage({ topicId: TOPIC_ID, position: "after_topic", kind: "info", type: "info", templateKey: v.key, sortOrder: i, values: mockValuesFor(v) })));
   // summary variants → test-scope «После теста»
