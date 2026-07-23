@@ -257,6 +257,19 @@ function readTopicPassRuleFromApi(raw: unknown): TopicPassRule {
   if (isPlainObject(raw)) {
     if (raw.source === "inherit_overall") return { source: "inherit_overall" };
     if (raw.source === "none") return { source: "none" };
+    // PRD-24: per-variant thresholds keyed by the stable formId. Entries that are not
+    // a well-formed {type, value} pair are dropped — a malformed threshold must not
+    // silently become a gate the author never set.
+    if (raw.source === "by_variant" && isPlainObject(raw.byForm)) {
+      const byForm: Record<string, { type: "percent" | "absolute"; value: number }> = {};
+      for (const [formId, entry] of Object.entries(raw.byForm)) {
+        if (!isPlainObject(entry)) continue;
+        const type = entry.type;
+        if (type !== "percent" && type !== "absolute") continue;
+        byForm[formId] = { type, value: typeof entry.value === "number" ? entry.value : 0 };
+      }
+      return { source: "by_variant", byForm };
+    }
     if (raw.source === "custom") {
       const type = raw.type;
       if (type === "percent" || type === "absolute") {

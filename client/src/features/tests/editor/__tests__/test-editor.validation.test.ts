@@ -1203,3 +1203,80 @@ describe("PRD-17: variants mode validation", () => {
     expect(validateTestEditor(model).errors.filter((e) => e.field === "sections[0].formSetJson")).toHaveLength(0);
   });
 });
+
+// ─── PRD-24: per-variant pass thresholds ─────────────────────────────────────
+
+describe("PRD-24: by_variant topic pass rule", () => {
+  const baseSection = baseModel().sections[0];
+  const forms = [
+    { id: "v1", label: "Вариант 1", questionIds: ["q1", "q2"] },
+    { id: "v2", label: "Вариант 2", questionIds: ["q3"] },
+  ];
+  /** Model with a variants topic + a by_variant rule, plus optional scoring overrides. */
+  const withRule = (
+    byForm: Record<string, { type: "percent" | "absolute"; value: number }>,
+    opts: { formSet?: boolean; overrides?: Array<{ questionId: string; points: number }> } = {},
+  ) =>
+    baseModel({
+      sections: [{ ...baseSection, ...(opts.formSet === false ? {} : { formSet: { forms } }) }],
+      passRules: {
+        decisionPolicy: "overall_only",
+        overall: { type: "percent", value: 60 },
+        byTopic: { [baseSection.topicId]: { source: "by_variant", byForm } },
+      },
+      scoring: {
+        defaultQuestionPoints: null,
+        questionOverrides: (opts.overrides ?? []).map((o) => ({
+          questionId: o.questionId,
+          points: o.points,
+          scoringJson: null,
+          difficulty: null,
+          pinnedContentHash: null,
+        })),
+      },
+    } as never);
+  const ruleErrors = (m: ReturnType<typeof baseModel>) =>
+    validateTestEditor(m).errors.filter((e) => e.field.startsWith(`passRules.byTopic[${baseSection.topicId}]`));
+
+  it("happy path — every variant covered, values in range", () => {
+    expect(ruleErrors(withRule({ v1: { type: "percent", value: 60 }, v2: { type: "absolute", value: 1 } }))).toHaveLength(0);
+  });
+
+  it("is rejected for a topic that is not in variants mode (FR-02)", () => {
+    const errs = ruleErrors(withRule({ v1: { type: "percent", value: 60 } }, { formSet: false }));
+    expect(errs).toHaveLength(1);
+    expect(errs[0].code).toBe("forbidden_combination");
+  });
+
+  it("requires a threshold for EVERY variant, else the topic would silently ungate", () => {
+    const errs = ruleErrors(withRule({ v1: { type: "percent", value: 60 } }));
+    expect(errs).toHaveLength(1);
+    expect(errs[0].field).toContain("v2");
+  });
+
+  it("rejects a threshold pointing at a variant that no longer exists", () => {
+    const errs = ruleErrors(withRule({
+      v1: { type: "percent", value: 60 },
+      v2: { type: "percent", value: 60 },
+      gone: { type: "percent", value: 60 },
+    }));
+    expect(errs).toHaveLength(1);
+    expect(errs[0].field).toContain("gone");
+  });
+
+  it("keeps a percent threshold within 0..100", () => {
+    expect(ruleErrors(withRule({ v1: { type: "percent", value: 101 }, v2: { type: "percent", value: 60 } }))).toHaveLength(1);
+    expect(ruleErrors(withRule({ v1: { type: "percent", value: -1 }, v2: { type: "percent", value: 60 } }))).toHaveLength(1);
+  });
+
+  // The cap is Σ EFFECTIVE prices of THAT variant, not its question count: with a
+  // 5-point override on q1, variant v1 (q1+q2) can attain 6, so 6 is valid and 7 is not.
+  // A count-based cap would have wrongly rejected 6.
+  it("caps an absolute threshold by the variant's attainable POINTS", () => {
+    const overrides = [{ questionId: "q1", points: 5 }];
+    expect(ruleErrors(withRule({ v1: { type: "absolute", value: 6 }, v2: { type: "absolute", value: 1 } }, { overrides }))).toHaveLength(0);
+    const errs = ruleErrors(withRule({ v1: { type: "absolute", value: 7 }, v2: { type: "absolute", value: 1 } }, { overrides }));
+    expect(errs).toHaveLength(1);
+    expect(errs[0].code).toBe("range");
+  });
+});

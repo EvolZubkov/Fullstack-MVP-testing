@@ -143,7 +143,13 @@ export type OverallPassRule = {
 export type TopicPassRule =
   | { source: "inherit_overall" }
   | { source: "custom"; type: "percent" | "absolute"; value: number }
-  | { source: "none" };
+  | { source: "none" }
+  /**
+   * PRD-24: a threshold per PRD-17 variant, keyed by the stable `formId`. Only
+   * available to a topic in variants mode; the delivered variant's entry is what
+   * gates the topic at runtime.
+   */
+  | { source: "by_variant"; byForm: Record<string, { type: "percent" | "absolute"; value: number }> };
 
 export type PassRules = {
   decisionPolicy: PassDecisionPolicy;

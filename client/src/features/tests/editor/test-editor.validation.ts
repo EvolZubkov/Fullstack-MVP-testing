@@ -21,6 +21,7 @@ import {
   type ValidationIssue,
   type ValidationResult,
 } from "./test-editor.types";
+import { resolveEffectiveScoring } from "@shared/scoring/effective-scoring";
 
 const VALID_PASS_DECISION_POLICIES: PassDecisionPolicy[] = [
   "overall_only",
@@ -47,6 +48,41 @@ function isValidHttpUrl(value: string): boolean {
  */
 function getSectionMaxPoints(section: EditorSection): number {
   return section.maxPoints ?? section.maxQuestions;
+}
+
+/**
+ * PRD-24: points attainable in ONE variant — Σ of the effective price of its
+ * questions. Price is a property of the TEST (PRD-15 block D, T-40), so it resolves
+ * through the same chain the «Оценка» tab renders: per-question override → section
+ * default → test default → system default. Every link lives in the editor model, so
+ * this is exact, not an estimate (the question count would be a lower bound only).
+ */
+function getVariantMaxPoints(
+  model: TestEditorModel,
+  section: EditorSection,
+  form: { questionIds: string[] },
+): number {
+  const overrideByQuestion = new Map(
+    model.scoring.questionOverrides.map((o) => [o.questionId, o]),
+  );
+  return form.questionIds.reduce((sum, questionId) => {
+    const override = overrideByQuestion.get(questionId);
+    const effective = resolveEffectiveScoring({
+      override: override
+        ? {
+            points: override.points,
+            scoring: override.scoringJson,
+            difficulty: override.difficulty,
+            pinnedContentHash: override.pinnedContentHash,
+          }
+        : null,
+      defaults: {
+        sectionDefaultPoints: section.defaultPoints,
+        testDefaultPoints: model.scoring.defaultQuestionPoints,
+      },
+    });
+    return sum + effective.points;
+  }, 0);
 }
 
 /** Total attainable points across all sections (Σ of {@link getSectionMaxPoints}). */
@@ -220,6 +256,67 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
       message: `Overall absolute pass threshold (${model.passRules.overall.value}) cannot exceed total points (${totalMaxPoints}).`,
       severity: "error",
     });
+  }
+
+  // PRD-24: a per-variant rule is only meaningful for a topic in variants mode, must
+  // cover every variant (an uncovered one would silently fall back to the overall rule
+  // at runtime), and its absolute thresholds are capped by the points attainable in
+  // THAT variant — resolved through the same effective-price chain the «Оценка» tab uses.
+  for (const [topicId, rule] of Object.entries(model.passRules.byTopic)) {
+    if (rule.source !== "by_variant") continue;
+    const section = getSectionByTopicId(model.sections, topicId);
+    const forms = section?.formSet?.forms ?? [];
+    if (!section || forms.length < 2) {
+      errors.push({
+        field: `passRules.byTopic[${topicId}]`,
+        code: "forbidden_combination",
+        message: `Правило «По вариантам» доступно только теме в режиме вариантов (не менее 2 вариантов).`,
+        severity: "error",
+      });
+      continue;
+    }
+    const formIds = new Set(forms.map((f) => f.id));
+    for (const form of forms) {
+      if (!rule.byForm[form.id]) {
+        errors.push({
+          field: `passRules.byTopic[${topicId}].byForm[${form.id}].value`,
+          code: "required",
+          message: `Задайте порог для варианта «${form.label}».`,
+          severity: "error",
+        });
+      }
+    }
+    for (const [formId, entry] of Object.entries(rule.byForm)) {
+      const form = forms.find((f) => f.id === formId);
+      if (!form) {
+        errors.push({
+          field: `passRules.byTopic[${topicId}].byForm[${formId}].value`,
+          code: "forbidden_combination",
+          message: `Порог ссылается на вариант, которого нет в теме.`,
+          severity: "error",
+        });
+        continue;
+      }
+      if (entry.type === "percent" && (entry.value < 0 || entry.value > 100)) {
+        errors.push({
+          field: `passRules.byTopic[${topicId}].byForm[${formId}].value`,
+          code: "range",
+          message: `Порог варианта «${form.label}» в процентах должен быть от 0 до 100.`,
+          severity: "error",
+        });
+      }
+      if (entry.type === "absolute") {
+        const maxPoints = getVariantMaxPoints(model, section, form);
+        if (entry.value > maxPoints) {
+          errors.push({
+            field: `passRules.byTopic[${topicId}].byForm[${formId}].value`,
+            code: "range",
+            message: `Порог варианта «${form.label}» (${entry.value}) не может превышать максимум баллов варианта (${maxPoints}).`,
+            severity: "error",
+          });
+        }
+      }
+    }
   }
 
   for (const [topicId, rule] of Object.entries(model.passRules.byTopic)) {

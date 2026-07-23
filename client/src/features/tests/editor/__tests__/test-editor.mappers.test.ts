@@ -147,6 +147,45 @@ describe("1. apiToEditorModel — standard test with sections", () => {
     // §2.4: at least one "none" → overall_and_required_topics
     expect(model.passRules.decisionPolicy).toBe("overall_and_required_topics");
   });
+
+  // PRD-24: a per-variant rule must survive the API round-trip intact — its byForm
+  // map is what the runtime resolves against the delivered variant.
+  it("reads and writes a by_variant topic rule", () => {
+    const byForm = { f1: { type: "percent" as const, value: 65 }, f2: { type: "absolute" as const, value: 7 } };
+    const model = apiToEditorModel({
+      id: "t",
+      title: "T",
+      mode: "standard",
+      status: "draft",
+      overallPassRuleJson: { type: "percent", value: 70 },
+      sections: [apiSection({ topicId: "topic-math", topicPassRuleJson: { source: "by_variant", byForm } })],
+    });
+    expect(model.passRules.byTopic["topic-math"]).toEqual({ source: "by_variant", byForm });
+
+    const payloads = mapEditorSectionsToPayload(model);
+    expect(payloads[0].topicPassRuleJson).toEqual({ source: "by_variant", byForm });
+  });
+
+  it("drops malformed by_variant entries instead of trusting them", () => {
+    const model = apiToEditorModel({
+      id: "t",
+      title: "T",
+      mode: "standard",
+      status: "draft",
+      overallPassRuleJson: { type: "percent", value: 70 },
+      sections: [apiSection({
+        topicId: "topic-math",
+        topicPassRuleJson: {
+          source: "by_variant",
+          byForm: { ok: { type: "percent", value: 50 }, bad: { type: "weird", value: 1 }, worse: 42 },
+        },
+      })],
+    });
+    expect(model.passRules.byTopic["topic-math"]).toEqual({
+      source: "by_variant",
+      byForm: { ok: { type: "percent", value: 50 } },
+    });
+  });
 });
 
 // ─── PRD-11: draw blueprint (de)serialization ────────────────────────────────
