@@ -59,6 +59,41 @@ describe("resolveTopicRule", () => {
   });
 });
 
+describe("resolveTopicRule — by_variant (PRD-24)", () => {
+  const overall = { type: "percent" as const, value: 70 };
+  const rule = {
+    source: "by_variant",
+    byForm: { f1: { type: "percent", value: 65 }, f2: { type: "absolute", value: 7 } },
+  };
+
+  it("resolves the delivered variant's percent threshold", () => {
+    expect(resolveTopicRule(rule, overall, { formId: "f1" })).toEqual({ type: "percent", value: 65 });
+  });
+
+  it("resolves the delivered variant's absolute threshold as a count rule", () => {
+    expect(resolveTopicRule(rule, overall, { formId: "f2" })).toEqual({ type: "count", value: 7 });
+  });
+
+  it("degrades to the overall rule when the delivered formId is unknown (FR-09)", () => {
+    expect(resolveTopicRule(rule, overall, { formId: "gone" })).toEqual(overall);
+    expect(resolveTopicRule(rule, overall, { formId: null })).toEqual(overall);
+    expect(resolveTopicRule(rule, overall, undefined)).toEqual(overall);
+  });
+
+  it("degrades to null when the overall rule is «none» and the variant is unresolved", () => {
+    expect(resolveTopicRule(rule, null, { formId: "gone" })).toBeNull();
+  });
+
+  it("coerces a malformed threshold value to 0 for both types", () => {
+    const broken = {
+      source: "by_variant",
+      byForm: { f1: { type: "percent" }, f2: { type: "absolute", value: "x" } },
+    };
+    expect(resolveTopicRule(broken, overall, { formId: "f1" })).toEqual({ type: "percent", value: 0 });
+    expect(resolveTopicRule(broken, overall, { formId: "f2" })).toEqual({ type: "count", value: 0 });
+  });
+});
+
 describe("checkPassRule", () => {
   it("null passes; percent compares %; count compares Σ earned points (FR-10)", () => {
     expect(checkPassRule(null, 0, 0)).toBe(true);

@@ -706,6 +706,42 @@ export const passRuleSchema = z.object({
 export type PassRule = z.infer<typeof passRuleSchema>;
 
 /**
+ * PRD-24: per-variant pass threshold. Stored inside a topic rule's `byForm`,
+ * keyed by the stable PRD-17 `formId`. `percent` compares the points-based
+ * percent; `absolute` compares Σ earned points of the delivered variant
+ * (same basis as the other sources — PRD-10 FR-10).
+ */
+export const byVariantThresholdSchema = z.object({
+  type: z.enum(["percent", "absolute"]),
+  value: z.number(),
+});
+
+export type ByVariantThreshold = z.infer<typeof byVariantThresholdSchema>;
+
+/**
+ * PRD-24: the topic pass-rule union as stored in
+ * `test_sections.topic_pass_rule_json`. `by_variant` carries a per-`formId`
+ * threshold map (PRD-17 variants); the other three sources are the PRD-7 ones.
+ * `resolveTopicRule` (shared/scoring/pass-rule) stays the runtime authority and
+ * tolerates legacy shapes, so this schema is for authoring/validation paths.
+ */
+export const topicPassRuleSchema = z.discriminatedUnion("source", [
+  z.object({ source: z.literal("inherit_overall") }),
+  z.object({ source: z.literal("none") }),
+  z.object({
+    source: z.literal("custom"),
+    type: z.enum(["percent", "absolute"]),
+    value: z.number(),
+  }),
+  z.object({
+    source: z.literal("by_variant"),
+    byForm: z.record(z.string(), byVariantThresholdSchema),
+  }),
+]);
+
+export type TopicPassRuleJson = z.infer<typeof topicPassRuleSchema>;
+
+/**
  * Feedback structures (PRD-7 §3.4 / decisions.md §3.4, §3.5).
  *
  * The single jsonb column `tests.feedback_json` (and `test_sections.feedback_json`)

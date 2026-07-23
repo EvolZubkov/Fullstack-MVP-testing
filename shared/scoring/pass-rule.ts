@@ -29,20 +29,48 @@ export function resolveOverallRule(raw: unknown): ResolvedRule | null {
 }
 
 /**
+ * Delivery context for topic-rule resolution (PRD-24). Carries what the learner
+ * was actually given, so a rule can depend on it. Absent/empty = unknown delivery.
+ */
+export interface TopicRuleContext {
+  /** Stable PRD-17 `formId` of the variant delivered for this topic in this attempt. */
+  formId?: string | null;
+}
+
+/**
  * Resolve a TOPIC pass rule against the ALREADY-resolved overall rule.
  * - `{source:'inherit_overall'}` («Как у теста») → the overall rule (or `null` when
  *   the overall rule is «none»).
  * - `{source:'none'}` («Не проверять отдельно») → `null` (no gate, `passed` stays
  *   informational/null).
  * - `{source:'custom', type, value}` → `{type: percent|count, value}`.
+ * - `{source:'by_variant', byForm}` (PRD-24) → the threshold of the DELIVERED variant
+ *   (`ctx.formId`); when the variant is unknown or absent from the map, degrades to
+ *   the overall rule (FR-09) — the topic stays gated rather than silently ungated.
  * - legacy `{type, value}` (pre-`source` data) → itself (`none` → `null`).
  * - `null`/`undefined`/non-object → `null` (no gate).
  */
-export function resolveTopicRule(raw: unknown, overall: ResolvedRule | null): ResolvedRule | null {
+export function resolveTopicRule(
+  raw: unknown,
+  overall: ResolvedRule | null,
+  ctx?: TopicRuleContext,
+): ResolvedRule | null {
   if (!raw || typeof raw !== "object") return null;
-  const r = raw as { source?: string; type?: string; value?: number };
+  const r = raw as {
+    source?: string;
+    type?: string;
+    value?: number;
+    byForm?: Record<string, { type?: string; value?: number }>;
+  };
   if (r.source === "inherit_overall") return overall;
   if (r.source === "none") return null;
+  if (r.source === "by_variant") {
+    const entry = ctx?.formId ? r.byForm?.[ctx.formId] : undefined;
+    if (!entry) return overall;
+    return entry.type === "percent"
+      ? { type: "percent", value: Number(entry.value) || 0 }
+      : { type: "count", value: Number(entry.value) || 0 };
+  }
   if (r.source === "custom") {
     return r.type === "percent"
       ? { type: "percent", value: Number(r.value) || 0 }
