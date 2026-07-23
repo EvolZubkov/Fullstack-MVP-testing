@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!--
     Wireframe: раздел «Цвета» и поддержка тем шаблоном
-    Файл: docs/wireframes/branding-theme-colors.html
+    Файл: docs/wireframes/approved/prd23-template-themes.html
 
     ДИЗАЙН НЕ ПЕРЕИЗОБРЕТАЕТСЯ. Каркас вкладки «Оформление» — рельса подразделов,
     список `.ou-formfield`, `.ou-color-trigger` у цвета, описание параметра под
-    контролом, подвал редактора — взят из approved/prd7-design-tab.html без
+    контролом, подвал редактора — взят из prd7-design-tab.html без
     изменений. Меняется состав рельсы и содержимое одного раздела.
 
     Требования, которые покрывает эскиз:
@@ -50,15 +50,10 @@
        подсказок. Ячейка держит контрол и — только у переопределённого цвета —
        возврат к цвету шаблона. */
     /* Колонка параметра держит описание и потому «жадная»: без фиксированной
-       раскладки таблица распирает панель и колонка последней темы обрезается
-       (`.ou-table-wrap` не прокручивается). Темам хватает узких колонок. */
-    .design-colors-table { table-layout: fixed; width: 100%; }
-    .design-colors-table td, .design-colors-table th { vertical-align: middle; }
+       раскладки она распирает таблицу, а колонки тем сжимаются до нечитаемых.
+       Темам хватает узких колонок. */
+    .design-colors-table table { table-layout: fixed; }
     .design-colors-table th:first-child { width: 46%; }
-    /* `.ou-table` держит ячейки в одну строку — описание параметра длинное и
-       иначе уезжает под соседние колонки. Переносим только эту колонку. */
-    .design-colors-table tbody th { white-space: normal; }
-    .design-colors-table__hint { white-space: normal; }
     .design-colors-table__param { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-default); }
     .design-colors-table__hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--wf-space-tiny); }
     /* Шапка раздела: переключатель темы и предпросмотр в одну строку. */
@@ -96,7 +91,7 @@
   <button class="wf-btn"        type="button" onclick="showState(this, 's-pinned')">Тема выбрана</button>
   <button class="wf-btn"        type="button" onclick="showState(this, 's-auto')">«Авто» · таблица тем</button>
   <button class="wf-btn"        type="button" onclick="showState(this, 's-branding')">Что осталось в «Брендировании»</button>
-  <a class="wf-nav-link" href="approved/prd7-design-tab.html">&larr; вкладка «Оформление» (каркас не меняется)</a>
+  <a class="wf-nav-link" href="prd7-design-tab.html">&larr; вкладка «Оформление» (каркас не меняется)</a>
 
   <div class="wf-nav-sep"></div>
   <button type="button" class="ou-btn ou-btn--secondary" onclick="toggleTheme(this)">Dark</button>
@@ -239,8 +234,8 @@
               <div class="ou-formfield__desc">Тест открывается в светлой теме у всех участников независимо от их системных настроек.</div>
             </div>
 
-            <div class="ou-table-wrap">
-              <table class="ou-table design-colors-table">
+            <div class="ou-tbl ou-tbl--compact design-colors-table">
+              <table>
                 <thead>
                   <tr>
                     <th scope="col">Параметр</th>
@@ -397,8 +392,8 @@
               <div class="ou-formfield__desc">Тест открывается в теме, выбранной у участника. Задайте цвета для обеих — иначе часть участников увидит не то, что вы задумали.</div>
             </div>
 
-            <div class="ou-table-wrap">
-              <table class="ou-table design-colors-table">
+            <div class="ou-tbl ou-tbl--compact design-colors-table">
+              <table>
                 <thead>
                   <tr>
                     <th scope="col">Параметр</th>
@@ -576,7 +571,7 @@
      ═══════════════════════════════════════════════════════════════════════════ -->
 <section class="wf-notes" aria-label="Пояснения">
   <h2 class="wf-notes-title">Состояния</h2>
-  <p class="wf-notes-intro">Холст показывает вкладку «Оформление». Каркас вкладки, подвал редактора и раздел «Шаблон» не меняются — см. approved/prd7-design-tab.html.</p>
+  <p class="wf-notes-intro">Холст показывает вкладку «Оформление». Каркас вкладки, подвал редактора и раздел «Шаблон» не меняются — см. prd7-design-tab.html.</p>
   <table class="wf-notes-table">
     <thead><tr><th>Состояние</th><th>Что показано</th><th>Требование</th></tr></thead>
     <tbody>
@@ -641,7 +636,7 @@
     <tbody>
       <tr><td>Выбор цвета</td><td><code>ColorPicker</code> (<code>.ou-color-trigger</code>)</td><td>Уже используется. Палитра и ввод HEX — внутри поповера компонента.</td></tr>
       <tr><td>Тема теста</td><td><code>SegmentedControl</code> (<code>.ou-seg</code>)</td><td>Три значения в одну строку. Не выводится, если шаблон тем не заявляет.</td></tr>
-      <tr><td>Таблица цветов по темам</td><td><code>Table</code> (<code>.ou-table</code> в <code>.ou-table-wrap</code>)</td><td>У шаблона с темами — всегда. Заголовок строки — название параметра, под ним описание из манифеста; по колонке на каждую тему, которую шаблон объявил.</td></tr>
+      <tr><td>Таблица цветов по темам</td><td><code>Table</code> (<code>.ou-tbl</code>, колонка параметра — <code>rowHeader</code>)</td><td>У шаблона с темами — всегда. Заголовок строки — название параметра, под ним описание из манифеста; по колонке на каждую тему, которую шаблон объявил.</td></tr>
       <tr><td>Сброс переопределения</td><td><code>IconButton</code> <code>ghost</code> <code>s</code>, иконка <code>rotate-ccw</code></td><td>Есть только у переопределённого цвета — его наличие и отмечает изменённые значения. У цвета из шаблона возвращать нечего, поэтому кнопки нет.</td></tr>
     </tbody>
   </table>
