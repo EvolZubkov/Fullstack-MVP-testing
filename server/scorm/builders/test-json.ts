@@ -191,7 +191,9 @@ export function buildTestJson(data: ExportData): string {
       // null = inherit_test (section uses the test-wide timer, no extra timer);
       // number = custom limit in minutes (section timer starts on entry).
       timeLimitMinutes: s.timeLimitMinutes ?? null,
-      topicPassRule: (s.topicPassRuleJson as PassRule | null) ?? null,
+      // PRD-24: the rule may now be `{source:'by_variant', byForm}` as well, so it is
+      // baked as authored — the runtime resolves it through the shared engine.
+      topicPassRule: (s.topicPassRuleJson as unknown) ?? null,
       // PRD-11: stratified-draw blueprint. Included only when set so packages
       // without quotas stay byte-identical (FR-02); runtime reads section.drawBlueprint.
       ...(s.drawBlueprintJson ? { drawBlueprint: s.drawBlueprintJson } : {}),

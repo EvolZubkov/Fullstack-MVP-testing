@@ -575,6 +575,33 @@ describe("buildManifest", () => {
     expect(xml).toContain("<imsss:minNormalizedMeasure>0.75</imsss:minNormalizedMeasure>");
   });
 
+  // PRD-24 FR-17: with a per-variant rule there is no single topic threshold, so the
+  // manifest advertises the LOWEST one — sequencing metadata must never be stricter
+  // than the rule the runtime actually applies, or a learner who cleared their own
+  // variant would be blocked by the LMS.
+  it("uses the minimum normalized variant threshold for a by_variant rule", () => {
+    const q = (id: string): any => ({ ...dbQuestion, id });
+    const byVariantSection: any = {
+      ...manifestSection,
+      questions: [q("q1"), q("q2"), q("q3"), q("q4")], // system default price = 1 each
+      topicPassRuleJson: {
+        source: "by_variant",
+        byForm: {
+          f1: { type: "percent", value: 60 }, // → 0.60
+          f2: { type: "absolute", value: 1 }, // 1 of 2 points in f2 → 0.50
+        },
+      },
+      formSetJson: {
+        forms: [
+          { id: "f1", label: "Вариант 1", questionIds: ["q1", "q2"] },
+          { id: "f2", label: "Вариант 2", questionIds: ["q3", "q4"] },
+        ],
+      },
+    };
+    const xml = buildManifest(manifestTest, { test: manifestTest, sections: [byVariantSection] } as any);
+    expect(xml).toContain("<imsss:minNormalizedMeasure>0.50</imsss:minNormalizedMeasure>");
+  });
+
   it("includes overall pass threshold for count rule", () => {
     const countTest = { ...manifestTest, overallPassRuleJson: { type: "count", value: 4 } };
     const xml = buildManifest(countTest, {
