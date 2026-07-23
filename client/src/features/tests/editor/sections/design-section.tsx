@@ -24,7 +24,7 @@
  *     the mutation; the Drawer footer's primary save stays bound to the test
  *     settings as in the rest of the editor.
  */
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Download,
@@ -56,9 +56,13 @@ import {
   type TemplateParam,
   type UseDesignSettingsResult,
 } from "../use-design-settings";
-import { fromHex, toHex } from "./color-format";
+import { fromHex, manifestColorFormat, toHex, type ColorFormat } from "./color-format";
+import { extractThemeTokens } from "./theme-tokens";
+import { useTemplateBundle } from "./use-template-bundle";
+import { DEFAULT_PARAM_CSS_VARS } from "@shared/template/params-css";
 import { TemplatePreviewModal } from "./template-preview-modal";
 import { TemplateGalleryModal } from "./template-gallery-modal";
+import { TemplateThumb } from "./template-thumb";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -322,30 +326,32 @@ function TemplatePane({
           <Eye size={16} aria-hidden="true" />
         </button>
         <div className="tpl-thumb">
-          <div className="preview-sketch" data-wf-demo>
-            <div className="ps-header">
-              <div className="ps-logo" />
-              <div className="ps-title">
-                {(tpl.manifest.name ?? tpl.name).slice(0, 3).toUpperCase()}
+          <TemplateThumb template={tpl} name={tpl.manifest.name ?? tpl.name}>
+            <div className="preview-sketch">
+              <div className="ps-header">
+                <div className="ps-logo" />
+                <div className="ps-title">
+                  {(tpl.manifest.name ?? tpl.name).slice(0, 3).toUpperCase()}
+                </div>
+              </div>
+              <div className="ps-progress">
+                <div className="ps-progress-bar" />
+              </div>
+              <div className="ps-body">
+                <div className="ps-sidebar">
+                  <div className="ps-nav-item active" />
+                  <div className="ps-nav-item" />
+                  <div className="ps-nav-item" />
+                </div>
+                <div className="ps-content">
+                  <div className="ps-q">Вопрос…</div>
+                  <div className="ps-opt sel" />
+                  <div className="ps-opt" />
+                  <div className="ps-opt" />
+                </div>
               </div>
             </div>
-            <div className="ps-progress">
-              <div className="ps-progress-bar" />
-            </div>
-            <div className="ps-body">
-              <div className="ps-sidebar">
-                <div className="ps-nav-item active" />
-                <div className="ps-nav-item" />
-                <div className="ps-nav-item" />
-              </div>
-              <div className="ps-content">
-                <div className="ps-q">Вопрос…</div>
-                <div className="ps-opt sel" />
-                <div className="ps-opt" />
-                <div className="ps-opt" />
-              </div>
-            </div>
-          </div>
+          </TemplateThumb>
         </div>
         <div className="tpl-info">
           <div className="tpl-info__head">
@@ -429,8 +435,26 @@ function SectionPane({
   testId: string;
 }) {
   const tpl = design.template;
+  const params = useMemo(
+    () => paramsBySection(tpl?.manifest.params, section),
+    [tpl?.manifest.params, section],
+  );
+  // The template's stylesheet is the only place a `default: null` colour actually
+  // lives, so colour rows resolve their inherited value from it. Fetched ONLY for
+  // a section that has colours — «Макет» and «Прогресс» need no palette — and
+  // under the same react-query key as the previews, so opening one afterwards
+  // costs nothing.
+  const hasColorParams = useMemo(() => params.some((p) => p.type === "color"), [params]);
+  const bundle = useTemplateBundle(tpl?.id, !!tpl && hasColorParams);
+  const tokens = useMemo(
+    () => extractThemeTokens(bundle.data?.css ?? ""),
+    [bundle.data?.css],
+  );
+  const colorFormat = useMemo(
+    () => manifestColorFormat(tpl?.manifest.params),
+    [tpl?.manifest.params],
+  );
   if (!tpl) return null;
-  const params = paramsBySection(tpl.manifest.params, section);
   if (params.length === 0) {
     return (
       <div data-testid={testId}>
@@ -452,6 +476,9 @@ function SectionPane({
           param={p}
           value={design.draft.params?.[p.key]}
           onChange={(v) => design.setParam(p.key, v)}
+          onClear={() => design.clearParam(p.key)}
+          inheritedColor={tokens.light[cssVarOf(p)] ?? null}
+          colorFormat={colorFormat}
         />
       ))}
       <DesignSaveError design={design} />
@@ -459,20 +486,59 @@ function SectionPane({
   );
 }
 
-function ParamRow({
+/**
+ * One design parameter: its control plus, when the manifest supplies one, the
+ * explanation of what the parameter actually paints. A colour named «Акцентный»
+ * says nothing about where it shows up; the description is where the template
+ * author tells the test author that (PRD-22, plan Э8).
+ */
+function ParamRow(props: {
+  param: TemplateParam;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  /** Drop the override, handing the param back to the template. */
+  onClear?: () => void;
+  /** Template's own value for this colour, read from its stylesheet. */
+  inheritedColor?: string | null;
+  /** Storage format this template's colours use. */
+  colorFormat?: ColorFormat;
+}) {
+  return (
+    <div className="ou-formfield" data-testid={`design-param-row-${props.param.key}`}>
+      <ParamControl {...props} />
+      {props.param.description ? (
+        <p className="ou-formfield__desc" data-testid={`design-param-desc-${props.param.key}`}>
+          {props.param.description}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** CSS custom property a param feeds, via its own `cssVar` or the shared map. */
+function cssVarOf(param: TemplateParam): string {
+  return (param as { cssVar?: string }).cssVar ?? DEFAULT_PARAM_CSS_VARS[param.key] ?? "";
+}
+
+function ParamControl({
   param,
   value,
   onChange,
+  onClear,
+  inheritedColor,
+  colorFormat = "hsl",
 }: {
   param: TemplateParam;
   value: unknown;
   onChange: (v: unknown) => void;
+  onClear?: () => void;
+  inheritedColor?: string | null;
+  colorFormat?: ColorFormat;
 }) {
   const fieldId = `design-param-${param.key}`;
   if (param.type === "text") {
     const v = typeof value === "string" ? value : "";
     return (
-      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
         <Input
           id={fieldId}
           size="m"
@@ -482,17 +548,20 @@ function ParamRow({
           onChange={(e) => onChange(e.target.value)}
           data-testid={`design-param-input-${param.key}`}
         />
-      </div>
     );
   }
   if (param.type === "color") {
-    const stored =
-      typeof value === "string" && value
-        ? value
-        : (param.default as string | undefined) ?? "";
-    const hexValue = toHex(stored, "#000000");
+    // What the author has explicitly set — the only thing that gets saved.
+    const override = typeof value === "string" && value ? value : null;
+    // What the template paints with when the author sets nothing: its manifest
+    // default, else the token from its stylesheet. Showing this (rather than a
+    // black placeholder) is what makes the field agree with the rendered test.
+    const inherited =
+      ((param.default as string | undefined) ?? "") || inheritedColor || "";
+    const effective = override ?? inherited;
+    const hexValue = toHex(effective, "#000000");
     return (
-      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
+      <>
         <label
           className="ou-formfield__lbl"
           htmlFor={fieldId}
@@ -500,20 +569,43 @@ function ParamRow({
         >
           {param.label}
         </label>
-        <ColorPicker
-          id={fieldId}
-          value={hexValue}
-          aria-labelledby={`${fieldId}-label`}
-          onChange={(hex) => onChange(fromHex(hex, stored))}
-          data-testid={`design-param-input-${param.key}`}
-        />
-      </div>
+        <div className="design-color-field">
+          <ColorPicker
+            id={fieldId}
+            value={hexValue}
+            aria-labelledby={`${fieldId}-label`}
+            // Round-trip through the format THIS template stores: `effective`
+            // carries it when the template ships a palette, `colorFormat` (from
+            // the manifest) decides when there is nothing to infer from.
+            onChange={(hex) => onChange(fromHex(hex, effective, colorFormat))}
+            data-testid={`design-param-input-${param.key}`}
+          />
+          {override === null ? (
+            <span
+              className="design-color-field__origin"
+              data-testid={`design-param-inherited-${param.key}`}
+            >
+              из шаблона
+            </span>
+          ) : (
+            // Without this an override is a one-way door: the author can repaint
+            // the colour but never hand it back to the template's own palette.
+            <Button
+              variant="ghost"
+              size="s"
+              onClick={() => onClear?.()}
+              data-testid={`design-param-reset-${param.key}`}
+            >
+              Вернуть из шаблона
+            </Button>
+          )}
+        </div>
+      </>
     );
   }
   if (param.type === "boolean") {
     const v = typeof value === "boolean" ? value : Boolean(param.default ?? false);
     return (
-      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
         <Switch
           id={fieldId}
           label={param.label}
@@ -521,14 +613,12 @@ function ParamRow({
           onChange={(e) => onChange(e.target.checked)}
           data-testid={`design-param-input-${param.key}`}
         />
-      </div>
     );
   }
   if (param.type === "select") {
     const opts = param.options ?? [];
     const v = typeof value === "string" ? value : (param.default as string) ?? opts[0] ?? "";
     return (
-      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
         <Select<string>
           id={fieldId}
           size="m"
@@ -539,7 +629,6 @@ function ParamRow({
           onChange={(next) => onChange(next)}
           data-testid={`design-param-input-${param.key}`}
         />
-      </div>
     );
   }
   if (param.type === "number") {
@@ -550,7 +639,6 @@ function ParamRow({
           ? param.default
           : 0;
     return (
-      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
         <NumberInput
           id={fieldId}
           size="m"
@@ -562,13 +650,11 @@ function ParamRow({
           onChange={(next) => onChange(next)}
           data-testid={`design-param-input-${param.key}`}
         />
-      </div>
     );
   }
   if (param.type === "url") {
     const v = typeof value === "string" ? value : (param.default as string) ?? "";
     return (
-      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
         <Input
           id={fieldId}
           type="url"
@@ -592,7 +678,6 @@ function ParamRow({
             ) : undefined
           }
         />
-      </div>
     );
   }
   if (param.type === "multiselect") {
@@ -603,7 +688,6 @@ function ParamRow({
         ? ((param.default as unknown[]).filter((x) => typeof x === "string") as string[])
         : [];
     return (
-      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
         <Combobox<string>
           id={fieldId}
           size="m"
@@ -615,7 +699,6 @@ function ParamRow({
           onValuesChange={(next) => onChange(next)}
           data-testid={`design-param-input-${param.key}`}
         />
-      </div>
     );
   }
   if (
@@ -634,7 +717,7 @@ function ParamRow({
     );
   }
   return (
-    <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
+    <>
       <label className="ou-formfield__lbl">{param.label}</label>
       <Banner
         tone="info"
@@ -642,7 +725,7 @@ function ParamRow({
         description={`Тип «${param.type}» не поддерживается этой версией редактора.`}
         data-testid={`design-param-unsupported-${param.key}`}
       />
-    </div>
+    </>
   );
 }
 
@@ -744,7 +827,7 @@ function MediaParamRow({
   }
 
   return (
-    <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
+    <>
       <label className="ou-formfield__lbl" htmlFor={fieldId}>
         {param.label}
       </label>
@@ -811,7 +894,7 @@ function MediaParamRow({
           data-testid={`design-param-error-${param.key}`}
         />
       )}
-    </div>
+    </>
   );
 }
 

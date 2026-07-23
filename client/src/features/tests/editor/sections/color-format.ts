@@ -105,15 +105,44 @@ export function hexToHsl(hex: string): string | null {
 }
 
 /**
+ * The colour format a TEMPLATE stores its params in, inferred from the manifest.
+ *
+ * The format cannot be guessed from the value being edited: a template whose
+ * palette lives entirely in `theme.css` declares every colour as `default: null`,
+ * so the first edit has nothing to infer from. Guessing HEX there wrote `#7700FF`
+ * into a template whose CSS composes `hsl(var(--primary))` — the browser dropped
+ * `hsl(#7700FF)` as invalid and the element lost its colour entirely.
+ *
+ * HSL is the platform convention (see {@link module:shared/template/params-css}:
+ * values are emitted verbatim and wrapped by the template CSS, so they must be
+ * bare triples), so that is the answer when the manifest states nothing. A
+ * template that ships HEX defaults is detected and honoured.
+ */
+export function manifestColorFormat(
+  params: ReadonlyArray<{ type?: string; default?: unknown }> | null | undefined,
+): ColorFormat {
+  for (const param of params ?? []) {
+    if (param?.type !== "color") continue;
+    const format = detectColorFormat(param.default);
+    if (format) return format;
+  }
+  return "hsl";
+}
+
+/**
  * Round-trip a new HEX picker value back to whichever format the stored
  * draft value originally used. When the draft is empty / unparseable
- * (e.g., template default not yet edited), falls back to the format
- * implied by the param's `default`.
+ * (e.g., template default not yet edited), falls back to `fallbackFormat` —
+ * which callers should resolve from the manifest via {@link manifestColorFormat}.
+ *
+ * The fallback is HSL, the platform convention: writing HEX into a template that
+ * wraps its tokens in `hsl()` produces an invalid declaration, and the affected
+ * element renders with no colour at all.
  */
 export function fromHex(
   pickerHex: string,
   originalValue: unknown,
-  fallbackFormat: ColorFormat = "hex",
+  fallbackFormat: ColorFormat = "hsl",
 ): string {
   const format =
     detectColorFormat(originalValue) ?? fallbackFormat;

@@ -49,7 +49,7 @@ export function TemplatePreviewModal({ open, onClose, template, params }: Templa
 
   // Draft params → CSS variables, via the SAME mapping the runtime uses.
   const cssVars = useMemo(
-    () => buildTemplateCssVars(params, bundle?.manifest.params),
+    () => buildTemplateCssVars(params, bundle?.manifest?.params),
     [params, bundle],
   );
 

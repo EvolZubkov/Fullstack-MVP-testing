@@ -50,6 +50,13 @@ export type TemplateParam = {
   key: string;
   type: DesignParamType;
   label: string;
+  /**
+   * PRD-22 (plan Э8): what this parameter actually paints, in the template
+   * author's own words. A colour label names the token, not the screen element,
+   * so without this the test author sets «Акцентный цвет» and has to guess where
+   * it will show up. Rendered under the control; absent ⇒ nothing is rendered.
+   */
+  description?: string;
   default?: unknown;
   /** Visual sub-group label rendered inside a section (e.g. "Цвета"). */
   group?: string;
@@ -105,7 +112,18 @@ export type TemplateRow = {
     description?: string;
     templateApiVersion: string;
     params?: TemplateParam[];
+    /**
+     * Package assets. `preview` is the template's own thumbnail, rendered by
+     * {@link module:features/tests/editor/sections/template-thumb} and served via
+     * `/api/templates/:id/assets/*`.
+     */
+    assets?: { preview?: string | null } | null;
   };
+  /**
+   * NOT the thumbnail: the `templates.preview_path` column is never populated by
+   * any code path and is null for every row. The thumbnail lives in
+   * `manifest.assets.preview`.
+   */
   previewPath: string | null;
 };
 
@@ -145,6 +163,8 @@ export type UseDesignSettingsResult = {
   templateOutdated: boolean;
   /** Patch a single param key in the draft. */
   setParam: (key: string, value: unknown) => void;
+  /** Remove an override so the template's own value applies again. */
+  clearParam: (key: string) => void;
   /** Reset the draft to the manifest's defaults (clearing all params). */
   resetToDefaults: () => void;
   /**
@@ -256,6 +276,20 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
     setDraft((d) => ({ ...d, params: { ...(d.params ?? {}), [key]: value } }));
   };
 
+  /**
+   * Drops an override so the template's own value applies again. The key is
+   * REMOVED rather than set to null: «унаследовано» is the absence of a value
+   * everywhere else in the pipeline (`buildTemplateCssVars` skips a param it
+   * cannot resolve), and a lingering `null` would show up as a saved change.
+   */
+  const clearParam = (key: string) => {
+    setDraft((d) => {
+      const params = { ...(d.params ?? {}) };
+      delete params[key];
+      return { ...d, params };
+    });
+  };
+
   const resetToDefaults = () => {
     setDraft((d) => ({ ...d, params: {} }));
   };
@@ -336,6 +370,7 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
     templateMissing,
     templateOutdated,
     setParam,
+    clearParam,
     resetToDefaults,
     setTemplate,
     applyDefaultTemplate,

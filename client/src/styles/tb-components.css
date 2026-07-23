@@ -1516,6 +1516,16 @@
   flex-wrap: wrap;
   gap: var(--ou-space-2);
 }
+/* PRD-22: thumbnail of the loaded image next to the upload control. An empty
+   frame is kept when nothing is loaded, so the row does not jump on upload. */
+.image-field__preview {
+  width: 144px;
+  height: 96px;
+  flex-shrink: 0;
+  border: 1px solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-surface-3) center / cover no-repeat;
+}
 .design-media-chip {
   display: inline-flex;
   align-items: center;
@@ -1574,6 +1584,7 @@
 }
 .tpl-gallery-card.is-current { opacity: 0.85; }
 .tpl-gallery-card__thumb {
+  position: relative;
   aspect-ratio: 16 / 9;
   background: var(--ou-bg-surface-2);
   display: flex;
@@ -1581,9 +1592,31 @@
   justify-content: center;
   border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
 }
+/* «Глаз» поверх миниатюры. Собственная подложка — под ним произвольная картинка
+   шаблона, и на светлой обложке иконка без неё теряется. */
+.tpl-gallery-card__preview-btn {
+  position: absolute;
+  top: var(--ou-space-1);
+  right: var(--ou-space-1);
+  z-index: 1;
+  background: var(--ou-bg-elevated);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  box-shadow: var(--ou-shadow-s, 0 1px 3px rgb(0 0 0 / 0.18));
+}
 .tpl-gallery-card__thumb .preview-sketch {
   width: 80%;
   height: 80%;
+}
+/* The template's OWN preview asset (manifest.assets.preview). Fills the 16:9 thumb
+   edge to edge — same treatment as the PRD-3 admin registry card, so one template
+   reads the same wherever its thumbnail appears. The schematic sketch above stays
+   as the fallback for a template that ships no preview. */
+.tpl-thumb__img,
+.tpl-gallery-card__thumb .tpl-thumb__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 .tpl-gallery-card__body {
   padding: var(--ou-space-3);
@@ -1779,6 +1812,18 @@
 .tpl-name { font: var(--ou-text-body-m); font-weight: 600; }
 .tpl-desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 .tpl-actions { display: flex; gap: var(--ou-space-2); margin-top: var(--ou-space-1); }
+
+/* Colour param row: the picker plus the origin of the current value — either
+   «из шаблона» (no override yet) or the action that gives the colour back. */
+.design-color-field {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+}
+.design-color-field__origin {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
 
 /* Preview sketch — schematic template thumbnail with header/progress/body. */
 .preview-sketch {

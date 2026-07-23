@@ -60,6 +60,7 @@ function makeDesign(over: Partial<UseDesignSettingsResult> = {}): UseDesignSetti
     templateMissing: false,
     templateOutdated: false,
     setParam: vi.fn(),
+    clearParam: vi.fn(),
     resetToDefaults: vi.fn(),
     setTemplate: vi.fn(),
     applyDefaultTemplate: vi.fn(),
@@ -422,5 +423,79 @@ describe("<DesignSection /> — MediaParamRow upload", () => {
       expect(screen.getByTestId("design-param-input-logo")).toHaveTextContent("Загрузка…"),
     );
     expect(screen.getByTestId("design-param-input-logo")).toBeDisabled();
+  });
+});
+
+// ─── Colour params: value shown vs value stored ──────────────────────────────
+
+describe("<DesignSection /> — colour params", () => {
+  /** A bundle response carrying a certification-style theme.css. */
+  function stubBundle(css: string) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        String(url).includes("/bundle")
+          ? new Response(JSON.stringify({ manifest: { params: [] }, demo: null, layouts: {}, css }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            })
+          : new Response("[]", { status: 200 }),
+      ),
+    );
+  }
+
+  const THEME_CSS = ':root { --primary: 15 100% 45%; --background: 240 4% 93%; }';
+
+  // The certification template leaves colours to theme.css (`default: null`).
+  // Before this the field showed #000000 — a colour the learner never sees.
+  it("shows the colour the template actually paints with, not a black placeholder", async () => {
+    stubBundle(THEME_CSS);
+    renderBranding([{ key: "primaryColor", type: "color", label: "Цвет кнопок", default: null }]);
+
+    // 15 100% 45% → #E63900, the template's brand orange.
+    await waitFor(() =>
+      expect(screen.getByTestId("design-param-input-primaryColor")).toHaveTextContent("#E63900"),
+    );
+    expect(screen.getByTestId("design-param-inherited-primaryColor")).toHaveTextContent("из шаблона");
+  });
+
+  // The bug: the picker speaks HEX, and with nothing stored the editor guessed
+  // HEX too — but the template composes hsl(var(--primary)), so `hsl(#7700FF)`
+  // was dropped by the browser and the button lost its colour.
+  it("stores an edit in the template's HSL format, not the picker's HEX", async () => {
+    stubBundle(THEME_CSS);
+    const { design } = renderBranding([
+      { key: "primaryColor", type: "color", label: "Цвет кнопок", default: null },
+    ]);
+    await waitFor(() => expect(screen.getByTestId("design-param-input-primaryColor")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("design-param-input-primaryColor"));
+    fireEvent.change(document.querySelector(".ou-color-pop__hex") as HTMLInputElement, {
+      target: { value: "#7700FF" },
+    });
+    const apply = [...document.querySelectorAll("button")].find((b) => /Готово|ОК|Применить/i.test(b.textContent ?? ""));
+    if (apply) fireEvent.click(apply);
+
+    await waitFor(() => expect(design.setParam).toHaveBeenCalled());
+    const [key, value] = (design.setParam as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1)!;
+    expect(key).toBe("primaryColor");
+    // #7700FF as the template stores colours; the round-trip is lossless —
+    // hsl(268 100% 50%) renders back to rgb(119, 0, 255).
+    expect(value).toBe("268 100% 50%");
+  });
+
+  it("offers «Вернуть из шаблона» only once the colour is overridden", async () => {
+    stubBundle(THEME_CSS);
+    const { design } = renderBranding(
+      [{ key: "primaryColor", type: "color", label: "Цвет кнопок", default: null }],
+      { primaryColor: "271 100% 50%" },
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("design-param-reset-primaryColor")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("design-param-inherited-primaryColor")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("design-param-reset-primaryColor"));
+    expect(design.clearParam).toHaveBeenCalledWith("primaryColor");
   });
 });

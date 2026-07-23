@@ -41,7 +41,13 @@ const TEMPLATE = {
     templateApiVersion: "1.0",
     params: [
       { key: "companyName", type: "text", label: "Название компании", default: "" },
-      { key: "primaryColor", type: "color", label: "Основной цвет", default: "221 83% 53%" },
+      {
+        key: "primaryColor",
+        type: "color",
+        label: "Цвет кнопок",
+        description: "Кнопки «Далее» и выбранный вариант ответа.",
+        default: "221 83% 53%",
+      },
       { key: "showProgressBar", type: "boolean", label: "Показывать прогресс-бар", default: true },
       { key: "fontFamily", type: "select", label: "Шрифт", options: ["Inter", "Roboto"], default: "Inter" },
       { key: "logoUrl", type: "image", label: "Логотип" },
@@ -255,6 +261,24 @@ describe("<DesignSection /> — Брендирование pane", () => {
     // wrapper testid stays; the upload button uses the same input testid.
     expect(screen.getByTestId("design-param-row-logoUrl")).toBeInTheDocument();
     expect(screen.getByTestId("design-param-input-logoUrl")).toBeInTheDocument();
+  });
+
+  // PRD-22 (plan Э8): a colour label names the token, not the screen element, so
+  // the manifest's explanation of what the colour paints is shown under the control.
+  it("shows the manifest description under a param, and nothing when there is none", async () => {
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-rail-branding"));
+    await waitFor(() =>
+      expect(screen.getByTestId("design-branding-pane")).toBeInTheDocument(),
+    );
+
+    expect(screen.getByTestId("design-param-desc-primaryColor")).toHaveTextContent(
+      "Кнопки «Далее» и выбранный вариант ответа.",
+    );
+    expect(screen.queryByTestId("design-param-desc-companyName")).toBeNull();
   });
 
   it("editing a text param updates the draft (input value)", async () => {
@@ -583,6 +607,39 @@ describe("<DesignSection /> — template gallery (S12-G3 / FR-33)", () => {
     // Click another card → Apply enabled.
     fireEvent.click(screen.getByTestId("design-gallery-card-minimal"));
     expect(screen.getByTestId("design-gallery-apply")).not.toBeDisabled();
+  });
+
+  // The «глаз» is a LOOK, not a choice: it must not move the selection the Apply
+  // button acts on, or an author peeking at a template would silently arm a switch.
+  it("«глаз» on a gallery card previews it without changing the selection", async () => {
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-template-replace"));
+    await waitFor(() => expect(screen.getByTestId("design-gallery-grid")).toBeInTheDocument());
+
+    // Current is corporate → Apply starts disabled (selection == current).
+    expect(screen.getByTestId("design-gallery-apply")).toBeDisabled();
+
+    fireEvent.click(screen.getByTestId("design-gallery-card-minimal-preview"));
+
+    // Selection untouched: Apply is still disabled and the gallery stays open.
+    expect(screen.getByTestId("design-gallery-apply")).toBeDisabled();
+    expect(screen.getByTestId("design-gallery-grid")).toBeInTheDocument();
+  });
+
+  it("every gallery card offers a preview command", async () => {
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-template-replace"));
+    await waitFor(() => expect(screen.getByTestId("design-gallery-grid")).toBeInTheDocument());
+
+    for (const id of ["corporate", "default", "minimal"]) {
+      expect(screen.getByTestId(`design-gallery-card-${id}-preview`)).toBeInTheDocument();
+    }
   });
 });
 
