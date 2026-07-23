@@ -41,16 +41,41 @@ const manifest = readJson("manifest.json");
 const demo = readJson("demo/course.json");
 const layouts = loadLayouts(manifest);
 
+/**
+ * How many screens the default is expected to produce: one per `preview.routes[]`
+ * entry plus one per declared content variant no route already covers. Computed
+ * rather than hard-coded, because the PRD-22 variant grid grows the second term —
+ * a fixed number would only ever pin the count of the day.
+ */
+function expectedScreenCount(): number {
+  const covered = new Set(
+    (manifest.preview.routes as Array<string | { route: string; templateKey?: string }>)
+      .map((r) => (typeof r === "string" ? undefined : r.templateKey))
+      .filter(Boolean),
+  );
+  const kinds = new Set(["intro", "info", "summary", "router"]);
+  const appended = (manifest.contentTemplates as Array<{ key: string; kind?: string }>).filter(
+    (c) => kinds.has(c.kind ?? "") && !covered.has(c.key),
+  );
+  return manifest.preview.routes.length + appended.length;
+}
+
 // ─── preview-context bridge ─────────────────────────────────────────────────
 
 describe("buildScreenInputs (demo dataset → screen specs)", () => {
   const specs = buildScreenInputs(demo, manifest);
 
-  it("appends the declared router variant the default omits from preview.routes", () => {
-    // The default lists intro/info/summary in preview.routes but NOT its router
-    // variant (`router.menu`), so exactly that one content variant is appended.
-    expect(specs.length).toBe(manifest.preview.routes.length + 1);
+  it("appends every declared content variant preview.routes omits", () => {
+    // The default lists only intro/summary in preview.routes; its router variant
+    // and the whole PRD-22 variant grid are appended from `contentTemplates[]`, so
+    // no variant the author can pick is missing from the preview.
+    expect(specs.length).toBe(expectedScreenCount());
     expect(specs.some((s) => s.route === "content.router")).toBe(true);
+    const gridKeys = (manifest.contentTemplates as Array<{ key: string }>)
+      .map((c) => c.key)
+      .filter((k) => /^(info|gallery)\./.test(k));
+    expect(gridKeys.length).toBe(12);
+    for (const key of gridKeys) expect(specs.some((s) => s.variantKey === key)).toBe(true);
   });
 
   it("assigns each spec a unique id", () => {
@@ -126,17 +151,31 @@ describe("buildScreenInputs (demo dataset → screen specs)", () => {
     };
     const spec = buildScreenInputs({ course: { title: "T" } } as any, plainIntro)[0];
     expect(spec.layoutKey).toBe("layouts/page-1.html");
-    expect(spec.expectedSlots).toEqual(["page-content"]);
+    // A variant-owned layout is not required to expose `page-content`: it places
+    // the fields itself, marked `data-placeholder`. What it owes is checked
+    // against the rendered DOM instead (see «поля варианта не попадут на экран»).
+    expect(spec.expectedSlots).toEqual([]);
   });
 
   it("falls back to the generic layout when the variant declares no layoutFile", () => {
-    // info/summary/router/questions ship without a layoutFile in the default and
-    // render through the generic `content`/`question` layouts — as the runtime does.
+    // summary/router/questions ship without a layoutFile in the default and render
+    // through the generic `content`/`question` layouts — as the runtime does.
     const byRoute = Object.fromEntries(specs.map((s) => [s.route, s.layoutKey]));
     expect(byRoute["question.single"]).toBe("question");
     expect(byRoute["question.matching"]).toBe("question");
-    expect(byRoute["content.info"]).toBe("content");
+    expect(byRoute["content.summary"]).toBe("content");
+    expect(byRoute["content.router"]).toBe("content");
     expect(byRoute["system.blocked"]).toBe("system.blocked");
+  });
+
+  it("a variant with its own layoutFile renders through THAT layout", () => {
+    // PRD-22 grid: each shape has a layout, and the two «-lead» twins of a shape
+    // share it — they differ by declared fields, not by markup.
+    const byVariant = Object.fromEntries(specs.map((s) => [s.variantKey ?? s.id, s.layoutKey]));
+    expect(byVariant["info.text"]).toBe("layouts/content.text.html");
+    expect(byVariant["info.text-lead"]).toBe("layouts/content.text.html");
+    expect(byVariant["info.image-left"]).toBe("layouts/content.image-left.html");
+    expect(byVariant["gallery.image-right-lead"]).toBe("layouts/gallery.image-right.html");
   });
 
   it("question screens expect the prompt + interaction slots, filled", () => {
@@ -160,9 +199,35 @@ describe("buildScreenInputs (demo dataset → screen specs)", () => {
   });
 
   it("generic content screens carry a placeholder skeleton in page-content", () => {
-    const info = specs.find((s) => s.route === "content.info")!;
-    expect(info.expectedSlots).toEqual(["page-content"]);
-    expect(info.input.slots!["page-content"]).toContain('data-placeholder="body"');
+    const summary = specs.find((s) => s.route === "content.summary")!;
+    expect(summary.expectedSlots).toEqual(["page-content"]);
+    expect(summary.input.slots!["page-content"]).toContain('data-placeholder="result"');
+  });
+
+  it("a variant-owned layout expects no page-content slot (Э1)", () => {
+    // Its fields reach the screen through `data-placeholder`, so demanding the
+    // generic wrapper's slot warned about a screen that renders perfectly.
+    const gallery = specs.find((s) => s.variantKey === "gallery.text")!;
+    expect(gallery.expectedSlots).toEqual([]);
+  });
+
+  it("the gallery demos form ONE sequence, so every slide shows the indicator", () => {
+    // PRD-22: the demo does not need a page per slide — the six gallery variants
+    // share one identifier, so each previews with the full set of dots.
+    const gallery = specs.filter((s) => /^gallery\./.test(s.variantKey ?? ""));
+    expect(gallery).toHaveLength(6);
+    for (const spec of gallery) {
+      const page = (spec.input.context as { page?: { dotsTotal?: number } }).page;
+      expect(page?.dotsTotal).toBe(6);
+    }
+  });
+
+  it("the «Далее» caption comes from the page setting, defaulting to «Далее»", () => {
+    const pageOf = (key: string) =>
+      (specs.find((s) => s.variantKey === key)!.input.context as { page: { nextLabel: string } }).page;
+    expect(pageOf("gallery.image-right-lead").nextLabel).toBe("Начать");
+    expect(pageOf("gallery.text").nextLabel).toBe("Далее");
+    expect(pageOf("info.text").nextLabel).toBe("Далее");
   });
 });
 
@@ -277,8 +342,7 @@ describe("runSmokeChecks — default template passes its own smoke-test", () => 
     }
     expect(report.ok).toBe(true);
     expect(report.failed).toBe(0);
-    // +1: the default's `router.menu` variant is appended (not in preview.routes).
-    expect(report.total).toBe(manifest.preview.routes.length + 1);
+    expect(report.total).toBe(expectedScreenCount());
     expect(report.passed).toBeGreaterThan(0);
     // The appended router screen renders the topic menu on the demo topics.
     const router = report.routes.find((r) => r.route === "content.router")!;
@@ -309,7 +373,11 @@ describe("runSmokeChecks — broken templates fail", () => {
     expect(q.status).toBe("warn");
     expect(q.errors).toEqual([]);
     expect(q.warnings.join(" ")).toContain("question-interaction");
-    expect(q.warnings.join(" ")).toContain("стандартного шаблона");
+    // The warning names the real consequence — that part of the screen stays
+    // empty. «Отрисован из стандартного шаблона» is reserved for a MISSING
+    // layout; saying it here claimed a substitution that never happens.
+    expect(q.warnings.join(" ")).toContain("не будет заполнена");
+    expect(q.warnings.join(" ")).not.toContain("стандартного шаблона");
     expect(report.ok).toBe(true);
   });
 
@@ -347,6 +415,124 @@ describe("runSmokeChecks — broken templates fail", () => {
     expect(res.status).toBe("warn");
     expect(res.warnings.join(" ")).toContain("отрисован из стандартного шаблона");
     expect(report.ok).toBe(true);
+  });
+
+  // PRD-22: a variant may ship its own layout and place the author's fields in
+  // `data-placeholder` regions instead of the generic `page-content` slot. The
+  // check must not demand a slot such a layout does not need — the shipping
+  // gallery is exactly that case, and it used to warn on every render.
+  describe("variant-owned layouts", () => {
+    /** Manifest with one info variant backed by its own layout file. */
+    function manifestWithVariantLayout(): PreviewManifest {
+      return {
+        layouts: { content: "layouts/content.html" },
+        contentTemplates: [
+          {
+            key: "gallery.card",
+            label: "Галерея: карточка",
+            kind: "info",
+            pageKind: "content.info",
+            layoutFile: "layouts/gallery.html",
+            placeholders: [
+              { key: "title", type: "text" } as any,
+              { key: "body", type: "richText" } as any,
+            ],
+          },
+        ],
+        preview: { routes: [{ route: "content.info", templateKey: "gallery.card", label: "Галерея" }] },
+      };
+    }
+    const dataset = {
+      course: {
+        title: "T",
+        contentPages: [
+          { id: "p1", templateKey: "gallery.card", values: { title: "Заголовок", body: "<p>Текст</p>" } },
+        ],
+      },
+    } as any;
+
+    it("passes a layout that places fields in data-placeholder regions", () => {
+      const report = runSmokeChecks({
+        dataset,
+        manifest: manifestWithVariantLayout(),
+        layouts: {
+          "layouts/content.html": '<div><div data-slot="page-content"></div></div>',
+          "layouts/gallery.html":
+            '<div class="gallery"><h1 data-placeholder="title"></h1><div data-placeholder="body"></div></div>',
+        },
+      });
+
+      expect(report.routes[0].status).toBe("pass");
+      expect(report.routes[0].warnings).toEqual([]);
+    });
+
+    it("warns when the layout offers neither placeholders nor the slot", () => {
+      // The author fills fields in «Структуре» and none of it reaches the learner —
+      // exactly what a builder-exported layout with baked-in text does.
+      const report = runSmokeChecks({
+        dataset,
+        manifest: manifestWithVariantLayout(),
+        layouts: {
+          "layouts/content.html": '<div><div data-slot="page-content"></div></div>',
+          "layouts/gallery.html": '<div class="gallery"><h1>Зашитый заголовок</h1></div>',
+        },
+      });
+
+      expect(report.routes[0].status).toBe("warn");
+      expect(report.routes[0].warnings.join(" ")).toContain("Поля варианта не попадут на экран");
+      expect(report.ok).toBe(true);
+    });
+
+    it("names the fields a layout implements only partially", () => {
+      // The sneakier half of the same defect: the screen looks fine in the preview,
+      // and only the author who filled `body` notices the value vanished.
+      const report = runSmokeChecks({
+        dataset,
+        manifest: manifestWithVariantLayout(),
+        layouts: {
+          "layouts/content.html": '<div><div data-slot="page-content"></div></div>',
+          "layouts/gallery.html": '<div class="gallery"><h1 data-placeholder="title"></h1></div>',
+        },
+      });
+
+      expect(report.routes[0].status).toBe("warn");
+      expect(report.routes[0].warnings.join(" ")).toContain("body");
+      expect(report.routes[0].warnings.join(" ")).not.toContain("ни одного data-placeholder");
+      expect(report.ok).toBe(true);
+    });
+
+    it("stays silent when the layout carries the generic slot instead", () => {
+      const report = runSmokeChecks({
+        dataset,
+        manifest: manifestWithVariantLayout(),
+        layouts: {
+          "layouts/content.html": '<div><div data-slot="page-content"></div></div>',
+          "layouts/gallery.html": '<div class="gallery"><div data-slot="page-content"></div></div>',
+        },
+      });
+
+      expect(report.routes[0].warnings).toEqual([]);
+    });
+
+    it("does not fire for a variant that declares no fields", () => {
+      const manifestNoFields: PreviewManifest = {
+        layouts: { content: "layouts/content.html", review: "layouts/review.html" },
+        contentTemplates: [],
+        preview: { routes: [{ route: "review", label: "Обзор" }] },
+      };
+      const report = runSmokeChecks({
+        dataset: { course: { title: "T" } } as any,
+        manifest: manifestNoFields,
+        // Keyed the way the bundle readers key it: by the `layouts` KEY for a
+        // system screen, by `layoutFile` path for a variant-owned layout.
+        layouts: {
+          content: '<div><div data-slot="page-content"></div></div>',
+          review: '<div class="review">Обзор</div>',
+        },
+      });
+
+      expect(report.routes[0].warnings).toEqual([]);
+    });
   });
 
   it("fails on a template.js syntax error", () => {

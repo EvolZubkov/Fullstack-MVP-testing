@@ -38,9 +38,35 @@ export {
   buildFallbackContentHtml,
   buildContentPageRender,
   findContentTemplate,
+  findDefaultContentTemplate,
+  resolveContentTemplate,
   getPageValues,
   getPagePlaceholderStyles,
 } from "./content-page";
+// PRD-22: sequences of content pages — which pages form one, and the `page.*`
+// context (navigation dots) their layout binds against. Shared so the LMS package,
+// the web host and «Предпросмотр» count the same dots.
+export {
+  buildSequencePlacements,
+  buildPageContext,
+  buildPageContextFor,
+  collectSequenceIds,
+  sequenceIdOf,
+  SEQUENCE_SETTING_KEY,
+} from "./page-sequences";
+// PRD-22 FR-36: relative links in author content resolve against the template's
+// files — the base differs per host, the stored value does not.
+export { withTemplateAssetBase, withTemplateAssetBaseInValues } from "./asset-base";
+// PRD-22: the closed registry of field types a template may declare.
+export {
+  PLACEHOLDER_TYPES,
+  SETTING_TYPES,
+  INPUT_MODES,
+  inputModesFor,
+  isPlaceholderType,
+  isSettingType,
+  validateVariantFields,
+} from "./field-types";
 // PRD-12 FR-6: the SINGLE router-hub rules + markup, so a section is open (or not)
 // identically in the LMS and on the web.
 export {

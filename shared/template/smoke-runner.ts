@@ -79,6 +79,46 @@ function rowStatus(errors: string[], warnings: string[]): SmokeRouteResult["stat
   return errors.length ? "fail" : warnings.length ? "warn" : "pass";
 }
 
+/**
+ * A variant that ships its own layout owes ONE thing: the fields it declares must
+ * have somewhere to land. There are two legitimate ways — a `data-placeholder`
+ * region per field, or the generic `page-content` slot the host fills with the
+ * placeholder skeleton. When a layout offers neither, the author fills fields in
+ * «Структуре» and nothing of it reaches the learner; that is worth saying plainly.
+ *
+ * Silent when the variant declares no fields (system screens, question variants):
+ * there is nothing to lose.
+ * @param spec      Screen under check
+ * @param root      Container the screen was rendered into
+ * @param warnings  Collector, appended in place
+ */
+function checkPlaceholdersReachTheScreen(
+  spec: ReturnType<typeof buildScreenInputs>[number],
+  root: HTMLElement,
+  warnings: string[],
+): void {
+  const declared = spec.input.content?.template?.placeholders ?? [];
+  if (declared.length === 0) return;
+  // The skeleton lands in the slot, so every declared field reaches the screen.
+  if (root.querySelector('[data-slot="page-content"]')) return;
+
+  const missing = declared.filter((ph) => root.querySelector(`[data-placeholder="${ph.key}"]`) == null);
+  if (missing.length === 0) return;
+  if (missing.length === declared.length) {
+    warnings.push(
+      "Поля варианта не попадут на экран: в макете нет ни одного data-placeholder " +
+        'из объявленных и нет слота data-slot="page-content"',
+    );
+    return;
+  }
+  // Partial loss is the sneakier case: the screen looks right in the preview, and
+  // only the author who filled the missing field notices it vanished.
+  warnings.push(
+    "В макете нет области для полей: " + missing.map((ph) => ph.key).join(", ") +
+      " — значения этих полей на экран не попадут",
+  );
+}
+
 /** Render one screen in isolation and collect render/slot/console findings. */
 function checkScreen(
   spec: ReturnType<typeof buildScreenInputs>[number],
@@ -132,17 +172,19 @@ function checkScreen(
       errors.push("Экран отрисован пустым");
     }
     // A missing/unfilled slot never blocks activation (spec §17.1/§17.2, PRD-3
-    // §4.2/§4.3): the engine skips an absent slot (render-screen `fillSlots`) and
-    // the hosts render such a screen from the standard template instead. Report it
-    // as a warning naming the consequence, so the author can see what they lose.
+    // §4.2/§4.3): the engine skips an absent slot (render-screen `fillSlots`).
+    // The warning names what the author loses — the screen's own content region —
+    // and NOT «renders from the standard template», which is true only when the
+    // layout itself is missing (handled above).
     for (const slot of spec.expectedSlots) {
       const el = root.querySelector(`[data-slot="${slot}"]`);
       if (!el) {
-        warnings.push(`Нет слота data-slot="${slot}" — экран будет отрисован из стандартного шаблона`);
+        warnings.push(`Нет слота data-slot="${slot}" — эта часть экрана не будет заполнена`);
       } else if (!el.innerHTML.trim()) {
         warnings.push(`Не заполнен слот data-slot="${slot}"`);
       }
     }
+    checkPlaceholdersReachTheScreen(spec, root, warnings);
   }
 
   return { id: spec.id, route: spec.route, label: spec.label, status: rowStatus(errors, warnings), errors, warnings };
