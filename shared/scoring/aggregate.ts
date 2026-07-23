@@ -16,7 +16,7 @@
  */
 import { scoreAnswer, type Answer, type CorrectData, type QuestionType } from "./engine";
 import type { QuestionScoring } from "../schema";
-import { resolveOverallRule, resolveTopicRule, checkPassRule } from "./pass-rule";
+import { resolveOverallRule, resolveTopicRule, checkPassRule, type ResolvedRule } from "./pass-rule";
 
 export interface AggregateQuestion {
   type: QuestionType;
@@ -32,6 +32,13 @@ export interface AggregateSection<E = unknown> {
   topicName: string;
   /** Stored topic pass rule (any authored shape — resolved here). */
   topicPassRule: unknown;
+  /**
+   * PRD-24: stable `formId` of the PRD-17 variant delivered for this topic in this
+   * attempt. Feeds the `by_variant` rule so the topic is gated by ITS variant's
+   * threshold. Absent/null (non-variant topic, legacy attempt, SCORM state without
+   * the pin) → the rule degrades to the overall one.
+   */
+  formId?: string | null;
   questions: AggregateQuestion[];
   /** Host-specific passthrough echoed verbatim into the topic result (feedback/recommendations). */
   extra?: E;
@@ -52,6 +59,14 @@ export interface AggregateTopicResult<E = unknown> {
   percent: number;
   passed: boolean | null;
   passRule: unknown;
+  /**
+   * PRD-24: the rule that ACTUALLY gated this topic, after resolution — i.e. the
+   * delivered variant's threshold for `by_variant`, the overall rule for
+   * `inherit_overall`, `null` when the topic is ungated. `passRule` above stays the
+   * raw authored shape; hosts render the «Требуется…» label from THIS field, which
+   * also survives being persisted with the attempt.
+   */
+  resolvedPassRule: ResolvedRule | null;
   extra?: E;
 }
 
@@ -91,7 +106,7 @@ export function aggregateStandardResult<E = unknown>(input: AggregateInput<E>): 
     }
     const total = sec.questions.length;
     const percent = possible > 0 ? (earned / possible) * 100 : 0;
-    const resolved = resolveTopicRule(sec.topicPassRule, overall);
+    const resolved = resolveTopicRule(sec.topicPassRule, overall, { formId: sec.formId ?? null });
     const passed: boolean | null = resolved ? checkPassRule(resolved, percent, earned) : null;
     if (passed === false) allTopicsPassed = false;
 
@@ -110,6 +125,7 @@ export function aggregateStandardResult<E = unknown>(input: AggregateInput<E>): 
       percent,
       passed,
       passRule: sec.topicPassRule,
+      resolvedPassRule: resolved,
       extra: sec.extra,
     };
   });

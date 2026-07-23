@@ -173,6 +173,56 @@ describe("aggregateStandardResult", () => {
   });
 });
 
+// ─── PRD-24: the delivered variant decides which threshold gates the topic ───────
+
+describe("aggregateStandardResult — by_variant delivery (PRD-24)", () => {
+  const byVariant = {
+    source: "by_variant",
+    byForm: { fA: { type: "percent", value: 50 }, fB: { type: "percent", value: 100 } },
+  };
+  const overall = { type: "percent" as const, value: 40 };
+  /** 1 correct of 2 → topic percent = 50. */
+  const qs = () => [single(0, 0), single(0, 1)];
+
+  it("gates the topic by the threshold of the variant actually delivered", () => {
+    const passed = aggregateStandardResult({
+      overallPassRule: overall,
+      sections: [{ ...section("T", byVariant, qs()), formId: "fA" }], // 50% >= 50
+    });
+    expect(passed.topicResults[0].passed).toBe(true);
+
+    const failed = aggregateStandardResult({
+      overallPassRule: overall,
+      sections: [{ ...section("T", byVariant, qs()), formId: "fB" }], // 50% < 100
+    });
+    expect(failed.topicResults[0].passed).toBe(false);
+    expect(failed.passed).toBe(false); // a failed gated topic sinks the whole test
+  });
+
+  it("degrades to the overall rule when the attempt pinned no variant (FR-09)", () => {
+    const r = aggregateStandardResult({
+      overallPassRule: overall,
+      sections: [section("T", byVariant, qs())], // no formId → overall 40
+    });
+    expect(r.topicResults[0].passed).toBe(true); // 50% >= 40
+  });
+
+  it("reports the rule that actually gated the topic (FR-10 label source)", () => {
+    const r = aggregateStandardResult({
+      overallPassRule: overall,
+      sections: [
+        { ...section("T", byVariant, qs()), formId: "fB" },
+        { ...section("U", { source: "none" }, qs()) },
+      ],
+    });
+    // raw rule is kept as-is; the resolved one is the delivered variant's threshold
+    expect(r.topicResults[0].passRule).toEqual(byVariant);
+    expect(r.topicResults[0].resolvedPassRule).toEqual({ type: "percent", value: 100 });
+    // an ungated topic reports no resolved rule
+    expect(r.topicResults[1].resolvedPassRule).toBeNull();
+  });
+});
+
 // ─── adaptive aggregation ────────────────────────────────────────────────────────
 
 /** A delivered level tally for `levelsState` (in sorted order). */
