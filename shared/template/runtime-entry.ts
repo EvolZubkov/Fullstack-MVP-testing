@@ -27,6 +27,11 @@ export { resolveOverallRule, resolveTopicRule, checkPassRule } from "../scoring/
 export { buildStartState } from "./start-state";
 export { buildTransitionContext } from "./transition-context";
 export { buildTemplateCssVars, DEFAULT_PARAM_CSS_VARS } from "./params-css";
+// PRD-23: themed templates — the printer of per-theme colour overrides and the
+// pinned-palette resolver, shared with the web host so both paint the same.
+export { buildTemplateThemeCss, sceneThemeAttribute, baseParams, paramsOfTheme } from "./theme-css";
+export { resolveThemeParams, paramsForTheme, colorParamKeys } from "./theme-params";
+export { TEST_THEMES, THEME_IDS, declaredThemes, supportsThemes, isTestTheme, readTestTheme } from "./themes";
 // PRD-19 Block C: progress-pills builder, shared by both hosts.
 export { buildQuestionProgress } from "./question-progress-context";
 // PRD-19 Block D: review/finish (обзор) screen builder.
