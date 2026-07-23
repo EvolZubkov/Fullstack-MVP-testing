@@ -425,6 +425,20 @@ function gradedAnswerFor(q) {
   return state.answers[q.id];
 }
 
+/**
+ * PRD-24: stable id of the PRD-17 variant delivered for `topicId` in THIS run
+ * (pinned into `state.variant.sections` by generateVariant). Returns null for a
+ * non-variant topic and for sessions saved BEFORE the pin existed — the pass-rule
+ * resolver then degrades a `by_variant` rule to the overall one instead of failing.
+ */
+function deliveredFormId(topicId) {
+  var sections = (state.variant && state.variant.sections) || [];
+  for (var i = 0; i < sections.length; i++) {
+    if (sections[i].topicId === topicId) return sections[i].formId || null;
+  }
+  return null;
+}
+
 function computeSectionResult(topicId) {
   if (state.sectionResults && state.sectionResults[topicId]) {
     return state.sectionResults[topicId];
@@ -453,7 +467,13 @@ function computeSectionResult(topicId) {
   // PRD-18: resolve the topic rule via the SAME shared engine as calculateResults
   // (inherit_overall -> overall, none -> null), not the local pass-check.
   var passRule = section ? section.topicPassRule : null;
-  var resolvedRule = window.TBTemplate.resolveTopicRule(passRule, window.TBTemplate.resolveOverallRule(TEST_DATA.overallPassRule));
+  // PRD-24: pass the delivered variant so a `by_variant` rule gates this topic by ITS
+  // threshold. State saved before PRD-24 has no pin → null → degrades to the overall rule.
+  var resolvedRule = window.TBTemplate.resolveTopicRule(
+    passRule,
+    window.TBTemplate.resolveOverallRule(TEST_DATA.overallPassRule),
+    { formId: deliveredFormId(topicId) }
+  );
   var passed = resolvedRule ? window.TBTemplate.checkPassRule(resolvedRule, percent, earnedPoints) : null;
 
   var result = {
@@ -492,6 +512,8 @@ function calculateResults() {
         topicId: fq.topicId,
         topicName: fq.topicName,
         topicPassRule: section ? section.topicPassRule : null,
+        // PRD-24: the delivered variant decides which threshold gates this topic.
+        formId: deliveredFormId(fq.topicId),
         questions: [],
         extra: {
           topicFeedback: (section && section.topicFeedback) || null,

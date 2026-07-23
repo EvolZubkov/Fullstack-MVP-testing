@@ -26,13 +26,21 @@ function renderViewResults() {
   renderViewResultsFallback();
 }
 
-/** Per-topic pass threshold label from the section's pass rule (SCORM-extra). */
-function vrRequiredLabel(topicId) {
-  var section = TEST_DATA.sections.find(function (s) { return s.topicId === topicId; });
-  if (section && section.topicPassRule && section.topicPassRule.type === 'percent') {
-    return 'Требуется: ' + section.topicPassRule.value + '%';
+/**
+ * Per-topic pass threshold label (SCORM-extra). PRD-24: read from the RESOLVED rule
+ * computed at grading time (`resolvedPassRule`) — for a `by_variant` topic that is the
+ * threshold of the variant THIS attempt was given. It is persisted with the attempt's
+ * topicResults, so viewing a past attempt shows the threshold that actually applied
+ * back then, not one recomputed from the current session's variant.
+ * Attempts saved before PRD-24 carry no resolved rule → fall back to the raw one.
+ */
+function vrRequiredLabel(tr) {
+  var resolved = tr && tr.resolvedPassRule;
+  if (!resolved) {
+    var raw = tr && tr.passRule;
+    return (raw && raw.type === 'percent') ? 'Требуется: ' + raw.value + '%' : undefined;
   }
-  return undefined;
+  return resolved.type === 'percent' ? 'Требуется: ' + resolved.value + '%' : undefined;
 }
 
 /** Deduped recommended courses/events across failed topics (failed-topic guidance). */
@@ -73,7 +81,7 @@ function renderViewResultsTemplated(app, results) {
         earnedPoints: tr.earnedPoints,
         possiblePoints: tr.possiblePoints,
         passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
-        requiredLabel: vrRequiredLabel(tr.topicId),
+        requiredLabel: vrRequiredLabel(tr),
         topicFeedback: tr.topicFeedback
       };
     })

@@ -89,6 +89,10 @@ function generateVariant() {
   TEST_DATA.sections.forEach(function(section) {
     var available = section.questions.filter(function(q) { return !usedIds[q.id]; });
     var questions;
+    // PRD-24: stable id of the variant delivered for this topic. Pinned into the
+    // attempt state so grading can gate the topic by ITS variant's threshold
+    // (`by_variant` rule). Stays null for non-variant topics.
+    var deliveredFormId = null;
     if (section.formSet && section.formSet.forms && section.formSet.forms.length) {
       // PRD-17 variants mode (BR-12): deliver ONE curated variant whole, in random
       // order. No cross-attempt store in SCORM (NFR-17) → previousFormIds empty, so
@@ -111,6 +115,7 @@ function generateVariant() {
         picked = selectForm(section.formSet.forms, [], availIds, shuffle);
       }
       questions = picked.questionIds.map(function (id) { return byId[id]; }).filter(Boolean);
+      deliveredFormId = picked.formId;
     } else {
       var drawn = drawSection(available, section.drawCount, section.drawBlueprint, shuffle);
       questions = drawn.selected;
@@ -124,7 +129,10 @@ function generateVariant() {
     state.variant.sections.push({
       topicId: section.topicId,
       topicName: section.topicName,
-      questionIds: questions.map(function(q) { return q.id; })
+      questionIds: questions.map(function(q) { return q.id; }),
+      // PRD-24 (FR-08): pin the delivered variant so grading, the «Требуется» label
+      // and the debug inspector all read the SAME variant this run actually got.
+      formId: deliveredFormId
     });
     questions.forEach(function(q) {
       // Generate shuffle mappings for each question type
