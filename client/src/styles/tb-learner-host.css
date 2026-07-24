@@ -74,7 +74,7 @@
 }
 .tbh-link:hover { opacity: 1; }
 
-/* Primary forward button (background set inline per theme). */
+/* Primary forward button — colour comes from the template palette. */
 .tbh-primarybtn {
   display: inline-flex;
   align-items: center;
@@ -83,7 +83,11 @@
   padding: 10px 20px;
   font-size: 14px;
   font-weight: 600;
-  color: #fff;
+  /* The chrome sits next to the template-rendered screen, so it wears the
+     TEMPLATE palette (cssVars applied on the host wrapper). DS tokens are the
+     fallback for a template that declares no colours of its own. */
+  background: hsl(var(--primary, var(--ou-accent-default)));
+  color: hsl(var(--primary-foreground, var(--ou-fg-on-accent)));
   border: 0;
   cursor: pointer;
 }

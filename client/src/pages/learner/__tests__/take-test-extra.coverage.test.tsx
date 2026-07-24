@@ -411,6 +411,9 @@ describe("<TakeTestPage /> sectional flexible flow", () => {
     jsonRes(
       attemptBody({
         allowReturnToUnanswered: true,
+        // PRD-19 обзор gate: these walks answer every question, so the обзор is
+        // due only because answers stay editable.
+        allowAnswerChange: true,
         answerCommitScope: "section",
         showSectionResults: true,
         variantJson: {
@@ -455,6 +458,26 @@ describe("<TakeTestPage /> sectional flexible flow", () => {
     // «Завершить тест» from the last section-results → submit the whole test.
     fireEvent.click(screen.getByTestId("ts-section-continue"));
     await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith("/learner/result/attempt-1"));
+  });
+
+  // PRD-19 обзор gate: nothing was skipped and nothing may be edited, so the
+  // обзор would list questions the learner can no longer touch — the section goes
+  // straight to its results instead.
+  it("skips the обзор when every answer is in and none can be changed", async () => {
+    await renderToQuestion({
+      startAttempt: sectionalFlex({ allowAnswerChange: false }),
+      sectionResult: jsonRes({ topicName: "Тема A", correct: 1, total: 1, percent: 100, passed: true }),
+    });
+
+    fireEvent.click(screen.getByTestId("qs-ans-0"));
+    fireEvent.click(await screen.findByText("Отправить ответ"));
+    fireEvent.click(await screen.findByText("Далее →"));
+
+    // The stub renders a button per action id, so the SCREEN is identified by the
+    // context it received: section-results, with no обзор in between.
+    await waitFor(() => expect(ctx().sectionResult).toBeTruthy());
+    expect(ctx().review).toBeUndefined();
+    expect(ctx().sectionResult.scorePercent).toBe(100);
   });
 
   it("advances directly to the next section when section-results is unavailable", async () => {

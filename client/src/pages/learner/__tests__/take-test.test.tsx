@@ -393,8 +393,10 @@ describe("<TakeTestPage /> resume", () => {
 // ─── flexible (PRD-19) flow ────────────────────────────────────────────────────
 
 describe("<TakeTestPage /> flexible flow", () => {
+  // PRD-19 обзор gate: with every question answered the обзор only appears when
+  // answers may still be edited — that is the case this suite walks.
   const flexAttempt = () =>
-    jsonRes(standardAttempt({ allowReturnToUnanswered: true, answerCommitScope: "test" }));
+    jsonRes(standardAttempt({ allowReturnToUnanswered: true, allowAnswerChange: true, answerCommitScope: "test" }));
 
   it("commits answers through the two-step footer, reaches the обзор, and finishes", async () => {
     await renderToStart({ startAttempt: flexAttempt() });

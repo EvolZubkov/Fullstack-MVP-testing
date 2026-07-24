@@ -16,6 +16,7 @@ import { buildSectionResultContext, buildSectionIntroContext } from "@shared/tem
 // the SAME assembler as the SCORM package — no web-only copy of either.
 import { TemplateContentScreen, type ContentScreenTemplate } from "./template-content-screen";
 import { buildPageSequence, contentPagesFor, type FlowContentPage } from "@shared/flow/page-sequence";
+import { shouldShowReview } from "@shared/flow/review-gate";
 import {
   buildRouterHubHtml,
   type RouterTopicStatus,
@@ -193,8 +194,15 @@ function escSlot(s: unknown): string {
  */
 function adaptiveFeedbackHtml(question: any, result: any): string {
   const ok = !!result.isCorrect;
-  const color = ok ? "#16a34a" : "#dc2626";
-  const bg = ok ? "#dcfce7" : "#fee2e2";
+  // The block is injected INTO the template screen, so its verdict colours belong
+  // to the template palette; DS tokens are the fallback when the template
+  // declares none. Literals ignored both and clashed on a dark template.
+  const color = ok
+    ? "hsl(var(--success, var(--ou-success-default)))"
+    : "hsl(var(--destructive, var(--ou-error-default)))";
+  const bg = ok
+    ? "hsl(var(--success, var(--ou-success-default)) / 0.12)"
+    : "hsl(var(--destructive, var(--ou-error-default)) / 0.12)";
   let html = `<div class="feedback-block" style="margin-top:16px;padding:12px;border-radius:8px;background:${bg};border:1px solid ${color};">`;
   html += `<div style="font-weight:600;color:${color};margin-bottom:4px;">${ok ? "Правильно!" : "Неправильно"}</div>`;
   const opts = (question.dataJson as any)?.options as unknown[] | undefined;
@@ -206,7 +214,8 @@ function adaptiveFeedbackHtml(question: any, result: any): string {
       html += `<div style="font-size:14px;margin-bottom:2px;"><b>Правильный ответ:</b> ${escSlot(txt)}</div>`;
     }
   }
-  if (result.feedback) html += `<div style="color:#333;font-size:14px;">${escSlot(result.feedback)}</div>`;
+  if (result.feedback)
+    html += `<div style="color:hsl(var(--muted-foreground, var(--ou-fg-muted)));font-size:14px;">${escSlot(result.feedback)}</div>`;
   html += "</div>";
   return html;
 }
@@ -1415,11 +1424,29 @@ export default function TakeTestPage() {
     if (isRouterMode && currentRouterTopic && curTopicId === currentRouterTopic) {
       const leavingSection = nextIdx === null || flatQuestions[nextIdx]?.topicId !== currentRouterTopic;
       if (leavingSection) {
-        // Persist directly, NOT through applyAdvance: its PRD-19 boundary logic
-        // would stage the section обзор, and that flag then survives the return to
-        // the hub — the next section opened onto a stale обзор instead of its
-        // first question. In router mode the hub IS the boundary screen.
+        // Persist directly, NOT through applyAdvance: its boundary logic also
+        // handles the linear «next section» crossing, which the hub owns here.
         saveProgress(nextAnswers, currentIndex, nextStatus);
+        // PRD-19 §4: `router_by_topics` is a SECTIONAL flow, so the section ends
+        // on its обзор (when there is anything to act on there) and then on its
+        // results — never straight back to the hub, which closed the section as
+        // passed with questions the learner had deliberately skipped.
+        if (!sectionCommitted[currentRouterTopic]) {
+          if (
+            shouldShowReview({
+              allowReturnToUnanswered: navSettings.allowReturnToUnanswered,
+              allowAnswerChange: navSettings.allowAnswerChange,
+              hasUnanswered: hasUnansweredIn(nextStatus, currentRouterTopic),
+            })
+          ) {
+            setShowReview(true);
+            return;
+          }
+          // Nothing to act on: commit the section and go to its results (FR-05a),
+          // which continue to the hub.
+          void finishSectionWeb(currentRouterTopic, false);
+          return;
+        }
         const post = contentTpl
           ? (contentPagesFor(flowStructure.contentPages, currentRouterTopic, "after_topic") as RenderableContentPage[])
           : [];
@@ -1465,6 +1492,18 @@ export default function TakeTestPage() {
   };
 
   /**
+   * Whether the scope still holds a question without a committed answer — the
+   * input the shared обзор gate needs. `topicId === null` = the whole test (flat).
+   */
+  const hasUnansweredIn = (
+    status: Record<string, "unanswered" | "answered" | "skipped">,
+    topicId: string | null,
+  ): boolean =>
+    flatQuestions.some(
+      (fq) => (topicId === null || fq.topicId === topicId) && status[fq.question.id] !== "answered",
+    );
+
+  /**
    * PRD-19 D5 (FR-05): advance after a commit/skip, but intercept a section
    * boundary (flexible sectional) or the test end (flexible flat) with the staged
    * обзор instead of crossing straight on. `nextIdx === null` = no further question
@@ -1479,19 +1518,32 @@ export default function TakeTestPage() {
     if (sectionScope) {
       const crossing = !!curTopic && (nextIdx === null || flatQuestions[nextIdx].topicId !== curTopic);
       if (crossing && !sectionCommitted[curTopic!]) {
-        if (navSettings.allowReturnToUnanswered) {
-          setShowReview(true); // flexible → section обзор («Завершить раздел»)
+        if (
+          shouldShowReview({
+            allowReturnToUnanswered: navSettings.allowReturnToUnanswered,
+            allowAnswerChange: navSettings.allowAnswerChange,
+            hasUnanswered: hasUnansweredIn(nextStatus, curTopic!),
+          })
+        ) {
+          setShowReview(true); // section обзор («Завершить раздел»)
           return;
         }
-        // Strict (no return): show the computed section-results between sections
+        // Nothing left to act on: straight to the computed section-results
         // (FR-05a) — no обзор/modal; the last section flows to the test results.
         if (navSettings.showSectionResults && !isLastSectionWeb(curTopic!)) {
           void finishSectionWeb(curTopic!, false);
           return;
         }
       }
-    } else if (navSettings.allowReturnToUnanswered && nextIdx === null) {
-      setShowReview(true); // flat flexible → single end-of-test обзор
+    } else if (
+      nextIdx === null &&
+      shouldShowReview({
+        allowReturnToUnanswered: navSettings.allowReturnToUnanswered,
+        allowAnswerChange: navSettings.allowAnswerChange,
+        hasUnanswered: hasUnansweredIn(nextStatus, null),
+      })
+    ) {
+      setShowReview(true); // flat → single end-of-test обзор
       return;
     }
     if (nextIdx !== null) {
@@ -1544,6 +1596,23 @@ export default function TakeTestPage() {
   const continueAfterSection = (topicId: string, isLast: boolean) => {
     setSectionResultView(null);
     setShowReview(false);
+    // Router mode: a finished section hands control back to the hub — never to
+    // whatever question comes next, and never straight to submit (the hub's own
+    // «Завершить» does that). The «После раздела» zone plays on the way, exactly
+    // as it does when the section ends without an обзор.
+    if (isRouterMode) {
+      const post = contentTpl
+        ? (contentPagesFor(flowStructure.contentPages, topicId, "after_topic") as RenderableContentPage[])
+        : [];
+      if (post.length > 0) {
+        setPendingHubReturn(topicId);
+        setPageQueue(post);
+        setPhase("content");
+        return;
+      }
+      returnToHub(topicId);
+      return;
+    }
     if (isLast) {
       handleSubmit();
       return;
@@ -2327,18 +2396,19 @@ export default function TakeTestPage() {
           ? ` · Время темы ${Math.floor(adaptiveSectionRemaining / 60)}:${String(adaptiveSectionRemaining % 60).padStart(2, "0")}`
           : "");
       const fbHtml = feedbackShown && lastAnswerResult ? adaptiveFeedbackHtml(currentQ, lastAnswerResult) : "";
-      const btnCls =
-        "ml-auto inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50";
+      // Tailwind is gone from the project, so the old utility string styled
+      // nothing — the button's whole look had been the inline blue background.
+      const btnCls = "tbh-primarybtn";
       const footer = adaptiveState.showCorrectAnswers ? (
         feedbackShown ? (
-          <button type="button" className={btnCls} style={{ background: "#2563eb" }} onClick={handleAdaptiveContinue}>
+          <button type="button" className={btnCls} onClick={handleAdaptiveContinue}>
             Далее →
           </button>
         ) : (
           <button
             type="button"
             className={btnCls}
-            style={{ background: "#2563eb" }}
+           
             onClick={handleAdaptiveConfirm}
             disabled={isAnswering || adaptiveState.answer === null}
           >
@@ -2349,7 +2419,7 @@ export default function TakeTestPage() {
         <button
           type="button"
           className={btnCls}
-          style={{ background: "#2563eb" }}
+         
           onClick={handleAdaptiveSubmit}
           disabled={isAnswering || adaptiveState.answer === null}
         >
@@ -2640,7 +2710,6 @@ export default function TakeTestPage() {
           }
           disabled={isSubmitting || (submitModeCurrent && !answerReady)}
           className="tbh-primarybtn"
-          style={{ background: "#2563eb" }}
         >
           {!(standardFeedbackShown || committedCurrent)
             ? navSettings.allowReturnToUnanswered

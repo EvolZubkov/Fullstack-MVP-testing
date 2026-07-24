@@ -378,7 +378,9 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
   return (
     <div
       className="tbh-minh-screen tbh-col tbh-noselect"
-      style={{ background: tpl.theme?.background }}
+      // The chrome OUTSIDE the template's shadow root needs the same palette the
+      // screen inside got, or its buttons ignore the test's branding.
+      style={{ background: tpl.theme?.background, ...(tpl.cssVars as React.CSSProperties | undefined) }}
       onCopy={(e) => e.preventDefault()}
       onCut={(e) => e.preventDefault()}
       onContextMenu={(e) => e.preventDefault()}
@@ -450,7 +452,7 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
               onClick={props.isLast ? props.onSubmit : props.onNext}
               disabled={props.isSubmitting || props.answerReady === false}
               className="tbh-primarybtn"
-              style={{ background: "#2563eb" }}
+             
             >
               {props.isLast ? (props.isSubmitting ? "Отправка..." : "Завершить тест") : "Далее →"}
             </button>
