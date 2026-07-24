@@ -26,6 +26,7 @@ import {
   serializeMeasurementRow,
   serializeStructureRow,
   serializeQuotaRow,
+  serializeVariantThresholdRow,
   serializeScoringOverrideRow,
   SCALE_HEADERS,
   SCALE_WIDTHS,
@@ -37,6 +38,8 @@ import {
   STRUCTURE_WIDTHS,
   QUOTA_HEADERS,
   QUOTA_WIDTHS,
+  VARIANT_THRESHOLD_HEADERS,
+  VARIANT_THRESHOLD_WIDTHS,
   SCORING_OVERRIDE_HEADERS,
   SCORING_OVERRIDE_WIDTHS,
 } from "../utils/workbook-sheets";
@@ -168,6 +171,32 @@ router.get(
         }
       }
 
+      // «Пороги вариантов» (PRD-24, FR-14): one row per variant of a section whose
+      // rule is `by_variant`. The workbook keys variants by POSITION (they are
+      // auto-numbered, PRD-17 D-10), so the stable formId is translated to the
+      // 1-based number — the same numbering the «Варианты» column of «Вопросы» uses.
+      const variantThresholdRows: Record<string, unknown>[] = [];
+      for (const s of orderedSections) {
+        const rule = s.topicPassRuleJson as
+          | { source?: string; byForm?: Record<string, { type: "percent" | "absolute"; value: number }> }
+          | null;
+        const fs = s.formSetJson as FormSet | null;
+        if (rule?.source !== "by_variant" || !fs) continue;
+        const name = topicName.get(s.topicId) || "";
+        fs.forms.forEach((form, i) => {
+          const entry = rule.byForm?.[form.id];
+          if (!entry) return;
+          variantThresholdRows.push(
+            serializeVariantThresholdRow({
+              topicName: name,
+              variantNumber: i + 1,
+              type: entry.type,
+              value: entry.value,
+            }),
+          );
+        });
+      }
+
       // «Оценка» (PRD-15 block D, FR-36): the test's per-question scoring
       // overrides, referenced by the same local alias as «Вклады вопросов».
       const overrides = await storage.getTestQuestionScoring(testId);
@@ -179,6 +208,7 @@ router.get(
       addSheet(wb, "Вопросы", questionRows, ["Ключ строки", ...QUESTION_HEADERS, "Варианты"], [12, ...QUESTION_WIDTHS, 25]);
       addSheet(wb, "Структура", structureRows, STRUCTURE_HEADERS, STRUCTURE_WIDTHS);
       addSheet(wb, "Квоты", quotaRows, QUOTA_HEADERS, QUOTA_WIDTHS);
+      addSheet(wb, "Пороги вариантов", variantThresholdRows, VARIANT_THRESHOLD_HEADERS, VARIANT_THRESHOLD_WIDTHS);
       addSheet(wb, "Оценка", scoringRows, SCORING_OVERRIDE_HEADERS, SCORING_OVERRIDE_WIDTHS);
       addSheet(wb, "Шкалы", scaleRows, SCALE_HEADERS, SCALE_WIDTHS);
       addSheet(wb, "Показатели", rvRows, RESULT_VAR_HEADERS, RESULT_VAR_WIDTHS);

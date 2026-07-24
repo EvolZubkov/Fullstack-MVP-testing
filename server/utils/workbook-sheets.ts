@@ -401,6 +401,11 @@ export function parseStructureRow(
     passRule = { source: "inherit_overall" };
   } else if (typeRaw === "нет" || typeRaw === "не проверять" || typeRaw === "none") {
     passRule = { source: "none" };
+  } else if (typeRaw === "по вариантам" || typeRaw === "by_variant") {
+    // PRD-24: the thresholds themselves live on the «Пороги вариантов» sheet and are
+    // keyed by formId, which only exists once the variant set is built — so the rule
+    // starts empty here and that pass fills it in.
+    passRule = { source: "by_variant", byForm: {} };
   } else {
     const type = PASS_TYPE_FROM[typeRaw];
     if (!type) return { ok: false, error: `неизвестный «Тип порога»: "${row["Тип порога"]}"` };
@@ -430,7 +435,10 @@ export function serializeStructureRow(s: {
   let passType = "Как у теста";
   let passValue: number | "" = "";
   if (rule.source === "none") passType = "Нет";
-  else if (rule.source === "custom" && rule.type) {
+  else if (rule.source === "by_variant") {
+    // PRD-24: no single number here — the thresholds go to «Пороги вариантов».
+    passType = "По вариантам";
+  } else if (rule.source === "custom" && rule.type) {
     passType = PASS_TYPE_TO[rule.type] ?? rule.type;
     passValue = typeof rule.value === "number" ? rule.value : "";
   }
@@ -480,6 +488,61 @@ export function serializeQuotaRow(topicName: string, stratum: DrawStratum): Reco
     "Тег": stratum.tag,
     "Количество": stratum.count,
     "Режим": QUOTA_MODE_TO[mode] ?? mode,
+  };
+}
+
+// ─── «Пороги вариантов» (PRD-24, FR-14) ──────────────────────────────────────
+//
+// A per-variant pass threshold is one row per (section, variant) — same shape as
+// «Квоты» is for strata. Variants are positional in the workbook (PRD-17 D-10), so
+// the key is the 1-based NUMBER, matching the «Варианты» column of «Вопросы»; the
+// importer maps it back to the stable formId AFTER the variant set is built.
+
+/** Canonical «Пороги вариантов» headers (one row per variant of a section). */
+export const VARIANT_THRESHOLD_HEADERS = ["Раздел", "Вариант", "Тип порога", "Порог"];
+export const VARIANT_THRESHOLD_WIDTHS = [28, 12, 16, 10];
+
+/** One parsed «Пороги вариантов» row (variant referenced by its 1-based number). */
+export interface ParsedVariantThreshold {
+  topicName: string;
+  variantNumber: number;
+  type: "percent" | "absolute";
+  value: number;
+}
+
+/** Parse a «Пороги вариантов» row. Accepts «2» or «Вариант 2» in the number cell. */
+export function parseVariantThresholdRow(
+  row: Record<string, unknown>,
+): ParseResult<ParsedVariantThreshold> {
+  const topicName = String(row["Раздел"] ?? row["Тема"] ?? "").replace(/[\s ​﻿]+/g, " ").trim();
+  if (!topicName) return { ok: false, error: "не указан раздел (тема)" };
+
+  const numberMatch = String(row["Вариант"] ?? "").match(/\d+/);
+  if (!numberMatch) return { ok: false, error: `некорректный «Вариант»: "${row["Вариант"]}"` };
+  const variantNumber = parseInt(numberMatch[0], 10);
+  if (!Number.isInteger(variantNumber) || variantNumber < 1) {
+    return { ok: false, error: `«Вариант» должен быть целым ≥ 1 ("${row["Вариант"]}")` };
+  }
+
+  const typeRaw = String(row["Тип порога"] ?? "").trim().toLowerCase();
+  const type = PASS_TYPE_FROM[typeRaw];
+  if (!type) return { ok: false, error: `неизвестный «Тип порога»: "${row["Тип порога"]}"` };
+
+  const value = Number(String(row["Порог"] ?? "").trim());
+  if (!Number.isFinite(value) || value < 0 || String(row["Порог"] ?? "").trim() === "") {
+    return { ok: false, error: `некорректный «Порог»: "${row["Порог"]}"` };
+  }
+
+  return { ok: true, value: { topicName, variantNumber, type, value } };
+}
+
+/** Serialize one variant threshold to a «Пороги вариантов» row (export). */
+export function serializeVariantThresholdRow(t: ParsedVariantThreshold): Record<string, unknown> {
+  return {
+    "Раздел": t.topicName,
+    "Вариант": t.variantNumber,
+    "Тип порога": PASS_TYPE_TO[t.type] ?? t.type,
+    "Порог": t.value,
   };
 }
 

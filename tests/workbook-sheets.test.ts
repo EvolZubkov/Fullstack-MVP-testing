@@ -14,6 +14,8 @@ import {
   parseBool,
   parseStructureRow,
   serializeStructureRow,
+  parseVariantThresholdRow,
+  serializeVariantThresholdRow,
   parseQuotaRow,
   serializeQuotaRow,
   parseScoringOverrideRow,
@@ -313,5 +315,68 @@ describe("serializeScoringOverrideRow", () => {
     );
     expect(row["Цена ответа"]).toBe("веса: 1 # 0");
     expect(row["Сложность"]).toBe(90);
+  });
+});
+
+// ─── PRD-24: лист «Пороги вариантов» ─────────────────────────────────────────
+
+describe("«По вариантам» на листе «Структура»", () => {
+  it("разбирает тип порога «По вариантам» в правило без значения", () => {
+    const r = parseStructureRow(
+      { "Раздел": "О компании", "Вопросов в выборке": "12", "Тип порога": "По вариантам" },
+      0,
+    );
+    // пороги приезжают отдельным листом, поэтому byForm пока пуст
+    expect(r.ok && r.value.passRule).toEqual({ source: "by_variant", byForm: {} });
+  });
+
+  it("экспортирует правило by_variant без числа в «Порог»", () => {
+    const row = serializeStructureRow({
+      topicName: "О компании",
+      sortOrder: 0,
+      drawCount: 12,
+      topicPassRuleJson: { source: "by_variant", byForm: { f1: { type: "percent", value: 60 } } },
+      required: true,
+    });
+    expect(row["Тип порога"]).toBe("По вариантам");
+    expect(row["Порог"]).toBe("");
+  });
+});
+
+describe("parseVariantThresholdRow / serializeVariantThresholdRow", () => {
+  it("разбирает строку с номером варианта", () => {
+    const r = parseVariantThresholdRow({
+      "Раздел": "О компании", "Вариант": "2", "Тип порога": "Сумма баллов", "Порог": "15",
+    });
+    expect(r.ok && r.value).toEqual({
+      topicName: "О компании", variantNumber: 2, type: "absolute", value: 15,
+    });
+  });
+
+  it("принимает «Вариант 3» как номер 3", () => {
+    const r = parseVariantThresholdRow({
+      "Раздел": "X", "Вариант": "Вариант 3", "Тип порога": "Процент", "Порог": "70",
+    });
+    expect(r.ok && r.value.variantNumber).toBe(3);
+  });
+
+  it("отвергает строку без раздела, без номера и с неизвестным типом", () => {
+    expect(parseVariantThresholdRow({ "Вариант": "1", "Тип порога": "Процент", "Порог": "50" }).ok).toBe(false);
+    expect(parseVariantThresholdRow({ "Раздел": "X", "Вариант": "", "Тип порога": "Процент", "Порог": "50" }).ok).toBe(false);
+    expect(parseVariantThresholdRow({ "Раздел": "X", "Вариант": "1", "Тип порога": "abc", "Порог": "50" }).ok).toBe(false);
+    expect(parseVariantThresholdRow({ "Раздел": "X", "Вариант": "1", "Тип порога": "Процент", "Порог": "" }).ok).toBe(false);
+  });
+
+  it("сериализует строку обратно (round-trip)", () => {
+    const row = serializeVariantThresholdRow({
+      topicName: "О компании", variantNumber: 2, type: "absolute", value: 15,
+    });
+    expect(row).toEqual({
+      "Раздел": "О компании", "Вариант": 2, "Тип порога": "Сумма баллов", "Порог": 15,
+    });
+    const back = parseVariantThresholdRow(row);
+    expect(back.ok && back.value).toEqual({
+      topicName: "О компании", variantNumber: 2, type: "absolute", value: 15,
+    });
   });
 });

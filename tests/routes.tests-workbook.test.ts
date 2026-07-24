@@ -661,3 +661,77 @@ describe("Round-trip: экспорт → реимпорт", () => {
     );
   });
 });
+
+// ─── PRD-24: лист «Пороги вариантов» ─────────────────────────────────────────
+
+describe("POST /:id/workbook/import — «Пороги вариантов» (PRD-24 FR-14)", () => {
+  /** Two questions split across two variants of the same topic. */
+  const q = (key: string, variants: string) => ({
+    ...questionRow,
+    "Ключ строки": key,
+    "Текст вопроса": `Вопрос ${key}`,
+    "Варианты": variants,
+  });
+  const structure = [{ "Раздел": "JavaScript", "Вопросов в выборке": "1", "Тип порога": "По вариантам" }];
+
+  it("привязывает пороги к вариантам по номеру и складывает их в правило", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [q("q1", "1"), q("q2", "2")],
+      "Структура": structure,
+      "Пороги вариантов": [
+        { "Раздел": "JavaScript", "Вариант": "1", "Тип порога": "Процент", "Порог": "60" },
+        { "Раздел": "JavaScript", "Вариант": "2", "Тип порога": "Сумма баллов", "Порог": "1" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    const saved = testSettingsMock.save.mock.calls[0][1].sections[0];
+    const formIds = saved.formSetJson.forms.map((f: { id: string }) => f.id);
+    // keyed by the freshly minted formId, in variant order
+    expect(saved.topicPassRuleJson).toEqual({
+      source: "by_variant",
+      byForm: {
+        [formIds[0]]: { type: "percent", value: 60 },
+        [formIds[1]]: { type: "absolute", value: 1 },
+      },
+    });
+  });
+
+  it("номер варианта, которого нет у темы → ошибка строки", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [q("q1", "1"), q("q2", "2")],
+      "Структура": structure,
+      "Пороги вариантов": [
+        { "Раздел": "JavaScript", "Вариант": "1", "Тип порога": "Процент", "Порог": "60" },
+        { "Раздел": "JavaScript", "Вариант": "2", "Тип порога": "Процент", "Порог": "60" },
+        { "Раздел": "JavaScript", "Вариант": "9", "Тип порога": "Процент", "Порог": "60" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+    expect(res.body.errors.some((e: string) => /вариант 9 не объявлен/i.test(e))).toBe(true);
+  });
+
+  it("неполное покрытие вариантов → ошибка раздела (книга не обходит валидацию)", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [q("q1", "1"), q("q2", "2")],
+      "Структура": structure,
+      "Пороги вариантов": [{ "Раздел": "JavaScript", "Вариант": "1", "Тип порога": "Процент", "Порог": "60" }],
+    });
+    const res = await postWorkbook(buf);
+    expect(res.body.errors.some((e: string) => /задано 1 из 2 порогов/i.test(e))).toBe(true);
+  });
+
+  it("книга без листа порогов импортируется как прежде", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      "Структура": [{ "Раздел": "JavaScript", "Вопросов в выборке": "1", "Тип порога": "Процент", "Порог": "70" }],
+    });
+    const res = await postWorkbook(buf);
+    expect(res.body.errors).toEqual([]);
+    expect(testSettingsMock.save.mock.calls[0][1].sections[0].topicPassRuleJson).toEqual({
+      source: "custom", type: "percent", value: 70,
+    });
+  });
+});

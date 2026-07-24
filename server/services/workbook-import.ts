@@ -48,6 +48,7 @@ import {
   validateSourceKey,
   parseStructureRow,
   parseQuotaRow,
+  parseVariantThresholdRow,
   parseScoringOverrideRow,
   type ParsedQuota,
 } from "../utils/workbook-sheets";
@@ -540,6 +541,80 @@ export async function importWorkbook(
     for (const key of quotasByTopic.keys()) {
       if (!usedTopicKeys.has(key)) {
         result.errors.push(`Лист «Квоты»: раздел "${key}" не найден на листе «Структура»`);
+      }
+    }
+
+    // ── «Пороги вариантов» (PRD-24, FR-14) ──────────────────────────────────
+    // Read AFTER the variant sets exist: the sheet keys variants by 1-based NUMBER
+    // (they are positional in the workbook), and only now can a number be mapped to
+    // the freshly minted, stable formId the rule is keyed by.
+    const thresholdsSheet = findSheet(workbook, "Пороги вариантов");
+    if (thresholdsSheet) {
+      const payloadByTopicKey = new Map<string, SectionPayload>();
+      for (const p of pending) {
+        const name = [...topicIdByName.entries()].find(([, id]) => id === p.payload.topicId)?.[0];
+        // dryRun synthetic ids carry the key inline («__newtopic__:<key>»)
+        const key = name ?? p.payload.topicId.replace(/^__newtopic__:/, "");
+        payloadByTopicKey.set(key, p.payload);
+      }
+
+      const trows = sheetToObjects(thresholdsSheet);
+      for (let i = 0; i < trows.length; i++) {
+        const where = `Лист «Пороги вариантов», строка ${i + 2}`;
+        const parsed = parseVariantThresholdRow(trows[i]);
+        if (!parsed.ok) {
+          result.errors.push(`${where}: ${parsed.error}`);
+          continue;
+        }
+        const key = normalizeName(parsed.value.topicName);
+        const payload = payloadByTopicKey.get(key);
+        if (!payload) {
+          result.errors.push(`${where}: раздел "${parsed.value.topicName}" не найден на листе «Структура»`);
+          continue;
+        }
+        const forms = (payload.formSetJson as FormSet | null)?.forms;
+        if (!forms?.length) {
+          result.errors.push(`${where}: раздел "${parsed.value.topicName}" не в режиме вариантов`);
+          continue;
+        }
+        const form = forms[parsed.value.variantNumber - 1];
+        if (!form) {
+          result.errors.push(
+            `${where}: вариант ${parsed.value.variantNumber} не объявлен у темы "${parsed.value.topicName}"`,
+          );
+          continue;
+        }
+        const rule = payload.topicPassRuleJson as {
+          source?: string;
+          byForm?: Record<string, { type: "percent" | "absolute"; value: number }>;
+        };
+        if (rule?.source !== "by_variant") {
+          result.errors.push(
+            `${where}: у раздела "${parsed.value.topicName}" тип порога не «По вариантам»`,
+          );
+          continue;
+        }
+        rule.byForm = rule.byForm ?? {};
+        rule.byForm[form.id] = { type: parsed.value.type, value: parsed.value.value };
+      }
+    }
+
+    // A `by_variant` section must end up with a threshold for EVERY variant —
+    // otherwise the uncovered one would silently fall back to the overall rule
+    // at delivery time (the editor blocks this too, FR-13).
+    for (const p of pending) {
+      const rule = p.payload.topicPassRuleJson as { source?: string; byForm?: Record<string, unknown> };
+      if (rule?.source !== "by_variant") continue;
+      const forms = (p.payload.formSetJson as FormSet | null)?.forms ?? [];
+      const covered = Object.keys(rule.byForm ?? {}).length;
+      if (!forms.length) {
+        result.errors.push(
+          `Тип порога «По вариантам» задан разделу без вариантов (тема "${p.payload.topicId}")`,
+        );
+      } else if (covered < forms.length) {
+        result.errors.push(
+          `Раздел с типом порога «По вариантам»: задано ${covered} из ${forms.length} порогов — нужен порог на каждый вариант`,
+        );
       }
     }
 
