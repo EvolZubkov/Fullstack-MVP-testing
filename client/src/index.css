@@ -15,35 +15,22 @@
 @import './styles/tb-templates-admin.css';
 @import './styles/tb-learner-host.css';
 
-/* The only survivors of the pre-DS palette: the elevate overlays, still used by
-   `.hover-elevate` below. They are TRANSLUCENT ink over the surface, so the DS
-   hover/pressed backgrounds (color-mix with transparent) fit exactly — and unlike
-   the black-ink literals they replaced, they flip with the theme.
-   Declared on `.ou`, where the DS tokens they reference are visible. */
+/* The only survivor of the pre-DS palette: the hover overlay used by
+   `.hover-elevate` below. It is TRANSLUCENT ink over the surface, so the DS
+   hover background (color-mix with transparent) fits exactly — and unlike the
+   black-ink literal it replaced, it flips with the theme.
+   Declared on `.ou`, where the DS token it references is visible. */
 .ou {
   --elevate-1: var(--ou-bg-hover);
-  --elevate-2: var(--ou-bg-pressed);
 }
 
 /**
- * Using the elevate system.
- * Automatic contrast adjustment.
+ * Hover elevation: a translucent ink overlay on top of the element, so the
+ * affordance compounds with whatever background the element already has instead
+ * of replacing it. The DS has no equivalent modifier, so the pattern stays here.
  *
- * <element className="hover-elevate" />
- * <element className="active-elevate-2" />
- *
- * // Using the tailwind utility when a data attribute is "on"
- * <element className="toggle-elevate data-[state=on]:toggle-elevated" />
- * // Or manually controlling the toggle state
- * <element className="toggle-elevate toggle-elevated" />
- *
- * Elevation systems have to handle many states.
- * - not-hovered, vs. hovered vs. active  (three mutually exclusive states)
- * - toggled or not
- * - focused or not (this is not handled with these utilities)
- *
- * Even without handling focused or not, this is six possible combinations that
- * need to be distinguished from eachother visually.
+ * Only the `hover` variant survives: `active-*`, `toggle-*` and the
+ * `no-default-*` escape hatches came from the shadcn era and had zero consumers.
  */
 @layer utilities {
 
@@ -52,99 +39,27 @@
     display: none;
   }
 
-  /* Placeholder styling for contentEditable div */
-  [contenteditable][data-placeholder]:empty::before {
-    content: attr(data-placeholder);
-    color: var(--ou-fg-muted);
-    pointer-events: none;
-  }
-
-  /* .no-default-hover-elevate/no-default-active-elevate is an escape hatch so consumers of
-   * buttons/badges can remove the automatic brightness adjustment on interactions
-   * and program their own. */
-  .no-default-hover-elevate {}
-
-  .no-default-active-elevate {}
-
-
-  /**
-   * Toggleable backgrounds go behind the content. Hoverable/active goes on top.
-   * This way they can stack/compound. Both will overlap the parent's borders!
-   * So borders will be automatically adjusted both on toggle, and hover/active,
-   * and they will be compounded.
-   */
-  .toggle-elevate::before,
-  .toggle-elevate-2::before {
-    content: "";
-    pointer-events: none;
-    position: absolute;
-    inset: 0px;
-    /*border-radius: inherit;   match rounded corners */
-    border-radius: inherit;
-    z-index: -1;
-    /* sits behind content but above backdrop */
-  }
-
-  .toggle-elevate.toggle-elevated::before {
-    background-color: var(--elevate-2);
-  }
-
-  /* If there's a 1px border, adjust the inset so that it covers that parent's border */
-  .border.toggle-elevate::before {
-    inset: -1px;
-  }
-
   /* Does not work on elements with overflow:hidden! */
-  .hover-elevate:not(.no-default-hover-elevate),
-  .active-elevate:not(.no-default-active-elevate),
-  .hover-elevate-2:not(.no-default-hover-elevate),
-  .active-elevate-2:not(.no-default-active-elevate) {
+  .hover-elevate {
     position: relative;
     z-index: 0;
   }
 
-  .hover-elevate:not(.no-default-hover-elevate)::after,
-  .active-elevate:not(.no-default-active-elevate)::after,
-  .hover-elevate-2:not(.no-default-hover-elevate)::after,
-  .active-elevate-2:not(.no-default-active-elevate)::after {
+  .hover-elevate::after {
     content: "";
     pointer-events: none;
     position: absolute;
     inset: 0px;
-    /*border-radius: inherit;   match rounded corners */
     border-radius: inherit;
-    z-index: 999;
-    /* sits in front of content */
+    z-index: 999; /* sits in front of content */
   }
 
-  .hover-elevate:hover:not(.no-default-hover-elevate)::after,
-  .active-elevate:active:not(.no-default-active-elevate)::after {
+  .hover-elevate:hover::after {
     background-color: var(--elevate-1);
   }
 
-  .hover-elevate-2:hover:not(.no-default-hover-elevate)::after,
-  .active-elevate-2:active:not(.no-default-active-elevate)::after {
-    background-color: var(--elevate-2);
-  }
-
   /* If there's a 1px border, adjust the inset so that it covers that parent's border */
-  .border.hover-elevate:not(.no-hover-interaction-elevate)::after,
-  .border.active-elevate:not(.no-active-interaction-elevate)::after,
-  .border.hover-elevate-2:not(.no-hover-interaction-elevate)::after,
-  .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
-  .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
+  .border.hover-elevate::after {
     inset: -1px;
-  }
-}
-
-@media (max-width: 900px) {
-  .results-topics-adaptive {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-}
-
-@media (max-width: 600px) {
-  .results-topics-adaptive {
-    grid-template-columns: 1fr !important;
   }
 }
