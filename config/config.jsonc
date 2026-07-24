@@ -7,16 +7,19 @@
   // referenced from this file via the { "env": "VAR_NAME" } indirection, which
   // the loader resolves from process.env at startup (see server/config.ts).
   //
-  // This file is committed and baked into the Docker image; it must never
-  // contain secret values — only { "env": ... } references to them.
+  // This file is committed; it must never contain secret values — only
+  // { "env": ... } references to them.
   //
   // Loading order (first existing wins), by NODE_ENV then default, under
   // ./config then the working directory:
   //   config/<NODE_ENV>.config.jsonc, <NODE_ENV>.config.jsonc,
   //   config/config.jsonc, config.jsonc
-  // CONFIG_FILE overrides the search with an explicit path. In production the
-  // deploy mounts a host-side config/production.config.jsonc (seeded from this
-  // file) that wins over the baked defaults per instance.
+  // CONFIG_FILE overrides the search with an explicit path — and in a deployed
+  // container it is the ONLY way to select a non-production file (the built server
+  // has NODE_ENV folded to "production"). This directory is NOT part of the image:
+  // the deploy copies these files to the host (/srv/app/<project>/config) and
+  // mounts them read-only at /app/config, so a settings change is an edit plus a
+  // restart, never a rebuild. Every deploy refreshes the host copies from here.
   // =========================================================================
 
   // Application logging (shape mirrors the reference service). Output is via

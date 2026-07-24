@@ -11,11 +11,15 @@
   },
   "server": {
     "port": 5000,
-    // Public URL of the deployed test instance (see docker/config/deploy.env:
-    // TEST_PORT, and the test server host). Adjust if the host/port change.
-    "appUrl": "http://192.168.1.200:8082",
+    // Public URL of the deployed test instance, as seen by the learner (the
+    // reverse proxy in front terminates TLS and forwards to the container port
+    // from docker/config/deploy.env: TEST_PORT). Used to build email links.
+    // No trailing slash (the loader strips one anyway).
+    "appUrl": "https://test-dev.edtech-rtk.ru",
     "appName": "СкилУм (test)",
-    "cookieSecure": false
+    // Same reverse-proxy setup as production: TLS terminates in nginx, which
+    // forwards X-Forwarded-Proto: https (trust proxy is on, see server/index.ts).
+    "cookieSecure": true
   },
   "database": { "url": { "env": "DATABASE_URL" } },
   "session": { "secret": { "env": "SESSION_SECRET" } },

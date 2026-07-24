@@ -5,6 +5,13 @@
   // .env.production (or the mounted .env) and referenced via { "env": "VAR" }.
   // See config/config.jsonc for the fully-documented base.
   //
+  // In a container this file is NOT baked into the image: the deploy copies it to
+  // /srv/app/<project>/config and mounts that directory read-only at /app/config.
+  // THIS repo copy is the source of truth — every deploy overwrites the host file
+  // with it (keeping a backup). Editing the host copy + `docker compose restart`
+  // applies a change immediately, but it lasts only until the next deploy, so any
+  // lasting change belongs here.
+  //
   // Edit the deployment-specific non-secret values before going live:
   //   server.appUrl        -> the public production URL
   //   server.cookieSecure  -> true only when TLS terminates in front (X-Forwarded-Proto)
@@ -17,8 +24,10 @@
   },
   "server": {
     "port": 5000,
-    // Set to the real external URL (e.g. https://scilum.example.com).
-    "appUrl": "",
+    // Real external URL, as seen by the learner (the reverse proxy in front
+    // terminates TLS). Used to build email links. No trailing slash (the loader
+    // strips one anyway).
+    "appUrl": "https://test.edtech-rtk.ru",
     "appName": "СкилУм",
     // Enable only behind a reverse proxy that forwards X-Forwarded-Proto: https.
     "cookieSecure": true

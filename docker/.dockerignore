@@ -1,16 +1,23 @@
 # =============================================================================
 # Docker build context exclusions for test-builder.
 #
-# .env and uploads/ are intentionally excluded from the image.
+# .env, config/ and uploads/ are intentionally excluded from the image.
 # They are deployed separately and mounted as volumes from the host:
 #   /srv/data/<project>/uploads -> /app/uploads (rw)
 #   /srv/logs/<project>         -> /app/logs     (rw)
 #   /srv/app/<project>/env/.env -> /app/.env     (ro)
+#   /srv/app/<project>/config   -> /app/config   (ro)
 # =============================================================================
 
-# ---- Application environment (deployed via build-docker.bat) ---------------
+# ---- Application environment (deployed via docker\scripts\deploy.bat) ------
 .env
 .env.*
+
+# ---- Non-secret application config (deployed to the host, mounted ro) ------
+# Kept out of the build context so it can never be baked in by accident: the
+# running config is the host copy under /srv/app/<project>/config, seeded from
+# the deploy package by deploy.sh.
+config/
 
 # ---- Node dependencies (rebuilt inside Docker via npm ci) ------------------
 node_modules/

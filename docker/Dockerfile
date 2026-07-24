@@ -3,7 +3,7 @@
 # test-builder Dockerfile
 # Image contains: Node.js runtime + compiled application + node_modules.
 #
-# .env and uploads/ are NOT baked in — they are mounted as volumes
+# .env, config/ and uploads/ are NOT baked in — they are mounted as volumes
 # from the host at runtime (see docker/scripts/deploy.sh).
 #
 # Build args:
@@ -70,10 +70,13 @@ COPY --chown=nodejs:nodejs script/verify-prd15-pre-push.sql ./script/verify-prd1
 # Without these the templates table stays empty and every test reports "template missing".
 COPY --chown=nodejs:nodejs server/scorm/templates ./server/scorm/templates
 
-# Non-secret application config (config/config.jsonc). Committed defaults baked
-# into the image; a per-instance config/production.config.jsonc is mounted at
-# runtime by deploy.sh and, under NODE_ENV=production, wins over these defaults.
-COPY --chown=nodejs:nodejs config ./config
+# Non-secret application config (config/*.config.jsonc) is deliberately NOT in the
+# image — it is a host-side volume mounted at /app/config (see
+# docker/templates/docker-compose.yml + docker/scripts/deploy.sh, which seeds the
+# host copy from the deploy package). A settings change is then an edit plus
+# `docker compose restart`, never a rebuild, and the same image can serve several
+# instances. The mount point is created below; the entrypoint fails fast when the
+# mount is missing.
 
 COPY docker/entrypoint.sh ./docker/entrypoint.sh
 
@@ -86,8 +89,9 @@ RUN sed -i 's/\r$//' /app/docker/entrypoint.sh && \
 # (server/services/template-package.ts extracts to uploads/templates/<id>/).
 # Recursive chown so every subdir is app-writable in the no-volume / image-default
 # case; a host bind-mount over /app/uploads is re-owned at runtime by entrypoint.sh.
-RUN mkdir -p /app/uploads/media /app/uploads/scorm /app/uploads/templates /app/logs /app/tmp && \
-    chown -R nodejs:nodejs /app/uploads /app/logs /app/tmp
+# /app/config is the read-only config mount point and stays EMPTY in the image.
+RUN mkdir -p /app/uploads/media /app/uploads/scorm /app/uploads/templates /app/logs /app/tmp /app/config && \
+    chown -R nodejs:nodejs /app/uploads /app/logs /app/tmp /app/config
 
 EXPOSE ${SERVICE_PORT}
 
