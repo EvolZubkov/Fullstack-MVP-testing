@@ -17,8 +17,6 @@ const LITERAL = /#[0-9a-fA-F]{3,8}\b|rgba?\(\s*[\d.]|hsla?\(\s*[\d.$]/;
 
 /** Known, justified literals: file → why. Everything else must use tokens. */
 const ALLOWED: Record<string, string> = {
-  "index.css": "легаси-палитра, вычищается задачей 5",
-  "styles/preflight.css": "сброс на legacy --border, переводится задачей 5",
   "styles/tb-components.css": "фолбэки внутри var(--ou-…, …)",
   "features/tests/editor/sections/color-format.ts": "утилита конвертации цвета",
   "features/tests/editor/sections/design-section.tsx": "#000000 — значение по умолчанию пипетки",
