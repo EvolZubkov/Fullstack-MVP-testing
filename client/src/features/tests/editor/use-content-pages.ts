@@ -465,15 +465,21 @@ export function hasStructureErrors(
 }
 
 /**
- * Aggregate **warning** signal for the «Структура» tab: true when any author
- * page's saved templateKey is no longer present in the active template
- * (variant catalog drift). Surfaced as a yellow tag — does NOT block Save;
- * the page still exports as the persisted variant or falls back at runtime.
+ * Aggregate **warning** signal for the «Структура» tab: true when any page's
+ * saved templateKey is no longer present in the active template (variant catalog
+ * drift). Surfaced as a yellow tag — does NOT block Save; the page still exports
+ * as the persisted variant or falls back at runtime.
+ *
+ * ANY kind counts, not just author (`info`) pages: a system page bound to a
+ * dropped variant is the same unresolved mapping, and the tests list counts it
+ * too ({@link module:server/services/page-variant-audit}). While this filtered on
+ * `kind === "info"` the list showed the warning triangle and the drawer looked
+ * clean — the author had no way to find what the list was complaining about.
  */
 export function hasStructureWarnings(
   pages: ContentPage[],
 ): boolean {
-  return pages.some((p) => p.kind === "info" && p.templateKeyMissing === true);
+  return pages.some((p) => p.templateKeyMissing === true);
 }
 
 export function useContentPages(

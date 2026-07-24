@@ -475,6 +475,25 @@ describe("<StructureSection /> — system row markers", () => {
     await waitFor(() => expect(screen.getByTestId("structure-system-results")).toBeInTheDocument());
     expect(screen.getByTestId("structure-system-results-fallback-tag")).toBeInTheDocument();
   });
+
+  // The tests list counts a system page bound to a dropped variant, so the row
+  // has to say so too — the marker used to live on author rows only, and the
+  // author saw a warning in the list with nothing to act on in the structure.
+  it("marks a SYSTEM row whose variant the template no longer declares", async () => {
+    installApi([
+      buildPage({
+        id: "pg-res",
+        kind: "results",
+        position: "after",
+        topicId: null,
+        templateKey: "results.gone",
+        valuesJson: { values: {} },
+      }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-system-results")).toBeInTheDocument());
+    expect(screen.getByTestId("structure-system-results-missing-tag")).toBeInTheDocument();
+  });
 });
 
 // ─── Zone layouts: review slot / router / after-zone interleave ────────────────

@@ -125,9 +125,15 @@ describe("useContentPages — aggregate signals (pure)", () => {
     expect(hasStructureErrors([buildPage({ templateKey: "info.GONE" })], variants)).toBe(false);
   });
 
-  it("hasStructureWarnings: true only for an info page flagged templateKeyMissing", () => {
+  it("hasStructureWarnings: true for any page flagged templateKeyMissing", () => {
     expect(hasStructureWarnings([buildPage({ kind: "info", templateKeyMissing: true })])).toBe(true);
     expect(hasStructureWarnings([buildPage({ kind: "info", templateKeyMissing: false })])).toBe(false);
+    // A SYSTEM page bound to a dropped variant is the same unresolved mapping —
+    // and the tests list counts it, so the tab dot must not stay silent (its
+    // `kind === "info"` filter made the list warn while the drawer looked clean).
+    expect(hasStructureWarnings([buildPage({ kind: "questions", templateKeyMissing: true })])).toBe(true);
+    expect(hasStructureWarnings([buildPage({ kind: "results", templateKeyMissing: true })])).toBe(true);
+    expect(hasStructureWarnings([buildPage({ kind: "review", templateKeyMissing: false })])).toBe(false);
   });
 });
 

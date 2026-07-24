@@ -1343,12 +1343,20 @@ function SystemPageRow(props: {
           </Menu>
         </MenuTrigger>
       </div>
-      {(canSwitch || usingFallback || hasErr) && (
+      {(canSwitch || usingFallback || hasErr || page.templateKeyMissing) && (
         <div className="page-row__meta">
           {hasErr && (
             <Tag tone="error" size="s" data-testid={`${props.testId}-required-tag`}>
               <AlertCircle size={12} aria-hidden="true" />
               Не заполнено обязательных полей: {missing.length}
+            </Tag>
+          )}
+          {/* Same mark an author row carries: the tests list counts a system page
+              bound to a dropped variant, so the row must show what to act on. */}
+          {page.templateKeyMissing && (
+            <Tag tone="warning" size="s" data-testid={`${props.testId}-missing-tag`}>
+              <Info size={12} aria-hidden="true" />
+              Шаблон страницы недоступен
             </Tag>
           )}
           {usingFallback && (
