@@ -15,51 +15,9 @@
 @import './styles/tb-templates-admin.css';
 @import './styles/tb-learner-host.css';
 
-/* The only survivor of the pre-DS palette: the hover overlay used by
-   `.hover-elevate` below. It is TRANSLUCENT ink over the surface, so the DS
-   hover background (color-mix with transparent) fits exactly — and unlike the
-   black-ink literal it replaced, it flips with the theme.
-   Declared on `.ou`, where the DS token it references is visible. */
-.ou {
-  --elevate-1: var(--ou-bg-hover);
-}
-
-/**
- * Hover elevation: a translucent ink overlay on top of the element, so the
- * affordance compounds with whatever background the element already has instead
- * of replacing it. The DS has no equivalent modifier, so the pattern stays here.
- *
- * Only the `hover` variant survives: `active-*`, `toggle-*` and the
- * `no-default-*` escape hatches came from the shadcn era and had zero consumers.
- */
 @layer utilities {
-
-  /* Hide ugly search cancel button in Chrome until we can style it properly */
+  /* Hide ugly search cancel button in Chrome until we can style it properly. */
   input[type="search"]::-webkit-search-cancel-button {
     display: none;
-  }
-
-  /* Does not work on elements with overflow:hidden! */
-  .hover-elevate {
-    position: relative;
-    z-index: 0;
-  }
-
-  .hover-elevate::after {
-    content: "";
-    pointer-events: none;
-    position: absolute;
-    inset: 0px;
-    border-radius: inherit;
-    z-index: 999; /* sits in front of content */
-  }
-
-  .hover-elevate:hover::after {
-    background-color: var(--elevate-1);
-  }
-
-  /* If there's a 1px border, adjust the inset so that it covers that parent's border */
-  .border.hover-elevate::after {
-    inset: -1px;
   }
 }
