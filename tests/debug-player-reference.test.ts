@@ -209,3 +209,61 @@ describe("Результаты по разделам — per-section completion 
     expect(b.completed).toBe(false); // still inside B
   });
 });
+
+// ─── PRD-24: выданный вариант и применённый порог в инспекторе ────────────────
+
+describe("Инспектор: выданный вариант и порог, которым тема гейтилась", () => {
+  const forms = [
+    { id: "fA", label: "Вариант A", questionIds: ["a1", "a2"] },
+    { id: "fB", label: "Вариант B", questionIds: ["a1", "a2"] }, // same questions on purpose
+  ];
+  const TEST_DATA = {
+    mode: "standard",
+    flowPolicy: { mode: "linear_by_topics" },
+    sections: [{ topicId: "A", topicName: "О компании", questions: [{ id: "a1" }, { id: "a2" }], formSet: { forms } }],
+  };
+  const calculateResults = () => ({
+    earnedPoints: 1, possiblePoints: 2, correct: 1, totalQuestions: 2, percent: 50, passed: false,
+    topicResults: [{
+      topicId: "A", topicName: "О компании", percent: 50, passed: false,
+      correct: 1, total: 2, earnedPoints: 1, possiblePoints: 2,
+      resolvedPassRule: { type: "percent", value: 100 },
+    }],
+  });
+  const win = (formId?: string) => ({
+    TEST_DATA,
+    calculateResults,
+    state: {
+      phase: "test",
+      currentIndex: 2,
+      flatQuestions: [
+        { topicId: "A", topicName: "О компании", question: { id: "a1", type: "single" } },
+        { topicId: "A", topicName: "О компании", question: { id: "a2", type: "single" } },
+      ],
+      variant: { sections: [{ topicId: "A", topicName: "О компании", questionIds: ["a1", "a2"], ...(formId ? { formId } : {}) }] },
+    },
+  });
+
+  it("берёт выданный вариант из пина, а не угадывает по набору вопросов", () => {
+    // Both variants hold the same questions, so inference cannot tell them apart —
+    // only the pin can. That is exactly the case PRD-24 has to get right.
+    const draw = (ref() as unknown as { buildDraw(pkg: unknown): { sections: Array<{ formId: string | null; formIndex: number | null }> } })
+      .buildDraw(ref().readPkg(win("fB")));
+    expect(draw.sections[0].formId).toBe("fB");
+    expect(draw.sections[0].formIndex).toBe(2);
+  });
+
+  it("для состояния без пина остаётся запасной путь — вывод по набору вопросов", () => {
+    const draw = (ref() as unknown as { buildDraw(pkg: unknown): { sections: Array<{ formId: string | null }> } })
+      .buildDraw(ref().readPkg(win()));
+    expect(draw.sections[0].formId).toBe("fA"); // first matching set
+  });
+
+  it("показывает применённый порог и метку выданного варианта в результатах", () => {
+    const score = ref().buildScore(ref().readPkg(win("fB"))) as unknown as {
+      sections: Array<{ ruleLabel?: string; variantLabel?: string | null }>;
+    };
+    expect(score.sections[0].ruleLabel).toBe("≥ 100%");
+    expect(score.sections[0].variantLabel).toBe("Вариант B");
+  });
+});

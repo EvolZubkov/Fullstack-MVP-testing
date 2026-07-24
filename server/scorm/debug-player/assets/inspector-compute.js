@@ -381,6 +381,32 @@
   }
   function humanCompletion(v) { return v === "completed" ? "завершено" : v === "incomplete" ? "не завершено" : String(v); }
   function humanSuccess(v) { return v === "passed" ? "зачёт ✓" : v === "failed" ? "незачёт ✗" : v === "unknown" ? "не определён" : String(v); }
+
+  /**
+   * PRD-24: human label for the RESOLVED topic rule (`{type:'percent'|'count'}`),
+   * i.e. the threshold that actually gated the topic. `null` = ungated.
+   */
+  function passRuleLabel(rule) {
+    if (!rule) return "без порога";
+    return rule.type === "percent" ? "≥ " + rule.value + "%" : "≥ " + rule.value + " баллов";
+  }
+
+  /**
+   * PRD-24: label of the variant this run delivered for a topic, read from the pin
+   * the runtime writes into the attempt state. Null for non-variant topics.
+   */
+  function variantLabelFor(pkg, topicId) {
+    var vs = (((pkg.state || {}).variant || {}).sections || [])
+      .filter(function (s) { return s.topicId === topicId; })[0];
+    if (!vs || !vs.formId) return null;
+    var def = ((pkg.TEST_DATA || {}).sections || [])
+      .filter(function (s) { return s.topicId === topicId; })[0];
+    var forms = (def && def.formSet && def.formSet.forms) || [];
+    for (var i = 0; i < forms.length; i++) {
+      if (forms[i].id === vs.formId) return forms[i].label || ("Вариант " + (i + 1));
+    }
+    return null;
+  }
   function collectByIndex(traffic, start, prefix) {
     var map = {}, order = [], i = start;
     while (i < traffic.length && traffic[i].fn === "SetValue" && traffic[i].key.indexOf(prefix) === 0) {
@@ -673,13 +699,20 @@
           topicName: td.topicName, earnedPoints: round2(td.earnedPoints), possiblePoints: round2(td.possiblePoints),
           percent: Math.round(td.percent || 0), passed: td.passed, correct: td.correct, total: td.total,
           completed: !!topicDone[td.topicId],
+          // PRD-24: the rule that ACTUALLY gated the topic. For a `by_variant` topic
+          // that is the delivered variant's threshold — without it the methodologist
+          // sees a verdict with no way to tell WHICH threshold produced it.
+          rule: td.resolvedPassRule || null,
+          ruleLabel: passRuleLabel(td.resolvedPassRule),
+          variantLabel: variantLabelFor(pkg, td.topicId),
         };
       }),
     };
   }
 
-  // ── Выдача: what THIS run delivered per section — variant (PRD-17, formId
-  // inferred from the drawn id-set, not stored in state) or per-tag quota
+  // ── Выдача: what THIS run delivered per section — variant (PRD-17; the formId is
+  // read from the pin the runtime writes into the attempt state, PRD-24, falling back
+  // to inference over the drawn id-set for pre-PRD-24 state) or per-tag quota
   // plan-vs-actual (PRD-11), or a plain/whole-topic draw. Adaptive → level path. ──
   function buildDraw(pkg) {
     if (!pkg || !pkg.state) return { available: false, adaptive: false };
@@ -727,12 +760,23 @@
         out.forms = def.formSet.forms.map(function (f, i) {
           return { id: f.id, label: f.label || ("Вариант " + (i + 1)), index: i + 1 };
         });
-        var set = {};
-        drawnIds.forEach(function (id) { set[id] = 1; });
-        for (var i = 0; i < def.formSet.forms.length; i++) {
-          var fids = def.formSet.forms[i].questionIds || [];
-          if (fids.length === drawnIds.length && fids.every(function (id) { return set[id]; })) {
-            out.formId = def.formSet.forms[i].id; out.formIndex = i + 1; break;
+        // PRD-24: the runtime now PINS the delivered variant, so read it back instead
+        // of guessing. Inference over the drawn id-set stays as a fallback for state
+        // captured before the pin existed (and it cannot tell apart two variants that
+        // share the same questions, which the pin can).
+        if (vs.formId) {
+          out.formId = vs.formId;
+          for (var pi = 0; pi < def.formSet.forms.length; pi++) {
+            if (def.formSet.forms[pi].id === vs.formId) { out.formIndex = pi + 1; break; }
+          }
+        } else {
+          var set = {};
+          drawnIds.forEach(function (id) { set[id] = 1; });
+          for (var i = 0; i < def.formSet.forms.length; i++) {
+            var fids = def.formSet.forms[i].questionIds || [];
+            if (fids.length === drawnIds.length && fids.every(function (id) { return set[id]; })) {
+              out.formId = def.formSet.forms[i].id; out.formIndex = i + 1; break;
+            }
           }
         }
       } else if (def.drawBlueprint && def.drawBlueprint.strata && def.drawBlueprint.strata.length) {
