@@ -45,11 +45,13 @@ TEST_ENV_FILE="${TEST_APP_DIR}/env/.env"
 # .env.test. When present it becomes the test instance's .env (DATABASE_URL and the
 # encryption keys are still forced below to match the prod-cloned DB).
 PROVIDED_ENV="/tmp/deploy-test-${PROD_PROJECT}.env.test"
-# Host-side non-secret config, mounted over the image's baked copy so it can be
-# edited on the server and applied with a restart (no rebuild). Seeded from the
-# image on first deploy (see step 4b).
+# Host-side non-secret config, mounted into the container: the image carries NO
+# config at all, so this host copy IS the configuration. It can be edited on the
+# server and applied with a restart (no rebuild). Seeded on first deploy from the
+# repo's config/test.config.jsonc, shipped here by deploy-test.bat (see step 4b).
 TEST_CONFIG_DIR="${TEST_APP_DIR}/config"
 TEST_CONFIG_FILE="${TEST_CONFIG_DIR}/test.config.jsonc"
+PROVIDED_CONFIG="/tmp/deploy-test-${PROD_PROJECT}.test.config.jsonc"
 TEST_COMPOSE="${TEST_APP_DIR}/docker-compose.yml"
 IMAGE_NAME="${TEST_PROJECT}"
 
@@ -264,31 +266,40 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 4b. Seed a HOST-side config/test.config.jsonc and mount it (see the compose
-# below), so non-secret settings (superadmin emails, appUrl, log levels) can be
-# edited ON THE SERVER and applied with `docker compose restart` — no image
-# rebuild. The instance runs with NODE_ENV=test, so the loader reads
-# config/test.config.jsonc; the read-only mount makes this host file win over the
-# image's baked copy. Seeded once from the image's baked default (the operator
-# then edits the host copy); --reset-db re-seeds from the current image.
+# 4b. Deploy the HOST-side config/test.config.jsonc and mount it (see the compose
+# below). The image contains NO config — it is a volume — so this host file is the
+# instance's only configuration; a settings change is applied with
+# `docker compose restart`, never a rebuild.
+#
+# The shipped repo copy (deploy-test.bat) is the source of truth and is written on
+# EVERY deploy, mirroring deploy.sh: an upstream change must reach the instance
+# rather than be skipped because a file already exists. A differing host copy is
+# backed up next to it first, so an ad-hoc server edit is visible and can be
+# carried back into the repo.
 # ---------------------------------------------------------------------------
-info "[4b/5] Seeding host config (editable without rebuild)..."
+info "[4b/5] Deploying host config (editable without rebuild)..."
 mkdir -p "${TEST_CONFIG_DIR}"
 
-if [ ! -f "${TEST_CONFIG_FILE}" ] || [ "${RESET_DB}" = true ]; then
-    # Extract the baked config from the image (cat via an overridden entrypoint;
-    # the container is not started).
-    docker run --rm --entrypoint cat "${IMAGE_NAME}:latest" /app/config/test.config.jsonc \
-        > "${TEST_CONFIG_FILE}" \
-        || error "Failed to extract config/test.config.jsonc from ${IMAGE_NAME}:latest (rebuild the image with build-test.bat first)."
-    ok "Config seeded from image: ${TEST_CONFIG_FILE}"
+if [ -f "${PROVIDED_CONFIG}" ]; then
+    if [ -f "${TEST_CONFIG_FILE}" ] && ! cmp -s "${PROVIDED_CONFIG}" "${TEST_CONFIG_FILE}"; then
+        CONFIG_BACKUP="${TEST_CONFIG_DIR}/test.config.jsonc.$(date +%Y%m%d-%H%M%S).bak"
+        cp "${TEST_CONFIG_FILE}" "${CONFIG_BACKUP}"
+        warn "Host config differed — previous copy saved as ${CONFIG_BACKUP}"
+    fi
+    cp "${PROVIDED_CONFIG}" "${TEST_CONFIG_FILE}"
+    sed -i '1s/^\xef\xbb\xbf//' "${TEST_CONFIG_FILE}"
+    sed -i 's/\r$//' "${TEST_CONFIG_FILE}"
+    ok "Config deployed from the shipped repo copy: ${TEST_CONFIG_FILE}"
+elif [ -f "${TEST_CONFIG_FILE}" ]; then
+    warn "config/test.config.jsonc was not shipped — keeping the existing host copy"
 else
-    warn "Host config already exists — keeping edits (use --reset-db to re-seed from image)"
+    error "config/test.config.jsonc was not shipped and none exists at ${TEST_CONFIG_FILE}.\nRun the deploy from the project (deploy-test.bat ships config/test.config.jsonc) — the image carries no config."
 fi
+rm -f "${PROVIDED_CONFIG}"
 # World-readable so the container's unprivileged app user (UID 1500) can read the
 # mounted file regardless of the server's umask.
 chmod 644 "${TEST_CONFIG_FILE}"
-ok "Edit non-secret config here, then 'docker compose restart': ${TEST_CONFIG_FILE}"
+ok "Config: ${TEST_CONFIG_FILE}  (repo is the source of truth; each deploy refreshes it)"
 
 # ---------------------------------------------------------------------------
 # 5. Write docker-compose.yml and start container
@@ -309,17 +320,24 @@ services:
     volumes:
       - ${TEST_DATA_DIR}/uploads:/app/uploads
       # Non-secret config, editable on the host (restart to apply — no rebuild).
-      # NODE_ENV=test makes the loader read config/test.config.jsonc; this mount
-      # overrides the image's baked copy.
+      # The image ships no config at all: config/test.config.jsonc exists ONLY
+      # through this mount, and CONFIG_FILE below points the loader at it.
       - ${TEST_CONFIG_FILE}:/app/config/test.config.jsonc:ro
     env_file:
       - ${TEST_ENV_FILE}
     environment:
       # Infra-controlled: the app must listen on INTERNAL_PORT to match the port
-      # mapping and healthcheck. `environment` wins over env_file, so a stray PORT in
-      # the secrets file can't move the listener off ${INTERNAL_PORT}.
+      # mapping and healthcheck. The compose "environment" key wins over env_file,
+      # so a stray PORT in the secrets file can't move the listener off
+      # ${INTERNAL_PORT}. (No backticks in this heredoc — it is unquoted, so they
+      # would run as a command substitution and silently eat the text.)
       PORT: ${INTERNAL_PORT}
       NODE_ENV: test
+      # The built server has NODE_ENV folded to "production" (script/build.ts), so
+      # NODE_ENV=test alone would still make the loader look for
+      # config/production.config.jsonc. CONFIG_FILE is read at RUNTIME and wins —
+      # without it this instance silently runs on built-in defaults.
+      CONFIG_FILE: config/test.config.jsonc
     healthcheck:
       test: ["CMD", "sh", "-c", "wget -q --spider http://127.0.0.1:${INTERNAL_PORT}/api/me"]
       interval: 30s
@@ -440,6 +458,8 @@ info ""
 info "Edit non-secret config (superadmins, appUrl, log levels) WITHOUT rebuild:"
 info "  nano ${TEST_CONFIG_FILE}"
 info "  docker compose restart"
+info "  NOTE: every deploy rewrites this file from the repo's config/test.config.jsonc"
+info "        (previous content kept as *.bak) — carry a lasting edit back into the repo."
 info ""
 info "Re-clone DB from prod:"
 info "  sudo bash $0 ${PROD_PROJECT} ${TEST_PROJECT} ${TEST_PORT} --reset-db"

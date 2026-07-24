@@ -23,8 +23,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 // Runs from /app inside the container (docker cp -> /app/create-admin.mjs), so the
-// baked config loader (server/config-loader.mjs) and config file are reachable
-// relative to /app — identical to set-password.mjs.
+// baked config loader (server/config-loader.mjs) and the MOUNTED config volume
+// (/app/config) are reachable relative to /app — identical to set-password.mjs.
 import { loadEnv, loadConfiguration } from "./server/config-loader.mjs";
 
 const EMAIL = (process.env.CA_EMAIL ?? "").trim();

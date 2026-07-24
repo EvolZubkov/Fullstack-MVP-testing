@@ -10,8 +10,9 @@
 ::   2. Build project (npm run build)
 ::   3. Build Docker image tagged as <test_project>:latest
 ::   4. Save image to <test_project>.tar
-::   5. Upload to server via SCP
-::   6. On server: docker load + update compose image tag + docker compose up -d
+::   5. Upload image + config\test.config.jsonc to server via SCP
+::   6. On server: docker load + refresh the host config + update compose image tag
+::      + docker compose up -d
 ::
 :: Use this to push a new code version to the test instance without re-cloning the DB.
 :: Use deploy-test.bat for the initial setup (creates directories, clones DB, etc.)
@@ -53,6 +54,11 @@ set "IMAGE_NAME=%TEST_PROJECT%"
 set "IMAGE_FILE=%TEST_PROJECT%.tar"
 set "REMOTE_TAR=/tmp/%IMAGE_FILE%"
 set "TEST_APP_DIR=/srv/app/%TEST_PROJECT%"
+:: Non-secret config is not in the image (config/ is a host volume), so every code
+:: deploy also ships the repo's config/test.config.jsonc — otherwise a setting
+:: changed upstream would never reach the test instance.
+set "REMOTE_CONFIG=/tmp/%TEST_PROJECT%.test.config.jsonc"
+set "TEST_CONFIG_FILE=%TEST_APP_DIR%/config/test.config.jsonc"
 
 echo.
 echo ===================================================
@@ -72,6 +78,10 @@ echo [1/4] Building project (npm run build)...
 cd /d "%PROJECT_ROOT%"
 call npm run build
 if errorlevel 1 ( echo ERROR: npm run build failed & exit /b 1 )
+if not exist "config\test.config.jsonc" (
+    echo ERROR: config\test.config.jsonc not found ^(required: the image carries no config^)
+    exit /b 1
+)
 echo [1/4] OK: dist/
 echo.
 
@@ -110,11 +120,14 @@ echo [4/4] Uploading to %DEPLOY_TARGET% and reloading...
 :: %REMOTE_TAR%, and /tmp is sticky, so a non-root scp can neither overwrite
 :: nor unlink it ("dest open ... Permission denied"). The trailing rm below
 :: only runs when the whole remote step succeeds, so leftovers do happen.
-ssh -tt "%DEPLOY_TARGET%" "sudo rm -f %REMOTE_TAR%"
+ssh -tt "%DEPLOY_TARGET%" "sudo rm -f %REMOTE_TAR% %REMOTE_CONFIG%"
 if errorlevel 1 ( echo ERROR: remote cleanup failed & exit /b 1 )
 
 scp "%IMAGE_FILE%" "%DEPLOY_TARGET%:%REMOTE_TAR%"
 if errorlevel 1 ( echo ERROR: scp failed & exit /b 1 )
+
+scp "config\test.config.jsonc" "%DEPLOY_TARGET%:%REMOTE_CONFIG%"
+if errorlevel 1 ( echo ERROR: scp of test.config.jsonc failed & exit /b 1 )
 
 :: -tt forces a TTY so the sudo commands below can prompt for a password when
 :: passwordless sudo is not configured. drizzle-kit migrate is non-interactive
@@ -126,7 +139,13 @@ if errorlevel 1 ( echo ERROR: scp failed & exit /b 1 )
 :: async), so the deploy just stopped after the spinner with no error at all — the
 :: same trap already fixed in deploy.sh for the production path. Writes to a FILE
 :: are synchronous and survive the exit.
-ssh -tt "%DEPLOY_TARGET%" "docker load -i %REMOTE_TAR% && sudo sed -i 's|image: .*:latest|image: %IMAGE_NAME%:latest|' %TEST_APP_DIR%/docker-compose.yml && cd %TEST_APP_DIR% && sudo docker compose up -d --force-recreate && echo 'Waiting for container...' && sleep 5 && echo 'Applying DB migrations (drizzle-kit migrate)...' && { sudo docker exec %IMAGE_NAME% sh -c 'npx drizzle-kit migrate > /tmp/migrate.log 2>&1; ec=$?; cat /tmp/migrate.log; exit $ec' || { echo ''; echo 'drizzle-kit migrate FAILED - see the error above. Two known causes on a test clone:'; echo '1) permission denied for database: the app role lacks CREATE on the DB (migrate needs it for the drizzle schema). As the postgres superuser, GRANT CREATE ON DATABASE %TEST_PROJECT% to the role from DATABASE_URL, then redeploy.'; echo '2) relation/table already exists: the clone predates the prod baseline. Run ONCE, then redeploy:'; echo '   sudo docker exec %IMAGE_NAME% node script/run-sql.cjs drizzle/baseline-existing-db.sql'; exit 1; }; } && rm -f %REMOTE_TAR%"
+::
+:: Config: the shipped repo copy is written over the host file on EVERY deploy
+:: (same rule as deploy.sh - the repo is the source of truth), keeping the previous
+:: content as .prev.bak when it differed. The compose file is also checked for
+:: CONFIG_FILE: an instance created before the config volume existed would start
+:: without any config, so fail early with the fix instead.
+ssh -tt "%DEPLOY_TARGET%" "docker load -i %REMOTE_TAR% && { sudo grep -q CONFIG_FILE %TEST_APP_DIR%/docker-compose.yml || { echo 'ERROR: docker-compose.yml on the server predates the config volume. Run deploy-test.bat once to regenerate it.'; exit 1; }; } && sudo mkdir -p %TEST_APP_DIR%/config && sudo sh -c 'if [ -f %TEST_CONFIG_FILE% ]; then if cmp -s %REMOTE_CONFIG% %TEST_CONFIG_FILE%; then :; else cp %TEST_CONFIG_FILE% %TEST_CONFIG_FILE%.prev.bak; echo Host config differed - previous copy saved as %TEST_CONFIG_FILE%.prev.bak; fi; fi' && sudo cp %REMOTE_CONFIG% %TEST_CONFIG_FILE% && sudo chmod 644 %TEST_CONFIG_FILE% && rm -f %REMOTE_CONFIG% && sudo sed -i 's|image: .*:latest|image: %IMAGE_NAME%:latest|' %TEST_APP_DIR%/docker-compose.yml && cd %TEST_APP_DIR% && sudo docker compose up -d --force-recreate && echo 'Waiting for container...' && sleep 5 && echo 'Applying DB migrations (drizzle-kit migrate)...' && { sudo docker exec %IMAGE_NAME% sh -c 'npx drizzle-kit migrate > /tmp/migrate.log 2>&1; ec=$?; cat /tmp/migrate.log; exit $ec' || { echo ''; echo 'drizzle-kit migrate FAILED - see the error above. Two known causes on a test clone:'; echo '1) permission denied for database: the app role lacks CREATE on the DB (migrate needs it for the drizzle schema). As the postgres superuser, GRANT CREATE ON DATABASE %TEST_PROJECT% to the role from DATABASE_URL, then redeploy.'; echo '2) relation/table already exists: the clone predates the prod baseline. Run ONCE, then redeploy:'; echo '   sudo docker exec %IMAGE_NAME% node script/run-sql.cjs drizzle/baseline-existing-db.sql'; exit 1; }; } && rm -f %REMOTE_TAR%"
 if errorlevel 1 ( echo ERROR: remote reload failed & exit /b 1 )
 
 echo.

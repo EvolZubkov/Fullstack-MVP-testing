@@ -83,6 +83,17 @@ if not exist "docker\templates\docker-compose.yml" (
     echo ERROR: docker\templates\docker-compose.yml not found.
     exit /b 1
 )
+:: Non-secret config is NOT in the image (see docker\.dockerignore) - it ships with
+:: the package and is seeded to /srv/app/<project>/config by deploy.sh, then mounted
+:: read-only at /app/config.
+if not exist "config\production.config.jsonc" (
+    echo ERROR: config\production.config.jsonc not found.
+    exit /b 1
+)
+if not exist "config\config.jsonc" (
+    echo ERROR: config\config.jsonc not found.
+    exit /b 1
+)
 
 if exist ".env" (
     set "ENV_SRC=.env"
@@ -102,6 +113,8 @@ echo [1/2] Creating deploy package...
 if exist "%PACKAGE_STAGE%" rmdir /s /q "%PACKAGE_STAGE%"
 mkdir "%PACKAGE_STAGE%\env"
 if errorlevel 1 ( echo ERROR: Cannot create staging directory & exit /b 1 )
+mkdir "%PACKAGE_STAGE%\config"
+if errorlevel 1 ( echo ERROR: Cannot create staging config directory & exit /b 1 )
 
 copy /y "%IMAGE_FILE%"                        "%PACKAGE_STAGE%\%IMAGE_FILE%"          >nul
 copy /y "docker\scripts\deploy.sh"            "%PACKAGE_STAGE%\deploy.sh"             >nul
@@ -109,6 +122,8 @@ copy /y "docker\scripts\run-deploy.sh"        "%PACKAGE_STAGE%\run-deploy.sh"   
 copy /y "docker\templates\docker-compose.yml" "%PACKAGE_STAGE%\docker-compose.yml"    >nul
 copy /y "docker\config\deploy.env"            "%PACKAGE_STAGE%\deploy.env"            >nul
 copy /y "%ENV_SRC%"                           "%PACKAGE_STAGE%\env\.env"              >nul
+copy /y "config\config.jsonc"                 "%PACKAGE_STAGE%\config\"               >nul
+copy /y "config\production.config.jsonc"      "%PACKAGE_STAGE%\config\"               >nul
 if errorlevel 1 ( echo ERROR: Failed to copy package files & exit /b 1 )
 
 if exist "%PACKAGE_FILE%" del /q "%PACKAGE_FILE%"
