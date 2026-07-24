@@ -372,8 +372,12 @@ function listDirty(draft: ContentPage[], server: ContentPage[]): boolean {
  * which tags / attributes / URIs the server stripped from each placeholder.
  */
 export type SanitizeRemoval = {
-  kind: "tag" | "attribute" | "uri";
-  /** Display label, e.g. `<script>`, `onclick`, `javascript:`. */
+  /**
+   * `"style"` is not a removal: the field's CSS was CONFINED to the page block
+   * (`count` = rules rewritten), everything else was deleted as unsafe.
+   */
+  kind: "tag" | "attribute" | "uri" | "style";
+  /** Display label, e.g. `<script>`, `onclick`, `javascript:`, `<style>`. */
   label: string;
   count: number;
 };

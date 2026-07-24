@@ -107,9 +107,10 @@ import {
   type UseContentPagesResult,
 } from "../use-content-pages";
 import { isPlaceholderType, isSettingType, inputModesFor } from "@shared/template/field-types";
-import { sanitizeHtml as sanitizeContentHtml } from "@shared/security/html-sanitize";
+import { sanitizeHtml as sanitizeContentHtml, placeholderScope } from "@shared/security/html-sanitize";
 import type { TestEditorModel } from "../test-editor.types";
 import { PagePreviewModal } from "./page-preview-modal";
+import { SanitizeBanner } from "./sanitize-banner";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -1807,45 +1808,14 @@ function PageEditForm(props: {
           data-testid={`structure-page-edit-no-variant-${page.id}`}
         />
       )}
-      {sanitizeDiag && Object.keys(sanitizeDiag).length > 0 && (
-        <div
-          className="validation-banner validation-banner--warning"
-          role="alert"
-          data-testid={`structure-page-edit-sanitize-${page.id}`}
-        >
-          <span className="validation-banner__ico" aria-hidden="true">
-            <AlertTriangle size={14} />
-          </span>
-          <div className="validation-banner__body">
-            <div className="validation-banner__title">HTML санитизирован</div>
-            <div className="validation-banner__desc">
-              Следующие элементы были удалены как небезопасные:
-              <ul className="validation-banner__list">
-                {Object.entries(sanitizeDiag).flatMap(([phKey, removals]) =>
-                  removals.map((r) => {
-                    const phLabel =
-                      variant?.placeholders.find((p) => p.key === phKey)?.label ?? phKey;
-                    return (
-                      <li key={`${phKey}-${r.label}`}>
-                        <code>{r.label}</code> в поле «{phLabel}»
-                        {r.count > 1 ? ` (×${r.count})` : ""}
-                      </li>
-                    );
-                  }),
-                )}
-              </ul>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s"
-            aria-label="Скрыть предупреждение о санитизации"
-            onClick={() => cp.dismissSanitizeDiagnostics(page.id)}
-            data-testid={`structure-page-edit-sanitize-dismiss-${page.id}`}
-          >
-            <X size={12} aria-hidden="true" />
-          </button>
-        </div>
+      {sanitizeDiag && (
+        <SanitizeBanner
+          diagnostics={sanitizeDiag}
+          fieldLabel={(phKey) => variant?.placeholders.find((p) => p.key === phKey)?.label ?? phKey}
+          onDismiss={() => cp.dismissSanitizeDiagnostics(page.id)}
+          testId={`structure-page-edit-sanitize-${page.id}`}
+          dismissTestId={`structure-page-edit-sanitize-dismiss-${page.id}`}
+        />
       )}
       {hasErr && (
         <div
@@ -1944,13 +1914,18 @@ function PlaceholderControl(props: {
       // enter; within it they pick the mode. Formatted mode shows the result, not
       // the markup, and pasted fragments are normalised on arrival (FR-34), so a
       // save error can only come from HTML the author typed themselves.
+      //
+      // Normalisation includes confining a pasted `<style>` to this field's own
+      // region — the SAME scope the server applies on save and on package build,
+      // so the author sees the final CSS immediately instead of discovering in the
+      // package that their `body { … }` rule restyled the player.
       return (
         <RichTextEditor
           label={label}
           value={(value as string) || ""}
           onChange={(next) => onChange(next)}
           modes={inputModesFor(ph.type) as RichTextMode[]}
-          sanitize={sanitizeContentHtml}
+          sanitize={(html) => sanitizeContentHtml(html, { scope: placeholderScope(ph.key) })}
           rows={ph.type === "html" ? 6 : 5}
           fullWidth
           data-testid={testId}
