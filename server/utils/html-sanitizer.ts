@@ -11,6 +11,8 @@ export {
   sanitizeHtmlWithDiagnostics,
   sanitizeValues,
   sanitizeValuesWithDiagnostics,
+  placeholderScope,
   type SanitizeRemoval,
   type SanitizeDiagnostics,
+  type SanitizeOptions,
 } from "@shared/security/html-sanitize";
