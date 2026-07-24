@@ -5809,11 +5809,17 @@ var TBTemplate = (() => {
     if (typeof r.value === "number") return { type: "count", value: r.value };
     return null;
   }
-  function resolveTopicRule(raw, overall) {
+  function resolveTopicRule(raw, overall, ctx) {
+    var _a;
     if (!raw || typeof raw !== "object") return null;
     const r = raw;
     if (r.source === "inherit_overall") return overall;
     if (r.source === "none") return null;
+    if (r.source === "by_variant") {
+      const entry = (ctx == null ? void 0 : ctx.formId) ? (_a = r.byForm) == null ? void 0 : _a[ctx.formId] : void 0;
+      if (!entry) return overall;
+      return entry.type === "percent" ? { type: "percent", value: Number(entry.value) || 0 } : { type: "count", value: Number(entry.value) || 0 };
+    }
     if (r.source === "custom") {
       return r.type === "percent" ? { type: "percent", value: Number(r.value) || 0 } : { type: "count", value: Number(r.value) || 0 };
     }
@@ -5837,6 +5843,7 @@ var TBTemplate = (() => {
     let tQuestions = 0;
     let allTopicsPassed = true;
     const topicResults = input.sections.map((sec) => {
+      var _a;
       let earned = 0;
       let possible = 0;
       let correct = 0;
@@ -5848,7 +5855,7 @@ var TBTemplate = (() => {
       }
       const total = sec.questions.length;
       const percent2 = possible > 0 ? earned / possible * 100 : 0;
-      const resolved = resolveTopicRule(sec.topicPassRule, overall);
+      const resolved = resolveTopicRule(sec.topicPassRule, overall, { formId: (_a = sec.formId) != null ? _a : null });
       const passed = resolved ? checkPassRule(resolved, percent2, earned) : null;
       if (passed === false) allTopicsPassed = false;
       tEarned += earned;
@@ -5865,6 +5872,7 @@ var TBTemplate = (() => {
         percent: percent2,
         passed,
         passRule: sec.topicPassRule,
+        resolvedPassRule: resolved,
         extra: sec.extra
       };
     });

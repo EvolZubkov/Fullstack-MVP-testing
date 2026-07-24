@@ -43,6 +43,13 @@ describe("SCORM runtime pins the delivered variant (PRD-24 FR-08)", () => {
     expect(appSrc).toMatch(/state\.variant\.sections\.push\(\{[\s\S]*?formId: deliveredFormId/);
   });
 
+  it("оба расчёта переносят применённое правило наружу (иначе подпись «Требуется» пустеет)", () => {
+    // calculateResults maps the shared result back into the runtime shape by hand —
+    // a field left out there is silently lost, which is exactly how the label broke.
+    expect(resultsSrc).toMatch(/resolvedPassRule: t.resolvedPassRule/);
+    expect(resultsSrc).toMatch(/resolvedPassRule: resolvedRule/);
+  });
+
   it("both grading paths feed the pin into the shared resolver", () => {
     // per-topic result screen + final aggregation
     expect(resultsSrc).toMatch(/resolveTopicRule\([\s\S]*?formId: deliveredFormId\(topicId\)/);

@@ -486,6 +486,9 @@ function computeSectionResult(topicId) {
     percent: percent,
     passed: passed,
     passRule: passRule,
+    // PRD-24: same as in calculateResults — the section screen must be able to show
+    // the threshold that actually applied to the delivered variant.
+    resolvedPassRule: resolvedRule,
     topicFeedback: section ? (section.topicFeedback || null) : null,
     recommendedCourses: section ? (section.recommendedCourses || []) : [],
     recommendedEvents: section ? (section.recommendedEvents || []) : [],
@@ -557,6 +560,11 @@ function calculateResults() {
         percent: t.percent,
         passed: t.passed,
         passRule: t.passRule,
+        // PRD-24: the rule that actually gated the topic (the delivered variant's
+        // threshold for a `by_variant` rule). The «Требуется…» label reads THIS, and
+        // it is persisted with the attempt, so dropping it here would silently blank
+        // the label — including for past attempts.
+        resolvedPassRule: t.resolvedPassRule,
         topicFeedback: t.extra.topicFeedback,
         recommendedCourses: t.extra.recommendedCourses,
         recommendedEvents: t.extra.recommendedEvents

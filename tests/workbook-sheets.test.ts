@@ -380,3 +380,20 @@ describe("parseVariantThresholdRow / serializeVariantThresholdRow", () => {
     });
   });
 });
+
+describe("parseVariantThresholdRow — граничные случаи", () => {
+  it("принимает «Тема» как синоним «Раздела»", () => {
+    const r = parseVariantThresholdRow({ "Тема": "О компании", "Вариант": "1", "Тип порога": "Процент", "Порог": "50" });
+    expect(r.ok && r.value.topicName).toBe("О компании");
+  });
+
+  it("отвергает нулевой номер варианта и отрицательный порог", () => {
+    expect(parseVariantThresholdRow({ "Раздел": "X", "Вариант": "0", "Тип порога": "Процент", "Порог": "50" }).ok).toBe(false);
+    expect(parseVariantThresholdRow({ "Раздел": "X", "Вариант": "1", "Тип порога": "Процент", "Порог": "-1" }).ok).toBe(false);
+  });
+
+  it("порог 0 допустим (тема без требования по этому варианту)", () => {
+    const r = parseVariantThresholdRow({ "Раздел": "X", "Вариант": "1", "Тип порога": "Процент", "Порог": "0" });
+    expect(r.ok && r.value.value).toBe(0);
+  });
+});

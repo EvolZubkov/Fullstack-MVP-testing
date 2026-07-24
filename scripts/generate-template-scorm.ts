@@ -357,8 +357,34 @@ async function main() {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
+    // PRD-24 acceptance (opt-in via TB_BY_VARIANT=1): put the topic into PRD-17
+    // variants mode and gate it with a PER-VARIANT threshold, so the package can be
+    // played to check that the verdict follows the variant that actually dropped.
+    // Variant 1 demands everything (100%), variant 2 only 40% — so the results screen
+    // shows a different «Требуется» depending on which variant actually dropped, and
+    // the manifest advertises the LOWEST of the two (0.40).
+    const byVariant = process.env.TB_BY_VARIANT === "1" && questions.length >= 2;
+    const half = Math.ceil(questions.length / 2);
+    const formSetJson = byVariant
+      ? {
+          forms: [
+            { id: "form-1", label: "Вариант 1", questionIds: questions.slice(0, half).map((q) => q.id) },
+            { id: "form-2", label: "Вариант 2", questionIds: questions.slice(half).map((q) => q.id) },
+          ],
+        }
+      : null;
+    const topicPassRuleJson = byVariant
+      ? {
+          source: "by_variant",
+          byForm: {
+            "form-1": { type: "percent", value: 100 },
+            "form-2": { type: "percent", value: 40 },
+          },
+        }
+      : null;
+
     const sections = [
-      { id: "section-1", testId: test.id, topicId: TOPIC_ID, drawCount: questions.length, sortOrder: 0, required: true, topicPassRuleJson: null, timeLimitMinutes: null, feedbackJson: null, topic, questions, courses: [], events: [] },
+      { id: "section-1", testId: test.id, topicId: TOPIC_ID, drawCount: questions.length, sortOrder: 0, required: true, topicPassRuleJson, formSetJson, timeLimitMinutes: null, feedbackJson: null, topic, questions, courses: [], events: [] },
     ];
 
     const data = {

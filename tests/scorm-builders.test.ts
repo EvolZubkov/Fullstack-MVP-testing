@@ -721,3 +721,51 @@ describe("buildManifest", () => {
     expect(written["test-ru"].code).toMatch(/Osnovy_JavaScript/);
   });
 });
+
+describe("buildManifest — by_variant, краевые случаи (PRD-24)", () => {
+  const q = (id: string): any => ({ ...dbQuestion, id });
+  const sectionWith = (byForm: Record<string, unknown>, forms: unknown[]): any => ({
+    ...manifestSection,
+    questions: [q("q1"), q("q2")],
+    topicPassRuleJson: { source: "by_variant", byForm },
+    formSetJson: { forms },
+  });
+
+  it("вариант без заданного порога не участвует в минимуме", () => {
+    const xml = buildManifest(manifestTest, {
+      test: manifestTest,
+      sections: [sectionWith(
+        { f1: { type: "percent", value: 80 } }, // f2 без записи — пропускается
+        [
+          { id: "f1", label: "Вариант 1", questionIds: ["q1"] },
+          { id: "f2", label: "Вариант 2", questionIds: ["q2"] },
+        ],
+      )],
+    } as any);
+    expect(xml).toContain("<imsss:minNormalizedMeasure>0.80</imsss:minNormalizedMeasure>");
+  });
+
+  it("вариант без вопросов не делит на ноль", () => {
+    const xml = buildManifest(manifestTest, {
+      test: manifestTest,
+      sections: [sectionWith(
+        { f1: { type: "absolute", value: 3 } },
+        [{ id: "f1", label: "Вариант 1", questionIds: [] }],
+      )],
+    } as any);
+    expect(xml).toContain("<imsss:minNormalizedMeasure>0.00</imsss:minNormalizedMeasure>");
+  });
+
+  it("правило by_variant без набора вариантов оставляет нейтральный порог", () => {
+    const xml = buildManifest(manifestTest, {
+      test: manifestTest,
+      sections: [{
+        ...manifestSection,
+        questions: [q("q1")],
+        topicPassRuleJson: { source: "by_variant", byForm: { f1: { type: "percent", value: 90 } } },
+        formSetJson: null,
+      }],
+    } as any);
+    expect(xml).toContain("<imsss:minNormalizedMeasure>0.5</imsss:minNormalizedMeasure>");
+  });
+});
