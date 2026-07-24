@@ -23,7 +23,6 @@ const ALLOWED: Record<string, string> = {
   "features/tests/editor/sections/color-format.ts": "утилита конвертации цвета",
   "features/tests/editor/sections/design-section.tsx": "#000000 — значение по умолчанию пипетки",
   // ↓ вычёркиваются по мере выполнения плана PLAN_DS_COLOR_COMPLIANCE
-  "features/tests/debug-player/debug-player.css": "задача 2",
   "styles/tb-learner-host.css": "задача 3",
   "pages/learner/take-test.tsx": "задача 3",
   "pages/learner/template-question-screen.tsx": "задача 3",
