@@ -977,7 +977,10 @@ describe("<SettingsSection /> — правило «По вариантам» (PR
     expect(screen.getByText(/макс\. 6 баллов/)).toBeInTheDocument();
   });
 
-  it("spells the maxima out per variant only when they differ", () => {
+  // One shared hint under the block read as belonging to the LAST variant row.
+  // The ceiling belongs to a single variant's threshold, so it is printed under
+  // that variant — and only where it means something (an absolute threshold).
+  it("prints the ceiling under each variant with an absolute threshold", () => {
     const model = variantsModel(
       { "top-1": { source: "by_variant", byForm: { v1: { type: "absolute", value: 2 }, v2: { type: "absolute", value: 1 } } } },
       { scoring: { defaultQuestionPoints: null, questionOverrides: [{ questionId: "q1", points: 5, scoringJson: null, difficulty: null, pinnedContentHash: null }] } },
@@ -985,7 +988,18 @@ describe("<SettingsSection /> — правило «По вариантам» (PR
     render(<SettingsSection model={model} updateModel={() => {}} />);
     openPane();
     // v1 = q1(5) + q2(1) = 6, v2 = q3(1) = 1
-    expect(screen.getByText(/Вариант 1 — 6, Вариант 2 — 1/)).toBeInTheDocument();
+    expect(screen.getByTestId("pass-variant-max-top-1-v1")).toHaveTextContent("макс. 6 баллов");
+    expect(screen.getByTestId("pass-variant-max-top-1-v2")).toHaveTextContent("макс. 1 баллов");
+  });
+
+  it("prints no ceiling for a variant judged by percent", () => {
+    const model = variantsModel({
+      "top-1": { source: "by_variant", byForm: { v1: { type: "absolute", value: 2 }, v2: { type: "percent", value: 60 } } },
+    });
+    render(<SettingsSection model={model} updateModel={() => {}} />);
+    openPane();
+    expect(screen.getByTestId("pass-variant-max-top-1-v1")).toBeInTheDocument();
+    expect(screen.queryByTestId("pass-variant-max-top-1-v2")).not.toBeInTheDocument();
   });
 
   it("patches only the edited variant's threshold", () => {

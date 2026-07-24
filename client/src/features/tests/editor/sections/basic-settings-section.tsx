@@ -1053,19 +1053,6 @@ function PassTopicRow(props: {
   const forms = props.forms ?? [];
   // FR-02: the per-variant rule only exists for a topic delivered as variants.
   const hasVariants = forms.length >= 2;
-  // One hint line under the block (as in the wireframe): the attainable points an
-  // absolute threshold is capped by. Variants usually share the same maximum, so it
-  // collapses to a single number and only spells them out when they differ.
-  const maxPointsHint = (() => {
-    if (props.rule.source !== "by_variant") return null;
-    const absolute = forms.filter((f) => props.rule.source === "by_variant" && props.rule.byForm[f.id]?.type === "absolute");
-    const maxima = props.variantMaxPoints ?? {};
-    const shown = absolute.filter((f) => maxima[f.id] != null);
-    if (shown.length === 0) return null;
-    const values = new Set(shown.map((f) => maxima[f.id]));
-    if (values.size === 1) return `макс. ${[...values][0]} баллов`;
-    return `макс.: ${shown.map((f) => `${f.label} — ${maxima[f.id]}`).join(", ")}`;
-  })();
   return (
     <>
       <tr data-testid={`pass-topic-row-${props.topicId}`}>
@@ -1104,6 +1091,12 @@ function PassTopicRow(props: {
                 const error = props.fieldErrors?.get(
                   `passRules.byTopic[${props.topicId}].byForm[${form.id}].value`,
                 );
+                // The ceiling an absolute threshold is capped by, printed under THAT
+                // variant's threshold. A single line under the whole block read as
+                // belonging to the last row — and said nothing about which variant it
+                // measured. A percent threshold has no ceiling to state.
+                const maxPoints = props.variantMaxPoints?.[form.id];
+                const showMax = type === "absolute" && maxPoints != null;
                 return (
                   <Fragment key={form.id}>
                     <span className="tb-pass-table__variant-label">{label}</span>
@@ -1134,12 +1127,17 @@ function PassTopicRow(props: {
                         onChange={(next) => props.onVariantValueChange(form.id, next)}
                       />
                     </div>
+                    {showMax && (
+                      <span
+                        className="tb-pass-table__variant-hint"
+                        data-testid={`pass-variant-max-${props.topicId}-${form.id}`}
+                      >
+                        макс. {maxPoints} баллов
+                      </span>
+                    )}
                   </Fragment>
                 );
               })}
-              {maxPointsHint && (
-                <span className="tb-pass-table__variant-hint">{maxPointsHint}</span>
-              )}
             </div>
           </td>
         </tr>

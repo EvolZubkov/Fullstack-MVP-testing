@@ -368,9 +368,11 @@
 /* «Порог» stretches to the right edge of its column so all rows align right. */
 .tb-pass-table__variants .ou-number,
 .tb-pass-table__variants .ou-number__box { width: 100%; }
-/* Hint spans the full width under the grid rows. */
+/* Ceiling hint: its own grid row under the variant it belongs to, in the «Порог»
+   column — a full-width line under the block read as belonging to the last row. */
 .tb-pass-table__variant-hint {
-  grid-column: 1 / -1;
+  grid-column: 3;
+  margin-top: calc(-1 * var(--ou-space-1));
   font: var(--ou-text-body-xs); color: var(--ou-fg-muted);
 }
 
