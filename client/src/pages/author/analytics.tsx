@@ -1664,7 +1664,10 @@ export default function AnalyticsPage() {
                                   key={test.testId}
                                   type="monotone"
                                   dataKey={test.testId}
-                                  stroke={`hsl(${i * 60}, 70%, 50%)`}
+                                  // Series colour from the shared categorical set — the
+                                  // hue-rotation formula guaranteed neither contrast nor
+                                  // distinguishable neighbours, and ignored the theme.
+                                  stroke={`var(--tb-chart-${(i % 8) + 1})`}
                                   strokeWidth={2}
                                   name={test.testTitle.length > 20 ? test.testTitle.slice(0, 20) + "…" : test.testTitle}
                                 />

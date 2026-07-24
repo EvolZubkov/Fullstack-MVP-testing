@@ -23,7 +23,6 @@ const ALLOWED: Record<string, string> = {
   "features/tests/editor/sections/color-format.ts": "утилита конвертации цвета",
   "features/tests/editor/sections/design-section.tsx": "#000000 — значение по умолчанию пипетки",
   // ↓ вычёркиваются по мере выполнения плана PLAN_DS_COLOR_COMPLIANCE
-  "pages/author/analytics.tsx": "задача 4",
 };
 
 function walk(dir: string, out: string[] = []): string[] {

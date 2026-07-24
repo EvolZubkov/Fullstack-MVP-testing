@@ -32,8 +32,29 @@
   --tb-input-w-sm: 140px;
   --tb-accent-rail-w: 2px;
   --tb-space-half:   2px;
+
   --wf-border-w: 1px;   /* fallback for portal-rendered components outside .tb-tests-list */
   /* gate-skip-end */
+}
+
+/* ── Categorical series for charts ──────────────────────────────────────
+   The DS ships no --ou-chart* scale, so the set is assembled from its semantic
+   hues: distinguishable neighbours, and every entry follows the theme because
+   each one is a DS token.
+
+   Declared on `.ou` (the class the theme provider puts on <body>), NOT on
+   :root — the semantic tokens live in the `.ou, .ou--light` / `.ou--dark`
+   blocks, so a :root declaration referenced variables that do not exist there
+   and every series silently collapsed to the inherited text colour. */
+.ou {
+  --tb-chart-1: var(--ou-accent-default);
+  --tb-chart-2: var(--ou-info-default);
+  --tb-chart-3: var(--ou-success-default);
+  --tb-chart-4: var(--ou-warning-default);
+  --tb-chart-5: var(--ou-error-default);
+  --tb-chart-6: var(--ou-accent-hover);
+  --tb-chart-7: var(--ou-info-700);
+  --tb-chart-8: var(--ou-success-700);
 }
 
 /* ── Drawer body scroll contract ────────────────────────────────────────
@@ -2014,6 +2035,13 @@
   flex-direction: column;
   min-height: 0;
   flex: 1;
+}
+/* The editor's preview rail is FLAT: every row is a screen, so rows keep the
+   group indent (--ou-space-6) instead of the admin rail's top-level alignment,
+   where a `--top` row deliberately lines up with the group headers around it.
+   Without this the list sat against the rail's left edge. */
+.tpl-preview-modal .tpl-check-rail__var--top {
+  padding-left: var(--ou-space-6);
 }
 .tpl-preview-frame {
   flex: 1;
