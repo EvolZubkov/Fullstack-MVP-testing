@@ -1,5 +1,5 @@
 import type { Test, TestSection, Topic, Question, TopicCourse, TopicEvent, PassRule, AdaptiveTopicSettings, AdaptiveLevel, AdaptiveLevelLink, ContentPage, ResultVariable, Scale, QuestionMeasurement, RetakePolicy, TestQuestionScoring } from "@shared/schema";
-import { sanitizeHtml } from "../../utils/html-sanitizer";
+import { sanitizeHtml, placeholderScope } from "../../utils/html-sanitizer";
 import { findEligibilityPlugin, findEligibilityConfig } from "@shared/eligibility/registry";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 import { buildTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
@@ -347,10 +347,15 @@ export function buildTestJson(data: ExportData): string {
     test.contentPages = data.contentPages.map((page) => {
       const rawValues = (page.valuesJson as { values?: Record<string, unknown>; placeholderStyles?: Record<string, unknown> }) ?? {};
       const values = rawValues.values ?? {};
-      // Re-sanitize all string values that may contain HTML
+      // Re-sanitize all string values that may contain HTML. Author CSS is also
+      // confined to the placeholder region it renders into: inside the package the
+      // markup lands in the REAL document, where a pasted `body { … }` rule would
+      // restyle the whole player (a fixed-stage template collapses to a blank
+      // screen). Re-scoping on every build also repairs pages saved before the fix;
+      // it is idempotent, so already-scoped values pass through unchanged.
       const sanitizedValues: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(values)) {
-        sanitizedValues[k] = typeof v === "string" ? sanitizeHtml(v) : v;
+        sanitizedValues[k] = typeof v === "string" ? sanitizeHtml(v, { scope: placeholderScope(k) }) : v;
       }
       // PRD-22 FR-30: page SETTINGS travel with the page. Without this the LMS
       // package loses the sequence identifier (no navigation dots) and the media

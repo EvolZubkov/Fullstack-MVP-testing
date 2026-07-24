@@ -317,6 +317,51 @@ describe("buildTestJson — standard mode", () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Author CSS in content pages. A pasted `<style>` is inert in the web host
+// (Shadow DOM) but styles the real document inside the package — a `body` rule
+// collapsed the fixed stage to a blank screen. The bake re-sanitises every page,
+// so scoping here also repairs pages that were saved before the fix.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("buildTestJson — author CSS is confined to the page block", () => {
+  const pageWith = (body: string): any => ({
+    id: "cp-1",
+    topicId: null,
+    position: "before_all",
+    mode: "template",
+    type: "info",
+    kind: "info",
+    templateKey: "info.text-lead",
+    sortOrder: 0,
+    valuesJson: { values: { body } },
+    settingsJson: {},
+  });
+  const bakePage = (body: string) =>
+    JSON.parse(buildTestJson({ ...exportData, contentPages: [pageWith(body)] } as any)).contentPages[0];
+
+  it("rewrites a document-level rule so it cannot reach the package body", () => {
+    const page = bakePage('<style>body { display: flex; min-height: 100vh; }</style><div class="card">x</div>');
+    expect(page.values.body).not.toMatch(/<style[^>]*>\s*body \{/);
+    expect(page.values.body).toContain('[data-placeholder="body"] { display: flex; min-height: 100vh; }');
+  });
+
+  it("stops the author's .btn from restyling the template's navigation button", () => {
+    const page = bakePage("<style>.btn { border-radius: 30px; }</style>");
+    expect(page.values.body).toContain('[data-placeholder="body"] .btn { border-radius: 30px; }');
+  });
+
+  it("leaves markup without CSS untouched", () => {
+    const page = bakePage("<p>Просто текст</p>");
+    expect(page.values.body).toBe("<p>Просто текст</p>");
+  });
+
+  it("does not stack prefixes when the page is packaged twice", () => {
+    const once = bakePage("<style>.card { color: red; }</style>").values.body;
+    const twice = bakePage(once).values.body;
+    expect(twice).toBe(once);
+  });
+});
+
 describe("buildTestJson — flowPolicy export (PRD-4 v1.1)", () => {
   it("defaults to linear_flat when flowPolicyJson is missing", () => {
     const data = JSON.parse(buildTestJson(exportData));

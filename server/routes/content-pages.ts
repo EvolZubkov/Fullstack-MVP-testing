@@ -26,6 +26,7 @@ import { logger } from "../logger";
 import {
   sanitizeHtmlWithDiagnostics,
   sanitizeValuesWithDiagnostics,
+  placeholderScope,
   type SanitizeDiagnostics,
 } from "../utils/html-sanitizer";
 import { encodeJsonForScript, injectIntoPreview } from "../scorm/preview-embed";
@@ -114,6 +115,10 @@ function draftTemplateIdFrom(req: { query: Record<string, unknown> }): string | 
  * Sanitises arbitrary string values without a template manifest (used for
  * mode='custom' / free-form payloads). Aggregates diagnostics so the PUT
  * route can surface them to the UI alongside the cleaned payload.
+ *
+ * Author CSS is confined to the region the value renders into
+ * ({@link placeholderScope}) — an `html`-mode page renders as a whole into
+ * `.content-page--html`, so its `<style>` can no longer restyle the player.
  */
 function sanitizeAllStringValuesWithDiagnostics(
   values: Record<string, unknown> | undefined,
@@ -122,7 +127,9 @@ function sanitizeAllStringValuesWithDiagnostics(
   const diagnostics: SanitizeDiagnostics = {};
   for (const [key, value] of Object.entries(values ?? {})) {
     if (typeof value === "string") {
-      const { value: cleaned, removed } = sanitizeHtmlWithDiagnostics(value);
+      const { value: cleaned, removed } = sanitizeHtmlWithDiagnostics(value, {
+        scope: placeholderScope(key),
+      });
       result[key] = cleaned;
       if (removed.length > 0) diagnostics[key] = removed;
     } else {
