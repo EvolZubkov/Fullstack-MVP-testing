@@ -110,16 +110,15 @@ function render() {
     renderStandardQuestion(qData, current, total, progress);
 }
 
-/** Feedback block HTML shown under a question once the answer is accepted. */
+/** Feedback block HTML shown under a question once the answer is accepted.
+ *  Emits the shared DS `.ou-banner` (revision «Стандартный»), so standard and adaptive
+ *  answer-check verdicts share one component. */
 function buildQuestionFeedbackHtml(q) {
     var answer = state.answers[q.id];
     var scoreRatio = checkAnswer(q, answer);
     var isCorrect = scoreRatio === 1;
-    var statusColor = isCorrect ? '#16a34a' : '#dc2626';
-    var statusText = isCorrect ? 'Правильно!' : (scoreRatio > 0 ? 'Частично правильно' : 'Неправильно');
-
-    var html = '<div class="feedback-block" style="margin-top:16px;padding:12px;border-radius:8px;background:' + (isCorrect ? '#dcfce7' : '#fee2e2') + ';border:1px solid ' + statusColor + ';">';
-    html += '<div style="font-weight:600;color:' + statusColor + ';margin-bottom:4px;">' + statusText + '</div>';
+    var tone = isCorrect ? 'success' : (scoreRatio > 0 ? 'warning' : 'error');
+    var statusText = isCorrect ? 'Правильно!' : (scoreRatio > 0 ? 'Частично правильно' : 'Неверно');
 
     var feedbackText = null;
     if (q.feedbackMode === 'conditional') {
@@ -127,11 +126,10 @@ function buildQuestionFeedbackHtml(q) {
     } else {
         feedbackText = q.feedback;
     }
-    if (feedbackText) {
-        html += '<div style="color:#333;font-size:14px;">' + escapeHtml(feedbackText) + '</div>';
-    }
-    html += '</div>';
-    return html;
+
+    var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    if (!TB || !TB.feedbackBanner) return '';
+    return TB.feedbackBanner(tone, statusText, feedbackText ? TB.feedbackDesc(feedbackText) : '');
 }
 
 // PRD-19 (Block D): true when the current scope has ≥1 skipped question — drives

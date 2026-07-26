@@ -9,6 +9,7 @@ import { TemplateQuestionScreen } from "./template-question-screen";
 import { fmtIsoDateHuman, daysUntilIsoDate } from "./cooldown-format";
 import { hasAnswer, rankingDeliveryOrder } from "./answer-gate";
 import { buildStartState } from "@shared/template/start-state";
+import { feedbackBanner, feedbackDesc } from "@shared/template/feedback-banner";
 import { buildQuestionProgress } from "@shared/template/question-progress-context";
 import { buildReviewContext } from "@shared/template/review-context";
 import { buildSectionResultContext, buildSectionIntroContext } from "@shared/template/result-context";
@@ -194,30 +195,21 @@ function escSlot(s: unknown): string {
  */
 function adaptiveFeedbackHtml(question: any, result: any): string {
   const ok = !!result.isCorrect;
-  // The block is injected INTO the template screen, so its verdict colours belong
-  // to the template palette; DS tokens are the fallback when the template
-  // declares none. Literals ignored both and clashed on a dark template.
-  const color = ok
-    ? "hsl(var(--success, var(--ou-success-default)))"
-    : "hsl(var(--destructive, var(--ou-error-default)))";
-  const bg = ok
-    ? "hsl(var(--success, var(--ou-success-default)) / 0.12)"
-    : "hsl(var(--destructive, var(--ou-error-default)) / 0.12)";
-  let html = `<div class="feedback-block" style="margin-top:16px;padding:12px;border-radius:8px;background:${bg};border:1px solid ${color};">`;
-  html += `<div style="font-weight:600;color:${color};margin-bottom:4px;">${ok ? "Правильно!" : "Неправильно"}</div>`;
+  // Revision «Стандартный»: the verdict is the shared DS `.ou-banner` — the SAME
+  // component and semantic success/error tokens the SCORM adaptive block now emits,
+  // so the web and package answer-check feedback cannot drift.
+  let body = "";
   const opts = (question.dataJson as any)?.options as unknown[] | undefined;
   if (!ok && result.correctAnswer && opts) {
     if (question.type === "single" && typeof result.correctAnswer.correctIndex === "number") {
-      html += `<div style="font-size:14px;margin-bottom:2px;"><b>Правильный ответ:</b> ${escSlot(opts[result.correctAnswer.correctIndex])}</div>`;
+      body += `<div class="ou-banner__desc"><b>Правильный ответ:</b> ${escSlot(opts[result.correctAnswer.correctIndex])}</div>`;
     } else if (question.type === "multiple" && Array.isArray(result.correctAnswer.correctIndices)) {
       const txt = result.correctAnswer.correctIndices.map((i: number) => opts[i]).join(", ");
-      html += `<div style="font-size:14px;margin-bottom:2px;"><b>Правильный ответ:</b> ${escSlot(txt)}</div>`;
+      body += `<div class="ou-banner__desc"><b>Правильный ответ:</b> ${escSlot(txt)}</div>`;
     }
   }
-  if (result.feedback)
-    html += `<div style="color:hsl(var(--muted-foreground, var(--ou-fg-muted)));font-size:14px;">${escSlot(result.feedback)}</div>`;
-  html += "</div>";
-  return html;
+  if (result.feedback) body += feedbackDesc(result.feedback);
+  return feedbackBanner(ok ? "success" : "error", ok ? "Правильно!" : "Неверно", body);
 }
 
 export default function TakeTestPage() {

@@ -45,17 +45,15 @@ function ensureAdaptiveShuffleMapping(q) {
   }
 }
 
-/** Adaptive feedback block HTML (uses lastAdaptiveResult; binary, no partial credit). */
+/** Adaptive feedback block HTML (uses lastAdaptiveResult; binary, no partial credit).
+ *  Emits the shared DS `.ou-banner` — same component as the standard mode. */
 function buildAdaptiveFeedbackHtml(q) {
   var isCorrect = state.lastAdaptiveResult.isCorrect;
-  var statusColor = isCorrect ? '#16a34a' : '#dc2626';
-  var statusText = isCorrect ? 'Правильно!' : 'Неправильно';
-  var html = '<div class="feedback-block" style="margin-top:16px;padding:12px;border-radius:8px;background:' + (isCorrect ? '#dcfce7' : '#fee2e2') + ';border:1px solid ' + statusColor + ';">';
-  html += '<div style="font-weight:600;color:' + statusColor + ';margin-bottom:4px;">' + statusText + '</div>';
+  var statusText = isCorrect ? 'Правильно!' : 'Неверно';
   var feedbackText = (q.feedbackMode === 'conditional') ? (isCorrect ? q.feedbackCorrect : q.feedbackIncorrect) : q.feedback;
-  if (feedbackText) html += '<div style="color:#333;font-size:14px;">' + escapeHtml(feedbackText) + '</div>';
-  html += '</div>';
-  return html;
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (!TB || !TB.feedbackBanner) return '';
+  return TB.feedbackBanner(isCorrect ? 'success' : 'error', statusText, feedbackText ? TB.feedbackDesc(feedbackText) : '');
 }
 
 /** Adaptive navigation HTML (Принять / Далее), onclick-wired. */

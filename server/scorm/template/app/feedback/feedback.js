@@ -223,28 +223,26 @@ function highlightRanking(q, answer) {
 
 
 function insertFeedback(q, isCorrect, scoreRatio) {
-  // Проверяем что feedback ещё не вставлен
-  var existing = document.querySelector('.feedback-block');
-  if (existing) return;
-  
-  var statusColor = isCorrect ? '#16a34a' : '#dc2626';
-  var statusBg = isCorrect ? '#dcfce7' : '#fee2e2';
-  var statusText = isCorrect ? 'Правильно!' : (scoreRatio > 0 ? 'Частично правильно' : 'Неправильно');
-  
+  // Already inserted? The DS banner keeps `feedback-block` as its marker class so
+  // this dedup hook (and any teardown that clears `.feedback-block`) still matches.
+  if (document.querySelector('.feedback-block')) return;
+
+  // Verdict → DS banner tone (revision «Стандартный»: the answer-check feedback is
+  // the shared `.ou-banner`, not inline-styled chrome). Partial credit reads as a
+  // warning, a full miss as an error.
+  var tone = isCorrect ? 'success' : (scoreRatio > 0 ? 'warning' : 'error');
+  var statusText = isCorrect ? 'Правильно!' : (scoreRatio > 0 ? 'Частично правильно' : 'Неверно');
+
   var feedbackText = null;
   if (q.feedbackMode === 'conditional') {
     feedbackText = isCorrect ? q.feedbackCorrect : q.feedbackIncorrect;
   } else {
     feedbackText = q.feedback;
   }
-  
-  var html = '<div class="feedback-block" style="margin-top:16px;padding:12px;border-radius:8px;background:' + statusBg + ';border:1px solid ' + statusColor + ';">';
-  html += '<div style="font-weight:600;color:' + statusColor + ';margin-bottom:4px;">' + statusText + '</div>';
-  
-  if (feedbackText) {
-    html += '<div style="color:#333;font-size:14px;">' + escapeHtml(feedbackText) + '</div>';
-  }
-  html += '</div>';
+
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (!TB || !TB.feedbackBanner) return;
+  var html = TB.feedbackBanner(tone, statusText, feedbackText ? TB.feedbackDesc(feedbackText) : '');
 
   // Prefer the template's dedicated feedback slot (question.html); fall back to
   // appending after the card (hardcoded chrome / older layouts).
