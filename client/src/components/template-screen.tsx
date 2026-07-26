@@ -139,7 +139,7 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
       // meant for the SCORM document; neutralise it on the embedded :host below.
       style.textContent =
         ":host{display:block;background:hsl(var(--background));color:hsl(var(--foreground));" +
-        "font-family:var(--font-sans);line-height:1.55;min-height:100%;padding:0;}\n" +
+        "font-family:var(--font-sans);line-height:1.55;height:100%;padding:0;}\n" +
         // `:root[data-theme="dark"]` must become `:host([data-theme="dark"])`, not
         // `:host[...]` — the suffix form is invalid on a shadow host and the browser
         // drops the whole rule, which is how a themed template lost its dark palette

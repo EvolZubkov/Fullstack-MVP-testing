@@ -17,6 +17,19 @@
   --shadow: var(--ou-shadow-lg);
 }
 
+/* ── Layout foundation (was base.css) ────────────────────────────────
+   The scene fills the package window: html / body / .container / the #app mount
+   carry a definite height so `.tb-scene { height: 100% }` resolves. Without it the
+   scene collapses to its content and the footer rides up under empty space. */
+html, body { height: 100%; margin: 0; }
+body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
+.container { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.container > #app {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+}
+.container > #app > * { flex: 1 1 auto; min-height: 0; }
+#toast-root { flex: none; }
+
 /* =================================================================
    SCENE LAYER (revision «Стандартный» on ui-kit)
    A fixed header / scrolling body / fixed footer «scene». All values are
