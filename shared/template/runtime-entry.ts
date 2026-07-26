@@ -38,6 +38,7 @@ export {
   renderMultiple,
   renderRanking,
   renderMatching,
+  questionHint,
 } from "./question-interaction";
 // PRD-23: themed templates — the printer of per-theme colour overrides and the
 // pinned-palette resolver, shared with the web host so both paint the same.

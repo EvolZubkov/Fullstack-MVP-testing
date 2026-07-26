@@ -18,6 +18,7 @@ const REQUIRED = [
   "renderMultiple",
   "renderRanking",
   "renderMatching",
+  "questionHint",
 ] as const;
 
 describe("runtime-entry public surface", () => {

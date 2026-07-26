@@ -525,7 +525,11 @@ function renderStandardQuestion(qData, current, total, progress) {
         }) : null;
         var context = {
             course: { title: TEST_DATA.title },
-            state: { questionCounterLabel: counterLabel, sectionName: (qData.topicName || '') },
+            state: {
+                questionCounterLabel: counterLabel,
+                sectionName: (qData.topicName || ''),
+                questionHint: (TB && TB.questionHint) ? TB.questionHint(q.type) : ''
+            },
             design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {}
         };
         if (qProgress) context.state.questionsProgress = qProgress;

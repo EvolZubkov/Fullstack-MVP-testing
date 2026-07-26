@@ -1,38 +1,48 @@
-<div class="layout-question-wrap">
-  {{#if design.logoUrl}}<div class="tb-brand"><img class="tb-brand__logo" src="{{ design.logoUrl }}" alt=""></div>{{/if}}
-  <div class="q-header">
-    <h1 class="q-title" data-path="course.title"></h1>
-    <div class="q-timer q-timer--hidden" id="timer-display"></div>
-  </div>
-  {{#if state.questionsProgress}}
-  <div class="tb-pills" role="group" aria-label="Карта вопросов">
-    <div class="tb-pills__head">
-      <span>{{state.questionsProgress.scopeLabel}}</span>
-      <b>отвечено {{state.questionsProgress.answeredCount}} · пропущено {{state.questionsProgress.skippedCount}}</b>
+<div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow">
+      {{#if design.logoUrl}}<span class="tb-scene__logo"><img src="{{ design.logoUrl }}" alt=""></span>{{/if}}
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title"></h1>
+      </div>
+      <div class="tb-scene__timers"><div class="q-timer q-timer--hidden" id="timer-display"></div></div>
     </div>
-    <div class="tb-pills__dots">
-      {{#each state.questionsProgress.states}}
-      <button type="button" class="tb-pill {{statusClass}}" {{#unless clickable}}disabled{{/unless}} data-action="goto:{{index}}" aria-label="{{ariaLabel}}">{{number}}</button>
-      {{/each}}
+    {{#if state.questionsProgress}}
+    <div class="ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map" role="group" aria-label="Карта вопросов">
+      <div class="ou-quiz__dots">
+        {{#each state.questionsProgress.states}}
+        <button type="button" class="ou-quiz__dot {{statusClass}}" {{#unless clickable}}disabled{{/unless}} data-action="goto:{{index}}" aria-label="{{ariaLabel}}">{{number}}</button>
+        {{/each}}
+      </div>
+      <div class="ou-quiz__legend">
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-skipped"></span>пропущен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-unanswered"></span>не выдан</span>
+      </div>
+      <span class="tb-scene__mapcount">отвечено <strong>{{state.questionsProgress.answeredCount}}</strong> · пропущено {{state.questionsProgress.skippedCount}}</span>
     </div>
-    <div class="tb-pills__legend">
-      <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-answered"></span>отвечен</span>
-      <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-skipped"></span>пропущен</span>
-      <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-current"></span>текущий</span>
-      <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-locked"></span>не выдан</span>
+    {{/if}}
+    <div class="tb-scene__progress"><div class="tb-scene__progress-fill" id="q-progress-fill"></div></div>
+  </header>
+
+  <main class="tb-scene__body">
+    <div class="tb-scene__col">
+      <div class="tb-scene__meta">
+        <span data-path="state.questionCounterLabel"></span>
+        {{#if state.sectionName}}<span class="ou-tag ou-tag--neutral" data-path="state.sectionName"></span>{{/if}}
+      </div>
+      <div class="tb-scene__q">
+        <h2 class="tb-scene__qtitle" data-slot="question-text"></h2>
+        {{#if state.questionHint}}<span class="tb-scene__qhint" data-path="state.questionHint"></span>{{/if}}
+      </div>
+      <div class="tb-qbody">
+        <div class="tb-qbody__media" data-slot="question-media"></div>
+        <div class="tb-qbody__answers">
+          <div data-slot="question-interaction"></div>
+          <div data-slot="question-feedback"></div>
+        </div>
+      </div>
     </div>
-  </div>
-  {{/if}}
-  {{#unless state.questionsProgress}}
-  <div class="progress-bar">
-    <div class="progress-fill" id="q-progress-fill"></div>
-  </div>
-  {{/unless}}
-  <div class="question-card">
-    <div class="question-meta"><span data-path="state.questionCounterLabel"></span>{{#if state.sectionName}} | <span data-path="state.sectionName"></span>{{/if}}</div>
-    <div class="question-text" data-slot="question-text"></div>
-    <div data-slot="question-media"></div>
-    <div data-slot="question-interaction"></div>
-    <div data-slot="question-feedback"></div>
-  </div>
+  </main>
 </div>

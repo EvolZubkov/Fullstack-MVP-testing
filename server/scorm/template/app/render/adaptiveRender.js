@@ -95,7 +95,10 @@ function renderAdaptiveQuestionTemplated(app, qData) {
     layout: (typeof systemLayout === 'function') ? systemLayout('question') : state.templateLayouts['question'],
     context: {
       course: { title: TEST_DATA.title },
-      state: { questionCounterLabel: counter },
+      state: {
+        questionCounterLabel: counter,
+        questionHint: (window.TBTemplate && window.TBTemplate.questionHint) ? window.TBTemplate.questionHint(q.type) : ''
+      },
       design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {}
     },
     slots: slots

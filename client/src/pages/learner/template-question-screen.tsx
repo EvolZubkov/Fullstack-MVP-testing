@@ -29,6 +29,7 @@ import {
   renderMultiple,
   renderRanking,
   renderMatching,
+  questionHint,
   type ReviewCorrect,
 } from "@shared/template/question-interaction";
 
@@ -245,7 +246,7 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
         cssVars={tpl.cssVars}
         themeCss={tpl.themeCss}
         dataTheme={tpl.dataTheme}
-        context={{ course: { title: testTitle }, state: { questionCounterLabel: counterLabel, questionsProgress: props.questionsProgress }, design: tpl.design }}
+        context={{ course: { title: testTitle }, state: { questionCounterLabel: counterLabel, questionHint: questionHint(question.type), questionsProgress: props.questionsProgress }, design: tpl.design }}
         slots={slots}
         onAction={(action) => {
           // PRD-19 Block C: pill navigation works even when the question is locked

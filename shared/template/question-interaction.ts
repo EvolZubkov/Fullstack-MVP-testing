@@ -61,6 +61,22 @@ export interface ReviewCorrect {
   pairs?: { left: number; right: number }[];
 }
 
+/**
+ * The learner guidance shown as the question subtitle, by type — the SAME copy on both
+ * hosts (the wireframe places it under the question title). Empty for unknown types.
+ */
+const QUESTION_HINTS: Readonly<Record<string, string>> = {
+  single: "Выберите один вариант ответа",
+  multiple: "Выберите один или несколько вариантов",
+  ranking: "Расставьте элементы в правильном порядке — перетащите или кнопками ↑/↓",
+  matching: "Перетащите ответ к подходящей подсказке",
+};
+
+/** Guidance subtitle for a question type (empty when the type has none). */
+export function questionHint(type: string): string {
+  return QUESTION_HINTS[type] ?? "";
+}
+
 /** HTML-escape user text (same convention as {@link module:shared/template/renderers}). */
 function esc(s: unknown): string {
   return String(s)

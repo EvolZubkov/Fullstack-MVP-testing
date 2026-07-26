@@ -119,6 +119,34 @@
     style.textContent = css;
   }
 
+  /**
+   * Revision «Стандартный» on ui-kit: make `<html>` the DS theme provider — `.ou`
+   * plus the active palette class — so the vendored design system's semantic tokens
+   * (`.ou`/`.ou--dark`) resolve for every screen (rendered into a descendant #app).
+   * Mirrors the web host, which puts the same classes on its shadow root. The palette
+   * is the author's pin; a themed «Авто» follows the system; a non-themed template
+   * (the default «Стандартный», dark) resolves to dark.
+   * @param {object} design    TEST_DATA.designSettings
+   * @param {object} manifest  Template manifest (params[] + themes[])
+   */
+  function applyDsThemeClass(design, manifest) {
+    if (typeof document === "undefined") return;
+    var el = document.documentElement;
+    el.classList.add("ou");
+    var TB = root.TBTemplate;
+    var theme = (TB && typeof TB.sceneThemeAttribute === "function") ? TB.sceneThemeAttribute(design, manifest) : null;
+    if (!theme) {
+      var themed = TB && typeof TB.supportsThemes === "function" && TB.supportsThemes(manifest);
+      if (themed && typeof window !== "undefined" && window.matchMedia) {
+        theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      } else {
+        theme = "dark";
+      }
+    }
+    el.classList.remove("ou--dark", "ou--light");
+    el.classList.add(theme === "light" ? "ou--light" : "ou--dark");
+  }
+
   // ─── textFit ──────────────────────────────────────────────────────────────
 
   /**
@@ -408,6 +436,7 @@
       }
       applyCssVarsToRoot(inlineParams, manifestParams || []);
       applyThemeCss(design, mf);
+      applyDsThemeClass(design, mf);
     },
 
     /** Pure helpers exposed for unit testing. */
