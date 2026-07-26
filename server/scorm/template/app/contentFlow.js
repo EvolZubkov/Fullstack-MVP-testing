@@ -373,11 +373,23 @@
       // раздел») before returning to the router hub. finishSection → section-results
       // → advanceAfterSection() calls returnFromTopic. Strict mode returns directly.
       if (
-        TEST_DATA.allowReturnToUnanswered &&
         !(state.sectionCommitted && state.sectionCommitted[state.currentRouterTopic]) &&
+        typeof reviewIsWorthShowing === "function" &&
+        reviewIsWorthShowing(state.currentRouterTopic) &&
         typeof goToReview === "function"
       ) {
         goToReview();
+        return;
+      }
+      // Nothing to act on in the обзор: still fix the section and show its
+      // results (FR-05a) — «Продолжить» there returns to the hub. Going straight
+      // back skipped the section results the test asks to show.
+      if (
+        !(state.sectionCommitted && state.sectionCommitted[state.currentRouterTopic]) &&
+        TEST_DATA.showSectionResults &&
+        typeof finishSection === "function"
+      ) {
+        finishSection(state.currentRouterTopic, false, 0, true);
         return;
       }
       RouterFlow.returnFromTopic();
@@ -387,9 +399,10 @@
     // end-of-test обзор («Завершить тест») rather than submitting directly.
     // Strict flat submits directly (unchanged behaviour).
     if (
-      TEST_DATA.allowReturnToUnanswered &&
       TEST_DATA.answerCommitScope !== "section" &&
       state.phase !== "review" &&
+      typeof reviewIsWorthShowing === "function" &&
+      reviewIsWorthShowing(null) &&
       typeof goToReview === "function"
     ) {
       goToReview();
@@ -423,11 +436,11 @@
       : null;
     if (hasNext && nextTopic === curTopic) return false; // still inside the section
 
-    if (TEST_DATA.allowReturnToUnanswered) {
-      if (typeof goToReview === "function") { goToReview(); return true; } // flexible → обзор
+    if (typeof reviewIsWorthShowing === "function" && reviewIsWorthShowing(curTopic)) {
+      if (typeof goToReview === "function") { goToReview(); return true; } // → обзор
       return false;
     }
-    // Strict (no return): no обзор/modal, but show the computed section-results
+    // No обзор needed (nothing to act on there): show the computed section-results
     // between sections when enabled (FR-05a). The last section flows to the test
     // results (which already carries the per-topic breakdown).
     var isLast = typeof isLastSectionTopic === "function" && isLastSectionTopic(curTopic);

@@ -36,6 +36,9 @@ export { TEST_THEMES, THEME_IDS, declaredThemes, supportsThemes, isTestTheme, re
 export { buildQuestionProgress } from "./question-progress-context";
 // PRD-19 Block D: review/finish (обзор) screen builder.
 export { buildReviewContext } from "./review-context";
+// PRD-19: the ONE rule for «is the обзор worth showing at the end of the scope»,
+// shared with the web host so the two players cannot answer it differently.
+export { shouldShowReview } from "../flow/review-gate";
 // PRD-12 FR-6: the SINGLE content-page assembler (skeleton + values), so a content
 // page is built identically on both hosts.
 export {

@@ -150,6 +150,36 @@ function hasSkippedInScope() {
     return false;
 }
 
+// PRD-19: does the scope still hold a question without a committed answer — the
+// input of the SHARED обзор gate (TBTemplate.shouldShowReview). `topicId` null =
+// the whole test (flat flow).
+function hasUnansweredInScope(topicId) {
+    if (!state.flatQuestions) return false;
+    for (var i = 0; i < state.flatQuestions.length; i++) {
+        var fq = state.flatQuestions[i];
+        if (!fq || !fq.question) continue;
+        if (topicId && fq.topicId !== topicId) continue;
+        if (!state.questionStatuses || state.questionStatuses[fq.question.id] !== 'answered') return true;
+    }
+    return false;
+}
+
+// PRD-19: the shared gate — shown only while the learner can still act there
+// (return to a skipped question, or revise an answer). Otherwise the flow goes
+// straight to the section results.
+function reviewIsWorthShowing(topicId) {
+    var TB = typeof TBTemplate !== 'undefined' ? TBTemplate : null;
+    var input = {
+        allowReturnToUnanswered: TEST_DATA.allowReturnToUnanswered,
+        allowAnswerChange: TEST_DATA.allowAnswerChange,
+        hasUnanswered: hasUnansweredInScope(topicId),
+    };
+    if (TB && typeof TB.shouldShowReview === 'function') return TB.shouldShowReview(input);
+    // Bundle missing (defensive): fall back to the same rule inline.
+    if (input.allowAnswerChange) return true;
+    return input.allowReturnToUnanswered !== false && input.hasUnanswered;
+}
+
 // PRD-19 (Block D): open the обзор screen (section-finish / test-finish).
 function goToReview() {
     state.phase = 'review';
