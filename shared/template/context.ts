@@ -30,8 +30,28 @@ export interface CtxCourse {
   startPageContent?: string;
 }
 
+/** A recommended course/event link for failed-topic guidance (SCORM-extra). */
+export interface CtxRecommendation {
+  title: string;
+  url?: string;
+}
+
+/**
+ * The unified per-topic feedback composition (spec §3.2 / plan 6.1): feedback text +
+ * recommended courses + recommended events, with presence flags. The SAME shape in
+ * standard and adaptive results, so the feedback block is composed identically in both
+ * modes — feedback is a property of the test's settings, not the flow mode.
+ */
+export interface CtxTopicFeedback {
+  feedback?: string;
+  hasFeedback: boolean;
+  recommendedCourses: CtxRecommendation[];
+  recommendedEvents: CtxRecommendation[];
+  hasRecommendations: boolean;
+}
+
 /** A per-topic result row for the standard results layout (`result.topicResults[]`). */
-export interface CtxTopicResultView {
+export interface CtxTopicResultView extends CtxTopicFeedback {
   topicId?: string;
   topicName: string;
   correct: number;
@@ -45,27 +65,15 @@ export interface CtxTopicResultView {
   pointsLabel?: string;
   /** SCORM-extra: per-topic pass threshold, e.g. "Требуется: 70%". */
   requiredLabel?: string;
-  /** SCORM-extra: per-topic feedback text. */
-  topicFeedback?: string;
 }
 
 /** A per-topic row for the adaptive results layout (level-based, no score). */
-export interface CtxAdaptiveTopicView {
+export interface CtxAdaptiveTopicView extends CtxTopicFeedback {
   topicName: string;
   /** Achieved level name or "Не достигнут". */
   levelLabel: string;
   /** Core-prepared class: `is-info` (achieved) / `is-fail` (not). */
   levelClass: string;
-  feedback?: string;
-  hasFeedback: boolean;
-  hasLinks: boolean;
-  links: Array<{ title: string; url: string }>;
-}
-
-/** A recommended course/event link for failed-topic guidance (SCORM-extra). */
-export interface CtxRecommendation {
-  title: string;
-  url?: string;
 }
 
 /**

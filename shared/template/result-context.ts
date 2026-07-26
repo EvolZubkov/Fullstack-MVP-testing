@@ -34,8 +34,18 @@ function round1(n: number): number {
   return Math.round((Number(n) || 0) * 10) / 10;
 }
 
+/** Per-topic feedback composition — the SAME shape for standard and adaptive. */
+export interface TopicFeedbackInput {
+  /** Per-topic feedback text (`feedback_json.text`). */
+  feedback?: string | null;
+  /** Recommended courses/links (`feedback_json.links`). */
+  recommendedCourses?: Array<{ title: string; url?: string }> | null;
+  /** Recommended events (`feedback_json.events`). */
+  recommendedEvents?: Array<{ title: string; url?: string }> | null;
+}
+
 /** Normalized per-topic input (host adapts its own field names into this). */
-export interface TopicInput {
+export interface TopicInput extends TopicFeedbackInput {
   topicId?: string;
   topicName: string;
   correct: number;
@@ -46,8 +56,31 @@ export interface TopicInput {
   passed: boolean | null;
   /** SCORM-extra: per-topic pass threshold label, e.g. "Требуется: 70%". */
   requiredLabel?: string;
-  /** SCORM-extra: per-topic feedback. */
-  topicFeedback?: string;
+}
+
+/**
+ * The unified per-topic feedback view — `feedback` text + recommended courses/events
+ * with presence flags. Shared by standard and adaptive results so the feedback block
+ * is composed identically in both modes (spec §3.2 / plan 6.1). Feedback is a property
+ * of the test's settings, not the flow mode.
+ */
+export function buildTopicFeedbackView(t: TopicFeedbackInput): {
+  feedback?: string;
+  hasFeedback: boolean;
+  recommendedCourses: CtxRecommendation[];
+  recommendedEvents: CtxRecommendation[];
+  hasRecommendations: boolean;
+} {
+  const fb = String(t.feedback ?? "").trim();
+  const courses = (t.recommendedCourses ?? []).map((l) => ({ title: l.title, ...(l.url ? { url: l.url } : {}) }));
+  const events = (t.recommendedEvents ?? []).map((l) => ({ title: l.title, ...(l.url ? { url: l.url } : {}) }));
+  return {
+    ...(fb ? { feedback: fb } : {}),
+    hasFeedback: fb.length > 0,
+    recommendedCourses: courses,
+    recommendedEvents: events,
+    hasRecommendations: courses.length > 0 || events.length > 0,
+  };
 }
 
 /** Normalized standard result input. */
@@ -88,10 +121,11 @@ function topicView(t: TopicInput, withPoints: boolean): CtxTopicResultView {
     percent: Math.round(t.percent || 0),
     passClass: passed === true ? "is-pass" : passed === false ? "is-fail" : "",
     statusLabel: passed === true ? "Пройдено" : passed === false ? "Не пройдено" : "",
+    // Unified feedback composition (feedback + courses + events) — same as adaptive.
+    ...buildTopicFeedbackView(t),
   };
   if (withPoints) view.pointsLabel = round1(t.earnedPoints) + " / " + round1(t.possiblePoints);
   if (t.requiredLabel) view.requiredLabel = t.requiredLabel;
-  if (t.topicFeedback && String(t.topicFeedback).trim()) view.topicFeedback = t.topicFeedback;
   return view;
 }
 
@@ -239,12 +273,10 @@ export function buildSectionIntroContext(input: SectionIntroInput): {
 }
 
 /** Normalized adaptive per-topic input. */
-export interface AdaptiveTopicInput {
+export interface AdaptiveTopicInput extends TopicFeedbackInput {
   topicName: string;
   achievedLevelIndex: number | null;
   achievedLevelName?: string | null;
-  feedback?: string | null;
-  recommendedLinks?: Array<{ title: string; url: string }>;
 }
 
 /** Normalized adaptive result input. */
@@ -261,18 +293,14 @@ export interface AdaptiveResultContextOptions {
   showFinish?: boolean;
 }
 
-/** Map a normalized adaptive topic to its level-based view. */
+/** Map a normalized adaptive topic to its level-based view (unified feedback). */
 function adaptiveTopicView(t: AdaptiveTopicInput): CtxAdaptiveTopicView {
   const achieved = t.achievedLevelIndex !== null && t.achievedLevelIndex !== undefined;
-  const links = (t.recommendedLinks || []).map((l) => ({ title: l.title, url: l.url }));
   return {
     topicName: t.topicName || "",
     levelLabel: achieved ? (t.achievedLevelName as string) : "Не достигнут",
     levelClass: achieved ? "is-info" : "is-fail",
-    feedback: t.feedback || "",
-    hasFeedback: !!(t.feedback && String(t.feedback).trim()),
-    hasLinks: links.length > 0,
-    links,
+    ...buildTopicFeedbackView(t),
   };
 }
 

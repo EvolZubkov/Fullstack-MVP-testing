@@ -68,7 +68,7 @@ describe("shared buildResultContext", () => {
 
   it("SCORM opts: points row + recommendations + back action", () => {
     const { result } = sharedBuild(
-      { ...sharedInput, topicResults: [{ ...sharedInput.topicResults[0], requiredLabel: "Требуется: 70%", topicFeedback: "ок" }] },
+      { ...sharedInput, topicResults: [{ ...sharedInput.topicResults[0], requiredLabel: "Требуется: 70%", feedback: "ок" }] },
       "Тест",
       {
         withTopicPoints: true,
@@ -80,7 +80,7 @@ describe("shared buildResultContext", () => {
     const t0 = (result.topicResults as any[])[0];
     expect(t0.pointsLabel).toBe("4 / 5");
     expect(t0.requiredLabel).toBe("Требуется: 70%");
-    expect(t0.topicFeedback).toBe("ок");
+    expect(t0.feedback).toBe("ок");
     expect(result.recommendedCourses?.length).toBe(1);
     expect(result.backAction).toBe("back-to-start");
   });
@@ -94,12 +94,41 @@ describe("host parity", () => {
   });
 });
 
+describe("unified per-topic feedback (plan 6.1)", () => {
+  // Feedback is a property of the test's settings, not the flow mode: both modes must
+  // expose the SAME per-topic composition (feedback + courses + events).
+  const fb = {
+    feedback: "Повторите тему",
+    recommendedCourses: [{ title: "Курс", url: "https://e.test/c" }],
+    recommendedEvents: [{ title: "Вебинар" }],
+  };
+  const shape = (t: any) => ({
+    hasFeedback: t.hasFeedback,
+    courses: t.recommendedCourses.length,
+    events: t.recommendedEvents.length,
+    hasRec: t.hasRecommendations,
+  });
+
+  it("standard and adaptive expose feedback + courses + events per topic", () => {
+    const std = sharedBuild(
+      { ...sharedInput, topicResults: [{ ...sharedInput.topicResults[0], ...fb }] },
+      "Тест",
+    );
+    const ad = sharedAdaptive(
+      { passed: false, topicResults: [{ topicName: "T", achievedLevelIndex: 1, achievedLevelName: "Базовый", ...fb }] },
+      "Тест",
+    );
+    expect(shape((std.result.topicResults as any[])[0])).toEqual(shape((ad.result.topicResults as any[])[0]));
+    expect(shape((std.result.topicResults as any[])[0])).toEqual({ hasFeedback: true, courses: 1, events: 1, hasRec: true });
+  });
+});
+
 describe("shared buildAdaptiveResultContext", () => {
   const adaptiveInput = {
     passed: false,
     topicResults: [
-      { topicName: "Сети", achievedLevelIndex: 1, achievedLevelName: "Средний", feedback: "ок", recommendedLinks: [{ title: "L", url: "#" }] },
-      { topicName: "БД", achievedLevelIndex: null, achievedLevelName: null, feedback: "", recommendedLinks: [] },
+      { topicName: "Сети", achievedLevelIndex: 1, achievedLevelName: "Средний", feedback: "ок", recommendedCourses: [{ title: "L", url: "#" }] },
+      { topicName: "БД", achievedLevelIndex: null, achievedLevelName: null, feedback: "", recommendedCourses: [] },
     ],
   };
 
@@ -110,7 +139,7 @@ describe("shared buildAdaptiveResultContext", () => {
     expect(ts[0].levelLabel).toBe("Средний");
     expect(ts[0].levelClass).toBe("is-info");
     expect(ts[0].hasFeedback).toBe(true);
-    expect(ts[0].hasLinks).toBe(true);
+    expect(ts[0].hasRecommendations).toBe(true);
     expect(ts[1].levelLabel).toBe("Не достигнут");
     expect(ts[1].levelClass).toBe("is-fail");
     expect(result.hasScormActions).toBeUndefined();

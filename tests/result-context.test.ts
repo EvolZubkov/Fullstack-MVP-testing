@@ -138,7 +138,7 @@ const adaptiveResult = {
       achievedLevelIndex: 1,
       achievedLevelName: "Средний",
       feedback: "Ваш уровень знаний по данной теме — средний",
-      recommendedLinks: [{ title: "Курс по коммуникациям", url: "https://example.test/comm" }],
+      recommendedCourses: [{ title: "Курс по коммуникациям", url: "https://example.test/comm" }],
     },
     {
       topicId: "b",
@@ -146,7 +146,7 @@ const adaptiveResult = {
       achievedLevelIndex: null,
       achievedLevelName: null,
       feedback: "",
-      recommendedLinks: [],
+      recommendedCourses: [],
     },
   ],
 };

@@ -32,6 +32,11 @@ function toTopicInput(t: TopicResult): TopicInput {
     earnedPoints: t.earnedPoints,
     possiblePoints: t.possiblePoints,
     passed: t.passed,
+    // Per-topic feedback composition (plan 6.1): feedback + courses + events, the
+    // SAME shape adaptive uses — the shared builder renders one feedback block.
+    feedback: (t as { feedback?: string | null }).feedback ?? null,
+    recommendedCourses: t.recommendedCourses ?? [],
+    recommendedEvents: t.recommendedEvents ?? [],
   };
 }
 
@@ -91,8 +96,15 @@ export function buildAdaptiveResultContext(result: any, testTitle: string): Resu
           achievedLevelIndex: t?.achievedLevelIndex ?? null,
           achievedLevelName: t?.achievedLevelName ?? null,
           feedback: t?.feedback ?? "",
-          recommendedLinks: Array.isArray(t?.recommendedLinks)
-            ? t.recommendedLinks.map((l: any) => ({ title: l?.title ?? "", url: l?.url ?? "#" }))
+          // Unified per-topic recommendations (plan 6.1): courses (was recommendedLinks)
+          // + events, so the adaptive feedback block matches the standard one.
+          recommendedCourses: Array.isArray(t?.recommendedCourses)
+            ? t.recommendedCourses.map((l: any) => ({ title: l?.title ?? "", url: l?.url }))
+            : Array.isArray(t?.recommendedLinks)
+              ? t.recommendedLinks.map((l: any) => ({ title: l?.title ?? "", url: l?.url }))
+              : [],
+          recommendedEvents: Array.isArray(t?.recommendedEvents)
+            ? t.recommendedEvents.map((l: any) => ({ title: l?.title ?? "" }))
             : [],
         }),
       ),

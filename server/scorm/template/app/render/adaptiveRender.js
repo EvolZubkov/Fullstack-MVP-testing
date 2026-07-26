@@ -467,8 +467,10 @@ function renderAdaptiveResultsTemplated(app, result) {
         topicName: tr.topicName,
         achievedLevelIndex: (tr.achievedLevelIndex === undefined ? null : tr.achievedLevelIndex),
         achievedLevelName: tr.achievedLevelName,
+        // Unified per-topic feedback (plan 6.1): courses (was recommendedLinks) + events.
         feedback: tr.feedback,
-        recommendedLinks: tr.recommendedLinks
+        recommendedCourses: tr.recommendedCourses || tr.recommendedLinks || [],
+        recommendedEvents: tr.recommendedEvents || []
       };
     })
   };

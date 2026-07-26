@@ -18,10 +18,13 @@
       {{#if hasFeedback}}
       <div class="topic-feedback">{{feedback}}</div>
       {{/if}}
-      {{#if hasLinks}}
+      {{#if hasRecommendations}}
       <div class="topic-links">
-        {{#each links}}
+        {{#each recommendedCourses}}
         <a class="topic-link" href="{{url}}" target="_blank" rel="noopener noreferrer">{{title}}</a>
+        {{/each}}
+        {{#each recommendedEvents}}
+        <span class="topic-link topic-link--event">{{title}}</span>
         {{/each}}
       </div>
       {{/if}}
