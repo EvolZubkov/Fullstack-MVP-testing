@@ -278,7 +278,12 @@ function renderReviewScreen() {
         finishLabel: finishLabel
     });
     var context = {
-        course: { title: TEST_DATA.title },
+        course: {
+            title: TEST_DATA.title,
+            subtitle: scormCourseSubtitle(),
+            timeLimitMinutes: TEST_DATA.timeLimitMinutes || null,
+            maxAttempts: TEST_DATA.maxAttempts || null
+        },
         design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {},
         state: { questionsProgress: built.questionsProgress },
         review: built.review
@@ -287,6 +292,18 @@ function renderReviewScreen() {
     // Mount directly into #app so .tb-pad > .review-page fills the fixed stage
     // and the bottom nav anchors — mirrors renderGalleryPage (no wrapper div).
     TB.renderScreenInto(app, { layout: layout, context: context });
+    // Reveal + paint the DS timers the shared header ships hidden (same as the
+    // question screen) — the обзор is mid-test, so a running countdown shows.
+    var rvTimer = app.querySelector('#timer-display');
+    if (rvTimer && state.remainingSeconds !== null) {
+        rvTimer.classList.remove('q-timer--hidden');
+        paintTimer('timer-display', state.remainingSeconds);
+    }
+    var rvSecTimer = app.querySelector('#section-timer-display');
+    if (rvSecTimer && state.sectionTimer) {
+        rvSecTimer.classList.remove('q-timer--hidden');
+        paintTimer('section-timer-display', state.sectionTimer.remainingSeconds);
+    }
     var actionEls = app.querySelectorAll('[data-action]');
     Array.prototype.forEach.call(actionEls, function (el) {
         var a = el.getAttribute('data-action') || '';
