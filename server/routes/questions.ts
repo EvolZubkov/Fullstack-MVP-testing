@@ -14,7 +14,7 @@ import { requirePermission } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
 import { normalizeTags } from "@shared/tags";
 import { importQuestionRows } from "../services/questions-import";
-import { serializeQuestionRow, QUESTION_WIDTHS } from "../services/questions-export";
+import { serializeQuestionRow, QUESTION_HEADERS, QUESTION_WIDTHS } from "../services/questions-export";
 import { assessQuestionsRemoval, assessQuestionChange } from "../services/draw-feasibility";
 import {
   respondForbiddenContent,
@@ -473,21 +473,9 @@ router.get(
 // Canonical column order (must match the export — see спецификация формата §3).
 // T-40: «Балл» / «Цена ответа» left the bank sheet — scoring is a property of
 // the test (the test-scoped «Оценка» sheet of the workbook), not the question.
-const TEMPLATE_HEADERS = [
-  "ID",
-  "Тема",
-  "Тип вопроса",
-  "Текст вопроса",
-  "Сложность",
-  "Тексты вариантов ответа",
-  "Номера правильных ответов",
-  "Следование вариантов ответов",
-  "Обратная связь",
-  "Теги",
-  "Режим ОС",
-  "ОС при верном",
-  "ОС при неверном",
-];
+// The template's columns ARE the export's columns — a hand-kept copy of the list
+// is how a template silently lags behind the format it is supposed to seed.
+const TEMPLATE_HEADERS = QUESTION_HEADERS;
 
 router.get(
   "/template",

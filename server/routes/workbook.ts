@@ -47,6 +47,8 @@ import {
   QUOTA_WIDTHS,
   SCORING_OVERRIDE_HEADERS,
   SCORING_OVERRIDE_WIDTHS,
+  VARIANT_THRESHOLD_HEADERS,
+  VARIANT_THRESHOLD_WIDTHS,
 } from "../utils/workbook-sheets";
 
 const router = Router();
@@ -58,6 +60,7 @@ const SHEET_RESULT_VARS = "Показатели";
 const SHEET_MEASUREMENTS = "Вклады вопросов";
 const SHEET_STRUCTURE = "Структура";
 const SHEET_QUOTAS = "Квоты";
+const SHEET_VARIANT_THRESHOLDS = "Пороги вариантов";
 const SHEET_SCORING = "Оценка";
 
 /** Synthetic target id for a new-test dry-run: every DB read returns empty. */
@@ -195,9 +198,21 @@ router.get(
       const wb = new ExcelJS.Workbook();
       // «Вопросы» and «Вклады вопросов» carry a leading «Ключ строки» (local
       // alias) so measurements can reference questions created in the same file.
-      addAoaSheet(wb, SHEET_QUESTIONS, [["Ключ строки", ...QUESTION_HEADERS]], [12, ...QUESTION_WIDTHS]);
+      // «Варианты» closes the sheet, exactly as the export writes it: the column
+      // carries PRD-17 variant membership, which the importer reads. Without it
+      // an author starting from this template cannot put a question into a
+      // variant — and «Пороги вариантов» then has nothing to threshold.
+      addAoaSheet(
+        wb,
+        SHEET_QUESTIONS,
+        [["Ключ строки", ...QUESTION_HEADERS, "Варианты"]],
+        [12, ...QUESTION_WIDTHS, 25],
+      );
       addAoaSheet(wb, SHEET_STRUCTURE, [STRUCTURE_HEADERS], STRUCTURE_WIDTHS);
       addAoaSheet(wb, SHEET_QUOTAS, [QUOTA_HEADERS], QUOTA_WIDTHS);
+      // Sheet order mirrors the export (tests-workbook), so a book downloaded
+      // here and a book exported from a test read the same way.
+      addAoaSheet(wb, SHEET_VARIANT_THRESHOLDS, [VARIANT_THRESHOLD_HEADERS], VARIANT_THRESHOLD_WIDTHS);
       addAoaSheet(wb, SHEET_SCORING, [SCORING_OVERRIDE_HEADERS], SCORING_OVERRIDE_WIDTHS);
       addAoaSheet(wb, SHEET_SCALES, [SCALE_HEADERS], SCALE_WIDTHS);
       addAoaSheet(wb, SHEET_RESULT_VARS, [RESULT_VAR_HEADERS], RESULT_VAR_WIDTHS);
@@ -208,17 +223,19 @@ router.get(
         [SHEET_QUESTIONS, "Банк вопросов (глобальный). Можно импортировать отдельным файлом — целевой тест не нужен"],
         [SHEET_STRUCTURE, "Разделы теста: тема, «Вопросов в выборке», порог (Тип/Порог), обязательность. Требует целевого теста"],
         [SHEET_QUOTAS, "Квоты выдачи по тегам (PRD-11): Раздел, Тег, Количество, Режим («Ровно»/«Не менее»). Σ количеств ≤ «Вопросов в выборке» раздела"],
+        [SHEET_VARIANT_THRESHOLDS, "Пороги по вариантам (PRD-24): Раздел, Вариант, Тип порога, Порог. Заполняется только для разделов с типом порога «По вариантам» — нужен порог на КАЖДЫЙ вариант раздела. Требует целевого теста"],
         [SHEET_SCORING, "Оценка вопросов в этом тесте: Балл, Цена ответа, Сложность — переопределения теста. Пустая ячейка = переопределения нет. Требует целевого теста"],
         [SHEET_SCALES, "Шкалы теста. Требуют выбора целевого теста"],
         [SHEET_RESULT_VARS, "Показатели результата (формулы). Требуют выбора целевого теста"],
         [SHEET_MEASUREMENTS, "Вклады вопросов в шкалы. Требуют выбора целевого теста"],
         ["", ""],
         ["«Ключ строки»", "Локальный алиас вопроса в пределах файла; на него ссылаются листы «Вклады вопросов» и «Оценка»"],
-        ["«Тип порога»", "«Сумма баллов» (порог в баллах) / «Процент» / «Нет» / «Как у теста». Для сертификации — «Сумма баллов»"],
+        ["«Варианты»", "Номера вариантов темы, в которые входит вопрос (PRD-17), через «;» — например «1; 2». Пусто = вопрос вне вариантов (обычная случайная выдача)"],
+        ["«Тип порога»", "«Сумма баллов» (порог в баллах) / «Процент» / «Нет» / «Как у теста» / «По вариантам» (пороги — на листе «Пороги вариантов», ячейка «Порог» остаётся пустой). Для сертификации — «Сумма баллов»"],
         ["«Режим» квоты", "«Ровно» = ровно N вопросов с тегом; «Не менее» = не менее N (остаток добирается случайно)"],
         ["«Цена ответа»", "Грамматика PRD-10: пусто = нет переопределения; «точное» = точное совпадение; «веса: …» / «ступени: …» — частичный зачёт"],
         ["Поток", "Структура импортируется с режимом «со страницей-маршрутизатором» (router_by_topics)"],
-        ["Порядок импорта", "Вопросы → Шкалы → Вклады вопросов + Показатели → Оценка → Структура + Квоты"],
+        ["Порядок импорта", "Вопросы → Шкалы → Вклады вопросов + Показатели → Оценка → Структура + Квоты + Пороги вариантов"],
         ["Справка по колонкам", "См. лист «Справка» в шаблоне вопросов (Вопросы → Скачать шаблон)"],
       ];
       addAoaSheet(wb, "Справка", help, [22, 96]);

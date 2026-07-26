@@ -11,6 +11,8 @@ import express from "express";
 import session from "express-session";
 import ExcelJS from "exceljs";
 import { addJsonSheet, workbookToBuffer, readWorkbookFromBuffer } from "../server/utils/excel";
+import { VARIANT_THRESHOLD_HEADERS } from "../server/utils/workbook-sheets";
+import { QUESTION_HEADERS } from "../server/services/questions-export";
 
 vi.hoisted(() => {
   process.env.DATABASE_URL = "postgresql://fake/test";
@@ -223,5 +225,87 @@ describe("GET /api/workbook/template", () => {
     expect(names).toEqual(
       expect.arrayContaining(["Вопросы", "Структура", "Квоты", "Шкалы", "Показатели", "Вклады вопросов", "Справка"]),
     );
+  });
+
+  // The template is the author's starting point: a sheet the importer reads but
+  // the template omits is a feature they cannot reach without hand-crafting the
+  // book. «Пороги вариантов» (PRD-24) shipped in the export and the importer and
+  // was missing here.
+  it("несёт ВСЕ листы, которые понимает импорт", async () => {
+    const res = await request(makeApp())
+      .get("/api/workbook/template")
+      .buffer(true)
+      .parse((r: any, cb: any) => {
+        const chunks: Buffer[] = [];
+        r.on("data", (c: Buffer) => chunks.push(c));
+        r.on("end", () => cb(null, Buffer.concat(chunks)));
+      });
+
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+    const names = wb.worksheets.map((w) => w.name);
+    expect(names).toEqual([
+      "Вопросы",
+      "Структура",
+      "Квоты",
+      "Пороги вариантов",
+      "Оценка",
+      "Шкалы",
+      "Показатели",
+      "Вклады вопросов",
+      "Справка",
+    ]);
+  });
+
+  it("заголовки «Порогов вариантов» совпадают с теми, что пишет экспорт", async () => {
+    const res = await request(makeApp())
+      .get("/api/workbook/template")
+      .buffer(true)
+      .parse((r: any, cb: any) => {
+        const chunks: Buffer[] = [];
+        r.on("data", (c: Buffer) => chunks.push(c));
+        r.on("end", () => cb(null, Buffer.concat(chunks)));
+      });
+
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+    const sheet = wb.worksheets.find((w) => w.name === "Пороги вариантов");
+    const header = (sheet?.getRow(1).values as unknown[]).slice(1);
+    expect(header).toEqual(VARIANT_THRESHOLD_HEADERS);
+  });
+
+  // Variants (PRD-17) travel in a «Варианты» column of «Вопросы»; the export
+  // writes it and the import reads it. Without it in the template the author
+  // cannot assign a question to a variant — and «Пороги вариантов» has nothing
+  // to threshold.
+  it("лист «Вопросы» несёт колонку «Варианты», как в экспорте", async () => {
+    const res = await request(makeApp())
+      .get("/api/workbook/template")
+      .buffer(true)
+      .parse((r: any, cb: any) => {
+        const chunks: Buffer[] = [];
+        r.on("data", (c: Buffer) => chunks.push(c));
+        r.on("end", () => cb(null, Buffer.concat(chunks)));
+      });
+
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+    const sheet = wb.worksheets.find((w) => w.name === "Вопросы");
+    const header = (sheet?.getRow(1).values as unknown[]).slice(1);
+    expect(header).toEqual(["Ключ строки", ...QUESTION_HEADERS, "Варианты"]);
+  });
+
+  it("справка объясняет новый лист и тип порога «По вариантам»", async () => {
+    const res = await request(makeApp())
+      .get("/api/workbook/template")
+      .buffer(true)
+      .parse((r: any, cb: any) => {
+        const chunks: Buffer[] = [];
+        r.on("data", (c: Buffer) => chunks.push(c));
+        r.on("end", () => cb(null, Buffer.concat(chunks)));
+      });
+
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+    const help = wb.worksheets.find((w) => w.name === "Справка");
+    const text = JSON.stringify(help?.getSheetValues());
+    expect(text).toContain("Пороги вариантов");
+    expect(text).toContain("По вариантам");
   });
 });
