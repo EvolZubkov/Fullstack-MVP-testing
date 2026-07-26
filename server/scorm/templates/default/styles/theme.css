@@ -293,6 +293,31 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
 .ou-tag.is-fail { background: var(--ou-error-soft); color: var(--ou-error-on-soft); }
 .ou-tag.is-partial { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
 
+/* ── Content / gallery pages ────────────────────────────────────── */
+/* The body CENTRES its block — reading measure, balanced, no vertical stretching
+   with empty side fields (the earlier feedback). */
+.tb-content-body { display: flex; flex-direction: column; align-items: center; justify-content: safe center; }
+.tb-content { width: 100%; display: flex; flex-direction: column; gap: var(--ou-space-4); }
+.tb-content--text { max-width: 720px; }
+.tb-content--image { max-width: 1120px; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; align-items: center; }
+.tb-content--image-right { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+.tb-content__media {
+  width: 100%; aspect-ratio: 4 / 3; box-sizing: border-box;
+  border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-l); overflow: hidden;
+  background: var(--ou-bg-surface-2); display: grid; place-items: center;
+  color: var(--ou-fg-muted); font: var(--ou-text-body-s);
+}
+.tb-content__media img { width: 100%; height: 100%; object-fit: cover; }
+.tb-content__text { min-width: 0; display: flex; flex-direction: column; gap: var(--ou-space-3); }
+.tb-content__title { margin: 0; font-weight: 600; font-size: var(--tb-question-fs, 30px); line-height: 1.2; letter-spacing: -0.015em; color: var(--ou-fg-default); text-wrap: pretty; }
+.tb-content__lead { font: var(--ou-text-body-l); color: var(--ou-fg-default); }
+.tb-content__body { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
+.tb-content__lead:empty, .tb-content__body:empty { display: none; }
+/* Sequence dots (gallery). */
+.tb-dots { display: flex; align-items: center; gap: var(--ou-space-2); }
+.tb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ou-border-strong); flex: none; }
+.tb-dot.is-current { background: var(--ou-accent-default); }
+
 /* ── Review (обзор ответов) ─────────────────────────────────────── */
 .tb-review-map { width: 100%; flex-direction: column; align-items: stretch; gap: var(--ou-space-3); }
 .tb-unanswered { display: flex; flex-direction: column; gap: var(--ou-space-2); width: 100%; }

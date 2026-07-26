@@ -1,12 +1,16 @@
-<div class="layout-content-wrap">
-  <div class="card page-card">
-    <div class="page-card__text">
-      <h1 class="page-card__title" data-placeholder="title"></h1>
-      <p class="page-card__lead" data-placeholder="lead"></p>
-      <div class="page-card__body" data-placeholder="body"></div>
+<div class="tb-scene">
+  <main class="tb-scene__body tb-content-body">
+    <div class="tb-content tb-content--text">
+      <div class="tb-content__text">
+        <h2 class="tb-content__title" data-placeholder="title"></h2>
+        <p class="tb-content__lead" data-placeholder="lead"></p>
+        <div class="tb-content__body" data-placeholder="body"></div>
+      </div>
     </div>
-  </div>
-  <div class="navigation">
-    <button type="button" class="btn" data-nav="next">{{page.nextLabel}}</button>
-  </div>
+  </main>
+  <footer class="tb-scene__foot">
+    {{#if page.canGoBack}}<button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-nav="prev">Назад</button>{{/if}}
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-nav="next">{{page.nextLabel}}</button>
+  </footer>
 </div>

@@ -1,19 +1,18 @@
-<div class="layout-content-wrap gallery-page">
-  <div class="card page-card page-card--split page-card--image-right">
-    <div class="page-card__text">
-      <h1 class="page-card__title" data-placeholder="title"></h1>
-      <p class="page-card__lead" data-placeholder="lead"></p>
-      <div class="page-card__body" data-placeholder="body"></div>
+<div class="tb-scene">
+  <main class="tb-scene__body tb-content-body">
+    <div class="tb-content tb-content--image tb-content--image-right">
+      <div class="tb-content__text">
+        <h2 class="tb-content__title" data-placeholder="title"></h2>
+        <p class="tb-content__lead" data-placeholder="lead"></p>
+        <div class="tb-content__body" data-placeholder="body"></div>
+      </div>
+      <div class="tb-content__media" data-placeholder="image"></div>
     </div>
-    <div class="page-card__media" data-placeholder="image"></div>
-  </div>
-  <div class="navigation gallery-nav">
-    <div class="gallery-dots" role="group" aria-label="Навигация по страницам">
-      {{#each page.dots}}<span class="gallery-dot {{statusClass}}"></span>{{/each}}
-    </div>
-    <div class="gallery-nav__buttons">
-      {{#if page.canGoBack}}<button type="button" class="btn btn-outline" data-nav="prev">Назад</button>{{/if}}
-      <button type="button" class="btn" data-nav="next">{{page.nextLabel}}</button>
-    </div>
-  </div>
+  </main>
+  <footer class="tb-scene__foot">
+    {{#if page.canGoBack}}<button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-nav="prev">Назад</button>{{/if}}
+    {{#if page.dotsTotal}}<div class="tb-dots">{{#each page.dots}}<span class="tb-dot {{statusClass}}"></span>{{/each}}</div>{{/if}}
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-nav="next">{{page.nextLabel}}</button>
+  </footer>
 </div>
