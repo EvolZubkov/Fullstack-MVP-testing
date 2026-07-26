@@ -420,7 +420,8 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   // PRD-7 G21: default template CSS for fallback system screens. Loaded into the
   // package as `styles-default.css` and toggled active by the runtime only while a
   // fallback screen is shown (the package is one screen at a time), so it never
-  // conflicts with the active template's own screens.
+  // conflicts with the active template's own screens. The default ships a single
+  // scene stylesheet now (theme.css) — the legacy base.css was folded into it.
   const readDefaultStyle = (f: string): string => {
     try {
       return fs.readFileSync(path.join(defaultDir, "styles", f), "utf8");
@@ -428,8 +429,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
       return "";
     }
   };
-  const stylesDefaultCss =
-    fallbackLayoutKeys.length > 0 ? readDefaultStyle("theme.css") + "\n" + readDefaultStyle("base.css") : "";
+  const stylesDefaultCss = fallbackLayoutKeys.length > 0 ? readDefaultStyle("theme.css") : "";
 
   // Vendored PDF-export libraries (no CDN — the package must work offline inside the LMS).
   // html2canvas + jsPDF are shipped in the package (from server/scorm/assets/vendor/) and

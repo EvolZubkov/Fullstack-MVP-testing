@@ -120,7 +120,8 @@ describe("SCORM fallback screens (PRD-7 G21)", () => {
     expect(zip.file("template-default/manifest.json"), "default manifest bundled").toBeTruthy();
     expect(zip.file("template-default/layouts/start.html"), "default start layout bundled").toBeTruthy();
     expect(zip.file("styles-default.css"), "default CSS bundled").toBeTruthy();
-    // default's base.css is the real component CSS, so it must be non-trivial.
+    // default's theme.css is now the single component stylesheet (base.css was folded
+    // into it), so it must be non-trivial.
     expect((await zip.file("styles-default.css")!.async("string")).length).toBeGreaterThan(500);
 
     // index.html toggles in the fallback stylesheet.

@@ -32,4 +32,15 @@ describe("scene layer (theme.css)", () => {
   it("uses DS tokens only — no colour literals (#hex / rgb / rgba)", () => {
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(\s*[\d.]/);
   });
+
+  it("is the SINGLE default stylesheet — base.css is gone and its live chrome moved here", () => {
+    // Consolidation: the default template ships only theme.css now; the legacy
+    // base.css was removed and every class the runtime still emits was folded in.
+    const baseCssPath = path.resolve(__dirname, "../server/scorm/templates/default/styles/base.css");
+    expect(fs.existsSync(baseCssPath), "default base.css must not exist").toBe(false);
+    // Runtime chrome + the tested block-wall safety net now live in theme.css.
+    for (const cls of [".q-timer", ".navigation", ".progress-bar", ".renderer--ring-chart", ".retake-wall"]) {
+      expect(css, `theme.css must style ${cls}`).toContain(cls);
+    }
+  });
 });

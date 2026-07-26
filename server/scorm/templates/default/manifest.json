@@ -1015,8 +1015,7 @@
   },
   "assets": {
     "styles": [
-      "styles/theme.css",
-      "styles/base.css"
+      "styles/theme.css"
     ],
     "scripts": [
       "scripts/template.js"
