@@ -193,6 +193,23 @@ can manage files without sudo:
 sudo usermod -aG botadmins <your-username>
 ```
 
+`env/.env` is the one file whose OWNER matters: it is mounted read-only at
+`/app/.env` and read by the app, which runs as UID 1500 and belongs to neither
+`root` nor `botadmins` inside the container. It must be `1500:botadmins 0640` —
+with a root owner the read fails with `EACCES`, the entrypoint refuses to start
+and the container restarts in a loop. The deploy seals ownership after every step
+that writes the file, so a re-deploy repairs a file someone edited as root; the
+manual fix is:
+
+```bash
+sudo chown 1500:botadmins /srv/app/<project>/env/.env
+cd /srv/app/<project> && sudo docker compose up -d --force-recreate
+```
+
+Editing it in place (`nano`, `sed -i`) is safe only if the owner survives — a tool
+that writes a temp file and renames it over the original leaves a root-owned file
+behind.
+
 ## File structure
 
 ```text

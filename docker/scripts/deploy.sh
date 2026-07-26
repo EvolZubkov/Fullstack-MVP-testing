@@ -76,10 +76,25 @@ read_env() {
 }
 # Set KEY ($1)=VALUE ($2) in an env file ($3): drop any existing line, append anew.
 # Line-based (not sed) so values with / & | (URLs, random keys) need no escaping.
+#
+# The result is written THROUGH the original file (`cat >`), never moved onto it.
+# `mv` renames the temp file, so the env file became a NEW inode owned by root —
+# the app runs as UID 1500 and lost its read on a 0640 file. That is invisible on
+# production (no secrets are rewritten there) and broke every test deploy, where
+# the clone alignment below rewrites DATABASE_URL and the ENCRYPTION_* keys.
 upsert_env() {
     grep -v "^$1=" "$3" > "$3.tmp" 2>/dev/null || true
-    mv "$3.tmp" "$3"
-    printf '%s=%s\n' "$1" "$2" >> "$3"
+    printf '%s=%s\n' "$1" "$2" >> "$3.tmp"
+    cat "$3.tmp" > "$3"
+    rm -f "$3.tmp"
+}
+# Ownership+mode the secrets file must ALWAYS end up with: owned by the app UID
+# (it is bind-mounted at /app/.env and read by the app, a member of neither root
+# nor ${APP_GROUP} inside the container), group-readable for host operators, never
+# world-readable. Called after every step that writes the file.
+seal_env_file() {
+    chown "${APP_UID}":"${APP_GROUP}" "$1"
+    chmod 640 "$1"
 }
 normalize_env() { sed -i '1s/^\xef\xbb\xbf//' "$1"; sed -i 's/\r$//' "$1"; }
 
@@ -199,8 +214,7 @@ sed -i -E '/^(PORT|NODE_ENV)=/d' "${ENV_FILE}"
 # dies on "DATABASE_URL must be set" while the file sits there, perfectly valid.
 # Group ${APP_GROUP} keeps host-side operators able to edit it; 0640 keeps the
 # secrets off world-read.
-chown "${APP_UID}":"${APP_GROUP}" "${ENV_FILE}"
-chmod 640 "${ENV_FILE}"
+seal_env_file "${ENV_FILE}"
 
 # ---------------------------------------------------------------------------
 # 5. Non-secret config — the REPO is the source of truth, refreshed every deploy
@@ -342,7 +356,7 @@ if [ -n "${CLONE_FROM}" ]; then
         value="$(read_env "${key}" "${SRC_ENV}")"
         [ -n "${value}" ] && upsert_env "${key}" "${value}" "${ENV_FILE}"
     done
-    chmod 640 "${ENV_FILE}"
+    seal_env_file "${ENV_FILE}"
     ok "Secrets aligned to the clone: DATABASE_URL -> .../${DB_NAME}, ENCRYPTION_* from ${CLONE_FROM}"
 fi
 
