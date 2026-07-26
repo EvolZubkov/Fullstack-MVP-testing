@@ -64,7 +64,7 @@ describe("readResultsRenderPayload", () => {
   it("standard: builds the results.html payload with score fields", () => {
     const p = readResultsRenderPayload(DEFAULT_DIR, standardResult, "Тест");
     expect(p).not.toBeNull();
-    expect(p!.layout).toContain("results-page");
+    expect(p!.layout).toContain("tb-scene");
     const ctx = p!.context as { result: Record<string, unknown> };
     expect(ctx.result.scorePercent).toBe(80);
     expect(ctx.result.passClass).toBe("is-pass");

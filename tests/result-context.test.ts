@@ -63,17 +63,19 @@ describe("buildResultContext → render real results.html (e2e)", () => {
     expect(root.querySelector('[data-path="result.scorePercent"]')?.textContent).toBe("60");
   });
 
-  it("renders the fail branch and the per-topic rows", () => {
-    expect(root.textContent).toContain("Тест не пройден");
+  it("renders the fail verdict and the per-topic cards", () => {
+    expect(root.querySelector(".tb-scene__headtag")?.textContent).toContain("Не пройден");
     expect(root.textContent).toContain("Тема A");
     expect(root.textContent).toContain("Тема B");
-    const widths = Array.from(root.querySelectorAll("[data-bar-width]")).map((b) => b.getAttribute("data-bar-width"));
-    expect(widths).toContain("80");
-    expect(widths).toContain("40");
+    const widths = Array.from(root.querySelectorAll(".tb-topic-card__bar .ou-progress__fill")).map(
+      (b) => (b as HTMLElement).style.width,
+    );
+    expect(widths).toContain("80%");
+    expect(widths).toContain("40%");
   });
 
   it("prepares the ring offset for the score ring", () => {
-    expect(root.querySelector(".results-ring")?.getAttribute("data-ring-offset")).toBeTruthy();
+    expect(root.querySelector(".ou-ring__fill")?.getAttribute("stroke-dashoffset")).toBeTruthy();
   });
 });
 

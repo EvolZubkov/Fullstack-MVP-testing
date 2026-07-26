@@ -243,6 +243,37 @@
 /* The runtime shows ONE branch (unhides it); `hidden` must beat the flex display. */
 .tb-blocked-branch[hidden] { display: none; }
 
+/* ── Results screen ─────────────────────────────────────────────── */
+.tb-scene__col--wide { width: 100%; max-width: 1120px; }
+/* Score strip: ring + facts side by side. */
+.tb-score-strip { display: flex; align-items: center; gap: var(--ou-space-8); flex-wrap: wrap; }
+/* Per-topic cards — responsive grid. */
+.tb-topics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--ou-space-4); }
+.tb-topic-card .ou-card__body { display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: flex-start; }
+.tb-topic-card__name { font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
+.tb-topic-card__bar { width: 100%; margin-top: var(--ou-space-1); }
+.tb-topic-card__bar.is-pass .ou-progress__fill { background: var(--ou-success-default); }
+.tb-topic-card__bar.is-fail .ou-progress__fill { background: var(--ou-error-default); }
+.tb-topic-card__req { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-stat-rows { display: flex; flex-direction: column; width: 100%; }
+.tb-stat-val { font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+/* Per-topic feedback block — feedback text + recommendation chips, divided off. */
+.tb-topic-card__fb {
+  display: flex; flex-direction: column; gap: var(--ou-space-2); width: 100%;
+  margin-top: var(--ou-space-2); padding-top: var(--ou-space-3);
+  border-top: 1px solid var(--ou-border-soft);
+}
+.tb-topic-card__fb-text { font: var(--ou-text-body-s); color: var(--ou-fg-soft); }
+.tb-recs { display: flex; flex-wrap: wrap; gap: var(--ou-space-2); }
+.tb-rec {
+  display: inline-flex; align-items: center; gap: var(--ou-space-2);
+  padding: var(--ou-space-1) var(--ou-space-3);
+  border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-pill);
+  background: var(--ou-bg-elevated); font: var(--ou-text-body-s); color: var(--ou-fg-default);
+  text-decoration: none;
+}
+a.tb-rec:hover { border-color: var(--ou-accent-default); }
+
 /* ── Verdict (results / section-results) ────────────────────────── */
 /* passClass (is-pass/is-fail) drives the DS ring fill + verdict tag colour. */
 .ou-ring__fill.is-pass { stroke: var(--ou-success-default); }

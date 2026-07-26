@@ -1,96 +1,72 @@
-<div class="results-page">
-  {{#if design.logoUrl}}<div class="tb-brand"><img class="tb-brand__logo" src="{{ design.logoUrl }}" alt=""></div>{{/if}}
-  <div class="results-hero">
-    {{#if result.passed}}
-    <div class="results-hero-icon is-pass">
-      <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10"/><path d="M17 4v5a5 5 0 0 1-10 0V4"/><path d="M5 6h2"/><path d="M17 6h2"/></svg>
+<div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow">
+      {{#if design.logoUrl}}<span class="tb-scene__logo"><img src="{{ design.logoUrl }}" alt=""></span>{{/if}}
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title"></h1>
+      </div>
+      <div class="tb-scene__headtag"><span class="ou-tag {{ result.passClass }}" data-path="result.statusLabel"></span></div>
     </div>
-    <div class="results-hero-title">Поздравляем!</div>
-    <div class="results-hero-sub">Вы успешно прошли тест.</div>
-    {{/if}}
-    {{#unless result.passed}}
-    <div class="results-hero-icon is-fail">
-      <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6"/><path d="M15 9l-6 6"/></svg>
-    </div>
-    <div class="results-hero-title">Тест не пройден</div>
-    <div class="results-hero-sub">Попробуйте ещё раз.</div>
-    {{/unless}}
-  </div>
+    <div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width: {{result.scorePercent}}%"></div></div>
+  </header>
 
-  <div class="card results-main-card">
-    <div class="results-main-title" data-path="course.title"></div>
-    <div class="results-main-sub">Результаты теста</div>
+  <main class="tb-scene__body">
+    <div class="tb-scene__col tb-scene__col--wide">
+      <div class="tb-score-strip">
+        <div class="ou-ring tb-ring">
+          <svg class="ou-ring__svg" width="140" height="140" viewBox="0 0 140 140">
+            <circle class="ou-ring__track" cx="70" cy="70" r="63" stroke-width="12"></circle>
+            <circle class="ou-ring__fill {{ result.passClass }}" cx="70" cy="70" r="63" stroke-width="12" stroke-linecap="round" stroke-dasharray="395.84" stroke-dashoffset="{{ result.ringDashoffset }}"></circle>
+          </svg>
+          <div class="ou-ring__center">
+            <div class="ou-ring__value"><span data-path="result.scorePercent"></span>%</div>
+            <div class="ou-ring__label">баллы</div>
+          </div>
+        </div>
+        <div class="tb-facts">
+          <div class="tb-facts__item"><div class="tb-facts__num" data-path="result.totalQuestions"></div><div class="tb-facts__lbl">вопросов</div></div>
+          <div class="tb-facts__item"><div class="tb-facts__num"><span data-path="result.correct"></span>/<span data-path="result.totalQuestions"></span></div><div class="tb-facts__lbl">верно</div></div>
+          <div class="tb-facts__item"><div class="tb-facts__num" data-path="result.earnedPoints"></div><div class="tb-facts__lbl">баллов</div></div>
+        </div>
+      </div>
 
-    <div class="results-ring" data-ring-offset="{{ result.ringDashoffset }}" style="--ring-offset: {{ result.ringDashoffset }}">
-      <svg viewBox="0 0 140 140" width="140" height="140">
-        <circle cx="70" cy="70" r="63" class="ring-bg" stroke-width="14" fill="none"></circle>
-        <circle cx="70" cy="70" r="63" class="ring-fg {{ result.passClass }}" stroke-width="14" fill="none" stroke-linecap="round"></circle>
-      </svg>
-      <div class="results-ring-center">
-        <div class="results-ring-pct"><span data-path="result.scorePercent"></span>%</div>
-        <div class="results-ring-label">Баллы</div>
-      </div>
-    </div>
-
-    <div class="results-stats">
-      <div class="results-stat">
-        <div class="v" data-path="result.totalQuestions"></div>
-        <div class="l">Вопросов</div>
-      </div>
-      <div class="results-stat">
-        <div class="v"><span data-path="result.correct"></span>/<span data-path="result.totalQuestions"></span></div>
-        <div class="l">Верно</div>
-      </div>
-      <div class="results-stat">
-        <div class="v" data-path="result.earnedPoints"></div>
-        <div class="l">Баллов</div>
-      </div>
-      <div class="results-pill {{ result.passClass }}" data-path="result.statusLabel"></div>
-    </div>
-  </div>
-
-  {{#if result.topicResults}}
-  <div class="results-section-title">Результаты по темам</div>
-  <div class="results-topics-grid">
-    {{#each result.topicResults}}
-    <div class="card topic-card">
-      <div class="topic-head">
-        <div class="topic-name">{{topicName}}</div>
-        <div class="results-pill {{passClass}}">{{statusLabel}}</div>
-      </div>
-      <div class="topic-bar {{passClass}}" data-bar-width="{{percent}}"><div class="topic-bar-fill" style="width: {{percent}}%"></div></div>
-      <div class="topic-row">
-        <div class="k">Правильно</div>
-        <div class="val">{{correct}} / {{total}}</div>
-      </div>
-      {{#if pointsLabel}}
-      <div class="topic-row">
-        <div class="k">Баллов</div>
-        <div class="val">{{pointsLabel}}</div>
+      {{#if result.topicResults}}
+      <hr class="ou-separator ou-separator--horizontal">
+      <div class="tb-scene__q"><h3 class="tb-scene__subhead">Результаты по темам</h3></div>
+      <div class="tb-topics-grid">
+        {{#each result.topicResults}}
+        <div class="ou-card tb-topic-card">
+          <div class="ou-card__body">
+            <span class="tb-topic-card__name">{{topicName}}</span>
+            <span class="ou-tag ou-tag--s {{passClass}}">{{statusLabel}}</span>
+            <div class="ou-progress ou-progress--s tb-topic-card__bar {{passClass}}"><div class="ou-progress__track"><div class="ou-progress__fill" style="width: {{percent}}%"></div></div></div>
+            <div class="tb-stat-rows">
+              <div class="ou-stat-row ou-stat-row--compact"><div class="ou-stat-row__body"><div class="ou-stat-row__title">Правильно</div></div><span class="tb-stat-val">{{correct}} / {{total}}</span></div>
+              {{#if pointsLabel}}<div class="ou-stat-row ou-stat-row--compact"><div class="ou-stat-row__body"><div class="ou-stat-row__title">Баллов</div></div><span class="tb-stat-val">{{pointsLabel}}</span></div>{{/if}}
+            </div>
+            {{#if requiredLabel}}<span class="tb-topic-card__req">{{requiredLabel}}</span>{{/if}}
+            {{#if hasFeedback}}
+            <div class="tb-topic-card__fb">
+              <span class="tb-topic-card__fb-text">{{feedback}}</span>
+              {{#if hasRecommendations}}<div class="tb-recs">{{#each recommendedCourses}}<a class="tb-rec" href="{{url}}" target="_blank" rel="noopener noreferrer">{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class="tb-rec">{{title}}</span>{{/each}}</div>{{/if}}
+            </div>
+            {{/if}}
+            {{#unless hasFeedback}}{{#if hasRecommendations}}
+            <div class="tb-topic-card__fb">
+              <div class="tb-recs">{{#each recommendedCourses}}<a class="tb-rec" href="{{url}}" target="_blank" rel="noopener noreferrer">{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class="tb-rec">{{title}}</span>{{/each}}</div>
+            </div>
+            {{/if}}{{/unless}}
+          </div>
+        </div>
+        {{/each}}
       </div>
       {{/if}}
-      {{#if requiredLabel}}<div class="topic-required">{{requiredLabel}}</div>{{/if}}
-      {{#if hasFeedback}}<div class="topic-feedback"><div class="topic-feedback-text">{{feedback}}</div></div>{{/if}}
     </div>
-    {{/each}}
-  </div>
-  {{/if}}
+  </main>
 
-  {{#if result.recommendedCourses}}
-  <div class="results-section-title">Рекомендуемые курсы</div>
-  <div class="results-rec-list">
-    {{#each result.recommendedCourses}}<a class="results-rec-item" href="{{url}}" target="_blank" rel="noopener noreferrer">{{title}}</a>{{/each}}
-  </div>
-  {{/if}}
-  {{#if result.recommendedEvents}}
-  <div class="results-section-title">Рекомендуемые мероприятия</div>
-  <div class="results-rec-list">
-    {{#each result.recommendedEvents}}<div class="results-rec-item">{{title}}</div>{{/each}}
-  </div>
-  {{/if}}
-
-  <div class="results-actions">
-    {{#if result.backAction}}<button type="button" class="btn" data-action="{{result.backAction}}">{{result.backLabel}}</button>{{/if}}
-    {{#unless result.backAction}}<button type="button" class="btn" data-action="restart">Пройти снова</button>{{/unless}}
-  </div>
+  <footer class="tb-scene__foot">
+    <div class="tb-scene__foot-spacer"></div>
+    {{#if result.backAction}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="{{result.backAction}}">{{result.backLabel}}</button>{{/if}}
+    {{#unless result.backAction}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="restart">Пройти снова</button>{{/unless}}
+  </footer>
 </div>

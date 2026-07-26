@@ -53,16 +53,15 @@ describe("results.html — superset gating", () => {
   it("web context: restart action only, no SCORM-only blocks", () => {
     const root = render(resultsLayout, webResult);
     expect(actions(root)).toEqual(["restart"]);
-    expect(root.querySelector(".topic-required")).toBeNull();
-    expect(root.querySelector(".results-rec-list")).toBeNull();
-    // The "Баллов" STAT (main card) always shows; only the per-topic points ROW is
+    expect(root.querySelector(".tb-topic-card__req")).toBeNull();
+    expect(root.querySelector(".tb-recs")).toBeNull();
+    // The score-strip "баллов" fact always shows; only the per-topic points ROW is
     // gated — so scope the check to the topic card.
-    expect(root.querySelector(".topic-card")?.textContent).not.toContain("Баллов");
-    expect(root.querySelectorAll(".topic-card .topic-row").length).toBe(1); // "Правильно" only
-    expect(root.textContent).not.toContain("Рекомендуемые курсы");
+    expect(root.querySelector(".tb-topic-card")?.textContent).not.toContain("Баллов");
+    expect(root.querySelectorAll(".tb-topic-card .ou-stat-row").length).toBe(1); // "Правильно" only
   });
 
-  it("SCORM context: points row + threshold + feedback + recommendations + back action", () => {
+  it("SCORM context: points row + threshold + per-topic feedback + recommendations + back action", () => {
     const scorm = {
       course: { title: "Тест" },
       result: {
@@ -72,24 +71,29 @@ describe("results.html — superset gating", () => {
             ...webResult.result.topicResults[0],
             pointsLabel: "4.0 / 5.0",
             requiredLabel: "Требуется: 70%",
-            topicFeedback: "Отличный результат",
+            // Unified per-topic feedback (plan 6.1): feedback + courses + events.
+            feedback: "Отличный результат",
+            hasFeedback: true,
+            recommendedCourses: [{ title: "Курс A", url: "https://e/a" }],
+            recommendedEvents: [{ title: "Семинар B" }],
+            hasRecommendations: true,
           },
         ],
-        recommendedCourses: [{ title: "Курс A", url: "https://e/a" }],
-        recommendedEvents: [{ title: "Семинар B" }],
         backAction: "back-to-start",
         backLabel: "Вернуться к тесту",
       },
     };
     const root = render(resultsLayout, scorm);
     expect(actions(root)).toEqual(["back-to-start"]); // restart is hidden via {{#unless backAction}}
-    expect(root.querySelector(".topic-required")?.textContent).toContain("70%");
-    expect(root.querySelectorAll(".topic-card .topic-row").length).toBe(2); // "Правильно" + "Баллов"
-    expect(root.querySelector(".topic-card")?.textContent).toContain("Баллов");
+    expect(root.querySelector(".tb-topic-card__req")?.textContent).toContain("70%");
+    expect(root.querySelectorAll(".tb-topic-card .ou-stat-row").length).toBe(2); // "Правильно" + "Баллов"
+    expect(root.querySelector(".tb-topic-card")?.textContent).toContain("Баллов");
     expect(root.textContent).toContain("4.0 / 5.0");
-    expect(root.textContent).toContain("Рекомендуемые курсы");
-    expect(root.textContent).toContain("Курс A");
-    expect(root.textContent).toContain("Рекомендуемые мероприятия");
+    // Recommendations are per-topic chips now (not a result-level section).
+    expect(root.querySelector(".tb-topic-card__fb-text")?.textContent).toContain("Отличный результат");
+    const recs = [...root.querySelectorAll(".tb-topic-card .tb-rec")].map((r) => r.textContent);
+    expect(recs).toContain("Курс A");
+    expect(recs).toContain("Семинар B");
     expect(root.querySelector('[data-action="back-to-start"]')?.textContent).toBe("Вернуться к тесту");
   });
 });
