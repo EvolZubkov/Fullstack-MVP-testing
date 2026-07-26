@@ -26,6 +26,7 @@ import {
 } from "./result-context";
 import { buildTransitionContext } from "./transition-context";
 import { buildReviewContext } from "./review-context";
+import { renderSingleChoice, renderMultiple, renderRanking, renderMatching } from "./question-interaction";
 import {
   buildSequencePlacements,
   buildPageContext,
@@ -341,72 +342,30 @@ function buildRouterCards(topics: RouterTopic[]): string {
 function isRouterScreen(route: string, kind?: string): boolean {
   return route === "content.router" || route === "router" || kind === "router";
 }
-
-// Drag-handle glyphs mirror the web host (client/pages/learner/template-question-screen)
-// so the preview interaction is visually identical to the runtime.
-const RANK_GRIP =
-  '<svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">' +
-  '<path d="M2.5 4.99524H17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>' +
-  '<path d="M14.1667 9.9952H2.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>' +
-  '<path d="M2.5 14.9951H10.8333" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
-const MATCH_GRIP =
-  '<svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">' +
-  '<circle cx="7" cy="5" r="1.4"></circle><circle cx="13" cy="5" r="1.4"></circle>' +
-  '<circle cx="7" cy="10" r="1.4"></circle><circle cx="13" cy="10" r="1.4"></circle>' +
-  '<circle cx="7" cy="15" r="1.4"></circle><circle cx="13" cy="15" r="1.4"></circle></svg>';
-
 /**
- * Build interaction HTML for the `question-interaction` slot. The markup/classes
- * mirror the runtime web host (`template-question-screen.tsx`: `.option` /
- * `.ranking-board`/`.rank-item` / `.matching-board`/`.match-*`) so the preview
- * renders the real, template-styled interaction rather than a bare list. Demo
- * state only: nothing is pre-selected, and matching chips are offset by one row so
- * the preview does not reveal the correct pairing.
+ * Build interaction HTML for the `question-interaction` slot by delegating to the
+ * SHARED scene emission ({@link module:shared/template/question-interaction}) — the
+ * SAME `.ou-*` markup the runtime and web host render, so the preview matches the
+ * real screen instead of a legacy `.option`/`.matching-board` list. Demo state only:
+ * nothing is pre-selected (single = no choice, multiple = none, ranking = shuffled
+ * order, matching = every chip still in the pool), so the preview never reveals the
+ * answer key.
  */
 function buildInteraction(q: PreviewQuestion): string {
-  const opts = q.options ?? [];
+  const texts = (q.options ?? []).map((o) => o.text);
   switch (q.type) {
     case "single":
-    case "multiple": {
-      const input = q.type === "single" ? "radio" : "checkbox";
-      return opts
-        .map(
-          (o) =>
-            `<div class="option" role="button" tabindex="0">` +
-            `<input type="${input}" tabindex="-1" aria-hidden="true"><span>${esc(o.text)}</span></div>`,
-        )
-        .join("");
-    }
-    case "ranking": {
-      const items = opts
-        .map(
-          (o, pos) =>
-            `<div class="rank-item rank-draggable" data-drag="${pos}" data-drop="${pos}">` +
-            `<span class="rank-grip">${RANK_GRIP}</span>` +
-            `<span class="rank-text">${esc(o.text)}</span></div>`,
-        )
-        .join("");
-      return `<div class="ranking-board">${items}</div>`;
-    }
+      return renderSingleChoice({ type: "single", dataJson: { options: texts } }, undefined);
+    case "multiple":
+      return renderMultiple({ type: "multiple", dataJson: { options: texts } }, []);
+    case "ranking":
+      return renderRanking({ type: "ranking", dataJson: { items: texts } }, undefined);
     case "matching": {
       const pairs = q.pairs ?? [];
-      const n = pairs.length;
-      const rows = pairs
-        .map((p, i) => {
-          // Offset left chips by one row → an unsolved task, not the answer key.
-          const left = n > 1 ? pairs[(i + 1) % n].left : p.left;
-          return (
-            `<div class="matching-line">` +
-            `<div class="match-tile match-left-slot"><div class="match-chip">` +
-            `<span class="match-grip" aria-hidden="true">${MATCH_GRIP}</span>` +
-            `<span class="match-chip-text">${esc(left)}</span></div></div>` +
-            `<div class="matching-gap"></div>` +
-            `<div class="match-tile match-right-tile">${esc(p.right)}</div>` +
-            `</div>`
-          );
-        })
-        .join("");
-      return `<div class="matching-board">${rows}</div>`;
+      return renderMatching(
+        { type: "matching", dataJson: { left: pairs.map((p) => p.left), right: pairs.map((p) => p.right) } },
+        {},
+      );
     }
     default:
       return "";
