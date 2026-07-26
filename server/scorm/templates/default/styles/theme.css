@@ -108,6 +108,24 @@
 .ou-quiz__dot.is-skipped { color: var(--ou-warning-on-soft); background: var(--ou-warning-soft); border-color: var(--ou-warning-default); }
 .ou-quiz__dot.is-unanswered { background: transparent; }
 
+/* ── Document scenes (start / intro / results / content) ────────── */
+/* A comfortable reading column and the shared type scale these screens use. */
+.tb-scene__col--doc { gap: var(--ou-space-5); }
+.tb-scene__hero {
+  margin: 0; font-weight: 600; line-height: 1.2; letter-spacing: -0.015em;
+  color: var(--ou-fg-default); text-wrap: pretty;
+  font-size: var(--tb-question-fs, 32px);
+}
+.tb-scene__lead { font: var(--ou-text-body-l); color: var(--ou-fg-soft); text-wrap: pretty; }
+.tb-scene__subhead { margin: 0; font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
+.tb-scene__note { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
+.tb-scene__headtag { margin-left: auto; align-self: center; flex: none; }
+
+/* Facts strip — big number + small label, spaced (start screen). */
+.tb-facts { display: flex; flex-wrap: wrap; gap: var(--ou-space-9); }
+.tb-facts__num { font: var(--ou-text-display-s); color: var(--ou-fg-default); line-height: 1.1; }
+.tb-facts__lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); }
+
 /* ── Question body ──────────────────────────────────────────────── */
 .tb-scene__meta { display: flex; align-items: center; gap: var(--ou-space-3); font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
 .tb-scene__q { display: flex; flex-direction: column; gap: var(--ou-space-2); }
