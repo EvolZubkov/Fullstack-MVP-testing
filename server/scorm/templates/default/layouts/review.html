@@ -1,39 +1,52 @@
-<div class="results-page">
-  {{#if design.logoUrl}}<div class="tb-brand"><img class="tb-brand__logo" src="{{ design.logoUrl }}" alt=""></div>{{/if}}
-  <div class="card">
-    <div class="obzor-title">{{review.scopeLabel}}</div>
-    <div class="obzor-sub">{{review.hint}}</div>
-    {{#if state.questionsProgress}}
-    <div class="tb-pills" role="group" aria-label="Карта вопросов">
-      <div class="tb-pills__head">
-        <span>{{state.questionsProgress.scopeLabel}}</span>
-        <b>отвечено {{state.questionsProgress.answeredCount}} из {{state.questionsProgress.total}}</b>
+<div class="tb-scene">
+  <header class="tb-scene__header tb-scene__header--flush">
+    <div class="tb-scene__brandrow">
+      {{#if design.logoUrl}}<span class="tb-scene__logo"><img src="{{ design.logoUrl }}" alt=""></span>{{/if}}
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title">{{ review.scopeLabel }}</h1>
       </div>
-      <div class="tb-pills__dots">
-        {{#each state.questionsProgress.states}}
-        <button type="button" class="tb-pill {{statusClass}}" {{#unless clickable}}disabled{{/unless}} data-action="goto:{{index}}" aria-label="{{ariaLabel}}">{{number}}</button>
-        {{/each}}
+      <div class="tb-scene__timers"><div class="q-timer q-timer--hidden" id="timer-display"></div></div>
+    </div>
+  </header>
+
+  <main class="tb-scene__body">
+    <div class="tb-scene__col">
+      <div class="tb-scene__q">
+        <span class="tb-scene__qhint">{{ review.hint }}</span>
       </div>
-      <div class="tb-pills__legend">
-        <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-answered"></span>отвечен</span>
-        <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-skipped"></span>не отвечен</span>
+
+      {{#if state.questionsProgress}}
+      <div class="ou-quiz ou-quiz--circle ou-quiz--l tb-review-map" role="group" aria-label="Карта вопросов">
+        <div class="ou-quiz__dots">
+          {{#each state.questionsProgress.states}}
+          <button type="button" class="ou-quiz__dot {{statusClass}}" {{#unless clickable}}disabled{{/unless}} data-action="goto:{{index}}" aria-label="{{ariaLabel}}">{{number}}</button>
+          {{/each}}
+        </div>
+        <div class="ou-quiz__legend">
+          <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+          <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-skipped"></span>не отвечен</span>
+        </div>
       </div>
+      {{/if}}
+
+      {{#if review.unansweredCount}}
+      <div class="tb-card">
+        <span class="tb-card__head">Без ответа ({{review.unansweredCount}}) — ответьте перед завершением:</span>
+        <div class="tb-unanswered">
+          {{#each review.unanswered}}
+          <button type="button" class="tb-unanswered__row" data-action="goto:{{index}}">
+            <span class="tb-unanswered__q"><strong>Вопрос {{number}}</strong> · {{prompt}}</span>
+            <span class="tb-unanswered__go">Перейти →</span>
+          </button>
+          {{/each}}
+        </div>
+      </div>
+      {{/if}}
     </div>
-    {{/if}}
-    {{#if review.unansweredCount}}
-    <div class="tb-unanswered">
-      <div class="tb-unanswered__head">Без ответа ({{review.unansweredCount}}) — ответьте перед завершением:</div>
-      {{#each review.unanswered}}
-      <button type="button" class="tb-unanswered__row" data-action="goto:{{index}}">
-        <span><strong>Вопрос {{number}}</strong> · {{prompt}}</span>
-        <span class="tb-unanswered__go">Перейти →</span>
-      </button>
-      {{/each}}
-    </div>
-    {{/if}}
-    <div class="q-actions">
-      <span class="q-actions__spacer"></span>
-      <button type="button" class="btn" data-action="finish-review">{{review.finishLabel}}</button>
-    </div>
-  </div>
+  </main>
+
+  <footer class="tb-scene__foot">
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="finish-review">{{ review.finishLabel }}</button>
+  </footer>
 </div>

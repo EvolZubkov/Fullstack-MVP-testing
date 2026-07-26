@@ -50,6 +50,9 @@
   overflow: auto;
   padding: 24px;
 }
+/* A header with no progress bar needs its own bottom padding (the bar normally
+   sits flush on the bottom edge). */
+.tb-scene__header--flush { padding-bottom: var(--ou-space-4); }
 /* Reading column: comfortable measure, fills the body height so answers can
    stretch. Widens to full on narrow viewports. */
 .tb-scene__col {
@@ -215,3 +218,18 @@
 /* ── Matching scene ─────────────────────────────────────────────── */
 .tb-scene .ou-match { width: 100%; row-gap: var(--ou-space-2); }
 .ou-match__placeholder { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* ── Review (обзор ответов) ─────────────────────────────────────── */
+.tb-review-map { width: 100%; flex-direction: column; align-items: stretch; gap: var(--ou-space-3); }
+.tb-unanswered { display: flex; flex-direction: column; gap: var(--ou-space-2); width: 100%; }
+.tb-unanswered__row {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-3);
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+  font: var(--ou-text-body-m); text-align: left; cursor: pointer;
+  transition: border-color var(--ou-motion-fast), background var(--ou-motion-fast);
+}
+.tb-unanswered__row:hover { border-color: var(--ou-border-default); background: var(--ou-bg-hover); }
+.tb-unanswered__q { min-width: 0; }
+.tb-unanswered__go { color: var(--ou-accent-default); flex: none; font: var(--ou-text-body-s); }
