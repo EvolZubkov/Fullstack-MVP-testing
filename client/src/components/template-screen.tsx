@@ -122,7 +122,13 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
     }
     const shadow = shadowRef.current;
     // Wipe the previous render's nodes but KEEP the persistent DS stylesheet.
-    shadow.querySelectorAll(":scope > :not([data-tb-ds])").forEach((n) => n.remove());
+    // NB: `querySelectorAll(":scope > …")` matches NOTHING on a ShadowRoot (the
+    // `:scope` combinator has no scoping element on a DocumentFragment), so the wipe
+    // must iterate the children directly — otherwise every re-render appends another
+    // scene copy and leaks a stylesheet (duplicate scenes stacking on the web host).
+    for (const n of [...shadow.children]) {
+      if (!n.hasAttribute("data-tb-ds")) n.remove();
+    }
     if (css) {
       const style = document.createElement("style");
       // Template CSS targets :root / body (light DOM). Inside the shadow root those

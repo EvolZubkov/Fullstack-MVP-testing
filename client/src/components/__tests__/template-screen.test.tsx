@@ -30,6 +30,24 @@ describe("TemplateScreen", () => {
     cleanup();
   });
 
+  it("replaces the previous render on re-render — no scene accumulation", () => {
+    // Regression: the take-test host builds a fresh context object per render, so the
+    // mount effect re-runs; the per-render wipe MUST clear the prior scene. A wipe via
+    // `querySelectorAll(":scope > …")` matches NOTHING on a ShadowRoot, so the old
+    // wipe removed nothing and every re-render stacked another scene (duplicated screens
+    // on the live web host). jsdom reproduces the `:scope`-on-ShadowRoot behaviour.
+    const layout = '<div class="tb-scene"><span data-path="course.title"></span></div>';
+    const { container, rerender } = render(<TemplateScreen layout={layout} context={{ course: { title: "A" } }} />);
+    rerender(<TemplateScreen layout={layout} context={{ course: { title: "B" } }} />);
+    rerender(<TemplateScreen layout={layout} context={{ course: { title: "C" } }} />);
+    const shadow = shadowOf(container);
+    expect(shadow.querySelectorAll(".tb-scene")).toHaveLength(1);
+    expect(shadow.querySelector(".tb-scene span")?.textContent).toBe("C");
+    // The persistent DS stylesheet survives the wipe — exactly one, never duplicated.
+    expect(shadow.querySelectorAll("style[data-tb-ds]")).toHaveLength(1);
+    cleanup();
+  });
+
   it("injects template CSS into the shadow root (isolated from the app)", () => {
     const { container } = render(<TemplateScreen layout="<div>x</div>" context={{}} css=".r{color:red}" />);
     const shadow = shadowOf(container);
