@@ -23,11 +23,17 @@
  *
  * Pure/framework-free — no DOM, no Node — safe to bundle into the SCORM runtime.
  */
+import { normalizePool } from "./dnd/matching-model";
 
 /** Question shape this module reads (a subset of the shared `Question`). */
 export interface InteractionQuestion {
   type: string;
-  dataJson?: { options?: unknown[] } | null;
+  dataJson?: {
+    options?: unknown[];
+    items?: unknown[];
+    left?: unknown[];
+    right?: unknown[];
+  } | null;
 }
 
 /**
@@ -37,6 +43,8 @@ export interface InteractionQuestion {
 export interface ReviewCorrect {
   correctIndex?: number;
   correctIndices?: number[];
+  correctOrder?: number[];
+  pairs?: { left: number; right: number }[];
 }
 
 /** HTML-escape user text (same convention as {@link module:shared/template/renderers}). */
@@ -155,4 +163,142 @@ export function renderMultiple(
   review?: ReviewCorrect,
 ): string {
   return renderChoice(question, answer, shuffleMapping, review, true);
+}
+
+// ─── Ranking ─────────────────────────────────────────────────────────────────
+
+/** Six-dot drag grip (ranking rows). */
+const RANK_GRIP =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">' +
+  '<path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"></path></svg>';
+const CHEVRON_UP =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"></path></svg>';
+const CHEVRON_DOWN =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>';
+
+/** Current ranking order: the answer if complete, else the shuffle/identity order. */
+function rankingOrder(count: number, answer: unknown, shuffleMapping?: number[]): number[] {
+  if (Array.isArray(answer) && answer.length === count) return answer as number[];
+  return displayOrder(count, shuffleMapping);
+}
+
+/**
+ * Ranking as `ou-rank` rows. Rows are drag-reorderable (`data-drag`/`data-drop` on the
+ * display POSITION, so the shared pointer engine reorders them; the host maps the drop to
+ * a reorder) and also carry keyboard up/down controls (`data-action="rank-up|rank-down:pos"`).
+ * `review.correctOrder` marks each position correct/incorrect.
+ */
+export function renderRanking(
+  question: InteractionQuestion,
+  answer: unknown,
+  shuffleMapping?: number[],
+  review?: ReviewCorrect,
+): string {
+  const items = question.dataJson?.items ?? [];
+  const order = rankingOrder(items.length, answer, shuffleMapping);
+  const correctOrder = review && Array.isArray(review.correctOrder) ? review.correctOrder : null;
+  const rows = order
+    .map((oi, pos) => {
+      let cls = "ou-rank__item";
+      if (correctOrder) cls += oi === correctOrder[pos] ? " correct-answer" : " incorrect-answer";
+      const up =
+        `<button type="button" class="ou-rank__btn" aria-label="Выше" data-action="rank-up:${pos}"` +
+        `${pos === 0 ? " disabled" : ""}>${CHEVRON_UP}</button>`;
+      const down =
+        `<button type="button" class="ou-rank__btn" aria-label="Ниже" data-action="rank-down:${pos}"` +
+        `${pos === order.length - 1 ? " disabled" : ""}>${CHEVRON_DOWN}</button>`;
+      return (
+        `<div class="${cls}" draggable="true" data-drag="${pos}" data-drop="${pos}">` +
+        `<span class="ou-rank__grip" aria-hidden="true">${RANK_GRIP}</span>` +
+        `<span class="ou-rank__index ou-rank__index--round ou-rank__index--accent">${pos + 1}</span>` +
+        `<span class="ou-rank__text"><span class="ou-rank__title" ` +
+        `style="font-weight:400;font-size:var(--tb-answer-fs,1.25rem);line-height:1.35;text-wrap:pretty">` +
+        `${esc(items[oi])}</span></span>` +
+        `<span class="ou-rank__controls">${up}${down}</span></div>`
+      );
+    })
+    .join("");
+  return `<div class="ou-rank">${rows}</div>`;
+}
+
+// ─── Matching ────────────────────────────────────────────────────────────────
+
+/** Left indices in display order (shuffle mapping when it matches, else identity). */
+function matchingLeftMapping(count: number, shuffleMapping?: { left: number[]; right: number[] }): number[] {
+  return shuffleMapping?.left?.length === count ? shuffleMapping.left : displayOrder(count, undefined);
+}
+
+/**
+ * Matching as an `ou-match` grid: a FIXED prompt (the right item) and a DRAGgable answer
+ * (the left item) per row (`ou-match--side-r`). The draggable chip carries `data-drag=<leftIdx>`
+ * and its cell is a drop zone — `data-drop="r<rightIdx>"` on a joined row (drop displaces),
+ * `data-drop="pool:<slot>"` on an open row (drop fills). The unplaced-chip order is the rich
+ * pool, reconciled with the answer via {@link module:shared/template/dnd/matching-model normalizePool}
+ * — the SAME model both hosts drive. `review.pairs` marks each joined row correct/incorrect.
+ */
+export function renderMatching(
+  question: InteractionQuestion,
+  answer: unknown,
+  shuffleMapping?: { left: number[]; right: number[] },
+  poolOrder: number[] = [],
+  review?: ReviewCorrect,
+): string {
+  const left = question.dataJson?.left ?? [];
+  const right = question.dataJson?.right ?? [];
+  const leftMapping = matchingLeftMapping(left.length, shuffleMapping);
+  const rightMapping = shuffleMapping?.right?.length === right.length ? shuffleMapping.right : displayOrder(right.length, undefined);
+  const pairs = (answer && typeof answer === "object" ? answer : {}) as Record<number, number>;
+  const rightToLeft: Record<number, number> = {};
+  Object.keys(pairs).forEach((k) => {
+    rightToLeft[pairs[Number(k)]] = Number(k);
+  });
+  const pool = normalizePool(poolOrder, pairs, leftMapping);
+
+  const correctRightToLeft: Record<number, number> = {};
+  if (review && Array.isArray(review.pairs)) {
+    review.pairs.forEach((p) => {
+      correctRightToLeft[p.right] = p.left;
+    });
+  }
+
+  // A draggable answer chip (left item) with grip, drop-zone hooks, and the fit font.
+  const dragCard = (li: number, dropId: string): string =>
+    `<div class="ou-match__card ou-match__card--drag" draggable="true" data-drag="${li}" data-drop="${dropId}">` +
+    `<span class="ou-match__icon" aria-hidden="true"></span>` +
+    `<span class="ou-match__card-text"><span class="ou-match__card-title" ` +
+    `style="font-size:var(--tb-answer-fs,1.125rem)">${esc(left[li])}</span></span></div>`;
+
+  let poolSlot = 0;
+  let html = '<div class="ou-match ou-match--gap-wide ou-match--side-r ou-match--icon-dots">';
+  for (const ri of rightMapping) {
+    const matchedLeft = rightToLeft[ri];
+    const isJoined = matchedLeft !== undefined;
+    let rowCls = `ou-match__row${isJoined ? " is-connected" : ""}`;
+    if (review && isJoined) {
+      rowCls += Number(matchedLeft) === Number(correctRightToLeft[ri]) ? " ou-match__row--correct" : " ou-match__row--incorrect";
+    }
+    html += `<div class="${rowCls}">`;
+    // Fixed prompt (the right item) on the left; the draggable answer on the right.
+    html +=
+      `<div class="ou-match__card ou-match__card--fixed">` +
+      `<span class="ou-match__card-text"><span class="ou-match__card-title" ` +
+      `style="font-size:var(--tb-answer-fs,1.125rem)">${esc(right[ri])}</span></span></div>`;
+    html += `<div class="ou-match__gap"></div>`;
+    if (isJoined) {
+      html += dragCard(matchedLeft, `r${ri}`);
+    } else {
+      const poolLeft = poolSlot < pool.length ? pool[poolSlot] : null;
+      if (poolLeft !== null && poolLeft !== undefined) {
+        html += dragCard(poolLeft, `pool:${poolSlot}`);
+      } else {
+        html +=
+          `<div class="ou-match__card ou-match__card--drag ou-match__card--empty" data-drop="pool:${poolSlot}">` +
+          `<span class="ou-match__placeholder">Перетащите вариант</span></div>`;
+      }
+      poolSlot++;
+    }
+    html += `</div>`;
+  }
+  html += "</div>";
+  return html;
 }
