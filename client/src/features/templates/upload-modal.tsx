@@ -8,8 +8,8 @@
  */
 import { useEffect, useState } from "react";
 import { Banner, Button, FileUploader, ModalDialog } from "@universityrt/ui-kit";
-import { AlertCircle } from "lucide-react";
-import { useUploadTemplate, type AdminTemplate, type UploadOutcome, type ValidationIssue } from "./use-admin-templates";
+import { useUploadTemplate, type AdminTemplate, type UploadOutcome } from "./use-admin-templates";
+import { IssueList } from "./issue-list";
 
 export interface UploadModalProps {
   open: boolean;
@@ -19,19 +19,6 @@ export interface UploadModalProps {
 }
 
 const MAX_MB = 20;
-
-function IssueList({ issues, tone }: { issues: ValidationIssue[]; tone: "error" | "warning" }) {
-  return (
-    <ul className="tpl-upload-result-list">
-      {issues.map((it, i) => (
-        <li className="tpl-upload-result-item" key={`${it.code}-${i}`}>
-          <AlertCircle size={16} style={{ color: `var(--ou-${tone}-default)`, flex: "0 0 auto" }} aria-hidden="true" />
-          <span>{it.message ?? it.detail ?? it.code}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 export function UploadModal({ open, onClose, onCheckNow }: UploadModalProps) {
   const upload = useUploadTemplate();

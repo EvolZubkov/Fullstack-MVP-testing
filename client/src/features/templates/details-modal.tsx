@@ -9,6 +9,7 @@ import { Button, ModalDialog, Tag } from "@universityrt/ui-kit";
 import { Eye } from "lucide-react";
 import { useTemplateDetails, type AdminTemplate } from "./use-admin-templates";
 import { statusBadge, validationBadge, smokeBadge } from "./template-status";
+import { IssueList } from "./issue-list";
 
 export interface DetailsModalProps {
   open: boolean;
@@ -50,6 +51,8 @@ export function DetailsModal({ open, onClose, template, onOpenPreview }: Details
   const status = statusBadge(template.status);
   const completeness = validationBadge(template.validationJson);
   const health = smokeBadge(template.smokeTestJson);
+  const warnings = template.validationJson?.warnings ?? [];
+  const blocking = template.validationJson?.blocking ?? [];
 
   const layoutKeys = Object.keys(template.manifest.layouts ?? {});
   const params = template.manifest.params ?? [];
@@ -103,6 +106,22 @@ export function DetailsModal({ open, onClose, template, onOpenPreview }: Details
         <dt>Используется тестами</dt>
         <dd>{usageCount == null ? "…" : usageCount}</dd>
       </dl>
+
+      {/* The «Комплектность» badge above lives for the life of the template, but
+          its reasons used to be visible only in the upload dialog — the author saw
+          a permanent warning with no way to learn what it meant. */}
+      {blocking.length > 0 && (
+        <>
+          <div className="tpl-detail-section-title">Блокирующие ошибки ({blocking.length})</div>
+          <IssueList issues={blocking} tone="error" />
+        </>
+      )}
+      {warnings.length > 0 && (
+        <>
+          <div className="tpl-detail-section-title">Замечания комплектности ({warnings.length})</div>
+          <IssueList issues={warnings} tone="warning" />
+        </>
+      )}
 
       <div className="tpl-detail-section-title">Макеты экранов ({layoutKeys.length})</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--ou-space-2)" }}>
