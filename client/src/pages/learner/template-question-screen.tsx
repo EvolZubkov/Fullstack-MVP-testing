@@ -30,8 +30,10 @@ import {
   renderRanking,
   renderMatching,
   questionHint,
+  answerTexts,
   type ReviewCorrect,
 } from "@shared/template/question-interaction";
+import { questionFont, optionFont } from "@shared/template/fit-font";
 
 function esc(s: unknown): string {
   return String(s)
@@ -246,7 +248,7 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
         cssVars={tpl.cssVars}
         themeCss={tpl.themeCss}
         dataTheme={tpl.dataTheme}
-        context={{ course: { title: testTitle }, state: { questionCounterLabel: counterLabel, questionHint: questionHint(question.type), questionsProgress: props.questionsProgress }, design: tpl.design }}
+        context={{ course: { title: testTitle }, state: { questionCounterLabel: counterLabel, questionHint: questionHint(question.type), questionFont: questionFont(question.prompt), optionFont: optionFont(answerTexts(question)), questionsProgress: props.questionsProgress }, design: tpl.design }}
         slots={slots}
         onAction={(action) => {
           // PRD-19 Block C: pill navigation works even when the question is locked

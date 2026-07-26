@@ -19,6 +19,10 @@ const REQUIRED = [
   "renderRanking",
   "renderMatching",
   "questionHint",
+  "answerTexts",
+  "fitFont",
+  "questionFont",
+  "optionFont",
 ] as const;
 
 describe("runtime-entry public surface", () => {

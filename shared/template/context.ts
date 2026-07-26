@@ -118,6 +118,12 @@ export interface CtxResult {
  */
 export interface CtxState {
   questionCounterLabel?: string;
+  /** Learner guidance subtitle by question type (both hosts, see questionHint). */
+  questionHint?: string;
+  /** Length-fit font for the question prompt, e.g. "28px" (see fit-font). */
+  questionFont?: string;
+  /** Length-fit font for the answer options, e.g. "18px" (see fit-font). */
+  optionFont?: string;
   exhausted?: boolean;
   canStart?: boolean;
   startLabel?: string;

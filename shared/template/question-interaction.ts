@@ -77,6 +77,18 @@ export function questionHint(type: string): string {
   return QUESTION_HINTS[type] ?? "";
 }
 
+/**
+ * All answer texts of a question, by type — the strings the options/items/cards show.
+ * Used to size the option font to the longest one (see fit-font). Reads the same
+ * `dataJson` collections the render functions do.
+ */
+export function answerTexts(question: InteractionQuestion): unknown[] {
+  const f = fields(question);
+  if (question.type === "ranking") return f.items;
+  if (question.type === "matching") return [...f.left, ...f.right];
+  return f.options;
+}
+
 /** HTML-escape user text (same convention as {@link module:shared/template/renderers}). */
 function esc(s: unknown): string {
   return String(s)

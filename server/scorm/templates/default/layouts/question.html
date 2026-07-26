@@ -27,7 +27,7 @@
   </header>
 
   <main class="tb-scene__body">
-    <div class="tb-scene__col">
+    <div class="tb-scene__col" style="--tb-question-fs: {{state.questionFont}}; --tb-answer-fs: {{state.optionFont}}">
       <div class="tb-scene__meta">
         <span data-path="state.questionCounterLabel"></span>
         {{#if state.sectionName}}<span class="ou-tag ou-tag--neutral" data-path="state.sectionName"></span>{{/if}}

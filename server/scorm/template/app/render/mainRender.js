@@ -528,7 +528,9 @@ function renderStandardQuestion(qData, current, total, progress) {
             state: {
                 questionCounterLabel: counterLabel,
                 sectionName: (qData.topicName || ''),
-                questionHint: (TB && TB.questionHint) ? TB.questionHint(q.type) : ''
+                questionHint: (TB && TB.questionHint) ? TB.questionHint(q.type) : '',
+                questionFont: (TB && TB.questionFont) ? TB.questionFont(q.prompt) : '',
+                optionFont: (TB && TB.optionFont && TB.answerTexts) ? TB.optionFont(TB.answerTexts({ type: q.type, dataJson: q.data })) : ''
             },
             design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {}
         };

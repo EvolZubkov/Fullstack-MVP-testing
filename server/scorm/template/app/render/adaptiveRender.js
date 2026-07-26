@@ -97,7 +97,9 @@ function renderAdaptiveQuestionTemplated(app, qData) {
       course: { title: TEST_DATA.title },
       state: {
         questionCounterLabel: counter,
-        questionHint: (window.TBTemplate && window.TBTemplate.questionHint) ? window.TBTemplate.questionHint(q.type) : ''
+        questionHint: (window.TBTemplate && window.TBTemplate.questionHint) ? window.TBTemplate.questionHint(q.type) : '',
+        questionFont: (window.TBTemplate && window.TBTemplate.questionFont) ? window.TBTemplate.questionFont(q.prompt) : '',
+        optionFont: (window.TBTemplate && window.TBTemplate.optionFont && window.TBTemplate.answerTexts) ? window.TBTemplate.optionFont(window.TBTemplate.answerTexts({ type: q.type, dataJson: q.data })) : ''
       },
       design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {}
     },
