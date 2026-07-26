@@ -12,6 +12,18 @@
 import { useCallback, useEffect, useRef } from "react";
 import { renderScreenInto, type ContentPageData } from "@shared/template/render-screen";
 import { attachPointerDnd } from "@shared/template/dnd/pointer-dnd";
+import dsCss from "@/styles/vendor/university-rt.css?raw";
+
+/**
+ * The design system, remapped for a shadow root. DS LAYER-1 primitives live on
+ * `:root`, which matches nothing inside a shadow tree, so they are moved onto
+ * `:host` (the shadow host) — exactly as the template CSS is remapped below. The
+ * `.ou`/`.ou--dark` semantic layers are class-based and inherit into the tree
+ * unchanged. Computed once: the source is a build-time constant.
+ */
+const DS_SHADOW_CSS = dsCss
+  .replace(/:root((?:\[[^\]]*\]|:not\([^)]*\))+)/g, ":host($1)")
+  .replace(/:root/g, ":host");
 
 export interface TemplateScreenProps {
   /** Layout HTML from the selected design template. */
@@ -99,9 +111,18 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
     if (!host) return;
     if (!shadowRef.current) {
       shadowRef.current = host.attachShadow({ mode: "open" });
+      // Inject the design system ONCE per shadow root, as the first (persistent)
+      // stylesheet — the scene's `.ou-*` markup resolves DS tokens/components in
+      // isolation. Parsed once here (not on every render) and kept across the
+      // per-render wipe below.
+      const ds = document.createElement("style");
+      ds.setAttribute("data-tb-ds", "");
+      ds.textContent = DS_SHADOW_CSS;
+      shadowRef.current.appendChild(ds);
     }
     const shadow = shadowRef.current;
-    shadow.innerHTML = "";
+    // Wipe the previous render's nodes but KEEP the persistent DS stylesheet.
+    shadow.querySelectorAll(":scope > :not([data-tb-ds])").forEach((n) => n.remove());
     if (css) {
       const style = document.createElement("style");
       // Template CSS targets :root / body (light DOM). Inside the shadow root those
@@ -135,6 +156,17 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
     }
     if (dataTheme) host.setAttribute("data-theme", dataTheme);
     else host.removeAttribute("data-theme");
+    // The host is the scene's DS theme provider: `.ou` + the active palette class so
+    // the DS semantic tokens (`.ou`/`.ou--dark`) resolve on it and inherit into the
+    // shadow tree. Pinned palette wins; «Авто» follows the system setting (kept in
+    // sync by the effect below). Applied imperatively (like `data-theme`) so React's
+    // className reconciliation does not drop it.
+    host.classList.add("ou");
+    const prefersDark =
+      typeof window !== "undefined" && !!window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+    const resolvedTheme = dataTheme ?? (prefersDark ? "dark" : "light");
+    host.classList.toggle("ou--dark", resolvedTheme === "dark");
+    host.classList.toggle("ou--light", resolvedTheme === "light");
     // Apply design-param overrides on the host element. Inline custom properties
     // on the host win over the template's `:host{}` (`:root`-mapped) tokens and
     // inherit into the shadow tree — so per-test branding overrides theme.css.
@@ -175,6 +207,22 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
     ro.observe(host);
     return () => ro.disconnect();
   }, [fitToWidth]);
+
+  // «Авто» palette: keep the host's DS theme class in sync with the system setting.
+  // Only when the test pins no palette (`dataTheme` undefined) — a pinned palette is
+  // fixed and set in the main effect.
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || dataTheme || typeof window === "undefined" || !window.matchMedia) return;
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      host.classList.toggle("ou--dark", mql.matches);
+      host.classList.toggle("ou--light", !mql.matches);
+    };
+    apply();
+    mql.addEventListener("change", apply);
+    return () => mql.removeEventListener("change", apply);
+  }, [dataTheme]);
 
   // Delegate clicks on [data-action] elements to the host (bound once).
   //

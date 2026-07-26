@@ -19,6 +19,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { buildResultContext, buildAdaptiveResultContext } from "./result-context";
 import { buildTemplateCssVars, type TemplateParamDef } from "@shared/template/params-css";
+import { buildPaletteBridge } from "@shared/template/palette-bridge";
 import { baseParams, buildTemplateThemeCss, sceneThemeAttribute } from "@shared/template/theme-css";
 import type { StoredDesignSettings } from "@shared/template/theme-params";
 import type { AttemptResult } from "@shared/schema";
@@ -87,6 +88,18 @@ function resolveLogoUrl(designParams: Record<string, unknown> | null | undefined
 function cssVar(css: string, name: string): string {
   const m = new RegExp(`--${name}:\\s*([^;}]+)`).exec(css);
   return m ? m[1].trim() : "";
+}
+
+/**
+ * Presence of a design custom property (e.g. `--primary`) in the resolved payload.
+ * A colour param lands in the inline `cssVars` for a plain template, or in the
+ * `themeCss` block for a PRD-23 themed one — the palette bridge must fire in either
+ * case. Returns the resolved value (a truthy marker) or `undefined` when unset, so
+ * {@link module:shared/template/palette-bridge buildPaletteBridge} overrides only the
+ * DS tokens the test actually branded (an unbranded var keeps the DS default).
+ */
+function paletteVar(name: string, cssVars: Record<string, string>, themeCss: string): string | undefined {
+  return cssVars[name] ?? (themeCss.includes(`${name}:`) ? "1" : undefined);
 }
 
 function readFileSafe(p: string): string {
@@ -220,9 +233,20 @@ export function readScreenTemplate(
     const themeCss = buildTemplateThemeCss(design, manifest, { rootSelector: ":host" });
     const dataTheme = sceneThemeAttribute(design, manifest);
     const logoUrl = resolveLogoUrl(base);
+    // Ревизия «Стандартный» на ui-kit: подмешать мост палитры DS. Он выводит
+    // акцентную рампу --ou-purple-* из --primary теста (и поверхности из
+    // --background/--card/--border), поэтому .ou-разметка ученических экранов
+    // брендируется палитрой теста. Ссылки на var(--…) — живые, значение
+    // подставляет активная тема (cssVars инлайном / themeCss на :host).
+    const bridge = buildPaletteBridge({
+      primary: paletteVar("--primary", cssVars, themeCss),
+      background: paletteVar("--background", cssVars, themeCss),
+      card: paletteVar("--card", cssVars, themeCss),
+      border: paletteVar("--border", cssVars, themeCss),
+    });
     return {
       layout,
-      css,
+      css: bridge ? `${css}\n${bridge}` : css,
       theme: { background: cssVar(css, "background"), foreground: cssVar(css, "foreground") },
       ...(Object.keys(cssVars).length > 0 ? { cssVars } : {}),
       ...(themeCss ? { themeCss } : {}),

@@ -33,7 +33,10 @@ describe("TemplateScreen", () => {
   it("injects template CSS into the shadow root (isolated from the app)", () => {
     const { container } = render(<TemplateScreen layout="<div>x</div>" context={{}} css=".r{color:red}" />);
     const shadow = shadowOf(container);
-    expect(shadow.querySelector("style")?.textContent).toContain(".r{color:red}");
+    // The design system is the first (persistent) stylesheet; the template CSS is a
+    // separate node — select it explicitly rather than by document order.
+    expect(shadow.querySelector("style[data-tb-ds]")).not.toBeNull();
+    expect(shadow.querySelector("style:not([data-tb-ds])")?.textContent).toContain(".r{color:red}");
     cleanup();
   });
 
@@ -65,7 +68,7 @@ describe("TemplateScreen — themes (PRD-23)", () => {
       ':root[data-theme="dark"] { --a: 2 }\n' +
       '@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --a: 3 } }';
     const { container } = render(<TemplateScreen layout="<div>x</div>" context={{}} css={css} />);
-    const text = shadowOf(container).querySelector("style")!.textContent!;
+    const text = shadowOf(container).querySelector("style:not([data-tb-ds])")!.textContent!;
     expect(text).toContain(':host([data-theme="dark"])');
     expect(text).toContain(':host(:not([data-theme="light"]))');
     expect(text).not.toContain(":host[");

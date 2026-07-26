@@ -27,6 +27,10 @@ export { resolveOverallRule, resolveTopicRule, checkPassRule } from "../scoring/
 export { buildStartState } from "./start-state";
 export { buildTransitionContext } from "./transition-context";
 export { buildTemplateCssVars, DEFAULT_PARAM_CSS_VARS } from "./params-css";
+// Ревизия «Стандартный» на ui-kit: мост палитры теста в токены DS — оба хоста
+// выводят DS-акцент из --primary теста, поэтому ученические экраны на .ou-разметке
+// брендируются палитрой теста одинаково в вебе и в пакете.
+export { buildPaletteBridge } from "./palette-bridge";
 // PRD-23: themed templates — the printer of per-theme colour overrides and the
 // pinned-palette resolver, shared with the web host so both paint the same.
 export { buildTemplateThemeCss, sceneThemeAttribute, baseParams, paramsOfTheme } from "./theme-css";
