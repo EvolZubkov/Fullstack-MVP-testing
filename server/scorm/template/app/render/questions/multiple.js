@@ -1,24 +1,14 @@
+/**
+ * @module render/questions/multiple
+ * @description Multiple-choice input for the SCORM runtime. Delegates to the SHARED
+ * emission (`TBTemplate.renderMultiple`) so the `.ou-*` markup matches the web host;
+ * toggling is delegated via `data-action="select:N"` (wired once in actions/answers).
+ * Review highlight applies only when the answer is locked (feedback shown).
+ *
+ * Depends on globals: window.TBTemplate.
+ */
 function renderMultipleQuestionInput(q, answer, locked, correct, shuffleMapping) {
-  var selectedArr = Array.isArray(answer) ? answer : [];
-  var correctSet = Array.isArray(correct.correctIndices) ? correct.correctIndices : [];
-  var displayOrder = shuffleMapping || q.data.options.map(function(_, i) { return i; });
-  var html = '';
-
-  displayOrder.forEach(function(originalIndex) {
-    var isSelected = selectedArr.indexOf(originalIndex) !== -1;
-    var isCorrect = correctSet.indexOf(originalIndex) !== -1;
-
-    var correctClass = '';
-    if (locked) {
-      if (isCorrect) correctClass = ' correct-answer';
-      else if (isSelected && !isCorrect) correctClass = ' incorrect-answer';
-    }
-
-    var clickHandler = locked ? '' : 'onclick="toggleMultiple(\'' + q.id + '\',' + originalIndex + ')"';
-    html += '<div class="option ' + (isSelected ? 'selected' : '') + correctClass + '" data-index="' + originalIndex + '" ' + clickHandler + ' style="' + (locked ? 'cursor:default;' : '') + '">';
-    html += '<input type="checkbox" ' + (isSelected ? 'checked' : '') + ' ' + (locked ? 'disabled' : '') + '>';
-    html += escapeHtml(q.data.options[originalIndex]) + '</div>';
-  });
-
-  return html;
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (!TB || !TB.renderMultiple) return '';
+  return TB.renderMultiple({ type: 'multiple', dataJson: q.data }, answer, shuffleMapping, locked ? correct : undefined);
 }

@@ -50,27 +50,18 @@ function confirmAnswer() {
     items: rankingItems
   });
   
-  // PRD-19 (Block B): lock the inputs only when the answer is frozen. With
-  // allowAnswerChange the learner may re-open and re-confirm, so keep the inputs
-  // live (re-selecting resets the fixation, see reopenIfCommitted in answers.js).
-  if (!TEST_DATA.allowAnswerChange) {
-    lockAnswerOptions(q);
-  }
+  // Re-render the input from the SHARED emission so the locked state and (when
+  // showCorrectAnswers) the correct/incorrect highlight are painted on the `.ou-*`
+  // markup — the render reads the committed status (isAnswerLocked) + review key.
+  // This replaces the legacy point-wise class mutation on `.option`/`.rank-item`/
+  // `.matching-line`, which no longer exist. Interaction is guarded by the delegated
+  // handlers (isAnswerLocked), so a locked answer ignores clicks even with data-action.
+  if (typeof rerenderCurrentQuestionInput === 'function') rerenderCurrentQuestionInput();
 
-  // Committed accent: mark matching/ranking boards as submitted so a drag-based
-  // answer is VISIBLY fixed right after «Отправить ответ» — parity with the
-  // persistent `.option.selected` on single/multiple. Done point-wise because this
-  // commit path updates the DOM in place (no full re-render). When showCorrectAnswers
-  // is on, the green/red correctness states below win (CSS :not()).
-  document.querySelectorAll('.matching-board, .ranking-board').forEach(function (b) {
-    b.classList.add('is-locked');
-  });
-
-  // PRD-19 (Block B): reveal correctness + feedback only when showCorrectAnswers.
-  // The explicit fixation itself works without feedback — flexible-mode
-  // «Отправить ответ» with showCorrectAnswers off just commits and advances.
+  // PRD-19 (Block B): reveal the feedback text only when showCorrectAnswers. The
+  // explicit fixation itself works without feedback — flexible-mode «Отправить ответ»
+  // with showCorrectAnswers off just commits and advances.
   if (TEST_DATA.showCorrectAnswers) {
-    highlightCorrectAnswers(q, answer);
     insertFeedback(q, isCorrect, scoreRatio);
   }
 

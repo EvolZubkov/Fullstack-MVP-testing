@@ -167,27 +167,15 @@ function reopenIfCommitted(fq) {
   if (typeof updateNavigationButton === 'function') updateNavigationButton();
 }
 
+// Choice selection re-renders the input from the SHARED emission (the DS `.ou-*`
+// markup is class-driven `is-on`, not native input state), mirroring the web host —
+// the same model the DnD adapters already use (rerenderCurrentQuestionInput).
 function selectSingle(qId, idx) {
   var fq = state.flatQuestions[state.currentIndex];
   if (isAnswerLocked(fq)) return;
   reopenIfCommitted(fq);
   state.answers[qId] = idx;
-  
-  // Убрать selected у всех опций этого вопроса
-  var allOptions = document.querySelectorAll('input[name="q_' + qId + '"]');
-  allOptions.forEach(function(radio) {
-    radio.checked = false;
-    radio.parentElement.classList.remove('selected');
-  });
-  
-  // Добавить selected к выбранному
-  var selectedOption = document.querySelector('.option[data-index="' + idx + '"]');
-  if (selectedOption) {
-    selectedOption.classList.add('selected');
-    var radio = selectedOption.querySelector('input[type="radio"]');
-    if (radio) radio.checked = true;
-  }
-
+  if (typeof rerenderCurrentQuestionInput === 'function') rerenderCurrentQuestionInput();
   refreshSubmitEnabled();
 }
 
@@ -198,22 +186,58 @@ function toggleMultiple(qId, idx) {
 
   var current = Array.isArray(state.answers[qId]) ? state.answers[qId].slice() : [];
   var pos = current.indexOf(idx);
-
   if (pos === -1) current.push(idx);
   else current.splice(pos, 1);
-
   state.answers[qId] = current;
 
-  // точечное обновление DOM через data-index
-  var opt = document.querySelector('.option[data-index="' + idx + '"]');
-  if (opt) {
-    var cb = opt.querySelector('input[type="checkbox"]');
-    var checked = current.indexOf(idx) !== -1;
-    if (cb) cb.checked = checked;
-    opt.classList.toggle('selected', checked);
-  }
-
+  if (typeof rerenderCurrentQuestionInput === 'function') rerenderCurrentQuestionInput();
   refreshSubmitEnabled();
+}
+
+/**
+ * The question currently on screen (standard or adaptive) — for the delegated
+ * choice/ranking click handler, which learns the question id from state, not markup.
+ */
+function __currentQuestionForInput() {
+  if (TEST_DATA.mode === 'adaptive' && state.adaptiveState) {
+    var qd = (typeof getCurrentAdaptiveQuestion === 'function') ? getCurrentAdaptiveQuestion() : null;
+    return qd ? qd.question : null;
+  }
+  var fq = state.flatQuestions && state.flatQuestions[state.currentIndex];
+  return fq ? fq.question : null;
+}
+
+var __qInputClicksBound = false;
+/**
+ * Delegates question-input clicks from the SHARED emission (bound once): a choice
+ * card's `data-action="select:N"` toggles the answer (single/multiple by type), a
+ * ranking control's `data-action="rank-up|rank-down:pos"` reorders via the shared
+ * reorder path. Selection/drag no longer use inline `onclick` — this replaces it, so
+ * both hosts stay on the same delegated `data-action` model.
+ */
+function bindQuestionInputClicksOnce() {
+  if (__qInputClicksBound) return;
+  __qInputClicksBound = true;
+  if (typeof document === 'undefined') return;
+  document.addEventListener('click', function (e) {
+    var el = (e.target && e.target.closest) ? e.target.closest('[data-action]') : null;
+    if (!el || el.disabled) return;
+    var a = el.getAttribute('data-action') || '';
+    if (a.indexOf('select:') === 0) {
+      var idx = parseInt(a.slice(7), 10);
+      if (isNaN(idx)) return;
+      var q = __currentQuestionForInput();
+      if (!q) return;
+      if (q.type === 'multiple') toggleMultiple(q.id, idx);
+      else if (q.type === 'single') selectSingle(q.id, idx);
+    } else if (a.indexOf('rank-up:') === 0 || a.indexOf('rank-down:') === 0) {
+      var up = a.indexOf('rank-up:') === 0;
+      var pos = parseInt(a.slice(a.indexOf(':') + 1), 10);
+      if (isNaN(pos)) return;
+      // Reuse the shared reorder path (from→to); it self-seeds and sets rankingTouched.
+      if (typeof applyRankingDrop === 'function') applyRankingDrop(String(up ? pos - 1 : pos + 1), String(pos));
+    }
+  });
 }
 
 function setMatch(qId, leftIdx, rightVal) {

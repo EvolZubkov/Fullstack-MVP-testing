@@ -1,31 +1,3 @@
-var __rankClickBound = false;
-
-function bindRankingClicksOnce() {
-  if (__rankClickBound) return;
-  __rankClickBound = true;
-
-  document.addEventListener('click', function(e) {
-    var el = e.target;
-
-    // fallback если closest нет
-    while (el && el !== document) {
-      if (el.classList && el.classList.contains('rank-btn')) break;
-      el = el.parentNode;
-    }
-    if (!el || el === document) return;
-
-    if (el.disabled) return;
-
-    var qId = el.getAttribute('data-qid');
-    var pos = parseInt(el.getAttribute('data-pos'), 10);
-    var dir = parseInt(el.getAttribute('data-dir'), 10);
-
-    if (!qId || Number.isNaN(pos) || Number.isNaN(dir)) return;
-
-    moveRank(qId, pos, dir);
-  });
-}
-
 function __rankMoveInArray(arr, from, to) {
   if (from === to) return arr;
   var copy = arr.slice();
@@ -58,7 +30,15 @@ function applyRankingDrop(dropId, dragId) {
   var to = parseInt(dropId, 10);
   if (Number.isNaN(from) || Number.isNaN(to)) return;
   var current = state.answers[q.id];
-  if (!Array.isArray(current)) return;
+  if (!Array.isArray(current)) {
+    // First reorder: seed from the delivered (shuffle) order the board is showing, so
+    // the position from→to reorders exactly what the learner sees — parity with the
+    // web's reorderRanking, which seeds off shuffleMapping via rankingOrder's fallback.
+    var sm = state.shuffleMappings && state.shuffleMappings[q.id];
+    var items = (q.data && q.data.items) || [];
+    current = (sm && sm.length === items.length) ? sm.slice() : items.map(function (_, i) { return i; });
+  }
+  if (to < 0 || to >= current.length) return;
   state.answers[q.id] = __rankMoveInArray(current, from, to);
   // Mark the ranking as actually interacted with so «Отправить ответ» enables
   // (the delivered order is non-correct, so an untouched order must not count).
