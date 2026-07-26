@@ -393,7 +393,7 @@ function renderSectionResults(topicId, isLast) {
         sectionResult: built.sectionResult
     };
     app.innerHTML = '';
-    // Mount directly into #app so .tb-pad > .results-page fills the fixed stage
+    // Mount directly into #app so .tb-pad > .tb-scene fills the fixed stage
     // (section-results ring centered) — mirrors renderGalleryPage (no wrapper div).
     TB.renderScreenInto(app, { layout: layout, context: context });
     var btn = app.querySelector('[data-action="section-continue"]');
@@ -545,7 +545,7 @@ function renderStandardQuestion(qData, current, total, progress) {
             'question-feedback': showFeedback ? buildQuestionFeedbackHtml(q) : ''
         };
         app.innerHTML = '';
-        // Mount directly into #app so .tb-pad > .layout-question-wrap fills the
+        // Mount directly into #app so .tb-pad > .tb-scene fills the
         // fixed stage and the appended nav row anchors at the bottom — mirrors
         // renderGalleryPage (a wrapper div would defeat the child-combinator rule).
         TB.renderScreenInto(app, { layout: layout, context: context, slots: slots });

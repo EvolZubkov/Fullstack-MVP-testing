@@ -370,7 +370,7 @@ function renderContentPage(page, contentTemplates) {
   var host;
   if (layout && TB && TB.renderScreenInto) {
     app.innerHTML = "";
-    // Mount directly into #app (no wrapper) so .tb-pad > .layout-content-wrap fills
+    // Mount directly into #app (no wrapper) so .tb-pad > .tb-scene fills
     // the fixed stage and the bottom nav anchors.
     TB.renderScreenInto(app, {
       layout: layout,
