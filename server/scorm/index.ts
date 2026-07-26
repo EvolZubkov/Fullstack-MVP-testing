@@ -8,6 +8,7 @@ import { readAsset } from "./assets/read-asset";
 import { extractEmbeddedMediaIntoAssets } from "./builders/media-assets";
 import { copyDirToFiles, getTemplatesRootDir } from "./builders/template-copy";
 import { getSharedRuntimeBundle } from "./builders/shared-runtime";
+import { readVendorDsCss, readPackageFontFiles, assemblePackageStyles } from "./builders/ds-styles";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -393,7 +394,11 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   if (fallbackLayoutKeys.length > 0 && fs.existsSync(defaultDir) && path.resolve(defaultDir) !== path.resolve(templateDir)) {
     copyDirToFiles(defaultDir, "template-default", templateFiles);
   }
-  const manifestHrefs = mediaHrefs.concat(Object.keys(templateFiles));
+  // Revision «Стандартный» on ui-kit: brand-font woff2 embedded under assets/fonts/,
+  // referenced by the vendored DS `@font-face` in styles.css. Declared in the manifest
+  // alongside media so strict LMS validators see every packaged resource.
+  const fontFiles = readPackageFontFiles();
+  const manifestHrefs = mediaHrefs.concat(Object.keys(templateFiles)).concat(Object.keys(fontFiles));
 
   // PRD-12 CSS unification: the package stylesheet is the SINGLE template CSS source
   // (theme.css tokens + base.css), the SAME files the web host loads — no separate
@@ -406,7 +411,11 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
       return "";
     }
   };
-  const stylesCss = readStyle("theme.css") + "\n" + readStyle("base.css");
+  // Revision «Стандартный» on ui-kit: the design system + brand font are vendored
+  // FIRST, the template's own theme.css/base.css layer OVER it, and the palette bridge
+  // is appended — so `.ou-*` learner screens render identically to the web host offline
+  // in the LMS and the DS accent follows the test's --primary.
+  const stylesCss = assemblePackageStyles(readVendorDsCss(), readStyle("theme.css"), readStyle("base.css"));
 
   // PRD-7 G21: default template CSS for fallback system screens. Loaded into the
   // package as `styles-default.css` and toggled active by the runtime only while a
@@ -437,6 +446,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "app.js": appJs,
     "vendor/html2canvas.min.js": html2canvasJs,
     "vendor/jspdf.umd.min.js": jspdfJs,
+    ...fontFiles,
     ...templateFiles,
   };
   if (stylesDefaultCss) files["styles-default.css"] = stylesDefaultCss;
