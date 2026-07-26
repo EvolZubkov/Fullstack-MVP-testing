@@ -224,6 +224,15 @@
 .tb-scene .ou-match { width: 100%; row-gap: var(--ou-space-2); }
 .ou-match__placeholder { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 
+/* ── Adaptive level transition ──────────────────────────────────── */
+.tb-transition-icon {
+  width: 80px; height: 80px; flex: none; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.tb-transition-icon.is-up { background: var(--ou-success-soft); color: var(--ou-success-default); }
+.tb-transition-icon.is-down { background: var(--ou-warning-soft); color: var(--ou-warning-default); }
+.tb-transition-icon.is-complete { background: var(--ou-accent-soft); color: var(--ou-accent-default); }
+
 /* ── Blocked / cooldown wall ────────────────────────────────────── */
 .tb-blocked-icon {
   width: 72px; height: 72px; flex: none; border-radius: 50%;

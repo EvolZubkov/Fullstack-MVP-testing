@@ -12,35 +12,43 @@ import type { CtxTransition } from "./context";
 
 /** Normalized transition facts (host adapts its own shape into this). */
 export interface TransitionInput {
-  isCorrect: boolean;
+  /** The topic whose difficulty level changed (named on the screen). */
+  topicName?: string;
   /** Level change: `up` (advanced), `down` (dropped), anything else = `complete`. */
-  levelTransition?: { type: string; message: string } | null;
-  topicTransition?: { toTopic: string } | null;
+  levelTransition?: { type: string; message?: string } | null;
   /** SCORM renders an explicit "Продолжить"; the web auto-advances on a timer. */
   showContinue?: boolean;
 }
 
-/** Build the `{ transition }` context for the transition layout. */
+/** Default supporting line per level direction (when the host gives no message). */
+function defaultMessage(isUp: boolean, isDown: boolean): string {
+  if (isUp) return "Следующие вопросы будут сложнее";
+  if (isDown) return "Следующие вопросы будут проще";
+  return "Ваш уровень по теме определён";
+}
+
+/**
+ * Build the `{ transition }` context. This interstitial is a LEVEL CHANGE within the
+ * current topic (spec §3.2 / plan 6.2): the title states the level change, the eyebrow
+ * names the topic the level is for. It is NOT a per-answer verdict («Правильно») and
+ * NOT a topic move (flat adaptive is a deferred future PRD).
+ */
 export function buildTransitionContext(input: TransitionInput): { transition: CtxTransition } {
-  const ok = !!input.isCorrect;
-  const t: CtxTransition = {
-    isCorrect: ok,
-    iconClass: ok ? "is-pass" : "is-fail",
-    title: ok ? "Правильно!" : "Неправильно",
-    showContinue: !!input.showContinue,
-  };
-  if (input.levelTransition) {
-    const type = input.levelTransition.type;
-    const isUp = type === "up";
-    const isDown = type === "down";
-    t.level = {
+  const type = input.levelTransition?.type;
+  const isUp = type === "up";
+  const isDown = type === "down";
+  const isComplete = !isUp && !isDown;
+  const transition: CtxTransition = {
+    topicName: input.topicName || "",
+    title: isUp ? "Сложность повышена" : isDown ? "Сложность понижена" : "Уровень зафиксирован",
+    level: {
       class: isUp ? "is-up" : isDown ? "is-down" : "is-complete",
       isUp,
       isDown,
-      isComplete: !isUp && !isDown,
-      message: input.levelTransition.message,
-    };
-  }
-  if (input.topicTransition) t.topic = { toTopic: input.topicTransition.toTopic };
-  return { transition: t };
+      isComplete,
+      message: (input.levelTransition?.message || "").trim() || defaultMessage(isUp, isDown),
+    },
+    showContinue: !!input.showContinue,
+  };
+  return { transition };
 }

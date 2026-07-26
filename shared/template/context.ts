@@ -308,22 +308,24 @@ export interface CtxSectionIntro {
 
 /** Adaptive inter-level/topic transition interstitial (`transition.*`). */
 export interface CtxTransition {
-  isCorrect: boolean;
-  /** Core-prepared icon class: `is-pass` / `is-fail`. */
-  iconClass: string;
-  /** Core-prepared status label: `Правильно!` / `Неправильно`. */
+  /**
+   * The topic the level is DETERMINED FOR (eyebrow). This screen is a level change
+   * WITHIN a topic (adaptive_by_section / adaptive+router) — NOT a topic move (flat
+   * adaptive is a deferred future PRD) and NOT a per-answer verdict.
+   */
+  topicName: string;
+  /** Level-change title, e.g. «Сложность повышена» — never an answer verdict. */
   title: string;
-  /** Level change, when present. */
-  level?: {
+  /** The level change (always present — the screen exists because the level changed). */
+  level: {
     /** Core-prepared class: `is-up` / `is-down` / `is-complete`. */
     class: string;
     isUp: boolean;
     isDown: boolean;
     isComplete: boolean;
+    /** Supporting line, e.g. «Следующие вопросы будут сложнее». */
     message: string;
   };
-  /** Topic change, when present. */
-  topic?: { toTopic: string };
   /** Whether to render an explicit "Продолжить" action (SCORM) vs auto-advance (web). */
   showContinue?: boolean;
 }

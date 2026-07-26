@@ -709,8 +709,8 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
 
   if (route === "system.transition") {
     const context = buildTransitionContext({
-      isCorrect: true,
-      levelTransition: { type: "up", message: "Уровень повышен" },
+      topicName: "Базовые угрозы",
+      levelTransition: { type: "up", message: "Следующие вопросы будут сложнее" },
       showContinue: true,
     });
     return { ...base, expectedSlots: [], input: { context } };

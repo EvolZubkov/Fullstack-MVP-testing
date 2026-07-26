@@ -338,10 +338,12 @@ function renderAdaptiveTransition(result) {
 
 /** Render the transition via the shared `system.transition` layout. */
 function renderAdaptiveTransitionTemplated(app, result) {
+  // Plan 6.2: a level-change screen for the CURRENT topic — not a verdict, not a topic
+  // move. Name the topic the level is determined for.
+  var qd = (typeof getCurrentAdaptiveQuestion === 'function') ? getCurrentAdaptiveQuestion() : null;
   var ctx = window.TBTemplate.buildTransitionContext({
-    isCorrect: result.isCorrect,
+    topicName: (result && result.topicName) || (qd && qd.topicName) || '',
     levelTransition: result.levelTransition || null,
-    topicTransition: result.topicTransition || null,
     showContinue: true
   });
   app.innerHTML = '';
