@@ -224,6 +224,16 @@
 .tb-scene .ou-match { width: 100%; row-gap: var(--ou-space-2); }
 .ou-match__placeholder { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 
+/* ── Blocked / cooldown wall ────────────────────────────────────── */
+.tb-blocked-icon {
+  width: 72px; height: 72px; flex: none; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--ou-warning-soft); color: var(--ou-warning-default);
+}
+.tb-blocked-branch { display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: center; }
+/* The runtime shows ONE branch (unhides it); `hidden` must beat the flex display. */
+.tb-blocked-branch[hidden] { display: none; }
+
 /* ── Verdict (results / section-results) ────────────────────────── */
 /* passClass (is-pass/is-fail) drives the DS ring fill + verdict tag colour. */
 .ou-ring__fill.is-pass { stroke: var(--ou-success-default); }
