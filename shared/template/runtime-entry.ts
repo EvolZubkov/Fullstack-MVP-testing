@@ -25,6 +25,7 @@ export { buildResultContext, buildAdaptiveResultContext, buildSectionResultConte
 export { aggregateStandardResult, aggregateAdaptiveResult } from "../scoring/aggregate";
 export { resolveOverallRule, resolveTopicRule, checkPassRule } from "../scoring/pass-rule";
 export { buildStartState } from "./start-state";
+export { buildCourseSubtitle } from "./course-subtitle";
 export { buildTransitionContext } from "./transition-context";
 export { buildTemplateCssVars, DEFAULT_PARAM_CSS_VARS } from "./params-css";
 // Ревизия «Стандартный» на ui-kit: мост палитры теста в токены DS — оба хоста

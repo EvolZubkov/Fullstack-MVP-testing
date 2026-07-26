@@ -11,6 +11,7 @@ import { hasAnswer, rankingDeliveryOrder } from "./answer-gate";
 import { buildStartState } from "@shared/template/start-state";
 import { feedbackBanner, feedbackDesc } from "@shared/template/feedback-banner";
 import { buildQuestionProgress } from "@shared/template/question-progress-context";
+import { buildCourseSubtitle } from "@shared/template/course-subtitle";
 import { buildReviewContext } from "@shared/template/review-context";
 import { buildSectionResultContext, buildSectionIntroContext } from "@shared/template/result-context";
 // PRD-12 FR-6: content pages render on the web from the SAME structure rules and
@@ -2719,6 +2720,14 @@ export default function TakeTestPage() {
       <TemplateQuestionScreen
         tpl={questionTpl}
         testTitle={attempt.testTitle}
+        subtitle={
+          testMetadata
+            ? buildCourseSubtitle({
+                attemptNumber: testMetadata.completedAttempts + 1,
+                maxAttempts: testMetadata.maxAttempts,
+              })
+            : undefined
+        }
         counterLabel={`Вопрос ${currentIndex + 1} из ${flatQuestions.length} · Тема: ${currentQ.topicName}${sectionClock}`}
         progressPercent={((currentIndex + 1) / flatQuestions.length) * 100}
         question={currentQ.question}

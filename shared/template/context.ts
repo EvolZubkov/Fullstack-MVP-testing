@@ -21,6 +21,12 @@
 /** Test-level info shown on the start screen and as the screen title (`course.*`). */
 export interface CtxCourse {
   title: string;
+  /**
+   * Header subtitle under the title (wireframe: "Попытка N из M"). Core-prepared
+   * by {@link module:shared/template/course-subtitle} on both hosts; empty string
+   * or absent -> the layout's `{{#if course.subtitle}}` renders a title-only header.
+   */
+  subtitle?: string;
   description?: string;
   questionCount?: number;
   passPercent?: number | null;

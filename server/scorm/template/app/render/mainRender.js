@@ -497,11 +497,25 @@ function fitQuestionText(card) {
 }
 
 /**
+ * Header subtitle ("Попытка N из M") via the shared builder, so the SCORM and web
+ * headers read identically (parity, PRD-12). The attempt number comes from
+ * Telemetry (defaults to 1 when telemetry is off — e.g. the debug player's fresh
+ * preview run); the cap from TEST_DATA. Empty string -> title-only header.
+ * @returns {string}
+ */
+function scormCourseSubtitle() {
+    var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    if (!TB || !TB.buildCourseSubtitle) return '';
+    var n = (typeof Telemetry !== 'undefined' && Telemetry.getAttemptNumber) ? Telemetry.getAttemptNumber() : 1;
+    return TB.buildCourseSubtitle({ attemptNumber: n, maxAttempts: TEST_DATA.maxAttempts || null });
+}
+
+/**
  * Renders the standard question screen. Primary path renders the shared template
  * `question` layout via the SHARED renderer (TBTemplate.renderScreenInto) — the
  * SAME layout + renderer the web host mounts — filling the question chrome from a
  * public context + controlled slots; progress/timer are applied imperatively
- * (the layout ships #timer-display hidden). The nav row is appended below. Falls
+ * (the layout ships the DS timers hidden). The nav row is appended below. Falls
  * back to the original hardcoded chrome if the design template failed to load.
  */
 function renderStandardQuestion(qData, current, total, progress) {
@@ -527,7 +541,12 @@ function renderStandardQuestion(qData, current, total, progress) {
             scopeLabel: sectionScope ? ('Вопросы раздела «' + (qData.topicName || '') + '»') : 'Вопросы теста'
         }) : null;
         var context = {
-            course: { title: TEST_DATA.title },
+            course: {
+                title: TEST_DATA.title,
+                subtitle: scormCourseSubtitle(),
+                timeLimitMinutes: TEST_DATA.timeLimitMinutes || null,
+                maxAttempts: TEST_DATA.maxAttempts || null
+            },
             state: {
                 questionCounterLabel: counterLabel,
                 sectionName: (qData.topicName || ''),
@@ -575,12 +594,18 @@ function renderStandardQuestion(qData, current, total, progress) {
             }
         }
 
-        // Timer — the layout ships #timer-display hidden; reveal when a timer runs.
+        // Timers — the layout ships both DS timers hidden; reveal + paint whichever
+        // countdown is running (presence thus follows the test/section time-limit
+        // settings). paintTimer drives the DS __num + is-critical state.
         var timerEl = app.querySelector('#timer-display');
         if (timerEl && state.remainingSeconds !== null) {
             timerEl.classList.remove('q-timer--hidden');
-            timerEl.textContent = formatTime(state.remainingSeconds);
-            if (state.remainingSeconds <= 60) { timerEl.style.color = '#dc2626'; timerEl.style.fontWeight = 'bold'; timerEl.classList.add('q-timer--urgent'); }
+            paintTimer('timer-display', state.remainingSeconds);
+        }
+        var secTimerEl = app.querySelector('#section-timer-display');
+        if (secTimerEl && state.sectionTimer) {
+            secTimerEl.classList.remove('q-timer--hidden');
+            paintTimer('section-timer-display', state.sectionTimer.remainingSeconds);
         }
 
         // Nav row below the card (kept onclick-wired; no global delegator needed).

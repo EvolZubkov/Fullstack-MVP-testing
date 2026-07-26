@@ -132,15 +132,24 @@ function timerRemaining(startMs, totalSeconds) {
 }
 
 /**
- * Paint one timer element: text plus a reversible critical highlight.
+ * Paint one timer element: the countdown text plus a reversible critical
+ * highlight. Drives the DS `.ou-timer` chrome the layout ships (text into the
+ * `.ou-timer__num` child, critical -> the DS `is-critical` state class), and
+ * falls back to the legacy `.q-timer` styling for the hardcoded-chrome path.
  * @param {string} elementId
  * @param {number} seconds
  */
 function paintTimer(elementId, seconds) {
   var el = document.getElementById(elementId);
   if (!el) return;
-  el.textContent = formatTime(seconds);
   var critical = seconds <= TIMER_WARN_AT;
+  if (el.className.indexOf('ou-timer') !== -1) {
+    var numEl = el.querySelector('.ou-timer__num') || el;
+    numEl.textContent = formatTime(seconds);
+    if (critical) el.classList.add('is-critical'); else el.classList.remove('is-critical');
+    return;
+  }
+  el.textContent = formatTime(seconds);
   el.style.color = critical ? '#dc2626' : '';
   el.style.fontWeight = critical ? 'bold' : '';
   if (critical) el.classList.add('q-timer--urgent'); else el.classList.remove('q-timer--urgent');

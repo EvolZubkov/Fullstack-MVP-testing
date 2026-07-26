@@ -135,6 +135,8 @@ export interface TemplateQuestionScreenProps {
     design?: { logoUrl?: string };
   };
   testTitle: string;
+  /** Header subtitle under the title ("Попытка N из M"); empty -> title-only header. */
+  subtitle?: string;
   counterLabel: string;
   progressPercent: number;
   question: Question;
@@ -248,7 +250,7 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
         cssVars={tpl.cssVars}
         themeCss={tpl.themeCss}
         dataTheme={tpl.dataTheme}
-        context={{ course: { title: testTitle }, state: { questionCounterLabel: counterLabel, questionHint: questionHint(question.type), questionFont: questionFont(question.prompt), optionFont: optionFont(answerTexts(question)), questionsProgress: props.questionsProgress }, design: tpl.design }}
+        context={{ course: { title: testTitle, subtitle: props.subtitle }, state: { questionCounterLabel: counterLabel, questionHint: questionHint(question.type), questionFont: questionFont(question.prompt), optionFont: optionFont(answerTexts(question)), questionsProgress: props.questionsProgress }, design: tpl.design }}
         slots={slots}
         onAction={(action) => {
           // PRD-19 Block C: pill navigation works even when the question is locked

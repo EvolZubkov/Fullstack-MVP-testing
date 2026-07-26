@@ -4,8 +4,16 @@
       {{#if design.logoUrl}}<span class="tb-scene__logo"><img src="{{ design.logoUrl }}" alt=""></span>{{/if}}
       <div class="tb-scene__titles">
         <h1 class="tb-scene__title" data-path="course.title"></h1>
+        {{#if course.subtitle}}<span class="tb-scene__subtitle" data-path="course.subtitle"></span>{{/if}}
       </div>
-      <div class="tb-scene__timers"><div class="q-timer q-timer--hidden" id="timer-display"></div></div>
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
     </div>
     {{#if state.questionsProgress}}
     <div class="ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map" role="group" aria-label="Карта вопросов">
