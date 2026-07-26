@@ -107,8 +107,8 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
       await flush();
 
       const app = document.getElementById("app")!;
-      // Template surface — not the built-in fallback.
-      expect(app.querySelector(".blocked-card")).toBeTruthy();
+      // Template surface (scene layout) — not the built-in fallback.
+      expect(app.querySelector(".tb-scene")).toBeTruthy();
       expect(app.querySelector(".retake-wall__card")).toBeNull();
 
       const cooldown = app.querySelector('[data-retake-branch="cooldown"]') as HTMLElement;
@@ -151,7 +151,7 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
     await flush();
 
     const app = document.getElementById("app")!;
-    expect(app.querySelector(".blocked-card")).toBeTruthy();
+    expect(app.querySelector('[data-testid="retake-wall"]')).toBeTruthy();
     const cooldown = app.querySelector('[data-retake-branch="cooldown"]') as HTMLElement;
     const error = app.querySelector('[data-retake-branch="error"]') as HTMLElement;
     expect(error.style.display).not.toBe("none");
@@ -177,7 +177,8 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
 
       const app = document.getElementById("app")!;
       expect(app.querySelector(".retake-wall__card")).toBeTruthy();
-      expect(app.querySelector(".blocked-card")).toBeNull();
+      // The built-in fallback wall is used, not the template's scene layout.
+      expect(app.querySelector(".tb-scene")).toBeNull();
       expect(app.querySelector('[data-testid="retake-wall"]')).toBeTruthy();
     } finally {
       vi.useRealTimers();

@@ -282,7 +282,13 @@ var RetakeGate = (function () {
   }
 
   function setShown(node, shown) {
-    if (node) node.style.display = shown ? '' : 'none';
+    if (!node) return;
+    node.style.display = shown ? '' : 'none';
+    // Also toggle the `hidden` attribute: the layout hides inactive branches with it
+    // initially, and a scene rule keys off `[hidden]` — clearing style.display alone
+    // would leave a shown branch hidden by the attribute.
+    if (shown) node.removeAttribute('hidden');
+    else node.setAttribute('hidden', '');
   }
 
   // Toggle the layout's `data-retake-branch` blocks to the relevant message:
