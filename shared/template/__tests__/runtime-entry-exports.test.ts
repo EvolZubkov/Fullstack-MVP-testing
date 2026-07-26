@@ -12,6 +12,12 @@ const REQUIRED = [
   "buildReviewContext",
   "shouldShowReview",
   "renderResultField",
+  // Ревизия «Стандартный»: единая эмиссия интерактива вопросов.
+  "buildPaletteBridge",
+  "renderSingleChoice",
+  "renderMultiple",
+  "renderRanking",
+  "renderMatching",
 ] as const;
 
 describe("runtime-entry public surface", () => {

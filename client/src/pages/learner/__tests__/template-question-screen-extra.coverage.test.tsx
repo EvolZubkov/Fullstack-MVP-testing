@@ -133,8 +133,8 @@ describe("TemplateQuestionScreen — choice review + multiple toggle", () => {
       />,
     );
     const shadow = shadowOf(container);
-    expect(shadow.querySelector('.option[data-index="0"]')?.className).toContain("correct-answer");
-    expect(shadow.querySelector('.option[data-index="1"]')?.className).toContain("incorrect-answer");
+    expect(shadow.querySelector('.ou-radio-card[data-index="0"]')?.className).toContain("correct-answer");
+    expect(shadow.querySelector('.ou-radio-card[data-index="1"]')?.className).toContain("incorrect-answer");
   });
 
   it("marks all correct indices + the wrong pick in multiple review mode", () => {
@@ -150,9 +150,9 @@ describe("TemplateQuestionScreen — choice review + multiple toggle", () => {
       />,
     );
     const shadow = shadowOf(container);
-    expect(shadow.querySelector('.option[data-index="0"]')?.className).toContain("correct-answer");
-    expect(shadow.querySelector('.option[data-index="1"]')?.className).toContain("correct-answer");
-    expect(shadow.querySelector('.option[data-index="2"]')?.className).toContain("incorrect-answer");
+    expect(shadow.querySelector('.ou-radio-card[data-index="0"]')?.className).toContain("correct-answer");
+    expect(shadow.querySelector('.ou-radio-card[data-index="1"]')?.className).toContain("correct-answer");
+    expect(shadow.querySelector('.ou-radio-card[data-index="2"]')?.className).toContain("incorrect-answer");
   });
 
   it("adds then removes an index for a multiple-choice question (nextAnswer toggle)", () => {
@@ -161,7 +161,7 @@ describe("TemplateQuestionScreen — choice review + multiple toggle", () => {
     const first = render(
       <TemplateQuestionScreen {...base} question={multiple()} answer={undefined} onAnswer={onAnswer} footer={<span />} />,
     );
-    (shadowOf(first.container).querySelector('.option[data-action="select:1"]') as HTMLElement)?.click();
+    (shadowOf(first.container).querySelector('.ou-radio-card[data-action="select:1"]') as HTMLElement)?.click();
     expect(onAnswer).toHaveBeenLastCalledWith([1]);
     cleanup();
 
@@ -169,7 +169,7 @@ describe("TemplateQuestionScreen — choice review + multiple toggle", () => {
     const second = render(
       <TemplateQuestionScreen {...base} question={multiple()} answer={[1]} onAnswer={onAnswer} footer={<span />} />,
     );
-    (shadowOf(second.container).querySelector('.option[data-action="select:1"]') as HTMLElement)?.click();
+    (shadowOf(second.container).querySelector('.ou-radio-card[data-action="select:1"]') as HTMLElement)?.click();
     expect(onAnswer).toHaveBeenLastCalledWith([]);
   });
 });
@@ -193,8 +193,8 @@ describe("TemplateQuestionScreen — ranking", () => {
       <TemplateQuestionScreen {...base} question={ranking()} answer={[0, 1, 2]} onAnswer={() => {}} footer={<span />} />,
     );
     const shadow = shadowOf(container);
-    expect(shadow.querySelector(".ranking-board")).toBeTruthy();
-    expect(shadow.querySelectorAll(".rank-item.rank-draggable").length).toBe(3);
+    expect(shadow.querySelector(".ou-rank")).toBeTruthy();
+    expect(shadow.querySelectorAll(".ou-rank__item").length).toBe(3);
   });
 
   it("highlights correct/incorrect positions in ranking review mode", () => {
@@ -210,8 +210,8 @@ describe("TemplateQuestionScreen — ranking", () => {
       />,
     );
     const shadow = shadowOf(container);
-    expect(shadow.querySelector(".rank-item.incorrect-answer")).toBeTruthy();
-    expect(shadow.querySelector(".rank-item.correct-answer")).toBeTruthy();
+    expect(shadow.querySelector(".ou-rank__item.incorrect-answer")).toBeTruthy();
+    expect(shadow.querySelector(".ou-rank__item.correct-answer")).toBeTruthy();
   });
 
   it("reorders the ranking on a drop action", () => {
@@ -234,9 +234,9 @@ describe("TemplateQuestionScreen — matching", () => {
       <TemplateQuestionScreen {...base} question={matching()} answer={{}} onAnswer={() => {}} footer={<span />} />,
     );
     const shadow = shadowOf(container);
-    expect(shadow.querySelector(".matching-board")).toBeTruthy();
-    expect(shadow.querySelectorAll(".match-chip").length).toBe(2);
-    expect(shadow.querySelectorAll(".match-right-tile").length).toBe(2);
+    expect(shadow.querySelector(".ou-match")).toBeTruthy();
+    expect(shadow.querySelectorAll(".ou-match__card--drag:not(.ou-match__card--empty)").length).toBe(2);
+    expect(shadow.querySelectorAll(".ou-match__card--fixed").length).toBe(2);
   });
 
   it("renders an empty pool placeholder when chips run out before the rows", () => {
@@ -250,7 +250,7 @@ describe("TemplateQuestionScreen — matching", () => {
         footer={<span />}
       />,
     );
-    expect(shadowOf(container).querySelector(".match-empty .slot-placeholder")?.textContent).toContain(
+    expect(shadowOf(container).querySelector(".ou-match__card--empty .ou-match__placeholder")?.textContent).toContain(
       "Перетащите вариант",
     );
   });
@@ -269,8 +269,8 @@ describe("TemplateQuestionScreen — matching", () => {
       />,
     );
     const shadow = shadowOf(container);
-    expect(shadow.querySelector(".matching-line.correct-answer")).toBeTruthy();
-    expect(shadow.querySelector(".matching-line.incorrect-answer")).toBeTruthy();
+    expect(shadow.querySelector(".ou-match__row.correct-answer")).toBeTruthy();
+    expect(shadow.querySelector(".ou-match__row.incorrect-answer")).toBeTruthy();
   });
 
   it("attaches a pooled chip to a right tile (dropOnRight)", () => {
@@ -365,7 +365,7 @@ describe("TemplateQuestionScreen — media + guards + pills", () => {
     expect(onNavigate).toHaveBeenCalledTimes(1);
     expect(onNavigate).toHaveBeenCalledWith(1);
     // Locked: a select action is swallowed (interaction read-only).
-    (shadowOf(container).querySelector('.option[data-action="select:0"]') as HTMLElement)?.click();
+    (shadowOf(container).querySelector('.ou-radio-card[data-action="select:0"]') as HTMLElement)?.click();
     expect(onAnswer).not.toHaveBeenCalled();
   });
 });

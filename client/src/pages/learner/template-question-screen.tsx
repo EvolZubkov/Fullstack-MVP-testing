@@ -2,13 +2,13 @@
  * @module client/pages/learner/template-question-screen
  *
  * Renders the test-taking question screen from the design template (PRD-12 #3):
- * single (radio), multiple (checkbox) and ranking (↑/↓ reorder). The shadow-isolated
- * template provides the chrome (header / progress / question card); the interaction
- * is HTML filled into the `question-interaction` slot — styled by the template's own
- * `.option`/`.rank-item` CSS and wired back to React via `data-action` click
- * delegation (mirrors the SCORM runtime). React keeps the answer state; navigation
- * is rendered on the template surface below. All four question types render via the
- * template; matching drags left chips onto right slots using the SHARED pointer
+ * single, multiple, ranking and matching. The shadow-isolated template provides the
+ * chrome (header / progress / question card); the interaction HTML is filled into the
+ * `question-interaction` slot from the SHARED emission
+ * ({@link module:shared/template/question-interaction}) — the DS `.ou-*` markup the
+ * SCORM package renders too — and wired back to React via `data-action`/`data-drag`
+ * delegation. React keeps the answer state; navigation is rendered on the template
+ * surface below. Matching drags answer chips onto prompt rows using the SHARED pointer
  * engine and the SHARED rich pool model ({@link module:shared/template/dnd/matching-model}),
  * the same engine the SCORM host runs — so both hosts compute drops identically.
  */
@@ -24,6 +24,13 @@ import {
   returnToPool,
   type MatchingState,
 } from "@shared/template/dnd/matching-model";
+import {
+  renderSingleChoice,
+  renderMultiple,
+  renderRanking,
+  renderMatching,
+  type ReviewCorrect,
+} from "@shared/template/question-interaction";
 
 function esc(s: unknown): string {
   return String(s)
@@ -31,63 +38,6 @@ function esc(s: unknown): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-/** True when option `oi` is currently chosen (single = equals, multiple = in array). */
-function isChosen(answer: unknown, oi: number): boolean {
-  return Array.isArray(answer) ? answer.includes(oi) : answer === oi;
-}
-
-/**
- * Answer key for review highlighting — mirrors the server `correctAnswer` payload
- * and SCORM's `q.correct` shape (single/multiple/matching/ranking).
- */
-type ReviewCorrect = {
-  correctIndex?: number;
-  correctIndices?: number[];
-  pairs?: { left: number; right: number }[];
-  correctOrder?: number[];
-};
-
-/**
- * Build choice options HTML (single → radio, multiple → checkbox). The template's
- * `.option` CSS styles both; clicks are delegated via `data-action="select:N"`.
- * In review mode (`review` set) options get `.correct-answer`/`.incorrect-answer`
- * classes — the SAME classes the SCORM runtime emits (server/scorm .../single.js,
- * multiple.js), so both hosts highlight review identically.
- */
-function optionsHtml(question: Question, answer: unknown, shuffleMapping?: number[], review?: ReviewCorrect): string {
-  const data = (question.dataJson as { options?: unknown[] }) || {};
-  const options = data.options || [];
-  const order =
-    shuffleMapping && shuffleMapping.length === options.length
-      ? shuffleMapping
-      : options.map((_, i) => i);
-  const inputType = question.type === "multiple" ? "checkbox" : "radio";
-  const correctIndices =
-    question.type === "multiple" && Array.isArray(review?.correctIndices) ? review!.correctIndices : null;
-  const correctIndex =
-    question.type !== "multiple" && typeof review?.correctIndex === "number" ? review!.correctIndex : null;
-  return order
-    .map((oi) => {
-      const chosen = isChosen(answer, oi);
-      let cls = `option${chosen ? " selected" : ""}`;
-      if (review) {
-        if (correctIndices) {
-          if (correctIndices.includes(oi)) cls += " correct-answer";
-          else if (chosen) cls += " incorrect-answer";
-        } else if (correctIndex !== null) {
-          if (oi === correctIndex) cls += " correct-answer";
-          else if (chosen) cls += " incorrect-answer";
-        }
-      }
-      return (
-        `<div class="${cls}" data-action="select:${oi}" data-index="${oi}" role="button" tabindex="0">` +
-        `<input type="${inputType}" ${chosen ? "checked" : ""} tabindex="-1" aria-hidden="true">` +
-        `<span>${esc(options[oi])}</span></div>`
-      );
-    })
-    .join("");
 }
 
 /** Compute the next answer when option `oi` is toggled, by question type. */
@@ -104,41 +54,6 @@ function rankingOrder(question: Question, answer: unknown, shuffleMapping?: numb
   const items = (question.dataJson as { items?: unknown[] })?.items || [];
   if (Array.isArray(answer) && answer.length === items.length) return answer as number[];
   return shuffleMapping && shuffleMapping.length === items.length ? shuffleMapping : items.map((_, i) => i);
-}
-
-const RANK_GRIP =
-  '<svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">' +
-  '<path d="M2.5 4.99524H17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>' +
-  '<path d="M14.1667 9.9952H2.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>' +
-  '<path d="M2.5 14.9951H10.8333" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
-
-/** Drag marker for matching chips — dots glyph (distinct from ranking's burger; mirrors ui-kit `dots`). */
-const MATCH_GRIP =
-  '<svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">' +
-  '<circle cx="7" cy="5" r="1.4"></circle><circle cx="13" cy="5" r="1.4"></circle>' +
-  '<circle cx="7" cy="10" r="1.4"></circle><circle cx="13" cy="10" r="1.4"></circle>' +
-  '<circle cx="7" cy="15" r="1.4"></circle><circle cx="13" cy="15" r="1.4"></circle></svg>';
-
-/** Build ranking HTML — draggable rows (HTML5 DnD via shadow delegation), mirrors SCORM. */
-function rankingHtml(question: Question, answer: unknown, shuffleMapping?: number[], review?: ReviewCorrect): string {
-  const items = (question.dataJson as { items?: unknown[] })?.items || [];
-  const order = rankingOrder(question, answer, shuffleMapping);
-  const correctOrder = review && Array.isArray(review.correctOrder) ? review.correctOrder : null;
-  return (
-    '<div class="ranking-board">' +
-    order
-      .map((oi, pos) => {
-        let cls = "rank-item rank-draggable";
-        if (correctOrder) cls += oi === correctOrder[pos] ? " correct-answer" : " incorrect-answer";
-        return (
-          `<div class="${cls}" data-drag="${pos}" data-drop="${pos}">` +
-          `<span class="rank-grip">${RANK_GRIP}</span>` +
-          `<span class="rank-text">${esc(items[oi])}</span></div>`
-        );
-      })
-      .join("") +
-    "</div>"
-  );
 }
 
 /** Reorder ranking by moving the item from `fromPos` to `toPos` (drop). */
@@ -168,75 +83,12 @@ function matchingLeftMapping(question: Question, shuffleMapping?: { left: number
 }
 
 /**
- * Build matching HTML — left chips dragged onto right slots via the shared pointer
- * engine. The pool of unmatched chips is kept in EXPLICIT order (the rich model)
- * and reconciled with the answer through {@link normalizePool}. Each left slot is a
- * drop zone (`data-drop="pool:<slot>"` so a chip can return to a precise slot); the
- * right tile is `data-drop="r<rightIdx>"`; chips carry `data-drag="<leftIdx>"`.
+ * Interaction HTML for the `question-interaction` slot, by question type. Emits the
+ * SHARED `.ou-*` markup ({@link module:shared/template/question-interaction}) so the web
+ * host and the SCORM package render byte-identical options; the local state helpers
+ * ({@link nextAnswer}, {@link reorderRanking}, {@link applyMatchingDrop}) wire the
+ * delegated actions back to React.
  */
-function matchingHtml(
-  question: Question,
-  answer: unknown,
-  shuffleMapping: { left: number[]; right: number[] } | undefined,
-  poolOrder: number[],
-  review?: ReviewCorrect,
-): string {
-  const data = (question.dataJson as { left?: unknown[]; right?: unknown[] }) || {};
-  const left = data.left || [];
-  const right = data.right || [];
-  const leftMapping = matchingLeftMapping(question, shuffleMapping);
-  const rightMapping = shuffleMapping?.right?.length === right.length ? shuffleMapping.right : right.map((_, i) => i);
-  const pairs = (answer && typeof answer === "object" ? answer : {}) as Record<number, number>;
-  const rightToLeft: Record<number, number> = {};
-  Object.keys(pairs).forEach((k) => {
-    rightToLeft[pairs[Number(k)]] = Number(k);
-  });
-  const pool = normalizePool(poolOrder, pairs, leftMapping);
-
-  // Review: correct right→left pairs (mirrors SCORM feedback.js highlightMatching).
-  const correctRightToLeft: Record<number, number> = {};
-  if (review && Array.isArray(review.pairs)) {
-    review.pairs.forEach((p) => {
-      correctRightToLeft[p.right] = p.left;
-    });
-  }
-
-  const chip = (li: number) =>
-    `<div class="match-chip" data-drag="${li}"><span class="match-grip" aria-hidden="true">${MATCH_GRIP}</span>` +
-    `<span class="match-chip-text">${esc(left[li])}</span></div>`;
-
-  let poolSlot = 0;
-  let html = '<div class="matching-board">';
-  for (const ri of rightMapping) {
-    const matchedLeft = rightToLeft[ri];
-    const isJoined = matchedLeft !== undefined;
-    let lineCls = `matching-line${isJoined ? " is-joined" : ""}`;
-    if (review && isJoined) {
-      lineCls += Number(matchedLeft) === Number(correctRightToLeft[ri]) ? " correct-answer" : " incorrect-answer";
-    }
-    html += `<div class="${lineCls}">`;
-    // A matched row's left pairs to THIS right (drop another chip = displace); an
-    // unmatched row's left is a pool slot. poolSlot advances ONLY on unmatched rows.
-    if (isJoined) {
-      html += `<div class="match-tile match-left-slot match-drop-left" data-drop="r${ri}">${chip(matchedLeft)}</div>`;
-    } else {
-      const poolLeft = poolSlot < pool.length ? pool[poolSlot] : null;
-      if (poolLeft !== null && poolLeft !== undefined) {
-        html += `<div class="match-tile match-left-slot match-drop-left" data-drop="pool:${poolSlot}">${chip(poolLeft)}</div>`;
-      } else {
-        html += `<div class="match-empty match-left-slot match-drop-left" data-drop="pool:${poolSlot}"><span class="slot-placeholder">Перетащите вариант</span></div>`;
-      }
-      poolSlot++;
-    }
-    html += `<div class="matching-gap"></div>`;
-    html += `<div class="match-tile match-right-tile match-drop-right" data-drop="r${ri}">${esc(right[ri])}</div>`;
-    html += `</div>`;
-  }
-  html += "</div>";
-  return html;
-}
-
-/** Interaction HTML for the `question-interaction` slot, by question type. */
 function interactionHtml(
   question: Question,
   answer: unknown,
@@ -245,11 +97,12 @@ function interactionHtml(
   review?: ReviewCorrect,
 ): string {
   const arr = Array.isArray(shuffleMapping) ? shuffleMapping : undefined;
-  if (question.type === "ranking") return rankingHtml(question, answer, arr, review);
+  if (question.type === "ranking") return renderRanking(question, answer, arr, review);
   if (question.type === "matching") {
-    return matchingHtml(question, answer, !Array.isArray(shuffleMapping) ? shuffleMapping : undefined, poolOrder, review);
+    return renderMatching(question, answer, !Array.isArray(shuffleMapping) ? shuffleMapping : undefined, poolOrder, review);
   }
-  return optionsHtml(question, answer, arr, review);
+  if (question.type === "multiple") return renderMultiple(question, answer, arr, review);
+  return renderSingleChoice(question, answer, arr, review);
 }
 
 function mediaHtml(question: Question): string {
@@ -406,6 +259,14 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
           if (action.startsWith("select:")) {
             const i = Number(action.slice("select:".length));
             if (!Number.isNaN(i)) onAnswer(nextAnswer(question, answer, i));
+            return;
+          }
+          // Keyboard ranking reorder (ou-rank controls): move a row up/down one slot.
+          if (action.startsWith("rank-up:") || action.startsWith("rank-down:")) {
+            const up = action.startsWith("rank-up:");
+            const pos = Number(action.slice(action.indexOf(":") + 1));
+            const map = Array.isArray(shuffleMapping) ? shuffleMapping : undefined;
+            if (!Number.isNaN(pos)) onAnswer(reorderRanking(question, answer, map, pos, up ? pos - 1 : pos + 1));
             return;
           }
           if (action.startsWith("drop:")) {

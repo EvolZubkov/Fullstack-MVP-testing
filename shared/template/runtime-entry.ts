@@ -31,6 +31,14 @@ export { buildTemplateCssVars, DEFAULT_PARAM_CSS_VARS } from "./params-css";
 // выводят DS-акцент из --primary теста, поэтому ученические экраны на .ou-разметке
 // брендируются палитрой теста одинаково в вебе и в пакете.
 export { buildPaletteBridge } from "./palette-bridge";
+// Ревизия «Стандартный»: ЕДИНАЯ эмиссия интерактива вопросов (.ou-разметка эталона).
+// Оба хоста зовут эти функции, поэтому DOM вариантов не расходится веб<->пакет.
+export {
+  renderSingleChoice,
+  renderMultiple,
+  renderRanking,
+  renderMatching,
+} from "./question-interaction";
 // PRD-23: themed templates — the printer of per-theme colour overrides and the
 // pinned-palette resolver, shared with the web host so both paint the same.
 export { buildTemplateThemeCss, sceneThemeAttribute, baseParams, paramsOfTheme } from "./theme-css";

@@ -25,15 +25,29 @@
  */
 import { normalizePool } from "./dnd/matching-model";
 
-/** Question shape this module reads (a subset of the shared `Question`). */
+/**
+ * Question shape this module reads. `dataJson` is untyped (a jsonb column reaches the
+ * host as `unknown`), so both hosts can pass their own question object without a cast.
+ */
 export interface InteractionQuestion {
   type: string;
-  dataJson?: {
+  dataJson?: unknown;
+}
+
+/** The answer collections a question may carry, read defensively from `dataJson`. */
+function fields(q: InteractionQuestion): {
+  options: unknown[];
+  items: unknown[];
+  left: unknown[];
+  right: unknown[];
+} {
+  const d = (q.dataJson ?? {}) as {
     options?: unknown[];
     items?: unknown[];
     left?: unknown[];
     right?: unknown[];
-  } | null;
+  };
+  return { options: d.options ?? [], items: d.items ?? [], left: d.left ?? [], right: d.right ?? [] };
 }
 
 /**
@@ -127,7 +141,7 @@ function renderChoice(
   review: ReviewCorrect | undefined,
   multiple: boolean,
 ): string {
-  const options = question.dataJson?.options ?? [];
+  const options = fields(question).options;
   const items = displayOrder(options.length, shuffleMapping)
     .map((oi) => {
       const chosen = isChosen(answer, oi);
@@ -194,7 +208,7 @@ export function renderRanking(
   shuffleMapping?: number[],
   review?: ReviewCorrect,
 ): string {
-  const items = question.dataJson?.items ?? [];
+  const items = fields(question).items;
   const order = rankingOrder(items.length, answer, shuffleMapping);
   const correctOrder = review && Array.isArray(review.correctOrder) ? review.correctOrder : null;
   const rows = order
@@ -243,8 +257,7 @@ export function renderMatching(
   poolOrder: number[] = [],
   review?: ReviewCorrect,
 ): string {
-  const left = question.dataJson?.left ?? [];
-  const right = question.dataJson?.right ?? [];
+  const { left, right } = fields(question);
   const leftMapping = matchingLeftMapping(left.length, shuffleMapping);
   const rightMapping = shuffleMapping?.right?.length === right.length ? shuffleMapping.right : displayOrder(right.length, undefined);
   const pairs = (answer && typeof answer === "object" ? answer : {}) as Record<number, number>;
@@ -275,7 +288,9 @@ export function renderMatching(
     const isJoined = matchedLeft !== undefined;
     let rowCls = `ou-match__row${isJoined ? " is-connected" : ""}`;
     if (review && isJoined) {
-      rowCls += Number(matchedLeft) === Number(correctRightToLeft[ri]) ? " ou-match__row--correct" : " ou-match__row--incorrect";
+      // Same review classes as choice/ranking (and the SCORM feedback pass), styled
+      // per-component in the scene layer — one convention across all question types.
+      rowCls += Number(matchedLeft) === Number(correctRightToLeft[ri]) ? " correct-answer" : " incorrect-answer";
     }
     html += `<div class="${rowCls}">`;
     // Fixed prompt (the right item) on the left; the draggable answer on the right.

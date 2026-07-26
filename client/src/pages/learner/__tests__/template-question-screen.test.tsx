@@ -57,7 +57,7 @@ describe("TemplateQuestionScreen", () => {
     const shadow = shadowOf(container);
     expect(shadow.querySelector(".question-meta")?.textContent).toContain("Тема: Сети · Вопрос 1 из 5");
     expect(shadow.querySelector('[data-slot="question-text"]')?.textContent).toContain("Столица Франции?");
-    expect(shadow.querySelectorAll(".option").length).toBe(2);
+    expect(shadow.querySelectorAll(".ou-radio-card").length).toBe(2);
     cleanup();
   });
 
@@ -104,7 +104,7 @@ describe("TemplateQuestionScreen", () => {
     const { container } = render(
       <TemplateQuestionScreen {...baseProps} onAnswer={onAnswer} footer={<span />} locked />,
     );
-    (shadowOf(container).querySelector('.option[data-action="select:0"]') as HTMLElement)?.click();
+    (shadowOf(container).querySelector('.ou-radio-card[data-action="select:0"]') as HTMLElement)?.click();
     expect(onAnswer).not.toHaveBeenCalled();
     cleanup();
   });
@@ -114,7 +114,7 @@ describe("TemplateQuestionScreen", () => {
     const { container } = render(
       <TemplateQuestionScreen {...baseProps} onAnswer={onAnswer} footer={<span />} />,
     );
-    (shadowOf(container).querySelector('.option[data-action="select:1"]') as HTMLElement)?.click();
+    (shadowOf(container).querySelector('.ou-radio-card[data-action="select:1"]') as HTMLElement)?.click();
     expect(onAnswer).toHaveBeenCalledWith(1);
     cleanup();
   });

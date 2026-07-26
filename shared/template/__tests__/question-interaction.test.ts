@@ -120,7 +120,7 @@ describe("renderMatching", () => {
     // pairs: left 0 -> right 0 (x). correct pairs: {left:0,right:0} -> correct.
     const html = renderMatching(Q, { 0: 0 }, undefined, [], { pairs: [{ left: 0, right: 0 }] });
     expect(html).toContain("is-connected");
-    expect(html).toContain("ou-match__row--correct");
+    expect(html).toMatch(/ou-match__row[^"]*correct-answer/);
     // the joined row's drop zone is the right id, not a pool slot
     expect(html).toContain('data-drop="r0"');
   });
