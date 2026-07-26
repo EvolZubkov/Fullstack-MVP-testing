@@ -197,27 +197,32 @@ function showFinishConfirm(unansweredCount, finishLabel, onConfirm) {
     if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
     var back = document.createElement('div');
     back.id = 'tb-finish-modal';
-    back.className = 'tb-modal-backdrop';
+    // DS ou-modal; <html> is the .ou theme provider, so DS tokens resolve here.
+    back.className = 'ou-modal-root';
     back.setAttribute('role', 'dialog');
     back.setAttribute('aria-modal', 'true');
     back.innerHTML =
-        '<div class="tb-modal">' +
-          '<div class="tb-modal__head">' +
-            '<div class="tb-modal__icon" aria-hidden="true">!</div>' +
-            '<div><h2 class="tb-modal__title">' + escapeHtml(finishLabel) + '?</h2>' +
-            '<p class="tb-modal__desc">Вопросов без ответа: ' + unansweredCount +
-              '. Они будут засчитаны как неверные. После завершения вернуться к ним нельзя.</p></div>' +
+        '<div class="ou-modal__backdrop" data-modal="cancel"></div>' +
+        '<div class="ou-modal ou-modal--s">' +
+          '<div class="ou-modal__head ou-modal__head--icon">' +
+            '<span class="ou-modal__icon ou-modal__icon--warning" aria-hidden="true">' +
+              '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>' +
+            '</span>' +
+            '<div class="ou-modal__head-text">' +
+              '<h2 class="ou-modal__title">' + escapeHtml(finishLabel) + '?</h2>' +
+              '<p class="ou-modal__desc">Вопросов без ответа: ' + unansweredCount +
+                '. Они будут засчитаны как неверные. После завершения вернуться к ним нельзя.</p>' +
+            '</div>' +
           '</div>' +
-          '<div class="tb-modal__foot">' +
-            '<button type="button" class="btn btn-outline" data-modal="cancel">Отмена</button>' +
-            '<button type="button" class="btn" data-modal="confirm">' + escapeHtml(finishLabel) + '</button>' +
+          '<div class="ou-modal__foot">' +
+            '<button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-modal="cancel">Отмена</button>' +
+            '<button type="button" class="ou-btn ou-btn--primary ou-btn--m" data-modal="confirm">' + escapeHtml(finishLabel) + '</button>' +
           '</div>' +
         '</div>';
     document.body.appendChild(back);
     function close() { if (back.parentNode) back.parentNode.removeChild(back); }
-    back.querySelector('[data-modal="cancel"]').addEventListener('click', close);
+    Array.prototype.forEach.call(back.querySelectorAll('[data-modal="cancel"]'), function (el) { el.addEventListener('click', close); });
     back.querySelector('[data-modal="confirm"]').addEventListener('click', function () { close(); onConfirm(); });
-    back.addEventListener('click', function (e) { if (e.target === back) close(); });
 }
 
 // PRD-19 (Block D / D5): true when `topicId` is the LAST section in delivery order
@@ -419,13 +424,13 @@ function buildQuestionNavHtml(current, total) {
     var submitDisabledAttr = submitReady ? '' : ' disabled';
 
     if (!TEST_DATA.allowReturnToUnanswered) {
-        var sh = '<div class="navigation" style="justify-content:flex-end">';
+        var sh = '<div class="tb-scene__foot"><div class="tb-scene__foot-spacer"></div>';
         if (TEST_DATA.showCorrectAnswers && !state.feedbackShown) {
-            sh += '<button class="btn" data-action="answer-submit" onclick="confirmAnswer()"' + submitDisabledAttr + '>Принять</button>';
+            sh += '<button class="ou-btn ou-btn--primary ou-btn--l" data-action="answer-submit" onclick="confirmAnswer()"' + submitDisabledAttr + '>Принять</button>';
         } else if (hasNext) {
-            sh += '<button class="btn" data-nav="next" onclick="next()">Далее</button>';
+            sh += '<button class="ou-btn ou-btn--primary ou-btn--l" data-nav="next" onclick="next()">Далее</button>';
         } else {
-            sh += '<button class="btn" data-action="test-finish" onclick="submit()">Завершить тест</button>';
+            sh += '<button class="ou-btn ou-btn--primary ou-btn--l" data-action="test-finish" onclick="submit()">Завершить тест</button>';
         }
         sh += '</div>';
         return sh;
@@ -444,27 +449,27 @@ function buildQuestionNavHtml(current, total) {
     // host (take-test.tsx); rendered always in flexible mode, disabled when no
     // accessible previous question exists (first question of the test/section).
     var prevIdx = typeof prevAccessibleQuestionIndex === 'function' ? prevAccessibleQuestionIndex() : -1;
-    left += '<button class="btn btn-outline" data-action="answer-back" onclick="goBack()"' + (prevIdx < 0 ? ' disabled' : '') + '>← Назад</button>';
+    left += '<button class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-back" onclick="goBack()"' + (prevIdx < 0 ? ' disabled' : '') + '>← Назад</button>';
     if (!committed) {
-        left += '<button class="btn btn-outline" data-action="answer-skip" onclick="skipQuestion()">Пропустить</button>';
-        right += '<button class="btn" data-action="answer-submit" onclick="confirmAnswer()"' + submitDisabledAttr + '>Отправить ответ</button>';
+        left += '<button class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-skip" onclick="skipQuestion()">Пропустить</button>';
+        right += '<button class="ou-btn ou-btn--primary ou-btn--l" data-action="answer-submit" onclick="confirmAnswer()"' + submitDisabledAttr + '>Отправить ответ</button>';
     } else {
         // PRD-19 (Block D / FR-16): the question page has NO finish button — «Далее»
         // always advances; завершение happens on the обзор (section-finish/test-finish).
         // On the last item «Далее» → advancePageSequence reaches the обзор (D5).
-        right += '<button class="btn" data-nav="next" onclick="next()">Далее</button>';
+        right += '<button class="ou-btn ou-btn--primary ou-btn--l" data-nav="next" onclick="next()">Далее</button>';
     }
     // PRD-19 (Block D / FR-04c): «К обзору» → обзор. Shown when skipped questions
     // exist in scope (the obvious navigation path alongside the quick pills) OR the
     // learner jumped here FROM the обзор (a review jump must always be able to return —
     // the обзор itself has no «back»). Cleared when the section is finished.
     if (hasSkippedInScope() || state.fromReview) {
-        left += '<button class="btn btn-outline" data-action="answer-return" onclick="goToReview()">К обзору</button>';
+        left += '<button class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-return" onclick="goToReview()">К обзору</button>';
     }
 
-    return '<div class="navigation">' +
-        '<div class="navigation__left" style="display:flex;gap:12px">' + left + '</div>' +
-        '<div class="navigation__right" style="display:flex;gap:12px">' + right + '</div>' +
+    // The nav row IS the scene footer panel (appended below the layout in #app).
+    return '<div class="tb-scene__foot">' + left +
+        '<div class="tb-scene__foot-spacer"></div>' + right +
         '</div>';
 }
 
