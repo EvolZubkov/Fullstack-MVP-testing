@@ -1,0 +1,1617 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: шаблон «Стандартный» — сцена вместо вертикальной колонки, компоненты ДС
+    Файл: docs/wireframes/tpl-standard-scene-ds.html
+
+    ЧТО ЭТО. Ревизия единственного ученического шаблона. Две задачи, поставленные
+    заказчиком: перевести шаблон на дизайн-систему и перестать растягивать экран
+    вниз бесконечными вложенными рамками.
+
+    ЗАМЕР «КАК СЕЙЧАС» (превью шаблона v1.3.0 в браузере, 1440x900):
+      - .container ограничен 900px на любом экране, всё содержимое — одна колонка;
+      - .card (padding 32, рамка, тень) навешен на каждый блок, внутри лежат ещё
+        карточки: на «Старте» четыре строки «Информация о тесте» — три уровня рамок;
+      - на экране вопроса до первого варианта уходит ~330px (заголовок, таймер,
+        карта вопросов, легенда, мета), кнопки уезжают под сгиб;
+      - 1120 строк своего CSS повторяют компоненты, которые в ДС уже есть;
+      - шрифт в пакет не вендорится: --font-sans: Inter без @font-face.
+
+    ТРЕБОВАНИЯ, КОТОРЫЕ ПОКРЫВАЕТ ЭСКИЗ:
+      Т-1  экран = сцена: закреплённые шапка и панель действий, скроллится только тело;
+      Т-2  одна поверхность на экран: рамка только у элемента списка, не у секции;
+      Т-3  ширина работает: медиа слева / варианты справа, короткие варианты в две
+           колонки, показатели результата полосой, темы сеткой;
+      Т-4  компоненты — из ДС: ou-quiz, ou-radio-card, ou-match, ou-rank, ou-ring,
+           ou-timer, ou-progress, ou-btn, ou-tag, ou-card, ou-stat-row, ou-banner;
+      Т-5  панель действий одна на все движки, роль закреплена за местом:
+           слева «Назад» и «К обзору», по центру «Пропустить», справа основное действие;
+      Т-6  таймер теста виден ученику (в вебе сегодня не показывается вовсе),
+           таймер раздела — второе значение рядом, а не строка в счётчике вопроса;
+      Т-7  раскладка считается от КОНТЕЙНЕРА, а не от окна: в вебе экран живёт внутри
+           страницы приложения, в LMS — в чужом iframe;
+      Т-8  низкий контейнер (менее ~560px): сцена разворачивается в поток, панель
+           перестаёт быть липкой;
+      Т-9  предпросмотр показывает истинный вид на всех точках входа: карточка в
+           галерее шаблонов, модалка в редакторе структуры, реестр «Шаблоны»;
+      Т-10 миниатюра генерируется ОДИН раз при импорте/валидации шаблона, а не
+           собирается на каждый показ;
+      Т-11 раскладка строится на модульной сетке: 12 колонок, поля сцены 24px,
+           интервал между колонками один модуль 4px. Варианты ответа ВСЕГДА одной
+           колонкой шириной 8 модулей из 12 — две трети ширины сцены.
+
+    СОСТОЯНИЯ:
+      s-question        вопрос, одиночный выбор — варианты одной колонкой на 8 модулей (Т-1..Т-5)
+      s-question-media  вопрос с медиа — медиа 5 модулей, ответы 6 (Т-3)
+      s-matching        сопоставление на ou-match (Т-4)
+      s-ranking         ранжирование на ou-rank (Т-4)
+      s-start           стартовый экран: факты полосой, кулдаун баннером (Т-2, Т-3)
+      s-review          обзор: карта вопросов и список без ответа (Т-2, Т-5)
+      s-section-results итоги раздела (Т-2, Т-4)
+      s-results         результаты: полоса показателей и сетка тем (Т-3)
+      s-content         страница контента: изображение слева, текст справа (Т-3)
+      s-narrow          узкий и низкий контейнер LMS (900x520) (Т-7, Т-8)
+      s-preview         предпросмотр: карточка галереи и модалка редактора (Т-9, Т-10)
+
+    Разбор состояний, дельта, соответствие компонентам ДС и работы вне шаблона —
+    в таблицах под холстом.
+  -->
+  <title>Шаблон «Стандартный»: сцена и компоненты ДС</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    /* ─── Дельта: слой сцены шаблона ────────────────────────────────────────
+       Это предлагаемый CSS шаблона (server/scorm/templates/default/styles/base.css
+       после ревизии): ТОЛЬКО раскладка, все компоненты внутри — из ДС. Значения
+       берутся из токенов --ou-*; собственных цветов слой не заводит.
+
+       В продукте раскладка переключается контейнерными запросами (@container) —
+       экран живёт то в окне LMS, то внутри страницы приложения, то в iframe
+       отладчика (Т-7). В эскизе те же правила подключены классом
+       .tb-player--narrow, потому что медиазапрос мерил бы окно браузера. */
+    .tb-player {
+      /* Модуль сцены — 4px, это базовая единица шкалы ДС: все интервалы и поля
+         кратны ему. Сам интервал между колонками НЕ фиксирован: он ступенчато
+         растёт с шириной КОНТЕЙНЕРА (не окна браузера — сцена живёт то в iframe
+         LMS, то внутри страницы приложения). Ступени ниже, в @container. */
+      --tb-gutter: var(--ou-space-2);   /* 8px  — 2 модуля, узкий контейнер */
+      --tb-pad: var(--ou-space-4);      /* 16px — 4 модуля */
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      height: 100%;
+      min-height: 0;
+      background: var(--ou-bg-page);
+      color: var(--ou-fg-default);
+      container-type: inline-size;
+    }
+    /* Шапка и панель действий делят одну сетку 1fr / auto / 1fr: центральная зона
+       (карта вопросов, «Пропустить») стоит по центру сцены независимо от того,
+       насколько длинное название теста слева. */
+    .tb-player__head {
+      display: flex; flex-wrap: wrap; align-items: center;
+      gap: var(--ou-space-4) var(--ou-space-6);
+      padding: var(--ou-space-4) var(--tb-pad);
+      background: var(--ou-bg-surface-1);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+    }
+    /* Ступени модульной сетки. Контейнером объявлен кадр окна (в продукте — корень
+       хоста: body пакета, обёртка TemplateScreen в вебе), поэтому запросы меряют
+       место, которое реально досталось сцене.
+         до 600px    интервал 8px  (2 модуля), поля 16px
+         600-1023    интервал 12px (3 модуля), поля 24px
+         1024-1439   интервал 16px (4 модуля), поля 32px
+         от 1440     интервал 24px (6 модулей), поля 40px */
+    @container (min-width: 600px) {
+      .tb-player { --tb-gutter: var(--ou-space-3); --tb-pad: var(--ou-space-6); }
+    }
+    @container (min-width: 1024px) {
+      .tb-player { --tb-gutter: var(--ou-space-4); --tb-pad: var(--ou-space-7); }
+    }
+    @container (min-width: 1440px) {
+      .tb-player { --tb-gutter: var(--ou-space-6); --tb-pad: var(--ou-space-8); }
+    }
+
+    /* Первый ряд шапки — марка и таймеры, второй ряд — карта вопросов с легендой.
+       Ряды разведены, потому что в одну строку это не помещается: название теста
+       обрезалось многоточием, а карта, счётчик и таймеры слипались. */
+    .tb-player__brand { order: 1; flex: 1 1 auto; display: flex; align-items: center; gap: var(--ou-space-3); min-width: 0; }
+    /* Плашка логотипа теста (design.logoUrl). Ограничена по высоте, чтобы шапка
+       не прыгала от размера загруженной картинки. */
+    /* Таймеры: подпись строчными сверху, крупное число тоном (тест — акцент,
+       раздел при нехватке времени — предупреждение), как в образце. */
+    .tb-player__clock .ou-timer--digital { gap: 2px; }
+    .tb-player__clock .ou-timer__lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); text-transform: lowercase; }
+    .tb-player__clock .ou-timer__num { font-size: 30px; font-weight: 700; line-height: 1; letter-spacing: -0.01em; color: var(--ou-accent-default); }
+    .tb-player__clock .ou-timer.is-warning .ou-timer__num { color: var(--ou-warning-default); }
+    .tb-player__clock .ou-timer.is-critical .ou-timer__num { color: var(--ou-error-default); }
+    .tb-player__logo {
+      width: var(--ou-space-7); height: var(--ou-space-7);
+      border-radius: var(--ou-radius-s);
+      background: var(--ou-accent-soft); color: var(--ou-accent-default);
+      display: grid; place-items: center; flex-shrink: 0;
+      font: var(--ou-text-body-s); font-weight: 700;
+    }
+    /* Название теста НЕ обрезается: это имя того, что ученик сейчас проходит.
+       Длинное переносится на вторую строку. */
+    .tb-player__title {
+      font: var(--ou-text-heading-m); color: var(--ou-fg-default);
+      text-wrap: pretty;
+    }
+    /* Второй ряд шапки — карта вопросов и легенда, оба прижаты ВЛЕВО. Счётчик
+       отвеченных/пропущенных сюда не входит: он живёт на строке прогресса справа. */
+    .tb-player__map {
+      order: 3; flex: 1 0 100%;
+      display: flex; align-items: center; justify-content: flex-start;
+      gap: var(--ou-space-4) var(--ou-space-6); flex-wrap: wrap;
+    }
+    .tb-player__map .ou-quiz__legend { margin: 0; }
+    /* Счётчик отвеченных/пропущенных прижат к правому краю строки карты — под
+       таймерами, как в образце. */
+    .tb-player__map .tb-player__count { margin-left: auto; font: var(--ou-text-body-m); color: var(--ou-fg-muted); white-space: nowrap; flex-shrink: 0; }
+    .tb-player__map .tb-player__count strong { color: var(--ou-fg-default); font-weight: 600; }
+    .tb-player__clock { order: 2; margin-left: auto; display: flex; align-items: flex-start; gap: var(--ou-space-7); flex-shrink: 0; }
+    /* Строка прогресса: тонкая полоса тянется, счётчик прижат к правому краю в
+       ту же строку. */
+    .tb-player__progressrow {
+      display: flex; align-items: center; gap: var(--ou-space-4);
+      padding: var(--ou-space-2) var(--tb-pad);
+    }
+    .tb-player__progressrow .ou-progress { flex: 1 1 auto; }
+    .tb-player__count { font: var(--ou-text-body-m); color: var(--ou-fg-muted); white-space: nowrap; flex-shrink: 0; }
+    .tb-player__count strong { color: var(--ou-fg-default); font-weight: 600; }
+    /* Тело центрируется по вертикали, пока содержимое короче сцены, и переходит в
+       обычную прокрутку сверху, когда длиннее (safe). Так короткий вопрос не висит
+       у верхней кромки, а длинный не обрезается. */
+    .tb-content {
+      overflow: auto; min-height: 0;
+      padding-block: var(--ou-space-6);
+      padding-inline: var(--tb-pad);
+      display: grid; align-content: start; justify-items: center;
+    }
+    /* ─── Модульная сетка ────────────────────────────────────────────────────
+       12 колонок, поля сцены 24px (--ou-space-6), интервал между колонками
+       один модуль 4px (--ou-space-1). Своих чисел слой не заводит: обе величины
+       уже есть в шкале ДС.
+       В ДС готовой 12-колоночной сетки нет: ou-lgrid умеет максимум 6 колонок
+       и не даёт спанов, поэтому сетка живёт в слое шаблона. */
+    .tb-screen {
+      width: 100%; max-width: var(--wf-size-1200);
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      column-gap: var(--tb-gutter);
+      row-gap: var(--ou-space-4);
+      align-content: start;
+      align-items: stretch;
+      position: relative;
+    }
+    .tb-col-3 { grid-column: span 3; }
+    .tb-col-4 { grid-column: span 4; }
+    .tb-col-5 { grid-column: span 5; }
+    .tb-col-6 { grid-column: span 6; }
+    /* 8 из 12 — две трети ширины сцены. Основная мера ученических экранов:
+       строка ответа во всю ширину нечитаема, глаз теряет её начало. */
+    .tb-col-8 { grid-column: span 8; }
+    .tb-col-12 { grid-column: 1 / -1; }
+    .tb-col-right-6 { grid-column: 7 / -1; }
+    /* Мера строки: раскладка использует ширину, но текст не растягивается на всю
+       сцену — читаемость важнее заполнения. */
+    /* Меру строки задаёт сам спан: 8 колонок из 12 на сцене 1200px — это ~66
+       знаков, то есть попадание в читаемую меру без отдельного ограничителя. */
+    .tb-player__foot {
+      display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+      gap: var(--ou-space-3);
+      padding: var(--ou-space-3) var(--tb-pad);
+      background: var(--ou-bg-surface-1);
+      border-top: var(--wf-border-w) solid var(--ou-border-soft);
+    }
+    .tb-foot__left { justify-self: start; display: flex; gap: var(--ou-space-2); }
+    .tb-foot__center { justify-self: center; }
+    .tb-foot__right { justify-self: end; display: flex; gap: var(--ou-space-2); }
+
+    /* ─── Дельта: экран вопроса ──────────────────────────────────────────── */
+    /* Вертикальные интервалы даёт row-gap сетки, поэтому у блоков своих отступов
+       нет: иначе шаг между строками складывается из двух источников.
+       Мета-строка тянется на все 12 колонок: слева номер вопроса и тег темы,
+       справа счётчик отвеченных/пропущенных. */
+    .tb-q__meta {
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: var(--ou-space-3) var(--ou-space-5); flex-wrap: wrap;
+      font: var(--ou-text-body-m); color: var(--ou-fg-muted);
+      margin: 0;
+    }
+    .tb-q__meta-left { display: inline-flex; align-items: center; gap: var(--ou-space-2); }
+    .tb-q__meta .tb-player__count { font: var(--ou-text-body-m); color: var(--ou-fg-muted); white-space: nowrap; }
+    .tb-q__meta .tb-player__count strong { color: var(--ou-fg-default); font-weight: 600; }
+    .tb-q__text {
+      font-family: var(--ou-font-family-base); font-weight: 600;
+      font-size: clamp(22px, 2.6cqi, 30px); line-height: 1.2;
+      color: var(--ou-fg-default); margin: 0; text-wrap: pretty;
+    }
+    /* Медиа тянется на высоту ряда: его низ совпадает с низом списка ответов.
+       Раньше высота была долей высоты сцены — величина, не связанная ни с сеткой,
+       ни с содержимым, и нижняя кромка медиа не совпадала ни с чем.
+       Минимум — 240px (60 модулей), картинка внутри вписывается (object-fit:
+       contain), поэтому пропорции кадра не ломаются. */
+    .tb-q__media {
+      border-radius: var(--ou-radius-l); background: var(--ou-accent-soft);
+      inline-size: 100%; align-self: stretch; min-block-size: var(--wf-size-240);
+      display: grid; place-items: center;
+      color: var(--ou-accent-default); font: var(--ou-text-body-s);
+    }
+    .tb-q__media img { inline-size: 100%; block-size: 100%; object-fit: contain; }
+    /* Варианты ответа — всегда ОДНА колонка. Ширину задаёт спан по модульной
+       сетке (8 из 12 на обычном экране вопроса, 6 из 12 рядом с медиа).
+       --tb-answer-fs выставляет рендерер по длине САМОГО ДЛИННОГО варианта: размер
+       единый для всех вариантов экрана и не меняется от состояния плашки
+       (выбран / верно / неверно), но зажат между 15 и 22px. */
+    .tb-q__options { display: grid; gap: var(--ou-space-3); --tb-answer-fs: 22px; }
+    .tb-q__options--long { --tb-answer-fs: 16px; }
+    /* Обычное начертание: акцент в опции даёт выделенная плашка, а не жирный
+       шрифт. Размер единый для всех вариантов экрана, зажат между 15 и 22px и
+       выставляется рендерером по длине самого длинного варианта. Перебивает
+       собственный font-weight 600 у ou-radio-card__title. */
+    .tb-q__options .ou-radio-card__title {
+      font-size: clamp(16px, var(--tb-answer-fs), 24px);
+      font-weight: 400; line-height: 1.35;
+    }
+    /* Вариант ответа как в образце: акцентно-тонированная плашка (не плоский серый
+       DS-фон), крупное радио, текст по средней линии. Цвета — токены DS: у всех
+       вариантов --ou-accent-soft, у выбранного --ou-accent-container + акцентная
+       рамка. Выравнивание по центру и увеличенное радио — кандидаты в правку
+       ui-kit, а не постоянные переопределения шаблона. */
+    .tb-q__options .ou-radio-card {
+      align-items: center; gap: var(--ou-space-4);
+      padding: var(--ou-space-4) var(--ou-space-5);
+      border-radius: var(--ou-radius-l);
+      background: linear-gradient(135deg, var(--ou-accent-soft), var(--ou-accent-container));
+      border-color: var(--ou-accent-border);
+      transition: border-color var(--ou-motion-fast), box-shadow var(--ou-motion-fast);
+    }
+    .tb-q__options .ou-radio-card:hover { border-color: var(--ou-accent-muted); }
+    .tb-q__options .ou-radio-card.is-on {
+      border-color: var(--ou-accent-default);
+      box-shadow: 0 0 0 1px var(--ou-accent-default) inset,
+                  0 var(--ou-space-2) var(--ou-space-6) color-mix(in oklch, transparent 78%, var(--ou-accent-default));
+    }
+    .tb-q__options .ou-radio { flex-shrink: 0; }
+    .tb-q__options .ou-radio__ring {
+      width: 28px; height: 28px; border-width: 2px;
+      border-color: var(--ou-accent-muted); background: transparent;
+    }
+    .tb-q__options .ou-radio__dot { width: 14px; height: 14px; }
+    .tb-q__options .ou-radio.is-on .ou-radio__ring { border-color: var(--ou-accent-default); }
+
+    /* ─── Дельта: стартовый экран ────────────────────────────────────────── */
+    .tb-title { font: var(--ou-text-display-s); margin: 0; }
+    .tb-lead { font: var(--ou-text-body-l); color: var(--ou-fg-soft); margin: 0; }
+    /* Параметры теста: полоса значений без рамок вместо четырёх карточек в
+       столбик. Каждый параметр — три колонки модульной сетки. Ряд объявлен
+       явной подсеткой, иначе первый параметр подтягивается в свободные колонки
+       предыдущей строки и полоса разъезжается. */
+    .tb-facts {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      grid-template-columns: subgrid;
+      column-gap: var(--tb-gutter);
+    }
+    .tb-fact { grid-column: span 3; }
+    .tb-fact__v { font: var(--ou-text-display-s); color: var(--ou-fg-default); line-height: 1.1; }
+    .tb-fact__l { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); }
+    .tb-block { margin: 0; display: grid; gap: var(--ou-space-3); align-content: start; }
+    .tb-block__title { font: var(--ou-text-heading-s); margin: 0 0 var(--ou-space-3); }
+
+    /* ─── Дельта: результаты ─────────────────────────────────────────────── */
+    .tb-result__band { display: flex; align-items: center; gap: var(--ou-space-8); flex-wrap: wrap; }
+    .tb-metrics { display: flex; gap: var(--ou-space-8); flex-wrap: wrap; }
+    .tb-metric__v { font: var(--ou-text-display-s); line-height: 1.1; }
+    .tb-metric__l { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); }
+    /* Тема результата — четыре колонки сетки: три темы в ряд без своих отступов. */
+    .tb-topic { grid-column: span 4; }
+    .tb-topic__head { display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-3); margin-bottom: var(--ou-space-3); }
+    .tb-topic__name { font: var(--ou-text-body-m); font-weight: 600; }
+    .tb-rows { display: flex; flex-direction: column; }
+    .tb-center { display: grid; place-items: center; text-align: center; gap: var(--ou-space-4); }
+
+    /* ─── Дельта: узкий и низкий контейнер (в продукте — @container) ─────── */
+    /* Узкая сцена: сетка схлопывается — каждый блок занимает все 12 колонок. */
+    .tb-player--narrow .tb-screen > * { grid-column: 1 / -1; }
+    .tb-player--narrow .tb-content { padding-block: var(--ou-space-4); }
+    .tb-player--narrow .tb-player__map .ou-quiz__legend { display: none; }
+    .tb-player--narrow .tb-player__map { flex-basis: auto; order: 2; }
+    .tb-player--narrow .tb-player__title { font: var(--ou-text-heading-s); }
+    .tb-player--narrow .tb-metrics { gap: var(--ou-space-5); }
+
+    /* Оверлей модульной сетки: тумблер «Сетка» кладёт полупрозрачные колонки
+       поверх тела, чтобы выравнивание проверялось глазами, а не на слово. */
+    .tb-content { position: relative; }
+    .tb-grid-overlay { display: none; }
+    body.wf-grid-on .tb-content .tb-grid-overlay {
+      display: grid; position: absolute; inset: 0 var(--tb-pad);
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      column-gap: var(--tb-gutter);
+      pointer-events: none; z-index: 50; max-width: var(--wf-size-1200);
+      margin-inline: auto;
+    }
+    .tb-grid-overlay span { background: color-mix(in oklch, transparent 88%, var(--ou-accent-default)); }
+
+    /* ─── Каркас эскиза ──────────────────────────────────────────────────── */
+    /* Кадр, изображающий окно, в котором играется тест: окно LMS, iframe отладчика
+       или область страницы приложения. Не часть UI. */
+    .wf-viewport {
+      container-type: inline-size;
+      width: 100%; max-width: var(--wf-size-1360);
+      height: var(--wf-size-760);
+      margin: 0 auto;
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      border-radius: var(--ou-radius-l);
+      overflow: hidden;
+      box-shadow: var(--ou-shadow-sm);
+    }
+    .wf-viewport--lms { max-width: var(--wf-size-900); height: var(--wf-size-560); }
+    .wf-viewport--flow { height: auto; }
+    .wf-page { padding-bottom: var(--ou-space-8); }
+    .wf-caption { max-width: var(--wf-size-1360); margin: 0 auto var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+    .wf-pair { max-width: var(--wf-size-1200); margin: 0 auto; display: grid; grid-template-columns: var(--wf-size-360) 1fr; gap: var(--ou-space-6); align-items: start; }
+    /* Миниатюра: тот же экран, снятый генератором при импорте шаблона и вставленный
+       в карточку как готовый файл. В эскизе — уменьшенная копия сцены. */
+    .wf-thumb { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--ou-radius-m); background: var(--ou-bg-page); }
+    .wf-thumb__inner { position: absolute; top: 0; left: 0; width: var(--wf-size-1200); height: var(--wf-size-660); transform: scale(0.26); transform-origin: top left; pointer-events: none; }
+    .wf-thumb--wide .wf-thumb__inner { transform: scale(0.52); }
+    /* Якорь для метки требования. НЕ задаёт display: класс вешается на элементы
+       раскладки (шапка, панель, сетка вариантов), и своё display они держат сами. */
+    .wf-annot-wrap { position: relative; }
+    .wf-annot {
+      display: none; position: absolute; top: calc(-1 * var(--ou-space-2)); right: calc(-1 * var(--ou-space-1));
+      z-index: 200; background: var(--ou-warning-default); color: var(--ou-fg-default);
+      border-radius: var(--ou-radius-s); padding: 0 var(--ou-space-1);
+      font: var(--ou-text-body-xs); font-weight: 700; line-height: var(--ou-space-5);
+      pointer-events: none; white-space: nowrap; box-shadow: var(--ou-shadow-sm);
+    }
+    body.wf-annots-on .wf-annot { display: block; }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+    .wf-state.active { display: block; }
+    .wf-notes { max-width: var(--wf-size-1200); margin: var(--ou-space-7) auto; padding: 0 var(--ou-space-4); }
+    .wf-notes-title { font: var(--ou-text-body-m); font-weight: 700; margin: var(--ou-space-5) 0 var(--ou-space-2); }
+    .wf-notes-intro { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-3); }
+    .wf-notes-table { width: 100%; border-collapse: collapse; margin-bottom: var(--ou-space-7); }
+    .wf-notes-table th, .wf-notes-table td { border: var(--wf-border-w) solid var(--ou-border-soft); padding: var(--ou-space-2) var(--ou-space-3); font: var(--ou-text-body-s); text-align: left; vertical-align: top; }
+    .wf-notes-table th { background: var(--ou-bg-surface-3); font-weight: 600; }
+    .wf-notes-table code { font: var(--ou-text-mono-s); background: var(--ou-bg-surface-3); padding: 0 var(--wf-space-tiny); border-radius: var(--ou-radius-xs); }
+    .wf-sprite { display: none; }
+    :root {
+      --wf-size-760: 760px;
+      --wf-size-560: 560px;
+      --wf-size-1360: 1360px;
+      --wf-size-660: 660px;
+      --wf-size-520: 520px;
+      --wf-size-900: 900px;
+      --wf-size-360: 360px;
+      --wf-size-160: 160px;
+    }
+  </style>
+</head>
+<body class="ou ou--dark ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-radio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></symbol>
+  <symbol id="i-radio-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m4 18 5-5 4 4 3-3 4 4"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 14 6-6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 10 6 6 6-6"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 7h.01M8 12h.01M8 17h.01M16 7h.01M16 12h.01M16 17h.01"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">Шаблон «Стандартный»:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this, 's-question')">Вопрос</button>
+  <button class="wf-btn" type="button" onclick="showState(this, 's-question-media')">Вопрос с медиа</button>
+  <button class="wf-btn" type="button" onclick="showState(this, 's-matching')">Сопоставление</button>
+  <button class="wf-btn" type="button" onclick="showState(this, 's-ranking')">Ранжирование</button>
+  <button class="wf-btn" type="button" onclick="showState(this, 's-start')">Старт</button>
+  <button class="wf-btn" type="button" onclick="showState(this, 's-review')">Обзор</button>
+  <button class="wf-btn" type="button" onclick="showState(this, 's-section-results')">Итоги раздела</button>
+  <button class="wf-btn" type="button" onclick="showState(this, 's-results')">Результаты</button>
+  <button class="wf-btn" type="button" onclick="showState(this, 's-content')">Контент</button>
+  <button class="wf-btn" type="button" onclick="showState(this, 's-narrow')">Узкое окно LMS</button>
+  <button class="wf-btn" type="button" onclick="showState(this, 's-preview')">Предпросмотр</button>
+  <div class="wf-nav-sep"></div>
+  <button type="button" class="ou-btn ou-btn--secondary ou-btn--s active" onclick="toggleTheme(this)">Dark</button>
+  <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="toggleDensity(this)">Normal</button>
+  <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="toggleGrid(this)">Сетка</button>
+  <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="toggleAnnots(this)">Аннотации</button>
+</nav>
+
+<!-- ══════════════════ Вопрос: одиночный выбор ══════════════════ -->
+<section class="wf-state active" id="s-question">
+  <div class="wf-page">
+    <p class="wf-caption">Экран вопроса: шапка и панель действий закреплены, скроллится только тело. Варианты — одной колонкой на 8 модулей из 12, две трети ширины сцены.</p>
+    <div class="wf-viewport">
+      <div class="tb-player">
+
+        <header class="tb-player__head wf-annot-wrap">
+          <span class="wf-annot">Т-1 · Т-5 · Т-6</span>
+          <div class="tb-player__brand">
+            <span class="tb-player__logo" aria-hidden="true">РТ</span>
+            <span class="tb-player__title">Основы информационной безопасности</span>
+          </div>
+          <div class="tb-player__map">
+            <div class="ou-quiz ou-quiz--l ou-quiz--circle" role="group" aria-label="Карта вопросов: отвечено 5, пропущено 1">
+              <div class="ou-quiz__dots">
+                <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 1, отвечен">1</button>
+                <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 2, отвечен">2</button>
+                <button type="button" class="ou-quiz__dot is-current" aria-label="Вопрос 3, текущий" aria-current="true">3</button>
+                <button type="button" class="ou-quiz__dot is-skipped" aria-label="Вопрос 4, пропущен">4</button>
+                <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 5, отвечен">5</button>
+                <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 6, отвечен">6</button>
+                <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 7, отвечен">7</button>
+                <button type="button" class="ou-quiz__dot is-unanswered" disabled aria-label="Вопрос 8, не выдан">8</button>
+                <button type="button" class="ou-quiz__dot is-unanswered" disabled aria-label="Вопрос 9, не выдан">9</button>
+                <button type="button" class="ou-quiz__dot is-unanswered" disabled aria-label="Вопрос 10, не выдан">10</button>
+                <button type="button" class="ou-quiz__dot is-unanswered" disabled aria-label="Вопрос 11, не выдан">11</button>
+                <button type="button" class="ou-quiz__dot is-unanswered" disabled aria-label="Вопрос 12, не выдан">12</button>
+              </div>
+            </div>
+            <div class="ou-quiz__legend"><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-skipped"></span>пропущен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span></div>
+            <span class="tb-player__count">отвечено <strong>5</strong> из 12 · пропущено 1</span>
+          </div>
+          <div class="tb-player__clock">
+            <div class="ou-timer ou-timer--digital ou-timer--s" role="timer"><span class="ou-timer__lbl">Тест</span><span class="ou-timer__num">44:51</span></div>
+            <div class="ou-timer ou-timer--digital ou-timer--s is-warning" role="timer"><span class="ou-timer__lbl">Раздел</span><span class="ou-timer__num">4:12</span></div>
+          </div>
+        </header>
+
+        <div class="ou-progress ou-progress--xs tb-player__progress" role="progressbar" aria-valuenow="42" aria-valuemin="0" aria-valuemax="100">
+          <div class="ou-progress__track"><div class="ou-progress__fill" style="width:42%"></div></div>
+        </div>
+
+        <main class="tb-content">
+          <div class="tb-grid-overlay" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="tb-screen">
+            <div class="tb-q__meta tb-col-8">
+              <span>Вопрос 3 из 12</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--s">Базовые угрозы</span>
+            </div>
+            <h1 class="tb-q__text tb-col-8">Какой пароль является наиболее надёжным с точки зрения безопасности?</h1>
+            <div class="tb-q__options tb-col-8 wf-annot-wrap">
+              <span class="wf-annot">Т-3 · 8 из 12 колонок · ou-radio-card</span>
+              <label class="ou-radio-card">
+                <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                <span class="ou-radio-card__text"><span class="ou-radio-card__title">Дата рождения, 01011990</span></span>
+              </label>
+              <label class="ou-radio-card is-on">
+                <span class="ou-radio ou-radio--m is-on"><input type="radio" class="ou-radio__input" checked><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                <span class="ou-radio-card__text"><span class="ou-radio-card__title">Длинная случайная фраза</span></span>
+              </label>
+              <label class="ou-radio-card">
+                <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                <span class="ou-radio-card__text"><span class="ou-radio-card__title">Название компании с цифрой</span></span>
+              </label>
+              <label class="ou-radio-card">
+                <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                <span class="ou-radio-card__text"><span class="ou-radio-card__title">Стандартный пароль qwerty123</span></span>
+              </label>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-player__foot wf-annot-wrap">
+          <span class="wf-annot">Т-5 · одна панель на SCORM, веб и отладчик</span>
+          <div class="tb-foot__left">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">← Назад</button>
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">К обзору</button>
+          </div>
+          <div class="tb-foot__center">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Пропустить</button>
+          </div>
+          <div class="tb-foot__right">
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Отправить ответ</button>
+          </div>
+        </footer>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ Вопрос с медиа ══════════════════ -->
+<section class="wf-state" id="s-question-media">
+  <div class="wf-page">
+    <p class="wf-caption">Вопрос с изображением: вопрос во всю ширину сверху, медиа и ответы — по 6 модулей из 12. Ответы всегда одной колонкой.</p>
+    <div class="wf-viewport">
+      <div class="tb-player">
+
+        <header class="tb-player__head">
+          <div class="tb-player__brand">
+            <span class="tb-player__logo" aria-hidden="true">РТ</span>
+            <span class="tb-player__title">Основы информационной безопасности</span>
+          </div>
+          <div class="tb-player__map">
+            <div class="ou-quiz ou-quiz--l ou-quiz--circle" role="group" aria-label="Карта вопросов">
+              <div class="ou-quiz__dots">
+                <button type="button" class="ou-quiz__dot is-answered">1</button>
+                <button type="button" class="ou-quiz__dot is-answered">2</button>
+                <button type="button" class="ou-quiz__dot is-answered">3</button>
+                <button type="button" class="ou-quiz__dot is-skipped">4</button>
+                <button type="button" class="ou-quiz__dot is-current" aria-current="true">5</button>
+                <button type="button" class="ou-quiz__dot is-unanswered" disabled>6</button>
+                <button type="button" class="ou-quiz__dot is-unanswered" disabled>7</button>
+                <button type="button" class="ou-quiz__dot is-unanswered" disabled>8</button>
+              </div>
+            </div>
+            <div class="ou-quiz__legend"><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-skipped"></span>пропущен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span></div>
+            <span class="tb-player__count">отвечено <strong>3</strong> из 8 · пропущено 1</span>
+          </div>
+          <div class="tb-player__clock">
+            <div class="ou-timer ou-timer--digital ou-timer--s" role="timer"><span class="ou-timer__lbl">Тест</span><span class="ou-timer__num">38:04</span></div>
+          </div>
+        </header>
+
+        <div class="ou-progress ou-progress--xs tb-player__progress">
+          <div class="ou-progress__track"><div class="ou-progress__fill" style="width:62%"></div></div>
+        </div>
+
+        <main class="tb-content">
+          <div class="tb-grid-overlay" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="tb-screen">
+            <div class="tb-q__meta tb-col-8"><span>Вопрос 5 из 8
+              <span class="ou-tag ou-tag--neutral ou-tag--s">Фишинг</span></span></div>
+            <h1 class="tb-q__text tb-col-12">Что в этом письме выдаёт попытку фишинга?</h1>
+            <div class="tb-q__media tb-col-6 wf-annot-wrap">
+              <span class="wf-annot">Т-3 · медиа 6 колонок</span>
+              <span><svg width="28" height="28" aria-hidden="true"><use href="#i-image"/></svg> скриншот письма</span>
+            </div>
+            <div class="tb-q__options tb-col-right-6 tb-q__options--long wf-annot-wrap">
+              <span class="wf-annot">ответы 6 колонок</span>
+                <label class="ou-radio-card">
+                  <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                  <span class="ou-radio-card__text"><span class="ou-radio-card__title">Домен отправителя отличается от корпоративного одной буквой</span></span>
+                </label>
+                <label class="ou-radio-card is-on">
+                  <span class="ou-radio ou-radio--m is-on"><input type="radio" class="ou-radio__input" checked><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                  <span class="ou-radio-card__text"><span class="ou-radio-card__title">Требование срочно подтвердить пароль по ссылке</span></span>
+                </label>
+                <label class="ou-radio-card">
+                  <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                  <span class="ou-radio-card__text"><span class="ou-radio-card__title">Письмо пришло в рабочее время</span></span>
+                </label>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-player__foot">
+          <div class="tb-foot__left">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">← Назад</button>
+          </div>
+          <div class="tb-foot__center">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Пропустить</button>
+          </div>
+          <div class="tb-foot__right">
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Отправить ответ</button>
+          </div>
+        </footer>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ Сопоставление ══════════════════ -->
+<section class="wf-state" id="s-matching">
+  <div class="wf-page">
+    <p class="wf-caption">Сопоставление на компоненте ДС <code>ou-match</code>: своя доска <code>.matching-board</code> из шаблона удаляется.</p>
+    <div class="wf-viewport">
+      <div class="tb-player">
+
+        <header class="tb-player__head">
+          <div class="tb-player__brand">
+            <span class="tb-player__logo" aria-hidden="true">РТ</span>
+            <span class="tb-player__title">Основы информационной безопасности</span>
+          </div>
+          <div class="tb-player__map">
+            <div class="ou-quiz ou-quiz--l ou-quiz--circle" role="group" aria-label="Карта вопросов">
+              <div class="ou-quiz__dots">
+                <button type="button" class="ou-quiz__dot is-answered">1</button>
+                <button type="button" class="ou-quiz__dot is-answered">2</button>
+                <button type="button" class="ou-quiz__dot is-current" aria-current="true">3</button>
+                <button type="button" class="ou-quiz__dot is-unanswered" disabled>4</button>
+              </div>
+            </div>
+            <div class="ou-quiz__legend"><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-skipped"></span>пропущен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span></div>
+            <span class="tb-player__count">отвечено <strong>2</strong> из 4</span>
+          </div>
+          <div class="tb-player__clock">
+            <div class="ou-timer ou-timer--digital ou-timer--s" role="timer"><span class="ou-timer__lbl">Тест</span><span class="ou-timer__num">12:30</span></div>
+          </div>
+        </header>
+
+        <div class="ou-progress ou-progress--xs tb-player__progress">
+          <div class="ou-progress__track"><div class="ou-progress__fill" style="width:50%"></div></div>
+        </div>
+
+        <main class="tb-content">
+          <div class="tb-grid-overlay" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="tb-screen">
+            <div class="tb-q__meta tb-col-8"><span>Вопрос 3 из 4<span class="ou-tag ou-tag--neutral ou-tag--s">Базовые угрозы</span></span></div>
+            <h1 class="tb-q__text tb-col-8">Сопоставьте тип угрозы с описанием</h1>
+            <div class="ou-match ou-match--side-l ou-match--icon-dots tb-col-12 wf-annot-wrap">
+              <span class="wf-annot">Т-4 · ou-match</span>
+              <div class="ou-match__row is-connected">
+                <div class="ou-match__card ou-match__card--drag">
+                  <span class="ou-match__icon" aria-hidden="true"></span>
+                  <span class="ou-match__card-text"><span class="ou-match__card-title">Фишинг</span></span>
+                </div>
+                <div class="ou-match__gap" aria-hidden="true">
+                  <svg class="ou-match__gap-arrow" viewBox="0 0 28 12"><path d="M2 6 L24 6"/><path d="M18 1 L26 6 L18 11"/></svg>
+                </div>
+                <div class="ou-match__card ou-match__card--fixed">
+                  <span class="ou-match__card-text"><span class="ou-match__card-title">Поддельное письмо для кражи данных</span></span>
+                </div>
+              </div>
+              <div class="ou-match__row">
+                <div class="ou-match__card ou-match__card--drag">
+                  <span class="ou-match__icon" aria-hidden="true"></span>
+                  <span class="ou-match__card-text"><span class="ou-match__card-title">Вредоносное ПО</span></span>
+                </div>
+                <div class="ou-match__gap" aria-hidden="true">
+                  <svg class="ou-match__gap-arrow" viewBox="0 0 28 12"><path d="M2 6 L24 6"/><path d="M18 1 L26 6 L18 11"/></svg>
+                </div>
+                <div class="ou-match__card ou-match__card--fixed">
+                  <span class="ou-match__card-text"><span class="ou-match__card-title">Программа, повреждающая систему</span></span>
+                </div>
+              </div>
+              <div class="ou-match__row">
+                <div class="ou-match__card ou-match__card--drag">
+                  <span class="ou-match__icon" aria-hidden="true"></span>
+                  <span class="ou-match__card-text"><span class="ou-match__card-title">Социальная инженерия</span></span>
+                </div>
+                <div class="ou-match__gap" aria-hidden="true">
+                  <svg class="ou-match__gap-arrow" viewBox="0 0 28 12"><path d="M2 6 L24 6"/><path d="M18 1 L26 6 L18 11"/></svg>
+                </div>
+                <div class="ou-match__card ou-match__card--fixed">
+                  <span class="ou-match__card-text"><span class="ou-match__card-title">Манипуляция людьми для получения доступа</span></span>
+                </div>
+              </div>
+              <div class="ou-match__row">
+                <div class="ou-match__card ou-match__card--drag">
+                  <span class="ou-match__icon" aria-hidden="true"></span>
+                  <span class="ou-match__card-text"><span class="ou-match__card-title">Брутфорс</span></span>
+                </div>
+                <div class="ou-match__gap" aria-hidden="true">
+                  <svg class="ou-match__gap-arrow" viewBox="0 0 28 12"><path d="M2 6 L24 6"/><path d="M18 1 L26 6 L18 11"/></svg>
+                </div>
+                <div class="ou-match__card ou-match__card--fixed">
+                  <span class="ou-match__card-text"><span class="ou-match__card-title">Перебор паролей автоматически</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-player__foot">
+          <div class="tb-foot__left">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">← Назад</button>
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">К обзору</button>
+          </div>
+          <div class="tb-foot__center">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Пропустить</button>
+          </div>
+          <div class="tb-foot__right">
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Отправить ответ</button>
+          </div>
+        </footer>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ Ранжирование ══════════════════ -->
+<section class="wf-state" id="s-ranking">
+  <div class="wf-page">
+    <p class="wf-caption">Ранжирование на компоненте ДС <code>ou-rank</code>: перетаскивание и кнопки вверх/вниз — одна реализация на оба хоста.</p>
+    <div class="wf-viewport">
+      <div class="tb-player">
+
+        <header class="tb-player__head">
+          <div class="tb-player__brand">
+            <span class="tb-player__logo" aria-hidden="true">РТ</span>
+            <span class="tb-player__title">Основы информационной безопасности</span>
+          </div>
+          <div class="tb-player__map">
+            <div class="ou-quiz ou-quiz--l ou-quiz--circle" role="group" aria-label="Карта вопросов">
+              <div class="ou-quiz__dots">
+                <button type="button" class="ou-quiz__dot is-answered">1</button>
+                <button type="button" class="ou-quiz__dot is-answered">2</button>
+                <button type="button" class="ou-quiz__dot is-answered">3</button>
+                <button type="button" class="ou-quiz__dot is-current" aria-current="true">4</button>
+              </div>
+            </div>
+            <div class="ou-quiz__legend"><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-skipped"></span>пропущен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span></div>
+            <span class="tb-player__count">отвечено <strong>3</strong> из 4</span>
+          </div>
+          <div class="tb-player__clock">
+            <div class="ou-timer ou-timer--digital ou-timer--s is-critical" role="timer"><span class="ou-timer__lbl">Тест</span><span class="ou-timer__num">0:48</span></div>
+          </div>
+        </header>
+
+        <div class="ou-progress ou-progress--xs tb-player__progress">
+          <div class="ou-progress__track"><div class="ou-progress__fill" style="width:88%"></div></div>
+        </div>
+
+        <main class="tb-content">
+          <div class="tb-grid-overlay" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="tb-screen">
+            <div class="tb-q__meta tb-col-8"><span>Вопрос 4 из 4<span class="ou-tag ou-tag--neutral ou-tag--s">Реагирование</span></span></div>
+            <h1 class="tb-q__text tb-col-8">Расположите шаги реагирования на инцидент в правильном порядке</h1>
+            <div class="ou-rank tb-col-8 wf-annot-wrap">
+              <span class="wf-annot">Т-4 · ou-rank</span>
+              <div class="ou-rank__item">
+                <span class="ou-rank__index">1</span>
+                <span class="ou-rank__grip" aria-hidden="true"><svg width="16" height="16"><use href="#i-grip"/></svg></span>
+                <span class="ou-rank__text"><span class="ou-rank__title">Зафиксировать признаки инцидента</span></span>
+                <span class="ou-rank__controls">
+                  <button type="button" class="ou-rank__btn" aria-label="Выше" disabled><svg width="14" height="14"><use href="#i-up"/></svg></button>
+                  <button type="button" class="ou-rank__btn" aria-label="Ниже"><svg width="14" height="14"><use href="#i-down"/></svg></button>
+                </span>
+              </div>
+              <div class="ou-rank__item">
+                <span class="ou-rank__index">2</span>
+                <span class="ou-rank__grip" aria-hidden="true"><svg width="16" height="16"><use href="#i-grip"/></svg></span>
+                <span class="ou-rank__text"><span class="ou-rank__title">Сообщить в службу информационной безопасности</span></span>
+                <span class="ou-rank__controls">
+                  <button type="button" class="ou-rank__btn" aria-label="Выше"><svg width="14" height="14"><use href="#i-up"/></svg></button>
+                  <button type="button" class="ou-rank__btn" aria-label="Ниже"><svg width="14" height="14"><use href="#i-down"/></svg></button>
+                </span>
+              </div>
+              <div class="ou-rank__item">
+                <span class="ou-rank__index">3</span>
+                <span class="ou-rank__grip" aria-hidden="true"><svg width="16" height="16"><use href="#i-grip"/></svg></span>
+                <span class="ou-rank__text"><span class="ou-rank__title">Изолировать заражённое устройство</span></span>
+                <span class="ou-rank__controls">
+                  <button type="button" class="ou-rank__btn" aria-label="Выше"><svg width="14" height="14"><use href="#i-up"/></svg></button>
+                  <button type="button" class="ou-rank__btn" aria-label="Ниже"><svg width="14" height="14"><use href="#i-down"/></svg></button>
+                </span>
+              </div>
+              <div class="ou-rank__item">
+                <span class="ou-rank__index">4</span>
+                <span class="ou-rank__grip" aria-hidden="true"><svg width="16" height="16"><use href="#i-grip"/></svg></span>
+                <span class="ou-rank__text"><span class="ou-rank__title">Восстановить работу и составить отчёт</span></span>
+                <span class="ou-rank__controls">
+                  <button type="button" class="ou-rank__btn" aria-label="Выше"><svg width="14" height="14"><use href="#i-up"/></svg></button>
+                  <button type="button" class="ou-rank__btn" aria-label="Ниже" disabled><svg width="14" height="14"><use href="#i-down"/></svg></button>
+                </span>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-player__foot">
+          <div class="tb-foot__left">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">← Назад</button>
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">К обзору</button>
+          </div>
+          <div class="tb-foot__center"></div>
+          <div class="tb-foot__right">
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Отправить ответ</button>
+          </div>
+        </footer>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ Старт ══════════════════ -->
+<section class="wf-state" id="s-start">
+  <div class="wf-page">
+    <p class="wf-caption">Стартовый экран: параметры теста — полоса значений без рамок вместо четырёх карточек в столбик. Кулдаун встроен баннером, отдельного экрана нет.</p>
+    <div class="wf-viewport">
+      <div class="tb-player">
+
+        <!-- На старте название теста стоит крупно в теле, поэтому в шапке его нет:
+             дублировать заголовок двумя размерами на одном экране незачем. -->
+        <header class="tb-player__head">
+          <div class="tb-player__brand">
+            <span class="tb-player__logo" aria-hidden="true">РТ</span>
+          </div>
+          <div class="tb-player__map"></div>
+          <div class="tb-player__clock">
+            <span class="ou-tag ou-tag--neutral ou-tag--s">Тест не начат</span>
+          </div>
+        </header>
+
+        <div class="ou-progress ou-progress--xs tb-player__progress" hidden></div>
+
+        <main class="tb-content">
+          <div class="tb-grid-overlay" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="tb-screen">
+            <h1 class="tb-title tb-col-8">Основы информационной безопасности</h1>
+            <p class="tb-lead tb-col-8">Проверочный тест по базовым принципам защиты корпоративных данных. Отвечайте самостоятельно, к пропущенным вопросам можно вернуться до завершения.</p>
+
+            <div class="tb-facts wf-annot-wrap">
+              <span class="wf-annot">Т-2 · три модуля на параметр</span>
+              <div class="tb-fact">
+                <div class="tb-fact__v">12</div>
+                <div class="tb-fact__l">вопросов</div>
+              </div>
+              <div class="tb-fact">
+                <div class="tb-fact__v">70%</div>
+                <div class="tb-fact__l">проходной балл</div>
+              </div>
+              <div class="tb-fact">
+                <div class="tb-fact__v">45 мин</div>
+                <div class="tb-fact__l">на прохождение</div>
+              </div>
+              <div class="tb-fact">
+                <div class="tb-fact__v">3</div>
+                <div class="tb-fact__l">попытки</div>
+              </div>
+            </div>
+
+            <hr class="ou-separator ou-separator--horizontal tb-col-12" />
+
+            <div class="tb-block tb-col-8">
+              <h2 class="tb-block__title">Как проходить</h2>
+              <p>Пропущенный вопрос помечается в карте вопросов; вернуться к нему можно с экрана обзора перед завершением. Ответ засчитывается после кнопки «Отправить ответ».</p>
+            </div>
+
+            <div class="ou-banner ou-banner--sm tb-col-8 wf-annot-wrap">
+              <span class="wf-annot">кулдаун без отдельного экрана</span>
+              <span class="ou-banner__ico" aria-hidden="true"><svg width="18" height="18"><use href="#i-clock"/></svg></span>
+              <div class="ou-banner__body">
+                <div class="ou-banner__title">Прошлая попытка: 64% · не пройден</div>
+                <div class="ou-banner__desc">Повторное прохождение будет доступно с 30 июля, через 6 дней.</div>
+              </div>
+              <div class="ou-banner__actions">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s">Мой результат</button>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-player__foot">
+          <div class="tb-foot__left">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">К списку тестов</button>
+          </div>
+          <div class="tb-foot__center"></div>
+          <div class="tb-foot__right">
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled>Начать тестирование</button>
+          </div>
+        </footer>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ Обзор ══════════════════ -->
+<section class="wf-state" id="s-review">
+  <div class="wf-page">
+    <p class="wf-caption">Обзор перед завершением: крупная карта вопросов с легендой (здесь она уместна) и список вопросов без ответа строками, а не карточками.</p>
+    <div class="wf-viewport">
+      <div class="tb-player">
+
+        <header class="tb-player__head">
+          <div class="tb-player__brand">
+            <span class="tb-player__logo" aria-hidden="true">РТ</span>
+            <span class="tb-player__title">Основы информационной безопасности</span>
+          </div>
+          <div class="tb-player__clock">
+            <div class="ou-timer ou-timer--digital ou-timer--s" role="timer"><span class="ou-timer__lbl">Тест</span><span class="ou-timer__num">08:15</span></div>
+          </div>
+        </header>
+
+        <div class="ou-progress ou-progress--xs tb-player__progress">
+          <div class="ou-progress__track"><div class="ou-progress__fill" style="width:83%"></div></div>
+        </div>
+
+        <main class="tb-content">
+          <div class="tb-grid-overlay" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="tb-screen">
+            <h1 class="tb-title tb-col-12">Раздел «Базовые угрозы» · обзор</h1>
+            <p class="tb-lead tb-col-8">Проверьте ответы перед завершением раздела. Вопросы без ответа будут засчитаны как неверные.</p>
+
+            <div class="ou-quiz ou-quiz--m ou-quiz--circle tb-col-12 wf-annot-wrap">
+              <span class="wf-annot">Т-4 · ou-quiz с легендой</span>
+              <div class="ou-quiz__head">
+                <span class="ou-quiz__lbl">Вопросы раздела</span>
+                <span class="ou-quiz__val">отвечено <strong>10</strong> из 12</span>
+              </div>
+              <div class="ou-quiz__dots">
+                <button type="button" class="ou-quiz__dot is-answered">1</button>
+                <button type="button" class="ou-quiz__dot is-answered">2</button>
+                <button type="button" class="ou-quiz__dot is-answered">3</button>
+                <button type="button" class="ou-quiz__dot is-skipped">4</button>
+                <button type="button" class="ou-quiz__dot is-answered">5</button>
+                <button type="button" class="ou-quiz__dot is-answered">6</button>
+                <button type="button" class="ou-quiz__dot is-answered">7</button>
+                <button type="button" class="ou-quiz__dot is-answered">8</button>
+                <button type="button" class="ou-quiz__dot is-skipped">9</button>
+                <button type="button" class="ou-quiz__dot is-answered">10</button>
+                <button type="button" class="ou-quiz__dot is-answered">11</button>
+                <button type="button" class="ou-quiz__dot is-answered">12</button>
+              </div>
+              <div class="ou-quiz__legend">
+                <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+                <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-skipped"></span>пропущен</span>
+                <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не выдан</span>
+              </div>
+            </div>
+
+            <hr class="ou-separator ou-separator--horizontal tb-col-12" />
+
+            <div class="tb-block tb-col-8">
+              <h2 class="tb-block__title">Без ответа: 2</h2>
+              <div class="tb-rows">
+                <div class="ou-stat-row">
+                  <div class="ou-stat-row__body">
+                    <div class="ou-stat-row__title">Вопрос 4 · Что делать при получении подозрительного письма?</div>
+                    <div class="ou-stat-row__sub">Базовые угрозы</div>
+                  </div>
+                  <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Перейти</button>
+                </div>
+                <div class="ou-stat-row">
+                  <div class="ou-stat-row__body">
+                    <div class="ou-stat-row__title">Вопрос 9 · Сопоставьте тип угрозы с описанием</div>
+                    <div class="ou-stat-row__sub">Базовые угрозы</div>
+                  </div>
+                  <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Перейти</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-player__foot wf-annot-wrap">
+          <span class="wf-annot">та же панель, слева пусто</span>
+          <div class="tb-foot__left"></div>
+          <div class="tb-foot__center"></div>
+          <div class="tb-foot__right">
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Завершить раздел</button>
+          </div>
+        </footer>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ Итоги раздела ══════════════════ -->
+<section class="wf-state" id="s-section-results">
+  <div class="wf-page">
+    <p class="wf-caption">Итоги раздела: кольцо ДС, вердикт тегом, показатели полосой. Одна поверхность, ни одной вложенной рамки.</p>
+    <div class="wf-viewport">
+      <div class="tb-player">
+
+        <header class="tb-player__head">
+          <div class="tb-player__brand">
+            <span class="tb-player__logo" aria-hidden="true">РТ</span>
+            <span class="tb-player__title">Основы информационной безопасности</span>
+          </div>
+          <div class="tb-player__clock">
+            <span class="ou-tag ou-tag--neutral ou-tag--s">Раздел 1 из 3</span>
+          </div>
+        </header>
+
+        <div class="ou-progress ou-progress--xs tb-player__progress">
+          <div class="ou-progress__track"><div class="ou-progress__fill" style="width:33%"></div></div>
+        </div>
+
+        <main class="tb-content">
+          <div class="tb-grid-overlay" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="tb-screen">
+           <div class="tb-center tb-col-12 wf-annot-wrap">
+            <span class="wf-annot">Т-4 · ou-ring</span>
+            <p class="ou-quiz__lbl">Итоги раздела</p>
+            <h1 class="tb-title">Раздел «Базовые угрозы»</h1>
+            <div class="ou-ring" style="width:140px;height:140px;display:inline-flex;align-items:center;justify-content:center;position:relative">
+              <svg class="ou-ring__svg" width="140" height="140" viewBox="0 0 140 140">
+                <circle class="ou-ring__track" cx="70" cy="70" r="63" stroke-width="12"></circle>
+                <circle class="ou-ring__fill ou-ring__fill--success" cx="70" cy="70" r="63" stroke-width="12" stroke-dasharray="395.8" stroke-dashoffset="59.4"></circle>
+              </svg>
+              <div class="ou-ring__center">
+                <div class="ou-ring__value">85%</div>
+                <div class="ou-ring__label">баллы</div>
+              </div>
+            </div>
+            <span class="ou-tag ou-tag--success ou-tag--solid ou-tag--m">Раздел зачтён</span>
+            <div class="tb-metrics">
+              <div>
+                <div class="tb-metric__v">6</div>
+                <div class="tb-metric__l">вопросов</div>
+              </div>
+              <div>
+                <div class="tb-metric__v">5 / 6</div>
+                <div class="tb-metric__l">верно</div>
+              </div>
+              <div>
+                <div class="tb-metric__v">5.0</div>
+                <div class="tb-metric__l">баллов</div>
+              </div>
+            </div>
+           </div>
+          </div>
+        </main>
+
+        <footer class="tb-player__foot">
+          <div class="tb-foot__left"></div>
+          <div class="tb-foot__center"></div>
+          <div class="tb-foot__right">
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Продолжить</button>
+          </div>
+        </footer>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ Результаты ══════════════════ -->
+<section class="wf-state" id="s-results">
+  <div class="wf-page">
+    <p class="wf-caption">Результаты: кольцо и показатели одной полосой, темы — сеткой. Сегодня это четыре последовательных экрана прокрутки.</p>
+    <div class="wf-viewport">
+      <div class="tb-player">
+
+        <header class="tb-player__head">
+          <div class="tb-player__brand">
+            <span class="tb-player__logo" aria-hidden="true">РТ</span>
+            <span class="tb-player__title">Основы информационной безопасности</span>
+          </div>
+          <div class="tb-player__clock">
+            <span class="ou-tag ou-tag--success ou-tag--solid ou-tag--s">Тест пройден</span>
+          </div>
+        </header>
+
+        <div class="ou-progress ou-progress--xs tb-player__progress">
+          <div class="ou-progress__track"><div class="ou-progress__fill" style="width:100%"></div></div>
+        </div>
+
+        <main class="tb-content">
+          <div class="tb-grid-overlay" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="tb-screen">
+            <div class="tb-result__band tb-col-12 wf-annot-wrap">
+              <span class="wf-annot">Т-3 · кольцо и показатели в одну полосу</span>
+              <div class="ou-ring" style="width:132px;height:132px;display:inline-flex;align-items:center;justify-content:center;position:relative">
+                <svg class="ou-ring__svg" width="132" height="132" viewBox="0 0 132 132">
+                  <circle class="ou-ring__track" cx="66" cy="66" r="59" stroke-width="12"></circle>
+                  <circle class="ou-ring__fill ou-ring__fill--success" cx="66" cy="66" r="59" stroke-width="12" stroke-dasharray="370.7" stroke-dashoffset="51.9"></circle>
+                </svg>
+                <div class="ou-ring__center">
+                  <div class="ou-ring__value">86%</div>
+                  <div class="ou-ring__label">баллы</div>
+                </div>
+              </div>
+              <div class="tb-metrics">
+                <div>
+                  <div class="tb-metric__v">12</div>
+                  <div class="tb-metric__l">вопросов</div>
+                </div>
+                <div>
+                  <div class="tb-metric__v">10 / 12</div>
+                  <div class="tb-metric__l">верно</div>
+                </div>
+                <div>
+                  <div class="tb-metric__v">8.6</div>
+                  <div class="tb-metric__l">баллов</div>
+                </div>
+                <div>
+                  <div class="tb-metric__v">27 мин</div>
+                  <div class="tb-metric__l">затрачено</div>
+                </div>
+              </div>
+            </div>
+
+            <hr class="ou-separator ou-separator--horizontal tb-col-12" />
+
+            <h2 class="tb-block__title tb-col-12">Результаты по темам</h2>
+                <div class="ou-card tb-topic wf-annot-wrap">
+                <span class="wf-annot">Т-2 · рамка только у элемента списка</span>
+                  <div class="ou-card__body">
+                    <div class="tb-topic__head">
+                      <span class="tb-topic__name">Базовые угрозы</span>
+                      <span class="ou-tag ou-tag--success ou-tag--s">зачтено</span>
+                    </div>
+                    <div class="ou-progress ou-progress--s ou-progress--success">
+                      <div class="ou-progress__track"><div class="ou-progress__fill" style="width:83%"></div></div>
+                    </div>
+                    <div class="tb-rows">
+                      <div class="ou-stat-row ou-stat-row--compact">
+                        <div class="ou-stat-row__body"><div class="ou-stat-row__title">Правильно</div></div>
+                        <span>5 / 6</span>
+                      </div>
+                      <div class="ou-stat-row ou-stat-row--compact">
+                        <div class="ou-stat-row__body"><div class="ou-stat-row__title">Баллов</div></div>
+                        <span>5.0</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="ou-card tb-topic">
+                  <div class="ou-card__body">
+                    <div class="tb-topic__head">
+                      <span class="tb-topic__name">Фишинг</span>
+                      <span class="ou-tag ou-tag--success ou-tag--s">зачтено</span>
+                    </div>
+                    <div class="ou-progress ou-progress--s ou-progress--success">
+                      <div class="ou-progress__track"><div class="ou-progress__fill" style="width:100%"></div></div>
+                    </div>
+                    <div class="tb-rows">
+                      <div class="ou-stat-row ou-stat-row--compact">
+                        <div class="ou-stat-row__body"><div class="ou-stat-row__title">Правильно</div></div>
+                        <span>3 / 3</span>
+                      </div>
+                      <div class="ou-stat-row ou-stat-row--compact">
+                        <div class="ou-stat-row__body"><div class="ou-stat-row__title">Баллов</div></div>
+                        <span>3.0</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="ou-card tb-topic">
+                  <div class="ou-card__body">
+                    <div class="tb-topic__head">
+                      <span class="tb-topic__name">Реагирование</span>
+                      <span class="ou-tag ou-tag--warning ou-tag--s">ниже порога</span>
+                    </div>
+                    <div class="ou-progress ou-progress--s ou-progress--warning">
+                      <div class="ou-progress__track"><div class="ou-progress__fill" style="width:66%"></div></div>
+                    </div>
+                    <div class="tb-rows">
+                      <div class="ou-stat-row ou-stat-row--compact">
+                        <div class="ou-stat-row__body"><div class="ou-stat-row__title">Правильно</div></div>
+                        <span>2 / 3</span>
+                      </div>
+                      <div class="ou-stat-row ou-stat-row--compact">
+                        <div class="ou-stat-row__body"><div class="ou-stat-row__title">Рекомендация</div></div>
+                        <span>курс «Реагирование»</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+          </div>
+        </main>
+
+        <footer class="tb-player__foot">
+          <div class="tb-foot__left">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Скачать отчёт</button>
+          </div>
+          <div class="tb-foot__center"></div>
+          <div class="tb-foot__right">
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Завершить</button>
+          </div>
+        </footer>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ Контент-страница ══════════════════ -->
+<section class="wf-state" id="s-content">
+  <div class="wf-page">
+    <p class="wf-caption">Страница контента (вариант «изображение слева»): та же сцена, прогресс считает страницы. Карточка вокруг текста больше не нужна.</p>
+    <div class="wf-viewport">
+      <div class="tb-player">
+
+        <header class="tb-player__head">
+          <div class="tb-player__brand">
+            <span class="tb-player__logo" aria-hidden="true">РТ</span>
+            <span class="tb-player__title">Основы информационной безопасности</span>
+          </div>
+          <div class="tb-player__clock">
+            <span class="ou-tag ou-tag--neutral ou-tag--s">Страница 2 из 4</span>
+          </div>
+        </header>
+
+        <div class="ou-progress ou-progress--xs tb-player__progress">
+          <div class="ou-progress__track"><div class="ou-progress__fill" style="width:50%"></div></div>
+        </div>
+
+        <main class="tb-content">
+          <div class="tb-grid-overlay" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="tb-screen">
+            <div class="tb-q__media tb-col-6"><span><svg width="28" height="28" aria-hidden="true"><use href="#i-image"/></svg> изображение страницы</span></div>
+            <div class="tb-col-right-6 tb-block">
+              <h1 class="tb-title">Как распознать фишинг</h1>
+              <p class="tb-lead">Три признака, по которым письмо стоит проверить, прежде чем открывать вложение.</p>
+              <p>Отправитель отличается от корпоративного домена одной буквой; письмо требует срочно подтвердить пароль; ссылка ведёт на адрес, который не совпадает с подписью.</p>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-player__foot">
+          <div class="tb-foot__left">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">← Назад</button>
+          </div>
+          <div class="tb-foot__center"></div>
+          <div class="tb-foot__right">
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Далее →</button>
+          </div>
+        </footer>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ Узкий контейнер LMS ══════════════════ -->
+<section class="wf-state" id="s-narrow">
+  <div class="wf-page">
+    <p class="wf-caption">Окно LMS 900x520: карта вопросов сворачивается в счётчик, варианты — в одну колонку, панель действий остаётся видимой. Раскладка считается от контейнера, а не от окна браузера.</p>
+    <div class="wf-viewport wf-viewport--lms">
+      <div class="tb-player tb-player--narrow">
+
+        <header class="tb-player__head wf-annot-wrap">
+          <span class="wf-annot">Т-7 · @container</span>
+          <div class="tb-player__brand">
+            <span class="tb-player__logo" aria-hidden="true">РТ</span>
+            <span class="tb-player__title">Основы информационной безопасности</span>
+          </div>
+          <div class="tb-player__map">
+            <div class="ou-quiz ou-quiz--l ou-quiz--circle" role="group" aria-label="Карта вопросов">
+              <div class="ou-quiz__dots">
+                <button type="button" class="ou-quiz__dot is-answered">1</button>
+                <button type="button" class="ou-quiz__dot is-current" aria-current="true">3</button>
+              </div>
+            </div>
+            <span class="tb-player__count">отвечено <strong>1</strong> из 2</span>
+          </div>
+          <div class="tb-player__clock">
+            <div class="ou-timer ou-timer--digital ou-timer--s" role="timer"><span class="ou-timer__lbl">Тест</span><span class="ou-timer__num">44:51</span></div>
+          </div>
+        </header>
+
+        <div class="ou-progress ou-progress--xs tb-player__progress">
+          <div class="ou-progress__track"><div class="ou-progress__fill" style="width:42%"></div></div>
+        </div>
+
+        <main class="tb-content">
+          <div class="tb-grid-overlay" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <div class="tb-screen">
+            <div class="tb-q__meta tb-col-8"><span>Вопрос 3 из 12<span class="ou-tag ou-tag--neutral ou-tag--s">Базовые угрозы</span></span></div>
+            <h1 class="tb-q__text tb-col-12">Какой пароль надёжнее?</h1>
+            <div class="tb-q__options tb-col-12">
+              <label class="ou-radio-card">
+                <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                <span class="ou-radio-card__text"><span class="ou-radio-card__title">Дата рождения, 01011990</span></span>
+              </label>
+              <label class="ou-radio-card is-on">
+                <span class="ou-radio ou-radio--m is-on"><input type="radio" class="ou-radio__input" checked><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                <span class="ou-radio-card__text"><span class="ou-radio-card__title">Длинная случайная фраза</span></span>
+              </label>
+              <label class="ou-radio-card">
+                <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                <span class="ou-radio-card__text"><span class="ou-radio-card__title">Название компании с цифрой</span></span>
+              </label>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-player__foot wf-annot-wrap">
+          <span class="wf-annot">Т-8 · ниже 560px — сцена в поток</span>
+          <div class="tb-foot__left">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">← Назад</button>
+          </div>
+          <div class="tb-foot__center">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Пропустить</button>
+          </div>
+          <div class="tb-foot__right">
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--s">Отправить</button>
+          </div>
+        </footer>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ Предпросмотр ══════════════════ -->
+<section class="wf-state" id="s-preview">
+  <div class="wf-page">
+    <p class="wf-caption">Предпросмотр показывает настоящий экран шаблона. Слева — карточка в галерее «Заменить шаблон» и в реестре «Шаблоны», справа — модалка предпросмотра из редактора структуры теста.</p>
+    <div class="wf-pair">
+
+      <div class="ou-card wf-annot-wrap">
+        <span class="wf-annot">Т-9 · Т-10</span>
+        <div class="ou-card__media ou-card__media--flat">
+          <div class="wf-thumb">
+            <div class="wf-thumb__inner">
+              <div class="tb-player">
+                <header class="tb-player__head">
+                  <div class="tb-player__brand">
+                    <span class="tb-player__logo" aria-hidden="true">РТ</span>
+                    <span class="tb-player__title">Основы информационной безопасности</span>
+                  </div>
+                  <div class="tb-player__map">
+            <div class="ou-quiz ou-quiz--l ou-quiz--circle">
+                      <div class="ou-quiz__dots">
+                        <span class="ou-quiz__dot is-answered">1</span>
+                        <span class="ou-quiz__dot is-answered">2</span>
+                        <span class="ou-quiz__dot is-current">3</span>
+                        <span class="ou-quiz__dot is-unanswered">4</span>
+                      </div>
+                    </div>
+            <div class="ou-quiz__legend"><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-skipped"></span>пропущен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span></div>
+            <span class="tb-player__count">отвечено <strong>2</strong> из 4</span>
+          </div>
+                  <div class="tb-player__clock">
+                    <div class="ou-timer ou-timer--digital ou-timer--s"><span class="ou-timer__lbl">Тест</span><span class="ou-timer__num">44:51</span></div>
+                  </div>
+                </header>
+                <div class="ou-progress ou-progress--xs tb-player__progress">
+                  <div class="ou-progress__track"><div class="ou-progress__fill" style="width:42%"></div></div>
+                </div>
+                <main class="tb-content">
+          <div class="tb-grid-overlay" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+                  <div class="tb-screen">
+                    <div class="tb-q__meta tb-col-8"><span>Вопрос 3 из 12</span></div>
+                    <h1 class="tb-q__text tb-col-8">Какой пароль является наиболее надёжным?</h1>
+                    <div class="tb-q__options tb-col-8">
+                      <span class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Дата рождения</span></span></span>
+                      <span class="ou-radio-card is-on"><span class="ou-radio ou-radio--m is-on"><input type="radio" class="ou-radio__input" checked><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Длинная фраза</span></span></span>
+                      <span class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Название компании</span></span></span>
+                      <span class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">qwerty123</span></span></span>
+                    </div>
+                  </div>
+                </main>
+                <footer class="tb-player__foot">
+                  <div class="tb-foot__left"><span class="ou-btn ou-btn--ghost ou-btn--m">← Назад</span></div>
+                  <div class="tb-foot__center"><span class="ou-btn ou-btn--ghost ou-btn--m">Пропустить</span></div>
+                  <div class="tb-foot__right"><span class="ou-btn ou-btn--primary ou-btn--m">Отправить ответ</span></div>
+                </footer>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ou-card__body">
+          <div class="ou-card__header">
+            <div class="ou-card__title">Стандартный</div>
+            <span class="ou-tag ou-tag--success ou-tag--s">выбран</span>
+          </div>
+          <p class="ou-card__lead">Тёмная и светлая палитры, 20 вариантов страниц, версия 2.0.0</p>
+        </div>
+        <div class="ou-card__footer">
+          <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><svg width="14" height="14" aria-hidden="true"><use href="#i-eye"/></svg> Предпросмотр</button>
+          <button type="button" class="ou-btn ou-btn--primary ou-btn--s">Выбрать</button>
+        </div>
+      </div>
+
+      <div class="ou-card">
+        <div class="ou-card__header">
+          <div class="ou-card__title">Предпросмотр шаблона «Стандартный»</div>
+          <div class="ou-card__trail">
+            <div class="ou-seg ou-seg--s" role="tablist" aria-label="Палитра">
+              <button type="button" class="ou-seg__item is-active" role="tab" aria-selected="true">Тёмная</button>
+              <button type="button" class="ou-seg__item" role="tab" aria-selected="false">Светлая</button>
+            </div>
+          </div>
+        </div>
+        <div class="ou-card__body">
+          <div class="wf-thumb wf-thumb--wide wf-annot-wrap" style="aspect-ratio:1200/660">
+            <span class="wf-annot">тот же рендер, что играет ученик</span>
+            <div class="wf-thumb__inner">
+              <div class="tb-player">
+                <header class="tb-player__head">
+                  <div class="tb-player__brand">
+                    <span class="tb-player__logo" aria-hidden="true">РТ</span>
+                    <span class="tb-player__title">Основы информационной безопасности</span>
+                  </div>
+                  <div class="tb-player__map">
+            <div class="ou-quiz ou-quiz--l ou-quiz--circle">
+                      <div class="ou-quiz__dots">
+                        <span class="ou-quiz__dot is-answered">1</span>
+                        <span class="ou-quiz__dot is-answered">2</span>
+                        <span class="ou-quiz__dot is-current">3</span>
+                        <span class="ou-quiz__dot is-skipped">4</span>
+                        <span class="ou-quiz__dot is-unanswered">5</span>
+                        <span class="ou-quiz__dot is-unanswered">6</span>
+                      </div>
+                    </div>
+            <div class="ou-quiz__legend"><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-skipped"></span>пропущен</span><span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span></div>
+            <span class="tb-player__count">отвечено <strong>2</strong> из 6 · пропущено 1</span>
+          </div>
+                  <div class="tb-player__clock">
+                    <div class="ou-timer ou-timer--digital ou-timer--s"><span class="ou-timer__lbl">Тест</span><span class="ou-timer__num">44:51</span></div>
+                  </div>
+                </header>
+                <div class="ou-progress ou-progress--xs tb-player__progress">
+                  <div class="ou-progress__track"><div class="ou-progress__fill" style="width:42%"></div></div>
+                </div>
+                <main class="tb-content">
+          <div class="tb-grid-overlay" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+                  <div class="tb-screen">
+                    <div class="tb-q__meta tb-col-8"><span>Вопрос 3 из 12<span class="ou-tag ou-tag--neutral ou-tag--s">Базовые угрозы</span></span></div>
+                    <h1 class="tb-q__text tb-col-8">Какой пароль является наиболее надёжным с точки зрения безопасности?</h1>
+                    <div class="tb-q__options tb-col-8">
+                      <span class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Дата рождения, 01011990</span></span></span>
+                      <span class="ou-radio-card is-on"><span class="ou-radio ou-radio--m is-on"><input type="radio" class="ou-radio__input" checked><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Длинная случайная фраза</span></span></span>
+                      <span class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Название компании с цифрой</span></span></span>
+                      <span class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Стандартный пароль qwerty123</span></span></span>
+                    </div>
+                  </div>
+                </main>
+                <footer class="tb-player__foot">
+                  <div class="tb-foot__left"><span class="ou-btn ou-btn--ghost ou-btn--m">← Назад</span><span class="ou-btn ou-btn--secondary ou-btn--m">К обзору</span></div>
+                  <div class="tb-foot__center"><span class="ou-btn ou-btn--ghost ou-btn--m">Пропустить</span></div>
+                  <div class="tb-foot__right"><span class="ou-btn ou-btn--primary ou-btn--m">Отправить ответ</span></div>
+                </footer>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ou-card__footer">
+          <span class="ou-quiz__val">Экран: Вопрос · одиночный выбор</span>
+          <button type="button" class="ou-btn ou-btn--secondary ou-btn--s">Закрыть</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ Таблицы под холстом ══════════════════ -->
+<div class="wf-notes">
+
+  <h2 class="wf-notes-title">Состояния эскиза</h2>
+  <p class="wf-notes-intro">Что показывает каждое состояние и какие требования оно закрывает.</p>
+  <table class="wf-notes-table">
+    <thead><tr><th>Состояние</th><th>Что показывает</th><th>Требования</th></tr></thead>
+    <tbody>
+      <tr><td>Вопрос</td><td>Сцена целиком: шапка с картой и таймерами, тело со скроллом, панель действий с полным набором ролей; варианты одной колонкой на 8 модулей</td><td>Т-1, Т-2, Т-4, Т-5, Т-6, Т-11</td></tr>
+      <tr><td>Вопрос с медиа</td><td>Вопрос во всю ширину; медиа и ответы по 6 модулей</td><td>Т-3, Т-11</td></tr>
+      <tr><td>Сопоставление</td><td>Экран на <code>ou-match</code> вместо собственной доски шаблона</td><td>Т-4</td></tr>
+      <tr><td>Ранжирование</td><td>Экран на <code>ou-rank</code> с номером, ручкой и кнопками вверх/вниз</td><td>Т-4</td></tr>
+      <tr><td>Старт</td><td>Параметры теста полосой, кулдаун и прошлая попытка баннером внутри экрана</td><td>Т-2, Т-3</td></tr>
+      <tr><td>Обзор</td><td>Карта вопросов с легендой и список без ответа строками</td><td>Т-2, Т-4, Т-5</td></tr>
+      <tr><td>Итоги раздела</td><td>Кольцо, вердикт тегом, показатели полосой</td><td>Т-2, Т-4</td></tr>
+      <tr><td>Результаты</td><td>Показатели одной полосой, темы сеткой карточек</td><td>Т-2, Т-3</td></tr>
+      <tr><td>Контент</td><td>Страница контента в той же сцене, прогресс по страницам</td><td>Т-1, Т-3</td></tr>
+      <tr><td>Узкое окно LMS</td><td>Контейнер 900x520: свёрнутая карта, одна колонка вариантов, панель на месте</td><td>Т-7, Т-8</td></tr>
+      <tr><td>Предпросмотр</td><td>Карточка галереи с миниатюрой и модалка предпросмотра редактора</td><td>Т-9, Т-10</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="wf-notes-title">Модульная сетка</h2>
+  <p class="wf-notes-intro">12 колонок, поля сцены 24px (<code>--ou-space-6</code>), интервал между колонками один модуль 4px (<code>--ou-space-1</code>). Обе величины уже есть в шкале ДС, своих чисел слой шаблона не заводит. Готовой 12-колоночной сетки в ДС нет: <code>ou-lgrid</code> умеет максимум 6 колонок и не даёт спанов.</p>
+  <table class="wf-notes-table">
+    <thead><tr><th>Блок</th><th>Спан</th><th>Почему так</th></tr></thead>
+    <tbody>
+      <tr><td>Текст вопроса, варианты ответа, описания</td><td>8 из 12</td><td>Две трети сцены — около 66 знаков в строке на ширине 1200px. Строка ответа во всю ширину нечитаема: глаз теряет её начало</td></tr>
+      <tr><td>Медиа вопроса</td><td>6 из 12</td><td>Слева от ответов; вопрос над ними во всю ширину</td></tr>
+      <tr><td>Ответы рядом с медиа</td><td>6 из 12 (колонки 7–12)</td><td>Правая половина строки, вплотную к интервалу сетки</td></tr>
+      <tr><td>Параметр теста на старте</td><td>3 из 12</td><td>Четыре параметра занимают ряд целиком; ряд объявлен подсеткой, иначе первый параметр подтягивается в свободные колонки предыдущей строки</td></tr>
+      <tr><td>Карточка темы в результатах</td><td>4 из 12</td><td>Три темы в ряд без собственных отступов</td></tr>
+      <tr><td>Карта вопросов, доска сопоставления, полоса показателей</td><td>12 из 12</td><td>Блоки, которым нужна вся ширина сцены</td></tr>
+      <tr><td>Узкий контейнер</td><td>12 из 12 для всего</td><td>Сетка схлопывается: каждый блок занимает всю ширину</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="wf-notes-title">Дельта: было — стало</h2>
+  <p class="wf-notes-intro">Замер «было» снят с шаблона v1.3.0 в браузере, «стало» — предложение эскиза.</p>
+  <table class="wf-notes-table">
+    <thead><tr><th>Экран</th><th>Было</th><th>Стало</th></tr></thead>
+    <tbody>
+      <tr><td>Все</td><td><code>.container</code> 900px, <code>.card</code> с рамкой и тенью на каждом блоке</td><td>Сцена во всю ширину контейнера, рамка только у элемента списка</td></tr>
+      <tr><td>Вопрос</td><td>~330px до первого варианта, кнопки под сгибом</td><td>Шапка 56px, кнопки закреплены внизу, варианты одной колонкой на 8 модулей из 12</td></tr>
+      <tr><td>Вопрос с медиа</td><td>Медиа над вариантами, обе зоны узкие</td><td>Медиа слева, ответы справа</td></tr>
+      <tr><td>Старт</td><td>Четыре карточки «Информация о тесте» в столбик</td><td>Полоса значений без рамок; кулдаун баннером в том же экране</td></tr>
+      <tr><td>Обзор</td><td>Легенда четырьмя строками, список без ответа кнопками-плашками</td><td>Легенда компонента ДС, список строками <code>ou-stat-row</code></td></tr>
+      <tr><td>Результаты</td><td>Герой, карточка, кольцо, статистика, темы — пять экранов прокрутки</td><td>Полоса «кольцо + показатели», темы сеткой 2–3 колонки</td></tr>
+      <tr><td>Таймер</td><td>В вебе не показывается совсем; таймер раздела — строка в счётчике вопроса</td><td>Два значения <code>ou-timer</code> в шапке на обоих хостах</td></tr>
+      <tr><td>Шрифт</td><td>В пакете нет ни одного <code>@font-face</code>, Inter подменяется системным</td><td>Брендовый шрифт вендорится в пакет</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="wf-notes-title">Соответствие компонентам ДС</h2>
+  <p class="wf-notes-intro">Что из 1120 строк собственного CSS шаблона заменяется готовым компонентом.</p>
+  <table class="wf-notes-table">
+    <thead><tr><th>Сейчас в шаблоне</th><th>Компонент ДС</th><th>Примечание</th></tr></thead>
+    <tbody>
+      <tr><td><code>.tb-pills</code>, <code>.tb-pill</code></td><td><code>ou-quiz</code> (QuizMap)</td><td>Состояния совпадают один в один: answered, current, skipped, unanswered</td></tr>
+      <tr><td><code>.option</code></td><td><code>ou-radio-card</code></td><td>В React-исходнике ui-kit есть более новый <code>ChoiceCard</code>, но его CSS не попал в собранный <code>university-rt.css</code> — используем существующий класс, заявку на сборку заводим отдельно</td></tr>
+      <tr><td><code>.matching-board</code>, <code>.match-tile</code></td><td><code>ou-match</code></td><td>Перетаскивание остаётся на общем движке <code>shared/template/dnd</code></td></tr>
+      <tr><td><code>.ranking-board</code>, <code>.rank-item</code></td><td><code>ou-rank</code></td><td>Кнопки вверх/вниз дают доступную альтернативу перетаскиванию</td></tr>
+      <tr><td><code>.results-ring</code></td><td><code>ou-ring</code></td><td>Цвет заливки — <code>--success</code> / <code>--danger</code> из токенов</td></tr>
+      <tr><td><code>.results-stat</code>, <code>.results-pill</code></td><td>типографика ДС + <code>ou-tag</code></td><td>Карточки показателей не нужны: значение и подпись без рамки</td></tr>
+      <tr><td><code>.progress-bar</code></td><td><code>ou-progress</code></td><td>Размер <code>xs</code> линией под шапкой</td></tr>
+      <tr><td><code>.q-timer</code></td><td><code>ou-timer</code></td><td>Вариант <code>pill</code>, состояния <code>is-warning</code> / <code>is-critical</code></td></tr>
+      <tr><td><code>.btn</code>, <code>.btn--outline</code></td><td><code>ou-btn</code></td><td>primary / secondary / ghost</td></tr>
+      <tr><td><code>.tb-modal</code></td><td><code>ou-modal</code></td><td>Подтверждение завершения с неотвеченными (FR-09)</td></tr>
+      <tr><td><code>.start-cooldown</code>, <code>.start-prior</code></td><td><code>ou-banner</code></td><td>Кулдаун и прошлая попытка — внутри стартового экрана</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="wf-notes-title">Что требуется вне шаблона</h2>
+  <p class="wf-notes-intro">Эскиз описывает вид. Одинаковым он станет только если все шесть точек рендера возьмут одну и ту же разметку.</p>
+  <table class="wf-notes-table">
+    <thead><tr><th>Движок</th><th>Сейчас</th><th>Что делаем</th></tr></thead>
+    <tbody>
+      <tr><td>SCORM-рантайм</td><td>Панель кнопок собирается строкой HTML в <code>mainRender.js</code></td><td>Панель объявляется зоной макета; рантайм наполняет её по общему контракту <code>data-action</code></td></tr>
+      <tr><td>Веб-хост ученика</td><td>Своя панель в JSX (<code>.tbh-foot</code>, колонка 768px), нет «К обзору», не показан таймер теста</td><td>Тот же слот и тот же набор кнопок из общего билдера; хост отдаёт шаблону высоту контейнера</td></tr>
+      <tr><td>Отладчик (PRD-18)</td><td>Играет настоящий пакет в iframe — наследует вид автоматически</td><td>Проверка сцены в низком iframe; правок по существу не требуется</td></tr>
+      <tr><td>Офлайн-превью шаблона</td><td>Рисует экраны без панели действий: её собирает рантайм, которого в превью нет</td><td>Панель приходит из того же общего билдера с демо-состоянием</td></tr>
+      <tr><td>Реестр «Шаблоны»</td><td>Рендерит через <code>renderScreenInto</code> — верно</td><td>Добавляется панель; в остальном без изменений</td></tr>
+      <tr><td>Карточка шаблона и галерея в редакторе</td><td><code>preview.svg</code> — нарисованный от руки эскиз с прошитыми цветами</td><td>Миниатюра генерируется при импорте и валидации шаблона и хранится как его ассет; картинка из манифеста остаётся фолбэком для внешних ZIP</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="wf-notes-title">Открытые вопросы</h2>
+  <table class="wf-notes-table">
+    <thead><tr><th>Вопрос</th><th>Почему важно</th></tr></thead>
+    <tbody>
+      <tr><td>Браузер WebTutor</td><td>Токены ДС используют <code>color-mix(in oklch, …)</code>: нужен Chrome 111+ / Safari 16.2+. Если в LMS старее — потребуется запасная палитра</td></tr>
+      <tr><td>Шаблон «Сертификация»</td><td>Остаётся на старой основе до отдельной задачи; пока живут два визуальных языка</td></tr>
+      <tr><td>ChoiceCard в ui-kit</td><td>React-компонент есть, CSS в собранном пакете нет. Заявка владельцу ДС или остаёмся на <code>ou-radio-card</code></td></tr>
+    </tbody>
+  </table>
+
+</div>
+
+<script>
+  /* Wireframe-only controls, идентичны approved/prd23-template-themes.html. */
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+    document.documentElement.style.setProperty('--wf-nav-h', nav.offsetHeight + 'px');
+  }
+
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (b) {
+      b.classList.toggle('active', b === btn);
+    });
+    updateWireframeNavOffset();
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  window.toggleGrid = function toggleGrid(btn) {
+    var on = document.body.classList.toggle('wf-grid-on');
+    if (btn) btn.classList.toggle('active', on);
+  };
+
+  window.toggleAnnots = function toggleAnnots(btn) {
+    var on = document.body.classList.toggle('wf-annots-on');
+    if (btn) btn.classList.toggle('active', on);
+  };
+
+  window.addEventListener('load', updateWireframeNavOffset);
+  window.addEventListener('resize', updateWireframeNavOffset);
+</script>
+
+</body>
+</html>

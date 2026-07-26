@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="stylesheet" href="ui-kit/university-rt.css">
+<style>html,body{margin:0;padding:0;height:100%}a{color:var(--ou-accent-default);text-decoration:none}a:hover{color:var(--ou-accent-hover);text-decoration:underline}</style>
+</helmet>
+<div class="ou ou--dark ou--normal" ref="{{ rootRef }}" style="height:100vh;min-height:100vh;overflow:hidden;display:flex;flex-direction:column;font-family:var(--ou-font-family-base)">
+
+  <header style="background:var(--ou-bg-elevated);border-bottom:1px solid var(--ou-border-soft);padding:var(--ou-space-4) 24px;display:flex;align-items:flex-start;gap:var(--ou-space-4);position:relative">
+    <span style="width:44px;height:44px;flex:none;border-radius:var(--ou-radius-m);background:var(--ou-accent-soft);color:var(--ou-accent-default);display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;letter-spacing:.02em">РТ</span>
+    <div style="min-width:0;display:flex;flex-direction:column;gap:2px;padding-top:2px">
+      <h1 style="margin:0;font:var(--ou-text-display-s);color:var(--ou-fg-default);letter-spacing:-.01em;text-wrap:pretty">Основы информационной безопасности</h1>
+      <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Обязательный курс · Попытка 1 из 2</span>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:flex-start;gap:var(--ou-space-6);flex:none">
+      <div class="ou-timer ou-timer--digital ou-timer--s">
+        <span class="ou-timer__lbl">тест</span>
+        <span class="ou-timer__num">{{ testTime }}</span>
+      </div>
+    </div>
+  </header>
+
+  <main style="flex:1;min-height:0;overflow:auto;padding:24px">
+    <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:var(--ou-space-4)">
+      <div class="ou-progress ou-progress--m">
+        <div class="ou-progress__head">
+          <span class="ou-progress__lbl">Разделы</span>
+          <span class="ou-progress__val">{{ doneCount }} / {{ totalCount }}</span>
+        </div>
+        <div class="ou-progress__track">
+          <div class="ou-progress__fill" style="width:{{ progressWidth }}"></div>
+        </div>
+      </div>
+
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));grid-auto-rows:minmax(130px, 1fr);gap:4px;align-content:start">
+        <sc-for list="{{ sections }}" as="sec" hint-placeholder-count="6">
+          <div class="ou-card" style="min-height:0;max-height:240px;gap:var(--ou-space-3);padding:var(--ou-space-5);justify-content:space-between">
+            <div style="display:flex;flex-direction:column;gap:var(--ou-space-2);min-width:0">
+              <div style="display:flex;align-items:flex-start;gap:var(--ou-space-3)">
+                <h2 style="margin:0;font:var(--ou-text-heading-m);color:var(--ou-fg-default);text-wrap:pretty;min-width:0">{{ sec.title }}</h2>
+                <span class="ou-tag ou-tag--neutral" style="margin-left:auto;flex:none">{{ sec.countLabel }}</span>
+              </div>
+              <p style="margin:0;font:var(--ou-text-body-m);color:var(--ou-fg-muted);text-wrap:pretty;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ sec.desc }}</p>
+            </div>
+            <div style="display:flex;align-items:center;gap:var(--ou-space-3)">
+              <span class="ou-tag {{ sec.statusMod }}">{{ sec.statusLabel }}</span>
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" style="margin-left:auto;min-width:120px;padding:0 var(--ou-space-5)" onClick="{{ sec.act }}">{{ sec.actLabel }}</button>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </main>
+
+  <footer style="background:var(--ou-bg-elevated);border-top:1px solid var(--ou-border-soft);padding:var(--ou-space-4) 24px;display:flex;align-items:center;gap:var(--ou-space-3)">
+    <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">{{ hint }}</span>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:var(--ou-space-3)">
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onClick="{{ save }}">Сохранить и выйти</button>
+      <button type="button" class="ou-btn ou-btn--primary ou-btn--l" disabled="{{ finishDisabled }}" onClick="{{ finish }}">Завершить</button>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;'dark' | 'light'&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;normal&quot;,&quot;compact&quot;,&quot;spacious&quot;],&quot;default&quot;:&quot;normal&quot;,&quot;tsType&quot;:&quot;'normal' | 'compact' | 'spacious'&quot;}}">
+const SECTIONS = [
+  ['О компании', 16, 'История, структура и ключевые направления бизнеса.'],
+  ['Корпоративные финансы', 10, 'Бюджетный цикл, показатели эффективности и отчётность.'],
+  ['Технологии', 12, 'Инфраструктура, сервисы и правила работы с данными.'],
+  ['Право', 10, 'Договоры, персональные данные и внутренние регламенты.'],
+  ['Информационная безопасность', 14, 'Угрозы, парольная политика и реагирование на инциденты.'],
+  ['Охрана труда', 8, 'Требования к рабочему месту и действия при происшествиях.'],
+];
+
+const STATUS = {
+  none:    { label: 'Не начата',  mod: 'ou-tag--neutral', act: 'начать' },
+  active:  { label: 'В процессе', mod: 'ou-tag--accent',  act: 'продолжить' },
+  done:    { label: 'Завершена',  mod: 'ou-tag--success', act: 'к обзору' },
+};
+
+class Component extends DCLogic {
+  state = { states: SECTIONS.map(() => 'none'), testLeft: 2691 };
+
+  componentDidMount() {
+    this.t = setInterval(() => this.setState(s => ({ testLeft: Math.max(0, s.testLeft - 1) })), 1000);
+  }
+  componentWillUnmount() { clearInterval(this.t); }
+
+  fmt(s) { return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+
+  advance(i) {
+    this.setState(s => {
+      const next = s.states.slice();
+      next[i] = next[i] === 'none' ? 'active' : next[i] === 'active' ? 'done' : 'active';
+      return { states: next };
+    });
+  }
+
+  renderVals() {
+    const st = this.state.states;
+    const done = st.filter(x => x === 'done').length;
+
+    return {
+      sections: SECTIONS.map(([title, n, desc], i) => ({
+        title,
+        desc,
+        countLabel: n + ' вопросов',
+        statusLabel: STATUS[st[i]].label,
+        statusMod: STATUS[st[i]].mod,
+        actLabel: STATUS[st[i]].act,
+        act: () => this.advance(i),
+      })),
+      doneCount: done,
+      totalCount: SECTIONS.length,
+      progressWidth: Math.round((done / SECTIONS.length) * 100) + '%',
+      testTime: this.fmt(this.state.testLeft),
+      finishDisabled: done < SECTIONS.length,
+      hint: done < SECTIONS.length
+        ? 'Пройдите все разделы, чтобы завершить тест'
+        : 'Все разделы пройдены — можно завершать',
+      save: () => {},
+      finish: () => {},
+      rootRef: (el) => {
+        if (!el) return;
+        el.className = 'ou ou--' + (this.props.theme ?? 'dark') + ' ou--' + (this.props.density ?? 'normal');
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>

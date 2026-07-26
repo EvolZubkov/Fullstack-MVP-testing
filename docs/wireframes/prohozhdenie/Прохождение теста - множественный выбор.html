@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link rel="stylesheet" href="ui-kit/university-rt.css">
+<style>html,body{margin:0;padding:0;height:100%}a{color:var(--ou-accent-default);text-decoration:none}a:hover{color:var(--ou-accent-hover);text-decoration:underline}</style>
+
+</head><body>
+
+
+<div class="ou ou--dark ou--normal" ref="#" style="height:100vh;min-height:100vh;display:flex;flex-direction:column;overflow:hidden;font-family:var(--ou-font-family-base)">
+
+  <header style="background:var(--ou-bg-elevated);border-bottom:1px solid var(--ou-border-soft);padding:var(--ou-space-4) 24px 0;display:flex;flex-direction:column;gap:var(--ou-space-3);position:relative">
+    <div style="display:flex;align-items:flex-start;gap:var(--ou-space-4)">
+      <span style="width:44px;height:44px;flex:none;border-radius:var(--ou-radius-m);background:var(--ou-accent-soft);color:var(--ou-accent-default);display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;letter-spacing:.02em">РТ</span>
+      <div style="min-width:0;display:flex;flex-direction:column;gap:2px;padding-top:2px">
+        <h1 style="margin:0;font:var(--ou-text-display-s);color:var(--ou-fg-default);letter-spacing:-.01em;text-wrap:pretty">Основы информационной безопасности</h1>
+        <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Обязательный курс · Попытка 1 из 2</span>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:flex-start;gap:var(--ou-space-6);flex:none">
+        <div class="ou-timer ou-timer--digital ou-timer--s">
+          <span class="ou-timer__lbl">тест</span>
+          <span class="ou-timer__num">44:51</span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s is-critical">
+          <span class="ou-timer__lbl">раздел</span>
+          <span class="ou-timer__num">4:12</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ou-quiz ou-quiz--circle ou-quiz--m" style="width:100%;flex-direction:row;align-items:center;gap:var(--ou-space-5);padding-bottom:var(--ou-space-4)">
+      <div class="ou-quiz__dots" style="flex:none">
+        
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 1" onClick="#">1</button>
+        
+
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 2" onClick="#">2</button>
+        
+
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 3" onClick="#">3</button>
+        
+
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 4" onClick="#">4</button>
+        
+
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 5" onClick="#">5</button>
+        
+
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 6" onClick="#">6</button>
+        
+
+          <button type="button" class="ou-quiz__dot is-flagged" aria-label="Вопрос 7" onClick="#">7</button>
+        
+
+          <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 8" onClick="#">8</button>
+        
+
+          <button type="button" class="ou-quiz__dot " aria-label="Вопрос 9" onClick="#">9</button>
+        
+
+          <button type="button" class="ou-quiz__dot is-answered is-current" aria-label="Вопрос 10" onClick="#">10</button>
+        
+
+          <button type="button" class="ou-quiz__dot " aria-label="Вопрос 11" onClick="#">11</button>
+        
+
+          <button type="button" class="ou-quiz__dot " aria-label="Вопрос 12" onClick="#">12</button>
+        
+      </div>
+      <div class="ou-quiz__legend" style="margin-top:0;align-items:center">
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot" style="background:transparent;box-shadow:inset 0 0 0 2px var(--ou-accent-default)"></span>текущий</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+      </div>
+      <span style="margin-left:auto;flex:none;text-align:right;font:var(--ou-text-body-m);color:var(--ou-fg-muted)">отвечено <strong style="color:var(--ou-fg-default);font-weight:600">8</strong> из 12 · пропущено 1</span>
+    </div>
+
+    <div style="position:absolute;left:0;right:0;bottom:-1px;height:3px;background:var(--ou-bg-surface-3)">
+      <div style="height:100%;width:67%;background:var(--ou-accent-default);border-radius:0 999px 999px 0;transition:width 240ms var(--ou-easing-standard)"></div>
+    </div>
+  </header>
+
+  <main style="flex:1;min-height:0;overflow:auto;padding:24px">
+    <div style="width:75%;height:100%;display:flex;flex-direction:column;gap:var(--ou-space-4)">
+      <div style="display:flex;align-items:center;gap:var(--ou-space-3)">
+        <span style="font:var(--ou-text-body-m);color:var(--ou-fg-muted)">Вопрос 10 из 12</span>
+        <span class="ou-tag ou-tag--neutral">Пароли и аутентификация</span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:var(--ou-space-2)">
+        <h2 style="margin:0;font-weight:600;font-size:32px;line-height:1.25;color:var(--ou-fg-default);letter-spacing:-.015em;text-wrap:pretty">Какие требования относятся к надёжному паролю?</h2>
+        <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Выберите все верные варианты — их может быть несколько. Выбрано: 2</span>
+      </div>
+
+      <div class="ou-radio-group ou-radio-group--vertical" style="width:100%;flex:1;min-height:0">
+        <div class="ou-radio-group__items" style="gap:8px;height:100%;min-height:0">
+          
+            <label class="ou-radio-card is-on" style="flex:1;align-items:center;gap:var(--ou-space-4);padding:var(--ou-space-3) var(--ou-space-4);min-height:52px;box-sizing:border-box">
+              <span class="ou-check ou-check--m" style="flex:none">
+                <input type="checkbox" class="ou-check__input" checked onChange="#">
+                <span class="ou-check__box">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+                </span>
+              </span>
+              <span class="ou-radio-card__text">
+                <span class="ou-radio-card__title" style="font-weight:400;font-size:20px;line-height:1.35;text-wrap:pretty">Длина не менее 12 символов</span>
+              </span>
+            </label>
+          
+
+            <label class="ou-radio-card " style="flex:1;align-items:center;gap:var(--ou-space-4);padding:var(--ou-space-3) var(--ou-space-4);min-height:52px;box-sizing:border-box">
+              <span class="ou-check ou-check--m" style="flex:none">
+                <input type="checkbox" class="ou-check__input" onChange="#">
+                <span class="ou-check__box">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+                </span>
+              </span>
+              <span class="ou-radio-card__text">
+                <span class="ou-radio-card__title" style="font-weight:400;font-size:20px;line-height:1.35;text-wrap:pretty">Совпадает с паролем от личной почты</span>
+              </span>
+            </label>
+          
+
+            <label class="ou-radio-card " style="flex:1;align-items:center;gap:var(--ou-space-4);padding:var(--ou-space-3) var(--ou-space-4);min-height:52px;box-sizing:border-box">
+              <span class="ou-check ou-check--m" style="flex:none">
+                <input type="checkbox" class="ou-check__input" onChange="#">
+                <span class="ou-check__box">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+                </span>
+              </span>
+              <span class="ou-radio-card__text">
+                <span class="ou-radio-card__title" style="font-weight:400;font-size:20px;line-height:1.35;text-wrap:pretty">Уникален для каждого сервиса</span>
+              </span>
+            </label>
+          
+
+            <label class="ou-radio-card is-on" style="flex:1;align-items:center;gap:var(--ou-space-4);padding:var(--ou-space-3) var(--ou-space-4);min-height:52px;box-sizing:border-box">
+              <span class="ou-check ou-check--m" style="flex:none">
+                <input type="checkbox" class="ou-check__input" checked onChange="#">
+                <span class="ou-check__box">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+                </span>
+              </span>
+              <span class="ou-radio-card__text">
+                <span class="ou-radio-card__title" style="font-weight:400;font-size:20px;line-height:1.35;text-wrap:pretty">Содержит дату рождения</span>
+              </span>
+            </label>
+          
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer style="background:var(--ou-bg-elevated);border-top:1px solid var(--ou-border-soft);padding:var(--ou-space-4) 24px;display:flex;align-items:center;gap:var(--ou-space-3)">
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onClick="#">
+      <span class="ou-btn__ico" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="m12 19-7-7 7-7"></path></svg>
+      </span>
+      Назад
+    </button>
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onClick="#">К обзору ответов</button>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:var(--ou-space-3)">
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onClick="#">Пропустить</button>
+      <button type="button" class="ou-btn ou-btn--primary ou-btn--l" onClick="#">Отправить ответ</button>
+    </div>
+  </footer>
+</div>
+
+</body></html>
