@@ -136,6 +136,11 @@
   align-items: center; justify-content: center; text-align: center;
   gap: var(--ou-space-5);
 }
+.tb-scene__col--narrow { max-width: 640px; }
+.tb-scene__hero--s { font-size: 28px; }
+/* DS ring at a fixed diameter (the component does not size itself). */
+.tb-ring { width: 140px; height: 140px; display: inline-flex; align-items: center; justify-content: center; position: relative; }
+.tb-ring .ou-ring__track { stroke: var(--ou-bg-surface-3); }
 .tb-eyebrow { font: var(--ou-text-body-s); color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: 0.06em; }
 /* Meta dots — inline facts with an accent dot (section intro). */
 .tb-meta-dots { display: flex; gap: var(--ou-space-5); flex-wrap: wrap; justify-content: center; }
@@ -218,6 +223,15 @@
 /* ── Matching scene ─────────────────────────────────────────────── */
 .tb-scene .ou-match { width: 100%; row-gap: var(--ou-space-2); }
 .ou-match__placeholder { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* ── Verdict (results / section-results) ────────────────────────── */
+/* passClass (is-pass/is-fail) drives the DS ring fill + verdict tag colour. */
+.ou-ring__fill.is-pass { stroke: var(--ou-success-default); }
+.ou-ring__fill.is-fail { stroke: var(--ou-error-default); }
+.ou-ring__fill.is-partial { stroke: var(--ou-warning-default); }
+.ou-tag.is-pass { background: var(--ou-success-soft); color: var(--ou-success-on-soft); }
+.ou-tag.is-fail { background: var(--ou-error-soft); color: var(--ou-error-on-soft); }
+.ou-tag.is-partial { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
 
 /* ── Review (обзор ответов) ─────────────────────────────────────── */
 .tb-review-map { width: 100%; flex-direction: column; align-items: stretch; gap: var(--ou-space-3); }
