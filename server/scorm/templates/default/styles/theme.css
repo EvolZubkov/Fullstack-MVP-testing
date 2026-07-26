@@ -399,3 +399,74 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
 .retake-wall__lead { margin: 0 0 8px; color: var(--ou-fg-muted); }
 .retake-wall__date { margin: 12px 0 0; font-size: 16px; color: var(--ou-fg-default); }
 .retake-wall__note { margin: 12px 0 0; color: var(--ou-error-default); }
+
+/* ── Generic card + content-page skeleton (shared builders) ─────────
+   The generic `content` layout is a `page-content` shell the runtime fills with a
+   per-template placeholder skeleton (content-page.ts) — and the router hub fills it
+   with topic cards (router-hub.ts). Both were base.css; folded here on tokens. */
+.card {
+  background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+  border: 1px solid var(--ou-border-soft); border-radius: 12px;
+  padding: 32px; margin-bottom: 24px; box-shadow: var(--ou-shadow-lg);
+}
+.question-text { font-size: 18px; margin-bottom: 28px; color: var(--ou-fg-default); line-height: 1.7; }
+
+/* Content-page placeholder skeleton (buildContentPageSkeleton → page-content slot). */
+.content-page { display: flex; flex-direction: column; gap: 16px; }
+.content-placeholder--title { font-size: 28px; font-weight: 700; line-height: 1.2; color: var(--ou-fg-default); }
+.content-placeholder--subtitle,
+.content-placeholder--lead { font-size: 17px; color: var(--ou-fg-muted); line-height: 1.55; }
+.content-placeholder--body { font-size: 15px; color: var(--ou-fg-default); line-height: 1.65; }
+.content-placeholder--body p { margin-bottom: 12px; }
+.content-placeholder--body p:last-child { margin-bottom: 0; }
+.content-placeholder--heroImage,
+.content-placeholder--image {
+  width: 100%; height: 220px; border-radius: 8px; background: var(--ou-bg-surface-3);
+  overflow: hidden; display: grid; place-items: center;
+}
+.content-placeholder--heroImage img,
+.content-placeholder--image img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ── Router hub (router_by_topics) — the topic-card menu ────────────
+   Emitted by the shared builder (router-hub.ts) into the content layout's
+   page-content slot, on both hosts and in the «Структура» preview. */
+.router-topic-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 24px; }
+/* The router IS the navigation (topic cards); hide the content shell's «Далее»
+   in the preview, which renders the layout verbatim (the runtime removes it live). */
+.tb-scene:has(.router-topic-cards) .tb-scene__foot { display: none; }
+.router-progress { margin: 18px 0 4px; }
+.router-progress__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.router-progress__label { font-size: 13px; font-weight: 600; color: var(--ou-fg-muted); }
+.router-progress__count { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ou-fg-default); }
+.router-progress__bar { height: 6px; border-radius: 999px; background: var(--ou-bg-surface-3); overflow: hidden; }
+.router-progress__fill { height: 100%; border-radius: 999px; background: var(--ou-accent-default); transition: width 0.25s ease; }
+.router-topic-card {
+  display: flex; flex-direction: column; gap: 6px; padding: 14px 16px;
+  border: 1px solid var(--ou-border-default); border-radius: 10px; background: var(--ou-bg-elevated);
+  cursor: pointer; text-align: left; font: inherit; color: var(--ou-fg-default);
+  transition: border-color 0.15s, background 0.15s;
+}
+.router-topic-card:hover:not(:disabled) { border-color: var(--ou-accent-default); background: var(--ou-accent-soft); }
+.router-topic-card:disabled { cursor: default; opacity: 0.85; }
+.router-topic-card--completed { border-color: var(--ou-success-default); background: var(--ou-success-soft); }
+.router-topic-card--inProgress { border-color: var(--ou-warning-default); background: var(--ou-warning-soft); }
+.router-topic-card--locked { opacity: 0.5; cursor: not-allowed; }
+.router-topic-card__name { font-weight: 600; font-size: 15px; }
+.router-topic-card__status { font-size: 12px; color: var(--ou-fg-muted); }
+.router-topic-card--completed .router-topic-card__status { color: var(--ou-success-default); font-weight: 500; }
+.router-topic-card__optional { font-weight: 400; font-size: 11px; color: var(--ou-fg-muted); }
+.router-topic-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.router-topic-card__img { flex: 0 0 auto; }
+.router-topic-card__img img { display: block; width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+.router-topic-card__meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.router-topic-card__chip { font-size: 11px; color: var(--ou-fg-muted); background: var(--ou-bg-surface-3); border-radius: 999px; padding: 2px 8px; }
+.router-topic-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.router-topic-card__go { font-size: 12px; font-weight: 600; color: var(--ou-accent-default); }
+.router-finish { margin-top: 24px; }
+.router-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; }
+.router-stat {
+  display: flex; flex-direction: column; gap: 2px;
+  border: 1px solid var(--ou-border-soft); border-radius: 8px; padding: 8px 12px; background: var(--ou-bg-elevated);
+}
+.router-stat__label { font-size: 11px; color: var(--ou-fg-muted); }
+.router-stat__value { font-size: 14px; font-weight: 700; color: var(--ou-fg-default); font-variant-numeric: tabular-nums; }

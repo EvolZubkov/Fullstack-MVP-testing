@@ -220,7 +220,8 @@ export function buildRouterHubHtml(
   // can see what they are working toward.
   const ready = isRouterReadyToFinish(list, state);
   html +=
-    '<button type="button" class="btn router-finish' + (ready ? "" : " router-finish--disabled") + '"' +
+    '<button type="button" class="ou-btn ou-btn--primary ou-btn--m router-finish' +
+    (ready ? "" : " router-finish--disabled") + '"' +
     (ready ? ' data-action="router-finish"' : " disabled") +
     ">Завершить</button>";
 
