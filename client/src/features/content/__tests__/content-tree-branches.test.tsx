@@ -281,8 +281,10 @@ describe("<ContentTree /> — folder selection resolves topics transitively", ()
       // Select the root folder f1 → topicsUnderFolder walks into f2 (BFS).
       fireEvent.click(screen.getAllByLabelText("Выбрать папку")[0]);
       // f1 direct (t1, t4) + f2's t3 = 3 topics · 1 folder.
-      expect(screen.getByText(/3 темы/)).toBeInTheDocument();
-      expect(screen.getByText(/1 папка/)).toBeInTheDocument();
+      // Scoped to the bulk bar: folder captions now carry counts of their own.
+      const bulkbar = document.querySelector(".ct-bulkbar__count")!;
+      expect(bulkbar.textContent).toContain("3 темы");
+      expect(bulkbar.textContent).toContain("1 папка");
 
       // Real GroupAccessModal (not mocked): folderCount > 0 → the folders-aware scope banner.
       fireEvent.click(screen.getByTestId("ct-group-access"));

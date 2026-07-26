@@ -55,6 +55,7 @@ import {
 import { Button, Checkbox, Chip, Cluster, Input, Label, ModalDialog, Select, Stack, Text } from "@universityrt/ui-kit";
 import { LoadingState } from "@/components/loading-state";
 import { FolderTreeSelect } from "@/components/folder-tree-select";
+import { TruncatedLabel } from "@/components/truncated-label";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
@@ -175,6 +176,26 @@ function plural(n: number, one: string, few: string, many: string): string {
   if (m10 === 1 && m100 !== 11) return one;
   if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
   return many;
+}
+
+/** What a row's caption reports: everything the container holds, at any depth. */
+interface ContentCounts {
+  folders: number;
+  topics: number;
+  questions: number;
+}
+
+/**
+ * Row caption: «2 папки · 3 темы · 40 вопросов». Zero parts are dropped — a
+ * folder without subfolders should not carry «0 папок» — and a container with
+ * nothing inside says so instead of showing three zeros.
+ */
+function countsLabel(c: ContentCounts): string {
+  const parts: string[] = [];
+  if (c.folders > 0) parts.push(`${c.folders} ${plural(c.folders, "папка", "папки", "папок")}`);
+  if (c.topics > 0) parts.push(`${c.topics} ${plural(c.topics, "тема", "темы", "тем")}`);
+  if (c.questions > 0) parts.push(`${c.questions} ${plural(c.questions, "вопрос", "вопроса", "вопросов")}`);
+  return parts.length > 0 ? parts.join(" · ") : "пусто";
 }
 
 /** Debounce a changing value so it only settles after `ms` of quiet. */
@@ -352,6 +373,32 @@ export function ContentTree() {
     return map;
   }, [topics]);
 
+  // What each folder HOLDS, counted through the whole subtree: a folder that only
+  // groups other folders (its own topic list empty) still reports the material
+  // inside it, instead of reading «0 тем» next to hundreds of questions.
+  const folderTotals = useMemo(() => {
+    const totals = new Map<string, ContentCounts>();
+    const visit = (folderId: string): ContentCounts => {
+      const cached = totals.get(folderId);
+      if (cached) return cached;
+      const acc: ContentCounts = { folders: 0, topics: 0, questions: 0 };
+      for (const tp of topicsByFolder.get(folderId) ?? []) {
+        acc.topics += 1;
+        acc.questions += (questionsByTopic.get(tp.id) ?? []).length;
+      }
+      for (const sub of childFolders.get(folderId) ?? []) {
+        const inner = visit(sub.id);
+        acc.folders += 1 + inner.folders;
+        acc.topics += inner.topics;
+        acc.questions += inner.questions;
+      }
+      totals.set(folderId, acc);
+      return acc;
+    };
+    for (const f of folders) visit(f.id);
+    return totals;
+  }, [folders, childFolders, topicsByFolder, questionsByTopic]);
+
   // Topics resolved from the «Папки и темы» selection: directly-selected topics
   // plus every topic inside a selected folder (transitively).
   function topicsUnderFolder(folderId: string): string[] {
@@ -498,7 +545,7 @@ export function ContentTree() {
           </span>
           <span className="ct-twist">{qOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
           <span className="ct-qtype" title={TYPE_LABEL[type]}><Icon size={16} /></span>
-          <span className="ct-name__label">{q.prompt}</span>
+          <TruncatedLabel className="ct-name__label" text={q.prompt} />
           {q.mediaType ? <span className="ct-qmedia" title="С медиа"><ImageIcon size={16} /></span> : null}
         </div>
         <div className="ct-owner" />
@@ -524,7 +571,7 @@ export function ContentTree() {
   function pushFolder(folder: Folder, depth: number) {
     if (!folderVisible(folder.id)) return;
     const open = contentActive || !collapsedFolders.has(folder.id);
-    const topicCount = (topicsByFolder.get(folder.id) ?? []).length;
+    const totals = folderTotals.get(folder.id) ?? { folders: 0, topics: 0, questions: 0 };
     const menuOpen = menu?.kind === "folder" && menu.id === folder.id;
     const folderSel = selectedFolders.has(folder.id);
     rows.push(
@@ -536,7 +583,7 @@ export function ContentTree() {
           <span className="ct-twist">{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
           <span className="ct-ico"><FolderIcon size={16} /></span>
           <span className="ct-name__label">{folder.name}</span>
-          <span className="ct-foldercount">{topicCount} {t.navigation.topics.toLowerCase()}</span>
+          <span className="ct-foldercount">{countsLabel(totals)}</span>
         </div>
         <div className="ct-owner" />
         <div className="ct-cell" />
@@ -675,7 +722,12 @@ export function ContentTree() {
           </div>
           <div className="ct-rootrow">
             <span className="ct-ico"><FolderIcon size={16} /></span>
-            {t.content.allTopics} ({questions.length})
+            {/* The bare «(N)» here silently meant QUESTIONS; the tree's totals now
+                say what each number counts. */}
+            {t.content.allTopics}
+            <span className="ct-foldercount">
+              {countsLabel({ folders: folders.length, topics: topics.length, questions: questions.length })}
+            </span>
           </div>
           {rows.length > 0 ? rows : <div className="ct-empty"><Text tone="muted">{t.content.nothingFound}</Text></div>}
         </div>
