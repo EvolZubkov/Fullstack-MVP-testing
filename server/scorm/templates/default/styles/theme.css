@@ -95,7 +95,7 @@
 /* Progress bar pinned to the header's bottom edge. */
 .tb-scene__progress {
   position: absolute; left: 0; right: 0; bottom: -1px; height: 3px;
-  background: var(--ou-bg-subtle, var(--ou-border-soft));
+  background: var(--ou-bg-surface-3);
 }
 .tb-scene__progress-fill {
   height: 100%; background: var(--ou-accent-default);
@@ -125,6 +125,28 @@
 .tb-facts { display: flex; flex-wrap: wrap; gap: var(--ou-space-9); }
 .tb-facts__num { font: var(--ou-text-display-s); color: var(--ou-fg-default); line-height: 1.1; }
 .tb-facts__lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); }
+
+/* Centred column (section intro / blocked / short system screens): balanced,
+   reading measure, vertically centred — no unjustified vertical stretching. */
+.tb-scene__col--center {
+  max-width: 680px; margin: 0 auto; height: 100%;
+  align-items: center; justify-content: center; text-align: center;
+  gap: var(--ou-space-5);
+}
+.tb-eyebrow { font: var(--ou-text-body-s); color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+/* Meta dots — inline facts with an accent dot (section intro). */
+.tb-meta-dots { display: flex; gap: var(--ou-space-5); flex-wrap: wrap; justify-content: center; }
+.tb-meta-dots__item { display: inline-flex; align-items: center; gap: var(--ou-space-2); font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
+.tb-meta-dots__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ou-accent-default); flex: none; }
+/* Bordered info card (instruction / note block). */
+.tb-card {
+  width: 100%; text-align: left;
+  border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-l);
+  background: var(--ou-bg-surface-2); padding: var(--ou-space-5);
+  display: flex; flex-direction: column; gap: var(--ou-space-2);
+}
+.tb-card__head { font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
+.tb-card__body { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
 
 /* ── Question body ──────────────────────────────────────────────── */
 .tb-scene__meta { display: flex; align-items: center; gap: var(--ou-space-3); font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
