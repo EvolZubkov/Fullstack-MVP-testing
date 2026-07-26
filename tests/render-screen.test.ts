@@ -41,17 +41,22 @@ describe("renderScreenInto — unified renderer on the real results layout", () 
   const root = document.createElement("div");
   renderScreenInto(root, { layout: resultsLayout, context });
 
-  it("resolves {{#unless}} / {{#if}} branches", () => {
-    expect(root.textContent).toContain("Тест не пройден");
-    expect(root.textContent).not.toContain("Поздравляем!");
+  it("resolves {{#if}} / {{#unless}} branches", () => {
+    // {{#if result.topicResults}} (true) renders the per-topic section…
+    expect(root.textContent).toContain("Результаты по темам");
+    // …and {{#unless result.backAction}} (true — the context sets none) renders the
+    // default restart button. The failed-verdict copy is now the bound statusLabel.
+    expect(root.textContent).toContain("Пройти снова");
+    expect(root.querySelector('[data-path="result.statusLabel"]')?.textContent).toBe("Не пройден");
   });
 
   it("iterates {{#each result.topicResults}} with item-scoped fields and attrs", () => {
     expect(root.textContent).toContain("Тема A");
     expect(root.textContent).toContain("Тема B");
-    const widths = Array.from(root.querySelectorAll("[data-bar-width]")).map((b) => b.getAttribute("data-bar-width"));
-    expect(widths).toContain("80");
-    expect(widths).toContain("40");
+    // Each topic's percent lands in its DS progress bar as an inline width.
+    const widths = Array.from(root.querySelectorAll(".ou-progress__fill")).map((b) => b.getAttribute("style") || "");
+    expect(widths.some((w) => w.includes("80%"))).toBe(true);
+    expect(widths.some((w) => w.includes("40%"))).toBe(true);
   });
 
   it("binds [data-path] elements from the context (DOM pass)", () => {
@@ -60,7 +65,7 @@ describe("renderScreenInto — unified renderer on the real results layout", () 
   });
 
   it("resolves {{ result.passClass }} mixed into a class attribute", () => {
-    expect(root.querySelector(".ring-fg")?.getAttribute("class")).toContain("is-fail");
+    expect(root.querySelector(".ou-ring__fill")?.getAttribute("class")).toContain("is-fail");
   });
 
   it("fills a data-slot region with controlled HTML when provided", () => {
