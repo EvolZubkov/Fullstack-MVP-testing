@@ -150,14 +150,31 @@ function checkControl(): string {
   );
 }
 
-/** One option card: control + title, with `is-on`/review classes and the delegated action. */
+/** Trailing verdict icon shown on a reviewed option card (wireframe `question — проверка`):
+ *  a check on the right option, a cross on a chosen wrong one. Colour is inherited from
+ *  the card's `.correct-answer`/`.incorrect-answer` class (theme.css), so no literal here. */
+const MARK_CHECK =
+  '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+const MARK_CROSS =
+  '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg>';
+
+/** The trailing mark for a review class (`" correct-answer"` → check, `" incorrect-answer"` → cross). */
+function reviewMark(review: string): string {
+  if (review === " correct-answer") return `<span class="ou-radio-card__mark">${MARK_CHECK}</span>`;
+  if (review === " incorrect-answer") return `<span class="ou-radio-card__mark">${MARK_CROSS}</span>`;
+  return "";
+}
+
+/** One option card: control + title, with `is-on`/review classes, verdict mark and the delegated action. */
 function optionCard(control: string, title: string, chosen: boolean, review: string, oi: number): string {
   return (
     `<label class="ou-radio-card${chosen ? " is-on" : ""}${review}" ` +
     `data-action="select:${oi}" data-index="${oi}" role="button" tabindex="0">${control}` +
     `<span class="ou-radio-card__text">` +
     `<span class="ou-radio-card__title" style="font-weight:400;font-size:var(--tb-answer-fs,1.25rem);` +
-    `line-height:1.35;text-wrap:pretty">${title}</span></span></label>`
+    `line-height:1.35;text-wrap:pretty">${title}</span></span>${reviewMark(review)}</label>`
   );
 }
 

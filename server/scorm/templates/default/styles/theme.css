@@ -211,6 +211,11 @@
   border-color: var(--ou-error-default);
   background: var(--ou-error-soft);
 }
+/* Trailing verdict mark (check / cross) pinned to the card's right edge; colour
+   follows the card's review class so the icon reads as its verdict. */
+.ou-radio-card__mark { margin-left: auto; flex: none; display: inline-flex; align-items: center; }
+.ou-radio-card.correct-answer .ou-radio-card__mark { color: var(--ou-success-default); }
+.ou-radio-card.incorrect-answer .ou-radio-card__mark { color: var(--ou-error-default); }
 
 /* ── Ranking scene ──────────────────────────────────────────────── */
 .tb-scene .ou-rank { gap: var(--ou-space-2); }

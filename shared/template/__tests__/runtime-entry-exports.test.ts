@@ -23,6 +23,8 @@ const REQUIRED = [
   "fitFont",
   "questionFont",
   "optionFont",
+  "feedbackBanner",
+  "feedbackDesc",
 ] as const;
 
 describe("runtime-entry public surface", () => {
