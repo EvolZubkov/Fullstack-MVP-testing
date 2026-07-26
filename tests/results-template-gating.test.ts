@@ -153,11 +153,11 @@ describe("results.adaptive.html — superset gating", () => {
       },
     };
     const root = render(adaptiveLayout, ctx);
-    const cards = root.querySelectorAll(".topic-card");
+    const cards = root.querySelectorAll(".tb-topic-card");
     expect(cards.length).toBe(2);
-    expect(cards[0].querySelector(".topic-feedback")?.textContent).toContain("Хорошо");
-    expect(cards[0].querySelector(".topic-link")?.getAttribute("href")).toBe("https://e/x");
-    expect(cards[1].querySelector(".topic-feedback")).toBeNull();
-    expect(cards[1].querySelector(".results-pill")?.textContent).toContain("Не достигнут");
+    expect(cards[0].querySelector(".tb-topic-card__fb-text")?.textContent).toContain("Хорошо");
+    expect(cards[0].querySelector("a.tb-rec")?.getAttribute("href")).toBe("https://e/x");
+    expect(cards[1].querySelector(".tb-topic-card__fb-text")).toBeNull();
+    expect(cards[1].querySelector(".ou-tag")?.textContent).toContain("Не достигнут");
   });
 });

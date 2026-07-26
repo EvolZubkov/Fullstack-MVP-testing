@@ -163,23 +163,23 @@ describe("buildAdaptiveResultContext → render real results.adaptive.html (e2e)
     expect(root.querySelector('[data-path="course.title"]')?.textContent).toBe("Адаптивный тест");
   });
 
-  it("renders achieved level pills per topic", () => {
+  it("renders achieved level tags per topic", () => {
     expect(root.textContent).toContain("Внутренние коммуникации");
     expect(root.textContent).toContain("Средний");
-    expect(root.querySelector(".results-pill.is-info")).not.toBeNull(); // achieved
-    // not-achieved topic -> fallback label + is-fail pill
+    expect(root.querySelector(".ou-tag.is-info")).not.toBeNull(); // achieved
+    // not-achieved topic -> fallback label + is-fail tag
     expect(root.textContent).toContain("Безопасность");
     expect(root.textContent).toContain("Не достигнут");
-    expect(root.querySelector(".results-pill.is-fail")).not.toBeNull();
+    expect(root.querySelector(".ou-tag.is-fail")).not.toBeNull();
   });
 
-  it("renders feedback and recommended links only where present (nested each)", () => {
+  it("renders feedback and recommendations only where present (nested each)", () => {
     expect(root.textContent).toContain("Ваш уровень знаний по данной теме — средний");
-    const link = root.querySelector(".topic-link") as HTMLAnchorElement | null;
+    const link = root.querySelector("a.tb-rec") as HTMLAnchorElement | null;
     expect(link?.getAttribute("href")).toBe("https://example.test/comm");
     expect(link?.textContent).toContain("Курс по коммуникациям");
-    // exactly one feedback block and one link (second topic has neither)
-    expect(root.querySelectorAll(".topic-feedback")).toHaveLength(1);
-    expect(root.querySelectorAll(".topic-link")).toHaveLength(1);
+    // exactly one feedback block and one recommendation chip (second topic has neither)
+    expect(root.querySelectorAll(".tb-topic-card__fb-text")).toHaveLength(1);
+    expect(root.querySelectorAll(".tb-rec")).toHaveLength(1);
   });
 });

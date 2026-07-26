@@ -274,6 +274,16 @@
 }
 a.tb-rec:hover { border-color: var(--ou-accent-default); }
 
+/* Adaptive results: centred hero (no score ring) + level cards. */
+.tb-adaptive-hero { display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-3); text-align: center; margin-bottom: var(--ou-space-2); }
+.tb-adaptive-hero__icon {
+  width: 64px; height: 64px; flex: none; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--ou-accent-soft); color: var(--ou-accent-default);
+}
+/* Adaptive level tag — achieved = accent (is-info), not achieved = error (is-fail). */
+.ou-tag.is-info { background: var(--ou-accent-soft); color: var(--ou-accent-on-soft); }
+
 /* ── Verdict (results / section-results) ────────────────────────── */
 /* passClass (is-pass/is-fail) drives the DS ring fill + verdict tag colour. */
 .ou-ring__fill.is-pass { stroke: var(--ou-success-default); }
