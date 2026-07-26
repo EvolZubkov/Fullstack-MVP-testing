@@ -14,5 +14,170 @@
   --success: 142 76% 36%;
   --font-sans: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --radius: 12px;
-  --shadow: 0px 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow: var(--ou-shadow-lg);
 }
+
+/* =================================================================
+   SCENE LAYER (revision «Стандартный» on ui-kit)
+   A fixed header / scrolling body / fixed footer «scene». All values are
+   DS tokens (--ou-*) so the palette flows only through the design system +
+   the palette bridge — no colour literals. The scene root is `.ou` (theme
+   provider), so DS semantic tokens resolve inside.
+   ================================================================= */
+
+/* ── Scene frame ────────────────────────────────────────────────── */
+.tb-scene {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  font-family: var(--ou-font-family-base, var(--font-sans));
+}
+.tb-scene__header {
+  flex: none;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-3);
+  padding: var(--ou-space-4) 24px 0;
+  background: var(--ou-bg-elevated);
+  border-bottom: 1px solid var(--ou-border-soft);
+}
+.tb-scene__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+}
+/* Reading column: comfortable measure, fills the body height so answers can
+   stretch. Widens to full on narrow viewports. */
+.tb-scene__col {
+  width: 75%;
+  max-width: 960px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-4);
+}
+@media (max-width: 900px) {
+  .tb-scene__col { width: 100%; }
+}
+/* Footer action panel — shared look for the host-rendered nav row. */
+.tb-scene__foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-3);
+  padding: var(--ou-space-4) 24px;
+  background: var(--ou-bg-elevated);
+  border-top: 1px solid var(--ou-border-soft);
+}
+.tb-scene__foot-spacer { margin-left: auto; }
+
+/* ── Header pieces ──────────────────────────────────────────────── */
+.tb-scene__brandrow { display: flex; align-items: flex-start; gap: var(--ou-space-4); }
+.tb-scene__logo {
+  width: 44px; height: 44px; flex: none;
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-accent-soft);
+  color: var(--ou-accent-default);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; letter-spacing: 0.02em;
+  overflow: hidden;
+}
+.tb-scene__logo img { width: 100%; height: 100%; object-fit: contain; }
+.tb-scene__titles { min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
+.tb-scene__title { margin: 0; font: var(--ou-text-display-s); color: var(--ou-fg-default); letter-spacing: -0.01em; text-wrap: pretty; }
+.tb-scene__subtitle { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-scene__timers { margin-left: auto; display: flex; align-items: flex-start; gap: var(--ou-space-6); flex: none; }
+
+/* Progress bar pinned to the header's bottom edge. */
+.tb-scene__progress {
+  position: absolute; left: 0; right: 0; bottom: -1px; height: 3px;
+  background: var(--ou-bg-subtle, var(--ou-border-soft));
+}
+.tb-scene__progress-fill {
+  height: 100%; background: var(--ou-accent-default);
+  border-radius: 0 999px 999px 0;
+  transition: width 240ms var(--ou-easing-standard);
+}
+
+/* Question-map (ou-quiz) statuses buildQuestionProgress emits that DS does not
+   ship 1:1 — mapped here so the shared context drives the DS component. */
+.ou-quiz__dot.is-skipped { color: var(--ou-warning-on-soft); background: var(--ou-warning-soft); border-color: var(--ou-warning-default); }
+.ou-quiz__dot.is-unanswered { background: transparent; }
+
+/* ── Question body ──────────────────────────────────────────────── */
+.tb-scene__meta { display: flex; align-items: center; gap: var(--ou-space-3); font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+.tb-scene__q { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+.tb-scene__qtitle {
+  margin: 0; font-weight: 600; line-height: 1.25; letter-spacing: -0.015em;
+  color: var(--ou-fg-default); text-wrap: pretty;
+  font-size: var(--tb-question-fs, 30px);
+}
+.tb-scene__qhint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* Media + answers: stacked by default; side-by-side (media 5 / answers 7) when
+   the media slot actually has content. */
+.tb-qbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr; gap: var(--ou-space-5); }
+.tb-qbody:has([data-slot="question-media"]:not(:empty)) {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  align-items: start;
+}
+.tb-qbody__media:empty { display: none; }
+.tb-qbody__media img,
+.tb-qbody__media video { width: 100%; border-radius: var(--ou-radius-m); }
+.tb-qbody__answers { min-height: 0; display: flex; flex-direction: column; }
+
+/* ── Answers fill + spacing (all types) ─────────────────────────── */
+.tb-scene .ou-radio-group,
+.tb-scene .ou-rank { width: 100%; flex: 1; min-height: 0; }
+.tb-scene .ou-radio-group__items { gap: var(--ou-space-2); height: 100%; min-height: 0; }
+.tb-scene .ou-radio-group--vertical .ou-radio-group__items { flex-direction: column; }
+.tb-scene .ou-radio-card {
+  flex: 1; min-height: 52px; align-items: center;
+  gap: var(--ou-space-4);
+  padding: var(--ou-space-3) var(--ou-space-4);
+  box-sizing: border-box;
+}
+
+/* Multiple: the tick is class-driven (no native input) — mirror DS :checked. */
+.ou-radio-card.is-on .ou-check__box {
+  background: var(--ou-accent-default);
+  border-color: var(--ou-accent-default);
+}
+.ou-radio-card.is-on .ou-check__box svg { opacity: 1; }
+
+/* Review highlight — one convention (correct-answer/incorrect-answer) across
+   choice / ranking / matching, painted per DS component. */
+.ou-radio-card.correct-answer,
+.ou-rank__item.correct-answer,
+.ou-match__row.correct-answer .ou-match__card--drag {
+  border-color: var(--ou-success-default);
+  background: var(--ou-success-soft);
+}
+.ou-radio-card.incorrect-answer,
+.ou-rank__item.incorrect-answer,
+.ou-match__row.incorrect-answer .ou-match__card--drag {
+  border-color: var(--ou-error-default);
+  background: var(--ou-error-soft);
+}
+
+/* ── Ranking scene ──────────────────────────────────────────────── */
+.tb-scene .ou-rank { gap: var(--ou-space-2); }
+.tb-scene .ou-rank__item {
+  flex: 1; min-height: 52px; box-sizing: border-box; align-items: center;
+  gap: var(--ou-space-4);
+  padding: var(--ou-space-3) var(--ou-space-4);
+}
+
+/* ── Matching scene ─────────────────────────────────────────────── */
+.tb-scene .ou-match {
+  width: 100%; flex: 1; min-height: 0;
+  grid-auto-rows: minmax(0, 1fr);
+  align-content: stretch;
+  row-gap: var(--ou-space-2);
+}
+.tb-scene .ou-match__card { min-height: 0; }
+.ou-match__placeholder { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
