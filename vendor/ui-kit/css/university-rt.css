@@ -3144,6 +3144,9 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou-uploader__title { font: var(--ou-text-body-l); font-weight: 600; }
 .ou-uploader__sub { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 .ou-uploader__cta {
+  /* A SPAN, not a button (the whole dropzone is the control), so nothing centres
+     its text inside the fixed height on its own — the label sat on the top line. */
+  display: inline-flex; align-items: center; justify-content: center;
   margin-top: var(--ou-space-2);
   height: 36px; padding: 0 var(--ou-space-4);
   background: var(--ou-bg-hover);
