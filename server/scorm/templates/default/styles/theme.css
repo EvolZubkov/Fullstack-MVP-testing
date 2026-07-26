@@ -124,6 +124,17 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .ou-quiz__dot.is-skipped { color: var(--ou-warning-on-soft); background: var(--ou-warning-soft); border-color: var(--ou-warning-default); }
 .ou-quiz__dot.is-unanswered { background: transparent; }
 
+/* Question map is ONE row (wireframe): dots (indicator) + legend + counter inline. */
+.tb-scene__map { flex-direction: row; align-items: center; gap: var(--ou-space-5); padding-bottom: var(--ou-space-4); }
+.tb-scene__map .ou-quiz__dots { flex: none; }
+.tb-scene__map .ou-quiz__legend { margin-top: 0; align-items: center; }
+.tb-scene__mapcount { margin-left: auto; flex: none; text-align: right; font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+.tb-scene__mapcount strong { color: var(--ou-fg-default); font-weight: 600; }
+/* Legend swatches (DS ships the base dot only). */
+.ou-quiz__legend-dot.is-answered { background: var(--ou-accent-default); box-shadow: none; }
+.ou-quiz__legend-dot.is-current { background: transparent; box-shadow: inset 0 0 0 2px var(--ou-accent-default); }
+.ou-quiz__legend-dot.is-flagged { background: var(--ou-warning-default); box-shadow: none; }
+
 /* ── Document scenes (start / intro / results / content) ────────── */
 /* A comfortable reading column and the shared type scale these screens use. */
 .tb-scene__col--doc { gap: var(--ou-space-5); }

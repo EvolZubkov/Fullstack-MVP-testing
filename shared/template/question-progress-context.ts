@@ -70,7 +70,7 @@ export interface BuildQuestionProgressInput {
 const STATUS_WORD: Record<string, string> = {
   "is-current": "текущий",
   "is-answered": "отвечен",
-  "is-skipped": "пропущен",
+  "is-flagged": "пропущен",
   "is-correct": "верно",
   "is-incorrect": "неверно",
   "is-unanswered": "без ответа",
@@ -127,7 +127,7 @@ export function buildQuestionProgress(input: BuildQuestionProgressInput): CtxQue
     } else if (status === "answered") {
       statusClass = "is-answered";
     } else if (status === "skipped") {
-      statusClass = "is-skipped";
+      statusClass = "is-flagged";
     }
     // The current question stays visually current even in review marking.
     if (!input.reviewMarking && index === currentIndex) statusClass = "is-current";

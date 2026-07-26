@@ -15,12 +15,12 @@
         {{/each}}
       </div>
       <div class="ou-quiz__legend">
-        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
-        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-skipped"></span>пропущен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
         <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>
-        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-unanswered"></span>не выдан</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
       </div>
-      <span class="tb-scene__mapcount">отвечено <strong>{{state.questionsProgress.answeredCount}}</strong> · пропущено {{state.questionsProgress.skippedCount}}</span>
+      <span class="tb-scene__mapcount">отвечено <strong>{{state.questionsProgress.answeredCount}}</strong> из {{state.questionsProgress.total}} · пропущено {{state.questionsProgress.skippedCount}}</span>
     </div>
     {{/if}}
     <div class="tb-scene__progress"><div class="tb-scene__progress-fill" id="q-progress-fill"></div></div>
