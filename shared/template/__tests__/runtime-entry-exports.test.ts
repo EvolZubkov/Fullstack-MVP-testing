@@ -1,0 +1,23 @@
+/**
+ * @module shared/template/__tests__/runtime-entry-exports
+ * @description Гард: набор публичных экспортов TBTemplate не должен молча
+ * сузиться — оба хоста (веб-импорт и SCORM-IIFE) зависят от этих имён.
+ */
+import { describe, it, expect } from "vitest";
+import * as entry from "../runtime-entry";
+
+const REQUIRED = [
+  "renderScreenInto",
+  "buildQuestionProgress",
+  "buildReviewContext",
+  "shouldShowReview",
+  "renderResultField",
+] as const;
+
+describe("runtime-entry public surface", () => {
+  it("exposes every symbol both hosts rely on", () => {
+    for (const name of REQUIRED) {
+      expect(typeof (entry as Record<string, unknown>)[name]).not.toBe("undefined");
+    }
+  });
+});
