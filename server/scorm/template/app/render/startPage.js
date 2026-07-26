@@ -239,7 +239,7 @@ function renderStartPageFallback() {
   // Случай 1: Попытки закончились, есть результаты — только "Мой результат"
   if (noAttempts && hasCompletedAttempts) {
     html += '<div style="text-align:center;">';
-    html += '<button class="btn" onclick="viewSavedResults()" style="padding:14px 40px;font-size:16px;font-weight:600;">Мой результат</button>';
+    html += '<button class="ou-btn ou-btn--primary ou-btn--m" onclick="viewSavedResults()" style="padding:14px 40px;font-size:16px;font-weight:600;">Мой результат</button>';
     html += '</div>';
   }
   // Случай 2: Есть незавершённая сессия — предлагаем продолжить
@@ -249,24 +249,24 @@ function renderStartPageFallback() {
     html += '<div style="font-size:14px;font-weight:600;color:hsl(var(--foreground));">Вопрос ' + (resumeIndex + 1) + ' из ' + resumeTotal + '</div>';
     html += '</div>';
     html += '<div style="display:flex;gap:12px;flex-direction:column;align-items:center;">';
-    html += '<button class="btn" onclick="continueSession()" style="padding:14px 40px;font-size:16px;font-weight:600;">Продолжить с места остановки</button>';
-    html += '<button class="btn" style="padding:14px 40px;font-size:16px;font-weight:600;background:hsl(var(--muted));color:hsl(var(--foreground));" onclick="startTest()">Начать заново</button>';
+    html += '<button class="ou-btn ou-btn--primary ou-btn--m" onclick="continueSession()" style="padding:14px 40px;font-size:16px;font-weight:600;">Продолжить с места остановки</button>';
+    html += '<button class="ou-btn ou-btn--primary ou-btn--m" style="padding:14px 40px;font-size:16px;font-weight:600;background:hsl(var(--muted));color:hsl(var(--foreground));" onclick="startTest()">Начать заново</button>';
     if (hasCompletedAttempts) {
-      html += '<button class="btn" style="padding:14px 40px;font-size:16px;font-weight:600;background:transparent;color:hsl(var(--muted-foreground));" onclick="viewSavedResults()">Мой результат</button>';
+      html += '<button class="ou-btn ou-btn--primary ou-btn--m" style="padding:14px 40px;font-size:16px;font-weight:600;background:transparent;color:hsl(var(--muted-foreground));" onclick="viewSavedResults()">Мой результат</button>';
     }
     html += '</div>';
   }
   // Случай 3: Есть попытки И есть завершённые результаты — две кнопки
   else if (canStartNewAttempt && hasCompletedAttempts) {
     html += '<div style="display:flex;gap:12px;flex-direction:column;align-items:center;">';
-    html += '<button class="btn" onclick="startTest()" style="padding:14px 40px;font-size:16px;font-weight:600;">Начать тестирование заново</button>';
-    html += '<button class="btn" style="padding:14px 40px;font-size:16px;font-weight:600;background:hsl(var(--muted));color:hsl(var(--foreground));" onclick="viewSavedResults()">Мой результат</button>';
+    html += '<button class="ou-btn ou-btn--primary ou-btn--m" onclick="startTest()" style="padding:14px 40px;font-size:16px;font-weight:600;">Начать тестирование заново</button>';
+    html += '<button class="ou-btn ou-btn--primary ou-btn--m" style="padding:14px 40px;font-size:16px;font-weight:600;background:hsl(var(--muted));color:hsl(var(--foreground));" onclick="viewSavedResults()">Мой результат</button>';
     html += '</div>';
   }
   // Случай 4: Первый вход или нет завершённых попыток
   else {
     html += '<div style="text-align:center;">';
-    html += '<button class="btn" '
+    html += '<button class="ou-btn ou-btn--primary ou-btn--m" '
       + (noAttempts ? 'disabled ' : '')
       + 'onclick="' + (noAttempts ? 'return false;' : 'startTest()') + '" '
       + 'style="padding:14px 40px;font-size:16px;font-weight:600;'

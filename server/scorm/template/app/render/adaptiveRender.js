@@ -67,10 +67,10 @@ function buildAdaptiveNavHtml() {
   var aDisabled = aReady ? '' : ' disabled';
   var html = '<div class="navigation" style="justify-content:flex-end">';
   if (TEST_DATA.showCorrectAnswers) {
-    if (!state.feedbackShown) html += '<button class="btn" data-action="answer-submit" onclick="confirmAdaptiveAnswer()"' + aDisabled + '>Принять</button>';
-    else html += '<button class="btn" data-nav="next" onclick="continueAfterFeedback()">Далее</button>';
+    if (!state.feedbackShown) html += '<button class="ou-btn ou-btn--primary ou-btn--m" data-action="answer-submit" onclick="confirmAdaptiveAnswer()"' + aDisabled + '>Принять</button>';
+    else html += '<button class="ou-btn ou-btn--primary ou-btn--m" data-nav="next" onclick="continueAfterFeedback()">Далее</button>';
   } else {
-    html += '<button class="btn" data-nav="next" onclick="submitAdaptiveAnswerAndContinue()">Далее</button>';
+    html += '<button class="ou-btn ou-btn--primary ou-btn--m" data-nav="next" onclick="submitAdaptiveAnswerAndContinue()">Далее</button>';
   }
   html += '</div>';
   return html;
@@ -181,13 +181,13 @@ function renderAdaptiveQuestionFallback(app, qData) {
   html += '<div class="navigation" style="justify-content:flex-end">';
   if (TEST_DATA.showCorrectAnswers) {
     if (!state.feedbackShown) {
-      html += '<button class="btn" onclick="confirmAdaptiveAnswer()">Принять</button>';
+      html += '<button class="ou-btn ou-btn--primary ou-btn--m" onclick="confirmAdaptiveAnswer()">Принять</button>';
     } else {
-      html += '<button class="btn" onclick="continueAfterFeedback()">Далее</button>';
+      html += '<button class="ou-btn ou-btn--primary ou-btn--m" onclick="continueAfterFeedback()">Далее</button>';
     }
   } else {
     // Без показа правильных ответов - сразу переходим (с валидацией)
-    html += '<button class="btn" onclick="submitAdaptiveAnswerAndContinue()">Далее</button>';
+    html += '<button class="ou-btn ou-btn--primary ou-btn--m" onclick="submitAdaptiveAnswerAndContinue()">Далее</button>';
   }
   html += '</div>';
 
@@ -410,7 +410,7 @@ function renderAdaptiveTransitionFallback(app, result) {
     html += '<p style="color:#9ca3af;font-size:16px;margin-top:16px;">Переход к теме: <strong style="color:#fff;">' + escapeHtml(topicTransition.toTopic) + '</strong></p>';
   }
 
-  html += '<button class="btn" onclick="continueAfterTransition()" style="margin-top:32px;padding:14px 40px;font-size:16px;">Продолжить</button>';
+  html += '<button class="ou-btn ou-btn--primary ou-btn--m" onclick="continueAfterTransition()" style="margin-top:32px;padding:14px 40px;font-size:16px;">Продолжить</button>';
   html += '</div>';
 
   app.innerHTML = html;
@@ -577,21 +577,21 @@ function renderAdaptiveResultsFallback(app, result) {
 
   // Actions
   html += '<div class="results-actions">';
-  html += '<button class="btn btn-outline" onclick="downloadPDF()">📄 Скачать PDF</button>';
+  html += '<button class="ou-btn ou-btn--ghost ou-btn--m" onclick="downloadPDF()">📄 Скачать PDF</button>';
 
   var hasLimit = !!TEST_DATA.maxAttempts;
   var canRetry = hasAttemptsLeft();
 
   if (!hasLimit) {
     // Нет лимита - обе кнопки
-    html += '<button class="btn btn-outline" onclick="restartAdaptive()">Пройти заново</button>';
-    html += '<button class="btn" onclick="finishAndClose()">Завершить тест</button>';
+    html += '<button class="ou-btn ou-btn--ghost ou-btn--m" onclick="restartAdaptive()">Пройти заново</button>';
+    html += '<button class="ou-btn ou-btn--primary ou-btn--m" onclick="finishAndClose()">Завершить тест</button>';
   } else if (canRetry) {
     // Есть лимит и есть попытки - только "Пройти заново"
-    html += '<button class="btn" onclick="restartAdaptive()">Пройти заново</button>';
+    html += '<button class="ou-btn ou-btn--primary ou-btn--m" onclick="restartAdaptive()">Пройти заново</button>';
   } else {
     // Попытки исчерпаны - только "Завершить"
-    html += '<button class="btn" onclick="finishAndClose()">Завершить тест</button>';
+    html += '<button class="ou-btn ou-btn--primary ou-btn--m" onclick="finishAndClose()">Завершить тест</button>';
   }
   html += '</div>';
 

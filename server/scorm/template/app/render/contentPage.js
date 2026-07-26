@@ -399,7 +399,7 @@ function renderContentPage(page, contentTemplates) {
     var nav = document.createElement("div");
     nav.className = "navigation";
     nav.style.justifyContent = "flex-end";
-    nav.innerHTML = '<button class="btn" data-nav="next" onclick="advancePageSequence()">Далее</button>';
+    nav.innerHTML = '<button class="ou-btn ou-btn--primary ou-btn--m" data-nav="next" onclick="advancePageSequence()">Далее</button>';
     app.appendChild(nav);
   }
 

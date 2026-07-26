@@ -292,7 +292,7 @@ function renderViewResultsFallback() {
 
   // Back button
   html += '<div class="results-actions">';
-  html += '<button class="btn" onclick="backToStart()" style="padding:12px 32px;font-size:15px;">';
+  html += '<button class="ou-btn ou-btn--primary ou-btn--m" onclick="backToStart()" style="padding:12px 32px;font-size:15px;">';
   html += 'Вернуться к тесту';
   html += '</button>';
   html += '</div>';

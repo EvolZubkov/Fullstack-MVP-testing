@@ -499,8 +499,8 @@
     var nav = app ? app.querySelector(".navigation") : null;
     if (nav) {
       nav.innerHTML = last
-        ? '<button class="btn" data-action="test-finish" onclick="finishAndClose()">Завершить тест</button>'
-        : '<button class="btn" data-nav="next" onclick="nextPostResults()">Далее</button>';
+        ? '<button class="ou-btn ou-btn--primary ou-btn--m" data-action="test-finish" onclick="finishAndClose()">Завершить тест</button>'
+        : '<button class="ou-btn ou-btn--primary ou-btn--m" data-nav="next" onclick="nextPostResults()">Далее</button>';
       return;
     }
     var btn = app && typeof findScreenNavButton === "function"
