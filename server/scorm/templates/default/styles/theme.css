@@ -152,6 +152,7 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 
 /* Facts strip — big number + small label, spaced (start screen). */
 .tb-facts { display: flex; flex-wrap: wrap; gap: var(--ou-space-9); }
+.tb-facts--center { justify-content: center; }
 .tb-facts__num { font: var(--ou-text-display-s); color: var(--ou-fg-default); line-height: 1.1; }
 .tb-facts__lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); }
 

@@ -283,6 +283,10 @@ export interface CtxSectionResult {
   summaryLabel: string;
   /** «Продолжить» action label. */
   continueLabel: string;
+  /** Header caption "Раздел N из M" (position among sections); absent when unknown. */
+  sectionLabel?: string;
+  /** Header progress-bar fill percent (section position / total); absent when unknown. */
+  progressPercent?: number;
 }
 
 /**

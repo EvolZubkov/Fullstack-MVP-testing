@@ -396,12 +396,21 @@ function renderSectionResults(topicId, isLast) {
     // Router mode returns to the hub («Продолжить»); the «Завершить тест» step lives
     // on the hub (FR-05b). Linear sectional uses «Завершить тест» only on the last.
     var isRouterMode = (typeof RouterFlow !== 'undefined' && RouterFlow.isRouterMode());
+    // Section position among the test's sections — drives the header «Раздел N из M»
+    // tag + progress (matching the wireframe). Absent order simply drops both.
+    var secList = (typeof TEST_DATA !== 'undefined' && TEST_DATA.sections) ? TEST_DATA.sections : [];
+    var secPos = 0;
+    for (var si = 0; si < secList.length; si++) { if (secList[si].topicId === topicId) { secPos = si + 1; break; } }
     var built = TB.buildSectionResultContext({
         topicName: sr.topicName,
         correct: sr.correct,
         total: sr.total,
         percent: sr.percent,
         passed: sr.passed,
+        courseTitle: TEST_DATA.title,
+        subtitle: scormCourseSubtitle(),
+        sectionIndex: secPos || undefined,
+        sectionsTotal: secList.length,
         continueLabel: (isLast && !isRouterMode) ? 'Завершить тест' : 'Продолжить'
     });
     var context = {

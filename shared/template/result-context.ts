@@ -174,6 +174,14 @@ export interface SectionResultInput {
   passed: boolean | null;
   /** Override the «Продолжить» label (e.g. the last section before test-finish). */
   continueLabel?: string;
+  /** Test title for the header (`course.title`); falls back to `topicName` when absent. */
+  courseTitle?: string;
+  /** Header subtitle "Попытка N из M". */
+  subtitle?: string;
+  /** 1-based position of this section among the test's sections (header tag + progress). */
+  sectionIndex?: number;
+  /** Total sections (header tag + progress); absent/0 drops the section tag + progress. */
+  sectionsTotal?: number;
 }
 
 /**
@@ -201,7 +209,15 @@ export function buildSectionResultContext(input: SectionResultInput): {
     summaryLabel: (input.correct != null ? input.correct : 0) + " из " + input.total + " верно · " + percent + "%",
     continueLabel: input.continueLabel || "Продолжить",
   };
-  return { course: { title: input.topicName || "" }, sectionResult };
+  // Header section-position tag + progress, when the host supplies the position.
+  if (input.sectionsTotal && input.sectionsTotal > 0 && input.sectionIndex) {
+    sectionResult.sectionLabel = "Раздел " + input.sectionIndex + " из " + input.sectionsTotal;
+    sectionResult.progressPercent = Math.round((input.sectionIndex / input.sectionsTotal) * 100);
+  }
+  return {
+    course: { title: input.courseTitle || input.topicName || "", subtitle: input.subtitle },
+    sectionResult,
+  };
 }
 
 /** Russian plural for «вопрос» (1 вопрос / 2 вопроса / 5 вопросов). */

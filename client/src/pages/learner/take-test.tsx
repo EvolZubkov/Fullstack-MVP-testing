@@ -2566,15 +2566,28 @@ export default function TakeTestPage() {
   // section grader (parity with the SCORM-baked computeSectionResult) + the shared
   // buildSectionResultContext, rendered from the same section-results layout.
   if (testMode === "standard" && attempt && sectionResultView && sectionResultsTpl) {
+    const srTopic = sectionResultView.topicId;
+    // Section position among the delivered sections (unique topic order) — header
+    // «Раздел N из M» tag + progress, parity with the SCORM runtime.
+    const orderedTopics = Array.from(new Set(flatQuestions.map((q) => q.topicId)));
+    const srPos = orderedTopics.indexOf(srTopic) + 1;
     const built = buildSectionResultContext({
       topicName: sectionResultView.topicName,
       correct: sectionResultView.correct,
       total: sectionResultView.total,
       percent: sectionResultView.percent,
       passed: sectionResultView.passed,
+      courseTitle: testInfo?.title || attempt?.testTitle || "",
+      subtitle: testMetadata
+        ? buildCourseSubtitle({
+            attemptNumber: testMetadata.completedAttempts + 1,
+            maxAttempts: testMetadata.maxAttempts,
+          })
+        : undefined,
+      sectionIndex: srPos || undefined,
+      sectionsTotal: orderedTopics.length,
       continueLabel: sectionResultView.isLast ? "Завершить тест" : "Продолжить",
     });
-    const srTopic = sectionResultView.topicId;
     const srIsLast = sectionResultView.isLast;
     return (
       <div className="tbh-minh-screen tbh-col" style={{ background: sectionResultsTpl.theme?.background }}>
