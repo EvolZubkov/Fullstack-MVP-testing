@@ -9,7 +9,7 @@
       "key": "primaryColor",
       "type": "color",
       "label": "Цвет кнопок и активных элементов",
-      "default": "217 91% 42%",
+      "default": "268 100% 50%",
       "group": "Цвета",
       "section": "branding",
       "description": "Кнопки «Далее» и «Начать», выбранный вариант ответа, пройденные точки прогресса, рамка фокуса."
@@ -18,7 +18,7 @@
       "key": "backgroundColor",
       "type": "color",
       "label": "Фон экрана",
-      "default": "225 7% 7%",
+      "default": "222 28% 9%",
       "group": "Цвета",
       "section": "branding",
       "description": "Подложка всего экрана — то, что видно под карточками и текстом."
@@ -36,7 +36,7 @@
       "key": "cardColor",
       "type": "color",
       "label": "Фон карточки",
-      "default": "225 14% 14%",
+      "default": "220 23% 18%",
       "group": "Цвета",
       "section": "branding",
       "description": "Заливка карточек: учебная страница, карточка вопроса, окно подтверждения, итоги."
@@ -54,7 +54,7 @@
       "key": "borderColor",
       "type": "color",
       "label": "Границы элементов",
-      "default": "0 0% 22%",
+      "default": "222 18% 22%",
       "group": "Цвета",
       "section": "branding",
       "description": "Рамки вариантов ответа и полей, разделители внутри карточек."
