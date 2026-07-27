@@ -369,6 +369,8 @@ function renderAdaptiveResultsTemplated(app, result) {
     canRetry: (!hasLimit) || canRetry,
     showFinish: (!hasLimit) || (!canRetry)
   });
+  // Header subtitle «Попытка N из M» — same builder as every learner screen (parity).
+  if (typeof scormCourseSubtitle === 'function') ctx.course.subtitle = scormCourseSubtitle();
   app.innerHTML = '';
   // Mount directly into #app so .tb-pad > .tb-scene fills the fixed stage —
   // mirrors renderGalleryPage (no wrapper div).

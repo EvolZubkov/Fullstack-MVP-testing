@@ -1,4 +1,15 @@
 <div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow tb-scene__brandrow--center">
+      {{#if design.logoUrl}}<span class="tb-scene__logo"><img src="{{ design.logoUrl }}" alt=""></span>{{/if}}
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title"></h1>
+        {{#if course.subtitle}}<span class="tb-scene__subtitle" data-path="course.subtitle"></span>{{/if}}
+      </div>
+      <div class="tb-scene__headtag"><span class="ou-tag ou-tag--neutral">Тест завершён</span></div>
+    </div>
+  </header>
+
   <main class="tb-scene__body">
     <div class="tb-scene__col tb-scene__col--wide">
       <div class="tb-adaptive-hero">
@@ -6,7 +17,7 @@
           <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
         </span>
         <h2 class="tb-scene__hero tb-scene__hero--s">Тест завершён</h2>
-        <span class="tb-scene__lead" data-path="course.title"></span>
+        <span class="tb-scene__lead">Адаптивный тест подобрал уровень по каждой теме</span>
       </div>
 
       {{#if result.topicResults}}
