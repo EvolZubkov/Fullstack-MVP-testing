@@ -498,31 +498,6 @@ function buildQuestionNavHtml(current, total) {
 }
 
 /**
- * Stepped text-fit for the fixed-stage question body: when the prompt + options
- * overflow `.question-card`, lower the `--q-fit` multiplier (which the template CSS
- * applies to the prompt/option font + spacing) one discrete step at a time until it
- * fits — so content shrinks BEFORE the card scrolls. There is a LOWER BOUND: once the
- * smallest step is reached, stepping stops and the card's own overflow-y:auto takes
- * over (scroll is the fallback below the minimum readable size). No-op for cards that
- * do not overflow (e.g. scrolling, non-fixed-stage templates) — the first step fits.
- * @param {Element|null} card  The `.question-card` (or null → no-op).
- */
-function fitQuestionText(card) {
-  if (!card || !card.style) return;
-  card.classList.remove('question-card--scroll'); // measure with overflow visible
-  // 1 → 0.7: at most a 30% shrink; below that the text gets too small, so scroll.
-  var steps = [1, 0.94, 0.88, 0.82, 0.76, 0.7];
-  var fits = false;
-  for (var i = 0; i < steps.length; i++) {
-    card.style.setProperty('--q-fit', String(steps[i]));
-    if (card.scrollHeight <= card.clientHeight + 1) { fits = true; break; } // fits at this step
-  }
-  // Turn on scroll ONLY when even the smallest step overflows — scroll (overflow:hidden on
-  // x) clips the «Эталон» debug markers drawn in a left gutter, so keep it off otherwise.
-  if (!fits) card.classList.add('question-card--scroll');
-}
-
-/**
  * Header subtitle ("Попытка N из M") via the shared builder, so the SCORM and web
  * headers read identically (parity, PRD-12). The attempt number comes from
  * Telemetry (defaults to 1 when telemetry is off — e.g. the debug player's fresh
@@ -640,10 +615,10 @@ function renderStandardQuestion(qData, current, total, progress) {
         if (navWrap.firstChild) app.appendChild(navWrap.firstChild);
 
         syncMatchingHeights();
-        // Stepped text-fit: shrink the prompt/options to fit the fixed stage before
-        // falling back to the card's internal scroll. Measured AFTER the nav is in
-        // place (so the card's available height is final).
-        fitQuestionText(app.querySelector('.question-card'));
+        // Font sizing is length-based (questionFont/optionFont → --tb-question-fs /
+        // --tb-answer-fs): each card grows to fit its text at that size, and the
+        // scene body (overflow:auto) scrolls when the content exceeds the space
+        // between the fixed header and footer — no height-fit shrink needed.
         return;
     }
 

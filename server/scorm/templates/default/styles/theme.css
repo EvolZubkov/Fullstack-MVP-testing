@@ -66,12 +66,14 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 /* A header with no progress bar needs its own bottom padding (the bar normally
    sits flush on the bottom edge). */
 .tb-scene__header--flush { padding-bottom: var(--ou-space-4); }
-/* Reading column: comfortable measure, fills the body height so answers can
-   stretch. Widens to full on narrow viewports. */
+/* Reading column: comfortable measure. `min-height:100%` (not `height`) fills the
+   body when content is short (header top / footer bottom, content at the top) but
+   lets the column GROW past the body when content is long — so the body
+   (`overflow:auto`) scrolls instead of clipping. Widens to full on narrow viewports. */
 .tb-scene__col {
   width: 75%;
   max-width: 960px;
-  height: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--ou-space-4);
@@ -195,7 +197,10 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 
 /* Media + answers: stacked by default; side-by-side (media 5 / answers 7) when
    the media slot actually has content. */
-.tb-qbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr; gap: var(--ou-space-5); }
+/* Media + answers: fill the column when content is short (flex-grow), but keep the
+   content's natural height when long (flex-basis:auto, no shrink) so it grows the
+   column and the body scrolls rather than clipping the last options. */
+.tb-qbody { flex: 1 0 auto; display: grid; grid-template-columns: 1fr; gap: var(--ou-space-5); }
 .tb-qbody:has([data-slot="question-media"]:not(:empty)) {
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
   align-items: start;
@@ -205,7 +210,7 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-qbody__media video { width: 100%; border-radius: var(--ou-radius-m); }
 .tb-qbody__answers { min-height: 0; display: flex; flex-direction: column; }
 
-/* ── Answers: comfortable, top-aligned (balanced — not stretched to fill) ── */
+/* ── Answers: comfortable, top-aligned; each option card grows to fit its text ── */
 .tb-scene .ou-radio-group,
 .tb-scene .ou-rank { width: 100%; }
 .tb-scene .ou-radio-group__items { gap: var(--ou-space-2); }
@@ -215,6 +220,16 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   gap: var(--ou-space-4);
   padding: var(--ou-space-3) var(--ou-space-4);
   box-sizing: border-box;
+}
+/* Option text is length-adaptive: `--tb-answer-fs` (from optionFont: 20px for short
+   text down to 14px for long) drives the size, so long options shrink toward the
+   floor before the card grows taller and the body scrolls. Weight per wireframe. */
+.tb-scene .ou-radio-card__title,
+.tb-scene .ou-rank__text,
+.tb-scene .ou-match__card-title {
+  font-size: var(--tb-answer-fs, 20px);
+  font-weight: 400;
+  line-height: 1.35;
 }
 
 /* Multiple: the tick is class-driven (no native input) — mirror DS :checked. */
