@@ -13,6 +13,7 @@ import { loadTestScoringContext } from "../services/effective-scoring";
 import { computeAttemptResult } from "../services/result-compute";
 import { decideRetake, lastCompletedAttemptDate, toIsoDateUTC } from "../services/retake-gate";
 import { readResultsRenderPayload } from "../services/template-render";
+import { buildCourseSubtitle } from "@shared/template/course-subtitle";
 import { resolveSystemScreenDir, resolveTemplateDir } from "../services/template-dir";
 import {
   liveDataSource,
@@ -1115,6 +1116,9 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
     const completedAttempts = userAttempts.filter((a) => a.finishedAt !== null).length;
     const maxAttempts = test?.maxAttempts || null;
     const canRetake = maxAttempts === null || completedAttempts < maxAttempts;
+    // Header subtitle «Попытка N из M» — N is this (completed) attempt's position;
+    // built by the same shared helper the other learner screens use (parity).
+    const resultsSubtitle = buildCourseSubtitle({ attemptNumber: completedAttempts, maxAttempts });
 
     // PRD-12 web-host: render payload (template layout + css + context) for the
     // results screen. Covers BOTH standard (results.html) and adaptive
@@ -1132,7 +1136,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       // Branding/cssVars resolve against the ACTIVE template manifest even when the
       // results layout falls back to `default` (active template owns no `results`).
       const paramsDir = await resolveTemplateDir(templateId, { activeOnly: true });
-      render = readResultsRenderPayload(dir, resultJson, test?.title || "", test?.designSettingsJson as any, paramsDir);
+      render = readResultsRenderPayload(dir, resultJson, test?.title || "", test?.designSettingsJson as any, paramsDir, resultsSubtitle);
       // File-level fallback (PRD-1 §4.3.2, PRD-3 NFR-06): a template that declares a
       // `results` variant but ships no results layout still renders — from the
       // standard template — instead of dropping to the legacy React markup.
@@ -1145,6 +1149,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
             test?.title || "",
             test?.designSettingsJson as any,
             paramsDir,
+            resultsSubtitle,
           );
         }
       }

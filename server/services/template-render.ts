@@ -269,6 +269,7 @@ export function readResultsRenderPayload(
   testTitle: string,
   design?: DesignSettingsInput | null,
   paramsDir?: string,
+  subtitle?: string,
 ): ScreenRenderPayload | null {
   try {
     const isAdaptive = (result as { mode?: string }).mode === "adaptive";
@@ -282,6 +283,9 @@ export function readResultsRenderPayload(
     const context = isAdaptive
       ? buildAdaptiveResultContext(result, testTitle)
       : buildResultContext(result as AttemptResult, testTitle);
+    // Header subtitle «Попытка N из M» (Core-prepared by the caller), same as the
+    // other learner screens — merged into the server-built course context.
+    if (subtitle) (context as { course: { subtitle?: string } }).course.subtitle = subtitle;
     // The results context is server-built, so merge branding straight in (the
     // client passes `render.context` verbatim to the renderer).
     if (base.design) (context as { design?: { logoUrl?: string } }).design = base.design;

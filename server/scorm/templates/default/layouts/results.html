@@ -4,6 +4,7 @@
       {{#if design.logoUrl}}<span class="tb-scene__logo"><img src="{{ design.logoUrl }}" alt=""></span>{{/if}}
       <div class="tb-scene__titles">
         <h1 class="tb-scene__title" data-path="course.title"></h1>
+        {{#if course.subtitle}}<span class="tb-scene__subtitle" data-path="course.subtitle"></span>{{/if}}
       </div>
       <div class="tb-scene__headtag"><span class="ou-tag {{ result.passClass }}" data-path="result.statusLabel"></span></div>
     </div>

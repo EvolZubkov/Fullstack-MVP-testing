@@ -94,6 +94,8 @@ function renderViewResultsTemplated(app, results) {
     backLabel: 'Вернуться к тесту'
   });
   ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
+  // Header subtitle «Попытка N из M» — same builder as the other screens (parity).
+  if (typeof scormCourseSubtitle === 'function') ctx.course.subtitle = scormCourseSubtitle();
 
   // PRD-7 G21: mount default's results layout + activate default's stylesheet
   // when `results` falls back to the default template.
