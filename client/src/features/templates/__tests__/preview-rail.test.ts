@@ -148,19 +148,22 @@ describe("classify — route → (section, group) grouping", () => {
     expect(group.label).toBe("totally-unknown");
   });
 
-  it("content.intro → user section, «Введение раздела»", () => {
+  // «Введение раздела» and the router are fixed-role flow screens → system section,
+  // not free author content.
+  it("content.intro → system section, «Введение раздела»", () => {
     const { section, group } = single("content.intro");
-    expect(section.key).toBe("user");
-    expect(section.label).toBe("Пользовательские страницы");
+    expect(section.key).toBe("system");
+    expect(section.label).toBe("Системные экраны");
     expect(group.key).toBe("content.intro");
     expect(group.label).toBe("Введение раздела");
   });
 
-  it("content.router / bare router → user section, «Маршрутизатор»", () => {
+  it("content.router / bare router → system section, «Маршрутизатор»", () => {
     const a = single("content.router");
-    expect(a.section.key).toBe("user");
+    expect(a.section.key).toBe("system");
     expect(a.group.key).toBe("content.router");
     expect(a.group.label).toBe("Маршрутизатор");
+    expect(single("router").section.key).toBe("system");
     expect(single("router").group.key).toBe("content.router");
   });
 
@@ -294,7 +297,7 @@ describe("buildRail — grouping and ordering", () => {
 
   it("sorts sections into the canonical SECTION_ORDER (system before user)", () => {
     const rail = buildRail([
-      spec("content.intro", "ci"),
+      spec("content.info", "ci", "Текст", { key: "info.text", label: "Текст" }),
       spec("results", "r"),
       spec("question.single", "q"),
       spec("start", "s"),

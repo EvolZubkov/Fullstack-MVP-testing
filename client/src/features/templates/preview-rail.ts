@@ -52,7 +52,7 @@ export interface RailSection {
 // («Вопрос» / «Учебная страница» / …) whose variants nest as demonstrations.
 const SECTION_LABELS: Record<string, string> = {
   system: "Системные экраны",
-  user: "Пользовательские страницы",
+  user: "Страницы контента",
 };
 const SECTION_ORDER = ["system", "user"];
 
@@ -92,9 +92,12 @@ function classify(route: string): { section: string; typeKey: string } {
     return { section: "system", typeKey: route === "results.adaptive" ? "results.adaptive" : "results" };
   }
   if (route.startsWith("system.")) return { section: "system", typeKey: route };
-  // ── User (author content) pages ──────────────────────────────────────────
-  if (route === "content.intro") return { section: "user", typeKey: "content.intro" };
-  if (route === "content.router" || route === "router") return { section: "user", typeKey: "content.router" };
+  // «Введение раздела» and the router («меню карточек») are fixed-role flow screens
+  // (a section boundary / topic picker), NOT free author content — they belong with
+  // the system scaffolding even though the author fills an instruction / topic list.
+  if (route === "content.intro") return { section: "system", typeKey: "content.intro" };
+  if (route === "content.router" || route === "router") return { section: "system", typeKey: "content.router" };
+  // ── Author content pages (added and filled ad-hoc via PRD-22 templates) ────
   // Galleries and learning pages each collapse under one type; their manifest
   // variants (Текст / Текст с подзаголовком / …) nest as demonstrations.
   if (route.startsWith("content.gallery") || route.startsWith("gallery")) return { section: "user", typeKey: "gallery" };
