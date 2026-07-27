@@ -2155,6 +2155,14 @@ export default function TakeTestPage() {
             timeLimitMinutes:
               flatQuestions.find((q) => q.topicId === introTopicId)?.sectionTimeLimitMinutes ?? null,
             sectionNumber: Math.max(1, sections.findIndex((s) => s.topicId === introTopicId) + 1),
+            sectionsTotal: sections.length,
+            courseTitle: testInfo?.title || attempt?.testTitle || "",
+            subtitle: testMetadata
+              ? buildCourseSubtitle({
+                  attemptNumber: testMetadata.completedAttempts + 1,
+                  maxAttempts: testMetadata.maxAttempts,
+                })
+              : undefined,
             instruction: String((page.valuesJson?.values as any)?.instruction ?? ""),
           })
         : undefined;

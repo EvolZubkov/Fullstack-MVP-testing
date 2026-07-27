@@ -280,6 +280,9 @@ function renderAdaptiveTransitionTemplated(app, result) {
     levelTransition: result.levelTransition || null,
     showContinue: true
   });
+  // Shared header (course.title + subtitle) + branding, like every learner screen.
+  ctx.course = { title: TEST_DATA.title, subtitle: (typeof scormCourseSubtitle === 'function') ? scormCourseSubtitle() : '' };
+  ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
   app.innerHTML = '';
   // Mount directly into #app so .tb-pad > .transition-page fills the fixed stage —
   // mirrors renderGalleryPage (no wrapper div).

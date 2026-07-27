@@ -242,8 +242,14 @@ function pluralMinutes(n: number): string {
 
 /** Normalized input for the «Введение раздела» screen (PRD-1 §4.3). */
 export interface SectionIntroInput {
-  /** 1-based section index (for the «Раздел N» eyebrow). */
+  /** 1-based section index (for the «Раздел N из M» eyebrow + header tag). */
   sectionNumber: number;
+  /** Total sections; enables «Раздел N из M» + the header progress. */
+  sectionsTotal?: number;
+  /** Test title for the header (`course.title`); falls back to `topicName`. */
+  courseTitle?: string;
+  /** Header subtitle «Попытка N из M». */
+  subtitle?: string;
   topicName: string;
   /** Topic description from its properties. */
   description?: string | null;
@@ -271,8 +277,10 @@ export function buildSectionIntroContext(input: SectionIntroInput): {
   const instrRaw = typeof input.instruction === "string" ? input.instruction : "";
   const instrText = instrRaw.replace(/<[^>]*>/g, "").trim();
   const illo = (input.illustration ?? "").trim();
+  const secNum = input.sectionNumber || 1;
+  const secTotal = input.sectionsTotal && input.sectionsTotal > 0 ? input.sectionsTotal : 0;
   const sectionIntro: CtxSectionIntro = {
-    eyebrow: "Раздел " + (input.sectionNumber || 1),
+    eyebrow: secTotal ? "Раздел " + secNum + " из " + secTotal : "Раздел " + secNum,
     topicName: input.topicName || "",
     description: desc,
     hasDescription: desc.length > 0,
@@ -285,7 +293,11 @@ export function buildSectionIntroContext(input: SectionIntroInput): {
     hasIllustration: illo.length > 0,
     continueLabel: input.continueLabel || "Далее",
   };
-  return { course: { title: input.topicName || "" }, sectionIntro };
+  if (secTotal) sectionIntro.progressPercent = Math.round((secNum / secTotal) * 100);
+  return {
+    course: { title: input.courseTitle || input.topicName || "", subtitle: input.subtitle },
+    sectionIntro,
+  };
 }
 
 /** Normalized adaptive per-topic input. */

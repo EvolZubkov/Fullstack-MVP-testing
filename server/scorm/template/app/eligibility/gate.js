@@ -332,6 +332,11 @@ var RetakeGate = (function () {
       if (!html) { renderBlockWallBuiltin(retake, el); return; }
       el.innerHTML = html;
       var view = {
+        // Shared header: test title + attempt subtitle (path-only DSL fills data-path).
+        course: {
+          title: (td && td.title) || (typeof TEST_DATA !== 'undefined' && TEST_DATA ? TEST_DATA.title : '') || '',
+          subtitle: (typeof scormCourseSubtitle === 'function') ? scormCourseSubtitle() : ''
+        },
         retake: {
           cooldownPeriodDays: retake.cooldownPeriodDays,
           availableDate: retake.availableDate,

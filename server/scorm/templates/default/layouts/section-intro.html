@@ -1,4 +1,16 @@
 <div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow tb-scene__brandrow--center">
+      {{#if design.logoUrl}}<span class="tb-scene__logo"><img src="{{ design.logoUrl }}" alt=""></span>{{/if}}
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title"></h1>
+        {{#if course.subtitle}}<span class="tb-scene__subtitle" data-path="course.subtitle"></span>{{/if}}
+      </div>
+      <div class="tb-scene__headtag"><span class="ou-tag ou-tag--neutral" data-path="sectionIntro.eyebrow"></span></div>
+    </div>
+    {{#if sectionIntro.progressPercent}}<div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width:{{sectionIntro.progressPercent}}%"></div></div>{{/if}}
+  </header>
+
   <main class="tb-scene__body">
     <div class="tb-scene__col tb-scene__col--center">
       <span class="tb-eyebrow">{{ sectionIntro.eyebrow }}</span>

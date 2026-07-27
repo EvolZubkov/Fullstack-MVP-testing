@@ -296,8 +296,10 @@ export interface CtxSectionResult {
  * it from {@link module:shared/template/result-context}.buildSectionIntroContext.
  */
 export interface CtxSectionIntro {
-  /** «Раздел N» eyebrow label. */
+  /** «Раздел N из M» (or «Раздел N» without a total) eyebrow + header-tag label. */
   eyebrow: string;
+  /** Header progress-bar fill percent (section position / total); absent when unknown. */
+  progressPercent?: number;
   /** Section/topic name (heading). */
   topicName: string;
   /** Topic description from its properties; empty string when absent. */

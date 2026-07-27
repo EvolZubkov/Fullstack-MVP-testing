@@ -161,22 +161,26 @@ function buildSectionIntroFallback(inp) {
   var instr = typeof inp.instruction === "string" ? inp.instruction : "";
   var instrText = instr.replace(/<[^>]*>/g, "").trim();
   var illo = (inp.illustration == null ? "" : String(inp.illustration)).trim();
+  var secNum = inp.sectionNumber || 1;
+  var secTotal = inp.sectionsTotal && inp.sectionsTotal > 0 ? inp.sectionsTotal : 0;
+  var sectionIntro = {
+    eyebrow: secTotal ? "Раздел " + secNum + " из " + secTotal : "Раздел " + secNum,
+    topicName: inp.topicName || "",
+    description: desc,
+    hasDescription: desc.length > 0,
+    questionCount: count,
+    questionCountLabel: count + " " + pluralQuestions(count),
+    hasTimeLimit: hasTime,
+    timeLimitLabel: hasTime ? String(inp.timeLimitMinutes) + " " + pluralMinutes(inp.timeLimitMinutes) : "",
+    hasInstruction: instrText.length > 0,
+    illustrationUrl: illo,
+    hasIllustration: illo.length > 0,
+    continueLabel: inp.continueLabel || "Далее",
+  };
+  if (secTotal) sectionIntro.progressPercent = Math.round((secNum / secTotal) * 100);
   return {
-    course: { title: inp.topicName || "" },
-    sectionIntro: {
-      eyebrow: "Раздел " + (inp.sectionNumber || 1),
-      topicName: inp.topicName || "",
-      description: desc,
-      hasDescription: desc.length > 0,
-      questionCount: count,
-      questionCountLabel: count + " " + pluralQuestions(count),
-      hasTimeLimit: hasTime,
-      timeLimitLabel: hasTime ? String(inp.timeLimitMinutes) + " " + pluralMinutes(inp.timeLimitMinutes) : "",
-      hasInstruction: instrText.length > 0,
-      illustrationUrl: illo,
-      hasIllustration: illo.length > 0,
-      continueLabel: inp.continueLabel || "Далее",
-    },
+    course: { title: inp.courseTitle || inp.topicName || "", subtitle: inp.subtitle || "" },
+    sectionIntro: sectionIntro,
   };
 }
 
@@ -208,6 +212,9 @@ function renderSectionIntro(page) {
   var illustrationUrl = illoRaw && typeof illoRaw === "object" ? (illoRaw.url || "") : (illoRaw || "");
   var introInput = {
     sectionNumber: idx + 1,
+    sectionsTotal: sections.length,
+    courseTitle: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") || section.topicName,
+    subtitle: (typeof scormCourseSubtitle === "function") ? scormCourseSubtitle() : "",
     topicName: section.topicName,
     description: section.topicDescription,
     questionCount: section.drawCount,
