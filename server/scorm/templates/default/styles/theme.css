@@ -93,6 +93,8 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 
 /* ── Header pieces ──────────────────────────────────────────────── */
 .tb-scene__brandrow { display: flex; align-items: flex-start; gap: var(--ou-space-4); }
+/* Content/system headers align the brand row on the centre line (no timers to top-align to). */
+.tb-scene__brandrow--center { align-items: center; }
 .tb-scene__logo {
   width: 44px; height: 44px; flex: none;
   border-radius: var(--ou-radius-m);

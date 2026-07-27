@@ -2115,6 +2115,14 @@ export default function TakeTestPage() {
         page={hubPage}
         template={contentTpl}
         courseTitle={testInfo?.title || attempt?.testTitle || ""}
+        subtitle={
+          testMetadata
+            ? buildCourseSubtitle({
+                attemptNumber: testMetadata.completedAttempts + 1,
+                maxAttempts: testMetadata.maxAttempts,
+              })
+            : undefined
+        }
         bodyHtml={buildRouterHubHtml(hubSections, {
           topicStates: routerTopicStates,
           sectionResults: {},
@@ -2156,6 +2164,14 @@ export default function TakeTestPage() {
         template={contentTpl}
         extraContext={introContext}
         courseTitle={testInfo?.title || attempt?.testTitle || ""}
+        subtitle={
+          testMetadata
+            ? buildCourseSubtitle({
+                attemptNumber: testMetadata.completedAttempts + 1,
+                maxAttempts: testMetadata.maxAttempts,
+              })
+            : undefined
+        }
         // PRD-22: the whole structure, so the navigation dots of a sequence are
         // computed by the shared core exactly as the SCORM runtime computes them.
         allPages={flowStructure.contentPages}

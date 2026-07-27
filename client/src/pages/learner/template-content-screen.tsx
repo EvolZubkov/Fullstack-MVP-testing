@@ -58,6 +58,8 @@ export interface TemplateContentScreenProps {
   template: ContentScreenTemplate;
   /** Course/test title for the layout's `course.*` bindings. */
   courseTitle: string;
+  /** Header subtitle under the title ("Попытка N из M"); empty -> title-only header. */
+  subtitle?: string;
   /**
    * Extra context merged over the default `course.*` — e.g. the `sectionIntro.*`
    * block that «Введение раздела» binds against.
@@ -96,6 +98,7 @@ export function TemplateContentScreen({
   page,
   template,
   courseTitle,
+  subtitle,
   extraContext,
   onNext,
   bodyHtml,
@@ -152,12 +155,12 @@ export function TemplateContentScreen({
 
   const context = useMemo(
     () => ({
-      course: { title: courseTitle },
+      course: { title: courseTitle, subtitle },
       page: pageContext,
       ...(template.design ? { design: template.design } : {}),
       ...(extraContext || {}),
     }),
-    [courseTitle, pageContext, template.design, extraContext],
+    [courseTitle, subtitle, pageContext, template.design, extraContext],
   );
 
   return (

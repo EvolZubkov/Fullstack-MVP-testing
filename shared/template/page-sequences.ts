@@ -65,6 +65,10 @@ export interface PageContext {
   /** 1-based position; 0 when the page is not in a sequence. */
   dotIndex: number;
   dotsTotal: number;
+  /** Core-prepared header caption "Страница N из M"; empty when not in a sequence. */
+  pageLabel: string;
+  /** Header progress-bar fill percent (position / total); 0 when not in a sequence. */
+  progressPercent: number;
   canGoBack: boolean;
   /** Caption of the layout's forward button (the `nextLabel` setting, PRD-22 FR-26). */
   nextLabel: string;
@@ -213,13 +217,16 @@ export function buildPageContext(
 ): PageContext {
   const canGoBack = options?.canGoBack === true;
   const nextLabel = options?.nextLabel?.trim() || DEFAULT_NEXT_LABEL;
-  if (!placement) return { dots: [], dotIndex: 0, dotsTotal: 0, canGoBack, nextLabel };
+  if (!placement)
+    return { dots: [], dotIndex: 0, dotsTotal: 0, pageLabel: "", progressPercent: 0, canGoBack, nextLabel };
 
   const dots: SequenceDot[] = [];
   for (let i = 1; i <= placement.total; i++) {
     dots.push({ statusClass: i === placement.index ? "is-current" : "" });
   }
-  return { dots, dotIndex: placement.index, dotsTotal: placement.total, canGoBack, nextLabel };
+  const pageLabel = placement.total > 0 ? "Страница " + placement.index + " из " + placement.total : "";
+  const progressPercent = placement.total > 0 ? Math.round((placement.index / placement.total) * 100) : 0;
+  return { dots, dotIndex: placement.index, dotsTotal: placement.total, pageLabel, progressPercent, canGoBack, nextLabel };
 }
 
 /**

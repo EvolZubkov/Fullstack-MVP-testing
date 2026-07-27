@@ -370,16 +370,20 @@ function renderContentPage(page, contentTemplates) {
   var host;
   if (layout && TB && TB.renderScreenInto) {
     app.innerHTML = "";
+    // PRD-22: navigation dots + header caption/progress of the page sequence,
+    // computed by the shared core from the structure — the author supplies only
+    // the identifier. A layout without an indicator simply ignores the block.
+    var pageCtx = buildPageRenderContext(page);
     // Mount directly into #app (no wrapper) so .tb-pad > .tb-scene fills
     // the fixed stage and the bottom nav anchors.
     TB.renderScreenInto(app, {
       layout: layout,
       context: {
-        course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") },
-        // PRD-22: navigation dots of the page sequence, computed by the shared
-        // core from the structure — the author supplies only the identifier.
-        // A layout without an indicator simply ignores the block.
-        page: buildPageRenderContext(page)
+        course: {
+          title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : ""),
+          subtitle: (typeof scormCourseSubtitle === "function") ? scormCourseSubtitle() : ""
+        },
+        page: pageCtx
       },
       slots: { "page-content": skeleton }
     });

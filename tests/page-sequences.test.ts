@@ -219,6 +219,8 @@ describe("buildPageContextFor", () => {
       dots: [{ statusClass: "" }, { statusClass: "is-current" }],
       dotIndex: 2,
       dotsTotal: 2,
+      pageLabel: "Страница 2 из 2",
+      progressPercent: 100,
       canGoBack: true,
       nextLabel: "Далее",
     });
