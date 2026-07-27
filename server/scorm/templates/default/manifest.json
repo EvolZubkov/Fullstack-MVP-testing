@@ -1068,28 +1068,22 @@
       {
         "route": "question.single",
         "questionId": "demo-single",
-        "label": "Вопрос: одиночный выбор"
+        "label": "Одиночный выбор"
       },
       {
         "route": "question.multiple",
         "questionId": "demo-multiple",
-        "label": "Вопрос: множественный выбор"
+        "label": "Множественный выбор"
       },
       {
         "route": "question.matching",
         "questionId": "demo-matching",
-        "label": "Вопрос: сопоставление"
+        "label": "Сопоставление"
       },
       {
         "route": "question.ranking",
         "questionId": "demo-ranking",
-        "label": "Вопрос: ранжирование"
-      },
-      {
-        "route": "content.summary",
-        "pageId": "demo-summary",
-        "templateKey": "summary.result",
-        "label": "Итог: результат"
+        "label": "Ранжирование"
       },
       {
         "route": "review",
@@ -1101,11 +1095,11 @@
       },
       {
         "route": "results",
-        "label": "Результаты"
+        "label": "Итоги теста"
       },
       {
         "route": "system.blocked",
-        "label": "Системная: доступ ограничен"
+        "label": "Доступ ограничен"
       }
     ]
   }

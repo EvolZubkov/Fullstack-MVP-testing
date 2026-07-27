@@ -47,42 +47,28 @@ export interface RailSection {
 // the results layout (spec-template-platform §8.3) and system pages (§5.4).
 // Each kind/category is its own section so summary (итоговая страница) and the
 // results screen are clearly distinct, and intro/info are not lumped together.
+// Two top-level groups: Core-generated SYSTEM screens (the author does not edit)
+// and the author's own CONTENT pages. Within each, the middle level is the TYPE
+// («Вопрос» / «Учебная страница» / …) whose variants nest as demonstrations.
 const SECTION_LABELS: Record<string, string> = {
-  start: "Старт",
-  // intro / summary are the symmetric per-SECTION bookends (PRD-4: `before_topic`
-  // shows content.intro before a section's questions; `after_topic` shows
-  // content.summary after the section result). Labelled symmetrically.
-  intro: "Введение раздела",
-  info: "Учебные страницы",
-  router: "Маршрутизатор",
-  questions: "Вопросы",
-  summary: "Итог раздела",
-  results: "Результаты теста",
   system: "Системные экраны",
+  user: "Пользовательские страницы",
 };
-const SECTION_ORDER = ["start", "intro", "info", "router", "questions", "summary", "results", "system"];
+const SECTION_ORDER = ["system", "user"];
 
 const TYPE_LABELS: Record<string, string> = {
   start: "Старт",
-  "content.intro": "Введение",
-  "content.info": "Учебный материал",
-  "content.summary": "Итог",
-  "content.router": "Маршрутизатор",
-  "content.gallery": "Галерея",
-  content: "Контент",
-  "question.single": "Один вариант",
-  "question.multiple": "Несколько вариантов",
-  "question.matching": "Сопоставление",
-  "question.ranking": "Ранжирование",
   question: "Вопрос",
-  results: "Результаты",
-  "results.adaptive": "Адаптивные результаты",
-  // PRD-19 section-boundary nodes. Without these the rail falls back to the raw
-  // route key and shows the author `review` / `section-results` in English.
   review: "Обзор раздела",
   "section-results": "Итоги раздела",
+  results: "Итоги теста",
+  "results.adaptive": "Итоги теста (адаптивные)",
   "system.blocked": "Доступ ограничен",
   "system.transition": "Переход",
+  "content.intro": "Введение раздела",
+  "content.router": "Маршрутизатор",
+  content: "Учебная страница",
+  gallery: "Галерея",
 };
 
 /**
@@ -92,30 +78,27 @@ const TYPE_LABELS: Record<string, string> = {
  * while `results` (§8.3) and `system.*` (§5.4) are the system surfaces.
  */
 function classify(route: string): { section: string; typeKey: string } {
-  if (route === "start") return { section: "start", typeKey: "start" };
-  if (route === "content.intro") return { section: "intro", typeKey: "content.intro" };
-  if (route === "content.summary") return { section: "summary", typeKey: "content.summary" };
-  if (route === "content.router" || route === "router") return { section: "router", typeKey: "content.router" };
-  if (route === "content" || route.startsWith("content.")) {
-    // Remaining content kinds (info and any future ones) → "Учебные страницы".
-    const sub = route.includes(".") ? route.split(".")[1] : "";
-    return { section: "info", typeKey: sub ? `content.${sub}` : "content" };
-  }
+  // ── System (Core-generated) screens ──────────────────────────────────────
+  if (route === "start") return { section: "system", typeKey: "start" };
+  // A question TYPE (single/multiple/matching/ranking) is not a template variant;
+  // the four routes collapse under ONE «Вопрос» type node.
   if (route === "question" || route.startsWith("question.")) {
-    const sub = route.includes(".") ? route.split(".")[1] : "";
-    return { section: "questions", typeKey: sub ? `question.${sub}` : "question" };
+    return { section: "system", typeKey: "question" };
   }
-  if (route === "results" || route.startsWith("results")) {
-    return { section: "results", typeKey: route === "results.adaptive" ? "results.adaptive" : "results" };
-  }
-  // PRD-19 «Обзор» / «Итоги раздела»: Core-generated section-boundary screens with
-  // no author content — grouped with the other system surfaces.
   if (route === "review" || route === "section-results") {
     return { section: "system", typeKey: route };
   }
-  if (route.startsWith("system.")) {
-    return { section: "system", typeKey: route };
+  if (route === "results" || route.startsWith("results")) {
+    return { section: "system", typeKey: route === "results.adaptive" ? "results.adaptive" : "results" };
   }
+  if (route.startsWith("system.")) return { section: "system", typeKey: route };
+  // ── User (author content) pages ──────────────────────────────────────────
+  if (route === "content.intro") return { section: "user", typeKey: "content.intro" };
+  if (route === "content.router" || route === "router") return { section: "user", typeKey: "content.router" };
+  // Galleries and learning pages each collapse under one type; their manifest
+  // variants (Текст / Текст с подзаголовком / …) nest as demonstrations.
+  if (route.startsWith("content.gallery") || route.startsWith("gallery")) return { section: "user", typeKey: "gallery" };
+  if (route === "content" || route.startsWith("content.")) return { section: "user", typeKey: "content" };
   return { section: "system", typeKey: route };
 }
 
@@ -137,7 +120,15 @@ function screenLabel(spec: ScreenSpec): string {
  * Manifest keys are namespaced (`v:`) so a variant whose key happens to equal a
  * route-derived type key cannot silently merge with it.
  */
+// Types whose variants group UNDER the type node (each variant is a demonstration
+// leaf), so «варианты одного типа» read as one collapsible group instead of many
+// top-level entries: question kinds, learning pages and galleries.
+const TYPE_GROUPED = new Set(["question", "content", "gallery"]);
+
 function groupOf(spec: ScreenSpec, typeKey: string): { key: string; label: string; fromManifest: boolean } {
+  if (TYPE_GROUPED.has(typeKey)) {
+    return { key: typeKey, label: typeLabel(typeKey), fromManifest: false };
+  }
   if (spec.variantKey) {
     return {
       key: "v:" + spec.variantKey,

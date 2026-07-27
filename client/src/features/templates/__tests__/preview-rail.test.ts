@@ -6,6 +6,11 @@
  * helpers by feeding one screen spec per route family plus the malformed /
  * fallback inputs, and `variantStatus` for the group roll-up. No React or
  * rendering — every case is a pure input -> output assertion.
+ *
+ * Taxonomy: TWO top sections — «Системные экраны» (`system`) and «Пользовательские
+ * страницы» (`user`). Within a section the middle level is the TYPE; question kinds,
+ * learning pages and galleries collapse under one type node («варианты одного типа»),
+ * so a variant is a demonstration leaf, not a separate middle level.
  */
 import { describe, expect, it } from "vitest";
 import type { ScreenSpec } from "@shared/template/preview-context";
@@ -52,20 +57,19 @@ function statuses(rows: Array<[string, SmokeRouteResult["status"]]>): Map<string
 // ─── classify: section + group keys per route family ──────────────────────────
 
 describe("classify — route → (section, group) grouping", () => {
-  it("start route", () => {
+  it("start route → system section", () => {
     const { section, group } = single("start");
-    expect(section.key).toBe("start");
-    expect(section.label).toBe("Старт");
+    expect(section.key).toBe("system");
+    expect(section.label).toBe("Системные экраны");
     expect(group.key).toBe("start");
     expect(group.label).toBe("Старт");
     expect(group.fromManifest).toBe(false);
   });
 
-  // Regression: PRD-19 nodes had no TYPE_LABELS entry, so the rail fell back to the
-  // raw route key and showed the author `review` / `section-results` in English.
-  it("PRD-19 section nodes are labelled in Russian, not by their route key", () => {
+  it("PRD-19 section nodes are labelled in Russian, under the system section", () => {
     const review = single("review", "review", "Обзор раздела");
     expect(review.section.key).toBe("system");
+    expect(review.group.key).toBe("review");
     expect(review.group.label).toBe("Обзор раздела");
 
     const sectionResults = single("section-results", "section-results", "Итоги раздела");
@@ -73,105 +77,51 @@ describe("classify — route → (section, group) grouping", () => {
     expect(sectionResults.group.label).toBe("Итоги раздела");
   });
 
-  // Same defect for the gallery group («certification» previews two slides).
-  it("gallery slides group under a Russian label", () => {
+  it("the four question kinds collapse under ONE «Вопрос» type in the system section", () => {
     const rail = buildRail([
-      spec("content.gallery.1", "gallery-1", "Галерея: список"),
-      spec("content.gallery.2", "gallery-2", "Галерея: текст"),
+      spec("question.single", "q1", "Одиночный выбор"),
+      spec("question.multiple", "q2", "Множественный выбор"),
+      spec("question.matching", "q3", "Сопоставление"),
+      spec("question.ranking", "q4", "Ранжирование"),
     ]);
+    expect(rail).toHaveLength(1);
+    expect(rail[0].key).toBe("system");
+    expect(rail[0].variants).toHaveLength(1);
     const group = rail[0].variants[0];
-    expect(group.key).toBe("content.gallery");
-    expect(group.label).toBe("Галерея");
-    expect(group.screens.map((s) => s.id)).toEqual(["gallery-1", "gallery-2"]);
+    expect(group.key).toBe("question");
+    expect(group.label).toBe("Вопрос");
+    expect(group.screens.map((s) => s.label)).toEqual([
+      "Одиночный выбор",
+      "Множественный выбор",
+      "Сопоставление",
+      "Ранжирование",
+    ]);
   });
 
-  it("content.intro → intro section", () => {
-    const { section, group } = single("content.intro");
-    expect(section.key).toBe("intro");
-    expect(section.label).toBe("Введение раздела");
-    expect(group.key).toBe("content.intro");
-    expect(group.label).toBe("Введение");
-  });
-
-  it("content.summary → summary section", () => {
-    const { section, group } = single("content.summary");
-    expect(section.key).toBe("summary");
-    expect(section.label).toBe("Итог раздела");
-    expect(group.key).toBe("content.summary");
-    expect(group.label).toBe("Итог");
-  });
-
-  it("content.router → router section", () => {
-    const { section, group } = single("content.router");
-    expect(section.key).toBe("router");
-    expect(section.label).toBe("Маршрутизатор");
-    expect(group.key).toBe("content.router");
-    expect(group.label).toBe("Маршрутизатор");
-  });
-
-  it("router (bare) also maps to router section", () => {
-    const { section, group } = single("router");
-    expect(section.key).toBe("router");
-    expect(group.key).toBe("content.router");
-  });
-
-  it("content (bare) → info section with generic content group", () => {
-    const { section, group } = single("content");
-    expect(section.key).toBe("info");
-    expect(section.label).toBe("Учебные страницы");
-    expect(group.key).toBe("content");
-    expect(group.label).toBe("Контент");
-  });
-
-  it("content.info → info section with mapped group label", () => {
-    const { section, group } = single("content.info");
-    expect(section.key).toBe("info");
-    expect(group.key).toBe("content.info");
-    expect(group.label).toBe("Учебный материал");
-  });
-
-  it("unknown content.* sub-kind still lands in info with fallback group label", () => {
-    const { section, group } = single("content.custom");
-    expect(section.key).toBe("info");
-    expect(group.key).toBe("content.custom");
-    // typeLabel fallback: no TYPE_LABELS entry → the key itself.
-    expect(group.label).toBe("content.custom");
-  });
-
-  it("question (bare) → questions section with generic question group", () => {
+  it("bare question route also maps to the «Вопрос» type", () => {
     const { section, group } = single("question");
-    expect(section.key).toBe("questions");
-    expect(section.label).toBe("Вопросы");
+    expect(section.key).toBe("system");
     expect(group.key).toBe("question");
     expect(group.label).toBe("Вопрос");
   });
 
-  it("question.single/multiple/matching/ranking map to their labels", () => {
-    expect(single("question.single").group.label).toBe("Один вариант");
-    expect(single("question.multiple").group.label).toBe("Несколько вариантов");
-    expect(single("question.matching").group.label).toBe("Сопоставление");
-    expect(single("question.ranking").group.label).toBe("Ранжирование");
-    expect(single("question.single").section.key).toBe("questions");
-  });
-
-  it("results (bare) → results section, group 'results'", () => {
+  it("results (bare) → system section, «Итоги теста»", () => {
     const { section, group } = single("results");
-    expect(section.key).toBe("results");
-    expect(section.label).toBe("Результаты теста");
+    expect(section.key).toBe("system");
     expect(group.key).toBe("results");
-    expect(group.label).toBe("Результаты");
+    expect(group.label).toBe("Итоги теста");
   });
 
-  it("results.adaptive → results section, adaptive group (ternary true branch)", () => {
+  it("results.adaptive → system section, adaptive group (ternary true branch)", () => {
     const { section, group } = single("results.adaptive");
-    expect(section.key).toBe("results");
+    expect(section.key).toBe("system");
     expect(group.key).toBe("results.adaptive");
-    expect(group.label).toBe("Адаптивные результаты");
+    expect(group.label).toBe("Итоги теста (адаптивные)");
   });
 
   it("results-prefixed but not adaptive → group collapses to 'results' (ternary false branch)", () => {
     const { section, group } = single("results.summary", "results.summary");
-    expect(section.key).toBe("results");
+    expect(section.key).toBe("system");
     expect(group.key).toBe("results");
   });
 
@@ -180,7 +130,6 @@ describe("classify — route → (section, group) grouping", () => {
     expect(single("system.transition").group.label).toBe("Переход");
     const { section, group } = single("system.blocked");
     expect(section.key).toBe("system");
-    expect(section.label).toBe("Системные экраны");
     expect(group.key).toBe("system.blocked");
   });
 
@@ -198,58 +147,97 @@ describe("classify — route → (section, group) grouping", () => {
     expect(group.key).toBe("totally-unknown");
     expect(group.label).toBe("totally-unknown");
   });
+
+  it("content.intro → user section, «Введение раздела»", () => {
+    const { section, group } = single("content.intro");
+    expect(section.key).toBe("user");
+    expect(section.label).toBe("Пользовательские страницы");
+    expect(group.key).toBe("content.intro");
+    expect(group.label).toBe("Введение раздела");
+  });
+
+  it("content.router / bare router → user section, «Маршрутизатор»", () => {
+    const a = single("content.router");
+    expect(a.section.key).toBe("user");
+    expect(a.group.key).toBe("content.router");
+    expect(a.group.label).toBe("Маршрутизатор");
+    expect(single("router").group.key).toBe("content.router");
+  });
+
+  it("learning-page variants collapse under «Учебная страница» in the user section", () => {
+    const rail = buildRail([
+      spec("content.info", "a", "Текст", { key: "info.text", label: "Текст" }),
+      spec("content.info", "b", "Текст с подзаголовком", { key: "info.text-lead", label: "Текст с подзаголовком" }),
+      spec("content", "c", "Текст, изображение слева", { key: "info.image-left", label: "Текст, изображение слева" }),
+    ]);
+    expect(rail).toHaveLength(1);
+    expect(rail[0].key).toBe("user");
+    expect(rail[0].variants).toHaveLength(1);
+    const group = rail[0].variants[0];
+    expect(group.key).toBe("content");
+    expect(group.label).toBe("Учебная страница");
+    expect(group.fromManifest).toBe(false);
+    expect(group.screens.map((s) => s.label)).toEqual([
+      "Текст",
+      "Текст с подзаголовком",
+      "Текст, изображение слева",
+    ]);
+  });
+
+  it("gallery variants collapse under «Галерея» in the user section", () => {
+    const rail = buildRail([
+      spec("content.gallery.1", "gallery-1", "Галерея: список"),
+      spec("content.gallery.2", "gallery-2", "Галерея: текст"),
+    ]);
+    expect(rail[0].key).toBe("user");
+    const group = rail[0].variants[0];
+    expect(group.key).toBe("gallery");
+    expect(group.label).toBe("Галерея");
+    expect(group.screens.map((s) => s.id)).toEqual(["gallery-1", "gallery-2"]);
+  });
 });
 
-// ─── groupOf: the manifest variant is the middle level (Д1) ───────────────────
+// ─── groupOf: variant-key middle level for NON-grouped types ──────────────────
 
-describe("groupOf — variant-backed screens group by their manifest variant", () => {
-  it("names the group from the manifest, not from the route", () => {
+describe("groupOf — variant-backed screens (non type-grouped) group by their manifest variant", () => {
+  it("names the group from the manifest, not the route (content.intro is not type-grouped)", () => {
     const rail = buildRail([
-      spec("content.info", "page-1", "Слайд 1", { key: "gallery.card", label: "Галерея" }),
+      spec("content.intro", "page-1", "Слайд 1", { key: "intro.card", label: "Введение с карточкой" }),
     ]);
     const group = rail[0].variants[0];
-    expect(group.key).toBe("v:gallery.card");
-    expect(group.label).toBe("Галерея");
+    expect(group.key).toBe("v:intro.card");
+    expect(group.label).toBe("Введение с карточкой");
     expect(group.fromManifest).toBe(true);
   });
 
   it("several demo screens of ONE variant are its demonstrations, not separate variants", () => {
-    const v = { key: "gallery.card", label: "Галерея" };
+    const v = { key: "intro.card", label: "Введение" };
     const rail = buildRail([
-      spec("content.info", "page-1", "Слайд 1", v),
-      spec("content.info", "page-2", "Слайд 2", v),
-      spec("content.info", "page-3", "Слайд 3", v),
+      spec("content.intro", "page-1", "Слайд 1", v),
+      spec("content.intro", "page-2", "Слайд 2", v),
+      spec("content.intro", "page-3", "Слайд 3", v),
     ]);
     expect(rail[0].variants).toHaveLength(1);
     expect(rail[0].variants[0].screens.map((s) => s.id)).toEqual(["page-1", "page-2", "page-3"]);
   });
 
-  it("distinct variants of one kind stay separate groups under the same section", () => {
+  it("falls back to the variant key when the manifest declares no / blank label", () => {
+    expect(buildRail([spec("content.intro", "a", "A", { key: "intro.x" })])[0].variants[0].label).toBe("intro.x");
+    expect(buildRail([spec("content.intro", "a", "A", { key: "intro.x", label: "  " })])[0].variants[0].label).toBe(
+      "intro.x",
+    );
+  });
+
+  it("type-grouped content ignores the manifest variant key and merges by type", () => {
+    // Two DISTINCT manifest variants of the learning-page type now read as ONE
+    // «Учебная страница» group with two demonstrations (variants of one type).
     const rail = buildRail([
-      spec("content.info", "a", "A", { key: "info.text", label: "Текст" }),
-      spec("content.info", "b", "B", { key: "info.image-left", label: "Текст, изображение слева" }),
+      spec("content.info", "a", "Текст", { key: "info.text", label: "Текст" }),
+      spec("content.info", "b", "Медиа", { key: "info.image-left", label: "Медиа" }),
     ]);
-    expect(rail[0].variants.map((v) => v.label)).toEqual(["Текст", "Текст, изображение слева"]);
-  });
-
-  it("falls back to the variant key when the manifest declares no label", () => {
-    const rail = buildRail([spec("content.info", "a", "A", { key: "info.text" })]);
-    expect(rail[0].variants[0].label).toBe("info.text");
-  });
-
-  it("falls back to the variant key when the manifest label is whitespace-only", () => {
-    const rail = buildRail([spec("content.info", "a", "A", { key: "info.text", label: "  " })]);
-    expect(rail[0].variants[0].label).toBe("info.text");
-  });
-
-  // The `v:` namespace exists so a variant key equal to a route-derived type key
-  // cannot silently swallow the route group (and vice versa).
-  it("a variant key equal to a route type key does not merge with it", () => {
-    const rail = buildRail([
-      spec("content.info", "routed"),
-      spec("content.info", "varianted", "B", { key: "content.info", label: "Учебная" }),
-    ]);
-    expect(rail[0].variants.map((v) => v.key)).toEqual(["content.info", "v:content.info"]);
+    expect(rail[0].variants).toHaveLength(1);
+    expect(rail[0].variants[0].key).toBe("content");
+    expect(rail[0].variants[0].screens.map((s) => s.id)).toEqual(["a", "b"]);
   });
 });
 
@@ -264,11 +252,8 @@ describe("screenLabel — leaf display name", () => {
     expect(single("start", "start", "  Экран старта  ").screen.label).toBe("Экран старта");
   });
 
-  it("falls back to the route when the label is whitespace-only", () => {
+  it("falls back to the route when the label is whitespace-only / absent", () => {
     expect(single("start", "start", "   ").screen.label).toBe("start");
-  });
-
-  it("falls back to the route when the label is absent", () => {
     expect(single("start", "start", undefined).screen.label).toBe("start");
   });
 
@@ -282,7 +267,7 @@ describe("screenLabel — leaf display name", () => {
   });
 });
 
-// ─── buildRail: grouping / dedup / ordering ───────────────────────────────────
+// ─── buildRail: grouping / ordering ───────────────────────────────────────────
 
 describe("buildRail — grouping and ordering", () => {
   it("returns an empty rail for no specs", () => {
@@ -292,38 +277,36 @@ describe("buildRail — grouping and ordering", () => {
   it("nests multiple demonstrations under one shared group (existing-group branch)", () => {
     const rail = buildRail([
       spec("question.single", "q-a", "Радио-список"),
-      spec("question.single", "q-b", "Карточки"),
+      spec("question.multiple", "q-b", "Карточки"),
     ]);
     expect(rail).toHaveLength(1);
     expect(rail[0].variants).toHaveLength(1);
+    expect(rail[0].variants[0].key).toBe("question");
     expect(rail[0].variants[0].screens.map((s) => s.id)).toEqual(["q-a", "q-b"]);
   });
 
   it("keeps distinct groups under one section (existing-section, new-group branch)", () => {
-    const rail = buildRail([
-      spec("question.single", "q-s"),
-      spec("question.multiple", "q-m"),
-    ]);
+    const rail = buildRail([spec("start", "s"), spec("question.single", "q"), spec("results", "r")]);
     expect(rail).toHaveLength(1);
-    expect(rail[0].key).toBe("questions");
-    expect(rail[0].variants.map((v) => v.key)).toEqual(["question.single", "question.multiple"]);
+    expect(rail[0].key).toBe("system");
+    expect(rail[0].variants.map((v) => v.key)).toEqual(["start", "question", "results"]);
   });
 
-  it("sorts sections into the canonical SECTION_ORDER regardless of input order", () => {
+  it("sorts sections into the canonical SECTION_ORDER (system before user)", () => {
     const rail = buildRail([
+      spec("content.intro", "ci"),
       spec("results", "r"),
       spec("question.single", "q"),
       spec("start", "s"),
-      spec("content.intro", "ci"),
     ]);
-    expect(rail.map((s) => s.key)).toEqual(["start", "intro", "questions", "results"]);
+    expect(rail.map((s) => s.key)).toEqual(["system", "user"]);
   });
 
   it("preserves declaration order of demonstrations within a group", () => {
     const rail = buildRail([
       spec("question.single", "first"),
-      spec("question.single", "second"),
-      spec("question.single", "third"),
+      spec("question.multiple", "second"),
+      spec("question.matching", "third"),
     ]);
     expect(rail[0].variants[0].screens.map((s) => s.id)).toEqual(["first", "second", "third"]);
   });
@@ -333,8 +316,8 @@ describe("buildRail — grouping and ordering", () => {
 
 describe("variantStatus — group dot", () => {
   const group = buildRail([
-    spec("content.info", "a", "A", { key: "g", label: "Г" }),
-    spec("content.info", "b", "B", { key: "g", label: "Г" }),
+    spec("question.single", "a", "A"),
+    spec("question.multiple", "b", "B"),
   ])[0].variants[0];
 
   it("is pass when every demonstration passes", () => {

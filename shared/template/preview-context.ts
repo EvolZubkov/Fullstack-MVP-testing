@@ -685,8 +685,13 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
   return { ...base, expectedSlots: [], input: { context: { course: { title: c.title } } } };
 }
 
-/** Content-page kinds the preview enumerates per variant (вводные/учебные/итог/маршрутизатор). */
-const CONTENT_VARIANT_KINDS = new Set(["intro", "info", "summary", "router"]);
+/**
+ * Content-page kinds the preview enumerates per variant (вводные/учебные/маршрутизатор).
+ * `summary` is intentionally excluded: it is the LEGACY per-topic «Итог раздела» kind
+ * whose role is now the computed `section-results` node (PRD-19) — the flow renders it
+ * only as an invisible boundary marker, so it must not appear as a preview screen.
+ */
+const CONTENT_VARIANT_KINDS = new Set(["intro", "info", "router"]);
 
 /** Derive a variant kind from a `pageKind` like `content.info` → `info`. */
 function kindFromPageKind(pageKind?: string): string | undefined {
