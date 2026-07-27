@@ -12,7 +12,10 @@
 
   <main class="tb-scene__body">
     <div class="tb-scene__col tb-scene__col--doc">
-      {{#if course.description}}<span class="tb-scene__lead" data-path="course.description"></span>{{/if}}
+      <div class="tb-scene__q">
+        <h2 class="tb-scene__hero" data-path="course.title"></h2>
+        {{#if course.description}}<span class="tb-scene__lead" data-path="course.description"></span>{{/if}}
+      </div>
 
       <div class="tb-facts">
         <div class="tb-facts__item">
