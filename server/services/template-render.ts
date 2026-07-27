@@ -75,11 +75,10 @@ export interface ScreenRenderPayload {
  * media envelope `{ url, name, … }` (or, for legacy/string values, a bare URL);
  * the layout binds a string, so the envelope is unwrapped here.
  */
-function resolveLogoUrl(designParams: Record<string, unknown> | null | undefined): string | undefined {
-  const logo = designParams?.logoUrl;
-  if (typeof logo === "string") return logo || undefined;
-  if (logo && typeof logo === "object" && typeof (logo as { url?: unknown }).url === "string") {
-    return (logo as { url: string }).url || undefined;
+function resolveMediaUrl(value: unknown): string | undefined {
+  if (typeof value === "string") return value || undefined;
+  if (value && typeof value === "object" && typeof (value as { url?: unknown }).url === "string") {
+    return (value as { url: string }).url || undefined;
   }
   return undefined;
 }
@@ -232,7 +231,9 @@ export function readScreenTemplate(
     const cssVars = buildTemplateCssVars(base, manifest.params);
     const themeCss = buildTemplateThemeCss(design, manifest, { rootSelector: ":host" });
     const dataTheme = sceneThemeAttribute(design, manifest);
-    const logoUrl = resolveLogoUrl(base);
+    const logoUrl = resolveMediaUrl(base?.logoUrl);
+    const startImageUrl = resolveMediaUrl(base?.startImageUrl);
+    const design_ = { ...(logoUrl ? { logoUrl } : {}), ...(startImageUrl ? { startImageUrl } : {}) };
     // Ревизия «Стандартный» на ui-kit: подмешать мост палитры DS. Он выводит
     // акцентную рампу --ou-purple-* из --primary теста (и поверхности из
     // --background/--card/--border), поэтому .ou-разметка ученических экранов
@@ -251,7 +252,7 @@ export function readScreenTemplate(
       ...(Object.keys(cssVars).length > 0 ? { cssVars } : {}),
       ...(themeCss ? { themeCss } : {}),
       ...(dataTheme ? { dataTheme } : {}),
-      ...(logoUrl ? { design: { logoUrl } } : {}),
+      ...(Object.keys(design_).length ? { design: design_ } : {}),
     };
   } catch {
     return null;

@@ -86,11 +86,18 @@ function wireStartAction(root, action, fn) {
  */
 function scormDesignContext() {
   var p = (typeof TEST_DATA !== 'undefined' && TEST_DATA.designSettings) ? TEST_DATA.designSettings.params : null;
-  var logo = p ? p.logoUrl : null;
-  var url = '';
-  if (logo && typeof logo === 'object' && typeof logo.url === 'string') url = logo.url;
-  else if (typeof logo === 'string') url = logo;
-  return url ? { logoUrl: url } : {};
+  // Unwrap a media envelope { url, name, … } (or a bare string) to a plain URL.
+  var mediaUrl = function (v) {
+    if (v && typeof v === 'object' && typeof v.url === 'string') return v.url;
+    if (typeof v === 'string') return v;
+    return '';
+  };
+  var out = {};
+  var logo = mediaUrl(p ? p.logoUrl : null);
+  if (logo) out.logoUrl = logo;
+  var startImg = mediaUrl(p ? p.startImageUrl : null);
+  if (startImg) out.startImageUrl = startImg;
+  return out;
 }
 
 /** Build the start context (shared builder) and mount the shared layout (standard mode). */

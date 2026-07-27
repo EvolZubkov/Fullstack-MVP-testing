@@ -366,6 +366,12 @@ export interface CtxRetake {
 export interface CtxDesign {
   /** Logo URL; absent → the `{{#if design.logoUrl}}` layout block renders nothing. */
   logoUrl?: string;
+  /**
+   * Start-screen illustration URL (PRD-7 branding). Present → the start layout shows
+   * the «with image» variant (illustration on the right); absent → the plain variant.
+   * Resolved to a plain URL string on both hosts (like {@link CtxDesign.logoUrl}).
+   */
+  startImageUrl?: string;
 }
 
 /**

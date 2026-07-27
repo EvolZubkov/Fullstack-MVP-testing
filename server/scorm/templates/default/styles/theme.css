@@ -107,6 +107,9 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   overflow: hidden;
 }
 .tb-scene__logo img { width: 100%; height: 100%; object-fit: contain; }
+/* Logo placeholder: the slot stays in the top-left even without a branding image,
+   showing a subtle picture icon so the logo's place is clear. */
+.tb-scene__logo-ph { color: var(--ou-accent-default); opacity: 0.75; }
 .tb-scene__titles { min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
 .tb-scene__title { margin: 0; font: var(--ou-text-display-s); color: var(--ou-fg-default); letter-spacing: -0.01em; text-wrap: pretty; }
 .tb-scene__subtitle { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
@@ -151,6 +154,14 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-scene__subhead { margin: 0; font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
 .tb-scene__note { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
 .tb-scene__headtag { margin-left: auto; align-self: center; flex: none; }
+
+/* Start screen: content column + OPTIONAL illustration on the right — two variants,
+   toggled by `design.startImageUrl` (`.tb-start--media`). Stacks on narrow widths. */
+.tb-start { display: grid; grid-template-columns: 1fr; gap: var(--ou-space-8); align-items: start; }
+.tb-start--media { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+.tb-start__main { min-width: 0; display: flex; flex-direction: column; gap: var(--ou-space-5); }
+.tb-start__media img { width: 100%; height: auto; display: block; border-radius: var(--ou-radius-l); }
+@media (max-width: 900px) { .tb-start--media { grid-template-columns: 1fr; } }
 
 /* Facts strip — big number + small label, spaced (start screen). */
 .tb-facts { display: flex; flex-wrap: wrap; gap: var(--ou-space-9); }
