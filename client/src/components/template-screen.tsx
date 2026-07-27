@@ -200,7 +200,25 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
       const app = screen.querySelector<HTMLElement>("#app");
       renderScreenInto(app ?? screen, { layout, context, slots, content });
     } else {
+      // Fill chain (mirrors the SCORM package's `#app` foundation): the shadow host
+      // fills its box (via the host `tbh-fill` class), and here the intermediate
+      // `screen` div + the scene are made flex-column and flex:1 so `.tb-scene`
+      // fills the host height even though the light-DOM wrapper uses `min-height`
+      // (not a definite `height`) — otherwise the scene collapses to its content
+      // and the footer rides up under empty space. A no-op when the host is
+      // unconstrained (preview): a flex:1 child of an auto-height column is content-sized.
+      host.style.display = "flex";
+      host.style.flexDirection = "column";
+      screen.style.flex = "1 1 auto";
+      screen.style.minHeight = "0";
+      screen.style.display = "flex";
+      screen.style.flexDirection = "column";
       renderScreenInto(screen, { layout, context, slots, content });
+      const sceneEl = screen.firstElementChild as HTMLElement | null;
+      if (sceneEl) {
+        sceneEl.style.flex = "1 1 auto";
+        sceneEl.style.minHeight = "0";
+      }
       fitToWidth();
     }
   }, [layout, context, css, slots, content, cssVars, themeCss, dataTheme, fitToWidth, shell]);

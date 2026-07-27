@@ -2273,14 +2273,14 @@ export default function TakeTestPage() {
     });
     return (
       <div
-        className="tbh-minh-screen tbh-noselect"
+        className="tbh-minh-screen tbh-col tbh-noselect"
         style={{ background: startTpl.theme?.background }}
         onCopy={(e) => e.preventDefault()}
         onCut={(e) => e.preventDefault()}
         onContextMenu={(e) => e.preventDefault()}
       >
         <TemplateScreen
-          className="tbh-wfull"
+          className="tbh-fill"
           layout={startTpl.layout}
           css={startTpl.css}
           cssVars={startTpl.cssVars}
