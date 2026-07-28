@@ -78,8 +78,12 @@ export function attachPointerDnd(root: DndRoot, config: PointerDndConfig): () =>
 
   let dragState: DragState | null = null;
 
-  const clearOver = () =>
+  const clearOver = () => {
     root.querySelectorAll(".is-over").forEach((n) => (n as Element).classList.remove("is-over"));
+    // Matching also lights the whole ROW via the DS's `.ou-match__row.is-target`
+    // highlight (the LEFT prompt) — clear it alongside the per-zone `.is-over`.
+    root.querySelectorAll(".ou-match__row.is-target").forEach((n) => (n as Element).classList.remove("is-target"));
+  };
 
   // The drop zone the dragged card overlaps MOST by area (excluding its own
   // source zone). Registers from `threshold` of the card area — a forgiving drop.
@@ -173,7 +177,13 @@ export function attachPointerDnd(root: DndRoot, config: PointerDndConfig): () =>
     }
     clearOver();
     const dz = overlapDropZone(st);
-    if (dz) dz.classList.add("is-over");
+    if (dz) {
+      dz.classList.add("is-over");
+      // Light the target ROW via the DS drop-highlight (the LEFT prompt), so the
+      // learner sees «нужную строку» regardless of which cell the ghost overlaps.
+      const row = dz.closest(".ou-match__row");
+      if (row) row.classList.add("is-target");
+    }
   };
 
   const finish = () => {

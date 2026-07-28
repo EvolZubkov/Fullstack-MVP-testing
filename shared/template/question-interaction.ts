@@ -69,7 +69,7 @@ const QUESTION_HINTS: Readonly<Record<string, string>> = {
   single: "Выберите один вариант ответа",
   multiple: "Выберите один или несколько вариантов",
   ranking: "Расставьте элементы в правильном порядке — перетащите или кнопками ↑/↓",
-  matching: "Перетащите ответ к подходящей подсказке",
+  matching: "Перетащите карточку справа на нужную строку",
 };
 
 /** Guidance subtitle for a question type (empty when the type has none). */
@@ -333,10 +333,14 @@ export function renderMatching(
     });
   }
 
-  // A draggable answer chip (left item) with grip, drop-zone hooks, and the fit font.
-  // NOTE: no `draggable="true"` — the shared pointer engine drives the drag. The
-  // native HTML5 draggable flag would start a browser drag that fires pointercancel
-  // and kills the pointer gesture, so REAL mouse dragging silently did nothing.
+  // A draggable answer chip (left item). The whole ROW is a drop target (both the
+  // fixed prompt and this slot carry data-drop="r<ri>"), so a chip released anywhere
+  // on «нужную строку» pairs with that row's prompt — the learner drags a right chip
+  // up/down onto a row, exactly the wireframe gesture. Only the LEFT prompt lights up
+  // (see the `:has(.is-over)` rule), so the right column is not itself a visible
+  // receiving zone. No `draggable="true"`: the native HTML5 flag would start a browser
+  // drag that fires pointercancel and kill the pointer gesture (real-mouse dragging
+  // then silently did nothing).
   const dragCard = (li: number, dropId: string): string =>
     `<div class="ou-match__card ou-match__card--drag" data-drag="${li}" data-drop="${dropId}">` +
     `<span class="ou-match__icon" aria-hidden="true"></span>` +
@@ -355,19 +359,23 @@ export function renderMatching(
       rowCls += Number(matchedLeft) === Number(correctRightToLeft[ri]) ? " correct-answer" : " incorrect-answer";
     }
     html += `<div class="${rowCls}">`;
-    // Fixed prompt (the right item) on the left; the draggable answer on the right.
+    // Fixed prompt (the right item) on the left — a drop zone for this row so a chip
+    // released over the prompt pairs with it; it is also the ONLY side that lights up.
     html +=
-      `<div class="ou-match__card ou-match__card--fixed">` +
+      `<div class="ou-match__card ou-match__card--fixed" data-drop="r${ri}">` +
       `<span class="ou-match__card-text"><span class="ou-match__card-title" ` +
       `style="font-size:var(--tb-answer-fs,1.125rem)">${esc(right[ri])}</span></span></div>`;
-    html += `<div class="ou-match__gap"></div>`;
+    // Connection indicator in the gap: a chevron-left «‹» pointing from the answer
+    // toward its prompt. Dashed grey hint by default, solid + accent once the row is
+    // connected (the DS `ou-match__gap-arrow` styling). The path is drawn pointing
+    // right; the DS's `.ou-match--side-r` `scaleX(-1)` flips it to a left chevron.
+    html +=
+      '<div class="ou-match__gap" aria-hidden="true">' +
+      '<svg class="ou-match__gap-arrow" viewBox="0 0 28 12"><path d="M10 2 L18 6 L10 10"></path></svg>' +
+      '</div>';
     if (isJoined) {
       html += dragCard(matchedLeft, `r${ri}`);
     } else {
-      // Each row's answer slot is aligned with THIS row's prompt, so dropping a chip
-      // here pairs it with that prompt (`r${ri}`) — the same zone a joined slot uses.
-      // (A bare `pool:` slot only reordered the pool and never formed a pair, so the
-      // very first match was impossible: no `r` zone existed until a row was joined.)
       const poolLeft = poolSlot < pool.length ? pool[poolSlot] : null;
       if (poolLeft !== null && poolLeft !== undefined) {
         html += dragCard(poolLeft, `r${ri}`);

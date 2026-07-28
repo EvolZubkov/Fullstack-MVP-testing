@@ -309,6 +309,17 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-scene .ou-rank__item { cursor: grab; }
 .tb-scene .ou-match__card--drag.dragging,
 .tb-scene .ou-rank__item.dragging { cursor: grabbing; }
+/* Drop-target feedback comes from the DS itself: the pointer engine adds
+   `.ou-match__row.is-target`, which lights the LEFT prompt (`.ou-match__row.is-target
+   .ou-match__card--fixed` in university-rt.css). No extra rule needed here. */
+/* After a pair connects, the DS tints only the RIGHT card + the arrow. Tint the LEFT
+   prompt too so the whole matched row reads as connected (review states keep their own
+   green/red tint, so exclude them). */
+.tb-scene .ou-match__row.is-connected:not(.correct-answer):not(.incorrect-answer) .ou-match__card--fixed {
+  border-color: var(--ou-accent-default);
+  background: var(--ou-accent-soft);
+  color: var(--ou-accent-on-soft);
+}
 .ou-match__placeholder { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 
 /* ── Adaptive level transition ──────────────────────────────────── */

@@ -122,11 +122,12 @@ describe("renderMatching", () => {
     expect(html).toContain("ou-match__card--drag");
     // side-r layout (fixed prompt left, drag answer right)
     expect(html).toContain("ou-match--side-r");
-    // draggable chips carry the left index; each open row's slot pairs with THIS
-    // row's prompt (data-drop="r<rightIdx>"), so a drop there forms the pair.
+    // The whole ROW is a drop target — both the fixed prompt and the row's slot carry
+    // data-drop="r<rightIdx>", so a chip released anywhere on the row pairs with that
+    // row's prompt. Chips are also drag sources (data-drag).
     expect(html).toContain('data-drag="0"');
-    expect(html).toContain('data-drop="r0"');
-    expect(html).toContain('data-drop="r1"');
+    expect(html).toMatch(/ou-match__card--fixed" data-drop="r0"/);
+    expect(html).toMatch(/ou-match__card--drag" data-drag="\d+" data-drop="r\d+"/);
     expect(html).not.toContain('data-drop="pool:');
   });
 
