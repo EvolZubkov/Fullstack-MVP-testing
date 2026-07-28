@@ -29,6 +29,11 @@ function isAbsoluteRef(url: string): boolean {
     v.startsWith("#") ||
     v.startsWith("data:") ||
     v.startsWith("blob:") ||
+    // A mustache placeholder (`{{ design.logoUrl }}`): its value is supplied at
+    // render time and is already correctly based — packed media resolves against
+    // the package root (`assets/media/…`), not the template dir. Prefixing the
+    // placeholder with the template base would 404 the resolved URL.
+    v.includes("{{") ||
     // Any scheme: http(s), mailto, tel — the sanitiser handles what is allowed.
     /^[a-z][a-z0-9+.-]*:/i.test(v)
   );

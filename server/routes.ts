@@ -96,10 +96,13 @@ export async function registerRoutes(
       if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
       const url = `/uploads/media/${req.file.filename}`;
+      // Busboy decodes the multipart filename as latin1 by default, so a UTF-8
+      // (e.g. Cyrillic) original name arrives mojibake — re-decode it to UTF-8.
+      const originalName = Buffer.from(req.file.originalname, "latin1").toString("utf8");
       res.json({
         url,
         mime: req.file.mimetype,
-        originalName: req.file.originalname,
+        originalName,
         size: req.file.size,
       });
     }
