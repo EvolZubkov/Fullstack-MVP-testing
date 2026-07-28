@@ -234,9 +234,18 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-qbody__media img,
 .tb-qbody__media video { width: 100%; border-radius: var(--ou-radius-m); }
 .tb-qbody__answers { min-height: 0; display: flex; flex-direction: column; }
-/* Verdict banner sits under the options — keep it off the last option (only when filled,
-   so the empty slot adds no phantom gap). */
-[data-slot="question-feedback"]:not(:empty) { margin-top: var(--ou-space-5); }
+/* Verdict banner sits ABOVE the options — keep it off the first option (only when
+   filled, so the empty slot adds no phantom gap). */
+[data-slot="question-feedback"]:not(:empty) { margin-bottom: var(--ou-space-5); }
+/* Answer-check verdict banner (feedback-block): center the verdict line with its icon
+   and tone the icon by result. The base .ou-banner top-aligns the icon and leaves it
+   muted grey (colour is toned only by the --subtle/--outline/--bar style variants,
+   which this banner doesn't use), so both are set here. */
+.tb-scene .feedback-block { align-items: center; }
+.tb-scene .feedback-block .ou-banner__ico { margin-top: 0; }
+.tb-scene .feedback-block.ou-banner--success .ou-banner__ico { color: var(--ou-success-default); }
+.tb-scene .feedback-block.ou-banner--warning .ou-banner__ico { color: var(--ou-warning-default); }
+.tb-scene .feedback-block.ou-banner--error .ou-banner__ico { color: var(--ou-error-default); }
 
 /* ── Answers: comfortable, top-aligned; each option card grows to fit its text ── */
 .tb-scene .ou-radio-group,
