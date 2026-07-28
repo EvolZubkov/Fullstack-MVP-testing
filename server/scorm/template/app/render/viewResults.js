@@ -109,6 +109,84 @@ function renderViewResultsTemplated(app, results) {
   if (backBtn) backBtn.onclick = backToStart;
 }
 
+/**
+ * PRD-12: the FINISH results screen (rendered once the learner passes the last
+ * question) via the SHARED `results` layout + renderer — the SAME scene as
+ * «Мой результат» ({@link renderViewResultsTemplated}) and the web host. Replaces
+ * the legacy hand-built `results-page` markup (renderResultsLegacy), which the
+ * revised «Стандартный» theme no longer styles. Differs from the saved-results view
+ * only in its FOOTER: the finish flow keeps its own actions (report / retry /
+ * finish|next), wired after mount since the shared layout carries one button.
+ */
+function renderResultsTemplated(app, results) {
+  var rec = vrRecommended(results);
+  var input = {
+    passed: !!results.passed,
+    percent: results.percent,
+    totalQuestions: results.totalQuestions,
+    correct: (results.totalCorrect != null ? results.totalCorrect : results.correct),
+    earnedPoints: results.earnedPoints,
+    possiblePoints: results.possiblePoints,
+    topicResults: (results.topicResults || []).map(function (tr) {
+      return {
+        topicId: tr.topicId,
+        topicName: tr.topicName,
+        correct: tr.correct,
+        total: tr.total,
+        percent: tr.percent,
+        earnedPoints: tr.earnedPoints,
+        possiblePoints: tr.possiblePoints,
+        passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
+        requiredLabel: vrRequiredLabel(tr),
+        topicFeedback: tr.topicFeedback
+      };
+    })
+  };
+  var ctx = window.TBTemplate.buildResultContext(input, TEST_DATA.title || '', {
+    withTopicPoints: true,
+    recommendedCourses: rec.courses,
+    recommendedEvents: rec.events
+  });
+  ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
+  if (typeof scormCourseSubtitle === 'function') ctx.course.subtitle = scormCourseSubtitle();
+
+  var layout = (typeof systemLayout === 'function') ? systemLayout('results') : state.templateLayouts['results'];
+  if (typeof applySystemScreenStyles === 'function') applySystemScreenStyles('results');
+  app.innerHTML = '';
+  window.TBTemplate.renderScreenInto(app, { layout: layout, context: ctx });
+  wireFinishResultsFooter(app, results);
+}
+
+/**
+ * Replaces the shared results footer (a single restart button) with the finish
+ * flow's own actions: «Скачать отчёт» (report, always) on the left, and on the
+ * right «Пройти заново» (only when the test was failed AND attempts remain) plus
+ * the primary «Далее» (test-scope «После теста» content follows) / «Завершить».
+ * Mirrors the results wireframe's footer; handlers reuse the existing finish helpers.
+ */
+function wireFinishResultsFooter(app, results) {
+  var foot = app.querySelector('.tb-scene__foot');
+  if (!foot) return;
+  var retry = !results.passed && (typeof hasAttemptsLeft === 'function') && hasAttemptsLeft();
+  var hasPost = state.postResultsPages && state.postResultsPages.length > 0;
+  var html = '<button type="button" class="ou-btn ou-btn--secondary ou-btn--m" data-fin="pdf">Скачать отчёт</button>' +
+    '<div class="tb-scene__foot-spacer"></div>';
+  if (retry) html += '<button type="button" class="ou-btn ou-btn--secondary ou-btn--l" data-fin="retry">Пройти заново</button>';
+  html += hasPost
+    ? '<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-nav="next" data-fin="next">Далее</button>'
+    : '<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-fin="finish">Завершить</button>';
+  foot.innerHTML = html;
+  Array.prototype.forEach.call(foot.querySelectorAll('[data-fin]'), function (b) {
+    var action = b.getAttribute('data-fin');
+    b.onclick = function () {
+      if (action === 'pdf') { if (typeof downloadPDF === 'function') downloadPDF(); }
+      else if (action === 'retry') { if (typeof restart === 'function') restart(); }
+      else if (action === 'next') { if (typeof enterPostResults === 'function') enterPostResults(); }
+      else if (typeof finishAndClose === 'function') finishAndClose();
+    };
+  });
+}
+
 function renderViewResultsFallback() {
 // Dead last-resort safety net: reached only if neither the active template nor the
 // bundled standard template supplies this layout — the package always bundles the

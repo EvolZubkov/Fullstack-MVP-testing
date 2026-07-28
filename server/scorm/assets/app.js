@@ -199,16 +199,34 @@ function generateVariant() {
 
 function renderResults() {
   var results = calculateResults();
-  
+
   // ✅ Сразу сохраняем результат попытки при показе результатов
   if (typeof saveAttemptResult === 'function' && !state.attemptSavedForThisSession) {
     saveAttemptResult(results);
     state.attemptSavedForThisSession = true;
     console.log('💾 renderResults: результат попытки сохранён', Math.round(results.percent) + '%');
   }
-  
-  var app = document.getElementById('app');
 
+  var app = document.getElementById('app');
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  var resultsLayout = (typeof systemLayout === 'function')
+    ? systemLayout('results')
+    : (state.templateLayouts && state.templateLayouts['results']);
+
+  // Revised «Стандартный»: render the FINISH results through the SHARED `results`
+  // layout + renderer (TBTemplate.renderScreenInto) — the SAME scene «Мой результат»
+  // (renderViewResults) and the web host show. The legacy hand-built `results-page`
+  // markup below is a last-resort fallback only: the revised theme no longer styles
+  // those classes, so on the default template it collapsed to an empty card.
+  if (resultsLayout && TB && TB.renderScreenInto && TB.buildResultContext &&
+      typeof renderResultsTemplated === 'function') {
+    renderResultsTemplated(app, results);
+    return;
+  }
+  renderResultsLegacy(app, results);
+}
+
+function renderResultsLegacy(app, results) {
   var pct = Math.round(results.percent);
   var passed = !!results.passed;
 
