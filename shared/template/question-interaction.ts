@@ -119,10 +119,10 @@ function displayOrder(count: number, shuffleMapping?: number[]): number[] {
  *
  * Multiple choice is a per-option traffic light on the learner's HANDLING of each
  * option, not just the answer key:
- *  - correct & chosen   → `" correct-answer"` (green, ✓)   — правильно выбранный
- *  - correct & !chosen  → `" missed-answer"`  (yellow, ✓)  — ошибочно пропущенный
- *  - wrong & chosen     → `" incorrect-answer"` (red, ✗)   — ошибочно выбранный
- *  - wrong & !chosen    → `" correct-skip"` (green, no ✓)  — правильно пропущенный
+ *  - correct & chosen   → `" correct-answer"` (green, ✓)      — правильно выбранный
+ *  - correct & !chosen  → `" missed-answer"`  (yellow, red ✗) — ошибочно пропущенный
+ *  - wrong & chosen     → `" incorrect-answer"` (red, ✗)      — ошибочно выбранный
+ *  - wrong & !chosen    → `" correct-skip"` (green, no mark)  — правильно пропущенный
  */
 function reviewClass(multiple: boolean, oi: number, chosen: boolean, review?: ReviewCorrect): string {
   if (!review) return "";
@@ -169,13 +169,15 @@ const MARK_CROSS =
   '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" ' +
   'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg>';
 
-/** The trailing mark for a review class: a check on the answer-key options
- *  (`" correct-answer"` green / `" missed-answer"` yellow), a cross on a chosen wrong
- *  one (`" incorrect-answer"`); a correctly-skipped wrong option (`" correct-skip"`)
- *  stays green but unmarked, since it is not itself a correct answer. */
+/** The trailing mark for a review class: a check ONLY on a correctly chosen option
+ *  (`" correct-answer"` green ✓). Both mistakes get a cross — a wrongly chosen option
+ *  (`" incorrect-answer"`, red ✗) AND a missed correct one (`" missed-answer"`): the
+ *  learner got that option wrong too, so a check would falsely read as «верно здесь»;
+ *  its cross is coloured red by the scene layer while the card stays yellow. A
+ *  correctly-skipped wrong option (`" correct-skip"`) stays green but unmarked. */
 function reviewMark(review: string): string {
-  if (review === " correct-answer" || review === " missed-answer") return `<span class="ou-radio-card__mark">${MARK_CHECK}</span>`;
-  if (review === " incorrect-answer") return `<span class="ou-radio-card__mark">${MARK_CROSS}</span>`;
+  if (review === " correct-answer") return `<span class="ou-radio-card__mark">${MARK_CHECK}</span>`;
+  if (review === " incorrect-answer" || review === " missed-answer") return `<span class="ou-radio-card__mark">${MARK_CROSS}</span>`;
   return "";
 }
 

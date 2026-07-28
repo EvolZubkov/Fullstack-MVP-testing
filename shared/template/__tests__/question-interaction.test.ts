@@ -65,9 +65,9 @@ describe("renderMultiple", () => {
 
   it("per-option traffic light in review: green/yellow/red by handling", () => {
     // Options A,B,C,D; correct = A,C; learner chose A,B.
-    //  A correct+chosen   → correct-answer (green, ✓)
-    //  B wrong+chosen      → incorrect-answer (red, ✗)
-    //  C correct+missed    → missed-answer (yellow, ✓)
+    //  A correct+chosen   → correct-answer (green, check)
+    //  B wrong+chosen      → incorrect-answer (red, cross)
+    //  C correct+missed    → missed-answer (yellow card, RED cross — a miss, not a tick)
     //  D wrong+skipped     → correct-skip (green, no mark)
     const MULTI4 = { type: "multiple", dataJson: { options: ["A", "B", "C", "D"] } };
     const html = renderMultiple(MULTI4, [0, 1], undefined, { correctIndices: [0, 2] });
@@ -75,9 +75,15 @@ describe("renderMultiple", () => {
     expect(html).toMatch(/ou-radio-card is-on incorrect-answer[^>]*>[\s\S]*?B/);
     expect(html).toMatch(/ou-radio-card missed-answer[^>]*>[\s\S]*?C/);
     expect(html).toMatch(/ou-radio-card correct-skip[^>]*>[\s\S]*?D/);
-    // A correct answer key carries a check even when missed; a correctly-skipped
-    // wrong option is green but unmarked.
-    expect(html.match(/ou-radio-card__mark/g)).toHaveLength(3); // A, B, C — not D
+    // Marks: A, B, C carry one; D (correctly skipped) does not.
+    const marks = html.match(/<span class="ou-radio-card__mark">[\s\S]*?<\/span>/g) || [];
+    expect(marks).toHaveLength(3);
+    // Only the correctly-chosen option gets a CHECK; both mistakes (wrong pick AND
+    // missed correct) get a CROSS — a missed correct answer must not read as «верно».
+    // (The check path is scoped to the mark span: the checkbox control reuses it.)
+    const CROSS = "M18 6 6 18M6 6l12 12";
+    expect(marks.filter((m) => m.includes(CROSS))).toHaveLength(2); // B (wrong pick) + C (missed)
+    expect(marks.filter((m) => !m.includes(CROSS))).toHaveLength(1); // A only (check)
   });
 });
 

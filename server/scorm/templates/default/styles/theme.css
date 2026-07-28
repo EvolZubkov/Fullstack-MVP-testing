@@ -234,6 +234,9 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-qbody__media img,
 .tb-qbody__media video { width: 100%; border-radius: var(--ou-radius-m); }
 .tb-qbody__answers { min-height: 0; display: flex; flex-direction: column; }
+/* Verdict banner sits under the options — keep it off the last option (only when filled,
+   so the empty slot adds no phantom gap). */
+[data-slot="question-feedback"]:not(:empty) { margin-top: var(--ou-space-5); }
 
 /* ── Answers: comfortable, top-aligned; each option card grows to fit its text ── */
 .tb-scene .ou-radio-group,
@@ -289,7 +292,9 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
    follows the card's review class so the icon reads as its verdict. */
 .ou-radio-card__mark { margin-left: auto; flex: none; display: inline-flex; align-items: center; }
 .ou-radio-card.correct-answer .ou-radio-card__mark { color: var(--ou-success-default); }
-.ou-radio-card.missed-answer .ou-radio-card__mark { color: var(--ou-warning-default); }
+/* Missed correct option: the CARD stays yellow (warning), but its mark is a RED cross —
+   the learner failed to pick a correct answer, so the icon reads as a mistake, not a tick. */
+.ou-radio-card.missed-answer .ou-radio-card__mark { color: var(--ou-error-default); }
 .ou-radio-card.incorrect-answer .ou-radio-card__mark { color: var(--ou-error-default); }
 
 /* ── Ranking scene ──────────────────────────────────────────────── */
