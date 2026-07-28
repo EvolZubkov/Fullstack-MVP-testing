@@ -597,14 +597,20 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
 .router-topic-card:disabled { cursor: default; opacity: 0.85; }
 /* Completed = neutral «Завершена». Pass/fail colour is added ONLY when the test
    reveals section results (router-topic-card--passed / --failed, emitted below);
-   those rules follow --completed so they win the shared-specificity cascade. */
-.router-topic-card--completed { border-color: var(--ou-border-strong); background: var(--ou-bg-surface-2); }
+   those rules follow --completed so they win the shared-specificity cascade.
+   A completed card RECEDES — a darker fill, flat (no raise), muted title — while
+   the ✓ mark stays bright, so it reads as clearly finished next to the raised,
+   actionable «Не начата» cards (whose fill == elevated == surface-2, hence the
+   deliberately different surface-1 here). */
+.router-topic-card--completed { border-color: var(--ou-border-strong); background: var(--ou-bg-surface-1); box-shadow: none; }
+.router-topic-card--completed .router-topic-card__name { color: var(--ou-fg-soft); }
 .router-topic-card--passed { border-color: var(--ou-success-default); background: var(--ou-success-soft); }
 .router-topic-card--failed { border-color: var(--ou-error-default); background: var(--ou-error-soft); }
 .router-topic-card--inProgress { border-color: var(--ou-warning-default); background: var(--ou-warning-soft); }
 .router-topic-card--locked { opacity: 0.5; cursor: not-allowed; }
 .router-topic-card__name { font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
-.router-topic-card__status { font-size: 12px; color: var(--ou-fg-muted); }
+.router-topic-card__status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ou-fg-muted); }
+.router-topic-card__ico { flex: none; }
 .router-topic-card--completed .router-topic-card__status { color: var(--ou-fg-default); font-weight: 500; }
 .router-topic-card--passed .router-topic-card__status { color: var(--ou-success-default); font-weight: 500; }
 .router-topic-card--failed .router-topic-card__status { color: var(--ou-error-default); font-weight: 500; }

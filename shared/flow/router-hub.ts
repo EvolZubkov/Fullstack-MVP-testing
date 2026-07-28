@@ -120,6 +120,17 @@ export function statusLabel(status: RouterTopicStatus): string {
   return "Не начата";
 }
 
+/** Status marks for a completed card — a check (done / passed) or a cross (failed);
+ *  colour comes from the card's state class in the scene layer, not the markup. */
+const CARD_CHECK =
+  '<svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" ' +
+  'stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M20 6 9 17l-5-5"></path></svg>';
+const CARD_CROSS =
+  '<svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" ' +
+  'stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M18 6 6 18M6 6l12 12"></path></svg>';
+
 /**
  * Builds the hub body: optional deadline stats, the required-sections progress
  * bar, and the section cards.
@@ -231,6 +242,9 @@ export function buildRouterHubHtml(
       metaHtml +
       '<span class="router-topic-card__foot">' +
       '<span class="router-topic-card__status">' +
+      // A completed card carries a mark (✓ done/passed, ✗ failed) so it reads as
+      // clearly finished, distinct from a fresh «Не начата» card at a glance.
+      (status === "completed" ? (outcome === "failed" ? CARD_CROSS : CARD_CHECK) : "") +
       escHtml(unlocked ? (status === "completed" ? completedLabel : statusLabel(status)) : "Недоступна") +
       "</span>" +
       goHtml +

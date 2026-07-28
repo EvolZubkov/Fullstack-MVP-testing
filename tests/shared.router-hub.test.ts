@@ -145,6 +145,15 @@ describe("router-hub — completed card outcome (PRD-19 show_section_results)", 
     expect(html).not.toContain("router-topic-card--passed");
   });
 
+  it("marks a completed card with a ✓ so it reads as clearly finished", () => {
+    const html = buildRouterHubHtml(SECTIONS, base({ topicStates: completed }));
+    // The completed card carries the status icon; a fresh «Не начата» card does not.
+    const completedCard = html.slice(html.indexOf('data-topic-id="t1"'), html.indexOf('data-topic-id="t2"'));
+    const freshCard = html.slice(html.indexOf('data-topic-id="t2"'));
+    expect(completedCard).toContain("router-topic-card__ico");
+    expect(freshCard).not.toContain("router-topic-card__ico");
+  });
+
   it("colours a passed section green «Пройдена» when results are shown", () => {
     const html = buildRouterHubHtml(
       SECTIONS,
