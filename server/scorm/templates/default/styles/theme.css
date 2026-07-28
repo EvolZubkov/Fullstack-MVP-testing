@@ -472,6 +472,9 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
 
 /* ── Review (обзор ответов) ─────────────────────────────────────── */
 .tb-review-map { width: 100%; flex-direction: column; align-items: stretch; gap: var(--ou-space-3); }
+/* Answered/skipped counts moved out of the header into the review body. */
+.tb-review-map__count { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+.tb-review-map__count strong { color: var(--ou-fg-default); font-weight: 600; }
 .tb-unanswered { display: flex; flex-direction: column; gap: var(--ou-space-2); width: 100%; }
 .tb-unanswered__row {
   display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-3);
