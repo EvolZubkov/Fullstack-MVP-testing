@@ -1,0 +1,1664 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: PRD-25 — Домашняя страница.
+    Файл: docs/wireframes/drafts/prd25-home.html
+    Спека: docs/specs/prd-25/home-page.md (разделы 2, 5, 6, 8; FR-05..FR-13, FR-17).
+    Фаза 0 плана. НЕ согласован — черновик к ревью.
+
+    Состояния (переключатель «Профиль прав» в навбаре):
+      s-learner  — чистый учащийся: две секции, правая колонка отсутствует,
+                   страница схлопнута в одну колонку на всю ширину
+      s-author   — автор: слева объекты автора, справа срочное и действия
+      s-manager  — менеджер: «Люди и назначения» + «Сводка»; показаны оба
+                   деградационных состояния (пустая секция и отказ источника)
+      s-super    — суперпользователь: все секции, включая «Материалы»
+
+    Раскладка НЕ переизобретается: это те же карточки, теги статусов и кнопки,
+    что уже используются в списках тестов и тем. Новое — только состав главной.
+  -->
+  <title>PRD-25 — Главная</title>
+  <!-- Актуальный DS-бандл: копия в docs/wireframes/ds отстала и не содержит
+       примитивов раскладки/типографики (Stack / Grid / Box / Text), которыми
+       раздел 6 спеки предписывает верстать страницу. Загружается ПЕРВЫМ, чтобы
+       общий для эскизов docs-бандл оставался источником остальных правил. -->
+  <link rel="stylesheet" href="/vendor/ui-kit/css/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    /* ─── Эскизный фрейм ───────────────────────────────────────────────────
+       Перенесён из approved/prd22-page-fields-sequences.html без изменений:
+       метки требований скрыты по умолчанию, включаются кнопкой «Аннотации». */
+    .wf-annot-wrap { position: relative; display: inline-flex; }
+    .wf-annot-wrap--block { position: relative; }
+    .wf-annot {
+      display: none;
+      position: absolute;
+      top: calc(-1 * var(--ou-space-2));
+      right: calc(-1 * var(--ou-space-1));
+      z-index: 200;
+      background: var(--ou-warning-default);
+      color: var(--ou-fg-default);
+      border-radius: var(--ou-radius-s);
+      padding: 0 var(--ou-space-1);
+      font-weight: 700;
+      font-size: var(--wf-space-10);
+      line-height: var(--ou-space-5);
+      pointer-events: none;
+      white-space: nowrap;
+      box-shadow: var(--ou-shadow-sm);
+    }
+    body.wf-annots-on .wf-annot { display: block; }
+    /* Карточка секции обрезает содержимое (overflow: hidden), поэтому метка
+       требования кладётся ВНУТРЬ, а не за верхний край. */
+    .ou-card > .wf-annot { top: var(--ou-space-2); right: var(--ou-space-2); }
+
+    .wf-sprite { display: none; }
+
+    /* ─── Восстановление DS-компонентов поверх wf-utils ────────────────────
+       wf-utils.css содержит «симулированные DS-компоненты» доисторической
+       эпохи: они объявлены ПОЗЖЕ настоящего бандла и перебивают его. Тона
+       .ou-tag там ссылаются на --ou-success-bg / --ou-success-fg, которых в
+       DS больше нет, и тег теряет заливку. Возвращаем настоящие правила DS
+       для компонентов, которые использует этот эскиз. */
+    .ou-tag--neutral { background: var(--ou-bg-surface-3); color: var(--ou-fg-soft); }
+    .ou-tag--success { background: var(--ou-success-soft); color: var(--ou-success-on-soft); }
+    .ou-tag--warning { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
+    .ou-tag--error   { background: var(--ou-error-soft);   color: var(--ou-error-on-soft); }
+    .ou-tag--outline { background: transparent; border: var(--wf-border-w) solid var(--ou-border-default); color: var(--ou-fg-soft); }
+    .ou-banner { margin-bottom: 0; }
+
+    /* ─── Пробел DS: раскладка главной ─────────────────────────────────────
+       Раздел 6 спеки требует две колонки 2:1 с липкой правой и схлопывание
+       в одну колонку, когда правая пуста. В ui-kit у `Grid` нет ни шаблона
+       «основная + боковая», ни липкой колонки, поэтому в эскизе это заведено
+       на data-атрибутах — разметка холста остаётся на классах DS, а нужные
+       примитивы вынесены в DS Mapping как расширение ui-kit. */
+    [data-home="grid"] { grid-template-columns: 2fr 1fr; align-items: start; }
+    [data-home="grid"][data-single] { grid-template-columns: 1fr; }
+    [data-home="aside"] { position: sticky; top: calc(var(--wf-nav-offset, var(--wf-size-52)) + var(--ou-space-4)); }
+    @media (max-width: 64em) {
+      [data-home="grid"] { grid-template-columns: 1fr; }
+      [data-home="aside"] { position: static; }
+    }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-user-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="i-flask" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2"/><path d="M6.453 15h11.094"/><path d="M8.5 2h7"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="i-file-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></symbol>
+  <symbol id="i-table" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></symbol>
+  <symbol id="i-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></symbol>
+</svg>
+
+<!-- ─── State switcher ─────────────────────────────────────────────────────── -->
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">PRD-25 · Главная — профиль прав:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this,'s-learner')">Учащийся</button>
+  <button class="wf-btn"        type="button" onclick="showState(this,'s-author')">Автор</button>
+  <button class="wf-btn"        type="button" onclick="showState(this,'s-manager')">Менеджер</button>
+  <button class="wf-btn"        type="button" onclick="showState(this,'s-super')">Суперпользователь</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn" type="button" onclick="toggleTheme(this)">Dark</button>
+  <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
+  <button class="wf-btn" type="button" onclick="toggleAnnots(this)">Аннотации</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-learner — чистый учащийся.
+     Ни одной авторской секции. Правая колонка отсутствует целиком (признаков
+     внимания нет, быстрых действий по правам нет) — страница схлопнута в одну
+     колонку на всю ширину (раздел 6).
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-learner" class="wf-state active">
+  <div class="ou-box ou-box--padx-6 ou-box--pady-6">
+    <div class="ou-stack ou-stack--gap-5">
+      <h1 class="ou-text ou-text--heading-l">Главная</h1>
+
+      <div class="ou-lgrid ou-lgrid--gap-5" data-home="grid" data-single>
+        <div class="ou-stack ou-stack--gap-5">
+
+          <!-- ── Мне назначено (FR-07) ── -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-07</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Мне назначено</h2>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-0">
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-text ou-text--body-m ou-text--w-medium">Пожарная безопасность: базовый курс</span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Попыток использовано 0 из 2</span>
+                  </div>
+                  <button type="button" class="ou-btn ou-btn--primary ou-btn--s"><span>Начать</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-arrow-right"/></svg></span></button>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-text ou-text--body-m ou-text--w-medium">Информационная безопасность</span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Попыток использовано 0 из 3</span>
+                  </div>
+                  <button type="button" class="ou-btn ou-btn--primary ou-btn--s"><span>Начать</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-arrow-right"/></svg></span></button>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-text ou-text--body-m ou-text--w-medium">Охрана труда: вводный инструктаж</span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Попыток использовано 0 из 1</span>
+                  </div>
+                  <button type="button" class="ou-btn ou-btn--primary ou-btn--s"><span>Начать</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-arrow-right"/></svg></span></button>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-text ou-text--body-m ou-text--w-medium">Корпоративные стандарты обслуживания</span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Попыток использовано 0 из 3</span>
+                  </div>
+                  <button type="button" class="ou-btn ou-btn--primary ou-btn--s"><span>Начать</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-arrow-right"/></svg></span></button>
+                </div>
+
+              </div>
+            </div>
+            <footer class="ou-card__footer">
+              <span class="ou-text ou-text--body-s ou-text--tone-muted">Показаны 4 из 7</span>
+              <div class="ou-card__footer-actions">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Все назначенные тесты</span></button>
+              </div>
+            </footer>
+          </section>
+
+          <!-- ── Мои результаты (FR-08) · пустое состояние (FR-17, раздел 8) ── -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-08 · FR-17</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Мои результаты</h2>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-empty ou-empty--inline">
+                <span class="ou-empty__art"><svg viewBox="0 0 24 24"><use href="#i-inbox"/></svg></span>
+                <div class="ou-empty__content">
+                  <p class="ou-empty__title">Вы ещё не проходили тестов</p>
+                  <p class="ou-empty__desc">Результат появится здесь сразу после первой завершённой попытки.</p>
+                  <div class="ou-empty__actions">
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--s"><span>Перейти к назначенным тестам</span></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-author — автор.
+     Слева: Мне назначено, Мои результаты, Мои тесты, Мои темы и вопросы.
+     Справа: Требует внимания, Быстрые действия.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-author" class="wf-state">
+  <div class="ou-box ou-box--padx-6 ou-box--pady-6">
+    <div class="ou-stack ou-stack--gap-5">
+      <h1 class="ou-text ou-text--heading-l">Главная</h1>
+
+      <div class="ou-lgrid ou-lgrid--gap-5" data-home="grid">
+
+        <!-- ── ЛЕВАЯ КОЛОНКА: объекты ── -->
+        <div class="ou-stack ou-stack--gap-5">
+
+          <!-- Мне назначено (FR-07): сначала с незавершённой попыткой -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-07</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Мне назначено</h2>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-0">
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-text ou-text--body-m ou-text--w-medium">Клиентский сервис: практикум</span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Попытка 2 из 3 · начата 27.07.2026</span>
+                  </div>
+                  <button type="button" class="ou-btn ou-btn--primary ou-btn--s"><span>Продолжить</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-arrow-right"/></svg></span></button>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-text ou-text--body-m ou-text--w-medium">Информационная безопасность</span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Попыток использовано 0 из 3</span>
+                  </div>
+                  <button type="button" class="ou-btn ou-btn--primary ou-btn--s"><span>Начать</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-arrow-right"/></svg></span></button>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-text ou-text--body-m ou-text--w-medium">Охрана труда: вводный инструктаж</span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Попыток использовано 0 из 1</span>
+                  </div>
+                  <button type="button" class="ou-btn ou-btn--primary ou-btn--s"><span>Начать</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-arrow-right"/></svg></span></button>
+                </div>
+
+              </div>
+            </div>
+            <footer class="ou-card__footer">
+              <span class="ou-text ou-text--body-s ou-text--tone-muted">Показаны 3 из 3</span>
+              <div class="ou-card__footer-actions">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Все назначенные тесты</span></button>
+              </div>
+            </footer>
+          </section>
+
+          <!-- Мои результаты (FR-08) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-08</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Мои результаты</h2>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <table class="tb-table">
+                <thead>
+                  <tr><th>Тест</th><th class="tb-table__cell--nowrap">Дата</th><th class="tb-table__cell--nowrap">Результат</th><th></th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Корпоративные стандарты обслуживания</td>
+                    <td class="tb-table__cell--nowrap">24.07.2026</td>
+                    <td class="tb-table__cell--nowrap">82&nbsp;%</td>
+                    <td class="tb-table__cell--nowrap"><span class="ou-tag ou-tag--success">Зачёт</span></td>
+                  </tr>
+                  <tr>
+                    <td>Информационная безопасность</td>
+                    <td class="tb-table__cell--nowrap">11.07.2026</td>
+                    <td class="tb-table__cell--nowrap">64&nbsp;%</td>
+                    <td class="tb-table__cell--nowrap"><span class="ou-tag ou-tag--error">Незачёт</span></td>
+                  </tr>
+                  <tr>
+                    <td>Охрана труда: вводный инструктаж</td>
+                    <td class="tb-table__cell--nowrap">02.07.2026</td>
+                    <td class="tb-table__cell--nowrap">95&nbsp;%</td>
+                    <td class="tb-table__cell--nowrap"><span class="ou-tag ou-tag--success">Зачёт</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <footer class="ou-card__footer">
+              <span class="ou-text ou-text--body-s ou-text--tone-muted">Три последние завершённые попытки</span>
+              <div class="ou-card__footer-actions">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>История прохождений</span></button>
+              </div>
+            </footer>
+          </section>
+
+          <!-- Мои тесты (FR-09) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-09</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Мои тесты</h2>
+                <p class="ou-card__subtitle">Сначала — требующие действия, дальше по времени изменения</p>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-0">
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Сертификация руководителей 2026</span>
+                      <span class="ou-tag ou-tag--success">Опубликован</span>
+                      <span class="ou-tag ou-tag--warning">Есть изменения</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">4 раздела · 56 вопросов · изменён 28.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть редактор" title="Открыть редактор"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-pencil"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Тестовый прогон" title="Тестовый прогон"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-flask"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Выгрузить SCORM" title="Выгрузить SCORM"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-download"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Пожарная безопасность: базовый курс</span>
+                      <span class="ou-tag ou-tag--neutral">Черновик</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">1 раздел · 0 вопросов · изменён 28.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть редактор" title="Открыть редактор"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-pencil"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Тестовый прогон" title="Тестовый прогон"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-flask"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Выгрузить SCORM" title="Выгрузить SCORM"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-download"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Информационная безопасность</span>
+                      <span class="ou-tag ou-tag--success">Опубликован</span>
+                      <span class="ou-tag ou-tag--outline">Доступ выдан</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">3 раздела · 42 вопроса · изменён 26.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть редактор" title="Открыть редактор"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-pencil"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Тестовый прогон" title="Тестовый прогон"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-flask"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Адаптивный входной тест</span>
+                      <span class="ou-tag ou-tag--neutral">Черновик</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">2 раздела · 18 вопросов · изменён 24.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть редактор" title="Открыть редактор"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-pencil"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Тестовый прогон" title="Тестовый прогон"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-flask"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Выгрузить SCORM" title="Выгрузить SCORM"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-download"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Охрана труда: вводный инструктаж</span>
+                      <span class="ou-tag ou-tag--success">Опубликован</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">2 раздела · 24 вопроса · изменён 21.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть редактор" title="Открыть редактор"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-pencil"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Тестовый прогон" title="Тестовый прогон"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-flask"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Выгрузить SCORM" title="Выгрузить SCORM"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-download"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Клиентский сервис: практикум</span>
+                      <span class="ou-tag ou-tag--neutral">Черновик</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">3 раздела · 31 вопрос · изменён 19.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть редактор" title="Открыть редактор"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-pencil"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Тестовый прогон" title="Тестовый прогон"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-flask"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Выгрузить SCORM" title="Выгрузить SCORM"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-download"/></svg></span></button>
+                  </span>
+                </div>
+
+              </div>
+            </div>
+            <footer class="ou-card__footer">
+              <span class="ou-text ou-text--body-s ou-text--tone-muted">Показаны 6 из 14</span>
+              <div class="ou-card__footer-actions">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Все тесты</span></button>
+              </div>
+            </footer>
+          </section>
+
+          <!-- Мои темы и вопросы (FR-10) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-10</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Мои темы и вопросы</h2>
+                <p class="ou-card__subtitle">По времени изменения темы или её вопросов</p>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-0">
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Информационная безопасность</span>
+                      <span class="ou-kbd">IB</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">128 вопросов · изменена 28.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть тему" title="Открыть тему"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-arrow-right"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Добавить вопрос" title="Добавить вопрос"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-plus"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Пожарная безопасность</span>
+                      <span class="ou-kbd">PB</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">64 вопроса · изменена 27.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть тему" title="Открыть тему"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-arrow-right"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Добавить вопрос" title="Добавить вопрос"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-plus"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Финансы и отчётность</span>
+                      <span class="ou-kbd">FIN</span>
+                      <span class="ou-tag ou-tag--outline">Доступ выдан</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">41 вопрос · изменена 25.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть тему" title="Открыть тему"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-arrow-right"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Добавить вопрос" title="Добавить вопрос"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-plus"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Клиентский сервис</span>
+                      <span class="ou-kbd">CS</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">37 вопросов · изменена 22.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть тему" title="Открыть тему"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-arrow-right"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Добавить вопрос" title="Добавить вопрос"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-plus"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Охрана труда</span>
+                      <span class="ou-kbd">OT</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">29 вопросов · изменена 20.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть тему" title="Открыть тему"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-arrow-right"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Добавить вопрос" title="Добавить вопрос"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-plus"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Корпоративные стандарты</span>
+                      <span class="ou-kbd">KS</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">18 вопросов · изменена 15.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть тему" title="Открыть тему"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-arrow-right"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Добавить вопрос" title="Добавить вопрос"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-plus"/></svg></span></button>
+                  </span>
+                </div>
+
+              </div>
+            </div>
+            <footer class="ou-card__footer">
+              <span class="ou-text ou-text--body-s ou-text--tone-muted">Показаны 6 из 11</span>
+              <div class="ou-card__footer-actions">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Все темы и вопросы</span></button>
+              </div>
+            </footer>
+          </section>
+
+        </div>
+
+        <!-- ── ПРАВАЯ КОЛОНКА: срочное и действия (липкая) ── -->
+        <aside class="ou-stack ou-stack--gap-5" data-home="aside">
+
+          <!-- Требует внимания (FR-05, раздел 5) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-05</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Требует внимания</h2>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-0">
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-start ou-stack--gap-3 ou-box--pady-3">
+                  <span class="ou-text ou-text--tone-warning"><svg width="16" height="16"><use href="#i-alert"/></svg></span>
+                  <div class="ou-stack ou-stack--gap-2 ou-grow">
+                    <span class="ou-stack ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-s ou-text--w-semibold">Изменён после публикации</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Сертификация руководителей 2026</span>
+                    </span>
+                    <span><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Опубликовать заново</span></button></span>
+                  </div>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-start ou-stack--gap-3 ou-box--pady-3">
+                  <span class="ou-text ou-text--tone-warning"><svg width="16" height="16"><use href="#i-alert"/></svg></span>
+                  <div class="ou-stack ou-stack--gap-2 ou-grow">
+                    <span class="ou-stack ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-s ou-text--w-semibold">Черновик без вопросов</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Пожарная безопасность: базовый курс</span>
+                    </span>
+                    <span><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Открыть редактор</span></button></span>
+                  </div>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-start ou-stack--gap-3 ou-box--pady-3">
+                  <span class="ou-text ou-text--tone-warning"><svg width="16" height="16"><use href="#i-branch"/></svg></span>
+                  <div class="ou-stack ou-stack--gap-2 ou-grow">
+                    <span class="ou-stack ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-s ou-text--w-semibold">Содержимое тем изменилось</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Охрана труда: вводный инструктаж · опубликованная версия отстала от пула</span>
+                    </span>
+                    <span><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Посмотреть расхождения</span></button></span>
+                  </div>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-start ou-stack--gap-3 ou-box--pady-3">
+                  <span class="ou-text ou-text--tone-info"><svg width="16" height="16"><use href="#i-clock"/></svg></span>
+                  <div class="ou-stack ou-stack--gap-2 ou-grow">
+                    <span class="ou-stack ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-s ou-text--w-semibold">Незавершённая попытка</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Клиентский сервис: практикум</span>
+                    </span>
+                    <span><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Продолжить</span></button></span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </section>
+
+          <!-- Быстрые действия (FR-06) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-06</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Быстрые действия</h2>
+              </div>
+            </header>
+            <div class="ou-card__body ou-box--padb-5">
+              <div class="ou-stack ou-stack--gap-2">
+                <button type="button" class="ou-btn ou-btn--primary ou-btn--s ou-btn--full"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-file-plus"/></svg></span><span>Создать тест</span></button>
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s ou-btn--full"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-plus"/></svg></span><span>Добавить вопрос</span></button>
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s ou-btn--full"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-table"/></svg></span><span>Импорт из Excel</span></button>
+              </div>
+            </div>
+          </section>
+
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-manager — менеджер.
+     Слева: Мне назначено (пустая секция), Мои результаты, Люди и назначения.
+     Справа: Требует внимания, Быстрые действия, Сводка (отказ источника, FR-15).
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-manager" class="wf-state">
+  <div class="ou-box ou-box--padx-6 ou-box--pady-6">
+    <div class="ou-stack ou-stack--gap-5">
+      <h1 class="ou-text ou-text--heading-l">Главная</h1>
+
+      <div class="ou-lgrid ou-lgrid--gap-5" data-home="grid">
+
+        <!-- ── ЛЕВАЯ КОЛОНКА ── -->
+        <div class="ou-stack ou-stack--gap-5">
+
+          <!-- Мне назначено (FR-07) · пустое состояние (раздел 8) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-07 · FR-17</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Мне назначено</h2>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-empty ou-empty--inline">
+                <span class="ou-empty__art"><svg viewBox="0 0 24 24"><use href="#i-inbox"/></svg></span>
+                <div class="ou-empty__content">
+                  <p class="ou-empty__title">Тестов пока не назначено</p>
+                  <p class="ou-empty__desc">Назначенные вам тесты появятся здесь.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Мои результаты (FR-08) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-08</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Мои результаты</h2>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <table class="tb-table">
+                <thead>
+                  <tr><th>Тест</th><th class="tb-table__cell--nowrap">Дата</th><th class="tb-table__cell--nowrap">Результат</th><th></th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Корпоративные стандарты обслуживания</td>
+                    <td class="tb-table__cell--nowrap">18.06.2026</td>
+                    <td class="tb-table__cell--nowrap">88&nbsp;%</td>
+                    <td class="tb-table__cell--nowrap"><span class="ou-tag ou-tag--success">Зачёт</span></td>
+                  </tr>
+                  <tr>
+                    <td>Охрана труда: вводный инструктаж</td>
+                    <td class="tb-table__cell--nowrap">05.06.2026</td>
+                    <td class="tb-table__cell--nowrap">91&nbsp;%</td>
+                    <td class="tb-table__cell--nowrap"><span class="ou-tag ou-tag--success">Зачёт</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <footer class="ou-card__footer">
+              <span class="ou-text ou-text--body-s ou-text--tone-muted">Три последние завершённые попытки</span>
+              <div class="ou-card__footer-actions">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>История прохождений</span></button>
+              </div>
+            </footer>
+          </section>
+
+          <!-- Люди и назначения (FR-11) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-11</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Люди и назначения</h2>
+              </div>
+            </header>
+            <div class="ou-card__body ou-box--padb-5">
+              <div class="ou-lgrid ou-lgrid--cols-3 ou-lgrid--gap-3">
+                <div class="ou-kpi">
+                  <div class="ou-kpi__head"><svg><use href="#i-clipboard"/></svg><span>Активные назначения</span></div>
+                  <div class="ou-kpi__value">36</div>
+                </div>
+                <div class="ou-kpi">
+                  <div class="ou-kpi__head"><svg><use href="#i-clock"/></svg><span>Ни одной попытки</span></div>
+                  <div class="ou-kpi__value">9</div>
+                </div>
+                <div class="ou-kpi">
+                  <div class="ou-kpi__head"><svg><use href="#i-user-plus"/></svg><span>Новых за 7 дней</span></div>
+                  <div class="ou-kpi__value">14</div>
+                </div>
+              </div>
+            </div>
+            <footer class="ou-card__footer">
+              <span class="ou-text ou-text--body-s ou-text--tone-muted">Данные по вашей области видимости</span>
+              <div class="ou-card__footer-actions">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Назначения</span></button>
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Пользователи</span></button>
+              </div>
+            </footer>
+          </section>
+
+        </div>
+
+        <!-- ── ПРАВАЯ КОЛОНКА ── -->
+        <aside class="ou-stack ou-stack--gap-5" data-home="aside">
+
+          <!-- Требует внимания (FR-05) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-05</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Требует внимания</h2>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-0">
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-start ou-stack--gap-3 ou-box--pady-3">
+                  <span class="ou-text ou-text--tone-warning"><svg width="16" height="16"><use href="#i-users"/></svg></span>
+                  <div class="ou-stack ou-stack--gap-2 ou-grow">
+                    <span class="ou-stack ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-s ou-text--w-semibold">Назначение без единой попытки</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Информационная безопасность · группа «Новые сотрудники» · 9 человек</span>
+                    </span>
+                    <span><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Открыть назначение</span></button></span>
+                  </div>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-start ou-stack--gap-3 ou-box--pady-3">
+                  <span class="ou-text ou-text--tone-warning"><svg width="16" height="16"><use href="#i-users"/></svg></span>
+                  <div class="ou-stack ou-stack--gap-2 ou-grow">
+                    <span class="ou-stack ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-s ou-text--w-semibold">Назначение без единой попытки</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Охрана труда: вводный инструктаж · группа «Склад» · 4 человека</span>
+                    </span>
+                    <span><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Открыть назначение</span></button></span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </section>
+
+          <!-- Быстрые действия (FR-06) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-06</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Быстрые действия</h2>
+              </div>
+            </header>
+            <div class="ou-card__body ou-box--padb-5">
+              <div class="ou-stack ou-stack--gap-2">
+                <button type="button" class="ou-btn ou-btn--primary ou-btn--s ou-btn--full"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-clipboard"/></svg></span><span>Назначить тест</span></button>
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s ou-btn--full"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-user-plus"/></svg></span><span>Добавить пользователя</span></button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Сводка (FR-12) · отказ источника (FR-15, раздел 8) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-12 · FR-15</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Сводка</h2>
+              </div>
+            </header>
+            <div class="ou-card__body ou-box--padb-5">
+              <div class="ou-banner ou-banner--subtle ou-banner--error" role="status">
+                <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert"/></svg></div>
+                <div class="ou-banner__body">
+                  <div class="ou-banner__title">Не удалось загрузить</div>
+                  <div class="ou-banner__desc">Остальные секции страницы работают.</div>
+                </div>
+                <div class="ou-banner__actions">
+                  <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-refresh"/></svg></span><span>Повторить</span></button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-super — суперпользователь: все секции без ограничения по владению,
+     включая «Материалы» в правой колонке.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-super" class="wf-state">
+  <div class="ou-box ou-box--padx-6 ou-box--pady-6">
+    <div class="ou-stack ou-stack--gap-5">
+      <h1 class="ou-text ou-text--heading-l">Главная</h1>
+
+      <div class="ou-lgrid ou-lgrid--gap-5" data-home="grid">
+
+        <!-- ── ЛЕВАЯ КОЛОНКА ── -->
+        <div class="ou-stack ou-stack--gap-5">
+
+          <!-- Мне назначено (FR-07) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-07</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Мне назначено</h2>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-0">
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-text ou-text--body-m ou-text--w-medium">Корпоративные стандарты обслуживания</span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Попыток использовано 0 из 3</span>
+                  </div>
+                  <button type="button" class="ou-btn ou-btn--primary ou-btn--s"><span>Начать</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-arrow-right"/></svg></span></button>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-text ou-text--body-m ou-text--w-medium">Информационная безопасность</span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Попыток использовано 1 из 3</span>
+                  </div>
+                  <button type="button" class="ou-btn ou-btn--primary ou-btn--s"><span>Начать</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-arrow-right"/></svg></span></button>
+                </div>
+
+              </div>
+            </div>
+            <footer class="ou-card__footer">
+              <span class="ou-text ou-text--body-s ou-text--tone-muted">Показаны 2 из 2</span>
+              <div class="ou-card__footer-actions">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Все назначенные тесты</span></button>
+              </div>
+            </footer>
+          </section>
+
+          <!-- Мои результаты (FR-08) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-08</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Мои результаты</h2>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <table class="tb-table">
+                <thead>
+                  <tr><th>Тест</th><th class="tb-table__cell--nowrap">Дата</th><th class="tb-table__cell--nowrap">Результат</th><th></th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Информационная безопасность</td>
+                    <td class="tb-table__cell--nowrap">26.07.2026</td>
+                    <td class="tb-table__cell--nowrap">58&nbsp;%</td>
+                    <td class="tb-table__cell--nowrap"><span class="ou-tag ou-tag--error">Незачёт</span></td>
+                  </tr>
+                  <tr>
+                    <td>Сертификация руководителей 2026</td>
+                    <td class="tb-table__cell--nowrap">14.07.2026</td>
+                    <td class="tb-table__cell--nowrap">76&nbsp;%</td>
+                    <td class="tb-table__cell--nowrap"><span class="ou-tag ou-tag--success">Зачёт</span></td>
+                  </tr>
+                  <tr>
+                    <td>Охрана труда: вводный инструктаж</td>
+                    <td class="tb-table__cell--nowrap">30.06.2026</td>
+                    <td class="tb-table__cell--nowrap">93&nbsp;%</td>
+                    <td class="tb-table__cell--nowrap"><span class="ou-tag ou-tag--success">Зачёт</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <footer class="ou-card__footer">
+              <span class="ou-text ou-text--body-s ou-text--tone-muted">Три последние завершённые попытки</span>
+              <div class="ou-card__footer-actions">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>История прохождений</span></button>
+              </div>
+            </footer>
+          </section>
+
+          <!-- Мои тесты (FR-09) · без ограничения по владению -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-09</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Мои тесты</h2>
+                <p class="ou-card__subtitle">Суперпользователь видит тесты всех владельцев</p>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-0">
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Сертификация руководителей 2026</span>
+                      <span class="ou-tag ou-tag--success">Опубликован</span>
+                      <span class="ou-tag ou-tag--warning">Есть изменения</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">4 раздела · 56 вопросов · Мария Иванова · изменён 28.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть редактор" title="Открыть редактор"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-pencil"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Тестовый прогон" title="Тестовый прогон"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-flask"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Выгрузить SCORM" title="Выгрузить SCORM"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-download"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Пожарная безопасность: базовый курс</span>
+                      <span class="ou-tag ou-tag--neutral">Черновик</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">1 раздел · 0 вопросов · Дмитрий Орлов · изменён 28.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть редактор" title="Открыть редактор"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-pencil"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Тестовый прогон" title="Тестовый прогон"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-flask"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Выгрузить SCORM" title="Выгрузить SCORM"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-download"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Информационная безопасность</span>
+                      <span class="ou-tag ou-tag--success">Опубликован</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">3 раздела · 42 вопроса · Анна Лебедева · изменён 26.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть редактор" title="Открыть редактор"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-pencil"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Тестовый прогон" title="Тестовый прогон"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-flask"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Выгрузить SCORM" title="Выгрузить SCORM"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-download"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Адаптивный входной тест</span>
+                      <span class="ou-tag ou-tag--neutral">Черновик</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">2 раздела · 18 вопросов · Мария Иванова · изменён 24.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть редактор" title="Открыть редактор"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-pencil"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Тестовый прогон" title="Тестовый прогон"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-flask"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Выгрузить SCORM" title="Выгрузить SCORM"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-download"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Охрана труда: вводный инструктаж</span>
+                      <span class="ou-tag ou-tag--success">Опубликован</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">2 раздела · 24 вопроса · Дмитрий Орлов · изменён 21.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть редактор" title="Открыть редактор"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-pencil"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Тестовый прогон" title="Тестовый прогон"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-flask"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Выгрузить SCORM" title="Выгрузить SCORM"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-download"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Клиентский сервис: практикум</span>
+                      <span class="ou-tag ou-tag--neutral">Черновик</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">3 раздела · 31 вопрос · Анна Лебедева · изменён 19.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть редактор" title="Открыть редактор"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-pencil"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Тестовый прогон" title="Тестовый прогон"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-flask"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Выгрузить SCORM" title="Выгрузить SCORM"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-download"/></svg></span></button>
+                  </span>
+                </div>
+
+              </div>
+            </div>
+            <footer class="ou-card__footer">
+              <span class="ou-text ou-text--body-s ou-text--tone-muted">Показаны 6 из 63</span>
+              <div class="ou-card__footer-actions">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Все тесты</span></button>
+              </div>
+            </footer>
+          </section>
+
+          <!-- Мои темы и вопросы (FR-10) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-10</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Мои темы и вопросы</h2>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-0">
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Информационная безопасность</span>
+                      <span class="ou-kbd">IB</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">128 вопросов · Анна Лебедева · изменена 28.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть тему" title="Открыть тему"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-arrow-right"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Добавить вопрос" title="Добавить вопрос"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-plus"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Пожарная безопасность</span>
+                      <span class="ou-kbd">PB</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">64 вопроса · Дмитрий Орлов · изменена 27.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть тему" title="Открыть тему"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-arrow-right"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Добавить вопрос" title="Добавить вопрос"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-plus"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Финансы и отчётность</span>
+                      <span class="ou-kbd">FIN</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">41 вопрос · Марина Иванова · изменена 25.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть тему" title="Открыть тему"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-arrow-right"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Добавить вопрос" title="Добавить вопрос"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-plus"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Клиентский сервис</span>
+                      <span class="ou-kbd">CS</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">37 вопросов · Анна Лебедева · изменена 22.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть тему" title="Открыть тему"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-arrow-right"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Добавить вопрос" title="Добавить вопрос"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-plus"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Охрана труда</span>
+                      <span class="ou-kbd">OT</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">29 вопросов · Дмитрий Орлов · изменена 20.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть тему" title="Открыть тему"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-arrow-right"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Добавить вопрос" title="Добавить вопрос"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-plus"/></svg></span></button>
+                  </span>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3 ou-box--pady-3">
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2 ou-stack--wrap">
+                      <span class="ou-text ou-text--body-m ou-text--w-medium">Корпоративные стандарты</span>
+                      <span class="ou-kbd">KS</span>
+                    </span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">18 вопросов · Мария Иванова · изменена 15.07.2026</span>
+                  </div>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть тему" title="Открыть тему"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-arrow-right"/></svg></span></button>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Добавить вопрос" title="Добавить вопрос"><span class="ou-iconbtn__ico"><svg width="15" height="15"><use href="#i-plus"/></svg></span></button>
+                  </span>
+                </div>
+
+              </div>
+            </div>
+            <footer class="ou-card__footer">
+              <span class="ou-text ou-text--body-s ou-text--tone-muted">Показаны 6 из 34</span>
+              <div class="ou-card__footer-actions">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Все темы и вопросы</span></button>
+              </div>
+            </footer>
+          </section>
+
+          <!-- Люди и назначения (FR-11) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-11</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Люди и назначения</h2>
+              </div>
+            </header>
+            <div class="ou-card__body ou-box--padb-5">
+              <div class="ou-lgrid ou-lgrid--cols-3 ou-lgrid--gap-3">
+                <div class="ou-kpi">
+                  <div class="ou-kpi__head"><svg><use href="#i-clipboard"/></svg><span>Активные назначения</span></div>
+                  <div class="ou-kpi__value">128</div>
+                </div>
+                <div class="ou-kpi">
+                  <div class="ou-kpi__head"><svg><use href="#i-clock"/></svg><span>Ни одной попытки</span></div>
+                  <div class="ou-kpi__value">23</div>
+                </div>
+                <div class="ou-kpi">
+                  <div class="ou-kpi__head"><svg><use href="#i-user-plus"/></svg><span>Новых за 7 дней</span></div>
+                  <div class="ou-kpi__value">31</div>
+                </div>
+              </div>
+            </div>
+            <footer class="ou-card__footer">
+              <span class="ou-text ou-text--body-s ou-text--tone-muted">По всем областям</span>
+              <div class="ou-card__footer-actions">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Назначения</span></button>
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Пользователи</span></button>
+              </div>
+            </footer>
+          </section>
+
+        </div>
+
+        <!-- ── ПРАВАЯ КОЛОНКА ── -->
+        <aside class="ou-stack ou-stack--gap-5" data-home="aside">
+
+          <!-- Требует внимания (FR-05) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-05</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Требует внимания</h2>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-0">
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-start ou-stack--gap-3 ou-box--pady-3">
+                  <span class="ou-text ou-text--tone-warning"><svg width="16" height="16"><use href="#i-alert"/></svg></span>
+                  <div class="ou-stack ou-stack--gap-2 ou-grow">
+                    <span class="ou-stack ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-s ou-text--w-semibold">Изменён после публикации</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Сертификация руководителей 2026</span>
+                    </span>
+                    <span><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Опубликовать заново</span></button></span>
+                  </div>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-start ou-stack--gap-3 ou-box--pady-3">
+                  <span class="ou-text ou-text--tone-warning"><svg width="16" height="16"><use href="#i-alert"/></svg></span>
+                  <div class="ou-stack ou-stack--gap-2 ou-grow">
+                    <span class="ou-stack ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-s ou-text--w-semibold">Черновик без вопросов</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Пожарная безопасность: базовый курс</span>
+                    </span>
+                    <span><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Открыть редактор</span></button></span>
+                  </div>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-start ou-stack--gap-3 ou-box--pady-3">
+                  <span class="ou-text ou-text--tone-warning"><svg width="16" height="16"><use href="#i-copy"/></svg></span>
+                  <div class="ou-stack ou-stack--gap-2 ou-grow">
+                    <span class="ou-stack ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-s ou-text--w-semibold">Дубликаты тем</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">5 групп совпадающих названий</span>
+                    </span>
+                    <span><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Открыть отчёт</span></button></span>
+                  </div>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-start ou-stack--gap-3 ou-box--pady-3">
+                  <span class="ou-text ou-text--tone-warning"><svg width="16" height="16"><use href="#i-users"/></svg></span>
+                  <div class="ou-stack ou-stack--gap-2 ou-grow">
+                    <span class="ou-stack ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-s ou-text--w-semibold">Назначение без единой попытки</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Информационная безопасность · группа «Новые сотрудники»</span>
+                    </span>
+                    <span><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Открыть назначение</span></button></span>
+                  </div>
+                </div>
+                <div class="ou-card__divider"></div>
+
+                <div class="ou-stack ou-stack--row ou-stack--ai-start ou-stack--gap-3 ou-box--pady-3">
+                  <span class="ou-text ou-text--tone-info"><svg width="16" height="16"><use href="#i-clock"/></svg></span>
+                  <div class="ou-stack ou-stack--gap-2 ou-grow">
+                    <span class="ou-stack ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-s ou-text--w-semibold">Пересдача доступна</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Информационная безопасность · осталось 2 попытки</span>
+                    </span>
+                    <span><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Пройти снова</span></button></span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </section>
+
+          <!-- Быстрые действия (FR-06) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-06</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Быстрые действия</h2>
+              </div>
+            </header>
+            <div class="ou-card__body ou-box--padb-5">
+              <div class="ou-stack ou-stack--gap-2">
+                <button type="button" class="ou-btn ou-btn--primary ou-btn--s ou-btn--full"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-file-plus"/></svg></span><span>Создать тест</span></button>
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s ou-btn--full"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-plus"/></svg></span><span>Добавить вопрос</span></button>
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s ou-btn--full"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-table"/></svg></span><span>Импорт из Excel</span></button>
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s ou-btn--full"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-clipboard"/></svg></span><span>Назначить тест</span></button>
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s ou-btn--full"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-user-plus"/></svg></span><span>Добавить пользователя</span></button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Сводка (FR-12): четыре числа за 30 дней, без графиков -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-12</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Сводка</h2>
+                <p class="ou-card__subtitle">За 30 дней</p>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-lgrid ou-lgrid--cols-2 ou-lgrid--gap-3">
+                <div class="ou-kpi">
+                  <div class="ou-kpi__head"><span>Попытки</span></div>
+                  <div class="ou-kpi__value">1&nbsp;284</div>
+                </div>
+                <div class="ou-kpi">
+                  <div class="ou-kpi__head"><span>Доля сдачи</span></div>
+                  <div class="ou-kpi__value">78<span class="ou-kpi__value-unit">%</span></div>
+                </div>
+                <div class="ou-kpi">
+                  <div class="ou-kpi__head"><span>Средний процент</span></div>
+                  <div class="ou-kpi__value">71<span class="ou-kpi__value-unit">%</span></div>
+                </div>
+                <div class="ou-kpi">
+                  <div class="ou-kpi__head"><span>Активные пользователи</span></div>
+                  <div class="ou-kpi__value">342</div>
+                </div>
+              </div>
+            </div>
+            <footer class="ou-card__footer">
+              <span class="ou-text ou-text--body-s ou-text--tone-muted">Графиков нет — они в «Аналитике»</span>
+              <div class="ou-card__footer-actions">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-chart"/></svg></span><span>Аналитика</span></button>
+              </div>
+            </footer>
+          </section>
+
+          <!-- Материалы (FR-13) -->
+          <section class="ou-card ou-card--outlined">
+            <span class="wf-annot">FR-13</span>
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Материалы</h2>
+              </div>
+            </header>
+            <div class="ou-card__body ou-box--padb-5">
+              <div class="ou-stack ou-stack--gap-3">
+                <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-3">
+                  <span class="ou-text ou-text--tone-muted"><svg width="16" height="16"><use href="#i-palette"/></svg></span>
+                  <div class="ou-stack ou-stack--gap-1 ou-grow">
+                    <span class="ou-text ou-text--body-s ou-text--w-semibold">Стандартный</span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">Активный шаблон оформления · версия 1.4.0</span>
+                  </div>
+                  <span class="ou-tag ou-tag--success">Активен</span>
+                </div>
+                <div class="ou-card__divider"></div>
+                <div class="ou-stack ou-stack--gap-2">
+                  <button type="button" class="ou-btn ou-btn--secondary ou-btn--s ou-btn--full"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-file-text"/></svg></span><span>Руководство (PDF)</span></button>
+                  <button type="button" class="ou-btn ou-btn--secondary ou-btn--s ou-btn--full"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-file-text"/></svg></span><span>Спецификация (PDF)</span></button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* Wireframe-only controls, идентичны approved/prd22-page-fields-sequences.html. */
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+    document.documentElement.style.setProperty('--wf-nav-h', nav.offsetHeight + 'px');
+  }
+
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (b) {
+      b.classList.toggle('active', b === btn);
+    });
+    updateWireframeNavOffset();
+    window.scrollTo(0, 0);
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  window.toggleAnnots = function toggleAnnots(btn) {
+    var on = document.body.classList.toggle('wf-annots-on');
+    if (btn) btn.classList.toggle('active', on);
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     ПОЯСНЕНИЯ И DS MAPPING (вне холста)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="wf-page">
+
+<section class="wf-notes" aria-label="Wireframe annotations">
+  <h3 class="wf-notes-title">Пояснения — состав страницы и гейты</h3>
+  <table>
+    <thead>
+      <tr><th>Элемент</th><th>Чем гейтится / условие</th><th>Примечание</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Оболочка страницы</td>
+        <td>наличие любой авторской capability (раздел 7)</td>
+        <td>Страница ОДНА, меняется только рамка: авторская <code>AppShell</code> с боковым меню либо учебная <code>LearnerLayout</code> с горизонтальной шапкой. В холсте рамка не рисуется — показана только область содержимого, она в обеих оболочках одинакова. Пункт «Главная» добавляется первым элементом в ОБЕ навигации без гейта (FR-04).</td>
+      </tr>
+      <tr>
+        <td>Раскладка</td>
+        <td>раздел 6</td>
+        <td>Две колонки 2:1: широкая левая — объекты, узкая правая — срочное и действия, липкая при прокрутке. Если правая колонка ПУСТА для профиля (профиль «Учащийся»), страница схлопывается в одну колонку на всю ширину. На узких экранах правая колонка переносится под левую.</td>
+      </tr>
+      <tr>
+        <td>Мне назначено</td>
+        <td><code>attempts.self.read</code> (FR-07)</td>
+        <td>До четырёх тестов: сначала с незавершённой попыткой («Продолжить»), затем не начатые («Начать»). В строке — название, использованные и доступные попытки. Ссылка на полный список — в подвале карточки.</td>
+      </tr>
+      <tr>
+        <td>Мои результаты</td>
+        <td><code>attempts.self.read</code> (FR-08)</td>
+        <td>Три последние ЗАВЕРШЁННЫЕ попытки: тест, дата, процент, зачёт или незачёт. Ссылка ведёт в историю прохождений.</td>
+      </tr>
+      <tr>
+        <td>Мои тесты</td>
+        <td><code>tests.read</code> (FR-09)</td>
+        <td>До шести тестов по <code>updated_at</code> убыв., с подъёмом наверх тестов с признаком внимания. Статус — существующей парой тегов продуктового списка: «Черновик» / «Опубликован» / «Опубликован» + «Есть изменения» (это и есть «изменён после публикации» из FR-09; новый термин не вводится). Действия — по своему праву каждое: редактор (<code>tests.edit</code>), тестовый прогон (edit-scope, PRD-18), выгрузка SCORM (<code>tests.export</code>). В профиле «Автор» третья строка — пример объекта с выданным доступом: экспорта в её действиях нет.</td>
+      </tr>
+      <tr>
+        <td>Мои темы и вопросы</td>
+        <td><code>topics.manage</code> (FR-10)</td>
+        <td>До шести тем по <code>topics.updated_at</code> убыв. (колонка вводится фазой 1). В строке — название, код темы, число вопросов, метка «Доступ выдан» для чужих тем с грантом. Действия: «Открыть», «Вопрос» (добавить вопрос сразу в эту тему).</td>
+      </tr>
+      <tr>
+        <td>Метка «Доступ выдан»</td>
+        <td>объект не принадлежит пользователю, доступ через грант</td>
+        <td>Собственные объекты метки НЕ несут — отсутствие метки и есть признак владения. Для суперпользователя метка не выводится вообще: он видит все объекты без ограничения по владению, и вместо метки в строке показан владелец.</td>
+      </tr>
+      <tr>
+        <td>Люди и назначения</td>
+        <td><code>assignments.manage</code> (FR-11)</td>
+        <td>Три числа: активные назначения, назначения без единой начатой попытки, новые пользователи за 7 дней. Область видимости — существующие сервисы скоупа (FR-16), собственной логики главная не заводит.</td>
+      </tr>
+      <tr>
+        <td>Требует внимания</td>
+        <td>раздел 5; секция ОТСУТСТВУЕТ целиком, если не сработал ни один признак (FR-05)</td>
+        <td>Единственная секция без пустого состояния. Признаки по тестам считаются ТОЛЬКО по выборке секции «Мои тесты» (до шести) — проверять весь пул на каждый вход запрещено (риск R-3). Тон иконки: warning — требует правки автора или менеджера, info — действие учащегося (незавершённая попытка, пересдача доступна).</td>
+      </tr>
+      <tr>
+        <td>Быстрые действия</td>
+        <td>по правам, от трёх до пяти (FR-06)</td>
+        <td>Каждое ведёт СРАЗУ к форме создания, а не в раздел со списком. У менеджера прав хватает только на два действия — секция показывает их, а не добирает недоступное до трёх.</td>
+      </tr>
+      <tr>
+        <td>Сводка</td>
+        <td><code>analytics.read</code> (FR-12)</td>
+        <td>Четыре числа за 30 дней. Графиков нет намеренно (риск R-1) — ссылка ведёт в «Аналитику».</td>
+      </tr>
+      <tr>
+        <td>Материалы</td>
+        <td><code>adminTemplates.manage</code> (FR-13)</td>
+        <td>Активный шаблон оформления и выгрузка руководства и спецификации — те же документы, что уже отдаёт раздел «Шаблоны».</td>
+      </tr>
+      <tr>
+        <td>Пустая секция</td>
+        <td>FR-17, раздел 8</td>
+        <td>Показаны оба варианта: «Вы ещё не проходили тестов» с действием (профиль «Учащийся») и «Тестов пока не назначено» (профиль «Менеджер»). У второго действия нет: создание назначения себе не относится к «Мне назначено», а иных точек входа у секции нет — см. вопрос к согласованию ниже.</td>
+      </tr>
+      <tr>
+        <td>Отказ источника секции</td>
+        <td>FR-15, раздел 8</td>
+        <td>Показан в профиле «Менеджер» на секции «Сводка»: «Не удалось загрузить» и кнопка повтора; остальные секции при этом работают. Ошибка приходит признаком в поле секции, а не роняет ответ <code>GET /api/home</code>.</td>
+      </tr>
+      <tr>
+        <td>Профиль «Учащийся» и правая колонка</td>
+        <td>раздел 6 + раздел 5</td>
+        <td>Правая колонка отсутствует, потому что у чистого учащегося нет быстрых действий по правам И не сработал ни один признак внимания. У того же учащегося с незавершённой попыткой правая колонка ПОЯВИТСЯ с одной секцией «Требует внимания» — это не отдельный экран, а то же условие раздела 6.</td>
+      </tr>
+      <tr>
+        <td>Обновление данных</td>
+        <td>FR-21</td>
+        <td>Страница перезапрашивает <code>GET /api/home</code> при возврате на вкладку — так же, как список назначенных тестов. Статикой не выражается.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<div class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping</h2>
+  <p class="wf-mapping-sub">
+    Холст собран ТОЛЬКО из компонентов дизайн-системы (<code>ou-*</code>) и продуктового слоя
+    <code>tb-components.css</code>. Локальных render-классов нет. Классы <code>wf-*</code>
+    используются исключительно эскизным фреймом — навбар состояний, метки требований, блоки
+    «Пояснения» и «DS Mapping» — и в продуктовый код не переносятся. Строки «Требуется в ui-kit»
+    являются блокером: примитив добавляется в ui-kit по согласованию до старта разработки, локальный
+    шим не заводится.
+  </p>
+  <table>
+    <thead>
+      <tr><th>Элемент эскиза</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Колонки страницы 2:1 + липкая правая колонка</td>
+        <td><code>Требуется в ui-kit: Grid template="main-aside"</code> + модификатор липкой колонки</td>
+        <td><code>--ou-space-*</code></td>
+        <td>У <code>Grid</code> сегодня есть только <code>cols</code>, <code>minItem</code> и <code>label-control</code>; шаблона «основная + боковая» и липкой колонки нет. В эскизе заведено на <code>data-home</code>, чтобы разметка холста осталась на классах DS. Схлопывание в одну колонку при пустой боковой — то же расширение.</td>
+      </tr>
+      <tr>
+        <td>Вертикальные и горизонтальные потоки, отступы, ширины</td>
+        <td><code>Stack</code> (<code>ou-stack</code>), <code>Box</code> (<code>ou-box--pad*</code>), <code>Grid</code> (<code>ou-lgrid</code>)</td>
+        <td><code>--ou-space-*</code></td>
+        <td>Существующие примитивы. В эскизе подключён АКТУАЛЬНЫЙ бандл <code>vendor/ui-kit/css/university-rt.css</code>: копия в <code>docs/wireframes/ds/</code> отстала и этих примитивов не содержит — её стоит синхронизировать отдельной задачей.</td>
+      </tr>
+      <tr>
+        <td>Заголовки и подписи</td>
+        <td><code>Text</code> (<code>ou-text--heading-l</code>, <code>--body-*</code>, <code>--tone-*</code>)</td>
+        <td><code>--ou-text-*</code>, <code>--ou-fg-*</code></td>
+        <td>Существующий примитив. Собственной типографики страница не заводит.</td>
+      </tr>
+      <tr>
+        <td>Секция главной</td>
+        <td><code>Card</code> (<code>ou-card ou-card--outlined</code>: <code>__header</code> / <code>__body</code> / <code>__divider</code> / <code>__footer</code>)</td>
+        <td><code>--ou-radius-l</code>, <code>--ou-border-soft</code>, <code>--ou-bg-elevated</code></td>
+        <td>Существующий компонент. Ссылка «показать все» живёт в подвале карточки, чтобы не дублировать заголовок.</td>
+      </tr>
+      <tr>
+        <td>Статусы теста и результата, метка «Доступ выдан»</td>
+        <td><code>Tag</code> (<code>ou-tag--success</code> / <code>--warning</code> / <code>--neutral</code> / <code>--error</code> / <code>--outline</code>)</td>
+        <td><code>--ou-success-soft</code>, <code>--ou-warning-soft</code>, <code>--ou-error-soft</code>, <code>--ou-bg-surface-3</code></td>
+        <td>Существующий компонент и существующие подписи продуктового списка тестов — новые термины не вводятся.</td>
+      </tr>
+      <tr>
+        <td>Код темы</td>
+        <td><code>ou-kbd</code></td>
+        <td><code>--ou-bg-surface-3</code>, <code>--ou-radius-s</code></td>
+        <td>Существующий компонент; <code>topics.code</code> — короткий код темы (PRD-2, миграция 032).</td>
+      </tr>
+      <tr>
+        <td>Действия в строках и быстрые действия</td>
+        <td><code>Button</code> (<code>ou-btn--primary</code> / <code>--secondary</code> / <code>--ghost</code> / <code>--full</code>), <code>IconButton</code> (<code>ou-iconbtn--ghost</code>)</td>
+        <td><code>--ou-space-*</code>, <code>--ou-accent-*</code></td>
+        <td>Существующие компоненты. Действия карточки теста — иконочные, как в продуктовом списке тестов.</td>
+      </tr>
+      <tr>
+        <td>Числа секций «Люди и назначения» и «Сводка»</td>
+        <td><code>ou-kpi</code> (<code>__head</code> / <code>__value</code> / <code>__value-unit</code>)</td>
+        <td><code>--ou-text-display-s</code>, <code>--ou-fg-muted</code></td>
+        <td>Существующий компонент. Спарклайны и дельты намеренно НЕ используются: тренды остаются в «Аналитике» (FR-12, риск R-1).</td>
+      </tr>
+      <tr>
+        <td>Таблица последних результатов</td>
+        <td><code>tb-table</code></td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-soft</code></td>
+        <td>Существующий продуктовый класс: три-четыре колонки без сортировки и пагинации — это выжимка, а не список.</td>
+      </tr>
+      <tr>
+        <td>Пустое состояние секции</td>
+        <td><code>EmptyState</code> (<code>ou-empty ou-empty--inline</code>)</td>
+        <td><code>--ou-fg-muted</code>, <code>--ou-space-*</code></td>
+        <td>Существующий компонент; вариант <code>--inline</code> рассчитан на размещение внутри карточки.</td>
+      </tr>
+      <tr>
+        <td>Отказ источника секции</td>
+        <td><code>Banner</code> (<code>ou-banner--subtle ou-banner--error</code>)</td>
+        <td><code>--ou-error-soft</code>, <code>--ou-error-on-soft</code></td>
+        <td>Существующий компонент. Баннер живёт ВНУТРИ карточки секции — страница не получает общей полосы ошибки.</td>
+      </tr>
+      <tr>
+        <td>Метанавигация состояний, метки требований, «Пояснения», «DS Mapping»</td>
+        <td><code>Wireframe utility</code> (<code>wf-nav</code>, <code>wf-annot</code>, <code>wf-notes</code>, <code>wf-mapping</code>)</td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-*</code></td>
+        <td>Не мигрирует в продуктовый UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<section class="wf-notes" aria-label="Открытые вопросы">
+  <h3 class="wf-notes-title">Вопросы к согласованию</h3>
+  <table>
+    <thead>
+      <tr><th>Место спеки</th><th>Неоднозначность</th><th>Решение в эскизе</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>FR-17 + раздел 8</td>
+        <td>«Каждая секция имеет пустое состояние с действием, ведущим к созданию первого объекта». У секции «Мне назначено» такого действия не существует: назначение создаёт менеджер другому человеку, а не себе.</td>
+        <td>Пустая «Мне назначено» показана БЕЗ действия. Требуется решение: оставить так или сформулировать исключение в FR-17.</td>
+      </tr>
+      <tr>
+        <td>FR-06</td>
+        <td>«от трёх до пяти действий, отфильтрованных по правам» — нижняя граница конфликтует с фильтром: у менеджера доступно только два действия.</td>
+        <td>Показаны два. Диапазон трактуется как потолок и ориентир, а не как обязательство добрать действия, на которые у пользователя нет права.</td>
+      </tr>
+      <tr>
+        <td>FR-06</td>
+        <td>«добавить тему или вопрос» — одно действие или два?</td>
+        <td>Одно: «Добавить вопрос» (создание темы доступно из того же раздела). Если нужны оба — добавляется вторая кнопка, потолок в пять действий это допускает только вместе с отказом от одного из остальных.</td>
+      </tr>
+      <tr>
+        <td>FR-09</td>
+        <td>Статус «изменён после публикации» — новый термин или существующая пара тегов списка тестов?</td>
+        <td>Существующая: «Опубликован» + «Есть изменения». Новый термин не вводится, чтобы главная и список тестов называли одно состояние одинаково.</td>
+      </tr>
+      <tr>
+        <td>Раздел 2 + FR-09/FR-10</td>
+        <td>Что показывать вместо метки владения суперпользователю, который видит объекты всех владельцев.</td>
+        <td>Владелец выводится строкой метаданных («4 раздела · 56 вопросов · Мария Иванова»), метка «Доступ выдан» не показывается.</td>
+      </tr>
+      <tr>
+        <td>Раздел 6</td>
+        <td>Пропорция «широкая левая и узкая правая» числом не задана.</td>
+        <td>Принято 2:1 с переносом правой колонки под левую на узких экранах.</td>
+      </tr>
+      <tr>
+        <td>Раздел 1 и FR-01</td>
+        <td>Заголовок страницы спекой не задан.</td>
+        <td>«Главная» — то же слово, что и пункт навигации из FR-04. Приветствий и подзаголовков нет: страница — рабочий стол, а не витрина.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = '/docs/wireframes/wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+
+</body>
+</html>
