@@ -189,15 +189,26 @@ export function attachPointerDnd(root: DndRoot, config: PointerDndConfig): () =>
     if (st.started) config.onDrop({ dropId: dz ? dz.getAttribute("data-drop") || "" : "", dragId: st.dragId });
   };
 
+  // Cards still carry the legacy `draggable="true"` attribute. On a REAL pointer
+  // drag the browser would then start a NATIVE HTML5 drag, which fires
+  // `pointercancel` and aborts this gesture — so mouse dragging silently did
+  // nothing (only synthetic PointerEvents, which never trigger native drag, worked).
+  // Suppress the native drag so this pointer engine is the sole mechanic.
+  const onDragStart = (e: Event) => {
+    if ((e.target as Element | null)?.closest?.("[data-drag]")) e.preventDefault();
+  };
+
   root.addEventListener("pointerdown", onPointerDown);
   root.addEventListener("pointermove", onPointerMove);
   root.addEventListener("pointerup", finish);
   root.addEventListener("pointercancel", finish);
+  root.addEventListener("dragstart", onDragStart);
   return () => {
     root.removeEventListener("pointerdown", onPointerDown);
     root.removeEventListener("pointermove", onPointerMove);
     root.removeEventListener("pointerup", finish);
     root.removeEventListener("pointercancel", finish);
+    root.removeEventListener("dragstart", onDragStart);
     if (dragState?.ghost) dragState.ghost.remove();
   };
 }
