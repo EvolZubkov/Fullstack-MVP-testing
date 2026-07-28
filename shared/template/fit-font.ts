@@ -2,7 +2,7 @@
  * @module shared/template/fit-font
  *
  * Length-driven font sizing for the learner scene (revision «Стандартный» on ui-kit).
- * The question prompt (20–32px) and the answer options (14–20px) shrink as their text
+ * The question prompt (18–32px) and the answer options (14–22px) shrink as their text
  * grows, so a long prompt/option stays inside the fixed stage without the runtime
  * measuring the DOM. Computed in ONE place and passed to both hosts via the context;
  * the layout/emission substitute it inline (`--tb-question-fs` / `--tb-answer-fs`).
@@ -19,10 +19,10 @@ export interface FitFontConfig {
   per: number;
 }
 
-/** The question prompt scale (32 → 20). */
-export const QUESTION_FIT: FitFontConfig = { max: 32, min: 20, from: 58, per: 0.17 };
-/** The answer-option scale (20 → 14). */
-export const OPTION_FIT: FitFontConfig = { max: 20, min: 14, from: 38, per: 0.14 };
+/** The question prompt scale (32 → 18). */
+export const QUESTION_FIT: FitFontConfig = { max: 32, min: 18, from: 58, per: 0.17 };
+/** The answer-option scale (22 → 14). */
+export const OPTION_FIT: FitFontConfig = { max: 22, min: 14, from: 38, per: 0.14 };
 
 /**
  * Font size (in `px`) for a text of `len` characters under `cfg`: `max` minus `per` per
