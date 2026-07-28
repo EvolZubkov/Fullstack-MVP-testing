@@ -390,6 +390,9 @@ function renderContentPage(page, contentTemplates) {
           title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : ""),
           subtitle: (typeof scormCourseSubtitle === "function") ? scormCourseSubtitle() : ""
         },
+        // Per-test branding: the shared header binds `{{#if design.logoUrl}}`, so a
+        // content page must carry `design` too or the logo goes missing on it.
+        design: (typeof scormDesignContext === "function") ? scormDesignContext() : {},
         page: pageCtx
       },
       slots: { "page-content": skeleton }

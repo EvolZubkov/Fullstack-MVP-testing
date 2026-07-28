@@ -371,6 +371,8 @@ function renderAdaptiveResultsTemplated(app, result) {
   });
   // Header subtitle «Попытка N из M» — same builder as every learner screen (parity).
   if (typeof scormCourseSubtitle === 'function') ctx.course.subtitle = scormCourseSubtitle();
+  // Per-test branding so the shared header logo renders here too.
+  ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
   app.innerHTML = '';
   // Mount directly into #app so .tb-pad > .tb-scene fills the fixed stage —
   // mirrors renderGalleryPage (no wrapper div).
