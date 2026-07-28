@@ -15,6 +15,8 @@ import type { CtxReview, CtxQuestionsProgress, CtxReviewUnanswered } from "./con
 /** A question for the review screen (adds the prompt for the explicit list). */
 export interface ReviewQuestionItem extends QuestionProgressItem {
   prompt: string;
+  /** `false` = not yet delivered to the learner; omitted from the обзор entirely. */
+  delivered?: boolean;
 }
 
 /** Inputs for {@link buildReviewContext}. */
@@ -33,6 +35,19 @@ export interface BuildReviewContextInput {
   scopeLabel: string;
   /** Finish-button label, e.g. «Завершить раздел» / «Завершить тест». */
   finishLabel: string;
+  /**
+   * The current question index — highlighted as «текущий» in the map. Set when the
+   * обзор was opened via «К обзору» mid-flow (so the learner sees where they left off);
+   * -1 (the default) for the end-of-flow обзор, which has no «current».
+   */
+  currentIndex?: number;
+  /**
+   * True when the обзор was opened via «К обзору» mid-flow: the footer then offers an
+   * accented «Назад» and demotes «Завершить …». Default false (end-of-flow обзор).
+   */
+  canReturn?: boolean;
+  /** «Назад» button label; defaults to «Назад». */
+  backLabel?: string;
 }
 
 /**
@@ -48,10 +63,13 @@ export function buildReviewContext(input: BuildReviewContextInput): {
   const sectionScope = input.commitScope === "section";
   const scopeTopicId = sectionScope ? (input.scopeTopicId ?? null) : null;
 
+  const currentIndex = typeof input.currentIndex === "number" ? input.currentIndex : -1;
+
   const questionsProgress = buildQuestionProgress({
     questions: input.questions,
     statuses: input.statuses,
-    currentIndex: -1, // обзор has no «current» pill
+    // «К обзору» mid-flow highlights the origin question; end-of-flow has no current.
+    currentIndex,
     commitScope: input.commitScope,
     scopeTopicId: sectionScope ? scopeTopicId : undefined,
     allIssued: true,
@@ -63,6 +81,7 @@ export function buildReviewContext(input: BuildReviewContextInput): {
   const unanswered: CtxReviewUnanswered[] = [];
   let pos = 0;
   input.questions.forEach((q, index) => {
+    if (q.delivered === false) return; // not yet delivered — never listed
     if (sectionScope && (q.topicId ?? null) !== scopeTopicId) return;
     pos += 1;
     const status = input.statuses[q.id] ?? "unanswered";
@@ -82,6 +101,8 @@ export function buildReviewContext(input: BuildReviewContextInput): {
       unanswered.length > 0
         ? "Проверьте перед завершением. Неотвеченные засчитываются как неверные."
         : "Все вопросы отвечены.",
+    canReturn: !!input.canReturn,
+    backLabel: input.backLabel ?? "Назад",
   };
 
   return { questionsProgress, review };

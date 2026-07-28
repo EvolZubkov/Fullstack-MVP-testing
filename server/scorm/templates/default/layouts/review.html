@@ -35,6 +35,7 @@
           {{/each}}
         </div>
         <div class="ou-quiz__legend">
+          {{#if review.canReturn}}<span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>{{/if}}
           <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
           <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
         </div>
@@ -62,7 +63,16 @@
   </main>
 
   <footer class="tb-scene__foot">
+    {{#if review.canReturn}}
+    <!-- Opened via «К обзору» mid-flow: «Назад» (to the origin question) is the accented
+         primary; «Завершить …» is demoted to a quiet ghost so it is not fired by accident. -->
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="finish-review">{{ review.finishLabel }}</button>
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="review-back">{{ review.backLabel }}</button>
+    {{/if}}
+    {{#unless review.canReturn}}
     <div class="tb-scene__foot-spacer"></div>
     <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="finish-review">{{ review.finishLabel }}</button>
+    {{/unless}}
   </footer>
 </div>

@@ -361,6 +361,10 @@ export default function TakeTestPage() {
     design?: { logoUrl?: string };
   } | null>(null);
   const [showReview, setShowReview] = useState(false);
+  // PRD-19: the обзор was opened via «Вернуться»/«К обзору» MID-flow (not reached at
+  // the section/test end). Then it offers an accented «Назад» to the origin question
+  // and demotes «Завершить …», and highlights the current question in the map.
+  const [reviewFromButton, setReviewFromButton] = useState(false);
   // PRD-19 Block D (FR-09): finish-confirm modal payload (null = hidden).
   // `onConfirm` runs the staged action (section finish or whole-test submit).
   const [finishConfirm, setFinishConfirm] = useState<{ count: number; label: string; onConfirm: () => void } | null>(null);
@@ -1438,6 +1442,7 @@ export default function TakeTestPage() {
               hasUnanswered: hasUnansweredIn(nextStatus, currentRouterTopic),
             })
           ) {
+            setReviewFromButton(false);
             setShowReview(true);
             return;
           }
@@ -1524,6 +1529,7 @@ export default function TakeTestPage() {
             hasUnanswered: hasUnansweredIn(nextStatus, curTopic!),
           })
         ) {
+          setReviewFromButton(false);
           setShowReview(true); // section обзор («Завершить раздел»)
           return;
         }
@@ -1542,6 +1548,7 @@ export default function TakeTestPage() {
         hasUnanswered: hasUnansweredIn(nextStatus, null),
       })
     ) {
+      setReviewFromButton(false);
       setShowReview(true); // flat → single end-of-test обзор
       return;
     }
@@ -2486,14 +2493,29 @@ export default function TakeTestPage() {
     const isLast = isLastSectionWeb(curTopic);
     const finishLabel =
       !sectionScope || (isLast && !navSettings.showSectionResults) ? "Завершить тест" : "Завершить раздел";
+    // Only questions the learner has actually reached (flat index <= the current
+    // position) or committed are «delivered» — the обзор must not reveal not-yet-issued
+    // questions. Mid-flow entry («Вернуться») additionally offers «Назад» + highlights
+    // the current question.
     const built = buildReviewContext({
-      questions: flatQuestions.map((fq) => ({ id: fq.question.id, topicId: fq.topicId, prompt: fq.question.prompt })),
+      questions: flatQuestions.map((fq, i) => {
+        const st = questionStatus[fq.question.id];
+        return {
+          id: fq.question.id,
+          topicId: fq.topicId,
+          prompt: fq.question.prompt,
+          delivered: i <= currentIndex || st === "answered" || st === "skipped",
+        };
+      }),
       statuses: questionStatus,
       commitScope: navSettings.answerCommitScope,
       scopeTopicId: sectionScope ? curTopic : null,
       isTest: !sectionScope,
       scopeLabel: sectionScope ? `Раздел «${curQ.topicName}» · обзор` : "Обзор теста",
       finishLabel,
+      currentIndex: reviewFromButton ? currentIndex : -1,
+      canReturn: reviewFromButton,
+      backLabel: "Назад",
     });
     // Sectional → finish the current section (freeze → section-results → next);
     // flat → finish the whole test.
@@ -2535,12 +2557,19 @@ export default function TakeTestPage() {
                 setCurrentIndex(i);
                 saveProgress(answers, i, questionStatus);
               }
+              setReviewFromButton(false);
+              setShowReview(false);
+            } else if (action === "review-back") {
+              // «Назад» (mid-flow обзор): return to the origin question (currentIndex
+              // is unchanged, so just close the обзор).
+              setReviewFromButton(false);
               setShowReview(false);
             } else if (action === "finish-review") {
               // FR-09: confirm when finishing with unanswered questions.
               if (built.review.unansweredCount > 0) {
                 setFinishConfirm({ count: built.review.unansweredCount, label: built.review.finishLabel, onConfirm: doFinish });
               } else {
+                setReviewFromButton(false);
                 doFinish();
               }
             }
@@ -2729,7 +2758,7 @@ export default function TakeTestPage() {
           </button>
         )}
         {hasSkipped && (
-          <button type="button" onClick={() => setShowReview(true)} className="tbh-navbtn">
+          <button type="button" onClick={() => { setReviewFromButton(true); setShowReview(true); }} className="tbh-navbtn">
             Вернуться
           </button>
         )}

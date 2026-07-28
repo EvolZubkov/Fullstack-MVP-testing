@@ -254,6 +254,15 @@ export interface CtxReview {
   total: number;
   /** Pre-answer hint shown above the list. */
   hint: string;
+  /**
+   * True when the обзор was opened via the «К обзору» button MID-flow (not reached
+   * at the section/test end). Then the footer shows an accented «Назад» (returns to
+   * the origin question) and DEMOTES «Завершить …», to cut the risk of an accidental
+   * finish. False for the end-of-flow обзор (finish is the primary action).
+   */
+  canReturn: boolean;
+  /** «Назад» button label (only meaningful when {@link canReturn}). */
+  backLabel: string;
 }
 
 /**

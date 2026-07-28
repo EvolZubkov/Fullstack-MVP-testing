@@ -27,6 +27,13 @@ export interface QuestionProgressItem {
   id: string;
   /** Section/topic id; drives the sectional scope. Null/undefined = flat. */
   topicId?: string | null;
+  /**
+   * `false` marks a question NOT yet delivered to the learner (index ahead of the
+   * frontier and never committed). Such questions are omitted from the map entirely —
+   * used by the review screen so it can't reveal not-yet-issued questions. Undefined
+   * (the default) keeps the question, so the question-screen map is unaffected.
+   */
+  delivered?: boolean;
 }
 
 /** Inputs for {@link buildQuestionProgress}. */
@@ -97,6 +104,7 @@ export function buildQuestionProgress(input: BuildQuestionProgressInput): CtxQue
     input.scopeTopicId !== undefined ? input.scopeTopicId : (questions[currentIndex]?.topicId ?? null);
   const inScope: Array<{ index: number; q: QuestionProgressItem }> = [];
   questions.forEach((q, index) => {
+    if (q.delivered === false) return; // not yet issued — never shown in the map
     if (commitScope === "section") {
       if ((q.topicId ?? null) === currentTopicId) inScope.push({ index, q });
     } else {

@@ -179,9 +179,13 @@ function reviewIsWorthShowing(topicId) {
 }
 
 // PRD-19 (Block D): open the обзор screen (section-finish / test-finish).
-function goToReview() {
+// `fromButton` = opened via «К обзору» MID-flow (not the end-of-flow обзор): remember
+// the origin question so the обзор can offer an accented «Назад» back to it and demote
+// «Завершить …» (cut accidental finishes). End-of-flow entry passes nothing → null.
+function goToReview(fromButton) {
     state.phase = 'review';
     state.feedbackShown = false;
+    state.reviewOrigin = fromButton ? state.currentIndex : null;
     render();
 }
 
@@ -266,16 +270,30 @@ function renderReviewScreen() {
         else { submit(); }
         return;
     }
+    // Opened via «К обзору» mid-flow? Then offer «Назад» to the origin question and
+    // highlight it as «текущий». Only questions the learner has actually reached
+    // (flat index <= the current position) or committed are «delivered» — the обзор
+    // must not reveal not-yet-issued questions.
+    var fromButton = (state.reviewOrigin !== null && state.reviewOrigin !== undefined);
+    var frontier = state.currentIndex;
+    var statusMap = state.questionStatuses || {};
     var built = TB.buildReviewContext({
-        questions: state.flatQuestions.map(function (fq) {
-            return { id: fq.question.id, topicId: fq.topicId, prompt: fq.question.prompt };
+        questions: state.flatQuestions.map(function (fq, i) {
+            var st = statusMap[fq.question.id];
+            return {
+                id: fq.question.id, topicId: fq.topicId, prompt: fq.question.prompt,
+                delivered: (i <= frontier) || st === 'answered' || st === 'skipped'
+            };
         }),
-        statuses: state.questionStatuses || {},
+        statuses: statusMap,
         commitScope: sectionScope ? 'section' : 'test',
         scopeTopicId: scopeTopicId,
         isTest: !sectionScope,
         scopeLabel: sectionScope ? ('Раздел «' + scopeName + '» · обзор') : 'Обзор теста',
-        finishLabel: finishLabel
+        finishLabel: finishLabel,
+        currentIndex: fromButton ? state.currentIndex : -1,
+        canReturn: fromButton,
+        backLabel: 'Назад'
     });
     var context = {
         course: {
@@ -315,8 +333,17 @@ function renderReviewScreen() {
                 // offers «К обзору» to return (the обзор itself has no «back»).
                 if (!isNaN(idx)) { state.fromReview = true; state.phase = 'question'; goToQuestionIndex(idx); }
             });
+        } else if (a === 'review-back') {
+            // «Назад» (mid-flow обзор): return to the question the learner came from.
+            el.addEventListener('click', function () {
+                var origin = state.reviewOrigin;
+                state.reviewOrigin = null;
+                state.phase = 'question';
+                goToQuestionIndex((typeof origin === 'number' && origin >= 0) ? origin : state.currentIndex);
+            });
         } else if (a === 'finish-review') {
             el.addEventListener('click', function () {
+                state.reviewOrigin = null;
                 var unanswered = built.review.unansweredCount;
                 if (sectionScope && scopeTopicId) {
                     // Section finish (D5): confirm-if-unanswered handled inside finishSection.
@@ -488,7 +515,7 @@ function buildQuestionNavHtml(current, total) {
     // learner jumped here FROM the обзор (a review jump must always be able to return —
     // the обзор itself has no «back»). Cleared when the section is finished.
     if (hasSkippedInScope() || state.fromReview) {
-        left += '<button class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-return" onclick="goToReview()">К обзору</button>';
+        left += '<button class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-return" onclick="goToReview(true)">К обзору</button>';
     }
 
     // The nav row IS the scene footer panel (appended below the layout in #app).
