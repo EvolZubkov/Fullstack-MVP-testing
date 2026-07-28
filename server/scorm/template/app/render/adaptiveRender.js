@@ -81,7 +81,7 @@ function renderAdaptiveQuestionTemplated(app, qData) {
   var counter = 'Тема: ' + qData.topicName + ' · Вопрос ' + qData.questionNumber + ' из ' + qData.totalInLevel;
   if (TEST_DATA.showDifficultyLevel && qData.levelName) counter += ' · ' + qData.levelName;
   var slots = {
-    'question-text': escapeHtml(q.prompt),
+    'question-text': authorTextHtml(q.prompt),
     'question-media': renderQuestionMedia(q),
     'question-interaction': '<div id="question-input">' + renderQuestionInput(q) + '</div>',
     'question-feedback': showFeedback ? buildAdaptiveFeedbackHtml(q) : ''

@@ -10,6 +10,17 @@
  */
 
 export { compileTemplate, renderTemplate } from "./dsl";
+// The author-text pipeline: the package renders a prompt, an option and a page
+// text field through the SAME functions as the web host, so the markdown subset
+// and the typography cannot differ between a browser and an LMS.
+export {
+  renderInlineMarkdown,
+  renderBlockMarkdown,
+  stripMarkdown,
+  renderPlainText,
+  applyTypography,
+  escapeHtml,
+} from "../text";
 export { renderResultField, CORE_RENDERER_IDS } from "./renderers";
 export { renderScreenInto } from "./render-screen";
 export {

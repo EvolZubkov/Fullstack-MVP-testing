@@ -11,6 +11,8 @@
  * character past `from`, clamped to `[min, max]`. Pure — no DOM, no Node.
  */
 
+import { stripMarkdown } from "../text/plain";
+
 /** Fit configuration: clamp `[min, max]`, start shrinking past `from` chars, `per` px/char. */
 export interface FitFontConfig {
   max: number;
@@ -34,9 +36,15 @@ export function fitFont(len: number, cfg: FitFontConfig): string {
   return Math.round(size) + "px";
 }
 
-/** Question prompt font from its text length. */
+/**
+ * Question prompt font from its text length.
+ *
+ * Length is measured on the VISIBLE text: markdown markers become tags, and a
+ * link's URL never reaches the screen at all, so counting those characters would
+ * shrink a prompt for text the learner cannot see.
+ */
 export function questionFont(prompt: unknown): string {
-  return fitFont(String(prompt ?? "").length, QUESTION_FIT);
+  return fitFont(stripMarkdown(String(prompt ?? "")).length, QUESTION_FIT);
 }
 
 /**
@@ -44,6 +52,9 @@ export function questionFont(prompt: unknown): string {
  * shares one readable size (the emission sets `--tb-answer-fs` once for the group).
  */
 export function optionFont(texts: unknown[] | null | undefined): string {
-  const longest = (texts ?? []).reduce((m: number, t) => Math.max(m, String(t ?? "").length), 0);
+  const longest = (texts ?? []).reduce(
+    (m: number, t) => Math.max(m, stripMarkdown(String(t ?? "")).length),
+    0,
+  );
   return fitFont(longest, OPTION_FIT);
 }

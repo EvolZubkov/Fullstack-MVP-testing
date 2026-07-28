@@ -24,6 +24,7 @@
  * Pure/framework-free — no DOM, no Node — safe to bundle into the SCORM runtime.
  */
 import { normalizePool } from "./dnd/matching-model";
+import { renderInlineMarkdown } from "../text/markdown";
 
 /**
  * Question shape this module reads. `dataJson` is untyped (a jsonb column reaches the
@@ -89,13 +90,17 @@ export function answerTexts(question: InteractionQuestion): unknown[] {
   return f.options;
 }
 
-/** HTML-escape user text (same convention as {@link module:shared/template/renderers}). */
-function esc(s: unknown): string {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+/**
+ * Render one answer text: the markdown subset an author may type, with the
+ * typography pass applied ({@link module:shared/text/markdown}).
+ *
+ * Inline rendering, never block: an option is a `.ou-radio-card__title`, and a
+ * `<p>` inside it would break the card. Escaping happens inside the renderer,
+ * before any tag is generated, so markup the author typed still cannot reach the
+ * DOM as markup — the safety property of the plain `esc()` this replaced is kept.
+ */
+function answerHtml(text: unknown): string {
+  return renderInlineMarkdown(text === null || text === undefined ? "" : String(text));
 }
 
 /** True when option `oi` is chosen (single = equals, multiple = in the array). */
@@ -205,7 +210,7 @@ function renderChoice(
     .map((oi) => {
       const chosen = isChosen(answer, oi);
       const control = multiple ? checkControl() : radioControl(chosen);
-      return optionCard(control, esc(options[oi]), chosen, reviewClass(multiple, oi, chosen, review), oi);
+      return optionCard(control, answerHtml(options[oi]), chosen, reviewClass(multiple, oi, chosen, review), oi);
     })
     .join("");
   return `<div class="ou-radio-group ou-radio-group--vertical"><div class="ou-radio-group__items">${items}</div></div>`;
@@ -288,7 +293,7 @@ export function renderRanking(
         `<span class="ou-rank__index ou-rank__index--round ou-rank__index--accent">${pos + 1}</span>` +
         `<span class="ou-rank__text"><span class="ou-rank__title" ` +
         `style="font-weight:400;font-size:var(--tb-answer-fs,1.25rem);line-height:1.35;text-wrap:pretty">` +
-        `${esc(items[oi])}</span></span>` +
+        `${answerHtml(items[oi])}</span></span>` +
         `<span class="ou-rank__controls">${up}${down}</span></div>`
       );
     })
@@ -347,7 +352,7 @@ export function renderMatching(
     `<div class="ou-match__card ou-match__card--drag" data-drag="${li}" data-drop="${dropId}">` +
     `<span class="ou-match__icon" aria-hidden="true"></span>` +
     `<span class="ou-match__card-text"><span class="ou-match__card-title" ` +
-    `style="font-size:var(--tb-answer-fs,1.125rem)">${esc(left[li])}</span></span></div>`;
+    `style="font-size:var(--tb-answer-fs,1.125rem)">${answerHtml(left[li])}</span></span></div>`;
 
   // Adaptive column ratio. The LEFT column shows the prompts (`right` items), the
   // RIGHT column the answer chips (`left` items). When one side's LONGEST text
@@ -385,7 +390,7 @@ export function renderMatching(
     html +=
       `<div class="ou-match__card ou-match__card--fixed" data-drop="r${ri}">` +
       `<span class="ou-match__card-text"><span class="ou-match__card-title" ` +
-      `style="font-size:var(--tb-answer-fs,1.125rem)">${esc(right[ri])}</span></span></div>`;
+      `style="font-size:var(--tb-answer-fs,1.125rem)">${answerHtml(right[ri])}</span></span></div>`;
     // Connection indicator in the gap: a chevron-left «‹» pointing from the answer
     // toward its prompt. Dashed grey hint by default, solid + accent once the row is
     // connected (the DS `ou-match__gap-arrow` styling). The path is drawn pointing

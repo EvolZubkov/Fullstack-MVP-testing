@@ -21,6 +21,18 @@ describe("fitFont", () => {
     expect(fitFont(100, QUESTION_FIT)).toBe("25px");
   });
 
+  it("measures the VISIBLE text: markdown markers and a URL are not seen", () => {
+    // The markers become tags and the URL never reaches the screen, so counting
+    // those characters would shrink the text for something nobody reads.
+    expect(questionFont("Что такое **замыкание** в JavaScript и зачем оно нужно тут?")).toBe(
+      questionFont("Что такое замыкание в JavaScript и зачем оно нужно тут?"),
+    );
+    expect(questionFont("Смотри [пример](https://example.com/a/very/long/path/here)")).toBe(
+      questionFont("Смотри пример"),
+    );
+    expect(optionFont(["**" + "о".repeat(120) + "**"])).toBe(fitFont(120, OPTION_FIT));
+  });
+
   it("questionFont sizes by prompt length; optionFont by the LONGEST option", () => {
     expect(questionFont("Короткий вопрос")).toBe("32px");
     expect(optionFont(["A", "B", "C"])).toBe("22px");

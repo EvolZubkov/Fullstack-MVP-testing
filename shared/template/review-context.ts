@@ -9,6 +9,7 @@
  */
 
 import { buildQuestionProgress, type QuestionStatus, type QuestionProgressItem } from "./question-progress-context";
+import { renderPlainText } from "../text/plain";
 import type { AnswerCommitScope } from "../flow/answer-commit-scope";
 import type { CtxReview, CtxQuestionsProgress, CtxReviewUnanswered } from "./context";
 
@@ -86,7 +87,10 @@ export function buildReviewContext(input: BuildReviewContextInput): {
     pos += 1;
     const status = input.statuses[q.id] ?? "unanswered";
     if (status === "answered") answeredCount++;
-    else unanswered.push({ index, number: pos, prompt: q.prompt });
+    // The review list is TEXT: the layout binds `{{prompt}}`, which the DSL escapes,
+    // so markdown markers would show as characters. Strip them and keep the
+    // typography, so the line reads like every other learner screen.
+    else unanswered.push({ index, number: pos, prompt: renderPlainText(q.prompt) });
   });
 
   const review: CtxReview = {

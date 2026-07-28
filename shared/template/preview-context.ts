@@ -27,6 +27,7 @@ import {
 import { buildTransitionContext } from "./transition-context";
 import { buildReviewContext } from "./review-context";
 import { renderSingleChoice, renderMultiple, renderRanking, renderMatching } from "./question-interaction";
+import { renderInlineMarkdown } from "../text/markdown";
 import {
   buildSequencePlacements,
   buildPageContext,
@@ -559,7 +560,14 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
       state: { questionCounterLabel: "Вопрос 1 из " + total },
     };
     const slots = q
-      ? { "question-text": esc(q.prompt), "question-media": "", "question-interaction": buildInteraction(q) }
+      ? {
+          // The preview renders what the learner will see, so the prompt goes through
+          // the SAME author-text pipeline as the two runtime hosts — otherwise the
+          // author would approve a screen the players do not produce.
+          "question-text": renderInlineMarkdown(String(q.prompt ?? "")),
+          "question-media": "",
+          "question-interaction": buildInteraction(q),
+        }
       : { "question-text": "", "question-media": "", "question-interaction": "" };
     return { ...base, expectedSlots: ["question-text", "question-interaction"], input: { context, slots } };
   }

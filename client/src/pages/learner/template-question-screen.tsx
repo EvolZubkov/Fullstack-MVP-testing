@@ -34,6 +34,7 @@ import {
   type ReviewCorrect,
 } from "@shared/template/question-interaction";
 import { questionFont, optionFont } from "@shared/template/fit-font";
+import { renderInlineMarkdown } from "@shared/text";
 
 function esc(s: unknown): string {
   return String(s)
@@ -189,7 +190,10 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
 
   const css = `${tpl.css}\n#q-progress-fill{width:${Math.round(progressPercent)}%}`;
   const slots = {
-    "question-text": esc(question.prompt),
+    // Inline, not block: the prompt renders into the scene's `<h2>` heading, and a
+    // paragraph inside it would be invalid. The SCORM twin fills the same slot
+    // through the same renderer, so the two hosts show identical markup.
+    "question-text": renderInlineMarkdown(question.prompt),
     "question-media": mediaHtml(question),
     "question-interaction": interactionHtml(
       question,

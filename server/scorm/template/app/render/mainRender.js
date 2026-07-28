@@ -578,7 +578,7 @@ function renderStandardQuestion(qData, current, total, progress) {
         };
         if (qProgress) context.state.questionsProgress = qProgress;
         var slots = {
-            'question-text': escapeHtml(q.prompt),
+            'question-text': authorTextHtml(q.prompt),
             'question-media': renderQuestionMedia(q),
             'question-interaction': '<div id="question-input">' + renderQuestionInput(q) + '</div>',
             'question-feedback': showFeedback ? buildQuestionFeedbackHtml(q) : ''
@@ -658,7 +658,7 @@ function renderStandardQuestion(qData, current, total, progress) {
     }
     html += '<div class="card">';
     html += '<div style="color:#666;margin-bottom:8px;">Вопрос ' + (current + 1) + ' из ' + total + ' | ' + escapeHtml(qData.topicName) + '</div>';
-    html += '<div class="question-text">' + escapeHtml(q.prompt) + '</div>';
+    html += '<div class="question-text">' + authorTextHtml(q.prompt) + '</div>';
     html += renderQuestionMedia(q);
     html += '<div id="question-input">';
     html += renderQuestionInput(q);

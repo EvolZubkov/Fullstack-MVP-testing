@@ -46,8 +46,12 @@ describe("renderSingleChoice", () => {
   });
 
   it("escapes option text", () => {
+    // Straight quotes now become guillemets: answer texts go through the shared
+    // author-text pipeline (markdown subset + typography), and the option is
+    // rendered from it. The security property is unchanged — markup the author
+    // typed is still escaped before any tag is generated.
     const html = renderSingleChoice({ type: "single", dataJson: { options: ['<b>"x"</b>'] } }, undefined);
-    expect(html).toContain("&lt;b&gt;&quot;x&quot;&lt;/b&gt;");
+    expect(html).toContain("&lt;b&gt;«x»&lt;/b&gt;");
     expect(html).not.toContain("<b>");
   });
 });

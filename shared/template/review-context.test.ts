@@ -102,3 +102,27 @@ describe("buildReviewContext", () => {
     expect(review.isTest).toBe(true);
   });
 });
+
+describe("buildReviewContext — prompt text", () => {
+  it("lists an unanswered question without markdown markers", () => {
+    const { review } = buildReviewContext({
+      questions: [{ id: "a1", topicId: "A", prompt: "Что такое **замыкание**?" }],
+      statuses: {},
+      isTest: true,
+      scopeLabel: "Тест",
+      finishLabel: "Завершить",
+    } as never);
+    expect(review.unanswered[0].prompt).toBe("Что такое замыкание?");
+  });
+
+  it("applies typography to the listed prompt", () => {
+    const { review } = buildReviewContext({
+      questions: [{ id: "a1", topicId: "A", prompt: 'Раздел "новый" - тут' }],
+      statuses: {},
+      isTest: true,
+      scopeLabel: "Тест",
+      finishLabel: "Завершить",
+    } as never);
+    expect(review.unanswered[0].prompt).toBe("Раздел «новый» — тут");
+  });
+});
