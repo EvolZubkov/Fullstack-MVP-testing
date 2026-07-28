@@ -21,6 +21,7 @@
 export { escapeHtml } from "./escape";
 export { normalizeAuthorText } from "./normalize";
 export { looksLikeHtml, htmlToMarkdown } from "./html-to-markdown";
+export { applyTypographyToHtml, normalizeAuthorHtml, normalizeAuthorPlain } from "./html-text";
 export { applyTypography } from "./typography";
 export { renderInlineMarkdown, renderBlockMarkdown } from "./markdown";
 export { stripMarkdown, renderPlainText } from "./plain";
