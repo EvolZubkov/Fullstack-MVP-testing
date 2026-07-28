@@ -110,6 +110,7 @@ import { isPlaceholderType, isSettingType, inputModesFor } from "@shared/templat
 import { sanitizeHtml as sanitizeContentHtml, placeholderScope } from "@shared/security/html-sanitize";
 import type { TestEditorModel } from "../test-editor.types";
 import { PagePreviewModal } from "./page-preview-modal";
+import { VariantPreviewPicker } from "./variant-preview-picker";
 import { SanitizeBanner } from "./sanitize-banner";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -475,13 +476,14 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
       <AddPageModal
         ctx={addCtx}
         cp={cp}
+        designDraft={designDraft}
         onClose={() => setAddCtx(null)}
         onCreated={(id) => {
           setAddCtx(null);
           setExpandedId(id);
         }}
       />
-      <ReplaceVariantModal ctx={replaceCtx} cp={cp} onClose={() => setReplaceCtx(null)} />
+      <ReplaceVariantModal ctx={replaceCtx} cp={cp} designDraft={designDraft} onClose={() => setReplaceCtx(null)} />
       {previewCtx && (
         <PagePreviewModal
           open
@@ -2264,6 +2266,7 @@ type AddOption =
 function AddPageModal(props: {
   ctx: AddContext | null;
   cp: UseContentPagesResult;
+  designDraft?: { templateId: string; params?: Record<string, unknown> };
   onClose: () => void;
   onCreated: (id: string) => void;
 }) {
@@ -2339,7 +2342,7 @@ function AddPageModal(props: {
         setQuery("");
         props.onClose();
       }}
-      size="m"
+      size="xl"
       title="Добавить страницу"
       description={ctx ? `Выберите вариант для зоны «${ctx.zoneLabel}».` : undefined}
       footer={
@@ -2394,11 +2397,24 @@ function AddPageModal(props: {
           Ничего не найдено
         </div>
       ) : (
-        <VariantList
-          options={filteredOptions.map((o) => ({ key: o.key, label: o.label, description: o.description }))}
+        <VariantPreviewPicker
+          options={filteredOptions.map((o) => {
+            const v = o.kind === "template" ? cp.infoVariants.find((iv) => iv.key === o.templateKey) : undefined;
+            return {
+              key: o.key,
+              label: o.label,
+              description: o.description,
+              variantKey: v?.key,
+              kind: v?.kind,
+              pageKind: v?.pageKind,
+            };
+          })}
           selectedKey={effectiveKey}
           onSelect={setSelectedKey}
           testIdPrefix="structure-add-option"
+          templateId={props.designDraft?.templateId ?? "default"}
+          params={props.designDraft?.params ?? {}}
+          open={open}
         />
       )}
     </ModalDialog>
@@ -2438,6 +2454,7 @@ function hasPlaceholderValue(raw: unknown): boolean {
 function ReplaceVariantModal(props: {
   ctx: ReplaceContext | null;
   cp: UseContentPagesResult;
+  designDraft?: { templateId: string; params?: Record<string, unknown> };
   onClose: () => void;
 }) {
   const { ctx, cp } = props;
@@ -2534,7 +2551,7 @@ function ReplaceVariantModal(props: {
         setQuery("");
         props.onClose();
       }}
-      size="m"
+      size="xl"
       title="Сменить вариант страницы"
       description={page ? `Системная страница «${KIND_LABEL[page.kind] ?? page.kind}».` : undefined}
       footer={
@@ -2589,16 +2606,22 @@ function ReplaceVariantModal(props: {
           Ничего не найдено
         </div>
       ) : (
-        <VariantList
+        <VariantPreviewPicker
           options={filteredVariants.map((v) => ({
             key: v.key,
             label: v.label,
             description: v.description,
             isCurrent: v.key === page?.templateKey,
+            variantKey: v.key,
+            kind: v.kind,
+            pageKind: v.pageKind,
           }))}
           selectedKey={effectiveKey}
           onSelect={setSelectedKey}
           testIdPrefix="structure-replace-option"
+          templateId={previewTemplateId(cp, props.designDraft?.templateId, page ?? { kind: null })}
+          params={props.designDraft?.params ?? {}}
+          open={page !== null}
         />
       )}
       {lostFields.length > 0 && (
@@ -2632,60 +2655,4 @@ function ReplaceVariantModal(props: {
   );
 }
 
-// ─── Variant list (shared listbox) ───────────────────────────────────────────────
-
-function VariantList(props: {
-  options: Array<{
-    key: string;
-    label: string;
-    description?: string;
-    /** PRD-7 S13.6: mark the current variant (disabled + «Текущий» chip). */
-    isCurrent?: boolean;
-  }>;
-  selectedKey: string | null;
-  onSelect: (key: string) => void;
-  testIdPrefix: string;
-}) {
-  return (
-    <ul className="variant-list" role="listbox" aria-label="Варианты страниц">
-      {props.options.map((o) => {
-        const selected = o.key === props.selectedKey;
-        const cls =
-          "variant-list__item" +
-          (selected ? " is-selected" : "") +
-          (o.isCurrent ? " is-current" : "");
-        return (
-          <li
-            key={o.key}
-            className={cls}
-            role="option"
-            aria-selected={selected ? "true" : "false"}
-            aria-disabled={o.isCurrent ? "true" : undefined}
-            tabIndex={o.isCurrent ? -1 : 0}
-            onClick={o.isCurrent ? undefined : () => props.onSelect(o.key)}
-            onKeyDown={(e) => {
-              if (o.isCurrent) return;
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                props.onSelect(o.key);
-              }
-            }}
-            data-testid={`${props.testIdPrefix}-${o.key}`}
-          >
-            <div>
-              <div className="variant-list__name">{o.label}</div>
-              {o.description && <div className="variant-list__desc">{o.description}</div>}
-              {o.isCurrent && (
-                <div className="variant-list__meta">
-                  <span className="variant-list__meta-tag variant-list__meta-tag--current">
-                    Текущий
-                  </span>
-                </div>
-              )}
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
+// VariantList moved to ./variant-preview-picker (reused as the picker's left pane).

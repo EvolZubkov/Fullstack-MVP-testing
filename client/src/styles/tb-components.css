@@ -1516,6 +1516,58 @@
   background: var(--ou-accent-soft);
 }
 
+/* Variant picker: the option list on the left, one live page preview on the right
+   (the «Список + панель превью» layout). Collapses to a single column on narrow modals. */
+.variant-picker {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: var(--ou-space-4);
+  /* FIXED height so the modal doesn't jump as previews (different content heights)
+     render or the bundle loads — both panes fill it and scroll internally. */
+  height: var(--wf-size-440, 440px);
+  align-items: stretch;
+}
+.variant-picker__list { min-width: 0; min-height: 0; }
+.variant-picker__list .variant-list { max-height: 100%; height: 100%; }
+.variant-picker__preview {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-surface-1);
+  overflow: hidden;
+}
+/* Fit-to-box: the preview renders at a fixed reference canvas (see ScaledPreview) and
+   is scaled UNIFORMLY to fit this box — proportional, no scroll, aspect preserved. */
+.variant-picker__box {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.variant-picker__frame { flex: none; transform-origin: center center; }
+/* TemplateScreen's host fills the fixed reference frame so the scene lays out against
+   a definite size (its `height:100%` resolves) before the frame is scaled. */
+.variant-picker__frame > * { width: 100%; height: 100%; display: block; }
+.variant-picker__empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ou-space-6);
+  color: var(--ou-fg-muted);
+  font: var(--ou-text-body-s);
+  text-align: center;
+}
+@media (max-width: 720px) {
+  .variant-picker { grid-template-columns: 1fr; height: auto; }
+  .variant-picker__list .variant-list { max-height: var(--wf-size-240, 240px); }
+  .variant-picker__preview { height: var(--wf-size-280, 280px); }
+}
+
 /* Variant picker list inside the «Добавить страницу» modal. */
 .variant-list {
   list-style: none;

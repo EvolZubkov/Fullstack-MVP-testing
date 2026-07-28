@@ -102,6 +102,9 @@ export type ContentTemplateVariant = {
   label: string;
   /** PRD-1 §4.3 variant kind. Built-in manifests declare it; older ones may not. */
   kind?: ContentPageKind;
+  /** Preview route this variant renders under (e.g. `content.info`) — drives the
+   *  variant-preview spec builder. Present in the manifest; absent on legacy ones. */
+  pageKind?: string;
   description?: string;
   placeholders: ContentTemplatePlaceholder[];
   /** PRD-22 page properties; absent ⇒ the variant has none. */
