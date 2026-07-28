@@ -541,12 +541,19 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
 }
 .router-topic-card:hover:not(:disabled) { border-color: var(--ou-accent-default); background: var(--ou-accent-soft); }
 .router-topic-card:disabled { cursor: default; opacity: 0.85; }
-.router-topic-card--completed { border-color: var(--ou-success-default); background: var(--ou-success-soft); }
+/* Completed = neutral «Завершена». Pass/fail colour is added ONLY when the test
+   reveals section results (router-topic-card--passed / --failed, emitted below);
+   those rules follow --completed so they win the shared-specificity cascade. */
+.router-topic-card--completed { border-color: var(--ou-border-strong); background: var(--ou-bg-surface-2); }
+.router-topic-card--passed { border-color: var(--ou-success-default); background: var(--ou-success-soft); }
+.router-topic-card--failed { border-color: var(--ou-error-default); background: var(--ou-error-soft); }
 .router-topic-card--inProgress { border-color: var(--ou-warning-default); background: var(--ou-warning-soft); }
 .router-topic-card--locked { opacity: 0.5; cursor: not-allowed; }
 .router-topic-card__name { font-weight: 600; font-size: 15px; }
 .router-topic-card__status { font-size: 12px; color: var(--ou-fg-muted); }
-.router-topic-card--completed .router-topic-card__status { color: var(--ou-success-default); font-weight: 500; }
+.router-topic-card--completed .router-topic-card__status { color: var(--ou-fg-default); font-weight: 500; }
+.router-topic-card--passed .router-topic-card__status { color: var(--ou-success-default); font-weight: 500; }
+.router-topic-card--failed .router-topic-card__status { color: var(--ou-error-default); font-weight: 500; }
 .router-topic-card__optional { font-weight: 400; font-size: 11px; color: var(--ou-fg-muted); }
 .router-topic-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .router-topic-card__img { flex: 0 0 auto; }

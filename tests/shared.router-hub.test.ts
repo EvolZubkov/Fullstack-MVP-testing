@@ -130,6 +130,52 @@ describe("router-hub — markup", () => {
   });
 });
 
+describe("router-hub — completed card outcome (PRD-19 show_section_results)", () => {
+  const completed = { t1: "completed" as const };
+
+  it("keeps a completed card NEUTRAL «Завершена» when section results are hidden", () => {
+    // Even with a frozen fail result, a test that hides section results must not
+    // leak it on the hub — the card stays neutral, never red.
+    const html = buildRouterHubHtml(
+      SECTIONS,
+      base({ topicStates: completed, sectionResults: { t1: { passed: false } }, showSectionResults: false }),
+    );
+    expect(html).toContain("Завершена");
+    expect(html).not.toContain("router-topic-card--failed");
+    expect(html).not.toContain("router-topic-card--passed");
+  });
+
+  it("colours a passed section green «Пройдена» when results are shown", () => {
+    const html = buildRouterHubHtml(
+      SECTIONS,
+      base({ topicStates: completed, sectionResults: { t1: { passed: true } }, showSectionResults: true }),
+    );
+    expect(html).toContain("router-topic-card--passed");
+    expect(html).toContain("Пройдена");
+    expect(html).not.toContain("router-topic-card--failed");
+  });
+
+  it("colours a failed section red «Не пройдена» when results are shown", () => {
+    const html = buildRouterHubHtml(
+      SECTIONS,
+      base({ topicStates: completed, sectionResults: { t1: { passed: false } }, showSectionResults: true }),
+    );
+    expect(html).toContain("router-topic-card--failed");
+    expect(html).toContain("Не пройдена");
+  });
+
+  it("stays neutral for a section with no pass rule (passed == null) even when results are shown", () => {
+    // A section that cannot be failed must not read as a graded pass/fail.
+    const html = buildRouterHubHtml(
+      SECTIONS,
+      base({ topicStates: completed, sectionResults: { t1: { passed: null } }, showSectionResults: true }),
+    );
+    expect(html).toContain("Завершена");
+    expect(html).not.toContain("router-topic-card--passed");
+    expect(html).not.toContain("router-topic-card--failed");
+  });
+});
+
 describe("router-hub — labels", () => {
   it("pluralises «вопрос» correctly", () => {
     expect(pluralQuestions(1)).toBe("вопрос");

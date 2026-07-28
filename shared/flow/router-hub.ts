@@ -43,6 +43,13 @@ export interface RouterHubState {
   unlockRules?: Record<string, SectionUnlockRule | undefined>;
   /** `all_required_completed` (default) | `all_required_passed`. */
   completionPolicy?: string | null;
+  /**
+   * Whether the test reveals section outcomes (PRD-19 `show_section_results`).
+   * When off, a completed section's card stays a NEUTRAL «Завершена» — the hub must
+   * not leak pass/fail the author chose to hide. When on, the card reflects the
+   * frozen result (see {@link sectionResults}).
+   */
+  showSectionResults?: boolean;
 }
 
 function escHtml(s: unknown): string {
@@ -166,6 +173,19 @@ export function buildRouterHubHtml(
     const status: RouterTopicStatus = state.topicStates[section.topicId] || "notStarted";
     const unlocked = isSectionUnlocked(section, state);
     const locked = !unlocked && status !== "completed";
+    // A completed card reflects its OUTCOME (green «Пройдена» / red «Не пройдена»)
+    // only when the test reveals section results AND the section carries a verdict.
+    // Otherwise — results hidden, or a section with no pass rule (`passed == null`,
+    // which cannot fail) — it reads as a neutral «Завершена», never coloured, so the
+    // hub can't imply a pass the author didn't grade or chose not to show.
+    let outcome: "passed" | "failed" | null = null;
+    if (status === "completed" && state.showSectionResults) {
+      const result = (state.sectionResults || {})[section.topicId];
+      if (result && result.passed === true) outcome = "passed";
+      else if (result && result.passed === false) outcome = "failed";
+    }
+    const completedLabel =
+      outcome === "passed" ? "Пройдена" : outcome === "failed" ? "Не пройдена" : "Завершена";
     // Completed cards stay disabled to prevent re-entry; locked ones because their
     // prerequisites are not met yet.
     const disabled = status === "completed" || !unlocked;
@@ -191,7 +211,9 @@ export function buildRouterHubHtml(
 
     cards +=
       '<button type="button" role="listitem"' +
-      ' class="router-topic-card router-topic-card--' + status + (locked ? " router-topic-card--locked" : "") + '"' +
+      ' class="router-topic-card router-topic-card--' + status +
+      (outcome ? " router-topic-card--" + outcome : "") +
+      (locked ? " router-topic-card--locked" : "") + '"' +
       ' data-topic-id="' + escHtml(section.topicId) + '"' +
       ' data-router-status="' + status + '"' +
       (locked ? ' data-router-locked="true"' : "") +
@@ -209,7 +231,7 @@ export function buildRouterHubHtml(
       metaHtml +
       '<span class="router-topic-card__foot">' +
       '<span class="router-topic-card__status">' +
-      escHtml(unlocked ? statusLabel(status) : "Недоступна") +
+      escHtml(unlocked ? (status === "completed" ? completedLabel : statusLabel(status)) : "Недоступна") +
       "</span>" +
       goHtml +
       "</span>" +

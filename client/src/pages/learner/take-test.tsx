@@ -271,6 +271,11 @@ export default function TakeTestPage() {
   const [routerTopicStates, setRouterTopicStates] = useState<
     Record<string, RouterTopicStatus | undefined>
   >({});
+  // Frozen per-section pass/fail, so the hub card can show its outcome (green/red)
+  // when the test reveals section results — parity with the SCORM `state.sectionResults`.
+  const [routerSectionResults, setRouterSectionResults] = useState<
+    Record<string, { passed?: boolean | null }>
+  >({});
   const [currentRouterTopic, setCurrentRouterTopic] = useState<string | null>(null);
   const [showHub, setShowHub] = useState(false);
   /** Set while a section's «после темы» zone plays on the way back to the hub. */
@@ -1577,6 +1582,8 @@ export default function TakeTestPage() {
             passed: d.passed,
             isLast,
           });
+          // Freeze the outcome so the router hub card reflects it (parity with SCORM).
+          setRouterSectionResults((prev) => ({ ...prev, [topicId]: { passed: d.passed } }));
           return;
         }
       } catch {
@@ -2113,9 +2120,12 @@ export default function TakeTestPage() {
   if (showHub && contentTpl && hubPage) {
     const hubHubState = {
       topicStates: routerTopicStates,
-      sectionResults: {},
+      sectionResults: routerSectionResults,
       unlockRules: {},
       completionPolicy: null,
+      // Same gate as SCORM: only reveal a section's pass/fail on the card when the
+      // test shows section results; otherwise the card stays a neutral «Завершена».
+      showSectionResults: navSettings.showSectionResults,
     };
     const hubReady = isRouterReadyToFinish(hubSections, hubHubState);
     return (

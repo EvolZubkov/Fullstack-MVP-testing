@@ -85,6 +85,9 @@
       unlockRules: (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.sectionUnlockRules) || {},
       completionPolicy:
         (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.routerCompletionPolicy) || null,
+      // PRD-19: a completed section's card shows its pass/fail only when the test
+      // reveals section results; otherwise the hub keeps it a neutral «Завершена».
+      showSectionResults: TEST_DATA.showSectionResults !== false,
     };
   }
 
