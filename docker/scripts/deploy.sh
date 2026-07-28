@@ -452,6 +452,26 @@ fi
 ok "DB migrations applied"
 
 # ---------------------------------------------------------------------------
+# 8b. Data step that SQL cannot express: canonical page text
+# ---------------------------------------------------------------------------
+# Content-page fields get their typography on save, so pages written before the
+# text pipeline existed keep straight quotes and hyphens until someone re-saves
+# them. This bundled script applies the SAME pass the application does (it is
+# built from `shared/text`, not reimplemented in SQL) and writes only the rows
+# that actually change, so every later deploy re-runs it as a cheap no-op.
+#
+# Non-fatal on purpose: a cosmetic backfill must never block a release. A failure
+# is reported and the deploy continues — the next one retries it.
+info "Normalising content-page text (backfill)..."
+if ! docker compose run --rm -T --no-deps --entrypoint sh app \
+    -c 'node dist/backfill-page-text.cjs > /tmp/backfill.log 2>&1; ec=$?; cat /tmp/backfill.log; exit $ec'; then
+    warn "content-page text backfill FAILED — see the error above."
+    warn "  The release continues: the step is cosmetic and re-runs on the next deploy."
+else
+    ok "Content-page text normalised"
+fi
+
+# ---------------------------------------------------------------------------
 # 9. Start and wait for health
 # ---------------------------------------------------------------------------
 info "Starting service..."

@@ -82,6 +82,31 @@ async function buildAll() {
     logLevel: "info",
   });
   
+  // Deploy-time data steps live next to the server bundle: the production image
+  // is installed with `--omit=dev`, so there is no tsx to run a TS script, and a
+  // hand-written JS twin would be a second copy of the text pipeline. Bundling
+  // them with the same esbuild config means the migration runs the SAME code the
+  // application does.
+  console.log("building deploy scripts...");
+  await esbuild({
+    entryPoints: ["script/backfill-page-text.ts"],
+    platform: "node",
+    bundle: true,
+    format: "cjs",
+    outfile: "dist/backfill-page-text.cjs",
+    banner: {
+      js: "const __importMetaUrl = require('url').pathToFileURL(__filename).href;",
+    },
+    define: {
+      "process.env.NODE_ENV": '"production"',
+      "import.meta.url": "__importMetaUrl",
+      "import.meta.dirname": "__dirname",
+    },
+    minify: false,
+    external: externals,
+    logLevel: "info",
+  });
+
   console.log("copying scorm assets...");
   await mkdir("dist/scorm/assets", { recursive: true });
   await cp("server/scorm/assets", "dist/scorm/assets", { recursive: true });
