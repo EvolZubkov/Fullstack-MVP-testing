@@ -2076,10 +2076,11 @@
    width/height rules there have no effect. Targeting the inner .ou-modal lets
    the dialog actually grow to the preview's intended ~1120×860 footprint. */
 .tpl-preview-modal .ou-modal {
-  max-width: var(--wf-size-1120, 1120px);
+  /* Wider footprint so the 16:9 preview stage has comfortable room. */
+  max-width: min(var(--wf-size-1320, 1320px), 94vw);
   width: 100%;
   height: calc(100vh - var(--ou-space-7) * 2);
-  max-height: var(--wf-size-860, 860px);
+  max-height: var(--wf-size-900, 900px);
 }
 .tpl-preview-modal .ou-modal__body {
   padding: 0;

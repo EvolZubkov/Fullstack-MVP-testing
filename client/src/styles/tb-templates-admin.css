@@ -129,6 +129,10 @@
    while the stage runs longer. (DS `.ou-modal` is a flex column with a max-height;
    pinning the height lets the flex children resolve.) */
 .tpl-check-modal .ou-modal {
+  /* Wider than DS `xl` (960px): a 16:9 stage next to the screen rail needs the
+     horizontal room, so the preview reads at a comfortable size. */
+  max-width: min(var(--wf-size-1320, 1320px), 94vw);
+  width: 100%;
   height: calc(100vh - var(--ou-space-7) * 2);
 }
 .tpl-check-modal .ou-modal__body {
@@ -227,12 +231,16 @@
   min-height: 0;
 }
 .tpl-check-stage__frame {
-  flex: 1 1 auto;
+  /* A 16:9 preview surface (the screen the learner sees): full width of the stage
+     column, height taken from the 16:9 ratio. Was a height-filling box of arbitrary
+     proportion. The scene scrolls inside when a screen is taller than the frame. */
+  flex: 0 0 auto;
+  aspect-ratio: 16 / 9;
+  width: 100%;
   border: var(--ou-border-width) solid var(--ou-border-soft);
   border-radius: var(--ou-radius-m);
   overflow: auto;
   background: var(--ou-bg-canvas, var(--ou-bg-muted));
-  min-height: var(--ou-size-320, 320px);
 }
 .tpl-check-stage__caption {
   font: var(--ou-text-body-s);
