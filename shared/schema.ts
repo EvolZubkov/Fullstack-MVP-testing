@@ -144,12 +144,19 @@ export const topics = pgTable("topics", {
   // (NULL) → formulas fall back to the UUID. Uniqueness is not enforced at the DB
   // level — resolution is per-test (migration 032).
   code: text("code"),
+  // PRD-25 FR-20: time of the last change to the topic itself or to any of its
+  // questions. Backs the «Мои темы и вопросы» home-page section, which orders by
+  // recency. Touched by the topic and question repositories in the same
+  // transaction as the mutation — see server/storage/shared.ts#touchTopics.
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
   // FR-27: hard uniqueness only WITHIN one owner; legacy unowned rows (owner
   // NULL) are excluded by the partial predicate, so they never collide.
   ownerNameIdx: uniqueIndex("topics_owner_name_normalized_idx")
     .on(table.ownerId, table.nameNormalized)
     .where(sql`owner_id IS NOT NULL`),
+  // PRD-25: the home page reads the most recently touched topics first.
+  updatedAtIdx: index("topics_updated_at_idx").on(table.updatedAt),
 }));
 
 // PRD-15 block C (FR-19): access to a topic for a non-owner USER. `use` lets
@@ -591,7 +598,7 @@ export type InsertTestQuestionScoring = z.infer<typeof insertTestQuestionScoring
 export const insertTestFolderSchema = createInsertSchema(testFolders).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertFolderSchema = createInsertSchema(folders).omit({ id: true });
-export const insertTopicSchema = createInsertSchema(topics).omit({ id: true }).extend({
+export const insertTopicSchema = createInsertSchema(topics).omit({ id: true, updatedAt: true }).extend({
   // Optional readable id (slug): lower snake_case, ≤64. Blank → NULL (use the UUID).
   code: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? null : v),
