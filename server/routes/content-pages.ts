@@ -20,6 +20,7 @@ import { and, eq } from "drizzle-orm";
 import { storage } from "../storage";
 import { db } from "../db";
 import { templates } from "@shared/schema";
+import { normalizeAuthorText } from "@shared/text";
 import { requireAuth, requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { logger } from "../logger";
@@ -158,6 +159,14 @@ function normalizeValuesForTemplate(
     const style = valuesJson?.placeholderStyles?.[ph.key] as { fontSize?: unknown } | undefined;
     if (ph.textFit?.allowAuthorFontSize && typeof style?.fontSize === "number" && Number.isFinite(style.fontSize)) {
       placeholderStyles[ph.key] = { fontSize: style.fontSize };
+    }
+
+    // Plain-text fields are author text and are stored canonically, exactly like
+    // a question prompt. `richText`/`html` are markup and are left to the
+    // sanitiser: reflowing line breaks inside markup could change what it renders.
+    if (ph.type === "text" || ph.type === "textarea") {
+      const value = values[ph.key];
+      if (typeof value === "string") values[ph.key] = normalizeAuthorText(value);
     }
 
     if (ph.type === "resultField") {

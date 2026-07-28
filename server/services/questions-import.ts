@@ -16,6 +16,7 @@ import { createHash } from "crypto";
 import { storage } from "../storage";
 import { logger } from "../logger";
 import { normalizeTags } from "@shared/tags";
+import { normalizeIncomingText, normalizeQuestionData } from "./question-text";
 import type { Question } from "@shared/schema";
 import type { Role } from "@shared/access";
 import {
@@ -69,6 +70,14 @@ export interface QuestionImportResult {
   errors: string[];
   /** Local `Ключ строки` alias → resolved question (FR-15.6). */
   aliasToQuestion: Map<string, ResolvedQuestion>;
+}
+
+/**
+ * Read one text cell the way the import must store it: markup converted to the
+ * markdown subset, whitespace canonical. An empty cell reads as an empty string.
+ */
+function cellText(raw: unknown): string {
+  return normalizeIncomingText(String(raw ?? ""), { convertHtml: true });
 }
 
 /** Derive the option/pair/item count from a parsed dataJson. */
@@ -168,8 +177,11 @@ export async function importQuestionRows(
         continue;
       }
 
-      // Текст вопроса.
-      const prompt = String(row["Текст вопроса"] || row["Вопрос"] || "").trim();
+      // Текст вопроса — в канонической форме: ячейка приходит из Word, из чужой
+      // системы или из ручной правки, а храниться должна так же, как из редактора.
+      // Разметку в ячейке переводим в markdown: автор её не набирал, а хранить
+      // теги как видимые символы — значит показать ученику «<b>».
+      const prompt = cellText(row["Текст вопроса"] || row["Вопрос"]);
       if (!prompt) {
         result.errors.push(`Строка ${rowNum}: пустой вопрос`);
         continue;
@@ -328,9 +340,16 @@ export async function importQuestionRows(
       const feedbackModeRaw = String(row["Режим ОС"] || "").trim().toLowerCase();
       const feedbackMode: "general" | "conditional" =
         feedbackModeRaw === "условная" || feedbackModeRaw === "conditional" ? "conditional" : "general";
-      const feedback = String(row["Обратная связь"] || "").trim() || null;
-      const feedbackCorrect = String(row["ОС при верном"] || "").trim() || null;
-      const feedbackIncorrect = String(row["ОС при неверном"] || "").trim() || null;
+      const feedback = cellText(row["Обратная связь"]) || null;
+      const feedbackCorrect = cellText(row["ОС при верном"]) || null;
+      const feedbackIncorrect = cellText(row["ОС при неверном"]) || null;
+
+      // Canonical answer texts BEFORE the hash: the hash deduplicates imported
+      // rows and pins published snapshots, so hashing a value the write path is
+      // about to rewrite would produce a hash no stored row can ever match.
+      // Per element, AFTER the separator split — otherwise markup spanning two
+      // options would swallow the `#`/`|` between them.
+      dataJson = normalizeQuestionData(dataJson, { convertHtml: true });
 
       // The unit count (options / pairs / items) backs the «Измерения» alias.
       const unitCount = unitCountOf(type, dataJson);

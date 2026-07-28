@@ -13,6 +13,8 @@ import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
 import { normalizeTags } from "@shared/tags";
+import { normalizeAuthorText } from "@shared/text";
+import { normalizeOptionalText, normalizeQuestionData } from "../services/question-text";
 import { importQuestionRows } from "../services/questions-import";
 import { serializeQuestionRow, QUESTION_HEADERS, QUESTION_WIDTHS } from "../services/questions-export";
 import { assessQuestionsRemoval, assessQuestionChange } from "../services/draw-feasibility";
@@ -167,7 +169,11 @@ router.post(
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
 
-      if (!topicId || !type || !prompt) {
+      // Canonical form BEFORE the required-field check: a prompt of nothing but
+      // spaces is an empty prompt, not a filled one.
+      const canonicalPrompt = normalizeAuthorText(prompt);
+
+      if (!topicId || !type || !canonicalPrompt) {
         return res.status(400).json({ error: "TopicId, type and prompt required" });
       }
 
@@ -180,17 +186,17 @@ router.post(
       const question = await storage.createQuestion({
         topicId,
         type,
-        prompt,
-        dataJson,
+        prompt: canonicalPrompt,
+        dataJson: normalizeQuestionData(dataJson),
         correctJson,
         difficulty: difficulty || 50,
         mediaUrl: mediaUrl || null,
         mediaType: mediaType || null,
         shuffleAnswers: shuffleAnswers ?? true,
-        feedback: feedback || null,
+        feedback: normalizeAuthorText(feedback) || null,
         feedbackMode: feedbackMode || "general",
-        feedbackCorrect: feedbackCorrect || null,
-        feedbackIncorrect: feedbackIncorrect || null,
+        feedbackCorrect: normalizeAuthorText(feedbackCorrect) || null,
+        feedbackIncorrect: normalizeAuthorText(feedbackIncorrect) || null,
         tags: normalizeTags(Array.isArray(tags) ? tags : []),
         createdBy: req.currentUser?.id ?? null,
       } as any);
@@ -272,17 +278,20 @@ router.put(
       const updated = await storage.updateQuestion(req.params.id, {
         topicId,
         type,
-        prompt,
-        dataJson,
+        // A field the client did not send stays `undefined` — the storage layer
+        // reads that as «leave unchanged», so normalisation must not turn it
+        // into an empty string.
+        prompt: normalizeOptionalText(prompt),
+        dataJson: normalizeQuestionData(dataJson),
         correctJson,
         difficulty,
         mediaUrl,
         mediaType,
         shuffleAnswers,
-        feedback,
+        feedback: normalizeOptionalText(feedback),
         feedbackMode,
-        feedbackCorrect,
-        feedbackIncorrect,
+        feedbackCorrect: normalizeOptionalText(feedbackCorrect),
+        feedbackIncorrect: normalizeOptionalText(feedbackIncorrect),
         // Only touch tags when the client sent them; otherwise leave unchanged.
         tags: Array.isArray(tags) ? normalizeTags(tags) : undefined,
       } as any);
