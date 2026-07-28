@@ -23,7 +23,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layers, Plus, Trash2, X } from "lucide-react";
 import type { DrawBlueprint, FormSet, Topic } from "@shared/schema";
-import { tagKey } from "@shared/tags";
+import { normalizeTag, tagKey, TAG_MAX_LENGTH } from "@shared/tags";
 import {
   Banner,
   Button,
@@ -462,6 +462,14 @@ function QuotaEditor(props: {
   const remainder = Math.max(0, drawCount - sum);
   const overflow = sum > drawCount;
   const anyShortfall = strata.some((s) => s.count > availOf(s.tag));
+  // Mirror the server drawStratumSchema: a tag must be 1–TAG_MAX_LENGTH chars after
+  // normalization. An empty/blank tag (e.g. a stale blueprint whose tag was cleared)
+  // would be rejected with an HTTP 400 on save — flag it here so it can't slip through.
+  const badTag = (tag: string) => {
+    const t = normalizeTag(tag ?? "");
+    return t.length < 1 || t.length > TAG_MAX_LENGTH;
+  };
+  const anyBadTag = strata.some((s) => badTag(s.tag));
 
   const setStrata = (next: DrawBlueprint["strata"]) => onChange({ strata: next });
   const toggle = (on: boolean) => {
@@ -509,6 +517,15 @@ function QuotaEditor(props: {
 
       {expanded && (
         <div className="tb-quota-block" data-testid={`topic-quota-block-${topicId}`}>
+          {anyBadTag && (
+            <Banner
+              tone="error"
+              variant="subtle"
+              role="alert"
+              description={`Не выбран тег для квоты (тег обязателен, 1–${TAG_MAX_LENGTH} символов). Сохранение заблокировано до исправления.`}
+              data-testid={`topic-quota-tag-error-${topicId}`}
+            />
+          )}
           {overflow && (
             <Banner
               tone="error"
@@ -518,7 +535,7 @@ function QuotaEditor(props: {
               data-testid={`topic-quota-error-${topicId}`}
             />
           )}
-          {!overflow && anyShortfall && (
+          {!overflow && !anyBadTag && anyShortfall && (
             <Banner
               tone="warning"
               variant="subtle"
@@ -553,6 +570,7 @@ function QuotaEditor(props: {
                         fullWidth
                         value={s.tag}
                         options={options}
+                        tone={badTag(s.tag) ? "error" : undefined}
                         onChange={(v) => updateStratum(i, { tag: v })}
                         aria-label={`Подтема для квоты ${i + 1}`}
                         data-testid={`quota-tag-${topicId}-${i}`}

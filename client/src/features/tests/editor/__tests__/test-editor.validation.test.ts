@@ -109,6 +109,40 @@ describe("PRD-11 FR-05: quota sum vs drawCount", () => {
     const result = validateTestEditor(baseModel());
     expect(result.errors.filter((e) => e.field.includes("drawBlueprintJson"))).toHaveLength(0);
   });
+
+  // PRD-11: mirror the server drawStratumSchema so a bad tag/count blocks save here
+  // (else the author only learns of it as a raw HTTP 400 after «Сохранить»).
+  it("empty / blank tag → section error (blocks save)", () => {
+    for (const tag of ["", "   "]) {
+      const result = validateTestEditor(withBlueprint([{ tag, count: 2 }]));
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({ field: "sections[0].drawBlueprintJson", code: "range" }),
+      );
+    }
+  });
+
+  it("over-long tag (> 50 chars after normalization) → section error", () => {
+    const result = validateTestEditor(withBlueprint([{ tag: "x".repeat(51), count: 1 }]));
+    expect(result.errors.some((e) => e.field === "sections[0].drawBlueprintJson")).toBe(true);
+  });
+
+  it("non-integer / < 1 count → section error", () => {
+    expect(
+      validateTestEditor(withBlueprint([{ tag: "a", count: 0 }])).errors.some(
+        (e) => e.field === "sections[0].drawBlueprintJson",
+      ),
+    ).toBe(true);
+    expect(
+      validateTestEditor(withBlueprint([{ tag: "a", count: 1.5 }])).errors.some(
+        (e) => e.field === "sections[0].drawBlueprintJson",
+      ),
+    ).toBe(true);
+  });
+
+  it("valid tag + count → no tag error", () => {
+    const result = validateTestEditor(withBlueprint([{ tag: "Сети", count: 2 }]));
+    expect(result.errors.filter((e) => e.field.includes("drawBlueprintJson"))).toHaveLength(0);
+  });
 });
 
 // ─── FR-11: title required ────────────────────────────────────────────────────

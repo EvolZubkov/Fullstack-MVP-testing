@@ -22,6 +22,7 @@ import {
   type ValidationResult,
 } from "./test-editor.types";
 import { resolveEffectiveScoring } from "@shared/scoring/effective-scoring";
+import { normalizeTag, TAG_MAX_LENGTH } from "@shared/tags";
 
 const VALID_PASS_DECISION_POLICIES: PassDecisionPolicy[] = [
   "overall_only",
@@ -210,6 +211,29 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
           message: `Сумма квот (${sum}) для темы «${section.topicName}» превышает «Вопросов в тест» (${section.drawCount}).`,
           severity: "error",
         });
+      }
+      // PRD-11: mirror the server drawStratumSchema byte-for-byte so an empty /
+      // over-long tag (or a bad count) is BLOCKED here with a clear message instead
+      // of surfacing as a raw HTTP 400 only after the author hits «Сохранить».
+      for (let j = 0; j < bp.strata.length; j++) {
+        const stratum = bp.strata[j];
+        const tag = normalizeTag(stratum.tag ?? "");
+        if (tag.length < 1 || tag.length > TAG_MAX_LENGTH) {
+          errors.push({
+            field: `sections[${i}].drawBlueprintJson`,
+            code: "range",
+            message: `Квота №${j + 1} темы «${section.topicName}»: укажите тег (1–${TAG_MAX_LENGTH} символов).`,
+            severity: "error",
+          });
+        }
+        if (!Number.isInteger(stratum.count) || stratum.count < 1) {
+          errors.push({
+            field: `sections[${i}].drawBlueprintJson`,
+            code: "range",
+            message: `Квота №${j + 1} темы «${section.topicName}»: количество должно быть целым ≥ 1.`,
+            severity: "error",
+          });
+        }
       }
     }
   }
