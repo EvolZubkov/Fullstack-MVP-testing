@@ -279,7 +279,9 @@ export function renderRanking(
         `<button type="button" class="ou-rank__btn" aria-label="Ниже" data-action="rank-down:${pos}"` +
         `${pos === order.length - 1 ? " disabled" : ""}>${CHEVRON_DOWN}</button>`;
       return (
-        `<div class="${cls}" draggable="true" data-drag="${pos}" data-drop="${pos}">` +
+        // No `draggable="true"` — the shared pointer engine drives the drag; the native
+        // flag would start a browser drag that cancels the pointer gesture (see dragCard).
+        `<div class="${cls}" data-drag="${pos}" data-drop="${pos}">` +
         `<span class="ou-rank__grip" aria-hidden="true">${RANK_GRIP}</span>` +
         `<span class="ou-rank__index ou-rank__index--round ou-rank__index--accent">${pos + 1}</span>` +
         `<span class="ou-rank__text"><span class="ou-rank__title" ` +
@@ -332,8 +334,11 @@ export function renderMatching(
   }
 
   // A draggable answer chip (left item) with grip, drop-zone hooks, and the fit font.
+  // NOTE: no `draggable="true"` — the shared pointer engine drives the drag. The
+  // native HTML5 draggable flag would start a browser drag that fires pointercancel
+  // and kills the pointer gesture, so REAL mouse dragging silently did nothing.
   const dragCard = (li: number, dropId: string): string =>
-    `<div class="ou-match__card ou-match__card--drag" draggable="true" data-drag="${li}" data-drop="${dropId}">` +
+    `<div class="ou-match__card ou-match__card--drag" data-drag="${li}" data-drop="${dropId}">` +
     `<span class="ou-match__icon" aria-hidden="true"></span>` +
     `<span class="ou-match__card-text"><span class="ou-match__card-title" ` +
     `style="font-size:var(--tb-answer-fs,1.125rem)">${esc(left[li])}</span></span></div>`;
