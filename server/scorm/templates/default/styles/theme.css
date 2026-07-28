@@ -301,7 +301,8 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 }
 
 /* ── Matching scene ─────────────────────────────────────────────── */
-.tb-scene .ou-match { width: 100%; row-gap: var(--ou-space-2); }
+/* Column gap between the two matching sides — 24px (DS default is 56px wide). */
+.tb-scene .ou-match { width: 100%; row-gap: var(--ou-space-2); --ou-match-gap-w: var(--ou-space-6); }
 .ou-match__placeholder { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 
 /* ── Adaptive level transition ──────────────────────────────────── */
