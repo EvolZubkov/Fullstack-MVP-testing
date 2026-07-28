@@ -113,6 +113,10 @@
     }
     var app = document.getElementById("app");
     if (!app) return;
+    // The router hub is the test-entry menu — the attempt subtitle ("Попытка N")
+    // belongs on the in-attempt screens, not on the section menu. Drop it.
+    var sub = app.querySelector(".tb-scene__subtitle");
+    if (sub && sub.parentNode) sub.parentNode.removeChild(sub);
     // The router is a HUB — navigation is via the topic cards, not the content
     // wrapper's «Далее». Remove that nav so the run matches the «Структура» preview.
     var nav = app.querySelector(".navigation");

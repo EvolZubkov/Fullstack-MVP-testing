@@ -369,6 +369,9 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
 /* The body CENTRES its block — reading measure, balanced, no vertical stretching
    with empty side fields (the earlier feedback). */
 .tb-content-body { display: flex; flex-direction: column; align-items: center; justify-content: safe center; }
+/* The router hub is a menu, not centered reading content — its cards read top-down
+   from the top of the field with the body's own padding, not floated to the middle. */
+.tb-scene:has(.router-topic-cards) .tb-content-body { justify-content: flex-start; }
 .tb-content { width: 100%; display: flex; flex-direction: column; gap: var(--ou-space-4); }
 .tb-content--text { max-width: 720px; }
 .tb-content--image { max-width: 1120px; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; align-items: center; }
