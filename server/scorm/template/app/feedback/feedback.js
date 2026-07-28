@@ -258,7 +258,11 @@ function insertFeedback(q, isCorrect, scoreRatio) {
 }
 
 function updateNavigationButton() {
-  var nav = document.querySelector('.navigation');
+  // The revised «Стандартный» question nav row IS the scene footer
+  // (buildQuestionNavHtml → `.tb-scene__foot`); `.navigation` is only the legacy
+  // fallback chrome. Without this the post-commit «Отправить ответ»/«Принять» →
+  // «Далее» swap silently no-oped and the learner was stuck with no forward button.
+  var nav = document.querySelector('.tb-scene__foot') || document.querySelector('.navigation');
   if (!nav) return;
 
   var total = state.flatQuestions.length;
