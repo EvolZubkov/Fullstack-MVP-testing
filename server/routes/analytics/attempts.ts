@@ -9,6 +9,7 @@ import { loadTestScoringContext } from "../../services/effective-scoring";
 import { loadScoringConfig } from "../../services/scoring-config";
 import { computeAttemptResult, type AttemptResultBase } from "../../services/result-compute";
 import { computeAnswerContributions, type Answer, type QuestionType } from "@shared/scales/engine";
+import { stripMarkdown } from "@shared/text";
 
 const router = Router();
 
@@ -229,7 +230,7 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
 
       detailedAnswers.push({
         questionId: qId,
-        questionPrompt: question.prompt,
+        questionPrompt: stripMarkdown(question.prompt),
         questionType: question.type,
         topicId: question.topicId,
         topicName: topicMap.get(question.topicId) || "Unknown",

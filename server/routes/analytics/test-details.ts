@@ -6,6 +6,7 @@ import { requireTestScope } from "../../middleware/test-scope";
 import { checkAnswer } from "../../utils/check-answer";
 import { loadTestScoringContext } from "../../services/effective-scoring";
 import type { AttemptResult } from "@shared/schema";
+import { stripMarkdown } from "@shared/text";
 
 const router = Router();
 
@@ -169,7 +170,7 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
 
         const existing = questionStatsMap.get(qId) || {
           questionId: qId,
-          questionPrompt: question.prompt,
+          questionPrompt: stripMarkdown(question.prompt),
           questionType: question.type,
           topicId: question.topicId,
           topicName: topicMap.get(question.topicId) || "Unknown",

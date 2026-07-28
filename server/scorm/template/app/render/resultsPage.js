@@ -335,7 +335,7 @@ function finishScormAdaptive(results, passedForLms, resultComputation, scaleComp
             result: isCorrect ? 'correct' : 'incorrect',
             response: answer !== undefined && answer !== null ? JSON.stringify(answer) : '',
             correct: '',
-            description: question.prompt || ''
+            description: authorTextPlain(question.prompt)
           });
         });
       });
@@ -756,7 +756,7 @@ function finishScorm(results, passedForLms, resultComputation, scaleComputation)
       result: fullCorrect ? 'correct' : 'incorrect',
       response: formatResponse(q, ans),
       correct: formatResponse(q, getCorrectAnswerFor(q)),
-      description: q.prompt || ''
+      description: authorTextPlain(q.prompt)
     });
   });
 
@@ -875,7 +875,7 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
       result: fullCorrect ? 'correct' : 'incorrect',
       response: formatResponse(q, ans),
       correct: formatResponse(q, getCorrectAnswerFor(q)),
-      description: q.prompt || ''
+      description: authorTextPlain(q.prompt)
     });
   });
 
