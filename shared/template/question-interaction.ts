@@ -347,8 +347,27 @@ export function renderMatching(
     `<span class="ou-match__card-text"><span class="ou-match__card-title" ` +
     `style="font-size:var(--tb-answer-fs,1.125rem)">${esc(left[li])}</span></span></div>`;
 
+  // Adaptive column ratio. The LEFT column shows the prompts (`right` items), the
+  // RIGHT column the answer chips (`left` items). When one side's LONGEST text
+  // noticeably exceeds the other's, give that side more room (≈66/33) instead of an
+  // even 50/50. «Noticeable» = at least half again as long (1.5×) AND at least 25
+  // characters longer, so a handful of extra characters never shifts the layout.
+  const maxLen = (arr: unknown[]): number =>
+    arr.reduce((m: number, s) => Math.max(m, String(s ?? "").length), 0);
+  const leftTextLen = maxLen(right);
+  const rightTextLen = maxLen(left);
+  const longer = Math.max(leftTextLen, rightTextLen);
+  const shorter = Math.min(leftTextLen, rightTextLen);
+  const skew = longer >= shorter * 1.5 && longer - shorter >= 25;
+  const gapCol = "var(--ou-match-gap-w)";
+  const columns = !skew
+    ? `minmax(0, 1fr) ${gapCol} minmax(0, 1fr)`
+    : leftTextLen > rightTextLen
+      ? `minmax(0, 2fr) ${gapCol} minmax(0, 1fr)`
+      : `minmax(0, 1fr) ${gapCol} minmax(0, 2fr)`;
+
   let poolSlot = 0;
-  let html = '<div class="ou-match ou-match--gap-wide ou-match--side-r ou-match--icon-dots">';
+  let html = `<div class="ou-match ou-match--gap-wide ou-match--side-r ou-match--icon-dots" style="grid-template-columns:${columns}">`;
   for (const ri of rightMapping) {
     const matchedLeft = rightToLeft[ri];
     const isJoined = matchedLeft !== undefined;

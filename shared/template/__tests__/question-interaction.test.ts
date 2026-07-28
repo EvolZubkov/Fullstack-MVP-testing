@@ -139,4 +139,16 @@ describe("renderMatching", () => {
     // the joined row's drop zone is the right id, not a pool slot
     expect(html).toContain('data-drop="r0"');
   });
+
+  it("adapts the column ratio to the longer side (66/33), else keeps 50/50", () => {
+    const long = "x".repeat(80);
+    // LEFT column = prompts (`right`); RIGHT column = answers (`left`).
+    const leftHeavy = { type: "matching", dataJson: { left: ["a", "b"], right: [long, "y"] } };
+    expect(renderMatching(leftHeavy, {}, undefined)).toContain("minmax(0, 2fr) var(--ou-match-gap-w) minmax(0, 1fr)");
+    const rightHeavy = { type: "matching", dataJson: { left: [long, "b"], right: ["x", "y"] } };
+    expect(renderMatching(rightHeavy, {}, undefined)).toContain("minmax(0, 1fr) var(--ou-match-gap-w) minmax(0, 2fr)");
+    // similar lengths → balanced (a few extra chars must NOT skew it)
+    const even = { type: "matching", dataJson: { left: ["abcde", "fg"], right: ["abcdefg", "hi"] } };
+    expect(renderMatching(even, {}, undefined)).toContain("minmax(0, 1fr) var(--ou-match-gap-w) minmax(0, 1fr)");
+  });
 });
