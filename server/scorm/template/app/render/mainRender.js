@@ -590,8 +590,10 @@ function renderStandardQuestion(qData, current, total, progress) {
         TB.renderScreenInto(app, { layout: layout, context: context, slots: slots });
 
         // PRD-19 Block C: wire pill clicks → goToQuestionIndex (frontier enforced
-        // by the `disabled` attribute the builder set on non-reachable pills).
-        var pills = app.querySelectorAll('.tb-pill[data-action]');
+        // by the `disabled` attribute the builder set on non-reachable pills). The map
+        // pills are `.ou-quiz__dot` (revision «Стандартный»); the old `.tb-pill`
+        // selector matched nothing, so the navigator was dead on the question screen.
+        var pills = app.querySelectorAll('.ou-quiz__dot[data-action]');
         Array.prototype.forEach.call(pills, function (btn) {
             btn.addEventListener('click', function () {
                 if (btn.disabled) return;

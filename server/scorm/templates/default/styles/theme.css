@@ -132,6 +132,10 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
    ship 1:1 — mapped here so the shared context drives the DS component. */
 .ou-quiz__dot.is-skipped { color: var(--ou-warning-on-soft); background: var(--ou-warning-soft); border-color: var(--ou-warning-default); }
 .ou-quiz__dot.is-unanswered { background: transparent; }
+/* Not-yet-issued / read-only (strict mode) pills are `disabled` — they are not jump
+   targets, so drop the DS pointer cursor (the base .ou-quiz__dot sets `cursor:pointer`
+   on every dot, disabled or not). */
+.ou-quiz__dot:disabled { cursor: default; }
 
 /* The header is a size CONTAINER so the question map adapts to the SCENE width — not
    the viewport. This works identically in the SCORM iframe and the web Shadow DOM,
