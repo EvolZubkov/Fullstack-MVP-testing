@@ -53,7 +53,9 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   display: flex;
   flex-direction: column;
   gap: var(--ou-space-3);
-  padding: var(--ou-space-4) 24px 0;
+  /* Bottom padding keeps the header content off the progress bar (which is pinned
+     to the bottom edge) so the two don't read as stuck together. */
+  padding: var(--ou-space-4) 24px var(--ou-space-3);
   background: var(--ou-bg-elevated);
   border-bottom: 1px solid var(--ou-border-soft);
 }
