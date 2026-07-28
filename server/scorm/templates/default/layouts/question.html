@@ -28,7 +28,8 @@
         <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
         <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
       </div>
-      <span class="tb-scene__mapcount">отвечено <strong>{{state.questionsProgress.answeredCount}}</strong> из {{state.questionsProgress.total}} · пропущено {{state.questionsProgress.skippedCount}}</span>
+      <span class="tb-scene__mapcount tb-scene__mapcount--answered">отвечено <strong>{{state.questionsProgress.answeredCount}}</strong> из {{state.questionsProgress.total}}</span>
+      <span class="tb-scene__mapcount tb-scene__mapcount--skipped">пропущено {{state.questionsProgress.skippedCount}}</span>
     </div>
     {{/if}}
     <div class="tb-scene__progress"><div class="tb-scene__progress-fill" id="q-progress-fill"></div></div>
