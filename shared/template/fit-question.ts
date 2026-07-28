@@ -11,13 +11,13 @@
  * below, and long option lists scrolled. This pass measures the real layout and:
  *
  *  1. gives the header (meta + title + hint) the LARGEST prompt font that keeps it within
- *     `headerFraction` of the field (default 1/4) — so the prompt is never shrunk merely
- *     because the text is long, only when it would exceed its quarter;
+ *     `headerFraction` of the field (default 1/3) — so the prompt is never shrunk merely
+ *     because the text is long, only when it would exceed its third;
  *  2. gives the options the LARGEST answer font that still fits them all without
  *     scrolling the field;
- *  3. as a last resort, if the options still overflow at their floor, lets the prompt
- *     yield space below its quarter (down to its floor) so everything fits — the balance
- *     point between the two areas.
+ *  3. as a last resort, if the options still overflow, lets the prompt yield space —
+ *     but only from its third DOWN TO `headerFractionMin` (default 1/4), never below —
+ *     so everything fits: the balance point between the two areas.
  *
  * DOM-based but framework-free: the SCORM runtime calls it after rendering a question,
  * the web host from a layout effect on the shadow-mounted scene. Both write the two
@@ -32,8 +32,10 @@ export interface FitQuestionOptions {
   /** Option font range (px). Default 22 / 14. */
   answerMax?: number;
   answerMin?: number;
-  /** Share of the field height the header may occupy. Default 0.25 (a quarter). */
+  /** Max share of the field height the header may occupy. Default 1/3. */
   headerFraction?: number;
+  /** Floor the header may shrink to when yielding space to the options. Default 1/4. */
+  headerFractionMin?: number;
 }
 
 /** True when `field` scrolls its content (overflows its visible box). */
@@ -64,7 +66,8 @@ export function fitQuestionScene(
   const qMin = options?.questionMin ?? 18;
   const aMax = options?.answerMax ?? 22;
   const aMin = options?.answerMin ?? 14;
-  const frac = options?.headerFraction ?? 0.25;
+  const fracMax = options?.headerFraction ?? 1 / 3;
+  const fracMin = options?.headerFractionMin ?? 1 / 4;
 
   const fieldH = field.clientHeight;
   if (!(fieldH > 0)) return;
@@ -73,11 +76,11 @@ export function fitQuestionScene(
   const setQ = (px: number) => col.style.setProperty("--tb-question-fs", `${px}px`);
   const setA = (px: number) => col.style.setProperty("--tb-answer-fs", `${px}px`);
 
-  // Phase 1 — prompt: largest font that keeps the header within its quarter.
+  // Phase 1 — prompt: largest font that keeps the header within its third (max share).
   let q = qMax;
   setQ(q);
   let guard = 0;
-  while (q > qMin && headerH() > fieldH * frac && guard++ < 128) setQ(--q);
+  while (q > qMin && headerH() > fieldH * fracMax && guard++ < 128) setQ(--q);
 
   // Phase 2 — options: largest answer font that fits them all without scrolling.
   let a = aMax;
@@ -85,8 +88,9 @@ export function fitQuestionScene(
   guard = 0;
   while (a > aMin && overflows(field) && guard++ < 128) setA(--a);
 
-  // Phase 3 — balance: if the options still overflow at their floor, let the prompt give
-  // up space below its quarter (down to its floor) until the field no longer scrolls.
+  // Phase 3 — balance: if the options still overflow, let the prompt give up space, but
+  // only from its third DOWN TO the min share (a quarter), never below — stop as soon as
+  // the field fits or the header reaches that floor.
   guard = 0;
-  while (q > qMin && overflows(field) && guard++ < 128) setQ(--q);
+  while (q > qMin && overflows(field) && headerH() > fieldH * fracMin && guard++ < 128) setQ(--q);
 }
