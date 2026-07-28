@@ -80,6 +80,25 @@ node_modules/.bin/drizzle-kit generate --custom --name=<краткое_имя>
 Скрипт идемпотентен: если в `drizzle.__drizzle_migrations` уже есть запись,
 вставка пропускается.
 
+### Если журнал отстал больше чем на бейзлайн
+
+`baseline-existing-db.sql` помечает применённой ТОЛЬКО `0000`. База из эпохи `push`
+могла получить и более поздние миграции (их DDL накатывал сам `push`), и тогда
+после бейзлайна `migrate` упрётся в следующую по счёту миграцию с ошибкой вида
+`column ... already exists`.
+
+Признак: `SELECT * FROM drizzle.__drizzle_migrations` пуст или короче журнала,
+а изменения из недостающих миграций в схеме уже есть. Лечение — пометить
+применёнными все миграции, чей DDL фактически в базе. `created_at` берётся из
+`when` соответствующей записи `drizzle/meta/_journal.json`, `hash` — sha256
+содержимого файла миграции:
+
+```bash
+node -e "const f=require('fs'),c=require('crypto');const p='drizzle/0001_x.sql';console.log(c.createHash('sha256').update(f.readFileSync(p,'utf8')).digest('hex'))"
+```
+
+Так была разово починена dev-БД перед PRD-25 (журнал пуст, схема — по `0001`).
+
 ## Как это применяется в деплое
 
 `docker/scripts/deploy.sh` — один скрипт для всех инстансов (прод и тест) —
