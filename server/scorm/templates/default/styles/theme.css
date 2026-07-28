@@ -575,7 +575,9 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
 /* ── Router hub (router_by_topics) — the topic-card menu ────────────
    Emitted by the shared builder (router-hub.ts) into the content layout's
    page-content slot, on both hosts and in the «Структура» preview. */
-.router-topic-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 24px; }
+/* Same footprint as the results «Результаты по темам» grid (.tb-topics-grid): min
+   column 340px and the DS card spacing, so hub cards read at the same size. */
+.router-topic-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--ou-space-4); margin-top: 24px; }
 .router-progress { margin: 18px 0 4px; }
 .router-progress__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
 .router-progress__label { font-size: 13px; font-weight: 600; color: var(--ou-fg-muted); }
@@ -583,8 +585,9 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
 .router-progress__bar { height: 6px; border-radius: 999px; background: var(--ou-bg-surface-3); overflow: hidden; }
 .router-progress__fill { height: 100%; border-radius: 999px; background: var(--ou-accent-default); transition: width 0.25s ease; }
 .router-topic-card {
-  display: flex; flex-direction: column; gap: 6px; padding: 14px 16px;
-  border: 1px solid var(--ou-border-default); border-radius: 10px; background: var(--ou-bg-elevated);
+  display: flex; flex-direction: column; gap: var(--ou-space-2); padding: var(--ou-space-5);
+  border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-l); background: var(--ou-bg-elevated);
+  box-shadow: var(--ou-shadow-sm);
   cursor: pointer; text-align: left; font: inherit; color: var(--ou-fg-default);
   transition: border-color 0.15s, background 0.15s;
 }
@@ -598,7 +601,7 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
 .router-topic-card--failed { border-color: var(--ou-error-default); background: var(--ou-error-soft); }
 .router-topic-card--inProgress { border-color: var(--ou-warning-default); background: var(--ou-warning-soft); }
 .router-topic-card--locked { opacity: 0.5; cursor: not-allowed; }
-.router-topic-card__name { font-weight: 600; font-size: 15px; }
+.router-topic-card__name { font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
 .router-topic-card__status { font-size: 12px; color: var(--ou-fg-muted); }
 .router-topic-card--completed .router-topic-card__status { color: var(--ou-fg-default); font-weight: 500; }
 .router-topic-card--passed .router-topic-card__status { color: var(--ou-success-default); font-weight: 500; }
