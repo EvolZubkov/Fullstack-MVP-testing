@@ -310,18 +310,8 @@ function renderReviewScreen() {
     // Mount directly into #app so .tb-pad > .review-page fills the fixed stage
     // and the bottom nav anchors — mirrors renderGalleryPage (no wrapper div).
     TB.renderScreenInto(app, { layout: layout, context: context });
-    // Reveal + paint the DS timers the shared header ships hidden (same as the
-    // question screen) — the обзор is mid-test, so a running countdown shows.
-    var rvTimer = app.querySelector('#timer-display');
-    if (rvTimer && state.remainingSeconds !== null) {
-        rvTimer.classList.remove('q-timer--hidden');
-        paintTimer('timer-display', state.remainingSeconds);
-    }
-    var rvSecTimer = app.querySelector('#section-timer-display');
-    if (rvSecTimer && state.sectionTimer) {
-        rvSecTimer.classList.remove('q-timer--hidden');
-        paintTimer('section-timer-display', state.sectionTimer.remainingSeconds);
-    }
+    // Reveal + paint the running countdowns (the обзор is mid-test).
+    if (typeof revealSceneTimers === 'function') revealSceneTimers(app);
     var actionEls = app.querySelectorAll('[data-action]');
     Array.prototype.forEach.call(actionEls, function (el) {
         var a = el.getAttribute('data-action') || '';
@@ -449,6 +439,8 @@ function renderSectionResults(topicId, isLast) {
     // Mount directly into #app so .tb-pad > .tb-scene fills the fixed stage
     // (section-results ring centered) — mirrors renderGalleryPage (no wrapper div).
     TB.renderScreenInto(app, { layout: layout, context: context });
+    // Section-results is mid-test — reveal + paint the running countdowns.
+    if (typeof revealSceneTimers === 'function') revealSceneTimers(app);
     var btn = app.querySelector('[data-action="section-continue"]');
     if (btn) btn.addEventListener('click', advance);
 }
@@ -625,16 +617,7 @@ function renderStandardQuestion(qData, current, total, progress) {
         // Timers — the layout ships both DS timers hidden; reveal + paint whichever
         // countdown is running (presence thus follows the test/section time-limit
         // settings). paintTimer drives the DS __num + is-critical state.
-        var timerEl = app.querySelector('#timer-display');
-        if (timerEl && state.remainingSeconds !== null) {
-            timerEl.classList.remove('q-timer--hidden');
-            paintTimer('timer-display', state.remainingSeconds);
-        }
-        var secTimerEl = app.querySelector('#section-timer-display');
-        if (secTimerEl && state.sectionTimer) {
-            secTimerEl.classList.remove('q-timer--hidden');
-            paintTimer('section-timer-display', state.sectionTimer.remainingSeconds);
-        }
+        if (typeof revealSceneTimers === 'function') revealSceneTimers(app);
 
         // Nav row below the card (kept onclick-wired; no global delegator needed).
         var navWrap = document.createElement('div');

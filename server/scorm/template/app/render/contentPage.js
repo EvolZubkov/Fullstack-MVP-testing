@@ -242,6 +242,9 @@ function renderSectionIntro(page) {
   // same trust model as info-page bodies / the question-interaction slot).
   if (typeof applySystemScreenStyles === "function") applySystemScreenStyles("section-intro");
   TB.renderScreenInto(app, { layout: layout, context: context, slots: { instruction: instruction } });
+  // Section-intro is inside the timed flow (and inside a section) — reveal + paint
+  // the running test/section countdowns.
+  if (typeof revealSceneTimers === 'function') revealSceneTimers(app);
   var btn = app.querySelector('[data-action="section-intro-continue"]');
   if (btn) btn.addEventListener("click", function () {
     if (typeof advancePageSequence === "function") advancePageSequence();
@@ -407,6 +410,9 @@ function renderContentPage(page, contentTemplates) {
       if (typeof navigateBackOrPrevPage === "function") navigateBackOrPrevPage();
     };
     applyPageBackground(app, page);
+    // Content pages + the router hub are inside the timed flow — reveal + paint the
+    // running countdowns (no-op when no limit runs / the layout has no timer markup).
+    if (typeof revealSceneTimers === 'function') revealSceneTimers(app);
   } else {
     app.innerHTML = skeleton;
     host = app;

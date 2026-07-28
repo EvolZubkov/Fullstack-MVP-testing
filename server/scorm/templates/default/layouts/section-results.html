@@ -7,6 +7,14 @@
         {{#if course.subtitle}}<span class="tb-scene__subtitle" data-path="course.subtitle"></span>{{/if}}
       </div>
       {{#if sectionResult.sectionLabel}}<div class="tb-scene__headtag"><span class="ou-tag ou-tag--neutral" data-path="sectionResult.sectionLabel"></span></div>{{/if}}
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
     </div>
     {{#if sectionResult.sectionLabel}}<div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width:{{sectionResult.progressPercent}}%"></div></div>{{/if}}
   </header>

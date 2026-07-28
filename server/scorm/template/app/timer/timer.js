@@ -155,6 +155,30 @@ function paintTimer(elementId, seconds) {
   if (critical) el.classList.add('q-timer--urgent'); else el.classList.remove('q-timer--urgent');
 }
 
+/**
+ * Reveal + paint the scene timers (test + section) that every flow layout ships
+ * HIDDEN (`q-timer--hidden`). Call after a flow screen mounts so the running
+ * countdowns are visible on EVERY screen of the timed flow — content pages, the
+ * router hub, section intro/results, questions and the review — not just the
+ * question screen. Presence follows the settings: the test timer shows only when a
+ * test limit runs (`state.remainingSeconds` set); the section timer only while a
+ * section countdown is active (`state.sectionTimer`). A screen without the timer
+ * markup is a safe no-op (paintTimer / querySelector just find nothing).
+ */
+function revealSceneTimers(root) {
+  var scope = root || document;
+  var t = scope.querySelector('#timer-display');
+  if (t && state.remainingSeconds !== null && state.remainingSeconds !== undefined) {
+    t.classList.remove('q-timer--hidden');
+    paintTimer('timer-display', state.remainingSeconds);
+  }
+  var s = scope.querySelector('#section-timer-display');
+  if (s && state.sectionTimer) {
+    s.classList.remove('q-timer--hidden');
+    paintTimer('section-timer-display', state.sectionTimer.remainingSeconds);
+  }
+}
+
 // --- Test-wide timer -------------------------------------------------------
 
 /**
