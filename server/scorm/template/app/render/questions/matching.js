@@ -9,9 +9,9 @@
  *
  * Depends on globals: state, window.TBTemplate.
  */
-function renderMatchingQuestionInput(q, answer, locked, correct, shuffleMapping) {
+function renderMatchingQuestionInput(q, answer, showReview, correct, shuffleMapping) {
   var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
   if (!TB || !TB.renderMatching) return '';
   var pool = (state.matchingPools && Array.isArray(state.matchingPools[q.id])) ? state.matchingPools[q.id] : [];
-  return TB.renderMatching({ type: 'matching', dataJson: q.data }, answer, shuffleMapping, pool, locked ? correct : undefined);
+  return TB.renderMatching({ type: 'matching', dataJson: q.data }, answer, shuffleMapping, pool, showReview ? correct : undefined);
 }

@@ -10,8 +10,8 @@
  *
  * Depends on globals: window.TBTemplate.
  */
-function renderRankingQuestionInput(q, answer, locked, correct, shuffleMapping) {
+function renderRankingQuestionInput(q, answer, showReview, correct, shuffleMapping) {
   var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
   if (!TB || !TB.renderRanking) return '';
-  return TB.renderRanking({ type: 'ranking', dataJson: q.data }, answer, shuffleMapping, locked ? correct : undefined);
+  return TB.renderRanking({ type: 'ranking', dataJson: q.data }, answer, shuffleMapping, showReview ? correct : undefined);
 }
