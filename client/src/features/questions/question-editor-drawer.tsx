@@ -46,6 +46,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { t } from "@/lib/i18n";
+import { handleMarkdownPaste } from "./paste-markdown";
 import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
 import { useContentGuard } from "@/features/content-protection/use-content-guard";
 import type { Question, Topic } from "@shared/schema";
@@ -497,11 +498,15 @@ export function QuestionEditorDrawer({
           <Textarea
             label={t.questions.questionText}
             placeholder={t.questions.questionTextPlaceholder}
+            hint={t.questions.markdownHint}
             rows={2}
             fullWidth
             error={form.formState.errors.prompt?.message}
             data-testid="input-question-prompt"
             {...form.register("prompt")}
+            onPaste={(e) =>
+              handleMarkdownPaste(e, (v) => form.setValue("prompt", v, { shouldDirty: true }))
+            }
           />
 
           {selectedType === "single" && (
@@ -775,6 +780,7 @@ function SingleChoiceBuilder({
                 <Input
                   value={opt}
                   onChange={(e) => updateOption(i, e.target.value)}
+                  onPaste={(e) => handleMarkdownPaste(e, (v) => updateOption(i, v))}
                   placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
                   fullWidth
                   data-testid={`input-option-${i}`}
@@ -860,6 +866,7 @@ function MultipleChoiceBuilder({
                 <Input
                   value={opt}
                   onChange={(e) => updateOption(i, e.target.value)}
+                  onPaste={(e) => handleMarkdownPaste(e, (v) => updateOption(i, v))}
                   placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
                   fullWidth
                   data-testid={`input-multi-option-${i}`}
@@ -932,6 +939,7 @@ function MatchingBuilder({
                 <Input
                   value={item}
                   onChange={(e) => updateLeft(i, e.target.value)}
+                  onPaste={(e) => handleMarkdownPaste(e, (v) => updateLeft(i, v))}
                   placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
                   fullWidth
                   data-testid={`input-matching-left-${i}`}
@@ -949,6 +957,7 @@ function MatchingBuilder({
                 <Input
                   value={item}
                   onChange={(e) => updateRight(i, e.target.value)}
+                  onPaste={(e) => handleMarkdownPaste(e, (v) => updateRight(i, v))}
                   placeholder={`${t.questions.optionPlaceholder} ${String.fromCharCode(65 + i)}`}
                   fullWidth
                   data-testid={`input-matching-right-${i}`}
@@ -1007,6 +1016,7 @@ function RankingBuilder({
                 <Input
                   value={item}
                   onChange={(e) => updateItem(i, e.target.value)}
+                  onPaste={(e) => handleMarkdownPaste(e, (v) => updateItem(i, v))}
                   placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
                   fullWidth
                   data-testid={`input-ranking-${i}`}
