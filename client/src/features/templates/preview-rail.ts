@@ -79,7 +79,10 @@ const TYPE_LABELS: Record<string, string> = {
  */
 function classify(route: string): { section: string; typeKey: string } {
   // ── System (Core-generated) screens ──────────────────────────────────────
-  if (route === "start") return { section: "system", typeKey: "start" };
+  // The start screen and ITS layout variants (start.image-right, …) collapse under
+  // ONE «Старт» type node, so same-type variants read hierarchically (like questions
+  // and learning pages) rather than as flat siblings.
+  if (route === "start" || route.startsWith("start.")) return { section: "system", typeKey: "start" };
   // A question TYPE (single/multiple/matching/ranking) is not a template variant;
   // the four routes collapse under ONE «Вопрос» type node.
   if (route === "question" || route.startsWith("question.")) {
@@ -125,8 +128,9 @@ function screenLabel(spec: ScreenSpec): string {
  */
 // Types whose variants group UNDER the type node (each variant is a demonstration
 // leaf), so «варианты одного типа» read as one collapsible group instead of many
-// top-level entries: question kinds, learning pages and galleries.
-const TYPE_GROUPED = new Set(["question", "content", "gallery"]);
+// top-level entries: the start screen's layout variants, question kinds, learning
+// pages and galleries.
+const TYPE_GROUPED = new Set(["start", "question", "content", "gallery"]);
 
 function groupOf(spec: ScreenSpec, typeKey: string): { key: string; label: string; fromManifest: boolean } {
   if (TYPE_GROUPED.has(typeKey)) {

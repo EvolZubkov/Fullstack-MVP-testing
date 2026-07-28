@@ -1066,12 +1066,12 @@
     "routes": [
       {
         "route": "start",
-        "label": "Старт"
+        "label": "Стандартный"
       },
       {
         "route": "start.image-right",
         "templateKey": "start.image-right",
-        "label": "Старт: изображение справа"
+        "label": "Изображение справа"
       },
       {
         "route": "content.intro",

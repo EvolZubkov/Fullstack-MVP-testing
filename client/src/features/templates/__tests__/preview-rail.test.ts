@@ -66,6 +66,20 @@ describe("classify — route → (section, group) grouping", () => {
     expect(group.fromManifest).toBe(false);
   });
 
+  it("start layout variants collapse under ONE «Старт» type node (hierarchical, not flat)", () => {
+    const rail = buildRail([
+      spec("start", "s1", "Стандартный"),
+      spec("start.image-right", "s2", "Изображение справа"),
+    ]);
+    expect(rail).toHaveLength(1);
+    expect(rail[0].key).toBe("system");
+    expect(rail[0].variants).toHaveLength(1); // ONE «Старт» group, not two siblings
+    const group = rail[0].variants[0];
+    expect(group.key).toBe("start");
+    expect(group.label).toBe("Старт");
+    expect(group.screens.map((s) => s.label)).toEqual(["Стандартный", "Изображение справа"]);
+  });
+
   it("PRD-19 section nodes are labelled in Russian, under the system section", () => {
     const review = single("review", "review", "Обзор раздела");
     expect(review.section.key).toBe("system");
