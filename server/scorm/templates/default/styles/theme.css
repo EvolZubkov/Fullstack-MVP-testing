@@ -147,7 +147,9 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-scene__map { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--ou-space-2) var(--ou-space-4); padding-bottom: var(--ou-space-4); }
 .tb-scene__map .ou-quiz__dots { flex: 0 0 auto; }
 .tb-scene__map .ou-quiz__legend { margin-top: 0; align-items: center; order: 1; }
-.tb-scene__mapcount { flex: none; font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+/* Right-aligned so that when a counter wraps to its own full-width row it stacks
+   UNDER «отвечено» (which is pushed right), not off at the left edge. */
+.tb-scene__mapcount { flex: none; text-align: right; font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
 .tb-scene__mapcount strong { color: var(--ou-fg-default); font-weight: 600; }
 .tb-scene__mapcount--answered { margin-left: auto; order: 2; }
 .tb-scene__mapcount--skipped { order: 3; }
