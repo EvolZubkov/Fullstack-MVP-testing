@@ -72,6 +72,12 @@ export interface PageContext {
   canGoBack: boolean;
   /** Caption of the layout's forward button (the `nextLabel` setting, PRD-22 FR-26). */
   nextLabel: string;
+  /**
+   * Forward button rendered inert. The router hub uses it: «Завершить» lives in the
+   * standard footer but stays disabled until every required section is completed.
+   * Absent/false ⇒ a live button, which is every ordinary content page.
+   */
+  nextDisabled?: boolean;
 }
 
 /** The declared setting key that carries the sequence identifier. */
@@ -213,12 +219,13 @@ export function buildSequencePlacements(
  */
 export function buildPageContext(
   placement: SequencePlacement | null | undefined,
-  options?: { canGoBack?: boolean; nextLabel?: string },
+  options?: { canGoBack?: boolean; nextLabel?: string; nextDisabled?: boolean },
 ): PageContext {
   const canGoBack = options?.canGoBack === true;
   const nextLabel = options?.nextLabel?.trim() || DEFAULT_NEXT_LABEL;
+  const nextDisabled = options?.nextDisabled === true;
   if (!placement)
-    return { dots: [], dotIndex: 0, dotsTotal: 0, pageLabel: "", progressPercent: 0, canGoBack, nextLabel };
+    return { dots: [], dotIndex: 0, dotsTotal: 0, pageLabel: "", progressPercent: 0, canGoBack, nextLabel, nextDisabled };
 
   const dots: SequenceDot[] = [];
   for (let i = 1; i <= placement.total; i++) {
@@ -226,7 +233,7 @@ export function buildPageContext(
   }
   const pageLabel = placement.total > 0 ? "Страница " + placement.index + " из " + placement.total : "";
   const progressPercent = placement.total > 0 ? Math.round((placement.index / placement.total) * 100) : 0;
-  return { dots, dotIndex: placement.index, dotsTotal: placement.total, pageLabel, progressPercent, canGoBack, nextLabel };
+  return { dots, dotIndex: placement.index, dotsTotal: placement.total, pageLabel, progressPercent, canGoBack, nextLabel, nextDisabled };
 }
 
 /**
@@ -238,7 +245,7 @@ export function buildPageContext(
 export function buildPageContextFor(
   pageId: string,
   pages: SequenceContentPage[] | null | undefined,
-  options?: { canGoBack?: boolean; nextLabel?: string },
+  options?: { canGoBack?: boolean; nextLabel?: string; nextDisabled?: boolean },
 ): PageContext {
   const page = (pages ?? []).find((p) => p.id === pageId);
   return buildPageContext(buildSequencePlacements(pages).get(pageId), {

@@ -109,11 +109,13 @@ describe("router-hub — markup", () => {
     expect(html).toContain("(необязательная)");
   });
 
-  it("shows «Завершить» disabled until the policy is met, then actionable", () => {
-    expect(buildRouterHubHtml(SECTIONS, base())).toContain("router-finish--disabled");
+  it("does not emit its own «Завершить» — it lives in the standard footer", () => {
+    // The finish action is the layout's footer nav button (gated by page.nextDisabled),
+    // not part of the hub body. The body must never carry a duplicate button.
+    expect(buildRouterHubHtml(SECTIONS, base())).not.toContain("router-finish");
     const ready = buildRouterHubHtml(SECTIONS, base({ topicStates: { t1: "completed", t2: "completed" } }));
-    expect(ready).toContain('data-action="router-finish"');
-    expect(ready).not.toContain("router-finish--disabled");
+    expect(ready).not.toContain("router-finish");
+    expect(ready).not.toContain(">Завершить<");
   });
 
   it("renders the deadline block only when a deadline exists", () => {

@@ -17,6 +17,6 @@
   <footer class="tb-scene__foot">
     {{#if page.canGoBack}}<button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-nav="prev">Назад</button>{{/if}}
     <div class="tb-scene__foot-spacer"></div>
-    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-nav="next">{{page.nextLabel}}</button>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-nav="next"{{#if page.nextDisabled}} disabled aria-disabled="true"{{/if}}>{{page.nextLabel}}</button>
   </footer>
 </div>

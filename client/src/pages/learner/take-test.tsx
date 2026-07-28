@@ -21,6 +21,7 @@ import { buildPageSequence, contentPagesFor, type FlowContentPage } from "@share
 import { shouldShowReview } from "@shared/flow/review-gate";
 import {
   buildRouterHubHtml,
+  isRouterReadyToFinish,
   type RouterTopicStatus,
 } from "@shared/flow/router-hub";
 import type { RenderableContentPage } from "@shared/template/content-page";
@@ -2110,33 +2111,30 @@ export default function TakeTestPage() {
   // wrapper with the SHARED hub markup in its page-content slot — the same cards,
   // classes and open/locked rules the SCORM package renders.
   if (showHub && contentTpl && hubPage) {
+    const hubHubState = {
+      topicStates: routerTopicStates,
+      sectionResults: {},
+      unlockRules: {},
+      completionPolicy: null,
+    };
+    const hubReady = isRouterReadyToFinish(hubSections, hubHubState);
     return (
       <TemplateContentScreen
         page={hubPage}
         template={contentTpl}
         courseTitle={testInfo?.title || attempt?.testTitle || ""}
-        subtitle={
-          testMetadata
-            ? buildCourseSubtitle({
-                attemptNumber: testMetadata.completedAttempts + 1,
-                maxAttempts: testMetadata.maxAttempts,
-              })
-            : undefined
-        }
-        bodyHtml={buildRouterHubHtml(hubSections, {
-          topicStates: routerTopicStates,
-          sectionResults: {},
-          unlockRules: {},
-          completionPolicy: null,
-        })}
+        // The hub is the section menu, not an in-attempt screen — no «Попытка N».
+        bodyHtml={buildRouterHubHtml(hubSections, hubHubState)}
         onBodyAction={(action) => {
           if (action.startsWith("router-select:")) {
             selectRouterTopic(action.slice("router-select:".length));
-            return;
           }
-          if (action === "router-finish") finishFromHub();
         }}
-        onNext={() => {}}
+        // «Завершить» is the standard footer nav button, inert until every required
+        // section is done; the click routes to finishFromHub via onNext.
+        nextLabel="Завершить"
+        nextDisabled={!hubReady}
+        onNext={finishFromHub}
       />
     );
   }

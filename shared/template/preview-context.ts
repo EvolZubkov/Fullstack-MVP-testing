@@ -861,7 +861,8 @@ export function buildContentPageScreen(inp: ContentPageScreenInput): ScreenSpec 
   // Router pages append the runtime topic-menu (`.router-topic-cards`) built from
   // the REAL test topics (same markup as buildOne / the SCORM runtime), so the
   // маршрутизатор preview shows the actual menu rather than an empty placeholder.
-  const pageContent = isRouterScreen(inp.route, tpl?.kind)
+  const isRouter = isRouterScreen(inp.route, tpl?.kind);
+  const pageContent = isRouter
     ? skeleton + buildRouterCards(inp.routerTopics ?? [])
     : skeleton;
   const result = inp.result ?? { scorePercent: 0, status: "", passed: false };
@@ -880,7 +881,10 @@ export function buildContentPageScreen(inp: ContentPageScreenInput): ScreenSpec 
         // indicator is shown only when the caller supplies the page's placement.
         page: buildPageContext(inp.sequencePlacement, {
           canGoBack: !!inp.sequencePlacement && inp.sequencePlacement.index > 1,
-          nextLabel: nextLabelOf({ settingsJson: inp.settings ?? null } as SequenceContentPage),
+          // The hub's «Завершить» lives in the standard footer, inert until sections
+          // are completed — the preview shows nothing done, so it renders disabled.
+          nextLabel: isRouter ? "Завершить" : nextLabelOf({ settingsJson: inp.settings ?? null } as SequenceContentPage),
+          nextDisabled: isRouter,
         }),
       },
       slots: { "page-content": pageContent },

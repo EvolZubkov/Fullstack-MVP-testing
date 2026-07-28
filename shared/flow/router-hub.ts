@@ -115,10 +115,12 @@ export function statusLabel(status: RouterTopicStatus): string {
 
 /**
  * Builds the hub body: optional deadline stats, the required-sections progress
- * bar, the section cards, and the «Завершить» action.
+ * bar, and the section cards.
  *
- * Actions are emitted as `data-action` so either host can bind them by delegation:
- * `router-select:<topicId>` and `router-finish`.
+ * Card actions are emitted as `data-action="router-select:<topicId>"` so either
+ * host binds them by delegation. «Завершить» is NOT part of this body: it lives in
+ * the layout's standard footer (nav slot), gated by `page.nextDisabled` until the
+ * completion policy is met — see {@link isRouterReadyToFinish} and the hosts' wiring.
  */
 export function buildRouterHubHtml(
   sections: RouterSection[] | null | undefined,
@@ -216,14 +218,8 @@ export function buildRouterHubHtml(
   html +=
     '<div class="router-topic-cards" role="list" aria-label="Доступные темы">' + cards + "</div>";
 
-  // «Завершить» is always visible but inert until the policy is met — the learner
-  // can see what they are working toward.
-  const ready = isRouterReadyToFinish(list, state);
-  html +=
-    '<button type="button" class="ou-btn ou-btn--primary ou-btn--m router-finish' +
-    (ready ? "" : " router-finish--disabled") + '"' +
-    (ready ? ' data-action="router-finish"' : " disabled") +
-    ">Завершить</button>";
-
+  // «Завершить» is NOT emitted here: it lives in the layout's standard footer, in
+  // the usual navigation slot (bottom-right primary), gated by `page.nextDisabled`
+  // until the completion policy is met — see the hosts' hub wiring.
   return html;
 }

@@ -501,9 +501,6 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
    Emitted by the shared builder (router-hub.ts) into the content layout's
    page-content slot, on both hosts and in the «Структура» preview. */
 .router-topic-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 24px; }
-/* The router IS the navigation (topic cards); hide the content shell's «Далее»
-   in the preview, which renders the layout verbatim (the runtime removes it live). */
-.tb-scene:has(.router-topic-cards) .tb-scene__foot { display: none; }
 .router-progress { margin: 18px 0 4px; }
 .router-progress__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
 .router-progress__label { font-size: 13px; font-weight: 600; color: var(--ou-fg-muted); }
@@ -532,7 +529,6 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
 .router-topic-card__chip { font-size: 11px; color: var(--ou-fg-muted); background: var(--ou-bg-surface-3); border-radius: 999px; padding: 2px 8px; }
 .router-topic-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .router-topic-card__go { font-size: 12px; font-weight: 600; color: var(--ou-accent-default); }
-.router-finish { margin-top: 24px; }
 .router-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; }
 .router-stat {
   display: flex; flex-direction: column; gap: 2px;

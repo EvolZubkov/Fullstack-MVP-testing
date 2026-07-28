@@ -73,8 +73,18 @@ export interface TemplateContentScreenProps {
    * suppressed: the hub navigates by card, not by a linear next.
    */
   bodyHtml?: string;
-  /** Actions from `bodyHtml` (e.g. `router-select:<id>`, `router-finish`). */
+  /** Actions from `bodyHtml` (e.g. `router-select:<id>`). */
   onBodyAction?: (action: string) => void;
+  /**
+   * Overrides the footer button caption. The router hub sets «Завершить» — the
+   * finish action lives in the standard footer nav slot, not among the cards.
+   */
+  nextLabel?: string;
+  /**
+   * Renders the footer button inert. The hub keeps «Завершить» disabled until every
+   * required section is completed; a click on it then triggers `onNext`.
+   */
+  nextDisabled?: boolean;
   /**
    * «Назад» on a layout that offers it (section-intro). Omitted ⇒ the affordance
    * is inert, as it was before — never a dead-end, just no reverse.
@@ -103,6 +113,8 @@ export function TemplateContentScreen({
   onNext,
   bodyHtml,
   onBodyAction,
+  nextLabel,
+  nextDisabled,
   onBack,
   allPages,
   className,
@@ -118,9 +130,13 @@ export function TemplateContentScreen({
     const own = built.layoutKey !== "content" ? template.variantLayouts?.[built.layoutKey] : null;
     const chosen = own || template.layout;
     if (!bodyHtml) return chosen;
-    // A hub navigates by card, so the wrapper's linear «Далее» is not just inert —
-    // it must not be there at all, or the learner is offered a button that does
-    // nothing. The SCORM runtime drops the same `.navigation` block.
+    // The hub keeps the STANDARD footer (its primary button is «Завершить»). Only a
+    // legacy `.navigation` fallback wrapper — never part of the standard footer — is
+    // stripped, so a custom layout can't offer a second dead forward button. The
+    // DOMParser round-trip is done ONLY when such a block is actually present: it
+    // would otherwise mangle mustache written inside a tag (e.g. a conditional
+    // `disabled` attribute), which the browser reparses into bogus attributes.
+    if (!chosen.includes("navigation")) return chosen;
     try {
       const doc = new DOMParser().parseFromString(chosen, "text/html");
       doc.querySelectorAll(".navigation").forEach((n) => n.remove());
@@ -135,8 +151,13 @@ export function TemplateContentScreen({
   // hosts cannot count differently. `canGoBack` is host state: the web run knows
   // whether a previous screen exists, the structure does not.
   const pageContext = useMemo(
-    () => buildPageContextFor(String(page.id ?? ""), allPages ?? [], { canGoBack: Boolean(onBack) }),
-    [page.id, allPages, onBack],
+    () =>
+      buildPageContextFor(String(page.id ?? ""), allPages ?? [], {
+        canGoBack: Boolean(onBack),
+        nextLabel,
+        nextDisabled,
+      }),
+    [page.id, allPages, onBack, nextLabel, nextDisabled],
   );
 
   // PRD-22 FR-36: a relative link in author content points at the TEMPLATE's
@@ -182,12 +203,21 @@ export function TemplateContentScreen({
       content={contentWithAssetBase}
       className={className}
       onAction={(action) => {
-        if (bodyHtml && onBodyAction && action !== "nav:next") {
-          onBodyAction(action);
+        if (bodyHtml) {
+          // The hub navigates by card (`router-select:*`), but its footer «Завершить»
+          // is the standard `nav:next` — route that to onNext (finish), the rest to
+          // the card handler. A disabled button never emits nav:next.
+          if (action === "nav:next") {
+            onNext();
+            return;
+          }
+          onBodyAction?.(action);
           return;
         }
-        // A hub navigates by card; the wrapper's linear «Далее» must not skip it.
-        if (bodyHtml) return;
+        if (action === "section-intro-back" || action === "back") {
+          onBack?.();
+          return;
+        }
         if (action === "section-intro-back" || action === "back") {
           onBack?.();
           return;
