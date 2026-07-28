@@ -122,9 +122,12 @@ describe("renderMatching", () => {
     expect(html).toContain("ou-match__card--drag");
     // side-r layout (fixed prompt left, drag answer right)
     expect(html).toContain("ou-match--side-r");
-    // draggable chips carry the left index; open rows are pool drop zones
+    // draggable chips carry the left index; each open row's slot pairs with THIS
+    // row's prompt (data-drop="r<rightIdx>"), so a drop there forms the pair.
     expect(html).toContain('data-drag="0"');
-    expect(html).toContain('data-drop="pool:0"');
+    expect(html).toContain('data-drop="r0"');
+    expect(html).toContain('data-drop="r1"');
+    expect(html).not.toContain('data-drop="pool:');
   });
 
   it("joins a matched pair and marks review", () => {

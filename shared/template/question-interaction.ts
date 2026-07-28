@@ -359,12 +359,16 @@ export function renderMatching(
     if (isJoined) {
       html += dragCard(matchedLeft, `r${ri}`);
     } else {
+      // Each row's answer slot is aligned with THIS row's prompt, so dropping a chip
+      // here pairs it with that prompt (`r${ri}`) — the same zone a joined slot uses.
+      // (A bare `pool:` slot only reordered the pool and never formed a pair, so the
+      // very first match was impossible: no `r` zone existed until a row was joined.)
       const poolLeft = poolSlot < pool.length ? pool[poolSlot] : null;
       if (poolLeft !== null && poolLeft !== undefined) {
-        html += dragCard(poolLeft, `pool:${poolSlot}`);
+        html += dragCard(poolLeft, `r${ri}`);
       } else {
         html +=
-          `<div class="ou-match__card ou-match__card--drag ou-match__card--empty" data-drop="pool:${poolSlot}">` +
+          `<div class="ou-match__card ou-match__card--drag ou-match__card--empty" data-drop="r${ri}">` +
           `<span class="ou-match__placeholder">Перетащите вариант</span></div>`;
       }
       poolSlot++;
