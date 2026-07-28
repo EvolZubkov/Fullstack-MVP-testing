@@ -849,7 +849,9 @@
     if (!el) return;
     if (el.getAttribute("data-tb-ref-pad") === null) el.setAttribute("data-tb-ref-pad", el.style.paddingLeft);
     el.style.position = "relative";
-    el.style.paddingLeft = "40px";
+    // The pair letter sits at left:10px and is ~32px wide, so the content needs to
+    // start past ~44px or the badge touches the text; 52px leaves a clear gutter.
+    el.style.paddingLeft = "52px";
   }
   function applyReference(iframeWin) {
     var doc = iframeWin && iframeWin.document;
