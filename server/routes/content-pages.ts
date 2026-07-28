@@ -20,7 +20,7 @@ import { and, eq } from "drizzle-orm";
 import { storage } from "../storage";
 import { db } from "../db";
 import { templates } from "@shared/schema";
-import { normalizeAuthorText } from "@shared/text";
+import { normalizeAuthorPlain, normalizeAuthorHtml } from "@shared/text";
 import { requireAuth, requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { logger } from "../logger";
@@ -131,7 +131,10 @@ function sanitizeAllStringValuesWithDiagnostics(
       const { value: cleaned, removed } = sanitizeHtmlWithDiagnostics(value, {
         scope: placeholderScope(key),
       });
-      result[key] = cleaned;
+      // An `html`-mode page is markup with no manifest to type its fields, so the
+      // markup-aware pass applies: canonical whitespace and typography for the
+      // text, nothing for the tags, and no markdown anywhere.
+      result[key] = normalizeAuthorHtml(cleaned);
       if (removed.length > 0) diagnostics[key] = removed;
     } else {
       result[key] = value;
@@ -161,12 +164,19 @@ function normalizeValuesForTemplate(
       placeholderStyles[ph.key] = { fontSize: style.fontSize };
     }
 
-    // Plain-text fields are author text and are stored canonically, exactly like
-    // a question prompt. `richText`/`html` are markup and are left to the
-    // sanitiser: reflowing line breaks inside markup could change what it renders.
-    if (ph.type === "text" || ph.type === "textarea") {
-      const value = values[ph.key];
-      if (typeof value === "string") values[ph.key] = normalizeAuthorText(value);
+    // Author text is stored canonically whatever field it sits in. Plain fields
+    // take the plain pass; `richText`/`html` take the markup-aware one, which
+    // applies the same whitespace and typography rules to the TEXT only and never
+    // touches a tag, an attribute, a style block or preformatted content.
+    // Markdown is never interpreted in a markup field — there the author writes
+    // HTML, and `*` is a character.
+    const value = values[ph.key];
+    if (typeof value === "string") {
+      if (ph.type === "text" || ph.type === "textarea") {
+        values[ph.key] = normalizeAuthorPlain(value);
+      } else if (ph.type === "richText" || ph.type === "html") {
+        values[ph.key] = normalizeAuthorHtml(value);
+      }
     }
 
     if (ph.type === "resultField") {

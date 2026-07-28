@@ -2,10 +2,11 @@
  * @module tests/routes.content-pages-text-normalize
  * @description Canonical form for the plain-text fields of a content page.
  *
- * `text` and `textarea` placeholders hold author text, exactly like a question
- * prompt does, and they are stored the same way: LF endings, no edge whitespace,
- * at most one blank line. `richText`/`html` values are markup and stay in the
- * hands of the sanitiser — normalising line breaks there could reflow the markup.
+ * `text` and `textarea` placeholders hold author text and are stored canonically:
+ * LF endings, no edge whitespace, at most one blank line. `richText`/`html` hold
+ * MARKUP and get the same treatment applied to their TEXT only — tags, attributes,
+ * style blocks and preformatted regions are never touched, and markdown is never
+ * interpreted there.
  *
  * Harness mirrors tests/routes.content-pages.test.ts.
  */
@@ -146,7 +147,7 @@ describe("POST /api/tests/:id/content-pages — canonical text fields", () => {
     expect(saved.valuesJson.values.note).toBe("Первая\n\nВторая");
   });
 
-  it("leaves richText markup alone, it is the sanitiser's business", async () => {
+  it("keeps the markup of a richText value exactly as written", async () => {
     await request(makeApp())
       .post("/api/tests/test-1/content-pages")
       .send({
@@ -155,10 +156,101 @@ describe("POST /api/tests/:id/content-pages — canonical text fields", () => {
         type: "intro",
         mode: "template",
         templateKey: "intro.hero",
-        valuesJson: { values: { title: "Заголовок", body: "<p>Первый</p>\n\n\n<p>Второй</p>" } },
+        valuesJson: {
+          values: {
+            title: "Заголовок",
+            body: '<div class="card"><p>Первый</p><img src="a.png" alt="x"></div>',
+          },
+        },
       });
 
     const saved = storageMock.createContentPage.mock.calls[0][0];
-    expect(saved.valuesJson.values.body).toBe("<p>Первый</p>\n\n\n<p>Второй</p>");
+    expect(saved.valuesJson.values.body).toBe(
+      '<div class="card"><p>Первый</p><img src="a.png" alt="x"></div>',
+    );
+  });
+});
+
+describe("POST /api/tests/:id/content-pages — markup fields", () => {
+  it("applies typography to the text of a richText value, leaving the markup intact", async () => {
+    await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({
+        topicId: "topic-1",
+        position: "before_topic",
+        type: "intro",
+        mode: "template",
+        templateKey: "intro.hero",
+        valuesJson: { values: { title: "Заголовок", body: '<p>Слово "важное" - тут</p>' } },
+      });
+
+    const saved = storageMock.createContentPage.mock.calls[0][0];
+    expect(saved.valuesJson.values.body).toBe("<p>Слово «важное» — тут</p>");
+  });
+
+  it("canonicalises the whitespace of a markup value", async () => {
+    await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({
+        topicId: "topic-1",
+        position: "before_topic",
+        type: "intro",
+        mode: "template",
+        templateKey: "intro.hero",
+        valuesJson: { values: { title: "Заголовок", body: "<p>первый</p>\r\n\r\n\r\n<p>второй</p>  " } },
+      });
+
+    const saved = storageMock.createContentPage.mock.calls[0][0];
+    expect(saved.valuesJson.values.body).toBe("<p>первый</p>\n\n<p>второй</p>");
+  });
+
+  it("never interprets markdown in a markup value", async () => {
+    await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({
+        topicId: "topic-1",
+        position: "before_topic",
+        type: "intro",
+        mode: "template",
+        templateKey: "intro.hero",
+        valuesJson: { values: { title: "Заголовок", body: "<p>**звёздочки** и a * b</p>" } },
+      });
+
+    const saved = storageMock.createContentPage.mock.calls[0][0];
+    // «и» is a hanging word — the typography pass still binds it; only markdown is off.
+    expect(saved.valuesJson.values.body).toBe("<p>**звёздочки** и a * b</p>");
+  });
+
+  it("leaves attributes untouched: a quote there is not a guillemet", async () => {
+    await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({
+        topicId: "topic-1",
+        position: "before_topic",
+        type: "intro",
+        mode: "template",
+        templateKey: "intro.hero",
+        valuesJson: { values: { title: "Заголовок", body: '<p class="lead" data-x="a - b">Текст</p>' } },
+      });
+
+    const saved = storageMock.createContentPage.mock.calls[0][0];
+    expect(saved.valuesJson.values.body).toBe('<p class="lead" data-x="a - b">Текст</p>');
+  });
+});
+
+describe("POST /api/tests/:id/content-pages — html-mode page", () => {
+  it("canonicalises and typographs a free-form html page, which has no manifest to type it", async () => {
+    await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({
+        topicId: "topic-1",
+        position: "before_topic",
+        type: "html",
+        mode: "html",
+        valuesJson: { values: { __html: '<p>Слово "важное" - тут</p>\r\n\r\n\r\n<p>ещё</p>  ' } },
+      });
+
+    const saved = storageMock.createContentPage.mock.calls[0][0];
+    expect(saved.valuesJson.values.__html).toBe("<p>Слово «важное» — тут</p>\n\n<p>ещё</p>");
   });
 });
