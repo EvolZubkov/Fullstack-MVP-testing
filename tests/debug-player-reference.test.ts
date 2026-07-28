@@ -2,10 +2,11 @@
  * @module tests/debug-player-reference
  * @description PRD-18 Phase 4 — the «Эталон» overlay (§5.4). Loads the REAL shared
  * compute IIFE (`inspector-compute.js`) into jsdom so `window.TBInspector` is the
- * production object, builds the package's real question DOM (the SAME markup the
- * SCORM render emits — `.option[data-index]`, `.ranking-board`, `.matching-board`)
- * and asserts the correct-answer markers land on the right elements: ✓ on correct
- * options, the correct ordinal on ranking items, paired letters on matching.
+ * production object, builds the revised «Стандартный» question DOM (the SAME markup
+ * the SCORM render emits — `.ou-radio-card[data-index]`, `.ou-rank__item`,
+ * `.ou-match__row`) for the CURRENT question (state.currentIndex) and asserts the
+ * correct-answer markers land on the right elements: ✓ on correct options, the
+ * correct ordinal on ranking items, paired letters on matching.
  */
 // @vitest-environment jsdom
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
@@ -43,74 +44,80 @@ const marks = () => document.querySelectorAll('[data-tb-ref="1"]');
 describe("Эталон overlay — applyReference", () => {
   it("marks the correct single/multiple options with ✓ (by data-index)", () => {
     document.body.innerHTML =
-      '<div class="option" data-index="0" onclick="selectSingle(\'q1\',0)"><input name="q_q1"></div>' +
-      '<div class="option" data-index="1" onclick="selectSingle(\'q1\',1)"><input name="q_q1"></div>' +
-      '<div class="option" data-index="2" onclick="selectSingle(\'q1\',2)"><input name="q_q1"></div>';
+      '<label class="ou-radio-card" data-index="0"></label>' +
+      '<label class="ou-radio-card" data-index="1"></label>' +
+      '<label class="ou-radio-card" data-index="2"></label>';
     ref().applyReference(fakeWin({
+      currentIndex: 0,
       flatQuestions: [{ question: { id: "q1", type: "single", correct: { correctIndex: 1 } } }],
     }));
     const all = marks();
     expect(all).toHaveLength(1);
     expect(all[0].textContent).toBe("✓");
-    expect(all[0].closest(".option")?.getAttribute("data-index")).toBe("1");
+    expect(all[0].closest(".ou-radio-card")?.getAttribute("data-index")).toBe("1");
   });
 
   it("marks every correct option for multiple choice", () => {
     document.body.innerHTML =
-      '<div class="option" data-index="0" onclick="toggleMultiple(\'q2\',0)"><input></div>' +
-      '<div class="option" data-index="1" onclick="toggleMultiple(\'q2\',1)"><input></div>' +
-      '<div class="option" data-index="2" onclick="toggleMultiple(\'q2\',2)"><input></div>';
+      '<label class="ou-radio-card" data-index="0"></label>' +
+      '<label class="ou-radio-card" data-index="1"></label>' +
+      '<label class="ou-radio-card" data-index="2"></label>';
     ref().applyReference(fakeWin({
+      currentIndex: 0,
       flatQuestions: [{ question: { id: "q2", type: "multiple", correct: { correctIndices: [0, 2] } } }],
     }));
     expect(marks()).toHaveLength(2);
   });
 
-  it("marks ranking items with their correct 1-based position", () => {
-    // Items currently displayed in order 0,1,2; correct order is [2,0,1].
+  it("marks ranking items with their correct 1-based position (matched by title text)", () => {
+    // Rows displayed A,B,C; correct order is items [2,0,1] → A(0)→pos2, B(1)→pos3, C(2)→pos1.
     document.body.innerHTML =
-      '<div class="ranking-board" data-qid="q3">' +
-      '<div class="rank-item" data-item="0"><span class="rank-text">A</span></div>' +
-      '<div class="rank-item" data-item="1"><span class="rank-text">B</span></div>' +
-      '<div class="rank-item" data-item="2"><span class="rank-text">C</span></div>' +
+      '<div class="ou-rank">' +
+      '<div class="ou-rank__item" data-drag="0"><span class="ou-rank__title">A</span></div>' +
+      '<div class="ou-rank__item" data-drag="1"><span class="ou-rank__title">B</span></div>' +
+      '<div class="ou-rank__item" data-drag="2"><span class="ou-rank__title">C</span></div>' +
       "</div>";
     ref().applyReference(fakeWin({
-      flatQuestions: [{ question: { id: "q3", type: "ranking", correct: { correctOrder: [2, 0, 1] } } }],
+      currentIndex: 0,
+      flatQuestions: [{ question: { id: "q3", type: "ranking", data: { items: ["A", "B", "C"] }, correct: { correctOrder: [2, 0, 1] } } }],
     }));
-    const m = Array.from(marks()).map((n) => [n.closest(".rank-item")?.getAttribute("data-item"), n.textContent]);
-    // item 0 → correct pos 2; item 1 → pos 3; item 2 → pos 1
-    expect(m).toEqual([["0", "2"], ["1", "3"], ["2", "1"]]);
+    const m = Array.from(marks()).map((n) => [n.closest(".ou-rank__item")?.querySelector(".ou-rank__title")?.textContent, n.textContent]);
+    expect(m).toEqual([["A", "2"], ["B", "3"], ["C", "1"]]);
   });
 
-  it("marks matching pairs with the same letter on the chip and the right tile", () => {
+  it("marks matching pairs with the same letter on the fixed prompt and the chip", () => {
     document.body.innerHTML =
-      '<div class="matching-board" data-qid="q4">' +
-      '<div class="matching-line" data-right="0"><div class="match-chip" data-drag="1"></div><div class="match-right-tile">R0</div></div>' +
-      '<div class="matching-line" data-right="1"><div class="match-chip" data-drag="0"></div><div class="match-right-tile">R1</div></div>' +
+      '<div class="ou-match">' +
+      '<div class="ou-match__row"><div class="ou-match__card ou-match__card--fixed"><span class="ou-match__card-title">R0</span></div>' +
+      '<div class="ou-match__card ou-match__card--drag" data-drag="1"><span class="ou-match__card-title">L1</span></div></div>' +
+      '<div class="ou-match__row"><div class="ou-match__card ou-match__card--fixed"><span class="ou-match__card-title">R1</span></div>' +
+      '<div class="ou-match__card ou-match__card--drag" data-drag="0"><span class="ou-match__card-title">L0</span></div></div>' +
       "</div>";
     // Correct: left 0 ↔ right 0 (letter A), left 1 ↔ right 1 (letter B).
     ref().applyReference(fakeWin({
-      flatQuestions: [{ question: { id: "q4", type: "matching", correct: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }] } } }],
+      currentIndex: 0,
+      flatQuestions: [{ question: { id: "q4", type: "matching", data: { left: ["L0", "L1"], right: ["R0", "R1"] }, correct: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }] } } }],
     }));
-    expect(marks()).toHaveLength(4); // 2 pairs × (chip + tile)
-    // The right tile of data-right=0 and the chip data-drag=0 must share letter "A".
-    const tileA = document.querySelector('.matching-line[data-right="0"] .match-right-tile [data-tb-ref]')?.textContent;
-    const chipA = document.querySelector('.match-chip[data-drag="0"] [data-tb-ref]')?.textContent;
-    expect(tileA).toBe("A");
-    expect(chipA).toBe("A");
+    expect(marks()).toHaveLength(4); // 2 pairs × (fixed prompt + chip)
+    const fixedR0 = Array.from(document.querySelectorAll<HTMLElement>(".ou-match__card--fixed"))
+      .find((el) => el.querySelector(".ou-match__card-title")?.textContent === "R0");
+    const chipL0 = Array.from(document.querySelectorAll<HTMLElement>(".ou-match__card--drag"))
+      .find((el) => el.querySelector(".ou-match__card-title")?.textContent === "L0");
+    expect(fixedR0?.querySelector("[data-tb-ref]")?.textContent).toBe("A");
+    expect(chipL0?.querySelector("[data-tb-ref]")?.textContent).toBe("A");
   });
 
   it("is idempotent — re-applying does not stack markers", () => {
-    document.body.innerHTML = '<div class="option" data-index="0" onclick="selectSingle(\'q1\',0)"><input></div>';
-    const win = fakeWin({ flatQuestions: [{ question: { id: "q1", type: "single", correct: { correctIndex: 0 } } }] });
+    document.body.innerHTML = '<label class="ou-radio-card" data-index="0"></label>';
+    const win = fakeWin({ currentIndex: 0, flatQuestions: [{ question: { id: "q1", type: "single", correct: { correctIndex: 0 } } }] });
     ref().applyReference(win);
     ref().applyReference(win);
     expect(marks()).toHaveLength(1);
   });
 
   it("clearReference removes every marker", () => {
-    document.body.innerHTML = '<div class="option" data-index="0" onclick="selectSingle(\'q1\',0)"><input></div>';
-    const win = fakeWin({ flatQuestions: [{ question: { id: "q1", type: "single", correct: { correctIndex: 0 } } }] });
+    document.body.innerHTML = '<label class="ou-radio-card" data-index="0"></label>';
+    const win = fakeWin({ currentIndex: 0, flatQuestions: [{ question: { id: "q1", type: "single", correct: { correctIndex: 0 } } }] });
     ref().applyReference(win);
     expect(marks()).toHaveLength(1);
     ref().clearReference(win);

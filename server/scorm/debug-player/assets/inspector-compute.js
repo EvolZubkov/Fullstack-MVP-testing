@@ -857,63 +857,74 @@
     try { st = iframeWin.state; } catch (e) {}
     if (!doc || !st || !st.flatQuestions) return;
     clearReference(iframeWin);
-    var byId = {};
-    st.flatQuestions.forEach(function (fq) { byId[fq.question.id] = fq.question; });
 
-    // single / multiple — ✓ on the correct option(s). qid is parsed from the
-    // option's onclick (selectSingle/toggleMultiple), present while answering.
-    var groups = {};
-    var opts = doc.querySelectorAll(".option[data-index]");
-    for (var i = 0; i < opts.length; i++) {
-      var oc = opts[i].getAttribute("onclick") || "";
-      var m = /\(\s*['"]([^'"]+)['"]/.exec(oc);
-      var qid = m ? m[1] : null;
-      if (!qid || !byId[qid]) continue;
-      (groups[qid] = groups[qid] || { q: byId[qid], opts: [] }).opts.push(opts[i]);
-    }
-    Object.keys(groups).forEach(function (qid) {
-      var q = groups[qid].q, c = q.correct || {};
-      var correctSet = q.type === "single"
+    // The debug player shows ONE question at a time. The revised «Стандартный»
+    // markup (ou-radio-card / ou-rank / ou-match) no longer carries the qid on the
+    // option, so the reference targets the CURRENT question from the live state.
+    var curFq = st.flatQuestions[st.currentIndex];
+    var curQ = curFq && curFq.question;
+    if (!curQ) return;
+    var data = curQ.data || {};
+    var c = curQ.correct || {};
+
+    // single / multiple — ✓ on the correct option(s). Options are `.ou-radio-card`
+    // rows keyed by `data-index`, in the shuffled display order.
+    if (curQ.type === "single" || curQ.type === "multiple") {
+      var correctSet = curQ.type === "single"
         ? (typeof c.correctIndex === "number" ? [c.correctIndex] : [])
         : (Array.isArray(c.correctIndices) ? c.correctIndices : []);
-      groups[qid].opts.forEach(function (opt) {
-        var idx = parseInt(opt.getAttribute("data-index"), 10);
+      var opts = doc.querySelectorAll(".ou-radio-card[data-index]");
+      for (var i = 0; i < opts.length; i++) {
+        var idx = parseInt(opts[i].getAttribute("data-index"), 10);
         if (correctSet.indexOf(idx) !== -1) {
-          opt.style.position = "relative";
-          opt.appendChild(tbRefBadge(doc, "✓", "ok"));
-        }
-      });
-    });
-
-    // ranking — the correct 1-based position of each item.
-    var boards = doc.querySelectorAll(".ranking-board[data-qid]");
-    for (var b = 0; b < boards.length; b++) {
-      var rq = byId[boards[b].getAttribute("data-qid")];
-      if (!rq) continue;
-      var co = (rq.correct && Array.isArray(rq.correct.correctOrder)) ? rq.correct.correctOrder : [];
-      var items = boards[b].querySelectorAll(".rank-item[data-item]");
-      for (var j = 0; j < items.length; j++) {
-        var pos = co.indexOf(parseInt(items[j].getAttribute("data-item"), 10));
-        if (pos !== -1) {
-          items[j].style.position = "relative";
-          items[j].appendChild(tbRefBadge(doc, String(pos + 1), "num"));
+          opts[i].style.position = "relative";
+          opts[i].appendChild(tbRefBadge(doc, "✓", "ok"));
         }
       }
     }
 
-    // matching — paired letters A/B/C on the chip (data-drag=left) and the right tile.
-    var mboards = doc.querySelectorAll(".matching-board[data-qid]");
-    for (var mb = 0; mb < mboards.length; mb++) {
-      var mq = byId[mboards[mb].getAttribute("data-qid")];
-      if (!mq) continue;
-      var pairs = (mq.correct && Array.isArray(mq.correct.pairs)) ? mq.correct.pairs : [];
-      pairs.forEach(function (p, idx) {
+    // ranking — the correct 1-based position of each item. Rows carry the DISPLAY
+    // position (`data-drag`), not the item index, so rows are matched to items by
+    // their rendered title text.
+    if (curQ.type === "ranking") {
+      var items = Array.isArray(data.items) ? data.items : [];
+      var co = Array.isArray(c.correctOrder) ? c.correctOrder : [];
+      var textPos = {};
+      co.forEach(function (itemIdx, pos) { textPos[String(items[itemIdx])] = pos + 1; });
+      var rows = doc.querySelectorAll(".ou-rank__item");
+      for (var r = 0; r < rows.length; r++) {
+        var t = rows[r].querySelector(".ou-rank__title");
+        var p = t ? textPos[t.textContent] : undefined;
+        if (p) { rows[r].style.position = "relative"; rows[r].appendChild(tbRefBadge(doc, String(p), "num")); }
+      }
+    }
+
+    // matching — paired letters A/B/C on the fixed prompt (right item) and the
+    // draggable chip (left item), matched by text since the DOM keys chips by the
+    // left INDEX only. One letter per correct pair.
+    if (curQ.type === "matching") {
+      var left = Array.isArray(data.left) ? data.left : [];
+      var right = Array.isArray(data.right) ? data.right : [];
+      var pairs = Array.isArray(c.pairs) ? c.pairs : [];
+      var mrows = doc.querySelectorAll(".ou-match__row");
+      var chips = doc.querySelectorAll(".ou-match__card--drag:not(.ou-match__card--empty)");
+      pairs.forEach(function (pair, idx) {
         var letter = String.fromCharCode(65 + idx);
-        var line = mboards[mb].querySelector('.matching-line[data-right="' + p.right + '"]');
-        var rt = line ? line.querySelector(".match-right-tile") : null;
-        if (rt) { reserveKeyGutter(rt); rt.appendChild(tbRefBadge(doc, letter, "key")); }
-        var chip = mboards[mb].querySelector('.match-chip[data-drag="' + p.left + '"]');
-        if (chip) { reserveKeyGutter(chip); chip.appendChild(tbRefBadge(doc, letter, "key")); }
+        var rightText = String(right[pair.right]);
+        var leftText = String(left[pair.left]);
+        for (var mr = 0; mr < mrows.length; mr++) {
+          var fixedT = mrows[mr].querySelector(".ou-match__card--fixed .ou-match__card-title");
+          if (fixedT && fixedT.textContent === rightText) {
+            var fc = mrows[mr].querySelector(".ou-match__card--fixed");
+            reserveKeyGutter(fc); fc.appendChild(tbRefBadge(doc, letter, "key"));
+          }
+        }
+        for (var ci = 0; ci < chips.length; ci++) {
+          var ct = chips[ci].querySelector(".ou-match__card-title");
+          if (ct && ct.textContent === leftText) {
+            reserveKeyGutter(chips[ci]); chips[ci].appendChild(tbRefBadge(doc, letter, "key"));
+          }
+        }
       });
     }
   }
