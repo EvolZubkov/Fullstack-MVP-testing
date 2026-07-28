@@ -23,6 +23,7 @@ const REQUIRED = [
   "fitFont",
   "questionFont",
   "optionFont",
+  "fitQuestionScene",
   "feedbackBanner",
   "feedbackDesc",
 ] as const;

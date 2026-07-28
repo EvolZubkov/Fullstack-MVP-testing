@@ -615,10 +615,20 @@ function renderStandardQuestion(qData, current, total, progress) {
         if (navWrap.firstChild) app.appendChild(navWrap.firstChild);
 
         syncMatchingHeights();
-        // Font sizing is length-based (questionFont/optionFont → --tb-question-fs /
-        // --tb-answer-fs): each card grows to fit its text at that size, and the
-        // scene body (overflow:auto) scrolls when the content exceeds the space
-        // between the fixed header and footer — no height-fit shrink needed.
+        // The length-based questionFont/optionFont set the INITIAL --tb-question-fs /
+        // --tb-answer-fs; a HEIGHT-based pass then balances them: the header takes up to
+        // 1/4 of the field at the largest size that fits, the options take the largest
+        // size that keeps them all on screen without scrolling. Re-run on resize.
+        if (TB && TB.fitQuestionScene) {
+            var fitCol = function () {
+                TB.fitQuestionScene(app.querySelector('.tb-scene__body'), app.querySelector('.tb-scene__col'), app.querySelector('.tb-scene__q'));
+            };
+            fitCol();
+            requestAnimationFrame(fitCol); // after fonts/layout settle
+            if (state._fitQ) window.removeEventListener('resize', state._fitQ);
+            state._fitQ = fitCol;
+            window.addEventListener('resize', fitCol);
+        }
         return;
     }
 

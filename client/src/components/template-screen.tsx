@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { renderScreenInto, type ContentPageData } from "@shared/template/render-screen";
+import { fitQuestionScene } from "@shared/template/fit-question";
 import { attachPointerDnd } from "@shared/template/dnd/pointer-dnd";
 import dsCss from "@/styles/vendor/university-rt.css?raw";
 
@@ -106,6 +107,21 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
     }
   }, []);
 
+  // Height-based fit for a question scene (no-op otherwise): balance the prompt (≤1/4 of
+  // the field) and option fonts so the card fits without scrolling. Runs after render and
+  // on host resize; deferred a frame so fonts/layout have settled before measuring.
+  const fitQuestion = useCallback(() => {
+    const screen = screenRef.current;
+    if (!screen) return;
+    requestAnimationFrame(() =>
+      fitQuestionScene(
+        screen.querySelector<HTMLElement>(".tb-scene__body"),
+        screen.querySelector<HTMLElement>(".tb-scene__col"),
+        screen.querySelector<HTMLElement>(".tb-scene__q"),
+      ),
+    );
+  }, []);
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -199,6 +215,7 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
       screen.innerHTML = shell;
       const app = screen.querySelector<HTMLElement>("#app");
       renderScreenInto(app ?? screen, { layout, context, slots, content });
+      fitQuestion();
     } else {
       // Fill chain (mirrors the SCORM package's `#app` foundation): the shadow host
       // fills its box (via the host `tbh-fill` class), and here the intermediate
@@ -220,17 +237,18 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
         sceneEl.style.minHeight = "0";
       }
       fitToWidth();
+      fitQuestion();
     }
-  }, [layout, context, css, slots, content, cssVars, themeCss, dataTheme, fitToWidth, shell]);
+  }, [layout, context, css, slots, content, cssVars, themeCss, dataTheme, fitToWidth, fitQuestion, shell]);
 
   // Re-fit when the host (modal) width changes.
   useEffect(() => {
     const host = hostRef.current;
     if (!host || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => fitToWidth());
+    const ro = new ResizeObserver(() => { fitToWidth(); fitQuestion(); });
     ro.observe(host);
     return () => ro.disconnect();
-  }, [fitToWidth]);
+  }, [fitToWidth, fitQuestion]);
 
   // «Авто» palette: keep the host's DS theme class in sync with the system setting.
   // Only when the test pins no palette (`dataTheme` undefined) — a pinned palette is

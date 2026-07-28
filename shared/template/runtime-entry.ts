@@ -45,6 +45,9 @@ export {
 // Ревизия «Стандартный»: динамический размер шрифта вопроса/вариантов по длине —
 // общая формула, оба хоста кладут результат в контекст, макет подставляет инлайном.
 export { fitFont, questionFont, optionFont } from "./fit-font";
+// Runtime HEIGHT-based fit: balance prompt (≤1/4 of the field) and option fonts so the
+// question card fits without scrolling (both hosts call it after render).
+export { fitQuestionScene } from "./fit-question";
 // Ревизия «Стандартный»: единый DS-баннер проверки ответа (оба хоста, оба режима).
 export { feedbackBanner, feedbackDesc } from "./feedback-banner";
 // PRD-23: themed templates — the printer of per-theme colour overrides and the
