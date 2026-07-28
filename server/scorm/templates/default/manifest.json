@@ -136,6 +136,15 @@
       "kind": "start",
       "pageKind": "start",
       "layoutFile": "layouts/start.html",
+      "isDefault": true,
+      "placeholders": []
+    },
+    {
+      "key": "start.image-right",
+      "label": "Старт: изображение справа",
+      "kind": "start",
+      "pageKind": "start",
+      "layoutFile": "layouts/start.image-right.html",
       "placeholders": []
     },
     {
@@ -1058,6 +1067,11 @@
       {
         "route": "start",
         "label": "Старт"
+      },
+      {
+        "route": "start.image-right",
+        "templateKey": "start.image-right",
+        "label": "Старт: изображение справа"
       },
       {
         "route": "content.intro",

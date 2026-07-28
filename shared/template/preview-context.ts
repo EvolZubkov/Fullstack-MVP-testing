@@ -520,7 +520,9 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
   const layoutKey = resolveLayoutKey(route, manifest, variant);
   const base = { id: route, route, label: target.label, layoutKey };
 
-  if (route === "start") {
+  // The start screen and its layout VARIANTS (e.g. `start.image-right`) all take the
+  // same start context — matched by route prefix or the variant's `start` kind.
+  if (route === "start" || route.startsWith("start.") || variant?.kind === "start") {
     const { course, state } = buildStartState({
       info: {
         title: c.title,

@@ -1,0 +1,93 @@
+<div class="tb-scene tb-scene--cover">
+  <main class="tb-scene__body">
+    <!-- Start cover VARIANT: the illustration is committed to the RIGHT column (the
+         standard start only shows it when design.startImageUrl is set; this variant
+         always keeps the media panel, with a placeholder when no image is supplied). -->
+    <div class="tb-cover tb-cover--media">
+      <div class="tb-cover__main">
+        <span class="tb-scene__logo tb-cover__logo">{{#if design.logoUrl}}<img src="{{ design.logoUrl }}" alt="">{{/if}}{{#unless design.logoUrl}}<svg class="tb-scene__logo-ph" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-4.5-4.5L5 21"/></svg>{{/unless}}</span>
+
+        <div class="tb-cover__content">
+          <div class="tb-cover__head">
+            <div class="tb-cover__eyebrow">
+              {{#if course.subtitle}}<span data-path="course.subtitle"></span>{{/if}}
+              {{#if state.exhausted}}<span class="ou-tag ou-tag--neutral">Попытки исчерпаны</span>{{/if}}
+            </div>
+            <h1 class="tb-cover__title" data-path="course.title"></h1>
+            {{#if course.description}}<p class="tb-cover__desc" data-path="course.description"></p>{{/if}}
+          </div>
+
+          <div class="tb-facts">
+            <div class="tb-facts__item">
+              <div class="tb-facts__num" data-path="course.questionCount"></div>
+              <div class="tb-facts__lbl">вопросов</div>
+            </div>
+            <div class="tb-facts__item">
+              <div class="tb-facts__num"><span data-path="course.passPercent"></span>%</div>
+              <div class="tb-facts__lbl">проходной балл</div>
+            </div>
+            {{#if course.timeLimitMinutes}}
+            <div class="tb-facts__item">
+              <div class="tb-facts__num"><span data-path="course.timeLimitMinutes"></span> мин</div>
+              <div class="tb-facts__lbl">на прохождение</div>
+            </div>
+            {{/if}}
+            {{#if course.maxAttempts}}
+            <div class="tb-facts__item">
+              <div class="tb-facts__num" data-path="course.maxAttempts"></div>
+              <div class="tb-facts__lbl">попыток</div>
+            </div>
+            {{/if}}
+          </div>
+
+          {{#if course.startPageContent}}
+          <div class="tb-cover__note">
+            <span class="tb-scene__subhead">Как проходить</span>
+            <span class="tb-scene__note">{{course.startPageContent}}</span>
+          </div>
+          {{/if}}
+
+          {{#if state.cooldown}}
+          <div class="ou-banner ou-banner--sm tb-cooldown">
+            <span class="ou-banner__ico" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            </span>
+            <div class="ou-banner__body">
+              <div class="ou-banner__title">Повторное прохождение пока недоступно</div>
+              <div class="ou-banner__desc">Повторный запуск будет доступен с <strong><span data-path="state.cooldown.availableDateHuman"></span></strong>{{#if state.cooldown.daysUntil}} &middot; через <span data-path="state.cooldown.daysUntil"></span> дн.{{/if}}</div>
+            </div>
+          </div>
+          {{/if}}
+
+          {{#if state.priorResult}}
+          <div class="ou-banner ou-banner--sm tb-prior">
+            <div class="ou-banner__body">
+              <div class="ou-banner__title">Прошлая попытка: <span data-path="state.priorResult.percent"></span>%{{#if state.priorResult.verdictLabel}} &middot; <span class="{{state.priorResult.verdictClass}}" data-path="state.priorResult.verdictLabel"></span>{{/if}}{{#if state.priorResult.attemptsLabel}} &middot; <span data-path="state.priorResult.attemptsLabel"></span>{{/if}}</div>
+            </div>
+            <div class="ou-banner__actions">
+              {{#if state.canViewResults}}<button type="button" class="ou-btn ou-btn--secondary ou-btn--s" data-action="view-results">Мой результат</button>{{/if}}
+              {{#if state.canDownloadReport}}<button type="button" class="ou-btn ou-btn--secondary ou-btn--s" data-action="download-report">Скачать отчёт</button>{{/if}}
+            </div>
+          </div>
+          {{/if}}
+        </div>
+      </div>
+
+      <div class="tb-cover__media">
+        {{#if design.startImageUrl}}<img src="{{ design.startImageUrl }}" alt="">{{/if}}
+        {{#unless design.startImageUrl}}<span class="tb-cover__media-ph" aria-hidden="true"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-4.5-4.5L5 21"/></svg></span>{{/unless}}
+      </div>
+    </div>
+  </main>
+
+  <footer class="tb-scene__foot">
+    {{#if state.showBack}}<button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="back">К списку тестов</button>{{/if}}
+    <div class="tb-scene__foot-spacer"></div>
+    {{#if state.resumeNote}}<span class="tb-scene__note">{{state.resumeNote}}</span>{{/if}}
+    {{#if state.canResume}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="resume">{{state.resumeLabel}}</button>{{/if}}
+    {{#if state.cooldown}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" disabled aria-disabled="true">Начать тестирование</button>{{/if}}
+    {{#if state.canStart}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="start-test">{{state.startLabel}}</button>{{/if}}
+    {{#if state.canRestart}}<button type="button" class="ou-btn ou-btn--secondary ou-btn--l" data-action="restart">Начать заново</button>{{/if}}
+    {{#unless state.priorResult}}{{#if state.canViewResults}}<button type="button" class="ou-btn ou-btn--secondary ou-btn--l" data-action="view-results">Мой результат</button>{{/if}}{{/unless}}
+  </footer>
+</div>

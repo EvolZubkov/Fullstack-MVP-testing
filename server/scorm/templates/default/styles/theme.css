@@ -216,6 +216,9 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-cover__note { display: flex; flex-direction: column; gap: var(--ou-space-1); }
 .tb-cover__media { min-width: 0; min-height: 0; border-radius: var(--ou-radius-l); overflow: hidden; background: var(--ou-bg-surface-2); }
 .tb-cover__media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Placeholder shown by the image-right start VARIANT when no start image is set —
+   keeps the right media panel visible so the layout reads as «image right». */
+.tb-cover__media-ph { width: 100%; height: 100%; min-height: 220px; display: flex; align-items: center; justify-content: center; color: var(--ou-fg-muted); opacity: 0.55; }
 @media (max-width: 900px) { .tb-cover--media { grid-template-columns: 1fr; } .tb-cover__media { min-height: 220px; } }
 
 /* Facts strip — big number + small label, spaced (start screen). */
