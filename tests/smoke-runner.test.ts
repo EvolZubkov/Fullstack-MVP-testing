@@ -53,7 +53,11 @@ function expectedScreenCount(): number {
       .map((r) => (typeof r === "string" ? undefined : r.templateKey))
       .filter(Boolean),
   );
-  const kinds = new Set(["intro", "info", "summary", "router"]);
+  // Mirror the source's CONTENT_VARIANT_KINDS (shared/template/preview-context):
+  // `summary` is the LEGACY «Итог раздела» kind — PRD-19 made it an invisible flow
+  // boundary (its role is now the computed section-results node), so it is NOT
+  // enumerated as a preview screen. Keeping it here over-counted by one.
+  const kinds = new Set(["intro", "info", "router"]);
   const appended = (manifest.contentTemplates as Array<{ key: string; kind?: string }>).filter(
     (c) => kinds.has(c.kind ?? "") && !covered.has(c.key),
   );
@@ -158,12 +162,11 @@ describe("buildScreenInputs (demo dataset → screen specs)", () => {
   });
 
   it("falls back to the generic layout when the variant declares no layoutFile", () => {
-    // summary/router/questions ship without a layoutFile in the default and render
-    // through the generic `content`/`question` layouts — as the runtime does.
+    // router/questions ship without a layoutFile in the default and render through
+    // the generic `content`/`question` layouts — as the runtime does.
     const byRoute = Object.fromEntries(specs.map((s) => [s.route, s.layoutKey]));
     expect(byRoute["question.single"]).toBe("question");
     expect(byRoute["question.matching"]).toBe("question");
-    expect(byRoute["content.summary"]).toBe("content");
     expect(byRoute["content.router"]).toBe("content");
     expect(byRoute["system.blocked"]).toBe("system.blocked");
   });
@@ -199,9 +202,11 @@ describe("buildScreenInputs (demo dataset → screen specs)", () => {
   });
 
   it("generic content screens carry a placeholder skeleton in page-content", () => {
-    const summary = specs.find((s) => s.route === "content.summary")!;
-    expect(summary.expectedSlots).toEqual(["page-content"]);
-    expect(summary.input.slots!["page-content"]).toContain('data-placeholder="result"');
+    // content.router renders through the generic `content` layout; its declared
+    // placeholders reach the screen as a page-content skeleton.
+    const router = specs.find((s) => s.route === "content.router")!;
+    expect(router.expectedSlots).toEqual(["page-content"]);
+    expect(router.input.slots!["page-content"]).toContain('data-placeholder="title"');
   });
 
   it("a variant-owned layout expects no page-content slot (Э1)", () => {

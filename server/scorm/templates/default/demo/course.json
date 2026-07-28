@@ -46,27 +46,6 @@
         }
       },
       {
-        "id": "demo-summary",
-        "type": "summary",
-        "route": "content.summary",
-        "templateKey": "summary.result",
-        "topicId": "topic-1",
-        "values": {
-          "title": "Итоги раздела",
-          "result": {
-            "path": "result.scorePercent",
-            "renderer": "core.ringChart",
-            "rendererOptions": {
-              "showValue": true,
-              "decimals": 0,
-              "size": 150,
-              "strokeWidth": 14
-            },
-            "label": ""
-          }
-        }
-      },
-      {
         "id": "demo-info-text",
         "type": "info",
         "kind": "info",
