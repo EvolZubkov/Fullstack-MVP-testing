@@ -68,13 +68,13 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 /* A header with no progress bar needs its own bottom padding (the bar normally
    sits flush on the bottom edge). */
 .tb-scene__header--flush { padding-bottom: var(--ou-space-4); }
-/* Reading column: comfortable measure. `min-height:100%` (not `height`) fills the
-   body when content is short (header top / footer bottom, content at the top) but
-   lets the column GROW past the body when content is long — so the body
-   (`overflow:auto`) scrolls instead of clipping. Widens to full on narrow viewports. */
+/* Content field: fills 3/4 of the screen width and ADAPTS to it (no fixed cap), so a
+   wide stage no longer leaves a large empty band on the right. `min-height:100%` (not
+   `height`) fills the body when content is short (header top / footer bottom, content
+   at the top) but lets the column GROW past the body when content is long — so the
+   body (`overflow:auto`) scrolls instead of clipping. Full width on narrow viewports. */
 .tb-scene__col {
   width: 75%;
-  max-width: 960px;
   min-height: 100%;
   display: flex;
   flex-direction: column;
