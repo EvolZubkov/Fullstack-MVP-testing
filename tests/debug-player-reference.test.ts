@@ -123,6 +123,30 @@ describe("Эталон overlay — applyReference", () => {
     ref().clearReference(win);
     expect(marks()).toHaveLength(0);
   });
+
+  it("does NOT touch the DOM while a drag gesture is in flight (leaves the captured chip stable)", () => {
+    // The shared DnD engine appends a `[data-drag-ghost]` card for the whole gesture.
+    // Repainting the overlay then mutates the captured chip's subtree and Chromium
+    // fires pointercancel, aborting the drag. So applyReference/clearReference must be
+    // a no-op while the ghost exists.
+    document.body.innerHTML =
+      '<div class="ou-match__card ou-match__card--drag" data-drag="0" data-drag-ghost=""></div>';
+    const win = fakeWin({
+      currentIndex: 0,
+      flatQuestions: [{ question: { id: "q4", type: "matching", data: { left: ["L0"], right: ["R0"] }, correct: { pairs: [{ left: 0, right: 0 }] } } }],
+    });
+    ref().applyReference(win);
+    expect(marks()).toHaveLength(0); // overlay not painted during the drag
+
+    // Once the gesture ends (ghost gone) the next tick paints normally.
+    document.body.innerHTML =
+      '<div class="ou-match"><div class="ou-match__row">' +
+      '<div class="ou-match__card ou-match__card--fixed"><span class="ou-match__card-title">R0</span></div>' +
+      '<div class="ou-match__card ou-match__card--drag" data-drag="0"><span class="ou-match__card-title">L0</span></div>' +
+      "</div></div>";
+    ref().applyReference(win);
+    expect(marks().length).toBeGreaterThan(0);
+  });
 });
 
 describe("Протокол — skip/return commit status (PRD-19 FR-24)", () => {

@@ -828,9 +828,20 @@
       "font:700 13px/1 system-ui,sans-serif;font-variant-numeric:tabular-nums;";
     return b;
   }
+  // True while a pointer drag gesture is in flight: the shared DnD engine
+  // (shared/template/dnd/pointer-dnd) appends a `[data-drag-ghost]` card to the
+  // document for the whole duration of a started drag. Mutating the captured
+  // chip's subtree during that window (adding/removing an «Эталон» badge, toggling
+  // its padding) makes the browser fire `pointercancel`, which the engine treats as
+  // a drop-abort — so the overlay's per-tick repaint silently killed matching /
+  // ranking drags while «Эталон» was on. The overlay must stand still until the
+  // gesture ends; the next tick repaints.
+  function dragInFlight(doc) {
+    try { return !!doc.querySelector('[data-drag-ghost]'); } catch (e) { return false; }
+  }
   function clearReference(iframeWin) {
     var doc = iframeWin && iframeWin.document;
-    if (!doc) return;
+    if (!doc || dragInFlight(doc)) return;
     var marks = doc.querySelectorAll('[data-tb-ref="1"]');
     for (var i = 0; i < marks.length; i++) {
       if (marks[i].parentNode) marks[i].parentNode.removeChild(marks[i]);
@@ -858,6 +869,9 @@
     var st = null;
     try { st = iframeWin.state; } catch (e) {}
     if (!doc || !st || !st.flatQuestions) return;
+    // Never repaint mid-drag — see dragInFlight. Leaving the overlay untouched keeps
+    // the captured chip's subtree stable so the gesture can complete.
+    if (dragInFlight(doc)) return;
     clearReference(iframeWin);
 
     // The debug player shows ONE question at a time. The revised «Стандартный»
