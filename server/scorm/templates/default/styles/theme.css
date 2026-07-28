@@ -397,7 +397,10 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-blocked-branch[hidden] { display: none; }
 
 /* ── Results screen ─────────────────────────────────────────────── */
-.tb-scene__col--wide { width: 100%; max-width: 1120px; }
+/* Fills the body width (like the router hub / content pages, .tb-content) — no fixed
+   cap, so a wide stage no longer leaves an empty band on the right and the per-topic
+   grid spreads to more columns. */
+.tb-scene__col--wide { width: 100%; }
 /* Score strip: ring + facts side by side. */
 .tb-score-strip { display: flex; align-items: center; gap: var(--ou-space-8); flex-wrap: wrap; }
 /* Per-topic cards — responsive grid. */
