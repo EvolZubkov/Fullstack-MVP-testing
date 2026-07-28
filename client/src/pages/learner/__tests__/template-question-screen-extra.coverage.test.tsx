@@ -137,7 +137,9 @@ describe("TemplateQuestionScreen — choice review + multiple toggle", () => {
     expect(shadow.querySelector('.ou-radio-card[data-index="1"]')?.className).toContain("incorrect-answer");
   });
 
-  it("marks all correct indices + the wrong pick in multiple review mode", () => {
+  it("per-option traffic light in multiple review mode (green/yellow/red)", () => {
+    // correct = {0,1}; chose {0,2}. 0 correct+chosen → green; 1 correct+missed →
+    // yellow (missed-answer); 2 wrong+chosen → red.
     const { container } = render(
       <TemplateQuestionScreen
         {...base}
@@ -151,7 +153,7 @@ describe("TemplateQuestionScreen — choice review + multiple toggle", () => {
     );
     const shadow = shadowOf(container);
     expect(shadow.querySelector('.ou-radio-card[data-index="0"]')?.className).toContain("correct-answer");
-    expect(shadow.querySelector('.ou-radio-card[data-index="1"]')?.className).toContain("correct-answer");
+    expect(shadow.querySelector('.ou-radio-card[data-index="1"]')?.className).toContain("missed-answer");
     expect(shadow.querySelector('.ou-radio-card[data-index="2"]')?.className).toContain("incorrect-answer");
   });
 

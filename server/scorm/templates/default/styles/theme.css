@@ -264,13 +264,20 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 }
 .ou-radio-card.is-on .ou-check__box svg { opacity: 1; }
 
-/* Review highlight — one convention (correct-answer/incorrect-answer) across
-   choice / ranking / matching, painted per DS component. */
+/* Review highlight — a per-option traffic light. `correct-answer`/`correct-skip`
+   are green (the learner handled the option right), `missed-answer` yellow (a correct
+   option they did not pick — multiple choice only), `incorrect-answer` red. Painted
+   per DS component across choice / ranking / matching. */
 .ou-radio-card.correct-answer,
+.ou-radio-card.correct-skip,
 .ou-rank__item.correct-answer,
 .ou-match__row.correct-answer .ou-match__card--drag {
   border-color: var(--ou-success-default);
   background: var(--ou-success-soft);
+}
+.ou-radio-card.missed-answer {
+  border-color: var(--ou-warning-default);
+  background: var(--ou-warning-soft);
 }
 .ou-radio-card.incorrect-answer,
 .ou-rank__item.incorrect-answer,
@@ -282,6 +289,7 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
    follows the card's review class so the icon reads as its verdict. */
 .ou-radio-card__mark { margin-left: auto; flex: none; display: inline-flex; align-items: center; }
 .ou-radio-card.correct-answer .ou-radio-card__mark { color: var(--ou-success-default); }
+.ou-radio-card.missed-answer .ou-radio-card__mark { color: var(--ou-warning-default); }
 .ou-radio-card.incorrect-answer .ou-radio-card__mark { color: var(--ou-error-default); }
 
 /* ── Ranking scene ──────────────────────────────────────────────── */

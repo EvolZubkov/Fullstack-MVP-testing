@@ -63,10 +63,21 @@ describe("renderMultiple", () => {
     expect(html).toContain('data-action="select:2"');
   });
 
-  it("uses correctIndices (array) for review, not correctIndex", () => {
-    const html = renderMultiple(MULTI, [1], undefined, { correctIndices: [0, 2] });
-    expect(html).toMatch(/correct-answer[^>]*>[\s\S]*?A/);
-    expect(html).toMatch(/incorrect-answer[^>]*>[\s\S]*?B/);
+  it("per-option traffic light in review: green/yellow/red by handling", () => {
+    // Options A,B,C,D; correct = A,C; learner chose A,B.
+    //  A correct+chosen   → correct-answer (green, ✓)
+    //  B wrong+chosen      → incorrect-answer (red, ✗)
+    //  C correct+missed    → missed-answer (yellow, ✓)
+    //  D wrong+skipped     → correct-skip (green, no mark)
+    const MULTI4 = { type: "multiple", dataJson: { options: ["A", "B", "C", "D"] } };
+    const html = renderMultiple(MULTI4, [0, 1], undefined, { correctIndices: [0, 2] });
+    expect(html).toMatch(/ou-radio-card is-on correct-answer[^>]*>[\s\S]*?A/);
+    expect(html).toMatch(/ou-radio-card is-on incorrect-answer[^>]*>[\s\S]*?B/);
+    expect(html).toMatch(/ou-radio-card missed-answer[^>]*>[\s\S]*?C/);
+    expect(html).toMatch(/ou-radio-card correct-skip[^>]*>[\s\S]*?D/);
+    // A correct answer key carries a check even when missed; a correctly-skipped
+    // wrong option is green but unmarked.
+    expect(html.match(/ou-radio-card__mark/g)).toHaveLength(3); // A, B, C — not D
   });
 });
 

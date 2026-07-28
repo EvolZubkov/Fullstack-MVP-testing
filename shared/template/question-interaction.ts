@@ -111,17 +111,26 @@ function displayOrder(count: number, shuffleMapping?: number[]): number[] {
 }
 
 /**
- * Review class suffix for an option: `" correct-answer"` for a right option, or
- * `" incorrect-answer"` for a chosen wrong one (the SAME class names the SCORM runtime
- * emits). Empty outside review mode.
+ * Review class suffix for an option (the SAME class names the SCORM runtime emits).
+ * Empty outside review mode.
+ *
+ * Single choice is binary: `" correct-answer"` (green) on the right option,
+ * `" incorrect-answer"` (red) on a chosen wrong one.
+ *
+ * Multiple choice is a per-option traffic light on the learner's HANDLING of each
+ * option, not just the answer key:
+ *  - correct & chosen   → `" correct-answer"` (green, ✓)   — правильно выбранный
+ *  - correct & !chosen  → `" missed-answer"`  (yellow, ✓)  — ошибочно пропущенный
+ *  - wrong & chosen     → `" incorrect-answer"` (red, ✗)   — ошибочно выбранный
+ *  - wrong & !chosen    → `" correct-skip"` (green, no ✓)  — правильно пропущенный
  */
 function reviewClass(multiple: boolean, oi: number, chosen: boolean, review?: ReviewCorrect): string {
   if (!review) return "";
   const correctSet = multiple && Array.isArray(review.correctIndices) ? review.correctIndices : null;
   const correctOne = !multiple && typeof review.correctIndex === "number" ? review.correctIndex : null;
   if (correctSet) {
-    if (correctSet.includes(oi)) return " correct-answer";
-    if (chosen) return " incorrect-answer";
+    if (correctSet.includes(oi)) return chosen ? " correct-answer" : " missed-answer";
+    return chosen ? " incorrect-answer" : " correct-skip";
   } else if (correctOne !== null) {
     if (oi === correctOne) return " correct-answer";
     if (chosen) return " incorrect-answer";
@@ -160,9 +169,12 @@ const MARK_CROSS =
   '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" ' +
   'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg>';
 
-/** The trailing mark for a review class (`" correct-answer"` → check, `" incorrect-answer"` → cross). */
+/** The trailing mark for a review class: a check on the answer-key options
+ *  (`" correct-answer"` green / `" missed-answer"` yellow), a cross on a chosen wrong
+ *  one (`" incorrect-answer"`); a correctly-skipped wrong option (`" correct-skip"`)
+ *  stays green but unmarked, since it is not itself a correct answer. */
 function reviewMark(review: string): string {
-  if (review === " correct-answer") return `<span class="ou-radio-card__mark">${MARK_CHECK}</span>`;
+  if (review === " correct-answer" || review === " missed-answer") return `<span class="ou-radio-card__mark">${MARK_CHECK}</span>`;
   if (review === " incorrect-answer") return `<span class="ou-radio-card__mark">${MARK_CROSS}</span>`;
   return "";
 }
