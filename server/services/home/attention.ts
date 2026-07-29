@@ -49,7 +49,9 @@ const TEST_FLAG_TEXT: Partial<
   "test-empty-draft": {
     title: "Черновик без вопросов",
     action: "Открыть редактор",
-    severity: "info",
+    // Warning, not info: the approved wireframe renders this row with the warning
+    // tone, and a test that cannot be taken at all is a blocker for its author.
+    severity: "warning",
   },
   "test-edited-after-publish": {
     title: "Изменён после публикации",

@@ -121,10 +121,16 @@ describe("buildAttention", () => {
       myTests: [myTest({ flags: ["test-empty-draft"] }), myTest({ testId: "t2", flags: ["test-pool-drift"] })],
       duplicateTopicGroups: 2,
     });
-    expect(rows[0].kind).toBe("test-pool-drift");
+    // Both test rows are warnings (an unusable test blocks its author either way),
+    // so the invariant to pin is the partition, not which warning lands first.
     const severities = rows.map((r) => r.severity);
     expect(severities.indexOf("warning")).toBe(0);
     expect(severities.lastIndexOf("warning")).toBeLessThan(severities.indexOf("info"));
+  });
+
+  it("treats an empty draft as a warning, matching the approved wireframe", () => {
+    const rows = buildAttention({ myTests: [myTest({ flags: ["test-empty-draft"] })] });
+    expect(rows[0].severity).toBe("warning");
   });
 
   it("raises one row for the whole duplicate-topics report", () => {
