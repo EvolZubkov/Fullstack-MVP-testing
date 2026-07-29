@@ -7,13 +7,14 @@
  * `question-interaction` slot from the SHARED emission
  * ({@link module:shared/template/question-interaction}) — the DS `.ou-*` markup the
  * SCORM package renders too — and wired back to React via `data-action`/`data-drag`
- * delegation. React keeps the answer state; navigation is rendered on the template
- * surface below. Matching drags answer chips onto prompt rows using the SHARED pointer
+ * delegation. React keeps the answer state; the navigation row is part of the
+ * template's scene (`.tb-scene__foot`, built from `state.nav`) for BOTH flows, so the
+ * host renders no chrome of its own. Matching drags answer chips onto prompt rows using the SHARED pointer
  * engine and the SHARED rich pool model ({@link module:shared/template/dnd/matching-model}),
  * the same engine the SCORM host runs — so both hosts compute drops identically.
  */
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { TemplateScreen } from "@/components/template-screen";
 import type { Question } from "@shared/schema";
 import type { CtxQuestionsProgress } from "@shared/template/context";
@@ -29,12 +30,18 @@ import {
   renderMultiple,
   renderRanking,
   renderMatching,
+  renderScale,
   questionHint,
   answerTexts,
   type ReviewCorrect,
 } from "@shared/template/question-interaction";
 import { questionFont, optionFont } from "@shared/template/fit-font";
+import { buildQuestionNav, QUESTION_NAV_ACTIONS, type QuestionNavState } from "@shared/template/question-nav";
+import type { SceneTimersState } from "@shared/template/scene-timers";
 import { renderInlineMarkdown } from "@shared/text";
+
+/** Action names the shared nav row emits (plus the layout's own `nav:next`). */
+const NAV_ACTIONS: readonly string[] = Object.values(QUESTION_NAV_ACTIONS);
 
 function esc(s: unknown): string {
   return String(s)
@@ -106,6 +113,9 @@ function interactionHtml(
     return renderMatching(question, answer, !Array.isArray(shuffleMapping) ? shuffleMapping : undefined, poolOrder, review);
   }
   if (question.type === "multiple") return renderMultiple(question, answer, arr, review);
+  // The scale takes no shuffle mapping: the order of graduations is content, not
+  // presentation (see `hasFixedOptionOrder` in shared/questions/question-type).
+  if (question.type === "scale") return renderScale(question, answer, review);
   return renderSingleChoice(question, answer, arr, review);
 }
 
@@ -132,13 +142,22 @@ export interface TemplateQuestionScreenProps {
     themeCss?: string;
     /** PRD-23: palette pinned by the author; absent means «Авто». */
     dataTheme?: "light" | "dark";
+    /** PRD-23: template declares a choice of palettes (see resolveSceneTheme). */
+    themed?: boolean;
     /** Per-test branding for the render context (logo). */
     design?: { logoUrl?: string };
   };
   testTitle: string;
   /** Header subtitle under the title ("Попытка N из M"); empty -> title-only header. */
   subtitle?: string;
+  /** Bare «Вопрос N из M» — the section goes in {@link sectionName}, not in here. */
   counterLabel: string;
+  /**
+   * Section (topic) of the current question. Passed to the template as
+   * `state.sectionName`, which the layout prints as a tag beside the counter — the
+   * SAME context field the SCORM runtime fills, so both hosts render one meta row.
+   */
+  sectionName?: string;
   progressPercent: number;
   question: Question;
   answer: unknown;
@@ -152,21 +171,19 @@ export interface TemplateQuestionScreenProps {
   reviewMode?: boolean;
   /** Correct-answer key (correctIndex/correctIndices/pairs/correctOrder) for review. */
   correctAnswer?: ReviewCorrect;
-  /** Custom footer; when provided, replaces the default standard Назад/Далее nav. */
-  footer?: ReactNode;
-  /** When false, the default footer's «Далее»/«Завершить» is disabled (no usable
-   *  answer yet) — parity with the custom footer's «Отправить ответ» gate. */
-  answerReady?: boolean;
-  // Standard-mode nav (used only when `footer` is not provided):
-  canPrev?: boolean;
-  onPrev?: () => void;
-  /** PRD-19 (Block B): «Пропустить» — flexible-mode skip, shown when `canSkip`. */
-  canSkip?: boolean;
-  onSkip?: () => void;
-  isLast?: boolean;
-  isSubmitting?: boolean;
-  onNext?: () => void;
-  onSubmit?: () => void;
+  /**
+   * Navigation state of the row — REQUIRED, for the standard and the adaptive flow
+   * alike. The row is printed from the SHARED emitter INSIDE the scene
+   * (`.tb-scene__foot`), exactly as the SCORM runtime prints it: the host builds no
+   * footer of its own, since chrome next to the shadow root gets neither the
+   * template's scene surface nor the DS palette. Its buttons report back through
+   * {@link onNavAction} with the emitter's action names.
+   */
+  nav: QuestionNavState;
+  /** Countdown state for the header timers (shared painter, parity with the package). */
+  timers?: SceneTimersState;
+  /** Action from the shared nav row (`answer-back`/`answer-skip`/… or `nav:next`). */
+  onNavAction?: (action: string) => void;
   /** PRD-19 Block C: progress-pills map (Core-prepared); renders the pill row. */
   questionsProgress?: CtxQuestionsProgress;
   /** PRD-19 Block C: jump to an absolute question index from a pill click. */
@@ -239,10 +256,11 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
 
   return (
     <div
-      className="tbh-minh-screen tbh-col tbh-noselect"
-      // The chrome OUTSIDE the template's shadow root needs the same palette the
-      // screen inside got, or its buttons ignore the test's branding.
-      style={{ background: tpl.theme?.background, ...(tpl.cssVars as React.CSSProperties | undefined) }}
+      // No palette on the wrapper: the scene (`.tbh-fill`) covers it entirely and
+      // paints its own surface. Painting the host with `tpl.theme` used to show a
+      // LIGHT band under a dark scene — the value is read as the first
+      // `--background` in theme.css, i.e. always the base (light) palette.
+      className="tbh-screen tbh-col tbh-noselect"
       onCopy={(e) => e.preventDefault()}
       onCut={(e) => e.preventDefault()}
       onContextMenu={(e) => e.preventDefault()}
@@ -254,9 +272,17 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
         cssVars={tpl.cssVars}
         themeCss={tpl.themeCss}
         dataTheme={tpl.dataTheme}
-        context={{ course: { title: testTitle, subtitle: props.subtitle }, state: { questionCounterLabel: counterLabel, questionHint: questionHint(question.type), questionFont: questionFont(question.prompt), optionFont: optionFont(answerTexts(question)), questionsProgress: props.questionsProgress }, design: tpl.design }}
+        themed={tpl.themed}
+        context={{ course: { title: testTitle, subtitle: props.subtitle }, state: { questionCounterLabel: counterLabel, sectionName: props.sectionName, questionHint: questionHint(question.type), questionFont: questionFont(question.prompt), optionFont: optionFont(answerTexts(question)), questionsProgress: props.questionsProgress, nav: buildQuestionNav(props.nav) }, design: tpl.design }}
         slots={slots}
+        timers={props.timers}
         onAction={(action) => {
+          // Nav row: reported verbatim, so the caller reads the emitter's own action
+          // names. Not gated by `locked` — navigating away is always allowed.
+          if (NAV_ACTIONS.includes(action)) {
+            props.onNavAction?.(action);
+            return;
+          }
           // PRD-19 Block C: pill navigation works even when the question is locked
           // (the lock guards answer editing, not navigating away).
           if (action.startsWith("goto:")) {
@@ -295,40 +321,6 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
           }
         }}
       />
-
-      <div
-        className="tbh-foot"
-        style={{ color: tpl.theme?.foreground }}
-      >
-        {props.footer !== undefined ? (
-          props.footer
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={props.onPrev}
-              disabled={!props.canPrev}
-              className="tbh-navbtn"
-            >
-              ← Назад
-            </button>
-            {props.canSkip && (
-              <button type="button" onClick={props.onSkip} className="tbh-navbtn">
-                Пропустить
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={props.isLast ? props.onSubmit : props.onNext}
-              disabled={props.isSubmitting || props.answerReady === false}
-              className="tbh-primarybtn"
-             
-            >
-              {props.isLast ? (props.isSubmitting ? "Отправка..." : "Завершить тест") : "Далее →"}
-            </button>
-          </>
-        )}
-      </div>
     </div>
   );
 }

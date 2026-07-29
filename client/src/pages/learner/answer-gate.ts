@@ -5,6 +5,7 @@
  * in isolation. Mirrors the SCORM runtime (`hasAnswer` / `createRankingOrder`);
  * both hosts must agree so scoring and the «Отправить ответ» gate never diverge.
  */
+import { hasFixedOptionOrder } from "@shared/questions/question-type";
 
 /** Produces a permutation of `[0..length-1]`. Injectable for deterministic tests. */
 export type ShuffleFn = (length: number) => number[];
@@ -52,6 +53,32 @@ export function rankingDeliveryOrder(
 }
 
 /**
+ * Does this question get a SHUFFLED delivery order (PRD-16 FR-41/FR-42)?
+ *
+ * The author's «Случайный порядок вариантов» switch (`questions.shuffle_answers`,
+ * absent = on for legacy rows) governs Один ответ / Несколько ответов /
+ * Соответствие. Ранжирование is the documented exception (FR-42): its authored
+ * order IS the answer key, so it is always shuffled and the editor shows no
+ * switch for it — a ranking row that carries `false` (Excel import, or a type
+ * switched inside the editor) must not be delivered in the correct order.
+ *
+ * The scale is the opposite exception (PRD-26 FR-04): the order of its graduations is
+ * content, so it is NEVER shuffled — not even when the row carries `shuffleAnswers`
+ * set to `true` (legacy import, or a type switched inside the editor).
+ *
+ * Mirrors the SCORM runtime helper `shuffleMappingFor` (app/utils/shuffle.js);
+ * both hosts must agree or the same question is delivered differently.
+ */
+export function deliversShuffledOrder(
+  question: { type?: string; shuffleAnswers?: boolean } | null | undefined,
+): boolean {
+  if (!question) return false;
+  if (question.type === "ranking") return true;
+  if (hasFixedOptionOrder(question.type ?? "")) return false;
+  return question.shuffleAnswers !== false;
+}
+
+/**
  * Does `answer` count as a usable answer for its question type? Gates the submit
  * button so nothing can be submitted empty (parity with the SCORM runtime).
  * Ranking requires an actual reorder — the delivered order is not seeded as the
@@ -62,6 +89,9 @@ export function hasAnswer(question: { type?: string; dataJson?: unknown } | null
   const data = question.dataJson as { left?: unknown[]; items?: unknown[] } | undefined;
   switch (question.type) {
     case "single":
+    // A scale is answered by one graduation index, exactly like single choice — index 0
+    // is a real answer, so the check is on the type, not on truthiness.
+    case "scale":
       return typeof answer === "number";
     case "multiple":
       return Array.isArray(answer) && answer.length > 0;

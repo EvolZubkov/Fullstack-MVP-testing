@@ -9,10 +9,13 @@
  * `onAction`, so the host can wire template buttons (e.g. restart) to app navigation.
  */
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { renderScreenInto, type ContentPageData } from "@shared/template/render-screen";
 import { fitQuestionScene } from "@shared/template/fit-question";
 import { attachPointerDnd } from "@shared/template/dnd/pointer-dnd";
+import { nextScaleIndex } from "@shared/template/scale-keyboard";
+import { resolveSceneTheme } from "@shared/template/themes";
+import { paintSceneTimers, type SceneTimersState } from "@shared/template/scene-timers";
 import dsCss from "@/styles/vendor/university-rt.css?raw";
 
 /**
@@ -59,6 +62,28 @@ export interface TemplateScreenProps {
    * `prefers-color-scheme` rules to decide.
    */
   dataTheme?: "light" | "dark";
+  /**
+   * PRD-23: whether the template declares a CHOICE of palettes (server payload
+   * `themed`). Under «Авто» it decides whether the system setting is followed at
+   * all — see the shared {@link module:shared/template/themes resolveSceneTheme}.
+   * Absent ⇒ not themed, which is what the SCORM runtime assumes too.
+   */
+  themed?: boolean;
+  /**
+   * HTML mounted right AFTER the screen, inside the same shadow root — where the
+   * SCORM runtime appends the question's navigation row (`.tb-scene__foot`). It has
+   * to live in the shadow tree, not next to the host: the panel is styled by the
+   * TEMPLATE's stylesheet, which is isolated in here. Its `data-action`/`data-nav`
+   * buttons reach {@link onAction} through the same delegation as the scene's own.
+   */
+  afterHtml?: string;
+  /**
+   * Countdown state for the header's DS timers, painted by the SHARED
+   * {@link module:shared/template/scene-timers paintSceneTimers} — the same call the
+   * SCORM runtime makes after mounting a screen. Omitted ⇒ both timers stay hidden,
+   * which is what a layout ships them as.
+   */
+  timers?: SceneTimersState;
   /** Called with the `data-action` value when a button inside the screen is clicked. */
   onAction?: (action: string) => void;
   className?: string;
@@ -74,7 +99,7 @@ export interface TemplateScreenProps {
   shell?: string;
 }
 
-export function TemplateScreen({ layout, context, css, slots, content, cssVars, themeCss, dataTheme, onAction, className, shell }: TemplateScreenProps) {
+export function TemplateScreen({ layout, context, css, slots, content, cssVars, themeCss, dataTheme, themed, afterHtml, timers, onAction, className, shell }: TemplateScreenProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const shadowRef = useRef<ShadowRoot | null>(null);
   const screenRef = useRef<HTMLElement | null>(null);
@@ -122,6 +147,16 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
     );
   }, []);
 
+  // Scene rebuilds are keyed by CONTENT, not by object identity. Callers build the
+  // context/slots literals inline, so a parent that re-renders for an unrelated
+  // reason — the countdown ticking once a second — used to hand over fresh objects
+  // and wipe/rebuild the whole shadow tree, which is what made hover flicker and a
+  // click land on an already-replaced button.
+  const renderKey = useMemo(
+    () => JSON.stringify([layout, css, context, slots, content, cssVars, themeCss, dataTheme, themed, afterHtml, shell]),
+    [layout, css, context, slots, content, cssVars, themeCss, dataTheme, themed, afterHtml, shell],
+  );
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -163,7 +198,15 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
         css
           .replace(/:root((?:\[[^\]]*\]|:not\([^)]*\))+)/g, ":host($1)")
           .replace(/:root/g, ":host")
-          .replace(/\bbody\b(?=\s*\{)/g, ":host") +
+          .replace(/\bbody\b(?=\s*\{)/g, ":host")
+          // The palette bridge declares itself on `.ou` — the DS theme provider,
+          // which in the package is `<html>` and here is the shadow HOST. A bare
+          // `.ou` inside the shadow tree matches nothing (the class lives outside
+          // it), so the test's brand colours were printed and then never applied:
+          // the scene kept the DS default accent while `--primary` already held the
+          // author's. Only the standalone selector is remapped — `.ou-btn`,
+          // `.ou--dark` and descendant rules like `.ou .x` are left alone.
+          .replace(/(^|[},])(\s*)\.ou(?=\s*\{)/g, "$1$2:host") +
         "\n:host{padding:0;}";
       shadow.appendChild(style);
     }
@@ -186,7 +229,10 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
     host.classList.add("ou");
     const prefersDark =
       typeof window !== "undefined" && !!window.matchMedia?.("(prefers-color-scheme: dark)").matches;
-    const resolvedTheme = dataTheme ?? (prefersDark ? "dark" : "light");
+    // The palette rule is SHARED with the SCORM runtime (`resolveSceneTheme`): a
+    // pinned palette wins, «Авто» follows the system only for a themed template,
+    // and a single-palette template opens in its own (dark) palette on both hosts.
+    const resolvedTheme = resolveSceneTheme({ pinned: dataTheme, themed: !!themed, systemPrefersDark: prefersDark });
     host.classList.toggle("ou--dark", resolvedTheme === "dark");
     host.classList.toggle("ou--light", resolvedTheme === "light");
     // Apply design-param overrides on the host element. Inline custom properties
@@ -236,10 +282,39 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
         sceneEl.style.flex = "1 1 auto";
         sceneEl.style.minHeight = "0";
       }
+      // Host-built trailer (the question's nav row) — a SIBLING of the scene inside
+      // the shadow tree, exactly as the package appends it into `#app`, so it wears
+      // the template's footer styling and stays out of the scrolling body.
+      if (afterHtml) {
+        const trailer = document.createElement("div");
+        trailer.innerHTML = afterHtml;
+        const row = trailer.firstElementChild as HTMLElement | null;
+        if (row) {
+          row.style.flex = "none";
+          screen.appendChild(row);
+        }
+      }
       fitToWidth();
       fitQuestion();
     }
-  }, [layout, context, css, slots, content, cssVars, themeCss, dataTheme, fitToWidth, fitQuestion, shell]);
+    // Header countdowns — the layout ships them hidden, exactly as in the package,
+    // and the shared painter reveals whichever is running.
+    paintSceneTimers(screen, timers ?? {});
+    // NB: the countdown values are deliberately NOT in the dependency list — they
+    // change every second, and rebuilding the scene at 1 Hz destroyed the very node
+    // the pointer was over (flickering hover, clicks landing on a replaced button).
+    // The effect below repaints them in place instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renderKey, fitToWidth, fitQuestion]);
+
+  // Tick the countdowns between renders: the scene DOM is imperative, so a new
+  // seconds value repaints the two timer nodes and touches nothing else. Depends on
+  // the PRIMITIVE seconds, not on the object literal a parent rebuilds every render.
+  const testSeconds = timers?.testSeconds ?? null;
+  const sectionSeconds = timers?.sectionSeconds ?? null;
+  useEffect(() => {
+    paintSceneTimers(screenRef.current, { testSeconds, sectionSeconds });
+  }, [testSeconds, sectionSeconds]);
 
   // Re-fit when the host (modal) width changes.
   useEffect(() => {
@@ -255,7 +330,9 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
   // fixed and set in the main effect.
   useEffect(() => {
     const host = hostRef.current;
-    if (!host || dataTheme || typeof window === "undefined" || !window.matchMedia) return;
+    // Only a THEMED template follows the system: a single-palette one is pinned to
+    // its own palette by `resolveSceneTheme` and must not flip when the OS does.
+    if (!host || dataTheme || !themed || typeof window === "undefined" || !window.matchMedia) return;
     const mql = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
       host.classList.toggle("ou--dark", mql.matches);
@@ -264,7 +341,7 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
     apply();
     mql.addEventListener("change", apply);
     return () => mql.removeEventListener("change", apply);
-  }, [dataTheme]);
+  }, [dataTheme, themed]);
 
   // Delegate clicks on [data-action] elements to the host (bound once).
   //
@@ -290,6 +367,31 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
     };
     shadow.addEventListener("click", handler);
     return () => shadow.removeEventListener("click", handler);
+  }, []);
+
+  // Keyboard on the PRD-26 scale (`.ou-stepper--choice`, a radio group): arrows move
+  // AND select, Home/End jump to a pole. The index maths lives in the shared helper
+  // ({@link module:shared/template/scale-keyboard}) so the package answers the same
+  // keys. Space/Enter need nothing here — a graduation is a real <button>.
+  useEffect(() => {
+    const shadow = shadowRef.current;
+    if (!shadow) return;
+    const handler = (e: Event) => {
+      const ev = e as KeyboardEvent;
+      const target = ev.target as Element | null;
+      const group = target?.closest?.(".ou-stepper--choice");
+      if (!group) return;
+      const steps = Array.from(group.querySelectorAll(".ou-stepper__step"));
+      if (!steps.length) return;
+      const checked = steps.findIndex((s) => s.getAttribute("aria-checked") === "true");
+      const next = nextScaleIndex(ev.key, checked === -1 ? null : checked, steps.length);
+      if (next === null) return;
+      ev.preventDefault();
+      (steps[next] as HTMLElement).focus();
+      onActionRef.current?.(`select:${next}`);
+    };
+    shadow.addEventListener("keydown", handler);
+    return () => shadow.removeEventListener("keydown", handler);
   }, []);
 
   // Delegate `change` on [data-change] controls (e.g. <select>): emit as the

@@ -7,13 +7,15 @@ import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
 import { TemplateQuestionScreen } from "./template-question-screen";
 import { fmtIsoDateHuman } from "./cooldown-format";
-import { hasAnswer, rankingDeliveryOrder } from "./answer-gate";
+import { deliversShuffledOrder, hasAnswer, rankingDeliveryOrder } from "./answer-gate";
+import { isSingleIndexChoice } from "@shared/questions/question-type";
 import { buildStartState } from "@shared/template/start-state";
 import { feedbackBanner, feedbackDesc } from "@shared/template/feedback-banner";
 import { buildQuestionProgress } from "@shared/template/question-progress-context";
-import { buildCourseSubtitle } from "@shared/template/course-subtitle";
 import { buildReviewContext } from "@shared/template/review-context";
+import { QUESTION_NAV_ACTIONS, type QuestionNavState } from "@shared/template/question-nav";
 import { buildSectionResultContext, buildSectionIntroContext } from "@shared/template/result-context";
+import { buildTransitionContext } from "@shared/template/transition-context";
 // PRD-12 FR-6: content pages render on the web from the SAME structure rules and
 // the SAME assembler as the SCORM package — no web-only copy of either.
 import { TemplateContentScreen, type ContentScreenTemplate } from "./template-content-screen";
@@ -204,7 +206,7 @@ function adaptiveFeedbackHtml(question: any, result: any): string {
   let body = "";
   const opts = (question.dataJson as any)?.options as unknown[] | undefined;
   if (!ok && result.correctAnswer && opts) {
-    if (question.type === "single" && typeof result.correctAnswer.correctIndex === "number") {
+    if (isSingleIndexChoice(question.type) && typeof result.correctAnswer.correctIndex === "number") {
       body += `<div class="ou-banner__desc"><b>Правильный ответ:</b> ${escSlot(opts[result.correctAnswer.correctIndex])}</div>`;
     } else if (question.type === "multiple" && Array.isArray(result.correctAnswer.correctIndices)) {
       const txt = result.correctAnswer.correctIndices.map((i: number) => opts[i]).join(", ");
@@ -337,6 +339,13 @@ export default function TakeTestPage() {
     Record<string, { passed?: boolean | null }>
   >({});
   const [currentRouterTopic, setCurrentRouterTopic] = useState<string | null>(null);
+  /**
+   * Where the learner stopped inside each section (flat question index). Re-entering
+   * a section — from the hub or after «Продолжить с места остановки» — resumes at
+   * that question instead of restarting the section from its first one. Persisted
+   * with the progress, so it survives a reload.
+   */
+  const [sectionPositions, setSectionPositions] = useState<Record<string, number>>({});
   const [showHub, setShowHub] = useState(false);
   /** Set while a section's «после темы» zone plays on the way back to the hub. */
   const [pendingHubReturn, setPendingHubReturn] = useState<string | null>(null);
@@ -381,6 +390,8 @@ export default function TakeTestPage() {
     themeCss?: string;
     /** PRD-23: palette pinned by the author; absent means «Авто». */
     dataTheme?: "light" | "dark";
+    /** PRD-23: template declares a choice of palettes (see resolveSceneTheme). */
+    themed?: boolean;
     design?: { logoUrl?: string };
   } | null>(null);
   // PRD-12 / PRD-6: retake block-wall template + cooldown data (set on 403).
@@ -393,6 +404,8 @@ export default function TakeTestPage() {
     themeCss?: string;
     /** PRD-23: palette pinned by the author; absent means «Авто». */
     dataTheme?: "light" | "dark";
+    /** PRD-23: template declares a choice of palettes (see resolveSceneTheme). */
+    themed?: boolean;
     design?: { logoUrl?: string };
   } | null>(null);
   const [blockData, setBlockData] = useState<{ cooldownPeriodDays?: number; availableDate?: string | null } | null>(null);
@@ -406,6 +419,8 @@ export default function TakeTestPage() {
     themeCss?: string;
     /** PRD-23: palette pinned by the author; absent means «Авто». */
     dataTheme?: "light" | "dark";
+    /** PRD-23: template declares a choice of palettes (see resolveSceneTheme). */
+    themed?: boolean;
     design?: { logoUrl?: string };
   } | null>(null);
   // PRD-19 Block D: обзор (review) screen template + visibility flag.
@@ -418,6 +433,8 @@ export default function TakeTestPage() {
     themeCss?: string;
     /** PRD-23: palette pinned by the author; absent means «Авто». */
     dataTheme?: "light" | "dark";
+    /** PRD-23: template declares a choice of palettes (see resolveSceneTheme). */
+    themed?: boolean;
     design?: { logoUrl?: string };
   } | null>(null);
   const [showReview, setShowReview] = useState(false);
@@ -438,6 +455,22 @@ export default function TakeTestPage() {
     themeCss?: string;
     /** PRD-23: palette pinned by the author; absent means «Авто». */
     dataTheme?: "light" | "dark";
+    /** PRD-23: template declares a choice of palettes (see resolveSceneTheme). */
+    themed?: boolean;
+    design?: { logoUrl?: string };
+  } | null>(null);
+  // PRD-4 §4.7: adaptive level-change interstitial (`system.transition`) layout.
+  const [transitionTpl, setTransitionTpl] = useState<{
+    layout: string;
+    css: string;
+    theme?: { background: string; foreground: string };
+    cssVars?: Record<string, string>;
+    /** PRD-23: per-theme colour overrides, printed as CSS. */
+    themeCss?: string;
+    /** PRD-23: palette pinned by the author; absent means «Авто». */
+    dataTheme?: "light" | "dark";
+    /** PRD-23: template declares a choice of palettes (see resolveSceneTheme). */
+    themed?: boolean;
     design?: { logoUrl?: string };
   } | null>(null);
   // PRD-19 D5: per-section freeze map (web analogue of SCORM state.sectionCommitted).
@@ -543,10 +576,11 @@ export default function TakeTestPage() {
     return shuffleArray(indices);
   };
 
-  // hasAnswer + rankingDeliveryOrder live in ./answer-gate (pure + unit-tested).
+  // hasAnswer + rankingDeliveryOrder + deliversShuffledOrder live in ./answer-gate
+  // (pure + unit-tested).
 
   const createAdaptiveShuffleMapping = (question: any): any => {
-    if (!question || question.shuffleAnswers === false) return null;
+    if (!deliversShuffledOrder(question)) return null;
     const type = question.type;
     const data = question.dataJson as any;
     if (type === "single" || type === "multiple") {
@@ -711,6 +745,13 @@ export default function TakeTestPage() {
           // PRD-19 D5: section-results (итоги раздела) screen layout.
           const srRes = await fetch(`/api/tests/${testId}/screen-template/section-results`, { credentials: "include" });
           if (srRes.ok) setSectionResultsTpl(await srRes.json());
+          // PRD-4 §4.7: the adaptive level-change interstitial, from the SAME
+          // `system.transition` layout the package renders (no web-only React card).
+          if ((test.mode || "standard") === "adaptive") {
+            const trRes = await fetch(`/api/tests/${testId}/screen-template/transition`, { credentials: "include" });
+            if (trRes.ok) setTransitionTpl(await trRes.json());
+            else reportClientError("take-test", `screen-template/transition failed: HTTP ${trRes.status} (test ${testId})`);
+          }
           // PRD-12 FR-6: author content-page wrapper + the manifest's placeholder
           // declarations, so content pages render from the template rather than
           // being skipped.
@@ -866,6 +907,9 @@ export default function TakeTestPage() {
         answerCommitScope: data.attempt.answerCommitScope ?? "test",
       });
       setQuestionStatus(data.questionStatus || {});
+      // Where the learner stopped inside each section — a re-entry from the hub
+      // continues from that question instead of restarting the section.
+      setSectionPositions(data.sectionPositions || {});
 
       // Инициализация таймера (с учётом прошедшего времени)
       if (data.attempt.timeLimitMinutes && data.attempt.timeLimitMinutes > 0) {
@@ -910,7 +954,7 @@ export default function TakeTestPage() {
             // Восстанавливаем shuffle mapping из варианта если есть
             if (variant.shuffleMappings && variant.shuffleMappings[question.id]) {
               mappings[question.id] = variant.shuffleMappings[question.id];
-            } else if (question.shuffleAnswers !== false) {
+            } else if (deliversShuffledOrder(question)) {
               // Генерируем новый если нет сохранённого
               const qData = question.dataJson as any;
               if (question.type === "single" || question.type === "multiple") {
@@ -1038,7 +1082,7 @@ export default function TakeTestPage() {
           });
 
           // Generate shuffle mappings
-          if (question.shuffleAnswers !== false) {
+          if (deliversShuffledOrder(question)) {
             const qData = question.dataJson as any;
 
             if (question.type === "single" || question.type === "multiple") {
@@ -1164,11 +1208,21 @@ export default function TakeTestPage() {
     nextStatus: Record<string, "unanswered" | "answered" | "skipped">,
   ) => {
     if (!attempt) return;
+    // Remember the position inside the section being left/advanced, so a return
+    // lands on that question rather than at the section's start.
+    const topicId = flatQuestions[nextIndex]?.topicId;
+    const positions = topicId ? { ...sectionPositions, [topicId]: nextIndex } : sectionPositions;
+    if (topicId && positions !== sectionPositions) setSectionPositions(positions);
     fetch(`/api/attempts/${attempt.id}/save-progress`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ answers: nextAnswers, currentIndex: nextIndex, questionStatus: nextStatus }),
+      body: JSON.stringify({
+        answers: nextAnswers,
+        currentIndex: nextIndex,
+        questionStatus: nextStatus,
+        sectionPositions: positions,
+      }),
     }).catch((err) => console.error("Auto-save error:", err));
   };
 
@@ -1208,7 +1262,9 @@ export default function TakeTestPage() {
     const correct = question.correctJson as any;
     if (!correct) return false;
 
-    if (question.type === "single") {
+    // A scale with a correct graduation is checked exactly like single choice; a
+    // measurement-only scale never reaches here (the server marks it unscored).
+    if (isSingleIndexChoice(question.type)) {
       return answer === correct.correctIndex;
     }
 
@@ -1440,7 +1496,12 @@ export default function TakeTestPage() {
 
   /** Enters a section from the hub: its «перед темой» zone, then its questions. */
   const selectRouterTopic = (topicId: string) => {
-    const first = flatQuestions.findIndex((q) => q.topicId === topicId);
+    const firstOfTopic = flatQuestions.findIndex((q) => q.topicId === topicId);
+    // Re-entering a started section resumes at the question the learner stopped on
+    // (the saved position), not at its beginning — «продолжить», not «начать заново».
+    const saved = sectionPositions[topicId];
+    const first =
+      typeof saved === "number" && flatQuestions[saved]?.topicId === topicId ? saved : firstOfTopic;
     setRouterTopicStates((prev) => ({ ...prev, [topicId]: "inProgress" }));
     setCurrentRouterTopic(topicId);
     setShowHub(false);
@@ -2132,6 +2193,16 @@ export default function TakeTestPage() {
     }
   };
 
+  // PRD-12 parity: an adaptive session ends where a standard one does — on the
+  // result page, which renders the итоги from the shared `results.adaptive` layout.
+  // The run used to end on a React card of its own instead, so the same attempt
+  // looked one way right after finishing and another way from «История».
+  useEffect(() => {
+    if (testMode !== "adaptive") return;
+    if (!adaptiveState?.isFinished || !adaptiveState.attemptId) return;
+    navigate(`/learner/result/${adaptiveState.attemptId}`);
+  }, [testMode, adaptiveState?.isFinished, adaptiveState?.attemptId]);
+
   // Loading state
   // PRD-15 FR-14: the attempt was annulled by an emergency re-publish (404 on
   // submit/answer). Tell the learner the attempt is not counted and let them
@@ -2173,7 +2244,7 @@ export default function TakeTestPage() {
       blockedTpl.css +
       '\n[data-retake-branch="default"],[data-retake-branch="error"]{display:none}[data-retake-branch="cooldown"]{display:block}';
     return (
-      <div className="tbh-minh-screen tbh-col" style={{ background: blockedTpl.theme?.background }}>
+      <div className="tbh-screen tbh-col" style={{ background: blockedTpl.theme?.background }}>
         <TemplateScreen
           className="tbh-fill"
           layout={blockedTpl.layout}
@@ -2181,6 +2252,7 @@ export default function TakeTestPage() {
           cssVars={blockedTpl.cssVars}
           themeCss={blockedTpl.themeCss}
           dataTheme={blockedTpl.dataTheme}
+          themed={blockedTpl.themed}
           context={{ retake: { cooldownPeriodDays: blockData.cooldownPeriodDays, availableDateHuman }, ...(blockedTpl.design ? { design: blockedTpl.design } : {}) }}
         />
         <div className="tbh-center-foot">
@@ -2230,6 +2302,11 @@ export default function TakeTestPage() {
         // section is done; the click routes to finishFromHub via onNext.
         nextLabel="Завершить"
         nextDisabled={!hubReady}
+        // The hub is OUTSIDE any section, so only the test countdown belongs here.
+        // The section timer keeps running in state (its deadline is absolute), but
+        // showing it on the menu reads as «время раздела идёт», which it is not for
+        // the learner standing here.
+        timers={{ testSeconds: remainingSeconds, sectionSeconds: null }}
         onNext={finishFromHub}
       />
     );
@@ -2251,12 +2328,6 @@ export default function TakeTestPage() {
             sectionNumber: Math.max(1, sections.findIndex((s) => s.topicId === introTopicId) + 1),
             sectionsTotal: sections.length,
             courseTitle: testInfo?.title || attempt?.testTitle || "",
-            subtitle: testMetadata
-              ? buildCourseSubtitle({
-                  attemptNumber: testMetadata.completedAttempts + 1,
-                  maxAttempts: testMetadata.maxAttempts,
-                })
-              : undefined,
             instruction: String((page.valuesJson?.values as any)?.instruction ?? ""),
           })
         : undefined;
@@ -2266,14 +2337,7 @@ export default function TakeTestPage() {
         template={contentTpl}
         extraContext={introContext}
         courseTitle={testInfo?.title || attempt?.testTitle || ""}
-        subtitle={
-          testMetadata
-            ? buildCourseSubtitle({
-                attemptNumber: testMetadata.completedAttempts + 1,
-                maxAttempts: testMetadata.maxAttempts,
-              })
-            : undefined
-        }
+        timers={{ testSeconds: remainingSeconds, sectionSeconds: sectionRemainingSeconds }}
         // PRD-22: the whole structure, so the navigation dots of a sequence are
         // computed by the shared core exactly as the SCORM runtime computes them.
         allPages={flowStructure.contentPages}
@@ -2379,7 +2443,7 @@ export default function TakeTestPage() {
     });
     return (
       <div
-        className="tbh-minh-screen tbh-col tbh-noselect"
+        className="tbh-screen tbh-col tbh-noselect"
         style={{ background: startTpl.theme?.background }}
         onCopy={(e) => e.preventDefault()}
         onCut={(e) => e.preventDefault()}
@@ -2392,6 +2456,7 @@ export default function TakeTestPage() {
           cssVars={startTpl.cssVars}
           themeCss={startTpl.themeCss}
           dataTheme={startTpl.dataTheme}
+          themed={startTpl.themed}
           context={{ ...startContext, ...(startTpl.design ? { design: startTpl.design } : {}) }}
           onAction={(action) => {
             if (action === "start-test" || action === "restart") handleStartTest();
@@ -2413,100 +2478,38 @@ export default function TakeTestPage() {
     return <ServiceErrorScreen diagnosis={`start screen unavailable: no start template (test ${testId})`} />;
   }
 
-  // Adaptive mode - finished
+  // Adaptive mode — finished. The итоги render from the SHARED `results.adaptive`
+  // layout, and that screen is the result page — the same one the standard flow
+  // navigates to on submit (and the same one «История» opens). The redirect runs in
+  // the effect above; this is the one frame before it lands.
   if (testMode === "adaptive" && adaptiveState?.isFinished) {
-    return (
-      <Box maxW="3xl" padX={6} padY={8}>
-        <Card>
-          <CardBody>
-            <Stack gap={6}>
-              <Stack gap={2} align="center">
-                <Trophy size={48} color="var(--ou-accent-default)" />
-                <Text variant="display-s" weight="bold">Тест завершён!</Text>
-                <Text tone="muted">{adaptiveState.testTitle}</Text>
-              </Stack>
-
-              {adaptiveState.result?.topicResults?.map((tr: any, idx: number) => (
-                <Box key={idx} border radius="l" pad={4}>
-                  <Stack gap={3}>
-                    <Text variant="heading-s" weight="semibold">{tr.topicName}</Text>
-                    <Cluster>
-                      {tr.achievedLevelName ? (
-                        <Tag tone="success" variant="solid">{tr.achievedLevelName}</Tag>
-                      ) : (
-                        <Tag tone="error" variant="solid">{tr.feedback || "Уровень не достигнут"}</Tag>
-                      )}
-                    </Cluster>
-                    {tr.achievedLevelName && tr.feedback && (
-                      <Text variant="body-s" tone="muted">{tr.feedback}</Text>
-                    )}
-                    {tr.recommendedLinks?.length > 0 && (
-                      <Stack gap={1}>
-                        <Text variant="body-s" weight="medium">Рекомендуемые материалы:</Text>
-                        <Stack as="ul" gap={1}>
-                          {tr.recommendedLinks.map((link: any, i: number) => (
-                            <li key={i}>
-                              <a href={link.url} target="_blank" rel="noopener noreferrer">
-                                <Text variant="body-s" tone="accent">{link.title}</Text>
-                              </a>
-                            </li>
-                          ))}
-                        </Stack>
-                      </Stack>
-                    )}
-                  </Stack>
-                </Box>
-              ))}
-
-              <Button fullWidth onClick={() => navigate("/learner")}>
-                Вернуться к списку тестов
-              </Button>
-            </Stack>
-          </CardBody>
-        </Card>
-      </Box>
-    );
+    return <LoadingState message={t.result.loading} />;
   }
 
-  // Adaptive mode - transition screen
-  if (testMode === "adaptive" && showTransition && adaptiveState?.lastResult) {
-    const { levelTransition, topicTransition, isCorrect } = adaptiveState.lastResult;
-
+  // Adaptive mode — level-change interstitial, from the SHARED `system.transition`
+  // layout (the same screen the package renders via buildTransitionContext). Auto-
+  // advances on the timer set by the answer handlers, so the layout's «Продолжить»
+  // is not requested (showContinue: false).
+  if (testMode === "adaptive" && showTransition && adaptiveState?.lastResult && transitionTpl) {
+    const { levelTransition } = adaptiveState.lastResult;
+    const ctx = buildTransitionContext({
+      topicName: adaptiveState.currentQuestion?.topicName || "",
+      levelTransition: levelTransition || null,
+      showContinue: false,
+    });
     return (
-      <Center minH="screen" pad={4}>
-        <Box full maxW="md">
-          <Card>
-            <CardBody>
-              <Stack gap={4} align="center">
-                {isCorrect ? (
-                  <CheckCircle size={48} color="var(--ou-success-600)" />
-                ) : (
-                  <XCircle size={48} color="var(--ou-error-600)" />
-                )}
-
-                <Text variant="heading-s" weight="medium">
-                  {isCorrect ? "Правильно!" : "Неправильно"}
-                </Text>
-
-                {levelTransition && (
-                  <Banner
-                    fullWidth
-                    tone={levelTransition.type === "up" ? "success" : levelTransition.type === "down" ? "error" : "info"}
-                  >
-                    {levelTransition.message}
-                  </Banner>
-                )}
-
-                {topicTransition && (
-                  <Text variant="body-s" tone="muted">
-                    Переход к теме: <Text as="span" variant="body-s" weight="medium">{topicTransition.toTopic}</Text>
-                  </Text>
-                )}
-              </Stack>
-            </CardBody>
-          </Card>
-        </Box>
-      </Center>
+      <div className="tbh-screen tbh-col">
+        <TemplateScreen
+          className="tbh-fill"
+          layout={transitionTpl.layout}
+          css={transitionTpl.css}
+          cssVars={transitionTpl.cssVars}
+          themeCss={transitionTpl.themeCss}
+          dataTheme={transitionTpl.dataTheme}
+          themed={transitionTpl.themed}
+          context={{ ...ctx, course: { title: adaptiveState.testTitle }, design: transitionTpl.design }}
+        />
+      </div>
     );
   }
 
@@ -2527,36 +2530,31 @@ export default function TakeTestPage() {
           ? ` · Время темы ${Math.floor(adaptiveSectionRemaining / 60)}:${String(adaptiveSectionRemaining % 60).padStart(2, "0")}`
           : "");
       const fbHtml = feedbackShown && lastAnswerResult ? adaptiveFeedbackHtml(currentQ, lastAnswerResult) : "";
-      // Tailwind is gone from the project, so the old utility string styled
-      // nothing — the button's whole look had been the inline blue background.
-      const btnCls = "tbh-primarybtn";
-      const footer = adaptiveState.showCorrectAnswers ? (
-        feedbackShown ? (
-          <button type="button" className={btnCls} onClick={handleAdaptiveContinue}>
-            Далее →
-          </button>
-        ) : (
-          <button
-            type="button"
-            className={btnCls}
-           
-            onClick={handleAdaptiveConfirm}
-            disabled={isAnswering || adaptiveState.answer === null}
-          >
-            {isAnswering ? "Отправка..." : "Принять"}
-          </button>
-        )
-      ) : (
-        <button
-          type="button"
-          className={btnCls}
-         
-          onClick={handleAdaptiveSubmit}
-          disabled={isAnswering || adaptiveState.answer === null}
-        >
-          {isAnswering ? "Отправка..." : "Далее →"}
-        </button>
-      );
+      // The nav row is the TEMPLATE's scene footer, exactly as in the standard flow
+      // (and as in the package, buildAdaptiveNavState) — the host builds no footer of
+      // its own. Adaptive is strictly sequential, so this is the strict-linear row:
+      // no «Назад»/«Пропустить»/«К обзору», and `hasNext` is always true — only the
+      // server knows when the session ends, so the row never says «Завершить тест».
+      const adaptiveNav: QuestionNavState = {
+        flexible: false,
+        committed: feedbackShown,
+        canPrev: false,
+        // Once the feedback is on screen the answer is fixed — «Далее» always works.
+        answerReady: feedbackShown || (!isAnswering && adaptiveState.answer !== null),
+        hasNext: true,
+        showAccept: adaptiveState.showCorrectAnswers && !feedbackShown,
+        showReview: false,
+      };
+      /** Wires the shared row's actions to the adaptive handlers. */
+      const onAdaptiveNavAction = (action: string) => {
+        // «Принять» — fix the answer and show the feedback (showCorrectAnswers only).
+        if (action === QUESTION_NAV_ACTIONS.submit) return void handleAdaptiveConfirm();
+        // «Далее» — continue past the shown feedback, or submit and advance.
+        if (action === QUESTION_NAV_ACTIONS.next) {
+          if (adaptiveState.showCorrectAnswers && feedbackShown) return handleAdaptiveContinue();
+          return void handleAdaptiveSubmit();
+        }
+      };
       return (
         <TemplateQuestionScreen
           tpl={questionTpl}
@@ -2571,7 +2569,8 @@ export default function TakeTestPage() {
           reviewMode={feedbackShown && adaptiveState.showCorrectAnswers}
           correctAnswer={lastAnswerResult?.correctAnswer}
           feedbackHtml={fbHtml}
-          footer={footer}
+          nav={adaptiveNav}
+          onNavAction={onAdaptiveNavAction}
         />
       );
     }
@@ -2626,7 +2625,7 @@ export default function TakeTestPage() {
       }
     };
     return (
-      <div className="tbh-minh-screen tbh-col" style={{ background: reviewTpl.theme?.background }}>
+      <div className="tbh-screen tbh-col" style={{ background: reviewTpl.theme?.background }}>
         <TemplateScreen
           className="tbh-fill"
           layout={reviewTpl.layout}
@@ -2634,6 +2633,8 @@ export default function TakeTestPage() {
           cssVars={reviewTpl.cssVars}
           themeCss={reviewTpl.themeCss}
           dataTheme={reviewTpl.dataTheme}
+          timers={{ testSeconds: remainingSeconds, sectionSeconds: sectionRemainingSeconds }}
+          themed={reviewTpl.themed}
           context={{
             course: { title: attempt.testTitle },
             design: reviewTpl.design,
@@ -2722,19 +2723,13 @@ export default function TakeTestPage() {
       percent: sectionResultView.percent,
       passed: sectionResultView.passed,
       courseTitle: testInfo?.title || attempt?.testTitle || "",
-      subtitle: testMetadata
-        ? buildCourseSubtitle({
-            attemptNumber: testMetadata.completedAttempts + 1,
-            maxAttempts: testMetadata.maxAttempts,
-          })
-        : undefined,
       sectionIndex: srPos || undefined,
       sectionsTotal: orderedTopics.length,
       continueLabel: sectionResultView.isLast ? "Завершить тест" : "Продолжить",
     });
     const srIsLast = sectionResultView.isLast;
     return (
-      <div className="tbh-minh-screen tbh-col" style={{ background: sectionResultsTpl.theme?.background }}>
+      <div className="tbh-screen tbh-col" style={{ background: sectionResultsTpl.theme?.background }}>
         <TemplateScreen
           className="tbh-fill"
           layout={sectionResultsTpl.layout}
@@ -2742,6 +2737,8 @@ export default function TakeTestPage() {
           cssVars={sectionResultsTpl.cssVars}
           themeCss={sectionResultsTpl.themeCss}
           dataTheme={sectionResultsTpl.dataTheme}
+          timers={{ testSeconds: remainingSeconds, sectionSeconds: sectionRemainingSeconds }}
+          themed={sectionResultsTpl.themed}
           context={{
             course: built.course,
             design: sectionResultsTpl.design,
@@ -2793,10 +2790,6 @@ export default function TakeTestPage() {
       });
     // PRD-19 (Block B): a committed answer is read-only unless allowAnswerChange.
     const prd19Locked = isQuestionLocked(currentQ);
-    const sectionClock =
-      sectionRemainingSeconds !== null
-        ? ` · Время темы ${Math.floor(sectionRemainingSeconds / 60)}:${String(sectionRemainingSeconds % 60).padStart(2, "0")}`
-        : "";
     const goBack = () => {
       setStandardFeedbackShown(false);
       setStandardAnswerResult(null);
@@ -2841,67 +2834,45 @@ export default function TakeTestPage() {
     // fixation → «Далее»/«Завершить») is used for BOTH showCorrectAnswers AND any
     // flexible test (allowReturnToUnanswered), mirroring the SCORM «Отправить
     // ответ»+«Пропуск» nav. Strict non-feedback tests keep the default footer.
-    const reviewFooter = (showCorrectAnswers || navSettings.allowReturnToUnanswered) ? (
-      <>
-        <button
-          type="button"
-          onClick={goBack}
-          disabled={prevIdx === null}
-          className="tbh-navbtn"
-        >
-          ← Назад
-        </button>
-        {canSkip && (
-          <button type="button" onClick={handleSkip} className="tbh-navbtn">
-            Пропустить
-          </button>
-        )}
-        {hasSkipped && (
-          <button type="button" onClick={() => { setReviewFromButton(true); setShowReview(true); }} className="tbh-navbtn">
-            Вернуться
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={
-            !(standardFeedbackShown || committedCurrent)
-              ? handleStandardConfirm
-              : // PRD-19 D5 (FR-16): the question page has NO finish button in flexible
-                // mode — «Далее» on the last question reaches the обзор (section/test
-                // finish). Strict-feedback (showCorrectAnswers, no return) keeps the
-                // direct «Завершить тест» submit.
-                isLastQuestion && !navSettings.allowReturnToUnanswered
-                ? handleSubmit
-                : handleStandardContinue
-          }
-          disabled={isSubmitting || (submitModeCurrent && !answerReady)}
-          className="tbh-primarybtn"
-        >
-          {!(standardFeedbackShown || committedCurrent)
-            ? navSettings.allowReturnToUnanswered
-              ? "Отправить ответ"
-              : "Принять"
-            : isLastQuestion && !navSettings.allowReturnToUnanswered
-              ? isSubmitting
-                ? "Отправка..."
-                : "Завершить тест"
-              : "Далее →"}
-        </button>
-      </>
-    ) : undefined;
+    // The row itself comes from the SHARED emitter (`renderQuestionNav`) and is
+    // printed INSIDE the scene, the same markup in the same place as the package's.
+    // This only resolves the run state it is built from.
+    const questionNav: QuestionNavState = {
+      flexible: navSettings.allowReturnToUnanswered,
+      committed: standardFeedbackShown || committedCurrent,
+      canPrev: prevIdx !== null,
+      answerReady: !isSubmitting && (!submitModeCurrent || answerReady),
+      hasNext: !isLastQuestion,
+      showAccept: showCorrectAnswers && submitModeCurrent,
+      showReview: hasSkipped,
+    };
+    /** Wires the shared row's actions to this screen's handlers. */
+    const onNavAction = (action: string) => {
+      if (action === QUESTION_NAV_ACTIONS.back) return goBack();
+      if (action === QUESTION_NAV_ACTIONS.skip) return handleSkip();
+      if (action === QUESTION_NAV_ACTIONS.review) {
+        setReviewFromButton(true);
+        setShowReview(true);
+        return;
+      }
+      if (action === QUESTION_NAV_ACTIONS.submit) return handleStandardConfirm();
+      if (action === QUESTION_NAV_ACTIONS.finish) return void handleSubmit();
+      // «Далее» — walk on past a committed answer (the layout's primary action).
+      if (action === QUESTION_NAV_ACTIONS.next) return handleStandardContinue();
+    };
     return (
       <TemplateQuestionScreen
         tpl={questionTpl}
         testTitle={attempt.testTitle}
-        subtitle={
-          testMetadata
-            ? buildCourseSubtitle({
-                attemptNumber: testMetadata.completedAttempts + 1,
-                maxAttempts: testMetadata.maxAttempts,
-              })
-            : undefined
-        }
-        counterLabel={`Вопрос ${currentIndex + 1} из ${flatQuestions.length} · Тема: ${currentQ.topicName}${sectionClock}`}
+        // Bare counter + the section as its own context field: the layout prints the
+        // section as a tag, exactly as it does in the package (PRD-12 parity). The
+        // section clock stays appended here until the header timers are wired on the
+        // web host — the package shows it in an `ou-timer` instead.
+        counterLabel={`Вопрос ${currentIndex + 1} из ${flatQuestions.length}`}
+        // Countdowns render as the header's DS timers (shared painter), the same
+        // place and markup the package uses — not as text glued to the counter.
+        timers={{ testSeconds: remainingSeconds, sectionSeconds: sectionRemainingSeconds }}
+        sectionName={currentQ.topicName}
         progressPercent={((currentIndex + 1) / flatQuestions.length) * 100}
         question={currentQ.question}
         answer={answers[currentQ.question.id]}
@@ -2915,18 +2886,10 @@ export default function TakeTestPage() {
             ? adaptiveFeedbackHtml(currentQ.question, standardAnswerResult)
             : undefined
         }
-        footer={reviewFooter}
-        answerReady={answerReady}
+        nav={questionNav}
+        onNavAction={onNavAction}
         questionsProgress={questionsProgress}
         onNavigateToQuestion={navigateToQuestion}
-        canPrev={prevIdx !== null}
-        onPrev={goBack}
-        canSkip={canSkip}
-        onSkip={handleSkip}
-        isLast={isLastQuestion}
-        isSubmitting={isSubmitting}
-        onNext={handleNext}
-        onSubmit={handleSubmit}
       />
     );
   }
