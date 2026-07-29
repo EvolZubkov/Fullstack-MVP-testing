@@ -36,6 +36,10 @@ export { buildResultContext, buildAdaptiveResultContext, buildSectionResultConte
 export { aggregateStandardResult, aggregateAdaptiveResult } from "../scoring/aggregate";
 export { resolveOverallRule, resolveTopicRule, checkPassRule } from "../scoring/pass-rule";
 export { buildStartState } from "./start-state";
+// PRD-22: the start illustration is a property of the START PAGE, with the branding
+// param as the fallback. Exported so the package resolves it through the SAME rule
+// the web host and the editor previews use.
+export { resolveStartImageUrl, mediaUrlOf, START_IMAGE_KEY } from "./start-image";
 export { buildCourseSubtitle } from "./course-subtitle";
 export { buildTransitionContext } from "./transition-context";
 export { buildTemplateCssVars, DEFAULT_PARAM_CSS_VARS } from "./params-css";
@@ -50,9 +54,25 @@ export {
   renderMultiple,
   renderRanking,
   renderMatching,
+  renderScale,
   questionHint,
   answerTexts,
 } from "./question-interaction";
+// PRD-26: признаки типа вопроса и клавиатура шкалы. Рантайм пакета несёт ES5-зеркало
+// признаков (app/utils/qtype.js), а клавиатуру берёт отсюда — считать индекс градации
+// дважды нельзя, иначе хосты разойдутся в поведении стрелок.
+export { nextScaleIndex } from "./scale-keyboard";
+export {
+  isSingleIndexChoice,
+  hasOptionList,
+  hasFixedOptionOrder,
+  isMeasurementOnly,
+} from "../questions/question-type";
+// Ревизия «Стандартный»: состояние навигационной строки вопроса. Саму строку
+// рисует МАКЕТ шаблона; хосты лишь кладут это состояние в контекст (state.nav).
+export { buildQuestionNav, QUESTION_NAV_ACTIONS } from "./question-nav";
+// Состояние подвала экрана результатов — строку рисует макет (results.html).
+export { buildResultsNav, RESULTS_NAV_ACTIONS } from "./results-nav";
 // Ревизия «Стандартный»: динамический размер шрифта вопроса/вариантов по длине —
 // общая формула, оба хоста кладут результат в контекст, макет подставляет инлайном.
 export { fitFont, questionFont, optionFont } from "./fit-font";
@@ -65,7 +85,18 @@ export { feedbackBanner, feedbackDesc } from "./feedback-banner";
 // pinned-palette resolver, shared with the web host so both paint the same.
 export { buildTemplateThemeCss, sceneThemeAttribute, baseParams, paramsOfTheme } from "./theme-css";
 export { resolveThemeParams, paramsForTheme, colorParamKeys } from "./theme-params";
-export { TEST_THEMES, THEME_IDS, declaredThemes, supportsThemes, isTestTheme, readTestTheme } from "./themes";
+export {
+  TEST_THEMES,
+  THEME_IDS,
+  declaredThemes,
+  supportsThemes,
+  resolveSceneTheme,
+  isTestTheme,
+  readTestTheme,
+} from "./themes";
+// Бюджет времени раздела: одна модель для веб-хоста и пакета (идёт только внутри
+// раздела, выход замораживает остаток, возврат продолжает с него).
+export * as sectionBudget from "../flow/section-budget";
 // PRD-19 Block C: progress-pills builder, shared by both hosts.
 export { buildQuestionProgress } from "./question-progress-context";
 // PRD-19 Block D: review/finish (обзор) screen builder.

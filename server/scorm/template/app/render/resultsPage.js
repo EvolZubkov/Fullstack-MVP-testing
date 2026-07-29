@@ -588,7 +588,7 @@ function checkAnswer(q, answer) {
 
   var correct = q.correct || {};
 
-  if (q.type === 'single') {
+  if (TBQType.isSingleIndexChoice(q.type)) {
     return answer === correct.correctIndex ? 1 : 0;
   }
 
@@ -706,7 +706,7 @@ function finishScorm(results, passedForLms, resultComputation, scaleComputation)
   function to1(x) { return typeof x === 'number' ? x + 1 : x; }
 
   function mapScormType(q) {
-    if (q.type === 'single') return 'choice';
+    if (TBQType.isSingleIndexChoice(q.type)) return 'choice';
     if (q.type === 'multiple') return 'choice';
     if (q.type === 'matching') return 'matching';
     if (q.type === 'ranking') return 'sequencing';
@@ -716,7 +716,7 @@ function finishScorm(results, passedForLms, resultComputation, scaleComputation)
   function formatResponse(q, ans) {
     if (ans == null) return '';
 
-    if (q.type === 'single') return String(to1(ans));
+    if (TBQType.isSingleIndexChoice(q.type)) return String(to1(ans));
     if (q.type === 'multiple') return ans.map(to1).join(',');
     if (q.type === 'ranking') return ans.map(to1).join(',');
     if (q.type === 'matching') {
@@ -730,7 +730,7 @@ function finishScorm(results, passedForLms, resultComputation, scaleComputation)
 
   function getCorrectAnswerFor(q) {
     var c = q.correct || {};
-    if (q.type === 'single') return c.correctIndex;
+    if (TBQType.isSingleIndexChoice(q.type)) return c.correctIndex;
     if (q.type === 'multiple') return c.correctIndices || [];
     if (q.type === 'ranking') return c.correctOrder || [];
     if (q.type === 'matching') {
@@ -819,7 +819,7 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
   var interactions = [];
 
   function mapScormType(q) {
-    if (q.type === 'single') return 'choice';
+    if (TBQType.isSingleIndexChoice(q.type)) return 'choice';
     if (q.type === 'multiple') return 'choice';
     if (q.type === 'matching') return 'matching';
     if (q.type === 'ranking') return 'sequencing';
@@ -827,7 +827,7 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
   }
 
   function formatResponse(q, answer) {
-    if (q.type === 'single') {
+    if (TBQType.isSingleIndexChoice(q.type)) {
       return answer !== undefined && answer !== null ? String(answer + 1) : '';
     }
     if (q.type === 'multiple') {
@@ -849,7 +849,7 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
 
   function getCorrectAnswerFor(q) {
     var c = q.correct;
-    if (q.type === 'single') return c.correctIndex;
+    if (TBQType.isSingleIndexChoice(q.type)) return c.correctIndex;
     if (q.type === 'multiple') return c.correctIndices;
     if (q.type === 'ranking') return c.correctOrder;
     if (q.type === 'matching') {

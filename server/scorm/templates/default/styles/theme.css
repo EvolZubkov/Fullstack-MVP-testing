@@ -1,17 +1,78 @@
+/* ── Palette (PRD-23) ────────────────────────────────────────────────
+   The template ships BOTH palettes, declared in `manifest.json` as `themes[]`:
+   the light one on `:root` and the dark one behind the system setting plus an
+   explicit `:root[data-theme="dark"]` override that always wins over the media
+   query (a pinned palette must ignore the viewer's OS).
+
+   Values are the design system's own tokens, transcribed as HSL components (the
+   convention this file uses everywhere: colours read them as `hsl(var(--x))`).
+   The mapping is deliberate, not eyeballed:
+     --background  → --ou-bg-page      --card        → --ou-bg-elevated
+     --foreground  → --ou-fg-default   --card-border → --ou-border-default
+     --border      → --ou-border-soft  --muted-*     → --ou-fg-muted / surface-3
+     --primary     → --ou-purple-500 (the DS accent both palettes are built on)
+   so the palette bridge (`buildPaletteBridge`) derives the same `--ou-*` ramp the
+   scene's `.ou-*` markup already paints with, in either theme.
+
+   Non-colour tokens (font, radius, shadow) are theme-independent and stay below.
+   ─────────────────────────────────────────────────────────────────── */
+/* The light palette is the BASE one, so it is declared on a bare `:root` — never
+   `:root[data-theme="light"]`. The author's per-theme colours are printed as
+   `:root { … }` too (buildTemplateThemeCss) and land later in the cascade; giving
+   this block an attribute selector would out-specify them and the test's own
+   palette would never paint. Pinning light under a dark system is handled by the
+   `:not([data-theme="light"])` guard on the dark block below. */
 :root {
-  --background: 222 28% 9%;
-  --foreground: 0 0% 98%;
-  --border: 222 18% 22%;
-  --card: 220 23% 18%;
-  --card-foreground: 0 0% 98%;
-  --card-border: 0 0% 24%;
-  --primary: 268 100% 50%;
-  --primary-foreground: 0 0% 98%;
-  --muted: 225 10% 20%;
-  --muted-foreground: 0 0% 65%;
-  --accent: 225 8% 22%;
+  --background: 240 5% 96%;         /* --ou-neutral-50  #F4F4F5 */
+  --foreground: 218 28% 16%;        /* --ou-neutral-900 #1D2533 */
+  --border: 220 7% 91%;             /* --ou-neutral-100 #E7E8EA */
+  --card: 0 0% 100%;                /* --ou-neutral-0   #FFFFFF */
+  --card-foreground: 218 28% 16%;
+  --card-border: 223 8% 83%;        /* --ou-neutral-200 #D0D2D7 */
+  --primary: 268 100% 50%;          /* --ou-purple-500  #7700FF */
+  --primary-foreground: 0 0% 100%;
+  --muted: 220 7% 91%;
+  --muted-foreground: 222 10% 40%;  /* --ou-neutral-500 #5D6371 */
+  --accent: 220 7% 91%;
   --destructive: 0 84% 52%;
   --success: 142 76% 36%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: 222 28% 9%;       /* --ou-bg-page      #11151E */
+    --foreground: 240 5% 96%;       /* --ou-neutral-50   #F4F4F5 */
+    --border: 222 18% 22%;          /* --ou-border-soft  #2F3543 */
+    --card: 220 23% 18%;            /* --ou-bg-elevated  #232A38 */
+    --card-foreground: 240 5% 96%;
+    --card-border: 222 15% 27%;     /* --ou-border-default #3A4150 */
+    --primary: 268 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --muted: 222 18% 22%;
+    --muted-foreground: 222 9% 71%; /* --ou-neutral-300  #AEB2BB */
+    --accent: 222 18% 22%;
+    --destructive: 0 84% 52%;
+    --success: 142 76% 36%;
+  }
+}
+
+:root[data-theme="dark"] {
+  --background: 222 28% 9%;
+  --foreground: 240 5% 96%;
+  --border: 222 18% 22%;
+  --card: 220 23% 18%;
+  --card-foreground: 240 5% 96%;
+  --card-border: 222 15% 27%;
+  --primary: 268 100% 50%;
+  --primary-foreground: 0 0% 100%;
+  --muted: 222 18% 22%;
+  --muted-foreground: 222 9% 71%;
+  --accent: 222 18% 22%;
+  --destructive: 0 84% 52%;
+  --success: 142 76% 36%;
+}
+
+:root {
   --font-sans: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --radius: 12px;
   --shadow: var(--ou-shadow-lg);
@@ -28,6 +89,10 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
 }
 .container > #app > * { flex: 1 1 auto; min-height: 0; }
+/* …except the nav row the runtime appends next to the scene: it is chrome of a fixed
+   height. Under the rule above it grew a flex-basis and got SQUEEZED by ~4px, so the
+   package's footer sat lower than the web host's on the same template. */
+.container > #app > .tb-scene__foot { flex: none; }
 #toast-root { flex: none; }
 
 /* =================================================================
@@ -53,9 +118,17 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   display: flex;
   flex-direction: column;
   gap: var(--ou-space-3);
-  /* Bottom padding keeps the header content off the progress bar (which is pinned
-     to the bottom edge) so the two don't read as stuck together. */
-  padding: var(--ou-space-4) 24px var(--ou-space-3);
+  /* Bottom padding leaves an 8px gap between the header content (question map /
+     titles) and the progress bar. The bar is 3px tall and hangs 1px past the bottom
+     edge, so it eats 2px of this padding — hence 8 + 2, which makes the VISIBLE gap
+     exactly 8px. */
+  padding: var(--ou-space-4) 24px calc(var(--ou-space-2) + 2px);
+  /* Every screen that shows a header gives it the SAME minimum height, so the field
+     below starts on one line and the header does not jump between slides: the logo
+     tile (44px) plus the vertical padding. Screens with a question map simply grow
+     past it. */
+  min-height: calc(44px + var(--ou-space-4) + var(--ou-space-2) + 2px);
+  box-sizing: border-box;
   background: var(--ou-bg-elevated);
   border-bottom: 1px solid var(--ou-border-soft);
 }
@@ -83,13 +156,15 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 @media (max-width: 900px) {
   .tb-scene__col { width: 100%; }
 }
-/* Footer action panel — shared look for the host-rendered nav row. */
+/* Footer action panel — shared look for the host-rendered nav row. Vertical padding
+   is deliberately tight (8px): the panel is chrome, and every pixel it takes comes
+   off the scrolling body, which is where long questions run out of room. */
 .tb-scene__foot {
   flex: none;
   display: flex;
   align-items: center;
   gap: var(--ou-space-3);
-  padding: var(--ou-space-4) 24px;
+  padding: var(--ou-space-2) 24px;
   background: var(--ou-bg-elevated);
   border-top: 1px solid var(--ou-border-soft);
 }
@@ -148,7 +223,10 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
    indicator cells wrap into rows, (4) «отвечено» drops too. Each dropped element gets
    `flex-basis:100%` (a full row of its own) and an `order` so the stack reads
    dots → legend → отвечено → пропущено. */
-.tb-scene__map { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--ou-space-2) var(--ou-space-4); padding-bottom: var(--ou-space-4); }
+/* `padding-bottom: 0` on purpose: the DS component ships a 16px bottom padding of its
+   own, which stacked on the header's own padding and pushed the pills 24px above the
+   progress bar instead of the 8px the header sets. The gap belongs to the header. */
+.tb-scene__map { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--ou-space-2) var(--ou-space-4); padding-bottom: 0; }
 .tb-scene__map .ou-quiz__dots { flex: 0 0 auto; }
 .tb-scene__map .ou-quiz__legend { margin-top: 0; align-items: center; order: 1; }
 /* Right-aligned so that when a counter wraps to its own full-width row it stacks
@@ -197,6 +275,11 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-scene__subhead { margin: 0; font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
 .tb-scene__note { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
 .tb-scene__headtag { margin-left: auto; align-self: center; flex: none; }
+/* The chip and the timers both used to push themselves right with `margin-left:auto`,
+   and TWO auto margins SHARE the free space — which parked the chip in the middle of
+   the header instead of at its edge. When a chip is present it is the one that takes
+   the free space, and the timers just follow it. */
+.tb-scene__headtag ~ .tb-scene__timers { margin-left: var(--ou-space-6); }
 
 /* ── Title / cover slide (start) — a DISTINCT layout, NOT the shared header.
    The logo floats top-left, the test title dominates the field, its description
@@ -290,6 +373,28 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-scene .feedback-block.ou-banner--success .ou-banner__ico { color: var(--ou-success-default); }
 .tb-scene .feedback-block.ou-banner--warning .ou-banner__ico { color: var(--ou-warning-default); }
 .tb-scene .feedback-block.ou-banner--error .ou-banner__ico { color: var(--ou-error-default); }
+
+/* ── Scale (PRD-26): the DS Stepper in choice mode is the answer control ────────
+   The component itself (ou-stepper--choice) lives in the DS bundle; the SCENE only
+   decides where it sits and when it flips to the vertical layout. Both hosts read
+   this one file, so the flip point cannot differ between the web run and the LMS
+   package. The count-based half of the rule (more than seven graduations) is applied
+   by renderScale; this is the WIDTH half: a narrow answer column cannot fit a row of
+   labelled points, so the scale stands up. */
+.tb-scene .ou-stepper--choice { width: 100%; margin-block: var(--ou-space-4); }
+@media (max-width: 640px) {
+  .tb-scene .ou-stepper--choice { flex-direction: column; align-items: stretch; }
+  .tb-scene .ou-stepper--choice .ou-stepper__step {
+    flex: 0 0 auto; flex-direction: row; align-items: center;
+    gap: var(--ou-space-4); padding: 0; min-height: 44px;
+  }
+  .tb-scene .ou-stepper--choice .ou-stepper__bullet { width: 28px; height: 28px; }
+  .tb-scene .ou-stepper--choice .ou-stepper__step:not(:last-child)::after {
+    top: 28px; bottom: -8px; left: 13px; right: auto; width: 4px; height: auto;
+  }
+  .tb-scene .ou-stepper--choice .ou-stepper__label { text-align: left; padding-top: 0; }
+  .tb-scene .ou-stepper--choice .ou-stepper__title { text-align: left; }
+}
 
 /* ── Answers: comfortable, top-aligned; each option card grows to fit its text ── */
 .tb-scene .ou-radio-group,

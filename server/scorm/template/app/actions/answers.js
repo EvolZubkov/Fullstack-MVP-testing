@@ -77,6 +77,9 @@ function showToast(message, kind) {
 function hasAnswer(q, answer) {
   if (!q) return true;
 
+  // A scale is answered by one graduation index, exactly like single choice — and
+  // index 0 is a real answer, so the check is on the type of the value.
+  if (typeof TBQType !== 'undefined' && TBQType.isSingleIndexChoice(q.type)) return typeof answer === 'number';
   if (q.type === 'single') return typeof answer === 'number';
   if (q.type === 'multiple') return Array.isArray(answer) && answer.length > 0;
 
@@ -131,7 +134,14 @@ function currentAnsweringQuestion() {
 // patch the DOM in place without a full re-render, so call this after every
 // answer change to keep the submit button's disabled state in sync.
 function refreshSubmitEnabled() {
-  var btn = document.querySelector('[data-action="answer-submit"]');
+  // The gate sits on the nav row's PRIMARY button, and WHICH action that is depends
+  // on the flow (shared buildQuestionNav): «Отправить ответ»/«Принять» is
+  // `answer-submit`, but a strict-linear row — and every adaptive question — carries
+  // the gate on «Далее»/«Завершить тест» instead. Refreshing only `answer-submit`
+  // left those disabled until the next full re-render, i.e. unusable.
+  var btn = document.querySelector('[data-action="answer-submit"]')
+    || document.querySelector('.tb-scene__foot [data-action="answer-next"]')
+    || document.querySelector('.tb-scene__foot [data-action="test-finish"]');
   if (!btn) return;
   var q = currentAnsweringQuestion();
   if (!q) return;
@@ -229,6 +239,8 @@ function bindQuestionInputClicksOnce() {
       var q = __currentQuestionForInput();
       if (!q) return;
       if (q.type === 'multiple') toggleMultiple(q.id, idx);
+      // A scale answer is one index, so it goes through the single-choice path.
+      else if (typeof TBQType !== 'undefined' && TBQType.isSingleIndexChoice(q.type)) selectSingle(q.id, idx);
       else if (q.type === 'single') selectSingle(q.id, idx);
     } else if (a.indexOf('rank-up:') === 0 || a.indexOf('rank-down:') === 0) {
       var up = a.indexOf('rank-up:') === 0;
@@ -237,6 +249,34 @@ function bindQuestionInputClicksOnce() {
       // Reuse the shared reorder path (from→to); it self-seeds and sets rankingTouched.
       if (typeof applyRankingDrop === 'function') applyRankingDrop(String(up ? pos - 1 : pos + 1), String(pos));
     }
+  });
+
+  // Keyboard on the PRD-26 scale (a radio group): arrows move AND select, Home/End
+  // jump to a pole. The index maths comes from the SHARED helper so the package and
+  // the web host answer the same keys. Space/Enter need nothing — a graduation is a
+  // real <button> and its click is handled above.
+  document.addEventListener('keydown', function (e) {
+    var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    if (!TB || !TB.nextScaleIndex) return;
+    var group = (e.target && e.target.closest) ? e.target.closest('.ou-stepper--choice') : null;
+    if (!group) return;
+    var steps = group.querySelectorAll('.ou-stepper__step');
+    if (!steps.length) return;
+    var checked = -1;
+    for (var i = 0; i < steps.length; i++) {
+      if (steps[i].getAttribute('aria-checked') === 'true') { checked = i; break; }
+    }
+    var next = TB.nextScaleIndex(e.key, checked === -1 ? null : checked, steps.length);
+    if (next === null) return;
+    e.preventDefault();
+    var q = __currentQuestionForInput();
+    if (!q) return;
+    selectSingle(q.id, next);
+    // The re-render replaces the nodes, so focus is restored by index afterwards.
+    setTimeout(function () {
+      var again = document.querySelectorAll('.ou-stepper--choice .ou-stepper__step');
+      if (again[next] && again[next].focus) again[next].focus();
+    }, 0);
   });
 }
 

@@ -18,6 +18,11 @@ const REQUIRED = [
   "renderMultiple",
   "renderRanking",
   "renderMatching",
+  // PRD-26: шкала и её клавиатура — рантайм пакета зовёт их через TBTemplate.
+  "renderScale",
+  "nextScaleIndex",
+  "isSingleIndexChoice",
+  "isMeasurementOnly",
   "questionHint",
   "answerTexts",
   "fitFont",

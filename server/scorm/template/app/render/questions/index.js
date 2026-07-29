@@ -15,6 +15,8 @@ function renderQuestionInput(q) {
   // The type hint is the question subtitle (state.questionHint in the layout, both
   // hosts) — not prepended here, so the package matches the web exactly.
   if (q.type === 'single')   return renderSingleQuestionInput(q, answer, showReview, correct, shuffleMapping);
+  // The scale takes no shuffle mapping: its graduation order is content (PRD-26 FR-04).
+  if (q.type === 'scale')    return renderScaleQuestionInput(q, answer, showReview, correct);
   if (q.type === 'multiple') return renderMultipleQuestionInput(q, answer, showReview, correct, shuffleMapping);
   if (q.type === 'matching') return renderMatchingQuestionInput(q, answer, showReview, correct, shuffleMapping);
   if (q.type === 'ranking')  return renderRankingQuestionInput(q, answer, showReview, correct, shuffleMapping);

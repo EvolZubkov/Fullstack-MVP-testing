@@ -19,7 +19,9 @@ function confirmAnswer() {
   var rightItems = null;
   var rankingItems = null;
   
-  if (q.type === 'single' || q.type === 'multiple') {
+  // A scale carries its graduations in the same `options` list, so telemetry reports
+  // its answer texts through this branch too (TBQType.hasOptionList).
+  if (typeof TBQType !== 'undefined' ? TBQType.hasOptionList(q.type) : (q.type === 'single' || q.type === 'multiple')) {
     answerOptions = q.data && q.data.options ? q.data.options : null;
   } else if (q.type === 'matching') {
     leftItems = q.data && q.data.left ? q.data.left : null;
@@ -272,8 +274,8 @@ function updateNavigationButton() {
   // two-button flexible row (Отправить ответ / Пропустить) is replaced cleanly by
   // the post-commit Далее/Завершить — a textContent swap on a single .btn would
   // leave the «Пропустить» button stranded.
-  if (typeof buildQuestionNavHtml === 'function') {
-    nav.outerHTML = buildQuestionNavHtml(current, total);
+  if (typeof render === 'function') {
+    render();
     return;
   }
 
