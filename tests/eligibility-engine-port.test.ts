@@ -59,13 +59,17 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
   });
 
   it("daysUntilDate matches", () => {
-    const cases: Array<[string | null, string]> = [
+    const cases: Array<[string | null, string | null]> = [
       ["2026-06-30", "2026-06-28"],
       ["2026-06-30", "2026-06-30"],
       ["2026-06-29", "2026-06-30"],
       [null, "2026-06-30"],
       ["garbage", "2026-06-30"],
       ["2026-06-30", "garbage"],
+      // `effectiveToday` from cooldownDecision is null when access is open (the
+      // dead-fallback removal in server/services/retake-gate.ts relies on this
+      // being tolerated, not coerced).
+      ["2026-06-30", null],
     ];
     for (const [iso, today] of cases) {
       expect(port.EligibilityEngine.daysUntilDate(iso, today)).toEqual(tsEngine.daysUntilDate(iso, today));

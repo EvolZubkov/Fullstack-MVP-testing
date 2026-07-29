@@ -70,8 +70,6 @@ export function decideRetake(
     cooldownPeriodDays,
     lastAttemptDate,
     availableDate: decision.availableDate,
-    daysUntil: decision.allowed
-      ? null
-      : daysUntilDate(decision.availableDate, decision.effectiveToday ?? todayDate),
+    daysUntil: decision.allowed ? null : daysUntilDate(decision.availableDate, decision.effectiveToday),
   };
 }

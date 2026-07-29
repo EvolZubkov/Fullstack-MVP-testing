@@ -327,8 +327,11 @@ describe("<TakeTestPage /> start gates", () => {
 
   it("folds a retake cooldown into the start context instead of navigating away", async () => {
     await renderToStart({
+      // daysUntil is deliberately NOT derivable from availableDate by any clock
+      // (real or faked) — this is the guard that would catch a regression back to
+      // a client-side, clock-based countdown.
       startAttempt: jsonRes(
-        { code: "RETAKE_COOLDOWN", cooldownPeriodDays: 7, availableDate: "2026-08-01", daysUntil: 3 },
+        { code: "RETAKE_COOLDOWN", cooldownPeriodDays: 7, availableDate: "2026-08-01", daysUntil: 99 },
         false,
         403,
       ),
@@ -336,8 +339,23 @@ describe("<TakeTestPage /> start gates", () => {
     fireEvent.click(screen.getByTestId("ts-start-test"));
     await waitFor(() => expect(ctx().state.cooldown).toBeTruthy());
     // The countdown comes from the SERVER date, not from the browser clock.
-    expect(ctx().state.cooldown.daysUntil).toBe(3);
+    expect(ctx().state.cooldown.daysUntil).toBe(99);
     expect(navigateSpy).not.toHaveBeenCalledWith("/learner");
+  });
+
+  it("delivers a retake cooldown with the start-screen data and blocks the start button", async () => {
+    // Path (a): the cooldown arrives with the initial /api/learner/tests fetch
+    // (testMetadata.retakeGate), not via a 403 on start — this is the primary
+    // delivery path and must be covered separately from the 403 fallback above.
+    await renderToStart({
+      tests: [
+        standardTest({
+          retakeGate: { cooldownPeriodDays: 30, availableDate: "2026-08-01", daysUntil: 99 },
+        }),
+      ],
+    });
+    expect(ctx().state.cooldown.daysUntil).toBe(99);
+    expect(ctx().state.canStart).toBe(false);
   });
 
   it("navigates to the prior result from the start «view-results» action", async () => {

@@ -103,10 +103,16 @@ export function cooldownDecision(
  * date is absent/unparseable or the target is not in the future. Both hosts will
  * render the optional «через N дн.» countdown from this, so they cannot disagree
  * — callers MUST pass `cooldownDecision(...).effectiveToday`, not a raw clock read.
+ * `todayDate` accepts `null`/`undefined` so callers can pass `effectiveToday`
+ * (which is `null` only alongside `allowed: true`, where callers won't ask for a
+ * countdown anyway) straight through without an artificial fallback.
  */
-export function daysUntilDate(iso: string | null | undefined, todayDate: string): number | null {
+export function daysUntilDate(
+  iso: string | null | undefined,
+  todayDate: string | null | undefined,
+): number | null {
   const target = iso ? parseIsoDate(iso) : null;
-  const today = parseIsoDate(todayDate);
+  const today = todayDate ? parseIsoDate(todayDate) : null;
   if (target == null || today == null) return null;
   const diff = target - today;
   return diff > 0 ? diff : null;
