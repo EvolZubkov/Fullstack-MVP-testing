@@ -6255,6 +6255,49 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-stepper__num::before { content: attr(data-step); }
 .ou-stepper__step.is-done .ou-stepper__num { display: none; }
 
+/* ─── Choice mode ────────────────────────────────────────────────────────────
+   The stepper as an ANSWER control: an ordered scale (Likert) the user picks a
+   point on, not a progress indicator. Geometry, connector, vertical layout and
+   statuses are the base component's; this mode changes only what makes a
+   progress indicator unusable as an answer:
+     - bullet is larger and EMPTY (no step number, no check icon);
+     - labels wrap instead of being ellipsised and take the answer type scale
+       (--tb-answer-fs, set by the host's font-fit pass);
+     - a `done` step tints only its CONNECTOR — the point stays neutral, so the
+       fill reads as «position on the scale», not «steps completed»;
+     - `is-success` marks the right graduation when a verdict is shown. */
+.ou-stepper--choice .ou-stepper__bullet { width: 44px; height: 44px; color: transparent; }
+.ou-stepper--choice .ou-stepper__bullet svg { display: none; }
+/* Connector recomputed for the 44px bullet: centre at 22px, inset = radius + gap. */
+.ou-stepper--choice .ou-stepper__step:not(:last-child)::after {
+  top: 20px; left: calc(50% + 26px); right: calc(-50% + 26px); height: 4px; border-radius: 999px;
+}
+.ou-stepper--choice .ou-stepper__step { gap: var(--ou-space-3); }
+.ou-stepper--choice .ou-stepper__title {
+  white-space: normal; overflow: visible; text-overflow: clip;
+  font-size: var(--tb-answer-fs, 20px); font-weight: 400; line-height: 1.3; text-wrap: balance;
+}
+.ou-stepper--choice .ou-stepper__step.is-current .ou-stepper__title { font-weight: 600; }
+.ou-stepper--choice .ou-stepper__step.is-current .ou-stepper__bullet { box-shadow: 0 0 0 6px var(--ou-accent-soft); }
+.ou-stepper--choice .ou-stepper__step.is-done .ou-stepper__bullet {
+  background: var(--ou-bg-elevated); border-color: var(--ou-border-default);
+}
+.ou-stepper--choice .ou-stepper__step.is-done .ou-stepper__title { color: var(--ou-fg-muted); font-weight: 400; }
+.ou-stepper--choice .ou-stepper__step.is-success .ou-stepper__bullet {
+  background: var(--ou-success-default); border-color: var(--ou-success-default);
+  box-shadow: 0 0 0 6px var(--ou-success-soft);
+}
+.ou-stepper--choice .ou-stepper__step.is-success .ou-stepper__title { color: var(--ou-success-on-soft); font-weight: 600; }
+.ou-stepper--choice .ou-stepper__step.is-error .ou-stepper__bullet { box-shadow: 0 0 0 6px var(--ou-error-soft); }
+.ou-stepper--choice .ou-stepper__step.is-error .ou-stepper__title { color: var(--ou-error-on-soft); font-weight: 600; }
+/* Verdict shown: mute the «where I am» fill so only success/error carry colour. */
+.ou-stepper--choice.ou-stepper--review .ou-stepper__step.is-done::after { background: var(--ou-border-default); }
+/* Vertical: the base 28px bullet, connector at the same weight as horizontal. */
+.ou-stepper--choice.ou-stepper--vertical .ou-stepper__bullet { width: 28px; height: 28px; }
+.ou-stepper--choice.ou-stepper--vertical .ou-stepper__step:not(:last-child)::after {
+  top: 28px; bottom: -8px; left: 13px; right: auto; width: 4px; height: auto;
+}
+
 
 /* ─── Switch.css ───────────────────────────────── */
 /* UniversityRT · Switch */
