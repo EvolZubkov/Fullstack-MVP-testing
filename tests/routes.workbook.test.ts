@@ -252,7 +252,10 @@ describe("GET /api/workbook/template", () => {
       "Шкалы",
       "Показатели",
       "Вклады вопросов",
+      // Documentation sheets close the book; neither is a role name, so the
+      // importer ignores them and the filled example can never be imported.
       "Справка",
+      "Пример",
     ]);
   });
 
@@ -272,11 +275,12 @@ describe("GET /api/workbook/template", () => {
     expect(header).toEqual(VARIANT_THRESHOLD_HEADERS);
   });
 
-  // Variants (PRD-17) travel in a «Варианты» column of «Вопросы»; the export
-  // writes it and the import reads it. Without it in the template the author
-  // cannot assign a question to a variant — and «Пороги вариантов» has nothing
-  // to threshold.
-  it("лист «Вопросы» несёт колонку «Варианты», как в экспорте", async () => {
+  // Variants (PRD-17) travel in a «Варианты теста» column of «Вопросы»; the
+  // export writes it and the import reads it. Without it in the template the
+  // author cannot assign a question to a variant — and «Пороги вариантов» has
+  // nothing to threshold. The sheet additionally offers the optional per-test
+  // scoring pair, which the importer accepts here (canonical place: «Оценка»).
+  it("лист «Вопросы» несёт колонки экспорта, варианты теста и пару оценки", async () => {
     const res = await request(makeApp())
       .get("/api/workbook/template")
       .buffer(true)
@@ -289,7 +293,11 @@ describe("GET /api/workbook/template", () => {
     const wb = await readWorkbookFromBuffer(res.body as Buffer);
     const sheet = wb.worksheets.find((w) => w.name === "Вопросы");
     const header = (sheet?.getRow(1).values as unknown[]).slice(1);
-    expect(header).toEqual(["Ключ строки", ...QUESTION_HEADERS, "Варианты"]);
+    for (const col of ["Ключ строки", ...QUESTION_HEADERS, "Варианты теста"]) {
+      expect(header, `нет колонки «${col}»`).toContain(col);
+    }
+    expect(header).toContain("Балл");
+    expect(header).toContain("Цена ответа");
   });
 
   it("справка объясняет новый лист и тип порога «По вариантам»", async () => {
@@ -307,5 +315,35 @@ describe("GET /api/workbook/template", () => {
     const text = JSON.stringify(help?.getSheetValues());
     expect(text).toContain("Пороги вариантов");
     expect(text).toContain("По вариантам");
+  });
+});
+
+// ─── Руководство по заполнению шаблона (PDF) ─────────────────────────────────
+// The «Импорт» section offers the beginner guide as a PDF next to «Скачать
+// шаблон». The artifact is pre-built by `npm run docs:pdf` and committed under
+// `docs/dist`, so the running service serves it without needing Chrome.
+
+describe("GET /api/workbook/docs/:doc", () => {
+  it("отдаёт руководство по заполнению шаблона как PDF", async () => {
+    const res = await request(makeApp())
+      .get("/api/workbook/docs/guide")
+      .buffer(true)
+      .parse((r: any, cb: any) => {
+        const chunks: Buffer[] = [];
+        r.on("data", (c: Buffer) => chunks.push(c));
+        r.on("end", () => cb(null, Buffer.concat(chunks)));
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/pdf");
+    expect(res.headers["content-disposition"]).toContain("attachment");
+    // A real PDF, not an error page: the format's magic bytes.
+    expect((res.body as Buffer).subarray(0, 4).toString("latin1")).toBe("%PDF");
+  });
+
+  it("неизвестный документ → 404", async () => {
+    const res = await request(makeApp()).get("/api/workbook/docs/unknown");
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: "Unknown document" });
   });
 });

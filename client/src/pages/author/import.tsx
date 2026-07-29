@@ -16,7 +16,7 @@
  */
 import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Download, Upload, X } from "lucide-react";
+import { BookOpen, Download, Upload, X } from "lucide-react";
 import {
   Banner,
   Box,
@@ -62,6 +62,8 @@ interface Plan {
   measurements?: { rows: number; questions: number };
   structure?: { sections: number; quotas: number };
   errors: string[];
+  /** Non-blocking notices from the importer (e.g. two competing scoring sources). */
+  warnings: string[];
   test?: { id: string | null; title: string } | null;
 }
 
@@ -76,6 +78,16 @@ function formatKb(bytes: number): string {
   return `${Math.max(1, Math.round(bytes / 1024))} КБ`;
 }
 
+/** Download the template-filling guide PDF served by `GET /api/workbook/docs/:doc`. */
+function downloadGuide() {
+  const a = document.createElement("a");
+  a.href = "/api/workbook/docs/guide";
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 /** Maps a raw endpoint response to the unified {@link Plan}. */
 function normalizePlan(data: any, requiresTest: boolean): Plan {
   if (!requiresTest) {
@@ -83,6 +95,7 @@ function normalizePlan(data: any, requiresTest: boolean): Plan {
       scope: "questions",
       questions: { created: data.created ?? 0, updated: data.updated ?? 0, skipped: data.skipped ?? 0 },
       errors: data.errors ?? [],
+      warnings: data.warnings ?? [],
     };
   }
   return {
@@ -93,6 +106,7 @@ function normalizePlan(data: any, requiresTest: boolean): Plan {
     measurements: data.measurements,
     structure: data.structure,
     errors: data.errors ?? [],
+    warnings: data.warnings ?? [],
     test: data.test ?? null,
   };
 }
@@ -379,6 +393,17 @@ export default function ImportPage() {
                   >
                     {tr.downloadTemplate}
                   </Button>
+                  {/* The beginner's guide to the template, built by `npm run docs:pdf`.
+                      A plain anchor-click keeps the SPA on the page — a location
+                      assignment would navigate away before the download starts. */}
+                  <Button
+                    variant="ghost"
+                    size="s"
+                    leadingIcon={<BookOpen size={14} />}
+                    onClick={downloadGuide}
+                  >
+                    {tr.downloadGuide}
+                  </Button>
                 </Cluster>
               </>
             ) : (
@@ -414,6 +439,22 @@ export default function ImportPage() {
                       />
                     ) : (
                       <Banner tone="success" variant="subtle" style={{ marginTop: "var(--ou-space-3)" }} description={tr.noErrors} />
+                    )}
+                    {/* Warnings do not block the import — the book is valid, but
+                        something in it likely is not what the author meant. */}
+                    {preview.warnings.length > 0 && (
+                      <Banner
+                        tone="warning"
+                        style={{ marginTop: "var(--ou-space-3)" }}
+                        title={tr.warningsTitle}
+                        description={
+                          <ul className="ou-list--bulleted">
+                            {preview.warnings.map((w, i) => (
+                              <li key={i}>{w}</li>
+                            ))}
+                          </ul>
+                        }
+                      />
                     )}
                     {renderPlanRows(preview)}
                     {preview.errors.length > 0 && (

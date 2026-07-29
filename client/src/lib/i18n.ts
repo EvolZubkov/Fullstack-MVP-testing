@@ -593,6 +593,8 @@ export const t = {
     uploaderSub: "Поддерживается формат .xlsx",
     uploaderCta: "Выбрать файл",
     downloadTemplate: "Скачать шаблон",
+    downloadGuide: "Руководство по заполнению (PDF)",
+    warningsTitle: "Обратите внимание",
     removeFile: "Убрать файл",
     inspecting: "Определяем содержимое файла…",
     detectedQuestionsOnly: "В файле только вопросы — импорт в общий банк.",
