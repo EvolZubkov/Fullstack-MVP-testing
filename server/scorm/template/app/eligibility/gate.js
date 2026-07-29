@@ -72,36 +72,51 @@ var RetakeGate = (function () {
       .replace(/\{\{\s*personId\s*\}\}/g, personId || '');
   }
 
+  // Memoized same-origin GET of the portal chrome. SECID, cur_person_id and the
+  // trusted date all read the SAME response, so the gate touches the portal once per
+  // URL instead of once per resolver. `no-store` keeps the Date header live: a cached
+  // response would carry a stale server clock.
+  var portalChrome = {};
+
+  function fetchPortalChrome(url) {
+    var key = url || '/';
+    if (portalChrome[key]) return portalChrome[key];
+    portalChrome[key] = fetch(key, { credentials: 'include', cache: 'no-store' })
+      .then(function (r) {
+        var dateHeader = '';
+        try { dateHeader = (r.headers && r.headers.get && r.headers.get('Date')) || ''; } catch (e) { dateHeader = ''; }
+        return r.text().then(function (text) {
+          return { text: text || '', dateHeader: dateHeader };
+        });
+      })
+      .catch(function () { return { text: '', dateHeader: '' }; });
+    return portalChrome[key];
+  }
+
   // Scrape the session SECID (32-hex) the collection POST requires. It is present in
   // the portal chrome; `secidSource.endpoint` (default "/") is fetched same-origin.
   function resolveSecid(config) {
     var src = config.secidSource || {};
-    var url = src.endpoint || '/';
     var pattern = src.pattern || '[A-F0-9]{32}';
-    return fetch(url, { credentials: 'include' })
-      .then(function (r) { return r.text(); })
-      .then(function (html) {
-        var m = new RegExp(pattern).exec(html || '');
-        return m ? m[0] : '';
-      })
-      .catch(function () { return ''; });
+    return fetchPortalChrome(src.endpoint || '/').then(function (page) {
+      var m = new RegExp(pattern).exec(page.text || '');
+      return m ? m[0] : '';
+    });
   }
 
   // Resolve cur_person_id. WebTutor's collection query is scoped to the learner by
   // `cur_person_id`; it is not in SCORM (pre-Initialize) so it is scraped from the
   // portal chrome via `personIdSource.pattern`, with an optional config override.
+  // NOTE: the live contract allows an EMPTY value (the endpoint is session-scoped),
+  // so a miss here is not an error.
   function resolvePersonId(config) {
     if (config.personId) return Promise.resolve(String(config.personId));
     var src = config.personIdSource || {};
     if (!src.pattern) return Promise.resolve('');
-    var url = src.endpoint || '/';
-    return fetch(url, { credentials: 'include' })
-      .then(function (r) { return r.text(); })
-      .then(function (html) {
-        var m = new RegExp(src.pattern).exec(html || '');
-        return m ? (m[1] || m[0]) : '';
-      })
-      .catch(function () { return ''; });
+    return fetchPortalChrome(src.endpoint || '/').then(function (page) {
+      var m = new RegExp(src.pattern).exec(page.text || '');
+      return m ? (m[1] || m[0]) : '';
+    });
   }
 
   function formEncode(obj) {

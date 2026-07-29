@@ -84,6 +84,9 @@ beforeAll(() => {
 
 beforeEach(() => {
   document.body.innerHTML = '<div id="app"></div>';
+  // The gate now reads the portal chrome (SECID + the Date header). Offline here:
+  // every resolver degrades exactly as it does when the portal is unreachable.
+  vi.stubGlobal("fetch", () => Promise.reject(new Error("offline")));
 });
 
 describe("PRD-6 gate block page — rendered from the design template", () => {
