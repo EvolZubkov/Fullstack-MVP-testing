@@ -37,6 +37,39 @@ export const RESULT_VAR_WIDTHS = [18, 28, 10, 60, 18, 14, 20];
 export const MEASUREMENT_HEADERS = ["Вопрос", "Шкала", "Источник", "Ключ источника", "Значение", "Вес"];
 export const MEASUREMENT_WIDTHS = [14, 16, 12, 16, 10, 8];
 
+// ─── «Варианты теста» column of the «Вопросы» sheet ──────────────────────────
+//
+// Variant membership (PRD-17) rides on the «Вопросы» sheet. The column used to be
+// called just «Варианты», which collided with the answer options twice over: the
+// same sheet already carries «Тексты вариантов ответа» and «Следование вариантов
+// ответов», so the bare word read as "answer options" to every first-time author —
+// AND «Варианты» is itself the ancient name of the options column. Hence the
+// explicit name, with the old one still accepted (see {@link variantsColumnOf}).
+
+/** Canonical name of the variant-membership column. */
+export const VARIANTS_COLUMN = "Варианты теста";
+/** Legacy name, still read on import (older books and pre-rename exports). */
+export const VARIANTS_COLUMN_LEGACY = "Варианты";
+/** Canonical name of the answer-options column (whose ancient alias is the above). */
+export const OPTIONS_COLUMN = "Тексты вариантов ответа";
+
+/**
+ * Which column of a «Вопросы» sheet carries variant membership, or `null` when
+ * none does.
+ *
+ * The legacy name is honoured ONLY next to the canonical options column: a sheet
+ * that lacks «Тексты вариантов ответа» is an ancient bank export where «Варианты»
+ * still means the answer options — and which predates variants entirely, so it
+ * has no membership to read. The canonical name always wins when both appear.
+ */
+export function variantsColumnOf(headers: Set<string>): string | null {
+  if (headers.has(VARIANTS_COLUMN)) return VARIANTS_COLUMN;
+  if (headers.has(VARIANTS_COLUMN_LEGACY) && headers.has(OPTIONS_COLUMN)) {
+    return VARIANTS_COLUMN_LEGACY;
+  }
+  return null;
+}
+
 // ─── booleans / enums ────────────────────────────────────────────────────────
 
 const TRUE_WORDS = new Set(["да", "yes", "true", "1", "y", "истина"]);

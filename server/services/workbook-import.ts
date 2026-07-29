@@ -50,6 +50,7 @@ import {
   parseQuotaRow,
   parseVariantThresholdRow,
   parseScoringOverrideRow,
+  variantsColumnOf,
   type ParsedQuota,
 } from "../utils/workbook-sheets";
 
@@ -63,6 +64,11 @@ export interface WorkbookImportResult {
   /** PRD-14 FR-16: sections + quotas written from «Структура»/«Квоты». */
   structure: { sections: number; quotas: number };
   errors: string[];
+  /**
+   * Non-blocking notices: the book imports, but something in it is likely not
+   * what the author meant (e.g. two competing sources of the same setting).
+   */
+  warnings: string[];
   dryRun: boolean;
 }
 
@@ -101,6 +107,7 @@ export async function importWorkbook(
     scoring: { rows: 0 },
     structure: { sections: 0, quotas: 0 },
     errors: [],
+    warnings: [],
     dryRun,
   };
 
@@ -132,9 +139,11 @@ export async function importWorkbook(
     for (const [alias, q] of qres.aliasToQuestion) aliasToQuestion.set(alias, q);
 
     // Variant memberships: resolve each row's question (row key alias, else ID)
-    // and group its labels under the question's topic.
+    // and group its labels under the question's topic. The column is «Варианты
+    // теста»; the old bare «Варианты» is still honoured on legacy books.
+    const variantsCol = variantsColumnOf(sheetHeaders(questionsSheet));
     for (const r of qrows) {
-      const numbers = parseVariantNumbers(r["Варианты"]);
+      const numbers = variantsCol ? parseVariantNumbers(r[variantsCol]) : [];
       if (numbers.length === 0) continue;
       const topicKey = normalizeName(String(r["Тема"] ?? ""));
       if (!topicKey) continue;
@@ -364,6 +373,26 @@ export async function importWorkbook(
 
     if (scoringSheet) {
       const rows = sheetToObjects(scoringSheet);
+
+      // Both sources carry DATA: «Оценка» wins and the «Вопросы» columns are not
+      // read at all. Say so — silently ignoring half the book is a surprise, and
+      // an untouched (header-only) «Оценка» sheet from the template additionally
+      // CLEARS the test's overrides, dropping scoring the author did fill in.
+      //
+      // Keyed on values, not on column presence: the template ships both the
+      // «Оценка» sheet and the «Вопросы» scoring columns, so a presence check
+      // would fire on every book built from it and stop being read.
+      const questionsCarryScoringValues = questionRows.some(
+        (r) =>
+          String(r["Балл"] ?? "").trim() !== "" || String(r["Цена ответа"] ?? "").trim() !== "",
+      );
+      if (questionsCarryScoringValues) {
+        result.warnings.push(
+          `Оценка взята с листа «Оценка» (строк: ${rows.length}); колонки «Балл»/«Цена ответа» ` +
+            `листа «Вопросы» не читались. Чтобы оценка бралась с листа «Вопросы», удалите лист «Оценка».`,
+        );
+      }
+
       for (let i = 0; i < rows.length; i++) {
         const where = `Лист «Оценка», строка ${i + 2}`;
         const parsed = parseScoringOverrideRow(rows[i]);
@@ -417,15 +446,20 @@ export async function importWorkbook(
 
       // «Цена ответа» needs the question type/option count; "точное" becomes an
       // EXPLICIT exact override (parseScoringCell returns null for it).
+      //
+      // A cell that fails to parse is reported and DROPPED ON ITS OWN: the three
+      // columns are independent links of the effective chain, so voiding the whole
+      // row would silently take a valid «Балл»/«Сложность» down with it and let the
+      // question fall through to the system default (1 point, exact).
       let scoringJson: QuestionScoring | null = null;
       if (input.scoringRaw !== "") {
         const sp = parseScoringCell(input.scoringRaw, q.type, q.unitCount);
-        if (!sp.ok) {
-          result.errors.push(`${input.where}: ${sp.error}`);
-          continue;
-        }
-        scoringJson = sp.value ?? { kind: "exact" };
+        if (sp.ok) scoringJson = sp.value ?? { kind: "exact" };
+        else result.errors.push(`${input.where}: ${sp.error}`);
       }
+
+      // Nothing left to override once the bad cell is dropped — no row to write.
+      if (input.points == null && scoringJson == null && input.difficulty == null) continue;
 
       seenQuestionIds.add(q.id);
       overrideRows.push({

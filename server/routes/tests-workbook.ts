@@ -42,6 +42,7 @@ import {
   VARIANT_THRESHOLD_WIDTHS,
   SCORING_OVERRIDE_HEADERS,
   SCORING_OVERRIDE_WIDTHS,
+  VARIANTS_COLUMN,
 } from "../utils/workbook-sheets";
 import type { DrawBlueprint, FormSet } from "@shared/schema";
 
@@ -139,7 +140,7 @@ router.get(
         return {
           "Ключ строки": alias,
           ...serializeQuestionRow(q, topicName.get(q.topicId) || ""),
-          "Варианты": (variantNumbersByQuestion.get(q.id) ?? []).join("; "),
+          [VARIANTS_COLUMN]: (variantNumbersByQuestion.get(q.id) ?? []).join("; "),
         };
       });
 
@@ -205,7 +206,7 @@ router.get(
         .map((o) => serializeScoringOverrideRow(o, aliasByQuestionId.get(o.questionId)!));
 
       const wb = new ExcelJS.Workbook();
-      addSheet(wb, "Вопросы", questionRows, ["Ключ строки", ...QUESTION_HEADERS, "Варианты"], [12, ...QUESTION_WIDTHS, 25]);
+      addSheet(wb, "Вопросы", questionRows, ["Ключ строки", ...QUESTION_HEADERS, VARIANTS_COLUMN], [12, ...QUESTION_WIDTHS, 25]);
       addSheet(wb, "Структура", structureRows, STRUCTURE_HEADERS, STRUCTURE_WIDTHS);
       addSheet(wb, "Квоты", quotaRows, QUOTA_HEADERS, QUOTA_WIDTHS);
       addSheet(wb, "Пороги вариантов", variantThresholdRows, VARIANT_THRESHOLD_HEADERS, VARIANT_THRESHOLD_WIDTHS);

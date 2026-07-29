@@ -54,6 +54,43 @@ describe("parseScoringCell — weighted (single)", () => {
   });
 });
 
+describe("parseScoringCell — ключ РТК «%A2B1C1D0» (алиас весов)", () => {
+  it("разбирает буквенный ключ в веса по позиции опции", () => {
+    const r = parseScoringCell("%A2B1C1D0", "single", 4);
+    expect(r).toEqual({ ok: true, value: { kind: "weighted", weights: [2, 1, 1, 0] } });
+  });
+
+  it("допускает пробелы и строчные буквы", () => {
+    const r = parseScoringCell("% a0 b2 c1 d1", "single", 4);
+    expect(r.ok && r.value).toEqual({ kind: "weighted", weights: [0, 2, 1, 1] });
+  });
+
+  it("меньше букв, чем вариантов → добивает нулями", () => {
+    const r = parseScoringCell("%A2B1", "single", 4);
+    expect(r.ok && r.value).toEqual({ kind: "weighted", weights: [2, 1, 0, 0] });
+  });
+
+  it("больше букв, чем вариантов → ошибка", () => {
+    const r = parseScoringCell("%A2B1C1D0", "single", 3);
+    expect(r.ok).toBe(false);
+  });
+
+  it("буквы не по порядку A, B, C… → ошибка", () => {
+    const r = parseScoringCell("%A2C1B1D0", "single", 4);
+    expect(r.ok).toBe(false);
+  });
+
+  it("ключ для не-single → ошибка", () => {
+    const r = parseScoringCell("%A2B1", "multiple", 2);
+    expect(r.ok).toBe(false);
+  });
+
+  it("мусор после «%» → ошибка", () => {
+    const r = parseScoringCell("%абв", "single", 4);
+    expect(r.ok).toBe(false);
+  });
+});
+
 describe("parseScoringCell — tiered (multiple/matching/ranking)", () => {
   it("разбирает ступени с условиями и токеном T", () => {
     const r = parseScoringCell("ступени: c>=2 => 1; c==T & x==0 => 2", "multiple", 3);

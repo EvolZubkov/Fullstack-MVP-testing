@@ -187,8 +187,15 @@ export async function importQuestionRows(
         continue;
       }
 
-      // Варианты и правильные ответы.
-      const optionsStr = String(row["Тексты вариантов ответа"] || row["Варианты"] || "").trim();
+      // Варианты и правильные ответы. «Варианты» is the ancient name of the
+      // options column, but on a workbook sheet that name belongs to the variant
+      // membership («Варианты теста» since the rename) — so the alias applies only
+      // when the canonical options column is ABSENT, i.e. on a truly old file.
+      const optionsStr = String(
+        row["Тексты вариантов ответа"] ||
+          (hasCol("Тексты вариантов ответа") ? "" : row["Варианты"]) ||
+          "",
+      ).trim();
       const correctStr = String(row["Номера правильных ответов"] || row["Правильный ответ"] || "").trim();
 
       let dataJson: unknown = {};
