@@ -71,6 +71,7 @@ const QUESTION_HINTS: Readonly<Record<string, string>> = {
   multiple: "Выберите один или несколько вариантов",
   ranking: "Расставьте элементы в правильном порядке — перетащите или кнопками ↑/↓",
   matching: "Перетащите карточку справа на нужную строку",
+  scale: "Выберите ответ на шкале",
 };
 
 /** Guidance subtitle for a question type (empty when the type has none). */
@@ -241,6 +242,79 @@ export function renderMultiple(
   review?: ReviewCorrect,
 ): string {
   return renderChoice(question, answer, shuffleMapping, review, true);
+}
+
+// ─── Scale (Likert) ──────────────────────────────────────────────────────────
+
+/**
+ * Graduation count above which the scale lays out vertically (PRD-26 FR-16). Up to
+ * seven points stay side by side; beyond that the labels get too narrow to read. A
+ * NARROW scene switches to the same vertical layout through the template's `theme.css`
+ * media query, so this constant is only the «too many points» half of the rule.
+ */
+const SCALE_HORIZONTAL_MAX = 7;
+
+/** Status class of one graduation. Verdict wins over the plain selection state. */
+function scaleStatus(index: number, chosen: number | null, correct: number | null): string {
+  if (correct !== null) {
+    if (index === correct) return " is-success";
+    if (index === chosen) return " is-error";
+    return chosen !== null && index < chosen ? " is-done" : "";
+  }
+  if (chosen === null) return "";
+  if (index === chosen) return " is-current";
+  return index < chosen ? " is-done" : "";
+}
+
+/**
+ * A scale question as the DS `Stepper` in choice mode — the SAME component the author
+ * UI uses for process steps, with the `ou-stepper--choice` modifier that turns it into
+ * an answer control (empty bullets, wrapping labels, the fill reading as «position on
+ * the scale»). No bespoke scale component exists, and none is needed.
+ *
+ * Graduations before the chosen one carry `is-done`, so the DS tints the CONNECTOR up
+ * to the answer; the chosen one carries `is-current`. In review the right graduation is
+ * `is-success` and a wrongly chosen one `is-error`, and the root gains
+ * `ou-stepper--review` so the accent fill is muted and only the verdict has colour.
+ *
+ * There is no `shuffleMapping` parameter on purpose: the order of graduations is
+ * content, not presentation, and must never be shuffled (see `hasFixedOptionOrder` in
+ * {@link module:shared/questions/question-type}).
+ *
+ * Clicks are delegated exactly like the other types — `data-action="select:<index>"` —
+ * so the hosts wire nothing special.
+ */
+export function renderScale(
+  question: InteractionQuestion,
+  answer: unknown,
+  review?: ReviewCorrect,
+): string {
+  const options = fields(question).options;
+  const chosen = typeof answer === "number" ? answer : null;
+  // Measurement-only questions have no `correctIndex`, so review simply produces no
+  // verdict classes — the same call works for both modes.
+  const correct = review && typeof review.correctIndex === "number" ? review.correctIndex : null;
+
+  const rootCls =
+    "ou-stepper ou-stepper--choice" +
+    (options.length > SCALE_HORIZONTAL_MAX ? " ou-stepper--vertical" : "") +
+    (correct !== null ? " ou-stepper--review" : "");
+
+  const steps = options
+    .map((label, i) => {
+      const status = scaleStatus(i, chosen, correct);
+      return (
+        `<button type="button" class="ou-stepper__step ou-stepper__step--btn${status}" ` +
+        `role="radio" aria-checked="${chosen === i ? "true" : "false"}" ` +
+        `data-action="select:${i}" data-index="${i}">` +
+        `<span class="ou-stepper__bullet"></span>` +
+        `<span class="ou-stepper__label"><span class="ou-stepper__title">${answerHtml(label)}</span></span>` +
+        `</button>`
+      );
+    })
+    .join("");
+
+  return `<div class="${rootCls}" role="radiogroup">${steps}</div>`;
 }
 
 // ─── Ranking ─────────────────────────────────────────────────────────────────
