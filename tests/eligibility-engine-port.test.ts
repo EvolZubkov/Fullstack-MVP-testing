@@ -46,18 +46,10 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
       ["2026-05-08", "2026-06-08", 30],
       ["2026-02-28", "2026-03-30", 30],
       ["bad", "2026-05-20", 30],
-    ];
-    for (const [last, today, days] of cases) {
-      expect(port.EligibilityEngine.cooldownDecision(last, today, days)).toEqual(
-        tsEngine.cooldownDecision(last, today, days),
-      );
-    }
-  });
-
-  it("cooldownDecision matches when the clock is rolled back", () => {
-    const cases: Array<[string | null, string, number]> = [
+      // Clock rolled back behind the last attempt (untrusted "today").
       ["2026-05-20", "2026-05-01", 30],
-      ["2026-05-20", "2026-05-20", 30],
+      // Valid last attempt, unparseable "today".
+      ["2026-05-08", "garbage", 30],
     ];
     for (const [last, today, days] of cases) {
       expect(port.EligibilityEngine.cooldownDecision(last, today, days)).toEqual(
@@ -73,6 +65,7 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
       ["2026-06-29", "2026-06-30"],
       [null, "2026-06-30"],
       ["garbage", "2026-06-30"],
+      ["2026-06-30", "garbage"],
     ];
     for (const [iso, today] of cases) {
       expect(port.EligibilityEngine.daysUntilDate(iso, today)).toEqual(tsEngine.daysUntilDate(iso, today));

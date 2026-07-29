@@ -25,25 +25,34 @@ var EligibilityEngine = (function () {
     return y + '-' + mo + '-' + d;
   }
 
+  // Calendar-day cooldown decision. No prior attempt (lastAttemptDate null/
+  // unparseable) => allowed with no availableDate. The reported "today" is
+  // normalized against an untrusted clock before use: see effectiveToday below.
   function cooldownDecision(lastAttemptDate, todayDate, cooldownPeriodDays) {
-    var parsedToday = parseIsoDate(todayDate);
+    var reportedToday = parseIsoDate(todayDate);
     var last = lastAttemptDate ? parseIsoDate(lastAttemptDate) : null;
-    if (last == null || parsedToday == null) {
-      return { allowed: true, availableDate: null, daysSince: null };
+    if (last == null || reportedToday == null) {
+      return { allowed: true, availableDate: null, daysSince: null, effectiveToday: null };
     }
     // A "today" that precedes the last attempt is an impossible state: the clock is
     // not trusted (rolled-back OS date), so the cooldown runs from the attempt date.
-    var today = parsedToday < last ? last : parsedToday;
+    var today = Math.max(reportedToday, last);
     var daysSince = today - last;
     return {
       allowed: daysSince >= cooldownPeriodDays,
       availableDate: formatIsoDate(last + cooldownPeriodDays),
-      daysSince: daysSince
+      daysSince: daysSince,
+      // "Today" AFTER normalizing an untrusted clock. Derived values (e.g. a "N
+      // days left" countdown) MUST be computed from this, not from the raw
+      // todayDate argument, or they will disagree with allowed/daysSince.
+      effectiveToday: formatIsoDate(today)
     };
   }
 
   // Whole days from todayDate to iso (UTC calendar granularity), or null when either
-  // date is absent/unparseable or the target is not in the future.
+  // date is absent/unparseable or the target is not in the future. Both hosts will
+  // render the optional "через N дн." countdown from this, so they cannot disagree
+  // -- callers MUST pass cooldownDecision(...).effectiveToday, not a raw clock read.
   function daysUntilDate(iso, todayDate) {
     var target = iso ? parseIsoDate(iso) : null;
     var today = parseIsoDate(todayDate);

@@ -4,7 +4,9 @@
  * Authoritative, pure core for the PRD-6 retake gate. Two concerns:
  *
  * 1. Cooldown date math — calendar-day arithmetic on `YYYY-MM-DD` dates
- *    (no time-of-day): `allowed = (today - lastAttempt) >= cooldownPeriodDays`,
+ *    (no time-of-day): `today` is first normalized against an untrusted clock
+ *    (clamped forward to `lastAttempt` if it is reported earlier), then
+ *    `allowed = (today - lastAttempt) >= cooldownPeriodDays`,
  *    `availableDate = lastAttempt + cooldownPeriodDays` (PRD-6 §4.1/§4.3).
  * 2. Verdict normalization + orchestration — turn a plugin's `boolean |
  *    EligibilityResult` into a normalized result, default to `allowed` when no
@@ -58,38 +60,49 @@ export interface CooldownDecision {
   allowed: boolean;
   availableDate: string | null;
   daysSince: number | null;
+  /**
+   * "Today" AFTER normalizing an untrusted clock (`null` when either input date
+   * was missing/unparseable). Any derived value — e.g. a "N days left" countdown —
+   * MUST be computed from this, not from the raw `todayDate` the caller passed in,
+   * or it will disagree with `allowed`/`daysSince`.
+   */
+  effectiveToday: string | null;
 }
 
 /**
  * Calendar-day cooldown decision. No prior attempt (`lastAttemptDate` null/
- * unparseable) => allowed with no `availableDate` (PRD-6 §4.3).
+ * unparseable) => allowed with no `availableDate` (PRD-6 §4.3). The reported
+ * "today" is normalized against an untrusted clock before use: see
+ * `effectiveToday`.
  */
 export function cooldownDecision(
   lastAttemptDate: string | null,
   todayDate: string,
   cooldownPeriodDays: number,
 ): CooldownDecision {
-  const parsedToday = parseIsoDate(todayDate);
+  const reportedToday = parseIsoDate(todayDate);
   const last = lastAttemptDate ? parseIsoDate(lastAttemptDate) : null;
-  if (last == null || parsedToday == null) {
-    return { allowed: true, availableDate: null, daysSince: null };
+  if (last == null || reportedToday == null) {
+    return { allowed: true, availableDate: null, daysSince: null, effectiveToday: null };
   }
   // A "today" that precedes the last attempt is an impossible state, so the clock
   // that produced it cannot be trusted (a learner rolling the OS date back). Fall
   // back to the attempt date: the cooldown then runs its full length.
-  const today = parsedToday < last ? last : parsedToday;
+  const today = Math.max(reportedToday, last);
   const daysSince = today - last;
   return {
     allowed: daysSince >= cooldownPeriodDays,
     availableDate: formatIsoDate(last + cooldownPeriodDays),
     daysSince,
+    effectiveToday: formatIsoDate(today),
   };
 }
 
 /**
  * Whole days from `todayDate` to `iso` (UTC calendar granularity); null when either
- * date is absent/unparseable or the target is not in the future. Both hosts render
- * the optional «через N дн.» line from this, so they cannot disagree.
+ * date is absent/unparseable or the target is not in the future. Both hosts will
+ * render the optional «через N дн.» countdown from this, so they cannot disagree
+ * — callers MUST pass `cooldownDecision(...).effectiveToday`, not a raw clock read.
  */
 export function daysUntilDate(iso: string | null | undefined, todayDate: string): number | null {
   const target = iso ? parseIsoDate(iso) : null;
