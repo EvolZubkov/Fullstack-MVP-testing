@@ -2717,6 +2717,34 @@ a.results-rec-item { color: hsl(var(--primary)); }
     style.textContent = css;
   }
 
+  /**
+   * Revision «Стандартный» on ui-kit: make `<html>` the DS theme provider — `.ou`
+   * plus the active palette class — so the vendored design system's semantic tokens
+   * (`.ou`/`.ou--dark`) resolve for every screen (rendered into a descendant #app).
+   * Mirrors the web host, which puts the same classes on its shadow root. The palette
+   * is the author's pin; a themed «Авто» follows the system; a non-themed template
+   * (the default «Стандартный», dark) resolves to dark.
+   * @param {object} design    TEST_DATA.designSettings
+   * @param {object} manifest  Template manifest (params[] + themes[])
+   */
+  function applyDsThemeClass(design, manifest) {
+    if (typeof document === "undefined") return;
+    var el = document.documentElement;
+    el.classList.add("ou");
+    var TB = root.TBTemplate;
+    var theme = (TB && typeof TB.sceneThemeAttribute === "function") ? TB.sceneThemeAttribute(design, manifest) : null;
+    if (!theme) {
+      var themed = TB && typeof TB.supportsThemes === "function" && TB.supportsThemes(manifest);
+      if (themed && typeof window !== "undefined" && window.matchMedia) {
+        theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      } else {
+        theme = "dark";
+      }
+    }
+    el.classList.remove("ou--dark", "ou--light");
+    el.classList.add(theme === "light" ? "ou--light" : "ou--dark");
+  }
+
   // ─── textFit ──────────────────────────────────────────────────────────────
 
   /**
@@ -3006,6 +3034,7 @@ a.results-rec-item { color: hsl(var(--primary)); }
       }
       applyCssVarsToRoot(inlineParams, manifestParams || []);
       applyThemeCss(design, mf);
+      applyDsThemeClass(design, mf);
     },
 
     /** Pure helpers exposed for unit testing. */
@@ -3501,22 +3530,26 @@ function buildSectionIntroFallback(inp) {
   var instr = typeof inp.instruction === "string" ? inp.instruction : "";
   var instrText = instr.replace(/<[^>]*>/g, "").trim();
   var illo = (inp.illustration == null ? "" : String(inp.illustration)).trim();
+  var secNum = inp.sectionNumber || 1;
+  var secTotal = inp.sectionsTotal && inp.sectionsTotal > 0 ? inp.sectionsTotal : 0;
+  var sectionIntro = {
+    eyebrow: secTotal ? "Раздел " + secNum + " из " + secTotal : "Раздел " + secNum,
+    topicName: inp.topicName || "",
+    description: desc,
+    hasDescription: desc.length > 0,
+    questionCount: count,
+    questionCountLabel: count + " " + pluralQuestions(count),
+    hasTimeLimit: hasTime,
+    timeLimitLabel: hasTime ? String(inp.timeLimitMinutes) + " " + pluralMinutes(inp.timeLimitMinutes) : "",
+    hasInstruction: instrText.length > 0,
+    illustrationUrl: illo,
+    hasIllustration: illo.length > 0,
+    continueLabel: inp.continueLabel || "Далее",
+  };
+  if (secTotal) sectionIntro.progressPercent = Math.round((secNum / secTotal) * 100);
   return {
-    course: { title: inp.topicName || "" },
-    sectionIntro: {
-      eyebrow: "Раздел " + (inp.sectionNumber || 1),
-      topicName: inp.topicName || "",
-      description: desc,
-      hasDescription: desc.length > 0,
-      questionCount: count,
-      questionCountLabel: count + " " + pluralQuestions(count),
-      hasTimeLimit: hasTime,
-      timeLimitLabel: hasTime ? String(inp.timeLimitMinutes) + " " + pluralMinutes(inp.timeLimitMinutes) : "",
-      hasInstruction: instrText.length > 0,
-      illustrationUrl: illo,
-      hasIllustration: illo.length > 0,
-      continueLabel: inp.continueLabel || "Далее",
-    },
+    course: { title: inp.courseTitle || inp.topicName || "", subtitle: inp.subtitle || "" },
+    sectionIntro: sectionIntro,
   };
 }
 
@@ -3548,6 +3581,9 @@ function renderSectionIntro(page) {
   var illustrationUrl = illoRaw && typeof illoRaw === "object" ? (illoRaw.url || "") : (illoRaw || "");
   var introInput = {
     sectionNumber: idx + 1,
+    sectionsTotal: sections.length,
+    courseTitle: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") || section.topicName,
+    subtitle: (typeof scormCourseSubtitle === "function") ? scormCourseSubtitle() : "",
     topicName: section.topicName,
     description: section.topicDescription,
     questionCount: section.drawCount,
@@ -3575,6 +3611,9 @@ function renderSectionIntro(page) {
   // same trust model as info-page bodies / the question-interaction slot).
   if (typeof applySystemScreenStyles === "function") applySystemScreenStyles("section-intro");
   TB.renderScreenInto(app, { layout: layout, context: context, slots: { instruction: instruction } });
+  // Section-intro is inside the timed flow (and inside a section) — reveal + paint
+  // the running test/section countdowns.
+  if (typeof revealSceneTimers === 'function') revealSceneTimers(app);
   var btn = app.querySelector('[data-action="section-intro-continue"]');
   if (btn) btn.addEventListener("click", function () {
     if (typeof advancePageSequence === "function") advancePageSequence();
@@ -3710,16 +3749,23 @@ function renderContentPage(page, contentTemplates) {
   var host;
   if (layout && TB && TB.renderScreenInto) {
     app.innerHTML = "";
-    // Mount directly into #app (no wrapper) so .tb-pad > .layout-content-wrap fills
+    // PRD-22: navigation dots + header caption/progress of the page sequence,
+    // computed by the shared core from the structure — the author supplies only
+    // the identifier. A layout without an indicator simply ignores the block.
+    var pageCtx = buildPageRenderContext(page);
+    // Mount directly into #app (no wrapper) so .tb-pad > .tb-scene fills
     // the fixed stage and the bottom nav anchors.
     TB.renderScreenInto(app, {
       layout: layout,
       context: {
-        course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") },
-        // PRD-22: navigation dots of the page sequence, computed by the shared
-        // core from the structure — the author supplies only the identifier.
-        // A layout without an indicator simply ignores the block.
-        page: buildPageRenderContext(page)
+        course: {
+          title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : ""),
+          subtitle: (typeof scormCourseSubtitle === "function") ? scormCourseSubtitle() : ""
+        },
+        // Per-test branding: the shared header binds `{{#if design.logoUrl}}`, so a
+        // content page must carry `design` too or the logo goes missing on it.
+        design: (typeof scormDesignContext === "function") ? scormDesignContext() : {},
+        page: pageCtx
       },
       slots: { "page-content": skeleton }
     });
@@ -3733,13 +3779,16 @@ function renderContentPage(page, contentTemplates) {
       if (typeof navigateBackOrPrevPage === "function") navigateBackOrPrevPage();
     };
     applyPageBackground(app, page);
+    // Content pages + the router hub are inside the timed flow — reveal + paint the
+    // running countdowns (no-op when no limit runs / the layout has no timer markup).
+    if (typeof revealSceneTimers === 'function') revealSceneTimers(app);
   } else {
     app.innerHTML = skeleton;
     host = app;
     var nav = document.createElement("div");
     nav.className = "navigation";
     nav.style.justifyContent = "flex-end";
-    nav.innerHTML = '<button class="btn" data-nav="next" onclick="advancePageSequence()">Далее</button>';
+    nav.innerHTML = '<button class="ou-btn ou-btn--primary ou-btn--m" data-nav="next" onclick="advancePageSequence()">Далее</button>';
     app.appendChild(nav);
   }
 
@@ -3848,6 +3897,9 @@ function renderContentPage(page, contentTemplates) {
       unlockRules: (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.sectionUnlockRules) || {},
       completionPolicy:
         (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.routerCompletionPolicy) || null,
+      // PRD-19: a completed section's card shows its pass/fail only when the test
+      // reveals section results; otherwise the hub keeps it a neutral «Завершена».
+      showSectionResults: TEST_DATA.showSectionResults !== false,
     };
   }
 
@@ -3876,20 +3928,18 @@ function renderContentPage(page, contentTemplates) {
     }
     var app = document.getElementById("app");
     if (!app) return;
-    // The router is a HUB — navigation is via the topic cards, not the content
-    // wrapper's «Далее». Remove that nav so the run matches the «Структура» preview.
+    // The router hub is the test-entry menu — the attempt subtitle ("Попытка N")
+    // belongs on the in-attempt screens, not on the section menu. Drop it.
+    var sub = app.querySelector(".tb-scene__subtitle");
+    if (sub && sub.parentNode) sub.parentNode.removeChild(sub);
+    // The router is a HUB, but «Завершить» belongs in the STANDARD footer, in the
+    // usual navigation slot — the content wrapper's own primary button, repurposed
+    // below (label + gating + handler). Drop only the fallback `.navigation` block
+    // (the no-layout branch of renderContentPage), which would duplicate it.
     var nav = app.querySelector(".navigation");
     if (nav && nav.parentNode) nav.parentNode.removeChild(nav);
-    // A layout free to name its footer otherwise (`.gallery__nav`) would keep a
-    // live «Далее» next to the cards and let the learner walk past the hub, so
-    // the button is also dropped by its `data-nav` contract.
-    var strayNext = typeof findScreenNavButton === "function"
-      ? findScreenNavButton(app, "next")
-      : null;
-    if (strayNext && strayNext.parentNode) strayNext.parentNode.removeChild(strayNext);
-    // Cards (and the «Завершить» action) live INSIDE the content wrapper's
-    // page-content slot — the SAME DOM the preview builds (buildRouterCards into
-    // page-content) — so the run and the structure preview look identical.
+    // Cards live INSIDE the content wrapper's page-content slot — the SAME DOM the
+    // preview builds — so the run and the structure preview look identical.
     var host = app.querySelector('[data-slot="page-content"]') || app;
     // Cards / progress / «Завершить» come from the SHARED builder — the same
     // markup and the same open/locked rules the web host renders, so a section
@@ -3918,6 +3968,24 @@ function renderContentPage(page, contentTemplates) {
     );
 
     var ready = isRouterReadyToFinish();
+
+    // «Завершить» in the standard footer: the content wrapper's primary nav button,
+    // relabelled and wired to finishRouter, inert until every required section is
+    // done. Re-runs on each hub render, so completing a section enables it.
+    var finishBtn = typeof findScreenNavButton === "function"
+      ? findScreenNavButton(app, "next")
+      : null;
+    if (finishBtn) {
+      finishBtn.textContent = "Завершить";
+      finishBtn.disabled = !ready;
+      if (ready) {
+        finishBtn.removeAttribute("aria-disabled");
+        finishBtn.onclick = finishRouter;
+      } else {
+        finishBtn.setAttribute("aria-disabled", "true");
+        finishBtn.onclick = null;
+      }
+    }
 
     // PRD-8 FR-18: emit router lifecycle events for diagnostics + template
     // extensions. The first time the «Завершить» action becomes available
@@ -4467,6 +4535,8 @@ var TBTemplate = (() => {
     THEME_IDS: () => THEME_IDS,
     aggregateAdaptiveResult: () => aggregateAdaptiveResult,
     aggregateStandardResult: () => aggregateStandardResult,
+    answerTexts: () => answerTexts,
+    applyTypography: () => applyTypography,
     attachPointerDnd: () => attachPointerDnd,
     baseParams: () => baseParams,
     buildAdaptiveResultContext: () => buildAdaptiveResultContext,
@@ -4474,10 +4544,12 @@ var TBTemplate = (() => {
     buildBeforeZone: () => buildBeforeZone,
     buildContentPageRender: () => buildContentPageRender,
     buildContentPageSkeleton: () => buildContentPageSkeleton,
+    buildCourseSubtitle: () => buildCourseSubtitle,
     buildFallbackContentHtml: () => buildFallbackContentHtml,
     buildPageContext: () => buildPageContext,
     buildPageContextFor: () => buildPageContextFor,
     buildPageSequence: () => buildPageSequence,
+    buildPaletteBridge: () => buildPaletteBridge,
     buildQuestionProgress: () => buildQuestionProgress,
     buildResultContext: () => buildResultContext,
     buildReviewContext: () => buildReviewContext,
@@ -4498,8 +4570,13 @@ var TBTemplate = (() => {
     declaredThemes: () => declaredThemes,
     dropOnPoolSlot: () => dropOnPoolSlot,
     dropOnRight: () => dropOnRight,
+    escapeHtml: () => escapeHtml2,
+    feedbackBanner: () => feedbackBanner,
+    feedbackDesc: () => feedbackDesc,
     findContentTemplate: () => findContentTemplate,
     findDefaultContentTemplate: () => findDefaultContentTemplate,
+    fitFont: () => fitFont,
+    fitQuestionScene: () => fitQuestionScene,
     getPagePlaceholderStyles: () => getPagePlaceholderStyles,
     getPageValues: () => getPageValues,
     inputModesFor: () => inputModesFor,
@@ -4510,13 +4587,23 @@ var TBTemplate = (() => {
     isSettingType: () => isSettingType,
     isTestTheme: () => isTestTheme,
     normalizePool: () => normalizePool,
+    optionFont: () => optionFont,
     paramsForTheme: () => paramsForTheme,
     paramsOfTheme: () => paramsOfTheme,
     pluralQuestions: () => pluralQuestions2,
+    questionFont: () => questionFont,
+    questionHint: () => questionHint,
     questionIndicesByTopic: () => questionIndicesByTopic,
     readTestTheme: () => readTestTheme,
+    renderBlockMarkdown: () => renderBlockMarkdown,
+    renderInlineMarkdown: () => renderInlineMarkdown,
+    renderMatching: () => renderMatching,
+    renderMultiple: () => renderMultiple,
+    renderPlainText: () => renderPlainText,
+    renderRanking: () => renderRanking,
     renderResultField: () => renderResultField,
     renderScreenInto: () => renderScreenInto,
+    renderSingleChoice: () => renderSingleChoice,
     renderTemplate: () => renderTemplate,
     resolveContentTemplate: () => resolveContentTemplate,
     resolveOverallRule: () => resolveOverallRule,
@@ -4525,7 +4612,9 @@ var TBTemplate = (() => {
     returnToPool: () => returnToPool,
     sceneThemeAttribute: () => sceneThemeAttribute,
     sequenceIdOf: () => sequenceIdOf,
+    shouldShowReview: () => shouldShowReview,
     statusLabel: () => statusLabel,
+    stripMarkdown: () => stripMarkdown,
     supportsThemes: () => supportsThemes,
     validateVariantFields: () => validateVariantFields,
     withTemplateAssetBase: () => withTemplateAssetBase,
@@ -4713,6 +4802,270 @@ var TBTemplate = (() => {
   }
   function renderTemplate(template, context, options) {
     return compileTemplate(template)(context, options);
+  }
+
+  // shared/text/escape.ts
+  function escapeHtml2(value) {
+    if (value === null || value === void 0) return "";
+    return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  // shared/text/hanging-words.ts
+  var PREPOSITIONS = [
+    "\u0432",
+    "\u0432\u043E",
+    "\u043A",
+    "\u043A\u043E",
+    "\u0441",
+    "\u0441\u043E",
+    "\u0443",
+    "\u043E",
+    "\u043E\u0431",
+    "\u043E\u0431\u043E",
+    "\u043E\u0442",
+    "\u043E\u0442\u043E",
+    "\u0434\u043E",
+    "\u0437\u0430",
+    "\u0438\u0437",
+    "\u043D\u0430",
+    "\u043D\u0430\u0434",
+    "\u043F\u043E",
+    "\u043F\u043E\u0434",
+    "\u043F\u043E\u0434\u043E",
+    "\u043F\u0440\u0435\u0434",
+    "\u043F\u0440\u0435\u0434\u043E",
+    "\u043F\u0440\u0438",
+    "\u043F\u0440\u043E",
+    "\u0431\u0435\u0437",
+    "\u0431\u0435\u0437\u043E",
+    "\u043C\u0435\u0436",
+    "\u043C\u0435\u0436\u0434\u0443",
+    "\u0447\u0435\u0440\u0435\u0437",
+    "\u0447\u0440\u0435\u0437",
+    "\u0441\u043A\u0432\u043E\u0437\u044C",
+    "\u0432\u043D\u0435",
+    "\u0432\u043C\u0435\u0441\u0442\u043E",
+    "\u043A\u0440\u043E\u043C\u0435",
+    "\u043F\u0435\u0440\u0435\u0434",
+    "\u043F\u0435\u0440\u0435\u0434\u043E",
+    "\u043E\u043A\u043E\u043B\u043E",
+    "\u043F\u043E\u0441\u043B\u0435",
+    "\u0432\u0434\u043E\u043B\u044C",
+    "\u0432\u043E\u043A\u0440\u0443\u0433",
+    "\u0440\u0430\u0434\u0438",
+    "\u0434\u043B\u044F"
+  ];
+  var CONJUNCTIONS = [
+    "\u0438",
+    "\u0430",
+    "\u043D\u043E",
+    "\u0434\u0430",
+    "\u0438\u043B\u0438",
+    "\u043B\u0438\u0431\u043E",
+    "\u0442\u043E",
+    "\u043D\u0438",
+    "\u043D\u0435",
+    "\u0436\u0435",
+    "\u0431\u044B",
+    "\u043B\u0438",
+    "\u043A\u0430\u043A",
+    "\u0442\u0430\u043A",
+    "\u0447\u0442\u043E",
+    "\u0447\u0435\u043C",
+    "\u0445\u043E\u0442\u044C",
+    "\u0445\u043E\u0442\u044F",
+    "\u0435\u0441\u043B\u0438",
+    "\u043A\u043E\u0433\u0434\u0430",
+    "\u043F\u043E\u043A\u0430",
+    "\u043B\u0438\u0448\u044C",
+    "\u0435\u0434\u0432\u0430"
+  ];
+  var PRONOUNS = [
+    "\u044F",
+    "\u0442\u044B",
+    "\u043E\u043D",
+    "\u043E\u043D\u0430",
+    "\u043E\u043D\u043E",
+    "\u043C\u044B",
+    "\u0432\u044B",
+    "\u043E\u043D\u0438",
+    "\u043C\u0435\u043D\u044F",
+    "\u0442\u0435\u0431\u044F",
+    "\u0435\u0433\u043E",
+    "\u0435\u0435",
+    "\u0435\u0451",
+    "\u043D\u0430\u0441",
+    "\u0432\u0430\u0441",
+    "\u0438\u0445",
+    "\u043C\u043D\u0435",
+    "\u0442\u0435\u0431\u0435",
+    "\u0435\u043C\u0443",
+    "\u0435\u0439",
+    "\u043D\u0430\u043C",
+    "\u0432\u0430\u043C",
+    "\u0438\u043C",
+    "\u043C\u043D\u043E\u0439",
+    "\u043C\u043D\u043E\u044E",
+    "\u0442\u043E\u0431\u043E\u0439",
+    "\u0442\u043E\u0431\u043E\u044E",
+    "\u0435\u044E",
+    "\u043D\u0430\u043C\u0438",
+    "\u0432\u0430\u043C\u0438",
+    "\u0438\u043C\u0438"
+  ];
+  var POSSESSIVES = [
+    "\u043C\u043E\u0439",
+    "\u043C\u043E\u044F",
+    "\u043C\u043E\u0451",
+    "\u043C\u043E\u0435",
+    "\u043C\u043E\u0438",
+    "\u0442\u0432\u043E\u0439",
+    "\u0442\u0432\u043E\u044F",
+    "\u0442\u0432\u043E\u0451",
+    "\u0442\u0432\u043E\u0435",
+    "\u0442\u0432\u043E\u0438",
+    "\u043D\u0430\u0448",
+    "\u043D\u0430\u0448\u0430",
+    "\u043D\u0430\u0448\u0435",
+    "\u043D\u0430\u0448\u0438",
+    "\u0432\u0430\u0448",
+    "\u0432\u0430\u0448\u0430",
+    "\u0432\u0430\u0448\u0435",
+    "\u0432\u0430\u0448\u0438",
+    "\u0441\u0432\u043E\u0439",
+    "\u0441\u0432\u043E\u044F",
+    "\u0441\u0432\u043E\u0451",
+    "\u0441\u0432\u043E\u0435",
+    "\u0441\u0432\u043E\u0438"
+  ];
+  var DEMONSTRATIVES = [
+    "\u044D\u0442\u043E\u0442",
+    "\u044D\u0442\u0430",
+    "\u044D\u0442\u043E",
+    "\u044D\u0442\u0438",
+    "\u0442\u043E\u0442",
+    "\u0442\u0430",
+    "\u0442\u0435",
+    "\u0441\u0430\u043C",
+    "\u0441\u0430\u043C\u0430",
+    "\u0441\u0430\u043C\u043E",
+    "\u0441\u0430\u043C\u0438",
+    "\u0432\u0435\u0441\u044C",
+    "\u0432\u0441\u044F",
+    "\u0432\u0441\u0451",
+    "\u0432\u0441\u0435",
+    "\u043A\u0430\u0436\u0434\u044B\u0439",
+    "\u043A\u0430\u0436\u0434\u0430\u044F",
+    "\u043A\u0430\u0436\u0434\u043E\u0435",
+    "\u043A\u0430\u0436\u0434\u044B\u0435",
+    "\u043A\u0442\u043E",
+    "\u043A\u0442\u043E-\u0442\u043E",
+    "\u0447\u0442\u043E-\u0442\u043E",
+    "\u043A\u0442\u043E-\u043D\u0438\u0431\u0443\u0434\u044C",
+    "\u0447\u0442\u043E-\u043D\u0438\u0431\u0443\u0434\u044C"
+  ];
+  var ADVERBS = ["\u0432\u043E\u0442", "\u0443\u0436\u0435", "\u0435\u0449\u0451", "\u0442\u0430\u043C", "\u0442\u0443\u0442", "\u043D\u0443"];
+  var HANGING_WORDS = /* @__PURE__ */ new Set([
+    ...PREPOSITIONS,
+    ...CONJUNCTIONS,
+    ...PRONOUNS,
+    ...POSSESSIVES,
+    ...DEMONSTRATIVES,
+    ...ADVERBS
+  ]);
+
+  // shared/text/typography.ts
+  var NBSP = "\xA0";
+  function replaceQuotes(text) {
+    let open = false;
+    return text.replace(/"/g, () => {
+      open = !open;
+      return open ? "\xAB" : "\xBB";
+    });
+  }
+  function replaceDashes(text) {
+    return text.replace(/^(\s*)-(?=\s+\S)/, "$1\u2014").replace(/([,.!?;:])\s*-(?=\s)/g, "$1\u2014").replace(/(?<=\s)-(?=\s)/g, "\u2014").replace(/[ \t\u00A0]*—[ \t\u00A0]*/g, " \u2014 ").replace(/^ — /, "\u2014 ");
+  }
+  var HANGING_RE = /(?<![А-Яа-яЁё-])([А-Яа-яЁё]+(?:-[А-Яа-яЁё]+)*) (?=\S)/g;
+  function shouldBind(word) {
+    const lower = word.toLowerCase();
+    return HANGING_WORDS.has(lower) || lower.length <= 2;
+  }
+  function bindHangingWords(text) {
+    return text.replace(
+      HANGING_RE,
+      (match, word) => shouldBind(word) ? word + NBSP : match
+    );
+  }
+  function applyTypography(text) {
+    if (!text) return text;
+    let result = replaceQuotes(text);
+    result = replaceDashes(result);
+    result = bindHangingWords(result);
+    return result;
+  }
+
+  // shared/text/markdown.ts
+  var MD_LINK = /\[([^\]\n]+)\]\(([^\s)]+)\)/;
+  var BARE_URL = /https?:\/\/[^\s<>()]*[^\s<>().,;:!?]/;
+  var EMAIL = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+  var LINK_TOKEN_RE = new RegExp(
+    `${MD_LINK.source}|${BARE_URL.source}|${EMAIL.source}`,
+    "g"
+  );
+  var SAFE_PROTOCOL = /^(https?:\/\/|mailto:)/i;
+  var MASK = "\0";
+  function applyEmphasis(html) {
+    return html.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+  }
+  function normaliseNewlines(text) {
+    return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  }
+  function renderLineBreaks(html) {
+    return html.replace(/\n/g, "<br>").replace(/(?:<br>){3,}/g, "<br><br>");
+  }
+  function anchor(url, label) {
+    const href = escapeHtml2(url);
+    const attrs = /^mailto:/i.test(url) ? "" : ' target="_blank" rel="noopener noreferrer"';
+    return `<a href="${href}"${attrs}>${label}</a>`;
+  }
+  function renderLinkToken(match) {
+    const [source, mdLabel, mdUrl] = match;
+    if (mdLabel !== void 0 && mdUrl !== void 0) {
+      if (!SAFE_PROTOCOL.test(mdUrl)) return escapeHtml2(source);
+      return anchor(mdUrl, applyEmphasis(escapeHtml2(applyTypography(mdLabel))));
+    }
+    const url = /^https?:\/\//i.test(source) ? source : `mailto:${source}`;
+    return anchor(url, escapeHtml2(source));
+  }
+  function renderInlineMarkdown(text) {
+    if (!text) return "";
+    const links = [];
+    LINK_TOKEN_RE.lastIndex = 0;
+    const masked = normaliseNewlines(text).replace(LINK_TOKEN_RE, (...args) => {
+      const match = args.slice(0, -2);
+      links.push(renderLinkToken(match));
+      return `${MASK}${links.length - 1}${MASK}`;
+    });
+    const body = renderLineBreaks(applyEmphasis(escapeHtml2(applyTypography(masked))));
+    return body.replace(new RegExp(`${MASK}(\\d+)${MASK}`, "g"), (_, i) => links[Number(i)]);
+  }
+  function renderBlockMarkdown(text) {
+    if (!text) return "";
+    return normaliseNewlines(text).split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter((paragraph) => paragraph.length > 0).map((paragraph) => `<p>${renderInlineMarkdown(paragraph)}</p>`).join("");
+  }
+
+  // shared/text/plain.ts
+  var MD_LINK2 = /\[([^\]\n]+)\]\(([^\s)]+)\)/g;
+  var MD_BOLD = /\*\*([^*\n]+)\*\*/g;
+  var MD_ITALIC = /\*([^*\n]+)\*/g;
+  function stripMarkdown(text) {
+    if (!text) return "";
+    return text.replace(MD_LINK2, "$1").replace(MD_BOLD, "$1").replace(MD_ITALIC, "$1");
+  }
+  function renderPlainText(text) {
+    if (!text) return "";
+    return applyTypography(stripMarkdown(text));
   }
 
   // shared/template/renderers.ts
@@ -5000,7 +5353,10 @@ var TBTemplate = (() => {
     const threshold = typeof config.overlapThreshold === "number" ? config.overlapThreshold : 0.1;
     const ghostParent = root.nodeType === 9 ? root.body : root;
     let dragState = null;
-    const clearOver = () => root.querySelectorAll(".is-over").forEach((n) => n.classList.remove("is-over"));
+    const clearOver = () => {
+      root.querySelectorAll(".is-over").forEach((n) => n.classList.remove("is-over"));
+      root.querySelectorAll(".ou-match__row.is-target").forEach((n) => n.classList.remove("is-target"));
+    };
     const overlapDropZone = (st) => {
       if (!st.ghost) return null;
       const g = st.ghost.getBoundingClientRect();
@@ -5086,7 +5442,11 @@ var TBTemplate = (() => {
       }
       clearOver();
       const dz = overlapDropZone(st);
-      if (dz) dz.classList.add("is-over");
+      if (dz) {
+        dz.classList.add("is-over");
+        const row = dz.closest(".ou-match__row");
+        if (row) row.classList.add("is-target");
+      }
     };
     const finish = () => {
       const st = dragState;
@@ -5098,15 +5458,21 @@ var TBTemplate = (() => {
       clearOver();
       if (st.started) config.onDrop({ dropId: dz ? dz.getAttribute("data-drop") || "" : "", dragId: st.dragId });
     };
+    const onDragStart = (e) => {
+      var _a, _b;
+      if ((_b = (_a = e.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, "[data-drag]")) e.preventDefault();
+    };
     root.addEventListener("pointerdown", onPointerDown);
     root.addEventListener("pointermove", onPointerMove);
     root.addEventListener("pointerup", finish);
     root.addEventListener("pointercancel", finish);
+    root.addEventListener("dragstart", onDragStart);
     return () => {
       root.removeEventListener("pointerdown", onPointerDown);
       root.removeEventListener("pointermove", onPointerMove);
       root.removeEventListener("pointerup", finish);
       root.removeEventListener("pointercancel", finish);
+      root.removeEventListener("dragstart", onDragStart);
       if (dragState == null ? void 0 : dragState.ghost) dragState.ghost.remove();
     };
   }
@@ -5117,6 +5483,19 @@ var TBTemplate = (() => {
   function round1(n) {
     return Math.round((Number(n) || 0) * 10) / 10;
   }
+  function buildTopicFeedbackView(t) {
+    var _a, _b, _c;
+    const fb = String((_a = t.feedback) != null ? _a : "").trim();
+    const courses = ((_b = t.recommendedCourses) != null ? _b : []).map((l) => ({ title: l.title, ...l.url ? { url: l.url } : {} }));
+    const events = ((_c = t.recommendedEvents) != null ? _c : []).map((l) => ({ title: l.title, ...l.url ? { url: l.url } : {} }));
+    return {
+      ...fb ? { feedback: fb } : {},
+      hasFeedback: fb.length > 0,
+      recommendedCourses: courses,
+      recommendedEvents: events,
+      hasRecommendations: courses.length > 0 || events.length > 0
+    };
+  }
   function topicView(t, withPoints) {
     const passed = t.passed;
     const view = {
@@ -5126,11 +5505,12 @@ var TBTemplate = (() => {
       total: t.total,
       percent: Math.round(t.percent || 0),
       passClass: passed === true ? "is-pass" : passed === false ? "is-fail" : "",
-      statusLabel: passed === true ? "\u041F\u0440\u043E\u0439\u0434\u0435\u043D\u043E" : passed === false ? "\u041D\u0435 \u043F\u0440\u043E\u0439\u0434\u0435\u043D\u043E" : ""
+      statusLabel: passed === true ? "\u041F\u0440\u043E\u0439\u0434\u0435\u043D\u043E" : passed === false ? "\u041D\u0435 \u043F\u0440\u043E\u0439\u0434\u0435\u043D\u043E" : "",
+      // Unified feedback composition (feedback + courses + events) — same as adaptive.
+      ...buildTopicFeedbackView(t)
     };
     if (withPoints) view.pointsLabel = round1(t.earnedPoints) + " / " + round1(t.possiblePoints);
     if (t.requiredLabel) view.requiredLabel = t.requiredLabel;
-    if (t.topicFeedback && String(t.topicFeedback).trim()) view.topicFeedback = t.topicFeedback;
     return view;
   }
   function buildResultContext(input, title, opts = {}) {
@@ -5171,7 +5551,14 @@ var TBTemplate = (() => {
       summaryLabel: (input.correct != null ? input.correct : 0) + " \u0438\u0437 " + input.total + " \u0432\u0435\u0440\u043D\u043E \xB7 " + percent + "%",
       continueLabel: input.continueLabel || "\u041F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C"
     };
-    return { course: { title: input.topicName || "" }, sectionResult };
+    if (input.sectionsTotal && input.sectionsTotal > 0 && input.sectionIndex) {
+      sectionResult.sectionLabel = "\u0420\u0430\u0437\u0434\u0435\u043B " + input.sectionIndex + " \u0438\u0437 " + input.sectionsTotal;
+      sectionResult.progressPercent = Math.round(input.sectionIndex / input.sectionsTotal * 100);
+    }
+    return {
+      course: { title: input.courseTitle || input.topicName || "", subtitle: input.subtitle },
+      sectionResult
+    };
   }
   function pluralQuestions(n) {
     const abs = Math.abs(n) % 100;
@@ -5197,8 +5584,10 @@ var TBTemplate = (() => {
     const instrRaw = typeof input.instruction === "string" ? input.instruction : "";
     const instrText = instrRaw.replace(/<[^>]*>/g, "").trim();
     const illo = ((_b = input.illustration) != null ? _b : "").trim();
+    const secNum = input.sectionNumber || 1;
+    const secTotal = input.sectionsTotal && input.sectionsTotal > 0 ? input.sectionsTotal : 0;
     const sectionIntro = {
-      eyebrow: "\u0420\u0430\u0437\u0434\u0435\u043B " + (input.sectionNumber || 1),
+      eyebrow: secTotal ? "\u0420\u0430\u0437\u0434\u0435\u043B " + secNum + " \u0438\u0437 " + secTotal : "\u0420\u0430\u0437\u0434\u0435\u043B " + secNum,
       topicName: input.topicName || "",
       description: desc,
       hasDescription: desc.length > 0,
@@ -5211,19 +5600,19 @@ var TBTemplate = (() => {
       hasIllustration: illo.length > 0,
       continueLabel: input.continueLabel || "\u0414\u0430\u043B\u0435\u0435"
     };
-    return { course: { title: input.topicName || "" }, sectionIntro };
+    if (secTotal) sectionIntro.progressPercent = Math.round(secNum / secTotal * 100);
+    return {
+      course: { title: input.courseTitle || input.topicName || "", subtitle: input.subtitle },
+      sectionIntro
+    };
   }
   function adaptiveTopicView(t) {
     const achieved = t.achievedLevelIndex !== null && t.achievedLevelIndex !== void 0;
-    const links = (t.recommendedLinks || []).map((l) => ({ title: l.title, url: l.url }));
     return {
       topicName: t.topicName || "",
       levelLabel: achieved ? t.achievedLevelName : "\u041D\u0435 \u0434\u043E\u0441\u0442\u0438\u0433\u043D\u0443\u0442",
       levelClass: achieved ? "is-info" : "is-fail",
-      feedback: t.feedback || "",
-      hasFeedback: !!(t.feedback && String(t.feedback).trim()),
-      hasLinks: links.length > 0,
-      links
+      ...buildTopicFeedbackView(t)
     };
   }
   function buildAdaptiveResultContext(input, title, opts = {}) {
@@ -5510,6 +5899,15 @@ var TBTemplate = (() => {
     return { mode: "adaptive", overallPassed, topicResults };
   }
 
+  // shared/template/course-subtitle.ts
+  function buildCourseSubtitle(input) {
+    const n = input == null ? void 0 : input.attemptNumber;
+    if (typeof n !== "number" || !Number.isFinite(n) || n < 1) return "";
+    const max = input == null ? void 0 : input.maxAttempts;
+    const capped = typeof max === "number" && Number.isFinite(max) && max > 0;
+    return capped ? `\u041F\u043E\u043F\u044B\u0442\u043A\u0430 ${n} \u0438\u0437 ${max}` : `\u041F\u043E\u043F\u044B\u0442\u043A\u0430 ${n}`;
+  }
+
   // shared/template/start-state.ts
   function buildStartState(input) {
     const noAttempts = input.maxAttempts != null && input.completedAttempts >= input.maxAttempts;
@@ -5565,6 +5963,12 @@ var TBTemplate = (() => {
     const i = input.info;
     const course = {
       title: i.title,
+      // Header subtitle "Попытка N из M": the upcoming attempt is one past those
+      // already completed. Same builder both hosts use on the question/обзор screens.
+      subtitle: buildCourseSubtitle({
+        attemptNumber: input.completedAttempts + 1,
+        maxAttempts: input.maxAttempts
+      }),
       description: i.description || "",
       questionCount: i.questionCount,
       passPercent: i.passPercent,
@@ -5576,28 +5980,30 @@ var TBTemplate = (() => {
   }
 
   // shared/template/transition-context.ts
+  function defaultMessage(isUp, isDown) {
+    if (isUp) return "\u0421\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0435 \u0432\u043E\u043F\u0440\u043E\u0441\u044B \u0431\u0443\u0434\u0443\u0442 \u0441\u043B\u043E\u0436\u043D\u0435\u0435";
+    if (isDown) return "\u0421\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0435 \u0432\u043E\u043F\u0440\u043E\u0441\u044B \u0431\u0443\u0434\u0443\u0442 \u043F\u0440\u043E\u0449\u0435";
+    return "\u0412\u0430\u0448 \u0443\u0440\u043E\u0432\u0435\u043D\u044C \u043F\u043E \u0442\u0435\u043C\u0435 \u043E\u043F\u0440\u0435\u0434\u0435\u043B\u0451\u043D";
+  }
   function buildTransitionContext(input) {
-    const ok = !!input.isCorrect;
-    const t = {
-      isCorrect: ok,
-      iconClass: ok ? "is-pass" : "is-fail",
-      title: ok ? "\u041F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u043E!" : "\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u043E",
-      showContinue: !!input.showContinue
-    };
-    if (input.levelTransition) {
-      const type = input.levelTransition.type;
-      const isUp = type === "up";
-      const isDown = type === "down";
-      t.level = {
+    var _a, _b;
+    const type = (_a = input.levelTransition) == null ? void 0 : _a.type;
+    const isUp = type === "up";
+    const isDown = type === "down";
+    const isComplete = !isUp && !isDown;
+    const transition = {
+      topicName: input.topicName || "",
+      title: isUp ? "\u0421\u043B\u043E\u0436\u043D\u043E\u0441\u0442\u044C \u043F\u043E\u0432\u044B\u0448\u0435\u043D\u0430" : isDown ? "\u0421\u043B\u043E\u0436\u043D\u043E\u0441\u0442\u044C \u043F\u043E\u043D\u0438\u0436\u0435\u043D\u0430" : "\u0423\u0440\u043E\u0432\u0435\u043D\u044C \u0437\u0430\u0444\u0438\u043A\u0441\u0438\u0440\u043E\u0432\u0430\u043D",
+      level: {
         class: isUp ? "is-up" : isDown ? "is-down" : "is-complete",
         isUp,
         isDown,
-        isComplete: !isUp && !isDown,
-        message: input.levelTransition.message
-      };
-    }
-    if (input.topicTransition) t.topic = { toTopic: input.topicTransition.toTopic };
-    return { transition: t };
+        isComplete,
+        message: (((_b = input.levelTransition) == null ? void 0 : _b.message) || "").trim() || defaultMessage(isUp, isDown)
+      },
+      showContinue: !!input.showContinue
+    };
+    return { transition };
   }
 
   // shared/template/params-css.ts
@@ -5634,6 +6040,259 @@ var TBTemplate = (() => {
       result[cssVar] = typeof value === "number" ? String(value) + (def.cssUnit || "px") : String(value);
     }
     return result;
+  }
+
+  // shared/template/palette-bridge.ts
+  var RAMP = [
+    [50, "#fff", 92],
+    [100, "#fff", 80],
+    [200, "#fff", 60],
+    [300, "#fff", 40],
+    [400, "#fff", 18],
+    [500, "#000", null],
+    // якорь = сам primary
+    [600, "#000", 16],
+    [700, "#000", 32],
+    [800, "#000", 50],
+    [900, "#000", 68]
+  ];
+  function buildPaletteBridge(p) {
+    const lines = [];
+    if (p.primary) {
+      const anchor2 = "hsl(var(--primary))";
+      for (const [step, mixWith, pct] of RAMP) {
+        const value = pct === null ? anchor2 : `color-mix(in oklch, ${mixWith} ${pct}%, ${anchor2})`;
+        lines.push(`--ou-purple-${step}:${value};`);
+      }
+    }
+    if (p.background) lines.push("--ou-bg-page:hsl(var(--background));");
+    if (p.card) lines.push("--ou-bg-elevated:hsl(var(--card));");
+    if (p.border) lines.push("--ou-border-soft:hsl(var(--border));");
+    return lines.length ? `.ou{${lines.join("")}}` : "";
+  }
+
+  // shared/template/question-interaction.ts
+  function fields(q) {
+    var _a, _b, _c, _d, _e;
+    const d = (_a = q.dataJson) != null ? _a : {};
+    return { options: (_b = d.options) != null ? _b : [], items: (_c = d.items) != null ? _c : [], left: (_d = d.left) != null ? _d : [], right: (_e = d.right) != null ? _e : [] };
+  }
+  var QUESTION_HINTS = {
+    single: "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043E\u0434\u0438\u043D \u0432\u0430\u0440\u0438\u0430\u043D\u0442 \u043E\u0442\u0432\u0435\u0442\u0430",
+    multiple: "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043E\u0434\u0438\u043D \u0438\u043B\u0438 \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0432\u0430\u0440\u0438\u0430\u043D\u0442\u043E\u0432",
+    ranking: "\u0420\u0430\u0441\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u044D\u043B\u0435\u043C\u0435\u043D\u0442\u044B \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u043E\u043C \u043F\u043E\u0440\u044F\u0434\u043A\u0435 \u2014 \u043F\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u0438\u043B\u0438 \u043A\u043D\u043E\u043F\u043A\u0430\u043C\u0438 \u2191/\u2193",
+    matching: "\u041F\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u043A\u0430\u0440\u0442\u043E\u0447\u043A\u0443 \u0441\u043F\u0440\u0430\u0432\u0430 \u043D\u0430 \u043D\u0443\u0436\u043D\u0443\u044E \u0441\u0442\u0440\u043E\u043A\u0443"
+  };
+  function questionHint(type) {
+    var _a;
+    return (_a = QUESTION_HINTS[type]) != null ? _a : "";
+  }
+  function answerTexts(question) {
+    const f = fields(question);
+    if (question.type === "ranking") return f.items;
+    if (question.type === "matching") return [...f.left, ...f.right];
+    return f.options;
+  }
+  function answerHtml(text) {
+    return renderInlineMarkdown(text === null || text === void 0 ? "" : String(text));
+  }
+  function isChosen(answer, oi) {
+    return Array.isArray(answer) ? answer.includes(oi) : answer === oi;
+  }
+  function displayOrder(count, shuffleMapping) {
+    return shuffleMapping && shuffleMapping.length === count ? shuffleMapping : Array.from({ length: count }, (_, i) => i);
+  }
+  function reviewClass(multiple, oi, chosen, review) {
+    if (!review) return "";
+    const correctSet = multiple && Array.isArray(review.correctIndices) ? review.correctIndices : null;
+    const correctOne = !multiple && typeof review.correctIndex === "number" ? review.correctIndex : null;
+    if (correctSet) {
+      if (correctSet.includes(oi)) return chosen ? " correct-answer" : " missed-answer";
+      return chosen ? " incorrect-answer" : " correct-skip";
+    } else if (correctOne !== null) {
+      if (oi === correctOne) return " correct-answer";
+      if (chosen) return " incorrect-answer";
+    }
+    return "";
+  }
+  function radioControl(on) {
+    return `<span class="ou-radio ou-radio--m${on ? " is-on" : ""}"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>`;
+  }
+  function checkControl() {
+    return `<span class="ou-check ou-check--m"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span></span>`;
+  }
+  var MARK_CHECK = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+  var MARK_CROSS = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg>';
+  function reviewMark(review) {
+    if (review === " correct-answer") return `<span class="ou-radio-card__mark">${MARK_CHECK}</span>`;
+    if (review === " incorrect-answer" || review === " missed-answer") return `<span class="ou-radio-card__mark">${MARK_CROSS}</span>`;
+    return "";
+  }
+  function optionCard(control, title, chosen, review, oi) {
+    return `<label class="ou-radio-card${chosen ? " is-on" : ""}${review}" data-action="select:${oi}" data-index="${oi}" role="button" tabindex="0">${control}<span class="ou-radio-card__text"><span class="ou-radio-card__title" style="font-weight:400;font-size:var(--tb-answer-fs,1.25rem);line-height:1.35;text-wrap:pretty">${title}</span></span>${reviewMark(review)}</label>`;
+  }
+  function renderChoice(question, answer, shuffleMapping, review, multiple) {
+    const options = fields(question).options;
+    const items = displayOrder(options.length, shuffleMapping).map((oi) => {
+      const chosen = isChosen(answer, oi);
+      const control = multiple ? checkControl() : radioControl(chosen);
+      return optionCard(control, answerHtml(options[oi]), chosen, reviewClass(multiple, oi, chosen, review), oi);
+    }).join("");
+    return `<div class="ou-radio-group ou-radio-group--vertical"><div class="ou-radio-group__items">${items}</div></div>`;
+  }
+  function renderSingleChoice(question, answer, shuffleMapping, review) {
+    return renderChoice(question, answer, shuffleMapping, review, false);
+  }
+  function renderMultiple(question, answer, shuffleMapping, review) {
+    return renderChoice(question, answer, shuffleMapping, review, true);
+  }
+  var RANK_GRIP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"></path></svg>';
+  var CHEVRON_UP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"></path></svg>';
+  var CHEVRON_DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>';
+  function rankingOrder(count, answer, shuffleMapping) {
+    if (Array.isArray(answer) && answer.length === count) return answer;
+    return displayOrder(count, shuffleMapping);
+  }
+  function renderRanking(question, answer, shuffleMapping, review) {
+    const items = fields(question).items;
+    const order = rankingOrder(items.length, answer, shuffleMapping);
+    const correctOrder = review && Array.isArray(review.correctOrder) ? review.correctOrder : null;
+    const rows = order.map((oi, pos) => {
+      let cls = "ou-rank__item";
+      if (correctOrder) cls += oi === correctOrder[pos] ? " correct-answer" : " incorrect-answer";
+      const up = `<button type="button" class="ou-rank__btn" aria-label="\u0412\u044B\u0448\u0435" data-action="rank-up:${pos}"${pos === 0 ? " disabled" : ""}>${CHEVRON_UP}</button>`;
+      const down = `<button type="button" class="ou-rank__btn" aria-label="\u041D\u0438\u0436\u0435" data-action="rank-down:${pos}"${pos === order.length - 1 ? " disabled" : ""}>${CHEVRON_DOWN}</button>`;
+      return (
+        // No `draggable="true"` — the shared pointer engine drives the drag; the native
+        // flag would start a browser drag that cancels the pointer gesture (see dragCard).
+        `<div class="${cls}" data-drag="${pos}" data-drop="${pos}"><span class="ou-rank__grip" aria-hidden="true">${RANK_GRIP}</span><span class="ou-rank__index ou-rank__index--round ou-rank__index--accent">${pos + 1}</span><span class="ou-rank__text"><span class="ou-rank__title" style="font-weight:400;font-size:var(--tb-answer-fs,1.25rem);line-height:1.35;text-wrap:pretty">${answerHtml(items[oi])}</span></span><span class="ou-rank__controls">${up}${down}</span></div>`
+      );
+    }).join("");
+    return `<div class="ou-rank">${rows}</div>`;
+  }
+  function matchingLeftMapping(count, shuffleMapping) {
+    var _a;
+    return ((_a = shuffleMapping == null ? void 0 : shuffleMapping.left) == null ? void 0 : _a.length) === count ? shuffleMapping.left : displayOrder(count, void 0);
+  }
+  function renderMatching(question, answer, shuffleMapping, poolOrder = [], review) {
+    var _a;
+    const { left, right } = fields(question);
+    const leftMapping = matchingLeftMapping(left.length, shuffleMapping);
+    const rightMapping = ((_a = shuffleMapping == null ? void 0 : shuffleMapping.right) == null ? void 0 : _a.length) === right.length ? shuffleMapping.right : displayOrder(right.length, void 0);
+    const pairs = answer && typeof answer === "object" ? answer : {};
+    const rightToLeft = {};
+    Object.keys(pairs).forEach((k) => {
+      rightToLeft[pairs[Number(k)]] = Number(k);
+    });
+    const pool = normalizePool(poolOrder, pairs, leftMapping);
+    const correctRightToLeft = {};
+    if (review && Array.isArray(review.pairs)) {
+      review.pairs.forEach((p) => {
+        correctRightToLeft[p.right] = p.left;
+      });
+    }
+    const dragCard = (li, dropId) => `<div class="ou-match__card ou-match__card--drag" data-drag="${li}" data-drop="${dropId}"><span class="ou-match__icon" aria-hidden="true"></span><span class="ou-match__card-text"><span class="ou-match__card-title" style="font-size:var(--tb-answer-fs,1.125rem)">${answerHtml(left[li])}</span></span></div>`;
+    const maxLen = (arr) => arr.reduce((m, s) => Math.max(m, String(s != null ? s : "").length), 0);
+    const leftTextLen = maxLen(right);
+    const rightTextLen = maxLen(left);
+    const longer = Math.max(leftTextLen, rightTextLen);
+    const shorter = Math.min(leftTextLen, rightTextLen);
+    const skew = longer >= shorter * 1.5 && longer - shorter >= 25;
+    const gapCol = "var(--ou-match-gap-w)";
+    const columns = !skew ? `minmax(0, 1fr) ${gapCol} minmax(0, 1fr)` : leftTextLen > rightTextLen ? `minmax(0, 2fr) ${gapCol} minmax(0, 1fr)` : `minmax(0, 1fr) ${gapCol} minmax(0, 2fr)`;
+    let poolSlot = 0;
+    let html = `<div class="ou-match ou-match--gap-wide ou-match--side-r ou-match--icon-dots" style="grid-template-columns:${columns}">`;
+    for (const ri of rightMapping) {
+      const matchedLeft = rightToLeft[ri];
+      const isJoined = matchedLeft !== void 0;
+      let rowCls = `ou-match__row${isJoined ? " is-connected" : ""}`;
+      if (review && isJoined) {
+        rowCls += Number(matchedLeft) === Number(correctRightToLeft[ri]) ? " correct-answer" : " incorrect-answer";
+      }
+      html += `<div class="${rowCls}">`;
+      html += `<div class="ou-match__card ou-match__card--fixed" data-drop="r${ri}"><span class="ou-match__card-text"><span class="ou-match__card-title" style="font-size:var(--tb-answer-fs,1.125rem)">${answerHtml(right[ri])}</span></span></div>`;
+      html += '<div class="ou-match__gap" aria-hidden="true"><svg class="ou-match__gap-arrow" viewBox="0 0 28 12"><path d="M10 2 L18 6 L10 10"></path></svg></div>';
+      if (isJoined) {
+        html += dragCard(matchedLeft, `r${ri}`);
+      } else {
+        const poolLeft = poolSlot < pool.length ? pool[poolSlot] : null;
+        if (poolLeft !== null && poolLeft !== void 0) {
+          html += dragCard(poolLeft, `r${ri}`);
+        } else {
+          html += `<div class="ou-match__card ou-match__card--drag ou-match__card--empty" data-drop="r${ri}"><span class="ou-match__placeholder">\u041F\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u0432\u0430\u0440\u0438\u0430\u043D\u0442</span></div>`;
+        }
+        poolSlot++;
+      }
+      html += `</div>`;
+    }
+    html += "</div>";
+    return html;
+  }
+
+  // shared/template/fit-font.ts
+  var QUESTION_FIT = { max: 32, min: 18, from: 58, per: 0.17 };
+  var OPTION_FIT = { max: 22, min: 14, from: 38, per: 0.14 };
+  function fitFont(len, cfg) {
+    const shrink = Math.max(0, (Number(len) || 0) - cfg.from) * cfg.per;
+    const size = Math.min(cfg.max, Math.max(cfg.min, cfg.max - shrink));
+    return Math.round(size) + "px";
+  }
+  function questionFont(prompt) {
+    return fitFont(stripMarkdown(String(prompt != null ? prompt : "")).length, QUESTION_FIT);
+  }
+  function optionFont(texts) {
+    const longest = (texts != null ? texts : []).reduce(
+      (m, t) => Math.max(m, stripMarkdown(String(t != null ? t : "")).length),
+      0
+    );
+    return fitFont(longest, OPTION_FIT);
+  }
+
+  // shared/template/fit-question.ts
+  function overflows(field) {
+    return field.scrollHeight > field.clientHeight + 1;
+  }
+  function fitQuestionScene(field, col, headerEnd, options) {
+    var _a, _b, _c, _d, _e, _f;
+    if (!field || !col || !headerEnd) return;
+    const qMax = (_a = options == null ? void 0 : options.questionMax) != null ? _a : 32;
+    const qMin = (_b = options == null ? void 0 : options.questionMin) != null ? _b : 18;
+    const aMax = (_c = options == null ? void 0 : options.answerMax) != null ? _c : 22;
+    const aMin = (_d = options == null ? void 0 : options.answerMin) != null ? _d : 14;
+    const fracMax = (_e = options == null ? void 0 : options.headerFraction) != null ? _e : 1 / 3;
+    const fracMin = (_f = options == null ? void 0 : options.headerFractionMin) != null ? _f : 1 / 4;
+    const fieldH = field.clientHeight;
+    if (!(fieldH > 0)) return;
+    const colTop = col.getBoundingClientRect().top;
+    const headerH = () => headerEnd.getBoundingClientRect().bottom - colTop;
+    const setQ = (px) => col.style.setProperty("--tb-question-fs", `${px}px`);
+    const setA = (px) => col.style.setProperty("--tb-answer-fs", `${px}px`);
+    let q = qMax;
+    setQ(q);
+    let guard = 0;
+    while (q > qMin && headerH() > fieldH * fracMax && guard++ < 128) setQ(--q);
+    let a = aMax;
+    setA(a);
+    guard = 0;
+    while (a > aMin && overflows(field) && guard++ < 128) setA(--a);
+    guard = 0;
+    while (q > qMin && overflows(field) && headerH() > fieldH * fracMin && guard++ < 128) setQ(--q);
+  }
+
+  // shared/template/feedback-banner.ts
+  function esc2(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  var ICONS = {
+    success: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>',
+    error: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>',
+    warning: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>'
+  };
+  function feedbackDesc(text) {
+    return `<div class="ou-banner__desc">${esc2(text)}</div>`;
+  }
+  function feedbackBanner(tone, title, bodyHtml) {
+    return `<div class="ou-banner ou-banner--${tone} ou-banner--sm feedback-block"><span class="ou-banner__ico" aria-hidden="true">${ICONS[tone]}</span><div class="ou-banner__body"><div class="ou-banner__title">${esc2(title)}</div>` + (bodyHtml || "") + `</div></div>`;
   }
 
   // shared/template/themes.ts
@@ -5753,7 +6412,7 @@ var TBTemplate = (() => {
   var STATUS_WORD = {
     "is-current": "\u0442\u0435\u043A\u0443\u0449\u0438\u0439",
     "is-answered": "\u043E\u0442\u0432\u0435\u0447\u0435\u043D",
-    "is-skipped": "\u043F\u0440\u043E\u043F\u0443\u0449\u0435\u043D",
+    "is-flagged": "\u043F\u0440\u043E\u043F\u0443\u0449\u0435\u043D",
     "is-correct": "\u0432\u0435\u0440\u043D\u043E",
     "is-incorrect": "\u043D\u0435\u0432\u0435\u0440\u043D\u043E",
     "is-unanswered": "\u0431\u0435\u0437 \u043E\u0442\u0432\u0435\u0442\u0430",
@@ -5770,6 +6429,7 @@ var TBTemplate = (() => {
     const inScope = [];
     questions.forEach((q, index) => {
       var _a2;
+      if (q.delivered === false) return;
       if (commitScope === "section") {
         if (((_a2 = q.topicId) != null ? _a2 : null) === currentTopicId) inScope.push({ index, q });
       } else {
@@ -5794,7 +6454,7 @@ var TBTemplate = (() => {
       } else if (status === "answered") {
         statusClass = "is-answered";
       } else if (status === "skipped") {
-        statusClass = "is-skipped";
+        statusClass = "is-flagged";
       }
       if (!input.reviewMarking && index === currentIndex) statusClass = "is-current";
       const issued = input.allIssued || index <= currentIndex || status === "answered" || status === "skipped";
@@ -5820,14 +6480,15 @@ var TBTemplate = (() => {
 
   // shared/template/review-context.ts
   function buildReviewContext(input) {
-    var _a;
+    var _a, _b;
     const sectionScope = input.commitScope === "section";
     const scopeTopicId = sectionScope ? (_a = input.scopeTopicId) != null ? _a : null : null;
+    const currentIndex = typeof input.currentIndex === "number" ? input.currentIndex : -1;
     const questionsProgress = buildQuestionProgress({
       questions: input.questions,
       statuses: input.statuses,
-      currentIndex: -1,
-      // обзор has no «current» pill
+      // «К обзору» mid-flow highlights the origin question; end-of-flow has no current.
+      currentIndex,
       commitScope: input.commitScope,
       scopeTopicId: sectionScope ? scopeTopicId : void 0,
       allIssued: true,
@@ -5838,12 +6499,13 @@ var TBTemplate = (() => {
     const unanswered = [];
     let pos = 0;
     input.questions.forEach((q, index) => {
-      var _a2, _b;
+      var _a2, _b2;
+      if (q.delivered === false) return;
       if (sectionScope && ((_a2 = q.topicId) != null ? _a2 : null) !== scopeTopicId) return;
       pos += 1;
-      const status = (_b = input.statuses[q.id]) != null ? _b : "unanswered";
+      const status = (_b2 = input.statuses[q.id]) != null ? _b2 : "unanswered";
       if (status === "answered") answeredCount++;
-      else unanswered.push({ index, number: pos, prompt: q.prompt });
+      else unanswered.push({ index, number: pos, prompt: renderPlainText(q.prompt) });
     });
     const review = {
       scopeLabel: input.scopeLabel,
@@ -5853,9 +6515,20 @@ var TBTemplate = (() => {
       unansweredCount: unanswered.length,
       answeredCount,
       total: pos,
-      hint: unanswered.length > 0 ? "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u043F\u0435\u0440\u0435\u0434 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u0435\u043C. \u041D\u0435\u043E\u0442\u0432\u0435\u0447\u0435\u043D\u043D\u044B\u0435 \u0437\u0430\u0441\u0447\u0438\u0442\u044B\u0432\u0430\u044E\u0442\u0441\u044F \u043A\u0430\u043A \u043D\u0435\u0432\u0435\u0440\u043D\u044B\u0435." : "\u0412\u0441\u0435 \u0432\u043E\u043F\u0440\u043E\u0441\u044B \u043E\u0442\u0432\u0435\u0447\u0435\u043D\u044B."
+      hint: unanswered.length > 0 ? "\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u043F\u0435\u0440\u0435\u0434 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u0435\u043C. \u041D\u0435\u043E\u0442\u0432\u0435\u0447\u0435\u043D\u043D\u044B\u0435 \u0437\u0430\u0441\u0447\u0438\u0442\u044B\u0432\u0430\u044E\u0442\u0441\u044F \u043A\u0430\u043A \u043D\u0435\u0432\u0435\u0440\u043D\u044B\u0435." : "\u0412\u0441\u0435 \u0432\u043E\u043F\u0440\u043E\u0441\u044B \u043E\u0442\u0432\u0435\u0447\u0435\u043D\u044B.",
+      canReturn: !!input.canReturn,
+      backLabel: (_b = input.backLabel) != null ? _b : "\u041D\u0430\u0437\u0430\u0434"
     };
     return { questionsProgress, review };
+  }
+
+  // shared/flow/review-gate.ts
+  function shouldShowReview(input) {
+    var _a, _b;
+    const canReturn = (_a = input.allowReturnToUnanswered) != null ? _a : true;
+    const canEdit = (_b = input.allowAnswerChange) != null ? _b : false;
+    if (canEdit) return true;
+    return canReturn && input.hasUnanswered;
   }
 
   // shared/template/content-page.ts
@@ -6144,12 +6817,16 @@ var TBTemplate = (() => {
     var _a;
     const canGoBack = (options == null ? void 0 : options.canGoBack) === true;
     const nextLabel = ((_a = options == null ? void 0 : options.nextLabel) == null ? void 0 : _a.trim()) || DEFAULT_NEXT_LABEL;
-    if (!placement) return { dots: [], dotIndex: 0, dotsTotal: 0, canGoBack, nextLabel };
+    const nextDisabled = (options == null ? void 0 : options.nextDisabled) === true;
+    if (!placement)
+      return { dots: [], dotIndex: 0, dotsTotal: 0, pageLabel: "", progressPercent: 0, canGoBack, nextLabel, nextDisabled };
     const dots = [];
     for (let i = 1; i <= placement.total; i++) {
       dots.push({ statusClass: i === placement.index ? "is-current" : "" });
     }
-    return { dots, dotIndex: placement.index, dotsTotal: placement.total, canGoBack, nextLabel };
+    const pageLabel = placement.total > 0 ? "\u0421\u0442\u0440\u0430\u043D\u0438\u0446\u0430 " + placement.index + " \u0438\u0437 " + placement.total : "";
+    const progressPercent = placement.total > 0 ? Math.round(placement.index / placement.total * 100) : 0;
+    return { dots, dotIndex: placement.index, dotsTotal: placement.total, pageLabel, progressPercent, canGoBack, nextLabel, nextDisabled };
   }
   function buildPageContextFor(pageId, pages, options) {
     var _a;
@@ -6173,7 +6850,11 @@ var TBTemplate = (() => {
   function isAbsoluteRef(url) {
     const v = url.trim();
     if (v === "") return true;
-    return v.startsWith("/") || v.startsWith("#") || v.startsWith("data:") || v.startsWith("blob:") || // Any scheme: http(s), mailto, tel — the sanitiser handles what is allowed.
+    return v.startsWith("/") || v.startsWith("#") || v.startsWith("data:") || v.startsWith("blob:") || // A mustache placeholder (`{{ design.logoUrl }}`): its value is supplied at
+    // render time and is already correctly based — packed media resolves against
+    // the package root (`assets/media/…`), not the template dir. Prefixing the
+    // placeholder with the template base would 404 the resolved URL.
+    v.includes("{{") || // Any scheme: http(s), mailto, tel — the sanitiser handles what is allowed.
     /^[a-z][a-z0-9+.-]*:/i.test(v);
   }
   function joinBase(base, path) {
@@ -6314,6 +6995,8 @@ var TBTemplate = (() => {
     if (status === "inProgress") return "\u0412 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0435";
     return "\u041D\u0435 \u043D\u0430\u0447\u0430\u0442\u0430";
   }
+  var CARD_CHECK = '<svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+  var CARD_CROSS = '<svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg>';
   function buildRouterHubHtml(sections, state, options) {
     const list = sections || [];
     let html = "";
@@ -6339,6 +7022,13 @@ var TBTemplate = (() => {
       const status = state.topicStates[section.topicId] || "notStarted";
       const unlocked = isSectionUnlocked(section, state);
       const locked = !unlocked && status !== "completed";
+      let outcome = null;
+      if (status === "completed" && state.showSectionResults) {
+        const result = (state.sectionResults || {})[section.topicId];
+        if (result && result.passed === true) outcome = "passed";
+        else if (result && result.passed === false) outcome = "failed";
+      }
+      const completedLabel = outcome === "passed" ? "\u041F\u0440\u043E\u0439\u0434\u0435\u043D\u0430" : outcome === "failed" ? "\u041D\u0435 \u043F\u0440\u043E\u0439\u0434\u0435\u043D\u0430" : "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0430";
       const disabled = status === "completed" || !unlocked;
       const meta = [];
       if (section.drawCount) meta.push(section.drawCount + " " + pluralQuestions2(section.drawCount));
@@ -6347,11 +7037,11 @@ var TBTemplate = (() => {
       const imgUrl = section.image && typeof section.image === "object" ? section.image.url || "" : section.image || "";
       const imgHtml = imgUrl ? '<span class="router-topic-card__img"><img src="' + escHtml3(imgUrl) + '" alt=""></span>' : "";
       const goHtml = unlocked && status !== "completed" ? '<span class="router-topic-card__go">\u043D\u0430\u0447\u0430\u0442\u044C</span>' : "";
-      cards += '<button type="button" role="listitem" class="router-topic-card router-topic-card--' + status + (locked ? " router-topic-card--locked" : "") + '" data-topic-id="' + escHtml3(section.topicId) + '" data-router-status="' + status + '"' + (locked ? ' data-router-locked="true"' : "") + (disabled ? " disabled" : ' data-action="router-select:' + escHtml3(section.topicId) + '"') + '><span class="router-topic-card__top"><span class="router-topic-card__name">' + escHtml3(section.topicName || section.topicId) + (section.required === false ? ' <span class="router-topic-card__optional">(\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u0430\u044F)</span>' : "") + "</span>" + imgHtml + "</span>" + metaHtml + '<span class="router-topic-card__foot"><span class="router-topic-card__status">' + escHtml3(unlocked ? statusLabel(status) : "\u041D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430") + "</span>" + goHtml + "</span></button>";
+      cards += '<button type="button" role="listitem" class="router-topic-card router-topic-card--' + status + (outcome ? " router-topic-card--" + outcome : "") + (locked ? " router-topic-card--locked" : "") + '" data-topic-id="' + escHtml3(section.topicId) + '" data-router-status="' + status + '"' + (locked ? ' data-router-locked="true"' : "") + (disabled ? " disabled" : ' data-action="router-select:' + escHtml3(section.topicId) + '"') + '><span class="router-topic-card__top"><span class="router-topic-card__name">' + escHtml3(section.topicName || section.topicId) + (section.required === false ? ' <span class="router-topic-card__optional">(\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u0430\u044F)</span>' : "") + "</span>" + imgHtml + "</span>" + metaHtml + '<span class="router-topic-card__foot"><span class="router-topic-card__status">' + // A completed card carries a mark (✓ done/passed, ✗ failed) so it reads as
+      // clearly finished, distinct from a fresh «Не начата» card at a glance.
+      (status === "completed" ? outcome === "failed" ? CARD_CROSS : CARD_CHECK : "") + escHtml3(unlocked ? status === "completed" ? completedLabel : statusLabel(status) : "\u041D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430") + "</span>" + goHtml + "</span></button>";
     }
     html += '<div class="router-topic-cards" role="list" aria-label="\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0435 \u0442\u0435\u043C\u044B">' + cards + "</div>";
-    const ready = isRouterReadyToFinish(list, state);
-    html += '<button type="button" class="btn router-finish' + (ready ? "" : " router-finish--disabled") + '"' + (ready ? ' data-action="router-finish"' : " disabled") + ">\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C</button>";
     return html;
   }
   return __toCommonJS(runtime_entry_exports);
