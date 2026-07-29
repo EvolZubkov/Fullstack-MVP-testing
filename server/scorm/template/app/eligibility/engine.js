@@ -26,17 +26,30 @@ var EligibilityEngine = (function () {
   }
 
   function cooldownDecision(lastAttemptDate, todayDate, cooldownPeriodDays) {
-    var today = parseIsoDate(todayDate);
+    var parsedToday = parseIsoDate(todayDate);
     var last = lastAttemptDate ? parseIsoDate(lastAttemptDate) : null;
-    if (last == null || today == null) {
+    if (last == null || parsedToday == null) {
       return { allowed: true, availableDate: null, daysSince: null };
     }
+    // A "today" that precedes the last attempt is an impossible state: the clock is
+    // not trusted (rolled-back OS date), so the cooldown runs from the attempt date.
+    var today = parsedToday < last ? last : parsedToday;
     var daysSince = today - last;
     return {
       allowed: daysSince >= cooldownPeriodDays,
       availableDate: formatIsoDate(last + cooldownPeriodDays),
       daysSince: daysSince
     };
+  }
+
+  // Whole days from todayDate to iso (UTC calendar granularity), or null when either
+  // date is absent/unparseable or the target is not in the future.
+  function daysUntilDate(iso, todayDate) {
+    var target = iso ? parseIsoDate(iso) : null;
+    var today = parseIsoDate(todayDate);
+    if (target == null || today == null) return null;
+    var diff = target - today;
+    return diff > 0 ? diff : null;
   }
 
   var CORE_DEFAULT_RESULT = {
@@ -92,6 +105,7 @@ var EligibilityEngine = (function () {
     parseIsoDate: parseIsoDate,
     formatIsoDate: formatIsoDate,
     cooldownDecision: cooldownDecision,
+    daysUntilDate: daysUntilDate,
     CORE_DEFAULT_RESULT: CORE_DEFAULT_RESULT,
     normalizeVerdict: normalizeVerdict,
     applyFailPolicy: applyFailPolicy,

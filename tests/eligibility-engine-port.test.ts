@@ -54,6 +54,31 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
     }
   });
 
+  it("cooldownDecision matches when the clock is rolled back", () => {
+    const cases: Array<[string | null, string, number]> = [
+      ["2026-05-20", "2026-05-01", 30],
+      ["2026-05-20", "2026-05-20", 30],
+    ];
+    for (const [last, today, days] of cases) {
+      expect(port.EligibilityEngine.cooldownDecision(last, today, days)).toEqual(
+        tsEngine.cooldownDecision(last, today, days),
+      );
+    }
+  });
+
+  it("daysUntilDate matches", () => {
+    const cases: Array<[string | null, string]> = [
+      ["2026-06-30", "2026-06-28"],
+      ["2026-06-30", "2026-06-30"],
+      ["2026-06-29", "2026-06-30"],
+      [null, "2026-06-30"],
+      ["garbage", "2026-06-30"],
+    ];
+    for (const [iso, today] of cases) {
+      expect(port.EligibilityEngine.daysUntilDate(iso, today)).toEqual(tsEngine.daysUntilDate(iso, today));
+    }
+  });
+
   it("normalizeVerdict matches", () => {
     const verdicts: any[] = [
       true,

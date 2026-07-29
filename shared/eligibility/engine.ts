@@ -69,17 +69,34 @@ export function cooldownDecision(
   todayDate: string,
   cooldownPeriodDays: number,
 ): CooldownDecision {
-  const today = parseIsoDate(todayDate);
+  const parsedToday = parseIsoDate(todayDate);
   const last = lastAttemptDate ? parseIsoDate(lastAttemptDate) : null;
-  if (last == null || today == null) {
+  if (last == null || parsedToday == null) {
     return { allowed: true, availableDate: null, daysSince: null };
   }
+  // A "today" that precedes the last attempt is an impossible state, so the clock
+  // that produced it cannot be trusted (a learner rolling the OS date back). Fall
+  // back to the attempt date: the cooldown then runs its full length.
+  const today = parsedToday < last ? last : parsedToday;
   const daysSince = today - last;
   return {
     allowed: daysSince >= cooldownPeriodDays,
     availableDate: formatIsoDate(last + cooldownPeriodDays),
     daysSince,
   };
+}
+
+/**
+ * Whole days from `todayDate` to `iso` (UTC calendar granularity); null when either
+ * date is absent/unparseable or the target is not in the future. Both hosts render
+ * the optional «через N дн.» line from this, so they cannot disagree.
+ */
+export function daysUntilDate(iso: string | null | undefined, todayDate: string): number | null {
+  const target = iso ? parseIsoDate(iso) : null;
+  const today = parseIsoDate(todayDate);
+  if (target == null || today == null) return null;
+  const diff = target - today;
+  return diff > 0 ? diff : null;
 }
 
 /** Default result when no plugin is configured for the test (PRD-6 §3.4). */

@@ -9,6 +9,7 @@ import {
   parseIsoDate,
   formatIsoDate,
   cooldownDecision,
+  daysUntilDate,
   normalizeVerdict,
   applyFailPolicy,
   buildRetakeState,
@@ -132,5 +133,41 @@ describe("evaluateEligibility orchestration", () => {
     });
     expect(r.allowed).toBe(true);
     expect(r.reason).toBe("plugin_error_fail_open");
+  });
+});
+
+describe("cooldownDecision — недоверенные часы", () => {
+  it("нормализует «сегодня» раньше даты последней попытки до самой попытки", () => {
+    // Machine clock rolled back behind the last attempt: impossible state, so the
+    // clock is not trusted and the cooldown runs its full length from the attempt.
+    const rolledBack = cooldownDecision("2026-05-20", "2026-05-01", 30);
+    expect(rolledBack.allowed).toBe(false);
+    expect(rolledBack.daysSince).toBe(0);
+    expect(rolledBack.availableDate).toBe("2026-06-19");
+  });
+
+  it("не трогает нормальный порядок дат", () => {
+    expect(cooldownDecision("2026-05-20", "2026-06-19", 30)).toEqual({
+      allowed: true,
+      availableDate: "2026-06-19",
+      daysSince: 30,
+    });
+  });
+});
+
+describe("daysUntilDate", () => {
+  it("считает целые дни до будущей даты", () => {
+    expect(daysUntilDate("2026-06-30", "2026-06-28")).toBe(2);
+  });
+
+  it("возвращает null для сегодня и прошлого", () => {
+    expect(daysUntilDate("2026-06-30", "2026-06-30")).toBeNull();
+    expect(daysUntilDate("2026-06-29", "2026-06-30")).toBeNull();
+  });
+
+  it("возвращает null для пустого и неразбираемого входа", () => {
+    expect(daysUntilDate(null, "2026-06-30")).toBeNull();
+    expect(daysUntilDate("garbage", "2026-06-30")).toBeNull();
+    expect(daysUntilDate("2026-06-30", "garbage")).toBeNull();
   });
 });
