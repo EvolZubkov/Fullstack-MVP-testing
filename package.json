@@ -24,7 +24,8 @@
     "scorm:player": "node scripts/scorm-player.mjs",
     "scorm:previews": "node scripts/generate-prd1-template-previews.mjs",
     "test:watch": "vitest",
-    "push:upstream": "git push upstream HEAD"
+    "push:upstream": "git push upstream HEAD",
+    "docs:pdf": "node scripts/build-docs-pdf.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -1,5 +1,9 @@
 node_modules
 dist
+# Exception: committed authoring-doc PDFs (npm run docs:pdf), served for download
+# in the «Шаблоны» section. The bare `dist` above would otherwise ignore them.
+!docs/dist/
+!docs/dist/*.pdf
 .DS_Store
 server/public
 vite.config.ts.*
