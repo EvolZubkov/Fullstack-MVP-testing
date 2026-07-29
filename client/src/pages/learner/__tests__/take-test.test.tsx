@@ -238,6 +238,38 @@ describe("<TakeTestPage /> init", () => {
     expect(ctx().course.title).toBe("Тест по основам");
     expect(ctx().state.canStart).toBe(true);
   });
+
+  // Regression: the templated start branch was gated on `testMode === "standard"`,
+  // and the legacy React start screen it replaced was removed — so an adaptive test
+  // matched NO render branch and hung on the "Подготовка теста..." fallthrough.
+  it("renders the start screen for an adaptive test", async () => {
+    installFetch({ tests: [standardTest({ mode: "adaptive", sections: [{ drawCount: 0 }] })] });
+    render(<TakeTestPage />);
+    await screen.findByTestId("template-screen");
+    expect(ctx().course.title).toBe("Тест по основам");
+    expect(ctx().state.canStart).toBe(true);
+  });
+
+  // Adaptive draws from levels, not from section quotas, so the up-front count is
+  // unknown: it must be ABSENT (the layout hides the fact) rather than a bare "0".
+  it("omits the question count on the adaptive start screen", async () => {
+    installFetch({ tests: [standardTest({ mode: "adaptive", sections: [{ drawCount: 0 }] })] });
+    render(<TakeTestPage />);
+    await screen.findByTestId("template-screen");
+    expect(ctx().course.questionCount).toBeUndefined();
+  });
+
+  it("shows the neutral service error and reports it when the start template is missing", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fn = installFetch({ noStartTpl: true });
+    render(<TakeTestPage />);
+    expect(await screen.findByText("Ошибка сервиса")).toBeInTheDocument();
+    expect(consoleSpy).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(fn.mock.calls.some((c) => String(c[0]) === "/api/logs/client")).toBe(true),
+    );
+    consoleSpy.mockRestore();
+  });
 });
 
 // ─── question delivery + navigation ───────────────────────────────────────────
@@ -306,10 +338,16 @@ describe("<TakeTestPage /> standard flow", () => {
     );
   });
 
-  it("shows the «оформление недоступно» reload screen when the question template is missing", async () => {
+  // The learner is told nothing technical («оформление недоступно» named a concept
+  // they cannot act on); the cause goes to the console and the server log instead.
+  it("shows the neutral service error when the question template is missing", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     await renderToStart({ noQuestionTpl: true });
     fireEvent.click(screen.getByTestId("ts-start-test"));
-    expect(await screen.findByText("Оформление недоступно")).toBeInTheDocument();
+    expect(await screen.findByText("Ошибка сервиса")).toBeInTheDocument();
+    expect(screen.getByText("Обратитесь к администратору.")).toBeInTheDocument();
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
   });
 });
 

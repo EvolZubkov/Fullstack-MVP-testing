@@ -33,6 +33,7 @@ import {
   forceAdvanceTarget,
 } from "./use-section-timer";
 import { t } from "@/lib/i18n";
+import { reportClientError } from "@/lib/report-error";
 import type { Question, Attempt, Test } from "@shared/schema";
 
 interface AttemptWithQuestions extends Attempt {
@@ -218,6 +219,60 @@ function adaptiveFeedbackHtml(question: any, result: any): string {
 type RetakeCooldownFacts = { cooldownPeriodDays?: number; availableDate?: string | null; daysUntil?: number | null };
 /** Normalized cooldown facts held in component state. */
 type RetakeGateState = { cooldownPeriodDays: number | null; availableDate: string | null; daysUntil: number | null };
+
+/**
+ * The single screen a learner sees when the run cannot be rendered.
+ *
+ * The cause is deliberately NOT spelled out: a learner can act on none of them,
+ * and a technical wording («оформление недоступно») only produces a support
+ * ticket that says nothing useful. The diagnosis goes where it can be acted on —
+ * the browser console and the server log — via {@link reportClientError}, exactly
+ * once per mount, so a screen like this can never again be invisible to the
+ * people running the service.
+ */
+function ServiceErrorScreen({ diagnosis }: { diagnosis: string }) {
+  const reported = useRef(false);
+  useEffect(() => {
+    if (reported.current) return;
+    reported.current = true;
+    reportClientError("take-test", diagnosis);
+  }, [diagnosis]);
+  return (
+    <Center minH="screen" pad={6}>
+      <Box full maxW="md">
+        <Card>
+          <CardHeader title="Ошибка сервиса" />
+          <CardBody>
+            <Stack gap={4}>
+              <Text variant="body-s" tone="muted">Обратитесь к администратору.</Text>
+              <Button fullWidth onClick={() => window.location.reload()}>Обновить</Button>
+            </Stack>
+          </CardBody>
+        </Card>
+      </Box>
+    </Center>
+  );
+}
+
+/**
+ * «Подготовка теста...» that cannot last forever.
+ *
+ * Reaching the render fallthrough means no branch matched the current state —
+ * a defect, not a slow network: every request of the init has resolved by then.
+ * The spinner is still shown briefly, because a legitimate one-frame gap does
+ * exist (the content queue drains a frame before the effect moves the phase on),
+ * and flashing an error there would be worse than a blink of a spinner. After
+ * that the screen turns into the neutral service error and reports the state it
+ * was stuck in.
+ */
+function StuckPreparingScreen({ diagnosis, timeoutMs = 10_000 }: { diagnosis: string; timeoutMs?: number }) {
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setStuck(true), timeoutMs);
+    return () => clearTimeout(id);
+  }, [timeoutMs]);
+  return stuck ? <ServiceErrorScreen diagnosis={diagnosis} /> : <LoadingState message={t.common.preparingTest} />;
+}
 
 export default function TakeTestPage() {
   const { testId } = useParams<{ testId: string }>();
@@ -638,13 +693,18 @@ export default function TakeTestPage() {
           priorResult: test.priorResult ?? null,
         });
 
-        // PRD-12 web-host: fetch the start screen template (best-effort; null ->
-        // legacy React markup).
+        // PRD-12 web-host: fetch the screen templates. Best-effort per screen —
+        // `review`/`section-results`/`content` have their own fallbacks — but a
+        // failure is never swallowed silently: `start` and `question` are the two
+        // screens the run CANNOT proceed without, and a swallowed 404 on either is
+        // what turned a broken template into an endless «Подготовка теста...».
         try {
           const tplRes = await fetch(`/api/tests/${testId}/screen-template/start`, { credentials: "include" });
           if (tplRes.ok) setStartTpl(await tplRes.json());
+          else reportClientError("take-test", `screen-template/start failed: HTTP ${tplRes.status} (test ${testId})`);
           const qRes = await fetch(`/api/tests/${testId}/screen-template/question`, { credentials: "include" });
           if (qRes.ok) setQuestionTpl(await qRes.json());
+          else reportClientError("take-test", `screen-template/question failed: HTTP ${qRes.status} (test ${testId})`);
           // PRD-19 Block D: обзор (review) screen layout.
           const rvRes = await fetch(`/api/tests/${testId}/screen-template/review`, { credentials: "include" });
           if (rvRes.ok) setReviewTpl(await rvRes.json());
@@ -672,8 +732,11 @@ export default function TakeTestPage() {
               },
             });
           }
-        } catch {
-          /* fall back to React markup */
+        } catch (tplErr) {
+          // A template request that could not complete at all (network/parse).
+          // The screens below decide what to render; what must not happen is that
+          // nobody ever learns this occurred.
+          reportClientError("take-test", `screen-template fetch failed: ${(tplErr as Error)?.message} (test ${testId})`);
         }
 
         // Показываем стартовую страницу
@@ -2266,7 +2329,12 @@ export default function TakeTestPage() {
       />
     );
   }
-  if (phase === "start" && testInfo && testMetadata && testMode === "standard" && startTpl) {
+  // Start screen — BOTH modes. It was gated on `testMode === "standard"` while the
+  // legacy React start screen still covered adaptive; that screen was then removed
+  // («ученические экраны только из шаблонов»), which left adaptive tests matching no
+  // branch at all — an endless «Подготовка теста...». The layout itself is
+  // mode-agnostic: it renders the facts it is given.
+  if (phase === "start" && testInfo && testMetadata && startTpl) {
     const exhausted =
       testMetadata.maxAttempts !== null && testMetadata.completedAttempts >= testMetadata.maxAttempts;
     // PRD-19 Block F (FR-19/20): cooldown facts render the cooldown card + disabled
@@ -2279,7 +2347,10 @@ export default function TakeTestPage() {
       info: {
         title: testInfo.title,
         description: testInfo.description || "",
-        questionCount: testMetadata.totalQuestions,
+        // Adaptive draws from its levels, not from the section quotas, so the
+        // count is unknown up front: omit the fact instead of promising «0
+        // вопросов» (the layout hides a fact it is not given).
+        questionCount: testMode === "adaptive" ? undefined : testMetadata.totalQuestions,
         passPercent: testMetadata.passPercent,
         timeLimitMinutes: testMetadata.timeLimitMinutes,
         maxAttempts: testMetadata.maxAttempts,
@@ -2287,8 +2358,12 @@ export default function TakeTestPage() {
       },
       maxAttempts: testMetadata.maxAttempts,
       completedAttempts: testMetadata.completedAttempts,
+      // Adaptive has no resume: `handleResumeTest` cannot restore an adaptive
+      // attempt and always starts a new one, and the variant carries no drawn
+      // question list, so the offer would read «вопрос 1 из 0» and then not do
+      // what it says. Offer a start instead.
       resume:
-        testMetadata.hasInProgress && !exhausted
+        testMetadata.hasInProgress && !exhausted && testMode !== "adaptive"
           ? { index: testMetadata.resumeIndex ?? 0, total: testMetadata.resumeTotal ?? 0 }
           : null,
       hasCompletedResults: testMetadata.completedAttempts > 0,
@@ -2328,6 +2403,14 @@ export default function TakeTestPage() {
         />
       </div>
     );
+  }
+
+  // Still on the start phase, but the branch above could not render it: the start
+  // template did not load. `testInfo`/`testMetadata` are always set before the phase
+  // becomes "start", so this is unambiguous — report it and say so at once instead of
+  // leaving the learner on a spinner that will never resolve.
+  if (phase === "start") {
+    return <ServiceErrorScreen diagnosis={`start screen unavailable: no start template (test ${testId})`} />;
   }
 
   // Adaptive mode - finished
@@ -2854,24 +2937,19 @@ export default function TakeTestPage() {
   // instead of a divergent in-app UI. The normal + review render is the templated
   // branch above (questionTpl present), matching the SCORM runtime.
   if (testMode === "standard" && attempt && flatQuestions.length > 0 && !questionTpl) {
-    return (
-      <Center minH="screen" pad={6}>
-        <Box full maxW="md">
-          <Card>
-            <CardHeader title="Оформление недоступно" />
-            <CardBody>
-              <Stack gap={4}>
-                <Text variant="body-s" tone="muted">
-                  Не удалось загрузить оформление теста. Обновите страницу, чтобы продолжить прохождение.
-                </Text>
-                <Button fullWidth onClick={() => window.location.reload()}>Обновить</Button>
-              </Stack>
-            </CardBody>
-          </Card>
-        </Box>
-      </Center>
-    );
+    return <ServiceErrorScreen diagnosis={`question screen unavailable: no question template (test ${testId})`} />;
   }
 
-  return <LoadingState message={t.common.preparingTest} />;
+  // Nothing above matched. Not a loading state (that is the branch at the top of the
+  // render): the init has finished, so this is an unforeseen combination of phase and
+  // data. Show the spinner briefly for the one-frame gaps that legitimately land
+  // here, then surface the service error and report which state it was.
+  return (
+    <StuckPreparingScreen
+      diagnosis={
+        `render fell through: phase=${phase} mode=${testMode} attempt=${!!attempt} ` +
+        `questions=${flatQuestions.length} startTpl=${!!startTpl} questionTpl=${!!questionTpl} (test ${testId})`
+      }
+    />
+  );
 }

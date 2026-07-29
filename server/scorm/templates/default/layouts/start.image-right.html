@@ -18,14 +18,18 @@
           </div>
 
           <div class="tb-facts">
+            {{#if course.questionCount}}
             <div class="tb-facts__item">
               <div class="tb-facts__num" data-path="course.questionCount"></div>
               <div class="tb-facts__lbl">вопросов</div>
             </div>
+            {{/if}}
+            {{#if course.passPercent}}
             <div class="tb-facts__item">
               <div class="tb-facts__num"><span data-path="course.passPercent"></span>%</div>
               <div class="tb-facts__lbl">проходной балл</div>
             </div>
+            {{/if}}
             {{#if course.timeLimitMinutes}}
             <div class="tb-facts__item">
               <div class="tb-facts__num"><span data-path="course.timeLimitMinutes"></span> мин</div>
