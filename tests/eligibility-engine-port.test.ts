@@ -104,8 +104,11 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
       { allowed: false, availableDate: "2026-06-07", source: "webtutor_cooldown", reason: "cooldown_active", data: { lastAttemptDate: "2026-05-08", effectiveToday: "2026-05-20" } },
       // ...and stays null when the verdict carries no cooldown math (failPolicy).
       { allowed: true, source: "core_failpolicy", reason: "plugin_error_fail_open", data: { error: "boom" } },
-      // A non-string value must not leak into the state either.
+      // An explicit null must not leak into the state either...
       { allowed: false, availableDate: "2026-06-07", data: { lastAttemptDate: "2026-05-08", effectiveToday: null } },
+      // ...nor a value of the wrong TYPE: only `typeof === 'string'` is lifted, so a
+      // numeric date (a hand-rolled plugin returning 20260530) is dropped, not stringified.
+      { allowed: false, availableDate: "2026-06-07", data: { lastAttemptDate: 20260508, effectiveToday: 20260530 } },
     ];
     for (const result of results) {
       expect(port.EligibilityEngine.buildRetakeState(result, c)).toEqual(tsEngine.buildRetakeState(result, c));
@@ -113,6 +116,10 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
     // The field genuinely arrives (a both-null parity match would prove nothing).
     expect(tsEngine.buildRetakeState(results[0], c).effectiveToday).toBe("2026-05-20");
     expect(tsEngine.buildRetakeState(results[1], c).effectiveToday).toBeNull();
+    // Both twins drop the non-string pair rather than carrying 20260530 through.
+    for (const impl of [tsEngine.buildRetakeState, port.EligibilityEngine.buildRetakeState]) {
+      expect(impl(results[3] as any, c)).toMatchObject({ lastAttemptDate: null, effectiveToday: null });
+    }
   });
 
   it("parseFlexibleDate matches", () => {

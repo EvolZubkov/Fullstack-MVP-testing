@@ -51,29 +51,53 @@ var RetakeGate = (function () {
     return EligibilityEngine.formatIsoDate(Math.floor(ms / 86400000));
   }
 
+  // Marker resolved by the date sub-budget race so the fallback can name `timeout` as
+  // the cause instead of lumping it in with "no usable header".
+  var DATE_TIMEOUT = { timedOut: true };
+
+  // Why the trusted date was NOT used. The gate degrades silently by design (a network
+  // hiccup must never block a course), so the ONLY way to tell a mis-integration from a
+  // healthy same-origin portal is this string — see §6: the first live LMS run has to be
+  // readable off the console in one pass, without a "patched — re-uploaded" round trip.
+  function fallbackCause(page) {
+    if (page === DATE_TIMEOUT) return 'timeout after ' + DATE_TIMEOUT_MS + ' ms';
+    if (page && page.dateHeader) return 'unparseable-header: "' + page.dateHeader + '"';
+    if (page && page.failed) {
+      return 'request-failed' + (page.status ? ': HTTP ' + page.status : '') +
+        (page.error && page.error.message ? ': ' + page.error.message : '');
+    }
+    return 'no-header';
+  }
+
   // Trusted "today" (PRD-6 trusted-date): the LMS clock, read from the `Date` response
   // header of the portal chrome the gate already fetches. Same-origin only, which is
   // exactly the environment webtutor_cooldown requires anyway. Any failure (no header,
   // cross-origin, HTTP error, timeout) degrades to the machine clock = legacy behaviour.
   function resolveToday(config) {
     var src = (config && config.secidSource) || {};
-    var work = fetchPortalChrome(src.endpoint || '/').then(function (page) {
-      return page.dateHeader ? Date.parse(page.dateHeader) : NaN;
-    });
+    var work = fetchPortalChrome(src.endpoint || '/');
     var timeout = new Promise(function (resolve) {
-      setTimeout(function () { resolve(NaN); }, DATE_TIMEOUT_MS);
+      setTimeout(function () { resolve(DATE_TIMEOUT); }, DATE_TIMEOUT_MS);
     });
+    // The race carries the PAGE (not a parsed timestamp) so the fallback branch can
+    // still see which degradation happened.
     return Promise.race([work, timeout])
-      .catch(function () { return NaN; })
-      .then(function (serverMs) {
+      .catch(function (e) { return { dateHeader: '', failed: true, status: 0, error: e }; })
+      .then(function (page) {
         var clientMs = Date.now();
         var clientDay = isoDayFromMs(clientMs);
+        var header = (page && page.dateHeader) || '';
+        var serverMs = header ? Date.parse(header) : NaN;
         if (!serverMs || !isFinite(serverMs)) {
-          glog('date source: client (no usable Date header) | today:', clientDay);
+          glog('date source: client (' + fallbackCause(page) + ') | client:',
+            new Date(clientMs).toUTCString(), '| today:', clientDay);
           return clientDay;
         }
         var serverDay = isoDayFromMs(serverMs);
-        glog('date source: network | server:', serverDay, '| client:', clientDay,
+        // Both timestamps, raw, plus the skew: §6 wants the server and the client clock
+        // side by side, not just the two calendar days they happen to fall on.
+        glog('date source: network | server:', header, '=>', serverDay,
+          '| client:', new Date(clientMs).toUTCString(), '=>', clientDay,
           '| skew sec:', Math.round((serverMs - clientMs) / 1000));
         return serverDay;
       });
@@ -134,10 +158,12 @@ var RetakeGate = (function () {
         var dateHeader = '';
         try { dateHeader = (r.headers && r.headers.get && r.headers.get('Date')) || ''; } catch (e) { dateHeader = ''; }
         return r.text().then(function (text) {
-          return { text: text || '', dateHeader: dateHeader };
+          // `failed`/`status` are diagnostics only: an error response can still carry a
+          // usable `Date` header, so the body is handed on exactly as before.
+          return { text: text || '', dateHeader: dateHeader, failed: !r.ok, status: r.status || 0 };
         });
       })
-      .catch(function () { return { text: '', dateHeader: '' }; });
+      .catch(function (e) { return { text: '', dateHeader: '', failed: true, status: 0, error: e }; });
     return portalChrome[key];
   }
 
@@ -259,14 +285,14 @@ var RetakeGate = (function () {
     return Promise.resolve(true); // unknown adapter => allow (core default spirit)
   }
 
-  // `startedAt` is the epoch-ms the WHOLE gate began (see run). The plugin gets the
-  // REMAINDER of GATE_TIMEOUT_MS, not a fresh copy of it: everything the gate did
-  // first — notably resolving the trusted date — already spent part of NFR-06's
-  // budget, and giving the plugin the full 5 s again would make the worst case the
-  // SUM of the two. Omitted (legacy callers/tests) => the full budget.
+  // `startedAt` is the epoch-ms the WHOLE gate began (see run) and is REQUIRED — `run`
+  // is the only caller. The plugin gets the REMAINDER of GATE_TIMEOUT_MS, not a fresh
+  // copy of it: everything the gate did first — notably resolving the trusted date —
+  // already spent part of NFR-06's budget, and giving the plugin the full 5 s again
+  // would make the worst case the SUM of the two.
   function evaluate(td, ctx, startedAt) {
     var failPolicy = (td.retakePolicy.eligibilityPlugin && td.retakePolicy.eligibilityPlugin.failPolicy) || 'failOpen';
-    var budgetLeft = Math.max(0, GATE_TIMEOUT_MS - (Date.now() - (startedAt || Date.now())));
+    var budgetLeft = Math.max(0, GATE_TIMEOUT_MS - (Date.now() - startedAt));
     var work;
     try { work = Promise.resolve(runPlugin(td, ctx)); } catch (e) { work = Promise.reject(e); }
     var timeout = new Promise(function (_resolve, reject) {
@@ -516,10 +542,12 @@ var RetakeGate = (function () {
         else onAllowedStart();
       });
     }).catch(function (e) {
-      // evaluate() already absorbs plugin errors via failPolicy, so reaching here
-      // means the GATE itself broke (state build / template render). Previously this
-      // was an unhandled rejection: no log, and a learner left on a blank #app.
-      glog('GATE CRASHED after the verdict:', (e && e.stack) || e, '- starting the course (failOpen spirit)');
+      // evaluate() already absorbs plugin errors via failPolicy, so reaching here means
+      // the GATE itself broke — either BEFORE the verdict (buildContext: the trusted-date
+      // resolve) or after it (retake state build / template render). Previously this was
+      // an unhandled rejection: no log, and a learner left on a blank #app.
+      glog('GATE CRASHED (context build or verdict handling):', (e && e.stack) || e,
+        '- starting the course (failOpen spirit)');
       try { onAllowedStart(); } catch (e2) { glog('course start also failed:', (e2 && e2.stack) || e2); }
     });
   }
