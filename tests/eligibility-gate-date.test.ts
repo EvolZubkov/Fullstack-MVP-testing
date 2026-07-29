@@ -1,12 +1,18 @@
 /**
  * @module tests/eligibility-gate-date
  *
- * PRD-6 trusted date — memoization. The gate must hit the portal chrome only once
- * per URL: SECID, person id (and, going forward, the date) all read the SAME
- * response, so a plugin configured to resolve both SECID and person id must still
- * fetch `/` exactly once, and both resolvers must read off that one response (the
- * collection POST body carries the person id it produced). Source-of-date and
- * degrade-to-machine-clock coverage is a follow-up task.
+ * PRD-6 trusted date. Two concerns, both over the REAL gate runtime:
+ *
+ * 1. Memoization — the gate must hit the portal chrome only once per URL: SECID,
+ *    person id and the date all read the SAME response, so a plugin configured to
+ *    resolve both SECID and person id must still fetch `/` exactly once, and both
+ *    resolvers must read off that one response (the collection POST body carries
+ *    the person id it produced).
+ * 2. Source of "today" (FR-TD-01/02) — the gate takes the calendar day from the
+ *    portal response's `Date` header (the LMS clock), so rolling the machine clock
+ *    forward past the cooldown does NOT open the gate; every degradation branch
+ *    (no header, request failure) falls back to the machine clock, i.e. legacy
+ *    behaviour, and never blocks.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
@@ -69,6 +75,24 @@ const SCORM_WITH_ATTEMPT = {
   init: () => {},
 };
 
+/**
+ * Gated test data driven by `suspendDataCooldown`: it reads the last-attempt date
+ * from `cmi.suspend_data` (SCORM_WITH_ATTEMPT reports 2026-05-20), so the verdict
+ * depends on ONE remaining input — "today". 30-day cooldown => available 2026-06-19.
+ */
+function suspendGate() {
+  return {
+    id: "t1",
+    title: "Курс",
+    retakePolicy: {
+      enabled: true,
+      cooldownPeriodDays: 30,
+      eligibilityPlugin: { key: "suspend_data_cooldown", failPolicy: "failOpen" },
+    },
+    retakePlugin: { runtimeEntry: "suspendDataCooldown", config: {} },
+  };
+}
+
 beforeEach(() => {
   document.body.innerHTML = '<div id="app"></div>';
 });
@@ -118,5 +142,51 @@ describe("PRD-6 gate — trusted date", () => {
     // reached the request, not just that the fetch count is low).
     const collectionCall = bodies.find((b) => b.url.indexOf("extjs_json_collection_data") !== -1);
     expect(String(collectionCall?.body)).toContain(encodeURIComponent("cur_person_id=42"));
+  });
+
+  it("uses the portal clock, so a machine clock rolled forward does not open the gate", async () => {
+    vi.useFakeTimers();
+    // Machine says 30.06.2026 (well past the 30-day cooldown); the portal says 30.05.2026.
+    vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));
+    stubFetch({ dateHeader: "Sat, 30 May 2026 09:00:00 GMT" });
+    const state: Record<string, unknown> = { templateLayouts: {} };
+    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+
+    let started = false;
+    gate.run(suspendGate(), () => { started = true; });
+    await flush();
+
+    expect((state.retake as any)?.todayDate).toBe("2026-05-30");
+    expect((state.retake as any)?.allowed).toBe(false);
+    expect(started).toBe(false);
+  });
+
+  it("degrades to the machine clock when the portal sends no Date header", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));
+    stubFetch({ dateHeader: null });
+    const state: Record<string, unknown> = { templateLayouts: {} };
+    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+
+    let started = false;
+    gate.run(suspendGate(), () => { started = true; });
+    await flush();
+
+    expect((state.retake as any)?.todayDate).toBe("2026-06-30");
+    expect((state.retake as any)?.allowed).toBe(true);
+    expect(started).toBe(true);
+  });
+
+  it("degrades to the machine clock when the portal request fails", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));
+    vi.stubGlobal("fetch", () => Promise.reject(new Error("offline")));
+    const state: Record<string, unknown> = { templateLayouts: {} };
+    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+
+    gate.run(suspendGate(), () => {});
+    await flush();
+
+    expect((state.retake as any)?.todayDate).toBe("2026-06-30");
   });
 });

@@ -100,9 +100,11 @@ export function cooldownDecision(
 
 /**
  * Whole days from `todayDate` to `iso` (UTC calendar granularity); null when either
- * date is absent/unparseable or the target is not in the future. Both hosts will
- * render the optional «через N дн.» countdown from this, so they cannot disagree
- * — callers MUST pass `cooldownDecision(...).effectiveToday`, not a raw clock read.
+ * date is absent/unparseable or the target is not in the future. Both hosts render
+ * the optional «через N дн.» countdown from this — the web server via
+ * `decideRetake`, the SCORM gate via `renderCooldownStart` — so they cannot
+ * disagree; callers MUST pass `cooldownDecision(...).effectiveToday` (or the
+ * `retake.effectiveToday` it feeds), not a raw clock read.
  * `todayDate` accepts `null`/`undefined` so callers can pass `effectiveToday`
  * (which is `null` only alongside `allowed: true`, where callers won't ask for a
  * countdown anyway) straight through without an artificial fallback.
@@ -164,11 +166,14 @@ export function buildRetakeState(
 ): RetakeState {
   const lastAttemptDate =
     result.data && typeof result.data.lastAttemptDate === "string" ? result.data.lastAttemptDate : null;
+  const effectiveToday =
+    result.data && typeof result.data.effectiveToday === "string" ? result.data.effectiveToday : null;
   return {
     checked: true,
     allowed: result.allowed,
     lastAttemptDate,
     todayDate: ctx.todayDate,
+    effectiveToday,
     availableDate: result.availableDate ?? null,
     nextAllowedDate: result.availableDate ?? null,
     cooldownPeriodDays: ctx.cooldownPeriodDays,

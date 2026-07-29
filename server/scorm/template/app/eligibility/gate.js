@@ -36,26 +36,63 @@ var RetakeGate = (function () {
     );
   }
 
-  function todayIso() {
-    var now = new Date();
-    var epoch = Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86400000);
-    return EligibilityEngine.formatIsoDate(epoch);
+  // NFR-TD-01: the date resolution has its own budget INSIDE the gate's 5 s, so a slow
+  // portal can never hang the start — it just degrades to the machine clock.
+  var DATE_TIMEOUT_MS = 2500;
+
+  // UTC calendar day of an epoch-ms value. The whole cooldown math is UTC-calendar on
+  // both hosts (the web server uses toIsoDateUTC), and taking the day in UTC keeps the
+  // learner's TIME ZONE out of the decision — otherwise a TZ set to UTC+14 would hand
+  // out "tomorrow" without touching the clock.
+  function isoDayFromMs(ms) {
+    return EligibilityEngine.formatIsoDate(Math.floor(ms / 86400000));
+  }
+
+  // Trusted "today" (PRD-6 trusted-date): the LMS clock, read from the `Date` response
+  // header of the portal chrome the gate already fetches. Same-origin only, which is
+  // exactly the environment webtutor_cooldown requires anyway. Any failure (no header,
+  // cross-origin, HTTP error, timeout) degrades to the machine clock = legacy behaviour.
+  function resolveToday(config) {
+    var src = (config && config.secidSource) || {};
+    var work = fetchPortalChrome(src.endpoint || '/').then(function (page) {
+      return page.dateHeader ? Date.parse(page.dateHeader) : NaN;
+    });
+    var timeout = new Promise(function (resolve) {
+      setTimeout(function () { resolve(NaN); }, DATE_TIMEOUT_MS);
+    });
+    return Promise.race([work, timeout])
+      .catch(function () { return NaN; })
+      .then(function (serverMs) {
+        var clientMs = Date.now();
+        var clientDay = isoDayFromMs(clientMs);
+        if (!serverMs || !isFinite(serverMs)) {
+          glog('date source: client (no usable Date header) | today:', clientDay);
+          return clientDay;
+        }
+        var serverDay = isoDayFromMs(serverMs);
+        glog('date source: network | server:', serverDay, '| client:', clientDay,
+          '| skew sec:', Math.round((serverMs - clientMs) / 1000));
+        return serverDay;
+      });
   }
 
   function buildContext(td) {
     var tz = '';
     try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { tz = ''; }
-    return {
-      test: { id: td.id || '', title: td.title || '' },
-      retakePolicy: { cooldownPeriodDays: td.retakePolicy.cooldownPeriodDays },
-      runtime: {
-        todayDate: todayIso(),
-        timezone: tz,
-        launchUrl: typeof location !== 'undefined' ? location.href : ''
-      },
-      lms: { scormVersion: '2004' },
-      config: td.retakePlugin.config || {}
-    };
+    var config = td.retakePlugin.config || {};
+    return resolveToday(config).then(function (todayDate) {
+      return {
+        test: { id: td.id || '', title: td.title || '' },
+        retakePolicy: { cooldownPeriodDays: td.retakePolicy.cooldownPeriodDays },
+        runtime: {
+          todayDate: todayDate,
+          timezone: tz,
+          launchUrl: typeof location !== 'undefined' ? location.href : ''
+        },
+        lms: { scormVersion: '2004' },
+        config: config
+      };
+    });
   }
 
   // Normalize the WebTutor collection response to a flat array of records. The
@@ -238,19 +275,6 @@ var RetakeGate = (function () {
     return m ? (m[3] + '.' + m[2] + '.' + m[1]) : iso;
   }
 
-  // Whole days from today until the ISO date (UTC day granularity), or null when
-  // not in the future. Drives the optional «через N дн.» on the cooldown start.
-  function daysUntilIso(iso) {
-    if (!iso) return null;
-    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-    if (!m) return null;
-    var target = Date.UTC(+m[1], (+m[2]) - 1, +m[3]);
-    var now = new Date();
-    var today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-    var d = Math.ceil((target - today) / 86400000);
-    return d > 0 ? d : null;
-  }
-
   // The block page is a SYSTEM PAGE of the design template (PRD-6 §4.4): the gate
   // renders the template's `system.blocked` layout and fills `retake.*` via the
   // shared path-DSL. The template manifest/layouts are NOT loaded yet at gate time
@@ -420,7 +444,7 @@ var RetakeGate = (function () {
         canStartNew: false,
         cooldown: {
           availableDateHuman: retake.availableDate ? fmtDateHuman(retake.availableDate) : '',
-          daysUntil: daysUntilIso(retake.availableDate)
+          daysUntil: EligibilityEngine.daysUntilDate(retake.availableDate, retake.effectiveToday || retake.todayDate)
         }
       });
       ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
@@ -446,32 +470,33 @@ var RetakeGate = (function () {
     // previous run in this window (e.g. a prior failed fetch) so the portal is
     // always asked again rather than replaying a stale or failed result.
     portalChrome = {};
-    var ctx = buildContext(td);
-    glog('gated. plugin:', td.retakePlugin.runtimeEntry,
-      '| cooldownPeriodDays:', ctx.retakePolicy.cooldownPeriodDays,
-      '| today:', ctx.runtime.todayDate);
-    evaluate(td, ctx).then(function (result) {
-      var retake = EligibilityEngine.buildRetakeState(result, {
-        todayDate: ctx.runtime.todayDate,
-        cooldownPeriodDays: ctx.retakePolicy.cooldownPeriodDays
+    buildContext(td).then(function (ctx) {
+      glog('gated. plugin:', td.retakePlugin.runtimeEntry,
+        '| cooldownPeriodDays:', ctx.retakePolicy.cooldownPeriodDays,
+        '| today:', ctx.runtime.todayDate);
+      return evaluate(td, ctx).then(function (result) {
+        var retake = EligibilityEngine.buildRetakeState(result, {
+          todayDate: ctx.runtime.todayDate,
+          cooldownPeriodDays: ctx.retakePolicy.cooldownPeriodDays
+        });
+        if (typeof state !== 'undefined' && state) state.retake = retake;
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('PRD-6 retake gate:', result.allowed ? 'allowed' : 'blocked',
+            '(' + (retake.reason || '') + (retake.availableDate ? ', available ' + retake.availableDate : '') + ')');
+        }
+        // buildRetakeState drops `data`, so the underlying error would otherwise be
+        // lost even though the verdict was decided by failPolicy rather than by data.
+        if (result.data && result.data.error) glog('decided by failPolicy. error was:', result.data.error);
+        glog('lastAttemptDate:', (result.data && result.data.lastAttemptDate) || '(none)',
+          '| availableDate:', retake.availableDate || '(none)');
+        // PRD-19 FR-19: eligible => NO gate-shell. Hand straight to the normal
+        // course (onAllowedStart = runCourse: Initialize + the standard start page),
+        // so an elapsed-cooldown test is indistinguishable from an ordinary one.
+        // FR-20: blocked => the cooldown state renders ON the standard start page
+        // (pre-Initialize), not a separate wall — NFR-01/02 still hold.
+        if (!result.allowed) renderCooldownStart(retake, td);
+        else onAllowedStart();
       });
-      if (typeof state !== 'undefined' && state) state.retake = retake;
-      if (typeof console !== 'undefined' && console.log) {
-        console.log('PRD-6 retake gate:', result.allowed ? 'allowed' : 'blocked',
-          '(' + (retake.reason || '') + (retake.availableDate ? ', available ' + retake.availableDate : '') + ')');
-      }
-      // buildRetakeState drops `data`, so the underlying error would otherwise be
-      // lost even though the verdict was decided by failPolicy rather than by data.
-      if (result.data && result.data.error) glog('decided by failPolicy. error was:', result.data.error);
-      glog('lastAttemptDate:', (result.data && result.data.lastAttemptDate) || '(none)',
-        '| availableDate:', retake.availableDate || '(none)');
-      // PRD-19 FR-19: eligible => NO gate-shell. Hand straight to the normal
-      // course (onAllowedStart = runCourse: Initialize + the standard start page),
-      // so an elapsed-cooldown test is indistinguishable from an ordinary one.
-      // FR-20: blocked => the cooldown state renders ON the standard start page
-      // (pre-Initialize), not a separate wall — NFR-01/02 still hold.
-      if (!result.allowed) renderCooldownStart(retake, td);
-      else onAllowedStart();
     }).catch(function (e) {
       // evaluate() already absorbs plugin errors via failPolicy, so reaching here
       // means the GATE itself broke (state build / template render). Previously this

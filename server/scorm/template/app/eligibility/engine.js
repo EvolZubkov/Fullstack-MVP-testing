@@ -50,9 +50,11 @@ var EligibilityEngine = (function () {
   }
 
   // Whole days from todayDate to iso (UTC calendar granularity), or null when either
-  // date is absent/unparseable or the target is not in the future. Both hosts will
-  // render the optional "через N дн." countdown from this, so they cannot disagree
-  // -- callers MUST pass cooldownDecision(...).effectiveToday, not a raw clock read.
+  // date is absent/unparseable or the target is not in the future. Both hosts render
+  // the optional "через N дн." countdown from this -- the web server via decideRetake,
+  // the SCORM gate via renderCooldownStart -- so they cannot disagree; callers MUST
+  // pass cooldownDecision(...).effectiveToday (or the retake.effectiveToday it feeds),
+  // not a raw clock read.
   function daysUntilDate(iso, todayDate) {
     var target = iso ? parseIsoDate(iso) : null;
     var today = todayDate ? parseIsoDate(todayDate) : null;
@@ -97,11 +99,14 @@ var EligibilityEngine = (function () {
   function buildRetakeState(result, ctx) {
     var lastAttemptDate = result.data && typeof result.data.lastAttemptDate === 'string'
       ? result.data.lastAttemptDate : null;
+    var effectiveToday = result.data && typeof result.data.effectiveToday === 'string'
+      ? result.data.effectiveToday : null;
     return {
       checked: true,
       allowed: result.allowed,
       lastAttemptDate: lastAttemptDate,
       todayDate: ctx.todayDate,
+      effectiveToday: effectiveToday,
       availableDate: result.availableDate != null ? result.availableDate : null,
       nextAllowedDate: result.availableDate != null ? result.availableDate : null,
       cooldownPeriodDays: ctx.cooldownPeriodDays,
