@@ -177,6 +177,74 @@ describe("PRD-6 gate — trusted date", () => {
     expect(started).toBe(true);
   });
 
+  // FR-TD-03: the calendar day is UTC on BOTH inputs, so the learner's time zone never
+  // participates. 23:30 GMT is "tomorrow" in any zone east of UTC+0:30 — computing the
+  // day locally (`new Date(ms).getDate()` & friends) would hand out 31.05 and shorten
+  // every cooldown by a day for half the planet. The zone is PINNED here: with the
+  // runner left on UTC the local and UTC days coincide and the assertion is vacuous.
+  it("takes the UTC calendar day at the day boundary, not the learner's local day", async () => {
+    const prevTz = process.env.TZ;
+    process.env.TZ = "Europe/Moscow"; // UTC+3, no DST — local day is already 31.05
+    try {
+      vi.useFakeTimers();
+      // Machine clock agrees with the portal (same instant, same zone): both readings
+      // must yield 30.05, so the test fails on a local-day computation of EITHER input.
+      vi.setSystemTime(new Date("2026-05-30T23:35:00Z"));
+      stubFetch({ dateHeader: "Sat, 30 May 2026 23:30:00 GMT" });
+      const state: Record<string, unknown> = { templateLayouts: {} };
+      const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+
+      gate.run(suspendGate(), () => {});
+      await flush();
+
+      expect((state.retake as any)?.todayDate).toBe("2026-05-30");
+      // 20.05 + 30 дн. => the verdict follows the UTC day, not the local one.
+      expect((state.retake as any)?.allowed).toBe(false);
+    } finally {
+      process.env.TZ = prevTz;
+    }
+  });
+
+  it("degrades to the machine clock when the Date header is unparseable", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));
+    stubFetch({ dateHeader: "not-a-date" });
+    const state: Record<string, unknown> = { templateLayouts: {} };
+    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+
+    let started = false;
+    expect(() => gate.run(suspendGate(), () => { started = true; })).not.toThrow();
+    await flush();
+
+    // A verdict was still reached, on the machine clock (legacy behaviour).
+    expect((state.retake as any)?.checked).toBe(true);
+    expect((state.retake as any)?.todayDate).toBe("2026-06-30");
+    expect((state.retake as any)?.allowed).toBe(true);
+    expect(started).toBe(true);
+  });
+
+  // The date resolve now runs SYNCHRONOUSLY inside buildContext, i.e. before run()
+  // has a promise chain to catch anything. A `fetch` that is missing or throws
+  // synchronously (hostile shim, ancient runtime) would therefore escape run() —
+  // and bootstrap/main.js calls `RetakeGate.run(TEST_DATA, runCourse)` with no
+  // try/catch, so the learner would sit on «Загрузка теста…» forever.
+  it("survives a fetch that throws synchronously and still reaches a verdict", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));
+    vi.stubGlobal("fetch", () => { throw new TypeError("fetch is not a function"); });
+    const state: Record<string, unknown> = { templateLayouts: {} };
+    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+
+    let started = false;
+    expect(() => gate.run(suspendGate(), () => { started = true; })).not.toThrow();
+    await flush();
+
+    expect((state.retake as any)?.checked).toBe(true);
+    expect((state.retake as any)?.todayDate).toBe("2026-06-30");
+    // failOpen + an elapsed cooldown on the machine clock => the course starts.
+    expect(started).toBe(true);
+  });
+
   it("degrades to the machine clock when the portal request fails", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));

@@ -121,7 +121,15 @@ var RetakeGate = (function () {
   function fetchPortalChrome(url) {
     var key = url || '/';
     if (Object.prototype.hasOwnProperty.call(portalChrome, key)) return portalChrome[key];
-    portalChrome[key] = fetch(key, { credentials: 'include', cache: 'no-store' })
+    portalChrome[key] = (function () {
+      // `fetch` may be missing or throw synchronously (hostile shim, ancient runtime).
+      // Turn that into a rejection so the gate degrades to the machine clock instead of
+      // escaping run() and leaving the learner on the loading screen: resolveToday now
+      // calls this synchronously from buildContext, i.e. BEFORE run's promise chain
+      // exists, so a synchronous throw would never reach run's `.catch`.
+      try { return fetch(key, { credentials: 'include', cache: 'no-store' }); }
+      catch (e) { return Promise.reject(e); }
+    })()
       .then(function (r) {
         var dateHeader = '';
         try { dateHeader = (r.headers && r.headers.get && r.headers.get('Date')) || ''; } catch (e) { dateHeader = ''; }
