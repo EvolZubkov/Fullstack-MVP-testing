@@ -12,7 +12,7 @@
  * facade, never imported by routes.
  */
 import { randomUUID } from "crypto";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   topics, questions, testSections, contentPages, resultVariables,
@@ -83,10 +83,14 @@ export class TopicsRepository {
 
   async updateTopic(id: string, updates: Partial<InsertTopic>): Promise<Topic | undefined> {
     // PRD-15 FR-27: a rename must refresh the normalized name too.
-    const patch =
-      typeof updates.name === "string"
+    // PRD-25 FR-20: any edit of the topic refreshes its recency stamp. Written
+    // in the same statement as the patch, so a failed update cannot move it.
+    const patch = {
+      ...(typeof updates.name === "string"
         ? { ...updates, nameNormalized: normalizeTopicName(updates.name) }
-        : updates;
+        : updates),
+      updatedAt: sql`now()`,
+    };
     const [updated] = await db.update(topics).set(patch).where(eq(topics.id, id)).returning();
     return updated || undefined;
   }

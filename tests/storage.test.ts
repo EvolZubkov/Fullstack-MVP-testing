@@ -467,6 +467,10 @@ describe("DatabaseStorage — questions", () => {
   });
 
   it("updateQuestion — returns updated question", async () => {
+    // PRD-25 FR-20: updateQuestion reads the question's CURRENT topic first (the
+    // topic a question leaves must be touched too), so the select is stubbed as
+    // well as the update.
+    setupSelectReturning([{ topicId: dbQuestion.topicId }]);
     setupUpdateReturning({ ...dbQuestion, prompt: "Updated?" });
     const q = await storage.updateQuestion("q1", { prompt: "Updated?" } as any);
     expect(q).toBeDefined();

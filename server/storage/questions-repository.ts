@@ -6,11 +6,18 @@
  * by the PRD-15 integrity checks. Scoring is NOT a property of the question
  * (PRD-15 block D): it resolves per-test elsewhere. Exposed through the
  * `IStorage` facade, never imported by routes.
+ *
+ * PRD-25 FR-20: every write here also refreshes `topics.updated_at` of the
+ * affected topic(s) via {@link touchTopics}. That is why the mutating methods
+ * run in a transaction even though each of them issues a single content
+ * statement — the stamp and the mutation must commit or roll back together, or
+ * the home page would order topics by a change that never happened.
  */
 import { randomUUID } from "crypto";
 import { eq, inArray, and, sql } from "drizzle-orm";
 import { db } from "../db";
 import { questions, type Question, type InsertQuestion } from "@shared/schema";
+import { touchTopics } from "./shared";
 
 /** Repository for the `questions` table. */
 export class QuestionsRepository {
@@ -42,26 +49,30 @@ export class QuestionsRepository {
 
   async createQuestion(question: InsertQuestion): Promise<Question> {
     const id = randomUUID();
-    const [newQuestion] = await db.insert(questions).values({
-      id,
-      topicId: question.topicId,
-      type: question.type,
-      prompt: question.prompt,
-      dataJson: question.dataJson,
-      correctJson: question.correctJson,
-      difficulty: question.difficulty ?? 50,
-      mediaUrl: question.mediaUrl || null,
-      mediaType: question.mediaType || null,
-      shuffleAnswers: question.shuffleAnswers ?? true,
-      feedback: question.feedback || null,
-      feedbackMode: question.feedbackMode || "general",
-      feedbackCorrect: question.feedbackCorrect || null,
-      feedbackIncorrect: question.feedbackIncorrect || null,
-      contentHash: question.contentHash || null,
-      tags: question.tags ?? [],
-      createdBy: question.createdBy || null,
-    }).returning();
-    return newQuestion;
+    return db.transaction(async (tx) => {
+      const [newQuestion] = await tx.insert(questions).values({
+        id,
+        topicId: question.topicId,
+        type: question.type,
+        prompt: question.prompt,
+        dataJson: question.dataJson,
+        correctJson: question.correctJson,
+        difficulty: question.difficulty ?? 50,
+        mediaUrl: question.mediaUrl || null,
+        mediaType: question.mediaType || null,
+        shuffleAnswers: question.shuffleAnswers ?? true,
+        feedback: question.feedback || null,
+        feedbackMode: question.feedbackMode || "general",
+        feedbackCorrect: question.feedbackCorrect || null,
+        feedbackIncorrect: question.feedbackIncorrect || null,
+        contentHash: question.contentHash || null,
+        tags: question.tags ?? [],
+        createdBy: question.createdBy || null,
+      }).returning();
+      // PRD-25 FR-20: the topic gained a question — that is a change to it.
+      await touchTopics(tx, [newQuestion.topicId]);
+      return newQuestion;
+    });
   }
 
   async duplicateQuestion(id: string): Promise<Question | undefined> {
@@ -69,39 +80,65 @@ export class QuestionsRepository {
     if (!original) return undefined;
 
     const newId = randomUUID();
-    const [newQuestion] = await db.insert(questions).values({
-      id: newId,
-      topicId: original.topicId,
-      type: original.type,
-      prompt: original.prompt + " (копия)",
-      dataJson: original.dataJson,
-      correctJson: original.correctJson,
-      difficulty: original.difficulty,
-      feedback: original.feedback,
-      feedbackMode: original.feedbackMode,
-      feedbackCorrect: original.feedbackCorrect,
-      feedbackIncorrect: original.feedbackIncorrect,
-      mediaUrl: original.mediaUrl,
-      mediaType: original.mediaType,
-      shuffleAnswers: original.shuffleAnswers,
-      tags: original.tags,
-    }).returning();
-    return newQuestion;
+    return db.transaction(async (tx) => {
+      const [newQuestion] = await tx.insert(questions).values({
+        id: newId,
+        topicId: original.topicId,
+        type: original.type,
+        prompt: original.prompt + " (копия)",
+        dataJson: original.dataJson,
+        correctJson: original.correctJson,
+        difficulty: original.difficulty,
+        feedback: original.feedback,
+        feedbackMode: original.feedbackMode,
+        feedbackCorrect: original.feedbackCorrect,
+        feedbackIncorrect: original.feedbackIncorrect,
+        mediaUrl: original.mediaUrl,
+        mediaType: original.mediaType,
+        shuffleAnswers: original.shuffleAnswers,
+        tags: original.tags,
+      }).returning();
+      await touchTopics(tx, [newQuestion.topicId]);
+      return newQuestion;
+    });
   }
 
   async updateQuestion(id: string, updates: Partial<InsertQuestion>): Promise<Question | undefined> {
-    const [updated] = await db.update(questions).set(updates).where(eq(questions.id, id)).returning();
-    return updated || undefined;
+    return db.transaction(async (tx) => {
+      // The question's topic has to be read BEFORE the patch: a question can be
+      // moved between topics, and the topic it LEAVES changed too — without this
+      // read it would never learn that it lost a question.
+      const [before] = await tx
+        .select({ topicId: questions.topicId })
+        .from(questions)
+        .where(eq(questions.id, id));
+      if (!before) return undefined;
+
+      const [updated] = await tx.update(questions).set(updates).where(eq(questions.id, id)).returning();
+      if (!updated) return undefined;
+      // Same id twice when the topic did not change — touchTopics dedupes.
+      await touchTopics(tx, [before.topicId, updated.topicId]);
+      return updated;
+    });
   }
 
   async deleteQuestion(id: string): Promise<boolean> {
-    const result = await db.delete(questions).where(eq(questions.id, id)).returning();
-    return result.length > 0;
+    return db.transaction(async (tx) => {
+      // RETURNING carries the topic id out of the row being deleted, so the
+      // parent topic is still known after it is gone — no pre-read needed.
+      const result = await tx.delete(questions).where(eq(questions.id, id)).returning();
+      await touchTopics(tx, result.map((q) => q.topicId));
+      return result.length > 0;
+    });
   }
 
   async deleteQuestionsBulk(ids: string[]): Promise<number> {
     if (ids.length === 0) return 0;
-    const result = await db.delete(questions).where(inArray(questions.id, ids)).returning();
-    return result.length;
+    return db.transaction(async (tx) => {
+      // One statement may span several topics; RETURNING yields every parent.
+      const result = await tx.delete(questions).where(inArray(questions.id, ids)).returning();
+      await touchTopics(tx, result.map((q) => q.topicId));
+      return result.length;
+    });
   }
 }
