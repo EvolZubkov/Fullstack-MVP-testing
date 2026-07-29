@@ -139,7 +139,10 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
     const state: Record<string, unknown> = { templateLayouts: { "system.blocked": blockedLayout } };
     const gate = makeGate({ state, SCORM, escapeHtml });
 
-    // webtutorCooldown with no resolvable object_id => reject => failClosed => error branch.
+    // webtutorCooldown needs the portal chrome for its SECID; the stubbed `fetch`
+    // above rejects (offline), so fetchPortalChrome degrades to an empty page and
+    // resolveSecid finds nothing => reject('secid_not_resolved') => failClosed =>
+    // error branch. This is the actual failure path in front of a live portal.
     gate.run(
       gatedTestData({
         retakePolicy: {
@@ -147,7 +150,13 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
           cooldownPeriodDays: 30,
           eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failClosed" },
         },
-        retakePlugin: { runtimeEntry: "webtutorCooldown", config: { objectIdPatterns: ["object_id=(\\d{6,})"] } },
+        retakePlugin: {
+          runtimeEntry: "webtutorCooldown",
+          config: {
+            collectionEndpoint: "/wt/collection",
+            secidSource: { endpoint: "/", pattern: "[A-F0-9]{32}" },
+          },
+        },
       }),
       () => {},
     );

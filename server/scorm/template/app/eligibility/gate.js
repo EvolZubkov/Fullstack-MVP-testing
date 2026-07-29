@@ -80,7 +80,7 @@ var RetakeGate = (function () {
 
   function fetchPortalChrome(url) {
     var key = url || '/';
-    if (portalChrome[key]) return portalChrome[key];
+    if (Object.prototype.hasOwnProperty.call(portalChrome, key)) return portalChrome[key];
     portalChrome[key] = fetch(key, { credentials: 'include', cache: 'no-store' })
       .then(function (r) {
         var dateHeader = '';
@@ -442,6 +442,10 @@ var RetakeGate = (function () {
   }
 
   function run(td, onAllowedStart) {
+    // Each gate run is a fresh evaluation: drop any portal response cached by a
+    // previous run in this window (e.g. a prior failed fetch) so the portal is
+    // always asked again rather than replaying a stale or failed result.
+    portalChrome = {};
     var ctx = buildContext(td);
     glog('gated. plugin:', td.retakePlugin.runtimeEntry,
       '| cooldownPeriodDays:', ctx.retakePolicy.cooldownPeriodDays,
