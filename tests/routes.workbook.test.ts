@@ -256,6 +256,9 @@ describe("GET /api/workbook/template", () => {
       // importer ignores them and the filled example can never be imported.
       "Справка",
       "Пример",
+      // Hidden source of the dropdown lists — last, so the book still opens on
+      // «Вопросы»; not a role name either, so the importer skips it as well.
+      "Значения",
     ]);
   });
 

@@ -41,6 +41,20 @@ export const QUESTION_HEADERS = [
 /** Column widths matching {@link QUESTION_HEADERS}. */
 export const QUESTION_WIDTHS = [36, 25, 18, 50, 12, 60, 25, 15, 40, 25, 12, 30, 30];
 
+// ─── canonical cell values of the enumerated «Вопросы» columns ───────────────
+//
+// What an author may PICK, offered as dropdowns by the workbook template. The
+// importer is more forgiving than these lists (it also reads `single`/`multiple`
+// for the type, and treats every non-`Fixed` value as "shuffle"), but a template
+// advertises the canonical spelling — the one the export writes back.
+
+/** «Тип вопроса» — derived from the export mapping, so the two cannot diverge. */
+export const QUESTION_TYPE_CHOICES = Object.values(typeToExcel);
+/** «Следование вариантов ответов» (see the serializer below). */
+export const SHUFFLE_CHOICES = ["Random", "Fixed"];
+/** «Режим ОС» (see the serializer below). */
+export const FEEDBACK_MODE_CHOICES = ["общая", "условная"];
+
 /** Serialize one question into a «Вопросы» sheet row (without «Ключ строки»). */
 export function serializeQuestionRow(q: Question, topicName: string): Record<string, unknown> {
   const data = q.dataJson as any;

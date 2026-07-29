@@ -14,7 +14,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import ExcelJS from "exceljs";
 import { addJsonSheet, workbookToBuffer, readWorkbookFromBuffer, sheetToObjects } from "../server/utils/excel";
-import { QUESTION_HEADERS } from "../server/services/questions-export";
+import { scales, resultVariables } from "@shared/schema";
+import {
+  QUESTION_HEADERS,
+  QUESTION_TYPE_CHOICES,
+  SHUFFLE_CHOICES,
+  FEEDBACK_MODE_CHOICES,
+} from "../server/services/questions-export";
 import {
   SCALE_HEADERS,
   RESULT_VAR_HEADERS,
@@ -24,6 +30,19 @@ import {
   VARIANT_THRESHOLD_HEADERS,
   SCORING_OVERRIDE_HEADERS,
   VARIANTS_COLUMN,
+  BOOL_CHOICES,
+  CONTROLS_CHOICES,
+  MEASUREMENT_SOURCE_CHOICES,
+  PASS_TYPE_CHOICES,
+  QUOTA_MODE_CHOICES,
+  SCALE_TYPE_CHOICES,
+  STRUCTURE_PASS_TYPE_CHOICES,
+  parseBool,
+  parseMeasurementRow,
+  parseQuotaRow,
+  parseStructureRow,
+  parseVariantThresholdRow,
+  serBool,
 } from "../server/utils/workbook-sheets";
 
 vi.hoisted(() => {
@@ -64,6 +83,7 @@ import {
   ROLE_SHEET_NAMES,
   HELP_SHEET,
   EXAMPLE_SHEET,
+  CHOICES_SHEET,
   SCORING_COL_POINTS,
   SCORING_COL_PRICE,
 } from "../server/services/workbook-template";
@@ -242,6 +262,140 @@ describe("шаблон книги — валидность примеров", ()
     for (const [name, rows] of Object.entries(EXAMPLE_ROWS)) {
       if (!rows.length) continue;
       expect(example, `на листе примеров нет блока «${name}»`).toContain(name);
+    }
+  });
+});
+
+// ─── проверка ввода (выпадающие списки) ───────────────────────────────────────
+
+/** Значения списка, на который ссылается проверка ввода ячейки. */
+function choicesBehind(wb: ExcelJS.Workbook, sheet: string, column: string): string[] {
+  const ws = wb.worksheets.find((w) => w.name === sheet)!;
+  const index = headersOf(ws).indexOf(column);
+  expect(index, `на листе «${sheet}» нет колонки «${column}»`).toBeGreaterThanOrEqual(0);
+  const dv = ws.getCell(2, index + 1).dataValidation as { type?: string; formulae?: string[] } | undefined;
+  expect(dv?.type, `у «${sheet}»/«${column}» нет проверки-списка`).toBe("list");
+  const ref = String(dv!.formulae![0]);
+  const m = /^'(.+)'!\$([A-Z]+)\$(\d+):\$[A-Z]+\$(\d+)$/.exec(ref);
+  expect(m, `ссылка списка неразборчива: ${ref}`).toBeTruthy();
+  const [, source, letter, from, to] = m!;
+  const values = wb.worksheets.find((w) => w.name === source)!;
+  const out: string[] = [];
+  for (let r = Number(from); r <= Number(to); r += 1) {
+    out.push(String(values.getCell(`${letter}${r}`).value ?? ""));
+  }
+  return out;
+}
+
+describe("шаблон книги — проверка ввода", () => {
+  it("перечислимые колонки получают выпадающий список", async () => {
+    const wb = await buildWorkbookTemplate();
+
+    expect(choicesBehind(wb, "Вопросы", "Тип вопроса")).toEqual(QUESTION_TYPE_CHOICES);
+    expect(choicesBehind(wb, "Вопросы", "Следование вариантов ответов")).toEqual(SHUFFLE_CHOICES);
+    expect(choicesBehind(wb, "Вопросы", "Режим ОС")).toEqual(FEEDBACK_MODE_CHOICES);
+    expect(choicesBehind(wb, "Структура", "Тип порога")).toEqual(STRUCTURE_PASS_TYPE_CHOICES);
+    expect(choicesBehind(wb, "Структура", "Обязательный")).toEqual(BOOL_CHOICES);
+    expect(choicesBehind(wb, "Квоты", "Режим")).toEqual(QUOTA_MODE_CHOICES);
+    expect(choicesBehind(wb, "Пороги вариантов", "Тип порога")).toEqual(PASS_TYPE_CHOICES);
+    expect(choicesBehind(wb, "Шкалы", "Тип")).toEqual(SCALE_TYPE_CHOICES);
+    expect(choicesBehind(wb, "Показатели", "Управляет статусом")).toEqual(CONTROLS_CHOICES);
+    expect(choicesBehind(wb, "Вклады вопросов", "Источник")).toEqual(MEASUREMENT_SOURCE_CHOICES);
+  });
+
+  it("лист-источник списков скрыт и не является ролевым", async () => {
+    const wb = await buildWorkbookTemplate();
+    const ws = wb.worksheets.find((w) => w.name === CHOICES_SHEET)!;
+
+    expect(ws, "листа со списками нет").toBeTruthy();
+    expect(ws.state).toBe("hidden");
+    // Иначе импортёр попытался бы прочитать его как данные.
+    expect(ROLE_SHEET_NAMES).not.toContain(CHOICES_SHEET);
+  });
+
+  it("проверка покрывает не только первую строку", async () => {
+    const wb = await buildWorkbookTemplate();
+    const ws = wb.worksheets.find((w) => w.name === "Квоты")!;
+    const column = headersOf(ws).indexOf("Режим") + 1;
+
+    for (const row of [2, 50, 400]) {
+      const dv = ws.getCell(row, column).dataValidation as { type?: string } | undefined;
+      expect(dv?.type, `строка ${row} осталась без проверки`).toBe("list");
+    }
+  });
+
+  // Главное свойство: список не должен предлагать то, что загрузка не примет.
+  // Проверяется настоящими разборщиками, а не повторением тех же констант.
+  it("каждое предлагаемое значение принимается разборщиком", async () => {
+    const wb = await buildWorkbookTemplate();
+
+    for (const value of choicesBehind(wb, "Структура", "Тип порога")) {
+      const row = { "Раздел": "Финансы", "Вопросов в выборке": 3, "Тип порога": value, "Порог": 50 };
+      expect(parseStructureRow(row, 0).ok, `«Тип порога» = «${value}»`).toBe(true);
+    }
+
+    for (const value of choicesBehind(wb, "Квоты", "Режим")) {
+      const row = { "Раздел": "Финансы", "Тег": "базовый", "Количество": 2, "Режим": value };
+      expect(parseQuotaRow(row).ok, `«Режим» = «${value}»`).toBe(true);
+    }
+
+    for (const value of choicesBehind(wb, "Пороги вариантов", "Тип порога")) {
+      const row = { "Раздел": "Финансы", "Вариант": 1, "Тип порога": value, "Порог": 1 };
+      expect(parseVariantThresholdRow(row).ok, `«Тип порога» = «${value}»`).toBe(true);
+    }
+
+    for (const value of choicesBehind(wb, "Вклады вопросов", "Источник")) {
+      const row = { "Вопрос": "q1", "Шкала": "finlit", "Источник": value, "Ключ источника": "0", "Значение": 1 };
+      expect(parseMeasurementRow(row).ok, `«Источник» = «${value}»`).toBe(true);
+    }
+
+    // У шкал и показателей разборщик пропускает значение как есть, а сужает его
+    // уже enum схемы — поэтому сверяем список именно с ним.
+    expect(choicesBehind(wb, "Шкалы", "Агрегация")).toEqual([...scales.aggregation.enumValues]);
+    expect(choicesBehind(wb, "Шкалы", "SCORM")).toEqual([...scales.scormTarget.enumValues]);
+    expect(choicesBehind(wb, "Показатели", "Тип")).toEqual([...resultVariables.type.enumValues]);
+    expect(choicesBehind(wb, "Показатели", "SCORM")).toEqual([...resultVariables.scormTarget.enumValues]);
+
+    // «да»/«нет» — то, что пишет экспорт и читает parseBool.
+    expect(choicesBehind(wb, "Структура", "Обязательный")).toEqual([serBool(true), serBool(false)]);
+    expect(parseBool(choicesBehind(wb, "Структура", "Обязательный")[0])).toBe(true);
+    expect(parseBool(choicesBehind(wb, "Структура", "Обязательный")[1])).toBe(false);
+  });
+});
+
+// ─── оформление ───────────────────────────────────────────────────────────────
+
+describe("шаблон книги — оформление", () => {
+  it("на листе «Пример» каждый блок оформлен как таблица", async () => {
+    const wb = await buildWorkbookTemplate();
+    const ws = wb.worksheets.find((w) => w.name === EXAMPLE_SHEET)!;
+
+    // Строка заголовков блока «Вопросы» — по его первой колонке.
+    let headerRow = 0;
+    ws.eachRow((row, n) => {
+      if (!headerRow && String(row.getCell(1).value ?? "") === "Ключ строки") headerRow = n;
+    });
+    expect(headerRow, "не найдена строка заголовков блока").toBeGreaterThan(0);
+
+    const header = ws.getRow(headerRow).getCell(1);
+    expect(header.font?.bold, "заголовок блока не выделен").toBe(true);
+    expect((header.fill as ExcelJS.FillPattern)?.fgColor?.argb, "заголовок без заливки").toBeTruthy();
+    expect(header.border?.bottom, "заголовок без рамки").toBeTruthy();
+
+    const data = ws.getRow(headerRow + 1).getCell(1);
+    expect(data.border?.top, "строка данных без рамки").toBeTruthy();
+    expect(data.alignment?.wrapText, "длинный текст должен переноситься").toBe(true);
+
+    // Подпись блока — строкой выше заголовков, отдельным начертанием.
+    expect(ws.getRow(headerRow - 1).getCell(1).font?.bold).toBe(true);
+  });
+
+  it("на ролевых листах строка заголовков выделена и закреплена", async () => {
+    const wb = await buildWorkbookTemplate();
+    for (const name of ROLE_SHEET_NAMES) {
+      const ws = wb.worksheets.find((w) => w.name === name)!;
+      expect(ws.getRow(1).font?.bold, `«${name}»: заголовок не выделен`).toBe(true);
+      expect(ws.views?.[0]?.state, `«${name}»: заголовок не закреплён`).toBe("frozen");
     }
   });
 });

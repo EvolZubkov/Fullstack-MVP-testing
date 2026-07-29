@@ -25,7 +25,13 @@
  */
 import ExcelJS from "exceljs";
 import { addAoaSheet } from "../utils/excel";
-import { QUESTION_HEADERS, QUESTION_WIDTHS } from "./questions-export";
+import {
+  QUESTION_HEADERS,
+  QUESTION_WIDTHS,
+  QUESTION_TYPE_CHOICES,
+  SHUFFLE_CHOICES,
+  FEEDBACK_MODE_CHOICES,
+} from "./questions-export";
 import {
   SCALE_HEADERS,
   SCALE_WIDTHS,
@@ -42,6 +48,19 @@ import {
   VARIANT_THRESHOLD_HEADERS,
   VARIANT_THRESHOLD_WIDTHS,
   VARIANTS_COLUMN,
+  BOOL_CHOICES,
+  CONTROLS_CHOICES,
+  MEASUREMENT_SOURCE_CHOICES,
+  PASS_TYPE_CHOICES,
+  QUOTA_MODE_CHOICES,
+  RESULT_VAR_SCORM_CHOICES,
+  RESULT_VAR_TYPE_CHOICES,
+  SCALE_AGGREGATION_CHOICES,
+  SCALE_DIRECTION_CHOICES,
+  SCALE_NORMALIZATION_CHOICES,
+  SCALE_SCORM_CHOICES,
+  SCALE_TYPE_CHOICES,
+  STRUCTURE_PASS_TYPE_CHOICES,
 } from "../utils/workbook-sheets";
 
 /** Canonical role-sheet names (must match the importer/exporter). */
@@ -115,6 +134,157 @@ const ROLE_SHEETS: RoleSheet[] = [
 
 /** Names of the sheets the importer reads (everything else is ignored). */
 export const ROLE_SHEET_NAMES: string[] = ROLE_SHEETS.map((s) => s.name);
+
+// ─── input validation: pick a value instead of typing it ─────────────────────
+//
+// Every column whose meaning is a closed set gets an Excel dropdown. A typo in
+// such a cell is not a small mistake: «Сумма балов» or «условнная» costs the
+// author a whole upload-and-read-the-errors cycle, and the ones that fall back
+// to a default silently (an unrecognised «Следование вариантов ответов» simply
+// means "shuffle") are worse — they never surface at all.
+//
+// The offered values come from {@link module:server/utils/workbook-sheets} and
+// {@link module:server/services/questions-export}, where they are derived from
+// the export mappings and the schema enums, so a template can never advertise a
+// value the importer stopped taking.
+
+/** Sheet holding the dropdown sources — hidden: it is plumbing, not content. */
+export const CHOICES_SHEET = "Значения";
+
+/**
+ * How many rows of each role sheet the dropdowns cover. The sheets ship empty,
+ * so this is a guess at "more rows than anyone will paste"; ExcelJS folds
+ * identical validations into ranges, so the cost of a generous bound is a few
+ * bytes rather than 500 XML entries per column.
+ */
+const VALIDATED_ROWS = 500;
+
+/** Enumerated columns per role sheet: header → the values offered. */
+const VALIDATED_COLUMNS: Record<string, Record<string, string[]>> = {
+  [SHEET_QUESTIONS]: {
+    "Тип вопроса": QUESTION_TYPE_CHOICES,
+    "Следование вариантов ответов": SHUFFLE_CHOICES,
+    "Режим ОС": FEEDBACK_MODE_CHOICES,
+  },
+  [SHEET_STRUCTURE]: {
+    "Тип порога": STRUCTURE_PASS_TYPE_CHOICES,
+    "Обязательный": BOOL_CHOICES,
+  },
+  [SHEET_QUOTAS]: {
+    "Режим": QUOTA_MODE_CHOICES,
+  },
+  [SHEET_VARIANT_THRESHOLDS]: {
+    "Тип порога": PASS_TYPE_CHOICES,
+  },
+  [SHEET_SCALES]: {
+    "Тип": SCALE_TYPE_CHOICES,
+    "Агрегация": SCALE_AGGREGATION_CHOICES,
+    "Нормализация": SCALE_NORMALIZATION_CHOICES,
+    "Направление": SCALE_DIRECTION_CHOICES,
+    "Показывать ученику": BOOL_CHOICES,
+    "SCORM": SCALE_SCORM_CHOICES,
+  },
+  [SHEET_RESULT_VARS]: {
+    "Тип": RESULT_VAR_TYPE_CHOICES,
+    "Показывать ученику": BOOL_CHOICES,
+    "SCORM": RESULT_VAR_SCORM_CHOICES,
+    "Управляет статусом": CONTROLS_CHOICES,
+  },
+  [SHEET_MEASUREMENTS]: {
+    "Источник": MEASUREMENT_SOURCE_CHOICES,
+  },
+};
+
+/**
+ * Write every distinct value list as a column of the hidden sheet and return the
+ * absolute range of each, keyed by the list itself.
+ *
+ * Ranges rather than an inline `"a,b,c"` formula on purpose: the inline form is
+ * capped at 255 characters AND is split by Excel's LOCALE list separator, which
+ * is `;` in a Russian install — the same file would then show one dropdown item
+ * containing all the commas. A range reference behaves the same everywhere.
+ */
+function planChoiceLists(): { lists: string[][]; ranges: Map<string, string> } {
+  const lists: string[][] = [];
+  const ranges = new Map<string, string>();
+  for (const columns of Object.values(VALIDATED_COLUMNS)) {
+    for (const choices of Object.values(columns)) {
+      const key = choices.join("|");
+      if (ranges.has(key)) continue;
+      const letter = colLetter(lists.length + 1);
+      lists.push(choices);
+      ranges.set(key, `'${CHOICES_SHEET}'!$${letter}$2:$${letter}$${choices.length + 1}`);
+    }
+  }
+  return { lists, ranges };
+}
+
+/**
+ * Add the hidden lists sheet. Written LAST so the visible tab order still opens
+ * on «Вопросы»: plumbing must not push the sheet the author came for aside.
+ */
+function writeChoiceSheet(wb: ExcelJS.Workbook, lists: string[][]): void {
+  const ws = wb.addWorksheet(CHOICES_SHEET);
+  const height = Math.max(...lists.map((l) => l.length));
+  ws.addRow(lists.map((_, i) => `список ${i + 1}`));
+  for (let r = 0; r < height; r += 1) {
+    ws.addRow(lists.map((list) => list[r] ?? ""));
+  }
+  // Hidden, not veryHidden: an author who unhides it finds the source of the
+  // dropdowns rather than a mystery, and nothing here is secret.
+  ws.state = "hidden";
+}
+
+/** Spreadsheet column letter for a 1-based index (A, B, … Z, AA). */
+function colLetter(index: number): string {
+  let n = index;
+  let out = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    out = String.fromCharCode(65 + rem) + out;
+    n = Math.floor((n - 1) / 26);
+  }
+  return out;
+}
+
+/**
+ * Attach the dropdowns of one role sheet.
+ *
+ * The error is a WARNING rather than a hard stop: the importer accepts more
+ * spellings than the template advertises (English synonyms, `single`/`multiple`,
+ * `%`), so a book assembled elsewhere must keep pasting cleanly. The dropdown
+ * exists to make the right value easy, not to make every other value impossible.
+ */
+function applyColumnValidations(
+  ws: ExcelJS.Worksheet,
+  sheetName: string,
+  headers: string[],
+  ranges: Map<string, string>,
+): void {
+  const columns = VALIDATED_COLUMNS[sheetName];
+  if (!columns) return;
+  for (const [column, choices] of Object.entries(columns)) {
+    const index = headers.indexOf(column);
+    if (index < 0) continue;
+    const formula = ranges.get(choices.join("|"));
+    if (!formula) continue;
+    const listed = choices.join(", ");
+    for (let row = 2; row <= VALIDATED_ROWS + 1; row += 1) {
+      ws.getCell(row, index + 1).dataValidation = {
+        type: "list",
+        allowBlank: true,
+        formulae: [formula],
+        showInputMessage: true,
+        promptTitle: column,
+        prompt: `Выберите значение из списка: ${listed}`,
+        showErrorMessage: true,
+        errorStyle: "warning",
+        errorTitle: "Значение не из списка",
+        error: `Ожидается одно из: ${listed}. Другое значение загрузка может не принять или понять иначе.`,
+      };
+    }
+  }
+}
 
 // ─── Example test ─────────────────────────────────────────────────────────────
 //
@@ -440,47 +610,142 @@ const EXAMPLE_ORDER = [
   SHEET_MEASUREMENTS,
 ];
 
+/** What a line of the «Пример» sheet is, so the renderer can dress it. */
+type ExampleLineKind = "title" | "note" | "caption" | "header" | "data" | "blank";
+
+/** One rendered line of the «Пример» sheet. */
+interface ExampleLine {
+  kind: ExampleLineKind;
+  cells: unknown[];
+}
+
 /**
  * Render the example test as stacked blocks: a caption, the sheet's header row
  * and its filled rows. Rendering from {@link EXAMPLE_ROWS} through the canonical
  * headers keeps the example aligned with the real columns automatically.
+ *
+ * Each line carries its kind, because the sheet is read by eye: eight blocks of
+ * bare rows run together into one wall, and the reader's first question — where
+ * does the block for THIS sheet start and which cell is a heading — has to be
+ * answerable at a glance. {@link styleExampleSheet} turns the kinds into format.
  */
-function buildExampleRows(): unknown[][] {
-  const out: unknown[][] = [
-    ["ПРИМЕР ЗАПОЛНЕНИЯ — небольшой, но полностью рабочий тест"],
-    ["Этот лист НЕ импортируется: книгу читают только листы с ролевыми названиями."],
-    ["Скопируйте нужные строки на одноимённый лист — под его строку заголовков."],
-    [],
-    ["Что описано: три темы, все четыре типа вопросов, частичный зачёт, квоты по тегам,"],
-    ["раздел с двумя вариантами и своими порогами, шкала с диапазонами и два показателя."],
-    [],
+function buildExampleLines(): ExampleLine[] {
+  const out: ExampleLine[] = [
+    { kind: "title", cells: ["ПРИМЕР ЗАПОЛНЕНИЯ — небольшой, но полностью рабочий тест"] },
+    { kind: "note", cells: ["Этот лист НЕ импортируется: книгу читают только листы с ролевыми названиями."] },
+    { kind: "note", cells: ["Скопируйте нужные строки на одноимённый лист — под его строку заголовков."] },
+    { kind: "blank", cells: [] },
+    { kind: "note", cells: ["Что описано: три темы, все четыре типа вопросов, частичный зачёт, квоты по тегам,"] },
+    { kind: "note", cells: ["раздел с двумя вариантами и своими порогами, шкала с диапазонами и два показателя."] },
+    { kind: "blank", cells: [] },
   ];
 
   for (const name of EXAMPLE_ORDER) {
     const rows = EXAMPLE_ROWS[name];
     if (!rows?.length) continue;
     const spec = ROLE_SHEETS.find((s) => s.name === name)!;
-    out.push([`ЛИСТ «${name}»`]);
-    out.push(spec.headers);
-    for (const row of rows) out.push(spec.headers.map((h) => row[h] ?? ""));
-    out.push([]);
+    out.push({ kind: "caption", cells: [`ЛИСТ «${name}»`] });
+    out.push({ kind: "header", cells: spec.headers });
+    for (const row of rows) {
+      out.push({ kind: "data", cells: spec.headers.map((h) => row[h] ?? "") });
+    }
+    out.push({ kind: "blank", cells: [] });
   }
   return out;
 }
 
+/** Header fill of an example block — light enough to print and to read on. */
+const HEADER_FILL: ExcelJS.FillPattern = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FFEDEDF5" },
+};
+
+/** Grid of an example block. */
+const CELL_BORDER: Partial<ExcelJS.Borders> = {
+  top: { style: "thin", color: { argb: "FFD5D5E0" } },
+  left: { style: "thin", color: { argb: "FFD5D5E0" } },
+  bottom: { style: "thin", color: { argb: "FFD5D5E0" } },
+  right: { style: "thin", color: { argb: "FFD5D5E0" } },
+};
+
+/**
+ * Dress the «Пример» sheet: each block reads as a table with a marked header,
+ * and the prose around it stays visibly prose.
+ *
+ * Data cells wrap rather than spill: an option list or a graded-scoring rule is
+ * long, and a row of half-shown text is what made the sheet unreadable in the
+ * first place. Row heights are left unset on purpose so Excel fits them to the
+ * wrapped content.
+ */
+function styleExampleSheet(ws: ExcelJS.Worksheet, lines: ExampleLine[]): void {
+  lines.forEach((line, index) => {
+    const row = ws.getRow(index + 1);
+    switch (line.kind) {
+      case "title":
+        row.getCell(1).font = { bold: true, size: 14 };
+        break;
+      case "note":
+        row.getCell(1).font = { italic: true, color: { argb: "FF666677" } };
+        break;
+      case "caption":
+        row.getCell(1).font = { bold: true, size: 12, color: { argb: "FF3B3B8F" } };
+        break;
+      case "header":
+        for (let c = 1; c <= line.cells.length; c += 1) {
+          const cell = row.getCell(c);
+          cell.font = { bold: true };
+          cell.fill = HEADER_FILL;
+          cell.border = CELL_BORDER;
+          cell.alignment = { vertical: "middle", wrapText: true };
+        }
+        break;
+      case "data":
+        for (let c = 1; c <= line.cells.length; c += 1) {
+          const cell = row.getCell(c);
+          cell.border = CELL_BORDER;
+          cell.alignment = { vertical: "top", wrapText: true };
+        }
+        break;
+      case "blank":
+        break;
+    }
+  });
+}
+
 /**
  * Build the «Импорт» section's workbook template: empty role sheets (headers
- * only), the per-column reference and the filled example.
+ * only, with dropdowns on the enumerated columns), the per-column reference and
+ * the filled example.
  */
 export async function buildWorkbookTemplate(): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
+  const { lists, ranges } = planChoiceLists();
 
   for (const sheet of ROLE_SHEETS) {
-    addAoaSheet(wb, sheet.name, [sheet.headers], sheet.widths);
+    const ws = addAoaSheet(wb, sheet.name, [sheet.headers], sheet.widths);
+    // The header row is the contract of the sheet: it must stay legible and stay
+    // on screen while the author scrolls into row 300.
+    ws.getRow(1).font = { bold: true };
+    ws.getRow(1).alignment = { vertical: "middle", wrapText: true };
+    ws.views = [{ state: "frozen", ySplit: 1 }];
+    applyColumnValidations(ws, sheet.name, sheet.headers, ranges);
   }
 
   addAoaSheet(wb, HELP_SHEET, [HELP_HEADERS, ...HELP_ROWS], HELP_WIDTHS);
-  addAoaSheet(wb, EXAMPLE_SHEET, buildExampleRows(), [14, 36, 20, 56, 30, 18, 16, 16, 22, 18]);
+  const help = wb.getWorksheet(HELP_SHEET)!;
+  help.getRow(1).font = { bold: true };
+  help.views = [{ state: "frozen", ySplit: 1 }];
 
+  const lines = buildExampleLines();
+  const example = addAoaSheet(
+    wb,
+    EXAMPLE_SHEET,
+    lines.map((l) => l.cells),
+    [14, 36, 20, 56, 30, 18, 16, 16, 22, 18],
+  );
+  styleExampleSheet(example, lines);
+
+  writeChoiceSheet(wb, lists);
   return wb;
 }

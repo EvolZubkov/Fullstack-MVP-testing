@@ -18,6 +18,7 @@
 
 import type { ScaleBand } from "@shared/scales/engine";
 import type { DrawStratum, QuestionScoring } from "@shared/schema";
+import { scales, resultVariables } from "@shared/schema";
 import { serializeScoring } from "./scoring-excel";
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -84,6 +85,12 @@ export function serBool(b: boolean): string {
   return b ? "да" : "нет";
 }
 
+/**
+ * The yes/no pair offered in a dropdown. {@link parseBool} also accepts
+ * yes/true/1/истина; those stay readable but unadvertised.
+ */
+export const BOOL_CHOICES = [serBool(true), serBool(false)];
+
 const SOURCE_FROM: Record<string, string> = {
   вопрос: "question",
   вариант: "option",
@@ -115,6 +122,37 @@ const CONTROLS_TO: Record<string, string> = {
   success: "успех",
   completion: "завершение",
 };
+
+// ─── canonical cell values of the enumerated columns ─────────────────────────
+//
+// The values an author may PICK, as opposed to everything the parsers tolerate.
+// The parsers above accept synonyms and English spellings so older books keep
+// loading; offering all of them would turn a dropdown into a quiz. Each list is
+// therefore derived from the export side (`*_TO`) or straight from the schema
+// enum the value must land in — never hand-written, because a hand-kept copy is
+// exactly how a template starts offering a value the importer no longer takes.
+//
+// Consumed by the workbook template (`server/services/workbook-template.ts`),
+// which turns them into Excel dropdowns.
+
+/** «Источник» of «Вклады вопросов». */
+export const MEASUREMENT_SOURCE_CHOICES = Object.values(SOURCE_TO);
+/** «Управляет статусом» of «Показатели». */
+export const CONTROLS_CHOICES = Object.values(CONTROLS_TO);
+/** Scale kind — the value lands in the `scales.type` enum as written. */
+export const SCALE_TYPE_CHOICES = [...scales.type.enumValues];
+/** «Агрегация» of «Шкалы». */
+export const SCALE_AGGREGATION_CHOICES = [...scales.aggregation.enumValues];
+/** «Нормализация» of «Шкалы». */
+export const SCALE_NORMALIZATION_CHOICES = [...scales.normalization.enumValues];
+/** «Направление» of «Шкалы». */
+export const SCALE_DIRECTION_CHOICES = [...scales.direction.enumValues];
+/** «SCORM» of «Шкалы». */
+export const SCALE_SCORM_CHOICES = [...scales.scormTarget.enumValues];
+/** «Тип» of «Показатели». */
+export const RESULT_VAR_TYPE_CHOICES = [...resultVariables.type.enumValues];
+/** «SCORM» of «Показатели» (a different default order than the scale one). */
+export const RESULT_VAR_SCORM_CHOICES = [...resultVariables.scormTarget.enumValues];
 
 // ─── bands grammar («Диапазоны») ──────────────────────────────────────────────
 
@@ -396,6 +434,28 @@ const QUOTA_MODE_FROM: Record<string, "exact" | "min"> = {
 };
 /** PRD-11 mode → «Режим» cell (export). */
 const QUOTA_MODE_TO: Record<string, string> = { exact: "Ровно", min: "Не менее" };
+
+/** «Режим» of «Квоты». */
+export const QUOTA_MODE_CHOICES = Object.values(QUOTA_MODE_TO);
+
+/**
+ * «Тип порога» of «Пороги вариантов» — a variant threshold is always a concrete
+ * number, so only the two measurable types apply.
+ */
+export const PASS_TYPE_CHOICES = Object.values(PASS_TYPE_TO);
+
+/**
+ * «Тип порога» of «Структура» — the two measurable types plus the three modes
+ * {@link parseStructureRow} handles before consulting `PASS_TYPE_FROM`:
+ * inherit the test's rule, do not check at all, or take the threshold per
+ * variant from the «Пороги вариантов» sheet.
+ */
+export const STRUCTURE_PASS_TYPE_CHOICES = [
+  "Как у теста",
+  "Нет",
+  ...PASS_TYPE_CHOICES,
+  "По вариантам",
+];
 
 /** One parsed «Структура» row (refs resolved later by the orchestrator). */
 export interface ParsedSection {
