@@ -36,8 +36,11 @@ var RetakeGate = (function () {
     );
   }
 
-  // NFR-TD-01: the date resolution has its own budget INSIDE the gate's 5 s, so a slow
-  // portal can never hang the start — it just degrades to the machine clock.
+  // NFR-TD-01: the date resolution has its own sub-budget, so a slow portal can never
+  // hang the start — it just degrades to the machine clock. GATE_TIMEOUT_MS is the
+  // budget for the WHOLE gate and is SHARED, not per-step: what the date resolution
+  // spends here is deducted from what the plugin gets afterwards (see evaluate), so
+  // the worst case to a verdict stays 5 s rather than 2.5 s + 5 s.
   var DATE_TIMEOUT_MS = 2500;
 
   // UTC calendar day of an epoch-ms value. The whole cooldown math is UTC-calendar on
@@ -248,12 +251,18 @@ var RetakeGate = (function () {
     return Promise.resolve(true); // unknown adapter => allow (core default spirit)
   }
 
-  function evaluate(td, ctx) {
+  // `startedAt` is the epoch-ms the WHOLE gate began (see run). The plugin gets the
+  // REMAINDER of GATE_TIMEOUT_MS, not a fresh copy of it: everything the gate did
+  // first — notably resolving the trusted date — already spent part of NFR-06's
+  // budget, and giving the plugin the full 5 s again would make the worst case the
+  // SUM of the two. Omitted (legacy callers/tests) => the full budget.
+  function evaluate(td, ctx, startedAt) {
     var failPolicy = (td.retakePolicy.eligibilityPlugin && td.retakePolicy.eligibilityPlugin.failPolicy) || 'failOpen';
+    var budgetLeft = Math.max(0, GATE_TIMEOUT_MS - (Date.now() - (startedAt || Date.now())));
     var work;
     try { work = Promise.resolve(runPlugin(td, ctx)); } catch (e) { work = Promise.reject(e); }
     var timeout = new Promise(function (_resolve, reject) {
-      setTimeout(function () { reject(new Error('eligibility_timeout')); }, GATE_TIMEOUT_MS);
+      setTimeout(function () { reject(new Error('eligibility_timeout')); }, budgetLeft);
     });
     return Promise.race([work, timeout])
       .then(function (v) { return EligibilityEngine.normalizeVerdict(v); })
@@ -470,11 +479,12 @@ var RetakeGate = (function () {
     // previous run in this window (e.g. a prior failed fetch) so the portal is
     // always asked again rather than replaying a stale or failed result.
     portalChrome = {};
+    var startedAt = Date.now();
     buildContext(td).then(function (ctx) {
       glog('gated. plugin:', td.retakePlugin.runtimeEntry,
         '| cooldownPeriodDays:', ctx.retakePolicy.cooldownPeriodDays,
         '| today:', ctx.runtime.todayDate);
-      return evaluate(td, ctx).then(function (result) {
+      return evaluate(td, ctx, startedAt).then(function (result) {
         var retake = EligibilityEngine.buildRetakeState(result, {
           todayDate: ctx.runtime.todayDate,
           cooldownPeriodDays: ctx.retakePolicy.cooldownPeriodDays

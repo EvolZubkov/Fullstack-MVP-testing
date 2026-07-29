@@ -189,4 +189,50 @@ describe("PRD-6 gate — trusted date", () => {
 
     expect((state.retake as any)?.todayDate).toBe("2026-06-30");
   });
+
+  // NFR-06 + NFR-TD-01: GATE_TIMEOUT_MS (5 s) is the budget for the WHOLE gate, and the
+  // date resolution spends part of it, so the plugin must inherit the REMAINDER. A portal
+  // that accepts the connection and then answers nothing stalls BOTH steps — the date
+  // resolve and the plugin's SECID scrape — which is the only case where the two budgets
+  // could stack. Driving the fake clock pins the verdict to 5 s: still pending at 4999 ms
+  // (so the assertion cannot pass vacuously) and present at 5000 ms. Before the fix this
+  // took 7500 ms (2500 date + a fresh 5000 for the plugin).
+  it("keeps the whole gate inside GATE_TIMEOUT_MS when the portal never answers", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));
+    vi.stubGlobal("fetch", () => new Promise(() => {})); // connects, never settles
+    const state: Record<string, unknown> = { templateLayouts: {} };
+    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+
+    let started = false;
+    gate.run(
+      {
+        id: "t1",
+        title: "Курс",
+        retakePolicy: {
+          enabled: true,
+          cooldownPeriodDays: 30,
+          eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" },
+        },
+        retakePlugin: {
+          runtimeEntry: "webtutorCooldown",
+          config: {
+            collectionEndpoint: "/pp/Ext5/extjs_json_collection_data.html",
+            secidSource: { endpoint: "/", pattern: "[A-F0-9]{32}" },
+          },
+        },
+      },
+      () => { started = true; },
+    );
+
+    await vi.advanceTimersByTimeAsync(4999);
+    await flush();
+    expect(started).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await flush();
+    // failOpen on `eligibility_timeout` => the course starts rather than hanging.
+    expect(started).toBe(true);
+    expect((state.retake as any)?.reason).toBe("plugin_error_fail_open");
+  });
 });
