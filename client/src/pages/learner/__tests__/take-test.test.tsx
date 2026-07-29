@@ -327,8 +327,8 @@ describe("<TakeTestPage /> start gates", () => {
 
   it("folds a retake cooldown into the start context instead of navigating away", async () => {
     await renderToStart({
-      // daysUntil is deliberately NOT derivable from availableDate by any clock
-      // (real or faked) — this is the guard that would catch a regression back to
+      // daysUntil is deliberately NOT derivable from availableDate under the
+      // suite's clock — this is the guard that would catch a regression back to
       // a client-side, clock-based countdown.
       startAttempt: jsonRes(
         { code: "RETAKE_COOLDOWN", cooldownPeriodDays: 7, availableDate: "2026-08-01", daysUntil: 99 },

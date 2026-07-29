@@ -10,10 +10,10 @@
  * (ДД.ММ.ГГГГ).
  *
  * The «через N дн.» countdown is NOT computed here (PRD-6): it is a server
- * decision (`server/services/retake-gate.ts`, `shared/eligibility/engine.
- * daysUntilDate`) sourced from the server's own clock and delivered ready-made as
- * `retakeGate.daysUntil`, so the web host never reads the learner's local clock
- * for it.
+ * decision (`server/services/retake-gate.ts`, `shared/eligibility/engine.ts`'s
+ * `daysUntilDate`) sourced from the server's own clock and delivered ready-made
+ * as `retakeGate.daysUntil`, so the web host never reads the learner's local
+ * clock for it.
  */
 
 /** Format a `YYYY-MM-DD` (optionally with a time suffix) ISO date as ДД.ММ.ГГГГ. */

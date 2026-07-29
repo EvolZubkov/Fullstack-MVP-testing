@@ -59,7 +59,7 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
   });
 
   it("daysUntilDate matches", () => {
-    const cases: Array<[string | null, string | null]> = [
+    const cases: Array<[string | null, string | null | undefined]> = [
       ["2026-06-30", "2026-06-28"],
       ["2026-06-30", "2026-06-30"],
       ["2026-06-29", "2026-06-30"],
@@ -70,6 +70,8 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
       // dead-fallback removal in server/services/retake-gate.ts relies on this
       // being tolerated, not coerced).
       ["2026-06-30", null],
+      // Same tolerance for `undefined` (an omitted argument), not just `null`.
+      ["2026-06-30", undefined],
     ];
     for (const [iso, today] of cases) {
       expect(port.EligibilityEngine.daysUntilDate(iso, today)).toEqual(tsEngine.daysUntilDate(iso, today));

@@ -55,7 +55,7 @@ var EligibilityEngine = (function () {
   // -- callers MUST pass cooldownDecision(...).effectiveToday, not a raw clock read.
   function daysUntilDate(iso, todayDate) {
     var target = iso ? parseIsoDate(iso) : null;
-    var today = parseIsoDate(todayDate);
+    var today = todayDate ? parseIsoDate(todayDate) : null;
     if (target == null || today == null) return null;
     var diff = target - today;
     return diff > 0 ? diff : null;
