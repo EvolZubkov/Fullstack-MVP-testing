@@ -25,6 +25,9 @@ const engineSrc = read("server/scorm/template/app/eligibility/engine.js");
 const pluginsSrc = read("server/scorm/template/app/eligibility/plugins.js");
 const gateSrc = read("server/scorm/template/app/eligibility/gate.js");
 
+/** The gate's own sub-budget for resolving the date (NFR-TD-01), mirrored from gate.js. */
+const DATE_TIMEOUT_MS = 2500;
+
 /** Build a fresh RetakeGate over the supplied runtime globals. */
 function makeGate(state: Record<string, unknown>, SCORM: unknown) {
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
@@ -38,8 +41,13 @@ function makeGate(state: Record<string, unknown>, SCORM: unknown) {
   return factory(state, SCORM, (s: unknown) => String(s == null ? "" : s), () => Promise.resolve(null));
 }
 
-/** Record every fetch and answer it: portal chrome (with/without Date) + collection. */
-function stubFetch(opts: { dateHeader?: string | null; chrome?: string }) {
+/**
+ * Record every fetch and answer it: portal chrome (with/without Date) + collection.
+ * `ok`/`status` shape the PORTAL CHROME response only (the collection endpoint always
+ * answers 200), so a caller can model "the portal errored but still stamped a Date".
+ * Both default to a healthy 200, which is what every pre-existing caller relies on.
+ */
+function stubFetch(opts: { dateHeader?: string | null; chrome?: string; ok?: boolean; status?: number }) {
   const calls: string[] = [];
   const bodies: Array<{ url: string; body: unknown }> = [];
   vi.stubGlobal("fetch", (url: string, init?: { body?: unknown }) => {
@@ -56,13 +64,22 @@ function stubFetch(opts: { dateHeader?: string | null; chrome?: string }) {
       });
     }
     return Promise.resolve({
-      ok: true,
-      status: 200,
+      ok: opts.ok ?? true,
+      status: opts.status ?? 200,
       headers,
       text: () => Promise.resolve(opts.chrome ?? ""),
     });
   });
   return { calls, bodies };
+}
+
+/** Capture `console.log` and expose the emitted lines as flat strings. */
+function captureLog() {
+  const lines: string[] = [];
+  const spy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+    lines.push(args.map((a) => String(a)).join(" "));
+  });
+  return { lines, restore: () => spy.mockRestore(), text: () => lines.join("\n") };
 }
 
 async function flush() {
@@ -258,6 +275,94 @@ describe("PRD-6 gate — trusted date", () => {
     expect((state.retake as any)?.todayDate).toBe("2026-06-30");
   });
 
+  // An HTTP ERROR is NOT a reason to distrust the clock: the `Date` header is stamped by
+  // the portal server whatever the status line says, so a 500 that still carries one is a
+  // trusted reading. Treating it as a fallback would hand the gate back to the machine
+  // clock — i.e. reopen the very bypass this feature closes — on any portal hiccup.
+  it("trusts the Date header of an HTTP error response", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));
+    stubFetch({ dateHeader: "Sat, 30 May 2026 09:00:00 GMT", ok: false, status: 500 });
+    const state: Record<string, unknown> = { templateLayouts: {} };
+    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+
+    let started = false;
+    gate.run(suspendGate(), () => { started = true; });
+    await flush();
+
+    // The server day, not the machine's 30.06 — so the cooldown still holds.
+    expect((state.retake as any)?.todayDate).toBe("2026-05-30");
+    expect((state.retake as any)?.allowed).toBe(false);
+    expect(started).toBe(false);
+  });
+
+  it("degrades to the machine clock on an HTTP error with no Date header", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));
+    stubFetch({ dateHeader: null, ok: false, status: 500 });
+    const log = captureLog();
+    const state: Record<string, unknown> = { templateLayouts: {} };
+    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+
+    let started = false;
+    try {
+      gate.run(suspendGate(), () => { started = true; });
+      await flush();
+    } finally {
+      log.restore();
+    }
+
+    expect((state.retake as any)?.todayDate).toBe("2026-06-30");
+    expect(started).toBe(true);
+    // The status reaches the diagnostics, so a broken portal is distinguishable from a
+    // portal that answered fine but exposed no header.
+    expect(log.text()).toContain("date source: client (request-failed: HTTP 500)");
+  });
+
+  // NFR-TD-02. The gate degrades SILENTLY by design, so this console line is the ONLY
+  // signal that separates a mis-integration from a healthy portal — §6 requires the first
+  // live LMS run to be readable in one pass. Every branch is exercised, because a cause
+  // string that is never emitted is exactly as useless as no diagnostics at all.
+  it("names the date source and every fallback cause on the console", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));
+
+    /** Run one full gate pass against the currently stubbed fetch; return its log. */
+    async function runGate(): Promise<string> {
+      const log = captureLog();
+      try {
+        const state: Record<string, unknown> = { templateLayouts: {} };
+        makeGate(state, SCORM_WITH_ATTEMPT).run(suspendGate(), () => {});
+        await flush();
+        // Let the date sub-budget elapse — only the "never answers" branch needs it,
+        // the others have long since settled and simply ignore the extra time.
+        await vi.advanceTimersByTimeAsync(DATE_TIMEOUT_MS);
+        await flush();
+        return log.text();
+      } finally {
+        log.restore();
+      }
+    }
+
+    stubFetch({ dateHeader: "Sat, 30 May 2026 09:00:00 GMT" });
+    const networkLog = await runGate();
+    expect(networkLog).toContain("date source: network");
+    // The two raw readings and the skew, per §6 — not just the two calendar days.
+    expect(networkLog).toContain("skew sec:");
+
+    stubFetch({ dateHeader: null });
+    expect(await runGate()).toContain("date source: client (no-header)");
+
+    stubFetch({ dateHeader: "not-a-date" });
+    expect(await runGate()).toContain('date source: client (unparseable-header: "not-a-date")');
+
+    vi.stubGlobal("fetch", () => Promise.reject(new Error("offline")));
+    expect(await runGate()).toContain("date source: client (request-failed: offline)");
+
+    vi.stubGlobal("fetch", () => new Promise(() => {})); // connects, never settles
+    expect(await runGate()).toContain("date source: client (timeout after 2500 ms)");
+  });
+
   // FR-TD-05 on the SCORM path. `cooldownDecision` clamps an impossible "today" (a clock
   // reading BEHIND the last attempt) up to the attempt date and reports it as
   // `effectiveToday`; the gate must count the «через N дн.» line from THAT, not from the
@@ -344,5 +449,10 @@ describe("PRD-6 gate — trusted date", () => {
     // failOpen on `eligibility_timeout` => the course starts rather than hanging.
     expect(started).toBe(true);
     expect((state.retake as any)?.reason).toBe("plugin_error_fail_open");
+    // ...and this pins the DATE sub-budget too (NFR-TD-01): the same never-answering
+    // portal stalls the date resolve, so at 2500 ms it must have given up and fallen back
+    // to the machine clock. Were the sub-budget missing or longer, the gate would still
+    // be waiting on the date and `todayDate` would never be set.
+    expect((state.retake as any)?.todayDate).toBe("2026-06-30");
   });
 });

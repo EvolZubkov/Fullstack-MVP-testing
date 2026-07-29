@@ -10,6 +10,13 @@
 var RetakeGate = (function () {
   var GATE_TIMEOUT_MS = 5000; // NFR-06
 
+  // Monotonic clock for the gate's own budget: a wall-clock jump (NTP step after the
+  // machine wakes) must not eat the plugin's remaining time. Wall time stays in
+  // resolveToday, where comparing against the server clock IS the point.
+  var monotonicNow = (typeof performance !== 'undefined' && performance && performance.now)
+    ? function () { return performance.now(); }
+    : function () { return Date.now(); };
+
   // Diagnostics. The gate used to emit ONE line, after deciding, carrying only the
   // normalized reason — so a broken integration was indistinguishable from a
   // non-gated package: `failPolicy` defaults to failOpen, which turns every error
@@ -70,9 +77,19 @@ var RetakeGate = (function () {
   }
 
   // Trusted "today" (PRD-6 trusted-date): the LMS clock, read from the `Date` response
-  // header of the portal chrome the gate already fetches. Same-origin only, which is
-  // exactly the environment webtutor_cooldown requires anyway. Any failure (no header,
-  // cross-origin, HTTP error, timeout) degrades to the machine clock = legacy behaviour.
+  // header of the portal chrome the gate already fetches. Same-origin is the EXPECTED
+  // mode — it is what webtutor_cooldown requires anyway — but it is NOT an invariant this
+  // code checks: `Date` is not on the CORS safelist, so a foreign origin normally exposes
+  // no header and the gate simply degrades; an admin who points `secidSource.endpoint` at
+  // an absolute URL whose host sends `Access-Control-Expose-Headers: Date` would have the
+  // gate trust that third party's clock. That is administrative configuration, out of the
+  // learner's reach, so it is a deployment concern rather than a bypass.
+  //
+  // Degradation to the machine clock (= legacy behaviour) happens when the header is
+  // MISSING or UNPARSEABLE, when the request REJECTS, or when the sub-budget TIMES OUT.
+  // An HTTP error carrying a valid `Date` is deliberately NOT a fallback: the header is
+  // stamped by the portal server whatever the response status, so a 500 from the portal
+  // still tells us the portal's clock — which is the whole point of the trusted date.
   function resolveToday(config) {
     var src = (config && config.secidSource) || {};
     var work = fetchPortalChrome(src.endpoint || '/');
@@ -285,14 +302,14 @@ var RetakeGate = (function () {
     return Promise.resolve(true); // unknown adapter => allow (core default spirit)
   }
 
-  // `startedAt` is the epoch-ms the WHOLE gate began (see run) and is REQUIRED — `run`
-  // is the only caller. The plugin gets the REMAINDER of GATE_TIMEOUT_MS, not a fresh
-  // copy of it: everything the gate did first — notably resolving the trusted date —
-  // already spent part of NFR-06's budget, and giving the plugin the full 5 s again
+  // `startedAt` is the MONOTONIC reading taken when the WHOLE gate began (see run) and is
+  // REQUIRED — `run` is the only caller. The plugin gets the REMAINDER of GATE_TIMEOUT_MS,
+  // not a fresh copy of it: everything the gate did first — notably resolving the trusted
+  // date — already spent part of NFR-06's budget, and giving the plugin the full 5 s again
   // would make the worst case the SUM of the two.
   function evaluate(td, ctx, startedAt) {
     var failPolicy = (td.retakePolicy.eligibilityPlugin && td.retakePolicy.eligibilityPlugin.failPolicy) || 'failOpen';
-    var budgetLeft = Math.max(0, GATE_TIMEOUT_MS - (Date.now() - startedAt));
+    var budgetLeft = Math.max(0, GATE_TIMEOUT_MS - (monotonicNow() - startedAt));
     var work;
     try { work = Promise.resolve(runPlugin(td, ctx)); } catch (e) { work = Promise.reject(e); }
     var timeout = new Promise(function (_resolve, reject) {
@@ -513,7 +530,9 @@ var RetakeGate = (function () {
     // previous run in this window (e.g. a prior failed fetch) so the portal is
     // always asked again rather than replaying a stale or failed result.
     portalChrome = {};
-    var startedAt = Date.now();
+    // Monotonic, not Date.now(): a system-clock step during the gate must not zero the
+    // remaining budget and time the plugin out on a learner who did nothing wrong.
+    var startedAt = monotonicNow();
     buildContext(td).then(function (ctx) {
       glog('gated. plugin:', td.retakePlugin.runtimeEntry,
         '| cooldownPeriodDays:', ctx.retakePolicy.cooldownPeriodDays,
