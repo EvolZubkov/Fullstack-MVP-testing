@@ -249,7 +249,7 @@ export type QuestionScoring = z.infer<typeof questionScoringSchema>;
 export const questions = pgTable("questions", {
   id: varchar("id", { length: 36 }).primaryKey(),
   topicId: varchar("topic_id", { length: 36 }).notNull(),
-  type: text("type", { enum: ["single", "multiple", "matching", "ranking"] }).notNull(),
+  type: text("type", { enum: ["single", "multiple", "matching", "ranking", "scale"] }).notNull(),
   prompt: text("prompt").notNull(),
   dataJson: jsonb("data_json").notNull(),
   correctJson: jsonb("correct_json").notNull(),
@@ -527,6 +527,14 @@ export const attempts = pgTable("attempts", {
   variantJson: jsonb("variant_json").notNull(),
   answersJson: jsonb("answers_json"),
   resultJson: jsonb("result_json"),
+  /**
+   * Section time budgets of THIS attempt (`shared/flow/section-budget`), kept
+   * server-side on purpose: the remaining time of a section decides whether the
+   * learner may keep answering, so it must not live where the learner can edit it
+   * (it used to sit in `localStorage`). Shape: `{ budgets, lastSeenAt, activeMs }`.
+   * NULL for attempts of tests without section limits.
+   */
+  sectionTimerJson: jsonb("section_timer_json"),
   startedAt: timestamp("started_at").notNull(),
   finishedAt: timestamp("finished_at"),
 }, (table) => ({
@@ -1014,7 +1022,7 @@ export type AdaptiveAnswerResponse = z.infer<typeof adaptiveAnswerResponseSchema
 export const detailedAnswerSchema = z.object({
   questionId: z.string(),
   questionPrompt: z.string(),
-  questionType: z.enum(["single", "multiple", "matching", "ranking"]),
+  questionType: z.enum(["single", "multiple", "matching", "ranking", "scale"]),
   topicId: z.string(),
   topicName: z.string(),
   userAnswer: z.unknown(),
@@ -1086,7 +1094,7 @@ export type AdaptiveLevelStats = z.infer<typeof adaptiveLevelStatsSchema>;
 export const questionStatsSchema = z.object({
   questionId: z.string(),
   questionPrompt: z.string(),
-  questionType: z.enum(["single", "multiple", "matching", "ranking"]),
+  questionType: z.enum(["single", "multiple", "matching", "ranking", "scale"]),
   topicId: z.string(),
   topicName: z.string(),
   difficulty: z.number(),
@@ -1271,7 +1279,7 @@ export const scormAnswers = pgTable("scorm_answers", {
   // Данные вопроса
   questionId: varchar("question_id", { length: 36 }).notNull(),
   questionPrompt: text("question_prompt").notNull(),
-  questionType: text("question_type", { enum: ["single", "multiple", "matching", "ranking"] }).notNull(),
+  questionType: text("question_type", { enum: ["single", "multiple", "matching", "ranking", "scale"] }).notNull(),
   topicId: varchar("topic_id", { length: 36 }),
   topicName: text("topic_name"),
   difficulty: integer("difficulty"),
