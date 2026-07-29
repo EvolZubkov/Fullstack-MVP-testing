@@ -9,13 +9,36 @@
 function renderStartPage() {
   // PRD-7 G21: `systemLayout('start')` is the bundled default's start when the
   // active template doesn't declare a `start` contentTemplate.
-  var layout = (typeof systemLayout === 'function') ? systemLayout('start') : (state && state.templateLayouts && state.templateLayouts['start']);
+  var layout = resolveStartLayout();
   var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
   if (layout && TB && TB.renderScreenInto && TEST_DATA.mode !== 'adaptive') {
     renderStartPageTemplated();
     return;
   }
   renderStartPageFallback();
+}
+
+/**
+ * Resolve the start screen's layout HTML, honouring the author's chosen start
+ * VARIANT (PRD-1 §4.3). The `start` content page's `templateKey` selects a
+ * contentTemplate whose own `layoutFile` (e.g. `start.image-right`) is preferred
+ * over the generic `start` layout, so switching the start variant in «Структура»
+ * takes effect at runtime. Falls back to `systemLayout('start')` when no variant
+ * is chosen, the template declares none, or its layout was not bundled.
+ */
+function resolveStartLayout() {
+  var base = (typeof systemLayout === 'function')
+    ? systemLayout('start')
+    : (state && state.templateLayouts && state.templateLayouts['start']);
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  var layouts = (state && state.templateLayouts) || {};
+  var manifest = (state && state.templateManifest) || {};
+  var startPage = (TEST_DATA.contentPages || []).filter(function (p) { return p && p.kind === 'start'; })[0];
+  if (startPage && TB && typeof TB.resolveContentTemplate === 'function') {
+    var ct = TB.resolveContentTemplate(startPage, manifest.contentTemplates || []).template;
+    if (ct && ct.layoutFile && layouts[ct.layoutFile]) return layouts[ct.layoutFile];
+  }
+  return base;
 }
 
 /**
@@ -106,8 +129,9 @@ function renderStartPageTemplated() {
   var ctx = buildScormStartContext();
   ctx.design = scormDesignContext();
   // PRD-7 G21: when `start` falls back to default, mount default's layout AND
-  // activate default's stylesheet so the screen is fully styled.
-  var layout = (typeof systemLayout === 'function') ? systemLayout('start') : state.templateLayouts['start'];
+  // activate default's stylesheet so the screen is fully styled. The chosen start
+  // VARIANT (e.g. `start.image-right`) wins over the generic `start` layout.
+  var layout = resolveStartLayout();
   if (typeof applySystemScreenStyles === 'function') applySystemScreenStyles('start');
   app.innerHTML = '';
   // Mount directly into #app so .tb-pad > .cover fills the fixed stage — mirrors

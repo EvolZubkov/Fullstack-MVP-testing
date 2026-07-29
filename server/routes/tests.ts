@@ -386,7 +386,7 @@ const SCREEN_KIND: Record<string, string | undefined> = {
 // instead of the bare session check.
 router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope("read"), async (req, res) => {
   try {
-    const layoutFile = SCREEN_LAYOUTS[req.params.screen];
+    let layoutFile = SCREEN_LAYOUTS[req.params.screen];
     if (!layoutFile) return res.status(400).json({ error: "Unknown screen" });
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
@@ -401,6 +401,27 @@ router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope(
     // cssVars/branding resolve against the ACTIVE template's manifest even when the
     // layout dir fell back to `default` (a screen kind the active template doesn't own).
     const paramsDir = await resolveTemplateDir(templateId, { activeOnly: true });
+    // PRD-1 §4.3: the start screen honours the author's chosen VARIANT
+    // (start.image-right, …). The `start` content page's templateKey selects a
+    // contentTemplate whose own `layoutFile` replaces the generic start.html —
+    // parity with the SCORM runtime (`startPage.resolveStartLayout`) and the editor
+    // preview. Only overridden when the variant actually ships its layout in `dir`.
+    if (req.params.screen === "start") {
+      try {
+        const startKey = (await storage.getContentPages(req.params.id)).find((p) => p.kind === "start")?.templateKey;
+        if (startKey) {
+          const ct = (readManifestContentTemplates(dir) as Array<{ key?: string; layoutFile?: string }>).find(
+            (c) => c.key === startKey,
+          );
+          const rel = ct?.layoutFile;
+          if (typeof rel === "string" && rel && readVariantLayouts(dir)[rel]) {
+            layoutFile = rel.replace(/^layouts\//, "");
+          }
+        }
+      } catch {
+        /* keep the standard start.html on any lookup failure */
+      }
+    }
     let payload = readScreenTemplate(dir, layoutFile, test.designSettingsJson as any, paramsDir);
     // File-level fallback (PRD-1 §4.3.2, PRD-3 NFR-06): a template that simply does
     // not ship this layout still renders — from the standard template — instead of

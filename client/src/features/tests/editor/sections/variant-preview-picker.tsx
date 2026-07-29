@@ -129,6 +129,32 @@ function buildVariantSpec(bundle: TemplateBundle | undefined, option: VariantOpt
   }
 }
 
+// ─── Design-media helpers ───────────────────────────────────────────────────────
+
+/** Unwrap a media design param to a plain URL (media envelope `{url}` or bare string). */
+function mediaUrl(value: unknown): string | undefined {
+  if (typeof value === "string") return value || undefined;
+  if (value && typeof value === "object" && typeof (value as { url?: unknown }).url === "string") {
+    return (value as { url: string }).url || undefined;
+  }
+  return undefined;
+}
+
+/**
+ * The `design.*` context the start layouts bind (`logoUrl` / `startImageUrl`),
+ * unwrapped from the draft branding params — so the start preview (incl. the
+ * «Изображение справа» variant) shows the picked illustration, not just the
+ * placeholder. Mirrors both hosts' `resolveMediaUrl`.
+ */
+function previewDesign(params: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  const logo = mediaUrl(params.logoUrl);
+  if (logo) out.logoUrl = logo;
+  const startImage = mediaUrl(params.startImageUrl);
+  if (startImage) out.startImageUrl = startImage;
+  return out;
+}
+
 // ─── Proportional fit-to-box scaler ────────────────────────────────────────────
 
 /** Reference canvas the preview renders at (a desktop-ish 16:10) — fixed so the
@@ -192,7 +218,16 @@ export function VariantPreviewPicker(props: {
     [props.params, bundle],
   );
   const selected = props.options.find((o) => o.key === props.selectedKey) ?? null;
-  const spec = useMemo(() => buildVariantSpec(bundle, selected), [bundle, selected]);
+  const spec = useMemo(() => {
+    const s = buildVariantSpec(bundle, selected);
+    // Start variants bind `design.startImageUrl` — inject it from the draft params
+    // so the «Изображение справа» preview shows the picked image, not a placeholder.
+    if (s && (selected?.kind === "start" || s.route === "start" || s.route.startsWith("start."))) {
+      const design = previewDesign(props.params);
+      return { ...s, input: { ...s.input, context: { ...(s.input?.context ?? {}), design } } };
+    }
+    return s;
+  }, [bundle, selected, props.params]);
   const layout = spec?.input && bundle ? bundle.layouts[spec.layoutKey] : undefined;
 
   return (

@@ -76,6 +76,32 @@ export type PagePreviewModalProps = {
   sequencePlacement?: SequencePlacement | null;
 };
 
+// ─── Design-media helpers ───────────────────────────────────────────────────────
+
+/**
+ * Unwrap a media design param (`logoUrl` / `startImageUrl`) to a plain URL,
+ * mirroring both hosts' `resolveMediaUrl`: an image param is stored as a media
+ * envelope `{ url, name, … }` (or a bare string for legacy values), but the start
+ * layout binds a plain URL string.
+ */
+function mediaUrl(value: unknown): string | undefined {
+  if (typeof value === "string") return value || undefined;
+  if (value && typeof value === "object" && typeof (value as { url?: unknown }).url === "string") {
+    return (value as { url: string }).url || undefined;
+  }
+  return undefined;
+}
+
+/** The `design.*` context the start layouts bind, unwrapped from the draft params. */
+function previewDesign(params: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  const logo = mediaUrl(params.logoUrl);
+  if (logo) out.logoUrl = logo;
+  const startImage = mediaUrl(params.startImageUrl);
+  if (startImage) out.startImageUrl = startImage;
+  return out;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function PagePreviewModal({
@@ -129,8 +155,25 @@ export function PagePreviewModal({
   // router) render the page's own values; router also gets the REAL topic-menu.
   const spec = useMemo(() => {
     if (!bundle) return null;
+    // The start screen honours the author's chosen VARIANT (start.image-right, …):
+    // match the demo screen by the page's `templateKey` (its route equals the
+    // variant key), falling back to the canonical `start`. The design illustration
+    // is injected into `design.*` from the draft branding params — the same
+    // `startImageUrl`/`logoUrl` both hosts resolve — so the picked image shows here.
+    if (page.kind === "start") {
+      const demoScreens = effectiveDemo ? buildScreenInputs(effectiveDemo, bundle.manifest) : [];
+      const byVariant = page.templateKey
+        ? demoScreens.find((s) => s.route === page.templateKey)
+        : undefined;
+      const chosen = byVariant ?? demoScreens.find((s) => s.route === "start") ?? null;
+      if (!chosen) return null;
+      const design = previewDesign(params);
+      return {
+        ...chosen,
+        input: { ...chosen.input, context: { ...(chosen.input?.context ?? {}), design } },
+      };
+    }
     if (
-      page.kind === "start" ||
       page.kind === "results" ||
       page.kind === "questions" ||
       page.kind === "review" ||
@@ -138,15 +181,13 @@ export function PagePreviewModal({
     ) {
       const demoScreens = effectiveDemo ? buildScreenInputs(effectiveDemo, bundle.manifest) : [];
       const matches =
-        page.kind === "start"
-          ? (r: string) => r === "start"
-          : page.kind === "results"
-            ? (r: string) => r === "results" || r === "results.adaptive"
-            : page.kind === "review"
-              ? (r: string) => r === "review"
-              : page.kind === "section-results"
-                ? (r: string) => r === "section-results"
-                : (r: string) => r.startsWith("question");
+        page.kind === "results"
+          ? (r: string) => r === "results" || r === "results.adaptive"
+          : page.kind === "review"
+            ? (r: string) => r === "review"
+            : page.kind === "section-results"
+              ? (r: string) => r === "section-results"
+              : (r: string) => r.startsWith("question");
       return demoScreens.find((s) => matches(s.route)) ?? null;
     }
     // PRD-1 §4.3: «Введение раздела» (intro) renders via its own section-intro layout
@@ -201,7 +242,7 @@ export function PagePreviewModal({
         status: t.status,
       })),
     });
-  }, [bundle, page, effectiveDemo, realData, sequencePlacement]);
+  }, [bundle, page, effectiveDemo, realData, sequencePlacement, params]);
 
   // Draft branding → CSS variables, via the SAME mapping the runtime uses.
   const cssVars = useMemo(() => buildTemplateCssVars(params, bundle?.manifest.params), [params, bundle]);
