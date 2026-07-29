@@ -58,6 +58,31 @@ describe("decideRetake", () => {
   });
 });
 
+describe("decideRetake — daysUntil", () => {
+  it("reports a countdown from the server date while access is blocked", () => {
+    const gate = decideRetake(policy({ cooldownPeriodDays: 30 }), "2026-05-20", "2026-06-16");
+    expect(gate.allowed).toBe(false);
+    expect(gate.availableDate).toBe("2026-06-19");
+    expect(gate.daysUntil).toBe(3);
+  });
+
+  it("omits the countdown once access is open", () => {
+    const gate = decideRetake(policy({ cooldownPeriodDays: 30 }), "2026-05-20", "2026-06-19");
+    expect(gate.allowed).toBe(true);
+    expect(gate.daysUntil).toBeNull();
+  });
+
+  it("counts from effectiveToday, not the raw todayDate, when the reported clock precedes the last attempt", () => {
+    // todayDate (2026-06-01) is BEFORE lastAttemptDate (2026-06-20) — an untrusted
+    // clock. The engine clamps effectiveToday to the last attempt date, so the
+    // countdown must run the full cooldown (30), not 49 days from the raw todayDate.
+    const gate = decideRetake(policy({ cooldownPeriodDays: 30 }), "2026-06-20", "2026-06-01");
+    expect(gate.allowed).toBe(false);
+    expect(gate.availableDate).toBe("2026-07-20");
+    expect(gate.daysUntil).toBe(30);
+  });
+});
+
 describe("lastCompletedAttemptDate / toIsoDateUTC", () => {
   it("returns the most recent finishedAt as a UTC calendar date", () => {
     const dates = [new Date("2026-06-01T10:00:00Z"), new Date("2026-06-03T23:30:00Z"), null];

@@ -47,6 +47,15 @@ export interface RetakeState {
   allowed: boolean;
   lastAttemptDate: string | null;
   todayDate: string | null;
+  /**
+   * "Today" as the cooldown decision actually used it: `todayDate` clamped forward
+   * to `lastAttemptDate` when the reported clock precedes the attempt. Null when the
+   * plugin reported no such value (no prior attempt, unparseable dates, or a verdict
+   * that did not come from the cooldown math at all — e.g. a `failPolicy` fallback).
+   * Countdown renderers MUST prefer this over `todayDate`, or they will disagree with
+   * `allowed`.
+   */
+  effectiveToday: string | null;
   availableDate: string | null;
   nextAllowedDate: string | null;
   cooldownPeriodDays: number | null;

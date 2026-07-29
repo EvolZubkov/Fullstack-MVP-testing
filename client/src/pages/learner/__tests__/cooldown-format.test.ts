@@ -1,15 +1,16 @@
 /**
  * @module client/src/pages/learner/__tests__/cooldown-format
  *
- * Unit tests for the web start-screen cooldown date helpers (PRD-19 Block F,
- * FR-20). These format the next-available date for the cooldown card on the SAME
+ * Unit tests for the web start-screen cooldown date formatter (PRD-19 Block F,
+ * FR-20). Formats the next-available date for the cooldown card on the SAME
  * start page (no separate block-wall) and must match the SCORM gate's
- * `fmtDateHuman` / `daysUntilIso` so both hosts render the date identically
- * (ДД.ММ.ГГГГ) and the optional «через N дн.» line agrees.
+ * `fmtDateHuman` so both hosts render the date identically (ДД.ММ.ГГГГ). The
+ * «через N дн.» countdown is a server decision (PRD-6) and is not covered here —
+ * see `tests/retake-gate.test.ts`.
  */
 
-import { describe, it, expect, afterEach, vi } from "vitest";
-import { fmtIsoDateHuman, daysUntilIsoDate } from "../cooldown-format";
+import { describe, it, expect } from "vitest";
+import { fmtIsoDateHuman } from "../cooldown-format";
 
 describe("fmtIsoDateHuman", () => {
   it("formats a YYYY-MM-DD ISO date as ДД.ММ.ГГГГ", () => {
@@ -24,29 +25,5 @@ describe("fmtIsoDateHuman", () => {
     expect(fmtIsoDateHuman(null)).toBe("");
     expect(fmtIsoDateHuman(undefined)).toBe("");
     expect(fmtIsoDateHuman("not-a-date")).toBe("");
-  });
-});
-
-describe("daysUntilIsoDate", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("counts whole days from today to a future date (UTC granularity)", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-28T10:00:00Z"));
-    expect(daysUntilIsoDate("2026-06-30")).toBe(2);
-  });
-
-  it("returns null for today and past dates (no «через N дн.» line)", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-30T23:00:00Z"));
-    expect(daysUntilIsoDate("2026-06-30")).toBeNull();
-    expect(daysUntilIsoDate("2026-06-29")).toBeNull();
-  });
-
-  it("returns null for null/unparseable input", () => {
-    expect(daysUntilIsoDate(null)).toBeNull();
-    expect(daysUntilIsoDate("garbage")).toBeNull();
   });
 });

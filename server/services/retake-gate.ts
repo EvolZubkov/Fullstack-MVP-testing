@@ -13,7 +13,7 @@
  * legacy tests are unaffected.
  */
 
-import { cooldownDecision } from "@shared/eligibility/engine";
+import { cooldownDecision, daysUntilDate } from "@shared/eligibility/engine";
 import type { RetakePolicy } from "@shared/schema";
 
 /** Outcome of the retake gate; spread into the 403 deny body when blocked. */
@@ -24,6 +24,11 @@ export interface RetakeGateResult {
   lastAttemptDate?: string | null;
   /** Calendar date (`YYYY-MM-DD`) from which a retake is allowed, if known. */
   availableDate?: string | null;
+  /**
+   * Whole days from the SERVER date to `availableDate`; `null` when access is
+   * open (no countdown to show).
+   */
+  daysUntil?: number | null;
 }
 
 /** Format a Date to a calendar `YYYY-MM-DD` (UTC), matching the cooldown math. */
@@ -65,5 +70,6 @@ export function decideRetake(
     cooldownPeriodDays,
     lastAttemptDate,
     availableDate: decision.availableDate,
+    daysUntil: decision.allowed ? null : daysUntilDate(decision.availableDate, decision.effectiveToday),
   };
 }

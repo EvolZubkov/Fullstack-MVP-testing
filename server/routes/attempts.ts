@@ -167,7 +167,11 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
         const retakeGate =
           gate.allowed
             ? null
-            : { cooldownPeriodDays: gate.cooldownPeriodDays ?? null, availableDate: gate.availableDate ?? null };
+            : {
+                cooldownPeriodDays: gate.cooldownPeriodDays ?? null,
+                availableDate: gate.availableDate ?? null,
+                daysUntil: gate.daysUntil ?? null,
+              };
 
         // PRD-19 Block F (FR-19/20): prior-attempt summary for the start screen.
         // The web uses the MOST RECENT completed attempt — the same one

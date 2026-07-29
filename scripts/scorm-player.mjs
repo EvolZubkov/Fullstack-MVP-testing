@@ -91,6 +91,23 @@ async function loadZipBuffer(buffer) {
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
 
+// PRD-6 trusted-date acceptance: pin the server clock the gate reads. Node sets `Date`
+// automatically from the host clock, so a run cannot otherwise exercise "LMS clock
+// disagrees with the machine clock". `--server-date=2026-05-30` (or the env var) makes
+// the stand answer with that date while the OS clock stays whatever the tester set.
+const SERVER_DATE =
+  (process.argv.find((a) => a.startsWith("--server-date=")) || "").split("=")[1] ||
+  process.env.SCORM_PLAYER_SERVER_DATE ||
+  "";
+
+app.use((_req, res, next) => {
+  if (SERVER_DATE) {
+    const ts = Date.parse(SERVER_DATE.length === 10 ? `${SERVER_DATE}T12:00:00Z` : SERVER_DATE);
+    if (Number.isFinite(ts)) res.setHeader("Date", new Date(ts).toUTCString());
+  }
+  next();
+});
+
 app.get("/api/packages", (_req, res) => {
   let list = [];
   try {
@@ -211,6 +228,10 @@ app.get("/", (_req, res) => {
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`SCORM player on http://localhost:${PORT}  (serving zips from ${OUT_DIR})`);
+  if (SERVER_DATE) {
+    // eslint-disable-next-line no-console
+    console.log(`  pinned server clock: ${SERVER_DATE} (Date header pinned, OS clock unaffected)`);
+  }
 });
 
 // ─── Player page (RTE shim on the parent window + iframe + inspector) ────────────

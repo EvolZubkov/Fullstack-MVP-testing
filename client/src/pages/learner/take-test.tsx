@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
 import { TemplateQuestionScreen } from "./template-question-screen";
-import { fmtIsoDateHuman, daysUntilIsoDate } from "./cooldown-format";
+import { fmtIsoDateHuman } from "./cooldown-format";
 import { hasAnswer, rankingDeliveryOrder } from "./answer-gate";
 import { buildStartState } from "@shared/template/start-state";
 import { feedbackBanner, feedbackDesc } from "@shared/template/feedback-banner";
@@ -214,6 +214,11 @@ function adaptiveFeedbackHtml(question: any, result: any): string {
   return feedbackBanner(ok ? "success" : "error", ok ? "Правильно!" : "Неверно", body);
 }
 
+/** Cooldown facts as the server delivers them (start-screen block or the 403 body). */
+type RetakeCooldownFacts = { cooldownPeriodDays?: number; availableDate?: string | null; daysUntil?: number | null };
+/** Normalized cooldown facts held in component state. */
+type RetakeGateState = { cooldownPeriodDays: number | null; availableDate: string | null; daysUntil: number | null };
+
 export default function TakeTestPage() {
   const { testId } = useParams<{ testId: string }>();
   const [, navigate] = useLocation();
@@ -307,7 +312,7 @@ export default function TakeTestPage() {
     // PRD-19 Block F (FR-19/20): retake cooldown facts resolved server-side, so the
     // start screen renders the cooldown state (date + disabled button + prior
     // summary) on the SAME page — no separate block-wall. Null = eligible.
-    retakeGate: { cooldownPeriodDays: number | null; availableDate: string | null } | null;
+    retakeGate: RetakeGateState | null;
     // PRD-19 Block F (FR-19/20): prior-attempt summary («повтор: можно» + cooldown).
     priorResult: { percent: number; passed: boolean | null; attemptNumber: number | null; maxAttempts: number | null } | null;
   } | null>(null);
@@ -623,7 +628,13 @@ export default function TakeTestPage() {
           resumeIndex: test.resumeIndex ?? null,
           resumeTotal: test.resumeTotal ?? null,
           lastCompletedAttemptId: test.lastCompletedAttemptId ?? null,
-          retakeGate: test.retakeGate ?? null,
+          retakeGate: test.retakeGate
+            ? {
+                cooldownPeriodDays: test.retakeGate.cooldownPeriodDays ?? null,
+                availableDate: test.retakeGate.availableDate ?? null,
+                daysUntil: test.retakeGate.daysUntil ?? null,
+              }
+            : null,
           priorResult: test.priorResult ?? null,
         });
 
@@ -703,7 +714,7 @@ export default function TakeTestPage() {
         else setPhase("question");
       }
     } catch (err) {
-      const retake = (err as { retake?: { cooldownPeriodDays?: number; availableDate?: string | null } }).retake;
+      const retake = (err as { retake?: RetakeCooldownFacts }).retake;
       if ((err as Error)?.message === "RETAKE_COOLDOWN") {
         // PRD-19 Block F (FR-20): a cooldown that the up-front gate missed (a race —
         // e.g. another tab consumed the last eligible window). Render the cooldown
@@ -719,6 +730,7 @@ export default function TakeTestPage() {
                   retakeGate: {
                     cooldownPeriodDays: retake?.cooldownPeriodDays ?? null,
                     availableDate: retake?.availableDate ?? null,
+                    daysUntil: retake?.daysUntil ?? null,
                   },
                 }
               : m,
@@ -917,9 +929,13 @@ export default function TakeTestPage() {
       }
       if (error.code === "RETAKE_COOLDOWN") {
         const e = new Error("RETAKE_COOLDOWN") as Error & {
-          retake?: { cooldownPeriodDays?: number; availableDate?: string | null };
+          retake?: RetakeCooldownFacts;
         };
-        e.retake = { cooldownPeriodDays: error.cooldownPeriodDays, availableDate: error.availableDate };
+        e.retake = {
+          cooldownPeriodDays: error.cooldownPeriodDays,
+          availableDate: error.availableDate,
+          daysUntil: error.daysUntil,
+        };
         throw e;
       }
       throw new Error("Failed to start attempt");
@@ -2280,7 +2296,7 @@ export default function TakeTestPage() {
       cooldown: gate
         ? {
             availableDateHuman: fmtIsoDateHuman(gate.availableDate),
-            daysUntil: daysUntilIsoDate(gate.availableDate),
+            daysUntil: gate.daysUntil,
           }
         : null,
       priorResult: testMetadata.priorResult,

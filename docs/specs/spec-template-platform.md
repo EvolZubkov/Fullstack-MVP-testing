@@ -1344,6 +1344,7 @@ Core выполняет безопасный pipeline:
 | `sectionResult.status` | Статус текущего раздела |
 | `result.{name}` | Пользовательские показатели из PRD-2 |
 | `retake.availableDate` | Дата доступного повторного прохождения для `system.blocked` |
+| `retake.effectiveToday` | Нормализованное «сегодня», от которого считаются производные величины; равно `todayDate`, если часы не пришлось нормализовать |
 
 Стандартные renderers MVP поставляются как plugin `core` и используются по полным ключам
 `core.textMetric`, `core.ringChart` и т.д.

@@ -72,6 +72,9 @@ var EligibilityPlugins = (function () {
       data: {
         lastAttemptDate: lastAttemptDate != null ? lastAttemptDate : null,
         todayDate: today,
+        // Normalized "today" (clamped forward when the reported clock precedes the
+        // attempt). Countdowns must derive from THIS, not from todayDate.
+        effectiveToday: dec.effectiveToday,
         nextAllowedDate: dec.availableDate,
         cooldownPeriodDays: days
       }
