@@ -161,6 +161,12 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "app/utils/escapeHtml.js",
   ]);
 
+  // PRD-26: question-type traits — the ES5 mirror of shared/questions/question-type.
+  // Must precede every part that branches on the question type.
+  const qTypeJs = readOneOf([
+    "app/utils/qtype.js",
+  ]);
+
   const shuffleJs = readOneOf([
     "app/utils/scorm/shuffle.js",
     "app/utils/shuffle.js",
@@ -318,6 +324,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   let appJs = joinJsParts([
     sharedRuntimeJs,
     escapeHtmlJs,
+    qTypeJs,
     telemetryJs,
     shuffleJs,
     suspendAttemptsJs,
