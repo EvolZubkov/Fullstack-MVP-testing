@@ -223,7 +223,20 @@ describe("buildPageContextFor", () => {
       progressPercent: 100,
       canGoBack: true,
       nextLabel: "Далее",
+      // Always present, like `canGoBack`: an ordinary content page carries the
+      // live (false) value, and only the router hub raises it.
+      nextDisabled: false,
     });
+  });
+
+  // The hub's «Завершить» sits in the standard footer and stays inert until every
+  // required section is done. The flag is the only thing carrying that state to the
+  // layout, on both hosts — it had no coverage, which is why the field could land
+  // while the only test touching this shape went red.
+  it("passes an inert forward button through", () => {
+    const pages = [page("p1", "before", "Галерея", 0)];
+
+    expect(buildPageContextFor("p1", pages, { nextDisabled: true }).nextDisabled).toBe(true);
   });
 
   it("an unknown page id yields the empty context", () => {
