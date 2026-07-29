@@ -58,6 +58,29 @@ describe("decideRetake", () => {
   });
 });
 
+describe("decideRetake — daysUntil", () => {
+  it("отдаёт обратный отсчёт по серверной дате, когда доступ закрыт", () => {
+    const gate = decideRetake(
+      { enabled: true, cooldownPeriodDays: 30 } as RetakePolicy,
+      "2026-05-20",
+      "2026-06-16",
+    );
+    expect(gate.allowed).toBe(false);
+    expect(gate.availableDate).toBe("2026-06-19");
+    expect(gate.daysUntil).toBe(3);
+  });
+
+  it("не отдаёт отсчёт, когда доступ открыт", () => {
+    const gate = decideRetake(
+      { enabled: true, cooldownPeriodDays: 30 } as RetakePolicy,
+      "2026-05-20",
+      "2026-06-19",
+    );
+    expect(gate.allowed).toBe(true);
+    expect(gate.daysUntil ?? null).toBeNull();
+  });
+});
+
 describe("lastCompletedAttemptDate / toIsoDateUTC", () => {
   it("returns the most recent finishedAt as a UTC calendar date", () => {
     const dates = [new Date("2026-06-01T10:00:00Z"), new Date("2026-06-03T23:30:00Z"), null];

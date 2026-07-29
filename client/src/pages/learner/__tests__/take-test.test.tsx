@@ -328,13 +328,15 @@ describe("<TakeTestPage /> start gates", () => {
   it("folds a retake cooldown into the start context instead of navigating away", async () => {
     await renderToStart({
       startAttempt: jsonRes(
-        { code: "RETAKE_COOLDOWN", cooldownPeriodDays: 7, availableDate: "2026-08-01" },
+        { code: "RETAKE_COOLDOWN", cooldownPeriodDays: 7, availableDate: "2026-08-01", daysUntil: 3 },
         false,
         403,
       ),
     });
     fireEvent.click(screen.getByTestId("ts-start-test"));
     await waitFor(() => expect(ctx().state.cooldown).toBeTruthy());
+    // The countdown comes from the SERVER date, not from the browser clock.
+    expect(ctx().state.cooldown.daysUntil).toBe(3);
     expect(navigateSpy).not.toHaveBeenCalledWith("/learner");
   });
 
