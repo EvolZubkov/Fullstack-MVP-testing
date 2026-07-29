@@ -20,6 +20,7 @@ import scalesRouter from "./scales";
 import testsWorkbookRouter from "./tests-workbook";
 import workbookRouter from "./workbook";
 import debugPlayerRouter from "./debug-player";
+import homeRouter from "./home";
 
 export {
   foldersRouter,
@@ -44,6 +45,7 @@ export {
   testsWorkbookRouter,
   workbookRouter,
   debugPlayerRouter,
+  homeRouter,
 };
 
 // Конфигурация монтирования роутеров
@@ -61,6 +63,9 @@ export const routerConfig = [
   { path: "/api/test-folders", router: testFoldersRouter },
   { path: "/api/topics", router: topicsRouter },
   { path: "/api/auth", router: authRouter },
+  // PRD-25: смонтирован среди префиксных роутеров — до общих "/api",
+  // чтобы путь не перехватывался ими
+  { path: "/api/home", router: homeRouter },
   { path: "/api/users", router: usersRouter },
   { path: "/api/groups", router: groupsRouter },
   { path: "/api/questions", router: questionsRouter },
