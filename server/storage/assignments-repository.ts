@@ -48,6 +48,15 @@ export class AssignmentsRepository {
     return db.select().from(testAssignments).where(eq(testAssignments.groupId, groupId));
   }
 
+  /**
+   * PRD-25 FR-11: every assignment, for the home-page counters. The other reads
+   * are all scoped (by test, user or group); the summary needs the whole table,
+   * the same way `getAllAttempts` serves analytics.
+   */
+  async getAllAssignments(): Promise<TestAssignment[]> {
+    return db.select().from(testAssignments);
+  }
+
   async isTestAssignedToUser(testId: string, userId: string): Promise<boolean> {
     // Direct assignment first (cheapest), then via the user's groups.
     const [direct] = await db

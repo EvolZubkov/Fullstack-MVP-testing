@@ -126,6 +126,8 @@ export interface IStorage {
   getUserAssignments(userId: string): Promise<TestAssignment[]>;
   isTestAssignedToUser(testId: string, userId: string): Promise<boolean>;
   getGroupAssignments(groupId: string): Promise<TestAssignment[]>;
+  /** PRD-25 FR-11: every assignment, for the home-page counters. */
+  getAllAssignments(): Promise<TestAssignment[]>;
   createTestAssignment(assignment: InsertTestAssignment & { assignedBy: string }): Promise<TestAssignment>;
   deleteTestAssignment(id: string): Promise<boolean>;
   getAssignedTestsForUser(userId: string): Promise<Test[]>;
@@ -547,6 +549,10 @@ export class DatabaseStorage implements IStorage {
 
   getGroupAssignments(groupId: string): Promise<TestAssignment[]> {
     return this.assignmentsRepo.getGroupAssignments(groupId);
+  }
+
+  getAllAssignments(): Promise<TestAssignment[]> {
+    return this.assignmentsRepo.getAllAssignments();
   }
 
   isTestAssignedToUser(testId: string, userId: string): Promise<boolean> {
