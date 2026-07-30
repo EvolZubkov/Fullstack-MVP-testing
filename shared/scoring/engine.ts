@@ -12,7 +12,7 @@
  * Modes (scoring-model §11; PRD-10 FR-01..FR-07):
  * - `exact` / absent — exact match, 0 or 1, `sMax = 1` (legacy behaviour,
  *   bit-identical to the pre-PRD-10 checkAnswer).
- * - `weighted` (single) — `s = weights[chosen]` (additive); `sMax = max(weights)`.
+ * - `weighted` (single/scale) — `s = weights[chosen]` (additive); `sMax = max(weights)`.
  * - `tiered` (multiple/matching/ranking) — first matching tier wins, else 0
  *   (non-additive step table over the answer counters); `sMax = max(tier.score)`.
  *
@@ -22,8 +22,14 @@
  */
 
 import type { QuestionScoring, ScoringPredicate } from "../schema";
+import { isSingleIndexChoice } from "../questions/question-type";
 
-export type QuestionType = "single" | "multiple" | "matching" | "ranking";
+/**
+ * Re-exported from the type-trait module so the scoring engine and the rest of the
+ * product cannot disagree on the list of question types.
+ */
+export type { QuestionType } from "../questions/question-type";
+import type { QuestionType } from "../questions/question-type";
 
 /** Learner answer shapes by question type (runtime encoding). */
 export type Answer = number | number[] | Record<string, number> | null | undefined;
@@ -89,7 +95,11 @@ function maxOf(nums: number[]): number {
 function exactCorrect(type: QuestionType, correct: CorrectData, answer: Answer): number {
   if (answer === null || answer === undefined) return 0;
 
-  if (type === "single") {
+  // Single choice and a scale are both answered by ONE option index, so correctness
+  // is the same comparison. A measurement-only scale carries no `correctIndex`, so it
+  // can never score here — the aggregate excludes it from the totals instead
+  // (PRD-26 FR-08).
+  if (isSingleIndexChoice(type)) {
     return answer === correct.correctIndex ? 1 : 0;
   }
   if (type === "multiple") {

@@ -41,6 +41,40 @@ describe("scoreAnswer — exact (default)", () => {
   });
 });
 
+// ─── scale (PRD-26) ──────────────────────────────────────────────────────────
+
+describe("scoreAnswer — scale", () => {
+  const checked: ScoreInput = { type: "scale", correct: { correctIndex: 3 }, answer: 3 };
+
+  it("with a correct graduation, scores exactly like single choice", () => {
+    expect(scoreAnswer(checked)).toEqual({ score: 1, sMax: 1, ratio: 1 });
+    expect(scoreAnswer({ ...checked, answer: 2 })).toEqual({ score: 0, sMax: 1, ratio: 0 });
+    expect(scoreAnswer({ ...checked, answer: null }).ratio).toBe(0);
+  });
+
+  it("counts the first graduation as an answer, not as «nothing»", () => {
+    const first: ScoreInput = { type: "scale", correct: { correctIndex: 0 }, answer: 0 };
+    expect(scoreAnswer(first).ratio).toBe(1);
+  });
+
+  it("measurement-only (no correct graduation) can never score", () => {
+    // FR-08: such a question is kept out of the totals by the aggregate; the engine
+    // itself simply has nothing to compare against.
+    const measurement: ScoreInput = { type: "scale", correct: {}, answer: 2 };
+    expect(scoreAnswer(measurement)).toEqual({ score: 0, sMax: 1, ratio: 0 });
+  });
+
+  it("prices graduations through weighted scoring (FR-07)", () => {
+    const scoring: QuestionScoring = { kind: "weighted", weights: [0, 1, 2, 3, 4, 5] };
+    const mbi = (answer: number | null): ScoreInput => ({ type: "scale", correct: {}, answer, scoring });
+    // The Maslach scale: the graduation index IS the raw score, top graduation = sMax.
+    expect(scoreAnswer(mbi(0))).toEqual({ score: 0, sMax: 5, ratio: 0 });
+    expect(scoreAnswer(mbi(3))).toEqual({ score: 3, sMax: 5, ratio: 0.6 });
+    expect(scoreAnswer(mbi(5))).toEqual({ score: 5, sMax: 5, ratio: 1 });
+    expect(scoreAnswer(mbi(null)).score).toBe(0);
+  });
+});
+
 // ─── weighted (single) ───────────────────────────────────────────────────────
 
 describe("scoreAnswer — weighted", () => {

@@ -20,7 +20,9 @@ var ScoringEngine = (function () {
   function exactCorrect(type, correct, answer) {
     if (answer === null || answer === undefined) return 0;
 
-    if (type === 'single') {
+    // Single choice and a scale are both answered by ONE option index, so
+    // correctness is the same comparison (mirrors shared/scoring/engine.ts).
+    if (typeof TBQType !== 'undefined' ? TBQType.isSingleIndexChoice(type) : type === 'single') {
       return answer === correct.correctIndex ? 1 : 0;
     }
     if (type === 'multiple') {

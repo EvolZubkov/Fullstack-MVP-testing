@@ -54,6 +54,29 @@ describe("parseScoringCell — weighted (single)", () => {
   });
 });
 
+describe("parseScoringCell — weighted (шкала, PRD-26 FR-07)", () => {
+  it("разбирает веса по градациям шкалы", () => {
+    // Опросник выгорания: шесть градаций с баллами 0..5.
+    const r = parseScoringCell("веса: 0 # 1 # 2 # 3 # 4 # 5", "scale", 6);
+    expect(r).toEqual({ ok: true, value: { kind: "weighted", weights: [0, 1, 2, 3, 4, 5] } });
+  });
+
+  it("буквенный ключ РТК работает и для шкалы", () => {
+    const r = parseScoringCell("%A0B1C2", "scale", 3);
+    expect(r).toEqual({ ok: true, value: { kind: "weighted", weights: [0, 1, 2] } });
+  });
+
+  it("весов больше числа градаций → ошибка", () => {
+    expect(parseScoringCell("веса: 0 # 1 # 2", "scale", 2).ok).toBe(false);
+  });
+
+  it("ступени для шкалы → ошибка: счётчик одного индекса всегда 0 или 1", () => {
+    const r = parseScoringCell("ступени: c>=1 => 1", "scale", 6);
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.error).toContain("шкалы");
+  });
+});
+
 describe("parseScoringCell — ключ РТК «%A2B1C1D0» (алиас весов)", () => {
   it("разбирает буквенный ключ в веса по позиции опции", () => {
     const r = parseScoringCell("%A2B1C1D0", "single", 4);

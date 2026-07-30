@@ -16,8 +16,14 @@ const portSrc = readFileSync(
   resolve(process.cwd(), "server/scorm/template/app/scoring/engine.js"),
   "utf8",
 );
+// The question-type traits (`TBQType`, PRD-26) are prepended the way the package build
+// concatenates them, so the port sees the same trait table the shipped runtime does.
+const qTypeSrc = readFileSync(
+  resolve(process.cwd(), "server/scorm/template/app/utils/qtype.js"),
+  "utf8",
+);
 // eslint-disable-next-line @typescript-eslint/no-implied-eval
-const ScoringEnginePort = new Function(`${portSrc}\n;return ScoringEngine;`)() as {
+const ScoringEnginePort = new Function(`${qTypeSrc}\n${portSrc}\n;return ScoringEngine;`)() as {
   scoreAnswer: (input: unknown) => { score: number; sMax: number; ratio: number };
   explainAnswer: (input: unknown) => Record<string, unknown>;
 };
@@ -58,6 +64,19 @@ const scenarios: Array<{ name: string; input: ScoreInput }> = [
   { name: "exact ranking correct", input: { type: "ranking", correct: { correctOrder: [0, 1, 2] }, answer: [0, 1, 2] } },
   { name: "exact ranking wrong", input: { type: "ranking", correct: { correctOrder: [0, 1, 2] }, answer: [0, 2, 1] } },
   { name: "explicit exact", input: { type: "single", correct: { correctIndex: 1 }, answer: 1, scoring: { kind: "exact" } } },
+
+  // scale (PRD-26): checked and priced exactly like single choice
+  { name: "exact scale correct", input: { type: "scale", correct: { correctIndex: 3 }, answer: 3 } },
+  { name: "exact scale wrong", input: { type: "scale", correct: { correctIndex: 3 }, answer: 1 } },
+  { name: "exact scale null", input: { type: "scale", correct: { correctIndex: 3 }, answer: null } },
+  { name: "exact scale first graduation", input: { type: "scale", correct: { correctIndex: 0 }, answer: 0 } },
+  // Measurement-only: no correctIndex at all, so nothing can be right. The aggregate
+  // keeps such a question out of the totals (FR-08); the engine just scores 0.
+  { name: "measurement scale scores nothing", input: { type: "scale", correct: {}, answer: 2 } },
+  { name: "weighted scale graduations", input: { type: "scale", correct: {}, answer: 3, scoring: { kind: "weighted", weights: [0, 1, 2, 3, 4, 5] } } },
+  { name: "weighted scale first graduation", input: { type: "scale", correct: {}, answer: 0, scoring: { kind: "weighted", weights: [0, 1, 2, 3, 4, 5] } } },
+  { name: "weighted scale top graduation", input: { type: "scale", correct: {}, answer: 5, scoring: { kind: "weighted", weights: [0, 1, 2, 3, 4, 5] } } },
+  { name: "weighted scale unanswered", input: { type: "scale", correct: {}, answer: null, scoring: { kind: "weighted", weights: [0, 1, 2, 3, 4, 5] } } },
 
   // weighted
   { name: "weighted full", input: { type: "single", correct: { correctIndex: 0 }, answer: 0, scoring: { kind: "weighted", weights: [2, 1, 1, 0] } } },
