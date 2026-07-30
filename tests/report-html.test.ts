@@ -169,6 +169,30 @@ describe("report — adaptive page", () => {
     expect(html).not.toContain("| Правильных");
   });
 
+  it("wraps a long level label instead of clipping it", () => {
+    // Regression: the pill carried `white-space: nowrap` from the days of short labels
+    // («Не достигнут»). The full verdict is 40+ characters and ran straight out of a
+    // three-column card, which clips (`overflow: hidden`) — the learner saw
+    // «Минимально требуемый уровен…». An author-defined level name is unbounded too.
+    const html = buildAdaptiveReportHtml(
+      adaptiveInput({
+        result: {
+          topicResults: [
+            { topicName: "Управление численностью", achievedLevelIndex: null, achievedLevelName: null },
+            { topicName: "Сети", achievedLevelIndex: 2, achievedLevelName: "Уверенный пользователь корпоративных систем" },
+          ],
+        },
+      }),
+    );
+    // The pill must not forbid wrapping, and must not exceed its card.
+    expect(html).not.toMatch(/white-space: nowrap[^"]*>Минимально/);
+    expect(html).not.toMatch(/white-space: nowrap[^"]*>Уверенный/);
+    expect(html).toContain("max-width: 100%");
+    // Both verdicts survive in full.
+    expect(html).toContain("Минимально требуемый уровень не подтверждён");
+    expect(html).toContain("Уверенный пользователь корпоративных систем");
+  });
+
   it("omits the counts row when the host has no counts", () => {
     const html = buildAdaptiveReportHtml(
       adaptiveInput({ result: { topicResults: [{ topicName: "Сети", achievedLevelIndex: 0, achievedLevelName: "Базовый" }] } }),

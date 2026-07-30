@@ -351,7 +351,11 @@ export function buildAdaptiveReportHtml(input: AdaptiveReportInput, assets: Repo
       // Name above, level below — see the standard report's topic header.
       html += '<div style="margin-bottom: 8px;">';
       html += `<div style="font-size: 13px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere;">${esc(t.topicName || "Тема")}</div>`;
-      html += `<div style="display: inline-block; margin-top: 5px; font-size: 9px; font-weight: 500; padding: 3px 8px; border-radius: 4px; white-space: nowrap; background: ${levelBg}; color: ${levelColor};">${esc(levelName)}</div>`;
+      // The level label WRAPS, unlike the standard report's short verdict: it is either
+      // an author-defined level name or the full «минимально требуемый уровень не
+      // подтверждён» verdict. With `white-space: nowrap` such a label runs straight out
+      // of a three-column card and the card clips it (`overflow: hidden`).
+      html += `<div style="display: inline-block; max-width: 100%; margin-top: 5px; font-size: 9px; font-weight: 500; line-height: 1.35; padding: 3px 8px; border-radius: 4px; background: ${levelBg}; color: ${levelColor};">${esc(levelName)}</div>`;
       html += "</div>";
       if (t.totalQuestionsAnswered != null || t.totalCorrect != null) {
         // Two rows rather than one «A | B» line: in a three-column grid that line wraps
