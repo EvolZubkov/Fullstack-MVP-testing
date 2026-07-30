@@ -54,5 +54,11 @@ coverage/
 .vscode/
 
 # ---- Documentation and local tooling ----------------------------------------
-docs/
+# The markdown sources are not needed in the image, but the generated authoring
+# PDFs (docs/dist, built by `npm run docs:pdf` and committed) ARE: the
+# doc-download routes read them from disk at runtime. Docker forbids re-including
+# a path whose parent dir is excluded, so descend level by level — same pattern as
+# server/scorm/templates above.
+docs/*
+!docs/dist
 *.md

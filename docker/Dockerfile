@@ -70,6 +70,13 @@ COPY --chown=nodejs:nodejs script/verify-prd15-pre-push.sql ./script/verify-prd1
 # Without these the templates table stays empty and every test reports "template missing".
 COPY --chown=nodejs:nodejs server/scorm/templates ./server/scorm/templates
 
+# Pre-built authoring documents (`npm run docs:pdf`, committed under docs/dist) —
+# read from disk at runtime by the doc-download routes
+# (GET /api/admin/templates/docs/:doc, GET /api/workbook/docs/:doc), which resolve
+# them at process.cwd()/docs/dist. Without them the «Шаблоны» and «Импорт»
+# sections answer 404 «Документ не собран».
+COPY --chown=nodejs:nodejs docs/dist ./docs/dist
+
 # Non-secret application config (config/*.config.jsonc) is deliberately NOT in the
 # image — it is a host-side volume mounted at /app/config (see
 # docker/templates/docker-compose.yml + docker/scripts/deploy.sh, which seeds the
