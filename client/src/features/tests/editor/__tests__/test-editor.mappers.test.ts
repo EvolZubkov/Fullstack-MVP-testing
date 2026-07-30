@@ -552,7 +552,9 @@ describe("7. editorModelToPayload — create standard", () => {
     expect(payload).not.toHaveProperty("published");
     expect(payload.mode).toBe("standard");
     expect(payload.flowMode).toBe("linear_flat");
-    expect(payload).not.toHaveProperty("flowPolicyJson"); // §3.1: omitted for linear_flat
+    // §3.1: linear_flat is written EXPLICITLY — an omitted key means "keep the
+    // stored policy" on PUT, which used to strand tests on their old flow mode.
+    expect(payload.flowPolicyJson).toEqual({ mode: "linear_flat", router: null });
     expect(payload.overallPassRuleJson).toEqual({ type: "percent", value: 80 });
     expect(payload.passDecisionPolicy).toBe("overall_only");
     expect(payload.timeLimitMinutes).toBe(60);

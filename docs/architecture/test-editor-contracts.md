@@ -202,8 +202,11 @@ Default: `"always_available"`. Редактируется по каждой те
 
 ### 3.1 `tests.flow_policy_json`
 
-Пишется только если `flowMode != "linear_flat"` или явно настроены router-параметры. Для legacy и
-default-случая колонка `null`.
+Редактор пишет колонку ВСЕГДА, включая `linear_flat` (`{ "mode": "linear_flat", "router": null }`).
+`PUT /api/tests/:id` — частичный патч: отсутствующий `flowPolicyJson` означает «не менять», поэтому
+пропуск ключа для `linear_flat` не давал переключить тест с роутера/тем обратно на линейный сценарий.
+Для legacy-строк колонка может быть `null` — все читатели трактуют `null` и `{ "mode": "linear_flat" }`
+одинаково (плоский сценарий по умолчанию).
 
 ```json
 {
@@ -473,7 +476,8 @@ Backend возвращает 400 с полем `fields` для всех validati
 1. `required` темы берётся из `model.sections[].required`, НЕ из `model.passRules.byTopic`
    (`passRules.byTopic` не содержит `required`, FR-45).
 2. В payload пишется `status`, НЕ `published`. Backend синхронизирует `published` из `status`.
-3. `flow_policy_json` пишется только если `model.flowMode != "linear_flat"` или есть router-настройки.
+3. `flow_policy_json` пишется всегда — включая `linear_flat` (`{ mode, router: null }`), иначе смена
+   сценария на линейный не сохраняется (см. 3.1).
 4. Скрытые draft-настройки несовместимого режима НЕ попадают в payload (FR-25h, FR-25i).
 5. `feedback.assets[].scormHref` НЕ пишется в payload — заполняется backend при сохранении файла.
 6. `expectedVersion` берётся из `model.version` (snapshot при открытии редактора).
