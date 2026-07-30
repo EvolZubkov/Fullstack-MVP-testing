@@ -1,23 +1,36 @@
 /*
- * RTK certification — design tokens (PRD-7 branding).
+ * RTK certification — design tokens + the standard scene layer (PRD-7 branding).
  *
- * TWO layers, by design:
- *   1. The TEMPLATE ships a full light + dark palette here. It follows the viewer's
+ * THREE layers, in cascade order:
+ *   1. The RTK PALETTE below: a full light + dark palette. It follows the viewer's
  *      SYSTEM theme (@media prefers-color-scheme) and an explicit override
  *      (:root[data-theme="light|dark"]) that always wins over the media query.
- *   2. The AUTHOR may still override any colour via design params — those are applied
- *      as inline CSS vars on the stage and win over this file. The params default to
- *      EMPTY (manifest `default: null`), so when the author sets nothing, this theme
- *      drives; when they set a colour, it overrides (in both light and dark).
+ *   2. The SCENE LAYER, copied VERBATIM from the standard template
+ *      (server/scorm/templates/default/styles/theme.css). It is the SAME layer both
+ *      hosts render with, so these screens cannot drift from the standard ones. The
+ *      standard's own token blocks are deliberately NOT copied — they would override
+ *      the RTK palette and the brand font.
+ *   3. The RTK DECORATIVE layer at the end: the brand line, the cover brand plate,
+ *      the orange list markers and the author-background scrim. Everything that makes
+ *      this template look like itself lives HERE, in CSS — the layouts stay
+ *      byte-identical to the standard ones (tests/template-layout-parity.test.ts).
  *
- * Colours are HSL COMPONENTS (bare triples, no hsl()) — base.css composes them as
- * hsl(var(--token)) so params and theme can both feed the same tokens.
+ * The AUTHOR may still override any colour via design params — those are applied as
+ * inline CSS vars and win over this file. The params default to EMPTY (manifest
+ * default: null), so when the author sets nothing, this theme drives.
+ *
+ * Colours are HSL COMPONENTS (bare triples, no hsl()) — composed as hsl(var(--token))
+ * so params and theme can both feed the same tokens.
  */
 
-/* ── LIGHT (default) ───────────────────────────────────────────────────────── */
-:root,
-:root[data-theme="light"] {
-  --frame: 240 5% 86%;              /* letterbox gutter */
+/* ── LIGHT (default) ───────────────────────────────────────────────────────────
+   The light palette is the BASE one, so it is declared on a BARE `:root` — never
+   `:root[data-theme="light"]`. The author's per-theme colours are printed as
+   `:root { … }` too (buildTemplateThemeCss) and land later in the cascade; giving
+   this block an attribute selector would out-specify them and the test's own palette
+   would never paint. Pinning light under a dark system is handled by the
+   `:not([data-theme="light"])` guard on the dark block below. */
+:root {
   --background: 240 4% 93%;         /* stage */
   --foreground: 240 7% 11%;
   --border: 260 5% 90%;
@@ -31,7 +44,6 @@
   --accent: 18 80% 96%;
   --destructive: 353 98% 41%;
   --success: 120 51% 38%;
-  --lock: 240 3% 55%;
   --font-sans: 'Rostelecom Basis', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
   --radius: 12px;
   --shadow: 0 2px 10px rgba(60, 40, 20, 0.10);
@@ -40,7 +52,6 @@
 /* ── DARK — the token overrides (system preference) ────────────────────────── */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --frame: 240 10% 4%;
     --background: 240 10% 10%;
     --foreground: 240 15% 92%;
     --border: 240 8% 24%;
@@ -54,14 +65,12 @@
     --accent: 15 40% 20%;
     --destructive: 353 75% 58%;
     --success: 120 40% 55%;
-    --lock: 240 6% 48%;
     --shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
   }
 }
 
 /* ── DARK — explicit override (viewer toggle), wins over the media query ───── */
 :root[data-theme="dark"] {
-  --frame: 240 10% 4%;
   --background: 240 10% 10%;
   --foreground: 240 15% 92%;
   --border: 240 8% 24%;
@@ -75,6 +84,773 @@
   --accent: 15 40% 20%;
   --destructive: 353 75% 58%;
   --success: 120 40% 55%;
-  --lock: 240 6% 48%;
   --shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
 }
+
+/* ── Layout foundation (was base.css) ────────────────────────────────
+   The scene fills the package window: html / body / .container / the #app mount
+   carry a definite height so `.tb-scene { height: 100% }` resolves. Without it the
+   scene collapses to its content and the footer rides up under empty space. */
+html, body { height: 100%; margin: 0; }
+body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
+.container { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.container > #app {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+}
+.container > #app > * { flex: 1 1 auto; min-height: 0; }
+/* …except the nav row the runtime appends next to the scene: it is chrome of a fixed
+   height. Under the rule above it grew a flex-basis and got SQUEEZED by ~4px, so the
+   package's footer sat lower than the web host's on the same template. */
+.container > #app > .tb-scene__foot { flex: none; }
+#toast-root { flex: none; }
+
+/* =================================================================
+   SCENE LAYER (revision «Стандартный» on ui-kit)
+   A fixed header / scrolling body / fixed footer «scene». All values are
+   DS tokens (--ou-*) so the palette flows only through the design system +
+   the palette bridge — no colour literals. The scene root is `.ou` (theme
+   provider), so DS semantic tokens resolve inside.
+   ================================================================= */
+
+/* ── Scene frame ────────────────────────────────────────────────── */
+.tb-scene {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  font-family: var(--ou-font-family-base, var(--font-sans));
+}
+.tb-scene__header {
+  flex: none;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-3);
+  /* Bottom padding leaves an 8px gap between the header content (question map /
+     titles) and the progress bar. The bar is 3px tall and hangs 1px past the bottom
+     edge, so it eats 2px of this padding — hence 8 + 2, which makes the VISIBLE gap
+     exactly 8px. */
+  padding: var(--ou-space-4) 24px calc(var(--ou-space-2) + 2px);
+  /* Every screen that shows a header gives it the SAME minimum height, so the field
+     below starts on one line and the header does not jump between slides: the logo
+     tile (44px) plus the vertical padding. Screens with a question map simply grow
+     past it. */
+  min-height: calc(44px + var(--ou-space-4) + var(--ou-space-2) + 2px);
+  box-sizing: border-box;
+  background: var(--ou-bg-elevated);
+  border-bottom: 1px solid var(--ou-border-soft);
+}
+.tb-scene__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+}
+/* A header with no progress bar needs its own bottom padding (the bar normally
+   sits flush on the bottom edge). */
+.tb-scene__header--flush { padding-bottom: var(--ou-space-4); }
+/* Content field: fills 3/4 of the screen width and ADAPTS to it (no fixed cap), so a
+   wide stage no longer leaves a large empty band on the right. `min-height:100%` (not
+   `height`) fills the body when content is short (header top / footer bottom, content
+   at the top) but lets the column GROW past the body when content is long — so the
+   body (`overflow:auto`) scrolls instead of clipping. Full width on narrow viewports. */
+.tb-scene__col {
+  width: 75%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-4);
+}
+@media (max-width: 900px) {
+  .tb-scene__col { width: 100%; }
+}
+/* Footer action panel — shared look for the host-rendered nav row. Vertical padding
+   is deliberately tight (8px): the panel is chrome, and every pixel it takes comes
+   off the scrolling body, which is where long questions run out of room. */
+.tb-scene__foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-3);
+  padding: var(--ou-space-2) 24px;
+  background: var(--ou-bg-elevated);
+  border-top: 1px solid var(--ou-border-soft);
+}
+.tb-scene__foot-spacer { margin-left: auto; }
+
+/* ── Header pieces ──────────────────────────────────────────────── */
+.tb-scene__brandrow { display: flex; align-items: flex-start; gap: var(--ou-space-4); }
+/* Content/system headers align the brand row on the centre line (no timers to top-align to). */
+.tb-scene__brandrow--center { align-items: center; }
+.tb-scene__logo {
+  width: 44px; height: 44px; flex: none;
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-accent-soft);
+  color: var(--ou-accent-default);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; letter-spacing: 0.02em;
+  overflow: hidden;
+}
+.tb-scene__logo img { width: 100%; height: 100%; object-fit: contain; }
+/* Logo placeholder: the slot stays in the top-left even without a branding image,
+   showing a subtle picture icon so the logo's place is clear. */
+.tb-scene__logo-ph { color: var(--ou-accent-default); opacity: 0.75; }
+.tb-scene__titles { min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
+.tb-scene__title { margin: 0; font: var(--ou-text-display-s); color: var(--ou-fg-default); letter-spacing: -0.01em; text-wrap: pretty; }
+.tb-scene__subtitle { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-scene__timers { margin-left: auto; display: flex; align-items: flex-start; gap: var(--ou-space-6); flex: none; }
+
+/* Progress bar pinned to the header's bottom edge. */
+.tb-scene__progress {
+  position: absolute; left: 0; right: 0; bottom: -1px; height: 3px;
+  background: var(--ou-bg-surface-3);
+}
+.tb-scene__progress-fill {
+  height: 100%; background: var(--ou-accent-default);
+  border-radius: 0 999px 999px 0;
+  transition: width 240ms var(--ou-easing-standard);
+}
+
+/* Question-map (ou-quiz) statuses buildQuestionProgress emits that DS does not
+   ship 1:1 — mapped here so the shared context drives the DS component. */
+.ou-quiz__dot.is-skipped { color: var(--ou-warning-on-soft); background: var(--ou-warning-soft); border-color: var(--ou-warning-default); }
+.ou-quiz__dot.is-unanswered { background: transparent; }
+/* Not-yet-issued / read-only (strict mode) pills are `disabled` — they are not jump
+   targets, so drop the DS pointer cursor (the base .ou-quiz__dot sets `cursor:pointer`
+   on every dot, disabled or not). */
+.ou-quiz__dot:disabled { cursor: default; }
+
+/* The header is a size CONTAINER so the question map adapts to the SCENE width — not
+   the viewport. This works identically in the SCORM iframe and the web Shadow DOM,
+   where a viewport media query would measure the wrong box. */
+.tb-scene__header { container: tbhead / inline-size; }
+
+/* Question map (wireframe): ONE row — dots (indicator) + legend + counters. As the
+   header narrows it degrades in ORDERED steps (@container below): (1) the legend drops
+   to a line under the indicator, (2) «пропущено» drops to its own line, (3) the
+   indicator cells wrap into rows, (4) «отвечено» drops too. Each dropped element gets
+   `flex-basis:100%` (a full row of its own) and an `order` so the stack reads
+   dots → legend → отвечено → пропущено. */
+/* `padding-bottom: 0` on purpose: the DS component ships a 16px bottom padding of its
+   own, which stacked on the header's own padding and pushed the pills 24px above the
+   progress bar instead of the 8px the header sets. The gap belongs to the header. */
+.tb-scene__map { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--ou-space-2) var(--ou-space-4); padding-bottom: 0; }
+.tb-scene__map .ou-quiz__dots { flex: 0 0 auto; }
+.tb-scene__map .ou-quiz__legend { margin-top: 0; align-items: center; order: 1; }
+/* Right-aligned so that when a counter wraps to its own full-width row it stacks
+   UNDER «отвечено» (which is pushed right), not off at the left edge. */
+.tb-scene__mapcount { flex: none; text-align: right; font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+.tb-scene__mapcount strong { color: var(--ou-fg-default); font-weight: 600; }
+.tb-scene__mapcount--answered { margin-left: auto; order: 2; }
+.tb-scene__mapcount--skipped { order: 3; }
+.tb-scene__mapcount--skipped::before { content: "· "; }
+
+/* Step 1 — legend under the indicator. */
+@container tbhead (max-width: 1000px) {
+  .tb-scene__map .ou-quiz__legend { flex-basis: 100%; order: 10; }
+}
+/* Step 2 — «пропущено» to its own line (the middot separator is then redundant). */
+@container tbhead (max-width: 820px) {
+  .tb-scene__mapcount--skipped { flex-basis: 100%; order: 12; }
+  .tb-scene__mapcount--skipped::before { content: none; }
+}
+/* Step 3 — indicator cells wrap into multiple rows. `flex: 1 1 0` (a ZERO basis) is
+   what keeps «отвечено» on the dots' row: with an auto basis the flex line-break would
+   push «отвечено» down first (its natural single-row width forces a break) — instead the
+   dots box takes a 0 base, grows into the free space and wraps its cells internally, so
+   the counter stays beside the (now multi-row) indicator until step 4. */
+@container tbhead (max-width: 640px) {
+  .tb-scene__map .ou-quiz__dots { flex: 1 1 0; min-width: 0; }
+}
+/* Step 4 — «отвечено» to its own line as well. */
+@container tbhead (max-width: 480px) {
+  .tb-scene__mapcount--answered { flex-basis: 100%; order: 11; margin-left: 0; }
+}
+/* Legend swatches (DS ships the base dot only). */
+.ou-quiz__legend-dot.is-answered { background: var(--ou-accent-default); box-shadow: none; }
+.ou-quiz__legend-dot.is-current { background: transparent; box-shadow: inset 0 0 0 2px var(--ou-accent-default); }
+.ou-quiz__legend-dot.is-flagged { background: var(--ou-warning-default); box-shadow: none; }
+
+/* ── Document scenes (start / intro / results / content) ────────── */
+/* A comfortable reading column and the shared type scale these screens use. */
+.tb-scene__col--doc { gap: var(--ou-space-5); }
+.tb-scene__hero {
+  margin: 0; font-weight: 600; line-height: 1.2; letter-spacing: -0.015em;
+  color: var(--ou-fg-default); text-wrap: pretty;
+  font-size: var(--tb-question-fs, 32px);
+}
+.tb-scene__lead { font: var(--ou-text-body-l); color: var(--ou-fg-soft); text-wrap: pretty; }
+.tb-scene__subhead { margin: 0; font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
+.tb-scene__note { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
+.tb-scene__headtag { margin-left: auto; align-self: center; flex: none; }
+/* The chip and the timers both used to push themselves right with `margin-left:auto`,
+   and TWO auto margins SHARE the free space — which parked the chip in the middle of
+   the header instead of at its edge. When a chip is present it is the one that takes
+   the free space, and the timers just follow it. */
+.tb-scene__headtag ~ .tb-scene__timers { margin-left: var(--ou-space-6); }
+
+/* ── Title / cover slide (start) — a DISTINCT layout, NOT the shared header.
+   The logo floats top-left, the test title dominates the field, its description
+   sits under it and the facts strip below. Two variants toggle on
+   `design.startImageUrl` (`.tb-cover--media`): illustration filling the right. ── */
+.tb-scene--cover .tb-scene__body { padding: var(--ou-space-8) var(--ou-space-9); }
+.tb-cover { min-height: 100%; display: grid; grid-template-columns: 1fr; gap: var(--ou-space-9); align-items: stretch; }
+.tb-cover--media { grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); }
+.tb-cover__main { min-width: 0; display: flex; flex-direction: column; }
+.tb-cover__logo { flex: none; margin-bottom: var(--ou-space-8); }
+/* Content rests in the optical centre of the field below the logo. */
+.tb-cover__content { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: var(--ou-space-6); }
+.tb-cover__head { display: flex; flex-direction: column; gap: var(--ou-space-3); }
+.tb-cover__eyebrow { display: flex; align-items: center; gap: var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+/* Empty eyebrow (no attempt cap ⇒ no attempt line, not exhausted) must not take the
+   head's row-gap. Mirrors the standard template; `:empty` would not match because
+   the layout leaves whitespace behind. */
+.tb-cover__eyebrow:not(:has(*)) { display: none; }
+.tb-cover__title { margin: 0; font-weight: 700; font-size: 44px; line-height: 1.08; letter-spacing: -0.02em; color: var(--ou-fg-default); text-wrap: pretty; }
+.tb-cover__desc { margin: 0; font: var(--ou-text-body-l); color: var(--ou-fg-soft); max-width: 60ch; text-wrap: pretty; }
+.tb-cover__note { display: flex; flex-direction: column; gap: var(--ou-space-1); }
+.tb-cover__media { min-width: 0; min-height: 0; border-radius: var(--ou-radius-l); overflow: hidden; background: var(--ou-bg-surface-2); }
+.tb-cover__media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Placeholder shown by the image-right start VARIANT when no start image is set —
+   keeps the right media panel visible so the layout reads as «image right». */
+.tb-cover__media-ph { width: 100%; height: 100%; min-height: 220px; display: flex; align-items: center; justify-content: center; color: var(--ou-fg-muted); opacity: 0.55; }
+@media (max-width: 900px) { .tb-cover--media { grid-template-columns: 1fr; } .tb-cover__media { min-height: 220px; } }
+
+/* Facts strip — big number + small label, spaced (start screen). */
+.tb-facts { display: flex; flex-wrap: wrap; gap: var(--ou-space-9); }
+.tb-facts--center { justify-content: center; }
+.tb-facts__num { font: var(--ou-text-display-s); color: var(--ou-fg-default); line-height: 1.1; }
+.tb-facts__lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); }
+
+/* Centred column (section intro / blocked / short system screens): balanced,
+   reading measure, vertically centred — no unjustified vertical stretching. */
+.tb-scene__col--center {
+  max-width: 680px; margin: 0 auto; height: 100%;
+  align-items: center; justify-content: center; text-align: center;
+  gap: var(--ou-space-5);
+}
+.tb-scene__col--narrow { max-width: 640px; }
+.tb-scene__hero--s { font-size: 28px; }
+/* DS ring at a fixed diameter (the component does not size itself). */
+.tb-ring { width: 140px; height: 140px; display: inline-flex; align-items: center; justify-content: center; position: relative; }
+.tb-ring .ou-ring__track { stroke: var(--ou-bg-surface-3); }
+.tb-eyebrow { font: var(--ou-text-body-s); color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+/* Meta dots — inline facts with an accent dot (section intro). */
+.tb-meta-dots { display: flex; gap: var(--ou-space-5); flex-wrap: wrap; justify-content: center; }
+.tb-meta-dots__item { display: inline-flex; align-items: center; gap: var(--ou-space-2); font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
+.tb-meta-dots__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ou-accent-default); flex: none; }
+/* Bordered info card (instruction / note block). */
+.tb-card {
+  width: 100%; text-align: left;
+  border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-l);
+  background: var(--ou-bg-surface-2); padding: var(--ou-space-5);
+  display: flex; flex-direction: column; gap: var(--ou-space-2);
+}
+.tb-card__head { font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
+.tb-card__body { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
+
+/* ── Question body ──────────────────────────────────────────────── */
+.tb-scene__meta { display: flex; align-items: center; gap: var(--ou-space-3); font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+.tb-scene__q { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+.tb-scene__qtitle {
+  margin: 0; font-weight: 600; line-height: 1.25; letter-spacing: -0.015em;
+  color: var(--ou-fg-default); text-wrap: pretty;
+  font-size: var(--tb-question-fs, 30px);
+}
+.tb-scene__qhint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* Media + answers: stacked by default; side-by-side (media 5 / answers 7) when
+   the media slot actually has content. */
+/* Media + answers: fill the column when content is short (flex-grow), but keep the
+   content's natural height when long (flex-basis:auto, no shrink) so it grows the
+   column and the body scrolls rather than clipping the last options. */
+.tb-qbody { flex: 1 0 auto; display: grid; grid-template-columns: 1fr; gap: var(--ou-space-5); }
+.tb-qbody:has([data-slot="question-media"]:not(:empty)) {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  align-items: start;
+}
+.tb-qbody__media:empty { display: none; }
+.tb-qbody__media img,
+.tb-qbody__media video { width: 100%; border-radius: var(--ou-radius-m); }
+.tb-qbody__answers { min-height: 0; display: flex; flex-direction: column; }
+/* Verdict banner sits ABOVE the options — keep it off the first option (only when
+   filled, so the empty slot adds no phantom gap). */
+[data-slot="question-feedback"]:not(:empty) { margin-bottom: var(--ou-space-5); }
+/* Answer-check verdict banner (feedback-block): center the verdict line with its icon
+   and tone the icon by result. The base .ou-banner top-aligns the icon and leaves it
+   muted grey (colour is toned only by the --subtle/--outline/--bar style variants,
+   which this banner doesn't use), so both are set here. */
+.tb-scene .feedback-block { align-items: center; }
+.tb-scene .feedback-block .ou-banner__ico { margin-top: 0; }
+.tb-scene .feedback-block.ou-banner--success .ou-banner__ico { color: var(--ou-success-default); }
+.tb-scene .feedback-block.ou-banner--warning .ou-banner__ico { color: var(--ou-warning-default); }
+.tb-scene .feedback-block.ou-banner--error .ou-banner__ico { color: var(--ou-error-default); }
+
+/* ── Answers: comfortable, top-aligned; each option card grows to fit its text ── */
+.tb-scene .ou-radio-group,
+.tb-scene .ou-rank { width: 100%; }
+.tb-scene .ou-radio-group__items { gap: var(--ou-space-2); }
+.tb-scene .ou-radio-group--vertical .ou-radio-group__items { flex-direction: column; }
+.tb-scene .ou-radio-card {
+  min-height: 52px; align-items: center;
+  gap: var(--ou-space-4);
+  padding: var(--ou-space-3) var(--ou-space-4);
+  box-sizing: border-box;
+}
+/* Option text is length-adaptive: `--tb-answer-fs` (from optionFont: 20px for short
+   text down to 14px for long) drives the size, so long options shrink toward the
+   floor before the card grows taller and the body scrolls. Weight per wireframe. */
+.tb-scene .ou-radio-card__title,
+.tb-scene .ou-rank__text,
+.tb-scene .ou-match__card-title {
+  font-size: var(--tb-answer-fs, 20px);
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+/* Multiple: the tick is class-driven (no native input) — mirror DS :checked. */
+.ou-radio-card.is-on .ou-check__box {
+  background: var(--ou-accent-default);
+  border-color: var(--ou-accent-default);
+}
+.ou-radio-card.is-on .ou-check__box svg { opacity: 1; }
+
+/* Review highlight — a per-option traffic light. `correct-answer`/`correct-skip`
+   are green (the learner handled the option right), `missed-answer` yellow (a correct
+   option they did not pick — multiple choice only), `incorrect-answer` red. Painted
+   per DS component across choice / ranking / matching. */
+.ou-radio-card.correct-answer,
+.ou-radio-card.correct-skip,
+.ou-rank__item.correct-answer,
+.ou-match__row.correct-answer .ou-match__card--drag {
+  border-color: var(--ou-success-default);
+  background: var(--ou-success-soft);
+}
+.ou-radio-card.missed-answer {
+  border-color: var(--ou-warning-default);
+  background: var(--ou-warning-soft);
+}
+.ou-radio-card.incorrect-answer,
+.ou-rank__item.incorrect-answer,
+.ou-match__row.incorrect-answer .ou-match__card--drag {
+  border-color: var(--ou-error-default);
+  background: var(--ou-error-soft);
+}
+/* Trailing verdict mark (check / cross) pinned to the card's right edge; colour
+   follows the card's review class so the icon reads as its verdict. */
+.ou-radio-card__mark { margin-left: auto; flex: none; display: inline-flex; align-items: center; }
+.ou-radio-card.correct-answer .ou-radio-card__mark { color: var(--ou-success-default); }
+/* Missed correct option: the CARD stays yellow (warning), but its mark is a RED cross —
+   the learner failed to pick a correct answer, so the icon reads as a mistake, not a tick. */
+.ou-radio-card.missed-answer .ou-radio-card__mark { color: var(--ou-error-default); }
+.ou-radio-card.incorrect-answer .ou-radio-card__mark { color: var(--ou-error-default); }
+
+/* ── Ranking scene ──────────────────────────────────────────────── */
+.tb-scene .ou-rank { gap: var(--ou-space-2); }
+.tb-scene .ou-rank__item {
+  min-height: 52px; box-sizing: border-box; align-items: center;
+  gap: var(--ou-space-4);
+  padding: var(--ou-space-3) var(--ou-space-4);
+}
+
+/* ── Matching scene ─────────────────────────────────────────────── */
+/* Column gap between the two matching sides — 24px (DS default is 56px wide). */
+.tb-scene .ou-match { width: 100%; row-gap: var(--ou-space-2); --ou-match-gap-w: var(--ou-space-6); }
+/* The draggable answer chips no longer carry the native `draggable` flag (it broke
+   real-mouse dragging), so restore the grab affordance explicitly. */
+.tb-scene .ou-match__card--drag:not(.ou-match__card--empty),
+.tb-scene .ou-rank__item { cursor: grab; }
+.tb-scene .ou-match__card--drag.dragging,
+.tb-scene .ou-rank__item.dragging { cursor: grabbing; }
+/* Drop-target feedback comes from the DS itself: the pointer engine adds
+   `.ou-match__row.is-target`, which lights the LEFT prompt (`.ou-match__row.is-target
+   .ou-match__card--fixed` in university-rt.css). No extra rule needed here. */
+/* After a pair connects, the DS tints only the RIGHT card + the arrow. Tint the LEFT
+   prompt too so the whole matched row reads as connected (review states keep their own
+   green/red tint, so exclude them). */
+.tb-scene .ou-match__row.is-connected:not(.correct-answer):not(.incorrect-answer) .ou-match__card--fixed {
+  border-color: var(--ou-accent-default);
+  background: var(--ou-accent-soft);
+  color: var(--ou-accent-on-soft);
+}
+.ou-match__placeholder { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* ── Adaptive level transition ──────────────────────────────────── */
+.tb-transition-icon {
+  width: 80px; height: 80px; flex: none; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.tb-transition-icon.is-up { background: var(--ou-success-soft); color: var(--ou-success-default); }
+.tb-transition-icon.is-down { background: var(--ou-warning-soft); color: var(--ou-warning-default); }
+.tb-transition-icon.is-complete { background: var(--ou-accent-soft); color: var(--ou-accent-default); }
+
+/* ── Blocked / cooldown wall ────────────────────────────────────── */
+.tb-blocked-icon {
+  width: 72px; height: 72px; flex: none; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--ou-warning-soft); color: var(--ou-warning-default);
+}
+.tb-blocked-branch { display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: center; }
+/* The runtime shows ONE branch (unhides it); `hidden` must beat the flex display. */
+.tb-blocked-branch[hidden] { display: none; }
+
+/* ── Results screen ─────────────────────────────────────────────── */
+/* Fills the body width (like the router hub / content pages, .tb-content) — no fixed
+   cap, so a wide stage no longer leaves an empty band on the right and the per-topic
+   grid spreads to more columns. */
+.tb-scene__col--wide { width: 100%; }
+/* Score strip: ring + facts side by side. */
+.tb-score-strip { display: flex; align-items: center; gap: var(--ou-space-8); flex-wrap: wrap; }
+/* Per-topic cards — responsive grid. */
+.tb-topics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--ou-space-4); }
+.tb-topic-card .ou-card__body { display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: flex-start; }
+.tb-topic-card__name { font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
+.tb-topic-card__bar { width: 100%; margin-top: var(--ou-space-1); }
+.tb-topic-card__bar.is-pass .ou-progress__fill { background: var(--ou-success-default); }
+.tb-topic-card__bar.is-fail .ou-progress__fill { background: var(--ou-error-default); }
+.tb-topic-card__req { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-stat-rows { display: flex; flex-direction: column; width: 100%; }
+.tb-stat-val { font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+/* Per-topic feedback block — feedback text + recommendation chips, divided off. */
+.tb-topic-card__fb {
+  display: flex; flex-direction: column; gap: var(--ou-space-2); width: 100%;
+  margin-top: var(--ou-space-2); padding-top: var(--ou-space-3);
+  border-top: 1px solid var(--ou-border-soft);
+}
+.tb-topic-card__fb-text { font: var(--ou-text-body-s); color: var(--ou-fg-soft); }
+.tb-recs { display: flex; flex-wrap: wrap; gap: var(--ou-space-2); }
+.tb-rec {
+  display: inline-flex; align-items: center; gap: var(--ou-space-2);
+  padding: var(--ou-space-1) var(--ou-space-3);
+  border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-pill);
+  background: var(--ou-bg-elevated); font: var(--ou-text-body-s); color: var(--ou-fg-default);
+  text-decoration: none;
+}
+a.tb-rec:hover { border-color: var(--ou-accent-default); }
+
+/* Adaptive results: centred hero (no score ring) + level cards. */
+.tb-adaptive-hero { display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-3); text-align: center; margin-bottom: var(--ou-space-2); }
+.tb-adaptive-hero__icon {
+  width: 64px; height: 64px; flex: none; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--ou-accent-soft); color: var(--ou-accent-default);
+}
+/* The adaptive level tag needs no rule here: its tone is a DS modifier
+   (`ou-tag--success|--accent|--warning|--error`) chosen by the level's POSITION on
+   the topic's ladder — see levelToneClass in shared/template/result-context. */
+
+/* ── Verdict (results / section-results) ────────────────────────── */
+/* passClass (is-pass/is-fail) drives the DS ring fill + verdict tag colour. */
+.ou-ring__fill.is-pass { stroke: var(--ou-success-default); }
+.ou-ring__fill.is-fail { stroke: var(--ou-error-default); }
+.ou-ring__fill.is-partial { stroke: var(--ou-warning-default); }
+.ou-tag.is-pass { background: var(--ou-success-soft); color: var(--ou-success-on-soft); }
+.ou-tag.is-fail { background: var(--ou-error-soft); color: var(--ou-error-on-soft); }
+.ou-tag.is-partial { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
+
+/* ── Content / gallery pages ────────────────────────────────────── */
+/* The body CENTRES its block — reading measure, balanced, no vertical stretching
+   with empty side fields (the earlier feedback). */
+.tb-content-body { display: flex; flex-direction: column; align-items: center; justify-content: safe center; }
+/* The router hub is a menu, not centered reading content — its cards read top-down
+   from the top of the field with the body's own padding, not floated to the middle. */
+.tb-scene:has(.router-topic-cards) .tb-content-body { justify-content: flex-start; }
+.tb-content { width: 100%; display: flex; flex-direction: column; gap: var(--ou-space-4); }
+.tb-content--text { max-width: 720px; }
+.tb-content--image { max-width: 1120px; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; align-items: center; }
+.tb-content--image-right { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+.tb-content__media {
+  width: 100%; aspect-ratio: 4 / 3; box-sizing: border-box;
+  border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-l); overflow: hidden;
+  background: var(--ou-bg-surface-2); display: grid; place-items: center;
+  color: var(--ou-fg-muted); font: var(--ou-text-body-s);
+}
+.tb-content__media img { width: 100%; height: 100%; object-fit: cover; }
+.tb-content__text { min-width: 0; display: flex; flex-direction: column; gap: var(--ou-space-3); }
+.tb-content__title { margin: 0; font-weight: 600; font-size: var(--tb-question-fs, 30px); line-height: 1.2; letter-spacing: -0.015em; color: var(--ou-fg-default); text-wrap: pretty; }
+.tb-content__lead { font: var(--ou-text-body-l); color: var(--ou-fg-default); }
+.tb-content__body { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
+.tb-content__lead:empty, .tb-content__body:empty { display: none; }
+/* Sequence dots (gallery). */
+.tb-dots { display: flex; align-items: center; gap: var(--ou-space-2); }
+.tb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ou-border-strong); flex: none; }
+.tb-dot.is-current { background: var(--ou-accent-default); }
+
+/* ── Review (обзор ответов) ─────────────────────────────────────── */
+.tb-review-map { width: 100%; flex-direction: column; align-items: stretch; gap: var(--ou-space-3); }
+/* Answered/skipped counts moved out of the header into the review body. */
+.tb-review-map__count { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+.tb-review-map__count strong { color: var(--ou-fg-default); font-weight: 600; }
+.tb-unanswered { display: flex; flex-direction: column; gap: var(--ou-space-2); width: 100%; }
+.tb-unanswered__row {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-3);
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+  font: var(--ou-text-body-m); text-align: left; cursor: pointer;
+  transition: border-color var(--ou-motion-fast), background var(--ou-motion-fast);
+}
+.tb-unanswered__row:hover { border-color: var(--ou-border-default); background: var(--ou-bg-hover); }
+.tb-unanswered__q { min-width: 0; }
+.tb-unanswered__go { color: var(--ou-accent-default); flex: none; font: var(--ou-text-body-s); }
+
+/* ── Runtime chrome (was base.css) ──────────────────────────────────
+   The framework-free runtime emits these into the ACTIVE standard-template
+   scene (the same layouts that also serve as the fallback for external
+   templates), so they belong to theme.css — the single scene source — now that
+   base.css is gone. Colours flow through DS tokens; spacing keeps its metrics. */
+
+/* Result-variable field renderers (PRD-2 indicators on content pages; renderResultField). */
+.renderer--text-metric { display: flex; flex-direction: column; gap: 4px; }
+.renderer__label { font-size: 13px; color: var(--ou-fg-muted); }
+.renderer__value { font-size: 42px; font-weight: 700; color: var(--ou-fg-default); line-height: 1; }
+.renderer__suffix { font-size: 24px; color: var(--ou-fg-muted); margin-left: 2px; }
+.renderer__track { height: 8px; border-radius: 999px; background: var(--ou-bg-surface-3); overflow: hidden; }
+.renderer__fill { height: 100%; background: var(--ou-accent-default); }
+.renderer__ring-track { stroke: var(--ou-bg-surface-3); }
+.renderer__ring-fill { stroke: var(--ou-accent-default); }
+.renderer--ring-chart { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+.renderer--ring-chart .renderer__ring { display: block; }
+.renderer--ring-chart .renderer__value {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  font-size: 30px; font-weight: 800;
+}
+.renderer--ring-chart .renderer__label { position: absolute; left: 0; right: 0; bottom: -22px; text-align: center; }
+
+/* Question timer (question.html / review.html header). */
+.q-timer { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+.q-timer--hidden { display: none; }
+
+/* Question media + fullscreen affordance (renderQuestionMedia). */
+.question-media { position: relative; }
+.qm-fs-btn {
+  position: absolute; top: 10px; right: 10px;
+  border: 0; border-radius: var(--ou-radius-s); padding: 8px 10px;
+  background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+  cursor: pointer; font-size: 16px; line-height: 1; opacity: 0.9;
+}
+.qm-fs-btn:hover { opacity: 1; }
+
+/* Adaptive / content-page nav row + its progress bar. */
+.navigation { display: flex; justify-content: space-between; margin-top: 32px; }
+.progress-bar {
+  height: 10px; border-radius: 999px; overflow: hidden;
+  background: var(--ou-bg-surface-3); margin-bottom: 28px;
+}
+.progress-fill {
+  height: 100%; background: var(--ou-accent-default);
+  transition: width 0.4s var(--ou-easing-standard);
+}
+
+/* Built-in block/cooldown wall — the tested last-resort safety net shown when a
+   template ships no `system.blocked` layout (gate.js renderBlockWallBuiltin). The
+   active path renders the standard `system.blocked` scene; this styles the fallback. */
+.retake-wall { min-height: 60vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.retake-wall__card {
+  max-width: 520px; width: 100%;
+  background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-soft);
+  border-radius: 12px; padding: 32px; text-align: center; box-shadow: var(--ou-shadow-lg);
+}
+.retake-wall__title { margin: 0 0 12px; font-size: 22px; font-weight: 700; color: var(--ou-fg-default); }
+.retake-wall__lead { margin: 0 0 8px; color: var(--ou-fg-muted); }
+.retake-wall__date { margin: 12px 0 0; font-size: 16px; color: var(--ou-fg-default); }
+.retake-wall__note { margin: 12px 0 0; color: var(--ou-error-default); }
+
+/* ── Generic card + content-page skeleton (shared builders) ─────────
+   The generic `content` layout is a `page-content` shell the runtime fills with a
+   per-template placeholder skeleton (content-page.ts) — and the router hub fills it
+   with topic cards (router-hub.ts). Both were base.css; folded here on tokens. */
+.card {
+  background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+  border: 1px solid var(--ou-border-soft); border-radius: 12px;
+  padding: 32px; margin-bottom: 24px; box-shadow: var(--ou-shadow-lg);
+}
+.question-text { font-size: 18px; margin-bottom: 28px; color: var(--ou-fg-default); line-height: 1.7; }
+
+/* Content-page placeholder skeleton (buildContentPageSkeleton → page-content slot). */
+.content-page { display: flex; flex-direction: column; gap: 16px; }
+.content-placeholder--title { font-size: 28px; font-weight: 700; line-height: 1.2; color: var(--ou-fg-default); }
+.content-placeholder--subtitle,
+.content-placeholder--lead { font-size: 17px; color: var(--ou-fg-muted); line-height: 1.55; }
+.content-placeholder--body { font-size: 15px; color: var(--ou-fg-default); line-height: 1.65; }
+.content-placeholder--body p { margin-bottom: 12px; }
+.content-placeholder--body p:last-child { margin-bottom: 0; }
+.content-placeholder--heroImage,
+.content-placeholder--image {
+  width: 100%; height: 220px; border-radius: 8px; background: var(--ou-bg-surface-3);
+  overflow: hidden; display: grid; place-items: center;
+}
+.content-placeholder--heroImage img,
+.content-placeholder--image img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ── Router hub (router_by_topics) — the topic-card menu ────────────
+   Emitted by the shared builder (router-hub.ts) into the content layout's
+   page-content slot, on both hosts and in the «Структура» preview. */
+/* Same footprint as the results «Результаты по темам» grid (.tb-topics-grid): min
+   column 340px and the DS card spacing, so hub cards read at the same size. */
+.router-topic-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--ou-space-4); margin-top: 24px; }
+.router-progress { margin: 18px 0 4px; }
+.router-progress__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.router-progress__label { font-size: 13px; font-weight: 600; color: var(--ou-fg-muted); }
+.router-progress__count { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ou-fg-default); }
+.router-progress__bar { height: 6px; border-radius: 999px; background: var(--ou-bg-surface-3); overflow: hidden; }
+.router-progress__fill { height: 100%; border-radius: 999px; background: var(--ou-accent-default); transition: width 0.25s ease; }
+.router-topic-card {
+  display: flex; flex-direction: column; gap: var(--ou-space-2); padding: var(--ou-space-5);
+  border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-l); background: var(--ou-bg-elevated);
+  box-shadow: var(--ou-shadow-sm);
+  cursor: pointer; text-align: left; font: inherit; color: var(--ou-fg-default);
+  transition: border-color 0.15s, background 0.15s;
+}
+.router-topic-card:hover:not(:disabled) { border-color: var(--ou-accent-default); background: var(--ou-accent-soft); }
+.router-topic-card:disabled { cursor: default; opacity: 0.85; }
+/* Completed = neutral «Завершена». Pass/fail colour is added ONLY when the test
+   reveals section results (router-topic-card--passed / --failed, emitted below);
+   those rules follow --completed so they win the shared-specificity cascade.
+   A completed card RECEDES — a darker fill, flat (no raise), muted title — while
+   the ✓ mark stays bright, so it reads as clearly finished next to the raised,
+   actionable «Не начата» cards (whose fill == elevated == surface-2, hence the
+   deliberately different surface-1 here). */
+.router-topic-card--completed { border-color: var(--ou-border-strong); background: var(--ou-bg-surface-1); box-shadow: none; }
+.router-topic-card--completed .router-topic-card__name { color: var(--ou-fg-soft); }
+.router-topic-card--passed { border-color: var(--ou-success-default); background: var(--ou-success-soft); }
+.router-topic-card--failed { border-color: var(--ou-error-default); background: var(--ou-error-soft); }
+.router-topic-card--inProgress { border-color: var(--ou-warning-default); background: var(--ou-warning-soft); }
+.router-topic-card--locked { opacity: 0.5; cursor: not-allowed; }
+.router-topic-card__name { font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
+.router-topic-card__status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ou-fg-muted); }
+.router-topic-card__ico { flex: none; }
+.router-topic-card--completed .router-topic-card__status { color: var(--ou-fg-default); font-weight: 500; }
+.router-topic-card--passed .router-topic-card__status { color: var(--ou-success-default); font-weight: 500; }
+.router-topic-card--failed .router-topic-card__status { color: var(--ou-error-default); font-weight: 500; }
+.router-topic-card__optional { font-weight: 400; font-size: 11px; color: var(--ou-fg-muted); }
+.router-topic-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.router-topic-card__img { flex: 0 0 auto; }
+.router-topic-card__img img { display: block; width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+.router-topic-card__meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.router-topic-card__chip { font-size: 11px; color: var(--ou-fg-muted); background: var(--ou-bg-surface-3); border-radius: 999px; padding: 2px 8px; }
+.router-topic-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.router-topic-card__go { font-size: 12px; font-weight: 600; color: var(--ou-accent-default); }
+.router-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; }
+.router-stat {
+  display: flex; flex-direction: column; gap: 2px;
+  border: 1px solid var(--ou-border-soft); border-radius: 8px; padding: 8px 12px; background: var(--ou-bg-elevated);
+}
+.router-stat__label { font-size: 11px; color: var(--ou-fg-muted); }
+.router-stat__value { font-size: 14px; font-weight: 700; color: var(--ou-fg-default); font-variant-numeric: tabular-nums; }
+
+/* ── RTK accent in the DARK palette ─────────────────────────────────
+   The DS lifts its accent to `--ou-purple-300` (40% white) so a DARK brand reads
+   against a near-black page — necessary for the DS purple #7700FF, wrong for the RTK
+   orange, which is bright already and turns pale salmon. Pin the accent to the brand
+   itself and take hover/active DOWN (mix black) instead of up.
+
+   The RAMP itself is NOT declared here: all three hosts derive it from `--primary`
+   through the platform bridge (`shared/template/palette-bridge`), and restating its
+   color-mix fractions in a template is how a template silently drifts from the
+   platform. This block only overrides the per-theme CHOICE of ramp step, which is a
+   design decision the bridge does not make.
+
+   Selector matches the DS block's `.ou.ou--dark` specificity and, coming later in the
+   stylesheet, wins by order. `--ou-fg-on-accent` is white in both DS palettes; the
+   brand orange is slightly darker than the lifted step it replaces, so white-on-accent
+   contrast improves (~2.0 → ~3.4).
+   ─────────────────────────────────────────────────────────────────── */
+.ou.ou--dark {
+  --ou-accent-default: var(--ou-purple-500);
+  --ou-accent-hover: var(--ou-purple-600);
+  --ou-accent-active: var(--ou-purple-700);
+  --ou-border-focus: var(--ou-purple-500);
+}
+
+/* ── RTK decorative layer over the standard scene ───────────────────
+   Everything below is what distinguishes «Сертификация» from the standard template.
+   It is CSS-only BY DESIGN: the layouts are byte-identical copies of the standard
+   ones, so a revision of the standard screens carries over for free. The single
+   markup delta is the brand line in the two cover layouts (course.subtitle cannot
+   carry it — the runtime puts «Попытка N из M» there).
+   ─────────────────────────────────────────────────────────────────── */
+
+/* Brand line above the cover title: the RTK «Сертификация» framing. */
+.tb-cover__brandline {
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: hsl(var(--primary));
+}
+
+/* Cover brand plate: with no author start image the standard cover is a ONE-column grid
+   (`.tb-cover { grid-template-columns: 1fr }`) and the right of the field stays empty.
+   The RTK cover fills it with a brand plate carrying the ring. It must open a SECOND
+   COLUMN — an `::after` on the one-column grid would land as another ROW and stretch
+   across the width — and it mirrors `.tb-cover--media` in both proportions and the
+   narrow-screen collapse, so the two cover variants behave alike. Pure CSS: the cover
+   layout file stays identical to the standard one. */
+.tb-cover:not(.tb-cover--media) {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+}
+.tb-cover:not(.tb-cover--media)::after {
+  content: "";
+  min-width: 0;
+  min-height: 0;
+  border-radius: var(--ou-radius-l);
+  background: linear-gradient(140deg, hsl(var(--primary)) 0%, hsl(var(--primary) / .82) 100%);
+  /* The ring: an inset ring drawn low-right, echoing the RTK cover mark. */
+  box-shadow: inset -6rem -7rem 0 -5.6rem hsl(0 0% 100% / .16);
+}
+@media (max-width: 900px) {
+  .tb-cover:not(.tb-cover--media) { grid-template-columns: 1fr; }
+  .tb-cover:not(.tb-cover--media)::after { min-height: 160px; }
+}
+
+/* Author rich text: RTK orange numbered circles and dots instead of browser markers. */
+.tb-content__body ol,
+.tb-scene__note ol { counter-reset: tb-step; list-style: none; padding-left: 2.25rem; }
+.tb-content__body ol > li,
+.tb-scene__note ol > li { counter-increment: tb-step; position: relative; }
+.tb-content__body ol > li::before,
+.tb-scene__note ol > li::before {
+  content: counter(tb-step);
+  position: absolute;
+  left: -2.25rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-size: .8125rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tb-content__body ul,
+.tb-scene__note ul { list-style: none; padding-left: 2.25rem; }
+.tb-content__body ul > li,
+.tb-scene__note ul > li { position: relative; }
+.tb-content__body ul > li::before,
+.tb-scene__note ul > li::before {
+  content: "";
+  position: absolute;
+  left: -1.5rem;
+  top: .6em;
+  width: .4375rem;
+  height: .4375rem;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+}
+
+/* Theme-adaptive scrim over an author background image. The heading and footer text
+   follow the THEME, so a light author image under light text (dark theme) would be
+   invisible. The scrim (theme background at 82%) guarantees contrast in BOTH themes
+   while the image still shows through. */
+.tb-scene.has-slide-bg { position: relative; background-size: cover; background-position: center; }
+.tb-scene.has-slide-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: hsl(var(--background) / .82);
+  z-index: 0;
+}
+.tb-scene.has-slide-bg > * { position: relative; z-index: 1; }

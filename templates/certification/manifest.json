@@ -1,10 +1,9 @@
 {
   "id": "certification",
   "name": "Сертификация (РТК)",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "templateApiVersion": "1.0",
-  "mountShell": true,
-  "description": "Сертификационный тест РТК: фиксированная сцена 16:9, системная тема (светлая и тёмная) с переопределяемыми цветами, брендовый акцент, страница-роутер, кнопки навигации, пропуск и возврат к неотвеченным, экран обзора. Набор вариантов страниц совпадает со стандартным шаблоном — тест переключается между ними без переназначения страниц.",
+  "description": "Сертификационный тест РТК: брендовая палитра Ростелекома (светлая и тёмная) с переопределяемыми цветами, оранжевый акцент, страница-роутер, кнопки навигации, пропуск и возврат к неотвеченным, экран обзора. Набор вариантов страниц совпадает со стандартным шаблоном — тест переключается между ними без переназначения страниц.",
   "themes": [
     {
       "id": "light",
@@ -149,6 +148,21 @@
       "pageKind": "start",
       "layoutFile": "layouts/start.html",
       "placeholders": []
+    },
+    {
+      "key": "start.image-right",
+      "label": "Старт: изображение справа",
+      "kind": "start",
+      "pageKind": "start",
+      "layoutFile": "layouts/start.image-right.html",
+      "placeholders": [],
+      "settings": [
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение"
+        }
+      ]
     },
     {
       "key": "results.standard",
@@ -929,7 +943,6 @@
       "label": "Итог: результат",
       "kind": "summary",
       "pageKind": "content.summary",
-      "layoutFile": "layouts/summary.html",
       "placeholders": [
         {
           "key": "title",
@@ -1030,19 +1043,11 @@
     "section-results": "layouts/section-results.html",
     "section-intro": "layouts/section-intro.html",
     "system.blocked": "layouts/system.blocked.html",
-    "system.transition": "layouts/system.transition.html",
-    "layouts/content.text.html": "layouts/content.text.html",
-    "layouts/content.image-left.html": "layouts/content.image-left.html",
-    "layouts/content.image-right.html": "layouts/content.image-right.html",
-    "layouts/gallery.text.html": "layouts/gallery.text.html",
-    "layouts/gallery.image-left.html": "layouts/gallery.image-left.html",
-    "layouts/gallery.image-right.html": "layouts/gallery.image-right.html",
-    "layouts/summary.html": "layouts/summary.html"
+    "system.transition": "layouts/system.transition.html"
   },
   "assets": {
     "styles": [
-      "styles/theme.css",
-      "styles/base.css"
+      "styles/theme.css"
     ],
     "scripts": [
       "scripts/template.js"
@@ -1084,7 +1089,12 @@
     "routes": [
       {
         "route": "start",
-        "label": "Старт"
+        "label": "Стандартный"
+      },
+      {
+        "route": "start.image-right",
+        "templateKey": "start.image-right",
+        "label": "Изображение справа"
       },
       {
         "route": "content.router",

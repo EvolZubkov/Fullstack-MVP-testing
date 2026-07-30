@@ -39,25 +39,38 @@
   </style>
   <style id="tpl-styles">/* styles/theme.css */
 /*
- * RTK certification — design tokens (PRD-7 branding).
+ * RTK certification — design tokens + the standard scene layer (PRD-7 branding).
  *
- * TWO layers, by design:
- *   1. The TEMPLATE ships a full light + dark palette here. It follows the viewer's
+ * THREE layers, in cascade order:
+ *   1. The RTK PALETTE below: a full light + dark palette. It follows the viewer's
  *      SYSTEM theme (@media prefers-color-scheme) and an explicit override
  *      (:root[data-theme="light|dark"]) that always wins over the media query.
- *   2. The AUTHOR may still override any colour via design params — those are applied
- *      as inline CSS vars on the stage and win over this file. The params default to
- *      EMPTY (manifest `default: null`), so when the author sets nothing, this theme
- *      drives; when they set a colour, it overrides (in both light and dark).
+ *   2. The SCENE LAYER, copied VERBATIM from the standard template
+ *      (server/scorm/templates/default/styles/theme.css). It is the SAME layer both
+ *      hosts render with, so these screens cannot drift from the standard ones. The
+ *      standard's own token blocks are deliberately NOT copied — they would override
+ *      the RTK palette and the brand font.
+ *   3. The RTK DECORATIVE layer at the end: the brand line, the cover brand plate,
+ *      the orange list markers and the author-background scrim. Everything that makes
+ *      this template look like itself lives HERE, in CSS — the layouts stay
+ *      byte-identical to the standard ones (tests/template-layout-parity.test.ts).
  *
- * Colours are HSL COMPONENTS (bare triples, no hsl()) — base.css composes them as
- * hsl(var(--token)) so params and theme can both feed the same tokens.
+ * The AUTHOR may still override any colour via design params — those are applied as
+ * inline CSS vars and win over this file. The params default to EMPTY (manifest
+ * default: null), so when the author sets nothing, this theme drives.
+ *
+ * Colours are HSL COMPONENTS (bare triples, no hsl()) — composed as hsl(var(--token))
+ * so params and theme can both feed the same tokens.
  */
 
-/* ── LIGHT (default) ───────────────────────────────────────────────────────── */
-:root,
-:root[data-theme="light"] {
-  --frame: 240 5% 86%;              /* letterbox gutter */
+/* ── LIGHT (default) ───────────────────────────────────────────────────────────
+   The light palette is the BASE one, so it is declared on a BARE `:root` — never
+   `:root[data-theme="light"]`. The author's per-theme colours are printed as
+   `:root { … }` too (buildTemplateThemeCss) and land later in the cascade; giving
+   this block an attribute selector would out-specify them and the test's own palette
+   would never paint. Pinning light under a dark system is handled by the
+   `:not([data-theme="light"])` guard on the dark block below. */
+:root {
   --background: 240 4% 93%;         /* stage */
   --foreground: 240 7% 11%;
   --border: 260 5% 90%;
@@ -71,7 +84,6 @@
   --accent: 18 80% 96%;
   --destructive: 353 98% 41%;
   --success: 120 51% 38%;
-  --lock: 240 3% 55%;
   --font-sans: 'Rostelecom Basis', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
   --radius: 12px;
   --shadow: 0 2px 10px rgba(60, 40, 20, 0.10);
@@ -80,7 +92,6 @@
 /* ── DARK — the token overrides (system preference) ────────────────────────── */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --frame: 240 10% 4%;
     --background: 240 10% 10%;
     --foreground: 240 15% 92%;
     --border: 240 8% 24%;
@@ -94,14 +105,12 @@
     --accent: 15 40% 20%;
     --destructive: 353 75% 58%;
     --success: 120 40% 55%;
-    --lock: 240 6% 48%;
     --shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
   }
 }
 
 /* ── DARK — explicit override (viewer toggle), wins over the media query ───── */
 :root[data-theme="dark"] {
-  --frame: 240 10% 4%;
   --background: 240 10% 10%;
   --foreground: 240 15% 92%;
   --border: 240 8% 24%;
@@ -115,633 +124,775 @@
   --accent: 15 40% 20%;
   --destructive: 353 75% 58%;
   --success: 120 40% 55%;
-  --lock: 240 6% 48%;
   --shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
 }
 
-/* styles/base.css */
-/**
- * RTK certification template — component stylesheet.
- * Loaded by BOTH hosts (manifest assets.styles = theme.css + base.css).
- *
- * Model: a FIXED 16:9 stage (Storyline-style slides). shell.html letterboxes a
- * `.tb-stage` (container-type:size) and mounts screens into `#app` (.tb-pad).
- * Learner screens size their type with container units (cqh/cqw) so everything
- * scales with the stage, exactly like the approved wireframes
- * (docs/wireframes/rtk-template-wireframes.html).
- *
- * Tokens live in theme.css and are composed here via hsl(var(--token)) so design
- * params can override them. Class names that the RUNTIME emits (.option, .tb-pill,
- * .navigation, .router-topic-card*, .content-placeholder--*, .results-*, .matching-*,
- * .rank-*, .feedback-block) are RESTYLED here — the names must stay as the runtime
- * writes them; the appearance is RTK.
- */
+/* ── Layout foundation (was base.css) ────────────────────────────────
+   The scene fills the package window: html / body / .container / the #app mount
+   carry a definite height so `.tb-scene { height: 100% }` resolves. Without it the
+   scene collapses to its content and the footer rides up under empty space. */
+html, body { height: 100%; margin: 0; }
+body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
+.container { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.container > #app {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+}
+.container > #app > * { flex: 1 1 auto; min-height: 0; }
+/* …except the nav row the runtime appends next to the scene: it is chrome of a fixed
+   height. Under the rule above it grew a flex-basis and got SQUEEZED by ~4px, so the
+   package's footer sat lower than the web host's on the same template. */
+.container > #app > .tb-scene__foot { flex: none; }
+#toast-root { flex: none; }
 
-/* ===== Reset ===== */
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; }
-body {
-  font-family: var(--font-sans);
-  color: hsl(var(--foreground));
-  background: hsl(var(--frame));         /* letterbox gutter (theme-aware) */
-  -webkit-font-smoothing: antialiased;
-  line-height: 1.4;
-}
+/* =================================================================
+   SCENE LAYER (revision «Стандартный» on ui-kit)
+   A fixed header / scrolling body / fixed footer «scene». All values are
+   DS tokens (--ou-*) so the palette flows only through the design system +
+   the palette bridge — no colour literals. The scene root is `.ou` (theme
+   provider), so DS semantic tokens resolve inside.
+   ================================================================= */
 
-/* ===== Fixed 16:9 stage (letterbox) ===== */
-/* SCORM package only: the base index wraps the runtime-applied shell in `.container`
-   (absent from the preview/web/admin shells, so this never leaks there). Give it the
-   viewport height the letterboxed `.tb-frame` (min-height:100%) needs to fill + center. */
-.container { height: 100%; }
-.tb-frame {
-  min-height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: clamp(0px, 2vmin, 28px);
-}
-.tb-stage {
-  position: relative;
-  width: 100%;
-  max-width: calc(100dvh * 16 / 9);
-  aspect-ratio: 16 / 9;
-  container-type: size;
-  background: hsl(var(--background));
-  border: 1px solid hsl(var(--border));
-  border-radius: 14px;
-  overflow: hidden;
-  box-shadow: 0 8px 40px rgba(30, 24, 18, 0.16);
-}
-/* #app — the padded content area; screens + the runtime-appended nav live here. */
-.tb-pad {
-  position: absolute;
-  inset: 0;
-  padding: 6cqh 5.5cqw;
+/* ── Scene frame ────────────────────────────────────────────────── */
+.tb-scene {
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  overflow-x: hidden;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  font-family: var(--ou-font-family-base, var(--font-sans));
 }
-.tb-pad::-webkit-scrollbar { width: 8px; }
-.tb-pad::-webkit-scrollbar-thumb { background: hsl(var(--muted)); border-radius: 4px; }
-/* Direct screen wraps fill the pad so flex-grow / bottom-anchored nav work. */
-.tb-pad > * { width: 100%; }
-.tb-pad > .layout-question-wrap,
-.tb-pad > .cover,
-.tb-pad > .centered,
-.tb-pad > .review-page,
-.tb-pad > .content-page,
-.tb-pad > .slide,
-.tb-pad > .section-intro-page,
-.tb-pad > .results-page,
-.tb-pad > .transition-page,
-.tb-pad > .layout-content-wrap { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
-
-/* ===== Brand / logo ===== */
-.tb-brand { display: flex; align-items: center; gap: 2cqw; }
-.tb-brand__logo { max-height: 6.4cqh; max-width: 34cqw; width: auto; object-fit: contain; }
-.brand-word { font-weight: 800; color: hsl(var(--primary)); font-size: 3.4cqh; letter-spacing: .02em; }
-
-/* ===== Shared primitives ===== */
-.eyebrow {
-  font-weight: 700; font-size: 2.15cqh; letter-spacing: .16em;
-  text-transform: uppercase; color: hsl(var(--primary));
+.tb-scene__header {
+  flex: none;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-3);
+  /* Bottom padding leaves an 8px gap between the header content (question map /
+     titles) and the progress bar. The bar is 3px tall and hangs 1px past the bottom
+     edge, so it eats 2px of this padding — hence 8 + 2, which makes the VISIBLE gap
+     exactly 8px. */
+  padding: var(--ou-space-4) 24px calc(var(--ou-space-2) + 2px);
+  /* Every screen that shows a header gives it the SAME minimum height, so the field
+     below starts on one line and the header does not jump between slides: the logo
+     tile (44px) plus the vertical padding. Screens with a question map simply grow
+     past it. */
+  min-height: calc(44px + var(--ou-space-4) + var(--ou-space-2) + 2px);
+  box-sizing: border-box;
+  background: var(--ou-bg-elevated);
+  border-bottom: 1px solid var(--ou-border-soft);
 }
-.tb-h1 { font-size: 6.6cqh; line-height: 1.04; font-weight: 800; letter-spacing: -.01em; margin: 0; }
-.tb-h2 { font-size: 5cqh; line-height: 1.08; font-weight: 800; margin: 0; }
-.tb-desc { font-size: 2.7cqh; line-height: 1.42; color: hsl(var(--muted-foreground)); margin: 0; }
+.tb-scene__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+}
+/* A header with no progress bar needs its own bottom padding (the bar normally
+   sits flush on the bottom edge). */
+.tb-scene__header--flush { padding-bottom: var(--ou-space-4); }
+/* Content field: fills 3/4 of the screen width and ADAPTS to it (no fixed cap), so a
+   wide stage no longer leaves a large empty band on the right. `min-height:100%` (not
+   `height`) fills the body when content is short (header top / footer bottom, content
+   at the top) but lets the column GROW past the body when content is long — so the
+   body (`overflow:auto`) scrolls instead of clipping. Full width on narrow viewports. */
+.tb-scene__col {
+  width: 75%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-4);
+}
+@media (max-width: 900px) {
+  .tb-scene__col { width: 100%; }
+}
+/* Footer action panel — shared look for the host-rendered nav row. Vertical padding
+   is deliberately tight (8px): the panel is chrome, and every pixel it takes comes
+   off the scrolling body, which is where long questions run out of room. */
+.tb-scene__foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-3);
+  padding: var(--ou-space-2) 24px;
+  background: var(--ou-bg-elevated);
+  border-top: 1px solid var(--ou-border-soft);
+}
+.tb-scene__foot-spacer { margin-left: auto; }
 
-.btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 1.4cqw;
-  background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
-  font-family: inherit; font-size: 2.7cqh; font-weight: 650; line-height: 1;
-  border: 1.5px solid hsl(var(--primary)); border-radius: 1.5cqh;
-  padding: 1.9cqh 4.2cqw; cursor: pointer; letter-spacing: .01em;
-  transition: background .15s, box-shadow .15s, transform .1s;
+/* ── Header pieces ──────────────────────────────────────────────── */
+.tb-scene__brandrow { display: flex; align-items: flex-start; gap: var(--ou-space-4); }
+/* Content/system headers align the brand row on the centre line (no timers to top-align to). */
+.tb-scene__brandrow--center { align-items: center; }
+.tb-scene__logo {
+  width: 44px; height: 44px; flex: none;
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-accent-soft);
+  color: var(--ou-accent-default);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; letter-spacing: 0.02em;
+  overflow: hidden;
+}
+.tb-scene__logo img { width: 100%; height: 100%; object-fit: contain; }
+/* Logo placeholder: the slot stays in the top-left even without a branding image,
+   showing a subtle picture icon so the logo's place is clear. */
+.tb-scene__logo-ph { color: var(--ou-accent-default); opacity: 0.75; }
+.tb-scene__titles { min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
+.tb-scene__title { margin: 0; font: var(--ou-text-display-s); color: var(--ou-fg-default); letter-spacing: -0.01em; text-wrap: pretty; }
+.tb-scene__subtitle { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-scene__timers { margin-left: auto; display: flex; align-items: flex-start; gap: var(--ou-space-6); flex: none; }
+
+/* Progress bar pinned to the header's bottom edge. */
+.tb-scene__progress {
+  position: absolute; left: 0; right: 0; bottom: -1px; height: 3px;
+  background: var(--ou-bg-surface-3);
+}
+.tb-scene__progress-fill {
+  height: 100%; background: var(--ou-accent-default);
+  border-radius: 0 999px 999px 0;
+  transition: width 240ms var(--ou-easing-standard);
+}
+
+/* Question-map (ou-quiz) statuses buildQuestionProgress emits that DS does not
+   ship 1:1 — mapped here so the shared context drives the DS component. */
+.ou-quiz__dot.is-skipped { color: var(--ou-warning-on-soft); background: var(--ou-warning-soft); border-color: var(--ou-warning-default); }
+.ou-quiz__dot.is-unanswered { background: transparent; }
+/* Not-yet-issued / read-only (strict mode) pills are `disabled` — they are not jump
+   targets, so drop the DS pointer cursor (the base .ou-quiz__dot sets `cursor:pointer`
+   on every dot, disabled or not). */
+.ou-quiz__dot:disabled { cursor: default; }
+
+/* The header is a size CONTAINER so the question map adapts to the SCENE width — not
+   the viewport. This works identically in the SCORM iframe and the web Shadow DOM,
+   where a viewport media query would measure the wrong box. */
+.tb-scene__header { container: tbhead / inline-size; }
+
+/* Question map (wireframe): ONE row — dots (indicator) + legend + counters. As the
+   header narrows it degrades in ORDERED steps (@container below): (1) the legend drops
+   to a line under the indicator, (2) «пропущено» drops to its own line, (3) the
+   indicator cells wrap into rows, (4) «отвечено» drops too. Each dropped element gets
+   `flex-basis:100%` (a full row of its own) and an `order` so the stack reads
+   dots → legend → отвечено → пропущено. */
+/* `padding-bottom: 0` on purpose: the DS component ships a 16px bottom padding of its
+   own, which stacked on the header's own padding and pushed the pills 24px above the
+   progress bar instead of the 8px the header sets. The gap belongs to the header. */
+.tb-scene__map { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--ou-space-2) var(--ou-space-4); padding-bottom: 0; }
+.tb-scene__map .ou-quiz__dots { flex: 0 0 auto; }
+.tb-scene__map .ou-quiz__legend { margin-top: 0; align-items: center; order: 1; }
+/* Right-aligned so that when a counter wraps to its own full-width row it stacks
+   UNDER «отвечено» (which is pushed right), not off at the left edge. */
+.tb-scene__mapcount { flex: none; text-align: right; font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+.tb-scene__mapcount strong { color: var(--ou-fg-default); font-weight: 600; }
+.tb-scene__mapcount--answered { margin-left: auto; order: 2; }
+.tb-scene__mapcount--skipped { order: 3; }
+.tb-scene__mapcount--skipped::before { content: "· "; }
+
+/* Step 1 — legend under the indicator. */
+@container tbhead (max-width: 1000px) {
+  .tb-scene__map .ou-quiz__legend { flex-basis: 100%; order: 10; }
+}
+/* Step 2 — «пропущено» to its own line (the middot separator is then redundant). */
+@container tbhead (max-width: 820px) {
+  .tb-scene__mapcount--skipped { flex-basis: 100%; order: 12; }
+  .tb-scene__mapcount--skipped::before { content: none; }
+}
+/* Step 3 — indicator cells wrap into multiple rows. `flex: 1 1 0` (a ZERO basis) is
+   what keeps «отвечено» on the dots' row: with an auto basis the flex line-break would
+   push «отвечено» down first (its natural single-row width forces a break) — instead the
+   dots box takes a 0 base, grows into the free space and wraps its cells internally, so
+   the counter stays beside the (now multi-row) indicator until step 4. */
+@container tbhead (max-width: 640px) {
+  .tb-scene__map .ou-quiz__dots { flex: 1 1 0; min-width: 0; }
+}
+/* Step 4 — «отвечено» to its own line as well. */
+@container tbhead (max-width: 480px) {
+  .tb-scene__mapcount--answered { flex-basis: 100%; order: 11; margin-left: 0; }
+}
+/* Legend swatches (DS ships the base dot only). */
+.ou-quiz__legend-dot.is-answered { background: var(--ou-accent-default); box-shadow: none; }
+.ou-quiz__legend-dot.is-current { background: transparent; box-shadow: inset 0 0 0 2px var(--ou-accent-default); }
+.ou-quiz__legend-dot.is-flagged { background: var(--ou-warning-default); box-shadow: none; }
+
+/* ── Document scenes (start / intro / results / content) ────────── */
+/* A comfortable reading column and the shared type scale these screens use. */
+.tb-scene__col--doc { gap: var(--ou-space-5); }
+.tb-scene__hero {
+  margin: 0; font-weight: 600; line-height: 1.2; letter-spacing: -0.015em;
+  color: var(--ou-fg-default); text-wrap: pretty;
+  font-size: var(--tb-question-fs, 32px);
+}
+.tb-scene__lead { font: var(--ou-text-body-l); color: var(--ou-fg-soft); text-wrap: pretty; }
+.tb-scene__subhead { margin: 0; font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
+.tb-scene__note { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
+.tb-scene__headtag { margin-left: auto; align-self: center; flex: none; }
+/* The chip and the timers both used to push themselves right with `margin-left:auto`,
+   and TWO auto margins SHARE the free space — which parked the chip in the middle of
+   the header instead of at its edge. When a chip is present it is the one that takes
+   the free space, and the timers just follow it. */
+.tb-scene__headtag ~ .tb-scene__timers { margin-left: var(--ou-space-6); }
+
+/* ── Title / cover slide (start) — a DISTINCT layout, NOT the shared header.
+   The logo floats top-left, the test title dominates the field, its description
+   sits under it and the facts strip below. Two variants toggle on
+   `design.startImageUrl` (`.tb-cover--media`): illustration filling the right. ── */
+.tb-scene--cover .tb-scene__body { padding: var(--ou-space-8) var(--ou-space-9); }
+.tb-cover { min-height: 100%; display: grid; grid-template-columns: 1fr; gap: var(--ou-space-9); align-items: stretch; }
+.tb-cover--media { grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); }
+.tb-cover__main { min-width: 0; display: flex; flex-direction: column; }
+.tb-cover__logo { flex: none; margin-bottom: var(--ou-space-8); }
+/* Content rests in the optical centre of the field below the logo. */
+.tb-cover__content { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: var(--ou-space-6); }
+.tb-cover__head { display: flex; flex-direction: column; gap: var(--ou-space-3); }
+.tb-cover__eyebrow { display: flex; align-items: center; gap: var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+/* Empty eyebrow (no attempt cap ⇒ no attempt line, not exhausted) must not take the
+   head's row-gap. Mirrors the standard template; `:empty` would not match because
+   the layout leaves whitespace behind. */
+.tb-cover__eyebrow:not(:has(*)) { display: none; }
+.tb-cover__title { margin: 0; font-weight: 700; font-size: 44px; line-height: 1.08; letter-spacing: -0.02em; color: var(--ou-fg-default); text-wrap: pretty; }
+.tb-cover__desc { margin: 0; font: var(--ou-text-body-l); color: var(--ou-fg-soft); max-width: 60ch; text-wrap: pretty; }
+.tb-cover__note { display: flex; flex-direction: column; gap: var(--ou-space-1); }
+.tb-cover__media { min-width: 0; min-height: 0; border-radius: var(--ou-radius-l); overflow: hidden; background: var(--ou-bg-surface-2); }
+.tb-cover__media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Placeholder shown by the image-right start VARIANT when no start image is set —
+   keeps the right media panel visible so the layout reads as «image right». */
+.tb-cover__media-ph { width: 100%; height: 100%; min-height: 220px; display: flex; align-items: center; justify-content: center; color: var(--ou-fg-muted); opacity: 0.55; }
+@media (max-width: 900px) { .tb-cover--media { grid-template-columns: 1fr; } .tb-cover__media { min-height: 220px; } }
+
+/* Facts strip — big number + small label, spaced (start screen). */
+.tb-facts { display: flex; flex-wrap: wrap; gap: var(--ou-space-9); }
+.tb-facts--center { justify-content: center; }
+.tb-facts__num { font: var(--ou-text-display-s); color: var(--ou-fg-default); line-height: 1.1; }
+.tb-facts__lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); }
+
+/* Centred column (section intro / blocked / short system screens): balanced,
+   reading measure, vertically centred — no unjustified vertical stretching. */
+.tb-scene__col--center {
+  max-width: 680px; margin: 0 auto; height: 100%;
+  align-items: center; justify-content: center; text-align: center;
+  gap: var(--ou-space-5);
+}
+.tb-scene__col--narrow { max-width: 640px; }
+.tb-scene__hero--s { font-size: 28px; }
+/* DS ring at a fixed diameter (the component does not size itself). */
+.tb-ring { width: 140px; height: 140px; display: inline-flex; align-items: center; justify-content: center; position: relative; }
+.tb-ring .ou-ring__track { stroke: var(--ou-bg-surface-3); }
+.tb-eyebrow { font: var(--ou-text-body-s); color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+/* Meta dots — inline facts with an accent dot (section intro). */
+.tb-meta-dots { display: flex; gap: var(--ou-space-5); flex-wrap: wrap; justify-content: center; }
+.tb-meta-dots__item { display: inline-flex; align-items: center; gap: var(--ou-space-2); font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
+.tb-meta-dots__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ou-accent-default); flex: none; }
+/* Bordered info card (instruction / note block). */
+.tb-card {
+  width: 100%; text-align: left;
+  border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-l);
+  background: var(--ou-bg-surface-2); padding: var(--ou-space-5);
+  display: flex; flex-direction: column; gap: var(--ou-space-2);
+}
+.tb-card__head { font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
+.tb-card__body { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
+
+/* ── Question body ──────────────────────────────────────────────── */
+.tb-scene__meta { display: flex; align-items: center; gap: var(--ou-space-3); font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+.tb-scene__q { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+.tb-scene__qtitle {
+  margin: 0; font-weight: 600; line-height: 1.25; letter-spacing: -0.015em;
+  color: var(--ou-fg-default); text-wrap: pretty;
+  font-size: var(--tb-question-fs, 30px);
+}
+.tb-scene__qhint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* Media + answers: stacked by default; side-by-side (media 5 / answers 7) when
+   the media slot actually has content. */
+/* Media + answers: fill the column when content is short (flex-grow), but keep the
+   content's natural height when long (flex-basis:auto, no shrink) so it grows the
+   column and the body scrolls rather than clipping the last options. */
+.tb-qbody { flex: 1 0 auto; display: grid; grid-template-columns: 1fr; gap: var(--ou-space-5); }
+.tb-qbody:has([data-slot="question-media"]:not(:empty)) {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  align-items: start;
+}
+.tb-qbody__media:empty { display: none; }
+.tb-qbody__media img,
+.tb-qbody__media video { width: 100%; border-radius: var(--ou-radius-m); }
+.tb-qbody__answers { min-height: 0; display: flex; flex-direction: column; }
+/* Verdict banner sits ABOVE the options — keep it off the first option (only when
+   filled, so the empty slot adds no phantom gap). */
+[data-slot="question-feedback"]:not(:empty) { margin-bottom: var(--ou-space-5); }
+/* Answer-check verdict banner (feedback-block): center the verdict line with its icon
+   and tone the icon by result. The base .ou-banner top-aligns the icon and leaves it
+   muted grey (colour is toned only by the --subtle/--outline/--bar style variants,
+   which this banner doesn't use), so both are set here. */
+.tb-scene .feedback-block { align-items: center; }
+.tb-scene .feedback-block .ou-banner__ico { margin-top: 0; }
+.tb-scene .feedback-block.ou-banner--success .ou-banner__ico { color: var(--ou-success-default); }
+.tb-scene .feedback-block.ou-banner--warning .ou-banner__ico { color: var(--ou-warning-default); }
+.tb-scene .feedback-block.ou-banner--error .ou-banner__ico { color: var(--ou-error-default); }
+
+/* ── Answers: comfortable, top-aligned; each option card grows to fit its text ── */
+.tb-scene .ou-radio-group,
+.tb-scene .ou-rank { width: 100%; }
+.tb-scene .ou-radio-group__items { gap: var(--ou-space-2); }
+.tb-scene .ou-radio-group--vertical .ou-radio-group__items { flex-direction: column; }
+.tb-scene .ou-radio-card {
+  min-height: 52px; align-items: center;
+  gap: var(--ou-space-4);
+  padding: var(--ou-space-3) var(--ou-space-4);
+  box-sizing: border-box;
+}
+/* Option text is length-adaptive: `--tb-answer-fs` (from optionFont: 20px for short
+   text down to 14px for long) drives the size, so long options shrink toward the
+   floor before the card grows taller and the body scrolls. Weight per wireframe. */
+.tb-scene .ou-radio-card__title,
+.tb-scene .ou-rank__text,
+.tb-scene .ou-match__card-title {
+  font-size: var(--tb-answer-fs, 20px);
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+/* Multiple: the tick is class-driven (no native input) — mirror DS :checked. */
+.ou-radio-card.is-on .ou-check__box {
+  background: var(--ou-accent-default);
+  border-color: var(--ou-accent-default);
+}
+.ou-radio-card.is-on .ou-check__box svg { opacity: 1; }
+
+/* Review highlight — a per-option traffic light. `correct-answer`/`correct-skip`
+   are green (the learner handled the option right), `missed-answer` yellow (a correct
+   option they did not pick — multiple choice only), `incorrect-answer` red. Painted
+   per DS component across choice / ranking / matching. */
+.ou-radio-card.correct-answer,
+.ou-radio-card.correct-skip,
+.ou-rank__item.correct-answer,
+.ou-match__row.correct-answer .ou-match__card--drag {
+  border-color: var(--ou-success-default);
+  background: var(--ou-success-soft);
+}
+.ou-radio-card.missed-answer {
+  border-color: var(--ou-warning-default);
+  background: var(--ou-warning-soft);
+}
+.ou-radio-card.incorrect-answer,
+.ou-rank__item.incorrect-answer,
+.ou-match__row.incorrect-answer .ou-match__card--drag {
+  border-color: var(--ou-error-default);
+  background: var(--ou-error-soft);
+}
+/* Trailing verdict mark (check / cross) pinned to the card's right edge; colour
+   follows the card's review class so the icon reads as its verdict. */
+.ou-radio-card__mark { margin-left: auto; flex: none; display: inline-flex; align-items: center; }
+.ou-radio-card.correct-answer .ou-radio-card__mark { color: var(--ou-success-default); }
+/* Missed correct option: the CARD stays yellow (warning), but its mark is a RED cross —
+   the learner failed to pick a correct answer, so the icon reads as a mistake, not a tick. */
+.ou-radio-card.missed-answer .ou-radio-card__mark { color: var(--ou-error-default); }
+.ou-radio-card.incorrect-answer .ou-radio-card__mark { color: var(--ou-error-default); }
+
+/* ── Ranking scene ──────────────────────────────────────────────── */
+.tb-scene .ou-rank { gap: var(--ou-space-2); }
+.tb-scene .ou-rank__item {
+  min-height: 52px; box-sizing: border-box; align-items: center;
+  gap: var(--ou-space-4);
+  padding: var(--ou-space-3) var(--ou-space-4);
+}
+
+/* ── Matching scene ─────────────────────────────────────────────── */
+/* Column gap between the two matching sides — 24px (DS default is 56px wide). */
+.tb-scene .ou-match { width: 100%; row-gap: var(--ou-space-2); --ou-match-gap-w: var(--ou-space-6); }
+/* The draggable answer chips no longer carry the native `draggable` flag (it broke
+   real-mouse dragging), so restore the grab affordance explicitly. */
+.tb-scene .ou-match__card--drag:not(.ou-match__card--empty),
+.tb-scene .ou-rank__item { cursor: grab; }
+.tb-scene .ou-match__card--drag.dragging,
+.tb-scene .ou-rank__item.dragging { cursor: grabbing; }
+/* Drop-target feedback comes from the DS itself: the pointer engine adds
+   `.ou-match__row.is-target`, which lights the LEFT prompt (`.ou-match__row.is-target
+   .ou-match__card--fixed` in university-rt.css). No extra rule needed here. */
+/* After a pair connects, the DS tints only the RIGHT card + the arrow. Tint the LEFT
+   prompt too so the whole matched row reads as connected (review states keep their own
+   green/red tint, so exclude them). */
+.tb-scene .ou-match__row.is-connected:not(.correct-answer):not(.incorrect-answer) .ou-match__card--fixed {
+  border-color: var(--ou-accent-default);
+  background: var(--ou-accent-soft);
+  color: var(--ou-accent-on-soft);
+}
+.ou-match__placeholder { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* ── Adaptive level transition ──────────────────────────────────── */
+.tb-transition-icon {
+  width: 80px; height: 80px; flex: none; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.tb-transition-icon.is-up { background: var(--ou-success-soft); color: var(--ou-success-default); }
+.tb-transition-icon.is-down { background: var(--ou-warning-soft); color: var(--ou-warning-default); }
+.tb-transition-icon.is-complete { background: var(--ou-accent-soft); color: var(--ou-accent-default); }
+
+/* ── Blocked / cooldown wall ────────────────────────────────────── */
+.tb-blocked-icon {
+  width: 72px; height: 72px; flex: none; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--ou-warning-soft); color: var(--ou-warning-default);
+}
+.tb-blocked-branch { display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: center; }
+/* The runtime shows ONE branch (unhides it); `hidden` must beat the flex display. */
+.tb-blocked-branch[hidden] { display: none; }
+
+/* ── Results screen ─────────────────────────────────────────────── */
+/* Fills the body width (like the router hub / content pages, .tb-content) — no fixed
+   cap, so a wide stage no longer leaves an empty band on the right and the per-topic
+   grid spreads to more columns. */
+.tb-scene__col--wide { width: 100%; }
+/* Score strip: ring + facts side by side. */
+.tb-score-strip { display: flex; align-items: center; gap: var(--ou-space-8); flex-wrap: wrap; }
+/* Per-topic cards — responsive grid. */
+.tb-topics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--ou-space-4); }
+.tb-topic-card .ou-card__body { display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: flex-start; }
+.tb-topic-card__name { font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
+.tb-topic-card__bar { width: 100%; margin-top: var(--ou-space-1); }
+.tb-topic-card__bar.is-pass .ou-progress__fill { background: var(--ou-success-default); }
+.tb-topic-card__bar.is-fail .ou-progress__fill { background: var(--ou-error-default); }
+.tb-topic-card__req { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-stat-rows { display: flex; flex-direction: column; width: 100%; }
+.tb-stat-val { font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+/* Per-topic feedback block — feedback text + recommendation chips, divided off. */
+.tb-topic-card__fb {
+  display: flex; flex-direction: column; gap: var(--ou-space-2); width: 100%;
+  margin-top: var(--ou-space-2); padding-top: var(--ou-space-3);
+  border-top: 1px solid var(--ou-border-soft);
+}
+.tb-topic-card__fb-text { font: var(--ou-text-body-s); color: var(--ou-fg-soft); }
+.tb-recs { display: flex; flex-wrap: wrap; gap: var(--ou-space-2); }
+.tb-rec {
+  display: inline-flex; align-items: center; gap: var(--ou-space-2);
+  padding: var(--ou-space-1) var(--ou-space-3);
+  border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-pill);
+  background: var(--ou-bg-elevated); font: var(--ou-text-body-s); color: var(--ou-fg-default);
   text-decoration: none;
 }
-.btn:hover { background: hsl(15 100% 40%); box-shadow: 0 1.4cqh 3cqh rgba(227, 58, 0, .22); }
-.btn:active { transform: translateY(.4cqh); }
-.btn:disabled, .btn[disabled], .btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; box-shadow: none; }
-.btn--ghost, .btn--outline, .btn-outline {
-  background: transparent; color: hsl(var(--foreground)); border-color: hsl(var(--border));
-}
-.btn--ghost:hover, .btn--outline:hover, .btn-outline:hover { background: hsl(var(--accent)); border-color: hsl(var(--primary)); box-shadow: none; }
+a.tb-rec:hover { border-color: var(--ou-accent-default); }
 
-.chip {
-  display: inline-flex; align-items: center; gap: 1cqw; font-size: 2.15cqh;
-  background: hsl(var(--card)); border: 1px solid hsl(var(--border));
-  border-radius: 5cqh; padding: 1cqh 2.4cqw; color: hsl(var(--foreground)); font-weight: 550;
-}
-.chip b { color: hsl(var(--primary)); }
-.imgph {
-  background: repeating-linear-gradient(45deg, hsl(var(--muted)) 0 10px, hsl(240 5% 92%) 10px 20px);
-  border: 1px solid hsl(var(--border)); border-radius: 2cqh;
-  display: grid; place-items: center; color: hsl(var(--muted-foreground)); font-size: 2.2cqh;
-}
-.badge {
-  font-size: 2.5cqh; font-weight: 700; border-radius: 5cqh; padding: 1.1cqh 3cqw;
-  display: inline-flex; align-items: center; gap: 1.2cqw;
-}
-.badge.pass, .badge.is-pass { background: hsl(var(--success) / .14); color: hsl(var(--success)); border: 1px solid hsl(var(--success) / .5); }
-.badge.fail, .badge.is-fail { background: hsl(var(--destructive) / .10); color: hsl(var(--destructive)); border: 1px solid hsl(var(--destructive) / .5); }
-
-/* ===== START — cover ===== */
-.cover { justify-content: center; }
-.cover-grid {
-  flex: 1; display: grid; grid-template-columns: 1.05fr .95fr; gap: 5cqw;
-  align-items: center; min-height: 0;
-}
-.cover-col { display: flex; flex-direction: column; gap: 2.8cqh; align-items: flex-start; }
-.cover-eyebrow { font-weight: 700; font-size: 2.3cqh; letter-spacing: .14em; text-transform: uppercase; color: hsl(var(--muted-foreground)); }
-.cover-title { font-size: 8cqh; line-height: 1.02; font-weight: 800; letter-spacing: -.015em; margin: 0; color: hsl(var(--foreground)); }
-.cover-desc { font-size: 2.9cqh; line-height: 1.4; color: hsl(var(--muted-foreground)); max-width: 44cqw; }
-.cover-actions { display: flex; flex-direction: column; gap: 1.6cqh; align-items: flex-start; margin-top: 1cqh; }
-.cover-note { font-size: 2.05cqh; color: hsl(var(--destructive)); font-weight: 600; }
-/* Right column — decorative brand panel (no start-image data field exists). */
-/* Заливка ведётся от --primary: до PRD-23 градиент был прибит к фирменному
-   оранжевому, и стоило автору сменить цвет кнопок, как обложка расходилась с
-   остальным экраном. Оттенок и насыщенность берутся из токена, а объём даёт
-   разная светлота — так плашка следует за палитрой и за темой. */
-.cover-brand {
-  align-self: stretch; min-height: 74cqh; border-radius: 3cqh;
-  background:
-    radial-gradient(120% 120% at 80% 15%,
-      hsl(var(--primary) / .95),
-      hsl(var(--primary)) 55%,
-      color-mix(in srgb, hsl(var(--primary)) 70%, #000) 100%);
-  position: relative; overflow: hidden; display: grid; place-items: center;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, hsl(var(--primary)) 60%, #000);
-}
-.cover-brand__mark { font-size: 12cqh; font-weight: 900; color: #fff; opacity: .96; letter-spacing: -.02em; }
-.cover-brand__ring { position: absolute; width: 46cqh; aspect-ratio: 1; border-radius: 50%; border: 2.4cqh solid rgba(255,255,255,.16); right: -12cqh; bottom: -14cqh; }
-.cover-brand__logo { max-height: 9cqh; max-width: 60%; object-fit: contain; filter: brightness(0) invert(1); }
-
-/* Start-screen state cards (cooldown / prior / resume) — compact, on the cover. */
-.start-state { background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 1.8cqh; padding: 2cqh 2.6cqw; display: flex; flex-direction: column; gap: 1cqh; max-width: 52cqw; }
-.start-state__title { font-size: 2.5cqh; font-weight: 700; }
-.start-state__sub { font-size: 2.1cqh; color: hsl(var(--muted-foreground)); }
-.start-state__row { font-size: 2.15cqh; }
-.start-state__row strong { font-weight: 700; }
-.prior-fail { color: hsl(var(--destructive)); font-weight: 700; }
-.start-state .btn { font-size: 2.3cqh; padding: 1.3cqh 3cqw; }
-.prior-actions { display: flex; gap: 1.4cqw; flex-wrap: wrap; margin-top: .6cqh; }
-
-/* ===== SECTION-INTRO / centered system screens ===== */
-.centered { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.6cqh; text-align: center; min-height: 0; }
-.centered .tb-desc { max-width: 62cqw; }
-.section-metrics { display: flex; gap: 2cqw; flex-wrap: wrap; justify-content: center; }
-.warn-line { font-size: 2.5cqh; line-height: 1.35; color: hsl(var(--primary)); font-weight: 650; max-width: 62cqw; }
-.warn-line b { font-weight: 800; }
-.si-title { font-size: 5cqh; line-height: 1.05; font-weight: 800; margin: 0; }
-.si-instruction { text-align: left; background: hsl(var(--muted) / .5); border: 1px solid hsl(var(--border)); border-radius: 1.6cqh; padding: 1.4cqh 2.2cqw; font-size: 2.2cqh; line-height: 1.4; }
-.si-instruction__head { font-size: 1.9cqh; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: hsl(var(--muted-foreground)); margin-bottom: .6cqh; }
-/* Section-intro reskinned to the original: left-aligned, two info panels + «Важно!». */
-.section-intro-page { gap: 1.4cqh; }
-/* Section-intro can be content-dense (description + panels + instruction + important).
-   Override the shared fixed-fill (flex:1 clamps height → content spills over the nav):
-   grow to at least the stage, then grow further + let the pad scroll when taller. */
-.tb-pad > .section-intro-page { flex: 0 0 auto; min-height: 100%; }
-.si-head { flex: 0 0 auto; display: flex; flex-direction: column; gap: 1cqh; }
-/* Below the title: text column (left) + optional author illustration (right).
-   No illustration → the content column simply fills the row (flex handles it). */
-.si-main { flex: 0 0 auto; display: flex; gap: 4cqw; align-items: flex-start; }
-.si-content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1.6cqh; }
-.si-illustration { flex: 0 0 36%; align-self: stretch; display: flex; align-items: center; justify-content: center; min-width: 0; }
-.si-illustration img { max-width: 100%; max-height: 46cqh; object-fit: contain; }
-/* Instruction + «Важно!» span the full width BELOW the text/illustration row (mirrors
-   the source, and keeps the whole screen on one fixed-stage view). */
-.si-notes { flex: 0 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(38cqw, 1fr)); gap: 1.4cqh 2.4cqw; align-items: start; }
-.si-desc { font-size: 2.45cqh; line-height: 1.45; color: hsl(var(--muted-foreground)); max-width: 76cqw; margin: 0; white-space: pre-line; }
-.si-panels { display: flex; gap: 2.4cqw; flex-wrap: wrap; margin: 0; }
-.si-panel { flex: 1 1 0; min-width: 0; background: hsl(var(--muted) / .5); border: 1px solid hsl(var(--border)); border-radius: 2cqh; padding: 2cqh 2.4cqw; }
-.si-panel__big { font-size: 3.7cqh; font-weight: 800; color: hsl(var(--primary)); line-height: 1; }
-.si-panel__sub { font-size: 2.05cqh; color: hsl(var(--muted-foreground)); margin-top: .6cqh; line-height: 1.38; }
-.si-important__head { font-size: 2.4cqh; font-weight: 800; color: hsl(var(--primary)); margin-bottom: .5cqh; }
-.si-important__body { font-size: 2.2cqh; line-height: 1.4; color: hsl(var(--foreground)); margin: 0; }
-
-/* ===== QUESTION ===== */
-.layout-question-wrap { gap: 0; }
-/* Three-part top bar: section (left) · progress count (center) · question counter +
-   timer (right). Inset 4px from the stage top/sides (не впритык к границе). */
-.qbar {
-  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 2cqw;
-  background: hsl(var(--card)); border-bottom: 1px solid hsl(var(--border));
-  margin: calc(-6cqh + 4px) calc(-5.5cqw + 4px) 0; padding: 2.4cqh 5.5cqw; flex: 0 0 auto;
-}
-.qbar__l { display: flex; align-items: center; gap: 2.4cqw; justify-self: start; min-width: 0; }
-.qbar__r { display: flex; align-items: center; gap: 2.4cqw; justify-self: end; }
-.qbar__c { justify-self: center; min-width: 0; }
-.qbar__logo { max-height: 4.4cqh; max-width: 22cqw; object-fit: contain; }
-.qbar__brand { font-weight: 800; color: hsl(var(--primary)); font-size: 2.8cqh; }
-.qbar__sec { font-size: 2.2cqh; font-weight: 700; color: hsl(var(--foreground)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.qbar__count { font-size: 1.95cqh; font-weight: 650; color: hsl(var(--foreground)); white-space: nowrap; }
-.q-timer {
-  display: inline-flex; align-items: center; gap: 1cqw;
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-  font-size: 2.4cqh; font-weight: 700; letter-spacing: .02em;
-  color: hsl(var(--primary-foreground));
-  background: hsl(var(--primary)); border: none;
-  border-radius: 1.1cqh; padding: .9cqh 2.2cqw;
-}
-.q-timer::before {
-  content: ""; flex: 0 0 auto; width: 2.4cqh; height: 2.4cqh;
-  background: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='white'%20stroke-width='2.2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Ccircle%20cx='12'%20cy='12'%20r='9'/%3E%3Cpath%20d='M12%207v5l3%202'/%3E%3C/svg%3E") center/contain no-repeat;
-}
-.q-timer--hidden { display: none; }
-/* Low-time urgency: switch the chip BACKGROUND to red (white digits stay readable —
-   unlike red text on the orange chip). The !important overrides the runtime's inline
-   red text set for the default template. */
-.q-timer--urgent { background: hsl(var(--destructive)); color: hsl(var(--primary-foreground)) !important; }
-
-/* the question body area (runtime fills the 4 slots inside .question-card).
-   Scrolls INTERNALLY when the prompt + options exceed the fixed stage, so the qbar +
-   pills stay pinned at the top and the runtime-appended nav (submit) stays at the
-   bottom instead of being overlapped by long content. */
-.question-card { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; padding: 4cqh 0 1cqh; }
-/* Scroll is turned on by the runtime (fitQuestionText adds --scroll) ONLY when the body
-   overflows even at the smallest text-fit step. Off otherwise so the debug «Эталон»
-   markers (drawn in a left gutter OUTSIDE the option) aren't clipped by overflow. */
-.question-card--scroll { overflow-y: auto; overflow-x: hidden; }
-.question-card--scroll::-webkit-scrollbar { width: 8px; }
-.question-card--scroll::-webkit-scrollbar-thumb { background: hsl(var(--muted)); border-radius: 4px; }
-.question-meta { font-size: 2cqh; font-weight: 600; color: hsl(var(--muted-foreground)); margin-bottom: 1cqh; }
-/* --q-fit: stepped text-fit multiplier the runtime lowers (1 → ~0.72) when the prompt +
-   options overflow the fixed stage, so content shrinks to fit BEFORE scrolling. */
-.question-text { font-size: calc(3.3cqh * var(--q-fit, 1)); line-height: 1.3; font-weight: 650; color: hsl(var(--foreground)); margin-bottom: calc(3cqh * var(--q-fit, 1)); }
-.question-hint { font-size: calc(2.15cqh * var(--q-fit, 1)); color: hsl(var(--muted-foreground)); margin: calc(-2cqh * var(--q-fit, 1)) 0 calc(2.4cqh * var(--q-fit, 1)); }
-[data-slot="question-interaction"], #question-input { display: block; }
-
-/* options — runtime emits .option with a real <input> */
-.option {
-  display: flex; align-items: center; gap: 2.4cqw;
-  background: hsl(var(--card)); border: 1px solid hsl(var(--border));
-  border-radius: 1.5cqh; padding: calc(1.9cqh * var(--q-fit, 1)) 2.6cqw; margin-bottom: calc(1.6cqh * var(--q-fit, 1));
-  font-size: calc(2.5cqh * var(--q-fit, 1)); color: hsl(var(--foreground)); cursor: pointer;
-  transition: border-color .12s, background .12s, box-shadow .12s;
-}
-.option:hover { border-color: hsl(var(--primary)); box-shadow: 0 .4cqh 1.4cqh rgba(227, 58, 0, .16); }
-.option input { flex: 0 0 auto; width: 2.8cqh; height: 2.8cqh; accent-color: hsl(var(--primary)); cursor: pointer; }
-.option.selected { border-color: hsl(var(--primary)); box-shadow: inset 0 0 0 1px hsl(var(--primary)); background: hsl(var(--accent)); }
-.option.correct-answer { border-color: hsl(var(--success)); background: hsl(var(--success) / .12); }
-.option.incorrect-answer { border-color: hsl(var(--destructive)); background: hsl(var(--destructive) / .10); }
-.option.correct-answer input { accent-color: hsl(var(--success)); }
-.option.incorrect-answer input { accent-color: hsl(var(--destructive)); }
-
-/* progress bar (fallback when no pills) */
-.progress-bar { height: 1cqh; background: hsl(var(--muted)); border-radius: 1cqh; overflow: hidden; margin-bottom: 2.4cqh; }
-.progress-fill { height: 100%; background: hsl(var(--primary)); transition: width .3s; }
-
-/* ===== progress pills (runtime .tb-pill) ===== */
-.tb-pills { display: flex; flex-direction: column; gap: 1.2cqh; margin: 2.6cqh 0 1.6cqh; }
-.tb-pills__dots { display: flex; flex-wrap: wrap; gap: .8cqw; }
-.tb-pill {
-  width: 3.8cqh; height: 3.8cqh; border-radius: 50%;
+/* Adaptive results: centred hero (no score ring) + level cards. */
+.tb-adaptive-hero { display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-3); text-align: center; margin-bottom: var(--ou-space-2); }
+.tb-adaptive-hero__icon {
+  width: 64px; height: 64px; flex: none; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 1.85cqh; font-weight: 650;
-  background: hsl(var(--card)); color: hsl(var(--muted-foreground));
-  border: 1.5px solid hsl(var(--border)); cursor: pointer; transition: transform .1s;
+  background: var(--ou-accent-soft); color: var(--ou-accent-default);
 }
-.tb-pill:hover:not(:disabled) { transform: scale(1.08); }
-.tb-pill.is-answered { background: hsl(var(--primary)); border-color: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
-.tb-pill.is-current { border-color: hsl(var(--primary)); border-width: 2.5px; color: hsl(var(--primary)); font-weight: 800; background: hsl(var(--card)); }
-.tb-pill.is-skipped { border-color: hsl(var(--primary)); border-style: dashed; color: hsl(var(--primary)); background: hsl(var(--card)); }
-.tb-pill.is-correct { background: hsl(var(--success)); border-color: hsl(var(--success)); color: #fff; }
-.tb-pill.is-incorrect { background: hsl(var(--destructive)); border-color: hsl(var(--destructive)); color: #fff; }
-.tb-pill.is-unanswered { border-color: hsl(var(--border)); border-style: dashed; color: hsl(var(--muted-foreground)); }
-.tb-pill:disabled { opacity: .5; cursor: default; }
-.tb-pill:focus-visible { outline: 2px solid hsl(var(--primary)); outline-offset: 2px; }
-.tb-pills__legend { display: flex; flex-wrap: wrap; gap: 1cqh 2.4cqw; font-size: 1.85cqh; color: hsl(var(--muted-foreground)); }
-.tb-pills__legend-item { display: inline-flex; align-items: center; gap: 1cqw; }
-.tb-pills__legend-dot { width: 1.8cqh; height: 1.8cqh; border-radius: 50%; border: 1.5px solid hsl(var(--border)); }
-.tb-pills__legend-dot.is-answered { background: hsl(var(--primary)); border-color: hsl(var(--primary)); }
-.tb-pills__legend-dot.is-current { border-color: hsl(var(--primary)); border-width: 2px; }
-.tb-pills__legend-dot.is-skipped { border-color: hsl(var(--primary)); border-style: dashed; }
-.tb-pills__legend-dot.is-locked { opacity: .45; }
+/* Adaptive level tag — achieved = accent (is-info), not achieved = error (is-fail). */
+.ou-tag.is-info { background: var(--ou-accent-soft); color: var(--ou-accent-on-soft); }
 
-/* ===== nav rows — runtime question nav (.navigation__left/right, buttons carry
-   .btn / .btn.btn-outline) AND layout-owned navs. Just a flex wrapper; the buttons
-   keep their .btn / .btn-outline appearance. ===== */
-.navigation {
-  display: flex; align-items: center; justify-content: space-between; gap: 2cqw;
-  flex-wrap: wrap; margin-top: 2.6cqh; flex: 0 0 auto;
+/* ── Verdict (results / section-results) ────────────────────────── */
+/* passClass (is-pass/is-fail) drives the DS ring fill + verdict tag colour. */
+.ou-ring__fill.is-pass { stroke: var(--ou-success-default); }
+.ou-ring__fill.is-fail { stroke: var(--ou-error-default); }
+.ou-ring__fill.is-partial { stroke: var(--ou-warning-default); }
+.ou-tag.is-pass { background: var(--ou-success-soft); color: var(--ou-success-on-soft); }
+.ou-tag.is-fail { background: var(--ou-error-soft); color: var(--ou-error-on-soft); }
+.ou-tag.is-partial { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
+
+/* ── Content / gallery pages ────────────────────────────────────── */
+/* The body CENTRES its block — reading measure, balanced, no vertical stretching
+   with empty side fields (the earlier feedback). */
+.tb-content-body { display: flex; flex-direction: column; align-items: center; justify-content: safe center; }
+/* The router hub is a menu, not centered reading content — its cards read top-down
+   from the top of the field with the body's own padding, not floated to the middle. */
+.tb-scene:has(.router-topic-cards) .tb-content-body { justify-content: flex-start; }
+.tb-content { width: 100%; display: flex; flex-direction: column; gap: var(--ou-space-4); }
+.tb-content--text { max-width: 720px; }
+.tb-content--image { max-width: 1120px; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; align-items: center; }
+.tb-content--image-right { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+.tb-content__media {
+  width: 100%; aspect-ratio: 4 / 3; box-sizing: border-box;
+  border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-l); overflow: hidden;
+  background: var(--ou-bg-surface-2); display: grid; place-items: center;
+  color: var(--ou-fg-muted); font: var(--ou-text-body-s);
 }
-.navigation__left, .navigation__right { display: flex; align-items: center; gap: 2cqw; }
-.navigation .btn { font-size: 2.4cqh; padding: 1.5cqh 3.4cqw; }
-.section-results__card .navigation, .centered .navigation { justify-content: center; }
-.navigation--end { justify-content: flex-end; }
-/* Bottom-anchored nav (section-intro): must come AFTER `.navigation`'s margin-top
-   so `auto` wins the equal-specificity cascade and the button floats to the pad floor. */
-.navigation--bottom { margin-top: auto; }
+.tb-content__media img { width: 100%; height: 100%; object-fit: cover; }
+.tb-content__text { min-width: 0; display: flex; flex-direction: column; gap: var(--ou-space-3); }
+.tb-content__title { margin: 0; font-weight: 600; font-size: var(--tb-question-fs, 30px); line-height: 1.2; letter-spacing: -0.015em; color: var(--ou-fg-default); text-wrap: pretty; }
+.tb-content__lead { font: var(--ou-text-body-l); color: var(--ou-fg-default); }
+.tb-content__body { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
+.tb-content__lead:empty, .tb-content__body:empty { display: none; }
+/* Sequence dots (gallery). */
+.tb-dots { display: flex; align-items: center; gap: var(--ou-space-2); }
+.tb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ou-border-strong); flex: none; }
+.tb-dot.is-current { background: var(--ou-accent-default); }
 
-/* ===== feedback (runtime .feedback-block uses inline colors; frame + fallback) ===== */
-.feedback-block { margin-top: 2cqh; border-radius: 1.4cqh; font-size: 2.3cqh; }
-
-/* ===== REVIEW ===== */
-.review-page { gap: 0; }
-.review-page__title { font-size: 4.4cqh; font-weight: 800; margin: 1cqh 0 0; }
-.rv-stats { display: flex; gap: 2.5cqw; margin: 2cqh 0 1.6cqh; font-size: 2.2cqh; color: hsl(var(--muted-foreground)); flex-wrap: wrap; }
-.rv-stats b { color: hsl(var(--foreground)); }
-.rv-list { display: flex; flex-direction: column; gap: 1.2cqh; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-.rv-row {
-  display: flex; align-items: center; gap: 2cqw; width: 100%; text-align: left;
-  background: hsl(var(--card)); border: 1px solid hsl(var(--border));
-  border-left: 3px solid hsl(var(--primary)); border-radius: 1.2cqh;
-  padding: 1.4cqh 2.6cqw; font-size: 2.25cqh; color: hsl(var(--foreground));
-  font-family: inherit; cursor: pointer; transition: background .12s;
+/* ── Review (обзор ответов) ─────────────────────────────────────── */
+.tb-review-map { width: 100%; flex-direction: column; align-items: stretch; gap: var(--ou-space-3); }
+/* Answered/skipped counts moved out of the header into the review body. */
+.tb-review-map__count { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+.tb-review-map__count strong { color: var(--ou-fg-default); font-weight: 600; }
+.tb-unanswered { display: flex; flex-direction: column; gap: var(--ou-space-2); width: 100%; }
+.tb-unanswered__row {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-3);
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+  font: var(--ou-text-body-m); text-align: left; cursor: pointer;
+  transition: border-color var(--ou-motion-fast), background var(--ou-motion-fast);
 }
-.rv-row:hover { background: hsl(var(--accent)); }
-.rv-row .num { font-family: ui-monospace, Consolas, monospace; font-weight: 700; color: hsl(var(--primary)); flex: 0 0 auto; }
-.rv-row .pr { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rv-row .go { font-size: 2cqh; color: hsl(var(--primary)); font-weight: 600; white-space: nowrap; }
-.rv-hint { font-size: 2.05cqh; color: hsl(var(--muted-foreground)); margin: 1.4cqh 0; }
+.tb-unanswered__row:hover { border-color: var(--ou-border-default); background: var(--ou-bg-hover); }
+.tb-unanswered__q { min-width: 0; }
+.tb-unanswered__go { color: var(--ou-accent-default); flex: none; font: var(--ou-text-body-s); }
 
-/* ===== SECTION-RESULTS / RESULTS shared ring (SVG, data-driven) ===== */
-.results-page { display: flex; flex-direction: column; gap: 0; flex: 1 1 auto; min-height: 0; }
-.results-ring { position: relative; width: 26cqh; aspect-ratio: 1; margin: 1cqh auto; }
-.results-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); display: block; }
-.ring-bg { stroke: hsl(var(--muted)); }
-.ring-fg { transition: stroke-dashoffset .5s ease; stroke: hsl(var(--primary)); }
-.ring-fg.is-pass { stroke: hsl(var(--success)); }
-.ring-fg.is-fail { stroke: hsl(var(--destructive)); }
-.results-ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.results-ring-pct { font-size: 6.4cqh; font-weight: 800; line-height: 1; }
-.results-ring-label { font-size: 2.2cqh; color: hsl(var(--muted-foreground)); margin-top: .6cqh; }
+/* ── Runtime chrome (was base.css) ──────────────────────────────────
+   The framework-free runtime emits these into the ACTIVE standard-template
+   scene (the same layouts that also serve as the fallback for external
+   templates), so they belong to theme.css — the single scene source — now that
+   base.css is gone. Colours flow through DS tokens; spacing keeps its metrics. */
 
-/* section-results (centered card variant) */
-.section-results .section-results__card,
-.section-results__card { display: flex; flex-direction: column; align-items: center; gap: 2cqh; text-align: center; margin: auto; }
-.section-results__eyebrow { font-size: 2.15cqh; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: hsl(var(--primary)); }
-.section-results__title { font-size: 4.4cqh; font-weight: 800; }
-.section-results__summary { font-size: 2.6cqh; color: hsl(var(--muted-foreground)); }
-
-/* ===== RESULTS (runtime-owned .results-* structure — restyled) ===== */
-.results-hero { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 1.2cqh; margin-bottom: 2cqh; }
-.results-hero-icon { width: 9cqh; aspect-ratio: 1; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: hsl(var(--card)); border: 1px solid hsl(var(--border)); box-shadow: var(--shadow); }
-.results-hero-icon.is-pass { color: hsl(var(--success)); background: hsl(var(--success) / .12); border-color: hsl(var(--success) / .3); }
-.results-hero-icon.is-fail { color: hsl(var(--destructive)); background: hsl(var(--destructive) / .12); border-color: hsl(var(--destructive) / .3); }
-.results-hero-icon.is-info { color: hsl(var(--primary)); background: hsl(var(--primary) / .12); border-color: hsl(var(--primary) / .3); }
-.results-hero-title { font-size: 5.4cqh; font-weight: 800; }
-.results-hero-sub { font-size: 2.6cqh; color: hsl(var(--muted-foreground)); }
-.results-main-card, .card.results-main-card { background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 2cqh; padding: 3cqh 3cqw; text-align: center; box-shadow: var(--shadow); }
-.results-main-title { font-size: 3cqh; font-weight: 800; }
-.results-main-sub { font-size: 2.2cqh; color: hsl(var(--muted-foreground)); margin-top: .6cqh; }
-.results-stats { display: flex; justify-content: center; align-items: flex-end; gap: 4cqw; flex-wrap: wrap; margin-top: 2cqh; }
-.results-stat .v { font-size: 3.6cqh; font-weight: 800; line-height: 1; }
-.results-stat .l { font-size: 1.9cqh; color: hsl(var(--muted-foreground)); margin-top: .6cqh; }
-.results-pill { display: inline-flex; align-items: center; justify-content: center; padding: 1cqh 2.6cqw; border-radius: 5cqh; font-weight: 700; font-size: 2cqh; border: 1px solid hsl(var(--border)); }
-.results-pill.is-pass { background: hsl(var(--success) / .16); border-color: hsl(var(--success) / .4); color: hsl(var(--success)); }
-.results-pill.is-fail { background: hsl(var(--destructive) / .16); border-color: hsl(var(--destructive) / .4); color: hsl(var(--destructive)); }
-.results-pill.is-info { background: hsl(var(--primary) / .16); border-color: hsl(var(--primary) / .4); color: hsl(var(--primary)); }
-.results-section-title { font-size: 2.8cqh; font-weight: 800; margin: 2.6cqh 0 1.4cqh; }
-.results-topics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.6cqh 2cqw; }
-.card.topic-card, .topic-card { background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 1.6cqh; padding: 2cqh 2.4cqw; text-align: left; }
-.topic-head { display: flex; align-items: center; justify-content: space-between; gap: 2cqw; margin-bottom: 1cqh; }
-.topic-name { font-size: 2.4cqh; font-weight: 700; }
-.topic-row { display: flex; align-items: center; justify-content: space-between; gap: 2cqw; margin-top: .8cqh; font-size: 2.05cqh; }
-.topic-row .k { color: hsl(var(--muted-foreground)); }
-.topic-row .val { font-weight: 700; }
-.topic-bar { height: 1cqh; border-radius: 1cqh; background: hsl(var(--muted)); overflow: hidden; margin-top: 1.2cqh; }
-.topic-bar-fill { height: 100%; background: hsl(var(--muted-foreground)); }
-.topic-bar.is-pass .topic-bar-fill, .topic-bar.pass > div { background: hsl(var(--success)); }
-.topic-bar.is-fail .topic-bar-fill { background: hsl(var(--destructive)); }
-.topic-required, .topic-feedback, .topic-feedback-text { font-size: 1.9cqh; color: hsl(var(--muted-foreground)); margin-top: 1cqh; }
-.results-actions { display: flex; justify-content: center; gap: 2cqw; margin-top: 2.4cqh; flex-wrap: wrap; }
-/* Adaptive results: per-topic recommendation links (results.adaptive layout). */
-.topic-links { display: flex; flex-direction: column; gap: .8cqh; margin-top: 1cqh; }
-.topic-link { font-size: 2cqh; color: hsl(var(--primary)); text-decoration: none; }
-.topic-link:hover { text-decoration: underline; }
-.results-rec-list { display: flex; flex-direction: column; gap: 1cqh; }
-.results-rec-item { display: block; padding: 1.2cqh 2cqw; background: hsl(var(--muted) / .5); border-radius: 1cqh; font-size: 2.1cqh; color: hsl(var(--foreground)); text-decoration: none; }
-a.results-rec-item { color: hsl(var(--primary)); }
-
-/* ===== TRANSITION (adaptive; restyled) ===== */
-.transition-page { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.4cqh; text-align: center; }
-.transition-icon { width: 11cqh; aspect-ratio: 1; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-.transition-icon.is-pass { background: hsl(var(--success) / .16); color: hsl(var(--success)); }
-.transition-icon.is-fail { background: hsl(var(--destructive) / .16); color: hsl(var(--destructive)); }
-.transition-title { font-size: 4.6cqh; font-weight: 800; }
-.transition-level { display: flex; align-items: center; gap: 1.6cqw; padding: 1.8cqh 3cqw; border-radius: 2cqh; border: 2px solid hsl(var(--border)); font-size: 2.4cqh; font-weight: 650; }
-.transition-level.is-up { border-color: hsl(var(--success)); color: hsl(var(--success)); background: hsl(var(--success) / .12); }
-.transition-level.is-down { border-color: hsl(var(--destructive)); color: hsl(var(--destructive)); background: hsl(var(--destructive) / .12); }
-.transition-level.is-complete { border-color: hsl(var(--primary)); color: hsl(var(--primary)); background: hsl(var(--primary) / .12); }
-.transition-level-icon { flex: 0 0 auto; width: 2.8cqh; height: 2.8cqh; }
-.transition-level-msg { min-width: 0; }
-.transition-topic { font-size: 2.4cqh; color: hsl(var(--muted-foreground)); }
-.transition-actions { display: flex; justify-content: center; gap: 2cqw; margin-top: 1cqh; }
-
-/* ===== BLOCKED (retake gate) ===== */
-.blocked-card { margin: auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2.2cqh; }
-.blocked-lock { width: 16cqh; aspect-ratio: 1; border-radius: 50%; background: hsl(var(--background)); border: 2px solid hsl(var(--lock)); display: grid; place-items: center; color: hsl(var(--lock)); }
-.blocked-lock svg { width: 7.5cqh; height: 7.5cqh; }
-.blocked-title { font-size: 4.6cqh; font-weight: 800; }
-.blocked-description { font-size: 2.6cqh; color: hsl(var(--muted-foreground)); max-width: 60cqw; }
-.blocked-date { font-family: ui-monospace, Consolas, monospace; font-size: 2.6cqh; font-weight: 700; background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 1.4cqh; padding: 1.3cqh 3cqw; color: hsl(var(--foreground)); }
-
-/* ===== CONTENT PAGES (runtime .content-page / .content-placeholder--*) ===== */
-.layout-content-wrap { gap: 0; }
-.content-page { display: flex; flex-direction: column; gap: 2cqh; flex: 1 1 auto; min-height: 0; }
-.content-placeholder--title { font-size: 5cqh; font-weight: 800; line-height: 1.08; color: hsl(var(--foreground)); }
-.content-placeholder--subtitle, .content-placeholder--lead { font-size: 2.7cqh; color: hsl(var(--muted-foreground)); line-height: 1.4; }
-.content-placeholder--body { font-size: 2.5cqh; line-height: 1.5; color: hsl(var(--foreground)); }
-.content-placeholder--body p { margin-bottom: 1.6cqh; }
-.content-placeholder--body p:last-child { margin-bottom: 0; }
-.content-placeholder--body a { color: hsl(var(--primary)); }
-/* richText numbered / bulleted lists → RTK branded markers */
-.content-placeholder--body ol, .content-placeholder--body ul { list-style: none; display: flex; flex-direction: column; gap: 1.6cqh; margin: 0 0 1.6cqh; }
-.content-placeholder--body ol:last-child, .content-placeholder--body ul:last-child { margin-bottom: 0; }
-.content-placeholder--body li { position: relative; padding-left: 6.2cqw; line-height: 1.4; }
-.content-placeholder--body ol { counter-reset: tb-step; }
-.content-placeholder--body ol > li { counter-increment: tb-step; }
-.content-placeholder--body ol > li::before { content: counter(tb-step); position: absolute; left: 0; top: -.1cqh; width: 4.4cqh; height: 4.4cqh; border-radius: 50%; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); font-size: 2.2cqh; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
-.content-placeholder--body ul > li::before { content: ""; position: absolute; left: 1.4cqw; top: .55em; width: 1.4cqh; height: 1.4cqh; border-radius: 50%; background: hsl(var(--primary)); }
-.content-placeholder--image, .content-placeholder--heroImage { border-radius: 2cqh; overflow: hidden; }
-.content-placeholder--image img, .content-placeholder--heroImage img, .content-page img { max-width: 100%; border-radius: 2cqh; }
-
-/* content nav (Далее) — layout-owned .navigation in content.html */
-.layout-content-wrap > .navigation { justify-content: flex-end; margin-top: auto; }
-
-/* ===== ROUTER (content page; runtime-appended cards) ===== */
-.router-topic-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.4cqh 2cqw; margin-top: 2.4cqh; }
-.router-topic-card {
-  display: flex; flex-direction: column; justify-content: space-between; gap: 1.4cqh;
-  background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 1.8cqh;
-  padding: 2.4cqh 2.2cqw; cursor: pointer; text-align: left; font: inherit; color: hsl(var(--foreground));
-  transition: border-color .15s, box-shadow .15s;
-}
-.router-topic-card:hover:not(:disabled) { border-color: hsl(var(--primary)); box-shadow: 0 .6cqh 2cqh rgba(227, 58, 0, .14); }
-.router-topic-card:disabled { cursor: default; }
-.router-topic-card--locked { opacity: .55; cursor: not-allowed; }
-.router-topic-card--completed { border-color: hsl(var(--success)); }
-.router-topic-card--inProgress { border-color: hsl(var(--primary)); }
-.router-topic-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.6cqw; }
-.router-topic-card__name { font-size: 2.5cqh; font-weight: 700; line-height: 1.15; flex: 1 1 auto; min-width: 0; }
-.router-topic-card__img { flex: 0 0 auto; width: 9cqh; height: 9cqh; }
-.router-topic-card__img img { width: 100%; height: 100%; object-fit: contain; }
-.router-topic-card__optional { font-weight: 400; font-size: 1.9cqh; color: hsl(var(--muted-foreground)); margin-left: 1cqw; }
-.router-topic-card__status { font-size: 1.95cqh; font-weight: 650; color: hsl(var(--muted-foreground)); }
-.router-topic-card--completed .router-topic-card__status { color: hsl(var(--success)); }
-.router-topic-card--inProgress .router-topic-card__status { color: hsl(var(--primary)); }
-.router-topic-card__meta { display: flex; gap: 1cqw; flex-wrap: wrap; margin-top: .4cqh; }
-.router-topic-card__chip { font-size: 1.85cqh; background: hsl(var(--muted) / .6); border: 1px solid hsl(var(--border)); border-radius: 5cqh; padding: .6cqh 1.6cqw; color: hsl(var(--muted-foreground)); white-space: nowrap; }
-.router-topic-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 1cqw; margin-top: .6cqh; padding-top: 1.2cqh; border-top: 1px solid hsl(var(--border)); }
-.router-topic-card__go { font-size: 1.95cqh; font-weight: 700; color: hsl(var(--primary)); }
-.router-topic-card__go::after { content: " \2192"; }
-.router-finish--disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
-.router-finish--disabled:hover { background: hsl(var(--primary)); transform: none; box-shadow: none; }
-.router-stats { display: flex; gap: 2cqw; flex-wrap: wrap; margin: 1.6cqh 0 .4cqh; }
-.router-stat { display: flex; flex-direction: column; gap: .6cqh; background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 1.4cqh; padding: 1.4cqh 2cqw; min-width: 20cqw; }
-.router-stat__label { font-size: 1.85cqh; color: hsl(var(--muted-foreground)); line-height: 1.3; }
-.router-stat__value { font-size: 2.8cqh; font-weight: 700; font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
-.router-progress { margin: 1.8cqh 0 .4cqh; }
-.router-progress__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1cqh; }
-.router-progress__label { font-size: 2cqh; font-weight: 600; color: hsl(var(--muted-foreground)); }
-.router-progress__count { font-size: 2.2cqh; font-weight: 700; color: hsl(var(--foreground)); font-variant-numeric: tabular-nums; }
-.router-progress__bar { height: 1cqh; border-radius: 1cqh; background: hsl(var(--muted)); overflow: hidden; }
-.router-progress__fill { height: 100%; border-radius: 1cqh; background: hsl(var(--primary)); transition: width .25s; }
-/* «Завершить» = router footer action: shrink-wrapped, anchored bottom-right (matches
-   the template's bottom-right primary-action convention), separated from the grid. */
-.router-finish { display: flex; width: fit-content; margin: 3cqh 0 0 auto; }
-/* router mode removes .navigation, so no double nav */
-.layout-content-wrap:has(.router-topic-cards) > .navigation { display: none; }
-
-/* ===== result-field renderers (core.*) ===== */
-.renderer--text-metric { display: flex; flex-direction: column; gap: .6cqh; }
-.renderer__label { font-size: 2cqh; color: hsl(var(--muted-foreground)); }
-.renderer__value { font-size: 5cqh; font-weight: 800; color: hsl(var(--foreground)); line-height: 1; }
-.renderer__suffix { font-size: 3cqh; color: hsl(var(--muted-foreground)); }
-.renderer__track { height: 1cqh; border-radius: 1cqh; background: hsl(var(--muted)); overflow: hidden; }
-.renderer__fill { height: 100%; background: hsl(var(--primary)); }
-.renderer__ring-track { stroke: hsl(var(--muted)); }
-.renderer__ring-fill { stroke: hsl(var(--primary)); }
+/* Result-variable field renderers (PRD-2 indicators on content pages; renderResultField). */
+.renderer--text-metric { display: flex; flex-direction: column; gap: 4px; }
+.renderer__label { font-size: 13px; color: var(--ou-fg-muted); }
+.renderer__value { font-size: 42px; font-weight: 700; color: var(--ou-fg-default); line-height: 1; }
+.renderer__suffix { font-size: 24px; color: var(--ou-fg-muted); margin-left: 2px; }
+.renderer__track { height: 8px; border-radius: 999px; background: var(--ou-bg-surface-3); overflow: hidden; }
+.renderer__fill { height: 100%; background: var(--ou-accent-default); }
+.renderer__ring-track { stroke: var(--ou-bg-surface-3); }
+.renderer__ring-fill { stroke: var(--ou-accent-default); }
 .renderer--ring-chart { position: relative; display: inline-flex; align-items: center; justify-content: center; }
-.renderer--ring-chart .renderer__value { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 3.6cqh; font-weight: 800; }
-
-/* ===== MATCHING / RANKING DnD (functional; RTK colors) ===== */
-.matching-board, .ranking-board { display: flex; flex-direction: column; gap: 1.6cqh; margin-top: 1cqh; }
-.matching-line { display: flex; align-items: stretch; }
-.matching-gap { flex: 0 0 2.4cqw; }
-.match-tile { flex: 1 1 0; min-width: 0; padding: 1.8cqh 2cqw; border-radius: 1.5cqh; background: hsl(var(--card)); border: 1px solid hsl(var(--border)); display: flex; align-items: center; font-size: 2.3cqh; }
-.match-left-slot { justify-content: flex-start; gap: 1.4cqw; }
-.match-empty { flex: 1 1 0; min-width: 0; padding: 1.8cqh 2cqw; border-radius: 1.5cqh; border: 1px dashed hsl(var(--border)); display: flex; align-items: center; }
-.match-chip, .rank-item { -webkit-user-select: none; user-select: none; display: flex; align-items: center; gap: 1.6cqw; padding: 1.4cqh 2cqw; background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 1.5cqh; font-size: 2.3cqh; color: hsl(var(--foreground)); cursor: grab; }
-.match-chip { width: 100%; }
-.match-chip:active, .rank-item:active { cursor: grabbing; }
-.match-grip, .rank-grip { flex: 0 0 auto; display: inline-flex; align-items: center; opacity: .55; }
-.match-chip-text, .rank-text { flex: 1 1 auto; min-width: 0; }
-.slot-placeholder { color: hsl(var(--muted-foreground)); font-size: 2cqh; }
-.match-drop-right.is-over, .match-drop-left.is-over, .rank-item.is-over { outline: 2px solid hsl(var(--primary)); outline-offset: 2px; }
-.matching-line.is-joined { background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 1.5cqh; overflow: hidden; }
-.matching-line.is-joined .match-tile, .matching-line.is-joined .match-empty { background: transparent; border: 0; }
-.matching-line.correct-answer, .rank-item.correct-answer { border-color: hsl(var(--success)); background: hsl(var(--success) / .12); }
-.matching-line.incorrect-answer, .rank-item.incorrect-answer { border-color: hsl(var(--destructive)); background: hsl(var(--destructive) / .10); }
-.rank-item.dragging { opacity: .7; }
-.rank-draggable, .match-chip { touch-action: none; }
-/* Committed answer (is-locked): a neutral «зафиксировано» accent — parity with
-   .option.selected — shown even when showCorrectAnswers is off. Correct/incorrect
-   feedback colors (when enabled) win over this neutral accent. */
-.matching-board.is-locked .matching-line.is-joined:not(.correct-answer):not(.incorrect-answer),
-.ranking-board.is-locked .rank-item:not(.correct-answer):not(.incorrect-answer) {
-  border-color: hsl(var(--primary) / .55); background: hsl(var(--primary) / .06);
+.renderer--ring-chart .renderer__ring { display: block; }
+.renderer--ring-chart .renderer__value {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  font-size: 30px; font-weight: 800;
 }
-.matching-board.is-locked .match-chip, .ranking-board.is-locked .rank-item,
-.matching-board.is-locked .match-chip:active, .ranking-board.is-locked .rank-item:active { cursor: default; }
+.renderer--ring-chart .renderer__label { position: absolute; left: 0; right: 0; bottom: -22px; text-align: center; }
 
-/* ===== question media ===== */
-.question-media { position: relative; margin-bottom: 2.4cqh; }
-.question-media img, .question-media video { max-width: 100%; border-radius: 1.5cqh; }
-.qm-fs-btn { position: absolute; top: 1cqh; right: 1cqw; border: 0; border-radius: 1cqh; padding: .8cqh 1.4cqw; cursor: pointer; background: rgba(0,0,0,.5); color: #fff; font-size: 2cqh; }
+/* Question timer (question.html / review.html header). */
+.q-timer { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+.q-timer--hidden { display: none; }
 
-/* ===== host-chrome overlays (append to body — px, not cq) ===== */
-.tb-modal-backdrop { position: fixed; inset: 0; background: rgba(20, 16, 12, .55); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
-.tb-modal { background: hsl(var(--card)); color: hsl(var(--foreground)); border: 1px solid hsl(var(--border)); border-radius: 14px; max-width: 440px; width: 100%; box-shadow: 0 24px 64px rgba(20,16,12,.3); overflow: hidden; }
-.tb-modal__head { display: flex; gap: 12px; padding: 20px 20px 8px; }
-.tb-modal__icon { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: hsl(38 92% 50% / .15); color: hsl(38 92% 45%); }
-.tb-modal__title { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
-.tb-modal__desc, .tb-modal__body { font-size: 14px; color: hsl(var(--muted-foreground)); }
-.tb-modal__body { padding: 0 20px; }
-.tb-modal__foot { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 20px 20px; }
-.tb-modal__foot button { font-family: inherit; font-size: 14px; font-weight: 600; padding: 10px 20px; border-radius: 8px; cursor: pointer; border: 1.5px solid hsl(var(--border)); background: transparent; color: hsl(var(--foreground)); }
-.tb-modal__foot [data-modal="confirm"] { background: hsl(var(--primary)); border-color: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
-#center-toast { position: fixed; left: 50%; top: 24px; transform: translateX(-50%); z-index: 1100; background: hsl(var(--foreground)); color: hsl(var(--background)); padding: 10px 18px; border-radius: 999px; font-size: 14px; font-weight: 600; }
+/* Question media + fullscreen affordance (renderQuestionMedia). */
+.question-media { position: relative; }
+.qm-fs-btn {
+  position: absolute; top: 10px; right: 10px;
+  border: 0; border-radius: var(--ou-radius-s); padding: 8px 10px;
+  background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+  cursor: pointer; font-size: 16px; line-height: 1; opacity: 0.9;
+}
+.qm-fs-btn:hover { opacity: 1; }
 
-/* ===== SLIDE — the author content page (учебная страница) =====
-   ONE component behind every `info.*` and `gallery.*` variant, because the two are
-   the same screen: heading block, a content card (text, optionally split with an
-   image), and a footer with the navigation. The `gallery.*` variants add the
-   sequence dots — that is the ONLY structural difference, so a page keeps its look
-   when the author moves it in or out of a sequence.
+/* Adaptive / content-page nav row + its progress bar. */
+.navigation { display: flex; justify-content: space-between; margin-top: 32px; }
+.progress-bar {
+  height: 10px; border-radius: 999px; overflow: hidden;
+  background: var(--ou-bg-surface-3); margin-bottom: 28px;
+}
+.progress-fill {
+  height: 100%; background: var(--ou-accent-default);
+  transition: width 0.4s var(--ou-easing-standard);
+}
 
-   The variant keys, the placeholder keys (title/lead/body/image) and the settings
-   (sequenceId/nextLabel/backgroundImage) are IDENTICAL to the standard template's,
-   so a test switches between the two templates without re-binding its pages; only
-   the appearance below is RTK. */
-.slide { display: flex; flex-direction: column; gap: 3cqh; flex: 1 1 auto; min-height: 0; }
-/* Optional per-page background image (the `backgroundImage` setting). Applied by the
-   core to the screen root; the card keeps content readable on top. */
-.slide.has-slide-bg { position: relative; background-size: cover; background-position: center; background-repeat: no-repeat; border-radius: 2cqh; }
-/* Theme-adaptive scrim over the author's image: the heading/footer text follows the
-   theme (light in dark theme), so a bare light image would render that text
-   invisible. The scrim (theme background at ~82%) guarantees contrast in BOTH themes
-   while the image still shows through; the card keeps its own solid surface. */
-.slide.has-slide-bg::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: hsl(var(--background) / .82); z-index: 0; }
-.slide.has-slide-bg > * { position: relative; z-index: 1; }
+/* Built-in block/cooldown wall — the tested last-resort safety net shown when a
+   template ships no `system.blocked` layout (gate.js renderBlockWallBuiltin). The
+   active path renders the standard `system.blocked` scene; this styles the fallback. */
+.retake-wall { min-height: 60vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.retake-wall__card {
+  max-width: 520px; width: 100%;
+  background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-soft);
+  border-radius: 12px; padding: 32px; text-align: center; box-shadow: var(--ou-shadow-lg);
+}
+.retake-wall__title { margin: 0 0 12px; font-size: 22px; font-weight: 700; color: var(--ou-fg-default); }
+.retake-wall__lead { margin: 0 0 8px; color: var(--ou-fg-muted); }
+.retake-wall__date { margin: 12px 0 0; font-size: 16px; color: var(--ou-fg-default); }
+.retake-wall__note { margin: 12px 0 0; color: var(--ou-error-default); }
 
-.slide__head { flex: 0 0 auto; display: flex; flex-direction: column; gap: 1cqh; }
-/* A variant without a title/lead (or a page the author left blank) must not leave a
-   gap where the heading block would be. */
-.slide__head:not(:has(*:not(:empty))) { display: none; }
-.slide__title { font-size: 5cqh; font-weight: 800; line-height: 1.1; letter-spacing: -.01em; color: hsl(var(--foreground)); margin: 0; }
-.slide__lead { font-size: 2.4cqh; font-weight: 650; color: hsl(var(--primary)); margin: 0; }
-.slide__title:empty, .slide__lead:empty, .slide__media:empty { display: none; }
+/* ── Generic card + content-page skeleton (shared builders) ─────────
+   The generic `content` layout is a `page-content` shell the runtime fills with a
+   per-template placeholder skeleton (content-page.ts) — and the router hub fills it
+   with topic cards (router-hub.ts). Both were base.css; folded here on tokens. */
+.card {
+  background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+  border: 1px solid var(--ou-border-soft); border-radius: 12px;
+  padding: 32px; margin-bottom: 24px; box-shadow: var(--ou-shadow-lg);
+}
+.question-text { font-size: 18px; margin-bottom: 28px; color: var(--ou-fg-default); line-height: 1.7; }
 
-.slide__card { flex: 1 1 auto; min-height: 0; overflow-y: auto; background: hsl(var(--card)); border: 1px solid hsl(var(--card-border)); border-radius: 2.4cqh; padding: 3.4cqh 3.4cqw; box-shadow: var(--shadow); }
-.slide__card::-webkit-scrollbar { width: 8px; }
-.slide__card::-webkit-scrollbar-thumb { background: hsl(var(--muted)); border-radius: 4px; }
-/* Split variants (image left / image right): two columns, but ONLY when the page
-   actually carries an image. The media region is always present in the markup (the
-   core fills it), so the split keys on a NON-EMPTY region — an image-variant page
-   with no picture reads as a plain full-width card instead of a half-empty one.
-   Column order comes from the layout file, not from a modifier. */
-.slide--split .slide__card:has(.slide__media:not(:empty)) { display: grid; grid-template-columns: 1fr 1fr; gap: 4cqw; align-items: center; }
-/* Theme-adaptive media frame (a muted panel that reads in BOTH themes) — the image
-   sits inside it. Author images should be transparent PNG/SVG; a baked-in light/dark
-   background would clash with the opposite theme. */
-.slide__media { display: flex; align-items: center; justify-content: center; background: hsl(var(--muted) / .45); border: 1px solid hsl(var(--border)); border-radius: 2.4cqh; padding: 2.6cqh 2.6cqw; }
-.slide__media img { max-width: 100%; max-height: 48cqh; object-fit: contain; }
+/* Content-page placeholder skeleton (buildContentPageSkeleton → page-content slot). */
+.content-page { display: flex; flex-direction: column; gap: 16px; }
+.content-placeholder--title { font-size: 28px; font-weight: 700; line-height: 1.2; color: var(--ou-fg-default); }
+.content-placeholder--subtitle,
+.content-placeholder--lead { font-size: 17px; color: var(--ou-fg-muted); line-height: 1.55; }
+.content-placeholder--body { font-size: 15px; color: var(--ou-fg-default); line-height: 1.65; }
+.content-placeholder--body p { margin-bottom: 12px; }
+.content-placeholder--body p:last-child { margin-bottom: 0; }
+.content-placeholder--heroImage,
+.content-placeholder--image {
+  width: 100%; height: 220px; border-radius: 8px; background: var(--ou-bg-surface-3);
+  overflow: hidden; display: grid; place-items: center;
+}
+.content-placeholder--heroImage img,
+.content-placeholder--image img { width: 100%; height: 100%; object-fit: cover; }
 
-.slide__body { font-size: 2.5cqh; line-height: 1.55; color: hsl(var(--foreground)); }
-.slide__body > :first-child { margin-top: 0; }
-.slide__body p { margin-bottom: 1.6cqh; }
-.slide__body p:last-child { margin-bottom: 0; }
-.slide__body a { color: hsl(var(--primary)); }
-.slide__body ol, .slide__body ul { list-style: none; display: flex; flex-direction: column; gap: 1.4cqh; margin: 0 0 1.6cqh; }
-.slide__body ol:last-child, .slide__body ul:last-child { margin-bottom: 0; }
-.slide__body li { position: relative; padding-left: 6cqw; line-height: 1.4; }
-.slide__body ol { counter-reset: g-step; }
-.slide__body ol > li { counter-increment: g-step; }
-.slide__body ol > li::before { content: counter(g-step); position: absolute; left: 0; top: -.1cqh; width: 4.2cqh; height: 4.2cqh; border-radius: 50%; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); font-size: 2.1cqh; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
-.slide__body ul > li::before { content: ""; position: absolute; left: 1.2cqw; top: .6em; width: 1.3cqh; height: 1.3cqh; border-radius: 50%; background: hsl(var(--primary)); }
+/* ── Router hub (router_by_topics) — the topic-card menu ────────────
+   Emitted by the shared builder (router-hub.ts) into the content layout's
+   page-content slot, on both hosts and in the «Структура» preview. */
+/* Same footprint as the results «Результаты по темам» grid (.tb-topics-grid): min
+   column 340px and the DS card spacing, so hub cards read at the same size. */
+.router-topic-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--ou-space-4); margin-top: 24px; }
+.router-progress { margin: 18px 0 4px; }
+.router-progress__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.router-progress__label { font-size: 13px; font-weight: 600; color: var(--ou-fg-muted); }
+.router-progress__count { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ou-fg-default); }
+.router-progress__bar { height: 6px; border-radius: 999px; background: var(--ou-bg-surface-3); overflow: hidden; }
+.router-progress__fill { height: 100%; border-radius: 999px; background: var(--ou-accent-default); transition: width 0.25s ease; }
+.router-topic-card {
+  display: flex; flex-direction: column; gap: var(--ou-space-2); padding: var(--ou-space-5);
+  border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-l); background: var(--ou-bg-elevated);
+  box-shadow: var(--ou-shadow-sm);
+  cursor: pointer; text-align: left; font: inherit; color: var(--ou-fg-default);
+  transition: border-color 0.15s, background 0.15s;
+}
+.router-topic-card:hover:not(:disabled) { border-color: var(--ou-accent-default); background: var(--ou-accent-soft); }
+.router-topic-card:disabled { cursor: default; opacity: 0.85; }
+/* Completed = neutral «Завершена». Pass/fail colour is added ONLY when the test
+   reveals section results (router-topic-card--passed / --failed, emitted below);
+   those rules follow --completed so they win the shared-specificity cascade.
+   A completed card RECEDES — a darker fill, flat (no raise), muted title — while
+   the ✓ mark stays bright, so it reads as clearly finished next to the raised,
+   actionable «Не начата» cards (whose fill == elevated == surface-2, hence the
+   deliberately different surface-1 here). */
+.router-topic-card--completed { border-color: var(--ou-border-strong); background: var(--ou-bg-surface-1); box-shadow: none; }
+.router-topic-card--completed .router-topic-card__name { color: var(--ou-fg-soft); }
+.router-topic-card--passed { border-color: var(--ou-success-default); background: var(--ou-success-soft); }
+.router-topic-card--failed { border-color: var(--ou-error-default); background: var(--ou-error-soft); }
+.router-topic-card--inProgress { border-color: var(--ou-warning-default); background: var(--ou-warning-soft); }
+.router-topic-card--locked { opacity: 0.5; cursor: not-allowed; }
+.router-topic-card__name { font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
+.router-topic-card__status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ou-fg-muted); }
+.router-topic-card__ico { flex: none; }
+.router-topic-card--completed .router-topic-card__status { color: var(--ou-fg-default); font-weight: 500; }
+.router-topic-card--passed .router-topic-card__status { color: var(--ou-success-default); font-weight: 500; }
+.router-topic-card--failed .router-topic-card__status { color: var(--ou-error-default); font-weight: 500; }
+.router-topic-card__optional { font-weight: 400; font-size: 11px; color: var(--ou-fg-muted); }
+.router-topic-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.router-topic-card__img { flex: 0 0 auto; }
+.router-topic-card__img img { display: block; width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+.router-topic-card__meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.router-topic-card__chip { font-size: 11px; color: var(--ou-fg-muted); background: var(--ou-bg-surface-3); border-radius: 999px; padding: 2px 8px; }
+.router-topic-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.router-topic-card__go { font-size: 12px; font-weight: 600; color: var(--ou-accent-default); }
+.router-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; }
+.router-stat {
+  display: flex; flex-direction: column; gap: 2px;
+  border: 1px solid var(--ou-border-soft); border-radius: 8px; padding: 8px 12px; background: var(--ou-bg-elevated);
+}
+.router-stat__label { font-size: 11px; color: var(--ou-fg-muted); }
+.router-stat__value { font-size: 14px; font-weight: 700; color: var(--ou-fg-default); font-variant-numeric: tabular-nums; }
 
-/* Footer: dots pushed left, actions right. A page outside a sequence renders no
-   dots, and `margin-right:auto` on the (empty) dot row keeps the buttons where a
-   gallery page has them — the two variants stay visually aligned. */
-.slide__foot { flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-end; gap: 2cqw; margin-top: auto; }
-.slide__dots { display: flex; align-items: center; gap: 1.6cqw; margin-right: auto; }
-.tb-pill--dot { width: 2cqh; height: 2cqh; min-width: 2cqh; font-size: 0; cursor: default; background: hsl(var(--muted)); border: 1.5px solid hsl(var(--border)); }
-.tb-pill--dot.is-current { background: hsl(var(--primary)); border-color: hsl(var(--primary)); }
-.tb-pill--dot:hover { transform: none; }
-.slide__nav { display: flex; align-items: center; gap: 2cqw; }
-.slide__nav .btn { font-size: 2.4cqh; padding: 1.5cqh 3.6cqw; }
+/* ── RTK accent in the DARK palette ─────────────────────────────────
+   The DS lifts its accent to `--ou-purple-300` (40% white) so a DARK brand reads
+   against a near-black page — necessary for the DS purple #7700FF, wrong for the RTK
+   orange, which is bright already and turns pale salmon. Pin the accent to the brand
+   itself and take hover/active DOWN (mix black) instead of up.
 
-/* «Итог раздела» (summary.result): the result renderer on a centred card. */
-.slide--summary .summary-card { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 2cqh; text-align: center; background: hsl(var(--card)); border: 1px solid hsl(var(--card-border)); border-radius: 2.4cqh; padding: 4cqh 5cqw; box-shadow: var(--shadow); }
-.summary-card__title { font-size: 4.4cqh; font-weight: 800; line-height: 1.1; margin: 0; }
-.summary-card__title:empty { display: none; }
-.summary-card__result { display: flex; align-items: center; justify-content: center; }
+   The RAMP itself is NOT declared here: all three hosts derive it from `--primary`
+   through the platform bridge (`shared/template/palette-bridge`), and restating its
+   color-mix fractions in a template is how a template silently drifts from the
+   platform. This block only overrides the per-theme CHOICE of ramp step, which is a
+   design decision the bridge does not make.
 
-/* ===== loading ===== */
-#loading { text-align: center; padding: 20cqh 5cqw; color: hsl(var(--muted-foreground)); font-size: 2.6cqh; }
+   Selector matches the DS block's `.ou.ou--dark` specificity and, coming later in the
+   stylesheet, wins by order. `--ou-fg-on-accent` is white in both DS palettes; the
+   brand orange is slightly darker than the lifted step it replaces, so white-on-accent
+   contrast improves (~2.0 → ~3.4).
+   ─────────────────────────────────────────────────────────────────── */
+.ou.ou--dark {
+  --ou-accent-default: var(--ou-purple-500);
+  --ou-accent-hover: var(--ou-purple-600);
+  --ou-accent-active: var(--ou-purple-700);
+  --ou-border-focus: var(--ou-purple-500);
+}
+
+/* ── RTK decorative layer over the standard scene ───────────────────
+   Everything below is what distinguishes «Сертификация» from the standard template.
+   It is CSS-only BY DESIGN: the layouts are byte-identical copies of the standard
+   ones, so a revision of the standard screens carries over for free. The single
+   markup delta is the brand line in the two cover layouts (course.subtitle cannot
+   carry it — the runtime puts «Попытка N из M» there).
+   ─────────────────────────────────────────────────────────────────── */
+
+/* Brand line above the cover title: the RTK «Сертификация» framing. */
+.tb-cover__brandline {
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: hsl(var(--primary));
+}
+
+/* Cover brand plate: with no author start image the standard cover is a ONE-column grid
+   (`.tb-cover { grid-template-columns: 1fr }`) and the right of the field stays empty.
+   The RTK cover fills it with a brand plate carrying the ring. It must open a SECOND
+   COLUMN — an `::after` on the one-column grid would land as another ROW and stretch
+   across the width — and it mirrors `.tb-cover--media` in both proportions and the
+   narrow-screen collapse, so the two cover variants behave alike. Pure CSS: the cover
+   layout file stays identical to the standard one. */
+.tb-cover:not(.tb-cover--media) {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+}
+.tb-cover:not(.tb-cover--media)::after {
+  content: "";
+  min-width: 0;
+  min-height: 0;
+  border-radius: var(--ou-radius-l);
+  background: linear-gradient(140deg, hsl(var(--primary)) 0%, hsl(var(--primary) / .82) 100%);
+  /* The ring: an inset ring drawn low-right, echoing the RTK cover mark. */
+  box-shadow: inset -6rem -7rem 0 -5.6rem hsl(0 0% 100% / .16);
+}
+@media (max-width: 900px) {
+  .tb-cover:not(.tb-cover--media) { grid-template-columns: 1fr; }
+  .tb-cover:not(.tb-cover--media)::after { min-height: 160px; }
+}
+
+/* Author rich text: RTK orange numbered circles and dots instead of browser markers. */
+.tb-content__body ol,
+.tb-scene__note ol { counter-reset: tb-step; list-style: none; padding-left: 2.25rem; }
+.tb-content__body ol > li,
+.tb-scene__note ol > li { counter-increment: tb-step; position: relative; }
+.tb-content__body ol > li::before,
+.tb-scene__note ol > li::before {
+  content: counter(tb-step);
+  position: absolute;
+  left: -2.25rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-size: .8125rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tb-content__body ul,
+.tb-scene__note ul { list-style: none; padding-left: 2.25rem; }
+.tb-content__body ul > li,
+.tb-scene__note ul > li { position: relative; }
+.tb-content__body ul > li::before,
+.tb-scene__note ul > li::before {
+  content: "";
+  position: absolute;
+  left: -1.5rem;
+  top: .6em;
+  width: .4375rem;
+  height: .4375rem;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+}
+
+/* Theme-adaptive scrim over an author background image. The heading and footer text
+   follow the THEME, so a light author image under light text (dark theme) would be
+   invisible. The scrim (theme background at 82%) guarantees contrast in BOTH themes
+   while the image still shows through. */
+.tb-scene.has-slide-bg { position: relative; background-size: cover; background-position: center; }
+.tb-scene.has-slide-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: hsl(var(--background) / .82);
+  z-index: 0;
+}
+.tb-scene.has-slide-bg > * { position: relative; z-index: 1; }
 </style>
   <style id="pv-fixes">
     /* Undo template global resets that break the preview chrome */
@@ -785,7 +936,7 @@ a.results-rec-item { color: hsl(var(--primary)); }
       </div>
 
       <div class="pv-dialog-foot">
-        <span>26 экранов · 20 шаблонов контента · шаблон «Сертификация (РТК)» v1.3.0</span>
+        <span>27 экранов · 21 шаблонов контента · шаблон «Сертификация (РТК)» v1.4.0</span>
         <button type="button" class="pv-btn">Закрыть</button>
       </div>
     </div>
@@ -797,10 +948,9 @@ a.results-rec-item { color: hsl(var(--primary)); }
   window.PRD1_PREVIEW_MANIFEST  = {
   "id": "certification",
   "name": "Сертификация (РТК)",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "templateApiVersion": "1.0",
-  "mountShell": true,
-  "description": "Сертификационный тест РТК: фиксированная сцена 16:9, системная тема (светлая и тёмная) с переопределяемыми цветами, брендовый акцент, страница-роутер, кнопки навигации, пропуск и возврат к неотвеченным, экран обзора. Набор вариантов страниц совпадает со стандартным шаблоном — тест переключается между ними без переназначения страниц.",
+  "description": "Сертификационный тест РТК: брендовая палитра Ростелекома (светлая и тёмная) с переопределяемыми цветами, оранжевый акцент, страница-роутер, кнопки навигации, пропуск и возврат к неотвеченным, экран обзора. Набор вариантов страниц совпадает со стандартным шаблоном — тест переключается между ними без переназначения страниц.",
   "themes": [
     {
       "id": "light",
@@ -945,6 +1095,21 @@ a.results-rec-item { color: hsl(var(--primary)); }
       "pageKind": "start",
       "layoutFile": "layouts/start.html",
       "placeholders": []
+    },
+    {
+      "key": "start.image-right",
+      "label": "Старт: изображение справа",
+      "kind": "start",
+      "pageKind": "start",
+      "layoutFile": "layouts/start.image-right.html",
+      "placeholders": [],
+      "settings": [
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение"
+        }
+      ]
     },
     {
       "key": "results.standard",
@@ -1725,7 +1890,6 @@ a.results-rec-item { color: hsl(var(--primary)); }
       "label": "Итог: результат",
       "kind": "summary",
       "pageKind": "content.summary",
-      "layoutFile": "layouts/summary.html",
       "placeholders": [
         {
           "key": "title",
@@ -1826,19 +1990,11 @@ a.results-rec-item { color: hsl(var(--primary)); }
     "section-results": "layouts/section-results.html",
     "section-intro": "layouts/section-intro.html",
     "system.blocked": "layouts/system.blocked.html",
-    "system.transition": "layouts/system.transition.html",
-    "layouts/content.text.html": "layouts/content.text.html",
-    "layouts/content.image-left.html": "layouts/content.image-left.html",
-    "layouts/content.image-right.html": "layouts/content.image-right.html",
-    "layouts/gallery.text.html": "layouts/gallery.text.html",
-    "layouts/gallery.image-left.html": "layouts/gallery.image-left.html",
-    "layouts/gallery.image-right.html": "layouts/gallery.image-right.html",
-    "layouts/summary.html": "layouts/summary.html"
+    "system.transition": "layouts/system.transition.html"
   },
   "assets": {
     "styles": [
-      "styles/theme.css",
-      "styles/base.css"
+      "styles/theme.css"
     ],
     "scripts": [
       "scripts/template.js"
@@ -1880,7 +2036,12 @@ a.results-rec-item { color: hsl(var(--primary)); }
     "routes": [
       {
         "route": "start",
-        "label": "Старт"
+        "label": "Стандартный"
+      },
+      {
+        "route": "start.image-right",
+        "templateKey": "start.image-right",
+        "label": "Изображение справа"
       },
       {
         "route": "content.router",
@@ -2566,24 +2727,17 @@ a.results-rec-item { color: hsl(var(--primary)); }
   }
 };
   window.PRD1_PREVIEW_LAYOUTS   = {
-  "shell": "<div class=\"tb-frame\" data-template=\"certification\">\n  <div class=\"tb-stage\">\n    <main id=\"app\" class=\"tb-pad\" data-slot=\"page\" tabindex=\"-1\"></main>\n  </div>\n</div>\n",
-  "start": "<div class=\"cover\">\n  <div class=\"cover-grid\">\n    <div class=\"cover-col\">\n      {{#if design.logoUrl}}<div class=\"tb-brand\"><img class=\"tb-brand__logo\" src=\"{{ design.logoUrl }}\" alt=\"\"></div>{{/if}}\n      <div class=\"cover-eyebrow\">Сертификация</div>\n      <h1 class=\"cover-title\" data-path=\"course.title\">Тест</h1>\n      {{#if course.description}}<p class=\"cover-desc\" data-path=\"course.description\"></p>{{/if}}\n\n      {{#if state.cooldown}}\n      <div class=\"start-state\">\n        <div class=\"start-state__title\">Повторное прохождение пока недоступно</div>\n        <div class=\"start-state__sub\">Действует период ожидания между попытками.</div>\n        <div class=\"start-state__row\">Доступно с <strong><span data-path=\"state.cooldown.availableDateHuman\"></span></strong>{{#if state.cooldown.daysUntil}} &middot; через <span data-path=\"state.cooldown.daysUntil\"></span> дн.{{/if}}</div>\n        {{#if state.priorResult}}\n        <div class=\"start-state__row\">Прошлая попытка: <strong><span data-path=\"state.priorResult.percent\"></span>%</strong>{{#if state.priorResult.verdictLabel}} &middot; <span class=\"{{state.priorResult.verdictClass}}\" data-path=\"state.priorResult.verdictLabel\"></span>{{/if}}{{#if state.priorResult.attemptsLabel}} &middot; <span data-path=\"state.priorResult.attemptsLabel\"></span>{{/if}}</div>\n        <div class=\"prior-actions\">\n          {{#if state.canViewResults}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"view-results\">Мой результат</button>{{/if}}\n          {{#if state.canDownloadReport}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"download-report\">Скачать отчёт</button>{{/if}}\n        </div>\n        {{/if}}\n      </div>\n      {{/if}}\n\n      {{#unless state.cooldown}}{{#if state.priorResult}}\n      <div class=\"start-state\">\n        <div class=\"start-state__row\">Прошлая попытка: <strong><span data-path=\"state.priorResult.percent\"></span>%</strong>{{#if state.priorResult.verdictLabel}} &middot; <span class=\"{{state.priorResult.verdictClass}}\" data-path=\"state.priorResult.verdictLabel\"></span>{{/if}}{{#if state.priorResult.attemptsLabel}} &middot; <span data-path=\"state.priorResult.attemptsLabel\"></span>{{/if}}</div>\n        <div class=\"prior-actions\">\n          {{#if state.canViewResults}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"view-results\">Мой результат</button>{{/if}}\n          {{#if state.canDownloadReport}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"download-report\">Скачать отчёт</button>{{/if}}\n        </div>\n      </div>\n      {{/if}}{{/unless}}\n\n      <div class=\"cover-actions\">\n        {{#if state.resumeNote}}<div class=\"start-state__sub\">{{state.resumeNote}}</div>{{/if}}\n        {{#if state.exhausted}}<div class=\"cover-note\">Попытки закончились</div>{{/if}}\n        {{#if state.canResume}}<button type=\"button\" class=\"btn\" data-action=\"resume\">{{state.resumeLabel}}</button>{{/if}}\n        {{#if state.cooldown}}<button type=\"button\" class=\"btn\" disabled aria-disabled=\"true\">Начать тестирование</button>{{/if}}\n        {{#if state.canStart}}<button type=\"button\" class=\"btn\" data-action=\"start-test\">{{state.startLabel}}</button>{{/if}}\n        {{#if state.canRestart}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"restart\">Начать заново</button>{{/if}}\n        {{#unless state.priorResult}}{{#if state.canViewResults}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"view-results\">Мой результат</button>{{/if}}{{/unless}}\n        {{#if state.showBack}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"back\">К списку тестов</button>{{/if}}\n      </div>\n    </div>\n\n    <div class=\"cover-brand\" aria-hidden=\"true\">\n      <span class=\"cover-brand__ring\"></span>\n    </div>\n  </div>\n</div>\n",
-  "content": "<div class=\"layout-content-wrap\">\n  <div data-slot=\"page-content\"></div>\n  <div class=\"navigation\">\n    <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n  </div>\n</div>\n",
-  "question": "<div class=\"layout-question-wrap\">\n  <div class=\"qbar\">\n    <div class=\"qbar__l\">\n      {{#if design.logoUrl}}<img class=\"qbar__logo\" src=\"{{ design.logoUrl }}\" alt=\"\">{{/if}}\n      <span class=\"qbar__sec\" data-path=\"state.sectionName\"></span>\n    </div>\n    <div class=\"qbar__c\">{{#if state.questionsProgress}}<b class=\"qbar__count\">отвечено {{state.questionsProgress.answeredCount}} &middot; пропущено {{state.questionsProgress.skippedCount}}</b>{{/if}}</div>\n    <div class=\"qbar__r\">\n      <span class=\"question-meta\" data-path=\"state.questionCounterLabel\"></span>\n      <div class=\"q-timer q-timer--hidden\" id=\"timer-display\"></div>\n    </div>\n  </div>\n\n  {{#if state.questionsProgress}}\n  <div class=\"tb-pills\" role=\"group\" aria-label=\"Карта вопросов\">\n    <div class=\"tb-pills__dots\">\n      {{#each state.questionsProgress.states}}\n      <button type=\"button\" class=\"tb-pill {{statusClass}}\" {{#unless clickable}}disabled{{/unless}} data-action=\"goto:{{index}}\" aria-label=\"{{ariaLabel}}\">{{number}}</button>\n      {{/each}}\n    </div>\n    <div class=\"tb-pills__legend\">\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-answered\"></span>отвечен</span>\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-skipped\"></span>пропущен</span>\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-current\"></span>текущий</span>\n      <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-locked\"></span>не выдан</span>\n    </div>\n  </div>\n  {{/if}}\n  {{#unless state.questionsProgress}}\n  <div class=\"progress-bar\"><div class=\"progress-fill\" id=\"q-progress-fill\"></div></div>\n  {{/unless}}\n\n  <div class=\"question-card\">\n    <div class=\"question-text\" data-slot=\"question-text\"></div>\n    <div data-slot=\"question-media\"></div>\n    <div data-slot=\"question-interaction\"></div>\n    <div data-slot=\"question-feedback\"></div>\n  </div>\n</div>\n",
-  "results": "<div class=\"results-page\">\n  {{#if design.logoUrl}}<div class=\"tb-brand\"><img class=\"tb-brand__logo\" src=\"{{ design.logoUrl }}\" alt=\"\"></div>{{/if}}\n  <div class=\"results-hero\">\n    {{#if result.passed}}\n    <div class=\"results-hero-icon is-pass\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M8 21h8\"/><path d=\"M12 17v4\"/><path d=\"M7 4h10\"/><path d=\"M17 4v5a5 5 0 0 1-10 0V4\"/><path d=\"M5 6h2\"/><path d=\"M17 6h2\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Поздравляем!</div>\n    <div class=\"results-hero-sub\">Вы успешно прошли тест.</div>\n    {{/if}}\n    {{#unless result.passed}}\n    <div class=\"results-hero-icon is-fail\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M9 9l6 6\"/><path d=\"M15 9l-6 6\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Тест не пройден</div>\n    <div class=\"results-hero-sub\">Попробуйте ещё раз.</div>\n    {{/unless}}\n  </div>\n\n  <div class=\"card results-main-card\">\n    <div class=\"results-main-title\" data-path=\"course.title\"></div>\n    <div class=\"results-main-sub\">Результаты теста</div>\n\n    <div class=\"results-ring\" data-ring-offset=\"{{ result.ringDashoffset }}\" style=\"--ring-offset: {{ result.ringDashoffset }}\">\n      <svg viewBox=\"0 0 140 140\" width=\"140\" height=\"140\">\n        <circle cx=\"70\" cy=\"70\" r=\"63\" class=\"ring-bg\" stroke-width=\"14\" fill=\"none\"></circle>\n        <circle cx=\"70\" cy=\"70\" r=\"63\" class=\"ring-fg {{ result.passClass }}\" stroke-width=\"14\" fill=\"none\" stroke-linecap=\"round\" style=\"stroke-dasharray:395.84;stroke-dashoffset:{{ result.ringDashoffset }}\"></circle>\n      </svg>\n      <div class=\"results-ring-center\">\n        <div class=\"results-ring-pct\"><span data-path=\"result.scorePercent\"></span>%</div>\n        <div class=\"results-ring-label\">Баллы</div>\n      </div>\n    </div>\n\n    <div class=\"results-stats\">\n      <div class=\"results-stat\">\n        <div class=\"v\" data-path=\"result.totalQuestions\"></div>\n        <div class=\"l\">Вопросов</div>\n      </div>\n      <div class=\"results-stat\">\n        <div class=\"v\"><span data-path=\"result.correct\"></span>/<span data-path=\"result.totalQuestions\"></span></div>\n        <div class=\"l\">Верно</div>\n      </div>\n      <div class=\"results-stat\">\n        <div class=\"v\" data-path=\"result.earnedPoints\"></div>\n        <div class=\"l\">Баллов</div>\n      </div>\n      <div class=\"results-pill {{ result.passClass }}\" data-path=\"result.statusLabel\"></div>\n    </div>\n  </div>\n\n  {{#if result.topicResults}}\n  <div class=\"results-section-title\">Результаты по темам</div>\n  <div class=\"results-topics-grid\">\n    {{#each result.topicResults}}\n    <div class=\"card topic-card\">\n      <div class=\"topic-head\">\n        <div class=\"topic-name\">{{topicName}}</div>\n        <div class=\"results-pill {{passClass}}\">{{statusLabel}}</div>\n      </div>\n      <div class=\"topic-bar {{passClass}}\" data-bar-width=\"{{percent}}\"><div class=\"topic-bar-fill\" style=\"width: {{percent}}%\"></div></div>\n      <div class=\"topic-row\">\n        <div class=\"k\">Правильно</div>\n        <div class=\"val\">{{correct}} / {{total}}</div>\n      </div>\n      {{#if pointsLabel}}\n      <div class=\"topic-row\">\n        <div class=\"k\">Баллов</div>\n        <div class=\"val\">{{pointsLabel}}</div>\n      </div>\n      {{/if}}\n      {{#if requiredLabel}}<div class=\"topic-required\">{{requiredLabel}}</div>{{/if}}\n      {{#if topicFeedback}}<div class=\"topic-feedback\"><div class=\"topic-feedback-text\">{{topicFeedback}}</div></div>{{/if}}\n    </div>\n    {{/each}}\n  </div>\n  {{/if}}\n\n  {{#if result.recommendedCourses}}\n  <div class=\"results-section-title\">Рекомендуемые курсы</div>\n  <div class=\"results-rec-list\">\n    {{#each result.recommendedCourses}}<a class=\"results-rec-item\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}\n  </div>\n  {{/if}}\n  {{#if result.recommendedEvents}}\n  <div class=\"results-section-title\">Рекомендуемые мероприятия</div>\n  <div class=\"results-rec-list\">\n    {{#each result.recommendedEvents}}<div class=\"results-rec-item\">{{title}}</div>{{/each}}\n  </div>\n  {{/if}}\n\n  <div class=\"results-actions\">\n    {{#if result.backAction}}<button type=\"button\" class=\"btn\" data-action=\"{{result.backAction}}\">{{result.backLabel}}</button>{{/if}}\n    {{#unless result.backAction}}<button type=\"button\" class=\"btn\" data-action=\"restart\">Пройти снова</button>{{/unless}}\n  </div>\n</div>\n",
-  "results.adaptive": "<div class=\"results-page\">\n  <div class=\"results-hero\">\n    <div class=\"results-hero-icon is-info\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M8 21h8\"/><path d=\"M12 17v4\"/><path d=\"M7 4h10\"/><path d=\"M17 4v5a5 5 0 0 1-10 0V4\"/><path d=\"M5 6h2\"/><path d=\"M17 6h2\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Тест завершён</div>\n    <div class=\"results-hero-sub\" data-path=\"course.title\"></div>\n  </div>\n\n  <div class=\"results-section-title\">Результаты по темам</div>\n  <div class=\"results-topics-grid\">\n    {{#each result.topicResults}}\n    <div class=\"card topic-card\">\n      <div class=\"topic-head\">\n        <div class=\"topic-name\">{{topicName}}</div>\n        <div class=\"results-pill {{levelClass}}\">{{levelLabel}}</div>\n      </div>\n      {{#if hasFeedback}}\n      <div class=\"topic-feedback\">{{feedback}}</div>\n      {{/if}}\n      {{#if hasLinks}}\n      <div class=\"topic-links\">\n        {{#each links}}\n        <a class=\"topic-link\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>\n        {{/each}}\n      </div>\n      {{/if}}\n    </div>\n    {{/each}}\n  </div>\n\n  <div class=\"results-actions\">\n    {{#if result.showPdf}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"download-pdf\">Скачать PDF</button>{{/if}}\n    {{#if result.canRetry}}<button type=\"button\" class=\"btn\" data-action=\"restart-adaptive\">Пройти заново</button>{{/if}}\n    {{#if result.showFinish}}<button type=\"button\" class=\"btn\" data-action=\"finish\">Завершить тест</button>{{/if}}\n    {{#unless result.hasScormActions}}<button type=\"button\" class=\"btn\" data-action=\"restart\">Пройти снова</button>{{/unless}}\n  </div>\n</div>\n",
-  "review": "<div class=\"review-page\">\n  <span class=\"eyebrow\">{{review.scopeLabel}}</span>\n  <div class=\"review-page__title\">Проверьте ответы перед завершением</div>\n\n  {{#if state.questionsProgress}}\n  <div class=\"tb-pills\" role=\"group\" aria-label=\"Карта вопросов\">\n    <div class=\"tb-pills__dots\">\n      {{#each state.questionsProgress.states}}\n      <button type=\"button\" class=\"tb-pill {{statusClass}}\" {{#unless clickable}}disabled{{/unless}} data-action=\"goto:{{index}}\" aria-label=\"{{ariaLabel}}\">{{number}}</button>\n      {{/each}}\n    </div>\n  </div>\n  {{/if}}\n\n  <div class=\"rv-stats\">\n    <span>Отвечено <b>{{review.answeredCount}}</b></span>\n    <span>Пропущено <b>{{review.unansweredCount}}</b></span>\n    <span>Всего <b>{{review.total}}</b></span>\n  </div>\n\n  {{#if review.unansweredCount}}\n  <div class=\"rv-list\">\n    {{#each review.unanswered}}\n    <button type=\"button\" class=\"rv-row\" data-action=\"goto:{{index}}\">\n      <span class=\"num\">{{number}}</span>\n      <span class=\"pr\">{{prompt}}</span>\n      <span class=\"go\">Перейти &#8594;</span>\n    </button>\n    {{/each}}\n  </div>\n  {{/if}}\n\n  <div class=\"rv-hint\">{{review.hint}}</div>\n\n  <div class=\"navigation navigation--end\">\n    <button type=\"button\" class=\"btn\" data-action=\"finish-review\">{{review.finishLabel}}</button>\n  </div>\n</div>\n",
-  "section-results": "<div class=\"results-page section-results\">\n  <div class=\"section-results__card\">\n    <span class=\"section-results__eyebrow\">Раздел завершён</span>\n\n    <div class=\"results-ring\">\n      <svg viewBox=\"0 0 140 140\" width=\"140\" height=\"140\">\n        <circle cx=\"70\" cy=\"70\" r=\"63\" class=\"ring-bg\" stroke-width=\"14\" fill=\"none\"></circle>\n        <circle cx=\"70\" cy=\"70\" r=\"63\" class=\"ring-fg {{ sectionResult.passClass }}\" stroke-width=\"14\" fill=\"none\" stroke-linecap=\"round\" style=\"stroke-dasharray:395.84;stroke-dashoffset:{{ sectionResult.ringDashoffset }}\"></circle>\n      </svg>\n      <div class=\"results-ring-center\">\n        <div class=\"results-ring-pct\"><span data-path=\"sectionResult.scorePercent\"></span>%</div>\n        <div class=\"results-ring-label\">Баллы</div>\n      </div>\n    </div>\n\n    <div class=\"section-results__title\" data-path=\"sectionResult.topicName\"></div>\n    <div class=\"section-results__summary\" data-path=\"sectionResult.summaryLabel\"></div>\n\n    {{#if sectionResult.hasVerdict}}\n    <span class=\"badge {{ sectionResult.passClass }}\" data-path=\"sectionResult.statusLabel\"></span>\n    {{/if}}\n\n    <div class=\"navigation\">\n      <button type=\"button\" class=\"btn\" data-action=\"section-continue\">{{ sectionResult.continueLabel }}</button>\n    </div>\n  </div>\n</div>\n",
-  "section-intro": "<div class=\"section-intro-page\">\n  <div class=\"si-head\">\n    <span class=\"eyebrow\">{{ sectionIntro.eyebrow }}</span>\n    <h1 class=\"si-title\" data-path=\"sectionIntro.topicName\"></h1>\n  </div>\n\n  <div class=\"si-main\">\n    <div class=\"si-content\">\n      {{#if sectionIntro.hasDescription}}\n      <div class=\"si-desc\" data-path=\"sectionIntro.description\"></div>\n      {{/if}}\n\n      <div class=\"si-panels\">\n        {{#if sectionIntro.hasTimeLimit}}\n        <div class=\"si-panel\">\n          <div class=\"si-panel__big\">{{ sectionIntro.timeLimitLabel }}</div>\n          <div class=\"si-panel__sub\">Время прохождения раздела.</div>\n        </div>\n        {{/if}}\n        <div class=\"si-panel\">\n          <div class=\"si-panel__big\">{{ sectionIntro.questionCountLabel }}</div>\n          <div class=\"si-panel__sub\">В разделе вам нужно ответить на {{ sectionIntro.questionCountLabel }} по теме «<span data-path=\"sectionIntro.topicName\"></span>».</div>\n        </div>\n      </div>\n    </div>\n\n    {{#if sectionIntro.hasIllustration}}\n    <div class=\"si-illustration\"><img src=\"{{ sectionIntro.illustrationUrl }}\" alt=\"\"></div>\n    {{/if}}\n  </div>\n\n  <div class=\"si-notes\">\n    {{#if sectionIntro.hasInstruction}}\n    <div class=\"si-instruction\">\n      <div class=\"si-instruction__head\">Инструкция</div>\n      <div data-slot=\"instruction\"></div>\n    </div>\n    {{/if}}\n\n    {{#if sectionIntro.hasTimeLimit}}\n    <div class=\"si-important\">\n      <div class=\"si-important__head\">Важно!</div>\n      <p class=\"si-important__body\">После нажатия «Начать» таймер начнёт отсчёт — поставить тест на паузу нельзя.</p>\n    </div>\n    {{/if}}\n  </div>\n\n  <div class=\"navigation navigation--end navigation--bottom\">\n    <button type=\"button\" class=\"btn btn-outline\" data-action=\"section-intro-back\">Назад</button>\n    <button type=\"button\" class=\"btn\" data-action=\"section-intro-continue\">Начать</button>\n  </div>\n</div>\n",
-  "system.blocked": "<div class=\"results-page\">\n  <div class=\"blocked-card\" data-testid=\"retake-wall\">\n    <div class=\"blocked-lock\" role=\"img\" aria-label=\"Доступ заблокирован\">\n      <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"5\" y=\"11\" width=\"14\" height=\"9\" rx=\"2\"/><path d=\"M8 11V8a4 4 0 0 1 8 0v3\"/></svg>\n    </div>\n    <div data-retake-branch=\"default\">\n      <h1 class=\"blocked-title\">Доступ к тесту ограничен</h1>\n      <p class=\"blocked-description\">Для этого теста больше нет доступных попыток.</p>\n    </div>\n    <div data-retake-branch=\"cooldown\" hidden>\n      <h1 class=\"blocked-title\">Повторная попытка недоступна</h1>\n      <p class=\"blocked-description\">Этот тест можно проходить не чаще, чем раз в <span data-path=\"retake.cooldownPeriodDays\">&mdash;</span> дн.</p>\n      <div class=\"blocked-date\" data-retake-available>Доступно с <strong data-path=\"retake.availableDateHuman\">&mdash;</strong></div>\n    </div>\n    <div data-retake-branch=\"error\" hidden>\n      <h1 class=\"blocked-title\">Не удалось проверить доступ</h1>\n      <p class=\"blocked-description\">Не удалось проверить доступность повторного прохождения. Обратитесь к администратору курса.</p>\n    </div>\n  </div>\n</div>\n",
-  "system.transition": "<div class=\"transition-page\">\n  <div class=\"transition-icon {{ transition.iconClass }}\">\n    {{#if transition.isCorrect}}\n    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M20 6 9 17l-5-5\"/></svg>\n    {{/if}}\n    {{#unless transition.isCorrect}}\n    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/></svg>\n    {{/unless}}\n  </div>\n\n  <div class=\"transition-title\">{{ transition.title }}</div>\n\n  {{#if transition.level}}\n  <div class=\"transition-level {{ transition.level.class }}\">\n    {{#if transition.level.isUp}}<svg class=\"transition-level-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M12 19V5M5 12l7-7 7 7\"/></svg>{{/if}}\n    {{#if transition.level.isDown}}<svg class=\"transition-level-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M12 5v14M5 12l7 7 7-7\"/></svg>{{/if}}\n    {{#if transition.level.isComplete}}<svg class=\"transition-level-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 16v-4M12 8h.01\"/></svg>{{/if}}\n    <span class=\"transition-level-msg\" data-path=\"transition.level.message\"></span>\n  </div>\n  {{/if}}\n\n  {{#if transition.topic}}\n  <div class=\"transition-topic\">Переход к теме: <strong data-path=\"transition.topic.toTopic\"></strong></div>\n  {{/if}}\n\n  {{#if transition.showContinue}}\n  <div class=\"transition-actions\">\n    <button type=\"button\" class=\"btn\" data-action=\"continue\">Продолжить</button>\n  </div>\n  {{/if}}\n</div>\n",
-  "layouts/content.text.html": "<div class=\"slide\">\n  <header class=\"slide__head\">\n    <h1 class=\"slide__title\" data-placeholder=\"title\"></h1>\n    <p class=\"slide__lead\" data-placeholder=\"lead\"></p>\n  </header>\n  <div class=\"slide__card\">\n    <div class=\"slide__body\" data-placeholder=\"body\"></div>\n  </div>\n  <div class=\"slide__foot\">\n    <div class=\"slide__nav\">\n      <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n    </div>\n  </div>\n</div>\n",
-  "layouts/content.image-left.html": "<div class=\"slide slide--split\">\n  <header class=\"slide__head\">\n    <h1 class=\"slide__title\" data-placeholder=\"title\"></h1>\n    <p class=\"slide__lead\" data-placeholder=\"lead\"></p>\n  </header>\n  <div class=\"slide__card\">\n    <div class=\"slide__media\" data-placeholder=\"image\"></div>\n    <div class=\"slide__body\" data-placeholder=\"body\"></div>\n  </div>\n  <div class=\"slide__foot\">\n    <div class=\"slide__nav\">\n      <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n    </div>\n  </div>\n</div>\n",
-  "layouts/content.image-right.html": "<div class=\"slide slide--split\">\n  <header class=\"slide__head\">\n    <h1 class=\"slide__title\" data-placeholder=\"title\"></h1>\n    <p class=\"slide__lead\" data-placeholder=\"lead\"></p>\n  </header>\n  <div class=\"slide__card\">\n    <div class=\"slide__body\" data-placeholder=\"body\"></div>\n    <div class=\"slide__media\" data-placeholder=\"image\"></div>\n  </div>\n  <div class=\"slide__foot\">\n    <div class=\"slide__nav\">\n      <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n    </div>\n  </div>\n</div>\n",
-  "layouts/gallery.text.html": "<div class=\"slide slide--gallery\">\n  <header class=\"slide__head\">\n    <h1 class=\"slide__title\" data-placeholder=\"title\"></h1>\n    <p class=\"slide__lead\" data-placeholder=\"lead\"></p>\n  </header>\n  <div class=\"slide__card\">\n    <div class=\"slide__body\" data-placeholder=\"body\"></div>\n  </div>\n  <div class=\"slide__foot\">\n    <div class=\"slide__dots\" role=\"group\" aria-label=\"Навигация по страницам\">\n      {{#each page.dots}}<span class=\"tb-pill tb-pill--dot {{statusClass}}\"></span>{{/each}}\n    </div>\n    <div class=\"slide__nav\">\n      {{#if page.canGoBack}}<button type=\"button\" class=\"btn btn-outline\" data-nav=\"prev\">Назад</button>{{/if}}\n      <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n    </div>\n  </div>\n</div>\n",
-  "layouts/gallery.image-left.html": "<div class=\"slide slide--gallery slide--split\">\n  <header class=\"slide__head\">\n    <h1 class=\"slide__title\" data-placeholder=\"title\"></h1>\n    <p class=\"slide__lead\" data-placeholder=\"lead\"></p>\n  </header>\n  <div class=\"slide__card\">\n    <div class=\"slide__media\" data-placeholder=\"image\"></div>\n    <div class=\"slide__body\" data-placeholder=\"body\"></div>\n  </div>\n  <div class=\"slide__foot\">\n    <div class=\"slide__dots\" role=\"group\" aria-label=\"Навигация по страницам\">\n      {{#each page.dots}}<span class=\"tb-pill tb-pill--dot {{statusClass}}\"></span>{{/each}}\n    </div>\n    <div class=\"slide__nav\">\n      {{#if page.canGoBack}}<button type=\"button\" class=\"btn btn-outline\" data-nav=\"prev\">Назад</button>{{/if}}\n      <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n    </div>\n  </div>\n</div>\n",
-  "layouts/gallery.image-right.html": "<div class=\"slide slide--gallery slide--split\">\n  <header class=\"slide__head\">\n    <h1 class=\"slide__title\" data-placeholder=\"title\"></h1>\n    <p class=\"slide__lead\" data-placeholder=\"lead\"></p>\n  </header>\n  <div class=\"slide__card\">\n    <div class=\"slide__body\" data-placeholder=\"body\"></div>\n    <div class=\"slide__media\" data-placeholder=\"image\"></div>\n  </div>\n  <div class=\"slide__foot\">\n    <div class=\"slide__dots\" role=\"group\" aria-label=\"Навигация по страницам\">\n      {{#each page.dots}}<span class=\"tb-pill tb-pill--dot {{statusClass}}\"></span>{{/each}}\n    </div>\n    <div class=\"slide__nav\">\n      {{#if page.canGoBack}}<button type=\"button\" class=\"btn btn-outline\" data-nav=\"prev\">Назад</button>{{/if}}\n      <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n    </div>\n  </div>\n</div>\n",
-  "layouts/summary.html": "<div class=\"slide slide--summary\">\n  <div class=\"summary-card\">\n    <span class=\"eyebrow\">Итог</span>\n    <h1 class=\"summary-card__title\" data-placeholder=\"title\"></h1>\n    <div class=\"summary-card__result\" data-placeholder=\"result\"></div>\n  </div>\n  <div class=\"slide__foot\">\n    <div class=\"slide__nav\">\n      <button type=\"button\" class=\"btn\" data-nav=\"next\">{{page.nextLabel}}</button>\n    </div>\n  </div>\n</div>\n"
+  "shell": "<div class=\"tb-player\" data-template=\"certification\">\n  <div class=\"tb-progress-wrap\">\n    <div class=\"tb-progress-bar\" id=\"tb-progress-fill\"></div>\n  </div>\n  <main id=\"app\" class=\"tb-content\" data-slot=\"page\" tabindex=\"-1\"></main>\n</div>\n",
+  "start": "<div class=\"tb-scene tb-scene--cover\">\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-cover{{#if design.startImageUrl}} tb-cover--media{{/if}}\">\r\n      <div class=\"tb-cover__main\">\r\n        {{#if design.logoUrl}}<span class=\"tb-scene__logo tb-cover__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n\r\n        <div class=\"tb-cover__content\">\r\n          <div class=\"tb-cover__head\">\r\n            <div class=\"tb-cover__eyebrow\">\r\n              <span class=\"tb-cover__brandline\">Сертификация</span>\r\n              {{#if course.subtitle}}<span data-path=\"course.subtitle\"></span>{{/if}}\r\n              {{#if state.exhausted}}<span class=\"ou-tag ou-tag--neutral\">Попытки исчерпаны</span>{{/if}}\r\n            </div>\r\n            <h1 class=\"tb-cover__title\" data-path=\"course.title\"></h1>\r\n            {{#if course.description}}<p class=\"tb-cover__desc\" data-path=\"course.description\"></p>{{/if}}\r\n          </div>\r\n\r\n          <div class=\"tb-facts\">\r\n            {{#if course.questionCount}}\r\n            <div class=\"tb-facts__item\">\r\n              <div class=\"tb-facts__num\" data-path=\"course.questionCount\"></div>\r\n              <div class=\"tb-facts__lbl\">вопросов</div>\r\n            </div>\r\n            {{/if}}\r\n            {{#if course.passPercent}}\r\n            <div class=\"tb-facts__item\">\r\n              <div class=\"tb-facts__num\"><span data-path=\"course.passPercent\"></span>%</div>\r\n              <div class=\"tb-facts__lbl\">проходной балл</div>\r\n            </div>\r\n            {{/if}}\r\n            {{#if course.timeLimitMinutes}}\r\n            <div class=\"tb-facts__item\">\r\n              <div class=\"tb-facts__num\"><span data-path=\"course.timeLimitMinutes\"></span> мин</div>\r\n              <div class=\"tb-facts__lbl\">на прохождение</div>\r\n            </div>\r\n            {{/if}}\r\n            {{#if course.maxAttempts}}\r\n            <div class=\"tb-facts__item\">\r\n              <div class=\"tb-facts__num\" data-path=\"course.maxAttempts\"></div>\r\n              <div class=\"tb-facts__lbl\">попыток</div>\r\n            </div>\r\n            {{/if}}\r\n          </div>\r\n\r\n          {{#if course.startPageContent}}\r\n          <div class=\"tb-cover__note\">\r\n            <span class=\"tb-scene__subhead\">Как проходить</span>\r\n            <span class=\"tb-scene__note\">{{course.startPageContent}}</span>\r\n          </div>\r\n          {{/if}}\r\n\r\n          {{#if state.cooldown}}\r\n          <div class=\"ou-banner ou-banner--sm tb-cooldown\">\r\n            <span class=\"ou-banner__ico\" aria-hidden=\"true\">\r\n              <svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/></svg>\r\n            </span>\r\n            <div class=\"ou-banner__body\">\r\n              <div class=\"ou-banner__title\">Повторное прохождение пока недоступно</div>\r\n              <div class=\"ou-banner__desc\">Повторный запуск будет доступен с <strong><span data-path=\"state.cooldown.availableDateHuman\"></span></strong>{{#if state.cooldown.daysUntil}} &middot; через <span data-path=\"state.cooldown.daysUntil\"></span> дн.{{/if}}</div>\r\n            </div>\r\n          </div>\r\n          {{/if}}\r\n\r\n          {{#if state.priorResult}}\r\n          <div class=\"ou-banner ou-banner--sm tb-prior\">\r\n            <div class=\"ou-banner__body\">\r\n              <div class=\"ou-banner__title\">Прошлая попытка: <span data-path=\"state.priorResult.percent\"></span>%{{#if state.priorResult.verdictLabel}} &middot; <span class=\"{{state.priorResult.verdictClass}}\" data-path=\"state.priorResult.verdictLabel\"></span>{{/if}}{{#if state.priorResult.attemptsLabel}} &middot; <span data-path=\"state.priorResult.attemptsLabel\"></span>{{/if}}</div>\r\n            </div>\r\n            <div class=\"ou-banner__actions\">\r\n              {{#if state.canViewResults}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--s\" data-action=\"view-results\">Мой результат</button>{{/if}}\r\n              {{#if state.canDownloadReport}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--s\" data-action=\"download-report\">Скачать отчёт</button>{{/if}}\r\n            </div>\r\n          </div>\r\n          {{/if}}\r\n        </div>\r\n      </div>\r\n\r\n      {{#if design.startImageUrl}}\r\n      <div class=\"tb-cover__media\"><img src=\"{{ design.startImageUrl }}\" alt=\"\"></div>\r\n      {{/if}}\r\n    </div>\r\n  </main>\r\n\r\n  <footer class=\"tb-scene__foot\">\r\n    {{#if state.showBack}}<button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--m\" data-action=\"back\">К списку тестов</button>{{/if}}\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    {{#if state.resumeNote}}<span class=\"tb-scene__note\">{{state.resumeNote}}</span>{{/if}}\r\n    {{#if state.canResume}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"resume\">{{state.resumeLabel}}</button>{{/if}}\r\n    {{#if state.cooldown}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" disabled aria-disabled=\"true\">Начать тестирование</button>{{/if}}\r\n    {{#if state.canStart}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"start-test\">{{state.startLabel}}</button>{{/if}}\r\n    {{#if state.canRestart}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--l\" data-action=\"restart\">Начать заново</button>{{/if}}\r\n    {{#unless state.priorResult}}{{#if state.canViewResults}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--l\" data-action=\"view-results\">Мой результат</button>{{/if}}{{/unless}}\r\n  </footer>\r\n</div>\r\n",
+  "content": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow tb-scene__brandrow--center\">\r\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\r\n      </div>\r\n      {{#if page.pageLabel}}<div class=\"tb-scene__headtag\"><span class=\"ou-tag ou-tag--neutral\" data-path=\"page.pageLabel\"></span></div>{{/if}}\n      <div class=\"tb-scene__timers\">\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"timer-display\">\n          <span class=\"ou-timer__lbl\">тест</span><span class=\"ou-timer__num\"></span>\n        </div>\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"section-timer-display\">\n          <span class=\"ou-timer__lbl\">раздел</span><span class=\"ou-timer__num\"></span>\n        </div>\n      </div>\r\n    </div>\r\n    {{#if page.pageLabel}}<div class=\"tb-scene__progress\"><div class=\"tb-scene__progress-fill\" style=\"width:{{page.progressPercent}}%\"></div></div>{{/if}}\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body tb-content-body\">\r\n    <div class=\"tb-content\" data-slot=\"page-content\"></div>\r\n  </main>\r\n  <footer class=\"tb-scene__foot\">\r\n    {{#if page.canGoBack}}<button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--m\" data-nav=\"prev\">Назад</button>{{/if}}\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-nav=\"next\"{{#if page.nextDisabled}} disabled aria-disabled=\"true\"{{/if}}>{{page.nextLabel}}</button>\r\n  </footer>\r\n</div>\r\n",
+  "question": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow\">\r\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__timers\">\r\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"timer-display\">\r\n          <span class=\"ou-timer__lbl\">тест</span><span class=\"ou-timer__num\"></span>\r\n        </div>\r\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"section-timer-display\">\r\n          <span class=\"ou-timer__lbl\">раздел</span><span class=\"ou-timer__num\"></span>\r\n        </div>\r\n      </div>\r\n    </div>\r\n    {{#if state.questionsProgress}}\r\n    <div class=\"ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map\" role=\"group\" aria-label=\"Карта вопросов\">\r\n      <div class=\"ou-quiz__dots\">\r\n        {{#each state.questionsProgress.states}}\r\n        <button type=\"button\" class=\"ou-quiz__dot {{statusClass}}\" {{#unless clickable}}disabled{{/unless}} data-action=\"goto:{{index}}\" aria-label=\"{{ariaLabel}}\">{{number}}</button>\r\n        {{/each}}\r\n      </div>\r\n      <div class=\"ou-quiz__legend\">\r\n        <span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot is-flagged\"></span>пропущен</span>\r\n        <span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot is-current\"></span>текущий</span>\r\n        <span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot\"></span>не отвечен</span>\r\n        <span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot is-answered\"></span>отвечен</span>\r\n      </div>\r\n      <span class=\"tb-scene__mapcount tb-scene__mapcount--answered\">отвечено <strong>{{state.questionsProgress.answeredCount}}</strong> из {{state.questionsProgress.total}}</span>\r\n      <span class=\"tb-scene__mapcount tb-scene__mapcount--skipped\">пропущено {{state.questionsProgress.skippedCount}}</span>\r\n    </div>\r\n    {{/if}}\r\n    <div class=\"tb-scene__progress\"><div class=\"tb-scene__progress-fill\" id=\"q-progress-fill\"></div></div>\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-scene__col\" style=\"--tb-question-fs: {{state.questionFont}}; --tb-answer-fs: {{state.optionFont}}\">\r\n      <div class=\"tb-scene__meta\">\r\n        <span data-path=\"state.questionCounterLabel\"></span>\r\n        {{#if state.sectionName}}<span class=\"ou-tag ou-tag--neutral\" data-path=\"state.sectionName\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__q\">\r\n        <h2 class=\"tb-scene__qtitle\" data-slot=\"question-text\"></h2>\r\n        {{#if state.questionHint}}<span class=\"tb-scene__qhint\" data-path=\"state.questionHint\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-qbody\">\r\n        <div class=\"tb-qbody__media\" data-slot=\"question-media\"></div>\r\n        <div class=\"tb-qbody__answers\">\r\n          <div data-slot=\"question-feedback\"></div>\r\n          <div data-slot=\"question-interaction\"></div>\r\n        </div>\r\n      </div>\r\n    </div>\r\n  </main>\r\n\r\n  <!-- Navigation row. Composition is the TEMPLATE's decision; the host only supplies\r\n       `state.nav` (see shared/template/question-nav). Both hosts render this markup,\r\n       so the footer cannot differ between the web run and the package. -->\r\n  <footer class=\"tb-scene__foot\">\r\n    {{#if state.nav.showBack}}<button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--m\" data-action=\"answer-back\" {{#unless state.nav.canPrev}}disabled{{/unless}}>← Назад</button>{{/if}}\r\n    {{#if state.nav.showSkip}}<button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--m\" data-action=\"answer-skip\">Пропустить</button>{{/if}}\r\n    {{#if state.nav.showReview}}<button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--m\" data-action=\"answer-return\">К обзору</button>{{/if}}\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"{{state.nav.primaryAction}}\" {{#unless state.nav.primaryEnabled}}disabled{{/unless}} data-path=\"state.nav.primaryLabel\"></button>\r\n  </footer>\r\n</div>\r\n",
+  "results": "<div class=\"tb-scene\">\n  <header class=\"tb-scene__header\">\n    <div class=\"tb-scene__brandrow\">\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\n      <div class=\"tb-scene__titles\">\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\n      </div>\n      <div class=\"tb-scene__headtag\"><span class=\"ou-tag {{ result.passClass }}\" data-path=\"result.statusLabel\"></span></div>\n    </div>\n    <div class=\"tb-scene__progress\"><div class=\"tb-scene__progress-fill\" style=\"width: {{result.scorePercent}}%\"></div></div>\n  </header>\n\n  <main class=\"tb-scene__body\">\n    <div class=\"tb-scene__col tb-scene__col--wide\">\n      <div class=\"tb-score-strip\">\n        <div class=\"ou-ring tb-ring\">\n          <svg class=\"ou-ring__svg\" width=\"140\" height=\"140\" viewBox=\"0 0 140 140\">\n            <circle class=\"ou-ring__track\" cx=\"70\" cy=\"70\" r=\"63\" stroke-width=\"12\"></circle>\n            <circle class=\"ou-ring__fill {{ result.passClass }}\" cx=\"70\" cy=\"70\" r=\"63\" stroke-width=\"12\" stroke-linecap=\"round\" stroke-dasharray=\"395.84\" stroke-dashoffset=\"{{ result.ringDashoffset }}\"></circle>\n          </svg>\n          <div class=\"ou-ring__center\">\n            <div class=\"ou-ring__value\"><span data-path=\"result.scorePercent\"></span>%</div>\n            <div class=\"ou-ring__label\">баллы</div>\n          </div>\n        </div>\n        <div class=\"tb-facts\">\n          <div class=\"tb-facts__item\"><div class=\"tb-facts__num\" data-path=\"result.totalQuestions\"></div><div class=\"tb-facts__lbl\">вопросов</div></div>\n          <div class=\"tb-facts__item\"><div class=\"tb-facts__num\"><span data-path=\"result.correct\"></span>/<span data-path=\"result.totalQuestions\"></span></div><div class=\"tb-facts__lbl\">верно</div></div>\n          <div class=\"tb-facts__item\"><div class=\"tb-facts__num\" data-path=\"result.earnedPoints\"></div><div class=\"tb-facts__lbl\">баллов</div></div>\n        </div>\n      </div>\n\n      {{#if result.topicResults}}\n      <hr class=\"ou-separator ou-separator--horizontal\">\n      <div class=\"tb-scene__q\"><h3 class=\"tb-scene__subhead\">Результаты по темам</h3></div>\n      <div class=\"tb-topics-grid\">\n        {{#each result.topicResults}}\n        <div class=\"ou-card tb-topic-card\">\n          <div class=\"ou-card__body\">\n            <span class=\"tb-topic-card__name\">{{topicName}}</span>\n            <span class=\"ou-tag ou-tag--s {{passClass}}\">{{statusLabel}}</span>\n            <div class=\"ou-progress ou-progress--s tb-topic-card__bar {{passClass}}\"><div class=\"ou-progress__track\"><div class=\"ou-progress__fill\" style=\"width: {{percent}}%\"></div></div></div>\n            <div class=\"tb-stat-rows\">\n              <div class=\"ou-stat-row ou-stat-row--compact\"><div class=\"ou-stat-row__body\"><div class=\"ou-stat-row__title\">Правильно</div></div><span class=\"tb-stat-val\">{{correct}} / {{total}}</span></div>\n              {{#if pointsLabel}}<div class=\"ou-stat-row ou-stat-row--compact\"><div class=\"ou-stat-row__body\"><div class=\"ou-stat-row__title\">Баллов</div></div><span class=\"tb-stat-val\">{{pointsLabel}}</span></div>{{/if}}\n            </div>\n            {{#if requiredLabel}}<span class=\"tb-topic-card__req\">{{requiredLabel}}</span>{{/if}}\n            {{#if hasFeedback}}\n            <div class=\"tb-topic-card__fb\">\n              <span class=\"tb-topic-card__fb-text\">{{feedback}}</span>\n              {{#if hasRecommendations}}<div class=\"tb-recs\">{{#each recommendedCourses}}<a class=\"tb-rec\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class=\"tb-rec\">{{title}}</span>{{/each}}</div>{{/if}}\n            </div>\n            {{/if}}\n            {{#unless hasFeedback}}{{#if hasRecommendations}}\n            <div class=\"tb-topic-card__fb\">\n              <div class=\"tb-recs\">{{#each recommendedCourses}}<a class=\"tb-rec\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class=\"tb-rec\">{{title}}</span>{{/each}}</div>\n            </div>\n            {{/if}}{{/unless}}\n          </div>\n        </div>\n        {{/each}}\n      </div>\n      {{/if}}\n    </div>\n  </main>\n\n  <!-- Footer of the results screen. Composition is the TEMPLATE's decision; hosts\n       only fill `result.nav` (see shared/template/results-nav) and bind the actions.\n       `result.backAction` is the legacy single-button form kept for contexts that\n       do not build `nav` (host previews). -->\n  <footer class=\"tb-scene__foot\">\n    {{#if result.nav.showReport}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--m\" data-action=\"download-report\">Скачать отчёт</button>{{/if}}\n    <div class=\"tb-scene__foot-spacer\"></div>\n    {{#if result.nav.canRetry}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--l\" data-action=\"restart\">Пройти заново</button>{{/if}}\n    {{#if result.nav}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"{{result.nav.primaryAction}}\">{{result.nav.primaryLabel}}</button>{{/if}}\n    {{#unless result.nav}}\n      {{#if result.backAction}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"{{result.backAction}}\">{{result.backLabel}}</button>{{/if}}\n      {{#unless result.backAction}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"restart\">Пройти снова</button>{{/unless}}\n    {{/unless}}\n  </footer>\n</div>\n",
+  "results.adaptive": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow tb-scene__brandrow--center\">\r\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__headtag\"><span class=\"ou-tag ou-tag--neutral\">Тест завершён</span></div>\r\n    </div>\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-scene__col tb-scene__col--wide\">\r\n      <div class=\"tb-adaptive-hero\">\r\n        <span class=\"tb-adaptive-hero__icon\" aria-hidden=\"true\">\r\n          <svg width=\"34\" height=\"34\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 10 12 5 2 10l10 5 10-5Z\"/><path d=\"M6 12v5c3 3 9 3 12 0v-5\"/></svg>\r\n        </span>\r\n        <h2 class=\"tb-scene__hero tb-scene__hero--s\">Тест завершён</h2>\r\n        <span class=\"tb-scene__lead\">Адаптивный тест подобрал уровень по каждой теме</span>\r\n      </div>\r\n\r\n      {{#if result.topicResults}}\r\n      <div class=\"tb-scene__q\"><h3 class=\"tb-scene__subhead\">Результаты по темам</h3></div>\r\n      <div class=\"tb-topics-grid\">\r\n        {{#each result.topicResults}}\r\n        <div class=\"ou-card tb-topic-card\">\r\n          <div class=\"ou-card__body\">\r\n            <span class=\"tb-topic-card__name\">{{topicName}}</span>\r\n            <span class=\"ou-tag ou-tag--s {{levelClass}}\">{{levelLabel}}</span>\r\n            {{#if hasFeedback}}\r\n            <div class=\"tb-topic-card__fb\">\r\n              <span class=\"tb-topic-card__fb-text\">{{feedback}}</span>\r\n              {{#if hasRecommendations}}<div class=\"tb-recs\">{{#each recommendedCourses}}<a class=\"tb-rec\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class=\"tb-rec\">{{title}}</span>{{/each}}</div>{{/if}}\r\n            </div>\r\n            {{/if}}\r\n            {{#unless hasFeedback}}{{#if hasRecommendations}}\r\n            <div class=\"tb-topic-card__fb\">\r\n              <div class=\"tb-recs\">{{#each recommendedCourses}}<a class=\"tb-rec\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class=\"tb-rec\">{{title}}</span>{{/each}}</div>\r\n            </div>\r\n            {{/if}}{{/unless}}\r\n          </div>\r\n        </div>\r\n        {{/each}}\r\n      </div>\r\n      {{/if}}\r\n    </div>\r\n  </main>\r\n\r\n  <footer class=\"tb-scene__foot\">\r\n    {{#if result.showBack}}<button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--m\" data-action=\"results-back\">← К списку тестов</button>{{/if}}\r\n    {{#if result.showPdf}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--m\" data-action=\"download-pdf\">Скачать PDF</button>{{/if}}\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    {{#if result.canRetry}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--l\" data-action=\"restart-adaptive\">Пройти заново</button>{{/if}}\r\n    {{#if result.showFinish}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"finish\">Завершить тест</button>{{/if}}\r\n    {{#unless result.hasScormActions}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"restart\">Пройти снова</button>{{/unless}}\r\n  </footer>\r\n</div>\r\n",
+  "review": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow\">\r\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__timers\">\r\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"timer-display\">\r\n          <span class=\"ou-timer__lbl\">тест</span><span class=\"ou-timer__num\"></span>\r\n        </div>\r\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"section-timer-display\">\r\n          <span class=\"ou-timer__lbl\">раздел</span><span class=\"ou-timer__num\"></span>\r\n        </div>\r\n      </div>\r\n    </div>\r\n    <!-- The question map is NOT repeated in the review header — the body carries its\r\n         own (larger) map and the answered/skipped counts, so a header copy would\r\n         duplicate it. -->\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-scene__col\">\r\n      <div class=\"tb-scene__q\">\r\n        <h2 class=\"tb-scene__hero tb-scene__hero--s\">{{ review.scopeLabel }}</h2>\r\n        <span class=\"tb-scene__qhint\">{{ review.hint }}</span>\r\n      </div>\r\n\r\n      {{#if state.questionsProgress}}\r\n      <div class=\"ou-quiz ou-quiz--circle ou-quiz--l tb-review-map\" role=\"group\" aria-label=\"Карта вопросов\">\r\n        <div class=\"ou-quiz__dots\">\r\n          {{#each state.questionsProgress.states}}\r\n          <button type=\"button\" class=\"ou-quiz__dot {{statusClass}}\" {{#unless clickable}}disabled{{/unless}} data-action=\"goto:{{index}}\" aria-label=\"{{ariaLabel}}\">{{number}}</button>\r\n          {{/each}}\r\n        </div>\r\n        <div class=\"ou-quiz__legend\">\r\n          {{#if review.canReturn}}<span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot is-current\"></span>текущий</span>{{/if}}\r\n          <span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot is-flagged\"></span>пропущен</span>\r\n          <span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot is-answered\"></span>отвечен</span>\r\n        </div>\r\n        <span class=\"tb-review-map__count\">отвечено <strong>{{state.questionsProgress.answeredCount}}</strong> из {{state.questionsProgress.total}} · пропущено {{state.questionsProgress.skippedCount}}</span>\r\n      </div>\r\n      {{/if}}\r\n\r\n      {{#if review.unansweredCount}}\r\n      <hr class=\"ou-separator ou-separator--horizontal\">\r\n      <div class=\"tb-card\">\r\n        <span class=\"tb-card__head\">Без ответа: {{review.unansweredCount}}</span>\r\n        <div class=\"tb-unanswered\">\r\n          {{#each review.unanswered}}\r\n          <div class=\"ou-stat-row\">\r\n            <div class=\"ou-stat-row__body\">\r\n              <div class=\"ou-stat-row__title\">Вопрос {{number}} · {{prompt}}</div>\r\n            </div>\r\n            <button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--s\" data-action=\"goto:{{index}}\">Перейти</button>\r\n          </div>\r\n          {{/each}}\r\n        </div>\r\n      </div>\r\n      {{/if}}\r\n    </div>\r\n  </main>\r\n\r\n  <footer class=\"tb-scene__foot\">\r\n    {{#if review.canReturn}}\r\n    <!-- Opened via «К обзору» mid-flow: «Назад» (to the origin question) is the accented\r\n         primary; «Завершить …» is demoted to a quiet ghost so it is not fired by accident. -->\r\n    <button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--m\" data-action=\"finish-review\">{{ review.finishLabel }}</button>\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"review-back\">{{ review.backLabel }}</button>\r\n    {{/if}}\r\n    {{#unless review.canReturn}}\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"finish-review\">{{ review.finishLabel }}</button>\r\n    {{/unless}}\r\n  </footer>\r\n</div>\r\n",
+  "section-results": "<div class=\"tb-scene\">\n  <header class=\"tb-scene__header\">\n    <div class=\"tb-scene__brandrow tb-scene__brandrow--center\">\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\n      <div class=\"tb-scene__titles\">\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\n      </div>\n      {{#if sectionResult.sectionLabel}}<div class=\"tb-scene__headtag\"><span class=\"ou-tag ou-tag--neutral\" data-path=\"sectionResult.sectionLabel\"></span></div>{{/if}}\n      <div class=\"tb-scene__timers\">\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"timer-display\">\n          <span class=\"ou-timer__lbl\">тест</span><span class=\"ou-timer__num\"></span>\n        </div>\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"section-timer-display\">\n          <span class=\"ou-timer__lbl\">раздел</span><span class=\"ou-timer__num\"></span>\n        </div>\n      </div>\n    </div>\n    {{#if sectionResult.sectionLabel}}<div class=\"tb-scene__progress\"><div class=\"tb-scene__progress-fill\" style=\"width:{{sectionResult.progressPercent}}%\"></div></div>{{/if}}\n  </header>\n\n  <main class=\"tb-scene__body\">\n    <div class=\"tb-scene__col tb-scene__col--center tb-scene__col--narrow\">\n      <span class=\"tb-eyebrow\">Итоги раздела</span>\n      <h2 class=\"tb-scene__hero tb-scene__hero--s\">Раздел «<span data-path=\"sectionResult.topicName\"></span>»</h2>\n\n      <div class=\"ou-ring tb-ring\">\n        <svg class=\"ou-ring__svg\" width=\"140\" height=\"140\" viewBox=\"0 0 140 140\">\n          <circle class=\"ou-ring__track\" cx=\"70\" cy=\"70\" r=\"63\" stroke-width=\"12\"></circle>\n          <circle class=\"ou-ring__fill {{ sectionResult.passClass }}\" cx=\"70\" cy=\"70\" r=\"63\" stroke-width=\"12\" stroke-linecap=\"round\" stroke-dasharray=\"395.84\" stroke-dashoffset=\"{{ sectionResult.ringDashoffset }}\"></circle>\n        </svg>\n        <div class=\"ou-ring__center\">\n          <div class=\"ou-ring__value\"><span data-path=\"sectionResult.scorePercent\"></span>%</div>\n          <div class=\"ou-ring__label\">баллы</div>\n        </div>\n      </div>\n\n      {{#if sectionResult.hasVerdict}}<span class=\"ou-tag {{ sectionResult.passClass }}\" data-path=\"sectionResult.statusLabel\"></span>{{/if}}\n\n      <div class=\"tb-facts tb-facts--center\">\n        <div class=\"tb-facts__item\">\n          <div class=\"tb-facts__num\" data-path=\"sectionResult.total\"></div>\n          <div class=\"tb-facts__lbl\">вопросов</div>\n        </div>\n        <div class=\"tb-facts__item\">\n          <div class=\"tb-facts__num\">{{sectionResult.correct}} / {{sectionResult.total}}</div>\n          <div class=\"tb-facts__lbl\">верно</div>\n        </div>\n      </div>\n    </div>\n  </main>\n\n  <footer class=\"tb-scene__foot\">\n    <div class=\"tb-scene__foot-spacer\"></div>\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"section-continue\">{{ sectionResult.continueLabel }}</button>\n  </footer>\n</div>\n",
+  "section-intro": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow tb-scene__brandrow--center\">\r\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__headtag\"><span class=\"ou-tag ou-tag--neutral\" data-path=\"sectionIntro.eyebrow\"></span></div>\n      <div class=\"tb-scene__timers\">\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"timer-display\">\n          <span class=\"ou-timer__lbl\">тест</span><span class=\"ou-timer__num\"></span>\n        </div>\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"section-timer-display\">\n          <span class=\"ou-timer__lbl\">раздел</span><span class=\"ou-timer__num\"></span>\n        </div>\n      </div>\r\n    </div>\r\n    {{#if sectionIntro.progressPercent}}<div class=\"tb-scene__progress\"><div class=\"tb-scene__progress-fill\" style=\"width:{{sectionIntro.progressPercent}}%\"></div></div>{{/if}}\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-scene__col tb-scene__col--center\">\r\n      <span class=\"tb-eyebrow\">{{ sectionIntro.eyebrow }}</span>\r\n      <h2 class=\"tb-scene__hero\" data-path=\"sectionIntro.topicName\"></h2>\r\n      {{#if sectionIntro.hasDescription}}<span class=\"tb-scene__lead\" data-path=\"sectionIntro.description\"></span>{{/if}}\r\n      <div class=\"tb-meta-dots\">\r\n        <span class=\"tb-meta-dots__item\"><span class=\"tb-meta-dots__dot\" aria-hidden=\"true\"></span>{{ sectionIntro.questionCountLabel }}</span>\r\n        {{#if sectionIntro.hasTimeLimit}}<span class=\"tb-meta-dots__item\"><span class=\"tb-meta-dots__dot\" aria-hidden=\"true\"></span>{{ sectionIntro.timeLimitLabel }}</span>{{/if}}\r\n      </div>\r\n      {{#if sectionIntro.hasInstruction}}\r\n      <div class=\"tb-card\">\r\n        <span class=\"tb-card__head\">Инструкция</span>\r\n        <span class=\"tb-card__body\" data-slot=\"instruction\"></span>\r\n      </div>\r\n      {{/if}}\r\n    </div>\r\n  </main>\r\n  <footer class=\"tb-scene__foot\">\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"section-intro-continue\">{{ sectionIntro.continueLabel }}</button>\r\n  </footer>\r\n</div>\r\n",
+  "system.blocked": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow tb-scene__brandrow--center\">\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        <span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>\r\n      </div>\r\n      <div class=\"tb-scene__headtag\"><span class=\"ou-tag ou-tag--neutral\">Доступ ограничен</span></div>\r\n    </div>\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-scene__col tb-scene__col--center tb-scene__col--narrow\" data-testid=\"retake-wall\">\r\n      <span class=\"tb-blocked-icon\" role=\"img\" aria-label=\"Доступ ограничен\">\r\n        <svg width=\"34\" height=\"34\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/></svg>\r\n      </span>\r\n      <div class=\"tb-blocked-branch\" data-retake-branch=\"default\">\r\n        <h2 class=\"tb-scene__hero tb-scene__hero--s\">Доступ к тесту ограничен</h2>\r\n        <span class=\"tb-scene__lead\">Для этого теста больше нет доступных попыток.</span>\r\n      </div>\r\n      <div class=\"tb-blocked-branch\" data-retake-branch=\"cooldown\" hidden>\r\n        <h2 class=\"tb-scene__hero tb-scene__hero--s\">Повторное прохождение пока недоступно</h2>\r\n        <span class=\"tb-scene__lead\">Этот курс можно проходить не чаще, чем раз в <span data-path=\"retake.cooldownPeriodDays\">&mdash;</span> дн.</span>\r\n        <span class=\"tb-scene__lead\" data-retake-available>Повторный запуск будет доступен с <strong data-path=\"retake.availableDateHuman\">&mdash;</strong>.</span>\r\n      </div>\r\n      <div class=\"tb-blocked-branch\" data-retake-branch=\"error\" hidden>\r\n        <h2 class=\"tb-scene__hero tb-scene__hero--s\">Не удалось проверить доступ</h2>\r\n        <span class=\"tb-scene__lead\">Не удалось проверить доступность повторного прохождения. Обратитесь к администратору курса.</span>\r\n      </div>\r\n    </div>\r\n  </main>\r\n</div>\r\n",
+  "system.transition": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow tb-scene__brandrow--center\">\r\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__headtag\"><span class=\"ou-tag ou-tag--neutral\">Адаптивный тест</span></div>\r\n    </div>\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-scene__col tb-scene__col--center tb-scene__col--narrow\">\r\n      <span class=\"tb-transition-icon {{ transition.level.class }}\" aria-hidden=\"true\">\r\n        {{#if transition.level.isUp}}<svg width=\"34\" height=\"34\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 19V5M5 12l7-7 7 7\"/></svg>{{/if}}\r\n        {{#if transition.level.isDown}}<svg width=\"34\" height=\"34\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 5v14M5 12l7 7 7-7\"/></svg>{{/if}}\r\n        {{#if transition.level.isComplete}}<svg width=\"34\" height=\"34\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"m9 12 2 2 4-4\"/></svg>{{/if}}\r\n      </span>\r\n      {{#if transition.topicName}}<span class=\"tb-eyebrow\">Тема «<span data-path=\"transition.topicName\"></span>»</span>{{/if}}\r\n      <h2 class=\"tb-scene__hero tb-scene__hero--s\">{{ transition.title }}</h2>\r\n      <span class=\"tb-scene__lead\" data-path=\"transition.level.message\"></span>\r\n    </div>\r\n  </main>\r\n\r\n  {{#if transition.showContinue}}\r\n  <footer class=\"tb-scene__foot\">\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"continue\">Продолжить</button>\r\n  </footer>\r\n  {{/if}}\r\n</div>\r\n"
 };
 
   /* ── Shared helpers expected by contentPage.js ── */
@@ -2732,15 +2886,16 @@ a.results-rec-item { color: hsl(var(--primary)); }
     var el = document.documentElement;
     el.classList.add("ou");
     var TB = root.TBTemplate;
-    var theme = (TB && typeof TB.sceneThemeAttribute === "function") ? TB.sceneThemeAttribute(design, manifest) : null;
-    if (!theme) {
-      var themed = TB && typeof TB.supportsThemes === "function" && TB.supportsThemes(manifest);
-      if (themed && typeof window !== "undefined" && window.matchMedia) {
-        theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-      } else {
-        theme = "dark";
-      }
-    }
+    // The rule itself lives in the SHARED registry (`resolveSceneTheme`), so the web
+    // host cannot drift from it — that drift is what opened the same test dark here
+    // and white on the web.
+    var pinned = (TB && typeof TB.sceneThemeAttribute === "function") ? TB.sceneThemeAttribute(design, manifest) : null;
+    var themed = !!(TB && typeof TB.supportsThemes === "function" && TB.supportsThemes(manifest));
+    var systemDark = typeof window !== "undefined" && !!window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var theme = (TB && typeof TB.resolveSceneTheme === "function")
+      ? TB.resolveSceneTheme({ pinned: pinned, themed: themed, systemPrefersDark: systemDark })
+      : (pinned || (themed && systemDark ? "dark" : themed ? "light" : "dark"));
     el.classList.remove("ou--dark", "ou--light");
     el.classList.add(theme === "light" ? "ou--light" : "ou--dark");
   }
@@ -3583,7 +3738,6 @@ function renderSectionIntro(page) {
     sectionNumber: idx + 1,
     sectionsTotal: sections.length,
     courseTitle: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") || section.topicName,
-    subtitle: (typeof scormCourseSubtitle === "function") ? scormCourseSubtitle() : "",
     topicName: section.topicName,
     description: section.topicDescription,
     questionCount: section.drawCount,
@@ -3760,7 +3914,6 @@ function renderContentPage(page, contentTemplates) {
       context: {
         course: {
           title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : ""),
-          subtitle: (typeof scormCourseSubtitle === "function") ? scormCourseSubtitle() : ""
         },
         // Per-test branding: the shared header binds `{{#if design.logoUrl}}`, so a
         // content page must carry `design` too or the logo goes missing on it.
@@ -4529,8 +4682,11 @@ var TBTemplate = (() => {
     DEFAULT_PARAM_CSS_VARS: () => DEFAULT_PARAM_CSS_VARS,
     INPUT_MODES: () => INPUT_MODES,
     PLACEHOLDER_TYPES: () => PLACEHOLDER_TYPES,
+    QUESTION_NAV_ACTIONS: () => QUESTION_NAV_ACTIONS,
+    RESULTS_NAV_ACTIONS: () => RESULTS_NAV_ACTIONS,
     SEQUENCE_SETTING_KEY: () => SEQUENCE_SETTING_KEY,
     SETTING_TYPES: () => SETTING_TYPES,
+    START_IMAGE_KEY: () => START_IMAGE_KEY,
     TEST_THEMES: () => TEST_THEMES,
     THEME_IDS: () => THEME_IDS,
     aggregateAdaptiveResult: () => aggregateAdaptiveResult,
@@ -4550,8 +4706,10 @@ var TBTemplate = (() => {
     buildPageContextFor: () => buildPageContextFor,
     buildPageSequence: () => buildPageSequence,
     buildPaletteBridge: () => buildPaletteBridge,
+    buildQuestionNav: () => buildQuestionNav,
     buildQuestionProgress: () => buildQuestionProgress,
     buildResultContext: () => buildResultContext,
+    buildResultsNav: () => buildResultsNav,
     buildReviewContext: () => buildReviewContext,
     buildRouterHubHtml: () => buildRouterHubHtml,
     buildSectionIntroContext: () => buildSectionIntroContext,
@@ -4579,13 +4737,19 @@ var TBTemplate = (() => {
     fitQuestionScene: () => fitQuestionScene,
     getPagePlaceholderStyles: () => getPagePlaceholderStyles,
     getPageValues: () => getPageValues,
+    hasFixedOptionOrder: () => hasFixedOptionOrder,
+    hasOptionList: () => hasOptionList,
     inputModesFor: () => inputModesFor,
     isFlowContentPage: () => isFlowContentPage,
+    isMeasurementOnly: () => isMeasurementOnly,
     isPlaceholderType: () => isPlaceholderType,
     isRouterReadyToFinish: () => isRouterReadyToFinish,
     isSectionUnlocked: () => isSectionUnlocked,
     isSettingType: () => isSettingType,
+    isSingleIndexChoice: () => isSingleIndexChoice,
     isTestTheme: () => isTestTheme,
+    mediaUrlOf: () => mediaUrlOf,
+    nextScaleIndex: () => nextScaleIndex,
     normalizePool: () => normalizePool,
     optionFont: () => optionFont,
     paramsForTheme: () => paramsForTheme,
@@ -4602,21 +4766,27 @@ var TBTemplate = (() => {
     renderPlainText: () => renderPlainText,
     renderRanking: () => renderRanking,
     renderResultField: () => renderResultField,
+    renderScale: () => renderScale,
     renderScreenInto: () => renderScreenInto,
     renderSingleChoice: () => renderSingleChoice,
     renderTemplate: () => renderTemplate,
     resolveContentTemplate: () => resolveContentTemplate,
     resolveOverallRule: () => resolveOverallRule,
+    resolveSceneTheme: () => resolveSceneTheme,
+    resolveStartImageUrl: () => resolveStartImageUrl,
     resolveThemeParams: () => resolveThemeParams,
     resolveTopicRule: () => resolveTopicRule,
     returnToPool: () => returnToPool,
     sceneThemeAttribute: () => sceneThemeAttribute,
+    sectionBudget: () => section_budget_exports,
     sequenceIdOf: () => sequenceIdOf,
     shouldShowReview: () => shouldShowReview,
+    startImageForVariant: () => startImageForVariant,
     statusLabel: () => statusLabel,
     stripMarkdown: () => stripMarkdown,
     supportsThemes: () => supportsThemes,
     validateVariantFields: () => validateVariantFields,
+    variantDeclaresStartImage: () => variantDeclaresStartImage,
     withTemplateAssetBase: () => withTemplateAssetBase,
     withTemplateAssetBaseInValues: () => withTemplateAssetBaseInValues
   });
@@ -5630,6 +5800,23 @@ var TBTemplate = (() => {
     return { course: { title }, result };
   }
 
+  // shared/questions/question-type.ts
+  function isSingleIndexChoice(type) {
+    return type === "single" || type === "scale";
+  }
+  function hasOptionList(type) {
+    return type === "single" || type === "multiple" || type === "scale";
+  }
+  function hasFixedOptionOrder(type) {
+    return type === "scale";
+  }
+  function isMeasurementOnly(question) {
+    var _a;
+    if (question.type !== "scale") return false;
+    const key = (_a = question.correctJson) != null ? _a : question.correct;
+    return !key || typeof key.correctIndex !== "number";
+  }
+
   // shared/scoring/engine.ts
   function clamp01(v) {
     return Math.max(0, Math.min(1, v));
@@ -5639,7 +5826,7 @@ var TBTemplate = (() => {
   }
   function exactCorrect(type, correct, answer) {
     if (answer === null || answer === void 0) return 0;
-    if (type === "single") {
+    if (isSingleIndexChoice(type)) {
       return answer === correct.correctIndex ? 1 : 0;
     }
     if (type === "multiple") {
@@ -5795,27 +5982,32 @@ var TBTemplate = (() => {
     let tPossible = 0;
     let tCorrect = 0;
     let tQuestions = 0;
+    let tScored = 0;
     let allTopicsPassed = true;
     const topicResults = input.sections.map((sec) => {
       var _a;
       let earned = 0;
       let possible = 0;
       let correct = 0;
+      let scored = 0;
       for (const q of sec.questions) {
+        if (isMeasurementOnly(q)) continue;
+        scored++;
         const ratio = q.answer === void 0 || q.answer === null ? 0 : scoreAnswer({ type: q.type, correct: q.correct || {}, answer: q.answer, scoring: q.scoring }).ratio;
         possible += q.points;
         earned += q.points * ratio;
         if (ratio === 1) correct++;
       }
-      const total = sec.questions.length;
+      const total = scored;
       const percent2 = possible > 0 ? earned / possible * 100 : 0;
       const resolved = resolveTopicRule(sec.topicPassRule, overall, { formId: (_a = sec.formId) != null ? _a : null });
-      const passed = resolved ? checkPassRule(resolved, percent2, earned) : null;
+      const passed = resolved && scored > 0 ? checkPassRule(resolved, percent2, earned) : null;
       if (passed === false) allTopicsPassed = false;
       tEarned += earned;
       tPossible += possible;
       tCorrect += correct;
       tQuestions += total;
+      tScored += scored;
       return {
         topicId: sec.topicId,
         topicName: sec.topicName,
@@ -5831,10 +6023,11 @@ var TBTemplate = (() => {
       };
     });
     const percent = tPossible > 0 ? tEarned / tPossible * 100 : 0;
-    const overallPassed = checkPassRule(overall, percent, tEarned);
+    const overallPassed = tScored > 0 ? checkPassRule(overall, percent, tEarned) : true;
     return {
       correct: tCorrect,
       totalQuestions: tQuestions,
+      scoredQuestions: tScored,
       earnedPoints: tEarned,
       possiblePoints: tPossible,
       percent,
@@ -5904,8 +6097,8 @@ var TBTemplate = (() => {
     const n = input == null ? void 0 : input.attemptNumber;
     if (typeof n !== "number" || !Number.isFinite(n) || n < 1) return "";
     const max = input == null ? void 0 : input.maxAttempts;
-    const capped = typeof max === "number" && Number.isFinite(max) && max > 0;
-    return capped ? `\u041F\u043E\u043F\u044B\u0442\u043A\u0430 ${n} \u0438\u0437 ${max}` : `\u041F\u043E\u043F\u044B\u0442\u043A\u0430 ${n}`;
+    if (typeof max !== "number" || !Number.isFinite(max) || max <= 0) return "";
+    return `\u041F\u043E\u043F\u044B\u0442\u043A\u0430 ${n} \u0438\u0437 ${max}`;
   }
 
   // shared/template/start-state.ts
@@ -5977,6 +6170,30 @@ var TBTemplate = (() => {
       startPageContent: i.startPageContent || ""
     };
     return { course, state };
+  }
+
+  // shared/template/start-image.ts
+  var START_IMAGE_KEY = "image";
+  function mediaUrlOf(value) {
+    if (typeof value === "string") return value.trim();
+    if (value && typeof value === "object") {
+      const url = value.url;
+      if (typeof url === "string") return url.trim();
+    }
+    return "";
+  }
+  function resolveStartImageUrl(pageSettings, designParams) {
+    const own = mediaUrlOf(pageSettings ? pageSettings[START_IMAGE_KEY] : null);
+    if (own) return own;
+    return mediaUrlOf(designParams ? designParams.startImageUrl : null);
+  }
+  function variantDeclaresStartImage(variant) {
+    const settings = variant == null ? void 0 : variant.settings;
+    if (!Array.isArray(settings)) return false;
+    return settings.some((s) => (s == null ? void 0 : s.key) === START_IMAGE_KEY && (s == null ? void 0 : s.type) === "image");
+  }
+  function startImageForVariant(variant, pageSettings, designParams) {
+    return variantDeclaresStartImage(variant) ? resolveStartImageUrl(pageSettings, designParams) : "";
   }
 
   // shared/template/transition-context.ts
@@ -6081,7 +6298,8 @@ var TBTemplate = (() => {
     single: "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043E\u0434\u0438\u043D \u0432\u0430\u0440\u0438\u0430\u043D\u0442 \u043E\u0442\u0432\u0435\u0442\u0430",
     multiple: "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043E\u0434\u0438\u043D \u0438\u043B\u0438 \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0432\u0430\u0440\u0438\u0430\u043D\u0442\u043E\u0432",
     ranking: "\u0420\u0430\u0441\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u044D\u043B\u0435\u043C\u0435\u043D\u0442\u044B \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u043E\u043C \u043F\u043E\u0440\u044F\u0434\u043A\u0435 \u2014 \u043F\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u0438\u043B\u0438 \u043A\u043D\u043E\u043F\u043A\u0430\u043C\u0438 \u2191/\u2193",
-    matching: "\u041F\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u043A\u0430\u0440\u0442\u043E\u0447\u043A\u0443 \u0441\u043F\u0440\u0430\u0432\u0430 \u043D\u0430 \u043D\u0443\u0436\u043D\u0443\u044E \u0441\u0442\u0440\u043E\u043A\u0443"
+    matching: "\u041F\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u043A\u0430\u0440\u0442\u043E\u0447\u043A\u0443 \u0441\u043F\u0440\u0430\u0432\u0430 \u043D\u0430 \u043D\u0443\u0436\u043D\u0443\u044E \u0441\u0442\u0440\u043E\u043A\u0443",
+    scale: "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043E\u0442\u0432\u0435\u0442 \u043D\u0430 \u0448\u043A\u0430\u043B\u0435"
   };
   function questionHint(type) {
     var _a;
@@ -6145,6 +6363,28 @@ var TBTemplate = (() => {
   }
   function renderMultiple(question, answer, shuffleMapping, review) {
     return renderChoice(question, answer, shuffleMapping, review, true);
+  }
+  var SCALE_HORIZONTAL_MAX = 7;
+  function scaleStatus(index, chosen, correct) {
+    if (correct !== null) {
+      if (index === correct) return " is-success";
+      if (index === chosen) return " is-error";
+      return chosen !== null && index < chosen ? " is-done" : "";
+    }
+    if (chosen === null) return "";
+    if (index === chosen) return " is-current";
+    return index < chosen ? " is-done" : "";
+  }
+  function renderScale(question, answer, review) {
+    const options = fields(question).options;
+    const chosen = typeof answer === "number" ? answer : null;
+    const correct = review && typeof review.correctIndex === "number" ? review.correctIndex : null;
+    const rootCls = "ou-stepper ou-stepper--choice" + (options.length > SCALE_HORIZONTAL_MAX ? " ou-stepper--vertical" : "") + (correct !== null ? " ou-stepper--review" : "");
+    const steps = options.map((label, i) => {
+      const status = scaleStatus(i, chosen, correct);
+      return `<button type="button" class="ou-stepper__step ou-stepper__step--btn${status}" role="radio" aria-checked="${chosen === i ? "true" : "false"}" data-action="select:${i}" data-index="${i}"><span class="ou-stepper__bullet"></span><span class="ou-stepper__label"><span class="ou-stepper__title">${answerHtml(label)}</span></span></button>`;
+    }).join("");
+    return `<div class="${rootCls}" role="radiogroup">${steps}</div>`;
   }
   var RANK_GRIP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"></path></svg>';
   var CHEVRON_UP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"></path></svg>';
@@ -6229,8 +6469,88 @@ var TBTemplate = (() => {
     return html;
   }
 
+  // shared/template/scale-keyboard.ts
+  var STEP_KEYS = {
+    ArrowLeft: -1,
+    ArrowUp: -1,
+    ArrowRight: 1,
+    ArrowDown: 1
+  };
+  function nextScaleIndex(key, current, count) {
+    if (count <= 0) return null;
+    if (key === "Home") return current === 0 ? null : 0;
+    if (key === "End") return current === count - 1 ? null : count - 1;
+    const step = STEP_KEYS[key];
+    if (step === void 0) return null;
+    if (current === null) return step < 0 ? count - 1 : 0;
+    const target = current + step;
+    return target < 0 || target >= count ? null : target;
+  }
+
+  // shared/template/question-nav.ts
+  var QUESTION_NAV_ACTIONS = {
+    back: "answer-back",
+    skip: "answer-skip",
+    submit: "answer-submit",
+    review: "answer-return",
+    next: "answer-next",
+    finish: "test-finish"
+  };
+  function buildQuestionNav(state) {
+    const A = QUESTION_NAV_ACTIONS;
+    if (!state.flexible) {
+      const primary2 = state.showAccept ? { primaryAction: A.submit, primaryLabel: "\u041F\u0440\u0438\u043D\u044F\u0442\u044C" } : state.hasNext ? { primaryAction: A.next, primaryLabel: "\u0414\u0430\u043B\u0435\u0435" } : { primaryAction: A.finish, primaryLabel: "\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C \u0442\u0435\u0441\u0442" };
+      return {
+        showBack: false,
+        canPrev: false,
+        showSkip: false,
+        showReview: false,
+        primaryEnabled: state.answerReady,
+        ...primary2
+      };
+    }
+    const primary = state.committed ? { primaryAction: A.next, primaryLabel: "\u0414\u0430\u043B\u0435\u0435", primaryEnabled: true } : { primaryAction: A.submit, primaryLabel: "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u043E\u0442\u0432\u0435\u0442", primaryEnabled: state.answerReady };
+    return {
+      showBack: true,
+      canPrev: state.canPrev,
+      showSkip: !state.committed,
+      showReview: state.showReview,
+      ...primary
+    };
+  }
+
+  // shared/template/results-nav.ts
+  var RESULTS_NAV_ACTIONS = {
+    /** Export the attempt report (the template's `report` variant). */
+    report: "download-report",
+    /** Start the test over. */
+    retry: "restart",
+    /** Walk on to the post-test content pages. */
+    next: "results-next",
+    /** Close the run (LMS) / leave the results screen (web). */
+    finish: "results-finish",
+    /**
+     * Leave the results for the test list — the ADAPTIVE layout's exit, since its
+     * footer carries no closing action (the standard one ends with `primaryAction`).
+     * WEB ONLY: a package has nowhere to go back to, so the layout gates the button on
+     * `result.showBack`, which only the web host sets (the same split as the start
+     * screen's `showBack`). It lives in the scene footer because the alternative — a
+     * row of host chrome under the scene — is a second footer on one screen, and
+     * outside the shadow root it gets neither the scene surface nor the DS palette.
+     */
+    back: "results-back"
+  };
+  function buildResultsNav(state) {
+    const A = RESULTS_NAV_ACTIONS;
+    return {
+      showReport: !!state.canReport,
+      canRetry: !!state.canRetry,
+      ...state.hasPostPages ? { primaryAction: A.next, primaryLabel: "\u0414\u0430\u043B\u0435\u0435" } : { primaryAction: A.finish, primaryLabel: state.finishLabel || "\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C" }
+    };
+  }
+
   // shared/template/fit-font.ts
-  var QUESTION_FIT = { max: 32, min: 18, from: 58, per: 0.17 };
+  var QUESTION_FIT = { max: 32, min: 16, from: 58, per: 0.17 };
   var OPTION_FIT = { max: 22, min: 14, from: 38, per: 0.14 };
   function fitFont(len, cfg) {
     const shrink = Math.max(0, (Number(len) || 0) - cfg.from) * cfg.per;
@@ -6256,7 +6576,7 @@ var TBTemplate = (() => {
     var _a, _b, _c, _d, _e, _f;
     if (!field || !col || !headerEnd) return;
     const qMax = (_a = options == null ? void 0 : options.questionMax) != null ? _a : 32;
-    const qMin = (_b = options == null ? void 0 : options.questionMin) != null ? _b : 18;
+    const qMin = (_b = options == null ? void 0 : options.questionMin) != null ? _b : 16;
     const aMax = (_c = options == null ? void 0 : options.answerMax) != null ? _c : 22;
     const aMin = (_d = options == null ? void 0 : options.answerMin) != null ? _d : 14;
     const fracMax = (_e = options == null ? void 0 : options.headerFraction) != null ? _e : 1 / 3;
@@ -6323,6 +6643,11 @@ var TBTemplate = (() => {
   }
   function supportsThemes(manifest) {
     return declaredThemes(manifest).length >= 2;
+  }
+  function resolveSceneTheme({ pinned, themed, systemPrefersDark }) {
+    if (pinned) return pinned;
+    if (!themed) return "dark";
+    return systemPrefersDark ? "dark" : "light";
   }
 
   // shared/template/theme-params.ts
@@ -6406,6 +6731,58 @@ var TBTemplate = (() => {
   }
   function paramsOfTheme(design, manifest, themeId) {
     return paramsForTheme(resolveThemeParams(design, manifest), themeId);
+  }
+
+  // shared/flow/section-budget.ts
+  var section_budget_exports = {};
+  __export(section_budget_exports, {
+    enterSection: () => enterSection,
+    isSpent: () => isSpent,
+    pauseAll: () => pauseAll,
+    remainingMs: () => remainingMs,
+    remainingSeconds: () => remainingSeconds,
+    spentTopics: () => spentTopics
+  });
+  function remainingMs(budget, activeMs) {
+    if (!budget) return null;
+    const spent = budget.runningSince === null ? 0 : Math.max(0, activeMs - budget.runningSince);
+    return Math.max(0, budget.remainingMs - spent);
+  }
+  function remainingSeconds(budgets, topicId, activeMs) {
+    if (!topicId) return null;
+    const ms = remainingMs(budgets[topicId], activeMs);
+    return ms === null ? null : Math.ceil(ms / 1e3);
+  }
+  function isSpent(budgets, topicId, activeMs) {
+    const ms = remainingMs(budgets[topicId], activeMs);
+    return ms !== null && ms <= 0;
+  }
+  function spentTopics(budgets, activeMs) {
+    return Object.keys(budgets).filter((id) => isSpent(budgets, id, activeMs));
+  }
+  function enterSection(budgets, topicId, limitMinutes, activeMs) {
+    const next = pauseAll(budgets, activeMs);
+    const current = next[topicId];
+    if (current) {
+      if (current.runningSince !== null) return budgets === next ? budgets : next;
+      return { ...next, [topicId]: { remainingMs: current.remainingMs, runningSince: activeMs } };
+    }
+    if (!limitMinutes || limitMinutes <= 0) return next;
+    return { ...next, [topicId]: { remainingMs: limitMinutes * 6e4, runningSince: activeMs } };
+  }
+  function pauseAll(budgets, activeMs) {
+    var _a;
+    let changed = false;
+    const next = {};
+    for (const [id, b] of Object.entries(budgets)) {
+      if (b.runningSince === null) {
+        next[id] = b;
+        continue;
+      }
+      next[id] = { remainingMs: (_a = remainingMs(b, activeMs)) != null ? _a : 0, runningSince: null };
+      changed = true;
+    }
+    return changed ? next : budgets;
   }
 
   // shared/template/question-progress-context.ts
