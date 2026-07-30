@@ -19,6 +19,7 @@
 import type { ScaleBand } from "@shared/scales/engine";
 import type { DrawStratum, QuestionScoring } from "@shared/schema";
 import { scales, resultVariables } from "@shared/schema";
+import { normalizeTags, TAG_MAX_LENGTH } from "@shared/tags";
 import { serializeScoring } from "./scoring-excel";
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -558,8 +559,15 @@ export function parseQuotaRow(row: Record<string, unknown>): ParseResult<ParsedQ
   const topicName = String(row["Раздел"] ?? row["Тема"] ?? "").replace(/[\s ​﻿]+/g, " ").trim();
   if (!topicName) return { ok: false, error: "не указан раздел (тема)" };
 
-  const tag = String(row["Тег"] ?? "").trim();
+  // Normalized through the SAME helper the «Вопросы» sheet uses for question
+  // tags. Trimming alone let a quota keep a form the question side had already
+  // rewritten (whitespace runs, over-long text), and the draw matches tags by
+  // string — a quota that does not match spelling matches no questions at all.
+  const tag = normalizeTags([String(row["Тег"] ?? "")])[0] ?? "";
   if (!tag) return { ok: false, error: "не указан тег" };
+  if (tag.length > TAG_MAX_LENGTH) {
+    return { ok: false, error: `тег длиннее ${TAG_MAX_LENGTH} символов: "${tag}"` };
+  }
 
   const count = Number(String(row["Количество"] ?? "").trim());
   if (!Number.isInteger(count) || count < 1) {

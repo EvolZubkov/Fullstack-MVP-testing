@@ -18,8 +18,18 @@
  * `tagKey`, so storage and matching can never drift apart.
  */
 
-/** Maximum tag length (characters) after normalization (PRD-11 §3a). */
-export const TAG_MAX_LENGTH = 50;
+/**
+ * Maximum tag length (characters) after normalization (PRD-11 §3a).
+ *
+ * Raised from 50 to 100: real sub-topics are competence wordings, and 50 cut
+ * them mid-phrase — «Принимает комплексные решения и мыслит завтрашним днем»
+ * (54) was stored on the question as «…и мыслит завтрашним». That silently
+ * de-synced the question's tag from the quota's (which was not capped at all,
+ * see `parseQuotaRow`), so the quota matched nothing AND the test could no
+ * longer be saved: the stored quota tag failed the 50-char rule of
+ * `drawStratumSchema`.
+ */
+export const TAG_MAX_LENGTH = 100;
 
 /**
  * Storage form of a tag: trim ends and collapse internal whitespace runs to a
