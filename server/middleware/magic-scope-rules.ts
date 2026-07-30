@@ -63,6 +63,12 @@ function splitPath(value: string): string[] {
 /**
  * Find the rule covering `method` plus `pathname`, capturing `:name` segments.
  * Returns `null` when nothing matches — the caller must treat that as a denial.
+ *
+ * Literal segments are compared case-INSENSITIVELY, matching Express 5's own
+ * case-insensitive routing (`/API/tests/...` must match the same as `/api/tests/...`).
+ * Captured `:name` segments keep the ORIGINAL case of `pathname` — they are
+ * identifiers (test/attempt ids), not routing literals, so their case is significant
+ * and must survive untouched into the returned `params`.
  */
 export function matchMagicScopeRule(method: string, pathname: string): MagicScopeMatch | null {
   const actual = splitPath(pathname);
@@ -89,7 +95,7 @@ export function matchMagicScopeRule(method: string, pathname: string): MagicScop
           ok = false;
           break;
         }
-      } else if (segment !== actual[i]) {
+      } else if (segment.toLowerCase() !== actual[i].toLowerCase()) {
         ok = false;
         break;
       }

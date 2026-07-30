@@ -59,4 +59,10 @@ describe("matchMagicScopeRule", () => {
   it("denies a path with a doubled slash", () => {
     expect(matchMagicScopeRule("GET", "/api/tests//resume")).toBeNull();
   });
+
+  it("matches a cased path (Express 5 routes case-insensitively) while keeping the captured parameter's original case", () => {
+    const m = matchMagicScopeRule("GET", "/API/Tests/T1/Resume");
+    expect(m?.rule.bind).toBe("test");
+    expect(m?.params.testId).toBe("T1");
+  });
 });

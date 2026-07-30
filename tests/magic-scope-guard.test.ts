@@ -13,6 +13,9 @@ const { storageMock } = vi.hoisted(() => ({
   storageMock: { getAttempt: vi.fn() },
 }));
 vi.mock("../server/storage", () => ({ storage: storageMock }));
+vi.mock("../server/logger", () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
 
 import { magicScopeGuard } from "../server/middleware/magic-scope";
 
@@ -93,5 +96,34 @@ describe("magicScopeGuard", () => {
     storageMock.getAttempt.mockRejectedValue(new Error("db down"));
     const res = await request(makeApp({ assignmentId: "a1", testId: "t1" })).get("/api/attempts/at1/result");
     expect(res.status).toBe(500);
+  });
+
+  // Regression for the case-sensitivity bypass: Express 5 routes case-insensitively,
+  // so a magic-link session hitting an upper-cased path must be denied exactly like
+  // its lower-case equivalent, not slip past the "/api/" prefix gate.
+  it("denies an uppercase API path absent from the table (bypass regression)", async () => {
+    const res = await request(makeApp({ assignmentId: "a1", testId: "t1" })).get("/API/learner/attempts");
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("MAGIC_SCOPE");
+  });
+
+  it("allows an uppercase path matching an allow-listed test-bound route", async () => {
+    const res = await request(makeApp({ assignmentId: "a1", testId: "t1" })).get("/API/tests/t1/resume");
+    expect(res.status).toBe(200);
+  });
+
+  it("still treats the captured test id as case-significant: matching case is allowed", async () => {
+    const res = await request(makeApp({ assignmentId: "a1", testId: "T1" })).get("/api/tests/T1/resume");
+    expect(res.status).toBe(200);
+  });
+
+  it("still treats the captured test id as case-significant: differing case is denied", async () => {
+    const res = await request(makeApp({ assignmentId: "a1", testId: "t1" })).get("/api/tests/T1/resume");
+    expect(res.status).toBe(403);
+  });
+
+  it("treats HEAD as GET so a HEAD on an allow-listed GET route is not denied", async () => {
+    const res = await request(makeApp({ assignmentId: "a1", testId: "t1" })).head("/api/auth/me");
+    expect(res.status).toBe(200);
   });
 });
