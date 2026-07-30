@@ -115,8 +115,15 @@ export interface GridProps extends React.HTMLAttributes<HTMLDivElement> {
   cols?: 1 | 2 | 3 | 4 | 5 | 6;
   /** Responsive auto-fit: each column is at least this preset min-width. */
   minItem?: GridMinItem;
-  /** Named column template: `label-control` = flexible label + fixed control column (center-aligned). */
-  template?: 'label-control';
+  /**
+   * Named column template.
+   *
+   * - `label-control` — flexible label + fixed control column (center-aligned).
+   * - `main-aside` — wide main column + narrow aside (2:1), top-aligned; collapses
+   *   to a single column on narrow viewports. For work-surface pages that pair a
+   *   stream of content with a secondary rail of urgent items and shortcuts.
+   */
+  template?: 'label-control' | 'main-aside';
   gap?: Space;
 }
 

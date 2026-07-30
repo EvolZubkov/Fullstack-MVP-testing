@@ -7398,6 +7398,8 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-lgrid--min-lg { --ou-lgrid-min: 300px; }
 .ou-lgrid--min-xl { --ou-lgrid-min: 380px; }
 .ou-lgrid--label-control { grid-template-columns: 1fr var(--ou-lgrid-control, 6rem); align-items: center; }
+.ou-lgrid--main-aside { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
+@media (max-width: 63.99rem) { .ou-lgrid--main-aside { grid-template-columns: minmax(0, 1fr); } }
 
 .ou-box--pad-1 { padding: var(--ou-space-1); }
 .ou-box--pad-2 { padding: var(--ou-space-2); }
