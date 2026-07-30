@@ -1,0 +1,86 @@
+/**
+ * @module server/middleware/magic-scope-rules
+ * @description The allow-list for a magic-link session and its path matcher. A
+ * session opened through `/access/:token` may reach ONLY what this table names:
+ * anything absent is denied, so a newly added route is closed until someone puts
+ * it here deliberately. Keeping the whole scope in one file is the point — it is
+ * reviewable at a glance.
+ *
+ * `bind` says what the guard must additionally verify:
+ *   - `none`    — no object binding (session-level routes);
+ *   - `test`    — the captured `testId` must equal the session's magic test;
+ *   - `attempt` — the captured `attemptId` must be an attempt of that test owned
+ *                 by the session user.
+ */
+
+/** How a matched route is bound to the session's magic scope. */
+export type MagicScopeBind = "none" | "test" | "attempt";
+
+/** One entry of the allow-list. */
+export interface MagicScopeRule {
+  method: string;
+  /** Path pattern; a `:name` segment captures a parameter. */
+  pattern: string;
+  bind: MagicScopeBind;
+}
+
+/** A matched rule together with the captured path parameters. */
+export interface MagicScopeMatch {
+  rule: MagicScopeRule;
+  params: Record<string, string>;
+}
+
+/**
+ * Everything a magic-link session may call. Ordered by area: session, the test's
+ * own metadata and templates, the attempt lifecycle, the attempt report assets.
+ */
+export const MAGIC_SCOPE_RULES: MagicScopeRule[] = [
+  { method: "GET", pattern: "/api/auth/me", bind: "none" },
+  { method: "POST", pattern: "/api/auth/logout", bind: "none" },
+  // The handler itself narrows the payload down to the magic test.
+  { method: "GET", pattern: "/api/learner/tests", bind: "none" },
+  { method: "GET", pattern: "/api/tests/:testId/screen-template/:screen", bind: "test" },
+  { method: "POST", pattern: "/api/tests/:testId/attempts/start", bind: "test" },
+  { method: "POST", pattern: "/api/tests/:testId/attempts/start-adaptive", bind: "test" },
+  { method: "GET", pattern: "/api/tests/:testId/resume", bind: "test" },
+  { method: "POST", pattern: "/api/attempts/:attemptId/save-progress", bind: "attempt" },
+  { method: "POST", pattern: "/api/attempts/:attemptId/section-timer", bind: "attempt" },
+  { method: "POST", pattern: "/api/attempts/:attemptId/section-result", bind: "attempt" },
+  { method: "POST", pattern: "/api/attempts/:attemptId/finish", bind: "attempt" },
+  { method: "POST", pattern: "/api/attempts/:attemptId/answer-adaptive", bind: "attempt" },
+  { method: "POST", pattern: "/api/attempts/:attemptId/expire-topic-adaptive", bind: "attempt" },
+  { method: "GET", pattern: "/api/attempts/:attemptId/result", bind: "attempt" },
+  { method: "GET", pattern: "/api/report/lib/:file", bind: "none" },
+  { method: "GET", pattern: "/api/report/asset/:file", bind: "none" },
+];
+
+function splitPath(value: string): string[] {
+  return value.split("/").filter(Boolean);
+}
+
+/**
+ * Find the rule covering `method` plus `pathname`, capturing `:name` segments.
+ * Returns `null` when nothing matches — the caller must treat that as a denial.
+ */
+export function matchMagicScopeRule(method: string, pathname: string): MagicScopeMatch | null {
+  const actual = splitPath(pathname);
+  for (const rule of MAGIC_SCOPE_RULES) {
+    if (rule.method !== method.toUpperCase()) continue;
+    const expected = splitPath(rule.pattern);
+    if (expected.length !== actual.length) continue;
+
+    const params: Record<string, string> = {};
+    let ok = true;
+    for (let i = 0; i < expected.length; i += 1) {
+      const segment = expected[i];
+      if (segment.startsWith(":")) {
+        params[segment.slice(1)] = decodeURIComponent(actual[i]);
+      } else if (segment !== actual[i]) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return { rule, params };
+  }
+  return null;
+}
