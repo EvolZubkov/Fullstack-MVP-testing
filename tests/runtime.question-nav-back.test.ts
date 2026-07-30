@@ -1,15 +1,22 @@
 /**
  * @module tests/runtime.question-nav-back
  *
- * PRD-19 (Block B) — the SCORM runtime's question navigation must offer a
- * «← Назад» (return to the previous question) button in flexible mode
- * (allowReturnToUnanswered), at parity with the web host (take-test.tsx). The
- * button was missing entirely from `buildQuestionNavHtml`, so a learner could
- * skip / return-via-обзор but had no direct back navigation.
+ * PRD-19 (Block B) — which PREVIOUS question the SCORM runtime lets a learner return
+ * to: the immediately preceding one in flexible mode (allowReturnToUnanswered), never
+ * across a section boundary under sectional commit scope, and never at all in strict
+ * mode.
+ *
+ * Scope note: this file used to also assert the «← Назад» BUTTON markup, extracted from
+ * `buildQuestionNavHtml` in mainRender.js. That function is gone — the revision on the
+ * design system moved the nav row into the LAYOUT (`state.nav`, built by
+ * `shared/template/question-nav`), where its composition is covered by
+ * `shared/template/question-nav.test.ts`. The extraction threw at import and took the
+ * whole file (including the checks below) down with it; only the button block was
+ * removed, the reachability rules it guarded are still the runtime's own.
  *
  * The runtime ships as hand-maintained plain JS (server/scorm/template/app/*),
  * not as importable modules, so — like the other *-port tests — we extract the
- * functions under test by source and run them with injected globals.
+ * function under test by source and run it with injected globals.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -17,10 +24,6 @@ import { resolve } from "node:path";
 
 const answersSrc = readFileSync(
   resolve(process.cwd(), "server/scorm/template/app/actions/answers.js"),
-  "utf8",
-);
-const mainRenderSrc = readFileSync(
-  resolve(process.cwd(), "server/scorm/template/app/render/mainRender.js"),
   "utf8",
 );
 
@@ -31,11 +34,9 @@ function extract(src: string, name: string): string {
 }
 
 const prevSrc = extract(answersSrc, "prevAccessibleQuestionIndex");
-const navSrc = extract(mainRenderSrc, "buildQuestionNavHtml");
 
 interface Runtime {
   prevAccessibleQuestionIndex: () => number;
-  buildQuestionNavHtml: (current: number, total: number) => string;
 }
 
 function makeRuntime(TEST_DATA: any, state: any, hasSkippedInScope = () => false): Runtime {
@@ -44,7 +45,7 @@ function makeRuntime(TEST_DATA: any, state: any, hasSkippedInScope = () => false
     "TEST_DATA",
     "state",
     "hasSkippedInScope",
-    `${prevSrc}\n${navSrc}\nreturn { prevAccessibleQuestionIndex: prevAccessibleQuestionIndex, buildQuestionNavHtml: buildQuestionNavHtml };`,
+    `${prevSrc}\nreturn { prevAccessibleQuestionIndex: prevAccessibleQuestionIndex };`,
   );
   return factory(TEST_DATA, state, hasSkippedInScope) as Runtime;
 }
@@ -85,34 +86,5 @@ describe("PRD-19 SCORM runtime — prevAccessibleQuestionIndex", () => {
   it("strict mode (return disabled): never offers a previous", () => {
     const rt = makeRuntime({ allowReturnToUnanswered: false, answerCommitScope: "test" }, stateAt(2));
     expect(rt.prevAccessibleQuestionIndex()).toBe(-1);
-  });
-});
-
-describe("PRD-19 SCORM runtime — buildQuestionNavHtml «Назад»", () => {
-  it("renders an enabled «Назад» when a previous question is reachable", () => {
-    const rt = makeRuntime({ allowReturnToUnanswered: true, answerCommitScope: "section" }, stateAt(1));
-    const html = rt.buildQuestionNavHtml(1, 3);
-    expect(html).toContain('data-action="answer-back"');
-    expect(html).toContain("goBack()");
-    expect(html).toContain("Назад");
-    // Enabled: the back button itself carries no `disabled` attribute.
-    expect(/data-action="answer-back"[^>]*\sdisabled/.test(html)).toBe(false);
-    // Flexible mode still offers «Пропустить» before commit.
-    expect(html).toContain('data-action="answer-skip"');
-  });
-
-  it("renders a disabled «Назад» on the first question of a section", () => {
-    const rt = makeRuntime({ allowReturnToUnanswered: true, answerCommitScope: "section" }, stateAt(2));
-    const html = rt.buildQuestionNavHtml(2, 3);
-    expect(/data-action="answer-back"[^>]*\sdisabled/.test(html)).toBe(true);
-  });
-
-  it("offers «Назад» even after the answer is committed (independent of commit state)", () => {
-    const state = stateAt(1);
-    state.questionStatuses = { q1: "answered" } as any;
-    const rt = makeRuntime({ allowReturnToUnanswered: true, answerCommitScope: "section" }, state);
-    const html = rt.buildQuestionNavHtml(1, 3);
-    expect(html).toContain('data-action="answer-back"');
-    expect(html).toContain("Далее"); // committed → forward is «Далее»
   });
 });

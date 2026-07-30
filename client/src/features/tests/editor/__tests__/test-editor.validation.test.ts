@@ -11,6 +11,7 @@
  *   FR-20  — webhook URL valid or empty
  */
 import { describe, expect, it } from "vitest";
+import { TAG_MAX_LENGTH } from "@shared/tags";
 import { validateTestEditor } from "../test-editor.validation";
 import type { TestEditorModel } from "../test-editor.types";
 
@@ -121,8 +122,11 @@ describe("PRD-11 FR-05: quota sum vs drawCount", () => {
     }
   });
 
-  it("over-long tag (> 50 chars after normalization) → section error", () => {
-    const result = validateTestEditor(withBlueprint([{ tag: "x".repeat(51), count: 1 }]));
+  // Bound to TAG_MAX_LENGTH rather than a literal — see the same note in
+  // tests/schema-prd11-blueprint.test.ts. The rule under test is «there is a limit and
+  // the editor reports it», not the number of the day.
+  it("over-long tag (past TAG_MAX_LENGTH after normalization) → section error", () => {
+    const result = validateTestEditor(withBlueprint([{ tag: "x".repeat(TAG_MAX_LENGTH + 1), count: 1 }]));
     expect(result.errors.some((e) => e.field === "sections[0].drawBlueprintJson")).toBe(true);
   });
 

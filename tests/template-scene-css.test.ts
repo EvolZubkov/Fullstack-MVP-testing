@@ -14,6 +14,16 @@ const css = fs.readFileSync(
   "utf8",
 );
 
+/**
+ * The stylesheet WITHOUT comments. The no-colour-literals rule is about what the file
+ * DECLARES, and the palette block annotates each HSL triple with the DS token and hex
+ * value it transcribes — e.g. the `--background` line carries a trailing comment naming
+ * `--ou-neutral-50` and its `#F4F4F5`. Scanning raw text flagged those annotations as
+ * violations; the mapping they record is exactly what makes the transcription auditable,
+ * so strip comments rather than delete them.
+ */
+const declarations = css.replace(/\/\*[\s\S]*?\*\//g, "");
+
 describe("scene layer (theme.css)", () => {
   it("declares the scene flex root, scrolling body and fill answers", () => {
     expect(css).toContain("flex-direction: column");
@@ -29,8 +39,8 @@ describe("scene layer (theme.css)", () => {
     expect(css).toContain("incorrect-answer");
   });
 
-  it("uses DS tokens only — no colour literals (#hex / rgb / rgba)", () => {
-    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(\s*[\d.]/);
+  it("uses DS tokens only — no colour literals (#hex / rgb / rgba) in declarations", () => {
+    expect(declarations).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(\s*[\d.]/);
   });
 
   it("is the SINGLE default stylesheet — base.css is gone and its live chrome moved here", () => {
