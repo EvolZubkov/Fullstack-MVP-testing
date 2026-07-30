@@ -1009,6 +1009,21 @@ describe("buildMeasureView", () => {
     expect(v.zones[0].color).toBe(LEVEL_SCHEMES.traffic.unfavorable);
   });
 
+  it("средний интервал получает тон «внимание», а не «нейтральный»", () => {
+    // Тон обязан совпадать с цветом своей зоны: середина рампы жёлтая, значит и
+    // плашка уровня жёлтая. Нейтральный тон остаётся только за valence: none.
+    const v = ee({ value: 20 });
+    expect(v.levelLabel).toBe("Умеренный");
+    expect(v.tone).toBe("attention");
+  });
+
+  it("при valence none тон нейтральный на любом интервале", () => {
+    const v = ee({
+      interpretation: { domainMin: 0, domainMax: 45, valence: "none", bands: EE_BANDS },
+    });
+    expect(v.tone).toBe("neutral");
+  });
+
   it("переопределение тона на интервале побеждает вычисленный", () => {
     const bands = [{ ...EE_BANDS[0] }, { ...EE_BANDS[1] }, { ...EE_BANDS[2], tone: "critical" as const }];
     const v = ee({
@@ -1197,7 +1212,14 @@ function buildZones(
   });
 }
 
-/** Tone of the current level: the author's override, else the ramp position. */
+/**
+ * Tone of the current level: the author's override, else the ramp position.
+ *
+ * The thresholds mirror the RAMP, not an independent ladder: the tag sits next to a
+ * zone painted from the same position, so a midpoint that reads yellow on the ruler
+ * must not read blue on the tag. `neutral` is therefore reserved for `valence: none`
+ * — the one case that genuinely carries no evaluation.
+ */
 function toneOf(
   input: MeasureViewInput,
   override: LevelTone | undefined,
@@ -1210,8 +1232,7 @@ function toneOf(
   const position = index / (count - 1);
   const t = valence === "lower_is_better" ? 1 - position : position;
   if (t >= 0.75) return "favorable";
-  if (t >= 0.5) return "neutral";
-  if (t >= 0.25) return "attention";
+  if (t >= 0.375) return "attention";
   return "critical";
 }
 
@@ -1299,7 +1320,7 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
 - [ ] **Step 4: Убедиться, что тест проходит**
 
 Run: `npm test -- shared/template/__tests__/measure-view.test.ts`
-Expected: PASS, 18 тестов.
+Expected: PASS, 20 тестов.
 
 - [ ] **Step 5: Commit**
 
