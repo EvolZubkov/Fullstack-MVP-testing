@@ -233,6 +233,11 @@ export function buildTestJson(data: ExportData): string {
           // for untagged questions stay byte-identical (FR-02); the draw blueprint
           // is useless without them.
           ...(Array.isArray(q.tags) && q.tags.length ? { tags: q.tags } : {}),
+          // PRD-16 FR-41: «Случайный порядок вариантов» off — the runtime must
+          // deliver the authored order (shuffleMappingFor). Baked only when off
+          // (the default is on) so packages of untouched tests stay
+          // byte-identical (FR-02).
+          ...(q.shuffleAnswers === false ? { shuffleAnswers: false } : {}),
         };
       }),
     })),
@@ -318,6 +323,8 @@ export function buildTestJson(data: ExportData): string {
             feedbackIncorrect: q.feedbackIncorrect || null,
             // PRD-10: graded answer scoring (see standard-section map above).
             ...(baked.scoring ? { scoring: baked.scoring } : {}),
+            // PRD-16 FR-41 (see standard-section map above).
+            ...(q.shuffleAnswers === false ? { shuffleAnswers: false } : {}),
           };
         }),
       };
