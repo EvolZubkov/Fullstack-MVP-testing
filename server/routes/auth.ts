@@ -7,6 +7,7 @@ import { sendPasswordResetEmail } from "../email";
 import { maskEmail } from "../utils/mask-email";
 import { logger, audit, requestContext } from "../logger";
 import { appBaseUrl } from "../config";
+import "../middleware/magic-scope";
 
 const router = Router();
 
@@ -62,6 +63,9 @@ router.post("/login", async (req, res) => {
     if (ctx) ctx.userId = user.id;
 
     req.session.userId = user.id;
+    // A full authentication supersedes a magic-link session: dropping the mark is
+    // what "log in with a password to leave the test" actually means.
+    delete req.session.magic;
 
     // Явно сохраняем сессию перед ответом — гарантирует что сессия в store
     // до того как браузер отправит следующий запрос с cookie
@@ -165,6 +169,9 @@ router.get("/me", async (req, res) => {
         status: user.status,
         mustChangePassword: user.mustChangePassword,
         gdprConsent: user.gdprConsent,
+        // Present only for a session opened by an assignment link; the client uses
+        // it to keep the interface inside that one test.
+        magicScope: req.session.magic ? { testId: req.session.magic.testId } : null,
       },
     });
   } catch (error) {
