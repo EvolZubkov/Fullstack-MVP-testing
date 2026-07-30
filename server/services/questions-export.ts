@@ -12,6 +12,7 @@
  */
 
 import type { Question } from "@shared/schema";
+import { hasOptionList, isMeasurementOnly } from "@shared/questions/question-type";
 
 /** Маппинг типов: внутренний -> Excel. */
 const typeToExcel: Record<string, string> = {
@@ -19,6 +20,7 @@ const typeToExcel: Record<string, string> = {
   multiple: "multiple_response",
   matching: "matching",
   ranking: "ranking",
+  scale: "scale",
 };
 
 /** Canonical «Вопросы» headers (order = export column order). */
@@ -63,12 +65,16 @@ export function serializeQuestionRow(q: Question, topicName: string): Record<str
   let optionsStr = "";
   let correctStr = "";
 
-  if (q.type === "single" || q.type === "multiple") {
+  if (hasOptionList(q.type)) {
     optionsStr = (data.options || []).join("#");
-    if (q.type === "single") {
-      correctStr = String((correct.correctIndex ?? 0) + 1);
-    } else {
+    if (q.type === "multiple") {
       correctStr = (correct.correctIndices || []).map((i: number) => i + 1).join(",");
+    } else if (isMeasurementOnly(q)) {
+      // PRD-26 FR-23: a measurement-only scale round-trips through an EMPTY cell —
+      // that emptiness is what tells the import there is no correct graduation.
+      correctStr = "";
+    } else {
+      correctStr = String((correct.correctIndex ?? 0) + 1);
     }
   } else if (q.type === "matching") {
     // PRD-14 Ф0 (FR-01): "left list || right list" (round-trippable, distractors).

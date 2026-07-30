@@ -16,6 +16,7 @@ import { createHash } from "crypto";
 import { storage } from "../storage";
 import { logger } from "../logger";
 import { normalizeTags } from "@shared/tags";
+import { hasOptionList, hasFixedOptionOrder } from "@shared/questions/question-type";
 import { normalizeIncomingText, normalizeQuestionData } from "./question-text";
 import type { Question } from "@shared/schema";
 import type { Role } from "@shared/access";
@@ -34,9 +35,12 @@ const typeFromExcel: Record<string, string> = {
   ranking: "ranking",
   single: "single",
   multiple: "multiple",
+  // PRD-26: the scale is declared by its own name. Its rule for the correct-answer
+  // column differs from single choice — an empty cell means measurement mode (FR-23).
+  scale: "scale",
 };
 
-type QuestionType = "single" | "multiple" | "matching" | "ranking";
+type QuestionType = "single" | "multiple" | "matching" | "ranking" | "scale";
 
 /** SHA-256 от type + prompt + нормализованные варианты ответов. */
 export function computeQuestionHash(type: string, prompt: string, dataJson: unknown): string {
@@ -68,6 +72,12 @@ export interface QuestionImportResult {
   updated: number;
   skipped: number;
   errors: string[];
+  /**
+   * Non-blocking notices: the row imports, but something in it is likely not what the
+   * author meant. Same channel the workbook import already exposes; forwarded there
+   * prefixed with the sheet name.
+   */
+  warnings: string[];
   /** Local `Ключ строки` alias → resolved question (FR-15.6). */
   aliasToQuestion: Map<string, ResolvedQuestion>;
 }
@@ -82,7 +92,7 @@ function cellText(raw: unknown): string {
 
 /** Derive the option/pair/item count from a parsed dataJson. */
 function unitCountOf(type: QuestionType, dataJson: any): number {
-  if (type === "single" || type === "multiple") return dataJson.options?.length ?? 0;
+  if (hasOptionList(type)) return dataJson.options?.length ?? 0;
   if (type === "matching") return dataJson.left?.length ?? 0;
   return dataJson.items?.length ?? 0;
 }
@@ -135,6 +145,7 @@ export async function importQuestionRows(
     updated: 0,
     skipped: 0,
     errors: [],
+    warnings: [],
     aliasToQuestion: new Map(),
   };
 
@@ -201,17 +212,44 @@ export async function importQuestionRows(
       let dataJson: unknown = {};
       let correctJson: unknown = {};
 
-      if (type === "single" || type === "multiple") {
+      if (hasOptionList(type)) {
         const separator = optionsStr.includes("#") ? "#" : "|";
         const options = optionsStr.split(separator).map((s) => s.trim()).filter(Boolean);
 
         if (options.length < 2) {
-          result.errors.push(`Строка ${rowNum}: нужно минимум 2 варианта ответа`);
+          result.errors.push(
+            type === "scale"
+              ? `Строка ${rowNum}: нужно минимум 2 градации шкалы`
+              : `Строка ${rowNum}: нужно минимум 2 варианта ответа`,
+          );
           continue;
         }
         dataJson = { options };
 
-        if (type === "single") {
+        if (type === "scale") {
+          // PRD-26 FR-23: the correct-answer column IS the author's switch. Empty →
+          // measurement mode: `{}`, never `null` (the column is NOT NULL). One number
+          // → a checked scale. Several numbers make no sense: a scale answer is one
+          // graduation, and silently taking the first would hide the author's mistake.
+          if (correctStr === "") {
+            correctJson = {};
+          } else {
+            const nums = correctStr.split(/[,;.\s]+/).filter(Boolean);
+            if (nums.length > 1) {
+              result.errors.push(
+                `Строка ${rowNum}: у шкалы правильная градация одна или её нет вовсе; ` +
+                  `указано несколько номеров "${correctStr}"`,
+              );
+              continue;
+            }
+            const idx = parseInt(nums[0], 10) - 1;
+            if (isNaN(idx) || idx < 0 || idx >= options.length) {
+              result.errors.push(`Строка ${rowNum}: некорректный номер правильной градации "${correctStr}"`);
+              continue;
+            }
+            correctJson = { correctIndex: idx };
+          }
+        } else if (type === "single") {
           const idx = parseInt(correctStr, 10) - 1;
           if (isNaN(idx) || idx < 0 || idx >= options.length) {
             result.errors.push(`Строка ${rowNum}: некорректный номер правильного ответа "${correctStr}"`);
@@ -331,6 +369,17 @@ export async function importQuestionRows(
       // Следование вариантов.
       const shuffleStr = String(row["Следование вариантов ответов"] || "Random").trim().toLowerCase();
       const shuffleAnswers = shuffleStr !== "fixed";
+      // PRD-26 FR-24: the column does not apply to a scale — the order of graduations
+      // runs from one pole to the other and is never shuffled. An explicit `Random`
+      // is not an error (the value is stored, both hosts ignore it), but it means the
+      // author expected something that will not happen, so it is worth saying.
+      if (hasFixedOptionOrder(type) && hasCol("Следование вариантов ответов") && shuffleAnswers && shuffleStr !== "") {
+        result.warnings.push(
+          `Строка ${rowNum}: у шкалы порядок градаций содержателен и не перемешивается — ` +
+            `значение «${String(row["Следование вариантов ответов"]).trim()}» в колонке ` +
+            `«Следование вариантов ответов» не применяется`,
+        );
+      }
 
       // PRD-14 Ф0 (FR-04): сложность сохраняет явный 0; диапазон 0..100. T-40:
       // «Балл» больше не свойство вопроса — цена задаётся листом «Оценка» теста.

@@ -77,7 +77,7 @@ function normalizeName(s: string): string {
   return s.replace(/[\s ​﻿]+/g, " ").trim().toLowerCase();
 }
 
-type QuestionType = "single" | "multiple" | "matching" | "ranking";
+type QuestionType = "single" | "multiple" | "matching" | "ranking" | "scale";
 
 /** Find a worksheet by role name (case-insensitive, trimmed). */
 function findSheet(wb: ExcelJS.Workbook, name: string): ExcelJS.Worksheet | undefined {
@@ -136,6 +136,7 @@ export async function importWorkbook(
     const qres = await importQuestionRows(qrows, sheetHeaders(questionsSheet), { dryRun, actor });
     result.questions = { created: qres.created, updated: qres.updated, skipped: qres.skipped };
     for (const e of qres.errors) result.errors.push(`Лист «Вопросы», ${e}`);
+    for (const w of qres.warnings) result.warnings.push(`Лист «Вопросы», ${w}`);
     for (const [alias, q] of qres.aliasToQuestion) aliasToQuestion.set(alias, q);
 
     // Variant memberships: resolve each row's question (row key alias, else ID)
