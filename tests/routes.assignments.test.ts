@@ -53,6 +53,27 @@ const learnerUser = {
   email: "learner@test.com", name: "Learner",
 };
 const learner2 = { ...learnerUser, id: "learner2", email: "learner2@test.com" };
+// Privileged recipients (D-3 / PLAN_MAGIC_LINK_SCOPE.md Этап 3): must never
+// receive a passwordless assignment link, direct or group.
+const adminRecipient = {
+  ...authorUser, id: "admin1", role: "administrator",
+  email: "admin@test.com", name: "Admin Recipient",
+};
+const mixedRecipient = {
+  ...authorUser, id: "mixed1", role: "author",
+  email: "mixed@test.com", name: "Mixed Recipient",
+};
+
+/** Effective roles by user id, used by `storage.getUserRoles` in this suite. */
+const rolesById: Record<string, string[]> = {
+  author1: ["administrator"],
+  admin1: ["administrator"],
+  mixed1: ["author", "learner"],
+};
+/** Default: any id not listed above resolves as a pure learner (learner1, learner2, ...). */
+function defaultGetUserRoles(id: string): Promise<string[]> {
+  return Promise.resolve(rolesById[id] ?? ["learner"]);
+}
 
 const dbTest = { id: "test1", title: "Test One", description: "desc" };
 const dbAssignment = {
@@ -97,7 +118,12 @@ function asLearner(req: request.Test) { return req.set("x-test-user", "learner1"
 beforeEach(() => {
   vi.resetAllMocks();
 
-  storageMock.getUserRoles.mockResolvedValue(["administrator"]);
+  // Per-id roles: author1 is the acting administrator (requester); every other
+  // id defaults to a pure learner unless overridden in `rolesById` above. This
+  // matters because `mayReceiveAssignmentLink` resolves roles for the
+  // RECIPIENT, not just the requester — a blanket ["administrator"] mock would
+  // make every recipient look privileged and silently suppress token creation.
+  storageMock.getUserRoles.mockImplementation(defaultGetUserRoles);
   storageMock.getTest.mockResolvedValue(dbTest);
   storageMock.getAssignment.mockResolvedValue(dbAssignment);
 
@@ -105,6 +131,8 @@ beforeEach(() => {
     if (id === "author1") return Promise.resolve(authorUser);
     if (id === "learner1") return Promise.resolve(learnerUser);
     if (id === "learner2") return Promise.resolve(learner2);
+    if (id === "admin1") return Promise.resolve(adminRecipient);
+    if (id === "mixed1") return Promise.resolve(mixedRecipient);
     return Promise.resolve(undefined);
   });
 
@@ -543,6 +571,75 @@ describe("POST /api/assignments/:id/resend", () => {
     expect(res.status).toBe(200);
     expect(storageMock.createAssignmentAccessToken).toHaveBeenCalledTimes(1);
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D-3 (PLAN_MAGIC_LINK_SCOPE.md, Этап 3): a passwordless assignment link must
+// never be issued to a recipient holding any role other than `learner`.
+describe("Assignment link withheld for privileged recipients (D-3)", () => {
+  it("a pure-learner recipient still gets a token and a magic link in the letter", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.createTestAssignment.mockResolvedValue({ ...dbAssignment, userId: "learner1" });
+
+    const res = await asAuthor(request(makeApp())
+      .post("/api/tests/test1/assignments")
+      .send({ userId: "learner1" }));
+    expect(res.status).toBe(201);
+
+    await new Promise(r => setTimeout(r, 60));
+    expect(storageMock.createAssignmentAccessToken).toHaveBeenCalled();
+    const call = sendEmailMock.mock.calls[0][0];
+    expect(call.magicLink).toContain("/access/");
+  });
+
+  it("an administrator recipient gets no token and a letter without a magic link (direct assignment)", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.createTestAssignment.mockResolvedValue({ ...dbAssignment, userId: "admin1" });
+
+    const res = await asAuthor(request(makeApp())
+      .post("/api/tests/test1/assignments")
+      .send({ userId: "admin1" }));
+    expect(res.status).toBe(201);
+
+    await new Promise(r => setTimeout(r, 60));
+    expect(storageMock.createAssignmentAccessToken).not.toHaveBeenCalled();
+    expect(storageMock.revokeAssignmentAccessTokensByAssignmentAndUser).not.toHaveBeenCalled();
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    const call = sendEmailMock.mock.calls[0][0];
+    expect(call.magicLink).toBeUndefined();
+    expect(call.to).toBe("admin@test.com");
+  });
+
+  it("a recipient holding author+learner is still privileged and gets no token (mixed roles)", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.createTestAssignment.mockResolvedValue({ ...dbAssignment, userId: "mixed1" });
+
+    const res = await asAuthor(request(makeApp())
+      .post("/api/tests/test1/assignments")
+      .send({ userId: "mixed1" }));
+    expect(res.status).toBe(201);
+
+    await new Promise(r => setTimeout(r, 60));
+    expect(storageMock.createAssignmentAccessToken).not.toHaveBeenCalled();
+    const call = sendEmailMock.mock.calls[0][0];
+    expect(call.magicLink).toBeUndefined();
+  });
+
+  it("resend withholds a new token for a privileged recipient (still revokes the old one)", async () => {
+    storageMock.getAssignmentAccessTokensByAssignment.mockResolvedValue([
+      makeToken({ userId: "admin1" }),
+    ]);
+    storageMock.getTest.mockResolvedValue(dbTest);
+
+    const res = await asAuthor(request(makeApp()).post("/api/assignments/asgn1/resend"));
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(storageMock.revokeAssignmentAccessTokensByAssignment).toHaveBeenCalledWith("asgn1");
+    expect(storageMock.createAssignmentAccessToken).not.toHaveBeenCalled();
+    const call = sendEmailMock.mock.calls[0][0];
+    expect(call.to).toBe("admin@test.com");
+    expect(call.magicLink).toBeUndefined();
   });
 });
 

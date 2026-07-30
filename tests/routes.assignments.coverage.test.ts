@@ -131,7 +131,14 @@ const settle = () => new Promise((r) => setTimeout(r, 60));
 beforeEach(() => {
   vi.resetAllMocks();
 
-  storageMock.getUserRoles.mockResolvedValue(["administrator"]);
+  // Per-id roles: author1 is the acting administrator (requester); every other
+  // id defaults to a pure learner. `mayReceiveAssignmentLink` (D-3) resolves
+  // roles for the RECIPIENT, so a blanket ["administrator"] mock would make
+  // every recipient look privileged and silently suppress token creation —
+  // see `tests/routes.assignments.test.ts` for the dedicated D-3 coverage.
+  storageMock.getUserRoles.mockImplementation((id: string) =>
+    Promise.resolve(id === "author1" ? ["administrator"] : ["learner"]),
+  );
   storageMock.getTest.mockResolvedValue(dbTest);
   storageMock.getAssignment.mockResolvedValue(dbAssignment);
   storageMock.getTestGrantForUser.mockResolvedValue(undefined);

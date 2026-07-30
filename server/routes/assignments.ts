@@ -6,6 +6,7 @@ import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { requireTestScope, requireAssignmentScope } from "../middleware/test-scope";
 import { sendAssignmentEmail } from "../email";
+import { mayReceiveAssignmentLink } from "../services/access";
 
 const router = Router();
 
@@ -63,6 +64,26 @@ async function notifyUser(opts: {
   }
 
   if (!email) return;
+
+  // A recipient holding any role other than `learner` (D-3) must never receive
+  // a passwordless entry link: no token is minted, and the letter falls back
+  // to an ordinary login link (server/email.ts). This is normal operation, not
+  // an error — logged as such, without hinting at the reason in the letter.
+  if (!(await mayReceiveAssignmentLink(user))) {
+    logger.info(
+      `Assignment link withheld (privileged account) for user ${opts.userId}, test "${opts.testTitle}"`,
+      "assignments",
+    );
+    await sendAssignmentEmail({
+      to: email,
+      userName: user.name || undefined,
+      testTitle: opts.testTitle,
+      testDescription: opts.testDescription,
+      dueDate: opts.dueDate,
+    });
+    logger.info(`Assignment email sent to ${email} for test "${opts.testTitle}"`, "assignments");
+    return;
+  }
 
   // Отзываем старые токены этого пользователя для данного назначения перед созданием нового.
   // Важно: отзываем только токены конкретного пользователя, чтобы групповые назначения
@@ -321,19 +342,13 @@ router.post("/assignments/:id/resend", requirePermission("assignments.manage"), 
     const test = await storage.getTest(token.testId);
     if (!test) return res.status(404).json({ error: "Test not found" });
 
-    // Отзываем старые токены и генерируем новый
-    await storage.revokeAssignmentAccessTokensByAssignment(req.params.id);
-
-    const expiresAt = resolveTokenExpiry(null, null); // 30 дней от сейчас
-    const rawToken = await generateTokenForUser({
-      assignmentId: req.params.id,
-      userId: token.userId,
-      testId: token.testId,
-      expiresAt,
-    });
-
     const user = await storage.getUser(token.userId);
     if (!user) return res.status(404).json({ error: "User not found" });
+
+    // Отзываем старые токены. Это остаётся штатным действием независимо от
+    // того, будет ли выпущен новый (revocation of an existing link is always
+    // safe; only the re-issuance of a NEW passwordless link is gated below).
+    await storage.revokeAssignmentAccessTokensByAssignment(req.params.id);
 
     let email = "";
     try {
@@ -346,6 +361,30 @@ router.post("/assignments/:id/resend", requirePermission("assignments.manage"), 
     } catch {
       return res.status(400).json({ error: "Cannot decrypt user email" });
     }
+
+    // D-3: a recipient holding any role other than `learner` must not receive a
+    // new passwordless link — no token is minted, letter falls back to /login.
+    if (!(await mayReceiveAssignmentLink(user))) {
+      logger.info(
+        `Assignment link withheld (privileged account) for user ${token.userId}, test "${test.title}"`,
+        "assignments",
+      );
+      await sendAssignmentEmail({
+        to: email,
+        userName: user.name || undefined,
+        testTitle: test.title,
+        testDescription: test.description,
+      });
+      return res.json({ success: true });
+    }
+
+    const expiresAt = resolveTokenExpiry(null, null); // 30 дней от сейчас
+    const rawToken = await generateTokenForUser({
+      assignmentId: req.params.id,
+      userId: token.userId,
+      testId: token.testId,
+      expiresAt,
+    });
 
     const magicLink = `${appBaseUrl()}/access/${rawToken}`;
     await sendAssignmentEmail({
@@ -418,6 +457,31 @@ router.post("/assignments/:id/resend-group", requirePermission("assignments.mana
     let sent = 0;
 
     for (const u of groupUsers) {
+      let email = u.email;
+      try {
+        if (u.email && !u.email.includes("@")) {
+          email = await decryptEmail(u.email);
+        }
+      } catch { continue; }
+
+      // D-3: withhold a new passwordless link for a privileged group member —
+      // no token is minted, letter falls back to /login (server/email.ts).
+      if (!(await mayReceiveAssignmentLink(u))) {
+        logger.info(
+          `Assignment link withheld (privileged account) for user ${u.id}, test "${test.title}"`,
+          "assignments",
+        );
+        await sendAssignmentEmail({
+          to: email,
+          userName: u.name || undefined,
+          testTitle: test.title,
+          testDescription: test.description,
+          dueDate: assignment.dueDate ? new Date(assignment.dueDate) : null,
+        });
+        sent++;
+        continue;
+      }
+
       const expiresAt = resolveTokenExpiry(
         assignment.linkExpiresAt ? new Date(assignment.linkExpiresAt) : null,
         assignment.dueDate ? new Date(assignment.dueDate) : null,
@@ -428,13 +492,6 @@ router.post("/assignments/:id/resend-group", requirePermission("assignments.mana
         testId: assignment.testId,
         expiresAt,
       });
-
-      let email = u.email;
-      try {
-        if (u.email && !u.email.includes("@")) {
-          email = await decryptEmail(u.email);
-        }
-      } catch { continue; }
 
       const magicLink = `${appBaseUrl()}/access/${rawToken}`;
       await sendAssignmentEmail({
@@ -468,20 +525,38 @@ router.post("/assignments/:id/resend-user/:userId", requirePermission("assignmen
     const user = await storage.getUser(userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    // Отзываем старые токены этого пользователя для данного назначения
+    // Отзываем старые токены этого пользователя для данного назначения. Стоит
+    // независимо от того, будет ли выпущен новый (see /resend, /resend-group).
     await storage.revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId, userId);
-
-    const expiresAt = resolveTokenExpiry(
-      assignment.linkExpiresAt ? new Date(assignment.linkExpiresAt) : null,
-      assignment.dueDate ? new Date(assignment.dueDate) : null,
-    );
-    const rawToken = await generateTokenForUser({ assignmentId, userId, testId: assignment.testId, expiresAt });
 
     const { decryptEmail } = await import("../utils/crypto");
     let email = user.email;
     try {
       if (user.email && !user.email.includes("@")) email = await decryptEmail(user.email);
     } catch { return res.status(400).json({ error: "Cannot decrypt user email" }); }
+
+    // D-3: withhold a new passwordless link for a privileged recipient — no
+    // token is minted, letter falls back to /login (server/email.ts).
+    if (!(await mayReceiveAssignmentLink(user))) {
+      logger.info(
+        `Assignment link withheld (privileged account) for user ${userId}, test "${test.title}"`,
+        "assignments",
+      );
+      await sendAssignmentEmail({
+        to: email,
+        userName: user.name || undefined,
+        testTitle: test.title,
+        testDescription: test.description,
+        dueDate: assignment.dueDate ? new Date(assignment.dueDate) : null,
+      });
+      return res.json({ success: true });
+    }
+
+    const expiresAt = resolveTokenExpiry(
+      assignment.linkExpiresAt ? new Date(assignment.linkExpiresAt) : null,
+      assignment.dueDate ? new Date(assignment.dueDate) : null,
+    );
+    const rawToken = await generateTokenForUser({ assignmentId, userId, testId: assignment.testId, expiresAt });
 
     const magicLink = `${appBaseUrl()}/access/${rawToken}`;
     await sendAssignmentEmail({

@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 import { logger } from "./logger";
-import { config } from "./config";
+import { config, appBaseUrl } from "./config";
 
 // SMTP settings are read from `config` (populated by initConfig) inside the
 // functions below — not at import time (the DI model). Non-secret settings
@@ -145,7 +145,16 @@ export async function sendAssignmentEmail(opts: {
   testTitle: string;
   testDescription?: string | null;
   dueDate?: Date | null;
-  magicLink: string;
+  /**
+   * The one-time passwordless entry link (`/access/<token>`). Omitted when the
+   * recipient holds any role other than `learner` (see
+   * `mayReceiveAssignmentLink`, PLAN_MAGIC_LINK_SCOPE.md Этап 3): such an
+   * account must never receive a password-free entry link, so the letter falls
+   * back to an ordinary link to the login page and says nothing about why the
+   * quick link is absent (no mention of roles/permissions — an e-mail gets
+   * forwarded, spelling out the protection in it is pointless disclosure).
+   */
+  magicLink?: string;
 }): Promise<boolean> {
   const transport = getTransporter();
   const APP_NAME = appName();
@@ -155,15 +164,40 @@ export async function sendAssignmentEmail(opts: {
     ? opts.dueDate.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" })
     : null;
 
+  // No magic link was minted for this recipient: fall back to the ordinary
+  // login page. `ctaHref` is never a token in this branch.
+  const hasMagicLink = Boolean(opts.magicLink);
+  const ctaHref = opts.magicLink ?? `${appBaseUrl()}/login`;
+
   if (!transport) {
     logger.info("===========================================");
     logger.info("ASSIGNMENT MAGIC LINK (SMTP not configured):");
     logger.info(`Test: ${opts.testTitle}`);
     logger.info(`To: ${opts.to}`);
-    logger.info(`Link: ${opts.magicLink}`);
+    logger.info(hasMagicLink ? `Link: ${ctaHref}` : `Login: ${ctaHref}`);
     logger.info("===========================================");
     return false;
   }
+
+  // The call-to-action block: unchanged (byte-for-byte) when a magic link was
+  // minted; falls back to a plain login CTA otherwise, with no hint of why.
+  const ctaHtmlBlock = hasMagicLink
+    ? `<p>Для прохождения теста нажмите на кнопку ниже — вход произойдёт автоматически, пароль не требуется:</p>
+      <p style="text-align: center;">
+        <a href="${ctaHref}" class="button">Пройти тест</a>
+      </p>
+      <p style="font-size:13px;color:#666;">Или скопируйте ссылку в браузер:</p>
+      <p style="word-break: break-all; background: #e5e7eb; padding: 10px; border-radius: 4px; font-size: 13px;">
+        ${ctaHref}
+      </p>
+      <div class="warning">
+        ⚠️ Ссылка персональная — не передавайте её другим людям.${dueDateStr ? ` Ссылка действительна до ${dueDateStr}.` : ""}
+      </div>`
+    : `<p>Для прохождения теста нажмите на кнопку ниже:</p>
+      <p style="text-align: center;">
+        <a href="${ctaHref}" class="button">Войти и пройти тест</a>
+      </p>
+      <p style="font-size:13px;color:#666;">После входа тест будет в списке назначенных.</p>`;
 
   const html = `
 <!DOCTYPE html>
@@ -196,17 +230,7 @@ export async function sendAssignmentEmail(opts: {
         ${opts.testDescription ? `<p><strong>📝 Описание:</strong> ${opts.testDescription}</p>` : ""}
         ${dueDateStr ? `<p><strong>📅 Срок сдачи:</strong> ${dueDateStr}</p>` : ""}
       </div>
-      <p>Для прохождения теста нажмите на кнопку ниже — вход произойдёт автоматически, пароль не требуется:</p>
-      <p style="text-align: center;">
-        <a href="${opts.magicLink}" class="button">Пройти тест</a>
-      </p>
-      <p style="font-size:13px;color:#666;">Или скопируйте ссылку в браузер:</p>
-      <p style="word-break: break-all; background: #e5e7eb; padding: 10px; border-radius: 4px; font-size: 13px;">
-        ${opts.magicLink}
-      </p>
-      <div class="warning">
-        ⚠️ Ссылка персональная — не передавайте её другим людям.${dueDateStr ? ` Ссылка действительна до ${dueDateStr}.` : ""}
-      </div>
+      ${ctaHtmlBlock}
     </div>
     <div class="footer">
       <p>Это автоматическое сообщение, не отвечайте на него.</p>
@@ -217,6 +241,16 @@ export async function sendAssignmentEmail(opts: {
 </html>
   `;
 
+  const ctaTextBlock = hasMagicLink
+    ? `Для прохождения перейдите по ссылке (пароль не требуется):
+${ctaHref}
+
+Ссылка персональная — не передавайте её другим.`
+    : `Для прохождения теста перейдите на страницу входа:
+${ctaHref}
+
+После входа тест будет в списке назначенных.`;
+
   const text = `
 Вам назначен тест — ${APP_NAME}
 
@@ -224,10 +258,7 @@ export async function sendAssignmentEmail(opts: {
 
 Вам назначено прохождение теста: ${opts.testTitle}
 ${opts.testDescription ? `Описание: ${opts.testDescription}\n` : ""}${dueDateStr ? `Срок сдачи: ${dueDateStr}\n` : ""}
-Для прохождения перейдите по ссылке (пароль не требуется):
-${opts.magicLink}
-
-Ссылка персональная — не передавайте её другим.
+${ctaTextBlock}
 
 ---
 Это автоматическое сообщение, не отвечайте на него.
@@ -250,7 +281,7 @@ ${opts.magicLink}
     logger.info("ASSIGNMENT MAGIC LINK (email send failed):");
     logger.info(`Test: ${opts.testTitle}`);
     logger.info(`To: ${opts.to}`);
-    logger.info(`Link: ${opts.magicLink}`);
+    logger.info(hasMagicLink ? `Link: ${ctaHref}` : `Login: ${ctaHref}`);
     logger.info("===========================================");
     return false;
   }
