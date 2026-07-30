@@ -103,7 +103,7 @@ const webAdaptive = {
   result: {
     adaptive: true,
     topicResults: [
-      { topicName: "Сети", levelLabel: "Средний", levelClass: "is-info", hasFeedback: false, hasLinks: false },
+      { topicName: "Сети", levelLabel: "Средний", levelClass: "ou-tag--solid ou-tag--accent", hasFeedback: false, hasLinks: false },
     ],
   },
 };
@@ -112,24 +112,36 @@ describe("results.adaptive.html — superset gating", () => {
   it("web context: restart action only", () => {
     const root = render(adaptiveLayout, webAdaptive);
     expect(actions(root)).toEqual(["restart"]);
-    expect(root.querySelector('[data-action="download-pdf"]')).toBeNull();
+    expect(root.querySelector('[data-action="download-report"]')).toBeNull();
     expect(root.querySelector('[data-action="finish"]')).toBeNull();
   });
 
-  it("SCORM context: PDF + retry + finish actions, no web restart", () => {
+  it("report + retry + finish actions, no web restart", () => {
     const scorm = {
       course: { title: "Адаптивный тест" },
       result: {
         ...webAdaptive.result,
         hasScormActions: true,
-        showPdf: true,
+        // ONE report contract across both results layouts: the adaptive footer used to
+        // read `showPdf`/`download-pdf`, a spelling only the package filled — so the
+        // web host offered no report on adaptive tests (see shared/template/results-nav).
+        nav: { showReport: true },
         canRetry: true,
         showFinish: true,
       },
     };
     const root = render(adaptiveLayout, scorm);
-    expect(actions(root)).toEqual(["download-pdf", "restart-adaptive", "finish"]);
+    expect(actions(root)).toEqual(["download-report", "restart-adaptive", "finish"]);
     expect(root.querySelector('[data-action="restart"]')).toBeNull();
+  });
+
+  it("the report shows on the WEB adaptive footer too (nav is host-filled)", () => {
+    const web = {
+      course: { title: "Адаптивный тест" },
+      result: { ...webAdaptive.result, showBack: true, nav: { showReport: true } },
+    };
+    const root = render(adaptiveLayout, web);
+    expect(actions(root)).toEqual(["results-back", "download-report", "restart"]);
   });
 
   it("renders per-topic level pill + feedback/links only where present", () => {
@@ -141,14 +153,14 @@ describe("results.adaptive.html — superset gating", () => {
           {
             topicName: "Сети",
             levelLabel: "Средний",
-            levelClass: "is-info",
+            levelClass: "ou-tag--solid ou-tag--accent",
             feedback: "Хорошо",
             hasFeedback: true,
             hasRecommendations: true,
             recommendedCourses: [{ title: "Курс TCP/IP", url: "https://e/x" }],
             recommendedEvents: [],
           },
-          { topicName: "БД", levelLabel: "Не достигнут", levelClass: "is-fail", hasFeedback: false, hasRecommendations: false },
+          { topicName: "БД", levelLabel: "Минимально требуемый уровень не подтверждён", levelClass: "ou-tag--solid ou-tag--error", hasFeedback: false, hasRecommendations: false },
         ],
       },
     };
@@ -158,6 +170,6 @@ describe("results.adaptive.html — superset gating", () => {
     expect(cards[0].querySelector(".tb-topic-card__fb-text")?.textContent).toContain("Хорошо");
     expect(cards[0].querySelector("a.tb-rec")?.getAttribute("href")).toBe("https://e/x");
     expect(cards[1].querySelector(".tb-topic-card__fb-text")).toBeNull();
-    expect(cards[1].querySelector(".ou-tag")?.textContent).toContain("Не достигнут");
+    expect(cards[1].querySelector(".ou-tag")?.textContent).toContain("Минимально требуемый уровень не подтверждён");
   });
 });

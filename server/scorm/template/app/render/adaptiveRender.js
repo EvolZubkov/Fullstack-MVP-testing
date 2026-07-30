@@ -26,23 +26,12 @@ function renderAdaptiveQuestion() {
 /** Seed the per-question shuffle mapping for an adaptive question (idempotent). */
 function ensureAdaptiveShuffleMapping(q) {
   if (state.shuffleMappings[q.id]) return;
-  if (q.type === 'single' || q.type === 'multiple') {
-    var optCount = q.data.options ? q.data.options.length : 0;
-    if (optCount > 0) state.shuffleMappings[q.id] = createShuffleMapping(optCount);
-  } else if (q.type === 'matching') {
-    var leftCount = q.data.left ? q.data.left.length : 0;
-    var rightCount = q.data.right ? q.data.right.length : 0;
-    if (leftCount > 0 && rightCount > 0) {
-      state.shuffleMappings[q.id] = { left: createShuffleMapping(leftCount), right: createShuffleMapping(rightCount) };
-    }
-  } else if (q.type === 'ranking') {
-    var itemCount = q.data.items ? q.data.items.length : 0;
-    if (itemCount > 0) {
-      // Guaranteed non-correct delivery order (see createRankingOrder).
-      state.shuffleMappings[q.id] = createRankingOrder(itemCount, q.correct && q.correct.correctOrder);
-      if (!state.answers[q.id]) state.answers[q.id] = state.shuffleMappings[q.id].slice();
-    }
-  }
+  // Same seam as the standard mode (see shuffleMappingFor): honours the
+  // question's «Случайный порядок вариантов» switch, always shuffles ranking.
+  var mapping = shuffleMappingFor(q);
+  if (!mapping) return;
+  state.shuffleMappings[q.id] = mapping;
+  if (q.type === 'ranking' && !state.answers[q.id]) state.answers[q.id] = mapping.slice();
 }
 
 /** Adaptive feedback block HTML (uses lastAdaptiveResult; binary, no partial credit).
@@ -56,22 +45,58 @@ function buildAdaptiveFeedbackHtml(q) {
   return TB.feedbackBanner(isCorrect ? 'success' : 'error', statusText, feedbackText ? TB.feedbackDesc(feedbackText) : '');
 }
 
-/** Adaptive navigation HTML (Принять / Далее), onclick-wired. */
-function buildAdaptiveNavHtml() {
-  // Gate «Принять» on a usable answer for the current adaptive question (same rule
-  // as the standard flow; refreshSubmitEnabled keeps it in sync on selection).
+/**
+ * Navigation STATE of the adaptive question (`state.nav`) — the row itself comes
+ * from the template's `question.html` footer, exactly as in the standard mode
+ * (buildQuestionNavState). Adaptive is strictly sequential, so the row is the
+ * strict-linear one: no «Назад» / «Пропустить» / «К обзору», and the next step is
+ * always unknown to the client — hence `hasNext: true` (never «Завершить тест»,
+ * the server decides when the session ends).
+ *
+ * @returns {Object|null} The `state.nav` block, or null when the shared builder
+ *   is unavailable (the layout then prints no usable row and the caller falls back).
+ */
+function buildAdaptiveNavState() {
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (!TB || !TB.buildQuestionNav) return null;
+  // Gate «Принять»/«Далее» on a usable answer for the current adaptive question
+  // (same rule as the standard flow; refreshSubmitEnabled keeps it in sync).
   var aq = typeof currentAnsweringQuestion === 'function' ? currentAnsweringQuestion() : null;
-  var aReady = !aq || typeof hasAnswer !== 'function' ? true : hasAnswer(aq, state.answers[aq.id]);
-  var aDisabled = aReady ? '' : ' disabled';
-  var html = '<div class="navigation" style="justify-content:flex-end">';
-  if (TEST_DATA.showCorrectAnswers) {
-    if (!state.feedbackShown) html += '<button class="ou-btn ou-btn--primary ou-btn--m" data-action="answer-submit" onclick="confirmAdaptiveAnswer()"' + aDisabled + '>Принять</button>';
-    else html += '<button class="ou-btn ou-btn--primary ou-btn--m" data-nav="next" onclick="continueAfterFeedback()">Далее</button>';
-  } else {
-    html += '<button class="ou-btn ou-btn--primary ou-btn--m" data-nav="next" onclick="submitAdaptiveAnswerAndContinue()">Далее</button>';
-  }
-  html += '</div>';
-  return html;
+  var aReady = (!aq || typeof hasAnswer !== 'function') ? true : hasAnswer(aq, state.answers[aq.id]);
+  return TB.buildQuestionNav({
+    flexible: false,
+    committed: !!state.feedbackShown,
+    canPrev: false,
+    // After the feedback is shown the answer is fixed — «Далее» is always available.
+    answerReady: state.feedbackShown ? true : aReady,
+    hasNext: true,
+    showAccept: !!TEST_DATA.showCorrectAnswers && !state.feedbackShown,
+    showReview: false
+  });
+}
+
+/**
+ * Binds the adaptive question footer (the layout's `.tb-scene__foot`) to the
+ * adaptive handlers. The standard `wireQuestionNav` cannot be reused: its
+ * `answer-submit`/`answer-next` point at the standard flow's confirmAnswer/next.
+ *
+ * @param {Element} row The `.tb-scene__foot` element just mounted.
+ */
+function wireAdaptiveNav(row) {
+  if (!row) return;
+  var handlers = {
+    // «Принять» — fix the answer and show the feedback (showCorrectAnswers only).
+    'answer-submit': confirmAdaptiveAnswer,
+    // «Далее» — either continue past the shown feedback, or submit and advance.
+    'answer-next': function () {
+      if (TEST_DATA.showCorrectAnswers && state.feedbackShown) continueAfterFeedback();
+      else submitAdaptiveAnswerAndContinue();
+    }
+  };
+  row.querySelectorAll('button').forEach(function (btn) {
+    var handler = handlers[btn.getAttribute('data-action')];
+    if (handler) btn.addEventListener('click', handler);
+  });
 }
 
 /** Render the adaptive question via the shared `question` layout (mirrors the standard path). */
@@ -88,13 +113,17 @@ function renderAdaptiveQuestionTemplated(app, qData) {
   };
   app.innerHTML = '';
   // Mount directly into #app so .tb-pad > .tb-scene fills the fixed
-  // stage and the appended nav anchors — mirrors renderGalleryPage (no wrapper div).
+  // stage and the footer anchors at its bottom — mirrors renderGalleryPage (no wrapper div).
   window.TBTemplate.renderScreenInto(app, {
     layout: (typeof systemLayout === 'function') ? systemLayout('question') : state.templateLayouts['question'],
     context: {
       course: { title: TEST_DATA.title },
       state: {
         questionCounterLabel: counter,
+        // The nav row comes from the LAYOUT (`.tb-scene__foot`), like the standard
+        // mode's — the runtime no longer appends a footer of its own next to the
+        // scene, where neither the scene surface nor the DS palette reach it.
+        nav: buildAdaptiveNavState(),
         questionHint: (window.TBTemplate && window.TBTemplate.questionHint) ? window.TBTemplate.questionHint(q.type) : '',
         questionFont: (window.TBTemplate && window.TBTemplate.questionFont) ? window.TBTemplate.questionFont(q.prompt) : '',
         optionFont: (window.TBTemplate && window.TBTemplate.optionFont && window.TBTemplate.answerTexts) ? window.TBTemplate.optionFont(window.TBTemplate.answerTexts({ type: q.type, dataJson: q.data })) : ''
@@ -111,9 +140,7 @@ function renderAdaptiveQuestionTemplated(app, qData) {
     timerEl.textContent = formatTime(state.remainingSeconds);
     if (state.remainingSeconds <= 60) { timerEl.style.color = '#dc2626'; timerEl.style.fontWeight = 'bold'; }
   }
-  var navWrap = document.createElement('div');
-  navWrap.innerHTML = buildAdaptiveNavHtml();
-  if (navWrap.firstChild) app.appendChild(navWrap.firstChild);
+  wireAdaptiveNav(app.querySelector('.tb-scene__foot'));
   syncMatchingHeights();
 }
 
@@ -280,8 +307,9 @@ function renderAdaptiveTransitionTemplated(app, result) {
     levelTransition: result.levelTransition || null,
     showContinue: true
   });
-  // Shared header (course.title + subtitle) + branding, like every learner screen.
-  ctx.course = { title: TEST_DATA.title, subtitle: (typeof scormCourseSubtitle === 'function') ? scormCourseSubtitle() : '' };
+  // Shared header (course.title) + branding, like every learner screen. No «Попытка N»
+  // in-run: without telemetry the package cannot know the number and would print «1».
+  ctx.course = { title: TEST_DATA.title };
   ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
   app.innerHTML = '';
   // Mount directly into #app so .tb-pad > .transition-page fills the fixed stage —
@@ -365,20 +393,33 @@ function renderAdaptiveResultsTemplated(app, result) {
   };
   var ctx = window.TBTemplate.buildAdaptiveResultContext(input, TEST_DATA.title || '', {
     hasScormActions: true,
+    // `showPdf` is the LEGACY report flag, kept for external templates whose adaptive
+    // layout predates the unified contract; the shipped layouts read `result.nav`.
     showPdf: true,
     canRetry: (!hasLimit) || canRetry,
     showFinish: (!hasLimit) || (!canRetry)
   });
-  // Header subtitle «Попытка N из M» — same builder as every learner screen (parity).
-  if (typeof scormCourseSubtitle === 'function') ctx.course.subtitle = scormCourseSubtitle();
+  // One report contract for BOTH results layouts (shared/template/results-nav): the
+  // adaptive footer used to spell it `showPdf`/`download-pdf`, which the web host never
+  // sets — so the same template offered a report in the LMS and none in the browser.
+  // Retry/finish stay adaptive-specific (`restart-adaptive` is not `restart`).
+  ctx.result.nav = window.TBTemplate.buildResultsNav({
+    canReport: true,
+    canRetry: false,
+    hasPostPages: false
+  });
+  // No attempt counter in the header (parity with the web host): the scene header
+  // names the test, run parameters are not header material.
   // Per-test branding so the shared header logo renders here too.
   ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
   app.innerHTML = '';
   // Mount directly into #app so .tb-pad > .tb-scene fills the fixed stage —
   // mirrors renderGalleryPage (no wrapper div).
   window.TBTemplate.renderScreenInto(app, { layout: state.templateLayouts['results.adaptive'], context: ctx });
-  var pdf = app.querySelector('[data-action="download-pdf"]');
-  if (pdf) pdf.onclick = function () { if (typeof downloadPDF === 'function') downloadPDF(); };
+  // Both spellings are bound: `download-report` (unified) and the legacy `download-pdf`,
+  // so an external template on either contract still produces the report.
+  var report = app.querySelector('[data-action="download-report"]') || app.querySelector('[data-action="download-pdf"]');
+  if (report) report.onclick = function () { if (typeof downloadPDF === 'function') downloadPDF(); };
   var retry = app.querySelector('[data-action="restart-adaptive"]');
   if (retry) retry.onclick = restartAdaptive;
   var finish = app.querySelector('[data-action="finish"]');

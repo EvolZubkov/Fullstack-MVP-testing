@@ -321,13 +321,34 @@ export interface AdaptiveResultContextOptions {
   showFinish?: boolean;
 }
 
+/**
+ * Tone of the level tag, as DS modifiers. The tag answers only what the model can
+ * answer — level CONFIRMED or the test's minimum NOT confirmed — and says nothing
+ * about how good the level is: the ladder is the author's, it differs from test to
+ * test, and the test defines no target rung. Colouring the rungs (top = success and
+ * so on) would invent a verdict the author never set.
+ *
+ * Both states are SOLID, not the pastel default: the tag is the topic's headline on
+ * the card, and a washed-out pill under the topic name reads as decoration.
+ */
+const TONE_CONFIRMED = "ou-tag--solid ou-tag--accent";
+const TONE_BELOW_MINIMUM = "ou-tag--solid ou-tag--error";
+
+/**
+ * Verdict for an adaptive topic where NO level was confirmed — the learner did not
+ * reach the LOWEST level the test defines. Said in full, because the tag is the verdict
+ * of the assessment: a terse «Не достигнут» leaves «что именно» to the reader. Exported
+ * so the PDF report prints the same words as the screen it is opened from.
+ */
+export const NO_LEVEL_CONFIRMED_LABEL = "Минимально требуемый уровень не подтверждён";
+
 /** Map a normalized adaptive topic to its level-based view (unified feedback). */
 function adaptiveTopicView(t: AdaptiveTopicInput): CtxAdaptiveTopicView {
   const achieved = t.achievedLevelIndex !== null && t.achievedLevelIndex !== undefined;
   return {
     topicName: t.topicName || "",
-    levelLabel: achieved ? (t.achievedLevelName as string) : "Не достигнут",
-    levelClass: achieved ? "is-info" : "is-fail",
+    levelLabel: achieved ? (t.achievedLevelName as string) : NO_LEVEL_CONFIRMED_LABEL,
+    levelClass: achieved ? TONE_CONFIRMED : TONE_BELOW_MINIMUM,
     ...buildTopicFeedbackView(t),
   };
 }

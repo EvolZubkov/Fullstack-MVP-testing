@@ -1131,11 +1131,27 @@ Placeholders варианта должны соответствовать мак
 | `topicResults[]` | Результаты по темам (`topicId`, `topicName`, `correct`, `total`, `percent`, `passClass`, `statusLabel`; SCORM-доп.: `pointsLabel`, `requiredLabel`, `topicFeedback`) |
 | `adaptive` | Признак адаптивного режима; при `true` строки `topicResults[]` имеют форму уровней (`levelLabel`, `levelClass`, `feedback`, `hasFeedback`, `hasLinks`, `links[]`) вместо баллов |
 | `recommendedCourses[]` / `recommendedEvents[]` | Рекомендации по проваленным темам (SCORM; веб опускает) |
-| `backAction` / `backLabel` | Действие и подпись «назад» (SCORM) |
-| `showPdf` / `canRetry` / `showFinish` / `hasScormActions` | Флаги действий экрана результатов (SCORM) |
+| `backAction` / `backLabel` | Действие и подпись «назад» — устаревшая однокнопочная форма подвала; используется только когда `result.nav` не заполнен |
+| `nav` | Состояние подвала экрана результатов: `showReport`, `canRetry`, `primaryAction`, `primaryLabel` (см. ниже) |
+| `canRetry` / `showFinish` / `hasScormActions` | Флаги действий адаптивного экрана результатов (`results.adaptive`, SCORM) |
+| `showPdf` | УСТАРЕЛО. Прежний флаг кнопки отчёта в `results.adaptive`; поставляемые макеты читают `result.nav.showReport`. Оставлен только для внешних шаблонов, написанных до унификации |
 
 Помимо перечисленного, `result.*` несёт кастомные переменные результата (ядро
 добавляет их по ключу — их можно подставлять по имени пути).
+
+`result.nav` — состояние подвала экрана результатов (`results` и `results.adaptive`).
+Состав кнопок принадлежит ШАБЛОНУ, хост лишь заполняет состояние и привязывает
+действия по `data-action`. Макет обязан предусмотреть кнопки для всех значений, иначе
+соответствующая возможность у слушателя пропадёт:
+
+| Поле | `data-action` | Когда показывать |
+| --- | --- | --- |
+| `showReport` | `download-report` | Отчёт по попытке доступен. В SCORM-пакете это «Скачать отчёт» (PDF собирается внутри пакета). Флаг приходит и на итоговом экране, и на экране «Мой результат» |
+| `canRetry` | `restart` | Тест не пройден и попытки остались |
+| `primaryAction` / `primaryLabel` | `results-next` либо `results-finish` | Замыкающее действие: `results-next` («Далее»), если после теста есть контентные страницы, иначе `results-finish` с подписью из `primaryLabel` |
+
+Стартовый макет несёт свою кнопку отчёта по прошлой попытке — `state.canDownloadReport`
+с тем же `data-action="download-report"` (FR-20).
 
 Важно: классы и подписи (`passClass`, `statusLabel`, `ringDashoffset`) уже
 вычислены ядром. DSL не считает их сам — просто подставляйте готовые значения.

@@ -48,7 +48,8 @@
   </main>
 
   <footer class="tb-scene__foot">
-    {{#if result.showPdf}}<button type="button" class="ou-btn ou-btn--secondary ou-btn--m" data-action="download-pdf">Скачать PDF</button>{{/if}}
+    {{#if result.showBack}}<button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="results-back">← К списку тестов</button>{{/if}}
+    {{#if result.nav.showReport}}<button type="button" class="ou-btn ou-btn--secondary ou-btn--m" data-action="download-report">Скачать отчёт</button>{{/if}}
     <div class="tb-scene__foot-spacer"></div>
     {{#if result.canRetry}}<button type="button" class="ou-btn ou-btn--secondary ou-btn--l" data-action="restart-adaptive">Пройти заново</button>{{/if}}
     {{#if result.showFinish}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="finish">Завершить тест</button>{{/if}}
