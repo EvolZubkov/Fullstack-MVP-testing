@@ -6,19 +6,22 @@
   <title>Wireframe: ссылка-приглашение открывает только свой тест</title>
   <!--
   Эскиз к спеке docs/superpowers/specs/2026-07-30-magic-link-scope-design.md (раздел 6).
-  Сессия, открытая ссылкой из письма о назначении, ограничена ОДНИМ тестом. Два состояния:
-    - «Экран блокировки» — попытка уйти за границы теста (обрезанный адрес, /learner/history,
-      авторская часть). Разметка 1:1 с существующим client/src/pages/no-access.tsx: тот же
-      Center → Box(maxW=md) → Card → CardBody → Stack, тот же IconBadge + heading-m + body-s.
-      Отличий два: текст и вместо одной кнопки «Выйти» — «Войти по паролю» (primary) и
-      «Вернуться к тесту» (secondary). Новой раскладки не изобретаем.
-    - «Шапка ученика» — сравнение обычной и ограниченной сессии. Разметка 1:1 с
-      client/src/pages/learner/layout.tsx; в ограниченной сессии кластер «Главная / Тесты /
-      История» не рендерится, а логотип перестаёт быть ссылкой. Справа всё как было.
-  ВАЖНО о подключении DS: здесь используется client/src/styles/vendor/university-rt.css, а не
-  обычная для эскизов копия docs/wireframes/ds/university-rt.css — в docs-копии нет класса
-  .ou-iconbadge (она отстала от актуальной на 235 строк), а значок в этом экране взят из
-  реального компонента. Расхождение копий вынесено отдельной находкой, здесь не правится.
+  Сессия, открытая ссылкой из письма о назначении, ограничена ОДНИМ тестом.
+
+  Согласовано 2026-07-30: отдельного экрана блокировки НЕТ. Попытка уйти за границы теста
+  (обрезанный до «/» адрес, «/learner», «/learner/history», авторская часть) ведёт на
+  СУЩЕСТВУЮЩУЮ форму входа «/login» — client/src/pages/login.tsx, без изменений. Поэтому
+  единственное изменение интерфейса — шапка учащегося, и только она здесь показана.
+
+  Шапка: разметка 1:1 с client/src/pages/learner/layout.tsx. В ограниченной сессии кластер
+  «Главная / Тесты / История» не рендерится, а логотип перестаёт быть ссылкой на список
+  тестов. Справа — тема, имя, выход — без изменений.
+
+  О подключении DS: здесь взяты client/src/styles/preflight.css и
+  client/src/styles/vendor/university-rt.css, а не обычная для эскизов копия
+  docs/wireframes/ds/university-rt.css. Причина: docs-копия отстала от рабочей (в ней нет,
+  например, .ou-separator, который в шапке есть), а без preflight.css ссылки рисуются
+  подчёркнутыми, чего в приложении нет. Расхождение копий вынесено отдельной находкой.
   -->
   <link rel="stylesheet" href="/client/src/styles/preflight.css" />
   <link rel="stylesheet" href="/client/src/styles/vendor/university-rt.css" />
@@ -27,7 +30,7 @@
   <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
   <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
   <style>
-    /* Каркас ТОЛЬКО эскиза: показ состояний и разделитель сравнения. Ничего из UI. */
+    /* Каркас ТОЛЬКО эскиза: подписи сравниваемых состояний. Ничего из UI. */
     .wf-state.active { display: block; }
     .wf-pair { display: flex; flex-direction: column; gap: var(--ou-space-6); padding: var(--ou-space-6); }
     .wf-pair__label { font: var(--ou-text-body-s); font-weight: 700; color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: .04em; }
@@ -37,9 +40,6 @@
 <body class="ou ou--light ou--normal">
 
 <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
-  <symbol id="i-log-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></symbol>
-  <symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></symbol>
   <symbol id="i-book-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></symbol>
   <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></symbol>
   <symbol id="i-clipboard-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="16" x2="14" y2="16"/></symbol>
@@ -51,38 +51,14 @@
 
 <nav class="wf-nav" aria-label="Wireframe state switcher">
   <span class="wf-nav-title">Область ссылки-приглашения:</span>
-  <button class="wf-btn active" type="button" onclick="showState(this,'s-blocked')">Экран блокировки</button>
-  <button class="wf-btn" type="button" onclick="showState(this,'s-header')">Шапка ученика</button>
+  <button class="wf-btn active" type="button" onclick="showState(this,'s-header')">Шапка ученика</button>
   <div class="wf-nav-sep"></div>
   <button class="wf-btn" type="button" onclick="toggleTheme(this)">Dark</button>
   <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
 </nav>
 
-<!-- s-blocked: попытка выйти за границы теста -->
-<div class="wf-state active" id="s-blocked">
-  <div class="ou-center ou-center--screen ou-box--pad-4">
-    <div class="ou-box ou-box--full ou-box--maxw-md">
-      <div class="ou-card">
-        <div class="ou-card__body">
-          <div class="ou-stack ou-stack--gap-6">
-            <div class="ou-stack ou-stack--gap-3 ou-stack--ai-center">
-              <span class="ou-iconbadge ou-iconbadge--warning ou-iconbadge--l"><svg width="24" height="24"><use href="#i-link"/></svg></span>
-              <h1 class="ou-text ou-text--heading-m ou-text--w-semibold">Ссылка открывает только этот тест</h1>
-              <p class="ou-text ou-text--body-s ou-text--tone-muted ou-text--center">Ссылка из письма даёт доступ к назначенному тесту. Чтобы работать с остальными разделами, войдите по паролю.</p>
-            </div>
-            <div class="ou-stack ou-stack--gap-3">
-              <a href="/login" data-testid="link-login"><button type="button" class="ou-btn ou-btn--primary ou-btn--m ou-btn--full"><svg width="16" height="16"><use href="#i-log-in"/></svg> Войти по паролю</button></a>
-              <a href="/learner/test/t-42" data-testid="link-back-to-test"><button type="button" class="ou-btn ou-btn--secondary ou-btn--m ou-btn--full"><svg width="16" height="16"><use href="#i-arrow-left"/></svg> Вернуться к тесту</button></a>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- s-header: шапка ученика — обычная сессия против ограниченной -->
-<div class="wf-state" id="s-header">
+<div class="wf-state active" id="s-header">
   <div class="wf-pair">
     <div class="wf-pair__label">Обычная сессия — как сейчас</div>
     <div class="ou-box ou-box--padx-6 ou-box--pady-3">
@@ -143,12 +119,12 @@
   <table>
     <thead><tr><th>Элемент</th><th>Поведение</th><th>Правило</th></tr></thead>
     <tbody>
-      <tr><td>Экран блокировки</td><td>Показывается вместо запрошенной страницы, когда сессия открыта ссылкой, а маршрут не входит в границы теста: обрезанный до «/» адрес, «/learner», «/learner/history», любая авторская страница</td><td>Спека, раздел 6: разрешены ровно «/learner/test/&lt;testId&gt;» и «/learner/result/:attemptId»</td></tr>
-      <tr><td>«Войти по паролю»</td><td>Ведёт на «/login». Успешный вход снимает ограничение области, и кабинет открывается полностью — отдельного механизма повышения прав нет</td><td>Спека, раздел 5.1: логин удаляет пометку сессии</td></tr>
-      <tr><td>«Вернуться к тесту»</td><td>Ведёт на свой тест. Не рендерится, если область почему-то неизвестна</td><td>—</td></tr>
-      <tr><td>Тот же экран при отказе API</td><td>Если сервер ответил «403 MAGIC_SCOPE» на запрос, которого клиент не ожидал, показывается этот же экран — страховка от расхождения клиента с таблицей разрешений</td><td>Спека, раздел 6</td></tr>
+      <tr><td>Выход за границы теста</td><td>Вместо запрошенной страницы открывается существующая форма входа «/login». Отдельного экрана-заглушки нет: полноценная авторизация и есть способ выйти за пределы теста</td><td>Согласовано 2026-07-30; спека, раздел 6</td></tr>
+      <tr><td>Что считается выходом за границы</td><td>Любой маршрут, кроме «/learner/test/&lt;testId&gt;» своего теста и «/learner/result/:attemptId»: обрезанный до «/» адрес, «/learner», «/learner/history», авторская часть</td><td>Спека, раздел 6</td></tr>
+      <tr><td>После входа по паролю</td><td>Ограничение области снимается, кабинет открывается полностью. Отдельного механизма повышения прав нет</td><td>Спека, раздел 5.1: логин удаляет пометку сессии</td></tr>
+      <tr><td>Отказ API «403 MAGIC_SCOPE»</td><td>Ведёт туда же — на форму входа. Страховка от расхождения клиента с серверной таблицей разрешений</td><td>Спека, раздел 6</td></tr>
       <tr><td>Шапка в сессии по ссылке</td><td>Кластер «Главная / Тесты / История» не рендерится, логотип не ссылка. Тема, имя и выход остаются: ни один элемент шапки не ведёт туда, где будет отказ</td><td>Спека, раздел 6</td></tr>
-      <tr><td>Экран первого входа</td><td>В сессии по ссылке не показывается вообще — согласовано 2026-07-30. Смена временного пароля и согласие остаются на обычный вход</td><td>Спека, раздел 3</td></tr>
+      <tr><td>Экран первого входа</td><td>В сессии по ссылке не показывается вообще. Смена временного пароля и согласие остаются на обычный вход</td><td>Спека, раздел 3</td></tr>
     </tbody>
   </table>
 </section>
@@ -156,19 +132,17 @@
 <!-- DS Mapping -->
 <section class="wf-mapping">
   <h2 class="wf-mapping-title">DS Mapping — UniversityRT</h2>
-  <p>Экран блокировки повторяет раскладку <code>client/src/pages/no-access.tsx</code>; шапка — <code>client/src/pages/learner/layout.tsx</code>. Признак ограниченной сессии приходит из <code>GET /api/auth/me</code> в поле <code>user.magicScope</code>.</p>
+  <p>Шапка повторяет <code>client/src/pages/learner/layout.tsx</code>. Форма входа берётся существующая, <code>client/src/pages/login.tsx</code>, и не меняется. Признак ограниченной сессии приходит из <code>GET /api/auth/me</code> в поле <code>user.magicScope</code>.</p>
   <table>
     <thead><tr><th>Класс</th><th>Где используется</th><th>DS компонент</th><th>React (ui-kit)</th></tr></thead>
     <tbody>
-      <tr><td><code>.ou-center--screen</code></td><td>Центрирование карточки блокировки</td><td>Center</td><td><code>Center</code></td></tr>
-      <tr><td><code>.ou-box--maxw-md</code></td><td>Ширина карточки</td><td>Box</td><td><code>Box</code></td></tr>
-      <tr><td><code>.ou-card</code> / <code>.ou-card__body</code></td><td>Карточка блокировки</td><td>Card</td><td><code>Card</code> / <code>CardBody</code></td></tr>
-      <tr><td><code>.ou-iconbadge--warning</code></td><td>Значок над заголовком</td><td>IconBadge</td><td><code>IconBadge</code></td></tr>
-      <tr><td><code>.ou-text--heading-m</code> / <code>--body-s</code></td><td>Заголовок и пояснение</td><td>Text</td><td><code>Text</code></td></tr>
-      <tr><td><code>.ou-btn--primary</code> / <code>--secondary</code></td><td>«Войти по паролю» и «Вернуться к тесту»</td><td>Button</td><td><code>Button</code></td></tr>
-      <tr><td><code>.ou-stack</code></td><td>Вертикальные и горизонтальные группы</td><td>Stack / Cluster</td><td><code>Stack</code> / <code>Cluster</code></td></tr>
-      <tr><td><code>.ou-iconbtn</code></td><td>Тема и выход в шапке</td><td>IconButton</td><td><code>IconButton</code></td></tr>
-      <tr><td><code>.ou-avatar--s</code></td><td>Аватар в шапке</td><td>Avatar</td><td><code>Avatar</code></td></tr>
+      <tr><td><code>.ou-box--padx-6</code></td><td>Полоса шапки</td><td>Box</td><td><code>Box</code></td></tr>
+      <tr><td><code>.ou-stack--row</code> + <code>--jc-between</code></td><td>Левая и правая группы шапки</td><td>Cluster</td><td><code>Cluster</code></td></tr>
+      <tr><td><code>.ou-btn--ghost</code> / <code>--secondary</code></td><td>Пункты «Главная / Тесты / История»; активный — secondary</td><td>Button</td><td><code>Button</code></td></tr>
+      <tr><td><code>.ou-iconbtn</code></td><td>Тема и выход</td><td>IconButton</td><td><code>IconButton</code></td></tr>
+      <tr><td><code>.ou-avatar--s</code></td><td>Аватар пользователя</td><td>Avatar</td><td><code>Avatar</code></td></tr>
+      <tr><td><code>.ou-text--heading-s</code> / <code>--body-s</code></td><td>Название и имя пользователя</td><td>Text</td><td><code>Text</code></td></tr>
+      <tr><td><code>.ou-separator</code></td><td>Линия под шапкой</td><td>Separator</td><td><code>Separator</code></td></tr>
     </tbody>
   </table>
 </section>
