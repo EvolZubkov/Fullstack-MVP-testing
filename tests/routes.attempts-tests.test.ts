@@ -70,6 +70,7 @@ function makeApp(router: express.Router, path = "/api") {
   app.use(session({ secret: "test", resave: false, saveUninitialized: false }));
   app.use((req: any, _res: any, next: any) => {
     if (req.headers["x-test-user"]) req.session.userId = req.headers["x-test-user"];
+    if (req.headers["x-test-magic"]) req.session.magic = JSON.parse(req.headers["x-test-magic"]);
     next();
   });
   app.use(path, router);
@@ -78,6 +79,10 @@ function makeApp(router: express.Router, path = "/api") {
 
 function asLearner(req: request.Test) { return req.set("x-test-user", "learner1"); }
 function asAuthor(req: request.Test) { return req.set("x-test-user", "author1"); }
+/** Learner whose session was opened by an assignment link scoped to `testId`. */
+function asScopedLearner(req: request.Test, testId: string) {
+  return asLearner(req).set("x-test-magic", JSON.stringify({ assignmentId: "a1", testId }));
+}
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 const dbTest = {
@@ -123,6 +128,18 @@ describe("Attempts routes — learner/tests", () => {
     expect(res.status).toBe(200);
     expect(res.body[0].sections[0].topicName).toBe("JS");
     expect(res.body[0].completedAttempts).toBe(0);
+  });
+
+  it("GET /learner/tests — narrows the list to the magic scope's test", async () => {
+    const other = { ...dbTest, id: "test2", title: "Test 2" };
+    storageMock.getAssignedTestsForUser.mockResolvedValue([dbTest, other]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 5 }]);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+
+    const res = await asScopedLearner(request(app).get("/api/learner/tests"), "test2");
+    expect(res.status).toBe(200);
+    expect(res.body.map((t: { id: string }) => t.id)).toEqual(["test2"]);
   });
 
   it("GET /learner/tests — accessible to any role (PRD-13 D1)", async () => {

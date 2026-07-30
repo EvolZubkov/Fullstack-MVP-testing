@@ -28,6 +28,8 @@ import {
 import type { QuestionType } from "@shared/scales/engine";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 import type { Test, TestVariant, AttemptResult, TopicResult, PassRule, RetakePolicy } from "@shared/schema";
+// Brings the `SessionData.magic` augmentation (PRD magic-link scope) into scope.
+import "../middleware/magic-scope";
 
 const router = Router();
 
@@ -121,7 +123,11 @@ function shuffleInPlace<T>(arr: T[]): T[] {
 // GET /api/learner/tests - Тесты для ученика
 router.get("/learner/tests", requirePermission("attempts.self.read"), async (req, res) => {
   try {
-    const assignedTests = await storage.getAssignedTestsForUser(req.session.userId!);
+    const allAssigned = await storage.getAssignedTestsForUser(req.session.userId!);
+    // A magic-link session sees ONE test: the list is the start screen's data
+    // source, and it must not enumerate the learner's other assignments.
+    const magic = req.session.magic;
+    const assignedTests = magic ? allAssigned.filter((t) => t.id === magic.testId) : allAssigned;
 
     const topics = await storage.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t.name]));
