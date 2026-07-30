@@ -1,14 +1,18 @@
 import { Router } from "express";
-import { createHash, randomBytes } from "crypto";
 import { logger } from "../logger";
-import { appBaseUrl } from "../config";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
-import { sendAssignmentEmail } from "../email";
+import { deliverAssignmentLink } from "../services/assignment-link";
 
 const router = Router();
 
-// Генерирует токен и шлёт письмо новому участнику группы по всем активным назначениям
+// Уведомляет нового участника группы по всем её активным назначениям: решение
+// «выдать passwordless-ссылку или нет» (D-3, PLAN_MAGIC_LINK_SCOPE.md Этап 3)
+// принимает deliverAssignmentLink — та же точка, что используют все пути
+// выпуска ссылки в server/routes/assignments.ts. Раньше этот путь минтил
+// токен вручную и НЕ проверял роль получателя — учётная запись с правами выше
+// учащегося, добавленная в группу с активным назначением, получала обход
+// пароля.
 async function notifyNewGroupMember(userId: string, groupId: string) {
   try {
     const assignments = await storage.getGroupAssignments(groupId);
@@ -35,27 +39,19 @@ async function notifyNewGroupMember(userId: string, groupId: string) {
           ? new Date(assignment.dueDate)
           : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-      const raw = randomBytes(32).toString("hex");
-      const tokenHash = createHash("sha256").update(raw).digest("hex");
-      await storage.createAssignmentAccessToken({
+      // A brand-new group member has no prior token for this assignment, so
+      // there is nothing to revoke — `revokeExisting: false` skips that call.
+      await deliverAssignmentLink({
+        user,
+        email,
         assignmentId: assignment.id,
-        userId,
         testId: assignment.testId,
-        tokenHash,
-        expiresAt,
-      });
-
-      const magicLink = `${appBaseUrl()}/access/${raw}`;
-      await sendAssignmentEmail({
-        to: email,
-        userName: user.name || undefined,
         testTitle: test.title,
         testDescription: test.description,
         dueDate: assignment.dueDate ? new Date(assignment.dueDate) : null,
-        magicLink,
+        expiresAt,
+        revokeExisting: false,
       });
-
-      logger.info(`Sent assignment email to new group member ${email} for test "${test.title}"`);
     }
   } catch (e) {
     logger.error("notifyNewGroupMember error: " + (e as Error).message);

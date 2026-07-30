@@ -51,6 +51,19 @@ const authorUser = {
 const learnerUser = { ...authorUser, id: "learner1", role: "learner" };
 const group = { id: "g1", name: "Group A", description: null, createdAt: new Date(), createdBy: null };
 const groupUser = { id: "u2", email: "user@test.com", name: "User" };
+// A privileged new member (D-3 / PLAN_MAGIC_LINK_SCOPE.md Этап 3): adding this
+// user to a group with an active assignment must not mint a passwordless link.
+const adminGroupUser = { id: "admin1", email: "admin@test.com", name: "Admin" };
+
+/** Effective roles by user id, used by `storage.getUserRoles` in this suite. */
+const rolesById: Record<string, string[]> = {
+  author1: ["administrator"],
+  admin1: ["administrator"],
+};
+/** Default: any id not listed above resolves as a pure learner (u2, ...). */
+function defaultGetUserRoles(id: string): Promise<string[]> {
+  return Promise.resolve(rolesById[id] ?? ["learner"]);
+}
 
 function makeApp() {
   const app = express();
@@ -69,7 +82,12 @@ const tick = () => new Promise((r) => setTimeout(r, 60));
 beforeEach(() => {
   vi.clearAllMocks();
   storageMock.getUser.mockResolvedValue(authorUser);
-  storageMock.getUserRoles.mockResolvedValue(["administrator"]);
+  // Per-id roles: author1 is the acting administrator (requester); every other
+  // id defaults to a pure learner. `mayReceiveAssignmentLink` (D-3) resolves
+  // roles for the RECIPIENT (the new group member), so a blanket
+  // ["administrator"] mock would make every new member look privileged and
+  // silently suppress token creation.
+  storageMock.getUserRoles.mockImplementation(defaultGetUserRoles);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -180,7 +198,12 @@ describe("notifyNewGroupMember (coverage)", () => {
       { id: "a3", testId: "test-1", dueDate: null, linkExpiresAt: null },    // default +30d
     ]);
     // The member's stored email is an encrypted blob (no "@") -> decrypt branch.
-    storageMock.getUser.mockResolvedValue({ ...groupUser, email: "encrypted-blob", name: "User" });
+    // Scoped by id (not a blanket mockResolvedValue): the actor lookup inside
+    // requirePermission also goes through storage.getUser, and must keep
+    // resolving to author1's own record so its role check still passes.
+    storageMock.getUser.mockImplementation(async (id: string) =>
+      id === "author1" ? authorUser : { ...groupUser, email: "encrypted-blob", name: "User" },
+    );
     storageMock.getTest.mockImplementation(async (id: string) => (id === "test-1" ? test : undefined));
     storageMock.createAssignmentAccessToken.mockResolvedValue({});
     cryptoMock.decryptEmail.mockResolvedValue("user@test.com");
@@ -215,7 +238,11 @@ describe("notifyNewGroupMember (coverage)", () => {
   it("swallows a decrypt failure and stops", async () => {
     wireNewMember();
     storageMock.getGroupAssignments.mockResolvedValue([{ id: "a1", testId: "test-1", dueDate: null, linkExpiresAt: null }]);
-    storageMock.getUser.mockResolvedValue({ ...groupUser, email: "encrypted-blob" });
+    // Scoped by id — see the comment in the previous test for why a blanket
+    // mockResolvedValue would break the actor's own permission check.
+    storageMock.getUser.mockImplementation(async (id: string) =>
+      id === "author1" ? authorUser : { ...groupUser, email: "encrypted-blob" },
+    );
     cryptoMock.decryptEmail.mockRejectedValue(new Error("bad key"));
     const res = await asAuthor(request(makeApp()).post("/api/groups/g1/users").send({ userId: "u2" }));
     expect(res.status).toBe(200);
@@ -230,5 +257,32 @@ describe("notifyNewGroupMember (coverage)", () => {
     expect(res.status).toBe(200);
     await tick();
     expect(emailMock.sendAssignmentEmail).not.toHaveBeenCalled();
+  });
+
+  // D-3 (PLAN_MAGIC_LINK_SCOPE.md, Этап 3): the vulnerability this stage
+  // closes — adding a privileged user to a group with an active assignment
+  // must not hand them a passwordless entry link.
+  it("withholds the token and link when the new member is privileged (administrator)", async () => {
+    storageMock.getGroup.mockResolvedValue(group);
+    storageMock.getGroupUsers.mockResolvedValueOnce([]).mockResolvedValueOnce([adminGroupUser]);
+    storageMock.addUserToGroup.mockResolvedValue({});
+    storageMock.getGroupAssignments.mockResolvedValue([
+      { id: "a1", testId: "test-1", dueDate: null, linkExpiresAt: null },
+    ]);
+    storageMock.getUser.mockImplementation(async (id: string) =>
+      id === "admin1" ? { ...adminGroupUser, emailHash: "x" } : authorUser,
+    );
+    storageMock.getTest.mockResolvedValue(test);
+    emailMock.sendAssignmentEmail.mockResolvedValue(undefined);
+
+    const res = await asAuthor(request(makeApp()).post("/api/groups/g1/users").send({ userId: "admin1" }));
+    expect(res.status).toBe(200);
+    await tick();
+
+    expect(storageMock.createAssignmentAccessToken).not.toHaveBeenCalled();
+    expect(emailMock.sendAssignmentEmail).toHaveBeenCalledTimes(1);
+    const call = emailMock.sendAssignmentEmail.mock.calls[0][0];
+    expect(call.to).toBe("admin@test.com");
+    expect(call.magicLink).toBeUndefined();
   });
 });

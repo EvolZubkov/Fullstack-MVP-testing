@@ -82,6 +82,16 @@ const learner2 = { ...learnerUser, id: "learner2", email: "learner2@test.com" };
 const encUser = { ...learnerUser, id: "enc1", email: "ENCRYPTEDBLOB", name: "Enc User" };
 // A user with no email at all — forces the empty-email branch.
 const noEmailUser = { ...learnerUser, id: "noemail1", email: null as unknown as string, name: "No Email" };
+// Privileged recipients (D-3 / PLAN_MAGIC_LINK_SCOPE.md Этап 3): must never
+// receive a passwordless assignment link, direct, group, or resend.
+const adminRecipient = {
+  ...authorUser, id: "admin1", role: "administrator",
+  email: "admin@test.com", name: "Admin Recipient",
+};
+const mixedRecipient = {
+  ...authorUser, id: "mixed1", role: "author",
+  email: "mixed@test.com", name: "Mixed Recipient",
+};
 
 const dbTest = { id: "test1", title: "Test One", description: "desc" };
 const dbAssignment = {
@@ -136,9 +146,12 @@ beforeEach(() => {
   // roles for the RECIPIENT, so a blanket ["administrator"] mock would make
   // every recipient look privileged and silently suppress token creation —
   // see `tests/routes.assignments.test.ts` for the dedicated D-3 coverage.
-  storageMock.getUserRoles.mockImplementation((id: string) =>
-    Promise.resolve(id === "author1" ? ["administrator"] : ["learner"]),
-  );
+  storageMock.getUserRoles.mockImplementation((id: string) => {
+    if (id === "author1") return Promise.resolve(["administrator"]);
+    if (id === "admin1") return Promise.resolve(["administrator"]);
+    if (id === "mixed1") return Promise.resolve(["author", "learner"]);
+    return Promise.resolve(["learner"]);
+  });
   storageMock.getTest.mockResolvedValue(dbTest);
   storageMock.getAssignment.mockResolvedValue(dbAssignment);
   storageMock.getTestGrantForUser.mockResolvedValue(undefined);
@@ -149,6 +162,8 @@ beforeEach(() => {
     if (id === "learner2") return Promise.resolve(learner2);
     if (id === "enc1") return Promise.resolve(encUser);
     if (id === "noemail1") return Promise.resolve(noEmailUser);
+    if (id === "admin1") return Promise.resolve(adminRecipient);
+    if (id === "mixed1") return Promise.resolve(mixedRecipient);
     return Promise.resolve(undefined);
   });
 
@@ -466,6 +481,24 @@ describe("POST /api/assignments/:id/resend-group", () => {
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/failed to resend group/i);
   });
+
+  // D-3 (PLAN_MAGIC_LINK_SCOPE.md, Этап 3): a privileged group member must not
+  // receive a new passwordless link when the group is resent.
+  it("withholds the token and link for a privileged group member (administrator)", async () => {
+    storageMock.getAssignment.mockResolvedValue(groupAssignment);
+    storageMock.getGroupUsers.mockResolvedValue([
+      { id: "learner1", email: "l1@test.com", name: "L1", status: "active", emailHash: "x" },
+      { id: "admin1", email: "admin@test.com", name: "Admin Recipient", status: "active", emailHash: "x" },
+    ]);
+
+    const res = await asAuthor(request(makeApp()).post("/api/assignments/gasgn1/resend-group"));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ success: true, sent: 2 });
+    expect(storageMock.createAssignmentAccessToken).toHaveBeenCalledTimes(1); // only learner1
+    const adminCall = sendEmailMock.mock.calls.find((c: any[]) => c[0].to === "admin@test.com")?.[0];
+    expect(adminCall).toBeDefined();
+    expect(adminCall.magicLink).toBeUndefined();
+  });
 });
 
 // ─── POST /assignments/:id/resend-user/:userId ────────────────────────────────
@@ -521,6 +554,20 @@ describe("POST /api/assignments/:id/resend-user/:userId", () => {
     const res = await asAuthor(request(makeApp()).post("/api/assignments/asgn1/resend-user/learner2"));
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/failed to resend/i);
+  });
+
+  // D-3 (PLAN_MAGIC_LINK_SCOPE.md, Этап 3): a privileged recipient must not
+  // receive a new passwordless link when resent individually.
+  it("withholds the token and link for a privileged recipient (author+learner)", async () => {
+    const res = await asAuthor(request(makeApp()).post("/api/assignments/asgn1/resend-user/mixed1"));
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(storageMock.createAssignmentAccessToken).not.toHaveBeenCalled();
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({ to: "mixed@test.com" }),
+    );
+    const call = sendEmailMock.mock.calls[0][0];
+    expect(call.magicLink).toBeUndefined();
   });
 });
 
