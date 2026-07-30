@@ -126,6 +126,21 @@ function collectReferences(manifest: Record<string, unknown>): Array<{ ref: stri
     });
   }
 
+  // Page variants declare their own layout (PRD-22: the page fields come from the
+  // manifest), and it is the ONLY declaration of that file — `layouts` holds the
+  // canonical screens. Without this the variant layouts count as unused files and a
+  // healthy package permanently reports «Комплектность: Предупреждения», while a
+  // missing variant layout goes unreported.
+  const contentTemplates = manifest.contentTemplates;
+  if (Array.isArray(contentTemplates)) {
+    contentTemplates.forEach((ct, i) => {
+      if (ct && typeof ct === "object") {
+        const c = ct as Record<string, unknown>;
+        push(c.layoutFile, `contentTemplates[${i}].layoutFile (${asString(c.key) ?? i})`);
+      }
+    });
+  }
+
   const plugins = manifest.rendererPlugins;
   if (Array.isArray(plugins)) {
     plugins.forEach((pl, i) => {

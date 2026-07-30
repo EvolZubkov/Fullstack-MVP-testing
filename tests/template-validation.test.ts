@@ -233,6 +233,57 @@ describe("validateTemplatePackage — warnings (§4.2)", () => {
     expect(codes).toContain("UNUSED_FILE");
     expect(codes).toContain("OPTIONAL_LAYOUT_MISSING");
   });
+
+  // A page-variant layout is declared ONLY as `contentTemplates[].layoutFile`
+  // (PRD-22: the page fields come from the manifest). Those paths were absent from
+  // the reference set, so every variant layout was reported as an unused file and
+  // the card carried a permanent «Комплектность: Предупреждения» badge for a package
+  // with nothing wrong with it.
+  it("layout из contentTemplates[].layoutFile не считается неиспользуемым", () => {
+    const r = validateTemplatePackage(
+      validPackage({
+        manifest: {
+          contentTemplates: [
+            { key: "q.std", label: "Стандартный вопрос", kind: "questions", placeholders: [] },
+            {
+              key: "info.text",
+              label: "Текст",
+              kind: "info",
+              pageKind: "content.info",
+              layoutFile: "layouts/content.text.html",
+              placeholders: [],
+            },
+          ],
+        },
+        files: { "layouts/content.text.html": '<div data-slot="page-content"></div>' },
+      }),
+      { mode: "create" },
+    );
+    expect(r.ok).toBe(true);
+    expect(r.warnings.filter((w) => w.code === "UNUSED_FILE")).toEqual([]);
+  });
+
+  it("отсутствующий layout из contentTemplates[].layoutFile блокирует импорт", () => {
+    const r = validateTemplatePackage(
+      validPackage({
+        manifest: {
+          contentTemplates: [
+            {
+              key: "info.text",
+              label: "Текст",
+              kind: "info",
+              pageKind: "content.info",
+              layoutFile: "layouts/content.text.html",
+              placeholders: [],
+            },
+          ],
+        },
+      }),
+      { mode: "create" },
+    );
+    expect(r.ok).toBe(false);
+    expect(r.blocking.map((b) => b.code)).toContain("FILE_MISSING");
+  });
 });
 
 describe("validateTemplatePackage — theme declaration (PRD-23)", () => {
