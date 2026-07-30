@@ -372,6 +372,10 @@ const SCREEN_LAYOUTS: Record<string, string> = {
   content: "content.html",
   // PRD-1 §4.3: «Введение раздела» has its own layout rather than the generic wrapper.
   "section-intro": "section-intro.html",
+  // PRD-4 §4.7 / PRD-12: the adaptive level-change interstitial. A pure system
+  // layout (no variant kind), like `blocked` — the file-level fallback below covers
+  // a template that does not ship it.
+  transition: "system.transition.html",
 };
 // System variant kind backing each screen (for the default-fallback resolution).
 // `blocked` is a pure system layout with no contentTemplate kind, so it has no
