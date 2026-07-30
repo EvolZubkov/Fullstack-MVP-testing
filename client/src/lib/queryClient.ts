@@ -4,10 +4,18 @@ import { raiseScopeViolation } from "./magic-scope";
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    // A magic-link session hit something outside its test. Routing normally
-    // prevents this; when it does not, the learner is sent to the login form
-    // rather than left with a bare 403.
-    if (res.status === 403 && text.includes("MAGIC_SCOPE")) raiseScopeViolation();
+    if (res.status === 403) {
+      // A magic-link session hit something outside its test. Routing normally
+      // prevents this; when it does not, the learner is sent to the login form
+      // rather than left with a bare 403.
+      // Match the structured code, not the message text: a body that merely
+      // mentions MAGIC_SCOPE must not trip the redirect to the login form.
+      try {
+        if ((JSON.parse(text) as { code?: string }).code === "MAGIC_SCOPE") raiseScopeViolation();
+      } catch {
+        // A non-JSON 403 body is not a scope refusal — nothing to do.
+      }
+    }
     throw new Error(`${res.status}: ${text}`);
   }
 }
