@@ -270,11 +270,60 @@ function stopTestTimer() {
 }
 
 // --- Per-section timer (PRD-4 v1.1 section 3.2 / 4.6) ----------------------
+//
+// The remaining time of a section is PERSISTED, in the same currency the test-wide
+// timer anchors to: SCO ACTIVE time (`cmi.total_time`). Rules agreed 2026-07-29:
+//   - it runs only while the learner is inside the section;
+//   - leaving (hub / обзор / reload / closed browser) FREEZES the remainder;
+//   - re-entering — including «Продолжить с места остановки» — resumes from it, so
+//     reading the questions and coming back does not buy a fresh limit;
+//   - at zero the section is spent and locks.
+// The arithmetic lives in the SHARED `TBTemplate.sectionBudget` module, so the web
+// host answers «сколько осталось» with the same formula.
+
+/** Session start on the monotonic clock — the smoothing base for active time. */
+var sectionSessionStartMs = timerNowMs();
+
+/** Active-time reading in MS for the budget maths. */
+function sectionActiveMs() {
+  var sec = readTotalTimeSec();
+  var base = (typeof sec === 'number' && !isNaN(sec)) ? sec * 1000 : 0;
+  // `cmi.total_time` only advances on commit, so add the elapsed session time to
+  // keep the countdown smooth between commits.
+  return base + Math.max(0, timerNowMs() - sectionSessionStartMs);
+}
+
+/** Read the persisted section budgets from suspend_data. */
+function readSectionBudgets() {
+  try {
+    var s = readSuspendObj();
+    return (s && s.sectionBudgets && typeof s.sectionBudgets === 'object') ? s.sectionBudgets : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+/** Persist section budgets into suspend_data (next to the attempt state). */
+function writeSectionBudgets(budgets) {
+  try {
+    var s = readSuspendObj();
+    s.sectionBudgets = budgets;
+    writeSuspendObj(s);
+  } catch (e) {
+    /* storage unavailable — the in-memory countdown still runs */
+  }
+}
+
+/** The shared budget module (bundled into TBTemplate); null on a broken bundle. */
+function sectionBudgetApi() {
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  return (TB && TB.sectionBudget) ? TB.sectionBudget : null;
+}
 
 /**
- * Start an independent per-section countdown, replacing any current one.
- * On expiry calls onExpire(topicId); the caller maps that to advancing past
- * the section (linear) or returning to the router (router mode).
+ * Start (or RESUME) the countdown of a section, replacing any current one. On
+ * expiry calls onExpire(topicId); the caller maps that to advancing past the
+ * section (linear) or returning to the router (router mode).
  * @param {string} topicId
  * @param {number} limitMinutes
  * @param {(topicId: string) => void} [onExpire]
@@ -282,16 +331,19 @@ function stopTestTimer() {
 function startSectionTimer(topicId, limitMinutes, onExpire) {
   stopSectionTimer();
   if (!limitMinutes || limitMinutes <= 0) return;
+  var budget = sectionBudgetApi();
+  if (!budget) return;
 
-  var totalSeconds = limitMinutes * 60;
+  var budgets = budget.enterSection(readSectionBudgets(), topicId, limitMinutes, sectionActiveMs());
+  writeSectionBudgets(budgets);
+
   var section = {
     topicId: topicId,
     limitMinutes: limitMinutes,
-    remainingSeconds: totalSeconds,
+    remainingSeconds: budget.remainingSeconds(budgets, topicId, sectionActiveMs()) || 0,
     expired: false,
     onExpire: onExpire || null,
-    intervalId: null,
-    startPerfMs: timerNowMs()
+    intervalId: null
   };
   state.sectionTimer = section;
 
@@ -301,7 +353,8 @@ function startSectionTimer(topicId, limitMinutes, onExpire) {
       stopSectionTimer();
       return;
     }
-    var left = timerRemaining(section.startPerfMs, totalSeconds);
+    var left = budget.remainingSeconds(readSectionBudgets(), topicId, sectionActiveMs());
+    if (left === null) left = 0;
     section.remainingSeconds = left;
     paintTimer('section-timer-display', left);
     syncSectionBinding(section);
@@ -314,17 +367,31 @@ function startSectionTimer(topicId, limitMinutes, onExpire) {
     }
   }, TIMER_TICK_MS);
 
-  paintTimer('section-timer-display', totalSeconds);
+  paintTimer('section-timer-display', section.remainingSeconds);
   syncSectionBinding(section);
 }
 
-/** Stop and clear the section timer and its data-path binding. */
+/**
+ * Stop the section countdown and FREEZE its remainder in suspend_data, so the next
+ * entry (or a reload) continues from where the learner left off.
+ */
 function stopSectionTimer() {
   if (state.sectionTimer && state.sectionTimer.intervalId) {
     clearInterval(state.sectionTimer.intervalId);
   }
+  var budget = sectionBudgetApi();
+  if (budget) {
+    writeSectionBudgets(budget.pauseAll(readSectionBudgets(), sectionActiveMs()));
+  }
   state.sectionTimer = null;
   clearSectionBinding();
+}
+
+/** Whether a section's budget is already spent (its questions stay locked). */
+function isSectionSpent(topicId) {
+  var budget = sectionBudgetApi();
+  if (!budget || !topicId) return false;
+  return budget.isSpent(readSectionBudgets(), topicId, sectionActiveMs());
 }
 
 /**

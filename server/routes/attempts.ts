@@ -13,7 +13,8 @@ import { loadTestScoringContext } from "../services/effective-scoring";
 import { computeAttemptResult } from "../services/result-compute";
 import { decideRetake, lastCompletedAttemptDate, toIsoDateUTC } from "../services/retake-gate";
 import { readResultsRenderPayload } from "../services/template-render";
-import { buildCourseSubtitle } from "@shared/template/course-subtitle";
+import { pingSection } from "../services/section-timer";
+import { buildResultsNav, RESULTS_NAV_ACTIONS } from "@shared/template/results-nav";
 import { resolveSystemScreenDir, resolveTemplateDir } from "../services/template-dir";
 import {
   liveDataSource,
@@ -792,6 +793,38 @@ router.post("/attempts/:attemptId/expire-topic-adaptive", requirePermission("att
   }
 });
 
+// POST /api/attempts/:attemptId/section-timer — пинг «я в этом разделе».
+//
+// The SERVER owns the remaining time of a section (see services/section-timer):
+// the host reports where the learner is, the server credits the elapsed active
+// time (capped by the grace window) and answers with what is left and what is
+// locked. Keeping this off the browser is what makes «закрыл вкладку — вернулся с
+// полным лимитом» impossible.
+router.post("/attempts/:attemptId/section-timer", requirePermission("attempts.take"), async (req, res) => {
+  try {
+    const attempt = await storage.getAttempt(req.params.attemptId);
+    if (!attempt) return res.status(404).json({ error: "Attempt not found" });
+    if (attempt.userId !== req.session.userId) return res.status(403).json({ error: "Forbidden" });
+    if (attempt.finishedAt) return res.status(400).json({ error: "Attempt already finished" });
+
+    const topicId = typeof req.body?.topicId === "string" ? req.body.topicId : null;
+    // The limit comes from the TEST, never from the client: a forged body must not
+    // be able to widen a section's budget.
+    let limitMinutes: number | null = null;
+    if (topicId) {
+      const sections = await storage.getTestSections(attempt.testId);
+      limitMinutes = sections.find((s) => s.topicId === topicId)?.timeLimitMinutes ?? null;
+    }
+
+    const view = await pingSection(attempt.id, topicId, limitMinutes);
+    if (!view) return res.status(400).json({ error: "Attempt already finished" });
+    res.json(view);
+  } catch (error) {
+    logger.error("Section timer ping error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to update section timer" });
+  }
+});
+
 // POST /api/attempts/:attemptId/save-progress - Сохранить прогресс
 router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.take"), async (req, res) => {
   try {
@@ -808,7 +841,7 @@ router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.ta
       return res.status(400).json({ error: "Attempt already finished" });
     }
 
-    const { answers, currentIndex, shuffleMappings, questionStatus } = req.body;
+    const { answers, currentIndex, shuffleMappings, questionStatus, sectionPositions } = req.body;
 
     const updatedVariant: any = {
       ...(attempt.variantJson as any),
@@ -824,6 +857,13 @@ router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.ta
     // legacy progress (treated as all-'unanswered' on resume).
     if (questionStatus) {
       updatedVariant.questionStatus = questionStatus;
+    }
+
+    // Per-section resume position: re-entering a section continues from the question
+    // the learner stopped on (the web twin of the package's currentRouterTopic +
+    // currentPageIndex checkpoint), instead of restarting the section.
+    if (sectionPositions && typeof sectionPositions === "object") {
+      updatedVariant.sectionPositions = sectionPositions;
     }
 
     await storage.updateAttempt(attempt.id, {
@@ -881,6 +921,7 @@ router.get("/tests/:testId/resume", requirePermission("attempts.take"), async (r
       currentIndex: variant.currentIndex || 0,
       // PRD-19 (Block B): restore per-question statuses; absent = all-'unanswered'.
       questionStatus: variant.questionStatus || {},
+      sectionPositions: variant.sectionPositions || {},
     });
   } catch (error) {
     logger.error("Resume attempt error: " + (error as Error).message);
@@ -1120,9 +1161,8 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
     const completedAttempts = userAttempts.filter((a) => a.finishedAt !== null).length;
     const maxAttempts = test?.maxAttempts || null;
     const canRetake = maxAttempts === null || completedAttempts < maxAttempts;
-    // Header subtitle «Попытка N из M» — N is this (completed) attempt's position;
-    // built by the same shared helper the other learner screens use (parity).
-    const resultsSubtitle = buildCourseSubtitle({ attemptNumber: completedAttempts, maxAttempts });
+    // NB: the attempt counter is deliberately NOT put in the header subtitle any
+    // more — the scene header carries the test's identity, not run parameters.
 
     // PRD-12 web-host: render payload (template layout + css + context) for the
     // results screen. Covers BOTH standard (results.html) and adaptive
@@ -1140,7 +1180,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       // Branding/cssVars resolve against the ACTIVE template manifest even when the
       // results layout falls back to `default` (active template owns no `results`).
       const paramsDir = await resolveTemplateDir(templateId, { activeOnly: true });
-      render = readResultsRenderPayload(dir, resultJson, test?.title || "", test?.designSettingsJson as any, paramsDir, resultsSubtitle);
+      render = readResultsRenderPayload(dir, resultJson, test?.title || "", test?.designSettingsJson as any, paramsDir);
       // File-level fallback (PRD-1 §4.3.2, PRD-3 NFR-06): a template that declares a
       // `results` variant but ships no results layout still renders — from the
       // standard template — instead of dropping to the legacy React markup.
@@ -1153,8 +1193,22 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
             test?.title || "",
             test?.designSettingsJson as any,
             paramsDir,
-            resultsSubtitle,
           );
+        }
+      }
+      // Footer state for the layout-drawn results row (the package fills the same
+      // block). «Скачать отчёт» stays off until the web host can actually produce
+      // the report — showing a button that does nothing would be worse than the
+      // difference it papers over.
+      if (render?.context && typeof render.context === "object") {
+        const ctx = render.context as { result?: Record<string, unknown> };
+        if (ctx.result) {
+          ctx.result.nav = buildResultsNav({
+            canReport: false,
+            canRetry: !resultJson?.overallPassed && canRetake,
+            hasPostPages: false,
+            finishLabel: "К списку тестов",
+          });
         }
       }
     }
