@@ -41,6 +41,8 @@ import type { Role } from "@shared/access";
 import { importQuestionRows, type ResolvedQuestion } from "./questions-import";
 import { testSettingsService, type SectionPayload } from "./test-settings";
 import { parseScoringCell } from "../utils/scoring-excel";
+import { hasOptionList, isMeasurementOnly } from "@shared/questions/question-type";
+
 import {
   parseScaleRow,
   parseResultVariableRow,
@@ -88,7 +90,9 @@ function findSheet(wb: ExcelJS.Workbook, name: string): ExcelJS.Worksheet | unde
 /** Option/pair/item count of a stored question (for source-key validation). */
 function unitCountOfQuestion(q: { type: string; dataJson: unknown }): number {
   const d = (q.dataJson ?? {}) as any;
-  if (q.type === "single" || q.type === "multiple") return d.options?.length ?? 0;
+  // A scale keeps its graduations in the same `options` list, so its source keys are
+  // graduation indices validated against that count (PRD-26 FR-12).
+  if (hasOptionList(q.type)) return d.options?.length ?? 0;
   if (q.type === "matching") return d.left?.length ?? 0;
   return d.items?.length ?? 0;
 }
@@ -278,6 +282,7 @@ export async function importWorkbook(
           type: q.type as QuestionType,
           unitCount: unitCountOfQuestion(q),
           contentHash: q.contentHash ?? null,
+          measurementOnly: isMeasurementOnly(q),
         }
       : null;
     questionCache.set(ref, resolved);
@@ -443,6 +448,18 @@ export async function importWorkbook(
       if (seenQuestionIds.has(q.id)) {
         result.errors.push(`${input.where}: повторная строка для вопроса "${input.ref}"`);
         continue;
+      }
+
+      // PRD-26 FR-25: a measurement-only scale is never graded, so a price on it will
+      // not reach the result. The values are still WRITTEN (they become live the moment
+      // the author sets a correct graduation), but the author is told the row has no
+      // effect right now — silently storing dead numbers is how «почему не считается»
+      // tickets are born.
+      if (q.measurementOnly && (input.points != null || input.scoringRaw !== "")) {
+        result.warnings.push(
+          `${input.where}: вопрос "${input.ref}" — измерительная шкала без правильной ` +
+            `градации, поэтому «Балл»/«Цена ответа» на результат не влияют (значения сохранены)`,
+        );
       }
 
       // «Цена ответа» needs the question type/option count; "точное" becomes an

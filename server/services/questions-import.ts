@@ -16,7 +16,7 @@ import { createHash } from "crypto";
 import { storage } from "../storage";
 import { logger } from "../logger";
 import { normalizeTags } from "@shared/tags";
-import { hasOptionList, hasFixedOptionOrder } from "@shared/questions/question-type";
+import { hasOptionList, hasFixedOptionOrder, isMeasurementOnly } from "@shared/questions/question-type";
 import { normalizeIncomingText, normalizeQuestionData } from "./question-text";
 import type { Question } from "@shared/schema";
 import type { Role } from "@shared/access";
@@ -65,6 +65,12 @@ export interface ResolvedQuestion {
   unitCount: number;
   /** Content hash — pins «Оценка» overrides to the question state (FR-30). */
   contentHash: string | null;
+  /**
+   * PRD-26: the question is a measurement-only scale (no correct graduation), so the
+   * «Оценка» sheet has nothing to price on it. Carried here so the workbook passes do
+   * not have to re-read the question just to learn this.
+   */
+  measurementOnly: boolean;
 }
 
 export interface QuestionImportResult {
@@ -491,7 +497,7 @@ export async function importQuestionRows(
           if (hasCol("Теги")) updatePayload.tags = tags;
           if (!dryRun) await storage.updateQuestion(rowId, updatePayload as any);
           result.updated++;
-          recordAlias(row, { id: rowId, type, unitCount, contentHash });
+          recordAlias(row, { id: rowId, type, unitCount, contentHash, measurementOnly: isMeasurementOnly({ type, correctJson }) });
           continue;
         }
       }
@@ -512,6 +518,7 @@ export async function importQuestionRows(
               id: dup.id,
               type: dup.type as QuestionType,
               unitCount: unitCountOf(dup.type as QuestionType, dup.dataJson),
+              measurementOnly: isMeasurementOnly(dup),
               contentHash: dup.contentHash ?? contentHash,
             });
           }
@@ -543,7 +550,7 @@ export async function importQuestionRows(
 
       existingHashes.add(contentHash);
       result.created++;
-      recordAlias(row, { id: newId, type, unitCount, contentHash });
+      recordAlias(row, { id: newId, type, unitCount, contentHash, measurementOnly: isMeasurementOnly({ type, correctJson }) });
     } catch (err) {
       result.errors.push(`Строка ${rowNum}: ${(err as Error).message}`);
     }
