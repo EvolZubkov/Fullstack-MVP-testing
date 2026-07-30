@@ -13,6 +13,10 @@ export function LearnerLayout({ children }: LearnerLayoutProps) {
   const { user, logout } = useAuth();
   const [location, navigate] = useLocation();
 
+  // A magic-link session may not leave its test, so the header must not offer a
+  // single destination that would end at the login form.
+  const scoped = !!user?.magicScope;
+
   const handleLogout = async () => {
     await logout();
     navigate("/login");
@@ -28,44 +32,53 @@ export function LearnerLayout({ children }: LearnerLayoutProps) {
       <Box as="header" padX={6} padY={3}>
         <Cluster justify="between" gap={4}>
           <Cluster gap={6}>
-            <Link href="/learner">
+            {scoped ? (
               <Cluster gap={2}>
                 <BookOpen size={24} color="var(--ou-accent-default)" />
                 <Text variant="heading-s" weight="semibold">{t.navigation.testCenter}</Text>
               </Cluster>
-            </Link>
-            <Cluster gap={1}>
-              <Link href="/">
-                <Button
-                  variant={isHomeActive ? "secondary" : "ghost"}
-                  size="s"
-                  leadingIcon={<Home size={16} />}
-                  data-testid="link-home"
-                >
-                  {t.navigation.home}
-                </Button>
-              </Link>
+            ) : (
               <Link href="/learner">
-                <Button
-                  variant={isTestsActive ? "secondary" : "ghost"}
-                  size="s"
-                  leadingIcon={<ClipboardList size={16} />}
-                  data-testid="link-tests"
-                >
-                  {t.navigation.tests}
-                </Button>
+                <Cluster gap={2}>
+                  <BookOpen size={24} color="var(--ou-accent-default)" />
+                  <Text variant="heading-s" weight="semibold">{t.navigation.testCenter}</Text>
+                </Cluster>
               </Link>
-              <Link href="/learner/history">
-                <Button
-                  variant={isHistoryActive ? "secondary" : "ghost"}
-                  size="s"
-                  leadingIcon={<History size={16} />}
-                  data-testid="link-history"
-                >
-                  {t.navigation.history}
-                </Button>
-              </Link>
-            </Cluster>
+            )}
+            {!scoped && (
+              <Cluster gap={1}>
+                <Link href="/">
+                  <Button
+                    variant={isHomeActive ? "secondary" : "ghost"}
+                    size="s"
+                    leadingIcon={<Home size={16} />}
+                    data-testid="link-home"
+                  >
+                    {t.navigation.home}
+                  </Button>
+                </Link>
+                <Link href="/learner">
+                  <Button
+                    variant={isTestsActive ? "secondary" : "ghost"}
+                    size="s"
+                    leadingIcon={<ClipboardList size={16} />}
+                    data-testid="link-tests"
+                  >
+                    {t.navigation.tests}
+                  </Button>
+                </Link>
+                <Link href="/learner/history">
+                  <Button
+                    variant={isHistoryActive ? "secondary" : "ghost"}
+                    size="s"
+                    leadingIcon={<History size={16} />}
+                    data-testid="link-history"
+                  >
+                    {t.navigation.history}
+                  </Button>
+                </Link>
+              </Cluster>
+            )}
           </Cluster>
 
           <Cluster gap={3}>
