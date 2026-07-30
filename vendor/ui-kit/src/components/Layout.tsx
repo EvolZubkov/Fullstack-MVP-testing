@@ -119,9 +119,11 @@ export interface GridProps extends React.HTMLAttributes<HTMLDivElement> {
    * Named column template.
    *
    * - `label-control` — flexible label + fixed control column (center-aligned).
-   * - `main-aside` — wide main column + narrow aside (2:1), top-aligned; collapses
-   *   to a single column on narrow viewports. For work-surface pages that pair a
-   *   stream of content with a secondary rail of urgent items and shortcuts.
+   * - `main-aside` — wide main column + narrow aside (2:1), top-aligned. The aside
+   *   (the SECOND child) sticks while the main column scrolls, so urgent items and
+   *   shortcuts stay reachable; on narrow viewports the grid collapses to one
+   *   column and the aside stops sticking. For work-surface pages that pair a
+   *   stream of content with a secondary rail.
    */
   template?: 'label-control' | 'main-aside';
   gap?: Space;
