@@ -2,7 +2,7 @@
   <main class="tb-scene__body">
     <div class="tb-cover{{#if design.startImageUrl}} tb-cover--media{{/if}}">
       <div class="tb-cover__main">
-        <span class="tb-scene__logo tb-cover__logo">{{#if design.logoUrl}}<img src="{{ design.logoUrl }}" alt="">{{/if}}{{#unless design.logoUrl}}<svg class="tb-scene__logo-ph" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-4.5-4.5L5 21"/></svg>{{/unless}}</span>
+        {{#if design.logoUrl}}<span class="tb-scene__logo tb-cover__logo"><img src="{{ design.logoUrl }}" alt=""></span>{{/if}}
 
         <div class="tb-cover__content">
           <div class="tb-cover__head">

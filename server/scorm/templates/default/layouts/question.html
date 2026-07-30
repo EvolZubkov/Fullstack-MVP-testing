@@ -54,4 +54,15 @@
       </div>
     </div>
   </main>
+
+  <!-- Navigation row. Composition is the TEMPLATE's decision; the host only supplies
+       `state.nav` (see shared/template/question-nav). Both hosts render this markup,
+       so the footer cannot differ between the web run and the package. -->
+  <footer class="tb-scene__foot">
+    {{#if state.nav.showBack}}<button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-back" {{#unless state.nav.canPrev}}disabled{{/unless}}>← Назад</button>{{/if}}
+    {{#if state.nav.showSkip}}<button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-skip">Пропустить</button>{{/if}}
+    {{#if state.nav.showReview}}<button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-return">К обзору</button>{{/if}}
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="{{state.nav.primaryAction}}" {{#unless state.nav.primaryEnabled}}disabled{{/unless}} data-path="state.nav.primaryLabel"></button>
+  </footer>
 </div>

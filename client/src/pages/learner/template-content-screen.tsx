@@ -21,6 +21,7 @@ import {
   type SequenceContentPage,
 } from "@shared/template/page-sequences";
 import { withTemplateAssetBaseInValues } from "@shared/template/asset-base";
+import type { SceneTimersState } from "@shared/template/scene-timers";
 
 export interface ContentScreenTemplate {
   layout: string;
@@ -34,6 +35,8 @@ export interface ContentScreenTemplate {
   /** PRD-23: palette pinned by the author; absent means «Авто». */
 
   dataTheme?: "light" | "dark";
+  /** PRD-23: template declares a choice of palettes (see resolveSceneTheme). */
+  themed?: boolean;
   contentTemplates?: ContentTemplateDef[];
   design?: { logoUrl?: string };
   /**
@@ -96,6 +99,8 @@ export interface TemplateContentScreenProps {
    * with an indicator simply renders none.
    */
   allPages?: SequenceContentPage[];
+  /** Countdown state for the header timers (shared painter, parity with the package). */
+  timers?: SceneTimersState;
   className?: string;
 }
 
@@ -117,6 +122,7 @@ export function TemplateContentScreen({
   nextDisabled,
   onBack,
   allPages,
+  timers,
   className,
 }: TemplateContentScreenProps) {
   const built = useMemo(
@@ -184,58 +190,67 @@ export function TemplateContentScreen({
     [courseTitle, subtitle, pageContext, template.design, extraContext],
   );
 
+  // The scene fills the window, exactly as it does in the package: the layout pins
+  // its footer (`.tb-scene__foot`) to the bottom edge and scrolls only `.tb-scene__body`.
+  // Rendered host-sized instead, a short page would leave the footer floating in the
+  // middle of the screen — the web/SCORM difference this wrapper removes.
   return (
-    <TemplateScreen
-      layout={layout}
-      css={template.css}
-      cssVars={template.cssVars}
+    <div className={`tbh-screen tbh-col${className ? " " + className : ""}`}>
+      <TemplateScreen
+        layout={layout}
+        css={template.css}
+        cssVars={template.cssVars}
 
-      themeCss={template.themeCss}
+        themeCss={template.themeCss}
 
-      dataTheme={template.dataTheme}
-      context={context}
-      slots={{
-        // The hub's cards live INSIDE the page-content slot, next to the page's own
-        // placeholders — the same DOM the SCORM runtime builds, so both hosts get
-        // the template's content styling around identical markup.
-        "page-content": bodyHtml ? built.skeleton + bodyHtml : built.skeleton,
-      }}
-      content={contentWithAssetBase}
-      className={className}
-      onAction={(action) => {
-        if (bodyHtml) {
-          // The hub navigates by card (`router-select:*`), but its footer «Завершить»
-          // is the standard `nav:next` — route that to onNext (finish), the rest to
-          // the card handler. A disabled button never emits nav:next.
-          if (action === "nav:next") {
-            onNext();
+        dataTheme={template.dataTheme}
+
+        themed={template.themed}
+        context={context}
+        slots={{
+          // The hub's cards live INSIDE the page-content slot, next to the page's own
+          // placeholders — the same DOM the SCORM runtime builds, so both hosts get
+          // the template's content styling around identical markup.
+          "page-content": bodyHtml ? built.skeleton + bodyHtml : built.skeleton,
+        }}
+        content={contentWithAssetBase}
+        className="tbh-fill"
+        timers={timers}
+        onAction={(action) => {
+          if (bodyHtml) {
+            // The hub navigates by card (`router-select:*`), but its footer «Завершить»
+            // is the standard `nav:next` — route that to onNext (finish), the rest to
+            // the card handler. A disabled button never emits nav:next.
+            if (action === "nav:next") {
+              onNext();
+              return;
+            }
+            onBodyAction?.(action);
             return;
           }
-          onBodyAction?.(action);
-          return;
-        }
-        if (action === "section-intro-back" || action === "back") {
-          onBack?.();
-          return;
-        }
-        if (action === "section-intro-back" || action === "back") {
-          onBack?.();
-          return;
-        }
-        // Every «дальше» spelling the shipped layouts use reaches here: the generic
-        // wrapper's `data-nav="next"`, the section-intro's
-        // `data-action="section-intro-continue"`, and the plainer variants a custom
-        // template might use. Anything unrecognised is ignored rather than
-        // advancing — a stray click must not skip a screen.
-        if (
-          action === "nav:next" ||
-          action === "next" ||
-          action === "continue" ||
-          action === "section-intro-continue"
-        ) {
-          onNext();
-        }
-      }}
-    />
+          if (action === "section-intro-back" || action === "back") {
+            onBack?.();
+            return;
+          }
+          if (action === "section-intro-back" || action === "back") {
+            onBack?.();
+            return;
+          }
+          // Every «дальше» spelling the shipped layouts use reaches here: the generic
+          // wrapper's `data-nav="next"`, the section-intro's
+          // `data-action="section-intro-continue"`, and the plainer variants a custom
+          // template might use. Anything unrecognised is ignored rather than
+          // advancing — a stray click must not skip a screen.
+          if (
+            action === "nav:next" ||
+            action === "next" ||
+            action === "continue" ||
+            action === "section-intro-continue"
+          ) {
+            onNext();
+          }
+        }}
+      />
+    </div>
   );
 }

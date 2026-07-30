@@ -12,6 +12,7 @@ import {
   isTestTheme,
   isThemeId,
   readTestTheme,
+  resolveSceneTheme,
   supportsThemes,
   validateManifestThemes,
 } from "./themes";
@@ -82,6 +83,23 @@ describe("supportsThemes", () => {
     expect(supportsThemes({ themes: BOTH })).toBe(true);
     expect(supportsThemes({ themes: [BOTH[0]] })).toBe(false);
     expect(supportsThemes({})).toBe(false);
+  });
+});
+
+describe("resolveSceneTheme", () => {
+  it("отдаёт закреплённую палитру, что бы ни стояло в системе", () => {
+    expect(resolveSceneTheme({ pinned: "light", themed: true, systemPrefersDark: true })).toBe("light");
+    expect(resolveSceneTheme({ pinned: "dark", themed: false, systemPrefersDark: false })).toBe("dark");
+  });
+
+  it("под «Авто» слушает систему только у темированного шаблона", () => {
+    expect(resolveSceneTheme({ themed: true, systemPrefersDark: false })).toBe("light");
+    expect(resolveSceneTheme({ themed: true, systemPrefersDark: true })).toBe("dark");
+  });
+
+  it("нетемированный шаблон всегда тёмный — у него нет светлой палитры", () => {
+    expect(resolveSceneTheme({ themed: false, systemPrefersDark: false })).toBe("dark");
+    expect(resolveSceneTheme({ pinned: null, themed: false, systemPrefersDark: false })).toBe("dark");
   });
 });
 

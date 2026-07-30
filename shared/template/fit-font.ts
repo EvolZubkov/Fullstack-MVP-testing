@@ -21,8 +21,8 @@ export interface FitFontConfig {
   per: number;
 }
 
-/** The question prompt scale (32 → 18). */
-export const QUESTION_FIT: FitFontConfig = { max: 32, min: 18, from: 58, per: 0.17 };
+/** The question prompt scale (32 → 16). */
+export const QUESTION_FIT: FitFontConfig = { max: 32, min: 16, from: 58, per: 0.17 };
 /** The answer-option scale (22 → 14). */
 export const OPTION_FIT: FitFontConfig = { max: 22, min: 14, from: 38, per: 0.14 };
 

@@ -65,9 +65,18 @@
     </div>
   </main>
 
+  <!-- Footer of the results screen. Composition is the TEMPLATE's decision; hosts
+       only fill `result.nav` (see shared/template/results-nav) and bind the actions.
+       `result.backAction` is the legacy single-button form kept for contexts that
+       do not build `nav` (host previews). -->
   <footer class="tb-scene__foot">
+    {{#if result.nav.showReport}}<button type="button" class="ou-btn ou-btn--secondary ou-btn--m" data-action="download-report">Скачать отчёт</button>{{/if}}
     <div class="tb-scene__foot-spacer"></div>
-    {{#if result.backAction}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="{{result.backAction}}">{{result.backLabel}}</button>{{/if}}
-    {{#unless result.backAction}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="restart">Пройти снова</button>{{/unless}}
+    {{#if result.nav.canRetry}}<button type="button" class="ou-btn ou-btn--secondary ou-btn--l" data-action="restart">Пройти заново</button>{{/if}}
+    {{#if result.nav}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="{{result.nav.primaryAction}}">{{result.nav.primaryLabel}}</button>{{/if}}
+    {{#unless result.nav}}
+      {{#if result.backAction}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="{{result.backAction}}">{{result.backLabel}}</button>{{/if}}
+      {{#unless result.backAction}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="restart">Пройти снова</button>{{/unless}}
+    {{/unless}}
   </footer>
 </div>

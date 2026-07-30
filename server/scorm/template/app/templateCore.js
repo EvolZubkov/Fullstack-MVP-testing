@@ -134,15 +134,16 @@
     var el = document.documentElement;
     el.classList.add("ou");
     var TB = root.TBTemplate;
-    var theme = (TB && typeof TB.sceneThemeAttribute === "function") ? TB.sceneThemeAttribute(design, manifest) : null;
-    if (!theme) {
-      var themed = TB && typeof TB.supportsThemes === "function" && TB.supportsThemes(manifest);
-      if (themed && typeof window !== "undefined" && window.matchMedia) {
-        theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-      } else {
-        theme = "dark";
-      }
-    }
+    // The rule itself lives in the SHARED registry (`resolveSceneTheme`), so the web
+    // host cannot drift from it — that drift is what opened the same test dark here
+    // and white on the web.
+    var pinned = (TB && typeof TB.sceneThemeAttribute === "function") ? TB.sceneThemeAttribute(design, manifest) : null;
+    var themed = !!(TB && typeof TB.supportsThemes === "function" && TB.supportsThemes(manifest));
+    var systemDark = typeof window !== "undefined" && !!window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var theme = (TB && typeof TB.resolveSceneTheme === "function")
+      ? TB.resolveSceneTheme({ pinned: pinned, themed: themed, systemPrefersDark: systemDark })
+      : (pinned || (themed && systemDark ? "dark" : themed ? "light" : "dark"));
     el.classList.remove("ou--dark", "ou--light");
     el.classList.add(theme === "light" ? "ou--light" : "ou--dark");
   }

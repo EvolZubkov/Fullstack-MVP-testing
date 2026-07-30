@@ -122,7 +122,26 @@ export interface CtxResult {
   canRetry?: boolean;
   showFinish?: boolean;
   hasScormActions?: boolean;
+  /**
+   * Footer state of the results screen — the row is drawn by the LAYOUT, both
+   * hosts only fill these in (see `buildResultsNav`). Before this, the package
+   * overwrote the layout's footer with its own HTML and the web host rendered the
+   * layout as written, so the same screen offered different actions.
+   */
+  nav?: CtxResultsNav;
   [key: string]: unknown;
+}
+
+/** What the results layout binds its footer against (`result.nav`). */
+export interface CtxResultsNav {
+  /** Render «Скачать отчёт». */
+  showReport: boolean;
+  /** Render «Пройти заново» (failed and attempts remain). */
+  canRetry: boolean;
+  /** `data-action` of the primary button. */
+  primaryAction: string;
+  /** Its caption. */
+  primaryLabel: string;
 }
 
 /**
@@ -133,6 +152,13 @@ export interface CtxResult {
  */
 export interface CtxState {
   questionCounterLabel?: string;
+  /**
+   * Section (topic) the current question belongs to. The question layout prints it
+   * as a tag NEXT TO the counter, so the counter label itself must stay the bare
+   * «Вопрос N из M» on both hosts — a host that folds the section into the counter
+   * text renders a different meta row than the package does.
+   */
+  sectionName?: string;
   /** Learner guidance subtitle by question type (both hosts, see questionHint). */
   questionHint?: string;
   /** Length-fit font for the question prompt, e.g. "28px" (see fit-font). */

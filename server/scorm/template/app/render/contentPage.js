@@ -214,7 +214,6 @@ function renderSectionIntro(page) {
     sectionNumber: idx + 1,
     sectionsTotal: sections.length,
     courseTitle: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") || section.topicName,
-    subtitle: (typeof scormCourseSubtitle === "function") ? scormCourseSubtitle() : "",
     topicName: section.topicName,
     description: section.topicDescription,
     questionCount: section.drawCount,
@@ -391,7 +390,6 @@ function renderContentPage(page, contentTemplates) {
       context: {
         course: {
           title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : ""),
-          subtitle: (typeof scormCourseSubtitle === "function") ? scormCourseSubtitle() : ""
         },
         // Per-test branding: the shared header binds `{{#if design.logoUrl}}`, so a
         // content page must carry `design` too or the logo goes missing on it.

@@ -26,7 +26,7 @@
 
 /** Tuning for {@link fitQuestionScene}; all optional with design defaults. */
 export interface FitQuestionOptions {
-  /** Prompt font range (px). Default 32 / 18. */
+  /** Prompt font range (px). Default 32 / 16. */
   questionMax?: number;
   questionMin?: number;
   /** Option font range (px). Default 22 / 14. */
@@ -63,7 +63,7 @@ export function fitQuestionScene(
 ): void {
   if (!field || !col || !headerEnd) return;
   const qMax = options?.questionMax ?? 32;
-  const qMin = options?.questionMin ?? 18;
+  const qMin = options?.questionMin ?? 16;
   const aMax = options?.answerMax ?? 22;
   const aMin = options?.answerMin ?? 14;
   const fracMax = options?.headerFraction ?? 1 / 3;

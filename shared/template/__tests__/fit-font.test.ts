@@ -1,7 +1,7 @@
 /**
  * @module shared/template/__tests__/fit-font
  * @description Формула fit() эталона: от max отнимаем per за каждый символ сверх from,
- * зажимаем в [min, max]. Вопрос 18..32, вариант 14..22.
+ * зажимаем в [min, max]. Вопрос 16..32, вариант 14..22.
  */
 import { describe, it, expect } from "vitest";
 import { fitFont, questionFont, optionFont, QUESTION_FIT, OPTION_FIT } from "../fit-font";
@@ -9,7 +9,7 @@ import { fitFont, questionFont, optionFont, QUESTION_FIT, OPTION_FIT } from "../
 describe("fitFont", () => {
   it("clamps to max for short text and min for long text", () => {
     expect(fitFont(10, QUESTION_FIT)).toBe("32px"); // below `from` → max
-    expect(fitFont(1000, QUESTION_FIT)).toBe("18px"); // far past `from` → min
+    expect(fitFont(1000, QUESTION_FIT)).toBe("16px"); // far past `from` → min
     expect(fitFont(10, OPTION_FIT)).toBe("22px");
     expect(fitFont(1000, OPTION_FIT)).toBe("14px");
   });

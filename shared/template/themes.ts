@@ -94,6 +94,33 @@ export function supportsThemes(manifest: unknown): boolean {
   return declaredThemes(manifest).length >= 2;
 }
 
+/** Inputs of {@link resolveSceneTheme} — see there for the rule they feed. */
+export interface SceneThemeInput {
+  /** Palette the author pinned (`sceneThemeAttribute`); null/undefined ⇒ «Авто». */
+  pinned?: ThemeId | null;
+  /** Whether the template offers a CHOICE of palettes ({@link supportsThemes}). */
+  themed: boolean;
+  /** The viewer's system setting (`prefers-color-scheme: dark`). */
+  systemPrefersDark: boolean;
+}
+
+/**
+ * The palette a scene opens in — the ONE rule both hosts follow.
+ *
+ * A pinned palette always wins. Under «Авто» the system setting decides only for a
+ * THEMED template: a template that declares no themes ships a single palette, and
+ * the bundled «Стандартный» is the dark one, so following the system there would
+ * paint a light scene the template has no design for. That is exactly how the two
+ * hosts drifted apart — the package applied this rule and the web host followed the
+ * system unconditionally, so the same test opened dark in the package and white on
+ * the web (PRD-12 parity).
+ */
+export function resolveSceneTheme({ pinned, themed, systemPrefersDark }: SceneThemeInput): ThemeId {
+  if (pinned) return pinned;
+  if (!themed) return "dark";
+  return systemPrefersDark ? "dark" : "light";
+}
+
 /** One problem found in a `themes[]` declaration. */
 export interface ThemeIssue {
   /** Declared id, or `#N` when the entry has no usable one. */

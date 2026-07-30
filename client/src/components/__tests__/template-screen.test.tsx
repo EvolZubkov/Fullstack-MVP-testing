@@ -121,4 +121,23 @@ describe("TemplateScreen — themes (PRD-23)", () => {
     expect(host.hasAttribute("data-theme")).toBe(false);
     cleanup();
   });
+
+  // The DS palette class is what actually paints the scene, and the package resolves
+  // it through the SHARED `resolveSceneTheme`. jsdom reports «no dark preference», so
+  // these two cases are exactly the light-system learner whose web run used to open
+  // white while the package opened dark.
+  it("под «Авто» нетемированный шаблон открывается в своей (тёмной) палитре", () => {
+    const { container } = render(<TemplateScreen layout="<div>x</div>" context={{}} />);
+    const host = container.querySelector("[data-template-screen]") as HTMLElement;
+    expect(host.classList.contains("ou--dark")).toBe(true);
+    expect(host.classList.contains("ou--light")).toBe(false);
+    cleanup();
+  });
+
+  it("под «Авто» темированный шаблон следует системе", () => {
+    const { container } = render(<TemplateScreen layout="<div>x</div>" context={{}} themed />);
+    const host = container.querySelector("[data-template-screen]") as HTMLElement;
+    expect(host.classList.contains("ou--light")).toBe(true);
+    cleanup();
+  });
 });

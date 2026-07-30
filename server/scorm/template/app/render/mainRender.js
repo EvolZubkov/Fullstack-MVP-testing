@@ -298,7 +298,6 @@ function renderReviewScreen() {
     var context = {
         course: {
             title: TEST_DATA.title,
-            subtitle: scormCourseSubtitle(),
             timeLimitMinutes: TEST_DATA.timeLimitMinutes || null,
             maxAttempts: TEST_DATA.maxAttempts || null
         },
@@ -425,7 +424,6 @@ function renderSectionResults(topicId, isLast) {
         percent: sr.percent,
         passed: sr.passed,
         courseTitle: TEST_DATA.title,
-        subtitle: scormCourseSubtitle(),
         sectionIndex: secPos || undefined,
         sectionsTotal: secList.length,
         continueLabel: (isLast && !isRouterMode) ? 'Завершить тест' : 'Продолжить'
@@ -446,14 +444,15 @@ function renderSectionResults(topicId, isLast) {
 }
 
 /**
- * Navigation row HTML, onclick-wired. PRD-19 (Block B):
- * - strict-linear (allowReturnToUnanswered=false, B2): original single-button
- *   flow verbatim — «Принять» (showCorrectAnswers only) → «Далее»/«Завершить»;
- * - flexible (allowReturnToUnanswered=true, B3): before fixation two buttons —
- *   «Пропустить» (left) + «Отправить ответ» (right); after fixation «Далее»/
- *   «Завершить тест».
+ * Navigation STATE for the question layout's footer (`state.nav`). The row itself
+ * is drawn by the TEMPLATE — this runtime no longer builds buttons, it only
+ * resolves the run state the layout binds against (PRD-19 Block B: strict-linear
+ * vs flexible, fixation, «К обзору»), exactly as the web host does.
+ *
+ * The layout's buttons carry `data-action` and no inline handlers;
+ * {@link wireQuestionNav} binds them to this runtime's functions.
  */
-function buildQuestionNavHtml(current, total) {
+function buildQuestionNavState(current, total) {
     var hasNext = current < total - 1 ||
         (state.pageSequence && state.currentPageIndex < state.pageSequence.length - 1);
 
@@ -464,70 +463,70 @@ function buildQuestionNavHtml(current, total) {
     var submitReady = !navFq || typeof hasAnswer !== 'function'
         ? true
         : hasAnswer(navFq.question, state.answers[navFq.question.id]);
-    var submitDisabledAttr = submitReady ? '' : ' disabled';
-
-    if (!TEST_DATA.allowReturnToUnanswered) {
-        var sh = '<div class="tb-scene__foot"><div class="tb-scene__foot-spacer"></div>';
-        if (TEST_DATA.showCorrectAnswers && !state.feedbackShown) {
-            sh += '<button class="ou-btn ou-btn--primary ou-btn--l" data-action="answer-submit" onclick="confirmAnswer()"' + submitDisabledAttr + '>Принять</button>';
-        } else if (hasNext) {
-            sh += '<button class="ou-btn ou-btn--primary ou-btn--l" data-nav="next" onclick="next()">Далее</button>';
-        } else {
-            sh += '<button class="ou-btn ou-btn--primary ou-btn--l" data-action="test-finish" onclick="submit()">Завершить тест</button>';
-        }
-        sh += '</div>';
-        return sh;
-    }
-
-    // Flexible mode. «Вернуться» → обзор (Block D) and the clickable progress
-    // pills (Block C) are layered on later; goToNextUnanswered() already backs them.
     var fq = state.flatQuestions[current];
     var committed = state.feedbackShown ||
         !!(fq && state.questionStatuses && state.questionStatuses[fq.question.id] === 'answered');
-
-    var left = '';
-    var right = '';
-    // PRD-19 (Block B): «Назад» — return to the previous accessible question
-    // (bounded to the current section in sectional flows). Parity with the web
-    // host (take-test.tsx); rendered always in flexible mode, disabled when no
-    // accessible previous question exists (first question of the test/section).
     var prevIdx = typeof prevAccessibleQuestionIndex === 'function' ? prevAccessibleQuestionIndex() : -1;
-    left += '<button class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-back" onclick="goBack()"' + (prevIdx < 0 ? ' disabled' : '') + '>← Назад</button>';
-    if (!committed) {
-        left += '<button class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-skip" onclick="skipQuestion()">Пропустить</button>';
-        right += '<button class="ou-btn ou-btn--primary ou-btn--l" data-action="answer-submit" onclick="confirmAnswer()"' + submitDisabledAttr + '>Отправить ответ</button>';
-    } else {
-        // PRD-19 (Block D / FR-16): the question page has NO finish button — «Далее»
-        // always advances; завершение happens on the обзор (section-finish/test-finish).
-        // On the last item «Далее» → advancePageSequence reaches the обзор (D5).
-        right += '<button class="ou-btn ou-btn--primary ou-btn--l" data-nav="next" onclick="next()">Далее</button>';
-    }
-    // PRD-19 (Block D / FR-04c): «К обзору» → обзор. Shown when skipped questions
-    // exist in scope (the obvious navigation path alongside the quick pills) OR the
-    // learner jumped here FROM the обзор (a review jump must always be able to return —
-    // the обзор itself has no «back»). Cleared when the section is finished.
-    if (hasSkippedInScope() || state.fromReview) {
-        left += '<button class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-return" onclick="goToReview(true)">К обзору</button>';
-    }
 
-    // The nav row IS the scene footer panel (appended below the layout in #app).
-    return '<div class="tb-scene__foot">' + left +
-        '<div class="tb-scene__foot-spacer"></div>' + right +
-        '</div>';
+    return window.TBTemplate.buildQuestionNav({
+        flexible: !!TEST_DATA.allowReturnToUnanswered,
+        committed: committed,
+        canPrev: prevIdx >= 0,
+        answerReady: submitReady,
+        hasNext: hasNext,
+        showAccept: !!TEST_DATA.showCorrectAnswers && !state.feedbackShown,
+        showReview: hasSkippedInScope() || !!state.fromReview
+    });
 }
 
 /**
- * Header subtitle ("Попытка N из M") via the shared builder, so the SCORM and web
- * headers read identically (parity, PRD-12). The attempt number comes from
- * Telemetry (defaults to 1 when telemetry is off — e.g. the debug player's fresh
- * preview run); the cap from TEST_DATA. Empty string -> title-only header.
- * @returns {string}
+ * Binds the shared nav row's action attributes to this runtime's navigation
+ * functions. Replaces the inline `onclick`s the row used to carry — the markup is
+ * shared with the web host now, and behaviour is per host.
+ *
+ * @param {Element} row The `.tb-scene__foot` element just mounted.
+ */
+function wireQuestionNav(row) {
+    if (!row) return;
+    var handlers = {
+        'answer-back': function () { if (typeof goBack === 'function') goBack(); },
+        'answer-skip': function () { if (typeof skipQuestion === 'function') skipQuestion(); },
+        'answer-submit': function () { if (typeof confirmAnswer === 'function') confirmAnswer(); },
+        'answer-return': function () { if (typeof goToReview === 'function') goToReview(true); },
+        'answer-next': function () { if (typeof next === 'function') next(); },
+        'test-finish': function () { if (typeof submit === 'function') submit(); }
+    };
+    row.querySelectorAll('button').forEach(function (btn) {
+        var action = btn.getAttribute('data-action');
+        var handler = action ? handlers[action] : null;
+        if (handler) btn.addEventListener('click', handler);
+    });
+}
+
+/**
+ * Attempt line ("Попытка N из M") via the shared builder, so the SCORM and web
+ * screens read identically (parity, PRD-12). Used by the retake WALL only: the
+ * results header no longer carries the counter (run parameters are not header
+ * material), and the in-run header never did.
+ *
+ * The attempt number is REPORTED ONLY WHEN IT IS KNOWN. A package has no
+ * cross-attempt storage of its own (`suspend_data` is per attempt and WebTutor
+ * offers nothing else), so the number can only come from our telemetry endpoint.
+ * With telemetry off — the normal state of an LMS upload — the counter is a
+ * placeholder `1`, and printing it would tell a learner on their third attempt
+ * that it is their first. In that case the header stays title-only.
+ *
+ * @returns {string} "Попытка N из M", or "" when the number is not known.
  */
 function scormCourseSubtitle() {
     var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
     if (!TB || !TB.buildCourseSubtitle) return '';
-    var n = (typeof Telemetry !== 'undefined' && Telemetry.getAttemptNumber) ? Telemetry.getAttemptNumber() : 1;
-    return TB.buildCourseSubtitle({ attemptNumber: n, maxAttempts: TEST_DATA.maxAttempts || null });
+    var known = typeof Telemetry !== 'undefined' && Telemetry.hasAttemptNumber && Telemetry.hasAttemptNumber();
+    if (!known) return '';
+    return TB.buildCourseSubtitle({
+        attemptNumber: Telemetry.getAttemptNumber(),
+        maxAttempts: TEST_DATA.maxAttempts || null
+    });
 }
 
 /**
@@ -563,13 +562,13 @@ function renderStandardQuestion(qData, current, total, progress) {
         var context = {
             course: {
                 title: TEST_DATA.title,
-                subtitle: scormCourseSubtitle(),
                 timeLimitMinutes: TEST_DATA.timeLimitMinutes || null,
                 maxAttempts: TEST_DATA.maxAttempts || null
             },
             state: {
                 questionCounterLabel: counterLabel,
                 sectionName: (qData.topicName || ''),
+                nav: buildQuestionNavState(current, total),
                 questionHint: (TB && TB.questionHint) ? TB.questionHint(q.type) : '',
                 questionFont: (TB && TB.questionFont) ? TB.questionFont(q.prompt) : '',
                 optionFont: (TB && TB.optionFont && TB.answerTexts) ? TB.optionFont(TB.answerTexts({ type: q.type, dataJson: q.data })) : ''
@@ -621,10 +620,8 @@ function renderStandardQuestion(qData, current, total, progress) {
         // settings). paintTimer drives the DS __num + is-critical state.
         if (typeof revealSceneTimers === 'function') revealSceneTimers(app);
 
-        // Nav row below the card (kept onclick-wired; no global delegator needed).
-        var navWrap = document.createElement('div');
-        navWrap.innerHTML = buildQuestionNavHtml(current, total);
-        if (navWrap.firstChild) app.appendChild(navWrap.firstChild);
+        // The nav row came from the LAYOUT (state.nav); bind its buttons here.
+        wireQuestionNav(app.querySelector('.tb-scene__foot'));
 
         syncMatchingHeights();
         // The length-based questionFont/optionFont set the INITIAL --tb-question-fs /
@@ -667,9 +664,10 @@ function renderStandardQuestion(qData, current, total, progress) {
         html += buildQuestionFeedbackHtml(q);
     }
     html += '</div>';
-    html += buildQuestionNavHtml(current, total);
 
     app.innerHTML = html;
+    // Same shared row here, so the no-template fallback keeps working navigation.
+    wireQuestionNav(app.querySelector('.tb-scene__foot'));
     syncMatchingHeights();
 }
 
