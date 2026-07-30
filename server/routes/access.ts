@@ -6,6 +6,32 @@ import "../middleware/magic-scope";
 
 const router = Router();
 
+/** Log source tag, matching the `magic-scope` middleware's convention for this area. */
+const LOG_SOURCE = "access";
+
+/** A User-Agent longer than this is truncated before it ever reaches a log line. */
+const USER_AGENT_MAX_LEN = 200;
+
+/** Placeholder used when a caller sends no User-Agent header at all. */
+const UNKNOWN_USER_AGENT = "(none)";
+
+/**
+ * Renders the caller's IP and (length-capped) User-Agent for an audit log line.
+ *
+ * Never pass the raw token here or anywhere near a log call — this helper exists
+ * so every log site in this router shares one place that decides what request
+ * metadata is safe to record. The User-Agent is capped so a hostile client
+ * cannot use an oversized header to bloat the log.
+ */
+function describeCaller(req: Request): string {
+  const ip = req.ip ?? "unknown";
+  const rawUserAgent = req.get("user-agent");
+  const userAgent = rawUserAgent
+    ? rawUserAgent.slice(0, USER_AGENT_MAX_LEN)
+    : UNKNOWN_USER_AGENT;
+  return `ip=${ip} ua=${userAgent}`;
+}
+
 // GET /access/:token — вход по magic link без пароля
 router.get("/:token", async (req: Request, res: Response) => {
   const { token } = req.params;
@@ -24,14 +50,23 @@ router.get("/:token", async (req: Request, res: Response) => {
     const record = await storage.getAssignmentAccessToken(tokenHash);
 
     if (!record) {
+      logger.warn(`Magic link redemption failed: reason=not_found ${describeCaller(req)}`, LOG_SOURCE);
       return res.status(404).send(renderErrorPage("Ссылка не найдена. Возможно, она уже была использована или никогда не существовала."));
     }
 
     if (record.revokedAt) {
+      logger.warn(
+        `Magic link redemption failed: reason=revoked userId=${record.userId} testId=${record.testId} ${describeCaller(req)}`,
+        LOG_SOURCE,
+      );
       return res.status(403).send(renderErrorPage("Ссылка была отозвана. Обратитесь к организатору теста."));
     }
 
     if (record.expiresAt < new Date()) {
+      logger.warn(
+        `Magic link redemption failed: reason=expired userId=${record.userId} testId=${record.testId} ${describeCaller(req)}`,
+        LOG_SOURCE,
+      );
       return res.status(403).send(renderErrorPage("Срок действия ссылки истёк. Обратитесь к организатору теста."));
     }
 
@@ -43,12 +78,15 @@ router.get("/:token", async (req: Request, res: Response) => {
       req.session.save(err => err ? reject(err) : resolve())
     );
 
-    logger.info(`Magic link login: userId=${record.userId} testId=${record.testId}`);
+    logger.info(
+      `Magic link login: userId=${record.userId} testId=${record.testId} ${describeCaller(req)}`,
+      LOG_SOURCE,
+    );
 
     // Редиректим на тест
     res.redirect(`/learner/test/${record.testId}`);
   } catch (error) {
-    logger.error("Magic link error: " + (error as Error).message);
+    logger.error("Magic link error: " + (error as Error).message, LOG_SOURCE);
     res.status(500).send(renderErrorPage("Произошла ошибка. Попробуйте ещё раз или обратитесь к организатору."));
   }
 });

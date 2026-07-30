@@ -104,6 +104,98 @@ describe("GET /access/:token", () => {
     expect(loggerMock.info).toHaveBeenCalledTimes(1);
   });
 
+  it("logs the caller's IP and User-Agent on a successful redemption", async () => {
+    storageMock.getAssignmentAccessToken.mockResolvedValue(makeRecord());
+    const res = await request(makeApp())
+      .get(`/access/${validToken}`)
+      .set("user-agent", "TestClient/1.0");
+    expect(res.status).toBe(302);
+    expect(loggerMock.info).toHaveBeenCalledTimes(1);
+    const [message] = loggerMock.info.mock.calls[0];
+    expect(message).toContain("TestClient/1.0");
+    expect(message).toMatch(/ip=\S+/);
+  });
+
+  it("truncates an over-long User-Agent before logging", async () => {
+    storageMock.getAssignmentAccessToken.mockResolvedValue(makeRecord());
+    const longUa = "A".repeat(5000);
+    const res = await request(makeApp())
+      .get(`/access/${validToken}`)
+      .set("user-agent", longUa);
+    expect(res.status).toBe(302);
+    const [message] = loggerMock.info.mock.calls[0];
+    expect(message.length).toBeLessThan(longUa.length);
+    expect(message).toContain("A".repeat(200));
+    expect(message).not.toContain("A".repeat(201));
+  });
+
+  it("logs a warning with the IP when the token is not found", async () => {
+    storageMock.getAssignmentAccessToken.mockResolvedValue(undefined);
+    const res = await request(makeApp()).get(`/access/${validToken}`);
+    expect(res.status).toBe(404);
+    expect(loggerMock.warn).toHaveBeenCalledTimes(1);
+    const [message] = loggerMock.warn.mock.calls[0];
+    expect(message).toMatch(/ip=\S+/);
+    expect(message).toContain("not_found");
+  });
+
+  it("logs a warning with the IP when a revoked token is presented", async () => {
+    storageMock.getAssignmentAccessToken.mockResolvedValue(makeRecord({ revokedAt: new Date() }));
+    const res = await request(makeApp()).get(`/access/${validToken}`);
+    expect(res.status).toBe(403);
+    expect(loggerMock.warn).toHaveBeenCalledTimes(1);
+    const [message] = loggerMock.warn.mock.calls[0];
+    expect(message).toMatch(/ip=\S+/);
+    expect(message).toContain("revoked");
+  });
+
+  it("logs a warning with the IP when an expired token is presented", async () => {
+    storageMock.getAssignmentAccessToken.mockResolvedValue(
+      makeRecord({ expiresAt: new Date(Date.now() - 1000) }),
+    );
+    const res = await request(makeApp()).get(`/access/${validToken}`);
+    expect(res.status).toBe(403);
+    expect(loggerMock.warn).toHaveBeenCalledTimes(1);
+    const [message] = loggerMock.warn.mock.calls[0];
+    expect(message).toMatch(/ip=\S+/);
+    expect(message).toContain("expired");
+  });
+
+  it("never logs the raw token on any path (success, not-found, revoked, expired, error)", async () => {
+    const app = makeApp();
+
+    storageMock.getAssignmentAccessToken.mockResolvedValueOnce(undefined);
+    await request(app).get(`/access/${validToken}`);
+
+    storageMock.getAssignmentAccessToken.mockResolvedValueOnce(makeRecord({ revokedAt: new Date() }));
+    await request(app).get(`/access/${validToken}`);
+
+    storageMock.getAssignmentAccessToken.mockResolvedValueOnce(
+      makeRecord({ expiresAt: new Date(Date.now() - 1000) }),
+    );
+    await request(app).get(`/access/${validToken}`);
+
+    storageMock.getAssignmentAccessToken.mockResolvedValueOnce(makeRecord());
+    await request(app).get(`/access/${validToken}`);
+
+    storageMock.getAssignmentAccessToken.mockRejectedValueOnce(new Error("db down"));
+    await request(app).get(`/access/${validToken}`);
+
+    const allCalls = [
+      ...loggerMock.info.mock.calls,
+      ...loggerMock.warn.mock.calls,
+      ...loggerMock.error.mock.calls,
+    ];
+    expect(allCalls.length).toBeGreaterThan(0);
+    for (const call of allCalls) {
+      for (const arg of call) {
+        if (typeof arg === "string") {
+          expect(arg).not.toContain(validToken);
+        }
+      }
+    }
+  });
+
   it("returns 500 when storage throws", async () => {
     storageMock.getAssignmentAccessToken.mockRejectedValue(new Error("db down"));
     const res = await request(makeApp()).get(`/access/${validToken}`);
