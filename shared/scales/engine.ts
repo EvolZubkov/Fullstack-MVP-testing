@@ -22,11 +22,14 @@
  */
 
 import type { ScaleResult } from "../formula/types";
+import { isSingleIndexChoice } from "../questions/question-type";
 
 export type ScaleAggregation = "sum" | "avg" | "weighted_avg" | "max" | "min";
 export type ScaleNormalization = "none" | "percent" | "custom";
 export type ScaleDirection = "positive" | "inverse";
-export type QuestionType = "single" | "multiple" | "matching" | "ranking";
+/** Re-exported so the type list has ONE source across the product. */
+export type { QuestionType } from "../questions/question-type";
+import type { QuestionType } from "../questions/question-type";
 
 /** One interpretation band; `level` is the machine code, `label` the display text. */
 export interface ScaleBand {
@@ -78,7 +81,9 @@ function isActive(m: MeasurementSpec, answer: Answer, qType: QuestionType | unde
   if (m.sourceType === "option") {
     const i = Number(m.sourceKey);
     if (Number.isNaN(i)) return false;
-    if (qType === "single") return answer === i;
+    // A scale is answered by ONE graduation index, so its per-option contribution is
+    // read exactly like single choice (PRD-26 FR-11).
+    if (isSingleIndexChoice(qType ?? "")) return answer === i;
     if (qType === "multiple") return Array.isArray(answer) && answer.includes(i);
     return false;
   }
@@ -183,7 +188,9 @@ function rawRange(
   const weights: number[] = [];
   for (const [questionId, ms] of byQuestion) {
     const vals = ms.map((m) => m.value * m.weight);
-    if (questionTypes[questionId] === "single") {
+    // One-index answers (single choice, scale) can activate at most ONE unit of the
+    // question, so the range is the extremum, not the sum.
+    if (isSingleIndexChoice(questionTypes[questionId] ?? "")) {
       mins.push(Math.min(0, ...vals));
       maxes.push(Math.max(0, ...vals));
     } else {

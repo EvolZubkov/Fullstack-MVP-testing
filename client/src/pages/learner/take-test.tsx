@@ -1,14 +1,14 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useLocation } from "wouter";
-import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw } from "lucide-react";
-import { Banner, Box, Button, Card, CardBody, CardHeader, Center, Cluster, ModalDialog, Stack, Tag, Text } from "@universityrt/ui-kit";
+import { ChevronLeft, RotateCcw } from "lucide-react";
+import { Box, Button, Card, CardBody, CardHeader, Center, Cluster, ModalDialog, Stack, Text } from "@universityrt/ui-kit";
 import { useToast } from "@/hooks/use-toast";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
 import { TemplateQuestionScreen } from "./template-question-screen";
 import { fmtIsoDateHuman } from "./cooldown-format";
 import { deliversShuffledOrder, hasAnswer, rankingDeliveryOrder } from "./answer-gate";
-import { isSingleIndexChoice } from "@shared/questions/question-type";
+import { isSingleIndexChoice, isMeasurementOnly } from "@shared/questions/question-type";
 import { buildStartState } from "@shared/template/start-state";
 import { feedbackBanner, feedbackDesc } from "@shared/template/feedback-banner";
 import { buildQuestionProgress } from "@shared/template/question-progress-context";
@@ -2879,10 +2879,13 @@ export default function TakeTestPage() {
         shuffleMapping={shuffleMappings[currentQ.question.id]}
         onAnswer={(a) => handleAnswer(currentQ.question.id, a)}
         locked={(showCorrectAnswers && standardFeedbackShown) || currentTopicLocked || prd19Locked}
-        reviewMode={showCorrectAnswers && standardFeedbackShown}
+        // PRD-26 FR-34: a measurement-only scale has no right answer, so it shows
+        // neither the highlight nor the verdict banner even when the test is set to
+        // «показывать правильность ответа». The answer still commits and locks.
+        reviewMode={showCorrectAnswers && standardFeedbackShown && !isMeasurementOnly(currentQ.question)}
         correctAnswer={standardAnswerResult?.correctAnswer}
         feedbackHtml={
-          showCorrectAnswers && standardFeedbackShown && standardAnswerResult
+          showCorrectAnswers && standardFeedbackShown && standardAnswerResult && !isMeasurementOnly(currentQ.question)
             ? adaptiveFeedbackHtml(currentQ.question, standardAnswerResult)
             : undefined
         }

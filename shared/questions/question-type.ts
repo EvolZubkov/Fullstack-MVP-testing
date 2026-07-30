@@ -48,11 +48,16 @@ export function hasFixedOptionOrder(type: string): boolean {
   return type === "scale";
 }
 
-/** The question shape these predicates read — both hosts pass their own object. */
+/**
+ * The question shape these predicates read — every consumer passes its own object.
+ * The answer key travels under two different names: `correctJson` on the server (the
+ * DB column) and `correct` in the baked SCORM payload and the aggregate input. Both
+ * are accepted so no caller has to reshape its question first.
+ */
 export interface TypedQuestion {
   type: string;
-  /** Answer key; `correctJson` on the server, `correct` in the SCORM payload. */
   correctJson?: unknown;
+  correct?: unknown;
 }
 
 /**
@@ -67,6 +72,9 @@ export interface TypedQuestion {
  */
 export function isMeasurementOnly(question: TypedQuestion): boolean {
   if (question.type !== "scale") return false;
-  const correct = question.correctJson as { correctIndex?: unknown } | null | undefined;
-  return !correct || typeof correct.correctIndex !== "number";
+  const key = (question.correctJson ?? question.correct) as
+    | { correctIndex?: unknown }
+    | null
+    | undefined;
+  return !key || typeof key.correctIndex !== "number";
 }

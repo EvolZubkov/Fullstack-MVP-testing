@@ -33,8 +33,10 @@ var TBQType = (function () {
    */
   function isMeasurementOnly(q) {
     if (!q || q.type !== 'scale') return false;
-    var correct = q.correct;
-    return !correct || typeof correct.correctIndex !== 'number';
+    // The key travels as `correctJson` on the server and as `correct` in the baked
+    // payload; accept both so no caller has to reshape its question first.
+    var key = (q.correctJson !== undefined && q.correctJson !== null) ? q.correctJson : q.correct;
+    return !key || typeof key.correctIndex !== 'number';
   }
 
   return {
