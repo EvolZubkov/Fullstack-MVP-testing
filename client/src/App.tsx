@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { ToastProvider } from "@universityrt/ui-kit";
 import { queryClient } from "./lib/queryClient";
@@ -6,6 +7,7 @@ import { ToastBridge } from "@/hooks/use-toast";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { LoadingState } from "@/components/loading-state";
+import { isScopeViolation, subscribeScopeViolation } from "@/lib/magic-scope";
 import type { Capability } from "@shared/access";
 import NotFound from "@/pages/not-found";
 import NoAccessPage from "@/pages/no-access";
@@ -31,7 +33,7 @@ import HistoryPage from "@/pages/learner/history";
 import { LearnerLayout } from "@/pages/learner/layout";
 import LogsPage from "@/pages/author/logs";
 
-function ProtectedRoute({
+export function ProtectedRoute({
   children,
   requiredPermission,
 }: {
@@ -40,6 +42,7 @@ function ProtectedRoute({
 }) {
   const { user, isLoading, can } = useAuth();
   const [location] = useLocation();
+  const scopeViolated = useSyncExternalStore(subscribeScopeViolation, isScopeViolation, () => false);
 
   if (isLoading) {
     return <LoadingState message="Loading..." />;
@@ -47,6 +50,20 @@ function ProtectedRoute({
 
   if (!user) {
     return <Redirect to="/login" />;
+  }
+
+  // A session opened by an assignment link is access to ONE test. Two routes stay
+  // open: that test and a result page — ownership of the attempt is the server's
+  // call, so the client does not duplicate the check. Everything else, including
+  // the first-login gate below, is outside the link's remit, and the way out of the
+  // test is a full authentication — so send the learner straight to the login form
+  // instead of an intermediate "you cannot go there" screen.
+  if (user.magicScope) {
+    const testPath = `/learner/test/${user.magicScope.testId}`;
+    const insideScope =
+      !scopeViolated && (location === testPath || location.startsWith("/learner/result/"));
+    if (!insideScope) return <Redirect to="/login" />;
+    return <>{children}</>;
   }
 
   // Проверка первого входа: нужно согласие GDPR или смена пароля
