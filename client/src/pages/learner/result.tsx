@@ -1,9 +1,13 @@
-import { useLocation, Link, useParams } from "wouter";
+import { useRef } from "react";
+import { useLocation, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { Button, Center, Stack, Text } from "@universityrt/ui-kit";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
+import { RESULTS_NAV_ACTIONS } from "@shared/template/results-nav";
+import { downloadAttemptReport, type AttemptReport } from "@/features/learner/attempt-report";
+import { useToast } from "@/hooks/use-toast";
 import { t } from "@/lib/i18n";
 import type { Attempt, AttemptResult } from "@shared/schema";
 
@@ -27,7 +31,15 @@ interface AttemptWithResult extends Attempt {
     themeCss?: string;
     /** PRD-23: palette pinned by the author; absent means «Авто». */
     dataTheme?: "light" | "dark";
+    /** PRD-23: template declares a choice of palettes (see resolveSceneTheme). */
+    themed?: boolean;
   } | null;
+  /**
+   * Input for the shared PDF report («Скачать отчёт»). Present whenever the attempt has
+   * a computed result; absent payloads simply leave the footer button inert-free, since
+   * the server only turns `result.nav.showReport` on together with this.
+   */
+  report?: AttemptReport | null;
 }
 
 export default function ResultPage() {
@@ -67,24 +79,55 @@ export default function ResultPage() {
   return <TemplateResultPage attempt={attempt} />;
 }
 
-/** Read a CSS custom property (e.g. `--background`) from a stylesheet string. */
-function cssVar(css: string, name: string): string | undefined {
-  const m = new RegExp(`--${name}:\\s*([^;}]+)`).exec(css);
-  return m ? m[1].trim() : undefined;
-}
-
 function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
   const [, navigate] = useLocation();
+  const { toast } = useToast();
+  // Rasterizing takes a few seconds; a second click must not start a second export.
+  const reportBusy = useRef(false);
   const render = attempt.render!;
-  // Full-bleed surface in the template's own colors, so there is no seam between
-  // the (dark) template and the surrounding app shell. The back-nav lives inside
-  // the surface, on the same background. Colors come from the template CSS itself
-  // (server `theme` if present, else parsed from the bundled stylesheet).
-  const surface = render.theme?.background || cssVar(render.css, "background");
-  const onSurface = render.theme?.foreground || cssVar(render.css, "foreground");
+  // «К списку тестов» is a WEB-only action, so it is the host that turns it on —
+  // the same split as the start screen's `showBack`. It belongs to the scene's own
+  // footer: rendered as host chrome under the scene it was a SECOND footer on the
+  // screen, on a guessed background (`theme.background` is the first `--background`
+  // in theme.css, i.e. always the light palette), with a dead band below it.
+  const ctx = render.context as { result?: Record<string, unknown> } | null;
+  // …and only on the ADAPTIVE results layout, because that is the one whose footer
+  // has no closing action of its own: the standard layout ends with
+  // `result.nav.primaryAction` (the server labels it «К списку тестов»), so a second
+  // button with the same caption would just repeat it.
+  const showBack = !!ctx?.result?.adaptive;
+  const context = { ...(ctx ?? {}), result: { ...(ctx?.result ?? {}), showBack } };
+
+  /**
+   * «Скачать отчёт» — the shared PDF generator, loaded on demand. Failures are shown:
+   * a silent no-op on a button the learner pressed is worse than an honest error.
+   */
+  async function handleReport() {
+    if (reportBusy.current) return;
+    if (!attempt.report) {
+      toast({ variant: "destructive", title: "Отчёт недоступен", description: "Нет данных для отчёта по этой попытке." });
+      return;
+    }
+    reportBusy.current = true;
+    toast({ variant: "info", title: "Готовим отчёт", description: "Файл скачается автоматически." });
+    try {
+      await downloadAttemptReport(attempt.report);
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Не удалось сформировать отчёт",
+        description: (e as Error).message,
+      });
+    } finally {
+      reportBusy.current = false;
+    }
+  }
 
   return (
-    <div className="tbh-minh-full tbh-col" style={{ background: surface }}>
+    // Scene = the space the app shell left over (this route keeps the learner
+    // navbar), so only `.tb-scene__body` scrolls and the footer sits on the bottom
+    // edge — `100dvh` would add up to the navbar and push the footer out of view.
+    <div className="tbh-inset-screen tbh-col">
       <TemplateScreen
         className="tbh-fill"
         layout={render.layout}
@@ -92,29 +135,24 @@ function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
         cssVars={render.cssVars}
         themeCss={render.themeCss}
         dataTheme={render.dataTheme}
-        context={render.context}
+        themed={render.themed}
+        context={context}
         onAction={(action) => {
-          if (action === "restart" && attempt.canRetake) {
+          // Actions come from the LAYOUT's footer (`result.nav`) — the same names the
+          // package binds; see shared/template/results-nav.
+          if (action === RESULTS_NAV_ACTIONS.report) {
+            void handleReport();
+            return;
+          }
+          if (action === RESULTS_NAV_ACTIONS.retry && attempt.canRetake) {
             navigate(`/learner/test/${attempt.testId}`);
+            return;
+          }
+          if (action === RESULTS_NAV_ACTIONS.finish || action === RESULTS_NAV_ACTIONS.back) {
+            navigate("/learner");
           }
         }}
       />
-
-      <div
-        className="tbh-result-foot"
-        style={{ color: onSurface }}
-      >
-        <Link href="/learner" className="tbh-link">
-          <ArrowLeft size={16} />
-          {t.result.backToTests}
-        </Link>
-        {attempt.attemptsInfo && (
-          <span className="tbh-dim">
-            Использовано попыток: {attempt.attemptsInfo.completed} / {attempt.attemptsInfo.max}
-            {!attempt.canRetake && attempt.attemptsInfo.max !== null && " — попытки закончились"}
-          </span>
-        )}
-      </div>
     </div>
   );
 }

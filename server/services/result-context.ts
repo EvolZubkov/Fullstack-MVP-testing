@@ -18,6 +18,7 @@ import {
   type TopicInput,
   type AdaptiveTopicInput,
 } from "@shared/template/result-context";
+import type { ReportInput, AdaptiveReportInput, ReportMeta } from "@shared/report/report-html";
 
 export type { ResultRenderContext };
 
@@ -79,6 +80,72 @@ export function buildResultContext(result: AttemptResult, testTitle: string): Re
       ...(recommendedEvents.length ? { recommendedEvents } : {}),
     },
   );
+}
+
+/**
+ * Build the input for the shared PDF report (`shared/report/report-html`) from a
+ * computed attempt result.
+ *
+ * The report is NOT built from the render context: that one is presentational
+ * (`pointsLabel`, `passClass`), while the report needs the raw per-topic numbers and
+ * verdicts. Both therefore start from the SAME normalized topic input, so the report
+ * and the screen can never disagree about what the attempt was.
+ *
+ * @param result Computed attempt result.
+ * @param testTitle Test title (the report headline + the file name).
+ * @param meta Who took it and when, plus the attempt count for the «Лучший результат» line.
+ */
+export function buildReportInput(
+  result: AttemptResult,
+  testTitle: string,
+  meta: Omit<ReportMeta, "testName"> = {},
+): ReportInput {
+  return {
+    ...meta,
+    testName: testTitle,
+    result: {
+      passed: result.overallPassed,
+      percent: result.overallPercent,
+      totalQuestions: result.totalQuestions,
+      correct: result.totalCorrect,
+      earnedPoints: result.totalEarnedPoints,
+      possiblePoints: result.totalPossiblePoints,
+      topicResults: (result.topicResults || []).map(toTopicInput),
+    },
+  };
+}
+
+/** {@link buildReportInput} for an adaptive attempt (levels, no score). */
+export function buildAdaptiveReportInput(
+  result: any,
+  testTitle: string,
+  meta: Omit<ReportMeta, "testName"> = {},
+): AdaptiveReportInput {
+  const topics = Array.isArray(result?.topicResults) ? result.topicResults : [];
+  return {
+    ...meta,
+    adaptive: true,
+    testName: testTitle,
+    result: {
+      passed: !!result?.overallPassed,
+      topicResults: topics.map((t: any) => ({
+        topicName: t?.topicName ?? "",
+        achievedLevelIndex: t?.achievedLevelIndex ?? null,
+        achievedLevelName: t?.achievedLevelName ?? null,
+        totalQuestionsAnswered: t?.totalQuestionsAnswered,
+        totalCorrect: t?.totalCorrect,
+        feedback: t?.feedback ?? "",
+        recommendedCourses: Array.isArray(t?.recommendedCourses)
+          ? t.recommendedCourses.map((l: any) => ({ title: l?.title ?? "", url: l?.url }))
+          : Array.isArray(t?.recommendedLinks)
+            ? t.recommendedLinks.map((l: any) => ({ title: l?.title ?? "", url: l?.url }))
+            : [],
+        recommendedEvents: Array.isArray(t?.recommendedEvents)
+          ? t.recommendedEvents.map((l: any) => ({ title: l?.title ?? "" }))
+          : [],
+      })),
+    },
+  };
 }
 
 /**

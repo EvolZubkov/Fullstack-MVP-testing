@@ -21,6 +21,7 @@ import testsWorkbookRouter from "./tests-workbook";
 import workbookRouter from "./workbook";
 import debugPlayerRouter from "./debug-player";
 import homeRouter from "./home";
+import reportRouter from "./report";
 
 export {
   foldersRouter,
@@ -46,6 +47,7 @@ export {
   workbookRouter,
   debugPlayerRouter,
   homeRouter,
+  reportRouter,
 };
 
 // Конфигурация монтирования роутеров
@@ -66,6 +68,9 @@ export const routerConfig = [
   // PRD-25: смонтирован среди префиксных роутеров — до общих "/api",
   // чтобы путь не перехватывался ими
   { path: "/api/home", router: homeRouter },
+  // Ingredients of the web-side attempt report (vendored PDF libs + report assets);
+  // prefix-mounted before the generic "/api" routers so they cannot swallow it.
+  { path: "/api/report", router: reportRouter },
   { path: "/api/users", router: usersRouter },
   { path: "/api/groups", router: groupsRouter },
   { path: "/api/questions", router: questionsRouter },

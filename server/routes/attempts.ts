@@ -13,6 +13,8 @@ import { loadTestScoringContext } from "../services/effective-scoring";
 import { computeAttemptResult } from "../services/result-compute";
 import { decideRetake, lastCompletedAttemptDate, toIsoDateUTC } from "../services/retake-gate";
 import { readResultsRenderPayload } from "../services/template-render";
+import { buildReportInput, buildAdaptiveReportInput } from "../services/result-context";
+import type { ReportInput, AdaptiveReportInput } from "@shared/report/report-html";
 import { pingSection } from "../services/section-timer";
 import { buildResultsNav, RESULTS_NAV_ACTIONS } from "@shared/template/results-nav";
 import { resolveSystemScreenDir, resolveTemplateDir } from "../services/template-dir";
@@ -1171,6 +1173,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
     // case the client falls back to its React markup.
     const resultJson = attempt.resultJson as (AttemptResult & { mode?: string }) | null;
     let render = null;
+    let report: ReportInput | AdaptiveReportInput | null = null;
     if (resultJson && Array.isArray(resultJson.topicResults)) {
       const templateId = ((test?.designSettingsJson as any)?.templateId as string) || "default";
       // Learner-facing render: never serve a non-active template, and when the
@@ -1197,20 +1200,33 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
         }
       }
       // Footer state for the layout-drawn results row (the package fills the same
-      // block). «Скачать отчёт» stays off until the web host can actually produce
-      // the report — showing a button that does nothing would be worse than the
-      // difference it papers over.
+      // block). «Скачать отчёт» is on now that the web host produces the report from
+      // the SHARED generator (shared/report/*) — the same PDF the package hands out.
       if (render?.context && typeof render.context === "object") {
         const ctx = render.context as { result?: Record<string, unknown> };
         if (ctx.result) {
           ctx.result.nav = buildResultsNav({
-            canReport: false,
+            canReport: true,
             canRetry: !resultJson?.overallPassed && canRetake,
             hasPostPages: false,
             finishLabel: "К списку тестов",
           });
         }
       }
+
+      // Input for the shared PDF report the browser builds on demand. Assembled here
+      // because the report needs the RAW per-topic numbers and the learner's name,
+      // neither of which the presentational render context carries.
+      const learner = await storage.getUser(req.session.userId!);
+      const reportMeta = {
+        learnerName: learner?.name || null,
+        timestamp: (attempt.finishedAt ?? attempt.startedAt)?.toISOString() ?? null,
+        attemptsCount: completedAttempts || 1,
+      };
+      report =
+        resultJson.mode === "adaptive"
+          ? buildAdaptiveReportInput(resultJson, test?.title || "", reportMeta)
+          : buildReportInput(resultJson, test?.title || "", reportMeta);
     }
 
     res.json({
@@ -1219,6 +1235,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       result: attempt.resultJson as AttemptResult,
       canRetake,
       render,
+      report,
       attemptsInfo:
         maxAttempts !== null
           ? {
