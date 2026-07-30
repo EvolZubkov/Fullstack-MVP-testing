@@ -173,6 +173,26 @@
       "placeholders": []
     },
     {
+      "key": "report.standard",
+      "label": "Отчёт: стандартный",
+      "kind": "report",
+      "layoutFile": "layouts/report.html",
+      "styleFile": "styles/report.css",
+      "isDefault": true,
+      "settings": [],
+      "placeholders": []
+    },
+    {
+      "key": "report.adaptive.standard",
+      "label": "Отчёт: уровни",
+      "kind": "report.adaptive",
+      "layoutFile": "layouts/report.adaptive.html",
+      "styleFile": "styles/report.css",
+      "isDefault": true,
+      "settings": [],
+      "placeholders": []
+    },
+    {
       "key": "intro.standard",
       "label": "Введение раздела: стандартное",
       "kind": "intro",
@@ -1037,11 +1057,14 @@
     "section-results": "layouts/section-results.html",
     "section-intro": "layouts/section-intro.html",
     "system.blocked": "layouts/system.blocked.html",
-    "system.transition": "layouts/system.transition.html"
+    "system.transition": "layouts/system.transition.html",
+    "report": "layouts/report.html",
+    "report.adaptive": "layouts/report.adaptive.html"
   },
   "assets": {
     "styles": [
-      "styles/theme.css"
+      "styles/theme.css",
+      "styles/report.css"
     ],
     "scripts": [
       "scripts/template.js"

@@ -64,11 +64,25 @@ describe("готовые значения (§5.3)", () => {
 });
 
 describe("контекст обычного отчёта", () => {
-  it("result.* совпадает с контекстом ЭКРАНА результатов", () => {
+  it("result.* НЕ расходится с контекстом ЭКРАНА результатов (§5.2)", () => {
     const ctx = buildReportContext(input());
     const screen = buildResultContext(input().result, "Демо-тест", { withTopicPoints: true });
-    expect(ctx.result).toEqual(screen.result);
     expect(ctx.course).toEqual(screen.course);
+    // Отчёт ДОПОЛНЯЕТ result.* своими готовыми подписями (§5.3), поэтому проверяется
+    // надмножество: каждое поле, которым владеет экран, должно совпадать значение в
+    // значение — иначе отчёт покажет иной вердикт, чем экран, с которого его скачали.
+    for (const [key, value] of Object.entries(screen.result)) {
+      if (key === "topicResults") continue;
+      expect((ctx.result as Record<string, unknown>)[key], key).toEqual(value);
+    }
+    const screenRows = screen.result.topicResults ?? [];
+    const reportRows = (ctx.result.topicResults ?? []) as Array<Record<string, unknown>>;
+    expect(reportRows).toHaveLength(screenRows.length);
+    screenRows.forEach((screenRow, i) => {
+      for (const [key, value] of Object.entries(screenRow)) {
+        expect(reportRows[i][key], key).toEqual(value);
+      }
+    });
   });
 
   it("несёт готовые дату, число попыток и колонки", () => {

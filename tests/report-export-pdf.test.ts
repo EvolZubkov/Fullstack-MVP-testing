@@ -9,7 +9,7 @@
  * cleaned up).
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { exportReportPdf, loadReportAssets, loadImageDataUrl } from "../shared/report/export-pdf";
 
 /** A canvas double: html2canvas' output is only read for size + data URL. */
@@ -162,5 +162,53 @@ describe("report assets", () => {
     // With no readable plates there is nothing to choose from, so `pick` stays unused —
     // guarding that the empty case never indexes into an empty list.
     expect(pick).not.toHaveBeenCalled();
+  });
+
+  describe("с работающим 2D-контекстом", () => {
+    // jsdom не умеет `getContext("2d")`, а именно на нём стоит успешный путь чтения
+    // ассета: без подмены он не проверяется ни разу.
+    let ctxSpy: ReturnType<typeof vi.spyOn>;
+    let urlSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      ctxSpy = vi
+        .spyOn(HTMLCanvasElement.prototype, "getContext")
+        .mockReturnValue({ drawImage: () => undefined } as unknown as CanvasRenderingContext2D);
+      urlSpy = vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/png;base64,PLATE");
+    });
+
+    afterEach(() => {
+      ctxSpy.mockRestore();
+      urlSpy.mockRestore();
+      vi.unstubAllGlobals();
+    });
+
+    it("читает ассет в data-URL", async () => {
+      stubImage(() => "load");
+      await expect(loadImageDataUrl("/api/report/asset/logo-light.png")).resolves.toBe("data:image/png;base64,PLATE");
+    });
+
+    it("подложку выбирает переданный chooser, а не случай", async () => {
+      stubImage(() => "load");
+      const pick = vi.fn().mockReturnValue(2);
+      const assets = await loadReportAssets("/base/", pick);
+      // Три подложки прочитаны — выбор делается из них.
+      expect(pick).toHaveBeenCalledWith(3);
+      expect(assets.backgroundDataUrl).toBe("data:image/png;base64,PLATE");
+      expect(assets.logoDataUrl).toBe("data:image/png;base64,PLATE");
+    });
+
+    it("chooser вне диапазона не роняет сборку", async () => {
+      stubImage(() => "load");
+      const assets = await loadReportAssets("/base/", () => 99);
+      expect(assets.backgroundDataUrl).toBe("data:image/png;base64,PLATE");
+    });
+
+    it("подложки нет, а логотип есть — отчёт печатается с градиентом", async () => {
+      stubImage((src) => (src.includes("pdf-bg") ? "error" : "load"));
+      const assets = await loadReportAssets("/base/");
+      expect(assets.backgroundDataUrl).toBeNull();
+      expect(assets.logoDataUrl).toBe("data:image/png;base64,PLATE");
+    });
   });
 });

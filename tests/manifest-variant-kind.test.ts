@@ -284,7 +284,9 @@ describe("built-in manifests parse and validate", () => {
       const cts = m.contentTemplates as Record<string, unknown>[];
       for (const ct of cts) {
         expect(typeof ct.kind, `kind in ${id} → ${ct.key}`).toBe("string");
-        expect(["start", "questions", "router", "summary", "results", "intro", "info", "review", "section-results"]).toContain(ct.kind);
+        // Список берётся из СХЕМЫ, а не дублируется: дубль разошёлся, когда PRD-27
+        // добавил виды отчёта, и тест упал на поставляемом манифесте.
+        expect(variantKindSchema.options).toContain(ct.kind);
       }
     });
   }

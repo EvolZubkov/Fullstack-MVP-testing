@@ -99,9 +99,13 @@ describe("certification ships no layer of the retired fixed-stage model", () => 
     expect(fs.existsSync(path.join(CERT_DIR, "styles", "base.css"))).toBe(false);
   });
 
-  it("declares only theme.css as its stylesheet", () => {
+  it("declares no base.css among its stylesheets", () => {
+    // Проверяется именно отставленный слой, а не «ровно один лист»: PRD-27 добавил
+    // законный второй — `styles/report.css` со страницей отчёта, скоупленной в
+    // `.tb-report`. Запрет на любой второй лист поймал бы его как регрессию.
     const manifest = JSON.parse(fs.readFileSync(path.join(CERT_DIR, "manifest.json"), "utf8"));
-    expect(manifest.assets.styles).toEqual(["styles/theme.css"]);
+    expect(manifest.assets.styles).toContain("styles/theme.css");
+    expect(manifest.assets.styles).not.toContain("styles/base.css");
   });
 
   it("uses no container-query units in theme.css", () => {

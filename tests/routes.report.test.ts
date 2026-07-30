@@ -11,6 +11,7 @@ import { describe, it, expect } from "vitest";
 import request from "supertest";
 import express from "express";
 import reportRouter from "../server/routes/report";
+import { readBinaryAsset } from "../server/scorm/assets/read-asset";
 import { REPORT_BACKGROUND_FILES, REPORT_LOGO_FILE } from "../shared/report/export-pdf";
 
 const app = express();
@@ -81,5 +82,16 @@ describe("report ingredients require a session", () => {
   it("rejects an anonymous caller", async () => {
     expect((await request(anonApp).get("/api/report/lib/jspdf.umd.min.js")).status).toBe(401);
     expect((await request(anonApp).get(`/api/report/asset/${REPORT_LOGO_FILE}`)).status).toBe(401);
+  });
+});
+
+describe("readBinaryAsset", () => {
+  it("возвращает байты существующего ассета отчёта", () => {
+    expect(readBinaryAsset(`media/${REPORT_LOGO_FILE}`)?.length).toBeGreaterThan(1000);
+  });
+
+  it("возвращает null, а не бросает, когда файла нет ни по одному из путей", () => {
+    // Деплой без подложек — не ошибка: отчёт откатывается к градиенту (см. report-html).
+    expect(readBinaryAsset("media/does-not-exist.png")).toBeNull();
   });
 });

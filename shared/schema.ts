@@ -1409,8 +1409,26 @@ export type ScormAnswer = typeof scormAnswers.$inferSelect;
  * PRD-22: `gallery` is NOT a kind. A gallery slide is a variant of the author
  * page kind `info` with its own `layoutFile`; the navigation indicator comes from
  * the `sequence` setting, not from a separate page kind.
+ *
+ * PRD-27: `report` and `report.adaptive` are the ATTEMPT REPORT (the PDF the learner
+ * downloads). Two kinds, not two variants of one: the standard report prints points,
+ * the adaptive one confirmed levels, and a variant of one mode cannot be picked for the
+ * other. Unlike the page kinds, a report variant is not an author PAGE — it is bound to
+ * the test through the feedback settings (see `shared/report/report-variants`).
  */
-export const variantKindSchema = z.enum(["start", "questions", "router", "summary", "results", "intro", "info", "review", "section-results"]);
+export const variantKindSchema = z.enum([
+  "start",
+  "questions",
+  "router",
+  "summary",
+  "results",
+  "intro",
+  "info",
+  "review",
+  "section-results",
+  "report",
+  "report.adaptive",
+]);
 export type VariantKind = z.infer<typeof variantKindSchema>;
 
 /**

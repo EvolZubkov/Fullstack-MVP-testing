@@ -1,0 +1,87 @@
+<div class="tb-report {{ report.verdictClass }}">
+  {{#if report.hasLogo}}<div class="tb-report__brand"><img src="{{ report.logoUrl }}" alt=""></div>{{/if}}
+
+  <div class="tb-report__headline" data-path="report.verdictHeadline"></div>
+  <div class="tb-report__attempts" data-path="report.attemptsCountLabel"></div>
+  {{#if report.hasLearnerName}}<div class="tb-report__learner">Слушатель: <span data-path="report.learnerName"></span></div>{{/if}}
+  <div class="tb-report__date">Дата прохождения: <span data-path="report.attemptDateLabel"></span></div>
+
+  <section class="tb-report__card">
+    <div class="tb-report__title" data-path="course.title"></div>
+    <div class="tb-report__subtitle">Результат теста</div>
+
+    <div class="tb-report__score">
+      <div class="tb-report__metrics">
+        <div class="tb-report__metric">
+          <div class="tb-report__metric-num" data-path="result.totalQuestions"></div>
+          <div class="tb-report__metric-lbl">вопросов</div>
+        </div>
+        <div class="tb-report__metric">
+          <div class="tb-report__metric-num" data-path="report.correctLabel"></div>
+          <div class="tb-report__metric-lbl">верно</div>
+        </div>
+        <div class="tb-report__metric">
+          <div class="tb-report__metric-num" data-path="report.earnedPointsLabel"></div>
+          <div class="tb-report__metric-lbl">баллов</div>
+        </div>
+      </div>
+
+      <div class="tb-report__ring">
+        <svg viewBox="0 0 100 100">
+          <circle class="tb-report__ring-track" cx="50" cy="50" r="44" fill="none" stroke-width="12"/>
+          <circle class="tb-report__ring-fill" cx="50" cy="50" r="44" fill="none" stroke-width="12" stroke-linecap="round" stroke-dasharray="{{ report.ringDasharray }}" stroke-dashoffset="{{ report.ringDashoffset }}"/>
+        </svg>
+        <div class="tb-report__ring-value"><span data-path="result.scorePercent"></span>%</div>
+      </div>
+
+      <div class="tb-report__badge" data-path="report.verdictBadge"></div>
+    </div>
+  </section>
+
+  {{#if report.hasTopics}}
+  <section class="tb-report__card">
+    <div class="tb-report__title tb-report__title--tight">Результаты по темам</div>
+    <div class="tb-report__topics" style="grid-template-columns: repeat({{ report.gridColumns }}, 1fr);">
+      {{#each result.topicResults}}
+      <div class="tb-report__topic {{ passClass }}">
+        <div class="tb-report__topic-stripe"></div>
+        <div class="tb-report__topic-head">
+          <div class="tb-report__topic-name">{{ topicName }}</div>
+          <div class="tb-report__topic-verdict">{{ verdictLabel }}</div>
+        </div>
+        <div class="tb-report__topic-stats">
+          <span>{{ countsLabel }}</span>
+          <span>{{ pointsFixedLabel }}</span>
+        </div>
+        <div class="tb-report__topic-bar"><div class="tb-report__topic-bar-fill" style="width: {{ barPercent }}%;"></div></div>
+        {{#if showFeedback}}<div class="tb-report__topic-fb">{{ feedback }}</div>{{/if}}
+      </div>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+
+  {{#if report.hasCourses}}
+  <section class="tb-report__card">
+    <div class="tb-report__title tb-report__title--tight">Рекомендации по курсам</div>
+    <div class="tb-report__lead">Изучите эти материалы для улучшения знаний по темам, которые требуют внимания.</div>
+    {{#each report.courses}}
+    <div class="tb-report__rec">
+      <div class="pdf-link-btn tb-report__rec-chip" data-url="{{ url }}">{{ title }}</div>
+    </div>
+    {{/each}}
+  </section>
+  {{/if}}
+
+  {{#if report.hasEvents}}
+  <section class="tb-report__card">
+    <div class="tb-report__title tb-report__title--tight">Рекомендуемые мероприятия</div>
+    <div class="tb-report__lead">Посетите очные мероприятия для углублённого изучения материала.</div>
+    {{#each report.events}}
+    <div class="tb-report__rec tb-report__rec--plain">
+      <div class="tb-report__event">{{ title }}</div>
+    </div>
+    {{/each}}
+  </section>
+  {{/if}}
+</div>

@@ -48,6 +48,40 @@ export interface ReportBlock {
   logoUrl: string;
   /** Гейт строки логотипа. */
   hasLogo: boolean;
+  /** Заголовок отчёта: «Тест пройден» / «Тест не пройден». */
+  verdictHeadline: string;
+  /** Подпись бейджа вердикта — строчными, как в отчёте. */
+  verdictBadge: string;
+  /** Класс вердикта для CSS отчёта: `is-pass` / `is-fail`. */
+  verdictClass: string;
+  /** Гейт блока тем. */
+  hasTopics: boolean;
+  /** «3/5» — верно из общего числа вопросов. */
+  correctLabel: string;
+  /** Заработанные баллы с одним знаком после запятой, как печатает отчёт. */
+  earnedPointsLabel: string;
+  /** Длина окружности дуги отчёта (радиус 44, СВОЙ, не как у кольца экрана). */
+  ringDasharray: number;
+  /** Смещение дуги отчёта. */
+  ringDashoffset: number;
+  /**
+   * Рекомендованные материалы. В обычном режиме — курсы по ПРОВАЛЕННЫМ темам без дублей;
+   * в адаптивном — материалы всех тем, у которых они есть, с названием темы: там нет
+   * «провала», уровень либо подтверждён, либо нет.
+   */
+  courses: Array<{ title: string; url: string; topicName?: string }>;
+  hasCourses: boolean;
+  /** Рекомендованные мероприятия по проваленным темам, без дублей. */
+  events: Array<{ title: string }>;
+  hasEvents: boolean;
+}
+
+/** Геометрия дуги отчёта: радиус 44 против 63 у кольца экрана результатов. */
+const REPORT_RING_RADIUS = 44;
+
+/** Число с одним знаком после запятой — так печатает отчёт. */
+function fixed1(value: unknown): string {
+  return (Number(value) || 0).toFixed(1);
 }
 
 /** Полный контекст страницы отчёта. */
@@ -97,7 +131,45 @@ function reportBlock(meta: ReportMeta, topicCount: number, opts: ReportContextOp
     backgroundUrl: background || "",
     logoUrl: logo || "",
     hasLogo: !!logo,
+    // Значения вердикта и счёта заполняются вызывающим: у адаптивного отчёта их нет.
+    verdictHeadline: "",
+    verdictBadge: "",
+    verdictClass: "",
+    hasTopics: topicCount > 0,
+    correctLabel: "",
+    earnedPointsLabel: "",
+    ringDasharray: 0,
+    ringDashoffset: 0,
+    courses: [],
+    hasCourses: false,
+    events: [],
+    hasEvents: false,
   };
+}
+
+/** Дедуп рекомендаций по ПРОВАЛЕННЫМ темам: помощь адресуется провалу, а не строке. */
+function failedRecommendations(topics: ReportInput["result"]["topicResults"]): {
+  courses: Array<{ title: string; url: string }>;
+  events: Array<{ title: string }>;
+} {
+  const seenC = new Set<string>();
+  const seenE = new Set<string>();
+  const courses: Array<{ title: string; url: string }> = [];
+  const events: Array<{ title: string }> = [];
+  for (const t of topics ?? []) {
+    if (t.passed !== false) continue;
+    for (const c of t.recommendedCourses ?? []) {
+      if (!c || seenC.has(c.title)) continue;
+      seenC.add(c.title);
+      courses.push({ title: c.title, url: c.url ?? "" });
+    }
+    for (const e of t.recommendedEvents ?? []) {
+      if (!e || seenE.has(e.title)) continue;
+      seenE.add(e.title);
+      events.push({ title: e.title });
+    }
+  }
+  return { courses, events };
 }
 
 /**
@@ -110,11 +182,46 @@ export function buildReportContext(input: ReportInput, opts: ReportContextOption
   // `withTopicPoints` — в отчёте строка «Баллов» по теме нужна всегда: это документ,
   // а не экран, и досчитать её потом читателю нечем.
   const base = buildResultContext(input.result, input.testName || "", { withTopicPoints: true });
-  return {
-    ...base,
-    design: { ...(opts.design ?? {}) },
-    report: reportBlock(input, (input.result.topicResults ?? []).length, opts),
-  };
+  const topics = input.result.topicResults ?? [];
+  const passed = !!input.result.passed;
+  const percent = base.result.scorePercent ?? 0;
+  const circumference = 2 * Math.PI * REPORT_RING_RADIUS;
+  const rec = failedRecommendations(topics);
+
+  const report = reportBlock(input, topics.length, opts);
+  report.verdictHeadline = passed ? "Тест пройден" : "Тест не пройден";
+  report.verdictBadge = passed ? "пройден" : "не пройден";
+  report.verdictClass = passed ? "is-pass" : "is-fail";
+  report.correctLabel = `${input.result.correct}/${input.result.totalQuestions}`;
+  report.earnedPointsLabel = fixed1(input.result.earnedPoints);
+  report.ringDasharray = circumference;
+  report.ringDashoffset = circumference - (circumference * percent) / 100;
+  report.courses = rec.courses;
+  report.hasCourses = rec.courses.length > 0;
+  report.events = rec.events;
+  report.hasEvents = rec.events.length > 0;
+
+  const ctx: ReportRenderContext = { ...base, design: { ...(opts.design ?? {}) }, report };
+
+  // Готовые подписи строки темы: отчёт печатает свои формулировки и свою точность
+  // («Пройден», «3.0/5.0»), экран — свои («Пройдено», «3 / 5»).
+  const rows = ctx.result.topicResults;
+  if (Array.isArray(rows)) {
+    rows.forEach((row, i) => {
+      const src = topics[i];
+      if (!src) return;
+      const topicPassed = src.passed === true;
+      const target = row as unknown as Record<string, unknown>;
+      const topicPercent = Math.round(Number(src.percent) || 0);
+      target.verdictLabel = topicPassed ? "Пройден" : "Не пройден";
+      target.barPercent = topicPercent;
+      target.countsLabel = `${src.correct} из ${src.total} (${topicPercent}%)`;
+      target.pointsFixedLabel = `${fixed1(src.earnedPoints)}/${fixed1(src.possiblePoints)}`;
+      // Обратную связь отчёт печатает ТОЛЬКО по проваленной теме — как и раньше.
+      target.showFeedback = !topicPassed && String(src.feedback ?? "").trim().length > 0;
+    });
+  }
+  return ctx;
 }
 
 /**
@@ -129,11 +236,17 @@ export function buildAdaptiveReportContext(
 ): ReportRenderContext {
   const base = buildAdaptiveResultContext(input.result, input.testName || "");
   const topics = input.result.topicResults ?? [];
-  const ctx: ReportRenderContext = {
-    ...base,
-    design: { ...(opts.design ?? {}) },
-    report: reportBlock(input, topics.length, opts),
-  };
+  const report = reportBlock(input, topics.length, opts);
+  // Адаптивные материалы перечисляются по КАЖДОЙ теме, у которой они есть, с названием
+  // темы: понятия «проваленная тема» здесь нет.
+  for (const t of topics) {
+    for (const c of t.recommendedCourses ?? []) {
+      if (!c) continue;
+      report.courses.push({ topicName: t.topicName || "", title: c.title, url: c.url ?? "" });
+    }
+  }
+  report.hasCourses = report.courses.length > 0;
+  const ctx: ReportRenderContext = { ...base, design: { ...(opts.design ?? {}) }, report };
   // Счётчики заданных и верных вопросов у уровневых строк — их нет в контексте экрана
   // (экран показывает уровень), а отчёт печатает, поэтому добавляются здесь.
   const rows = ctx.result.topicResults;
@@ -147,6 +260,10 @@ export function buildAdaptiveReportContext(
       target.hasCounts = answered != null || correct != null;
       target.answeredLabel = `Вопросов: ${answered ?? 0}`;
       target.correctLabel = `Правильных: ${correct ?? 0}`;
+      // Класс для CSS отчёта: подтверждён уровень или нет. Не `levelClass` экрана —
+      // тот несёт классы дизайн-системы и меняется вместе с оформлением тега.
+      target.achievedClass =
+        src.achievedLevelIndex !== null && src.achievedLevelIndex !== undefined ? "is-achieved" : "is-below";
     });
   }
   return ctx;
