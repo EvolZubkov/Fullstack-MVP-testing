@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import { logger } from "./logger";
 import { config, appBaseUrl } from "./config";
+import { EMAIL_COLORS as C } from "./email-theme";
 
 // SMTP settings are read from `config` (populated by initConfig) inside the
 // functions below — not at import time (the DI model). Non-secret settings
@@ -60,13 +61,13 @@ export async function sendPasswordResetEmail(
 <head>
   <meta charset="utf-8">
   <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: ${C.fg}; }
     .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: #2563eb; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-    .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
-    .button { display: inline-block; background: #2563eb; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
-    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
-    .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 10px; border-radius: 4px; margin-top: 20px; font-size: 14px; }
+    .header { background: ${C.accent}; color: ${C.accentText}; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: ${C.page}; padding: 30px; border-radius: 0 0 8px 8px; }
+    .button { display: inline-block; background: ${C.accent}; color: ${C.accentText}; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: ${C.fgMuted}; }
+    .warning { background: ${C.warningSoft}; border: 1px solid ${C.warning}; padding: 10px; border-radius: 4px; margin-top: 20px; font-size: 14px; }
   </style>
 </head>
 <body>
@@ -82,7 +83,7 @@ export async function sendPasswordResetEmail(
         <a href="${resetLink}" class="button">Сбросить пароль</a>
       </p>
       <p>Или скопируйте эту ссылку в браузер:</p>
-      <p style="word-break: break-all; background: #e5e7eb; padding: 10px; border-radius: 4px; font-size: 14px;">
+      <p style="word-break: break-all; background: ${C.sunken}; padding: 10px; border-radius: 4px; font-size: 14px;">
         ${resetLink}
       </p>
       <div class="warning">
@@ -186,8 +187,8 @@ export async function sendAssignmentEmail(opts: {
       <p style="text-align: center;">
         <a href="${ctaHref}" class="button">Пройти тест</a>
       </p>
-      <p style="font-size:13px;color:#666;">Или скопируйте ссылку в браузер:</p>
-      <p style="word-break: break-all; background: #e5e7eb; padding: 10px; border-radius: 4px; font-size: 13px;">
+      <p style="font-size:13px;color:${C.fgMuted};">Или скопируйте ссылку в браузер:</p>
+      <p style="word-break: break-all; background: ${C.sunken}; padding: 10px; border-radius: 4px; font-size: 13px;">
         ${ctaHref}
       </p>
       <div class="warning">
@@ -197,7 +198,7 @@ export async function sendAssignmentEmail(opts: {
       <p style="text-align: center;">
         <a href="${ctaHref}" class="button">Войти и пройти тест</a>
       </p>
-      <p style="font-size:13px;color:#666;">После входа тест будет в списке назначенных.</p>`;
+      <p style="font-size:13px;color:${C.fgMuted};">После входа тест будет в списке назначенных.</p>`;
 
   const html = `
 <!DOCTYPE html>
@@ -205,15 +206,15 @@ export async function sendAssignmentEmail(opts: {
 <head>
   <meta charset="utf-8">
   <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: ${C.fg}; }
     .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: #2563eb; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-    .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
-    .button { display: inline-block; background: #2563eb; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; margin: 20px 0; font-size: 16px; font-weight: 600; }
-    .meta { background: #e5e7eb; border-radius: 6px; padding: 14px 18px; margin: 16px 0; font-size: 14px; }
+    .header { background: ${C.accent}; color: ${C.accentText}; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: ${C.page}; padding: 30px; border-radius: 0 0 8px 8px; }
+    .button { display: inline-block; background: ${C.accent}; color: ${C.accentText}; padding: 14px 36px; text-decoration: none; border-radius: 6px; margin: 20px 0; font-size: 16px; font-weight: 600; }
+    .meta { background: ${C.sunken}; border-radius: 6px; padding: 14px 18px; margin: 16px 0; font-size: 14px; }
     .meta p { margin: 4px 0; }
-    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
-    .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 10px; border-radius: 4px; margin-top: 20px; font-size: 13px; }
+    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: ${C.fgMuted}; }
+    .warning { background: ${C.warningSoft}; border: 1px solid ${C.warning}; padding: 10px; border-radius: 4px; margin-top: 20px; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -312,16 +313,16 @@ export async function sendInviteEmail(opts: {
 <head>
   <meta charset="utf-8">
   <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: ${C.fg}; }
     .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: #2563eb; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-    .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
-    .button { display: inline-block; background: #2563eb; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; margin: 20px 0; font-size: 16px; font-weight: 600; }
-    .steps { background: #eff6ff; border-radius: 6px; padding: 16px 20px; margin: 16px 0; }
+    .header { background: ${C.accent}; color: ${C.accentText}; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: ${C.page}; padding: 30px; border-radius: 0 0 8px 8px; }
+    .button { display: inline-block; background: ${C.accent}; color: ${C.accentText}; padding: 14px 36px; text-decoration: none; border-radius: 6px; margin: 20px 0; font-size: 16px; font-weight: 600; }
+    .steps { background: ${C.accentSoft}; border-radius: 6px; padding: 16px 20px; margin: 16px 0; }
     .steps ol { margin: 8px 0; padding-left: 20px; }
     .steps li { margin: 6px 0; }
-    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
-    .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 10px; border-radius: 4px; margin-top: 20px; font-size: 13px; }
+    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: ${C.fgMuted}; }
+    .warning { background: ${C.warningSoft}; border: 1px solid ${C.warning}; padding: 10px; border-radius: 4px; margin-top: 20px; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -345,8 +346,8 @@ export async function sendInviteEmail(opts: {
           <li>Начните работу с системой</li>
         </ol>
       </div>
-      <p style="font-size:13px;color:#666;">Или скопируйте ссылку в браузер:</p>
-      <p style="word-break: break-all; background: #e5e7eb; padding: 10px; border-radius: 4px; font-size: 13px;">
+      <p style="font-size:13px;color:${C.fgMuted};">Или скопируйте ссылку в браузер:</p>
+      <p style="word-break: break-all; background: ${C.sunken}; padding: 10px; border-radius: 4px; font-size: 13px;">
         ${opts.inviteLink}
       </p>
       <div class="warning">

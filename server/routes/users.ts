@@ -18,6 +18,13 @@ import { randomBytes, createHash } from "crypto";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
+/**
+ * Lifetime of the password-setup token carried by an invitation letter. Longer
+ * than an ordinary reset token (an invited person may only read their mail days
+ * later), and shared by both senders: bulk import and the single re-send.
+ */
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 const router = Router();
 
 // GET /api/users - Список пользователей
@@ -252,6 +259,56 @@ router.post("/:id/activate", requirePermission("users.manage"), async (req, res)
   } catch (error) {
     logger.error("Activate user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to activate user" });
+  }
+});
+
+// POST /api/users/:id/invite - Отправить (повторно) письмо-приглашение
+//
+// The same letter bulk-import sends for a freshly created row, but reachable
+// for an account that is already there and still `pending`: created one at a
+// time, imported with the invite checkbox off, or whose letter was lost. It
+// carries a password-setup link, so it only makes sense while the account has
+// never been signed into — an `active` account has a password of its own and a
+// blocked one must be unblocked first.
+router.post("/:id/invite", requirePermission("users.manage"), async (req, res) => {
+  try {
+    const user = await storage.getUser(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.status !== "pending") {
+      return res.status(400).json({
+        error: "Only a pending account can be invited",
+        status: user.status,
+      });
+    }
+
+    // Same anti-mail-bomb budget as POST /api/auth/forgot-password: both paths
+    // mint rows in `password_reset_tokens`, so one shared counter covers both.
+    const recentTokens = await storage.getRecentTokensCount(user.id, 1);
+    if (recentTokens >= 3) {
+      return res.status(429).json({ error: "Too many invites. Please try again later." });
+    }
+
+    const rawToken = randomBytes(32).toString("hex");
+    const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+    await storage.createPasswordResetToken(user.id, tokenHash, "invite", INVITE_TTL_MS);
+
+    const inviter = req.session.userId ? await storage.getUser(req.session.userId) : undefined;
+    const sent = await sendInviteEmail({
+      to: user.email,
+      userName: user.name || undefined,
+      inviteLink: `${appBaseUrl()}/reset-password?token=${rawToken}`,
+      inviterName: inviter?.name || undefined,
+    });
+
+    audit.userInvite(user.id);
+    logger.info(`Invite e-mail re-sent for user ${user.id} (delivered=${sent})`, "users");
+    res.json({ success: true, sent });
+  } catch (error) {
+    logger.error("Invite user error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to send invite" });
   }
 });
 
@@ -535,7 +592,7 @@ router.post("/bulk-import", requirePermission("users.create"), async (req, res) 
         if (sendInvites) {
           const rawToken = randomBytes(32).toString("hex");
           const tokenHash = createHash("sha256").update(rawToken).digest("hex");
-          await storage.createPasswordResetToken(user.id, tokenHash, "bulk-import", 7 * 24 * 60 * 60 * 1000); // 7 дней для invite
+          await storage.createPasswordResetToken(user.id, tokenHash, "bulk-import", INVITE_TTL_MS);
           const inviteLink = `${baseUrl}/reset-password?token=${rawToken}`;
           const sent = await sendInviteEmail({ to: user.email, userName: user.name || undefined, inviteLink });
           if (sent) invitesSent++;

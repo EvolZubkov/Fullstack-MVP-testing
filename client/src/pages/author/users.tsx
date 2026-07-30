@@ -22,6 +22,7 @@ import {
   Upload,
   Download,
   FileSpreadsheet,
+  MailPlus,
 } from "lucide-react";
 import {
   Box,
@@ -318,6 +319,34 @@ export default function UsersPage() {
     },
   });
 
+  // Invite mutation — re-send the password-setup letter to a pending account.
+  // `sent: false` is a success for the request but a failure for the person
+  // waiting on the letter (SMTP off), so it gets its own warning toast.
+  const inviteUserMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/users/${id}/invite`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to send invite");
+      return res.json() as Promise<{ success: boolean; sent: boolean }>;
+    },
+    onSuccess: (data) => {
+      if (data.sent) {
+        toast({ title: t.users.inviteSent, description: t.users.inviteSentDescription });
+      } else {
+        toast({
+          variant: "warning",
+          title: t.users.inviteNotSent,
+          description: t.users.inviteNotSentDescription,
+        });
+      }
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: t.common.error, description: t.users.failedToSendInvite });
+    },
+  });
+
   // Reset attempts mutation
   const resetAttemptsMutation = useMutation({
     mutationFn: async ({ userId, testId }: { userId: string; testId: string }) => {
@@ -456,6 +485,15 @@ export default function UsersPage() {
         >
           <MenuItem icon={<Pencil size={16} />} onClick={() => openEditDialog(u)}>{t.common.edit}</MenuItem>
           <MenuItem icon={<KeyRound size={16} />} onClick={() => openResetPasswordDialog(u)}>{t.users.resetPassword}</MenuItem>
+          {/* Only a never-signed-in account: the letter carries a password-setup link. */}
+          {u.status === "pending" && (
+            <MenuItem
+              icon={<MailPlus size={16} />}
+              onClick={() => inviteUserMutation.mutate(u.id)}
+            >
+              {t.users.sendInvite}
+            </MenuItem>
+          )}
           {(u.roles ?? []).includes("learner") && (
             <MenuItem icon={<RotateCcw size={16} />} onClick={() => openResetAttemptsDialog(u)}>Сбросить попытки</MenuItem>
           )}

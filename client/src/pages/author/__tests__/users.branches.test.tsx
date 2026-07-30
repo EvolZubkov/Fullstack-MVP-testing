@@ -148,6 +148,70 @@ describe("<UsersPage /> — badges", () => {
   });
 });
 
+// ─── Invite re-send toasts ─────────────────────────────────────────────────────
+
+describe("<UsersPage /> — invite", () => {
+  /** Open the pending row's action menu and fire the invite item. */
+  async function invitePendingUser() {
+    await screen.findByText("pending@test.dev");
+    fireEvent.click(await screen.findByLabelText("Действия"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Отправить приглашение" }));
+  }
+
+  beforeEach(() => {
+    usersData = [pendingUser];
+  });
+
+  it("confirms delivery when the letter went out", async () => {
+    installFetch(async (u, method) =>
+      method === "POST" && u.endsWith("/invite")
+        ? jsonResponse({ success: true, sent: true })
+        : undefined,
+    );
+    renderPage();
+    await invitePendingUser();
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "Приглашение отправлено" }),
+      ),
+    );
+  });
+
+  it("warns instead of confirming when nothing was mailed", async () => {
+    // SMTP not configured: the request succeeds, but no letter left the server.
+    installFetch(async (u, method) =>
+      method === "POST" && u.endsWith("/invite")
+        ? jsonResponse({ success: true, sent: false })
+        : undefined,
+    );
+    renderPage();
+    await invitePendingUser();
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: "warning", title: "Письмо не отправлено" }),
+      ),
+    );
+  });
+
+  it("reports a failed invite request as an error", async () => {
+    installFetch(async (u, method) =>
+      method === "POST" && u.endsWith("/invite")
+        ? jsonResponse({ error: "Too many invites. Please try again later." }, false, 429)
+        : undefined,
+    );
+    renderPage();
+    await invitePendingUser();
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variant: "destructive",
+          description: "Не удалось отправить приглашение.",
+        }),
+      ),
+    );
+  });
+});
+
 // ─── Mutation onError toasts ───────────────────────────────────────────────────
 
 describe("<UsersPage /> — create/update onError", () => {

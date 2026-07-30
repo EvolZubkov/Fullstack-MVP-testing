@@ -58,6 +58,20 @@ const learnerUser: MockUser = {
   createdAt: "2025-12-02T09:00:00Z",
 };
 
+/** Never signed in — the only state an invitation letter makes sense for. */
+const pendingUser: MockUser = {
+  id: "u-pend",
+  email: "pending@test.dev",
+  name: "Новичок",
+  roles: ["learner"],
+  status: "pending",
+  mustChangePassword: true,
+  gdprConsent: false,
+  lastLoginAt: null,
+  expiresAt: null,
+  createdAt: "2025-12-03T09:00:00Z",
+};
+
 /** JSON-ish Response stub honoured by both getQueryFn and the raw mutations. */
 function jsonResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -89,7 +103,7 @@ function installDefaultFetch() {
 }
 
 beforeEach(() => {
-  usersData = [adminUser, learnerUser];
+  usersData = [adminUser, learnerUser, pendingUser];
   installDefaultFetch();
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -214,6 +228,28 @@ describe("<UsersPage />", () => {
         expect.objectContaining({ method: "POST" }),
       ),
     );
+  });
+
+  it("re-sends the invitation for a pending user (POST .../invite)", async () => {
+    renderPage();
+    await screen.findByText("pending@test.dev");
+    // Third row — the account still awaiting its first sign-in.
+    fireEvent.click(screen.getAllByLabelText("Действия")[2]);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Отправить приглашение" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/users/u-pend/invite",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+  });
+
+  it("offers no invitation for an account that has already signed in", async () => {
+    renderPage();
+    await screen.findByText("admin@test.dev");
+    fireEvent.click(screen.getAllByLabelText("Действия")[0]);
+    await screen.findByRole("menuitem", { name: "Редактировать" });
+    expect(screen.queryByRole("menuitem", { name: "Отправить приглашение" })).toBeNull();
   });
 
   it("shows the empty state when no users exist", async () => {
