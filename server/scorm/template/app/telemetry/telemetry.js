@@ -25,6 +25,17 @@ var Telemetry = (function() {
   // session. Telemetry is analytics — losing it must never cost the learner anything.
   var stopped = false;
 
+  // Endpoints that have to outlive the page. The attempt result is the one payload that
+  // cannot be re-derived later, and it is sent exactly when the LMS tends to navigate
+  // away from the SCO — an ordinary fetch is cancelled together with the document, and
+  // the lost request is what fed the retry buffer in the first place.
+  var UNLOAD_SAFE_ENDPOINTS = { '/api/scorm-telemetry/finish': true };
+  // `keepalive` bodies share a 64 KiB per-page budget and the browser rejects the call
+  // outright above it, so an oversized result goes out as an ordinary request instead:
+  // sent while the page is alive beats not sent at all.
+  var KEEPALIVE_MAX_BYTES = 60000;
+  var keepaliveSupported = null;
+
   // Generate unique session ID
   function generateSessionId() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -60,6 +71,39 @@ var Telemetry = (function() {
     }
   }
 
+  // Feature test rather than version sniffing: some embedded browsers LMS platforms
+  // ship have a `fetch` without `keepalive`, and there the beacon queue is the only way
+  // a request survives the document.
+  function canKeepalive() {
+    if (keepaliveSupported === null) {
+      try {
+        keepaliveSupported = typeof Request === 'function' &&
+          'keepalive' in new Request('/', { method: 'POST' });
+      } catch (e) {
+        keepaliveSupported = false;
+      }
+    }
+    return keepaliveSupported;
+  }
+
+  function byteLength(s) {
+    try { return new Blob([s]).size; } catch (e) { return String(s).length; }
+  }
+
+  // Hand the payload to the browser's beacon queue. Returns whether it was accepted, or
+  // null when the API is absent so the caller can fall back to an ordinary request.
+  function queueBeacon(url, body) {
+    try {
+      if (typeof navigator === 'undefined' || !navigator ||
+          typeof navigator.sendBeacon !== 'function') {
+        return null;
+      }
+      return navigator.sendBeacon(url, new Blob([body], { type: 'application/json' })) === true;
+    } catch (e) {
+      return null;
+    }
+  }
+
   // ONE delivery attempt. Returns 'ok' | 'retry' | 'stop'; what to do with the item is
   // the caller's decision, so an item is queued in exactly ONE place. The earlier
   // version queued both here and in processBuffer: the copy that went to the tail got
@@ -87,12 +131,35 @@ var Telemetry = (function() {
       data: data
     };
 
+    var body = JSON.stringify(payload);
+    var url = config.apiBaseUrl + endpoint;
+    var unloadSafe = UNLOAD_SAFE_ENDPOINTS[endpoint] === true &&
+      byteLength(body) <= KEEPALIVE_MAX_BYTES;
+
+    if (unloadSafe && !canKeepalive()) {
+      // The beacon reports QUEUEING, not delivery. A `true` therefore counts as sent:
+      // there is nothing further to observe, and re-sending would double-count the
+      // attempt. A `null` means the API is missing — fall through to a normal request.
+      var queued = queueBeacon(url, body);
+      if (queued === true) {
+        console.log('[Telemetry] Queued via sendBeacon:', endpoint);
+        return 'ok';
+      }
+      if (queued === false) {
+        console.warn('[Telemetry] sendBeacon refused:', endpoint);
+        return 'retry';
+      }
+    }
+
     var response;
     try {
-      response = await fetch(config.apiBaseUrl + endpoint, {
+      response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: body,
+        // Unknown fields are ignored by older browsers; where it IS understood, the
+        // request is detached from the document, so closing the page cannot cancel it.
+        keepalive: unloadSafe
       });
     } catch (e) {
       console.warn('[Telemetry] Send failed:', endpoint, e.message);

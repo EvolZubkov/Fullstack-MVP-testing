@@ -52,8 +52,16 @@ function okResponse() {
   return { ok: true, status: 200, clone: () => ({ json: async () => ({}) }) };
 }
 
+/** A `Request` whose instances expose `keepalive` — i.e. a browser that supports it. */
+class KeepaliveRequest {
+  keepalive = false;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function loadTelemetry(fetchImpl: any): any {
+type Overrides = { navigator?: any; Request?: any };
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function loadTelemetry(fetchImpl: any, overrides: Overrides = {}): any {
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const factory = new Function(
     "fetch",
@@ -61,6 +69,8 @@ function loadTelemetry(fetchImpl: any): any {
     "window",
     "localStorage",
     "console",
+    "navigator",
+    "Request",
     `${SRC}\n;return Telemetry;`,
   );
   return factory(
@@ -69,6 +79,8 @@ function loadTelemetry(fetchImpl: any): any {
     windowStub(),
     { getItem: () => null, setItem: () => {} },
     silentConsole,
+    overrides.navigator ?? {},
+    overrides.Request ?? KeepaliveRequest,
   );
 }
 
@@ -177,5 +189,111 @@ describe("SCORM telemetry — retry buffer", () => {
     expect(delivered.size).toBe(50);
     expect(delivered.has("q0")).toBe(false);
     expect(delivered.has("q59")).toBe(true);
+  });
+});
+
+describe("SCORM telemetry — surviving page unload", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("sends the attempt result with keepalive so a closing page cannot cancel it", async () => {
+    const fetchStub = vi.fn(async () => okResponse());
+    const telemetry = loadTelemetry(fetchStub);
+    telemetry.init(CONFIG);
+
+    telemetry.finish({ percent: 80, passed: true });
+    await settle();
+
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(CONFIG.apiBaseUrl + "/api/scorm-telemetry/finish");
+    expect(init.keepalive).toBe(true);
+    // The wire format is unchanged: still a signed JSON envelope.
+    expect(init.headers).toMatchObject({ "Content-Type": "application/json" });
+    expect(JSON.parse(init.body as string).data.percent).toBe(80);
+  });
+
+  it("leaves ordinary events as plain requests", async () => {
+    const fetchStub = vi.fn(async () => okResponse());
+    const telemetry = loadTelemetry(fetchStub);
+    telemetry.init(CONFIG);
+
+    telemetry.answer({ questionId: "q1" });
+    await settle();
+
+    const [, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+    // keepalive shares a small per-page budget; spending it on in-progress events
+    // would starve the one payload that actually has to outlive the page.
+    expect(init.keepalive).toBeFalsy();
+  });
+
+  it("falls back to sendBeacon when the browser cannot keep a fetch alive", async () => {
+    const fetchStub = vi.fn(async () => okResponse());
+    const sendBeacon = vi.fn(() => true);
+    // A Request implementation without `keepalive` — the older embedded browsers some
+    // LMS platforms still ship.
+    class LegacyRequest {}
+    const telemetry = loadTelemetry(fetchStub, {
+      navigator: { sendBeacon },
+      Request: LegacyRequest,
+    });
+    telemetry.init(CONFIG);
+
+    telemetry.finish({ percent: 80, passed: true });
+    await settle();
+
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
+    expect(fetchStub).not.toHaveBeenCalled();
+
+    const [beaconUrl, blob] = sendBeacon.mock.calls[0] as unknown as [string, Blob];
+    expect(beaconUrl).toBe(CONFIG.apiBaseUrl + "/api/scorm-telemetry/finish");
+    expect(blob.type).toBe("application/json");
+    expect(JSON.parse(await blob.text()).data.percent).toBe(80);
+
+    // A queued beacon counts as delivered: there is no response to observe, and
+    // re-sending would double-count the attempt.
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
+    expect(fetchStub).not.toHaveBeenCalled();
+  });
+
+  it("retries within the normal budget when the beacon is refused", async () => {
+    const fetchStub = vi.fn(async () => okResponse());
+    const sendBeacon = vi.fn(() => false);
+    class LegacyRequest {}
+    const telemetry = loadTelemetry(fetchStub, {
+      navigator: { sendBeacon },
+      Request: LegacyRequest,
+    });
+    telemetry.init(CONFIG);
+
+    telemetry.finish({ percent: 80, passed: true });
+    await settle();
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
+    // Same budget as any other failure — one try plus three retries, then quiet.
+    expect(sendBeacon.mock.calls.length).toBeLessThanOrEqual(4);
+    const total = sendBeacon.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
+    expect(sendBeacon).toHaveBeenCalledTimes(total);
+  });
+
+  it("sends an oversized result as an ordinary request rather than not at all", async () => {
+    const fetchStub = vi.fn(async () => okResponse());
+    const telemetry = loadTelemetry(fetchStub);
+    telemetry.init(CONFIG);
+
+    // keepalive bodies are capped at 64 KiB; over that the browser rejects the call.
+    telemetry.finish({ percent: 80, passed: true, achievedLevels: "x".repeat(70_000) });
+    await settle();
+
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+    const [, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.keepalive).toBeFalsy();
   });
 });
