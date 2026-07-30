@@ -43,6 +43,7 @@ import {
   type FeedbackEditorValue,
 } from "./feedback-editor-modal";
 import { FeedbackPreview } from "./feedback-preview";
+import { ReportSettingsCard } from "./report-settings-card";
 import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
@@ -68,6 +69,8 @@ export type SettingsSectionProps = {
   updateModel: (updater: (m: TestEditorModel) => TestEditorModel) => void;
   /** FR-20c: per-field validation errors for inline highlighting. */
   fieldErrors?: FieldErrorIndex;
+  /** PRD-27: черновой шаблон вкладки «Оформление» — каталог видов отчёта считается на нём (§4.2). */
+  draftTemplateId?: string;
 };
 
 /** Backwards-compatible alias: original skeleton lived under this name. */
@@ -102,7 +105,12 @@ const RAIL_ERROR_PREFIXES: Record<RailKey, string[]> = {
   adaptive: ["adaptive"],
 };
 
-export function SettingsSection({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: SettingsSectionProps) {
+export function SettingsSection({
+  model,
+  updateModel,
+  fieldErrors = EMPTY_FIELD_ERRORS,
+  draftTemplateId,
+}: SettingsSectionProps) {
   const [active, setActive] = useState<RailKey>("basic");
   // Per requirements: «Адаптивный режим» sub-section is only relevant when
   // the test itself runs in adaptive mode. Hide the rail item in standard
@@ -173,7 +181,12 @@ export function SettingsSection({ model, updateModel, fieldErrors = EMPTY_FIELD_
         data-testid={`settings-pane-${effectiveActive}`}
       >
         {effectiveActive === "basic" && (
-          <BasicPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
+          <BasicPane
+            model={model}
+            updateModel={updateModel}
+            fieldErrors={fieldErrors}
+            draftTemplateId={draftTemplateId}
+          />
         )}
         {effectiveActive === "pass-rules" && (
           <PassRulesPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
@@ -200,7 +213,12 @@ export const BasicSettingsSection = SettingsSection;
 
 // ─── Sub-pane: Основное ───────────────────────────────────────────────────────
 
-function BasicPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: SettingsSectionProps) {
+function BasicPane({
+  model,
+  updateModel,
+  fieldErrors = EMPTY_FIELD_ERRORS,
+  draftTemplateId,
+}: SettingsSectionProps) {
   // PRD-7 S13.2-G7: «Общая обратная связь теста» card. The model already
   // carries the underlying fields (basic.feedback / feedbackLinks /
   // feedbackAssets), populated by the API on load (PRD-7 S2). This UI block
@@ -325,6 +343,16 @@ function BasicPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: Set
           />
         )}
       </div>
+
+      <hr className="wf-sep" />
+
+      <ReportSettingsCard
+        mode={model.mode}
+        draftTemplateId={draftTemplateId}
+        value={model.report ?? {}}
+        readOnly={model.basic.status === "published"}
+        onChange={(next) => updateModel((m) => ({ ...m, report: next }))}
+      />
 
       <hr className="wf-sep" />
 

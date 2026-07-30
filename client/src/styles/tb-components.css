@@ -2254,3 +2254,12 @@
 }
 /* The tree inside the popover scrolls if tall (the popover itself frames it). */
 .tb-foldercombo__pop .tb-foldertree { max-height: 16rem; overflow-y: auto; }
+
+/* PRD-27: сетка полей выбранного вида отчёта в блоке обратной связи «Настроек».
+   Только раскладка — контролы внутри дизайн-системные. */
+.tb-report-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--ou-space-4);
+}
+.tb-report-fields > .ou-formfield { margin: 0; }

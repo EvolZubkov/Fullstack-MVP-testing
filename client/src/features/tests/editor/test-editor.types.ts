@@ -8,6 +8,7 @@
  */
 
 import type { DrawBlueprint, FormSet, RetakePolicy } from "@shared/schema";
+import type { ReportSettings } from "@shared/schema";
 import type { QuestionScoringOverride } from "./scoring-api";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -382,6 +383,15 @@ export type TestEditorModel = {
   /** PRD-6 retake gate. `enabled: false` = legacy behaviour (no cooldown). */
   retakePolicy: RetakePolicy;
   /**
+   * PRD-27: выбранный вид ОТЧЁТА и значения его полей, по режиму теста. Часть черновика
+   * вкладки «Настройки»: сохраняется одной кнопкой «Сохранить», «Закрыть» отменяет.
+   * Пустая ветка = автор ничего не выбирал, берётся вариант с `isDefault`.
+   *
+   * Необязателен: черновики, сохранённые до PRD-27, среза не несут — как и `scoring`
+   * до блока D. Потребители обязаны читать через `?? {}`.
+   */
+  report?: ReportSettings;
+  /**
    * PRD-15 block D (FR-31): test-side scoring edited in the «Оценка» tab.
    * `defaultQuestionPoints = null` = system default (1 point). `questionOverrides`
    * are the per-(test, question) overrides; they are part of the draft and persist
@@ -442,6 +452,8 @@ export type TestSettingsPayload = {
   telemetryEnabled: boolean;
   /** PRD-6 retake gate; `null` when disabled (= legacy behaviour, FR-02). */
   retakePolicyJson?: RetakePolicy | null;
+  /** PRD-27: выбор варианта отчёта и значения его полей. */
+  reportSettingsJson?: ReportSettings | null;
   /** PRD-15 block D (FR-31): test-wide default price; `null` = system (1). */
   defaultQuestionPoints: number | null;
   expectedVersion: number;
