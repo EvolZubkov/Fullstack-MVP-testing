@@ -249,11 +249,28 @@ describe("шаблон книги — валидность примеров", ()
     expect(result.measurements.rows).toBeGreaterThan(0);
   });
 
-  it("примеры покрывают все четыре типа вопросов", async () => {
+  it("примеры покрывают все пять типов вопросов", async () => {
     const types = EXAMPLE_ROWS["Вопросы"].map((r) => r["Тип вопроса"]);
     expect(new Set(types)).toEqual(
-      new Set(["multiple_choice", "multiple_response", "matching", "ranking"]),
+      new Set(["multiple_choice", "multiple_response", "matching", "ranking", "scale"]),
     );
+  });
+
+  it("пример шкалы показывает опросник без правильного ответа (PRD-26)", async () => {
+    const scale = EXAMPLE_ROWS["Вопросы"].find((r) => r["Тип вопроса"] === "scale");
+    expect(scale).toBeTruthy();
+    // Пустая ячейка — это и есть переключатель «правильного ответа нет»; заполнив её
+    // в примере, мы научили бы автора ровно противоположному.
+    expect(scale!["Номера правильных ответов"]).toBe("");
+    expect(String(scale!["Тексты вариантов ответа"]).split("#").length).toBeGreaterThanOrEqual(2);
+
+    // У примера должен быть смысл: градации складываются в шкалу-накопитель.
+    const key = scale!["Ключ строки"];
+    const contributions = EXAMPLE_ROWS["Вклады вопросов"].filter((r) => r["Вопрос"] === key);
+    expect(contributions).toHaveLength(5);
+    expect(contributions.map((r) => r["Ключ источника"])).toEqual(["0", "1", "2", "3", "4"]);
+    const scaleKey = contributions[0]["Шкала"];
+    expect(EXAMPLE_ROWS["Шкалы"].some((r) => r["Ключ"] === scaleKey)).toBe(true);
   });
 
   it("лист «Пример» показывает заполненные строки для каждого ролевого листа с примерами", async () => {
