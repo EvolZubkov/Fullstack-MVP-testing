@@ -47,6 +47,7 @@ CREATE TABLE "attempts" (
 	"variant_json" jsonb NOT NULL,
 	"answers_json" jsonb,
 	"result_json" jsonb,
+	"section_timer_json" jsonb,
 	"started_at" timestamp NOT NULL,
 	"finished_at" timestamp
 );
