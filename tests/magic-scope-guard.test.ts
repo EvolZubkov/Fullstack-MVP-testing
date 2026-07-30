@@ -126,4 +126,16 @@ describe("magicScopeGuard", () => {
     const res = await request(makeApp({ assignmentId: "a1", testId: "t1" })).head("/api/auth/me");
     expect(res.status).toBe(200);
   });
+
+  // GET /api/learner/assigned-tests (server/routes/assignments.ts) answers the same
+  // question as the allow-listed /api/learner/tests but returns the raw result of
+  // storage.getAssignedTestsForUser with no per-magic-link narrowing. It must stay
+  // off MAGIC_SCOPE_RULES, or a restricted session could enumerate assignments/tests
+  // beyond the one it was scoped to. This pins that omission as deliberate: if it is
+  // ever added to the allow-list without replicating the narrowing, this test fails.
+  it("denies the un-narrowed sibling of /api/learner/tests (enumeration guard)", async () => {
+    const res = await request(makeApp({ assignmentId: "a1", testId: "t1" })).get("/api/learner/assigned-tests");
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("MAGIC_SCOPE");
+  });
 });
