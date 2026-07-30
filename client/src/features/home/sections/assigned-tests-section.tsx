@@ -19,6 +19,7 @@ import {
   CardHeader,
   Cluster,
   EmptyState,
+  Grid,
   Stack,
   Text,
 } from "@universityrt/ui-kit";
@@ -65,6 +66,9 @@ export function AssignedTestsSection({
     <Card variant="outlined" data-testid="home-assigned">
       <CardHeader title="Мне назначено" />
       <CardBody>
+        {/* One grid for the whole list, not a stack of independent rows: the
+            action column is shared, so «Начать» and «Продолжить» come out the
+            same width instead of a ragged edge. */}
         {items.length === 0 ? (
           <EmptyState
             layout="inline"
@@ -73,39 +77,32 @@ export function AssignedTestsSection({
             description="Назначенные вам тесты появятся здесь."
           />
         ) : (
-          <Stack gap={0}>
+          <Grid template="list-action" gap={3}>
             {items.map((item, index) => (
               <Fragment key={item.testId}>
                 {index > 0 && <CardDivider />}
-                <Stack
-                  direction="row"
-                  align="center"
-                  gap={3}
-                  padY={3}
-                  data-testid={`home-assigned-${item.testId}`}
-                >
-                  <Stack gap={1} grow>
-                    <Text variant="body-m" weight="medium">{item.title}</Text>
-                    <Text variant="body-xs" tone="muted">{attemptsLine(item)}</Text>
-                  </Stack>
-                  {item.blockedUntil ? (
-                    <Text variant="body-xs" tone="muted" data-testid={`home-assigned-blocked-${item.testId}`}>
-                      {`Новая попытка будет доступна ${formatCalendarDate(item.blockedUntil)}`}
-                    </Text>
-                  ) : (
-                    <Button
-                      size="s"
-                      trailingIcon={<ArrowRight size={14} />}
-                      onClick={() => navigate(`/learner/test/${item.testId}`)}
-                      data-testid={`home-assigned-start-${item.testId}`}
-                    >
-                      {item.inProgressAttemptId ? "Продолжить" : "Начать"}
-                    </Button>
-                  )}
+                <Stack gap={1} data-testid={`home-assigned-${item.testId}`}>
+                  <Text variant="body-m" weight="medium">{item.title}</Text>
+                  <Text variant="body-xs" tone="muted">{attemptsLine(item)}</Text>
                 </Stack>
+                {item.blockedUntil ? (
+                  <Text variant="body-xs" tone="muted" data-testid={`home-assigned-blocked-${item.testId}`}>
+                    {`Новая попытка будет доступна ${formatCalendarDate(item.blockedUntil)}`}
+                  </Text>
+                ) : (
+                  <Button
+                    size="s"
+                    fullWidth
+                    trailingIcon={<ArrowRight size={14} />}
+                    onClick={() => navigate(`/learner/test/${item.testId}`)}
+                    data-testid={`home-assigned-start-${item.testId}`}
+                  >
+                    {item.inProgressAttemptId ? "Продолжить" : "Начать"}
+                  </Button>
+                )}
               </Fragment>
             ))}
-          </Stack>
+          </Grid>
         )}
       </CardBody>
       {hasMore && (

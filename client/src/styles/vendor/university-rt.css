@@ -7400,6 +7400,8 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-lgrid--label-control { grid-template-columns: 1fr var(--ou-lgrid-control, 6rem); align-items: center; }
 .ou-lgrid--main-aside { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
 .ou-lgrid--main-aside > :nth-child(2) { position: sticky; top: var(--ou-space-4); }
+.ou-lgrid--list-action { grid-template-columns: 1fr max-content; align-items: center; }
+.ou-lgrid--list-action > .ou-card__divider { grid-column: 1 / -1; }
 @media (max-width: 63.99rem) {
   .ou-lgrid--main-aside { grid-template-columns: minmax(0, 1fr); }
   .ou-lgrid--main-aside > :nth-child(2) { position: static; }

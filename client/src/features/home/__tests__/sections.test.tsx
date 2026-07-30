@@ -102,6 +102,23 @@ describe("AssignedTestsSection", () => {
     expect(screen.getByTestId("home-assigned-start-b")).toHaveTextContent("Начать");
   });
 
+  it("lays the list out on the shared-action grid so labels of different length line up", () => {
+    const { container } = render(
+      <AssignedTestsSection
+        items={[assigned({ testId: "a", inProgressAttemptId: "att-1" }), assigned({ testId: "b" })]}
+        total={2}
+      />,
+    );
+
+    // The whole list is ONE grid: its action column is `max-content`, so every
+    // button gets the width of the widest one. Rendering each row as its own
+    // container would bring the ragged edge back.
+    expect(container.querySelector(".ou-lgrid--list-action")).not.toBeNull();
+    for (const id of ["a", "b"]) {
+      expect(screen.getByTestId(`home-assigned-start-${id}`).className).toContain("ou-btn--full");
+    }
+  });
+
   it("replaces the button with the retake date while the cooldown is closed", () => {
     render(<AssignedTestsSection items={[assigned({ blockedUntil: "2026-08-05" })]} total={1} />);
     expect(screen.queryByTestId("home-assigned-start-t1")).not.toBeInTheDocument();
