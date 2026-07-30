@@ -178,9 +178,11 @@ describe("buildRecentResults", () => {
   });
 });
 
-/** An author holds tests.edit / tests.publish / tests.export.scorm. */
+/** An author holds tests.edit / tests.publish / tests.debug.play — but NOT export. */
 const AUTHOR: Role[] = ["author"];
-/** A manager holds tests.read only — no edit, publish or export. */
+/** A developer holds everything the author does plus tests.export.scorm. */
+const DEVELOPER: Role[] = ["developer"];
+/** A manager holds tests.read only — no edit, publish, debug or export. */
 const MANAGER: Role[] = ["manager"];
 
 /** A test row as the DAL returns it, reduced to the fields the section reads. */
@@ -300,6 +302,17 @@ describe("buildMyTests", () => {
     storageMock.getTests.mockResolvedValue([testRow("t1", "2026-01-01")]);
 
     const result = await buildMyTests("u1", AUTHOR);
+
+    expect(result.items[0].canEdit).toBe(true);
+    expect(result.items[0].canDebug).toBe(true);
+    // SCORM generation is developer-only, so the author card offers no export.
+    expect(result.items[0].canExport).toBe(false);
+  });
+
+  it("offers the SCORM export to a developer", async () => {
+    storageMock.getTests.mockResolvedValue([testRow("t1", "2026-01-01")]);
+
+    const result = await buildMyTests("u1", DEVELOPER);
 
     expect(result.items[0].canEdit).toBe(true);
     expect(result.items[0].canDebug).toBe(true);

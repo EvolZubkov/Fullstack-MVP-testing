@@ -18,7 +18,7 @@
  * assignment, so losing topic access must not break published tests (FR-24).
  */
 
-import { ROLES, type Role } from "@shared/access";
+import { ROLES, hasAuthoringRole, type Role } from "@shared/access";
 import { storage } from "../storage";
 import { normalizeTopicName } from "@shared/topics/naming";
 import type { Topic, Test } from "@shared/schema";
@@ -63,7 +63,7 @@ export async function visibleTopic(
   topic: TopicRef,
 ): Promise<boolean> {
   if (isAdminOrSuper(roles)) return true;
-  if (topic.visibility === "shared" && hasRole(roles, ROLES.AUTHOR)) return true;
+  if (topic.visibility === "shared" && hasAuthoringRole(roles)) return true;
   if (topic.ownerId === userId) return true;
   return (await grantLevelFor(topic.id, userId)) !== null;
 }
@@ -97,8 +97,8 @@ export function canChangeTopicOwner(roles: readonly Role[]): boolean {
 /**
  * The set of topic ids a user may SEE/use, for list and picker filtering. For
  * admins returns `{ all: true }` (no id set needed). Otherwise the union of
- * shared topics, owned topics and active grants. `wantsAuthor` is false for a
- * pure manager/learner — they see nothing in the content bank.
+ * shared topics, owned topics and active grants. A pure manager/learner holds no
+ * authoring role and sees nothing in the content bank.
  */
 export async function visibleTopicScope(
   roles: readonly Role[],
@@ -106,7 +106,7 @@ export async function visibleTopicScope(
 ): Promise<{ all: boolean; ids: Set<string> }> {
   if (isAdminOrSuper(roles)) return { all: true, ids: new Set() };
   const ids = new Set<string>();
-  if (!hasRole(roles, ROLES.AUTHOR)) return { all: false, ids };
+  if (!hasAuthoringRole(roles)) return { all: false, ids };
 
   // Shared topics are visible to every author.
   const shared = await storage.getSharedTopicIds();

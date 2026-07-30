@@ -8,8 +8,9 @@
  * parent window (FR-06) — the same discovery a real LMS frame relies on, so the
  * inspector can read the live `window.__scorm` traffic in the player window. Runs
  * are throwaway: no `attempts`, no telemetry (R-2). Gated by the SAME edit-scope
- * as SCORM export (D-2 / FR-01). The browser UI (toolbar + status panel + iframe +
- * inspector) is the Phase-4 client.
+ * as SCORM export (D-2 / FR-01), but by its OWN capability `tests.debug.play`, so
+ * an author who may not generate an LMS package still debugs their own test. The
+ * browser UI (toolbar + status panel + iframe + inspector) is the Phase-4 client.
  */
 import { Router } from "express";
 import path from "node:path";
@@ -23,8 +24,9 @@ import { logger } from "../logger";
 
 const router = Router();
 
-// Same gate as SCORM export: edit-scope of the test (D-2, FR-01).
-const gate = [requirePermission("tests.export.scorm"), requireTestScope("edit")];
+// Same SCOPE as SCORM export — edit-scope of the test (D-2, FR-01) — under the
+// dedicated `tests.debug.play` capability (SCORM generation is developer-only).
+const gate = [requirePermission("tests.debug.play"), requireTestScope("edit")];
 
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",

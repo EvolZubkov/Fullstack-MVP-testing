@@ -14,6 +14,7 @@ import {
   effectiveRoles,
   primaryRole,
   isStoredRole,
+  hasAuthoringRole,
   ROLES,
   type Capability,
 } from "@shared/access";
@@ -55,11 +56,20 @@ const EXPECTED_AUTHOR: Capability[] = [
   "tests.edit",
   "tests.publish",
   "tests.delete",
-  "tests.export.scorm",
+  // SCORM generation is NOT here: it belongs to the developer role. The author
+  // keeps the in-service debug run over the same edit scope.
+  "tests.debug.play",
   "tests.access.grant",
   "templates.read",
   "analytics.read",
   "analytics.export",
+];
+
+/** The developer is the author plus SCORM generation and the template registry. */
+const EXPECTED_DEVELOPER: Capability[] = [
+  ...EXPECTED_AUTHOR,
+  "tests.export.scorm",
+  "adminTemplates.manage",
 ];
 
 function sorted(values: Iterable<string>): string[] {
@@ -67,8 +77,8 @@ function sorted(values: Iterable<string>): string[] {
 }
 
 describe("capability catalogue", () => {
-  it("has 33 unique capabilities", () => {
-    expect(CAPABILITIES.length).toBe(33);
+  it("has 34 unique capabilities", () => {
+    expect(CAPABILITIES.length).toBe(34);
     expect(new Set(CAPABILITIES).size).toBe(CAPABILITIES.length);
   });
 
@@ -90,6 +100,18 @@ describe("role -> permission map (golden)", () => {
 
   it("author matches the matrix", () => {
     expect(sorted(ROLE_PERMISSIONS[ROLES.AUTHOR])).toEqual(sorted(EXPECTED_AUTHOR));
+  });
+
+  it("developer matches the matrix", () => {
+    expect(sorted(ROLE_PERMISSIONS[ROLES.DEVELOPER])).toEqual(sorted(EXPECTED_DEVELOPER));
+  });
+
+  it("SCORM generation separates the developer from the author", () => {
+    expect(hasPermission([ROLES.AUTHOR], "tests.export.scorm")).toBe(false);
+    expect(hasPermission([ROLES.DEVELOPER], "tests.export.scorm")).toBe(true);
+    // The debug run stays with both — it is a separate capability.
+    expect(hasPermission([ROLES.AUTHOR], "tests.debug.play")).toBe(true);
+    expect(hasPermission([ROLES.DEVELOPER], "tests.debug.play")).toBe(true);
   });
 
   it("administrator has all capabilities except the superadmin-only ones", () => {
@@ -163,6 +185,15 @@ describe("role helpers", () => {
   it("primaryRole returns the highest-priority role", () => {
     expect(primaryRole([ROLES.MANAGER, ROLES.AUTHOR])).toBe(ROLES.AUTHOR);
     expect(primaryRole([ROLES.SUPERADMIN, ROLES.LEARNER])).toBe(ROLES.SUPERADMIN);
+    expect(primaryRole([ROLES.AUTHOR, ROLES.DEVELOPER])).toBe(ROLES.DEVELOPER);
     expect(primaryRole([])).toBeNull();
+  });
+
+  it("hasAuthoringRole covers author and developer only", () => {
+    expect(hasAuthoringRole([ROLES.AUTHOR])).toBe(true);
+    expect(hasAuthoringRole([ROLES.DEVELOPER])).toBe(true);
+    expect(hasAuthoringRole([ROLES.MANAGER, ROLES.LEARNER])).toBe(false);
+    expect(hasAuthoringRole([ROLES.ADMINISTRATOR])).toBe(false);
+    expect(hasAuthoringRole([])).toBe(false);
   });
 });

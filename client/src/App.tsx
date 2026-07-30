@@ -148,7 +148,7 @@ function Router() {
 
       {/* PRD-18: in-service debug player — full-screen, no AuthorLayout (like take-test). */}
       <Route path="/author/tests/:testId/debug">
-        <ProtectedRoute requiredPermission="tests.export.scorm">
+        <ProtectedRoute requiredPermission="tests.debug.play">
           <DebugPlayerPage />
         </ProtectedRoute>
       </Route>

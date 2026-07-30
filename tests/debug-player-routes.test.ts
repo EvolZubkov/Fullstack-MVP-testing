@@ -105,10 +105,23 @@ describe("POST /api/tests/:id/debug/session", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns 403 when the role lacks tests.export.scorm", async () => {
+  it("returns 403 when the role lacks tests.debug.play", async () => {
     storageMock.getUserRoles.mockResolvedValue(["learner"]);
     const res = await request(makeApp()).post("/api/tests/test-1/debug/session");
     expect(res.status).toBe(403);
+  });
+
+  it("lets an author debug even though SCORM export is developer-only", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["author"]);
+    storageMock.getTest.mockResolvedValue({ ...baseTest, ownerId: "user-1" });
+    buildScormExportDataMock.mockResolvedValue({ test: baseTest, designSettings: { templateId: "default" } });
+    generateScormPackageMock.mockResolvedValue(Buffer.from("zip-bytes"));
+    createDebugSessionMock.mockResolvedValue({ token: "tok-author", launch: "index.html" });
+
+    const res = await request(makeApp()).post("/api/tests/test-1/debug/session");
+
+    expect(res.status).toBe(200);
+    expect(res.body.token).toBe("tok-author");
   });
 
   it("returns 404 when the test does not exist", async () => {

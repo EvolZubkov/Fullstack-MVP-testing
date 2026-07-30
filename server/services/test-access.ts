@@ -4,14 +4,15 @@
  * Object-level access resolution for tests (PRD-13, role-model.md section 6).
  * The role -> permission map decides whether an action is allowed in principle;
  * these helpers decide whether it applies to a SPECIFIC test by owner and grant.
- * Administrators and the superadmin bypass scope; authors are scoped to owned and
- * edit-granted tests; managers to assign-granted tests.
+ * Administrators and the superadmin bypass scope; the authoring roles (author and
+ * developer, see `AUTHORING_ROLES`) are scoped to owned and edit-granted tests;
+ * managers to assign-granted tests.
  *
  * Added in Phase 2 alongside the permission core; route handlers start calling it
  * in Phase 3 (PRD-13 implementation plan).
  */
 
-import { ROLES, type Role } from "@shared/access";
+import { ROLES, hasAuthoringRole, type Role } from "@shared/access";
 import { storage } from "../storage";
 import type { Test } from "@shared/schema";
 
@@ -38,20 +39,20 @@ export async function canReadTest(
   test: TestRef,
 ): Promise<boolean> {
   if (isAdminOrSuper(roles)) return true;
-  if (hasRole(roles, ROLES.AUTHOR) && (await canEditTest(roles, userId, test))) return true;
+  if (hasAuthoringRole(roles) && (await canEditTest(roles, userId, test))) return true;
   if (hasRole(roles, ROLES.MANAGER) && (await canAssignTest(roles, userId, test))) return true;
   if (await storage.isTestAssignedToUser(test.id, userId)) return true;
   return false;
 }
 
-/** Can edit/publish/export the test: owner or edit-grant for authors. */
+/** Can edit/publish/export the test: owner or edit-grant for authoring roles. */
 export async function canEditTest(
   roles: readonly Role[],
   userId: string,
   test: TestRef,
 ): Promise<boolean> {
   if (isAdminOrSuper(roles)) return true;
-  if (hasRole(roles, ROLES.AUTHOR)) {
+  if (hasAuthoringRole(roles)) {
     if (test.ownerId === userId) return true;
     const grant = await storage.getTestGrantForUser(test.id, userId);
     return grant?.accessLevel === "edit";
@@ -66,12 +67,13 @@ export async function canDeleteTest(
   test: TestRef,
 ): Promise<boolean> {
   if (isAdminOrSuper(roles)) return true;
-  return hasRole(roles, ROLES.AUTHOR) && test.ownerId === userId;
+  return hasAuthoringRole(roles) && test.ownerId === userId;
 }
 
-/** Publishing and SCORM export follow the edit scope. */
+/** Publishing, SCORM export and the debug run all follow the edit scope. */
 export const canPublishTest = canEditTest;
 export const canExportScorm = canEditTest;
+export const canDebugTest = canEditTest;
 
 /** Can assign the test: assign- or edit-grant for managers (plus admin/super). */
 export async function canAssignTest(
@@ -94,7 +96,7 @@ export async function canReadTestAnalytics(
   test: TestRef,
 ): Promise<boolean> {
   if (isAdminOrSuper(roles)) return true;
-  if (hasRole(roles, ROLES.AUTHOR) && (await canEditTest(roles, userId, test))) return true;
+  if (hasAuthoringRole(roles) && (await canEditTest(roles, userId, test))) return true;
   if (hasRole(roles, ROLES.MANAGER) && (await canAssignTest(roles, userId, test))) return true;
   return false;
 }
@@ -107,7 +109,7 @@ export async function canReadTestAnalytics(
  */
 export function canGrantAccess(roles: readonly Role[], userId: string, test: TestRef): boolean {
   if (isAdminOrSuper(roles)) return true;
-  return hasRole(roles, ROLES.AUTHOR) && test.ownerId === userId;
+  return hasAuthoringRole(roles) && test.ownerId === userId;
 }
 
 /** Changing the test owner is admin/superadmin only. */
@@ -118,7 +120,7 @@ export function canChangeOwner(roles: readonly Role[]): boolean {
 /**
  * The set of test ids a user may READ, for list and analytics filtering. For
  * administrators/superadmin returns `{ all: true }` (no id set needed).
- * Otherwise the union of owned tests and edit-grants (author role) and all
+ * Otherwise the union of owned tests and edit-grants (authoring roles) and all
  * grants (manager role).
  */
 export async function readableTestScope(
@@ -127,7 +129,7 @@ export async function readableTestScope(
 ): Promise<{ all: boolean; ids: Set<string> }> {
   if (isAdminOrSuper(roles)) return { all: true, ids: new Set() };
   const ids = new Set<string>();
-  const wantsAuthor = hasRole(roles, ROLES.AUTHOR);
+  const wantsAuthor = hasAuthoringRole(roles);
   const wantsManager = hasRole(roles, ROLES.MANAGER);
   if (wantsAuthor) {
     for (const id of await storage.getTestIdsByOwner(userId)) ids.add(id);

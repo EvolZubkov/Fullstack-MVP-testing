@@ -331,6 +331,11 @@ export function TestsListPage(): React.JSX.Element {
   const canGrantAccessFor = (test: TestListEntry) =>
     canGrantAccessCap && (isAdmin || test.ownerId === user?.id);
 
+  // PRD-13: SCORM generation is developer/admin only — the author role holds the
+  // debug run but NOT the export, so the two menu items are gated separately.
+  const canExportScorm = can("tests.export.scorm");
+  const canDebugPlay = can("tests.debug.play");
+
   // PRD-15 T-12 (E-12): publish-infeasible findings to show in the impact dialog.
   const [publishImpact, setPublishImpact] = useState<{
     testId: string;
@@ -897,35 +902,39 @@ export function TestsListPage(): React.JSX.Element {
             Общий доступ
           </button>
         )}
-        <button
-          type="button"
-          className="dropdown-item"
-          role="menuitem"
-          onClick={() => {
-            setTestMenu(null);
-            // PRD-18: open the in-service debug player in a chromeless popup window
-            // (no address bar), sized to the screen, named per test so it's reused.
-            window.open(
-              `/author/tests/${test.id}/debug`,
-              `tb-debug-${test.id}`,
-              `popup=yes,width=${window.screen.availWidth},height=${window.screen.availHeight},left=0,top=0`,
-            );
-          }}
-          data-testid={`menu-debug-${test.id}`}
-        >
-          <FlaskConical size={14} />
-          Выполнить отладку
-        </button>
-        <a
-          className="dropdown-item"
-          role="menuitem"
-          href={`/api/tests/${test.id}/export/scorm`}
-          onClick={() => setTestMenu(null)}
-          data-testid={`menu-export-${test.id}`}
-        >
-          <Download size={14} />
-          Экспорт SCORM
-        </a>
+        {canDebugPlay && (
+          <button
+            type="button"
+            className="dropdown-item"
+            role="menuitem"
+            onClick={() => {
+              setTestMenu(null);
+              // PRD-18: open the in-service debug player in a chromeless popup window
+              // (no address bar), sized to the screen, named per test so it's reused.
+              window.open(
+                `/author/tests/${test.id}/debug`,
+                `tb-debug-${test.id}`,
+                `popup=yes,width=${window.screen.availWidth},height=${window.screen.availHeight},left=0,top=0`,
+              );
+            }}
+            data-testid={`menu-debug-${test.id}`}
+          >
+            <FlaskConical size={14} />
+            Выполнить отладку
+          </button>
+        )}
+        {canExportScorm && (
+          <a
+            className="dropdown-item"
+            role="menuitem"
+            href={`/api/tests/${test.id}/export/scorm`}
+            onClick={() => setTestMenu(null)}
+            data-testid={`menu-export-${test.id}`}
+          >
+            <Download size={14} />
+            Экспорт SCORM
+          </a>
+        )}
         <a
           className="dropdown-item"
           role="menuitem"
@@ -1288,6 +1297,7 @@ function TestRow(props: {
   const canAnyMenu =
     canEdit ||
     can("tests.export.scorm") ||
+    can("tests.debug.play") ||
     can("tests.publish") ||
     can("tests.delete") ||
     can("tests.access.grant");

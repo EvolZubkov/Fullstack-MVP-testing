@@ -298,6 +298,28 @@ describe("<TestsListPage /> — owner column + action gating by role (PRD-13)", 
     expect(screen.getByTestId("menu-edit-t-1")).toBeInTheDocument();
     expect(screen.queryByTestId("menu-access-t-1")).toBeNull();
   });
+
+  it("an author gets «Выполнить отладку» but no «Экспорт SCORM»", async () => {
+    authMock.can = canForRoles([ROLES.AUTHOR]);
+    authMock.roles = [ROLES.AUTHOR];
+    mockMany({ "/api/tests": [buildApiTestRow()], "/api/test-folders": [] });
+    renderPage();
+    await waitFor(() => screen.getByTestId("test-row-t-1"));
+    fireEvent.click(screen.getByTestId("test-more-t-1"));
+    expect(screen.getByTestId("menu-debug-t-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("menu-export-t-1")).toBeNull();
+  });
+
+  it("a developer gets both «Выполнить отладку» and «Экспорт SCORM»", async () => {
+    authMock.can = canForRoles([ROLES.DEVELOPER]);
+    authMock.roles = [ROLES.DEVELOPER];
+    mockMany({ "/api/tests": [buildApiTestRow()], "/api/test-folders": [] });
+    renderPage();
+    await waitFor(() => screen.getByTestId("test-row-t-1"));
+    fireEvent.click(screen.getByTestId("test-more-t-1"));
+    expect(screen.getByTestId("menu-debug-t-1")).toBeInTheDocument();
+    expect(screen.getByTestId("menu-export-t-1")).toBeInTheDocument();
+  });
 });
 
 describe("<TestsListPage /> — move-to-folder (S13.1-G32)", () => {

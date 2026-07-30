@@ -50,6 +50,7 @@ export async function buildMyTests(
   const mayEdit = hasPermission(roles, "tests.edit");
   const mayPublish = hasPermission(roles, "tests.publish");
   const mayExport = hasPermission(roles, "tests.export.scorm");
+  const mayDebug = hasPermission(roles, "tests.debug.play");
 
   const items = await Promise.all(
     window.map(async (test) => {
@@ -74,8 +75,9 @@ export async function buildMyTests(
         owned: test.ownerId === userId,
         flags,
         canEdit: mayEdit,
-        // The debug player is gated by the SAME right as SCORM export (PRD-18 D-2).
-        canDebug: mayExport,
+        // The debug player follows the same SCOPE as SCORM export (PRD-18 D-2) but
+        // has its own capability: the author debugs, the developer also exports.
+        canDebug: mayDebug,
         canExport: mayExport,
       };
       return item;

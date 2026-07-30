@@ -12,6 +12,7 @@ import { ROLES, ROLE_PRIORITY, type Role } from "@shared/access";
 export const ROLE_LABELS: Record<Role, string> = {
   [ROLES.SUPERADMIN]: "Суперадминистратор",
   [ROLES.ADMINISTRATOR]: "Администратор",
+  [ROLES.DEVELOPER]: "Разработчик",
   [ROLES.AUTHOR]: "Автор",
   [ROLES.MANAGER]: "Менеджер по обучению",
   [ROLES.LEARNER]: "Обычный пользователь",
@@ -21,6 +22,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   [ROLES.SUPERADMIN]: "Полные права и системная конфигурация",
   [ROLES.ADMINISTRATOR]: "Пользователи, группы, назначения, шаблоны, тесты",
+  [ROLES.DEVELOPER]: "Всё, что может Автор, плюс экспорт SCORM и шаблоны оформления",
   [ROLES.AUTHOR]: "Темы, вопросы, тесты: создание, редактирование, публикация",
   [ROLES.MANAGER]: "Группы, обычные пользователи, назначения, результаты",
   [ROLES.LEARNER]: "Прохождение назначенных тестов, свои результаты",

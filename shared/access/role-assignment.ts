@@ -10,7 +10,7 @@
  * Ceiling summary:
  *
  * - superadmin: any stored role, including `administrator`;
- * - administrator: `author`, `manager`, `learner` (NOT `administrator`);
+ * - administrator: `developer`, `author`, `manager`, `learner` (NOT `administrator`);
  * - manager: `learner`, and only when creating a user;
  * - others: none.
  *
@@ -48,6 +48,7 @@ export function assignableRoles(
     for (const role of STORED_ROLES) allowed.add(role);
   }
   if (has(ROLES.ADMINISTRATOR)) {
+    allowed.add(ROLES.DEVELOPER);
     allowed.add(ROLES.AUTHOR);
     allowed.add(ROLES.MANAGER);
     allowed.add(ROLES.LEARNER);

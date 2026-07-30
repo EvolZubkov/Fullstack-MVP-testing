@@ -18,11 +18,12 @@ function checkboxFor(label: string): HTMLInputElement {
 }
 
 describe("<RolePicker />", () => {
-  it("renders the four stored roles in priority order with descriptions", () => {
+  it("renders the five stored roles in priority order with descriptions", () => {
     render(<RolePicker value={[]} onChange={() => {}} actorRoles={[ROLES.SUPERADMIN]} />);
     const group = screen.getByRole("group", { name: "Роли пользователя" });
-    expect(within(group).getAllByRole("checkbox")).toHaveLength(4);
+    expect(within(group).getAllByRole("checkbox")).toHaveLength(5);
     expect(screen.getByText(ROLE_LABELS[ROLES.ADMINISTRATOR])).toBeInTheDocument();
+    expect(screen.getByText(ROLE_LABELS[ROLES.DEVELOPER])).toBeInTheDocument();
     expect(screen.getByText(ROLE_LABELS[ROLES.LEARNER])).toBeInTheDocument();
   });
 
@@ -36,6 +37,7 @@ describe("<RolePicker />", () => {
   it("an administrator actor cannot assign the administrator role", () => {
     render(<RolePicker value={[]} onChange={() => {}} actorRoles={[ROLES.ADMINISTRATOR]} />);
     expect(checkboxFor(ROLE_LABELS[ROLES.ADMINISTRATOR])).toBeDisabled();
+    expect(checkboxFor(ROLE_LABELS[ROLES.DEVELOPER])).not.toBeDisabled();
     expect(checkboxFor(ROLE_LABELS[ROLES.AUTHOR])).not.toBeDisabled();
     expect(checkboxFor(ROLE_LABELS[ROLES.MANAGER])).not.toBeDisabled();
   });

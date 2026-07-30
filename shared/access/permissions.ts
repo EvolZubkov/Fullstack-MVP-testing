@@ -10,7 +10,8 @@
  *
  * Invariant: `administrator` holds every capability except the
  * superadmin-only ones ({@link SUPERADMIN_ONLY}); `superadmin` holds all. The
- * author and manager sets are listed explicitly.
+ * author and manager sets are listed explicitly; `developer` is the author set
+ * plus SCORM generation.
  *
  * Normative source: docs/specs/access-control/role-model.md (sections 3-4).
  */
@@ -31,7 +32,12 @@ const SELF_AND_TAKE: readonly Capability[] = [
   "attempts.self.read",
 ];
 
-/** Capabilities of the Author role (content authoring, scoped to own tests). */
+/**
+ * Capabilities of the Author role (content authoring, scoped to own tests).
+ * SCORM generation is deliberately ABSENT: packaging a test for an LMS belongs
+ * to the Developer role ({@link DEVELOPER_CAPABILITIES}). The author still runs
+ * the in-service debug player (`tests.debug.play`) over the same edit scope.
+ */
 const AUTHOR_CAPABILITIES: readonly Capability[] = [
   ...SELF_AND_TAKE,
   "topics.read",
@@ -47,12 +53,33 @@ const AUTHOR_CAPABILITIES: readonly Capability[] = [
   "tests.edit",
   "tests.publish",
   "tests.delete",
-  "tests.export.scorm",
+  "tests.debug.play",
   // PRD-15 BRC-27: an author grants access to tests they own (object-scoped).
   "tests.access.grant",
   "templates.read",
   "analytics.read",
   "analytics.export",
+];
+
+/**
+ * Capabilities of the Developer role: everything the Author holds, plus SCORM
+ * generation and the template registry.
+ *
+ * The two roles share the same object-level scope (see `AUTHORING_ROLES` in
+ * {@link module:shared/access/roles}); the differences are who may package a test for
+ * an LMS and who may manage design templates.
+ *
+ * `adminTemplates.manage` is the PRD-3 registry: upload, validate, activate, export and
+ * delete a design template. That is the template DEVELOPER's own job — writing layouts
+ * and shipping them (see PRD-27, where the report page becomes part of the template) —
+ * so gating it behind the administrator meant every template iteration went through one.
+ * NB: it is a TEST-WIDE lever, not an object-scoped one: deactivating or deleting a
+ * template affects every test bound to it.
+ */
+const DEVELOPER_CAPABILITIES: readonly Capability[] = [
+  ...AUTHOR_CAPABILITIES,
+  "tests.export.scorm",
+  "adminTemplates.manage",
 ];
 
 /** Capabilities of the Training Manager role (delivery, scoped to grants). */
@@ -79,6 +106,7 @@ const ADMINISTRATOR_CAPABILITIES: readonly Capability[] = CAPABILITIES.filter(
 export const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Capability>>> = {
   [ROLES.SUPERADMIN]: new Set<Capability>(CAPABILITIES),
   [ROLES.ADMINISTRATOR]: new Set<Capability>(ADMINISTRATOR_CAPABILITIES),
+  [ROLES.DEVELOPER]: new Set<Capability>(DEVELOPER_CAPABILITIES),
   [ROLES.AUTHOR]: new Set<Capability>(AUTHOR_CAPABILITIES),
   [ROLES.MANAGER]: new Set<Capability>(MANAGER_CAPABILITIES),
   [ROLES.LEARNER]: new Set<Capability>(SELF_AND_TAKE),

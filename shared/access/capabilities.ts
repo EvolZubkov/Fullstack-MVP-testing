@@ -43,6 +43,9 @@ export const CAPABILITIES = [
   "tests.publish",
   "tests.delete",
   "tests.export.scorm",
+  // PRD-18 in-service debug player. Split from `tests.export.scorm` so the
+  // authoring role keeps the debug run after losing SCORM generation.
+  "tests.debug.play",
   "tests.access.grant",
   "tests.owner.change",
   // Templates.
@@ -88,6 +91,7 @@ export const SCOPE_AWARE_CAPABILITIES: readonly Capability[] = [
   "tests.publish",
   "tests.delete",
   "tests.export.scorm",
+  "tests.debug.play",
   "assignments.manage",
   "analytics.read",
   "analytics.export",
