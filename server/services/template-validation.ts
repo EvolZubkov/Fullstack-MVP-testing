@@ -30,6 +30,7 @@ import { templateManifestSchema, isSupportedTemplateApiVersion } from "@shared/s
 import { compileTemplate } from "@shared/template/dsl";
 import { validateVariantFields } from "@shared/template/field-types";
 import { validateManifestThemes } from "@shared/template/themes";
+import { validateReportVariants } from "@shared/report/report-variants";
 import type { TemplateEntries } from "./template-package";
 
 /** Default ZIP size ceiling (PRD-3 §8): 20 MB. */
@@ -221,6 +222,27 @@ export function collectFieldTypeIssues(manifest: Record<string, unknown>): Valid
 }
 
 /**
+ * Report-variant problems of a manifest (PRD-27 FR-25), as blocking issues.
+ *
+ * Needs the package files: the checks that matter are about the LAYOUT and the CSS,
+ * not the declaration. A report layout leaning on the scene layer or on document
+ * selectors renders correctly inside a SCORM package (where the template stylesheet
+ * sits in the main document) and breaks on the web (where it is injected into the
+ * screen's shadow root) — see PRD-27 §6.3 and risk R-1a. Only a static check catches
+ * that; review and the runtime both stay silent.
+ */
+export function collectReportVariantIssues(
+  entries: TemplateEntries,
+  manifest: Record<string, unknown>,
+): ValidationIssue[] {
+  return validateReportVariants(manifest, (path) => text(entries, path)).map((issue) => ({
+    code: "REPORT_VARIANT_INVALID",
+    message: `Отчёт, вариант "${issue.variantKey}": ${issue.message}`,
+    ref: issue.ref,
+  }));
+}
+
+/**
  * Concatenated text of every stylesheet the manifest declares. Empty when the
  * template declares none or the entries are missing — callers treat that as «no
  * evidence» and skip the checks that need the palette.
@@ -320,6 +342,13 @@ export function validateTemplatePackage(
   // not just that some enum failed. Runs on the raw manifest, so it also reports
   // variants the schema pass already rejected for another reason.
   for (const issue of collectFieldTypeIssues(manifest)) {
+    blocking.push(issue);
+  }
+
+  // ── report variants (PRD-27 FR-25) ────────────────────────────────────────
+  // Checked against the package FILES, not just the declaration: the failure mode
+  // is a layout that works in the LMS and breaks in the browser (§6.3, R-1a).
+  for (const issue of collectReportVariantIssues(entries, manifest)) {
     blocking.push(issue);
   }
 

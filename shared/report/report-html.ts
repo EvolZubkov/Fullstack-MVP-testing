@@ -14,6 +14,7 @@
  * for either host.
  */
 
+import { attemptsCountLabel, reportGridColumns } from "./report-context";
 import {
   NO_LEVEL_CONFIRMED_LABEL,
   type ResultInput,
@@ -151,11 +152,6 @@ function cardOpen(): string {
   return '<div style="background: rgba(31, 33, 41, 0.68); border-radius: 18px; padding: 18px 20px; margin-bottom: 15px;">';
 }
 
-/** Columns for the topic grid — at most three. */
-function gridColumns(count: number): number {
-  return count === 1 ? 1 : count === 2 ? 2 : 3;
-}
-
 /** Deduped recommendations across FAILED topics (guidance is per failure, not per row). */
 function failedRecommendations(topics: TopicInput[]): {
   courses: Array<{ title: string; url?: string }>;
@@ -204,7 +200,6 @@ export function buildReportHtml(input: ReportInput, assets: ReportAssets = {}): 
   const r = input.result;
   const percent = Math.round(Number(r.percent) || 0);
   const passed = !!r.passed;
-  const attempts = input.attemptsCount && input.attemptsCount > 0 ? input.attemptsCount : 1;
   const topics = r.topicResults ?? [];
 
   const statusColor = passed ? "#22c55e" : "#ef4444";
@@ -218,7 +213,7 @@ export function buildReportHtml(input: ReportInput, assets: ReportAssets = {}): 
   html += logoRow(assets);
 
   html += `<div style="font-size: 42px; font-weight: 900; margin-bottom: 4px; line-height: 1; color: ${passed ? "#22c55e" : "#ffffff"};">${esc(statusText)}</div>`;
-  html += `<div style="font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 8px;">Лучший результат за ${attempts} ${pluralize(attempts, "попытку", "попытки", "попыток")}</div>`;
+  html += `<div style="font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 8px;">${esc(attemptsCountLabel(input.attemptsCount))}</div>`;
   html += whoAndWhen(input);
 
   // Score card: metrics, the percent ring and the verdict badge.
@@ -250,7 +245,7 @@ export function buildReportHtml(input: ReportInput, assets: ReportAssets = {}): 
   if (topics.length > 0) {
     html += cardOpen();
     html += '<div style="font-size: 22px; font-weight: 400; margin-bottom: 15px;">Результаты по темам</div>';
-    html += `<div style="display: grid; grid-template-columns: repeat(${gridColumns(topics.length)}, 1fr); gap: 10px;">`;
+    html += `<div style="display: grid; grid-template-columns: repeat(${reportGridColumns(topics.length)}, 1fr); gap: 10px;">`;
     for (const t of topics) {
       const tPercent = Math.round(Number(t.percent) || 0);
       const tPassed = !!t.passed;
@@ -336,7 +331,7 @@ export function buildAdaptiveReportHtml(input: AdaptiveReportInput, assets: Repo
   if (topics.length > 0) {
     html += cardOpen();
     html += '<div style="font-size: 22px; font-weight: 400; margin-bottom: 15px;">Результаты по темам</div>';
-    html += `<div style="display: grid; grid-template-columns: repeat(${gridColumns(topics.length)}, 1fr); gap: 10px;">`;
+    html += `<div style="display: grid; grid-template-columns: repeat(${reportGridColumns(topics.length)}, 1fr); gap: 10px;">`;
     for (const t of topics) {
       const achieved = t.achievedLevelIndex !== null && t.achievedLevelIndex !== undefined;
       // The verdict comes from the results SCREEN's own label (one constant, not a

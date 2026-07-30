@@ -58,6 +58,7 @@ import {
 } from "../services/template-rebind";
 // Type-only: the smoke-runner is a browser/jsdom module; the server never executes
 // it (NFR-02), it only persists and gates on the report the admin browser produces.
+import { validateReportVariants } from "@shared/report/report-variants";
 import type { SmokeReport } from "@shared/template/smoke-runner";
 import { withTemplateAssetBase } from "@shared/template/asset-base";
 
@@ -256,6 +257,21 @@ router.put("/:id/activate", requirePermission("adminTemplates.manage"), async (r
       return res.status(409).json({
         error: "Активация запрещена: недопустимое объявление тем в манифесте",
         issues: themeIssues,
+      });
+    }
+
+    // PRD-27 (FR-25): то же для объявления вариантов отчёта. Как и с темами, здесь
+    // проверяется только ОБЪЯВЛЕНИЕ — макет и CSS отчёта лежат в пакете, который гейт
+    // не открывает (эти проверки идут при загрузке).
+    const reportIssues = validateReportVariants((row.manifest ?? {}) as Record<string, unknown>).map((issue) => ({
+      code: "REPORT_VARIANT_INVALID",
+      message: `Отчёт, вариант "${issue.variantKey}": ${issue.message}`,
+      ref: issue.ref,
+    }));
+    if (reportIssues.length > 0) {
+      return res.status(409).json({
+        error: "Активация запрещена: недопустимое объявление вариантов отчёта",
+        issues: reportIssues,
       });
     }
 
