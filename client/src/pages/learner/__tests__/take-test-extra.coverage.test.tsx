@@ -39,6 +39,10 @@ vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: toastSpy }),
 }));
 
+// This suite exercises standard (non-restricted) sessions only; the magic-link
+// scoping itself is covered in take-test.test.tsx.
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { id: "u1", magicScope: null } }) }));
+
 vi.mock("@/components/template-screen", () => ({
   TemplateScreen: (props: any) => (
     <div data-testid="template-screen">

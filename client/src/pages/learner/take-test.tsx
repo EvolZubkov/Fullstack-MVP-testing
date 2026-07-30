@@ -36,6 +36,7 @@ import {
 } from "./use-section-timer";
 import { t } from "@/lib/i18n";
 import { reportClientError } from "@/lib/report-error";
+import { useAuth } from "@/lib/auth";
 import type { Question, Attempt, Test } from "@shared/schema";
 
 interface AttemptWithQuestions extends Attempt {
@@ -336,6 +337,11 @@ export default function TakeTestPage() {
   const { testId } = useParams<{ testId: string }>();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  // A magic-link session (assignment invitation) has no test list to return to —
+  // the guard in ProtectedRoute would just bounce a "/learner" navigation back to
+  // /login. Every "back to the list" control in this page is scoped by this flag.
+  const magicScoped = !!user?.magicScope;
 
   // Common state
   const [isStarting, setIsStarting] = useState(true);
@@ -2285,11 +2291,19 @@ export default function TakeTestPage() {
           themed={blockedTpl.themed}
           context={{ retake: { cooldownPeriodDays: blockData.cooldownPeriodDays, availableDateHuman }, ...(blockedTpl.design ? { design: blockedTpl.design } : {}) }}
         />
-        <div className="tbh-center-foot">
-          <Button variant="secondary" leadingIcon={<ChevronLeft size={16} />} onClick={() => navigate("/learner")}>
-            К списку тестов
-          </Button>
-        </div>
+        {
+          // In a restricted session there is no test list to offer, and this
+          // blocked screen already IS the learner's own test — a "back to my
+          // test" button here would just point at the screen already showing,
+          // reading as a dead click rather than useful navigation. Omit it.
+          !magicScoped && (
+            <div className="tbh-center-foot">
+              <Button variant="secondary" leadingIcon={<ChevronLeft size={16} />} onClick={() => navigate("/learner")}>
+                К списку тестов
+              </Button>
+            </div>
+          )
+        }
       </div>
     );
   }
@@ -2471,7 +2485,10 @@ export default function TakeTestPage() {
           }
         : null,
       priorResult: testMetadata.priorResult,
-      showBack: true,
+      // A magic-link session has no test list to fall back to (it would just
+      // bounce to /login), so the ghost «К списку тестов» button is not offered
+      // at all in that case.
+      showBack: !magicScoped,
     });
     return (
       <div
@@ -2495,7 +2512,13 @@ export default function TakeTestPage() {
             else if (action === "resume") handleResumeTest();
             else if (action === "view-results" && testMetadata.lastCompletedAttemptId)
               navigate(`/learner/result/${testMetadata.lastCompletedAttemptId}`);
-            else if (action === "back") navigate("/learner");
+            else if (action === "back") {
+              // The button is hidden via `showBack` above in a restricted session,
+              // but stay robust regardless of how the action was reached: a
+              // magic-link session must never be sent to the (out-of-scope) test
+              // list, which would just bounce it to /login.
+              navigate(magicScoped ? `/learner/test/${testId}` : "/learner");
+            }
           }}
         />
       </div>

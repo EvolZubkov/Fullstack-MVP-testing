@@ -8,6 +8,7 @@ import { TemplateScreen } from "@/components/template-screen";
 import { RESULTS_NAV_ACTIONS } from "@shared/template/results-nav";
 import { downloadAttemptReport, type AttemptReport } from "@/features/learner/attempt-report";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
 import type { Attempt, AttemptResult } from "@shared/schema";
 
@@ -45,6 +46,11 @@ interface AttemptWithResult extends Attempt {
 export default function ResultPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
   const [, navigate] = useLocation();
+  const { user } = useAuth();
+  // A magic-link session has no test list — offering "/learner" would just bounce
+  // it to /login (ProtectedRoute's scope guard). Its only valid "back" is its own
+  // test, and that id is only known once `attempt` has loaded.
+  const magicScoped = !!user?.magicScope;
 
   const { data: attempt, isLoading, error } = useQuery<AttemptWithResult>({
     queryKey: ["/api/attempts", attemptId, "result"],
@@ -63,14 +69,24 @@ export default function ResultPage() {
       error || !attempt
         ? t.common.couldNotFindResults
         : "Результаты этой попытки ещё не сформированы или были потеряны.";
+    // In a restricted session the test id comes from `attempt` — if the fetch
+    // itself failed (`!attempt`), the id is unknown and there is nowhere valid to
+    // send the button, so it is omitted rather than pointed at the out-of-scope list.
+    const backTarget = magicScoped
+      ? attempt
+        ? `/learner/test/${attempt.testId}`
+        : null
+      : "/learner";
     return (
       <Center minH="full" pad={6}>
         <Stack gap={4} align="center">
           <Text as="h1" variant="heading-l" weight="semibold">{t.common.resultsNotFound}</Text>
           <Text tone="muted" align="center">{description}</Text>
-          <Button leadingIcon={<ArrowLeft size={16} />} onClick={() => navigate("/learner")}>
-            {t.result.backToTests}
-          </Button>
+          {backTarget && (
+            <Button leadingIcon={<ArrowLeft size={16} />} onClick={() => navigate(backTarget)}>
+              {t.result.backToTests}
+            </Button>
+          )}
         </Stack>
       </Center>
     );
@@ -82,6 +98,10 @@ export default function ResultPage() {
 function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  // A magic-link session has no test list — its "back"/"finish" both resolve to
+  // its own test rather than "/learner", which would just bounce it to /login.
+  const magicScoped = !!user?.magicScope;
   // Rasterizing takes a few seconds; a second click must not start a second export.
   const reportBusy = useRef(false);
   const render = attempt.render!;
@@ -149,7 +169,7 @@ function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
             return;
           }
           if (action === RESULTS_NAV_ACTIONS.finish || action === RESULTS_NAV_ACTIONS.back) {
-            navigate("/learner");
+            navigate(magicScoped ? `/learner/test/${attempt.testId}` : "/learner");
           }
         }}
       />

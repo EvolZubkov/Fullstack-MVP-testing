@@ -15,9 +15,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { buildQuestionNav } from "@shared/template/question-nav";
 
 // Shared spies created before the hoisted vi.mock factories run.
-const { navigateSpy, toastSpy } = vi.hoisted(() => ({
+const { navigateSpy, toastSpy, authState } = vi.hoisted(() => ({
   navigateSpy: vi.fn(),
   toastSpy: vi.fn(),
+  // Plain (non-restricted) session by default; individual tests opt into a
+  // magic-link session by setting `magicScope`.
+  authState: { user: { id: "u1", magicScope: null } as Record<string, unknown> | null },
 }));
 
 vi.mock("wouter", () => ({
@@ -28,6 +31,8 @@ vi.mock("wouter", () => ({
 vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: toastSpy }),
 }));
+
+vi.mock("@/lib/auth", () => ({ useAuth: () => authState }));
 
 // The template hosts render into a Shadow DOM via the shared renderer; replace
 // them with doubles that expose the render context (JSON) and the relevant
@@ -220,6 +225,7 @@ beforeEach(() => {
   navigateSpy.mockClear();
   toastSpy.mockClear();
   localStorage.clear();
+  authState.user = { id: "u1", magicScope: null };
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -474,6 +480,34 @@ describe("<TakeTestPage /> start gates", () => {
     await renderToStart();
     fireEvent.click(screen.getByTestId("ts-back"));
     expect(navigateSpy).toHaveBeenCalledWith("/learner");
+  });
+});
+
+// ─── magic-link (restricted) session ──────────────────────────────────────────
+
+describe("<TakeTestPage /> magic-link scope", () => {
+  // A magic-link session has no test list to fall back to (the guard would just
+  // bounce a "/learner" navigation to /login), so the start screen must not offer
+  // the ghost "back to list" control at all.
+  it("offers the start-screen back control in a normal session", async () => {
+    await renderToStart();
+    expect(ctx().state.showBack).toBe(true);
+  });
+
+  it("hides the start-screen back control in a restricted (magic-link) session", async () => {
+    authState.user = { id: "u1", magicScope: { testId: "test-1" } };
+    await renderToStart();
+    expect(ctx().state.showBack).toBe(false);
+  });
+
+  // Defensive: even if the "back" action were somehow triggered in a restricted
+  // session (the button is hidden via showBack above), it must resolve to the
+  // learner's own test rather than the out-of-scope list.
+  it("sends a restricted session's «back» action to its own test, not the list", async () => {
+    authState.user = { id: "u1", magicScope: { testId: "test-1" } };
+    await renderToStart();
+    fireEvent.click(screen.getByTestId("ts-back"));
+    expect(navigateSpy).toHaveBeenCalledWith("/learner/test/test-1");
   });
 });
 

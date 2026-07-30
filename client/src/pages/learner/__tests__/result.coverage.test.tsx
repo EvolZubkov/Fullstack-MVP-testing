@@ -17,9 +17,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
-const { navigateSpy, queryState } = vi.hoisted(() => ({
+const { navigateSpy, queryState, authState } = vi.hoisted(() => ({
   navigateSpy: vi.fn(),
   queryState: { value: {} as { isLoading?: boolean; error?: unknown; data?: unknown } },
+  // Plain (non-restricted) session by default; individual tests opt into a
+  // magic-link session by setting `magicScope`.
+  authState: { user: { id: "u1", magicScope: null } as Record<string, unknown> | null },
 }));
 
 vi.mock("wouter", () => ({
@@ -35,6 +38,8 @@ vi.mock("wouter", () => ({
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => queryState.value,
 }));
+
+vi.mock("@/lib/auth", () => ({ useAuth: () => authState }));
 
 vi.mock("@/components/template-screen", () => ({
   TemplateScreen: (props: any) => (
@@ -82,6 +87,7 @@ const fullAttempt = (over: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   navigateSpy.mockClear();
   queryState.value = {};
+  authState.user = { id: "u1", magicScope: null };
 });
 afterEach(() => vi.clearAllMocks());
 
@@ -109,6 +115,32 @@ describe("<ResultPage /> degraded states", () => {
     expect(
       screen.getByText("Результаты этой попытки ещё не сформированы или были потеряны."),
     ).toBeInTheDocument();
+  });
+});
+
+// ─── magic-link (restricted) session — degraded states ────────────────────────
+
+describe("<ResultPage /> degraded states under a magic-link session", () => {
+  // A magic-link session has no test list — "/learner" would just bounce it to
+  // /login (ProtectedRoute's scope guard) — so the fallback button must point at
+  // the learner's own test when the id is known (the attempt loaded, just its
+  // render/result payload is missing).
+  it("points the fallback button at the learner's own test when the id is known", () => {
+    authState.user = { id: "u1", magicScope: { testId: "test-1" } };
+    queryState.value = { isLoading: false, error: null, data: fullAttempt({ render: null }) };
+    render(<ResultPage />);
+    fireEvent.click(screen.getByText("К списку тестов"));
+    expect(navigateSpy).toHaveBeenCalledWith("/learner/test/test-1");
+  });
+
+  // When even the attempt itself failed to load, the test id is unknown — there
+  // is nowhere valid to send the learner, so the button is omitted rather than
+  // pointed at the out-of-scope list.
+  it("omits the fallback button when the test id is unknown (fetch error)", () => {
+    authState.user = { id: "u1", magicScope: { testId: "test-1" } };
+    queryState.value = { isLoading: false, error: new Error("boom"), data: undefined };
+    render(<ResultPage />);
+    expect(screen.queryByText("К списку тестов")).toBeNull();
   });
 });
 
@@ -160,6 +192,19 @@ describe("<ResultPage /> templated surface", () => {
     navigateSpy.mockClear();
     fireEvent.click(screen.getByTestId("ts-finish"));
     expect(navigateSpy).toHaveBeenCalledWith("/learner");
+  });
+
+  // A magic-link session has no test list — "back"/"finish" must resolve to the
+  // learner's own test instead of "/learner" (which would bounce it to /login).
+  it("sends «back»/«finish» to the learner's own test in a restricted session", () => {
+    authState.user = { id: "u1", magicScope: { testId: "test-1" } };
+    queryState.value = { isLoading: false, error: null, data: fullAttempt() };
+    render(<ResultPage />);
+    fireEvent.click(screen.getByTestId("ts-back"));
+    expect(navigateSpy).toHaveBeenCalledWith("/learner/test/test-1");
+    navigateSpy.mockClear();
+    fireEvent.click(screen.getByTestId("ts-finish"));
+    expect(navigateSpy).toHaveBeenCalledWith("/learner/test/test-1");
   });
 
   it("restarts the test on the «restart» action when a retake is allowed", () => {
