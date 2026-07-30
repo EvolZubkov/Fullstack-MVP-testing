@@ -9,6 +9,7 @@ import crypto from "node:crypto";
 
 import { routerConfig } from "./routes/index";
 import { config } from "./config";
+import { magicScopeGuard } from "./middleware/magic-scope";
 
 // Media upload configuration
 const mediaDir = path.resolve(process.cwd(), "uploads", "media");
@@ -31,12 +32,6 @@ const mediaUpload = multer({
     cb(ok ? null : new Error("Unsupported media type") as any, ok);
   },
 });
-
-declare module "express-session" {
-  interface SessionData {
-    userId: string;
-  }
-}
 
 const MemStore = MemoryStore(session);
 
@@ -77,6 +72,10 @@ export async function registerRoutes(
       },
     })
   );
+
+  // A magic-link session is access to ONE test: everything under /api that the
+  // rule table does not name is refused here, before any router sees it.
+  app.use(magicScopeGuard);
 
   // Static files
   app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
