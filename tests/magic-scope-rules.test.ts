@@ -29,6 +29,7 @@ describe("matchMagicScopeRule", () => {
     const m = matchMagicScopeRule("GET", "/api/tests/t1/screen-template/question");
     expect(m?.rule.bind).toBe("test");
     expect(m?.params.testId).toBe("t1");
+    expect(m?.params.screen).toBe("question");
   });
 
   it("is method sensitive", () => {
