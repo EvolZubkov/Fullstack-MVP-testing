@@ -128,6 +128,47 @@ export function resolveReportValues(
   return out;
 }
 
+/** Что нужно знать хосту, чтобы собрать отчёт выбранным вариантом (FR-22). */
+export interface ReportBake {
+  /** Выбранный вариант; `null` — шаблон видов не объявил, идёт деградация (FR-10/FR-15). */
+  variantKey: string | null;
+  /**
+   * Ключ, под которым макет лежит у рантайма. Вариант называет свой файл (`layoutFile`),
+   * и загрузчик пакета регистрирует его ПО ПУТИ; когда файла нет, остаётся канонический
+   * ключ вида — тот самый, по которому работает деградация на «Стандартный».
+   */
+  layoutKey: string;
+  /** Файл стиля варианта относительно каталога шаблона; `null` — своего стиля нет. */
+  styleFile: string | null;
+  /** Значения `settings[]`, уже слитые с умолчаниями манифеста. */
+  values: Record<string, unknown>;
+}
+
+/**
+ * Разрешить выбор автора против манифеста шаблона — ОДИН раз и в одном месте.
+ *
+ * Тем же вызовом пользуются сборщик пакета, веб-хост и отладчик: если каждый решал бы
+ * сам, отчёт в LMS расходился бы с тем, что автор видел в предпросмотре.
+ *
+ * @param manifest Разобранный `manifest.json` активного шаблона.
+ * @param kind Вид отчёта, отвечающий режиму теста.
+ * @param branch Ветка `tests.report_settings_json` этого режима (может отсутствовать).
+ */
+export function resolveReportBake(
+  manifest: unknown,
+  kind: ReportKind,
+  branch?: { variantKey?: string | null; values?: Record<string, unknown> | null } | null,
+): ReportBake {
+  const variant = resolveReportVariant(manifest, kind, branch?.variantKey);
+  const layoutFile = typeof variant?.layoutFile === "string" ? variant.layoutFile : "";
+  return {
+    variantKey: variant?.key ?? null,
+    layoutKey: layoutFile || kind,
+    styleFile: typeof variant?.styleFile === "string" && variant.styleFile ? variant.styleFile : null,
+    values: resolveReportValues(variant, branch?.values ?? null),
+  };
+}
+
 /**
  * Ключи, которые ПЕРЕЖИВУТ смену варианта: объявлены обоими вариантами с одним типом
  * (FR-14). Всё прочее автор теряет, и интерфейс обязан назвать потери до сохранения.

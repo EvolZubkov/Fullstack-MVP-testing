@@ -106,11 +106,22 @@ function pdfAdaptiveInput(results) {
 }
 
 /**
+ * Запечённый сборщиком выбор варианта отчёта (PRD-27 FR-22): макет, значения полей.
+ * Отсутствует у пакетов, собранных до этого PRD, — тогда работает деградация по виду.
+ *
+ * @returns {{layoutKey: string, values: Object}|null}
+ */
+function pdfReportBake() {
+  var ds = (typeof TEST_DATA !== 'undefined' && TEST_DATA) ? TEST_DATA.designSettings : null;
+  return (ds && ds.report) ? ds.report : null;
+}
+
+/**
  * Макет отчёта АКТИВНОГО шаблона, либо вложенного `default`, когда активный вида не
  * объявил (PRD-27 FR-10). `systemLayout` реализует ровно эту деградацию для системных
  * экранов, поэтому отчёт идёт через неё же.
  *
- * @param {string} key `report` либо `report.adaptive`.
+ * @param {string} key Ключ макета: путь файла варианта либо канонический вид.
  * @returns {string} Макет; пустая строка — отчёт не собрать.
  */
 function pdfReportLayout(key) {
@@ -143,7 +154,12 @@ async function exportResultsToPDF(results, testName, learnerName, timestamp) {
     if (!pdfAssets) pdfAssets = await TB.loadReportAssets(PDF_ASSET_BASE);
 
     var isAdaptive = TEST_DATA.mode === 'adaptive';
-    var layout = pdfReportLayout(isAdaptive ? 'report.adaptive' : 'report');
+    var kind = isAdaptive ? 'report.adaptive' : 'report';
+    // Макет ВЫБРАННОГО автором варианта; когда выбора в пакете нет (сборка до PRD-27)
+    // либо файл варианта не загрузился — канонический вид, то есть прежнее поведение.
+    var bake = pdfReportBake();
+    var layout = (bake && bake.layoutKey) ? pdfReportLayout(bake.layoutKey) : '';
+    if (!layout) layout = pdfReportLayout(kind);
     if (!layout) throw new Error('Шаблон не предоставил макет отчёта');
 
     var meta = {
@@ -154,7 +170,9 @@ async function exportResultsToPDF(results, testName, learnerName, timestamp) {
     };
     var opts = {
       assets: pdfAssets,
-      design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {}
+      design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {},
+      // Значения полей варианта — те, что автор задал в блоке обратной связи (FR-16).
+      values: (bake && bake.values) ? bake.values : null
     };
     var context = isAdaptive
       ? TB.buildAdaptiveReportContext(Object.assign({}, meta, { result: pdfAdaptiveInput(results) }), opts)

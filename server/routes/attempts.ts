@@ -1241,10 +1241,23 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       // брендинг остаётся этого теста (FR-10) — то же правило, что у системных экранов.
       const reportKind = reportKindForMode(resultJson.mode);
       const activeDir = await resolveTemplateDir(templateId, { activeOnly: true });
+      // PRD-27 FR-24: вариант и значения полей берутся из теста, КОТОРЫЙ ВЫДАВАЛСЯ.
+      // Попытка, приколотая к снапшоту (PRD-15), обязана собрать отчёт тем макетом и
+      // теми параметрами, что действовали на момент выдачи: иначе автор меняет вид
+      // отчёта — и документы по старым попыткам задним числом становятся другими.
+      // Живой тест остаётся источником всего остального (название, счётчик попыток).
+      // Читается ОДНА строка снапшота, а не собирается целый источник данных: попытке
+      // здесь нужен только выбор варианта, а сборка источника тянет весь замороженный
+      // пул вопросов.
+      const deliveredTest = attempt.snapshotId
+        ? ((await storage.getSnapshot(attempt.snapshotId))?.contentJson as
+            | { test?: Test }
+            | undefined)?.test ?? test
+        : test;
       // Выбор автора хранится по РЕЖИМУ теста (PRD-27 §4.1); его отсутствие означает
       // вариант с `isDefault`.
       const authoredReport =
-        (test?.reportSettingsJson as ReportSettings | null)?.[
+        (deliveredTest?.reportSettingsJson as ReportSettings | null)?.[
           resultJson.mode === "adaptive" ? "adaptive" : "standard"
         ] ?? null;
       reportRender = readReportRenderPayload(activeDir, reportKind, authoredReport, test?.designSettingsJson as any, activeDir);

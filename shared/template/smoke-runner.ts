@@ -23,6 +23,13 @@
 
 import { renderScreenInto, type ScreenRenderInput } from "./render-screen";
 import { buildScreenInputs, type PreviewDemoDataset, type PreviewManifest } from "./preview-context";
+import { REPORT_KINDS, reportVariants, resolveReportValues } from "../report/report-variants";
+import { buildAdaptiveReportContext, buildReportContext } from "../report/report-context";
+import {
+  buildAdaptiveReportPreviewInput,
+  buildReportPreviewInput,
+  type ReportPreviewTest,
+} from "../report/report-preview";
 
 /** Per-screen smoke result. */
 export interface SmokeRouteResult {
@@ -204,6 +211,50 @@ function checkTemplateJs(src: string): SmokeRouteResult {
 }
 
 /**
+ * Экраны ОТЧЁТА — по одному варианту каждого объявленного вида (PRD-27 FR-26).
+ *
+ * Отчёт не входит в `preview.routes[]`: это не экран прохождения, а документ. Но
+ * ломается он ровно так же, а замечает автор — только когда обучающийся не смог
+ * скачать PDF. Данные берутся тем же построителем, что и предпросмотр в настройках
+ * теста, чтобы проверка гоняла ровно ту страницу, что уйдёт в PDF.
+ *
+ * @param manifest Манифест проверяемого шаблона.
+ * @param dataset Демонстрационный набор шаблона — из него берутся название и темы.
+ */
+function reportSpecs(
+  manifest: PreviewManifest,
+  dataset: PreviewDemoDataset,
+): ReturnType<typeof buildScreenInputs> {
+  const out: ReturnType<typeof buildScreenInputs> = [];
+  const test: ReportPreviewTest = {
+    testName: dataset.course?.title || "Тест",
+    sections: (dataset.course?.topics ?? []).map((t) => ({ topicName: t.title })),
+  };
+  for (const kind of REPORT_KINDS) {
+    const variants = reportVariants(manifest, kind);
+    if (variants.length === 0) continue;
+    const variant = variants.find((v) => v.isDefault === true) ?? variants[0];
+    const values = resolveReportValues(variant, null);
+    // Исход «не пройден»: на нём страница показывает БОЛЬШЕ — вердикт, непройденные
+    // темы и блок рекомендаций, — то есть отрисовывается больше макета.
+    const context =
+      kind === "report.adaptive"
+        ? buildAdaptiveReportContext(buildAdaptiveReportPreviewInput(test, "failed"), { values, isPreview: true })
+        : buildReportContext(buildReportPreviewInput(test, "failed"), { values, isPreview: true });
+    out.push({
+      id: variant.key,
+      route: variant.key,
+      label: variant.label || variant.key,
+      variantKey: variant.key,
+      layoutKey: variant.layoutFile || kind,
+      expectedSlots: [],
+      input: { context: context as unknown as Record<string, unknown> },
+    } as ReturnType<typeof buildScreenInputs>[number]);
+  }
+  return out;
+}
+
+/**
  * Run the browser smoke-test across all preview screens (+ optional template.js
  * check) and return the aggregate {@link SmokeReport}. `ok` is the activation
  * gate signal the server persists and enforces (NFR-01).
@@ -212,6 +263,11 @@ export function runSmokeChecks(opts: SmokeRunOptions): SmokeReport {
   const render = opts.render ?? renderScreenInto;
   const specs = buildScreenInputs(opts.dataset, opts.manifest);
   const routes: SmokeRouteResult[] = specs.map((spec) => checkScreen(spec, opts, render));
+
+  // PRD-27 FR-26: виды отчёта проверяются наравне с экранами.
+  for (const spec of reportSpecs(opts.manifest, opts.dataset)) {
+    routes.push(checkScreen(spec, opts, render));
+  }
 
   if (opts.templateJs != null) routes.push(checkTemplateJs(opts.templateJs));
 

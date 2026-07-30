@@ -64,6 +64,20 @@ function expectedScreenCount(): number {
   return manifest.preview.routes.length + appended.length;
 }
 
+/**
+ * Сколько строк отчёта ждём в отчёте проверки: по ОДНОМУ варианту на объявленный вид
+ * (PRD-27 FR-26). Тоже считается, а не пишется числом: шаблон вправе объявить только
+ * обычный вид, только адаптивный или оба.
+ */
+function expectedReportRows(): number {
+  const kinds = new Set(
+    (manifest.contentTemplates as Array<{ kind?: string }>)
+      .map((c) => c.kind ?? "")
+      .filter((k) => k === "report" || k === "report.adaptive"),
+  );
+  return kinds.size;
+}
+
 // ─── preview-context bridge ─────────────────────────────────────────────────
 
 describe("buildScreenInputs (demo dataset → screen specs)", () => {
@@ -347,11 +361,39 @@ describe("runSmokeChecks — default template passes its own smoke-test", () => 
     }
     expect(report.ok).toBe(true);
     expect(report.failed).toBe(0);
-    expect(report.total).toBe(expectedScreenCount());
+    expect(report.total).toBe(expectedScreenCount() + expectedReportRows());
     expect(report.passed).toBeGreaterThan(0);
     // The appended router screen renders the topic menu on the demo topics.
     const router = report.routes.find((r) => r.route === "content.router")!;
     expect(router.status).not.toBe("fail");
+  });
+
+  it("проверяет виды ОТЧЁТА наравне с экранами (PRD-27 FR-26)", () => {
+    const report = runSmokeChecks({ dataset: demo, manifest, layouts });
+    // «Стандартный» объявляет оба вида — оба обязаны быть в отчёте проверки и оба
+    // обязаны отрисоваться: сломанный макет отчёта иначе всплывает только у
+    // обучающегося, который не смог скачать PDF.
+    const reportKeys = (manifest.contentTemplates as Array<{ key: string; kind?: string }>)
+      .filter((c) => c.kind === "report" || c.kind === "report.adaptive")
+      .map((c) => c.key);
+    expect(reportKeys.length).toBeGreaterThan(0);
+    for (const key of reportKeys) {
+      const row = report.routes.find((r) => r.id === key);
+      expect(row, `нет строки проверки для вида отчёта ${key}`).toBeTruthy();
+      expect(row!.status).not.toBe("fail");
+    }
+  });
+
+  it("ломаный макет отчёта — БЛОКИРУЮЩАЯ ошибка, а не молчание", () => {
+    const reportVariant = (manifest.contentTemplates as Array<{ key: string; kind?: string; layoutFile?: string }>)
+      .find((c) => c.kind === "report")!;
+    // Пустой макет: страница отрисуется пустой — ровно тот случай, ради которого
+    // проверка и существует.
+    const broken = { ...layouts, [reportVariant.layoutFile!]: "   " };
+    const report = runSmokeChecks({ dataset: demo, manifest, layouts: broken });
+    const row = report.routes.find((r) => r.id === reportVariant.key)!;
+    expect(row.status).toBe("fail");
+    expect(report.ok).toBe(false);
   });
 
   it("passes a valid template.js as an extra row", () => {

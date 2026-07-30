@@ -9,6 +9,8 @@ import { extractEmbeddedMediaIntoAssets } from "./builders/media-assets";
 import { copyDirToFiles, getTemplatesRootDir } from "./builders/template-copy";
 import { getSharedRuntimeBundle } from "./builders/shared-runtime";
 import { readVendorDsCss, readPackageFontFiles, assemblePackageStyles } from "./builders/ds-styles";
+import { resolveReportBake, reportKindForMode } from "@shared/report/report-variants";
+import type { ReportSettings } from "@shared/schema";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -86,6 +88,10 @@ const FALLBACK_KIND_LAYOUT: Record<string, string> = {
   intro: "section-intro",
   review: "review",
   "section-results": "section-results",
+  // PRD-27 FR-10: шаблон, не объявивший вида отчёта, отчёта не лишает — страница
+  // берётся из вложенного «Стандартного». Ключ макета совпадает с видом.
+  report: "report",
+  "report.adaptive": "report.adaptive",
 };
 
 /**
@@ -118,6 +124,38 @@ function computeFallbackLayoutKeys(templateDir: string, defaultDir: string): str
     .map(([, layoutKey]) => layoutKey);
 }
 
+/**
+ * CSS выбранного варианта отчёта (PRD-27 FR-22).
+ *
+ * Ищется сначала в активном шаблоне, затем во вложенном `default`: когда активный вида
+ * отчёта не объявил, макет берётся из `default` — и стиль обязан приехать оттуда же,
+ * иначе страница соберётся без оформления.
+ *
+ * @param templateDir Каталог активного шаблона.
+ * @param defaultDir Каталог вложенного «Стандартного».
+ * @param styleFile Путь из манифеста относительно корня шаблона; `null` — стиля нет.
+ */
+function readReportStyle(templateDir: string, defaultDir: string, styleFile: string | null): string {
+  if (!styleFile) return "";
+  for (const dir of [templateDir, defaultDir]) {
+    try {
+      return fs.readFileSync(path.join(dir, styleFile), "utf8");
+    } catch {
+      // Следующий каталог.
+    }
+  }
+  return "";
+}
+
+/** Разобранный `manifest.json` каталога шаблона; `null` — прочитать не удалось. */
+function readTemplateManifest(dir: string): unknown {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(dir, "manifest.json"), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
 export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   // Resolve the template directory up-front so we can detect which system screens
   // the active template doesn't declare and must fall back to the bundled `default`
@@ -134,6 +172,29 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   if (data.designSettings && fallbackLayoutKeys.length > 0) {
     data.designSettings.fallbackLayoutKeys = fallbackLayoutKeys;
   }
+
+  // PRD-27 FR-22: выбор ВАРИАНТА отчёта разрешается здесь — только сборщик видит и
+  // манифест активного шаблона, и выбор автора. Дальше он едет в TEST_DATA (для
+  // рантайма) и определяет, чей `styleFile` вложить в `styles.css`. Когда вид отчёта
+  // не объявлен, деградация та же, что у прочих системных экранов: макет из
+  // вложенного `default` — иначе тест на стороннем шаблоне остался бы без отчёта.
+  const reportKind = reportKindForMode(data.test.mode);
+  let reportBake = resolveReportBake(
+    readTemplateManifest(templateDir),
+    reportKind,
+    (data.test.reportSettingsJson as ReportSettings | null)?.[
+      data.test.mode === "adaptive" ? "adaptive" : "standard"
+    ] ?? null,
+  );
+  if (!reportBake.variantKey) {
+    // Активный шаблон вида не объявил. Макет приходит из вложенного «Стандартного» по
+    // КАНОНИЧЕСКОМУ ключу (так его находит `systemLayout`), а стиль — из его же
+    // варианта: без этого шага страница собиралась бы вообще без оформления, потому
+    // что своего `styleFile` у несуществующего варианта нет.
+    const fromDefault = resolveReportBake(readTemplateManifest(defaultDir), reportKind, null);
+    reportBake = { ...fromDefault, variantKey: null, layoutKey: reportKind };
+  }
+  if (data.designSettings) data.designSettings.report = reportBake;
 
   const testJson = buildTestJson(data);
 
@@ -439,9 +500,12 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     readVendorDsCss(),
     readStyle("theme.css"),
     readStyle("base.css"),
-    // PRD-27: страница отчёта рисуется макетом шаблона, а её стиль обязан быть в
-    // документе к моменту растеризации — читать файл из рантайма для этого поздно.
-    readStyle("report.css"),
+    // PRD-27 FR-22: стиль ВЫБРАННОГО варианта отчёта, а не какой-нибудь `report.css`
+    // по соглашению об имени: варианты вправе иметь разные `styleFile`. Он обязан
+    // лежать в документе к моменту растеризации — читать файл из рантайма для этого
+    // поздно. Путь в манифесте задан от корня шаблона, а `readStyle` смотрит в
+    // `styles/`, поэтому файл читается от каталога шаблона напрямую.
+    readReportStyle(templateDir, defaultDir, reportBake.styleFile),
   );
 
   // PRD-7 G21: default template CSS for fallback system screens. Loaded into the

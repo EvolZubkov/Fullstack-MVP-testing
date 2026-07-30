@@ -336,7 +336,8 @@ CREATE TABLE "tests" (
 	"default_question_points" integer,
 	"allow_return_to_unanswered" boolean DEFAULT true NOT NULL,
 	"allow_answer_change" boolean DEFAULT false NOT NULL,
-	"show_section_results" boolean DEFAULT true NOT NULL
+	"show_section_results" boolean DEFAULT true NOT NULL,
+	"report_settings_json" jsonb
 );
 
 CREATE TABLE "topic_access_grants" (

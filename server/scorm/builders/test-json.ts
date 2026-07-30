@@ -3,6 +3,7 @@ import { sanitizeHtml, placeholderScope } from "../../utils/html-sanitizer";
 import { findEligibilityPlugin, findEligibilityConfig } from "@shared/eligibility/registry";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 import { buildTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
+import type { ReportBake } from "@shared/report/report-variants";
 
 interface AdaptiveLevelWithLinks extends AdaptiveLevel {
   links: AdaptiveLevelLink[];
@@ -35,6 +36,13 @@ interface DesignSettingsExport {
    * `systemLayout()` looks up.
    */
   fallbackLayoutKeys?: string[];
+  /**
+   * PRD-27 FR-22: разрешённый выбор ВАРИАНТА отчёта — макет, стиль и значения полей.
+   * Считает {@link module:shared/report/report-variants resolveReportBake} на стороне
+   * сборщика (он один видит манифест шаблона), рантайм только читает. Отсутствие =
+   * отчёт собирается канонической деградацией, как до этого PRD (FR-28).
+   */
+  report?: ReportBake;
 }
 
 interface ExportData {
@@ -346,6 +354,9 @@ export function buildTestJson(data: ExportData): string {
       ...(data.designSettings.fallbackLayoutKeys && data.designSettings.fallbackLayoutKeys.length > 0
         ? { fallbackLayoutKeys: data.designSettings.fallbackLayoutKeys }
         : {}),
+      // PRD-27: включается только когда шаблон вид отчёта объявил — пакет теста на
+      // шаблоне без отчёта сохраняет прежнюю форму TEST_DATA (FR-28).
+      ...(data.designSettings.report ? { report: data.designSettings.report } : {}),
     };
   }
 
