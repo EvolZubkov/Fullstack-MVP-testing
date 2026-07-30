@@ -166,11 +166,33 @@ describe("buildAdaptiveResultContext → render real results.adaptive.html (e2e)
   it("renders achieved level tags per topic", () => {
     expect(root.textContent).toContain("Внутренние коммуникации");
     expect(root.textContent).toContain("Средний");
-    expect(root.querySelector(".ou-tag.is-info")).not.toBeNull(); // achieved
-    // not-achieved topic -> fallback label + is-fail tag
+    // A level was confirmed -> the neutral (solid accent) tone.
+    expect(root.querySelector(".ou-tag.ou-tag--solid.ou-tag--accent")).not.toBeNull();
+    // Nothing confirmed -> the label says so and the tone is the error one: the
+    // learner did not reach even the minimum level the test defines.
     expect(root.textContent).toContain("Безопасность");
-    expect(root.textContent).toContain("Не достигнут");
-    expect(root.querySelector(".ou-tag.is-fail")).not.toBeNull();
+    expect(root.textContent).toContain("Минимально требуемый уровень не подтверждён");
+    expect(root.querySelector(".ou-tag.ou-tag--solid.ou-tag--error")).not.toBeNull();
+  });
+
+  // The rung the learner stopped on is content, not colour: whichever level was
+  // confirmed, the tag looks the same and only the label differs.
+  it("gives every confirmed level the same tone, whatever its rung", () => {
+    const built = buildAdaptiveResultContext(
+      {
+        mode: "adaptive",
+        overallPassed: true,
+        topicResults: [
+          { topicName: "Верх", achievedLevelIndex: 2, achievedLevelName: "Продвинутый" },
+          { topicName: "Низ", achievedLevelIndex: 0, achievedLevelName: "Базовый" },
+        ],
+      },
+      "Адаптивный тест",
+    );
+    const rows = built.result.topicResults as Array<{ levelLabel: string; levelClass: string }>;
+    expect(rows.map((r) => r.levelLabel)).toEqual(["Продвинутый", "Базовый"]);
+    expect(rows[0].levelClass).toBe(rows[1].levelClass);
+    expect(rows[0].levelClass).toBe("ou-tag--solid ou-tag--accent");
   });
 
   it("renders feedback and recommendations only where present (nested each)", () => {

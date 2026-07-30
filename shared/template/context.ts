@@ -76,9 +76,18 @@ export interface CtxTopicResultView extends CtxTopicFeedback {
 /** A per-topic row for the adaptive results layout (level-based, no score). */
 export interface CtxAdaptiveTopicView extends CtxTopicFeedback {
   topicName: string;
-  /** Achieved level name or "Не достигнут". */
+  /**
+   * Confirmed level name, or «Минимально требуемый уровень не подтверждён» when the
+   * learner did not reach the lowest level the test defines.
+   */
   levelLabel: string;
-  /** Core-prepared class: `is-info` (achieved) / `is-fail` (not). */
+  /**
+   * Core-prepared DS tone modifiers for the level tag — two states only, because
+   * that is all the model asserts: `ou-tag--solid ou-tag--accent` (a level was
+   * confirmed; WHICH one the label says) / `ou-tag--solid ou-tag--error` (the test's
+   * minimum was not confirmed). The rungs themselves carry no colour: the ladder is
+   * the author's and differs from test to test.
+   */
   levelClass: string;
 }
 

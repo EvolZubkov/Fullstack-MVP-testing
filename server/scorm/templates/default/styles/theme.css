@@ -550,8 +550,10 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--ou-accent-soft); color: var(--ou-accent-default);
 }
-/* Adaptive level tag — achieved = accent (is-info), not achieved = error (is-fail). */
-.ou-tag.is-info { background: var(--ou-accent-soft); color: var(--ou-accent-on-soft); }
+/* The adaptive level tag needs no rule here: its tone comes as DS modifiers from the
+   context — solid accent when a level was confirmed, solid error when the test's
+   minimum was not (shared/template/result-context). The rungs carry no colour of
+   their own: the ladder is the author's and differs from test to test. */
 
 /* ── Verdict (results / section-results) ────────────────────────── */
 /* passClass (is-pass/is-fail) drives the DS ring fill + verdict tag colour. */

@@ -137,12 +137,28 @@ describe("shared buildAdaptiveResultContext", () => {
     expect(result.adaptive).toBe(true);
     const ts = result.topicResults as any[];
     expect(ts[0].levelLabel).toBe("Средний");
-    expect(ts[0].levelClass).toBe("is-info");
+    // A level was confirmed — the neutral (solid accent) tone; WHICH level is the label's job.
+    expect(ts[0].levelClass).toBe("ou-tag--solid ou-tag--accent");
     expect(ts[0].hasFeedback).toBe(true);
     expect(ts[0].hasRecommendations).toBe(true);
-    expect(ts[1].levelLabel).toBe("Не достигнут");
-    expect(ts[1].levelClass).toBe("is-fail");
+    expect(ts[1].levelLabel).toBe("Минимально требуемый уровень не подтверждён");
+    expect(ts[1].levelClass).toBe("ou-tag--solid ou-tag--error");
     expect(result.hasScormActions).toBeUndefined();
+  });
+
+  // The ladder is the AUTHOR's and differs from test to test, and no rung is the
+  // «target» one — so the rungs carry no colour of their own. The tag has exactly two
+  // states, and any confirmed level looks the same however high it sits.
+  it("tones the tag by confirmed / below-minimum only, never by the rung", () => {
+    const tone = (achievedLevelIndex: number | null, achievedLevelName: string | null) =>
+      (sharedAdaptive(
+        { topicResults: [{ topicName: "Т", achievedLevelIndex, achievedLevelName }] },
+        "Адаптивный",
+      ).result.topicResults as any[])[0].levelClass;
+
+    expect(tone(0, "Начальный")).toBe("ou-tag--solid ou-tag--accent");
+    expect(tone(4, "Экспертный")).toBe("ou-tag--solid ou-tag--accent");
+    expect(tone(null, null)).toBe("ou-tag--solid ou-tag--error");
   });
 
   it("SCORM opts: PDF/retry/finish action flags", () => {

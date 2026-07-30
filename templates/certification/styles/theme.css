@@ -536,9 +536,9 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--ou-accent-soft); color: var(--ou-accent-default);
 }
-/* The adaptive level tag needs no rule here: its tone is a DS modifier
-   (`ou-tag--success|--accent|--warning|--error`) chosen by the level's POSITION on
-   the topic's ladder — see levelToneClass in shared/template/result-context. */
+/* The adaptive level tag needs no rule here: its tone comes as DS modifiers from the
+   context — solid accent when a level was confirmed, solid error when the test's
+   minimum was not (shared/template/result-context). Mirrors the standard template. */
 
 /* ── Verdict (results / section-results) ────────────────────────── */
 /* passClass (is-pass/is-fail) drives the DS ring fill + verdict tag colour. */
