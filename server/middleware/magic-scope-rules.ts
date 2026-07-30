@@ -37,7 +37,9 @@ export interface MagicScopeMatch {
 export const MAGIC_SCOPE_RULES: MagicScopeRule[] = [
   { method: "GET", pattern: "/api/auth/me", bind: "none" },
   { method: "POST", pattern: "/api/auth/logout", bind: "none" },
-  // The handler itself narrows the payload down to the magic test.
+  // The route handler itself narrows the payload down to the magic test; see
+  // `server/routes/attempts.ts` (covered by `tests/routes.attempts-tests.test.ts`)
+  // for where that narrowing is actually enforced.
   { method: "GET", pattern: "/api/learner/tests", bind: "none" },
   { method: "GET", pattern: "/api/tests/:testId/screen-template/:screen", bind: "test" },
   { method: "POST", pattern: "/api/tests/:testId/attempts/start", bind: "test" },
@@ -71,10 +73,22 @@ export function matchMagicScopeRule(method: string, pathname: string): MagicScop
 
     const params: Record<string, string> = {};
     let ok = true;
+    // Literal segments are compared UNDECODED on purpose, while only captured
+    // parameters are decoded: this asymmetry is deliberate and errs toward
+    // denial (an encoded literal segment simply fails to match, rather than
+    // being decoded into something that could equal a literal by surprise).
     for (let i = 0; i < expected.length; i += 1) {
       const segment = expected[i];
       if (segment.startsWith(":")) {
-        params[segment.slice(1)] = decodeURIComponent(actual[i]);
+        try {
+          params[segment.slice(1)] = decodeURIComponent(actual[i]);
+        } catch {
+          // Malformed percent-encoding (e.g. a bare "%") must not throw: the
+          // function's contract is to return null on anything it can't match,
+          // so a bad segment just fails this rule and falls through to denial.
+          ok = false;
+          break;
+        }
       } else if (segment !== actual[i]) {
         ok = false;
         break;

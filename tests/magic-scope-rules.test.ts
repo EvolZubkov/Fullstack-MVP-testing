@@ -46,4 +46,17 @@ describe("matchMagicScopeRule", () => {
   it("does not let a longer path slip through a shorter rule", () => {
     expect(matchMagicScopeRule("GET", "/api/tests/t1/resume/extra")).toBeNull();
   });
+
+  it("returns null instead of throwing on malformed percent-encoding in a parameter segment", () => {
+    expect(matchMagicScopeRule("GET", "/api/tests/%/resume")).toBeNull();
+  });
+
+  it("still matches the same rule when the path has a trailing slash", () => {
+    const m = matchMagicScopeRule("GET", "/api/auth/me/");
+    expect(m?.rule.bind).toBe("none");
+  });
+
+  it("denies a path with a doubled slash", () => {
+    expect(matchMagicScopeRule("GET", "/api/tests//resume")).toBeNull();
+  });
 });
