@@ -218,7 +218,7 @@ export async function previewScales(
 
 // ─── Preview demo-answer context ──────────────────────────────────────────────────
 
-type QuestionType = "single" | "multiple" | "matching" | "ranking";
+import { QUESTION_TYPES, hasOptionList, type QuestionType } from "@shared/questions/question-type";
 
 /** One selectable answer unit of a measured question, derived from its measurements. */
 export type PreviewUnit = {
@@ -295,12 +295,12 @@ export async function loadScalePreviewContext(testId: string): Promise<PreviewQu
   const out: PreviewQuestionContext[] = [];
   for (const [questionId, entry] of byQuestion) {
     const q = qById.get(questionId)!;
-    const type = (["single", "multiple", "matching", "ranking"].includes(q.type) ? q.type : "single") as QuestionType;
+    const type = (QUESTION_TYPES.includes(q.type as QuestionType) ? q.type : "single") as QuestionType;
     out.push({
       id: questionId,
       type,
       prompt: q.prompt ?? questionId,
-      supported: type === "single" || type === "multiple",
+      supported: hasOptionList(type),
       units: Array.from(entry.units.values()).sort((a, b) => a.sourceKey.localeCompare(b.sourceKey, undefined, { numeric: true })),
     });
   }
@@ -351,10 +351,12 @@ function buildContributionUnits(q: RawQuestion, type: QuestionType): Contributio
   const data = (q.dataJson ?? {}) as Record<string, unknown>;
   const correct = (q.correctJson ?? {}) as Record<string, unknown>;
 
-  if (type === "single" || type === "multiple") {
+  if (hasOptionList(type)) {
     const options = asStringArray(data.options);
+    // Измерительная шкала правильных единиц не имеет — множество останется пустым,
+    // потому что correctIndex у неё отсутствует.
     const correctSet = new Set<number>(
-      type === "single"
+      type !== "multiple"
         ? typeof correct.correctIndex === "number"
           ? [correct.correctIndex]
           : []
@@ -418,7 +420,7 @@ export async function loadContributionQuestions(topicIds: string[]): Promise<Con
   return list
     .filter((q) => topicSet.has(q.topicId))
     .map((q) => {
-      const type = (["single", "multiple", "matching", "ranking"].includes(q.type) ? q.type : "single") as QuestionType;
+      const type = (QUESTION_TYPES.includes(q.type as QuestionType) ? q.type : "single") as QuestionType;
       return { id: q.id, topicId: q.topicId, prompt: q.prompt ?? q.id, type, units: buildContributionUnits(q, type) };
     });
 }

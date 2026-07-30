@@ -9,6 +9,7 @@
 import { CheckSquare, Image as ImageIcon, Music, Square, Video } from "lucide-react";
 import { Chip, Cluster, Grid, Stack, Text } from "@universityrt/ui-kit";
 import type { Question } from "@shared/schema";
+import { hasOptionList } from "@shared/questions/question-type";
 
 export function QuestionPreview({ question }: { question: Question }) {
   const data = question.dataJson as { options?: string[]; left?: string[]; right?: string[]; items?: string[] };
@@ -32,10 +33,15 @@ export function QuestionPreview({ question }: { question: Question }) {
       <Stack gap={2}>
         {media}
 
-        {(type === "single" || type === "multiple") && (
+        {hasOptionList(type) && (
           <Stack gap={1}>
             {(data.options ?? []).map((opt, i) => {
-              const isCorrect = type === "single" ? i === correct?.correctIndex : (correct?.correctIndices ?? []).includes(i);
+              // PRD-26: a measurement-only scale has no key at all, so nothing is
+              // marked correct — `correctIndex` is simply absent and every graduation
+              // renders neutral.
+              const isCorrect = type === "multiple"
+                ? (correct?.correctIndices ?? []).includes(i)
+                : i === correct?.correctIndex;
               return (
                 <Cluster key={i} gap={2} wrap={false} align="center">
                   {isCorrect
