@@ -54,6 +54,18 @@ describe("ProtectedRoute under a magic-link session", () => {
     expect(screen.getByTestId("page")).toBeInTheDocument();
   });
 
+  it("renders the test page with a trailing slash — wouter treats it as the same route", () => {
+    currentLocation = "/learner/test/t1/";
+    render(<ProtectedRoute><div data-testid="page">тест</div></ProtectedRoute>);
+    expect(screen.getByTestId("page")).toBeInTheDocument();
+  });
+
+  it("allows a result page with a trailing slash", () => {
+    currentLocation = "/learner/result/at1/";
+    render(<ProtectedRoute><div data-testid="page">результат</div></ProtectedRoute>);
+    expect(screen.getByTestId("page")).toBeInTheDocument();
+  });
+
   it("redirects a route outside the scope to the login form", () => {
     currentLocation = "/learner/history";
     render(<ProtectedRoute><div data-testid="page">история</div></ProtectedRoute>);

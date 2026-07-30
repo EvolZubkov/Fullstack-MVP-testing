@@ -60,8 +60,12 @@ export function ProtectedRoute({
   // instead of an intermediate "you cannot go there" screen.
   if (user.magicScope) {
     const testPath = `/learner/test/${user.magicScope.testId}`;
+    // Wouter matches a route with an optional trailing slash, so `/learner/test/t1/`
+    // is the same page as `/learner/test/t1` — compare without it, or the learner
+    // gets bounced to the login form while standing on their own test.
+    const path = location.replace(/\/+$/, "") || "/";
     const insideScope =
-      !scopeViolated && (location === testPath || location.startsWith("/learner/result/"));
+      !scopeViolated && (path === testPath || path.startsWith("/learner/result/"));
     if (!insideScope) return <Redirect to="/login" />;
     return <>{children}</>;
   }
