@@ -26,7 +26,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  CheckSquare, ChevronDown, ChevronRight, CircleDot, ListOrdered, Pencil, RotateCcw, SlidersHorizontal, Unplug,
+  CheckSquare, ChevronDown, ChevronRight, CircleDot, ListOrdered, Pencil, RotateCcw, ThermometerSun, Unplug,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -63,7 +63,7 @@ const TYPE_ICON: Record<QuestionType, LucideIcon> = {
   multiple: CheckSquare,
   matching: Unplug,
   ranking: ListOrdered,
-  scale: SlidersHorizontal,
+  scale: ThermometerSun,
 };
 const TYPE_LABEL: Record<QuestionType, string> = {
   single: t.questions.singleChoice,

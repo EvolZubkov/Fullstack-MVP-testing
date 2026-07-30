@@ -43,7 +43,7 @@ import {
   Image as ImageIcon,
   KeyRound,
   ListOrdered,
-  SlidersHorizontal,
+  ThermometerSun,
   MoreHorizontal,
   Move,
   Pencil,
@@ -138,7 +138,7 @@ function MenuItem({ icon, danger, onClick, children, testId }: {
 
 import type { QuestionType } from "@shared/questions/question-type";
 
-const TYPE_ICON: Record<QuestionType, LucideIcon> = { single: CircleDot, multiple: CheckSquare, matching: Unplug, ranking: ListOrdered, scale: SlidersHorizontal };
+const TYPE_ICON: Record<QuestionType, LucideIcon> = { single: CircleDot, multiple: CheckSquare, matching: Unplug, ranking: ListOrdered, scale: ThermometerSun };
 const TYPE_LABEL: Record<QuestionType, string> = {
   single: t.questions.singleChoice,
   multiple: t.questions.multipleChoice,

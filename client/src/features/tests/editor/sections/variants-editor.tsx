@@ -13,7 +13,7 @@
  */
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CircleDot, CheckSquare, Unplug, ListOrdered, List, Plus, Trash2, SlidersHorizontal, type LucideIcon } from "lucide-react";
+import { CircleDot, CheckSquare, Unplug, ListOrdered, List, Plus, Trash2, ThermometerSun, type LucideIcon } from "lucide-react";
 import { Button, ModalDialog, Switch, Tabs, Tag, TransferList, type TransferItem } from "@universityrt/ui-kit";
 import type { FormSet, Form } from "@shared/schema";
 import type { QuestionType } from "@shared/scales/engine";
@@ -44,7 +44,7 @@ const TYPE_ICON: Record<QuestionType, LucideIcon> = {
   multiple: CheckSquare,
   matching: Unplug,
   ranking: ListOrdered,
-  scale: SlidersHorizontal,
+  scale: ThermometerSun,
 };
 const TYPE_LABEL: Record<QuestionType, string> = {
   single: "Одиночный выбор",
