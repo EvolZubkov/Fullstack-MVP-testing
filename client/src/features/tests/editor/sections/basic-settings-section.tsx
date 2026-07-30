@@ -71,6 +71,8 @@ export type SettingsSectionProps = {
   fieldErrors?: FieldErrorIndex;
   /** PRD-27: черновой шаблон вкладки «Оформление» — каталог видов отчёта считается на нём (§4.2). */
   draftTemplateId?: string;
+  /** PRD-27: черновой брендинг вкладки «Оформление» — им красится предпросмотр отчёта. */
+  draftDesignParams?: Record<string, unknown>;
 };
 
 /** Backwards-compatible alias: original skeleton lived under this name. */
@@ -110,6 +112,7 @@ export function SettingsSection({
   updateModel,
   fieldErrors = EMPTY_FIELD_ERRORS,
   draftTemplateId,
+  draftDesignParams,
 }: SettingsSectionProps) {
   const [active, setActive] = useState<RailKey>("basic");
   // Per requirements: «Адаптивный режим» sub-section is only relevant when
@@ -186,6 +189,7 @@ export function SettingsSection({
             updateModel={updateModel}
             fieldErrors={fieldErrors}
             draftTemplateId={draftTemplateId}
+            draftDesignParams={draftDesignParams}
           />
         )}
         {effectiveActive === "pass-rules" && (
@@ -218,6 +222,7 @@ function BasicPane({
   updateModel,
   fieldErrors = EMPTY_FIELD_ERRORS,
   draftTemplateId,
+  draftDesignParams,
 }: SettingsSectionProps) {
   // PRD-7 S13.2-G7: «Общая обратная связь теста» card. The model already
   // carries the underlying fields (basic.feedback / feedbackLinks /
@@ -349,9 +354,23 @@ function BasicPane({
       <ReportSettingsCard
         mode={model.mode}
         draftTemplateId={draftTemplateId}
+        designParams={draftDesignParams}
         value={model.report ?? {}}
         readOnly={model.basic.status === "published"}
         onChange={(next) => updateModel((m) => ({ ...m, report: next }))}
+        // FR-18: предпросмотр строится на РЕАЛЬНОЙ структуре редактируемого теста —
+        // его названии и разделах; демонстрационные только числа и вердикты.
+        testName={model.basic.title}
+        sections={model.sections.map((s) => ({
+          topicId: s.topicId,
+          topicName: s.topicName,
+          questionCount: s.drawCount,
+        }))}
+        levelNames={
+          model.mode === "adaptive"
+            ? (model.adaptive.topics.find((t) => t.enabled)?.levels ?? []).map((l) => l.levelName)
+            : undefined
+        }
       />
 
       <hr className="wf-sep" />

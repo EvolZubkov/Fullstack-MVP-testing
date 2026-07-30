@@ -13,6 +13,7 @@
 import { useState } from "react";
 import {
   Banner,
+  Button,
   Card,
   CardBody,
   CardHeader,
@@ -22,12 +23,14 @@ import {
   Switch,
 } from "@universityrt/ui-kit";
 import type { ReportSettings } from "@shared/schema";
+import type { ReportPreviewSection } from "@shared/report/report-preview";
 import {
   useReportVariants,
   reportVariantSwitch,
   type ReportSettingDecl,
   type ReportVariantOption,
 } from "../use-report-variants";
+import { ReportPreviewModal } from "./report-preview-modal";
 
 /** Одно поле варианта: тип решает, каким компонентом дизайн-системы его показать. */
 function ReportField(props: {
@@ -119,6 +122,10 @@ function ReportField(props: {
  * @param value Текущий срез `report` черновика редактора.
  * @param onChange Обновление среза (одна кнопка «Сохранить» на весь ящик).
  * @param readOnly Опубликованный тест не редактируется.
+ * @param designParams Черновые параметры оформления — брендинг предпросмотра.
+ * @param testName Название редактируемого теста (реальное, FR-18).
+ * @param sections Разделы редактируемого теста (реальные, FR-18).
+ * @param levelNames Лестница уровней адаптивного теста.
  */
 export function ReportSettingsCard(props: {
   mode: "standard" | "adaptive";
@@ -126,11 +133,16 @@ export function ReportSettingsCard(props: {
   value: ReportSettings;
   onChange: (next: ReportSettings) => void;
   readOnly?: boolean;
+  designParams?: Record<string, unknown>;
+  testName?: string;
+  sections?: ReportPreviewSection[];
+  levelNames?: string[];
 }) {
   const branchKey = props.mode === "adaptive" ? "adaptive" : "standard";
   const branch = props.value?.[branchKey] ?? null;
   const catalogue = useReportVariants(props.draftTemplateId, undefined, props.mode, branch?.variantKey);
   const [dropped, setDropped] = useState<string[]>([]);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const values = branch?.values ?? {};
 
@@ -220,8 +232,38 @@ export function ReportSettingsCard(props: {
               )}
             </>
           )}
+
+          {/* Предпросмотр доступен и когда шаблон видов не предлагает: автору важно увидеть
+              ИМЕННО то, что уйдёт обучающемуся, — в том числе деградацию к «Стандартному»
+              (эскиз, состояние `s-none`). Пока каталог грузится, вида ещё нет. */}
+          {!catalogue.loading && (
+            <div className="ou-formfield">
+              <Button
+                variant="secondary"
+                size="m"
+                onClick={() => setPreviewOpen(true)}
+                data-testid="report-preview-open"
+              >
+                Предпросмотр отчёта
+              </Button>
+            </div>
+          )}
         </div>
       </CardBody>
+
+      <ReportPreviewModal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        mode={props.mode}
+        templateId={catalogue.templateId}
+        params={props.designParams ?? {}}
+        variant={catalogue.selected}
+        // FR-20: в предпросмотр уходят значения ЧЕРНОВИКА, а не сохранённые.
+        values={values}
+        testName={props.testName ?? ""}
+        sections={props.sections ?? []}
+        levelNames={props.levelNames}
+      />
     </Card>
   );
 }

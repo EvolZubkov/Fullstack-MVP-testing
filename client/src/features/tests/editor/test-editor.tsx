@@ -561,6 +561,7 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
               updateModel={editor.updateModel}
               fieldErrors={fieldErrors}
               draftTemplateId={design.draft.templateId}
+              draftDesignParams={design.draft.params}
             />
           )}
           {editor.model && activeTab === "design" && (

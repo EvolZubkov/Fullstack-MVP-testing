@@ -97,9 +97,20 @@ export interface TemplateScreenProps {
    * templates that ship a fixed-stage shell (manifest `mountShell`).
    */
   shell?: string;
+  /**
+   * Whether the rendered root is stretched to fill the host (default `true`).
+   *
+   * The fill chain exists for the learner SCENE: the scene must reach the bottom of the
+   * player, or the footer rides up under empty space. It works by pinning `flex: 1 1 auto;
+   * min-height: 0` on the root — which silently DEFEATS a layout that declares its own
+   * height. The report page is exactly that case (PRD-27): it is a document sized to A4
+   * (`min-height: 842px`), not a screen fitted to a viewport, and stretched it previews
+   * at the wrong proportions. Pass `fill={false}` for such layouts.
+   */
+  fill?: boolean;
 }
 
-export function TemplateScreen({ layout, context, css, slots, content, cssVars, themeCss, dataTheme, themed, afterHtml, timers, onAction, className, shell }: TemplateScreenProps) {
+export function TemplateScreen({ layout, context, css, slots, content, cssVars, themeCss, dataTheme, themed, afterHtml, timers, onAction, className, shell, fill = true }: TemplateScreenProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const shadowRef = useRef<ShadowRoot | null>(null);
   const screenRef = useRef<HTMLElement | null>(null);
@@ -270,15 +281,17 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
       // (not a definite `height`) — otherwise the scene collapses to its content
       // and the footer rides up under empty space. A no-op when the host is
       // unconstrained (preview): a flex:1 child of an auto-height column is content-sized.
-      host.style.display = "flex";
-      host.style.flexDirection = "column";
-      screen.style.flex = "1 1 auto";
-      screen.style.minHeight = "0";
-      screen.style.display = "flex";
-      screen.style.flexDirection = "column";
+      if (fill) {
+        host.style.display = "flex";
+        host.style.flexDirection = "column";
+        screen.style.flex = "1 1 auto";
+        screen.style.minHeight = "0";
+        screen.style.display = "flex";
+        screen.style.flexDirection = "column";
+      }
       renderScreenInto(screen, { layout, context, slots, content });
       const sceneEl = screen.firstElementChild as HTMLElement | null;
-      if (sceneEl) {
+      if (fill && sceneEl) {
         sceneEl.style.flex = "1 1 auto";
         sceneEl.style.minHeight = "0";
       }
@@ -305,7 +318,7 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
     // the pointer was over (flickering hover, clicks landing on a replaced button).
     // The effect below repaints them in place instead.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [renderKey, fitToWidth, fitQuestion]);
+  }, [renderKey, fitToWidth, fitQuestion, fill]);
 
   // Tick the countdowns between renders: the scene DOM is imperative, so a new
   // seconds value repaints the two timer nodes and touches nothing else. Depends on

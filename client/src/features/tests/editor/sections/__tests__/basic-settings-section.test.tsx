@@ -15,11 +15,25 @@
  *     level CRUD (add / edit / remove) + level links CRUD.
  */
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render as rtlRender, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SettingsSection } from "../basic-settings-section";
 import type { TestEditorModel } from "../../test-editor.types";
 import { defaultRetakePolicy } from "../../test-editor.mappers";
+
+/**
+ * Секция ходит в API за каталогом видов отчёта (PRD-27), поэтому провайдер запросов
+ * нужен ВСЕМ её тестам, а не только тем, что его помнят. Оборачиваем в одном месте:
+ * `rerender` тоже сохраняет провайдера, иначе повторный рендер ронял бы дерево.
+ */
+function render(ui: React.ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrap = (node: React.ReactElement) => (
+    <QueryClientProvider client={qc}>{node}</QueryClientProvider>
+  );
+  const utils = rtlRender(wrap(ui));
+  return { ...utils, rerender: (node: React.ReactElement) => utils.rerender(wrap(node)) };
+}
 
 function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
   return {
@@ -826,12 +840,7 @@ describe("PRD-4 v1.1 L1: adaptive+linear_flat UI guard", () => {
 
 describe("<SettingsSection /> — Повторное прохождение pane (PRD-6)", () => {
   function renderRetake(model: TestEditorModel, updateModel: () => void = () => {}) {
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const utils = render(
-      <QueryClientProvider client={qc}>
-        <SettingsSection model={model} updateModel={updateModel} />
-      </QueryClientProvider>,
-    );
+    const utils = render(<SettingsSection model={model} updateModel={updateModel} />);
     fireEvent.click(screen.getByTestId("settings-rail-retake"));
     return utils;
   }
