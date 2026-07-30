@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!--
     Wireframe: prd27 — Шаблон отчёта о результатах (выбор варианта и его параметры)
-    Файл: docs/wireframes/prd27-report-template.html
+    Файл: docs/wireframes/approved/prd27-report-template.html
     Спецификация: docs/specs/prd-27/report-template.md
 
     ДИЗАЙН НЕ ПЕРЕИЗОБРЕТАЕТСЯ. Блок обратной связи вкладки «Настройки» показан ровно
     таким, каким он реализован сегодня: карточка `ou-card ou-card--outlined ou-card--sm`
     с заголовком «Общая обратная связь теста» и списком `ou-formfield` внутри
-    `tb-feedback-block` (перенесено из approved/prd7-editor-settings-tab.html без правок).
+    `tb-feedback-block` (перенесено из prd7-editor-settings-tab.html без правок).
     Полная вкладка — там же; здесь показано только её окружение вокруг дельты.
 
     Что добавляет PRD-27 (и только это):
@@ -91,7 +91,7 @@
   <button class="wf-btn"        type="button" onclick="showState(this, 's-preview')">Предпросмотр: не пройден</button>
   <button class="wf-btn"        type="button" onclick="showState(this, 's-preview-ok')">Предпросмотр: пройден</button>
   <button class="wf-btn"        type="button" onclick="showState(this, 's-adaptive')">Адаптивный тест</button>
-  <a class="wf-nav-link" href="approved/prd7-editor-settings-tab.html">&larr; вкладка «Настройки» целиком (не меняется)</a>
+  <a class="wf-nav-link" href="prd7-editor-settings-tab.html">&larr; вкладка «Настройки» целиком (не меняется)</a>
 
   <div class="wf-nav-sep"></div>
   <button type="button" class="ou-btn ou-btn--secondary" onclick="toggleTheme(this)">Dark</button>
@@ -122,7 +122,7 @@
       </div></nav>
       <div class="ou-drawer__body" tabindex="0">
 
-        <!-- СУЩЕСТВУЮЩАЯ карточка, 1:1 из approved/prd7-editor-settings-tab.html -->
+        <!-- СУЩЕСТВУЮЩАЯ карточка, 1:1 из prd7-editor-settings-tab.html -->
         <section class="ou-card ou-card--outlined ou-card--sm">
           <header class="ou-card__header">
             <h3 class="ou-card__title">Общая обратная связь теста</h3>
@@ -485,7 +485,7 @@
     Дельта PRD-27 — одна новая карточка в блоке обратной связи вкладки «Настройки» и одно
     модальное окно. Окружение (карточка «Общая обратная связь теста», оболочка редактора,
     вкладки) перенесено 1:1 из
-    <a href="approved/prd7-editor-settings-tab.html">approved/prd7-editor-settings-tab.html</a>
+    <a href="prd7-editor-settings-tab.html">approved/prd7-editor-settings-tab.html</a>
     и настоящим PRD не меняется.
   </p>
 
@@ -568,13 +568,13 @@
   <p class="wf-notes-intro">
     Страница отчёта внутри окна предпросмотра показана заглушкой: её вёрстка принадлежит
     ШАБЛОНУ, а не этому экрану, и эскизом не задаётся. Сегодняшний вид отчёта —
-    в <a href="../specs/prd-27/report-template.md">спецификации</a> §6.2: перенос в макеты
+    в <a href="../../specs/prd-27/report-template.md">спецификации</a> §6.2: перенос в макеты
     «Стандартного» обязан воспроизвести его без изменений.
   </p>
 </div>
 
 <script>
-  /* Wireframe-only controls, идентичны approved/prd22-page-fields-sequences.html. */
+  /* Wireframe-only controls, идентичны prd22-page-fields-sequences.html. */
   function updateWireframeNavOffset() {
     var nav = document.querySelector('.wf-nav');
     if (!nav) return;
