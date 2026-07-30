@@ -12,20 +12,40 @@
  * packaged font dir, and trimmed to the woff2 source — the only format vendored, so
  * the woff/otf fallbacks do not 404 in the LMS.
  *
- * Pure/Node file I/O only — reads from the repo source tree (present at runtime, like
- * the template dirs {@link module:server/scorm/builders/template-copy}).
+ * Node file I/O only. The two sources — the DS stylesheet and the brand font — live
+ * OUTSIDE `server/`, so they are not part of the deployed server tree: the production
+ * image carries `dist/` (plus the template dirs), never `vendor/` or `client/`. They are
+ * therefore copied into `dist/scorm/assets` by the build ({@link copyDsAssetsInto}) and
+ * resolved dev-source-first, dist-second — the same convention as
+ * {@link module:server/scorm/assets/read-asset}. Resolution is relative to the process
+ * CWD, not to this module: in the bundled server every module collapses into `dist/`, so
+ * `__dirname` arithmetic towards a repo root points outside the application.
  */
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { buildPaletteBridge } from "@shared/template/palette-bridge";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-/** Repo root: this module lives at `server/scorm/builders/`. */
-const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 
 /** In-package font directory, relative to `styles.css` at the zip root. */
 export const PACKAGE_FONT_DIR = "assets/fonts";
+
+/** DS stylesheet: source path in the repo, and the path the build writes into `dist`. */
+const DS_CSS_SOURCE = path.join("vendor", "ui-kit", "css", "university-rt.css");
+const DS_CSS_DIST = path.join("dist", "scorm", "assets", "ds", "university-rt.css");
+/** Brand-font directories: repo source, and the one the build writes into `dist`. */
+const FONT_SOURCE_DIR = path.join("client", "public", "fonts");
+const FONT_DIST_DIR = path.join("dist", "scorm", "assets", "fonts");
+
+/**
+ * First existing candidate, resolved against the CWD: the repo source (dev) before the
+ * built asset (production image). Returns `null` when neither is present.
+ */
+function resolveFromCwd(...relatives: string[]): string | null {
+  for (const rel of relatives) {
+    const abs = path.resolve(process.cwd(), rel);
+    if (fs.existsSync(abs)) return abs;
+  }
+  return null;
+}
 
 /** Brand-font weights vendored into the package (woff2 only). */
 export const PACKAGE_FONT_FILES = [
@@ -49,25 +69,48 @@ export function rewriteDsFontFaces(dsCss: string): string {
 
 /** Read the DS stylesheet (source of truth) and rewrite its font faces for the package. */
 export function readVendorDsCss(): string {
-  const p = path.join(REPO_ROOT, "vendor", "ui-kit", "css", "university-rt.css");
+  const p = resolveFromCwd(DS_CSS_SOURCE, DS_CSS_DIST);
+  if (!p) {
+    throw new Error(
+      `DS stylesheet not found. Tried: ${DS_CSS_SOURCE}, ${DS_CSS_DIST} (relative to ${process.cwd()}). ` +
+        "The production build copies it into dist — run `npm run build`.",
+    );
+  }
   return rewriteDsFontFaces(fs.readFileSync(p, "utf8"));
 }
 
 /**
  * Brand-font files to embed under {@link PACKAGE_FONT_DIR}, keyed by their in-zip path.
- * A weight missing from the source tree is skipped rather than failing the export.
+ * A weight missing from both the source tree and the build output is skipped rather than
+ * failing the export — a package without the brand font still renders.
  */
 export function readPackageFontFiles(): Record<string, Buffer> {
   const out: Record<string, Buffer> = {};
   for (const file of PACKAGE_FONT_FILES) {
-    const src = path.join(REPO_ROOT, "client", "public", "fonts", file);
-    try {
-      out[`${PACKAGE_FONT_DIR}/${file}`] = fs.readFileSync(src);
-    } catch {
-      /* weight not present — skip */
-    }
+    const src = resolveFromCwd(path.join(FONT_SOURCE_DIR, file), path.join(FONT_DIST_DIR, file));
+    if (src) out[`${PACKAGE_FONT_DIR}/${file}`] = fs.readFileSync(src);
   }
   return out;
+}
+
+/**
+ * Copy the DS stylesheet and the packaged brand-font weights into a build output dir
+ * (`dist`), so the deployed server — which carries neither `vendor/` nor `client/` —
+ * can still assemble the package stylesheet. Called by `script/build.ts`.
+ *
+ * @param distDir Build output directory (the repo's `dist`, or a temp dir in tests).
+ */
+export function copyDsAssetsInto(distDir: string): void {
+  const cssTarget = path.join(distDir, "scorm", "assets", "ds", "university-rt.css");
+  fs.mkdirSync(path.dirname(cssTarget), { recursive: true });
+  fs.copyFileSync(path.resolve(process.cwd(), DS_CSS_SOURCE), cssTarget);
+
+  const fontDir = path.join(distDir, "scorm", "assets", "fonts");
+  fs.mkdirSync(fontDir, { recursive: true });
+  for (const file of PACKAGE_FONT_FILES) {
+    const src = path.resolve(process.cwd(), FONT_SOURCE_DIR, file);
+    if (fs.existsSync(src)) fs.copyFileSync(src, path.join(fontDir, file));
+  }
 }
 
 /**
