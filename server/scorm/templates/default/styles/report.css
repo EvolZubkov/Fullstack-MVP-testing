@@ -18,7 +18,7 @@
   position: relative;
   font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
   color: #ffffff;
-  /* Подложку ставит хост инлайном по `report.backgroundUrl`; без неё — градиент. */
+  /* Подложку ставит МАКЕТ инлайном из `report.backgroundUrl`; без неё — этот градиент. */
   background: linear-gradient(180deg, #1c1c2b 0%, #7700ff 100%);
   background-size: cover;
   background-position: center;

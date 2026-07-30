@@ -12,7 +12,8 @@ import { loadScoringConfig } from "../services/scoring-config";
 import { loadTestScoringContext } from "../services/effective-scoring";
 import { computeAttemptResult } from "../services/result-compute";
 import { decideRetake, lastCompletedAttemptDate, toIsoDateUTC } from "../services/retake-gate";
-import { readResultsRenderPayload } from "../services/template-render";
+import { readResultsRenderPayload, readReportRenderPayload } from "../services/template-render";
+import { reportKindForMode } from "@shared/report/report-variants";
 import { buildReportInput, buildAdaptiveReportInput } from "../services/result-context";
 import type { ReportInput, AdaptiveReportInput } from "@shared/report/report-html";
 import { pingSection } from "../services/section-timer";
@@ -27,7 +28,7 @@ import {
 } from "../services/test-snapshot";
 import type { QuestionType } from "@shared/scales/engine";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
-import type { Test, TestVariant, AttemptResult, TopicResult, PassRule, RetakePolicy } from "@shared/schema";
+import type { Test, TestVariant, AttemptResult, TopicResult, PassRule, RetakePolicy, ReportSettings } from "@shared/schema";
 // Brings the `SessionData.magic` augmentation (PRD magic-link scope) into scope.
 import "../middleware/magic-scope";
 
@@ -1180,6 +1181,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
     const resultJson = attempt.resultJson as (AttemptResult & { mode?: string }) | null;
     let render = null;
     let report: ReportInput | AdaptiveReportInput | null = null;
+    let reportRender: ReturnType<typeof readReportRenderPayload> = null;
     if (resultJson && Array.isArray(resultJson.topicResults)) {
       const templateId = ((test?.designSettingsJson as any)?.templateId as string) || "default";
       // Learner-facing render: never serve a non-active template, and when the
@@ -1233,6 +1235,27 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
         resultJson.mode === "adaptive"
           ? buildAdaptiveReportInput(resultJson, test?.title || "", reportMeta)
           : buildReportInput(resultJson, test?.title || "", reportMeta);
+
+      // PRD-27 Фаза 2: страницу отчёта рисует МАКЕТ шаблона. Активный шаблон, не
+      // объявивший нужного вида, отчёта не лишает: макет берётся из «Стандартного», а
+      // брендинг остаётся этого теста (FR-10) — то же правило, что у системных экранов.
+      const reportKind = reportKindForMode(resultJson.mode);
+      const activeDir = await resolveTemplateDir(templateId, { activeOnly: true });
+      // Выбор автора хранится по РЕЖИМУ теста (PRD-27 §4.1); его отсутствие означает
+      // вариант с `isDefault`.
+      const authoredReport =
+        (test?.reportSettingsJson as ReportSettings | null)?.[
+          resultJson.mode === "adaptive" ? "adaptive" : "standard"
+        ] ?? null;
+      reportRender = readReportRenderPayload(activeDir, reportKind, authoredReport, test?.designSettingsJson as any, activeDir);
+      if (!reportRender) {
+        const fallbackDir = await resolveTemplateDir("default", { activeOnly: false });
+        if (path.resolve(fallbackDir) !== path.resolve(activeDir)) {
+          // Деградация на «Стандартный»: выбранного варианта там нет, поэтому берётся
+          // его `isDefault`, а значения полей чужого варианта не переносятся.
+          reportRender = readReportRenderPayload(fallbackDir, reportKind, null, test?.designSettingsJson as any, activeDir);
+        }
+      }
     }
 
     res.json({
@@ -1242,6 +1265,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       canRetake,
       render,
       report,
+      reportRender,
       attemptsInfo:
         maxAttempts !== null
           ? {

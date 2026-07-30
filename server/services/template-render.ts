@@ -21,8 +21,14 @@ import { buildResultContext, buildAdaptiveResultContext } from "./result-context
 import { buildTemplateCssVars, type TemplateParamDef } from "@shared/template/params-css";
 import { buildPaletteBridge } from "@shared/template/palette-bridge";
 import { baseParams, buildTemplateThemeCss, sceneThemeAttribute } from "@shared/template/theme-css";
+import { supportsThemes } from "@shared/template/themes";
 import type { StoredDesignSettings } from "@shared/template/theme-params";
 import type { AttemptResult } from "@shared/schema";
+import {
+  resolveReportVariant,
+  resolveReportValues,
+  type ReportKind,
+} from "@shared/report/report-variants";
 
 /**
  * The test's stored design settings, as the routes read them off the test row.
@@ -60,6 +66,14 @@ export interface ScreenRenderPayload {
    * `prefers-color-scheme` rules to decide.
    */
   dataTheme?: "light" | "dark";
+  /**
+   * PRD-23: whether the ACTIVE template declares a choice of palettes. Under «Авто»
+   * the host needs it to pick the same palette the package picks (see the shared
+   * `resolveSceneTheme`): a template without themes ships ONE palette — the dark
+   * one for the bundled «Стандартный» — so following the viewer's system setting
+   * there would paint a light scene the template has no design for.
+   */
+  themed?: boolean;
   /**
    * Per-test branding for the render context (`design.*`, PRD-7). The client spreads
    * this into the context it builds for client-built screens (start/question/blocked);
@@ -276,6 +290,7 @@ export function readScreenTemplate(
       ...(Object.keys(cssVars).length > 0 ? { cssVars } : {}),
       ...(themeCss ? { themeCss } : {}),
       ...(dataTheme ? { dataTheme } : {}),
+      ...(supportsThemes(manifest) ? { themed: true } : {}),
       ...(Object.keys(design_).length ? { design: design_ } : {}),
     };
   } catch {
@@ -315,6 +330,62 @@ export function readResultsRenderPayload(
     // client passes `render.context` verbatim to the renderer).
     if (base.design) (context as { design?: { logoUrl?: string } }).design = base.design;
     return { ...base, context };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Render payload for the attempt REPORT (PRD-27 Фаза 2): the chosen variant's layout,
+ * its own stylesheet and the design tokens the page may use.
+ *
+ * Deliberately does NOT include `base.css`/`theme.css`: the report renders outside the
+ * scene and must not depend on the scene layer (§6.3). The palette reaches it as CSS
+ * variables (`cssVars`) plus the per-theme block (`themeCss`), which the browser applies
+ * to the report container.
+ *
+ * @param dir Template directory the report layout comes from — the active template, or
+ *   `default` when the active one declares no variant of this kind (FR-10).
+ * @param kind Report kind matching the test's mode.
+ * @param authored Выбор автора теста (`tests.report_settings_json`, ветка режима): ключ
+ *   варианта и значения его полей. `null` — автор ничего не выбирал.
+ * @param design The test's design settings (branding / pinned palette).
+ * @param paramsDir Directory whose manifest the design params were set against — the
+ *   ACTIVE template, even when the layout falls back to `default`.
+ * @returns Payload, or `null` when this directory offers no such variant.
+ */
+export function readReportRenderPayload(
+  dir: string,
+  kind: ReportKind,
+  authored: { variantKey?: string | null; values?: Record<string, unknown> | null } | null | undefined,
+  design?: DesignSettingsInput | null,
+  paramsDir?: string,
+): { layout: string; css: string; variantKey: string; values: Record<string, unknown>; cssVars?: Record<string, string>; themeCss?: string; design?: Record<string, string> } | null {
+  try {
+    const raw = readFileSafe(path.join(dir, "manifest.json"));
+    if (!raw) return null;
+    const manifest = JSON.parse(raw) as unknown;
+    const variant = resolveReportVariant(manifest, kind, authored?.variantKey ?? null);
+    if (!variant?.layoutFile) return null;
+    const layout = readFileSafe(path.join(dir, variant.layoutFile));
+    if (!layout) return null;
+    const css = variant.styleFile ? readFileSafe(path.join(dir, variant.styleFile)) || "" : "";
+
+    const brandingManifest = readBrandingManifest(paramsDir || dir);
+    const base = baseParams(design, brandingManifest);
+    const cssVars = buildTemplateCssVars(base, brandingManifest.params);
+    // Токены отчёта ставятся на КОНТЕЙНЕР, а не на `:host`: сцены здесь нет.
+    const themeCss = buildTemplateThemeCss(design, brandingManifest, { rootSelector: ".tb-report" });
+    const logoUrl = resolveMediaUrl(base?.logoUrl);
+    return {
+      layout,
+      css,
+      variantKey: variant.key,
+      values: resolveReportValues(variant, authored?.values ?? null),
+      ...(Object.keys(cssVars).length > 0 ? { cssVars } : {}),
+      ...(themeCss ? { themeCss } : {}),
+      ...(logoUrl ? { design: { logoUrl } } : {}),
+    };
   } catch {
     return null;
   }

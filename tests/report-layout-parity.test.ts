@@ -5,19 +5,18 @@
  * PRD-27 §6.2 — приёмка ПЕРЕНОСА вёрстки отчёта из кода в макет шаблона.
  *
  * Требование документа: «перенос — это перенос, а не редизайн», любое расхождение вида до
- * и после — дефект переноса. Побайтно сравнить нельзя (в коде были инлайн-стили, у макета
- * своя таблица), поэтому сравнивается то, что видит человек: весь ТЕКСТ страницы, число и
- * порядок карточек тем, кликабельные чипы и их адреса, наличие блоков.
+ * и после — дефект переноса.
  *
- * Пока строитель `buildReportHtml` жив, он и служит эталоном. Когда Фаза 2 его удалит,
- * эталоном останутся зафиксированные здесь ожидания.
+ * Равенство макета и прежнего строителя проверено в коммите 2ac6b2d, где оба
+ * существовали: подпись всего видимого текста совпадала символ в символ. Строитель удалён
+ * (Фаза 2), поэтому эталоном служат перечисленные здесь ожидания — состав и ПОРЯДОК
+ * текста, число и порядок карточек тем, вердикты, адреса кликабельных чипов, гейты блоков.
  */
 
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { renderScreenInto } from "../shared/template/render-screen";
-import { buildReportHtml, buildAdaptiveReportHtml } from "../shared/report/report-html";
 import { buildReportContext, buildAdaptiveReportContext } from "../shared/report/report-context";
 import type { ReportInput, AdaptiveReportInput } from "../shared/report/report-html";
 
@@ -26,28 +25,22 @@ const layout = (name: string) => fs.readFileSync(path.join(DEFAULT_DIR, "layouts
 const REPORT = layout("report.html");
 const REPORT_ADAPTIVE = layout("report.adaptive.html");
 
-/**
- * Подпись видимого текста. Пробелы убираются ПОЛНОСТЬЮ: строитель склеивал блоки без
- * разделителей, у макета есть отступы, и предмет сверки — состав и порядок текста, а не
- * разметка. Обе стороны нормализуются одинаково.
- */
-function textSignature(source: string | HTMLElement): string {
-  const text =
-    typeof source === "string"
-      ? ((): string => {
-          const host = document.createElement("div");
-          host.innerHTML = source;
-          return host.textContent ?? "";
-        })()
-      : (source.textContent ?? "");
-  return text.replace(/\s+/g, "");
+/** Видимый текст со схлопнутыми пробелами. */
+function visibleText(source: HTMLElement): string {
+  return (source.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
-/** Видимый текст со схлопнутыми пробелами — для проверок «содержит». */
-function visibleText(html: string): string {
-  const host = document.createElement("div");
-  host.innerHTML = html;
-  return (host.textContent ?? "").replace(/\s+/g, " ").trim();
+/**
+ * Каждый фрагмент присутствует и идёт ПОСЛЕ предыдущего. Порядок — часть вида отчёта:
+ * вердикт до счёта, счёт до тем, темы до рекомендаций.
+ */
+function expectInOrder(text: string, fragments: string[]): void {
+  let cursor = 0;
+  for (const fragment of fragments) {
+    const at = text.indexOf(fragment, cursor);
+    expect(at, "фрагмент не найден по порядку: " + fragment).toBeGreaterThanOrEqual(0);
+    cursor = at + fragment.length;
+  }
 }
 
 /** То же для отрендеренного макета. */
@@ -59,12 +52,6 @@ function renderToRoot(layoutHtml: string, context: unknown): HTMLElement {
 
 const linkUrls = (el: ParentNode) =>
   [...el.querySelectorAll(".pdf-link-btn")].map((n) => n.getAttribute("data-url"));
-
-const linkUrlsFromHtml = (html: string) => {
-  const host = document.createElement("div");
-  host.innerHTML = html;
-  return linkUrls(host);
-};
 
 const STANDARD: ReportInput = {
   testName: "Сертификационный тест",
@@ -119,10 +106,43 @@ const STANDARD: ReportInput = {
 };
 
 describe("report.html: макет повторяет страницу, которую печатал код", () => {
-  it("весь видимый текст совпадает", () => {
-    const expected = textSignature(buildReportHtml(STANDARD));
-    const actual = textSignature(renderToRoot(REPORT, buildReportContext(STANDARD)));
-    expect(actual).toBe(expected);
+  it("печатает всё, что печатал код, и в том же порядке", () => {
+    const text = visibleText(renderToRoot(REPORT, buildReportContext(STANDARD)));
+    expectInOrder(text, [
+      "Тест не пройден",
+      "Лучший результат за 2 попытки",
+      "Слушатель: Ольга Швецова",
+      "Дата прохождения:",
+      "Сертификационный тест",
+      "Результат теста",
+      "64",
+      "вопросов",
+      "10/64",
+      "верно",
+      "37.0",
+      "баллов",
+      "34%",
+      "не пройден",
+      "Результаты по темам",
+      "Корпоративные компетенции (часть 1)",
+      "Пройден",
+      "0 из 8 (31%)",
+      "5.0/16.0",
+      "Технологии",
+      "Не пройден",
+      "1 из 12 (18%)",
+      "4.0/22.0",
+      "Повторите раздел про сети",
+      "Право",
+      "1 из 10 (36%)",
+      "5.0/14.0",
+      "Рекомендации по курсам",
+      "Изучите эти материалы для улучшения знаний по темам, которые требуют внимания.",
+      "Основы сетей",
+      "Рекомендуемые мероприятия",
+      "Посетите очные мероприятия для углублённого изучения материала.",
+      "Семинар по инфраструктуре",
+    ]);
   });
 
   it("карточек тем столько же и в том же порядке", () => {
@@ -151,9 +171,8 @@ describe("report.html: макет повторяет страницу, кото�
     expect(cards[1].querySelector(".tb-report__topic-fb")?.textContent).toBe("Повторите раздел про сети");
   });
 
-  it("кликабельные чипы и их адреса совпадают с эталоном, дубль курса убран", () => {
+  it("кликабельный чип один: дубль курса по двум проваленным темам убран", () => {
     const root = renderToRoot(REPORT, buildReportContext(STANDARD));
-    expect(linkUrls(root)).toEqual(linkUrlsFromHtml(buildReportHtml(STANDARD)));
     expect(linkUrls(root)).toEqual(["https://e/net"]);
   });
 
@@ -178,7 +197,8 @@ describe("report.html: макет повторяет страницу, кото�
     const root = renderToRoot(REPORT, buildReportContext(passed));
     expect(root.querySelector(".tb-report__headline")?.textContent).toBe("Тест пройден");
     expect(root.querySelector(".tb-report")?.className).toContain("is-pass");
-    expect(visibleText(buildReportHtml(passed))).toContain("Тест пройден");
+    // Бейдж вердикта тоже переключается — строчными, как печаталось раньше.
+    expect(root.querySelector(".tb-report__badge")?.textContent).toBe("пройден");
   });
 
   it("без тем блок тем не рендерится", () => {
@@ -233,10 +253,27 @@ const ADAPTIVE: AdaptiveReportInput = {
 };
 
 describe("report.adaptive.html: макет повторяет адаптивную страницу", () => {
-  it("весь видимый текст совпадает", () => {
-    const expected = textSignature(buildAdaptiveReportHtml(ADAPTIVE));
-    const actual = textSignature(renderToRoot(REPORT_ADAPTIVE, buildAdaptiveReportContext(ADAPTIVE)));
-    expect(actual).toBe(expected);
+  it("печатает всё, что печатал код, и в том же порядке", () => {
+    const text = visibleText(renderToRoot(REPORT_ADAPTIVE, buildAdaptiveReportContext(ADAPTIVE)));
+    expectInOrder(text, [
+      "Результаты теста",
+      "Адаптивное тестирование",
+      "Слушатель: Ольга Швецова",
+      "Дата прохождения:",
+      "Тест профессиональных знаний",
+      "Результаты по темам",
+      "Управление численностью",
+      "Минимально требуемый уровень не подтверждён",
+      "Вопросов: 9",
+      "Правильных: 1",
+      "Ваш уровень знаний по данной теме - начальный",
+      "Вознаграждение и льготы",
+      "Базовый",
+      "Рекомендуемые материалы",
+      "Изучите эти материалы для улучшения знаний.",
+      "Управление численностью",
+      "Планирование штата",
+    ]);
   });
 
   it("уровни, класс подтверждения и счётчики", () => {
@@ -255,7 +292,6 @@ describe("report.adaptive.html: макет повторяет адаптивну
   it("материалы перечисляются с названием темы и остаются кликабельными", () => {
     const root = renderToRoot(REPORT_ADAPTIVE, buildAdaptiveReportContext(ADAPTIVE));
     expect(root.querySelector(".tb-report__rec-topic")?.textContent).toBe("Управление численностью");
-    expect(linkUrls(root)).toEqual(linkUrlsFromHtml(buildAdaptiveReportHtml(ADAPTIVE)));
     expect(linkUrls(root)).toEqual(["https://e/hc"]);
   });
 
@@ -266,12 +302,97 @@ describe("report.adaptive.html: макет повторяет адаптивну
   });
 });
 
+describe("содержательные правила отчёта, перенесённые из удалённых строителей", () => {
+  it("склонение числа попыток печатается макетом", () => {
+    const forms = (attemptsCount: number | undefined) =>
+      visibleText(renderToRoot(REPORT, buildReportContext({ ...STANDARD, attemptsCount })));
+    expect(forms(1)).toContain("за 1 попытку");
+    expect(forms(3)).toContain("за 3 попытки");
+    expect(forms(11)).toContain("за 11 попыток");
+    // Ни попытки — всё равно «за 1 попытку», а не «за 0 попыток».
+    expect(forms(undefined)).toContain("за 1 попытку");
+  });
+
+  it("авторский текст экранируется, а не исполняется", () => {
+    const evil: ReportInput = { ...STANDARD, testName: '<img src=x onerror="alert(1)">' };
+    const root = renderToRoot(REPORT, buildReportContext(evil));
+    expect(root.querySelector("img")).toBeNull();
+    expect(visibleText(root)).toContain('<img src=x onerror="alert(1)">');
+  });
+
+  it("рекомендации проваленных тем: курсы и мероприятия, без дублей и без пройденных", () => {
+    const withPassedCourse: ReportInput = {
+      ...STANDARD,
+      result: {
+        ...STANDARD.result,
+        topicResults: [
+          ...STANDARD.result.topicResults,
+          {
+            topicId: "t4",
+            topicName: "Сети",
+            correct: 8,
+            total: 8,
+            percent: 100,
+            earnedPoints: 8,
+            possiblePoints: 8,
+            passed: true,
+            // Курс ПРОЙДЕННОЙ темы в отчёт не попадает: помощь адресуется провалу.
+            recommendedCourses: [{ title: "Курс пройденной темы", url: "https://e/passed" }],
+          },
+        ],
+      },
+    };
+    const text = visibleText(renderToRoot(REPORT, buildReportContext(withPassedCourse)));
+    expect(text).toContain("Основы сетей");
+    expect(text).toContain("Семинар по инфраструктуре");
+    expect(text).not.toContain("Курс пройденной темы");
+    expect(text.match(/Основы сетей/g)).toHaveLength(1);
+  });
+
+  it("без рекомендаций блоки курсов и мероприятий не рендерятся", () => {
+    const bare: ReportInput = {
+      ...STANDARD,
+      result: {
+        ...STANDARD.result,
+        topicResults: STANDARD.result.topicResults.map((t) => ({
+          ...t,
+          recommendedCourses: [],
+          recommendedEvents: [],
+        })),
+      },
+    };
+    const text = visibleText(renderToRoot(REPORT, buildReportContext(bare)));
+    expect(text).not.toContain("Рекомендации по курсам");
+    expect(text).not.toContain("Рекомендуемые мероприятия");
+  });
+
+  it("подложка приходит из контекста, без неё макет держит свой фон", () => {
+    const withBg = renderToRoot(
+      REPORT,
+      buildReportContext(STANDARD, { assets: { backgroundDataUrl: "data:image/png;base64,AA" } }),
+    );
+    expect(withBg.querySelector<HTMLElement>(".tb-report")?.style.backgroundImage).toContain("data:image/png;base64,AA");
+    const plain = renderToRoot(REPORT, buildReportContext(STANDARD));
+    expect(plain.querySelector<HTMLElement>(".tb-report")?.style.backgroundImage).toBe("");
+  });
+});
+
 describe("макеты отчёта соблюдают контракт среды стилей (§6.3)", () => {
   it("корневой класс tb-report и ни одного класса слоя сцены", () => {
     for (const [name, html] of [["report.html", REPORT], ["report.adaptive.html", REPORT_ADAPTIVE]] as const) {
       expect(html, name).toMatch(/class="tb-report\b/);
       expect(html, name).not.toMatch(/\btb-scene/);
     }
+  });
+
+  it("подпись уровня переносится: длинный вердикт не обрезается", () => {
+    // Регрессия: плашка несла `white-space: nowrap` со времён короткого «Не достигнут»,
+    // и полный вердикт выходил за карточку, а карточка его обрезала.
+    const css = fs.readFileSync(path.join(DEFAULT_DIR, "styles", "report.css"), "utf8");
+    const rule = /\.tb-report__topic-level\s*\{([^}]*)\}/.exec(css);
+    expect(rule, "правило .tb-report__topic-level не найдено").not.toBeNull();
+    expect(rule![1]).not.toContain("nowrap");
+    expect(rule![1]).toContain("max-width: 100%");
   });
 
   it("таблица стилей отчёта скоуплена и не адресует документ", () => {

@@ -42,7 +42,8 @@ function fakePdf() {
   return { calls, jsPDF: Doc as unknown as never };
 }
 
-const PAGE = '<div style="width: 595px">Отчёт</div>';
+/** Страница отчёта: макет варианта + контекст, как их отдаёт шаблон. */
+const PAGE = { layout: '<div class="tb-report">Отчёт: {{ course.title }}</div>', context: { course: { title: "Демо" } } };
 
 describe("exportReportPdf", () => {
   it("rasterizes the page and hands an A4-wide image to the writer", async () => {
@@ -75,11 +76,14 @@ describe("exportReportPdf", () => {
 
   it("re-adds the recommendation chips as real PDF links", async () => {
     const { calls, jsPDF } = fakePdf();
-    const withChips =
-      '<div style="width: 595px">' +
-      '<div class="pdf-link-btn" data-url="https://e/a">Курс A</div>' +
-      '<div class="pdf-link-btn" data-url="">Без ссылки</div>' +
-      "</div>";
+    const withChips = {
+      layout:
+        '<div class="tb-report">' +
+        '<div class="pdf-link-btn" data-url="https://e/a">Курс A</div>' +
+        '<div class="pdf-link-btn" data-url="">Без ссылки</div>' +
+        "</div>",
+      context: {},
+    };
     await exportReportPdf(withChips, "T", { jsPDF, html2canvas: vi.fn().mockResolvedValue(fakeCanvas()) });
     // Only the chip that carries a URL becomes a link.
     expect(calls.link).toHaveLength(1);
@@ -97,11 +101,46 @@ describe("exportReportPdf", () => {
     ).rejects.toThrow(/jsPDF|html2canvas/);
   });
 
-  it("rejects empty markup rather than writing a blank page", async () => {
+  it("отказывается работать без макета: шаблон обязан его дать", async () => {
     const { jsPDF } = fakePdf();
     await expect(
-      exportReportPdf("", "T", { jsPDF, html2canvas: vi.fn().mockResolvedValue(fakeCanvas()) }),
-    ).rejects.toThrow("Пустая разметка отчёта");
+      exportReportPdf({ layout: "", context: {} }, "T", { jsPDF, html2canvas: vi.fn().mockResolvedValue(fakeCanvas()) }),
+    ).rejects.toThrow("Шаблон не предоставил макет отчёта");
+  });
+
+  it("рендерит МАКЕТ через общий рендерер, а не берёт готовый HTML", async () => {
+    const { jsPDF } = fakePdf();
+    const html2canvas = vi.fn().mockResolvedValue(fakeCanvas());
+    await exportReportPdf(
+      { layout: '<div class="tb-report"><span data-path="report.verdictHeadline"></span></div>', context: { report: { verdictHeadline: "Тест пройден" } } },
+      "T",
+      { jsPDF, html2canvas },
+    );
+    // Растеризуется отрисованный корень, и подстановка из контекста уже произошла.
+    const target = html2canvas.mock.calls[0][0] as HTMLElement;
+    expect(target.className).toContain("tb-report");
+    expect(target.textContent).toBe("Тест пройден");
+  });
+
+  it("CSS варианта и токены живут на контейнере и уходят вместе с ним", async () => {
+    const { jsPDF } = fakePdf();
+    let sawStyle = false;
+    let sawVar = "";
+    const html2canvas = vi.fn().mockImplementation((el: HTMLElement) => {
+      sawStyle = !!el.parentElement?.parentElement?.querySelector("style");
+      sawVar = el.parentElement?.style.getPropertyValue("--primary") ?? "";
+      return Promise.resolve(fakeCanvas());
+    });
+    await exportReportPdf(
+      { layout: '<div class="tb-report">x</div>', css: ".tb-report { color: red }", cssVars: { "--primary": "270 100% 50%" }, context: {} },
+      "T",
+      { jsPDF, html2canvas },
+    );
+    expect(sawStyle).toBe(true);
+    expect(sawVar).toBe("270 100% 50%");
+    // После экспорта ни стилей, ни контейнера в документе нет.
+    expect(document.querySelectorAll("style").length).toBe(0);
+    expect(document.body.children.length).toBe(0);
   });
 });
 

@@ -168,10 +168,6 @@ export {
 } from "../flow/page-sequence";
 // The attempt REPORT (PDF): one markup source and one export pipeline for both hosts.
 // The package reaches them through this bundle; the web host imports them directly.
-export {
-  buildReportHtml,
-  buildAdaptiveReportHtml,
-  reportFileName,
-  formatTimestamp as reportTimestamp,
-} from "../report/report-html";
+export { reportFileName, formatTimestamp as reportTimestamp } from "../report/report-html";
+export { buildReportContext, buildAdaptiveReportContext } from "../report/report-context";
 export { exportReportPdf, loadReportAssets } from "../report/export-pdf";

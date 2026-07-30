@@ -324,6 +324,27 @@ export const retakePolicySchema = z.preprocess(
 export type EligibilityPluginRef = z.infer<typeof eligibilityPluginRefSchema>;
 export type RetakePolicy = z.infer<typeof retakePolicySchema>;
 
+/** Выбор варианта отчёта и значения его полей для ОДНОГО режима (PRD-27 §4.1). */
+export const reportModeSettingsSchema = z.object({
+  /** `contentTemplates[].key` выбранного варианта. */
+  variantKey: z.string().min(1),
+  /** Значения `settings[]` варианта. Ключи, которых вариант не объявляет, отбрасываются. */
+  values: z.record(z.string(), z.unknown()).default({}),
+});
+
+/**
+ * `tests.report_settings_json`. Ключи ветвей — РЕЖИМЫ теста, а не виды манифеста: тест
+ * одного режима хранит одну ветку, но обе сохраняются при смене режима, чтобы настройка
+ * не терялась (§4.1). Отсутствие ветки = вариант с `isDefault` активного шаблона.
+ */
+export const reportSettingsSchema = z.object({
+  standard: reportModeSettingsSchema.nullish(),
+  adaptive: reportModeSettingsSchema.nullish(),
+});
+
+export type ReportModeSettings = z.infer<typeof reportModeSettingsSchema>;
+export type ReportSettings = z.infer<typeof reportSettingsSchema>;
+
 export const tests = pgTable("tests", {
   id: varchar("id", { length: 36 }).primaryKey(),
   folderId: varchar("folder_id", { length: 36 }),
@@ -368,6 +389,12 @@ export const tests = pgTable("tests", {
   // PRD-19 (FR-05a): show the section-results screen (optional system node, sectioned tests).
   // Default true; not applicable to linear_flat (no sections) — ignored by the runtime there.
   showSectionResults: boolean("show_section_results").notNull().default(true),
+  // PRD-27 (D-4): выбранный вариант ОТЧЁТА и значения его полей, по режиму теста.
+  // Отдельно от `design_settings_json`, хотя выбор и принадлежит шаблону: тот коммитится
+  // черновиком вкладки «Оформление», а поля отчёта живут в блоке обратной связи вкладки
+  // «Настройки», и один черновик связал бы две вкладки порядком сохранения (§4.2).
+  // NULL = автор ничего не выбирал: берётся вариант с `isDefault`.
+  reportSettingsJson: jsonb("report_settings_json").$type<ReportSettings>(),
 }, (table) => ({
   // Test lists filter by lifecycle status (draft/published/archived).
   statusIdx: index("tests_status_idx").on(table.status),

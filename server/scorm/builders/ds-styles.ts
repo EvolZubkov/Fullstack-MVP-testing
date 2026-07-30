@@ -124,10 +124,21 @@ export function copyDsAssetsInto(distDir: string): void {
  * @param themeCss Template `theme.css`.
  * @param baseCss  Template `base.css` (kept until the scene-model migration removes it).
  */
-export function assemblePackageStyles(dsCss: string, themeCss: string, baseCss: string): string {
+export function assemblePackageStyles(
+  dsCss: string,
+  themeCss: string,
+  baseCss: string,
+  /**
+   * PRD-27: таблица страницы ОТЧЁТА. Кладётся в собранный `styles.css`, а не читается
+   * рантаймом отдельно: отчёт строится в главном документе пакета, и стиль обязан быть
+   * там уже к моменту растеризации. Протечь она не может — вся скоуплена в `.tb-report`
+   * (§6.3), поэтому на сцену не влияет и идёт последней.
+   */
+  reportCss = "",
+): string {
   // The package always bakes --primary/--background/… from params (manifest defaults),
   // so the bridge fires unconditionally; a template without .ou markup simply has no
   // element for the (inert) `.ou{}` block to touch.
   const bridge = buildPaletteBridge({ primary: "1", background: "1", card: "1", border: "1" });
-  return [dsCss, themeCss, baseCss, bridge].filter(Boolean).join("\n");
+  return [dsCss, themeCss, baseCss, bridge, reportCss].filter(Boolean).join("\n");
 }

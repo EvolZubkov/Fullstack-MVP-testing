@@ -6,7 +6,11 @@ import { Button, Center, Stack, Text } from "@universityrt/ui-kit";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
 import { RESULTS_NAV_ACTIONS } from "@shared/template/results-nav";
-import { downloadAttemptReport, type AttemptReport } from "@/features/learner/attempt-report";
+import {
+  downloadAttemptReport,
+  type AttemptReport,
+  type AttemptReportRender,
+} from "@/features/learner/attempt-report";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
@@ -41,6 +45,11 @@ interface AttemptWithResult extends Attempt {
    * the server only turns `result.nav.showReport` on together with this.
    */
   report?: AttemptReport | null;
+  /**
+   * PRD-27: макет выбранного варианта отчёта, его стили и токены теста. Отсутствует,
+   * только когда макета не дал ни активный шаблон, ни «Стандартный».
+   */
+  reportRender?: AttemptReportRender | null;
 }
 
 export default function ResultPage() {
@@ -124,14 +133,20 @@ function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
    */
   async function handleReport() {
     if (reportBusy.current) return;
-    if (!attempt.report) {
-      toast({ variant: "destructive", title: "Отчёт недоступен", description: "Нет данных для отчёта по этой попытке." });
+    if (!attempt.report || !attempt.reportRender) {
+      toast({
+        variant: "destructive",
+        title: "Отчёт недоступен",
+        description: attempt.report
+          ? "Шаблон не предоставил макет отчёта."
+          : "Нет данных для отчёта по этой попытке.",
+      });
       return;
     }
     reportBusy.current = true;
     toast({ variant: "info", title: "Готовим отчёт", description: "Файл скачается автоматически." });
     try {
-      await downloadAttemptReport(attempt.report);
+      await downloadAttemptReport(attempt.report, attempt.reportRender);
     } catch (e) {
       toast({
         variant: "destructive",

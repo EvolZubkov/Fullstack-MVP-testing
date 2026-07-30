@@ -29,6 +29,13 @@
       "when": 1785351989650,
       "tag": "0003_section_timer_state",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785416377826,
+      "tag": "0004_prd27_report_settings",
+      "breakpoints": true
     }
   ]
 }

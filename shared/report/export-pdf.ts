@@ -15,6 +15,7 @@
  */
 
 import { reportFileName } from "./report-html";
+import { renderScreenInto } from "../template/render-screen";
 
 /** Minimal surface this module uses from jsPDF. */
 export interface JsPdfLike {
@@ -49,39 +50,73 @@ interface LinkBox {
   height: number;
 }
 
+/** Страница отчёта: макет варианта, его CSS и контекст (PRD-27 Фаза 2). */
+export interface ReportPage {
+  /** Макет варианта (`contentTemplates[].layoutFile`). */
+  layout: string;
+  /**
+   * CSS варианта. Пакету не нужен — там таблица отчёта уже в документе внутри
+   * `styles.css`; веб передаёт её здесь. Скоуплена в `.tb-report`, поэтому внедрение в
+   * главный документ ни на что не влияет (§6.3).
+   */
+  css?: string;
+  /**
+   * Токены оформления теста как CSS-переменные. Ставятся на КОНТЕЙНЕР отчёта: сцены
+   * здесь нет, `:root` отчёту не принадлежит, и это единственный канал темы (§6.3).
+   */
+  cssVars?: Record<string, string>;
+  /** Контекст из `buildReportContext` / `buildAdaptiveReportContext`. */
+  context: unknown;
+}
+
 /**
- * Render report HTML into a downloaded PDF.
+ * Render the report page into a downloaded PDF.
  *
- * Rasterizes the page off-screen, scales it to A4 width, and re-adds the recommendation
- * chips as REAL PDF links (the raster alone would make them dead pictures).
+ * Renders the variant's LAYOUT through the shared renderer — the same renderer the
+ * learner screens use — then rasterizes it off-screen, scales it to A4 width and re-adds
+ * the recommendation chips as REAL PDF links (the raster alone would make them dead
+ * pictures).
  *
- * @param html Report page markup from `buildReportHtml` / `buildAdaptiveReportHtml`.
+ * @param page Layout, optional CSS and context. See {@link ReportPage}.
  * @param testName Test title — only used to name the downloaded file.
  * @param deps See {@link ExportDeps}.
  * @returns The file name that was saved.
  * @throws When a library is missing or rasterizing fails — the caller decides how to
  *   surface it (both hosts show the failure to the learner rather than failing silently).
  */
-export async function exportReportPdf(html: string, testName: string, deps: ExportDeps): Promise<string> {
+export async function exportReportPdf(page: ReportPage, testName: string, deps: ExportDeps): Promise<string> {
   const doc = deps.document || (typeof document !== "undefined" ? document : null);
   if (!doc) throw new Error("Экспорт отчёта требует браузерного окружения");
   if (!deps.jsPDF || !deps.html2canvas) throw new Error("Библиотеки jsPDF или html2canvas не загружены");
+  if (!page || !page.layout) throw new Error("Шаблон не предоставил макет отчёта");
 
   const container = doc.createElement("div");
-  container.innerHTML = html;
   container.style.position = "absolute";
   container.style.left = "-9999px";
   container.style.top = "0";
+  // CSS варианта живёт ВНУТРИ контейнера и уходит вместе с ним: пока отчёт строится,
+  // лишних правил в документе нет, а после — и следа не остаётся.
+  if (page.css) {
+    const style = doc.createElement("style");
+    style.textContent = page.css;
+    container.appendChild(style);
+  }
+  const stage = doc.createElement("div");
+  for (const [name, value] of Object.entries(page.cssVars ?? {})) {
+    stage.style.setProperty(name, value);
+  }
+  container.appendChild(stage);
   doc.body.appendChild(container);
 
   try {
-    const page = container.firstElementChild;
-    if (!page) throw new Error("Пустая разметка отчёта");
+    renderScreenInto(stage, { layout: page.layout, context: page.context });
+    const rendered = stage.firstElementChild;
+    if (!rendered) throw new Error("Макет отчёта ничего не отрисовал");
 
     // Let the browser lay the page out (web fonts, grid) before rasterizing.
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    const canvas = await deps.html2canvas(page, {
+    const canvas = await deps.html2canvas(rendered, {
       scale: 2,
       useCORS: true,
       allowTaint: true,
@@ -90,7 +125,7 @@ export async function exportReportPdf(html: string, testName: string, deps: Expo
     });
 
     // Collect the link boxes while the container is still laid out.
-    const pageRect = page.getBoundingClientRect();
+    const pageRect = rendered.getBoundingClientRect();
     const links: LinkBox[] = [];
     container.querySelectorAll<HTMLElement>(".pdf-link-btn").forEach((chip) => {
       const url = chip.getAttribute("data-url");

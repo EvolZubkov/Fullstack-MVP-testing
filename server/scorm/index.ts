@@ -251,12 +251,20 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   ]);
 
   // PRD-6 retake gate — plain-JS ports of shared/eligibility/* (engine + plugins)
-  // and the runtime gate. Bundled for every package; the gate only runs when the
-  // test carries a retake policy (RetakeGate.isGated), so unpolicied packages are
-  // unaffected at runtime (the bundled bytes differ — see test-json conditional export).
-  const eligibilityEngineJs = readOneOf(["app/eligibility/engine.js"]);
-  const eligibilityPluginsJs = readOneOf(["app/eligibility/plugins.js"]);
-  const eligibilityGateJs = readOneOf(["app/eligibility/gate.js"]);
+  // and the runtime gate. Bundled ONLY when the test actually has the cooldown
+  // restriction switched on: buildTestJson bakes `retakePolicy` + the resolved
+  // `retakePlugin` under exactly that condition, and without them the gate could
+  // never fire (RetakeGate.isGated reads the same two fields), so for every other
+  // package these are dead bytes. bootstrap/main.js guards the call with
+  // `typeof RetakeGate !== "undefined"`, so the absent globals boot the course directly.
+  const retakeGated = !!(
+    patchedTestObj?.retakePolicy?.enabled === true &&
+    patchedTestObj?.retakePolicy?.eligibilityPlugin?.key &&
+    patchedTestObj?.retakePlugin?.runtimeEntry
+  );
+  const eligibilityEngineJs = retakeGated ? readOneOf(["app/eligibility/engine.js"]) : "";
+  const eligibilityPluginsJs = retakeGated ? readOneOf(["app/eligibility/plugins.js"]) : "";
+  const eligibilityGateJs = retakeGated ? readOneOf(["app/eligibility/gate.js"]) : "";
 
   const resultsPageJs = readOneOf([
     "app/render/resultsPage.js",
@@ -424,7 +432,14 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   // FIRST, the template's own theme.css/base.css layer OVER it, and the palette bridge
   // is appended — so `.ou-*` learner screens render identically to the web host offline
   // in the LMS and the DS accent follows the test's --primary.
-  const stylesCss = assemblePackageStyles(readVendorDsCss(), readStyle("theme.css"), readStyle("base.css"));
+  const stylesCss = assemblePackageStyles(
+    readVendorDsCss(),
+    readStyle("theme.css"),
+    readStyle("base.css"),
+    // PRD-27: страница отчёта рисуется макетом шаблона, а её стиль обязан быть в
+    // документе к моменту растеризации — читать файл из рантайма для этого поздно.
+    readStyle("report.css"),
+  );
 
   // PRD-7 G21: default template CSS for fallback system screens. Loaded into the
   // package as `styles-default.css` and toggled active by the runtime only while a

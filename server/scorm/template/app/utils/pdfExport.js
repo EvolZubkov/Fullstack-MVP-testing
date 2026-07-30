@@ -106,7 +106,27 @@ function pdfAdaptiveInput(results) {
 }
 
 /**
+ * Макет отчёта АКТИВНОГО шаблона, либо вложенного `default`, когда активный вида не
+ * объявил (PRD-27 FR-10). `systemLayout` реализует ровно эту деградацию для системных
+ * экранов, поэтому отчёт идёт через неё же.
+ *
+ * @param {string} key `report` либо `report.adaptive`.
+ * @returns {string} Макет; пустая строка — отчёт не собрать.
+ */
+function pdfReportLayout(key) {
+  if (typeof systemLayout === 'function') {
+    var viaFallback = systemLayout(key);
+    if (viaFallback) return viaFallback;
+  }
+  return (typeof state !== 'undefined' && state && state.templateLayouts && state.templateLayouts[key]) || '';
+}
+
+/**
  * Build and download the attempt report.
+ *
+ * Страницу рисует МАКЕТ шаблона через общий рендерер (PRD-27 Фаза 2); CSS отчёта уже в
+ * документе — пакет вкладывает `styles/report.css` в собранный `styles.css`, потому что
+ * читать файл из рантайма к моменту растеризации поздно.
  *
  * @param {Object} results Runtime result (standard or adaptive shape).
  * @param {string} testName Test title.
@@ -122,18 +142,25 @@ async function exportResultsToPDF(results, testName, learnerName, timestamp) {
 
     if (!pdfAssets) pdfAssets = await TB.loadReportAssets(PDF_ASSET_BASE);
 
+    var isAdaptive = TEST_DATA.mode === 'adaptive';
+    var layout = pdfReportLayout(isAdaptive ? 'report.adaptive' : 'report');
+    if (!layout) throw new Error('Шаблон не предоставил макет отчёта');
+
     var meta = {
       testName: testName,
       learnerName: learnerName,
       timestamp: timestamp,
       attemptsCount: (typeof getAllAttempts === 'function') ? getAllAttempts().length : 1
     };
-    var isAdaptive = TEST_DATA.mode === 'adaptive';
-    var html = isAdaptive
-      ? TB.buildAdaptiveReportHtml(Object.assign({}, meta, { result: pdfAdaptiveInput(results) }), pdfAssets)
-      : TB.buildReportHtml(Object.assign({}, meta, { result: pdfStandardInput(results) }), pdfAssets);
+    var opts = {
+      assets: pdfAssets,
+      design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {}
+    };
+    var context = isAdaptive
+      ? TB.buildAdaptiveReportContext(Object.assign({}, meta, { result: pdfAdaptiveInput(results) }), opts)
+      : TB.buildReportContext(Object.assign({}, meta, { result: pdfStandardInput(results) }), opts);
 
-    var fileName = await TB.exportReportPdf(html, testName, {
+    var fileName = await TB.exportReportPdf({ layout: layout, context: context }, testName, {
       jsPDF: window.jspdf && window.jspdf.jsPDF,
       html2canvas: window.html2canvas
     });

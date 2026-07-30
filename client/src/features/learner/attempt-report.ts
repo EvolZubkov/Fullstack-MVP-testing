@@ -11,13 +11,8 @@
  * learner's initial download.
  */
 
-import {
-  buildReportHtml,
-  buildAdaptiveReportHtml,
-  type ReportInput,
-  type AdaptiveReportInput,
-  type ReportAssets,
-} from "@shared/report/report-html";
+import type { ReportInput, AdaptiveReportInput, ReportAssets } from "@shared/report/report-html";
+import { buildReportContext, buildAdaptiveReportContext } from "@shared/report/report-context";
 import { exportReportPdf, loadReportAssets } from "@shared/report/export-pdf";
 
 /** Where the server serves the report's ingredients (see server/routes/report.ts). */
@@ -83,13 +78,31 @@ async function ensureLibs(): Promise<void> {
 export type AttemptReport = ReportInput | AdaptiveReportInput;
 
 /**
+ * Страница отчёта, как её отдаёт `GET /api/attempts/:id/result`: макет выбранного
+ * варианта, его таблица стилей и токены оформления теста. Отсутствует, только когда
+ * ни активный шаблон, ни «Стандартный» макета отчёта не дали.
+ */
+export interface AttemptReportRender {
+  layout: string;
+  css: string;
+  variantKey: string;
+  values: Record<string, unknown>;
+  cssVars?: Record<string, string>;
+  themeCss?: string;
+  design?: Record<string, string>;
+}
+
+/**
  * Build and download the attempt report.
  *
  * @param report Report input from `GET /api/attempts/:id/result`.
  * @returns The saved file name.
  * @throws When the libraries cannot load or rasterizing fails — the caller surfaces it.
  */
-export async function downloadAttemptReport(report: AttemptReport): Promise<string> {
+export async function downloadAttemptReport(
+  report: AttemptReport,
+  render: AttemptReportRender,
+): Promise<string> {
   await ensureLibs();
   if (!assetsPromise) {
     assetsPromise = loadReportAssets(ASSET_BASE).catch(() => {
@@ -99,12 +112,23 @@ export async function downloadAttemptReport(report: AttemptReport): Promise<stri
     });
   }
   const assets = await assetsPromise;
+  // Контекст строится ЗДЕСЬ, а не на сервере: подложка и логотип читаются в браузере
+  // (растеризатору нужны data-URL), а сам построитель — общий с пакетом.
+  const opts = { assets, values: render.values, design: render.design };
   // The server flags the mode (`adaptive`) — the page differs, the input shape follows.
-  const html = report.adaptive
-    ? buildAdaptiveReportHtml(report as AdaptiveReportInput, assets)
-    : buildReportHtml(report as ReportInput, assets);
-  return exportReportPdf(html, report.testName, {
-    jsPDF: window.jspdf!.jsPDF,
-    html2canvas: window.html2canvas!,
-  });
+  const context = report.adaptive
+    ? buildAdaptiveReportContext(report as AdaptiveReportInput, opts)
+    : buildReportContext(report as ReportInput, opts);
+  return exportReportPdf(
+    {
+      layout: render.layout,
+      // Токены темы приходят блоком, скоупленным в `.tb-report` (§6.3).
+      css: render.themeCss ? `${render.css}
+${render.themeCss}` : render.css,
+      cssVars: render.cssVars,
+      context,
+    },
+    report.testName,
+    { jsPDF: window.jspdf!.jsPDF, html2canvas: window.html2canvas! },
+  );
 }
