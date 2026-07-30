@@ -175,6 +175,9 @@ const jsonRes = (body: unknown, ok = true, status = 200) => ({
 
 interface FetchCfg {
   tests?: unknown[];
+  // Second+ answer to `/api/learner/tests` (the ATTEMPTS_EXHAUSTED refresh re-reads
+  // this endpoint). Omit to keep answering with `tests` on every call.
+  testsRefetch?: ReturnType<typeof jsonRes>;
   noStartTpl?: boolean;
   noQuestionTpl?: boolean;
   startAttempt?: ReturnType<typeof jsonRes>;
@@ -185,10 +188,15 @@ interface FetchCfg {
 
 /** Install a per-URL `fetch` stub for one test. */
 function installFetch(cfg: FetchCfg) {
+  let testsCalls = 0;
   const fn = vi.fn(async (url: string, opts?: any) => {
     const u = String(url);
     void opts;
-    if (u === "/api/learner/tests") return jsonRes(cfg.tests ?? [standardTest()]);
+    if (u === "/api/learner/tests") {
+      testsCalls += 1;
+      if (testsCalls > 1 && cfg.testsRefetch) return cfg.testsRefetch;
+      return jsonRes(cfg.tests ?? [standardTest()]);
+    }
     if (u.includes("/screen-template/start"))
       return cfg.noStartTpl ? jsonRes({}, false, 404) : jsonRes(TPL());
     if (u.includes("/screen-template/question"))
@@ -376,11 +384,49 @@ describe("<TakeTestPage /> start gates", () => {
   it("folds exhausted attempts into the start context instead of navigating away", async () => {
     // The learner must keep access to their result: a magic-link session has no
     // test list to fall back to, so the exhausted state renders where they are.
-    await renderToStart({ startAttempt: jsonRes({ code: "ATTEMPTS_EXHAUSTED" }, false, 403) });
+    // The refresh answers with the post-race facts (a real attempt id) — matching
+    // the server invariant that ATTEMPTS_EXHAUSTED never fires without one.
+    await renderToStart({
+      startAttempt: jsonRes({ code: "ATTEMPTS_EXHAUSTED" }, false, 403),
+      testsRefetch: jsonRes([standardTest({ completedAttempts: 3, lastCompletedAttemptId: "attempt-1" })]),
+    });
     fireEvent.click(screen.getByTestId("ts-start-test"));
     await waitFor(() => expect(ctx().state.canViewResults).toBe(true));
     expect(ctx().state.canStart).toBe(false);
     expect(navigateSpy).not.toHaveBeenCalledWith("/learner");
+  });
+
+  // The concrete failure this guards: a hand-faked `completedAttempts` counter
+  // flips `canViewResults` to true while `lastCompletedAttemptId` stays whatever
+  // the stale initial load had — here `null` — leaving «Мой результат» dead. The
+  // fix re-reads `/api/learner/tests` so the id is real.
+  it("re-reads the server facts after a race that exhausts the last attempt, and «Мой результат» opens the real attempt", async () => {
+    await renderToStart({
+      tests: [standardTest({ maxAttempts: 1, completedAttempts: 0, lastCompletedAttemptId: null })],
+      startAttempt: jsonRes({ code: "ATTEMPTS_EXHAUSTED" }, false, 403),
+      testsRefetch: jsonRes([
+        standardTest({ maxAttempts: 1, completedAttempts: 1, lastCompletedAttemptId: "attempt-42" }),
+      ]),
+    });
+    fireEvent.click(screen.getByTestId("ts-start-test"));
+    await waitFor(() => expect(ctx().state.canViewResults).toBe(true));
+    fireEvent.click(screen.getByTestId("ts-view-results"));
+    expect(navigateSpy).toHaveBeenCalledWith("/learner/result/attempt-42");
+  });
+
+  // When the refresh itself cannot be completed (offline / 500), the local
+  // fallback must stop offering a start WITHOUT pretending there is a result to
+  // view — `lastCompletedAttemptId` is left untouched (still null here), so
+  // `hasCompletedResults` (Part 2) keeps «Мой результат» off the screen too.
+  it("falls back to a safe exhausted state (no dead result button) when the refresh itself fails", async () => {
+    await renderToStart({
+      tests: [standardTest({ maxAttempts: 1, completedAttempts: 0, lastCompletedAttemptId: null })],
+      startAttempt: jsonRes({ code: "ATTEMPTS_EXHAUSTED" }, false, 403),
+      testsRefetch: jsonRes({}, false, 500),
+    });
+    fireEvent.click(screen.getByTestId("ts-start-test"));
+    await waitFor(() => expect(ctx().state.canStart).toBe(false));
+    expect(ctx().state.canViewResults).toBe(false);
   });
 
   it("folds a retake cooldown into the start context instead of navigating away", async () => {

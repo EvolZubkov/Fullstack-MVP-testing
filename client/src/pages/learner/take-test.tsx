@@ -222,6 +222,62 @@ type RetakeCooldownFacts = { cooldownPeriodDays?: number; availableDate?: string
 /** Normalized cooldown facts held in component state. */
 type RetakeGateState = { cooldownPeriodDays: number | null; availableDate: string | null; daysUntil: number | null };
 
+/** Start-screen facts derived from one `/api/learner/tests` entry (component state shape). */
+type TestMetadata = {
+  totalQuestions: number;
+  completedAttempts: number;
+  maxAttempts: number | null;
+  timeLimitMinutes: number | null;
+  startPageContent: string | null;
+  passPercent: number | null;
+  hasInProgress: boolean;
+  resumeIndex: number | null;
+  resumeTotal: number | null;
+  lastCompletedAttemptId: string | null;
+  // PRD-19 Block F (FR-19/20): retake cooldown facts resolved server-side, so the
+  // start screen renders the cooldown state (date + disabled button + prior
+  // summary) on the SAME page — no separate block-wall. Null = eligible.
+  retakeGate: RetakeGateState | null;
+  // PRD-19 Block F (FR-19/20): prior-attempt summary («повтор: можно» + cooldown).
+  priorResult: { percent: number; passed: boolean | null; attemptNumber: number | null; maxAttempts: number | null } | null;
+};
+
+/**
+ * Maps one raw `/api/learner/tests` list entry into the `testMetadata` shape.
+ * Used both by the initial load and by the `ATTEMPTS_EXHAUSTED` refresh (a race
+ * where the up-front load was stale), so the two paths can never drift on how a
+ * learner-test payload becomes start-screen facts.
+ */
+function buildTestMetadataFromListEntry(test: any): TestMetadata {
+  const totalQuestions = test.sections?.reduce((sum: number, s: any) => sum + s.drawCount, 0) || 0;
+  let passPercent: number | null = null;
+  if (test.overallPassRuleJson) {
+    const passRule = test.overallPassRuleJson as any;
+    if (passRule.type === "percent") passPercent = passRule.value;
+  }
+  const hasInProgress = test.inProgressAttemptId !== null;
+  return {
+    totalQuestions,
+    completedAttempts: test.completedAttempts || 0,
+    maxAttempts: test.maxAttempts || null,
+    timeLimitMinutes: test.timeLimitMinutes || null,
+    startPageContent: test.startPageContent || null,
+    passPercent,
+    hasInProgress,
+    resumeIndex: test.resumeIndex ?? null,
+    resumeTotal: test.resumeTotal ?? null,
+    lastCompletedAttemptId: test.lastCompletedAttemptId ?? null,
+    retakeGate: test.retakeGate
+      ? {
+          cooldownPeriodDays: test.retakeGate.cooldownPeriodDays ?? null,
+          availableDate: test.retakeGate.availableDate ?? null,
+          daysUntil: test.retakeGate.daysUntil ?? null,
+        }
+      : null,
+    priorResult: test.priorResult ?? null,
+  };
+}
+
 /**
  * The single screen a learner sees when the run cannot be rendered.
  *
@@ -362,24 +418,7 @@ export default function TakeTestPage() {
       setPhase("question");
     }
   }, [phase, contentTpl, pageQueue.length, pendingSubmit]);
-  const [testMetadata, setTestMetadata] = useState<{
-    totalQuestions: number;
-    completedAttempts: number;
-    maxAttempts: number | null;
-    timeLimitMinutes: number | null;
-    startPageContent: string | null;
-    passPercent: number | null;
-    hasInProgress: boolean;
-    resumeIndex: number | null;
-    resumeTotal: number | null;
-    lastCompletedAttemptId: string | null;
-    // PRD-19 Block F (FR-19/20): retake cooldown facts resolved server-side, so the
-    // start screen renders the cooldown state (date + disabled button + prior
-    // summary) on the SAME page — no separate block-wall. Null = eligible.
-    retakeGate: RetakeGateState | null;
-    // PRD-19 Block F (FR-19/20): prior-attempt summary («повтор: можно» + cooldown).
-    priorResult: { percent: number; passed: boolean | null; attemptNumber: number | null; maxAttempts: number | null } | null;
-  } | null>(null);
+  const [testMetadata, setTestMetadata] = useState<TestMetadata | null>(null);
   // PRD-12 web-host: start screen template assets (null -> legacy React markup).
   const [startTpl, setStartTpl] = useState<{
     layout: string;
@@ -690,42 +729,7 @@ export default function TakeTestPage() {
 
         setTestInfo(test);
         setTestMode(test.mode || "standard");
-
-        // Считаем общее количество вопросов
-        const totalQuestions = test.sections?.reduce((sum: number, s: any) => sum + s.drawCount, 0) || 0;
-
-        // Получаем проходной балл из overallPassRule
-        let passPercent: number | null = null;
-        if (test.overallPassRuleJson) {
-          const passRule = test.overallPassRuleJson as any;
-          if (passRule.type === "percent") {
-            passPercent = passRule.value;
-          }
-        }
-
-        // Проверяем есть ли незавершённая попытка
-        const hasInProgress = test.inProgressAttemptId !== null;
-
-        setTestMetadata({
-          totalQuestions,
-          completedAttempts: test.completedAttempts || 0,
-          maxAttempts: test.maxAttempts || null,
-          timeLimitMinutes: test.timeLimitMinutes || null,
-          startPageContent: test.startPageContent || null,
-          passPercent,
-          hasInProgress,
-          resumeIndex: test.resumeIndex ?? null,
-          resumeTotal: test.resumeTotal ?? null,
-          lastCompletedAttemptId: test.lastCompletedAttemptId ?? null,
-          retakeGate: test.retakeGate
-            ? {
-                cooldownPeriodDays: test.retakeGate.cooldownPeriodDays ?? null,
-                availableDate: test.retakeGate.availableDate ?? null,
-                daysUntil: test.retakeGate.daysUntil ?? null,
-              }
-            : null,
-          priorResult: test.priorResult ?? null,
-        });
+        setTestMetadata(buildTestMetadataFromListEntry(test));
 
         // PRD-12 web-host: fetch the screen templates. Best-effort per screen —
         // `review`/`section-results`/`content` have their own fallbacks — but a
@@ -819,8 +823,29 @@ export default function TakeTestPage() {
       }
     } catch (err) {
       if ((err as Error)?.message === "ATTEMPTS_EXHAUSTED") {
-        // Show the exhausted state where the learner already is: buildStartState
-        // renders «Мой результат» once completed >= max, so only the facts change.
+        // The attempts ran out between loading the start screen and this click
+        // (a race — e.g. another tab). Re-read the server's own facts rather than
+        // guessing them: the exhausted start screen offers «Мой результат», and
+        // that needs a real attempt id, not a hand-faked counter. Server invariant
+        // (server/routes/attempts.ts): ATTEMPTS_EXHAUSTED is only returned when a
+        // completed attempt already exists, so the local fallback below is
+        // defensive (a failed refresh), not a real branch of this race.
+        try {
+          const res = await fetch("/api/learner/tests", { credentials: "include" });
+          if (res.ok) {
+            const list = (await res.json()) as Array<Record<string, unknown>>;
+            const fresh = list.find((it) => it.id === testId);
+            if (fresh) {
+              setTestMetadata(buildTestMetadataFromListEntry(fresh));
+              setPhase("start");
+              return;
+            }
+          }
+        } catch {
+          // Offline or a failed refresh: fall through to the local fallback below.
+        }
+        // Refresh unavailable: at least stop offering a start, even though we
+        // cannot know the real attempt id for «Мой результат» yet.
         setTestMetadata((m) =>
           m
             ? { ...m, completedAttempts: m.maxAttempts ?? m.completedAttempts, hasInProgress: false }
@@ -2435,7 +2460,9 @@ export default function TakeTestPage() {
         testMetadata.hasInProgress && !exhausted && testMode !== "adaptive"
           ? { index: testMetadata.resumeIndex ?? 0, total: testMetadata.resumeTotal ?? 0 }
           : null,
-      hasCompletedResults: testMetadata.completedAttempts > 0,
+      // «Мой результат» must only appear when there is an attempt to open — a
+      // completed-attempt count with no id would render a dead button.
+      hasCompletedResults: testMetadata.lastCompletedAttemptId !== null,
       canStartNew: !exhausted,
       cooldown: gate
         ? {
