@@ -188,7 +188,8 @@ describe("sendAssignmentEmail", () => {
     expect(call.html).toContain(
       "Для прохождения теста нажмите на кнопку ниже — вход произойдёт автоматически, пароль не требуется:",
     );
-    expect(call.html).toContain(`<a href="${base.magicLink}" class="button">Пройти тест</a>`);
+    expect(call.html).toContain(`<a href="${base.magicLink}" class="button"`);
+    expect(call.html).toContain("Пройти тест");
     expect(call.html).toContain("Ссылка персональная — не передавайте её другим людям.");
     expect(call.text).toContain("Для прохождения перейдите по ссылке (пароль не требуется):");
     expect(call.text).toContain("Ссылка персональная — не передавайте её другим.");
@@ -216,6 +217,30 @@ describe("sendInviteEmail", () => {
   it("returns false when the transport throws", async () => {
     m.sendMail.mockRejectedValueOnce(new Error("nope"));
     expect(await sendInviteEmail(base)).toBe(false);
+  });
+});
+
+// Regression (2026-07-31): the button label came out accent-on-accent — the
+// colour lived only in the `<style>` block and mail clients overrode the anchor
+// with their own link colour. Every call-to-action must carry the contrasting
+// colour inline (and `!important`, which outranks the client's stylesheet).
+describe("call-to-action button contrast", () => {
+  const cases: Array<[string, () => Promise<unknown>]> = [
+    ["password reset", () => sendPasswordResetEmail("u@x.test", "https://reset")],
+    ["assignment (magic link)", () => sendAssignmentEmail({ to: "u@x.test", testTitle: "Q", magicLink: "https://go" })],
+    ["assignment (login fallback)", () => sendAssignmentEmail({ to: "u@x.test", testTitle: "Q" })],
+    ["invite", () => sendInviteEmail({ to: "u@x.test", inviteLink: "https://invite" })],
+  ];
+
+  it.each(cases)("%s: the button carries an inline !important colour", async (_name, send) => {
+    await send();
+    const html = m.sendMail.mock.calls[0][0].html as string;
+    const anchor = html.match(/<a[^>]*class="button"[^>]*>.*?<\/a>/s)?.[0];
+    expect(anchor).toBeDefined();
+    // Both the anchor and its inner span state the colour explicitly.
+    expect(anchor!.match(/color:\s*#FFFFFF\s*!important/gi)?.length).toBeGreaterThanOrEqual(2);
+    // ...and it is NOT the accent the button sits on.
+    expect(anchor).not.toMatch(/color:\s*#7700FF/i);
   });
 });
 
