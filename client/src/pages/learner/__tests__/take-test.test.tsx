@@ -373,13 +373,14 @@ describe("<TakeTestPage /> standard flow", () => {
 // ─── start-screen gates ────────────────────────────────────────────────────────
 
 describe("<TakeTestPage /> start gates", () => {
-  it("toasts and returns to the list when attempts are exhausted", async () => {
+  it("folds exhausted attempts into the start context instead of navigating away", async () => {
+    // The learner must keep access to their result: a magic-link session has no
+    // test list to fall back to, so the exhausted state renders where they are.
     await renderToStart({ startAttempt: jsonRes({ code: "ATTEMPTS_EXHAUSTED" }, false, 403) });
     fireEvent.click(screen.getByTestId("ts-start-test"));
-    await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Попытки закончились" })),
-    );
-    expect(navigateSpy).toHaveBeenCalledWith("/learner");
+    await waitFor(() => expect(ctx().state.canViewResults).toBe(true));
+    expect(ctx().state.canStart).toBe(false);
+    expect(navigateSpy).not.toHaveBeenCalledWith("/learner");
   });
 
   it("folds a retake cooldown into the start context instead of navigating away", async () => {

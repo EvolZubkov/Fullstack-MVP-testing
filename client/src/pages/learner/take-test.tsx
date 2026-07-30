@@ -818,6 +818,17 @@ export default function TakeTestPage() {
         else setPhase("question");
       }
     } catch (err) {
+      if ((err as Error)?.message === "ATTEMPTS_EXHAUSTED") {
+        // Show the exhausted state where the learner already is: buildStartState
+        // renders «Мой результат» once completed >= max, so only the facts change.
+        setTestMetadata((m) =>
+          m
+            ? { ...m, completedAttempts: m.maxAttempts ?? m.completedAttempts, hasInProgress: false }
+            : m,
+        );
+        setPhase("start");
+        return;
+      }
       const retake = (err as { retake?: RetakeCooldownFacts }).retake;
       if ((err as Error)?.message === "RETAKE_COOLDOWN") {
         // PRD-19 Block F (FR-20): a cooldown that the up-front gate missed (a race —
@@ -1026,13 +1037,10 @@ export default function TakeTestPage() {
     if (!res.ok) {
       const error = await res.json();
       if (error.code === "ATTEMPTS_EXHAUSTED") {
-        toast({
-          variant: "destructive",
-          title: "Попытки закончились",
-          description: "Вы исчерпали все попытки для этого теста",
-        });
-        navigate("/learner");
-        return;
+        // Race: the attempts ran out between loading the start screen and this
+        // click (another tab). Rethrow so the shared catch can fold the fact into
+        // the start screen — a magic-link session has no test list to fall back to.
+        throw new Error("ATTEMPTS_EXHAUSTED");
       }
       if (error.code === "RETAKE_COOLDOWN") {
         const e = new Error("RETAKE_COOLDOWN") as Error & {
@@ -1158,13 +1166,10 @@ export default function TakeTestPage() {
     if (!res.ok) {
       const error = await res.json();
       if (error.code === "ATTEMPTS_EXHAUSTED") {
-        toast({
-          variant: "destructive",
-          title: "Попытки закончились",
-          description: "Вы исчерпали все попытки для этого теста",
-        });
-        navigate("/learner");
-        return;
+        // Race: the attempts ran out between loading the start screen and this
+        // click (another tab). Rethrow so the shared catch can fold the fact into
+        // the start screen — a magic-link session has no test list to fall back to.
+        throw new Error("ATTEMPTS_EXHAUSTED");
       }
       throw new Error("Failed to start adaptive attempt");
     }
