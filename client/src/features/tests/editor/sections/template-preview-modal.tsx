@@ -19,6 +19,8 @@ import { buildScreenInputs, type PreviewDemoDataset } from "@shared/template/pre
 import { buildTemplateCssVars } from "@shared/template/params-css";
 import { baseParams, buildTemplateThemeCss } from "@shared/template/theme-css";
 import { declaredThemes, type TestTheme, type ThemeId } from "@shared/template/themes";
+import { buildRail } from "@/features/templates/preview-rail";
+import { TemplatePreviewRail } from "@/features/templates/preview-rail-nav";
 import { useTemplateBundle } from "./use-template-bundle";
 import type { TemplateRow } from "../use-design-settings";
 
@@ -52,6 +54,20 @@ export function TemplatePreviewModal({ open, onClose, template, params, theme, p
     [bundle],
   );
   const specById = useMemo(() => new Map(specs.map((s) => [s.id, s])), [specs]);
+  // The SAME grouped rail «Шаблоны» shows (Раздел → Вариант → демонстрации). A flat
+  // list of every demo screen is unreadable once a template ships a dozen
+  // learning-page variants — same-type screens belong in one branch.
+  const rail = useMemo(() => buildRail(specs), [specs]);
+  const [openVariants, setOpenVariants] = useState<Set<string>>(new Set());
+
+  const toggleVariant = (key: string) => {
+    setOpenVariants((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   // Draft params → CSS variables, via the SAME mapping the runtime uses. PRD-23:
   // for a template with palettes the colours leave this map and become a CSS block
@@ -88,9 +104,12 @@ export function TemplatePreviewModal({ open, onClose, template, params, theme, p
           specs.find((s) => s.route === wanted)?.id ??
           specs[0].id,
       );
+      // Branches open, as in «Шаблоны»: the author must SEE the demonstrations, and
+      // a rail that opens fully collapsed hides the very screens it lists.
+      setOpenVariants(new Set(rail.flatMap((s) => s.variants.map((v) => v.key))));
     }
     if (!open) setSelectedId(null);
-  }, [open, template?.id, specs, bundle]);
+  }, [open, template?.id, specs, rail, bundle]);
 
   if (!template) return null;
 
@@ -129,20 +148,15 @@ export function TemplatePreviewModal({ open, onClose, template, params, theme, p
 
         {bundle && specs.length > 0 && (
           <div className="tpl-check-split">
-            <nav className="tpl-check-rail" aria-label="Экраны шаблона">
-              {specs.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className={"tpl-check-rail__var tpl-check-rail__var--top" + (s.id === selectedId ? " is-active" : "")}
-                  aria-current={s.id === selectedId ? "page" : undefined}
-                  onClick={() => setSelectedId(s.id)}
-                  data-testid={`design-template-preview-screen-${s.id}`}
-                >
-                  <span>{s.label ?? s.route}</span>
-                </button>
-              ))}
-            </nav>
+            <TemplatePreviewRail
+              rail={rail}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              openVariants={openVariants}
+              onToggleVariant={toggleVariant}
+              ariaLabel="Экраны шаблона"
+              screenTestId={(id) => `design-template-preview-screen-${id}`}
+            />
 
             <div className="tpl-check-stage">
               {themes.length >= 2 && (
@@ -176,7 +190,9 @@ export function TemplatePreviewModal({ open, onClose, template, params, theme, p
                   </p>
                 )}
               </div>
-              <div className="tpl-check-stage__caption">{selectedSpec?.label ?? selectedSpec?.route ?? ""}</div>
+              <div className="tpl-check-stage__caption" data-testid="design-template-preview-caption">
+                {selectedSpec?.label ?? selectedSpec?.route ?? ""}
+              </div>
             </div>
           </div>
         )}

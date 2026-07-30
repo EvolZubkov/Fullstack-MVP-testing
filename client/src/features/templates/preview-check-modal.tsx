@@ -13,13 +13,20 @@
  * check summary and the selected variant's messages — blocking errors and
  * non-blocking warnings are both spelled out, so a yellow dot is readable and
  * not just countable.
+ *
+ * PRD-23: a template that declares `themes[]` ships a palette per theme, so the
+ * stage carries the same palette switch as the editor's preview
+ * ({@link module:features/tests/editor/sections/template-preview-modal}). Without it
+ * the registry showed only whichever palette `prefers-color-scheme` happened to pick,
+ * and an admin could neither see nor health-check the other one.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Banner, Button, ModalDialog } from "@universityrt/ui-kit";
-import { AlertTriangle, ChevronRight, Play, Power, RefreshCw, X } from "lucide-react";
+import { Banner, Button, ModalDialog, SegmentedControl } from "@universityrt/ui-kit";
+import { AlertTriangle, Play, Power, RefreshCw, X } from "lucide-react";
 import { TemplateScreen } from "@/components/template-screen";
 import { buildScreenInputs } from "@shared/template/preview-context";
+import { declaredThemes, type ThemeId } from "@shared/template/themes";
 import { runSmokeChecks, type SmokeReport, type SmokeRouteResult } from "@shared/template/smoke-runner";
 import {
   fetchSmokeBundle,
@@ -29,6 +36,7 @@ import {
   type SmokeBundle,
 } from "./use-admin-templates";
 import { buildRail, variantStatus, type RailVariant } from "./preview-rail";
+import { TemplatePreviewRail } from "./preview-rail-nav";
 
 export interface PreviewCheckModalProps {
   open: boolean;
@@ -57,12 +65,22 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openVariants, setOpenVariants] = useState<Set<string>>(new Set());
 
+  // PRD-23: palettes the template declares. Two or more is a CHOICE — then the
+  // stage is pinned to one of them and the switch flips between them. With a single
+  // palette nothing is pinned, so the template's own `prefers-color-scheme` rules
+  // decide, exactly as they do in a run.
+  const themes = useMemo(() => declaredThemes(bundle?.manifest), [bundle]);
+  const [stageTheme, setStageTheme] = useState<ThemeId | null>(null);
+  const shownTheme: ThemeId | null =
+    themes.length >= 2 ? (stageTheme ?? themes[0].id) : null;
+
   // Reset per open / template switch.
   useEffect(() => {
     if (open) {
       setReport(template.smokeTestJson ?? null);
       setSelectedId(null);
       setRunning(false);
+      setStageTheme(null);
     }
   }, [open, template.id, template.smokeTestJson]);
 
@@ -252,66 +270,20 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
 
       {bundle && (
         <div className="tpl-check-split">
-          <nav className="tpl-check-rail" aria-label="Экраны шаблона по разделам">
-            {rail.map((section) => (
-              <div key={section.key}>
-                <div className="tpl-check-rail__section">{section.label}</div>
-                {section.variants.map((variant) => {
-                  // Two-level rail: a variant with a single demonstration is shown as
-                  // the screen itself (no redundant middle level). The collapsible
-                  // group appears ONLY when a variant has 2+ demonstrations.
-                  if (variant.screens.length === 1) {
-                    const screen = variant.screens[0];
-                    return (
-                      <button
-                        key={screen.id}
-                        type="button"
-                        className={"tpl-check-rail__var tpl-check-rail__var--top" + (screen.id === selectedId ? " is-active" : "")}
-                        aria-current={screen.id === selectedId ? "page" : undefined}
-                        onClick={() => setSelectedId(screen.id)}
-                      >
-                        <span>{variant.label}</span>
-                        <span className={dotClass(screen.id)} aria-hidden="true" />
-                      </button>
-                    );
-                  }
-                  const isOpen = openVariants.has(variant.key);
-                  return (
-                    <div key={variant.key}>
-                      <button
-                        type="button"
-                        className={"tpl-check-rail__type" + (isOpen ? " is-open" : "")}
-                        onClick={() => toggleVariant(variant.key)}
-                        aria-expanded={isOpen ? "true" : "false"}
-                      >
-                        <ChevronRight size={14} className="tpl-check-rail__chevron" aria-hidden="true" />
-                        <span className="tpl-check-rail__type-label">{variant.label}</span>
-                        {/* The group dot carries the WORST status of its demonstrations,
-                            so a collapsed variant never hides a failing slide. */}
-                        <span className={dotClassFor(variantStatus(variant, statusById))} aria-hidden="true" />
-                        <span className="tpl-check-rail__type-n" aria-label={`демонстраций: ${variant.screens.length}`}>
-                          {variant.screens.length}
-                        </span>
-                      </button>
-                      {isOpen &&
-                        variant.screens.map((screen) => (
-                          <button
-                            key={screen.id}
-                            type="button"
-                            className={"tpl-check-rail__var" + (screen.id === selectedId ? " is-active" : "")}
-                            aria-current={screen.id === selectedId ? "page" : undefined}
-                            onClick={() => setSelectedId(screen.id)}
-                          >
-                            <span>{screen.label}</span>
-                            <span className={dotClass(screen.id)} aria-hidden="true" />
-                          </button>
-                        ))}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
+          <TemplatePreviewRail
+            rail={rail}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            openVariants={openVariants}
+            onToggleVariant={toggleVariant}
+            ariaLabel="Экраны шаблона по разделам"
+            screenDot={(id) => <span className={dotClass(id)} aria-hidden="true" />}
+            // The group dot carries the WORST status of its demonstrations, so a
+            // collapsed variant never hides a failing slide.
+            variantDot={(variant) => (
+              <span className={dotClassFor(variantStatus(variant, statusById))} aria-hidden="true" />
+            )}
+          />
 
           <div className="tpl-check-stage">
             {summary}
@@ -354,6 +326,21 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
               </div>
             )}
 
+            {/* Directly above the stage it controls — same control, same class and
+                same position as the editor's preview (PRD-23). */}
+            {themes.length >= 2 && (
+              <div className="tpl-check-stage__themes">
+                <SegmentedControl<ThemeId>
+                  size="s"
+                  items={themes.map((t) => ({ value: t.id, label: t.label }))}
+                  value={shownTheme ?? themes[0].id}
+                  onChange={(v) => setStageTheme(v)}
+                  aria-label="Палитра предпросмотра"
+                  data-testid="tpl-check-preview-theme"
+                />
+              </div>
+            )}
+
             <div className="tpl-check-stage__frame">
               {selectedSpec && selectedLayout != null ? (
                 <TemplateScreen
@@ -362,6 +349,8 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
                   slots={selectedSpec.input.slots}
                   content={selectedSpec.input.content}
                   css={bundle.css}
+                  dataTheme={shownTheme ?? undefined}
+                  themed={themes.length >= 2}
                   shell={bundle.manifest.mountShell ? bundle.layouts.shell : undefined}
                   onAction={handleStageAction}
                 />

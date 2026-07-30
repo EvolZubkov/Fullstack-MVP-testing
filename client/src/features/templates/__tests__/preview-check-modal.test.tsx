@@ -43,8 +43,16 @@ vi.mock("../preview-rail", async (importOriginal) => ({
 // The stub stands in for the rendered screen's own «Далее»/«Назад», which the real
 // renderer delegates to `onAction` as `nav:next` / `nav:prev`.
 vi.mock("@/components/template-screen", () => ({
-  TemplateScreen: ({ onAction }: { onAction?: (action: string) => void }) => (
-    <div data-testid="template-screen">
+  TemplateScreen: ({
+    onAction,
+    dataTheme,
+    themed,
+  }: {
+    onAction?: (action: string) => void;
+    dataTheme?: string;
+    themed?: boolean;
+  }) => (
+    <div data-testid="template-screen" data-theme={dataTheme ?? ""} data-themed={themed ? "1" : "0"}>
       <button type="button" onClick={() => onAction?.("nav:next")}>
         demo-next
       </button>
@@ -306,6 +314,49 @@ describe("<PreviewCheckModal /> variant rail (Э3)", () => {
     // The group is collapsible, so a failing slide must not hide behind a green dot.
     const groupDot = document.querySelector(".tpl-check-rail__type .tpl-check-dot");
     expect(groupDot?.className).toContain("tpl-check-dot--fail");
+  });
+});
+
+describe("<PreviewCheckModal /> palette switch (PRD-23)", () => {
+  const themedBundle = {
+    ...bundle,
+    manifest: {
+      preview: {},
+      themes: [
+        { id: "light", label: "Светлая" },
+        { id: "dark", label: "Тёмная" },
+      ],
+    },
+  };
+
+  it("offers the palette switch for a template that declares themes", async () => {
+    h.fetchSmokeBundle.mockResolvedValue(themedBundle);
+    renderModal();
+    expect(await screen.findByTestId("tpl-check-preview-theme")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Светлая" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Тёмная" })).toBeInTheDocument();
+    // The stage opens on the first declared palette and knows it is themed.
+    expect(screen.getByTestId("template-screen")).toHaveAttribute("data-theme", "light");
+    expect(screen.getByTestId("template-screen")).toHaveAttribute("data-themed", "1");
+  });
+
+  it("repaints the stage in the palette the admin picked", async () => {
+    h.fetchSmokeBundle.mockResolvedValue(themedBundle);
+    renderModal();
+    await screen.findByTestId("tpl-check-preview-theme");
+    fireEvent.click(screen.getByRole("button", { name: "Тёмная" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("template-screen")).toHaveAttribute("data-theme", "dark"),
+    );
+  });
+
+  it("shows no switch for a template with a single palette — there is nothing to switch", async () => {
+    renderModal();
+    await screen.findByText("Начало");
+    expect(screen.queryByTestId("tpl-check-preview-theme")).not.toBeInTheDocument();
+    // No pinned palette: the template's own `prefers-color-scheme` rules decide.
+    expect(screen.getByTestId("template-screen")).toHaveAttribute("data-theme", "");
+    expect(screen.getByTestId("template-screen")).toHaveAttribute("data-themed", "0");
   });
 });
 
