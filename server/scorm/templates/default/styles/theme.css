@@ -294,6 +294,11 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-cover__content { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: var(--ou-space-6); }
 .tb-cover__head { display: flex; flex-direction: column; gap: var(--ou-space-3); }
 .tb-cover__eyebrow { display: flex; align-items: center; gap: var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+/* Both of the row's children are gated (attempt line / «Попытки исчерпаны»), and a
+   test without an attempt cap prints neither. The empty row is 0px tall but still
+   takes the head's row-gap, so it would push the title down by a line's gap.
+   `:empty` cannot be used — the layout leaves whitespace text nodes behind. */
+.tb-cover__eyebrow:not(:has(*)) { display: none; }
 .tb-cover__title { margin: 0; font-weight: 700; font-size: 44px; line-height: 1.08; letter-spacing: -0.02em; color: var(--ou-fg-default); text-wrap: pretty; }
 .tb-cover__desc { margin: 0; font: var(--ou-text-body-l); color: var(--ou-fg-soft); max-width: 60ch; text-wrap: pretty; }
 .tb-cover__note { display: flex; flex-direction: column; gap: var(--ou-space-1); }
