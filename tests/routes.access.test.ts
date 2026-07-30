@@ -111,4 +111,23 @@ describe("GET /access/:token", () => {
     expect(res.text).toContain("Произошла ошибка");
     expect(loggerMock.error).toHaveBeenCalledTimes(1);
   });
+
+  it("marks the session as scoped to the assignment and the test", async () => {
+    storageMock.getAssignmentAccessToken.mockResolvedValue(makeRecord());
+    const app = makeApp();
+    // A probe route reports what the magic link put into the session.
+    app.get("/probe", (req, res) => res.json({ magic: (req.session as unknown as { magic?: unknown }).magic }));
+
+    const agent = request.agent(app);
+    await agent.get(`/access/${validToken}`);
+    const probe = await agent.get("/probe");
+    expect(probe.body.magic).toEqual({ assignmentId: "asgn1", testId: "test1" });
+  });
+
+  it("sends the hygiene headers so the raw token cannot leak", async () => {
+    storageMock.getAssignmentAccessToken.mockResolvedValue(makeRecord());
+    const res = await request(makeApp()).get(`/access/${validToken}`);
+    expect(res.headers["referrer-policy"]).toBe("no-referrer");
+    expect(res.headers["cache-control"]).toContain("no-store");
+  });
 });

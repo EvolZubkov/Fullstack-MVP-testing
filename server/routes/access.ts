@@ -2,12 +2,18 @@ import { Router, Request, Response } from "express";
 import { createHash } from "crypto";
 import { logger } from "../logger";
 import { storage } from "../storage";
+import "../middleware/magic-scope";
 
 const router = Router();
 
 // GET /access/:token — вход по magic link без пароля
 router.get("/:token", async (req: Request, res: Response) => {
   const { token } = req.params;
+
+  // The raw token is in the URL of THIS request: never let it travel onward in a
+  // Referer header and never let a cache keep the response.
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Cache-Control", "no-store");
 
   if (!token || token.length < 32) {
     return res.status(400).send(renderErrorPage("Недействительная ссылка"));
@@ -29,8 +35,10 @@ router.get("/:token", async (req: Request, res: Response) => {
       return res.status(403).send(renderErrorPage("Срок действия ссылки истёк. Обратитесь к организатору теста."));
     }
 
-    // Устанавливаем сессию для пользователя
+    // The link is access to ONE test, not a login: the session is marked so the
+    // scope guard can hold it inside that test. A password login clears the mark.
     req.session.userId = record.userId;
+    req.session.magic = { assignmentId: record.assignmentId, testId: record.testId };
     await new Promise<void>((resolve, reject) =>
       req.session.save(err => err ? reject(err) : resolve())
     );
