@@ -94,7 +94,7 @@ export function HomePage() {
 
   if (left.length === 0 && right.length === 0) {
     return (
-      <Box padX={6} padY={8} data-testid="home-no-sections">
+      <Box data-testid="home-no-sections">
         <EmptyState
           title="Нет доступных разделов"
           description="Вашей учётной записи не назначено ни одной роли. Обратитесь к администратору."
@@ -103,8 +103,12 @@ export function HomePage() {
     );
   }
 
+  // No outer padding here: in the author shell `.ou-shell__main` already applies
+  // it, exactly as on «Темы и вопросы» and «Тесты», which render their content
+  // bare. The learner shell has no such padding, so the route wrapper supplies it
+  // there — see pages/home.tsx.
   return (
-    <Box padX={6} padY={8}>
+    <>
       <PageHeader title="Главная" description="Что происходит и что можно продолжить" />
       {right.length === 0 ? (
         <Stack gap={4}>{left}</Stack>
@@ -114,6 +118,6 @@ export function HomePage() {
           <Stack gap={4}>{right}</Stack>
         </Grid>
       )}
-    </Box>
+    </>
   );
 }

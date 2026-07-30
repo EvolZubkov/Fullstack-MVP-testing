@@ -9,6 +9,7 @@
  * cleaner, but it is out of this PRD's scope and needs its own wireframes
  * (decision D-5) — so the shell is picked here rather than unified.
  */
+import { Box } from "@universityrt/ui-kit";
 import { AuthorLayout } from "@/pages/author/layout";
 import { LearnerLayout } from "@/pages/learner/layout";
 import { HomePage } from "@/features/home/home-page";
@@ -33,10 +34,26 @@ const AUTHOR_AREA: Capability[] = [
 
 export default function HomeRoute() {
   const { can } = useAuth();
-  const Shell = AUTHOR_AREA.some((cap) => can(cap)) ? AuthorLayout : LearnerLayout;
+  const inAuthorArea = AUTHOR_AREA.some((cap) => can(cap));
+
+  // Page padding differs by shell, so it belongs here — the only place that knows
+  // which shell is in play. The author shell already pads `.ou-shell__main`, and
+  // its pages (см. «Темы и вопросы», «Тесты») add none of their own; adding one
+  // here would inset the home page deeper than every other author screen. The
+  // learner shell pads nothing, so its pages carry their own — matched to the
+  // learner test list.
+  if (inAuthorArea) {
+    return (
+      <AuthorLayout>
+        <HomePage />
+      </AuthorLayout>
+    );
+  }
   return (
-    <Shell>
-      <HomePage />
-    </Shell>
+    <LearnerLayout>
+      <Box padX={6} padY={8}>
+        <HomePage />
+      </Box>
+    </LearnerLayout>
   );
 }
