@@ -97,13 +97,32 @@ function cssVar(css: string, name: string): string {
 /**
  * Presence of a design custom property (e.g. `--primary`) in the resolved payload.
  * A colour param lands in the inline `cssVars` for a plain template, or in the
- * `themeCss` block for a PRD-23 themed one — the palette bridge must fire in either
- * case. Returns the resolved value (a truthy marker) or `undefined` when unset, so
- * {@link module:shared/template/palette-bridge buildPaletteBridge} overrides only the
- * DS tokens the test actually branded (an unbranded var keeps the DS default).
+ * `themeCss` block for a PRD-23 themed one — and when the AUTHOR set nothing, the
+ * property still exists: the TEMPLATE'S OWN stylesheet declares it. All three count.
+ *
+ * Why the template's own stylesheet must count: the editor shows an unset colour row
+ * as INHERITED from the template (`extractThemeTokens` over this very stylesheet), so
+ * the scene has to paint that inherited colour. Keying the bridge on author params
+ * alone broke exactly that promise — a template whose brand lives in `theme.css` with
+ * `default: null` params (the PRD-23 pattern) rendered the DS purple until the author
+ * retyped the colour the editor was already showing them. The `default` template hid
+ * it, its `theme.css` primary BEING the DS purple, and the package never had it
+ * (`assemblePackageStyles` fires the bridge unconditionally) — so the same test came
+ * out orange in the export and purple on the web.
+ *
+ * Firing on mere presence is safe: the bridge emits `hsl(var(--primary))`, a LIVE
+ * reference, so whatever wins the cascade — author param or template default — is what
+ * paints. A template that declares no palette at all still gets no bridge and keeps
+ * the DS defaults.
  */
-function paletteVar(name: string, cssVars: Record<string, string>, themeCss: string): string | undefined {
-  return cssVars[name] ?? (themeCss.includes(`${name}:`) ? "1" : undefined);
+function paletteVar(
+  name: string,
+  cssVars: Record<string, string>,
+  themeCss: string,
+  templateCss: string,
+): string | undefined {
+  if (cssVars[name] != null) return cssVars[name];
+  return themeCss.includes(`${name}:`) || templateCss.includes(`${name}:`) ? "1" : undefined;
 }
 
 function readFileSafe(p: string): string {
@@ -245,10 +264,10 @@ export function readScreenTemplate(
     // брендируется палитрой теста. Ссылки на var(--…) — живые, значение
     // подставляет активная тема (cssVars инлайном / themeCss на :host).
     const bridge = buildPaletteBridge({
-      primary: paletteVar("--primary", cssVars, themeCss),
-      background: paletteVar("--background", cssVars, themeCss),
-      card: paletteVar("--card", cssVars, themeCss),
-      border: paletteVar("--border", cssVars, themeCss),
+      primary: paletteVar("--primary", cssVars, themeCss, css),
+      background: paletteVar("--background", cssVars, themeCss, css),
+      card: paletteVar("--card", cssVars, themeCss, css),
+      border: paletteVar("--border", cssVars, themeCss, css),
     });
     return {
       layout,

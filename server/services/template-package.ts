@@ -17,6 +17,7 @@ import path from "node:path";
 import JSZip from "jszip";
 import { buildZip } from "../scorm/zip";
 import { withTemplateAssetBase } from "@shared/template/asset-base";
+import { buildPaletteBridge } from "@shared/template/palette-bridge";
 
 /** Root directory for extracted uploaded template packages. */
 export const uploadedTemplatesDir = path.resolve(process.cwd(), "uploads", "templates");
@@ -220,10 +221,30 @@ export async function readTemplateBundle(
     }
   }
 
-  const css = (m.assets?.styles ?? [])
+  const templateCss = (m.assets?.styles ?? [])
     .map((rel) => read(rel))
     .filter((s): s is string => s != null)
     .join("\n");
+
+  // The `.ou-*` learner markup takes every accent from the DS ramp, not from
+  // `--primary`, so the bundle must carry the palette bridge exactly like the other two
+  // hosts do (`assemblePackageStyles` for the package, `readScreenTemplate` for the web
+  // screens). Without it every author-facing preview painted the DS purple no matter
+  // what the template's palette said — the admin registry card, its preview + health
+  // check, and the editor's template/page previews all read THIS bundle.
+  //
+  // Gated on the template actually declaring the token, and emitting a live
+  // `hsl(var(--primary))` reference, so a template with no palette keeps the DS
+  // defaults and an author override still wins (the host applies params on top).
+  const has = (name: string): string | undefined =>
+    templateCss.includes(`${name}:`) ? "1" : undefined;
+  const bridge = buildPaletteBridge({
+    primary: has("--primary"),
+    background: has("--background"),
+    card: has("--card"),
+    border: has("--border"),
+  });
+  const css = bridge ? `${templateCss}\n${bridge}` : templateCss;
 
   return { manifest, demo, layouts, css };
 }
