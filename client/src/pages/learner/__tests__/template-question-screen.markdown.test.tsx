@@ -42,7 +42,15 @@ function promptHtml(prompt: string): string {
       answer={undefined}
       shuffleMapping={undefined}
       onAnswer={() => {}}
-      footer={<span />}
+      nav={{
+        flexible: false,
+        committed: false,
+        canPrev: false,
+        answerReady: true,
+        hasNext: true,
+        showAccept: false,
+        showReview: false,
+      }}
     />,
   );
   const host = container.querySelector("[data-template-screen]") as HTMLElement;

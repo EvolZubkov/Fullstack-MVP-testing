@@ -12,6 +12,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { buildQuestionNav } from "@shared/template/question-nav";
 
 // Shared spies created before the hoisted vi.mock factories run.
 const { navigateSpy, toastSpy } = vi.hoisted(() => ({
@@ -58,7 +59,23 @@ vi.mock("../template-question-screen", () => ({
       <button data-testid="qs-answer-1" onClick={() => props.onAnswer(1)}>
         a1
       </button>
-      {props.footer !== undefined ? (
+      {props.nav ? (
+        // The row lives in the TEMPLATE now; the double renders the same buttons the
+        // layout does from the shared nav context, so the flows exercise real state.
+        (() => { const n = buildQuestionNav(props.nav); return (
+        <div data-testid="qs-nav">
+          {n.showBack && (
+            <button type="button" disabled={!n.canPrev} onClick={() => props.onNavAction?.("answer-back")}>← Назад</button>
+          )}
+          {n.showSkip && (
+            <button type="button" onClick={() => props.onNavAction?.("answer-skip")}>Пропустить</button>
+          )}
+          {n.showReview && (
+            <button type="button" onClick={() => props.onNavAction?.("answer-return")}>К обзору</button>
+          )}
+          <button type="button" disabled={!n.primaryEnabled} onClick={() => props.onNavAction?.(n.primaryAction)}>{n.primaryLabel}</button>
+        </div>); })()
+      ) : props.footer !== undefined ? (
         <div data-testid="qs-footer">{props.footer}</div>
       ) : (
         <div data-testid="qs-nav">
@@ -284,7 +301,7 @@ describe("<TakeTestPage /> standard flow", () => {
   it("advances to the next question after answering and pressing next", async () => {
     await renderToQuestion();
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-next"));
+    fireEvent.click(screen.getByText("Далее"));
     await waitFor(() =>
       expect(screen.getByTestId("qs-counter").textContent).toContain("Вопрос 2 из 2"),
     );
@@ -293,35 +310,37 @@ describe("<TakeTestPage /> standard flow", () => {
   it("submits and navigates to the result when every question is answered", async () => {
     await renderToQuestion();
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-next"));
-    await screen.findByTestId("qs-submit");
+    fireEvent.click(screen.getByText("Далее"));
+    await screen.findByText("Завершить тест");
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-submit"));
+    fireEvent.click(screen.getByText("Завершить тест"));
     await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith("/learner/result/attempt-1"));
   });
 
-  it("blocks submit with a toast when questions remain unanswered (strict)", async () => {
+  // The shared nav row gates the forward button on a usable answer — the SAME gate
+  // the SCORM runtime applies (`submitDisabledAttr`). So an unanswered last question
+  // cannot reach submit at all: the button is inert rather than toasting afterwards.
+  it("keeps the strict finish button inert while the question has no answer", async () => {
     await renderToQuestion();
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-next"));
-    await screen.findByTestId("qs-submit");
+    fireEvent.click(screen.getByText("Далее"));
+    const finish = await screen.findByText("Завершить тест");
     // Do NOT answer question 2.
-    fireEvent.click(screen.getByTestId("qs-submit"));
-    await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ title: "Не все вопросы отвечены" }),
-      ),
+    expect(finish).toBeDisabled();
+    fireEvent.click(finish);
+    await waitFor(() => expect(navigateSpy).not.toHaveBeenCalledWith("/learner/result/attempt-1"));
+    expect(toastSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Тест завершён" }),
     );
-    expect(navigateSpy).not.toHaveBeenCalledWith("/learner/result/attempt-1");
   });
 
   it("shows the annulled-attempt screen when finish returns 404", async () => {
     await renderToQuestion({ finish: jsonRes({}, false, 404) });
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-next"));
-    await screen.findByTestId("qs-submit");
+    fireEvent.click(screen.getByText("Далее"));
+    await screen.findByText("Завершить тест");
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-submit"));
+    fireEvent.click(screen.getByText("Завершить тест"));
     expect(await screen.findByText("Тест обновлён")).toBeInTheDocument();
     expect(screen.getByText("Начать заново")).toBeInTheDocument();
   });
@@ -329,10 +348,10 @@ describe("<TakeTestPage /> standard flow", () => {
   it("toasts a submit error when finish fails with a server error", async () => {
     await renderToQuestion({ finish: jsonRes({}, false, 500) });
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-next"));
-    await screen.findByTestId("qs-submit");
+    fireEvent.click(screen.getByText("Далее"));
+    await screen.findByText("Завершить тест");
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-submit"));
+    fireEvent.click(screen.getByText("Завершить тест"));
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Ошибка отправки" })),
     );
@@ -461,18 +480,18 @@ describe("<TakeTestPage /> flexible flow", () => {
     fireEvent.click(screen.getByTestId("ts-start-test"));
     await screen.findByTestId("question-screen");
 
-    // Q1: answer → «Отправить ответ» → «Далее →».
+    // Q1: answer → «Отправить ответ» → «Далее».
     fireEvent.click(screen.getByTestId("qs-answer-0"));
     fireEvent.click(await screen.findByText("Отправить ответ"));
-    fireEvent.click(await screen.findByText("Далее →"));
+    fireEvent.click(await screen.findByText("Далее"));
     await waitFor(() =>
       expect(screen.getByTestId("qs-counter").textContent).toContain("Вопрос 2 из 2"),
     );
 
-    // Q2 (last): answer → «Отправить ответ» → «Далее →» reaches the обзор.
+    // Q2 (last): answer → «Отправить ответ» → «Далее» reaches the обзор.
     fireEvent.click(screen.getByTestId("qs-answer-0"));
     fireEvent.click(await screen.findByText("Отправить ответ"));
-    fireEvent.click(await screen.findByText("Далее →"));
+    fireEvent.click(await screen.findByText("Далее"));
 
     // Review screen (template host) → finish.
     await screen.findByTestId("ts-finish-review");
@@ -481,7 +500,7 @@ describe("<TakeTestPage /> flexible flow", () => {
     await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith("/learner/result/attempt-1"));
   });
 
-  it("skips a question and exposes the «Вернуться» обзор entry", async () => {
+  it("skips a question and exposes the «К обзору» обзор entry", async () => {
     await renderToStart({ startAttempt: flexAttempt() });
     fireEvent.click(screen.getByTestId("ts-start-test"));
     await screen.findByTestId("question-screen");
@@ -491,8 +510,8 @@ describe("<TakeTestPage /> flexible flow", () => {
     await waitFor(() =>
       expect(screen.getByTestId("qs-counter").textContent).toContain("Вопрос 2 из 2"),
     );
-    // A skipped question makes «Вернуться» (обзор) available.
-    fireEvent.click(await screen.findByText("Вернуться"));
+    // A skipped question makes «К обзору» (обзор) available.
+    fireEvent.click(await screen.findByText("К обзору"));
     await screen.findByTestId("ts-finish-review");
     expect(ctx().review.unansweredCount).toBeGreaterThan(0);
   });
@@ -603,7 +622,7 @@ describe("<TakeTestPage /> sectional flow", () => {
 
     // Answer the sole question of section A and advance → intercepts with results.
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-next"));
+    fireEvent.click(screen.getByText("Далее"));
 
     await screen.findByTestId("ts-section-continue");
     expect(ctx().sectionResult.scorePercent).toBe(100);
