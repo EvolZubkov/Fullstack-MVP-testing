@@ -4,14 +4,21 @@
  * context; the SCORM-richer actions (resume-with-position, "Начать заново", "Мой
  * результат") are gated layout blocks the web context does not set, and the
  * web-only "back to list" action is likewise gated off here. Falls back to the
- * bespoke chrome for adaptive mode or when the design template is absent.
+ * last-resort notice only when the design template supplies no layout at all.
+ *
+ * ADAPTIVE renders here too. The templated path used to be gated off for it
+ * (`mode !== 'adaptive'`) because adaptive had bespoke chrome of its own; that
+ * chrome is gone (PRD-12 — one screen, one template), so the guard outlived its
+ * fallback and left an adaptive package with NO start screen, just the notice. The
+ * shared context is already adaptive-aware: `canResume` stays false for it
+ * (an adaptive session cannot be resumed), see buildScormStartContext.
  */
 function renderStartPage() {
   // PRD-7 G21: `systemLayout('start')` is the bundled default's start when the
   // active template doesn't declare a `start` contentTemplate.
   var layout = resolveStartLayout();
   var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
-  if (layout && TB && TB.renderScreenInto && TEST_DATA.mode !== 'adaptive') {
+  if (layout && TB && TB.renderScreenInto) {
     renderStartPageTemplated();
     return;
   }
