@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { BookOpen, LogOut, User, History, ClipboardList } from "lucide-react";
+import { BookOpen, Home, LogOut, User, History, ClipboardList } from "lucide-react";
 import { Avatar, Box, Button, Cluster, IconButton, Separator, Stack, Text } from "@universityrt/ui-kit";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/lib/auth";
@@ -18,6 +18,8 @@ export function LearnerLayout({ children }: LearnerLayoutProps) {
     navigate("/login");
   };
 
+  // PRD-25: главная — первый пункт и в учебной шапке тоже.
+  const isHomeActive = location === "/";
   const isTestsActive = location === "/learner";
   const isHistoryActive = location === "/learner/history";
 
@@ -33,6 +35,16 @@ export function LearnerLayout({ children }: LearnerLayoutProps) {
               </Cluster>
             </Link>
             <Cluster gap={1}>
+              <Link href="/">
+                <Button
+                  variant={isHomeActive ? "secondary" : "ghost"}
+                  size="s"
+                  leadingIcon={<Home size={16} />}
+                  data-testid="link-home"
+                >
+                  {t.navigation.home}
+                </Button>
+              </Link>
               <Link href="/learner">
                 <Button
                   variant={isTestsActive ? "secondary" : "ghost"}

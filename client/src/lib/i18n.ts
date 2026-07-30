@@ -247,6 +247,7 @@ export const t = {
   },
 
   navigation: {
+    home: "Главная",
     topics: "Темы",
     questions: "Вопросы",
     topicsAndQuestions: "Темы и вопросы",

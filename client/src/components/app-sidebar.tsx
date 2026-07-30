@@ -16,6 +16,7 @@ import { useLocation } from "wouter";
 import {
   BookOpen,
   FolderTree,
+  Home,
   ClipboardList,
   LayoutTemplate,
   BarChart3,
@@ -39,6 +40,9 @@ interface NavEntry {
 }
 
 const NAV: NavEntry[] = [
+  // PRD-25: главная доступна любому аутентифицированному пользователю, поэтому
+  // гейтится правом `auth.self`, которое есть у каждой роли.
+  { id: "home", href: "/", label: t.navigation.home, icon: Home, perm: "auth.self" },
   // PRD-16: «Темы» и «Вопросы» объединены в единый раздел «Темы и вопросы».
   { id: "content", href: "/author/content", label: t.navigation.topicsAndQuestions, icon: FolderTree, perm: "topics.manage" },
   { id: "tests", href: "/author/tests", label: t.navigation.tests, icon: ClipboardList, perm: "tests.read" },
@@ -54,7 +58,11 @@ export function AppSidebar() {
   const { can } = useAuth();
 
   const allowed = NAV.filter((n) => can(n.perm));
-  const activeId = allowed.find((n) => location.startsWith(n.href))?.id;
+  // PRD-25: «/» требует ТОЧНОГО совпадения — префиксная проверка совпала бы с
+  // любым маршрутом и подсвечивала бы «Главную» повсюду.
+  const activeId = allowed.find((n) =>
+    n.href === "/" ? location === "/" : location.startsWith(n.href),
+  )?.id;
   const hrefById = new Map(NAV.map((n) => [n.id, n.href]));
 
   const items = allowed.map((n) => ({

@@ -10,6 +10,7 @@ import type { Capability } from "@shared/access";
 import NotFound from "@/pages/not-found";
 import NoAccessPage from "@/pages/no-access";
 import LoginPage from "@/pages/login";
+import HomeRoute from "@/pages/home";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
 import FirstLoginPage from "@/pages/first-login";
@@ -29,22 +30,6 @@ import ResultPage from "@/pages/learner/result";
 import HistoryPage from "@/pages/learner/history";
 import { LearnerLayout } from "@/pages/learner/layout";
 import LogsPage from "@/pages/author/logs";
-
-/**
- * Default landing path for the current user (PRD-13 FR-30), chosen by the most
- * privileged area they can access: content roles -> tests; managers -> users;
- * learners -> the learner area. Returns `null` when the user holds no capability
- * that grants access to ANY area (e.g. an account with no roles): callers must
- * then render a "no access" screen instead of redirecting, otherwise the
- * fallback would point at a route the user also cannot enter and the guard would
- * redirect back to it forever (an infinite-redirect black screen).
- */
-function homePath(can: (cap: Capability) => boolean): string | null {
-  if (can("topics.manage")) return "/author/tests";
-  if (can("groups.manage") || can("users.read")) return "/author/users";
-  if (can("attempts.self.read")) return "/learner";
-  return null;
-}
 
 function ProtectedRoute({
   children,
@@ -70,38 +55,27 @@ function ProtectedRoute({
   }
 
   // PRD-13: доступ к маршруту по праву (capability), а не по жёсткой роли.
+  // PRD-25 FR-19: отказ ведёт на главную. Раньше здесь выбиралась «самая
+  // привилегированная доступная область», и когда таковой не было, приходилось
+  // рисовать экран «нет доступа», иначе редирект зациклился бы. Теперь у любого
+  // аутентифицированного пользователя есть куда приземлиться: главная сама
+  // покажет «нет доступа», если ей нечего показать (FR-18).
   if (requiredPermission && !can(requiredPermission)) {
-    const target = homePath(can);
-    // No reachable landing area, or the only landing area IS this route:
-    // redirecting would loop forever, so show an explicit "no access" screen.
-    if (!target || target === location) {
-      return <NoAccessPage />;
-    }
-    return <Redirect to={target} />;
+    return location === "/" ? <NoAccessPage /> : <Redirect to="/" />;
   }
 
   return <>{children}</>;
 }
 
-function HomeRedirect() {
-  const { user, isLoading, can } = useAuth();
-
-  if (isLoading) {
-    return <LoadingState message="Loading..." />;
-  }
-
-  if (!user) {
-    return <Redirect to="/login" />;
-  }
-
-  const target = homePath(can);
-  return target ? <Redirect to={target} /> : <NoAccessPage />;
-}
-
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={HomeRedirect} />
+      {/* PRD-25: «/» — настоящая страница, а не редирект по ролям. */}
+      <Route path="/">
+        <ProtectedRoute>
+          <HomeRoute />
+        </ProtectedRoute>
+      </Route>
       <Route path="/login" component={LoginPage} />
       <Route path="/forgot-password" component={ForgotPasswordPage} />
       <Route path="/reset-password" component={ResetPasswordPage} />
