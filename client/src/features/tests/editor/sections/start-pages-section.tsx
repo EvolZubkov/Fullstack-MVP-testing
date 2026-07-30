@@ -1242,7 +1242,12 @@ function SystemPageRow(props: {
   const values = page.valuesJson?.values ?? {};
   const missing = missingRequired(variant, values);
   const hasErr = missing.length > 0;
-  const isExpandable = (variant?.placeholders.length ?? 0) > 0;
+  // PRD-22 FR-04: the page form is placeholders + settings. Counting only
+  // placeholders left a variant whose fields are page PROPERTIES unexpandable —
+  // that is how the start illustration («Старт: изображение справа», a `settings[]`
+  // image) had nowhere to be uploaded from.
+  const isExpandable =
+    (variant?.placeholders.length ?? 0) + (variant?.settings?.length ?? 0) > 0;
   const expanded = isExpandable && expandedId === page.id;
   // PRD-7 G25 heuristic: an intro/summary page is "template-driven" until
   // the author has saved at least one non-empty placeholder value. Rendered
@@ -2621,6 +2626,9 @@ function ReplaceVariantModal(props: {
           testIdPrefix="structure-replace-option"
           templateId={previewTemplateId(cp, props.designDraft?.templateId, page ?? { kind: null })}
           params={props.designDraft?.params ?? {}}
+          // PRD-22: the page keeps its properties across the switch, so the preview
+          // of a variant with an illustration shows THIS page's picture.
+          pageSettings={(page?.settingsJson as Record<string, unknown> | null) ?? null}
           open={page !== null}
         />
       )}

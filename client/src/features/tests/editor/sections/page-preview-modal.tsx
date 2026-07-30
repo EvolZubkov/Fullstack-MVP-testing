@@ -21,6 +21,7 @@ import { buildContentPageScreen, buildScreenInputs, type PreviewDemoDataset } fr
 import type { SequencePlacement } from "@shared/template/page-sequences";
 import { buildSectionIntroContext } from "@shared/template/result-context";
 import { buildTemplateCssVars } from "@shared/template/params-css";
+import { startImageForVariant, type StartVariantDecl } from "@shared/template/start-image";
 import { useTemplateBundle } from "./use-template-bundle";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -92,12 +93,22 @@ function mediaUrl(value: unknown): string | undefined {
   return undefined;
 }
 
-/** The `design.*` context the start layouts bind, unwrapped from the draft params. */
-function previewDesign(params: Record<string, unknown>): Record<string, string> {
+/**
+ * The `design.*` context the start layouts bind, unwrapped from the draft params.
+ *
+ * PRD-22: the illustration comes from the START PAGE's own property, but only for
+ * the variant that DECLARES it; a variant without the property shows the test-wide
+ * branding illustration, exactly as its layout does in a run ({@link startImageForVariant}).
+ */
+function previewDesign(
+  params: Record<string, unknown>,
+  variant: StartVariantDecl | null | undefined,
+  pageSettings?: Record<string, unknown> | null,
+): Record<string, string> {
   const out: Record<string, string> = {};
   const logo = mediaUrl(params.logoUrl);
   if (logo) out.logoUrl = logo;
-  const startImage = mediaUrl(params.startImageUrl);
+  const startImage = startImageForVariant(variant, pageSettings, params);
   if (startImage) out.startImageUrl = startImage;
   return out;
 }
@@ -167,7 +178,10 @@ export function PagePreviewModal({
         : undefined;
       const chosen = byVariant ?? demoScreens.find((s) => s.route === "start") ?? null;
       if (!chosen) return null;
-      const design = previewDesign(params);
+      const declaration = (bundle.manifest.contentTemplates ?? []).find(
+        (ct) => ct.key === page.templateKey,
+      ) as StartVariantDecl | undefined;
+      const design = previewDesign(params, declaration, page.settingsJson as Record<string, unknown> | null);
       return {
         ...chosen,
         input: { ...chosen.input, context: { ...(chosen.input?.context ?? {}), design } },

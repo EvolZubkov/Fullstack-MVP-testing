@@ -66,8 +66,13 @@ export interface ScreenRenderPayload {
    * for the results screen the context is server-built and already carries it.
    * Omitted when the test has no logo. The logo param is stored as a media envelope
    * `{ url, name, … }`; `.url` is extracted here so the layout binds a plain string.
+   *
+   * `startImageUrl` is the start screen's illustration. It leaves this builder as the
+   * TEST-WIDE branding value; the start-screen route then resolves it per PRD-22 —
+   * the page's own property first, and nothing at all for a variant that does not
+   * declare one (`startImageForVariant`).
    */
-  design?: { logoUrl?: string };
+  design?: { logoUrl?: string; startImageUrl?: string };
 }
 
 /**

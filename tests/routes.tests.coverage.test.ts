@@ -20,6 +20,7 @@ const {
   buildExportMock,
   apiVersionMock,
   screenTplMock,
+  contentTemplatesMock,
   tplDirMock,
   dbState,
 } = vi.hoisted(() => ({
@@ -84,6 +85,7 @@ const {
   buildExportMock: vi.fn(),
   apiVersionMock: vi.fn().mockReturnValue(true),
   screenTplMock: vi.fn(),
+  contentTemplatesMock: vi.fn(() => [] as Array<Record<string, unknown>>),
   tplDirMock: vi.fn(async () => "template/dir"),
   dbState: { templates: [] as Array<Record<string, unknown>> },
 }));
@@ -101,7 +103,13 @@ vi.mock("../server/scorm/build-export-data", async (importOriginal) => {
   return { ...actual, buildScormExportData: buildExportMock };
 });
 vi.mock("../server/template-registry", () => ({ isSupportedTemplateApiVersion: apiVersionMock }));
-vi.mock("../server/services/template-render", () => ({ readScreenTemplate: screenTplMock }));
+vi.mock("../server/services/template-render", () => ({
+  readScreenTemplate: screenTplMock,
+  // PRD-22: the start screen resolves its illustration against the VARIANT's
+  // declaration, so the route reads the manifest's contentTemplates too.
+  readManifestContentTemplates: () => contentTemplatesMock(),
+  readVariantLayouts: () => ({}),
+}));
 vi.mock("../server/services/template-dir", () => ({
   resolveTemplateDir: tplDirMock,
   resolveSystemScreenDir: tplDirMock,
@@ -233,6 +241,63 @@ describe("GET /api/tests/:id/screen-template/:screen", () => {
     const res = await asAdmin(request(app).get("/api/tests/test1/screen-template/question"));
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("layout");
+  });
+
+  // PRD-22: the start illustration is a PROPERTY of the start page; the test-wide
+  // branding param stays the fallback. The web host resolves it here so its start
+  // screen shows the same picture the SCORM package does.
+  it("the start page's own illustration overrides the branding param", async () => {
+    storageMock.getTest.mockResolvedValue({
+      ...dbTest,
+      designSettingsJson: { templateId: "default", params: { startImageUrl: { url: "/uploads/media/brand.png" } } },
+    });
+    storageMock.getContentPages.mockResolvedValue([
+      { id: "p1", kind: "start", templateKey: "start.image-right", settingsJson: { image: "/uploads/media/page.png" } },
+    ]);
+    contentTemplatesMock.mockReturnValue([
+      { key: "start.image-right", settings: [{ key: "image", type: "image" }] },
+    ]);
+    screenTplMock.mockReturnValue({
+      layout: "<div></div>", css: "", theme: {},
+      design: { logoUrl: "/uploads/media/logo.png", startImageUrl: "/uploads/media/brand.png" },
+    });
+    const res = await asAdmin(request(app).get("/api/tests/test1/screen-template/start"));
+    expect(res.status).toBe(200);
+    expect(res.body.design.startImageUrl).toBe("/uploads/media/page.png");
+    // Other branding survives the override.
+    expect(res.body.design.logoUrl).toBe("/uploads/media/logo.png");
+  });
+
+  it("keeps the branding illustration when the start page carries none", async () => {
+    storageMock.getTest.mockResolvedValue({
+      ...dbTest,
+      designSettingsJson: { templateId: "default", params: { startImageUrl: { url: "/uploads/media/brand.png" } } },
+    });
+    storageMock.getContentPages.mockResolvedValue([
+      { id: "p1", kind: "start", templateKey: "start.image-right", settingsJson: {} },
+    ]);
+    contentTemplatesMock.mockReturnValue([
+      { key: "start.image-right", settings: [{ key: "image", type: "image" }] },
+    ]);
+    screenTplMock.mockReturnValue({ layout: "<div></div>", css: "", theme: {}, design: { startImageUrl: "/uploads/media/brand.png" } });
+    const res = await asAdmin(request(app).get("/api/tests/test1/screen-template/start"));
+    expect(res.body.design.startImageUrl).toBe("/uploads/media/brand.png");
+  });
+
+  it("a start variant without the illustration property shows none", async () => {
+    // The branding param used to paint every start variant, so «Старт: стандартный»
+    // looked exactly like «изображение справа» and switching them changed nothing.
+    storageMock.getTest.mockResolvedValue({
+      ...dbTest,
+      designSettingsJson: { templateId: "default", params: { startImageUrl: { url: "/uploads/media/brand.png" } } },
+    });
+    storageMock.getContentPages.mockResolvedValue([
+      { id: "p1", kind: "start", templateKey: "start.standard", settingsJson: {} },
+    ]);
+    contentTemplatesMock.mockReturnValue([{ key: "start.standard", settings: [] }]);
+    screenTplMock.mockReturnValue({ layout: "<div></div>", css: "", theme: {}, design: { startImageUrl: "/uploads/media/brand.png" } });
+    const res = await asAdmin(request(app).get("/api/tests/test1/screen-template/start"));
+    expect(res.body.design.startImageUrl).toBeUndefined();
   });
 
   it("500 when reading the template throws", async () => {

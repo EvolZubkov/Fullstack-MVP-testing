@@ -106,6 +106,11 @@ function wireStartAction(root, action, fn) {
  * param is baked into TEST_DATA as a media envelope `{ url, name, … }` (or a bare
  * string for legacy values); the layout binds a plain URL string, so `.url` is
  * unwrapped here — mirroring the web host's server-side `resolveLogoUrl`.
+ *
+ * PRD-22: the start ILLUSTRATION is a property of the start page itself
+ * (`settings.image` of the `start.image-right` variant), so it is resolved through
+ * the shared `TBTemplate.resolveStartImageUrl` — the page's own picture wins, the
+ * branding param stays the fallback for tests filled before the property existed.
  */
 function scormDesignContext() {
   var p = (typeof TEST_DATA !== 'undefined' && TEST_DATA.designSettings) ? TEST_DATA.designSettings.params : null;
@@ -118,9 +123,35 @@ function scormDesignContext() {
   var out = {};
   var logo = mediaUrl(p ? p.logoUrl : null);
   if (logo) out.logoUrl = logo;
-  var startImg = mediaUrl(p ? p.startImageUrl : null);
+  var startImg = resolveStartImage(p);
   if (startImg) out.startImageUrl = startImg;
   return out;
+}
+
+/**
+ * The start screen's illustration. Belongs to the start VARIANT that declares it
+ * (`settings[].image`): its own page value first, the branding param as the
+ * fallback. A variant without the property shows no illustration at all — the
+ * shared `startImageForVariant` is the single rule for both hosts.
+ */
+function resolveStartImage(designParams) {
+  var startPage = ((typeof TEST_DATA !== 'undefined' && TEST_DATA.contentPages) || [])
+    .filter(function (pg) { return pg && pg.kind === 'start'; })[0];
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (TB && typeof TB.startImageForVariant === 'function') {
+    var manifest = (typeof state !== 'undefined' && state && state.templateManifest) || {};
+    var variant = null;
+    if (startPage && startPage.templateKey) {
+      variant = (manifest.contentTemplates || []).filter(function (ct) {
+        return ct && ct.key === startPage.templateKey;
+      })[0] || null;
+    }
+    return TB.startImageForVariant(variant, startPage ? startPage.settings : null, designParams);
+  }
+  // Bundle without the shared helper (older package): the branding param alone.
+  var v = designParams ? designParams.startImageUrl : null;
+  if (v && typeof v === 'object' && typeof v.url === 'string') return v.url;
+  return typeof v === 'string' ? v : '';
 }
 
 /** Build the start context (shared builder) and mount the shared layout (standard mode). */

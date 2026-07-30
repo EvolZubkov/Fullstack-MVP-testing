@@ -23,6 +23,7 @@ import {
   type ScreenSpec,
 } from "@shared/template/preview-context";
 import { buildTemplateCssVars } from "@shared/template/params-css";
+import { startImageForVariant, type StartVariantDecl } from "@shared/template/start-image";
 import { useTemplateBundle, type TemplateBundle } from "./use-template-bundle";
 
 /** One selectable variant (list row + the keys needed to build its preview spec). */
@@ -146,11 +147,19 @@ function mediaUrl(value: unknown): string | undefined {
  * «Изображение справа» variant) shows the picked illustration, not just the
  * placeholder. Mirrors both hosts' `resolveMediaUrl`.
  */
-function previewDesign(params: Record<string, unknown>): Record<string, string> {
+function previewDesign(
+  params: Record<string, unknown>,
+  variant: StartVariantDecl | null | undefined,
+  pageSettings?: Record<string, unknown> | null,
+): Record<string, string> {
   const out: Record<string, string> = {};
   const logo = mediaUrl(params.logoUrl);
   if (logo) out.logoUrl = logo;
-  const startImage = mediaUrl(params.startImageUrl);
+  // PRD-22: the page's illustration belongs to the variant that DECLARES it, so a
+  // variant without the property is previewed without it — otherwise «Старт:
+  // стандартный» rendered the same screen as «изображение справа» and switching
+  // options looked like the preview had stopped repainting.
+  const startImage = startImageForVariant(variant, pageSettings, params);
   if (startImage) out.startImageUrl = startImage;
   return out;
 }
@@ -208,6 +217,12 @@ export function VariantPreviewPicker(props: {
   templateId: string | undefined;
   /** Draft branding params, applied as CSS variables (same mapping as the runtime). */
   params: Record<string, unknown>;
+  /**
+   * PRD-22: page PROPERTIES of the page being re-varianted (`settings_json`). The
+   * start illustration lives here, so the preview of «Старт: изображение справа»
+   * shows the author's own picture instead of the test-wide branding one.
+   */
+  pageSettings?: Record<string, unknown> | null;
   /** Only fetch the bundle while the host modal is open. */
   open: boolean;
 }) {
@@ -223,11 +238,14 @@ export function VariantPreviewPicker(props: {
     // Start variants bind `design.startImageUrl` — inject it from the draft params
     // so the «Изображение справа» preview shows the picked image, not a placeholder.
     if (s && (selected?.kind === "start" || s.route === "start" || s.route.startsWith("start."))) {
-      const design = previewDesign(props.params);
+      const declaration = (bundle?.manifest.contentTemplates ?? []).find(
+        (ct) => ct.key === selected?.variantKey,
+      ) as StartVariantDecl | undefined;
+      const design = previewDesign(props.params, declaration, props.pageSettings);
       return { ...s, input: { ...s.input, context: { ...(s.input?.context ?? {}), design } } };
     }
     return s;
-  }, [bundle, selected, props.params]);
+  }, [bundle, selected, props.params, props.pageSettings]);
   const layout = spec?.input && bundle ? bundle.layouts[spec.layoutKey] : undefined;
 
   return (

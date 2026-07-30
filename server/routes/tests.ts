@@ -10,6 +10,7 @@ import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { readScreenTemplate, readManifestContentTemplates, readVariantLayouts } from "../services/template-render";
 import { withTemplateAssetBase } from "@shared/template/asset-base";
 import { declaredThemes, isTestTheme, supportsThemes, TEST_THEMES } from "@shared/template/themes";
+import { startImageForVariant, type StartVariantDecl } from "@shared/template/start-image";
 import { colorParamKeys } from "@shared/template/theme-params";
 import { resolveTemplateDir, resolveSystemScreenDir } from "../services/template-dir";
 import { requirePermission, requireUserContext } from "../middleware/auth";
@@ -406,13 +407,21 @@ router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope(
     // contentTemplate whose own `layoutFile` replaces the generic start.html —
     // parity with the SCORM runtime (`startPage.resolveStartLayout`) and the editor
     // preview. Only overridden when the variant actually ships its layout in `dir`.
+    // PRD-22: the same page also OWNS the illustration (`settings.image` of a
+    // variant like `start.image-right`), so its value is carried to the render
+    // context below — the page's picture wins over the branding param.
+    let startPageSettings: Record<string, unknown> | null = null;
+    let startVariant: StartVariantDecl | null = null;
     if (req.params.screen === "start") {
       try {
-        const startKey = (await storage.getContentPages(req.params.id)).find((p) => p.kind === "start")?.templateKey;
+        const startPage = (await storage.getContentPages(req.params.id)).find((p) => p.kind === "start");
+        startPageSettings = (startPage?.settingsJson as Record<string, unknown>) ?? null;
+        const startKey = startPage?.templateKey;
         if (startKey) {
-          const ct = (readManifestContentTemplates(dir) as Array<{ key?: string; layoutFile?: string }>).find(
-            (c) => c.key === startKey,
-          );
+          const ct = (
+            readManifestContentTemplates(dir) as Array<{ key?: string; layoutFile?: string; settings?: unknown }>
+          ).find((c) => c.key === startKey);
+          startVariant = (ct as StartVariantDecl | undefined) ?? null;
           const rel = ct?.layoutFile;
           if (typeof rel === "string" && rel && readVariantLayouts(dir)[rel]) {
             layoutFile = rel.replace(/^layouts\//, "");
@@ -440,6 +449,23 @@ router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope(
     // otherwise every such image renders broken.
     const assetsBase = `/api/templates/${encodeURIComponent(templateId)}/assets/`;
     payload = { ...payload, layout: withTemplateAssetBase(payload.layout, assetsBase) };
+    // PRD-22: the start illustration the author uploaded ON THE PAGE overrides the
+    // test-wide branding param. Resolved through the SHARED rule the SCORM runtime
+    // uses (`resolveStartImageUrl`), so both hosts show the same picture.
+    if (req.params.screen === "start") {
+      const startImageUrl = startImageForVariant(
+        startVariant,
+        startPageSettings,
+        ((test.designSettingsJson as { params?: Record<string, unknown> } | null)?.params) ?? null,
+      );
+      // The illustration is REPLACED, not merged: a variant that does not own it
+      // must not keep the one `readScreenTemplate` derived from the branding param.
+      const { startImageUrl: _dropped, ...restDesign } = payload.design ?? {};
+      payload = {
+        ...payload,
+        design: { ...restDesign, ...(startImageUrl ? { startImageUrl } : {}) },
+      };
+    }
     // PRD-12 FR-6: the content screen also carries the manifest's placeholder
     // declarations — the web host builds its page skeleton from them through the
     // shared assembler, exactly as the SCORM runtime does from the bundled copy.

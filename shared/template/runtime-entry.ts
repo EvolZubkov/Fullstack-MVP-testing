@@ -39,7 +39,13 @@ export { buildStartState } from "./start-state";
 // PRD-22: the start illustration is a property of the START PAGE, with the branding
 // param as the fallback. Exported so the package resolves it through the SAME rule
 // the web host and the editor previews use.
-export { resolveStartImageUrl, mediaUrlOf, START_IMAGE_KEY } from "./start-image";
+export {
+  resolveStartImageUrl,
+  startImageForVariant,
+  variantDeclaresStartImage,
+  mediaUrlOf,
+  START_IMAGE_KEY,
+} from "./start-image";
 export { buildCourseSubtitle } from "./course-subtitle";
 export { buildTransitionContext } from "./transition-context";
 export { buildTemplateCssVars, DEFAULT_PARAM_CSS_VARS } from "./params-css";

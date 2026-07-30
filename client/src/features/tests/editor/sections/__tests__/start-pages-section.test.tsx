@@ -28,6 +28,17 @@ const TEMPLATE = {
   manifest: {
     contentTemplates: [
       { key: "start.standard", label: "Старт: стандартный", kind: "start", pageKind: "start", placeholders: [] },
+      // PRD-22: the start variant with an illustration declares it as a page
+      // PROPERTY — no placeholders at all, so the row's expandability must follow
+      // `settings[]` too or the field is unreachable.
+      {
+        key: "start.image-right",
+        label: "Старт: изображение справа",
+        kind: "start",
+        pageKind: "start",
+        placeholders: [],
+        settings: [{ key: "image", type: "image", label: "Изображение" }],
+      },
       { key: "results.standard", label: "Итоги теста: стандартные", kind: "results", pageKind: "results", placeholders: [] },
       {
         key: "info.text",
@@ -336,6 +347,19 @@ describe("<StructureSection /> — kind-aware layout", () => {
       screen.getByTestId("structure-system-results"),
     );
     expect(screen.getByTestId("structure-system-results")).toHaveTextContent("Итоги теста");
+  });
+
+  it("PRD-22: a start variant whose only field is a page property expands and offers it", async () => {
+    installApi([
+      buildPage({ id: "pg-start", kind: "start", position: "before", topicId: null, templateKey: "start.image-right", valuesJson: { values: {} } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-system-start")).toBeInTheDocument());
+    // The illustration is declared in `settings[]`, not `placeholders[]` — the row
+    // must still be expandable, otherwise the author cannot upload the picture.
+    const toggle = screen.getByTestId("structure-system-start-expand");
+    fireEvent.click(toggle);
+    expect(await screen.findByText("Изображение")).toBeInTheDocument();
   });
 
   it("linear_by_topics: «Введение раздела» + «Обзор раздела» + «Итоги раздела» nodes render inside the topic block", async () => {
