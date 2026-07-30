@@ -21,6 +21,8 @@ import { MyTestsSection } from "../sections/my-tests-section";
 import { MyTopicsSection } from "../sections/my-topics-section";
 import { SummaryStrip } from "../sections/summary-strip";
 import { MaterialsSection } from "../sections/materials-section";
+import { PeopleSection } from "../sections/people-section";
+import { QuickActions } from "../sections/quick-actions";
 
 const attention = (over: Partial<AttentionItem> = {}): AttentionItem => ({
   id: "test-empty-draft:t1",
@@ -239,5 +241,47 @@ describe("MaterialsSection", () => {
   it("says so when no template is active", () => {
     render(<MaterialsSection data={{ activeTemplates: [], docs: [] }} />);
     expect(screen.getByText("Активных шаблонов нет")).toBeInTheDocument();
+  });
+});
+
+describe("PeopleSection", () => {
+  it("shows the three counters as they came from the server", () => {
+    render(<PeopleSection data={{ activeAssignments: 29, notStarted: 4, newUsers7d: 3 }} />);
+
+    expect(screen.getByTestId("home-people")).toBeInTheDocument();
+    expect(screen.getByTestId("home-people-active")).toHaveTextContent("29");
+    expect(screen.getByTestId("home-people-not-started")).toHaveTextContent("4");
+    expect(screen.getByTestId("home-people-new-users")).toHaveTextContent("3");
+  });
+
+  it("renders zeros rather than hiding a counter that is at zero", () => {
+    render(<PeopleSection data={{ activeAssignments: 0, notStarted: 0, newUsers7d: 0 }} />);
+
+    expect(screen.getByTestId("home-people-active")).toHaveTextContent("0");
+    expect(screen.getByTestId("home-people-not-started")).toHaveTextContent("0");
+  });
+});
+
+describe("QuickActions", () => {
+  it("renders exactly the actions the server allowed, in order", () => {
+    render(
+      <QuickActions
+        actions={[
+          { id: "test-create", label: "Создать тест", href: "/author/tests" },
+          { id: "import", label: "Импорт из Excel", href: "/author/import" },
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId("home-quick-actions")).toBeInTheDocument();
+    expect(screen.getByText("Создать тест")).toBeInTheDocument();
+    expect(screen.getByText("Импорт из Excel")).toBeInTheDocument();
+    expect(screen.queryByText("Добавить пользователя")).not.toBeInTheDocument();
+  });
+
+  it("vanishes entirely when the user may perform nothing", () => {
+    const { container } = render(<QuickActions actions={[]} />);
+
+    expect(container).toBeEmptyDOMElement();
   });
 });
