@@ -24,9 +24,10 @@ import {
   buildSectionIntroContext,
   type ResultInput,
 } from "./result-context";
+import { buildResultsNav } from "./results-nav";
 import { buildTransitionContext } from "./transition-context";
 import { buildReviewContext } from "./review-context";
-import { renderSingleChoice, renderMultiple, renderRanking, renderMatching } from "./question-interaction";
+import { renderSingleChoice, renderMultiple, renderRanking, renderMatching, renderScale } from "./question-interaction";
 import { renderInlineMarkdown } from "../text/markdown";
 import {
   buildSequencePlacements,
@@ -361,6 +362,10 @@ function buildInteraction(q: PreviewQuestion): string {
       return renderMultiple({ type: "multiple", dataJson: { options: texts } }, []);
     case "ranking":
       return renderRanking({ type: "ranking", dataJson: { items: texts } }, undefined);
+    case "scale":
+      // PRD-26: nothing is picked in the preview either, so the scale shows its
+      // graduations with no fill — the administrator sees the control, not an answer.
+      return renderScale({ type: "scale", dataJson: { options: texts } }, undefined);
     case "matching": {
       const pairs = q.pairs ?? [];
       return renderMatching(
@@ -549,6 +554,13 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
             c.title,
           )
         : buildResultContext(resultInputFromRuntime(dataset), c.title);
+    // Both runtime hosts fill `result.nav`, so a preview WITHOUT it falls into the
+    // layout's legacy single-button branch — a footer neither host renders any more.
+    // Every flag is on so the preview proves the layout draws the whole row: without
+    // it a template can ship with no «Скачать отчёт» and the preview looks fine.
+    if (route === "results") {
+      context.result.nav = buildResultsNav({ canReport: true, canRetry: true, hasPostPages: false });
+    }
     return { ...base, expectedSlots: [], input: { context } };
   }
 

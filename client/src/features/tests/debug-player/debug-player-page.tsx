@@ -15,7 +15,7 @@ import {
 } from "@universityrt/ui-kit";
 import {
   FlaskConical, Info, RefreshCw, RotateCcw, X, ChevronLeft, ChevronRight, Download, Search,
-  CircleDot, CheckSquare, Unplug, ListOrdered, List, Layers, ChevronDown, ChevronUp,
+  CircleDot, CheckSquare, Unplug, ListOrdered, SlidersHorizontal, List, Layers, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useDebugSession } from "./use-debug-session";
 import {
@@ -479,6 +479,7 @@ function qTypeIcon(type: string) {
   if (type === "single") return <CircleDot {...p} />;
   if (type === "multiple") return <CheckSquare {...p} />;
   if (type === "matching") return <Unplug {...p} />;
+  if (type === "scale") return <SlidersHorizontal {...p} />;
   return <ListOrdered {...p} />;
 }
 

@@ -252,6 +252,7 @@ function formatUserAnswer(answer: DetailedAnswer): string {
 
   switch (questionType) {
     case "single":
+    case "scale":
       if (typeof userAnswer === "number" && options) {
         return options[userAnswer] || `Вариант ${userAnswer + 1}`;
       }
@@ -330,6 +331,7 @@ function formatCorrectAnswer(answer: DetailedAnswer): string {
 
   switch (questionType) {
     case "single":
+    case "scale":
       const idx = correctAnswer.correctIndex;
       if (typeof idx === "number" && options) {
         return options[idx] || `Вариант ${idx + 1}`;

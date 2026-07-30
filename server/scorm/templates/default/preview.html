@@ -38,20 +38,81 @@
     @media(max-width:860px){.pv-sidebar{display:none}.pv-overlay{padding:8px}.pv-nav{width:100%;max-height:160px;border-right:0;border-bottom:1px solid var(--pv-border)}.pv-body{flex-direction:column}.pv-stage{max-width:100%}}
   </style>
   <style id="tpl-styles">/* styles/theme.css */
+/* ── Palette (PRD-23) ────────────────────────────────────────────────
+   The template ships BOTH palettes, declared in `manifest.json` as `themes[]`:
+   the light one on `:root` and the dark one behind the system setting plus an
+   explicit `:root[data-theme="dark"]` override that always wins over the media
+   query (a pinned palette must ignore the viewer's OS).
+
+   Values are the design system's own tokens, transcribed as HSL components (the
+   convention this file uses everywhere: colours read them as `hsl(var(--x))`).
+   The mapping is deliberate, not eyeballed:
+     --background  → --ou-bg-page      --card        → --ou-bg-elevated
+     --foreground  → --ou-fg-default   --card-border → --ou-border-default
+     --border      → --ou-border-soft  --muted-*     → --ou-fg-muted / surface-3
+     --primary     → --ou-purple-500 (the DS accent both palettes are built on)
+   so the palette bridge (`buildPaletteBridge`) derives the same `--ou-*` ramp the
+   scene's `.ou-*` markup already paints with, in either theme.
+
+   Non-colour tokens (font, radius, shadow) are theme-independent and stay below.
+   ─────────────────────────────────────────────────────────────────── */
+/* The light palette is the BASE one, so it is declared on a bare `:root` — never
+   `:root[data-theme="light"]`. The author's per-theme colours are printed as
+   `:root { … }` too (buildTemplateThemeCss) and land later in the cascade; giving
+   this block an attribute selector would out-specify them and the test's own
+   palette would never paint. Pinning light under a dark system is handled by the
+   `:not([data-theme="light"])` guard on the dark block below. */
 :root {
-  --background: 222 28% 9%;
-  --foreground: 0 0% 98%;
-  --border: 222 18% 22%;
-  --card: 220 23% 18%;
-  --card-foreground: 0 0% 98%;
-  --card-border: 0 0% 24%;
-  --primary: 268 100% 50%;
-  --primary-foreground: 0 0% 98%;
-  --muted: 225 10% 20%;
-  --muted-foreground: 0 0% 65%;
-  --accent: 225 8% 22%;
+  --background: 240 5% 96%;         /* --ou-neutral-50  #F4F4F5 */
+  --foreground: 218 28% 16%;        /* --ou-neutral-900 #1D2533 */
+  --border: 220 7% 91%;             /* --ou-neutral-100 #E7E8EA */
+  --card: 0 0% 100%;                /* --ou-neutral-0   #FFFFFF */
+  --card-foreground: 218 28% 16%;
+  --card-border: 223 8% 83%;        /* --ou-neutral-200 #D0D2D7 */
+  --primary: 268 100% 50%;          /* --ou-purple-500  #7700FF */
+  --primary-foreground: 0 0% 100%;
+  --muted: 220 7% 91%;
+  --muted-foreground: 222 10% 40%;  /* --ou-neutral-500 #5D6371 */
+  --accent: 220 7% 91%;
   --destructive: 0 84% 52%;
   --success: 142 76% 36%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: 222 28% 9%;       /* --ou-bg-page      #11151E */
+    --foreground: 240 5% 96%;       /* --ou-neutral-50   #F4F4F5 */
+    --border: 222 18% 22%;          /* --ou-border-soft  #2F3543 */
+    --card: 220 23% 18%;            /* --ou-bg-elevated  #232A38 */
+    --card-foreground: 240 5% 96%;
+    --card-border: 222 15% 27%;     /* --ou-border-default #3A4150 */
+    --primary: 268 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --muted: 222 18% 22%;
+    --muted-foreground: 222 9% 71%; /* --ou-neutral-300  #AEB2BB */
+    --accent: 222 18% 22%;
+    --destructive: 0 84% 52%;
+    --success: 142 76% 36%;
+  }
+}
+
+:root[data-theme="dark"] {
+  --background: 222 28% 9%;
+  --foreground: 240 5% 96%;
+  --border: 222 18% 22%;
+  --card: 220 23% 18%;
+  --card-foreground: 240 5% 96%;
+  --card-border: 222 15% 27%;
+  --primary: 268 100% 50%;
+  --primary-foreground: 0 0% 100%;
+  --muted: 222 18% 22%;
+  --muted-foreground: 222 9% 71%;
+  --accent: 222 18% 22%;
+  --destructive: 0 84% 52%;
+  --success: 142 76% 36%;
+}
+
+:root {
   --font-sans: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --radius: 12px;
   --shadow: var(--ou-shadow-lg);
@@ -68,6 +129,10 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
 }
 .container > #app > * { flex: 1 1 auto; min-height: 0; }
+/* …except the nav row the runtime appends next to the scene: it is chrome of a fixed
+   height. Under the rule above it grew a flex-basis and got SQUEEZED by ~4px, so the
+   package's footer sat lower than the web host's on the same template. */
+.container > #app > .tb-scene__foot { flex: none; }
 #toast-root { flex: none; }
 
 /* =================================================================
@@ -93,9 +158,17 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   display: flex;
   flex-direction: column;
   gap: var(--ou-space-3);
-  /* Bottom padding keeps the header content off the progress bar (which is pinned
-     to the bottom edge) so the two don't read as stuck together. */
-  padding: var(--ou-space-4) 24px var(--ou-space-3);
+  /* Bottom padding leaves an 8px gap between the header content (question map /
+     titles) and the progress bar. The bar is 3px tall and hangs 1px past the bottom
+     edge, so it eats 2px of this padding — hence 8 + 2, which makes the VISIBLE gap
+     exactly 8px. */
+  padding: var(--ou-space-4) 24px calc(var(--ou-space-2) + 2px);
+  /* Every screen that shows a header gives it the SAME minimum height, so the field
+     below starts on one line and the header does not jump between slides: the logo
+     tile (44px) plus the vertical padding. Screens with a question map simply grow
+     past it. */
+  min-height: calc(44px + var(--ou-space-4) + var(--ou-space-2) + 2px);
+  box-sizing: border-box;
   background: var(--ou-bg-elevated);
   border-bottom: 1px solid var(--ou-border-soft);
 }
@@ -123,13 +196,15 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 @media (max-width: 900px) {
   .tb-scene__col { width: 100%; }
 }
-/* Footer action panel — shared look for the host-rendered nav row. */
+/* Footer action panel — shared look for the host-rendered nav row. Vertical padding
+   is deliberately tight (8px): the panel is chrome, and every pixel it takes comes
+   off the scrolling body, which is where long questions run out of room. */
 .tb-scene__foot {
   flex: none;
   display: flex;
   align-items: center;
   gap: var(--ou-space-3);
-  padding: var(--ou-space-4) 24px;
+  padding: var(--ou-space-2) 24px;
   background: var(--ou-bg-elevated);
   border-top: 1px solid var(--ou-border-soft);
 }
@@ -188,7 +263,10 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
    indicator cells wrap into rows, (4) «отвечено» drops too. Each dropped element gets
    `flex-basis:100%` (a full row of its own) and an `order` so the stack reads
    dots → legend → отвечено → пропущено. */
-.tb-scene__map { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--ou-space-2) var(--ou-space-4); padding-bottom: var(--ou-space-4); }
+/* `padding-bottom: 0` on purpose: the DS component ships a 16px bottom padding of its
+   own, which stacked on the header's own padding and pushed the pills 24px above the
+   progress bar instead of the 8px the header sets. The gap belongs to the header. */
+.tb-scene__map { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--ou-space-2) var(--ou-space-4); padding-bottom: 0; }
 .tb-scene__map .ou-quiz__dots { flex: 0 0 auto; }
 .tb-scene__map .ou-quiz__legend { margin-top: 0; align-items: center; order: 1; }
 /* Right-aligned so that when a counter wraps to its own full-width row it stacks
@@ -237,6 +315,11 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-scene__subhead { margin: 0; font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
 .tb-scene__note { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
 .tb-scene__headtag { margin-left: auto; align-self: center; flex: none; }
+/* The chip and the timers both used to push themselves right with `margin-left:auto`,
+   and TWO auto margins SHARE the free space — which parked the chip in the middle of
+   the header instead of at its edge. When a chip is present it is the one that takes
+   the free space, and the timers just follow it. */
+.tb-scene__headtag ~ .tb-scene__timers { margin-left: var(--ou-space-6); }
 
 /* ── Title / cover slide (start) — a DISTINCT layout, NOT the shared header.
    The logo floats top-left, the test title dominates the field, its description
@@ -251,6 +334,11 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-cover__content { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: var(--ou-space-6); }
 .tb-cover__head { display: flex; flex-direction: column; gap: var(--ou-space-3); }
 .tb-cover__eyebrow { display: flex; align-items: center; gap: var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+/* Both of the row's children are gated (attempt line / «Попытки исчерпаны»), and a
+   test without an attempt cap prints neither. The empty row is 0px tall but still
+   takes the head's row-gap, so it would push the title down by a line's gap.
+   `:empty` cannot be used — the layout leaves whitespace text nodes behind. */
+.tb-cover__eyebrow:not(:has(*)) { display: none; }
 .tb-cover__title { margin: 0; font-weight: 700; font-size: 44px; line-height: 1.08; letter-spacing: -0.02em; color: var(--ou-fg-default); text-wrap: pretty; }
 .tb-cover__desc { margin: 0; font: var(--ou-text-body-l); color: var(--ou-fg-soft); max-width: 60ch; text-wrap: pretty; }
 .tb-cover__note { display: flex; flex-direction: column; gap: var(--ou-space-1); }
@@ -330,6 +418,28 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-scene .feedback-block.ou-banner--success .ou-banner__ico { color: var(--ou-success-default); }
 .tb-scene .feedback-block.ou-banner--warning .ou-banner__ico { color: var(--ou-warning-default); }
 .tb-scene .feedback-block.ou-banner--error .ou-banner__ico { color: var(--ou-error-default); }
+
+/* ── Scale (PRD-26): the DS Stepper in choice mode is the answer control ────────
+   The component itself (ou-stepper--choice) lives in the DS bundle; the SCENE only
+   decides where it sits and when it flips to the vertical layout. Both hosts read
+   this one file, so the flip point cannot differ between the web run and the LMS
+   package. The count-based half of the rule (more than seven graduations) is applied
+   by renderScale; this is the WIDTH half: a narrow answer column cannot fit a row of
+   labelled points, so the scale stands up. */
+.tb-scene .ou-stepper--choice { width: 100%; margin-block: var(--ou-space-4); }
+@media (max-width: 640px) {
+  .tb-scene .ou-stepper--choice { flex-direction: column; align-items: stretch; }
+  .tb-scene .ou-stepper--choice .ou-stepper__step {
+    flex: 0 0 auto; flex-direction: row; align-items: center;
+    gap: var(--ou-space-4); padding: 0; min-height: 44px;
+  }
+  .tb-scene .ou-stepper--choice .ou-stepper__bullet { width: 28px; height: 28px; }
+  .tb-scene .ou-stepper--choice .ou-stepper__step:not(:last-child)::after {
+    top: 28px; bottom: -8px; left: 13px; right: auto; width: 4px; height: auto;
+  }
+  .tb-scene .ou-stepper--choice .ou-stepper__label { text-align: left; padding-top: 0; }
+  .tb-scene .ou-stepper--choice .ou-stepper__title { text-align: left; }
+}
 
 /* ── Answers: comfortable, top-aligned; each option card grows to fit its text ── */
 .tb-scene .ou-radio-group,
@@ -725,7 +835,7 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
       </div>
 
       <div class="pv-dialog-foot">
-        <span>11 экранов · 21 шаблонов контента · шаблон «Стандартный» v1.3.0</span>
+        <span>12 экранов · 21 шаблонов контента · шаблон «Стандартный» v1.3.0</span>
         <button type="button" class="pv-btn">Закрыть</button>
       </div>
     </div>
@@ -740,12 +850,22 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
   "version": "1.3.0",
   "templateApiVersion": "1.0",
   "description": "Базовый одноколоночный плеер. Используется по умолчанию для обратной совместимости.",
+  "themes": [
+    {
+      "id": "light",
+      "label": "Светлая"
+    },
+    {
+      "id": "dark",
+      "label": "Тёмная"
+    }
+  ],
   "params": [
     {
       "key": "primaryColor",
       "type": "color",
       "label": "Цвет кнопок и активных элементов",
-      "default": "268 100% 50%",
+      "default": null,
       "group": "Цвета",
       "section": "branding",
       "description": "Кнопки «Далее» и «Начать», выбранный вариант ответа, пройденные точки прогресса, рамка фокуса."
@@ -754,7 +874,7 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
       "key": "backgroundColor",
       "type": "color",
       "label": "Фон экрана",
-      "default": "222 28% 9%",
+      "default": null,
       "group": "Цвета",
       "section": "branding",
       "description": "Подложка всего экрана — то, что видно под карточками и текстом."
@@ -763,7 +883,7 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
       "key": "foregroundColor",
       "type": "color",
       "label": "Цвет основного текста",
-      "default": "0 0% 98%",
+      "default": null,
       "group": "Цвета",
       "section": "branding",
       "description": "Заголовки, текст вопроса и текст учебных страниц на фоне экрана."
@@ -772,7 +892,7 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
       "key": "cardColor",
       "type": "color",
       "label": "Фон карточки",
-      "default": "220 23% 18%",
+      "default": null,
       "group": "Цвета",
       "section": "branding",
       "description": "Заливка карточек: учебная страница, карточка вопроса, окно подтверждения, итоги."
@@ -781,7 +901,7 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
       "key": "cardBorderColor",
       "type": "color",
       "label": "Граница карточки",
-      "default": "0 0% 24%",
+      "default": null,
       "group": "Цвета",
       "section": "branding",
       "description": "Контур карточек и модальных окон."
@@ -790,7 +910,7 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
       "key": "borderColor",
       "type": "color",
       "label": "Границы элементов",
-      "default": "222 18% 22%",
+      "default": null,
       "group": "Цвета",
       "section": "branding",
       "description": "Рамки вариантов ответа и полей, разделители внутри карточек."
@@ -799,7 +919,7 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
       "key": "mutedColor",
       "type": "color",
       "label": "Фон вспомогательных блоков",
-      "default": "225 10% 20%",
+      "default": null,
       "group": "Цвета",
       "section": "branding",
       "description": "Заливка невыполненных точек прогресса, вставки с пояснением, дорожки шкал."
@@ -808,7 +928,7 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
       "key": "accentColor",
       "type": "color",
       "label": "Подсветка при наведении",
-      "default": "225 8% 22%",
+      "default": null,
       "group": "Цвета",
       "section": "branding",
       "description": "Заливка варианта ответа и ссылки под курсором мыши."
@@ -835,15 +955,6 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
       "group": "Оформление",
       "section": "branding",
       "description": "Показывается в шапке экранов старта и итогов."
-    },
-    {
-      "key": "startImageUrl",
-      "type": "image",
-      "label": "Изображение старта",
-      "default": null,
-      "group": "Оформление",
-      "section": "branding",
-      "description": "Иллюстрация в правой колонке стартового экрана. Стандартный старт показывает её, когда она задана; вариант «Изображение справа» всегда держит колонку с изображением."
     },
     {
       "key": "progress.mode",
@@ -890,7 +1001,14 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
       "kind": "start",
       "pageKind": "start",
       "layoutFile": "layouts/start.image-right.html",
-      "placeholders": []
+      "placeholders": [],
+      "settings": [
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение"
+        }
+      ]
     },
     {
       "key": "results.standard",
@@ -1845,6 +1963,11 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
         "label": "Ранжирование"
       },
       {
+        "route": "question.scale",
+        "questionId": "demo-scale",
+        "label": "Шкала"
+      },
+      {
         "route": "review",
         "label": "Обзор раздела"
       },
@@ -2227,6 +2350,34 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
           "r3",
           "r4"
         ]
+      },
+      {
+        "id": "demo-scale",
+        "topicId": "topic-1",
+        "type": "scale",
+        "prompt": "Насколько уверенно вы распознаёте фишинговое письмо?",
+        "options": [
+          {
+            "id": "g1",
+            "text": "Совсем не уверен"
+          },
+          {
+            "id": "g2",
+            "text": "Скорее не уверен"
+          },
+          {
+            "id": "g3",
+            "text": "Затрудняюсь ответить"
+          },
+          {
+            "id": "g4",
+            "text": "Скорее уверен"
+          },
+          {
+            "id": "g5",
+            "text": "Полностью уверен"
+          }
+        ]
       }
     ]
   },
@@ -2289,11 +2440,11 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
 };
   window.PRD1_PREVIEW_LAYOUTS   = {
   "shell": "<div class=\"tb-player\" data-template=\"default\">\n  <div class=\"tb-progress-wrap\">\n    <div class=\"tb-progress-bar\" id=\"tb-progress-fill\"></div>\n  </div>\n  <main id=\"app\" class=\"tb-content\" data-slot=\"page\" tabindex=\"-1\"></main>\n</div>\n",
-  "start": "<div class=\"tb-scene tb-scene--cover\">\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-cover{{#if design.startImageUrl}} tb-cover--media{{/if}}\">\r\n      <div class=\"tb-cover__main\">\r\n        <span class=\"tb-scene__logo tb-cover__logo\">{{#if design.logoUrl}}<img src=\"{{ design.logoUrl }}\" alt=\"\">{{/if}}{{#unless design.logoUrl}}<svg class=\"tb-scene__logo-ph\" width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/><circle cx=\"8.5\" cy=\"8.5\" r=\"1.5\"/><path d=\"m21 15-4.5-4.5L5 21\"/></svg>{{/unless}}</span>\r\n\r\n        <div class=\"tb-cover__content\">\r\n          <div class=\"tb-cover__head\">\r\n            <div class=\"tb-cover__eyebrow\">\r\n              {{#if course.subtitle}}<span data-path=\"course.subtitle\"></span>{{/if}}\r\n              {{#if state.exhausted}}<span class=\"ou-tag ou-tag--neutral\">Попытки исчерпаны</span>{{/if}}\r\n            </div>\r\n            <h1 class=\"tb-cover__title\" data-path=\"course.title\"></h1>\r\n            {{#if course.description}}<p class=\"tb-cover__desc\" data-path=\"course.description\"></p>{{/if}}\r\n          </div>\r\n\r\n          <div class=\"tb-facts\">\r\n            <div class=\"tb-facts__item\">\r\n              <div class=\"tb-facts__num\" data-path=\"course.questionCount\"></div>\r\n              <div class=\"tb-facts__lbl\">вопросов</div>\r\n            </div>\r\n            <div class=\"tb-facts__item\">\r\n              <div class=\"tb-facts__num\"><span data-path=\"course.passPercent\"></span>%</div>\r\n              <div class=\"tb-facts__lbl\">проходной балл</div>\r\n            </div>\r\n            {{#if course.timeLimitMinutes}}\r\n            <div class=\"tb-facts__item\">\r\n              <div class=\"tb-facts__num\"><span data-path=\"course.timeLimitMinutes\"></span> мин</div>\r\n              <div class=\"tb-facts__lbl\">на прохождение</div>\r\n            </div>\r\n            {{/if}}\r\n            {{#if course.maxAttempts}}\r\n            <div class=\"tb-facts__item\">\r\n              <div class=\"tb-facts__num\" data-path=\"course.maxAttempts\"></div>\r\n              <div class=\"tb-facts__lbl\">попыток</div>\r\n            </div>\r\n            {{/if}}\r\n          </div>\r\n\r\n          {{#if course.startPageContent}}\r\n          <div class=\"tb-cover__note\">\r\n            <span class=\"tb-scene__subhead\">Как проходить</span>\r\n            <span class=\"tb-scene__note\">{{course.startPageContent}}</span>\r\n          </div>\r\n          {{/if}}\r\n\r\n          {{#if state.cooldown}}\r\n          <div class=\"ou-banner ou-banner--sm tb-cooldown\">\r\n            <span class=\"ou-banner__ico\" aria-hidden=\"true\">\r\n              <svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/></svg>\r\n            </span>\r\n            <div class=\"ou-banner__body\">\r\n              <div class=\"ou-banner__title\">Повторное прохождение пока недоступно</div>\r\n              <div class=\"ou-banner__desc\">Повторный запуск будет доступен с <strong><span data-path=\"state.cooldown.availableDateHuman\"></span></strong>{{#if state.cooldown.daysUntil}} &middot; через <span data-path=\"state.cooldown.daysUntil\"></span> дн.{{/if}}</div>\r\n            </div>\r\n          </div>\r\n          {{/if}}\r\n\r\n          {{#if state.priorResult}}\r\n          <div class=\"ou-banner ou-banner--sm tb-prior\">\r\n            <div class=\"ou-banner__body\">\r\n              <div class=\"ou-banner__title\">Прошлая попытка: <span data-path=\"state.priorResult.percent\"></span>%{{#if state.priorResult.verdictLabel}} &middot; <span class=\"{{state.priorResult.verdictClass}}\" data-path=\"state.priorResult.verdictLabel\"></span>{{/if}}{{#if state.priorResult.attemptsLabel}} &middot; <span data-path=\"state.priorResult.attemptsLabel\"></span>{{/if}}</div>\r\n            </div>\r\n            <div class=\"ou-banner__actions\">\r\n              {{#if state.canViewResults}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--s\" data-action=\"view-results\">Мой результат</button>{{/if}}\r\n              {{#if state.canDownloadReport}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--s\" data-action=\"download-report\">Скачать отчёт</button>{{/if}}\r\n            </div>\r\n          </div>\r\n          {{/if}}\r\n        </div>\r\n      </div>\r\n\r\n      {{#if design.startImageUrl}}\r\n      <div class=\"tb-cover__media\"><img src=\"{{ design.startImageUrl }}\" alt=\"\"></div>\r\n      {{/if}}\r\n    </div>\r\n  </main>\r\n\r\n  <footer class=\"tb-scene__foot\">\r\n    {{#if state.showBack}}<button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--m\" data-action=\"back\">К списку тестов</button>{{/if}}\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    {{#if state.resumeNote}}<span class=\"tb-scene__note\">{{state.resumeNote}}</span>{{/if}}\r\n    {{#if state.canResume}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"resume\">{{state.resumeLabel}}</button>{{/if}}\r\n    {{#if state.cooldown}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" disabled aria-disabled=\"true\">Начать тестирование</button>{{/if}}\r\n    {{#if state.canStart}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"start-test\">{{state.startLabel}}</button>{{/if}}\r\n    {{#if state.canRestart}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--l\" data-action=\"restart\">Начать заново</button>{{/if}}\r\n    {{#unless state.priorResult}}{{#if state.canViewResults}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--l\" data-action=\"view-results\">Мой результат</button>{{/if}}{{/unless}}\r\n  </footer>\r\n</div>\r\n",
+  "start": "<div class=\"tb-scene tb-scene--cover\">\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-cover{{#if design.startImageUrl}} tb-cover--media{{/if}}\">\r\n      <div class=\"tb-cover__main\">\r\n        {{#if design.logoUrl}}<span class=\"tb-scene__logo tb-cover__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n\r\n        <div class=\"tb-cover__content\">\r\n          <div class=\"tb-cover__head\">\r\n            <div class=\"tb-cover__eyebrow\">\r\n              {{#if course.subtitle}}<span data-path=\"course.subtitle\"></span>{{/if}}\r\n              {{#if state.exhausted}}<span class=\"ou-tag ou-tag--neutral\">Попытки исчерпаны</span>{{/if}}\r\n            </div>\r\n            <h1 class=\"tb-cover__title\" data-path=\"course.title\"></h1>\r\n            {{#if course.description}}<p class=\"tb-cover__desc\" data-path=\"course.description\"></p>{{/if}}\r\n          </div>\r\n\r\n          <div class=\"tb-facts\">\r\n            {{#if course.questionCount}}\r\n            <div class=\"tb-facts__item\">\r\n              <div class=\"tb-facts__num\" data-path=\"course.questionCount\"></div>\r\n              <div class=\"tb-facts__lbl\">вопросов</div>\r\n            </div>\r\n            {{/if}}\r\n            {{#if course.passPercent}}\r\n            <div class=\"tb-facts__item\">\r\n              <div class=\"tb-facts__num\"><span data-path=\"course.passPercent\"></span>%</div>\r\n              <div class=\"tb-facts__lbl\">проходной балл</div>\r\n            </div>\r\n            {{/if}}\r\n            {{#if course.timeLimitMinutes}}\r\n            <div class=\"tb-facts__item\">\r\n              <div class=\"tb-facts__num\"><span data-path=\"course.timeLimitMinutes\"></span> мин</div>\r\n              <div class=\"tb-facts__lbl\">на прохождение</div>\r\n            </div>\r\n            {{/if}}\r\n            {{#if course.maxAttempts}}\r\n            <div class=\"tb-facts__item\">\r\n              <div class=\"tb-facts__num\" data-path=\"course.maxAttempts\"></div>\r\n              <div class=\"tb-facts__lbl\">попыток</div>\r\n            </div>\r\n            {{/if}}\r\n          </div>\r\n\r\n          {{#if course.startPageContent}}\r\n          <div class=\"tb-cover__note\">\r\n            <span class=\"tb-scene__subhead\">Как проходить</span>\r\n            <span class=\"tb-scene__note\">{{course.startPageContent}}</span>\r\n          </div>\r\n          {{/if}}\r\n\r\n          {{#if state.cooldown}}\r\n          <div class=\"ou-banner ou-banner--sm tb-cooldown\">\r\n            <span class=\"ou-banner__ico\" aria-hidden=\"true\">\r\n              <svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/></svg>\r\n            </span>\r\n            <div class=\"ou-banner__body\">\r\n              <div class=\"ou-banner__title\">Повторное прохождение пока недоступно</div>\r\n              <div class=\"ou-banner__desc\">Повторный запуск будет доступен с <strong><span data-path=\"state.cooldown.availableDateHuman\"></span></strong>{{#if state.cooldown.daysUntil}} &middot; через <span data-path=\"state.cooldown.daysUntil\"></span> дн.{{/if}}</div>\r\n            </div>\r\n          </div>\r\n          {{/if}}\r\n\r\n          {{#if state.priorResult}}\r\n          <div class=\"ou-banner ou-banner--sm tb-prior\">\r\n            <div class=\"ou-banner__body\">\r\n              <div class=\"ou-banner__title\">Прошлая попытка: <span data-path=\"state.priorResult.percent\"></span>%{{#if state.priorResult.verdictLabel}} &middot; <span class=\"{{state.priorResult.verdictClass}}\" data-path=\"state.priorResult.verdictLabel\"></span>{{/if}}{{#if state.priorResult.attemptsLabel}} &middot; <span data-path=\"state.priorResult.attemptsLabel\"></span>{{/if}}</div>\r\n            </div>\r\n            <div class=\"ou-banner__actions\">\r\n              {{#if state.canViewResults}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--s\" data-action=\"view-results\">Мой результат</button>{{/if}}\r\n              {{#if state.canDownloadReport}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--s\" data-action=\"download-report\">Скачать отчёт</button>{{/if}}\r\n            </div>\r\n          </div>\r\n          {{/if}}\r\n        </div>\r\n      </div>\r\n\r\n      {{#if design.startImageUrl}}\r\n      <div class=\"tb-cover__media\"><img src=\"{{ design.startImageUrl }}\" alt=\"\"></div>\r\n      {{/if}}\r\n    </div>\r\n  </main>\r\n\r\n  <footer class=\"tb-scene__foot\">\r\n    {{#if state.showBack}}<button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--m\" data-action=\"back\">К списку тестов</button>{{/if}}\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    {{#if state.resumeNote}}<span class=\"tb-scene__note\">{{state.resumeNote}}</span>{{/if}}\r\n    {{#if state.canResume}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"resume\">{{state.resumeLabel}}</button>{{/if}}\r\n    {{#if state.cooldown}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" disabled aria-disabled=\"true\">Начать тестирование</button>{{/if}}\r\n    {{#if state.canStart}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"start-test\">{{state.startLabel}}</button>{{/if}}\r\n    {{#if state.canRestart}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--l\" data-action=\"restart\">Начать заново</button>{{/if}}\r\n    {{#unless state.priorResult}}{{#if state.canViewResults}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--l\" data-action=\"view-results\">Мой результат</button>{{/if}}{{/unless}}\r\n  </footer>\r\n</div>\r\n",
   "content": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow tb-scene__brandrow--center\">\r\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\r\n      </div>\r\n      {{#if page.pageLabel}}<div class=\"tb-scene__headtag\"><span class=\"ou-tag ou-tag--neutral\" data-path=\"page.pageLabel\"></span></div>{{/if}}\n      <div class=\"tb-scene__timers\">\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"timer-display\">\n          <span class=\"ou-timer__lbl\">тест</span><span class=\"ou-timer__num\"></span>\n        </div>\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"section-timer-display\">\n          <span class=\"ou-timer__lbl\">раздел</span><span class=\"ou-timer__num\"></span>\n        </div>\n      </div>\r\n    </div>\r\n    {{#if page.pageLabel}}<div class=\"tb-scene__progress\"><div class=\"tb-scene__progress-fill\" style=\"width:{{page.progressPercent}}%\"></div></div>{{/if}}\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body tb-content-body\">\r\n    <div class=\"tb-content\" data-slot=\"page-content\"></div>\r\n  </main>\r\n  <footer class=\"tb-scene__foot\">\r\n    {{#if page.canGoBack}}<button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--m\" data-nav=\"prev\">Назад</button>{{/if}}\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-nav=\"next\"{{#if page.nextDisabled}} disabled aria-disabled=\"true\"{{/if}}>{{page.nextLabel}}</button>\r\n  </footer>\r\n</div>\r\n",
-  "question": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow\">\r\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__timers\">\r\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"timer-display\">\r\n          <span class=\"ou-timer__lbl\">тест</span><span class=\"ou-timer__num\"></span>\r\n        </div>\r\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"section-timer-display\">\r\n          <span class=\"ou-timer__lbl\">раздел</span><span class=\"ou-timer__num\"></span>\r\n        </div>\r\n      </div>\r\n    </div>\r\n    {{#if state.questionsProgress}}\r\n    <div class=\"ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map\" role=\"group\" aria-label=\"Карта вопросов\">\r\n      <div class=\"ou-quiz__dots\">\r\n        {{#each state.questionsProgress.states}}\r\n        <button type=\"button\" class=\"ou-quiz__dot {{statusClass}}\" {{#unless clickable}}disabled{{/unless}} data-action=\"goto:{{index}}\" aria-label=\"{{ariaLabel}}\">{{number}}</button>\r\n        {{/each}}\r\n      </div>\r\n      <div class=\"ou-quiz__legend\">\r\n        <span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot is-flagged\"></span>пропущен</span>\r\n        <span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot is-current\"></span>текущий</span>\r\n        <span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot\"></span>не отвечен</span>\r\n        <span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot is-answered\"></span>отвечен</span>\r\n      </div>\r\n      <span class=\"tb-scene__mapcount tb-scene__mapcount--answered\">отвечено <strong>{{state.questionsProgress.answeredCount}}</strong> из {{state.questionsProgress.total}}</span>\r\n      <span class=\"tb-scene__mapcount tb-scene__mapcount--skipped\">пропущено {{state.questionsProgress.skippedCount}}</span>\r\n    </div>\r\n    {{/if}}\r\n    <div class=\"tb-scene__progress\"><div class=\"tb-scene__progress-fill\" id=\"q-progress-fill\"></div></div>\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-scene__col\" style=\"--tb-question-fs: {{state.questionFont}}; --tb-answer-fs: {{state.optionFont}}\">\r\n      <div class=\"tb-scene__meta\">\r\n        <span data-path=\"state.questionCounterLabel\"></span>\r\n        {{#if state.sectionName}}<span class=\"ou-tag ou-tag--neutral\" data-path=\"state.sectionName\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__q\">\r\n        <h2 class=\"tb-scene__qtitle\" data-slot=\"question-text\"></h2>\r\n        {{#if state.questionHint}}<span class=\"tb-scene__qhint\" data-path=\"state.questionHint\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-qbody\">\r\n        <div class=\"tb-qbody__media\" data-slot=\"question-media\"></div>\r\n        <div class=\"tb-qbody__answers\">\r\n          <div data-slot=\"question-feedback\"></div>\r\n          <div data-slot=\"question-interaction\"></div>\r\n        </div>\r\n      </div>\r\n    </div>\r\n  </main>\r\n</div>\r\n",
-  "results": "<div class=\"tb-scene\">\n  <header class=\"tb-scene__header\">\n    <div class=\"tb-scene__brandrow\">\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\n      <div class=\"tb-scene__titles\">\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\n      </div>\n      <div class=\"tb-scene__headtag\"><span class=\"ou-tag {{ result.passClass }}\" data-path=\"result.statusLabel\"></span></div>\n    </div>\n    <div class=\"tb-scene__progress\"><div class=\"tb-scene__progress-fill\" style=\"width: {{result.scorePercent}}%\"></div></div>\n  </header>\n\n  <main class=\"tb-scene__body\">\n    <div class=\"tb-scene__col tb-scene__col--wide\">\n      <div class=\"tb-score-strip\">\n        <div class=\"ou-ring tb-ring\">\n          <svg class=\"ou-ring__svg\" width=\"140\" height=\"140\" viewBox=\"0 0 140 140\">\n            <circle class=\"ou-ring__track\" cx=\"70\" cy=\"70\" r=\"63\" stroke-width=\"12\"></circle>\n            <circle class=\"ou-ring__fill {{ result.passClass }}\" cx=\"70\" cy=\"70\" r=\"63\" stroke-width=\"12\" stroke-linecap=\"round\" stroke-dasharray=\"395.84\" stroke-dashoffset=\"{{ result.ringDashoffset }}\"></circle>\n          </svg>\n          <div class=\"ou-ring__center\">\n            <div class=\"ou-ring__value\"><span data-path=\"result.scorePercent\"></span>%</div>\n            <div class=\"ou-ring__label\">баллы</div>\n          </div>\n        </div>\n        <div class=\"tb-facts\">\n          <div class=\"tb-facts__item\"><div class=\"tb-facts__num\" data-path=\"result.totalQuestions\"></div><div class=\"tb-facts__lbl\">вопросов</div></div>\n          <div class=\"tb-facts__item\"><div class=\"tb-facts__num\"><span data-path=\"result.correct\"></span>/<span data-path=\"result.totalQuestions\"></span></div><div class=\"tb-facts__lbl\">верно</div></div>\n          <div class=\"tb-facts__item\"><div class=\"tb-facts__num\" data-path=\"result.earnedPoints\"></div><div class=\"tb-facts__lbl\">баллов</div></div>\n        </div>\n      </div>\n\n      {{#if result.topicResults}}\n      <hr class=\"ou-separator ou-separator--horizontal\">\n      <div class=\"tb-scene__q\"><h3 class=\"tb-scene__subhead\">Результаты по темам</h3></div>\n      <div class=\"tb-topics-grid\">\n        {{#each result.topicResults}}\n        <div class=\"ou-card tb-topic-card\">\n          <div class=\"ou-card__body\">\n            <span class=\"tb-topic-card__name\">{{topicName}}</span>\n            <span class=\"ou-tag ou-tag--s {{passClass}}\">{{statusLabel}}</span>\n            <div class=\"ou-progress ou-progress--s tb-topic-card__bar {{passClass}}\"><div class=\"ou-progress__track\"><div class=\"ou-progress__fill\" style=\"width: {{percent}}%\"></div></div></div>\n            <div class=\"tb-stat-rows\">\n              <div class=\"ou-stat-row ou-stat-row--compact\"><div class=\"ou-stat-row__body\"><div class=\"ou-stat-row__title\">Правильно</div></div><span class=\"tb-stat-val\">{{correct}} / {{total}}</span></div>\n              {{#if pointsLabel}}<div class=\"ou-stat-row ou-stat-row--compact\"><div class=\"ou-stat-row__body\"><div class=\"ou-stat-row__title\">Баллов</div></div><span class=\"tb-stat-val\">{{pointsLabel}}</span></div>{{/if}}\n            </div>\n            {{#if requiredLabel}}<span class=\"tb-topic-card__req\">{{requiredLabel}}</span>{{/if}}\n            {{#if hasFeedback}}\n            <div class=\"tb-topic-card__fb\">\n              <span class=\"tb-topic-card__fb-text\">{{feedback}}</span>\n              {{#if hasRecommendations}}<div class=\"tb-recs\">{{#each recommendedCourses}}<a class=\"tb-rec\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class=\"tb-rec\">{{title}}</span>{{/each}}</div>{{/if}}\n            </div>\n            {{/if}}\n            {{#unless hasFeedback}}{{#if hasRecommendations}}\n            <div class=\"tb-topic-card__fb\">\n              <div class=\"tb-recs\">{{#each recommendedCourses}}<a class=\"tb-rec\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class=\"tb-rec\">{{title}}</span>{{/each}}</div>\n            </div>\n            {{/if}}{{/unless}}\n          </div>\n        </div>\n        {{/each}}\n      </div>\n      {{/if}}\n    </div>\n  </main>\n\n  <footer class=\"tb-scene__foot\">\n    <div class=\"tb-scene__foot-spacer\"></div>\n    {{#if result.backAction}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"{{result.backAction}}\">{{result.backLabel}}</button>{{/if}}\n    {{#unless result.backAction}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"restart\">Пройти снова</button>{{/unless}}\n  </footer>\n</div>\n",
-  "results.adaptive": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow tb-scene__brandrow--center\">\r\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__headtag\"><span class=\"ou-tag ou-tag--neutral\">Тест завершён</span></div>\r\n    </div>\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-scene__col tb-scene__col--wide\">\r\n      <div class=\"tb-adaptive-hero\">\r\n        <span class=\"tb-adaptive-hero__icon\" aria-hidden=\"true\">\r\n          <svg width=\"34\" height=\"34\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 10 12 5 2 10l10 5 10-5Z\"/><path d=\"M6 12v5c3 3 9 3 12 0v-5\"/></svg>\r\n        </span>\r\n        <h2 class=\"tb-scene__hero tb-scene__hero--s\">Тест завершён</h2>\r\n        <span class=\"tb-scene__lead\">Адаптивный тест подобрал уровень по каждой теме</span>\r\n      </div>\r\n\r\n      {{#if result.topicResults}}\r\n      <div class=\"tb-scene__q\"><h3 class=\"tb-scene__subhead\">Результаты по темам</h3></div>\r\n      <div class=\"tb-topics-grid\">\r\n        {{#each result.topicResults}}\r\n        <div class=\"ou-card tb-topic-card\">\r\n          <div class=\"ou-card__body\">\r\n            <span class=\"tb-topic-card__name\">{{topicName}}</span>\r\n            <span class=\"ou-tag ou-tag--s {{levelClass}}\">{{levelLabel}}</span>\r\n            {{#if hasFeedback}}\r\n            <div class=\"tb-topic-card__fb\">\r\n              <span class=\"tb-topic-card__fb-text\">{{feedback}}</span>\r\n              {{#if hasRecommendations}}<div class=\"tb-recs\">{{#each recommendedCourses}}<a class=\"tb-rec\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class=\"tb-rec\">{{title}}</span>{{/each}}</div>{{/if}}\r\n            </div>\r\n            {{/if}}\r\n            {{#unless hasFeedback}}{{#if hasRecommendations}}\r\n            <div class=\"tb-topic-card__fb\">\r\n              <div class=\"tb-recs\">{{#each recommendedCourses}}<a class=\"tb-rec\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class=\"tb-rec\">{{title}}</span>{{/each}}</div>\r\n            </div>\r\n            {{/if}}{{/unless}}\r\n          </div>\r\n        </div>\r\n        {{/each}}\r\n      </div>\r\n      {{/if}}\r\n    </div>\r\n  </main>\r\n\r\n  <footer class=\"tb-scene__foot\">\r\n    {{#if result.showPdf}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--m\" data-action=\"download-pdf\">Скачать PDF</button>{{/if}}\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    {{#if result.canRetry}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--l\" data-action=\"restart-adaptive\">Пройти заново</button>{{/if}}\r\n    {{#if result.showFinish}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"finish\">Завершить тест</button>{{/if}}\r\n    {{#unless result.hasScormActions}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"restart\">Пройти снова</button>{{/unless}}\r\n  </footer>\r\n</div>\r\n",
+  "question": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow\">\r\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__timers\">\r\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"timer-display\">\r\n          <span class=\"ou-timer__lbl\">тест</span><span class=\"ou-timer__num\"></span>\r\n        </div>\r\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"section-timer-display\">\r\n          <span class=\"ou-timer__lbl\">раздел</span><span class=\"ou-timer__num\"></span>\r\n        </div>\r\n      </div>\r\n    </div>\r\n    {{#if state.questionsProgress}}\r\n    <div class=\"ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map\" role=\"group\" aria-label=\"Карта вопросов\">\r\n      <div class=\"ou-quiz__dots\">\r\n        {{#each state.questionsProgress.states}}\r\n        <button type=\"button\" class=\"ou-quiz__dot {{statusClass}}\" {{#unless clickable}}disabled{{/unless}} data-action=\"goto:{{index}}\" aria-label=\"{{ariaLabel}}\">{{number}}</button>\r\n        {{/each}}\r\n      </div>\r\n      <div class=\"ou-quiz__legend\">\r\n        <span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot is-flagged\"></span>пропущен</span>\r\n        <span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot is-current\"></span>текущий</span>\r\n        <span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot\"></span>не отвечен</span>\r\n        <span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot is-answered\"></span>отвечен</span>\r\n      </div>\r\n      <span class=\"tb-scene__mapcount tb-scene__mapcount--answered\">отвечено <strong>{{state.questionsProgress.answeredCount}}</strong> из {{state.questionsProgress.total}}</span>\r\n      <span class=\"tb-scene__mapcount tb-scene__mapcount--skipped\">пропущено {{state.questionsProgress.skippedCount}}</span>\r\n    </div>\r\n    {{/if}}\r\n    <div class=\"tb-scene__progress\"><div class=\"tb-scene__progress-fill\" id=\"q-progress-fill\"></div></div>\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-scene__col\" style=\"--tb-question-fs: {{state.questionFont}}; --tb-answer-fs: {{state.optionFont}}\">\r\n      <div class=\"tb-scene__meta\">\r\n        <span data-path=\"state.questionCounterLabel\"></span>\r\n        {{#if state.sectionName}}<span class=\"ou-tag ou-tag--neutral\" data-path=\"state.sectionName\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__q\">\r\n        <h2 class=\"tb-scene__qtitle\" data-slot=\"question-text\"></h2>\r\n        {{#if state.questionHint}}<span class=\"tb-scene__qhint\" data-path=\"state.questionHint\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-qbody\">\r\n        <div class=\"tb-qbody__media\" data-slot=\"question-media\"></div>\r\n        <div class=\"tb-qbody__answers\">\r\n          <div data-slot=\"question-feedback\"></div>\r\n          <div data-slot=\"question-interaction\"></div>\r\n        </div>\r\n      </div>\r\n    </div>\r\n  </main>\r\n\r\n  <!-- Navigation row. Composition is the TEMPLATE's decision; the host only supplies\r\n       `state.nav` (see shared/template/question-nav). Both hosts render this markup,\r\n       so the footer cannot differ between the web run and the package. -->\r\n  <footer class=\"tb-scene__foot\">\r\n    {{#if state.nav.showBack}}<button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--m\" data-action=\"answer-back\" {{#unless state.nav.canPrev}}disabled{{/unless}}>← Назад</button>{{/if}}\r\n    {{#if state.nav.showSkip}}<button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--m\" data-action=\"answer-skip\">Пропустить</button>{{/if}}\r\n    {{#if state.nav.showReview}}<button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--m\" data-action=\"answer-return\">К обзору</button>{{/if}}\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"{{state.nav.primaryAction}}\" {{#unless state.nav.primaryEnabled}}disabled{{/unless}} data-path=\"state.nav.primaryLabel\"></button>\r\n  </footer>\r\n</div>\r\n",
+  "results": "<div class=\"tb-scene\">\n  <header class=\"tb-scene__header\">\n    <div class=\"tb-scene__brandrow\">\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\n      <div class=\"tb-scene__titles\">\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\n      </div>\n      <div class=\"tb-scene__headtag\"><span class=\"ou-tag {{ result.passClass }}\" data-path=\"result.statusLabel\"></span></div>\n    </div>\n    <div class=\"tb-scene__progress\"><div class=\"tb-scene__progress-fill\" style=\"width: {{result.scorePercent}}%\"></div></div>\n  </header>\n\n  <main class=\"tb-scene__body\">\n    <div class=\"tb-scene__col tb-scene__col--wide\">\n      <div class=\"tb-score-strip\">\n        <div class=\"ou-ring tb-ring\">\n          <svg class=\"ou-ring__svg\" width=\"140\" height=\"140\" viewBox=\"0 0 140 140\">\n            <circle class=\"ou-ring__track\" cx=\"70\" cy=\"70\" r=\"63\" stroke-width=\"12\"></circle>\n            <circle class=\"ou-ring__fill {{ result.passClass }}\" cx=\"70\" cy=\"70\" r=\"63\" stroke-width=\"12\" stroke-linecap=\"round\" stroke-dasharray=\"395.84\" stroke-dashoffset=\"{{ result.ringDashoffset }}\"></circle>\n          </svg>\n          <div class=\"ou-ring__center\">\n            <div class=\"ou-ring__value\"><span data-path=\"result.scorePercent\"></span>%</div>\n            <div class=\"ou-ring__label\">баллы</div>\n          </div>\n        </div>\n        <div class=\"tb-facts\">\n          <div class=\"tb-facts__item\"><div class=\"tb-facts__num\" data-path=\"result.totalQuestions\"></div><div class=\"tb-facts__lbl\">вопросов</div></div>\n          <div class=\"tb-facts__item\"><div class=\"tb-facts__num\"><span data-path=\"result.correct\"></span>/<span data-path=\"result.totalQuestions\"></span></div><div class=\"tb-facts__lbl\">верно</div></div>\n          <div class=\"tb-facts__item\"><div class=\"tb-facts__num\" data-path=\"result.earnedPoints\"></div><div class=\"tb-facts__lbl\">баллов</div></div>\n        </div>\n      </div>\n\n      {{#if result.topicResults}}\n      <hr class=\"ou-separator ou-separator--horizontal\">\n      <div class=\"tb-scene__q\"><h3 class=\"tb-scene__subhead\">Результаты по темам</h3></div>\n      <div class=\"tb-topics-grid\">\n        {{#each result.topicResults}}\n        <div class=\"ou-card tb-topic-card\">\n          <div class=\"ou-card__body\">\n            <span class=\"tb-topic-card__name\">{{topicName}}</span>\n            <span class=\"ou-tag ou-tag--s {{passClass}}\">{{statusLabel}}</span>\n            <div class=\"ou-progress ou-progress--s tb-topic-card__bar {{passClass}}\"><div class=\"ou-progress__track\"><div class=\"ou-progress__fill\" style=\"width: {{percent}}%\"></div></div></div>\n            <div class=\"tb-stat-rows\">\n              <div class=\"ou-stat-row ou-stat-row--compact\"><div class=\"ou-stat-row__body\"><div class=\"ou-stat-row__title\">Правильно</div></div><span class=\"tb-stat-val\">{{correct}} / {{total}}</span></div>\n              {{#if pointsLabel}}<div class=\"ou-stat-row ou-stat-row--compact\"><div class=\"ou-stat-row__body\"><div class=\"ou-stat-row__title\">Баллов</div></div><span class=\"tb-stat-val\">{{pointsLabel}}</span></div>{{/if}}\n            </div>\n            {{#if requiredLabel}}<span class=\"tb-topic-card__req\">{{requiredLabel}}</span>{{/if}}\n            {{#if hasFeedback}}\n            <div class=\"tb-topic-card__fb\">\n              <span class=\"tb-topic-card__fb-text\">{{feedback}}</span>\n              {{#if hasRecommendations}}<div class=\"tb-recs\">{{#each recommendedCourses}}<a class=\"tb-rec\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class=\"tb-rec\">{{title}}</span>{{/each}}</div>{{/if}}\n            </div>\n            {{/if}}\n            {{#unless hasFeedback}}{{#if hasRecommendations}}\n            <div class=\"tb-topic-card__fb\">\n              <div class=\"tb-recs\">{{#each recommendedCourses}}<a class=\"tb-rec\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class=\"tb-rec\">{{title}}</span>{{/each}}</div>\n            </div>\n            {{/if}}{{/unless}}\n          </div>\n        </div>\n        {{/each}}\n      </div>\n      {{/if}}\n    </div>\n  </main>\n\n  <!-- Footer of the results screen. Composition is the TEMPLATE's decision; hosts\n       only fill `result.nav` (see shared/template/results-nav) and bind the actions.\n       `result.backAction` is the legacy single-button form kept for contexts that\n       do not build `nav` (host previews). -->\n  <footer class=\"tb-scene__foot\">\n    {{#if result.nav.showReport}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--m\" data-action=\"download-report\">Скачать отчёт</button>{{/if}}\n    <div class=\"tb-scene__foot-spacer\"></div>\n    {{#if result.nav.canRetry}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--l\" data-action=\"restart\">Пройти заново</button>{{/if}}\n    {{#if result.nav}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"{{result.nav.primaryAction}}\">{{result.nav.primaryLabel}}</button>{{/if}}\n    {{#unless result.nav}}\n      {{#if result.backAction}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"{{result.backAction}}\">{{result.backLabel}}</button>{{/if}}\n      {{#unless result.backAction}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"restart\">Пройти снова</button>{{/unless}}\n    {{/unless}}\n  </footer>\n</div>\n",
+  "results.adaptive": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow tb-scene__brandrow--center\">\r\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__headtag\"><span class=\"ou-tag ou-tag--neutral\">Тест завершён</span></div>\r\n    </div>\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-scene__col tb-scene__col--wide\">\r\n      <div class=\"tb-adaptive-hero\">\r\n        <span class=\"tb-adaptive-hero__icon\" aria-hidden=\"true\">\r\n          <svg width=\"34\" height=\"34\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 10 12 5 2 10l10 5 10-5Z\"/><path d=\"M6 12v5c3 3 9 3 12 0v-5\"/></svg>\r\n        </span>\r\n        <h2 class=\"tb-scene__hero tb-scene__hero--s\">Тест завершён</h2>\r\n        <span class=\"tb-scene__lead\">Адаптивный тест подобрал уровень по каждой теме</span>\r\n      </div>\r\n\r\n      {{#if result.topicResults}}\r\n      <div class=\"tb-scene__q\"><h3 class=\"tb-scene__subhead\">Результаты по темам</h3></div>\r\n      <div class=\"tb-topics-grid\">\r\n        {{#each result.topicResults}}\r\n        <div class=\"ou-card tb-topic-card\">\r\n          <div class=\"ou-card__body\">\r\n            <span class=\"tb-topic-card__name\">{{topicName}}</span>\r\n            <span class=\"ou-tag ou-tag--s {{levelClass}}\">{{levelLabel}}</span>\r\n            {{#if hasFeedback}}\r\n            <div class=\"tb-topic-card__fb\">\r\n              <span class=\"tb-topic-card__fb-text\">{{feedback}}</span>\r\n              {{#if hasRecommendations}}<div class=\"tb-recs\">{{#each recommendedCourses}}<a class=\"tb-rec\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class=\"tb-rec\">{{title}}</span>{{/each}}</div>{{/if}}\r\n            </div>\r\n            {{/if}}\r\n            {{#unless hasFeedback}}{{#if hasRecommendations}}\r\n            <div class=\"tb-topic-card__fb\">\r\n              <div class=\"tb-recs\">{{#each recommendedCourses}}<a class=\"tb-rec\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class=\"tb-rec\">{{title}}</span>{{/each}}</div>\r\n            </div>\r\n            {{/if}}{{/unless}}\r\n          </div>\r\n        </div>\r\n        {{/each}}\r\n      </div>\r\n      {{/if}}\r\n    </div>\r\n  </main>\r\n\r\n  <footer class=\"tb-scene__foot\">\r\n    {{#if result.showBack}}<button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--m\" data-action=\"results-back\">← К списку тестов</button>{{/if}}\r\n    {{#if result.showPdf}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--m\" data-action=\"download-pdf\">Скачать PDF</button>{{/if}}\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    {{#if result.canRetry}}<button type=\"button\" class=\"ou-btn ou-btn--secondary ou-btn--l\" data-action=\"restart-adaptive\">Пройти заново</button>{{/if}}\r\n    {{#if result.showFinish}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"finish\">Завершить тест</button>{{/if}}\r\n    {{#unless result.hasScormActions}}<button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"restart\">Пройти снова</button>{{/unless}}\r\n  </footer>\r\n</div>\r\n",
   "review": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow\">\r\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__timers\">\r\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"timer-display\">\r\n          <span class=\"ou-timer__lbl\">тест</span><span class=\"ou-timer__num\"></span>\r\n        </div>\r\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"section-timer-display\">\r\n          <span class=\"ou-timer__lbl\">раздел</span><span class=\"ou-timer__num\"></span>\r\n        </div>\r\n      </div>\r\n    </div>\r\n    <!-- The question map is NOT repeated in the review header — the body carries its\r\n         own (larger) map and the answered/skipped counts, so a header copy would\r\n         duplicate it. -->\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-scene__col\">\r\n      <div class=\"tb-scene__q\">\r\n        <h2 class=\"tb-scene__hero tb-scene__hero--s\">{{ review.scopeLabel }}</h2>\r\n        <span class=\"tb-scene__qhint\">{{ review.hint }}</span>\r\n      </div>\r\n\r\n      {{#if state.questionsProgress}}\r\n      <div class=\"ou-quiz ou-quiz--circle ou-quiz--l tb-review-map\" role=\"group\" aria-label=\"Карта вопросов\">\r\n        <div class=\"ou-quiz__dots\">\r\n          {{#each state.questionsProgress.states}}\r\n          <button type=\"button\" class=\"ou-quiz__dot {{statusClass}}\" {{#unless clickable}}disabled{{/unless}} data-action=\"goto:{{index}}\" aria-label=\"{{ariaLabel}}\">{{number}}</button>\r\n          {{/each}}\r\n        </div>\r\n        <div class=\"ou-quiz__legend\">\r\n          {{#if review.canReturn}}<span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot is-current\"></span>текущий</span>{{/if}}\r\n          <span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot is-flagged\"></span>пропущен</span>\r\n          <span class=\"ou-quiz__legend-item\"><span class=\"ou-quiz__legend-dot is-answered\"></span>отвечен</span>\r\n        </div>\r\n        <span class=\"tb-review-map__count\">отвечено <strong>{{state.questionsProgress.answeredCount}}</strong> из {{state.questionsProgress.total}} · пропущено {{state.questionsProgress.skippedCount}}</span>\r\n      </div>\r\n      {{/if}}\r\n\r\n      {{#if review.unansweredCount}}\r\n      <hr class=\"ou-separator ou-separator--horizontal\">\r\n      <div class=\"tb-card\">\r\n        <span class=\"tb-card__head\">Без ответа: {{review.unansweredCount}}</span>\r\n        <div class=\"tb-unanswered\">\r\n          {{#each review.unanswered}}\r\n          <div class=\"ou-stat-row\">\r\n            <div class=\"ou-stat-row__body\">\r\n              <div class=\"ou-stat-row__title\">Вопрос {{number}} · {{prompt}}</div>\r\n            </div>\r\n            <button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--s\" data-action=\"goto:{{index}}\">Перейти</button>\r\n          </div>\r\n          {{/each}}\r\n        </div>\r\n      </div>\r\n      {{/if}}\r\n    </div>\r\n  </main>\r\n\r\n  <footer class=\"tb-scene__foot\">\r\n    {{#if review.canReturn}}\r\n    <!-- Opened via «К обзору» mid-flow: «Назад» (to the origin question) is the accented\r\n         primary; «Завершить …» is demoted to a quiet ghost so it is not fired by accident. -->\r\n    <button type=\"button\" class=\"ou-btn ou-btn--ghost ou-btn--m\" data-action=\"finish-review\">{{ review.finishLabel }}</button>\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"review-back\">{{ review.backLabel }}</button>\r\n    {{/if}}\r\n    {{#unless review.canReturn}}\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"finish-review\">{{ review.finishLabel }}</button>\r\n    {{/unless}}\r\n  </footer>\r\n</div>\r\n",
   "section-results": "<div class=\"tb-scene\">\n  <header class=\"tb-scene__header\">\n    <div class=\"tb-scene__brandrow tb-scene__brandrow--center\">\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\n      <div class=\"tb-scene__titles\">\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\n      </div>\n      {{#if sectionResult.sectionLabel}}<div class=\"tb-scene__headtag\"><span class=\"ou-tag ou-tag--neutral\" data-path=\"sectionResult.sectionLabel\"></span></div>{{/if}}\n      <div class=\"tb-scene__timers\">\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"timer-display\">\n          <span class=\"ou-timer__lbl\">тест</span><span class=\"ou-timer__num\"></span>\n        </div>\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"section-timer-display\">\n          <span class=\"ou-timer__lbl\">раздел</span><span class=\"ou-timer__num\"></span>\n        </div>\n      </div>\n    </div>\n    {{#if sectionResult.sectionLabel}}<div class=\"tb-scene__progress\"><div class=\"tb-scene__progress-fill\" style=\"width:{{sectionResult.progressPercent}}%\"></div></div>{{/if}}\n  </header>\n\n  <main class=\"tb-scene__body\">\n    <div class=\"tb-scene__col tb-scene__col--center tb-scene__col--narrow\">\n      <span class=\"tb-eyebrow\">Итоги раздела</span>\n      <h2 class=\"tb-scene__hero tb-scene__hero--s\">Раздел «<span data-path=\"sectionResult.topicName\"></span>»</h2>\n\n      <div class=\"ou-ring tb-ring\">\n        <svg class=\"ou-ring__svg\" width=\"140\" height=\"140\" viewBox=\"0 0 140 140\">\n          <circle class=\"ou-ring__track\" cx=\"70\" cy=\"70\" r=\"63\" stroke-width=\"12\"></circle>\n          <circle class=\"ou-ring__fill {{ sectionResult.passClass }}\" cx=\"70\" cy=\"70\" r=\"63\" stroke-width=\"12\" stroke-linecap=\"round\" stroke-dasharray=\"395.84\" stroke-dashoffset=\"{{ sectionResult.ringDashoffset }}\"></circle>\n        </svg>\n        <div class=\"ou-ring__center\">\n          <div class=\"ou-ring__value\"><span data-path=\"sectionResult.scorePercent\"></span>%</div>\n          <div class=\"ou-ring__label\">баллы</div>\n        </div>\n      </div>\n\n      {{#if sectionResult.hasVerdict}}<span class=\"ou-tag {{ sectionResult.passClass }}\" data-path=\"sectionResult.statusLabel\"></span>{{/if}}\n\n      <div class=\"tb-facts tb-facts--center\">\n        <div class=\"tb-facts__item\">\n          <div class=\"tb-facts__num\" data-path=\"sectionResult.total\"></div>\n          <div class=\"tb-facts__lbl\">вопросов</div>\n        </div>\n        <div class=\"tb-facts__item\">\n          <div class=\"tb-facts__num\">{{sectionResult.correct}} / {{sectionResult.total}}</div>\n          <div class=\"tb-facts__lbl\">верно</div>\n        </div>\n      </div>\n    </div>\n  </main>\n\n  <footer class=\"tb-scene__foot\">\n    <div class=\"tb-scene__foot-spacer\"></div>\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"section-continue\">{{ sectionResult.continueLabel }}</button>\n  </footer>\n</div>\n",
   "section-intro": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow tb-scene__brandrow--center\">\r\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__headtag\"><span class=\"ou-tag ou-tag--neutral\" data-path=\"sectionIntro.eyebrow\"></span></div>\n      <div class=\"tb-scene__timers\">\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"timer-display\">\n          <span class=\"ou-timer__lbl\">тест</span><span class=\"ou-timer__num\"></span>\n        </div>\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"section-timer-display\">\n          <span class=\"ou-timer__lbl\">раздел</span><span class=\"ou-timer__num\"></span>\n        </div>\n      </div>\r\n    </div>\r\n    {{#if sectionIntro.progressPercent}}<div class=\"tb-scene__progress\"><div class=\"tb-scene__progress-fill\" style=\"width:{{sectionIntro.progressPercent}}%\"></div></div>{{/if}}\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-scene__col tb-scene__col--center\">\r\n      <span class=\"tb-eyebrow\">{{ sectionIntro.eyebrow }}</span>\r\n      <h2 class=\"tb-scene__hero\" data-path=\"sectionIntro.topicName\"></h2>\r\n      {{#if sectionIntro.hasDescription}}<span class=\"tb-scene__lead\" data-path=\"sectionIntro.description\"></span>{{/if}}\r\n      <div class=\"tb-meta-dots\">\r\n        <span class=\"tb-meta-dots__item\"><span class=\"tb-meta-dots__dot\" aria-hidden=\"true\"></span>{{ sectionIntro.questionCountLabel }}</span>\r\n        {{#if sectionIntro.hasTimeLimit}}<span class=\"tb-meta-dots__item\"><span class=\"tb-meta-dots__dot\" aria-hidden=\"true\"></span>{{ sectionIntro.timeLimitLabel }}</span>{{/if}}\r\n      </div>\r\n      {{#if sectionIntro.hasInstruction}}\r\n      <div class=\"tb-card\">\r\n        <span class=\"tb-card__head\">Инструкция</span>\r\n        <span class=\"tb-card__body\" data-slot=\"instruction\"></span>\r\n      </div>\r\n      {{/if}}\r\n    </div>\r\n  </main>\r\n  <footer class=\"tb-scene__foot\">\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"section-intro-continue\">{{ sectionIntro.continueLabel }}</button>\r\n  </footer>\r\n</div>\r\n",
@@ -2447,15 +2598,16 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
     var el = document.documentElement;
     el.classList.add("ou");
     var TB = root.TBTemplate;
-    var theme = (TB && typeof TB.sceneThemeAttribute === "function") ? TB.sceneThemeAttribute(design, manifest) : null;
-    if (!theme) {
-      var themed = TB && typeof TB.supportsThemes === "function" && TB.supportsThemes(manifest);
-      if (themed && typeof window !== "undefined" && window.matchMedia) {
-        theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-      } else {
-        theme = "dark";
-      }
-    }
+    // The rule itself lives in the SHARED registry (`resolveSceneTheme`), so the web
+    // host cannot drift from it — that drift is what opened the same test dark here
+    // and white on the web.
+    var pinned = (TB && typeof TB.sceneThemeAttribute === "function") ? TB.sceneThemeAttribute(design, manifest) : null;
+    var themed = !!(TB && typeof TB.supportsThemes === "function" && TB.supportsThemes(manifest));
+    var systemDark = typeof window !== "undefined" && !!window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var theme = (TB && typeof TB.resolveSceneTheme === "function")
+      ? TB.resolveSceneTheme({ pinned: pinned, themed: themed, systemPrefersDark: systemDark })
+      : (pinned || (themed && systemDark ? "dark" : themed ? "light" : "dark"));
     el.classList.remove("ou--dark", "ou--light");
     el.classList.add(theme === "light" ? "ou--light" : "ou--dark");
   }
@@ -3298,7 +3450,6 @@ function renderSectionIntro(page) {
     sectionNumber: idx + 1,
     sectionsTotal: sections.length,
     courseTitle: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") || section.topicName,
-    subtitle: (typeof scormCourseSubtitle === "function") ? scormCourseSubtitle() : "",
     topicName: section.topicName,
     description: section.topicDescription,
     questionCount: section.drawCount,
@@ -3475,7 +3626,6 @@ function renderContentPage(page, contentTemplates) {
       context: {
         course: {
           title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : ""),
-          subtitle: (typeof scormCourseSubtitle === "function") ? scormCourseSubtitle() : ""
         },
         // Per-test branding: the shared header binds `{{#if design.logoUrl}}`, so a
         // content page must carry `design` too or the logo goes missing on it.
@@ -4244,8 +4394,11 @@ var TBTemplate = (() => {
     DEFAULT_PARAM_CSS_VARS: () => DEFAULT_PARAM_CSS_VARS,
     INPUT_MODES: () => INPUT_MODES,
     PLACEHOLDER_TYPES: () => PLACEHOLDER_TYPES,
+    QUESTION_NAV_ACTIONS: () => QUESTION_NAV_ACTIONS,
+    RESULTS_NAV_ACTIONS: () => RESULTS_NAV_ACTIONS,
     SEQUENCE_SETTING_KEY: () => SEQUENCE_SETTING_KEY,
     SETTING_TYPES: () => SETTING_TYPES,
+    START_IMAGE_KEY: () => START_IMAGE_KEY,
     TEST_THEMES: () => TEST_THEMES,
     THEME_IDS: () => THEME_IDS,
     aggregateAdaptiveResult: () => aggregateAdaptiveResult,
@@ -4265,8 +4418,10 @@ var TBTemplate = (() => {
     buildPageContextFor: () => buildPageContextFor,
     buildPageSequence: () => buildPageSequence,
     buildPaletteBridge: () => buildPaletteBridge,
+    buildQuestionNav: () => buildQuestionNav,
     buildQuestionProgress: () => buildQuestionProgress,
     buildResultContext: () => buildResultContext,
+    buildResultsNav: () => buildResultsNav,
     buildReviewContext: () => buildReviewContext,
     buildRouterHubHtml: () => buildRouterHubHtml,
     buildSectionIntroContext: () => buildSectionIntroContext,
@@ -4294,13 +4449,19 @@ var TBTemplate = (() => {
     fitQuestionScene: () => fitQuestionScene,
     getPagePlaceholderStyles: () => getPagePlaceholderStyles,
     getPageValues: () => getPageValues,
+    hasFixedOptionOrder: () => hasFixedOptionOrder,
+    hasOptionList: () => hasOptionList,
     inputModesFor: () => inputModesFor,
     isFlowContentPage: () => isFlowContentPage,
+    isMeasurementOnly: () => isMeasurementOnly,
     isPlaceholderType: () => isPlaceholderType,
     isRouterReadyToFinish: () => isRouterReadyToFinish,
     isSectionUnlocked: () => isSectionUnlocked,
     isSettingType: () => isSettingType,
+    isSingleIndexChoice: () => isSingleIndexChoice,
     isTestTheme: () => isTestTheme,
+    mediaUrlOf: () => mediaUrlOf,
+    nextScaleIndex: () => nextScaleIndex,
     normalizePool: () => normalizePool,
     optionFont: () => optionFont,
     paramsForTheme: () => paramsForTheme,
@@ -4317,21 +4478,27 @@ var TBTemplate = (() => {
     renderPlainText: () => renderPlainText,
     renderRanking: () => renderRanking,
     renderResultField: () => renderResultField,
+    renderScale: () => renderScale,
     renderScreenInto: () => renderScreenInto,
     renderSingleChoice: () => renderSingleChoice,
     renderTemplate: () => renderTemplate,
     resolveContentTemplate: () => resolveContentTemplate,
     resolveOverallRule: () => resolveOverallRule,
+    resolveSceneTheme: () => resolveSceneTheme,
+    resolveStartImageUrl: () => resolveStartImageUrl,
     resolveThemeParams: () => resolveThemeParams,
     resolveTopicRule: () => resolveTopicRule,
     returnToPool: () => returnToPool,
     sceneThemeAttribute: () => sceneThemeAttribute,
+    sectionBudget: () => section_budget_exports,
     sequenceIdOf: () => sequenceIdOf,
     shouldShowReview: () => shouldShowReview,
+    startImageForVariant: () => startImageForVariant,
     statusLabel: () => statusLabel,
     stripMarkdown: () => stripMarkdown,
     supportsThemes: () => supportsThemes,
     validateVariantFields: () => validateVariantFields,
+    variantDeclaresStartImage: () => variantDeclaresStartImage,
     withTemplateAssetBase: () => withTemplateAssetBase,
     withTemplateAssetBaseInValues: () => withTemplateAssetBaseInValues
   });
@@ -5345,6 +5512,23 @@ var TBTemplate = (() => {
     return { course: { title }, result };
   }
 
+  // shared/questions/question-type.ts
+  function isSingleIndexChoice(type) {
+    return type === "single" || type === "scale";
+  }
+  function hasOptionList(type) {
+    return type === "single" || type === "multiple" || type === "scale";
+  }
+  function hasFixedOptionOrder(type) {
+    return type === "scale";
+  }
+  function isMeasurementOnly(question) {
+    var _a;
+    if (question.type !== "scale") return false;
+    const key = (_a = question.correctJson) != null ? _a : question.correct;
+    return !key || typeof key.correctIndex !== "number";
+  }
+
   // shared/scoring/engine.ts
   function clamp01(v) {
     return Math.max(0, Math.min(1, v));
@@ -5354,7 +5538,7 @@ var TBTemplate = (() => {
   }
   function exactCorrect(type, correct, answer) {
     if (answer === null || answer === void 0) return 0;
-    if (type === "single") {
+    if (isSingleIndexChoice(type)) {
       return answer === correct.correctIndex ? 1 : 0;
     }
     if (type === "multiple") {
@@ -5510,27 +5694,32 @@ var TBTemplate = (() => {
     let tPossible = 0;
     let tCorrect = 0;
     let tQuestions = 0;
+    let tScored = 0;
     let allTopicsPassed = true;
     const topicResults = input.sections.map((sec) => {
       var _a;
       let earned = 0;
       let possible = 0;
       let correct = 0;
+      let scored = 0;
       for (const q of sec.questions) {
+        if (isMeasurementOnly(q)) continue;
+        scored++;
         const ratio = q.answer === void 0 || q.answer === null ? 0 : scoreAnswer({ type: q.type, correct: q.correct || {}, answer: q.answer, scoring: q.scoring }).ratio;
         possible += q.points;
         earned += q.points * ratio;
         if (ratio === 1) correct++;
       }
-      const total = sec.questions.length;
+      const total = scored;
       const percent2 = possible > 0 ? earned / possible * 100 : 0;
       const resolved = resolveTopicRule(sec.topicPassRule, overall, { formId: (_a = sec.formId) != null ? _a : null });
-      const passed = resolved ? checkPassRule(resolved, percent2, earned) : null;
+      const passed = resolved && scored > 0 ? checkPassRule(resolved, percent2, earned) : null;
       if (passed === false) allTopicsPassed = false;
       tEarned += earned;
       tPossible += possible;
       tCorrect += correct;
       tQuestions += total;
+      tScored += scored;
       return {
         topicId: sec.topicId,
         topicName: sec.topicName,
@@ -5546,10 +5735,11 @@ var TBTemplate = (() => {
       };
     });
     const percent = tPossible > 0 ? tEarned / tPossible * 100 : 0;
-    const overallPassed = checkPassRule(overall, percent, tEarned);
+    const overallPassed = tScored > 0 ? checkPassRule(overall, percent, tEarned) : true;
     return {
       correct: tCorrect,
       totalQuestions: tQuestions,
+      scoredQuestions: tScored,
       earnedPoints: tEarned,
       possiblePoints: tPossible,
       percent,
@@ -5619,8 +5809,8 @@ var TBTemplate = (() => {
     const n = input == null ? void 0 : input.attemptNumber;
     if (typeof n !== "number" || !Number.isFinite(n) || n < 1) return "";
     const max = input == null ? void 0 : input.maxAttempts;
-    const capped = typeof max === "number" && Number.isFinite(max) && max > 0;
-    return capped ? `\u041F\u043E\u043F\u044B\u0442\u043A\u0430 ${n} \u0438\u0437 ${max}` : `\u041F\u043E\u043F\u044B\u0442\u043A\u0430 ${n}`;
+    if (typeof max !== "number" || !Number.isFinite(max) || max <= 0) return "";
+    return `\u041F\u043E\u043F\u044B\u0442\u043A\u0430 ${n} \u0438\u0437 ${max}`;
   }
 
   // shared/template/start-state.ts
@@ -5692,6 +5882,30 @@ var TBTemplate = (() => {
       startPageContent: i.startPageContent || ""
     };
     return { course, state };
+  }
+
+  // shared/template/start-image.ts
+  var START_IMAGE_KEY = "image";
+  function mediaUrlOf(value) {
+    if (typeof value === "string") return value.trim();
+    if (value && typeof value === "object") {
+      const url = value.url;
+      if (typeof url === "string") return url.trim();
+    }
+    return "";
+  }
+  function resolveStartImageUrl(pageSettings, designParams) {
+    const own = mediaUrlOf(pageSettings ? pageSettings[START_IMAGE_KEY] : null);
+    if (own) return own;
+    return mediaUrlOf(designParams ? designParams.startImageUrl : null);
+  }
+  function variantDeclaresStartImage(variant) {
+    const settings = variant == null ? void 0 : variant.settings;
+    if (!Array.isArray(settings)) return false;
+    return settings.some((s) => (s == null ? void 0 : s.key) === START_IMAGE_KEY && (s == null ? void 0 : s.type) === "image");
+  }
+  function startImageForVariant(variant, pageSettings, designParams) {
+    return variantDeclaresStartImage(variant) ? resolveStartImageUrl(pageSettings, designParams) : "";
   }
 
   // shared/template/transition-context.ts
@@ -5796,7 +6010,8 @@ var TBTemplate = (() => {
     single: "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043E\u0434\u0438\u043D \u0432\u0430\u0440\u0438\u0430\u043D\u0442 \u043E\u0442\u0432\u0435\u0442\u0430",
     multiple: "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043E\u0434\u0438\u043D \u0438\u043B\u0438 \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0432\u0430\u0440\u0438\u0430\u043D\u0442\u043E\u0432",
     ranking: "\u0420\u0430\u0441\u0441\u0442\u0430\u0432\u044C\u0442\u0435 \u044D\u043B\u0435\u043C\u0435\u043D\u0442\u044B \u0432 \u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u043E\u043C \u043F\u043E\u0440\u044F\u0434\u043A\u0435 \u2014 \u043F\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u0438\u043B\u0438 \u043A\u043D\u043E\u043F\u043A\u0430\u043C\u0438 \u2191/\u2193",
-    matching: "\u041F\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u043A\u0430\u0440\u0442\u043E\u0447\u043A\u0443 \u0441\u043F\u0440\u0430\u0432\u0430 \u043D\u0430 \u043D\u0443\u0436\u043D\u0443\u044E \u0441\u0442\u0440\u043E\u043A\u0443"
+    matching: "\u041F\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u043A\u0430\u0440\u0442\u043E\u0447\u043A\u0443 \u0441\u043F\u0440\u0430\u0432\u0430 \u043D\u0430 \u043D\u0443\u0436\u043D\u0443\u044E \u0441\u0442\u0440\u043E\u043A\u0443",
+    scale: "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043E\u0442\u0432\u0435\u0442 \u043D\u0430 \u0448\u043A\u0430\u043B\u0435"
   };
   function questionHint(type) {
     var _a;
@@ -5860,6 +6075,28 @@ var TBTemplate = (() => {
   }
   function renderMultiple(question, answer, shuffleMapping, review) {
     return renderChoice(question, answer, shuffleMapping, review, true);
+  }
+  var SCALE_HORIZONTAL_MAX = 7;
+  function scaleStatus(index, chosen, correct) {
+    if (correct !== null) {
+      if (index === correct) return " is-success";
+      if (index === chosen) return " is-error";
+      return chosen !== null && index < chosen ? " is-done" : "";
+    }
+    if (chosen === null) return "";
+    if (index === chosen) return " is-current";
+    return index < chosen ? " is-done" : "";
+  }
+  function renderScale(question, answer, review) {
+    const options = fields(question).options;
+    const chosen = typeof answer === "number" ? answer : null;
+    const correct = review && typeof review.correctIndex === "number" ? review.correctIndex : null;
+    const rootCls = "ou-stepper ou-stepper--choice" + (options.length > SCALE_HORIZONTAL_MAX ? " ou-stepper--vertical" : "") + (correct !== null ? " ou-stepper--review" : "");
+    const steps = options.map((label, i) => {
+      const status = scaleStatus(i, chosen, correct);
+      return `<button type="button" class="ou-stepper__step ou-stepper__step--btn${status}" role="radio" aria-checked="${chosen === i ? "true" : "false"}" data-action="select:${i}" data-index="${i}"><span class="ou-stepper__bullet"></span><span class="ou-stepper__label"><span class="ou-stepper__title">${answerHtml(label)}</span></span></button>`;
+    }).join("");
+    return `<div class="${rootCls}" role="radiogroup">${steps}</div>`;
   }
   var RANK_GRIP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"></path></svg>';
   var CHEVRON_UP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"></path></svg>';
@@ -5944,8 +6181,88 @@ var TBTemplate = (() => {
     return html;
   }
 
+  // shared/template/scale-keyboard.ts
+  var STEP_KEYS = {
+    ArrowLeft: -1,
+    ArrowUp: -1,
+    ArrowRight: 1,
+    ArrowDown: 1
+  };
+  function nextScaleIndex(key, current, count) {
+    if (count <= 0) return null;
+    if (key === "Home") return current === 0 ? null : 0;
+    if (key === "End") return current === count - 1 ? null : count - 1;
+    const step = STEP_KEYS[key];
+    if (step === void 0) return null;
+    if (current === null) return step < 0 ? count - 1 : 0;
+    const target = current + step;
+    return target < 0 || target >= count ? null : target;
+  }
+
+  // shared/template/question-nav.ts
+  var QUESTION_NAV_ACTIONS = {
+    back: "answer-back",
+    skip: "answer-skip",
+    submit: "answer-submit",
+    review: "answer-return",
+    next: "answer-next",
+    finish: "test-finish"
+  };
+  function buildQuestionNav(state) {
+    const A = QUESTION_NAV_ACTIONS;
+    if (!state.flexible) {
+      const primary2 = state.showAccept ? { primaryAction: A.submit, primaryLabel: "\u041F\u0440\u0438\u043D\u044F\u0442\u044C" } : state.hasNext ? { primaryAction: A.next, primaryLabel: "\u0414\u0430\u043B\u0435\u0435" } : { primaryAction: A.finish, primaryLabel: "\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C \u0442\u0435\u0441\u0442" };
+      return {
+        showBack: false,
+        canPrev: false,
+        showSkip: false,
+        showReview: false,
+        primaryEnabled: state.answerReady,
+        ...primary2
+      };
+    }
+    const primary = state.committed ? { primaryAction: A.next, primaryLabel: "\u0414\u0430\u043B\u0435\u0435", primaryEnabled: true } : { primaryAction: A.submit, primaryLabel: "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u043E\u0442\u0432\u0435\u0442", primaryEnabled: state.answerReady };
+    return {
+      showBack: true,
+      canPrev: state.canPrev,
+      showSkip: !state.committed,
+      showReview: state.showReview,
+      ...primary
+    };
+  }
+
+  // shared/template/results-nav.ts
+  var RESULTS_NAV_ACTIONS = {
+    /** Export the attempt report (the template's `report` variant). */
+    report: "download-report",
+    /** Start the test over. */
+    retry: "restart",
+    /** Walk on to the post-test content pages. */
+    next: "results-next",
+    /** Close the run (LMS) / leave the results screen (web). */
+    finish: "results-finish",
+    /**
+     * Leave the results for the test list — the ADAPTIVE layout's exit, since its
+     * footer carries no closing action (the standard one ends with `primaryAction`).
+     * WEB ONLY: a package has nowhere to go back to, so the layout gates the button on
+     * `result.showBack`, which only the web host sets (the same split as the start
+     * screen's `showBack`). It lives in the scene footer because the alternative — a
+     * row of host chrome under the scene — is a second footer on one screen, and
+     * outside the shadow root it gets neither the scene surface nor the DS palette.
+     */
+    back: "results-back"
+  };
+  function buildResultsNav(state) {
+    const A = RESULTS_NAV_ACTIONS;
+    return {
+      showReport: !!state.canReport,
+      canRetry: !!state.canRetry,
+      ...state.hasPostPages ? { primaryAction: A.next, primaryLabel: "\u0414\u0430\u043B\u0435\u0435" } : { primaryAction: A.finish, primaryLabel: state.finishLabel || "\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C" }
+    };
+  }
+
   // shared/template/fit-font.ts
-  var QUESTION_FIT = { max: 32, min: 18, from: 58, per: 0.17 };
+  var QUESTION_FIT = { max: 32, min: 16, from: 58, per: 0.17 };
   var OPTION_FIT = { max: 22, min: 14, from: 38, per: 0.14 };
   function fitFont(len, cfg) {
     const shrink = Math.max(0, (Number(len) || 0) - cfg.from) * cfg.per;
@@ -5971,7 +6288,7 @@ var TBTemplate = (() => {
     var _a, _b, _c, _d, _e, _f;
     if (!field || !col || !headerEnd) return;
     const qMax = (_a = options == null ? void 0 : options.questionMax) != null ? _a : 32;
-    const qMin = (_b = options == null ? void 0 : options.questionMin) != null ? _b : 18;
+    const qMin = (_b = options == null ? void 0 : options.questionMin) != null ? _b : 16;
     const aMax = (_c = options == null ? void 0 : options.answerMax) != null ? _c : 22;
     const aMin = (_d = options == null ? void 0 : options.answerMin) != null ? _d : 14;
     const fracMax = (_e = options == null ? void 0 : options.headerFraction) != null ? _e : 1 / 3;
@@ -6038,6 +6355,11 @@ var TBTemplate = (() => {
   }
   function supportsThemes(manifest) {
     return declaredThemes(manifest).length >= 2;
+  }
+  function resolveSceneTheme({ pinned, themed, systemPrefersDark }) {
+    if (pinned) return pinned;
+    if (!themed) return "dark";
+    return systemPrefersDark ? "dark" : "light";
   }
 
   // shared/template/theme-params.ts
@@ -6121,6 +6443,58 @@ var TBTemplate = (() => {
   }
   function paramsOfTheme(design, manifest, themeId) {
     return paramsForTheme(resolveThemeParams(design, manifest), themeId);
+  }
+
+  // shared/flow/section-budget.ts
+  var section_budget_exports = {};
+  __export(section_budget_exports, {
+    enterSection: () => enterSection,
+    isSpent: () => isSpent,
+    pauseAll: () => pauseAll,
+    remainingMs: () => remainingMs,
+    remainingSeconds: () => remainingSeconds,
+    spentTopics: () => spentTopics
+  });
+  function remainingMs(budget, activeMs) {
+    if (!budget) return null;
+    const spent = budget.runningSince === null ? 0 : Math.max(0, activeMs - budget.runningSince);
+    return Math.max(0, budget.remainingMs - spent);
+  }
+  function remainingSeconds(budgets, topicId, activeMs) {
+    if (!topicId) return null;
+    const ms = remainingMs(budgets[topicId], activeMs);
+    return ms === null ? null : Math.ceil(ms / 1e3);
+  }
+  function isSpent(budgets, topicId, activeMs) {
+    const ms = remainingMs(budgets[topicId], activeMs);
+    return ms !== null && ms <= 0;
+  }
+  function spentTopics(budgets, activeMs) {
+    return Object.keys(budgets).filter((id) => isSpent(budgets, id, activeMs));
+  }
+  function enterSection(budgets, topicId, limitMinutes, activeMs) {
+    const next = pauseAll(budgets, activeMs);
+    const current = next[topicId];
+    if (current) {
+      if (current.runningSince !== null) return budgets === next ? budgets : next;
+      return { ...next, [topicId]: { remainingMs: current.remainingMs, runningSince: activeMs } };
+    }
+    if (!limitMinutes || limitMinutes <= 0) return next;
+    return { ...next, [topicId]: { remainingMs: limitMinutes * 6e4, runningSince: activeMs } };
+  }
+  function pauseAll(budgets, activeMs) {
+    var _a;
+    let changed = false;
+    const next = {};
+    for (const [id, b] of Object.entries(budgets)) {
+      if (b.runningSince === null) {
+        next[id] = b;
+        continue;
+      }
+      next[id] = { remainingMs: (_a = remainingMs(b, activeMs)) != null ? _a : 0, runningSince: null };
+      changed = true;
+    }
+    return changed ? next : budgets;
   }
 
   // shared/template/question-progress-context.ts

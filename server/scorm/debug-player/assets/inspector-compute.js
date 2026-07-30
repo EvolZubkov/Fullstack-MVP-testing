@@ -64,16 +64,27 @@
     return null;
   }
 
+  /**
+   * Answered by picking ONE option index — 'single' and 'scale'. Mirrors
+   * `isSingleIndexChoice` (shared/questions/question-type); this file is loaded as a
+   * standalone script in the debug-player host page, so it cannot reach the package's
+   * `TBQType` global and keeps its own copy.
+   */
+  function isOneIndexChoice(t) {
+    return t === "single" || t === "scale";
+  }
+
   function typeLabel(t) {
     return t === "single" ? "Один ответ" : t === "multiple" ? "Несколько" :
-      t === "matching" ? "Соответствие" : t === "ranking" ? "Ранжирование" : (t || "?");
+      t === "matching" ? "Соответствие" : t === "ranking" ? "Ранжирование" :
+      t === "scale" ? "Шкала" : (t || "?");
   }
 
   // Human-readable answer using the package's own option/left/right/items text.
   function humanAnswer(q, ans) {
     if (ans === null || ans === undefined) return "(нет ответа)";
     var d = q.data || {};
-    if (q.type === "single") {
+    if (isOneIndexChoice(q.type)) {
       var o = d.options || [];
       return (typeof ans === "number" && o[ans] != null) ? o[ans] : "#" + ans;
     }
@@ -105,7 +116,7 @@
     if (m.sourceType === "option") {
       var i = Number(m.sourceKey);
       if (isNaN(i)) return false;
-      if (qType === "single") return answer === i;
+      if (isOneIndexChoice(qType)) return answer === i;
       if (qType === "multiple") return Array.isArray(answer) && answer.indexOf(i) !== -1;
       return false;
     }
@@ -895,6 +906,20 @@
         if (correctSet.indexOf(idx) !== -1) {
           opts[i].style.position = "relative";
           opts[i].appendChild(tbRefBadge(doc, "✓", "ok"));
+        }
+      }
+    }
+
+    // scale — ✓ on the correct graduation. The scale renders as the DS Stepper in
+    // choice mode, so its rows are `.ou-stepper__step`, not `.ou-radio-card`. A
+    // MEASUREMENT-only scale carries no `correctIndex`, so nothing is marked — there
+    // is no reference answer to show.
+    if (curQ.type === "scale" && typeof c.correctIndex === "number") {
+      var steps = doc.querySelectorAll(".ou-stepper--choice .ou-stepper__step[data-index]");
+      for (var si = 0; si < steps.length; si++) {
+        if (parseInt(steps[si].getAttribute("data-index"), 10) === c.correctIndex) {
+          steps[si].style.position = "relative";
+          steps[si].appendChild(tbRefBadge(doc, "✓", "ok"));
         }
       }
     }

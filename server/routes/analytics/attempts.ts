@@ -9,6 +9,7 @@ import { loadTestScoringContext } from "../../services/effective-scoring";
 import { loadScoringConfig } from "../../services/scoring-config";
 import { computeAttemptResult, type AttemptResultBase } from "../../services/result-compute";
 import { computeAnswerContributions, type Answer, type QuestionType } from "@shared/scales/engine";
+import { isSingleIndexChoice } from "@shared/questions/question-type";
 import { stripMarkdown } from "@shared/text";
 
 const router = Router();
@@ -205,7 +206,8 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       let formattedUserAnswer: any = userAnswer;
       let formattedCorrectAnswer: any = correctJson;
 
-      if (question.type === "single" && dataJson?.options) {
+      // Шкала форматируется как одиночный выбор: ответ — индекс градации (PRD-26).
+      if (isSingleIndexChoice(question.type) && dataJson?.options) {
         formattedUserAnswer = dataJson.options[userAnswer as number] || userAnswer;
         formattedCorrectAnswer = dataJson.options[correctJson?.correctIndex] || correctJson;
       } else if (question.type === "multiple" && dataJson?.options) {

@@ -39,6 +39,8 @@ export function formatAllOptions(type: string, dataJson: any): string {
   switch (type) {
     case "single":
     case "multiple":
+    // Шкала хранит градации в том же списке options (PRD-26).
+    case "scale":
       if (dataJson.options && Array.isArray(dataJson.options)) {
         return dataJson.options.map((opt: string, i: number) => `${i + 1}) ${opt}`).join("\n");
       }
@@ -67,6 +69,8 @@ export function formatCorrectAnswerText(type: string, dataJson: any, correctJson
 
   switch (type) {
     case "single":
+    // У измерительной шкалы correctIndex отсутствует — вернётся пустая строка.
+    case "scale":
       if (correctJson.correctIndex !== undefined && dataJson?.options) {
         const idx = correctJson.correctIndex;
         return `${idx + 1}) ${dataJson.options[idx] || "?"}`;
@@ -105,6 +109,7 @@ export function formatUserAnswerText(type: string, dataJson: any, userAnswer: un
 
   switch (type) {
     case "single":
+    case "scale":
       if (typeof userAnswer === "number" && dataJson?.options) {
         return `${userAnswer + 1}) ${dataJson.options[userAnswer] || "?"}`;
       }

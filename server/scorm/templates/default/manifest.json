@@ -4,12 +4,22 @@
   "version": "1.3.0",
   "templateApiVersion": "1.0",
   "description": "Базовый одноколоночный плеер. Используется по умолчанию для обратной совместимости.",
+  "themes": [
+    {
+      "id": "light",
+      "label": "Светлая"
+    },
+    {
+      "id": "dark",
+      "label": "Тёмная"
+    }
+  ],
   "params": [
     {
       "key": "primaryColor",
       "type": "color",
       "label": "Цвет кнопок и активных элементов",
-      "default": "268 100% 50%",
+      "default": null,
       "group": "Цвета",
       "section": "branding",
       "description": "Кнопки «Далее» и «Начать», выбранный вариант ответа, пройденные точки прогресса, рамка фокуса."
@@ -18,7 +28,7 @@
       "key": "backgroundColor",
       "type": "color",
       "label": "Фон экрана",
-      "default": "222 28% 9%",
+      "default": null,
       "group": "Цвета",
       "section": "branding",
       "description": "Подложка всего экрана — то, что видно под карточками и текстом."
@@ -27,7 +37,7 @@
       "key": "foregroundColor",
       "type": "color",
       "label": "Цвет основного текста",
-      "default": "0 0% 98%",
+      "default": null,
       "group": "Цвета",
       "section": "branding",
       "description": "Заголовки, текст вопроса и текст учебных страниц на фоне экрана."
@@ -36,7 +46,7 @@
       "key": "cardColor",
       "type": "color",
       "label": "Фон карточки",
-      "default": "220 23% 18%",
+      "default": null,
       "group": "Цвета",
       "section": "branding",
       "description": "Заливка карточек: учебная страница, карточка вопроса, окно подтверждения, итоги."
@@ -45,7 +55,7 @@
       "key": "cardBorderColor",
       "type": "color",
       "label": "Граница карточки",
-      "default": "0 0% 24%",
+      "default": null,
       "group": "Цвета",
       "section": "branding",
       "description": "Контур карточек и модальных окон."
@@ -54,7 +64,7 @@
       "key": "borderColor",
       "type": "color",
       "label": "Границы элементов",
-      "default": "222 18% 22%",
+      "default": null,
       "group": "Цвета",
       "section": "branding",
       "description": "Рамки вариантов ответа и полей, разделители внутри карточек."
@@ -63,7 +73,7 @@
       "key": "mutedColor",
       "type": "color",
       "label": "Фон вспомогательных блоков",
-      "default": "225 10% 20%",
+      "default": null,
       "group": "Цвета",
       "section": "branding",
       "description": "Заливка невыполненных точек прогресса, вставки с пояснением, дорожки шкал."
@@ -72,7 +82,7 @@
       "key": "accentColor",
       "type": "color",
       "label": "Подсветка при наведении",
-      "default": "225 8% 22%",
+      "default": null,
       "group": "Цвета",
       "section": "branding",
       "description": "Заливка варианта ответа и ссылки под курсором мыши."
@@ -99,15 +109,6 @@
       "group": "Оформление",
       "section": "branding",
       "description": "Показывается в шапке экранов старта и итогов."
-    },
-    {
-      "key": "startImageUrl",
-      "type": "image",
-      "label": "Изображение старта",
-      "default": null,
-      "group": "Оформление",
-      "section": "branding",
-      "description": "Иллюстрация в правой колонке стартового экрана. Стандартный старт показывает её, когда она задана; вариант «Изображение справа» всегда держит колонку с изображением."
     },
     {
       "key": "progress.mode",
@@ -154,7 +155,14 @@
       "kind": "start",
       "pageKind": "start",
       "layoutFile": "layouts/start.image-right.html",
-      "placeholders": []
+      "placeholders": [],
+      "settings": [
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение"
+        }
+      ]
     },
     {
       "key": "results.standard",
@@ -1107,6 +1115,11 @@
         "route": "question.ranking",
         "questionId": "demo-ranking",
         "label": "Ранжирование"
+      },
+      {
+        "route": "question.scale",
+        "questionId": "demo-scale",
+        "label": "Шкала"
       },
       {
         "route": "review",
