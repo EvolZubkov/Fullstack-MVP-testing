@@ -1,8 +1,13 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { raiseScopeViolation } from "./magic-scope";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
+    // A magic-link session hit something outside its test. Routing normally
+    // prevents this; when it does not, the learner is sent to the login form
+    // rather than left with a bare 403.
+    if (res.status === 403 && text.includes("MAGIC_SCOPE")) raiseScopeViolation();
     throw new Error(`${res.status}: ${text}`);
   }
 }
