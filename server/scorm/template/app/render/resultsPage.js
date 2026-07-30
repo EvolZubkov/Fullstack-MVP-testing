@@ -197,7 +197,6 @@ function finishAndClose() {
     achievedLevels: results.achievedLevels || null,
     failedTopicCourses: failedTopicCourses
   });
-  console.log('📤 Телеметрия: реальный результат попытки:', Math.round(results.percent) + '%, passed:', results.passed);
 
   // ===== LMS: отправляем лучшую попытку с хаком если нужно =====
   var attemptsExhausted = !!TEST_DATA.maxAttempts && !hasAttemptsLeft();

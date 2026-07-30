@@ -321,9 +321,16 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   ]);
   const telemetryEnabled = !!(data.telemetry && data.telemetry.enabled);
 
+  // Telemetry OFF ships a no-op stand-in rather than the real runtime: no endpoint, no
+  // request signing, no LMS profile reads, no retry buffer. The `Telemetry` NAME still
+  // has to be bound — its call sites are spread across the render/action code, and the
+  // adaptive screens are bundled in every package regardless of the test's mode, so an
+  // unresolved reference is a ReferenceError as soon as the learner reaches that screen.
+  // Removing the call sites by regex instead is what used to leave that hole: a form the
+  // pattern did not anticipate (`Telemetry.finish(results)`) survived the strip.
   const telemetryJs = telemetryEnabled
     ? tryReadAsset(["app/telemetry/telemetry.js"])
-    : "";
+    : readOneOf(["app/telemetry/telemetry-disabled.js"]);
 
   // PRD-12 (2-7): shared template runtime bundled from `@shared` and exposed as the
   // `TBTemplate` global — the same renderer the web host uses. Prepended so every
@@ -375,10 +382,6 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     eligibilityGateJs,
     bootstrapMainJs,
   ]).replace("__TEST_JSON_B64__", testJsonB64);
-  
-  if (!telemetryEnabled) {
-    appJs = stripTelemetryArtifacts(appJs);
-  }
 
   const mediaHrefs = Object.keys(assets);
 
@@ -497,20 +500,3 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   return buildZip(files);
 }
 
-function stripTelemetryArtifacts(src: string) {
-  // 1) убрать Telemetry.finish({ ... }, ...); и Telemetry.answer({ ... });
-  src = src.replace(/Telemetry\.(finish|answer)\(\s*\{[\s\S]*?\}\s*(?:,\s*[^)]*)?\);\s*/g, "");
-
-  // 2) убрать простые вызовы Telemetry.*
-  src = src.replace(/^\s*Telemetry\.(init|start|startNewAttempt)\([^)]*\);\s*$/gm, "");
-  src = src.replace(/^\s*Telemetry\.(start|startNewAttempt)\(\);\s*$/gm, "");
-
-  // 3) убрать присваивания attemptNumber из телеметрии (обычно используются только для логов/finish)
-  src = src.replace(/^\s*var\s+\w+\s*=\s*Telemetry\.getAttemptNumber\(\);\s*$/gm, "");
-
-  // 4) убрать комментарии и логи, где вообще упоминается телеметрия/Telemetry
-  src = src.replace(/^\s*\/\/.*(telemetr|Telemetry).*$/gim, "");
-  src = src.replace(/^\s*console\.log\(.*(telemetr|Telemetry).*?\);\s*$/gim, "");
-
-  return src;
-}

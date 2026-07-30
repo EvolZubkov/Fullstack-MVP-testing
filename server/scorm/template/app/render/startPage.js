@@ -230,7 +230,6 @@ function startTest() {
       correct: results.correct,
       achievedLevels: results.achievedLevels || null
     }, currentAttemptNum);
-    console.log('📤 Телеметрия finish отправлена для попытки:', currentAttemptNum);
 
     // Сбрасываем state для новой попытки
     state.answers = {};

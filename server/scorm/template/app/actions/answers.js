@@ -510,8 +510,8 @@ function restart() {
 
   generateVariant();
   
-  // Телеметрия: новая попытка
-  console.log('🆕 Вызываем Telemetry.startNewAttempt()');
+  // Телеметрия: новая попытка. Отправку логирует сам модуль телеметрии — здесь лог
+  // только дублировал бы его, а в пакете с выключенной телеметрией врал бы.
   Telemetry.startNewAttempt();
   
   render();
