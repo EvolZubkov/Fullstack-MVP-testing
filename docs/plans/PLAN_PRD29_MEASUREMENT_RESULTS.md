@@ -3077,7 +3077,7 @@ Expected: FAIL, элементы не найдены.
 - [ ] **Step 4: Добавить домен и направление**
 
 ```tsx
-          <div className="ou-formrow">
+          <div className="ou-formgroup ou-formgroup--two">
             <Input
               size="m" type="number" label="Минимум шкалы"
               value={s.domainMin ?? ""} disabled={readOnly}
@@ -3151,256 +3151,201 @@ git commit -m "feat(prd-29): домен, направление и видимо�
 
 ---
 
-## Task 14: Редактор толкований
+## Task 14: Толкования в редакторе — интервалы и перечень исходов
 
 **Files:**
 
-- Modify: `client/src/features/tests/editor/sections/scales-section.tsx` (таблица интервалов)
-- Modify: `client/src/features/tests/editor/sections/result-variables-section.tsx` (перечень исходов)
+- Modify: `client/src/features/tests/editor/test-editor.types.ts` (`ScaleBandModel`)
+- Modify: `client/src/features/tests/editor/sections/scales-section.tsx` (существующий `BandsEditor`)
+- Create: `client/src/features/tests/editor/sections/outcomes-editor.tsx`
+- Modify: `client/src/features/tests/editor/sections/result-variables-section.tsx`
 - Test: `client/src/features/tests/editor/sections/__tests__/interpretation-editor.test.tsx`
 
-- [ ] **Step 1: Написать падающий тест**
+**Переиспользуем, а не пишем заново.** В проекте уже есть два готовых куска:
+
+- `BandsEditor` в `scales-section.tsx` — таблица `tb-table tb-bands-table` с колонками
+  min / max / Метка / Уровень / действия, `Input size="s"`, `IconButton` с иконкой корзины,
+  подписи через `aria-label`, фабрика `emptyBand()` и стабильный `clientKey`. Новый редактор
+  интервалов заводить НЕЛЬЗЯ — расширяем этот.
+- `FeedbackEditorModal` в `feedback-editor-modal.tsx` — редактор обратной связи (текст,
+  курсы, мероприятия, вложения) с флагами `hideAssets` / `hideEvents`. Рекомендации на
+  интервале и на исходе открываются ИМ, а не новым инлайновым блоком.
+
+Новый компонент в этой задаче ровно один — редактор перечня исходов: для показателей в
+проекте нет ничего похожего.
+
+**Раскладка длинного текста.** Толкование — абзац, и в ячейку таблицы он не помещается.
+Поэтому у каждой строки есть раскрывающаяся строка-продолжение (`<tr>` с `colSpan`), где
+живут толкование и кнопка «Рекомендации». Сама таблица остаётся компактной.
+
+- [ ] **Step 1: Расширить модель интервала**
+
+В `client/src/features/tests/editor/test-editor.types.ts`:
+
+```ts
+export type ScaleBandModel = {
+  clientKey?: string;
+  min: string;
+  max: string;
+  label: string;
+  level: string;
+  /** PRD-29: what this level MEANS, shown to the learner under the ruler. */
+  text: string;
+  /**
+   * PRD-29: author's override of the tone derived from the ramp position. Empty =
+   * derive it. A closed list of METHODOLOGICAL states, never a colour — the template
+   * decides how each state looks.
+   */
+  tone: LevelTone | "";
+  /** PRD-29: recommendations that fire when the learner lands in this band. */
+  feedback?: FeedbackEditorValue;
+};
+```
+
+`emptyBand()` дополняется `text: ""` и `tone: ""`.
+
+- [ ] **Step 2: Написать падающий тест**
 
 ```tsx
 // client/src/features/tests/editor/sections/__tests__/interpretation-editor.test.tsx
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { InterpretationBandsEditor } from "../interpretation-bands-editor";
 import { OutcomesEditor } from "../outcomes-editor";
 
-describe("InterpretationBandsEditor", () => {
-  it("рисует строку на каждый интервал", () => {
-    render(<InterpretationBandsEditor
-      bands={[{ min: 0, max: 14, level: "low", label: "Низкий" }]}
-      readOnly={false} onChange={() => {}} />);
-    expect(screen.getByTestId("band-label-0")).toHaveValue("Низкий");
-  });
-
-  it("даёт поле толкования на каждый интервал", () => {
-    const onChange = vi.fn();
-    render(<InterpretationBandsEditor
-      bands={[{ min: 0, max: 14, level: "low", label: "Низкий" }]}
-      readOnly={false} onChange={onChange} />);
-    fireEvent.change(screen.getByTestId("band-text-0"), { target: { value: "Ресурс в норме." } });
-    expect(onChange).toHaveBeenCalledWith([
-      { min: 0, max: 14, level: "low", label: "Низкий", text: "Ресурс в норме." },
-    ]);
-  });
-});
-
 describe("OutcomesEditor", () => {
+  const OUTCOMES = [{ clientKey: "o1", code: "engaged", label: "Вовлечённость", text: "", tone: "" as const }];
+
   it("рисует строку на каждый исход", () => {
-    render(<OutcomesEditor
-      outcomes={[{ code: "engaged", label: "Вовлечённость" }]}
-      readOnly={false} onChange={() => {}} />);
-    expect(screen.getByTestId("outcome-code-0")).toHaveValue("engaged");
+    render(<OutcomesEditor outcomes={OUTCOMES} index={0} readOnly={false} onChange={() => {}} />);
+    expect(screen.getByLabelText("код исхода 1")).toHaveValue("engaged");
+    expect(screen.getByLabelText("метка исхода 1")).toHaveValue("Вовлечённость");
   });
 
   it("добавляет исход по кнопке", () => {
     const onChange = vi.fn();
-    render(<OutcomesEditor outcomes={[]} readOnly={false} onChange={onChange} />);
-    fireEvent.click(screen.getByTestId("outcome-add"));
-    expect(onChange).toHaveBeenCalledWith([{ code: "", label: "" }]);
+    render(<OutcomesEditor outcomes={[]} index={0} readOnly={false} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: /Добавить исход/i }));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0]).toHaveLength(1);
   });
 
-  it("предлагает исходы, найденные в формуле", () => {
-    render(<OutcomesEditor outcomes={[]} readOnly={false} onChange={() => {}}
-      suggestedCodes={["engaged", "burnout"]} />);
-    expect(screen.getByTestId("outcome-suggest")).toHaveTextContent("engaged");
+  it("удаляет исход", () => {
+    const onChange = vi.fn();
+    render(<OutcomesEditor outcomes={OUTCOMES} index={0} readOnly={false} onChange={onChange} />);
+    fireEvent.click(screen.getByLabelText("Удалить исход 1"));
+    expect(onChange).toHaveBeenCalledWith([]);
+  });
+
+  it("в режиме только для чтения не показывает удаление и добавление", () => {
+    render(<OutcomesEditor outcomes={OUTCOMES} index={0} readOnly onChange={() => {}} />);
+    expect(screen.queryByLabelText("Удалить исход 1")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Добавить исход/i })).toBeNull();
+  });
+
+  it("подсказывает коды, найденные в формуле, и добавляет их одним нажатием", () => {
+    const onChange = vi.fn();
+    render(
+      <OutcomesEditor
+        outcomes={[]}
+        index={0}
+        readOnly={false}
+        onChange={onChange}
+        suggestedCodes={["engaged", "burnout"]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "burnout" }));
+    expect(onChange.mock.calls[0][0][0]).toMatchObject({ code: "burnout", label: "burnout" });
+  });
+
+  it("не показывает блок подсказок, когда неизвестных кодов нет", () => {
+    render(<OutcomesEditor outcomes={OUTCOMES} index={0} readOnly={false} onChange={() => {}} />);
+    expect(screen.queryByText(/В формуле встречаются коды/i)).toBeNull();
   });
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
-
 Run: `npm test -- client/src/features/tests/editor/sections/__tests__/interpretation-editor.test.tsx`
-Expected: FAIL, модули не найдены.
+Expected: FAIL, модуль `../outcomes-editor` не найден.
 
-- [ ] **Step 3: Создать редактор интервалов**
+- [ ] **Step 3: Расширить существующий `BandsEditor`**
 
-```tsx
-// client/src/features/tests/editor/sections/interpretation-bands-editor.tsx
-/**
- * @module client/features/tests/editor/sections/interpretation-bands-editor
- *
- * Table editor for a numeric interpretation: one row per band, carrying the
- * boundaries, the level label, the explanatory text and an optional tone override.
- *
- * Tone is offered as a closed list of METHODOLOGICAL states rather than colours —
- * the template decides how a state looks, so the same data renders correctly in a
- * light theme, a dark theme and a differently-branded template.
- */
+В `scales-section.tsx`, НЕ создавая нового компонента:
 
-import { Button, Input, Select, Textarea, Banner } from "@universityrt/ui-kit";
-import type { InterpretationBand, LevelTone } from "@shared/scales/interpretation";
-
-const TONE_OPTIONS: Array<{ value: LevelTone | ""; label: string }> = [
-  { value: "", label: "По направлению шкалы" },
-  { value: "favorable", label: "Благоприятный" },
-  { value: "neutral", label: "Нейтральный" },
-  { value: "attention", label: "Внимание" },
-  { value: "critical", label: "Критический" },
-];
-
-export type InterpretationBandsEditorProps = {
-  bands: InterpretationBand[];
-  readOnly: boolean;
-  onChange: (bands: InterpretationBand[]) => void;
-  domainMin?: number | null;
-  domainMax?: number | null;
-};
-
-/** Gaps, overlaps and out-of-domain bands make the ruler unreadable — surface them. */
-function validate(bands: InterpretationBand[], min?: number | null, max?: number | null): string[] {
-  const problems: string[] = [];
-  const sorted = bands.slice().sort((a, b) => a.min - b.min);
-  sorted.forEach((band, i) => {
-    if (band.min > band.max) problems.push(`Интервал «${band.label ?? band.level}»: начало больше конца`);
-    if (i > 0 && band.min <= sorted[i - 1].max) problems.push(`Интервалы «${sorted[i - 1].label ?? ""}» и «${band.label ?? ""}» пересекаются`);
-    if (i > 0 && band.min > sorted[i - 1].max + 1) problems.push(`Между «${sorted[i - 1].label ?? ""}» и «${band.label ?? ""}» есть разрыв`);
-  });
-  if (sorted.length && min != null && sorted[0].min < min) problems.push("Первый интервал выходит за минимум шкалы");
-  if (sorted.length && max != null && sorted[sorted.length - 1].max > max) problems.push("Последний интервал выходит за максимум шкалы");
-  return problems;
-}
-
-export function InterpretationBandsEditor({
-  bands, readOnly, onChange, domainMin, domainMax,
-}: InterpretationBandsEditorProps) {
-  const patch = (i: number, next: Partial<InterpretationBand>) =>
-    onChange(bands.map((b, j) => (j === i ? { ...b, ...next } : b)));
-  const problems = validate(bands, domainMin, domainMax);
-
-  return (
-    <div className="tb-bands-editor">
-      {bands.map((band, i) => (
-        <div className="ou-formrow" key={`${band.level}-${i}`}>
-          <Input size="s" type="number" label="От" value={band.min} disabled={readOnly}
-            onChange={(e) => patch(i, { min: Number(e.target.value) })}
-            data-testid={`band-min-${i}`} />
-          <Input size="s" type="number" label="До" value={band.max} disabled={readOnly}
-            onChange={(e) => patch(i, { max: Number(e.target.value) })}
-            data-testid={`band-max-${i}`} />
-          <Input size="s" label="Метка уровня" value={band.label ?? ""} disabled={readOnly}
-            onChange={(e) => patch(i, { label: e.target.value })}
-            data-testid={`band-label-${i}`} />
-          <Select<LevelTone | ""> size="s" label="Оценка уровня" value={band.tone ?? ""}
-            disabled={readOnly} options={TONE_OPTIONS}
-            onChange={(value) => patch(i, value ? { tone: value } : { tone: undefined })}
-            data-testid={`band-tone-${i}`} />
-          <Textarea size="s" label="Толкование" value={band.text ?? ""} disabled={readOnly}
-            onChange={(e) => patch(i, { text: e.target.value })}
-            data-testid={`band-text-${i}`} />
-          <Button size="s" variant="ghost" disabled={readOnly}
-            onClick={() => onChange(bands.filter((_, j) => j !== i))}
-            data-testid={`band-remove-${i}`}>Удалить</Button>
-        </div>
-      ))}
-      <Button size="s" variant="secondary" disabled={readOnly}
-        onClick={() => onChange([...bands, { min: 0, max: 0, level: `level_${bands.length + 1}`, label: "" }])}
-        data-testid="band-add">Добавить интервал</Button>
-      {problems.length > 0 && (
-        <Banner variant="warning" data-testid="band-problems">{problems.join("; ")}</Banner>
-      )}
-    </div>
-  );
-}
-```
-
-Перед использованием сверить имена компонентов и их пропсы с `vendor/ui-kit` — писать
-`.ou-*` разметку руками нельзя, а недостающий примитив добавляется в ui-kit по согласованию.
-
-- [ ] **Step 4: Создать редактор исходов**
+- в `<colgroup>` и `<thead>` добавить колонку «Оценка» перед колонкой действий;
+- в строку добавить ячейку с `Select<LevelTone | "">` размера `s`, подписи:
+  «По направлению шкалы» (значение `""`), «Благоприятный», «Нейтральный», «Внимание»,
+  «Критический»; `aria-label` вида `оценка диапазона ${j + 1}`;
+- под каждой строкой добавить строку-продолжение:
 
 ```tsx
-// client/src/features/tests/editor/sections/outcomes-editor.tsx
-/**
- * @module client/features/tests/editor/sections/outcomes-editor
- *
- * Editor for a string/boolean indicator's outcome list — the set of values the
- * formula may return. Declaring outcomes is what makes a typo in the formula an
- * editing-time error instead of an empty card for one unlucky learner.
- *
- * `suggestedCodes` carries the literals found in the formula that the list does not
- * declare yet, so an existing formula seeds its own outcome list in one click.
- */
-
-import { Button, Input, Select, Textarea } from "@universityrt/ui-kit";
-import type { InterpretationOutcome, LevelTone } from "@shared/scales/interpretation";
-
-const TONE_OPTIONS: Array<{ value: LevelTone; label: string }> = [
-  { value: "favorable", label: "Благоприятный" },
-  { value: "neutral", label: "Нейтральный" },
-  { value: "attention", label: "Внимание" },
-  { value: "critical", label: "Критический" },
-];
-
-export type OutcomesEditorProps = {
-  outcomes: InterpretationOutcome[];
-  readOnly: boolean;
-  onChange: (outcomes: InterpretationOutcome[]) => void;
-  suggestedCodes?: string[];
-};
-
-export function OutcomesEditor({ outcomes, readOnly, onChange, suggestedCodes = [] }: OutcomesEditorProps) {
-  const patch = (i: number, next: Partial<InterpretationOutcome>) =>
-    onChange(outcomes.map((o, j) => (j === i ? { ...o, ...next } : o)));
-
-  return (
-    <div className="tb-outcomes-editor">
-      {outcomes.map((outcome, i) => (
-        <div className="ou-formrow" key={`${outcome.code}-${i}`}>
-          <Input size="s" label="Код" value={outcome.code} disabled={readOnly}
-            onChange={(e) => patch(i, { code: e.target.value })}
-            data-testid={`outcome-code-${i}`} />
-          <Input size="s" label="Метка" value={outcome.label} disabled={readOnly}
-            onChange={(e) => patch(i, { label: e.target.value })}
-            data-testid={`outcome-label-${i}`} />
-          <Select<LevelTone> size="s" label="Оценка" value={outcome.tone ?? "neutral"}
-            disabled={readOnly} options={TONE_OPTIONS}
-            onChange={(value) => patch(i, { tone: value })}
-            data-testid={`outcome-tone-${i}`} />
-          <Textarea size="s" label="Толкование" value={outcome.text ?? ""} disabled={readOnly}
-            onChange={(e) => patch(i, { text: e.target.value })}
-            data-testid={`outcome-text-${i}`} />
-          <Button size="s" variant="ghost" disabled={readOnly}
-            onClick={() => onChange(outcomes.filter((_, j) => j !== i))}
-            data-testid={`outcome-remove-${i}`}>Удалить</Button>
-        </div>
-      ))}
-      <Button size="s" variant="secondary" disabled={readOnly}
-        onClick={() => onChange([...outcomes, { code: "", label: "" }])}
-        data-testid="outcome-add">Добавить исход</Button>
-      {suggestedCodes.length > 0 && (
-        <div className="tb-outcomes-editor__suggest" data-testid="outcome-suggest">
-          <span>В формуле встречаются коды, которых нет в перечне:</span>
-          {suggestedCodes.map((code) => (
-            <Button key={code} size="s" variant="ghost" disabled={readOnly}
-              onClick={() => onChange([...outcomes, { code, label: code }])}>{code}</Button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+                <tr key={`${k}-detail`} className="tb-bands-table__detail">
+                  <td colSpan={6}>
+                    <Textarea
+                      size="s"
+                      value={b.text}
+                      disabled={readOnly}
+                      placeholder="Что означает этот уровень — текст для обучающегося"
+                      aria-label={`толкование диапазона ${j + 1}`}
+                      onChange={(e) => update(j, { text: e.target.value })}
+                    />
+                    {!readOnly && (
+                      <Button size="s" variant="ghost" onClick={() => setFeedbackFor(j)}>
+                        {b.feedback ? "Рекомендации заданы" : "Рекомендации"}
+                      </Button>
+                    )}
+                  </td>
+                </tr>
 ```
 
-- [ ] **Step 5: Встроить редакторы в секции**
+Кнопка открывает существующий `FeedbackEditorModal` с заголовком вида
+«Рекомендации для уровня «Высокий»» и `hideAssets={false}`; сохранение кладёт значение в
+`update(j, { feedback: value })`. Состояние открытого окна — локальный `useState<number | null>`.
 
-В карточку шкалы — редактор интервалов вместо нынешнего плоского списка `bands`.
-В карточку показателя — редактор исходов для типов `string` и `boolean`, редактор интервалов
-для `number`.
+- [ ] **Step 4: Создать редактор перечня исходов**
+
+Файл `client/src/features/tests/editor/sections/outcomes-editor.tsx`. Устройство ЗЕРКАЛЬНО
+`BandsEditor`: та же таблица `tb-table tb-bands-table`, те же `Input size="s"`, тот же
+`IconButton` с корзиной, те же `aria-label`, та же строка-продолжение с толкованием и
+кнопкой рекомендаций. Колонки: Код, Метка, Оценка, действия.
+
+Дополнительно — блок подсказок под таблицей: коды, найденные в формуле, но отсутствующие в
+перечне (приходят пропом `suggestedCodes` из Task 15), каждый кнопкой, добавляющей исход
+одним нажатием. Блок не рисуется, когда список пуст.
+
+Модель исхода зеркальна `ScaleBandModel`:
+
+```ts
+export type OutcomeModel = {
+  clientKey?: string;
+  code: string;
+  label: string;
+  text: string;
+  tone: LevelTone | "";
+  feedback?: FeedbackEditorValue;
+};
+```
+
+- [ ] **Step 5: Встроить редакторы**
+
+В карточке показателя (`result-variables-section.tsx`): `OutcomesEditor` для типов `string`
+и `boolean`, расширенный `BandsEditor` для `number`. Значения складываются в `configJson`
+показателя при сохранении — как это уже делается для интервалов шкалы.
 
 - [ ] **Step 6: Убедиться, что тесты проходят**
 
 Run: `npm test -- client/src/features/tests/editor`
-Expected: PASS.
+Expected: PASS. Существующие тесты `BandsEditor` обязаны остаться зелёными: добавление
+колонки не должно менять их ожидания. Если покраснели — смотреть на `colSpan` в строке
+«Диапазоны не заданы», он тоже вырос.
+
+Run: `npm run check`
+Expected: 0 ошибок.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add client/src/features/tests/editor/sections
-git commit -m "feat(prd-29): редакторы интервалов и перечня исходов"
+git add client/src/features/tests/editor
+git commit -m "feat(prd-29): толкования интервалов и перечень исходов в редакторе"
 ```
 
 ---
