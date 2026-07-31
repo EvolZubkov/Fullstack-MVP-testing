@@ -619,6 +619,28 @@ function buildQuestionOverridesFromApi(src: ApiTestResponse): QuestionScoringOve
   return out;
 }
 
+const SCALE_VALENCES = new Set(["higher_is_better", "lower_is_better", "none"]);
+
+/**
+ * PRD-29: read a scale's explicit domain out of `config_json`. Deliberately NOT
+ * `parseScaleInterpretation` — that one falls back to the span of the bands, which
+ * is the right answer for RENDERING but the wrong one for the editor: the author's
+ * «границы заданы вручную» switch must distinguish a stored domain from a derived
+ * one. Only a complete pair counts; a half-written config reads as "not set".
+ */
+function buildScaleDomain(configJson: unknown): { domainMin: number | null; domainMax: number | null } {
+  const config = isPlainObject(configJson) ? (configJson as Record<string, unknown>) : {};
+  const min = typeof config.domainMin === "number" && Number.isFinite(config.domainMin) ? config.domainMin : null;
+  const max = typeof config.domainMax === "number" && Number.isFinite(config.domainMax) ? config.domainMax : null;
+  return min === null || max === null ? { domainMin: null, domainMax: null } : { domainMin: min, domainMax: max };
+}
+
+/** PRD-29: the favourable direction stored in `config_json`; unknown degrades to "none". */
+function buildScaleValence(configJson: unknown): ScaleModel["valence"] {
+  const config = isPlainObject(configJson) ? (configJson as Record<string, unknown>) : {};
+  return SCALE_VALENCES.has(config.valence as string) ? (config.valence as ScaleModel["valence"]) : "none";
+}
+
 const SCALE_TYPES = new Set(["number", "boolean", "category", "level"]);
 const SCALE_AGGREGATIONS = new Set(["sum", "avg", "weighted_avg", "max", "min"]);
 const SCALE_NORMALIZATIONS = new Set(["none", "percent", "custom"]);
@@ -670,6 +692,8 @@ function buildScalesFromApi(src: ApiTestResponse): ScaleModel[] {
         ? (r.direction as ScaleModel["direction"])
         : "positive",
       bands: buildScaleBands(r.configJson),
+      ...buildScaleDomain(r.configJson),
+      valence: buildScaleValence(r.configJson),
       learnerVisibility: toLearnerVisibility(r.learnerVisibility),
       scormTarget: SCALE_TARGETS.has(r.scormTarget as string)
         ? (r.scormTarget as ScaleModel["scormTarget"])

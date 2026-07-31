@@ -41,7 +41,8 @@ const dbQuestions = [
 
 const SCALE: ScaleModel = {
   key: "comp", label: "Компетенция", type: "number", aggregation: "sum",
-  normalization: "none", direction: "positive", bands: [], learnerVisibility: "hidden", scormTarget: "none", sortOrder: 0,
+  normalization: "none", direction: "positive", bands: [], domainMin: null, domainMax: null,
+  valence: "none", learnerVisibility: "hidden", scormTarget: "none", sortOrder: 0,
 };
 
 beforeEach(() => {

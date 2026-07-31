@@ -9,7 +9,7 @@
 
 import type { DrawBlueprint, FormSet, RetakePolicy } from "@shared/schema";
 import type { ReportSettings } from "@shared/schema";
-import type { LearnerVisibility } from "@shared/scales/interpretation";
+import type { LearnerVisibility, Valence } from "@shared/scales/interpretation";
 import type { QuestionScoringOverride } from "./scoring-api";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -306,6 +306,21 @@ export type ScaleModel = {
   normalization: ScaleNormalization;
   direction: ScaleDirection;
   bands: ScaleBandModel[];
+  /**
+   * PRD-29: the scale's explicit numeric domain, persisted in `config_json`.
+   * BOTH `null` = not set; the domain is then derived from the span the
+   * interpretation bands cover (mirrors `parseScaleInterpretation`). A zero is a
+   * legitimate bound — every domain of the reference methodology starts at zero —
+   * so absence can never be signalled by the value itself, only by `null`.
+   */
+  domainMin: number | null;
+  domainMax: number | null;
+  /**
+   * PRD-29: which end of the scale is favourable. NOT the same as `direction`:
+   * `direction` inverts the value during aggregation, `valence` says how the
+   * value is to be JUDGED (it colours levels and orders the ruler's ramp).
+   */
+  valence: Valence;
   /** PRD-29: what the learner sees — nothing, the level only, or level + value. */
   learnerVisibility: LearnerVisibility;
   scormTarget: ScaleScormTarget;

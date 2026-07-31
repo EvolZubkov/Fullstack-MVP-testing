@@ -213,21 +213,43 @@ export function serializeBands(bands: ScaleBand[] | undefined): string {
 
 // ─── Видимость ученику (PRD-29) ───────────────────────────────────────────────
 
+/** The three positions of «Показывать ученику», as written into the cell. */
+const VISIBILITY_TO: Record<LearnerVisibility, string> = {
+  hidden: "нет",
+  level: "уровень",
+  level_and_value: "уровень и значение",
+};
+
 /**
- * The «Показывать ученику» cell stays a yes/no pair: the workbook contract (and
- * every file authors already hold) predates PRD-29's three positions. Only the
- * OUTER two are expressible here — the same mapping migration 036 applies to the
- * legacy boolean column. Authoring the middle position ("level" — level and
- * interpretation without the raw value) belongs to the editor, not the workbook.
+ * The column offers all THREE positions of {@link LearnerVisibility}. A yes/no pair
+ * would be a trap once the middle position is authorable: an export followed by an
+ * import would collapse «уровень» into «уровень и значение» and DISCLOSE the raw
+ * score the methodologist had closed.
+ *
+ * Legacy books stay readable: `да` reads as «уровень и значение» (the mapping
+ * migration 036 applies to the old boolean column), anything else as «нет».
  */
 function parseLearnerVisibility(raw: unknown): LearnerVisibility {
-  return parseBool(raw) ? "level_and_value" : "hidden";
+  const cell = String(raw ?? "").trim().toLowerCase();
+  if (cell === VISIBILITY_TO.level) return "level";
+  if (cell === VISIBILITY_TO.level_and_value) return "level_and_value";
+  return parseBool(cell) ? "level_and_value" : "hidden";
 }
 
-/** Serialize the three positions back into the yes/no cell: publication yes/no. */
+/** Serialize a visibility position into its cell text. */
 function serLearnerVisibility(v: LearnerVisibility): string {
-  return serBool(v !== "hidden");
+  return VISIBILITY_TO[v] ?? VISIBILITY_TO.hidden;
 }
+
+/**
+ * The values offered in the column's dropdown. «нет» is byte-identical to
+ * {@link serBool}(false), so a book written before PRD-29 still reads cleanly.
+ */
+export const VISIBILITY_CHOICES = [
+  VISIBILITY_TO.hidden,
+  VISIBILITY_TO.level,
+  VISIBILITY_TO.level_and_value,
+];
 
 // ─── «Шкалы» ──────────────────────────────────────────────────────────────────
 

@@ -8,7 +8,9 @@ import {
   parseBands,
   serializeBands,
   parseScaleRow,
+  serializeScaleRow,
   parseResultVariableRow,
+  serializeResultVariableRow,
   parseMeasurementRow,
   validateSourceKey,
   parseBool,
@@ -103,6 +105,70 @@ describe("parseScaleRow", () => {
   it("дефолты агрегации/нормализации/направления", () => {
     const r = parseScaleRow({ "Ключ": "k", "Название": "L", "Тип": "number" });
     expect(r.ok && r.value).toMatchObject({ aggregation: "sum", normalization: "none", direction: "positive" });
+  });
+});
+
+describe("колонка «Показывать ученику» (PRD-29)", () => {
+  const scaleRow = (visibility: string) => ({
+    "Ключ": "ee",
+    "Название": "Истощение",
+    "Тип": "level",
+    "Показывать ученику": visibility,
+  });
+
+  it("читает три значения", () => {
+    const cases: Array<[string, string]> = [
+      ["нет", "hidden"],
+      ["уровень", "level"],
+      ["уровень и значение", "level_and_value"],
+    ];
+    for (const [cell, expected] of cases) {
+      const r = parseScaleRow(scaleRow(cell));
+      expect(r.ok && r.value.learnerVisibility).toBe(expected);
+    }
+  });
+
+  it("читает книги прежнего формата: «да» = уровень и значение, «нет» = нет", () => {
+    expect(parseScaleRow(scaleRow("да")).ok && parseScaleRow(scaleRow("да")).value).toMatchObject({
+      learnerVisibility: "level_and_value",
+    });
+    expect(parseScaleRow(scaleRow("нет")).ok && parseScaleRow(scaleRow("нет")).value).toMatchObject({
+      learnerVisibility: "hidden",
+    });
+  });
+
+  it("круговой обход шкалы не раскрывает значение: «уровень» остаётся «уровень»", () => {
+    const exported = serializeScaleRow({
+      key: "ee",
+      label: "Истощение",
+      description: null,
+      type: "level",
+      aggregation: "sum",
+      normalization: "none",
+      direction: "positive",
+      configJson: {},
+      learnerVisibility: "level",
+      scormTarget: "none",
+    });
+    expect(exported["Показывать ученику"]).toBe("уровень");
+    const back = parseScaleRow(exported as Record<string, unknown>);
+    expect(back.ok && back.value.learnerVisibility).toBe("level");
+  });
+
+  it("круговой обход показателя сохраняет все три позиции", () => {
+    for (const visibility of ["hidden", "level", "level_and_value"] as const) {
+      const exported = serializeResultVariableRow({
+        name: "grade",
+        label: "Оценка",
+        type: "string",
+        formula: "percent",
+        learnerVisibility: visibility,
+        scormTarget: "both",
+        controlsStatus: "none",
+      });
+      const back = parseResultVariableRow(exported as Record<string, unknown>);
+      expect(back.ok && back.value.learnerVisibility).toBe(visibility);
+    }
   });
 });
 

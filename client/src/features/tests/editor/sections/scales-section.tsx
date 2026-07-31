@@ -30,6 +30,7 @@ import {
   IconButton,
   Input,
   ModalDialog,
+  NumberInput,
   SegmentedControl,
   Select,
   Stack,
@@ -59,11 +60,9 @@ import {
 import type { FieldErrorIndex } from "../field-errors";
 import { formatAuthorNumber, parseAuthorNumber, sanitizeAuthorNumberInput } from "../numeric-input";
 import { FoldAllButtons, useSectionFold } from "./section-fold";
-import { isSingleIndexChoice } from "@shared/questions/question-type";
-
-// Вывод шкал ученику — отдельный PRD (дальняя перспектива). До него тогл
-// «Показывать результат обучающемуся» скрыт; поле learnerVisibility сохранено в модели.
-const SHOW_LEARNER_RESULT_TOGGLE: boolean = false;
+import { isSingleIndexChoice, type QuestionType } from "@shared/questions/question-type";
+import { achievableRange } from "@shared/scales/engine";
+import type { LearnerVisibility, Valence } from "@shared/scales/interpretation";
 
 export type ScalesSectionProps = {
   model: TestEditorModel;
@@ -103,6 +102,29 @@ const TARGET_OPTIONS: Array<{ value: ScaleScormTarget; label: string }> = [
   { value: "suspend_data", label: "Только в пакете" },
   { value: "interaction", label: "Столбцом в отчёте" },
   { value: "both", label: "И то, и другое" },
+];
+
+/**
+ * PRD-29. Which end of the scale is favourable — the methodologist's call, and it
+ * differs BETWEEN scales of one test (the reference methodology has two scales
+ * reading downwards and a third reading upwards). Unrelated to `direction`, which
+ * only inverts the value during aggregation.
+ */
+const VALENCE_OPTIONS: Array<{ value: Valence; label: string }> = [
+  { value: "higher_is_better", label: "Чем больше, тем лучше" },
+  { value: "lower_is_better", label: "Чем больше, тем хуже" },
+  { value: "none", label: "Без оценки" },
+];
+
+/**
+ * PRD-29. The middle position is a working need of psychodiagnostics: the level may
+ * be disclosed while the raw score stays hidden — a score invites self-diagnosis and
+ * comparison between people.
+ */
+const VISIBILITY_OPTIONS: Array<{ value: LearnerVisibility; label: string }> = [
+  { value: "hidden", label: "Не показывать" },
+  { value: "level", label: "Уровень и толкование" },
+  { value: "level_and_value", label: "Уровень, толкование и значение" },
 ];
 
 const AGG_LABEL: Record<ScaleAggregation, string> = {
@@ -150,10 +172,43 @@ function emptyScale(sortOrder: number): ScaleModel {
     normalization: "none",
     direction: "positive",
     bands: [],
+    domainMin: null,
+    domainMax: null,
+    valence: "none",
     learnerVisibility: "hidden",
     scormTarget: "none",
     sortOrder,
   };
+}
+
+/** The numeric span the scale's interpretation bands cover, or null when unusable. */
+function bandSpan(s: ScaleModel): { min: number; max: number } | null {
+  const mins: number[] = [];
+  const maxes: number[] = [];
+  for (const b of s.bands) {
+    const min = parseAuthorNumber(b.min.trim());
+    const max = parseAuthorNumber(b.max.trim());
+    if (min === null || max === null) continue;
+    mins.push(min);
+    maxes.push(max);
+  }
+  if (mins.length === 0) return null;
+  return { min: Math.min(...mins), max: Math.max(...maxes) };
+}
+
+/**
+ * The domain the scale effectively has right now: the author's explicit bounds when
+ * set, else the span of the bands (exactly what `parseScaleInterpretation` derives),
+ * else the range computed from the contributions. The final `{0, 0}` only kicks in
+ * for a scale with neither bands nor contributions — there is nothing to infer from,
+ * and the author edits the seeded fields anyway.
+ */
+function effectiveDomain(
+  s: ScaleModel,
+  suggested: { min: number; max: number } | null,
+): { min: number; max: number } {
+  if (s.domainMin !== null && s.domainMax !== null) return { min: s.domainMin, max: s.domainMax };
+  return bandSpan(s) ?? suggested ?? { min: 0, max: 0 };
 }
 
 /** Stable per-row key: the server id once persisted, else the client key. */
@@ -269,6 +324,44 @@ function ScalesListPane({
   const scales = model.scales;
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // PRD-29: `achievableRange` needs the question TYPES — without them a multiple
+  // choice is read as a one-index pick and the computed maximum comes out wrong.
+  // The editor model carries the contributions but not the types, so they are read
+  // from the SAME source the contributions matrix uses.
+  const [questionTypes, setQuestionTypes] = useState<Record<string, QuestionType> | null>(null);
+  const topicIds = useMemo(() => model.sections.map((s) => s.topicId), [model.sections]);
+
+  useEffect(() => {
+    let alive = true;
+    loadContributionQuestions(topicIds)
+      .then((questions) => {
+        if (!alive) return;
+        const types: Record<string, QuestionType> = {};
+        for (const q of questions) types[q.id] = q.type;
+        setQuestionTypes(types);
+      })
+      .catch(() => {
+        // Types unknown → the «Рассчитать по вкладам» button stays disabled rather
+        // than seeding a domain computed from a guessed question type.
+        if (alive) setQuestionTypes(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [topicIds]);
+
+  /** The domain the contributions of one scale can actually reach, or null. */
+  const suggestedDomainOf = useCallback(
+    (s: ScaleModel): { min: number; max: number } | null => {
+      if (questionTypes === null || s.key.trim() === "") return null;
+      return achievableRange(
+        model.measurements.filter((m) => m.scaleKey === s.key),
+        s.aggregation,
+        questionTypes,
+      );
+    },
+    [questionTypes, model.measurements],
+  );
 
   const setScales = useCallback(
     (next: ScaleModel[]) => updateModel((m) => ({ ...m, scales: next })),
@@ -393,6 +486,7 @@ function ScalesListPane({
               scale={scale}
               scales={scales}
               coverage={coverageByKey.get(scale.key)?.size ?? 0}
+              suggestedDomain={suggestedDomainOf(scale)}
               readOnly={readOnly}
               expanded={expandedKey === key}
               onToggle={() => setExpandedKey((cur) => (cur === key ? null : key))}
@@ -417,6 +511,8 @@ type ScaleCardProps = {
   scales: ScaleModel[];
   /** Distinct questions contributing to this scale (drives subtitle + warn dot). */
   coverage: number;
+  /** PRD-29: the domain computed from the contributions; null when not computable. */
+  suggestedDomain: { min: number; max: number } | null;
   readOnly: boolean;
   expanded: boolean;
   onToggle: () => void;
@@ -424,7 +520,18 @@ type ScaleCardProps = {
   onRemove: () => void;
 };
 
-function ScaleCard({ index, scale: s, scales, coverage, readOnly, expanded, onToggle, onChange, onRemove }: ScaleCardProps) {
+function ScaleCard({
+  index,
+  scale: s,
+  scales,
+  coverage,
+  suggestedDomain,
+  readOnly,
+  expanded,
+  onToggle,
+  onChange,
+  onRemove,
+}: ScaleCardProps) {
   const keyError = keyErrorOf(s, index, scales);
   const bandError = bandErrorOf(s);
   const hasError = keyError !== null || bandError !== null;
@@ -490,6 +597,7 @@ function ScaleCard({ index, scale: s, scales, coverage, readOnly, expanded, onTo
             readOnly={readOnly}
             keyError={keyError}
             bandError={bandError}
+            suggestedDomain={suggestedDomain}
             onChange={onChange}
           />
         </div>
@@ -506,6 +614,7 @@ function ScaleForm({
   readOnly,
   keyError,
   bandError,
+  suggestedDomain,
   onChange,
 }: {
   scale: ScaleModel;
@@ -513,9 +622,17 @@ function ScaleForm({
   readOnly: boolean;
   keyError: string | null;
   bandError: string | null;
+  suggestedDomain: { min: number; max: number } | null;
   onChange: (patch: Partial<ScaleModel>) => void;
 }) {
   const setBands = (bands: ScaleBandModel[]) => onChange({ bands });
+  // Manual bounds are an explicit opt-in: 0 is a legal bound (every domain of the
+  // reference methodology starts at zero), so «not set» can never be a value.
+  const manualDomain = s.domainMin !== null && s.domainMax !== null;
+  const domainDrift =
+    manualDomain &&
+    suggestedDomain !== null &&
+    (suggestedDomain.min !== s.domainMin || suggestedDomain.max !== s.domainMax);
 
   return (
     <>
@@ -606,20 +723,112 @@ function ScaleForm({
         }
       />
 
-      {SHOW_LEARNER_RESULT_TOGGLE && (
+      <hr className="wf-sep" />
+      <div className="tb-section-label">Границы шкалы и показ результата</div>
+
+      <div className="ou-formfield">
+        <Switch
+          label="Задать границы шкалы вручную"
+          description="Выключено — границы берутся из охвата диапазонов. Ноль — законная граница, а не признак «не задано»."
+          checked={manualDomain}
+          disabled={readOnly}
+          onChange={(e) => {
+            if (!e.target.checked) {
+              onChange({ domainMin: null, domainMax: null });
+              return;
+            }
+            const seed = effectiveDomain(s, suggestedDomain);
+            onChange({ domainMin: seed.min, domainMax: seed.max });
+          }}
+          data-testid={`scales-domain-manual-${index}`}
+        />
+      </div>
+
+      {manualDomain && (
         <>
-          <hr className="wf-sep" />
-          <Switch
-            label="Показывать результат обучающемуся"
-            checked={s.learnerVisibility !== "hidden"}
-            disabled={readOnly}
-            // PRD-29 stores three positions; this legacy two-state toggle maps onto
-            // the outer two. The three-way control lands with the learner-facing screen.
-            onChange={(e) => onChange({ learnerVisibility: e.target.checked ? "level_and_value" : "hidden" })}
-            data-testid={`scales-show-${index}`}
-          />
+          <div className="ou-formgroup ou-formgroup--two">
+            <div className="ou-formfield">
+              <NumberInput
+                size="m"
+                fullWidth
+                label="Минимум шкалы"
+                value={s.domainMin as number}
+                disabled={readOnly}
+                onChange={(next) => onChange({ domainMin: next })}
+                data-testid={`scales-domain-min-${index}`}
+              />
+            </div>
+            <div className="ou-formfield">
+              <NumberInput
+                size="m"
+                fullWidth
+                label="Максимум шкалы"
+                value={s.domainMax as number}
+                disabled={readOnly}
+                onChange={(next) => onChange({ domainMax: next })}
+                data-testid={`scales-domain-max-${index}`}
+              />
+            </div>
+          </div>
+          <Button
+            size="s"
+            variant="secondary"
+            disabled={readOnly || suggestedDomain === null}
+            title={
+              suggestedDomain === null
+                ? "Расчёт доступен, когда у шкалы есть вклады вопросов"
+                : undefined
+            }
+            onClick={() => {
+              if (suggestedDomain === null) return;
+              onChange({ domainMin: suggestedDomain.min, domainMax: suggestedDomain.max });
+            }}
+            data-testid={`scales-domain-suggest-${index}`}
+          >
+            Рассчитать по вкладам
+          </Button>
+          {domainDrift && suggestedDomain !== null && (
+            // No silent recompute: the stored domain is the methodologist's decision,
+            // and a contribution edit must not rewrite it behind their back.
+            <Banner
+              tone="warning"
+              size="sm"
+              description={
+                `Заданные границы (${s.domainMin} … ${s.domainMax}) расходятся с расчётом по вкладам ` +
+                `(${suggestedDomain.min} … ${suggestedDomain.max}). Пересчёт не выполняется автоматически.`
+              }
+              data-testid={`scales-domain-drift-${index}`}
+            />
+          )}
         </>
       )}
+
+      <div className="ou-formgroup ou-formgroup--two">
+        <div className="ou-formfield">
+          <Select<Valence>
+            size="m"
+            fullWidth
+            label="Благоприятное направление"
+            value={s.valence}
+            disabled={readOnly}
+            options={VALENCE_OPTIONS}
+            onChange={(value) => onChange({ valence: value })}
+            data-testid={`scales-valence-${index}`}
+          />
+        </div>
+        <div className="ou-formfield">
+          <Select<LearnerVisibility>
+            size="m"
+            fullWidth
+            label="Показывать обучающемуся"
+            value={s.learnerVisibility}
+            disabled={readOnly}
+            options={VISIBILITY_OPTIONS}
+            onChange={(value) => onChange({ learnerVisibility: value })}
+            data-testid={`scales-visibility-${index}`}
+          />
+        </div>
+      </div>
     </>
   );
 }

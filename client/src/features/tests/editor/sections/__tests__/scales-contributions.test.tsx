@@ -75,7 +75,8 @@ afterEach(() => vi.unstubAllGlobals());
 
 const SCALE: ScaleModel = {
   key: "comp", label: "Компетенция", type: "number", aggregation: "sum",
-  normalization: "none", direction: "positive", bands: [], learnerVisibility: "hidden",
+  normalization: "none", direction: "positive", bands: [],
+  domainMin: null, domainMax: null, valence: "none", learnerVisibility: "hidden",
   scormTarget: "none", sortOrder: 0,
 };
 

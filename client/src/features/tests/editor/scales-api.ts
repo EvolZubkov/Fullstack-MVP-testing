@@ -37,6 +37,22 @@ function bandsToPayload(bands: ScaleBandModel[]): BandPayload[] {
   return out;
 }
 
+/**
+ * The scale's `config_json` as persisted: the interpretation bands plus the PRD-29
+ * domain and favourable direction. The domain is written ONLY as a complete pair —
+ * a half-pair would read back as "not set" (see `buildScaleDomain`) and quietly
+ * discard the other bound. `valence` is always written so clearing it back to
+ * «Без оценки» actually erases the stored value instead of leaving the old one.
+ */
+function toConfigJson(s: ScaleModel): Record<string, unknown> {
+  const config: Record<string, unknown> = { bands: bandsToPayload(s.bands), valence: s.valence };
+  if (s.domainMin !== null && s.domainMax !== null) {
+    config.domainMin = s.domainMin;
+    config.domainMax = s.domainMax;
+  }
+  return config;
+}
+
 /** Fields sent to the create/update endpoints. */
 function toPayload(s: ScaleModel, sortOrder: number) {
   return {
@@ -46,7 +62,7 @@ function toPayload(s: ScaleModel, sortOrder: number) {
     aggregation: s.aggregation,
     normalization: s.normalization,
     direction: s.direction,
-    configJson: { bands: bandsToPayload(s.bands) },
+    configJson: toConfigJson(s),
     learnerVisibility: s.learnerVisibility,
     scormTarget: s.scormTarget,
     sortOrder,
@@ -65,7 +81,9 @@ function sameScale(a: ScaleModel, b: ScaleModel): boolean {
     a.learnerVisibility === b.learnerVisibility &&
     a.scormTarget === b.scormTarget &&
     a.sortOrder === b.sortOrder &&
-    JSON.stringify(bandsToPayload(a.bands)) === JSON.stringify(bandsToPayload(b.bands))
+    // One comparison for the whole config_json: bands, domain and valence all live
+    // there, so a separate per-field list would drift the moment a field is added.
+    JSON.stringify(toConfigJson(a)) === JSON.stringify(toConfigJson(b))
   );
 }
 
