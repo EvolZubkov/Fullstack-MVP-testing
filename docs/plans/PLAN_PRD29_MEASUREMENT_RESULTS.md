@@ -1039,6 +1039,13 @@ describe("resolveRenderKind", () => {
       .toBe("value");
   });
 
+  it("НИКОГДА не подставляет кольцо автоматически вместо линейки", () => {
+    // Кольцо печатает процент, а при normalization: none процент не определён.
+    // Как явный выбор автора оно допустимо, как автозамена — нет.
+    expect(resolveRenderKind("band_ruler", { hasDomain: true, hasBands: false, isNumeric: true }))
+      .not.toBe("ring");
+  });
+
   it("для нечислового значения всегда метка", () => {
     expect(resolveRenderKind("ring", { hasDomain: true, hasBands: true, isNumeric: false }))
       .toBe("label");
@@ -1280,8 +1287,31 @@ export interface MeasureViewInput {
   ramp: LevelRamp;
 }
 
-/** Descending order of richness; the first feasible kind wins. */
-const FALLBACK_ORDER: RenderKind[] = ["gradient_bar", "band_ruler", "ring", "value_of_max", "value", "label"];
+/**
+ * Fallback chain per requested kind, most-preferred first. A single "descending
+ * richness" list cannot express this, because degradation is not one-dimensional.
+ *
+ * A ring reports a PERCENT, and for a scale with `normalization: none` a percent is
+ * undefined — that is the premise of this whole feature. So a ring is legitimate only
+ * as the author's explicit choice and must never be an automatic substitute for a
+ * bar; otherwise the tool invents a number the methodology never produced.
+ *
+ * A gradient bar carries the opposite risk: without bands there is no level, no tone
+ * and no explanatory text, so a colour continuum would imply an evaluation the author
+ * never made. It degrades to the plain «27 из 45», which claims nothing.
+ *
+ * Between the two linear readouts the move is sideways, not down: a bar asked for with
+ * bands present becomes the banded ruler, and a ruler asked for without bands becomes
+ * the plain value.
+ */
+const FALLBACK_CHAINS: Record<RenderKind, RenderKind[]> = {
+  gradient_bar: ["gradient_bar", "band_ruler", "value_of_max", "value", "label"],
+  band_ruler: ["band_ruler", "value_of_max", "value", "label"],
+  ring: ["ring", "value_of_max", "value", "label"],
+  value_of_max: ["value_of_max", "value", "label"],
+  value: ["value", "label"],
+  label: ["label"],
+};
 
 function isFeasible(kind: RenderKind, caps: MeasureCapabilities): boolean {
   if (!caps.isNumeric) return kind === "label";
@@ -1305,10 +1335,8 @@ function isFeasible(kind: RenderKind, caps: MeasureCapabilities): boolean {
  * picks one kind for the whole test and its scales differ.
  */
 export function resolveRenderKind(requested: RenderKind, caps: MeasureCapabilities): RenderKind {
-  if (isFeasible(requested, caps)) return requested;
-  const start = FALLBACK_ORDER.indexOf(requested);
-  for (let i = Math.max(start, 0); i < FALLBACK_ORDER.length; i += 1) {
-    if (isFeasible(FALLBACK_ORDER[i], caps)) return FALLBACK_ORDER[i];
+  for (const kind of FALLBACK_CHAINS[requested] ?? ["label"]) {
+    if (isFeasible(kind, caps)) return kind;
   }
   return "label";
 }
@@ -1475,7 +1503,7 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
 - [ ] **Step 4: Убедиться, что тест проходит**
 
 Run: `npm test -- shared/template/__tests__/measure-view.test.ts`
-Expected: PASS, 23 теста.
+Expected: PASS, 23 теста (22 исходных плюс проверка на автоподстановку кольца).
 
 - [ ] **Step 5: Commit**
 
