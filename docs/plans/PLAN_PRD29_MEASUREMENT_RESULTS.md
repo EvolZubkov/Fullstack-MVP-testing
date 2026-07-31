@@ -2387,10 +2387,20 @@ git commit -m "feat(prd-29): блоки показателей, шкал и ре
 который спроектирован как интерактивный элемент управления, а здесь только показывает.
 
 ```css
-/* PRD-29: measure row. `ou-formsection` already supplies the two-column grid, the
-   32px rhythm and the hairline between rows — the delta is only what the DS cannot
-   know: the zone colour and the read-only state of a control-shaped element. */
+/* PRD-29: measure row. `ou-formsection` supplies the two-column grid and the hairline
+   between rows; the delta is what the DS cannot know — the zone colour, the read-only
+   state of a control-shaped element, and the vertical budget of THIS screen.
+
+   The section's own 32px rhythm is for a settings form that scrolls freely. Here four
+   sections spend 256px of a 650px body on padding alone, which pushes the third scale
+   below the fold — and a measurement result exists to be read as a whole. */
+.tb-measure.ou-formsection { padding: 16px 0; }
 .tb-measure__level { align-self: flex-start; }
+
+/* Hierarchy by WEIGHT, not size: a block heading and an entity name sit at the same
+   16px, so raising the heading would mean raising `tb-scene__subhead` everywhere —
+   including «Результаты по темам» on the control screen, which §11 freezes. */
+.tb-measure .ou-formsection__title { font-weight: 400; }
 
 /* The DS slider is a 360px-wide control; here it is a full-width readout inside the
    content column, so the cap is relaxed and the grab affordances are removed. With
