@@ -148,9 +148,13 @@ export function FeedbackPreview(props: FeedbackPreviewProps) {
         icon={<LinkIcon size={14} />}
         items={props.links.map((l) => ({ label: l.title, href: l.url }))}
       />
+      {/* Календарь, а не ссылка: `CalendarDays` был импортирован под эту группу, но
+          не подставлен, и мероприятия печатались тем же значком, что курсы. На экране
+          итогов оба вида чипов стоят в ОДНОМ ряду без подписей, так что значок —
+          единственное различие; обе поверхности обязаны показывать одно и то же. */}
       <PreviewGroup
         title="Мероприятия"
-        icon={<LinkIcon size={14} />}
+        icon={<CalendarDays size={14} />}
         items={props.events.map((ev) => ({ label: ev.title, href: ev.url || undefined }))}
       />
     </div>
