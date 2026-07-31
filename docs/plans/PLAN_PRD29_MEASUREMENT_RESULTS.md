@@ -3320,6 +3320,18 @@ git commit -m "feat(prd-29): редакторы интервалов и пере
 - Test: `shared/formula/__tests__/outcome-literals.test.ts`
 - Modify: `client/src/features/tests/editor/sections/result-variables-section.tsx`
 
+Строковый показатель возвращает КОД исхода. Сегодня никто не проверяет, что коды, которые
+формула способна вернуть, вообще объявлены: опечатка в один символ молча даёт пустую
+карточку, и только у того ученика, который попал именно в эту ветвь. Обход дерева формулы
+превращает это в ошибку редактирования.
+
+Ключевое свойство дерева, на котором всё держится: **ссылки на сущности хранятся полями,
+а не строковыми узлами.** У `scaleById("ee").raw` разбор даёт
+`{ type: "accessor", fn: "scaleById", arg: "ee", prop: "raw" }` — ключ шкалы лежит в `arg`
+обычной строкой. То же у `var` (`name`), у `count` (`keys`, `level`). Поэтому строковым
+узлом `{ type: "string" }` оказывается ТОЛЬКО литерал-значение, то есть ровно код исхода.
+Никаких списков имён функций-исключений не нужно: отсев структурный.
+
 - [ ] **Step 1: Написать падающий тест**
 
 ```ts
@@ -3330,30 +3342,46 @@ import { collectStringLiterals, findUnknownOutcomes } from "../outcome-literals"
 describe("collectStringLiterals", () => {
   it("собирает строковые константы формулы", () => {
     expect(collectStringLiterals('IF(scaleById("s").raw > 10, "high", "low")').sort())
-      .toEqual(["high", "low", "s"]);
+      .toEqual(["high", "low"]);
+  });
+
+  it("не считает литералом ключ шкалы внутри scaleById", () => {
+    // Ключ живёт в поле `arg` узла accessor, а не отдельным строковым узлом,
+    // поэтому исключается структурно, а не списком имён функций.
+    expect(collectStringLiterals('scaleById("emotional_exhaustion").raw > 10')).toEqual([]);
+  });
+
+  it("обходит вложенные ветви целиком", () => {
+    const f = 'IF(percent >= 0, IF(percent > 50, "a", "b"), IF(percent > 20, "c", "d"))';
+    expect(collectStringLiterals(f).sort()).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("схлопывает повторы", () => {
+    expect(collectStringLiterals('IF(percent >= 0, "a", "a")')).toEqual(["a"]);
   });
 
   it("не падает на синтаксически неверной формуле", () => {
     expect(collectStringLiterals("IF(")).toEqual([]);
   });
-
-  it("схлопывает повторы", () => {
-    expect(collectStringLiterals('IF(1, "a", "a")')).toEqual(["a"]);
-  });
 });
 
 describe("findUnknownOutcomes", () => {
   it("находит исход, которого нет в перечне", () => {
-    expect(findUnknownOutcomes('IF(1, "growing", "burnout")', ["growing"])).toEqual(["burnout"]);
+    expect(findUnknownOutcomes('IF(percent >= 0, "growing", "burnout")', ["growing"]))
+      .toEqual(["burnout"]);
   });
 
-  it("игнорирует аргументы функций доступа к шкалам", () => {
+  it("не считает ключ шкалы неизвестным исходом", () => {
     expect(findUnknownOutcomes('IF(scaleById("ee").raw > 10, "growing", "growing")', ["growing"]))
       .toEqual([]);
   });
 
   it("возвращает пустой список, когда перечень пуст", () => {
-    expect(findUnknownOutcomes('IF(1, "a", "b")', [])).toEqual([]);
+    expect(findUnknownOutcomes('IF(percent >= 0, "a", "b")', [])).toEqual([]);
+  });
+
+  it("ничего не находит, когда все коды объявлены", () => {
+    expect(findUnknownOutcomes('IF(percent >= 0, "a", "b")', ["a", "b", "c"])).toEqual([]);
   });
 });
 ```
@@ -3371,13 +3399,20 @@ Expected: FAIL, «Cannot find module '../outcome-literals'».
  *
  * Reconciles a string indicator's formula with its declared outcome list.
  *
- * The formula returns an outcome CODE. Nothing else checks that the codes it can
+ * The formula returns an outcome CODE, and nothing checks that the codes it can
  * return actually exist: a one-character typo silently produces an empty card, and
  * only for the learner who lands in that branch. Walking the AST turns that into an
  * editing-time error.
  *
- * Accessor arguments (`scaleById("ee")`) are string literals too, so they are
- * excluded — they name a scale, not an outcome.
+ * Entity references are NOT string nodes — `scaleById("ee")` parses to
+ * `{ type: "accessor", fn, arg, prop }` with the key in `arg`, and `var` / `count`
+ * hold their names the same way. So a `{ type: "string" }` node is always a VALUE
+ * literal, which is exactly an outcome code. The filtering is structural; no list of
+ * accessor names is needed or wanted.
+ *
+ * The walk is an exhaustive switch over the `Ast` union rather than a generic object
+ * traversal: adding a node type then becomes a compile error here instead of a
+ * silently skipped branch.
  *
  * Pure — no DOM, no Node.
  */
@@ -3385,32 +3420,44 @@ Expected: FAIL, «Cannot find module '../outcome-literals'».
 import { parse } from "./parser";
 import type { Ast } from "./types";
 
-/** Function names whose string arguments address an entity, not an outcome. */
-const ACCESSORS = new Set(["scalebyid", "topicbyid", "topicbyname", "tagbyid", "var", "sectionbyid"]);
-
-function walk(node: Ast, out: Set<string>, skip: Set<Ast>): void {
-  if (!node || typeof node !== "object") return;
-  const n = node as unknown as Record<string, unknown>;
-  if (n.type === "string" && !skip.has(node)) {
-    out.add(String(n.value ?? ""));
-    return;
+function walk(node: Ast, out: Set<string>): void {
+  switch (node.type) {
+    case "string":
+      out.add(node.value);
+      return;
+    case "if":
+      walk(node.cond, out);
+      walk(node.then, out);
+      walk(node.otherwise, out);
+      return;
+    case "unary":
+      walk(node.operand, out);
+      return;
+    case "binary":
+      walk(node.left, out);
+      walk(node.right, out);
+      return;
+    case "number":
+    case "boolean":
+    case "percent":
+    case "score":
+    case "accessor":
+    case "var":
+    case "nullary":
+    case "count":
+      return;
   }
-  if (n.type === "call" && typeof n.name === "string" && ACCESSORS.has(n.name.toLowerCase())) {
-    const args = (n.args as Ast[]) ?? [];
-    args.forEach((a) => skip.add(a));
-  }
-  Object.values(n).forEach((value) => {
-    if (Array.isArray(value)) value.forEach((v) => walk(v as Ast, out, skip));
-    else if (value && typeof value === "object") walk(value as Ast, out, skip);
-  });
 }
 
-/** Every distinct string literal in the formula, accessor arguments included. */
+/**
+ * Every distinct string literal the formula can yield. An unparseable formula gives
+ * an empty list: the author is mid-edit, and a syntax error is already reported by
+ * the editor's own validation.
+ */
 export function collectStringLiterals(formula: string): string[] {
   try {
-    const ast = parse(formula);
     const out = new Set<string>();
-    walk(ast, out, new Set());
+    walk(parse(formula), out);
     return Array.from(out);
   } catch {
     return [];
@@ -3424,34 +3471,27 @@ export function collectStringLiterals(formula: string): string[] {
  */
 export function findUnknownOutcomes(formula: string, codes: string[]): string[] {
   if (codes.length === 0) return [];
-  try {
-    const ast = parse(formula);
-    const literals = new Set<string>();
-    const skip = new Set<Ast>();
-    walk(ast, literals, skip);
-    const known = new Set(codes);
-    return Array.from(literals).filter((l) => !known.has(l));
-  } catch {
-    return [];
-  }
+  const known = new Set(codes);
+  return collectStringLiterals(formula).filter((literal) => !known.has(literal));
 }
 ```
-
-Если структура AST в `shared/formula/types.ts` называет узлы иначе (`args` против
-`arguments`, `name` против `callee`), привести обход в соответствие ФАКТИЧЕСКИМ именам —
-и поправить тест, а не подгонять модуль под догадку.
 
 - [ ] **Step 4: Убедиться, что тест проходит**
 
 Run: `npm test -- shared/formula/__tests__/outcome-literals.test.ts`
-Expected: PASS, 6 тестов.
+Expected: PASS, 9 тестов.
 
 - [ ] **Step 5: Подключить сверку к редактору**
 
-В `result-variables-section.tsx` при каждом изменении формулы или перечня вызывать
-`findUnknownOutcomes` и показывать `ou-banner` со списком неизвестных кодов и кнопкой
-«Добавить в перечень». Ошибку показывать, но сохранение не блокировать: автор может
-заполнять формулу и перечень в любом порядке.
+В `client/src/features/tests/editor/sections/result-variables-section.tsx` при каждом
+изменении формулы или перечня вызывать `findUnknownOutcomes` и показывать `ou-banner`
+со списком неизвестных кодов и кнопкой «Добавить в перечень».
+
+Сохранение НЕ блокировать: автор заполняет формулу и перечень в любом порядке, и
+запрет мешал бы работе. Предупреждение — сигнал, а не гейт.
+
+Те же коды передаются в `OutcomesEditor` через `suggestedCodes` (Task 14), так что
+добавление в перечень делается одним нажатием и в двух местах не расходится.
 
 - [ ] **Step 6: Commit**
 
