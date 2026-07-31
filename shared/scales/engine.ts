@@ -155,29 +155,32 @@ function aggregate(contribs: number[], agg: ScaleAggregation, weights: number[])
 }
 
 /**
- * The min/max raw a scale can take on THIS attempt (PRD-5 §5.2 minPossible /
- * maxPossible), used for percent normalization. Only questions actually delivered
- * to the learner bound the range: a bank question the draw did not deliver
- * contributes 0 to `raw`, so counting its extremes would push `raw` outside
- * [min, max] and make percent go negative / exceed 100 (the reported defect). A
- * question is "delivered" when it has an entry in `answers`.
+ * Achievable `{ min, max }` of a scale over a set of measurement units — the range
+ * `raw` can land in. Exported because two callers need the SAME arithmetic on
+ * different inputs: `percent` normalization runs it over the DELIVERED units, while
+ * PRD-29 seeds a scale's stored domain from ALL declared ones. A second copy would
+ * drift, and a domain computed differently from the one `percent` normalizes against
+ * puts the ruler's marker somewhere other than its own level.
  *
  * Per-question achievable contribution:
- * - single: exactly one unit fires and an unmeasured/other option scores 0, so the
- *   range is `[min(0, …vals), max(0, …vals)]`.
+ * - single / scale: exactly one unit fires and an unmeasured option scores 0, so the
+ *   range is `[min(0, …vals), max(0, …vals)]`;
  * - multiple / matching / ranking: several units can fire together (a subset of
- *   options, every formed pair, every placement), so the extremes are the sums of
- *   the negative / positive units — the same way `raw` sums the active ones.
+ *   options, every formed pair, every placement), so the extremes are the sums of the
+ *   negative / positive units — the same way `raw` sums the active ones.
+ *
+ * `null` when there is nothing to measure: an empty set has no range, and reporting
+ * `{ min: 0, max: 0 }` would look like a legitimate zero-width domain.
  */
-function rawRange(
-  scaleMeasurements: MeasurementSpec[],
+export function achievableRange(
+  measurements: MeasurementSpec[],
   agg: ScaleAggregation,
   questionTypes: Record<string, QuestionType>,
-  answers: Record<string, Answer>,
-): { min: number; max: number } {
+): { min: number; max: number } | null {
+  if (measurements.length === 0) return null;
+
   const byQuestion = new Map<string, MeasurementSpec[]>();
-  for (const m of scaleMeasurements) {
-    if (!Object.prototype.hasOwnProperty.call(answers, m.questionId)) continue;
+  for (const m of measurements) {
     const list = byQuestion.get(m.questionId) ?? [];
     list.push(m);
     byQuestion.set(m.questionId, list);
@@ -188,8 +191,6 @@ function rawRange(
   const weights: number[] = [];
   for (const [questionId, ms] of byQuestion) {
     const vals = ms.map((m) => m.value * m.weight);
-    // One-index answers (single choice, scale) can activate at most ONE unit of the
-    // question, so the range is the extremum, not the sum.
     if (isSingleIndexChoice(questionTypes[questionId] ?? "")) {
       mins.push(Math.min(0, ...vals));
       maxes.push(Math.max(0, ...vals));
@@ -199,10 +200,31 @@ function rawRange(
     }
     weights.push(ms.reduce((s, m) => s + m.weight, 0) / ms.length);
   }
-  return {
-    min: aggregate(mins, agg, weights),
-    max: aggregate(maxes, agg, weights),
-  };
+
+  return { min: aggregate(mins, agg, weights), max: aggregate(maxes, agg, weights) };
+}
+
+/**
+ * The min/max raw a scale can take on THIS attempt (PRD-5 §5.2 minPossible /
+ * maxPossible), used for percent normalization. Only questions actually delivered
+ * to the learner bound the range: a bank question the draw did not deliver
+ * contributes 0 to `raw`, so counting its extremes would push `raw` outside
+ * [min, max] and make percent go negative / exceed 100 (the reported defect). A
+ * question is "delivered" when it has an entry in `answers`.
+ */
+function rawRange(
+  scaleMeasurements: MeasurementSpec[],
+  agg: ScaleAggregation,
+  questionTypes: Record<string, QuestionType>,
+  answers: Record<string, Answer>,
+): { min: number; max: number } {
+  // Only units the learner was actually given bound the range: a bank question the
+  // draw did not deliver contributes 0 to `raw`, so counting its extremes would push
+  // `raw` outside [min, max] and make percent go negative / exceed 100.
+  const delivered = scaleMeasurements.filter((m) =>
+    Object.prototype.hasOwnProperty.call(answers, m.questionId),
+  );
+  return achievableRange(delivered, agg, questionTypes) ?? { min: 0, max: 0 };
 }
 
 function applyBands(raw: number, bands: ScaleBand[] | undefined): { level: string; label: string } {
