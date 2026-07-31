@@ -54,9 +54,14 @@
       /* Отступ под фиксированный навбар: wf-utils.css объявляет
          --wf-nav-offset через --wf-size-52, поэтому размер обязан быть здесь. */
       --wf-size-52:     52px;
+      /* Окно плеера: рабочий размер и вариант поменьше. Кадр обязан иметь
+         ВЫСОТУ — без неё контракт сцены (шапка сверху, подвал снизу, скролл в
+         теле) не включается, и экран превращается в бесконечную ленту. */
+      --wf-size-1280: 1280px;
+      --wf-size-800:   800px;
+      --wf-size-1024: 1024px;
+      --wf-size-640:   640px;
       --wf-size-360:   360px;
-      --wf-size-900:   900px;
-      --wf-size-1200: 1200px;
       /* Отметка значения: 18px ручки ДС на дорожке 12px читается слабо. */
       --wf-marker-size: 22px;
       /* gate-skip-end */
@@ -146,28 +151,32 @@
     /* ══════════════════════════════════════════════════════════════════════
        КАРКАС ЭСКИЗА — не часть UI.
        ══════════════════════════════════════════════════════════════════════ */
-    /* Кадр, изображающий окно, в котором играется тест: окно LMS, iframe
-       отладчика или область страницы приложения. */
+    /* Кадр = окно, в котором играется тест: окно LMS, iframe отладчика или
+       область страницы приложения. Размер ФИКСИРОВАН по обеим осям — высота
+       кадра и есть то, что включает контракт сцены (theme.css: `.tb-scene` —
+       колонка height:100% с overflow:hidden, шапка и подвал flex:none, тело
+       flex:1 + overflow:auto). Кадр по содержимому показывал бы ленту вместо
+       экрана плеера: подвал уезжал бы под сгиб. */
     .wf-viewport {
-      width: 100%; max-width: var(--wf-size-1200); height: var(--wf-size-900);
+      width: var(--wf-size-1280); height: var(--wf-size-800);
+      max-width: 100%;
       margin: 0 auto;
       border: var(--wf-border-w) solid var(--ou-border-default);
       border-radius: var(--ou-radius-l);
       overflow: hidden;
       box-shadow: var(--ou-shadow-sm);
     }
-    /* Кадр по высоте содержимого: экран итогов длиннее окна, и в реальном окне
-       прокручивается тело сцены (.tb-scene__body). Эскиз показывает экран
-       целиком, иначе нижние блоки не видны на снимке. */
-    .wf-viewport--flow { height: auto; }
-    .wf-viewport--narrow { max-width: var(--wf-size-360); }
+    /* Окно поменьше — тумблер в навбаре. */
+    body.wf-window-s .wf-viewport { width: var(--wf-size-1024); height: var(--wf-size-640); }
+    .wf-viewport--narrow,
+    body.wf-window-s .wf-viewport--narrow { width: var(--wf-size-360); height: var(--wf-size-640); }
     /* Ширину читаемой колонки и схлопывание секции в один столбец шаблон
        переключает медиазапросами по ОКНУ. В эскизе окно — это браузер, а не
        кадр, поэтому в узком состоянии те же правила продублированы классом
        кадра. */
     .wf-viewport--narrow .tb-scene__col { width: 100%; }
     .wf-viewport--narrow .tb-measure.ou-formsection { display: flex; flex-direction: column; gap: var(--ou-space-4); }
-    .wf-caption { max-width: var(--wf-size-1200); margin: 0 auto var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+    .wf-caption { max-width: var(--wf-size-1280); margin: 0 auto var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
     /* Якорь метки требования. Своё display элементы раскладки держат сами. */
     .wf-annot-wrap { position: relative; }
     /* Метка лежит ВНУТРИ якоря: поверхности ДС обрезают выход за свои границы
@@ -180,10 +189,10 @@
       pointer-events: none; white-space: nowrap; box-shadow: var(--ou-shadow-sm);
     }
     body.wf-annots-on .wf-annot { display: block; }
-    .wf-page { max-width: var(--wf-size-1200); }
-    .wf-notes, .wf-mapping { max-width: var(--wf-size-1200); margin-inline: auto; }
+    .wf-page { max-width: var(--wf-size-1280); }
+    .wf-notes, .wf-mapping { max-width: var(--wf-size-1280); margin-inline: auto; }
     .wf-notes { margin-top: var(--ou-space-8); }
-    .wf-doc-title { max-width: var(--wf-size-1200); margin: var(--ou-space-8) auto 0; font: var(--ou-text-heading-m); color: var(--ou-fg-default); }
+    .wf-doc-title { max-width: var(--wf-size-1280); margin: var(--ou-space-8) auto 0; font: var(--ou-text-heading-m); color: var(--ou-fg-default); }
   </style>
 </head>
 <body class="ou ou--dark ou--normal">
@@ -198,13 +207,15 @@
   <button type="button" class="ou-btn ou-btn--secondary ou-btn--s active" onclick="toggleTheme(this)">Dark</button>
   <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="toggleDensity(this)">Normal</button>
   <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="toggleAnnots(this)">Аннотации</button>
+  <span class="wf-nav-sep"></span>
+  <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="toggleWindow(this)">Окно 1280&times;800</button>
 </nav>
 
 <!-- ══════════════════ Измерительная методика ══════════════════ -->
 <section class="wf-state active" id="s-measurement">
   <div class="wf-page">
-    <p class="wf-caption">Измерительная методика: порога прохождения нет, нормализация шкал — <code>none</code>, поэтому ни кольца процентов, ни полосы прогресса в шапке. Блоки идут в порядке §8.2: «Ваш результат», «По шкалам», «Рекомендации». Кадр растянут по высоте содержимого: в реальном окне прокручивается тело сцены.</p>
-    <div class="wf-viewport wf-viewport--flow">
+    <p class="wf-caption">Измерительная методика: порога прохождения нет, нормализация шкал — <code>none</code>, поэтому ни кольца процентов, ни полосы прогресса в шапке. Блоки идут в порядке §8.2: «Ваш результат», «По шкалам», «Рекомендации». Кадр — окно плеера 1280&times;800 (тумблер в навбаре переключает на 1024&times;640): шапка закреплена сверху, подвал прижат к низу, прокручивается только тело сцены.</p>
+    <div class="wf-viewport">
       <div class="tb-scene">
 
         <header class="tb-scene__header tb-scene__header--flush">
@@ -480,8 +491,8 @@
 <!-- ══════════════════ Смешанный тест ══════════════════ -->
 <section class="wf-state" id="s-mixed">
   <div class="wf-page">
-    <p class="wf-caption">Смешанный тест: есть и порог прохождения, и шкалы с показателем. Все пять блоков в фиксированном порядке §8.2 — сводка баллов, «Ваш результат», «По шкалам», результаты по темам, рекомендации. Второго вида макета «Итоги: измерение» не заводится (§8.1). Кадр растянут по высоте содержимого: в реальном окне прокручивается тело сцены.</p>
-    <div class="wf-viewport wf-viewport--flow">
+    <p class="wf-caption">Смешанный тест: есть и порог прохождения, и шкалы с показателем. Все пять блоков в фиксированном порядке §8.2 — сводка баллов, «Ваш результат», «По шкалам», результаты по темам, рекомендации. Второго вида макета «Итоги: измерение» не заводится (§8.1). Кадр — окно плеера 1280&times;800 (тумблер в навбаре переключает на 1024&times;640): шапка закреплена сверху, подвал прижат к низу, прокручивается только тело сцены.</p>
+    <div class="wf-viewport">
       <div class="tb-scene">
 
         <header class="tb-scene__header">
@@ -729,8 +740,8 @@
 <!-- ══════════════════ Узкий контейнер 360 ══════════════════ -->
 <section class="wf-state" id="s-narrow">
   <div class="wf-page">
-    <p class="wf-caption">Та же методика в контейнере шириной 360px. Под дорожкой стоят только числовые границы, а название уровня стоит словом в метке под именем шкалы, поэтому подписи не спорят за место и особого тесного режима линейке не нужно. Две колонки секции схлопываются в один столбец. Кадр растянут по высоте содержимого: в реальном окне прокручивается тело сцены.</p>
-    <div class="wf-viewport wf-viewport--flow wf-viewport--narrow">
+    <p class="wf-caption">Та же методика в контейнере шириной 360px. Под дорожкой стоят только числовые границы, а название уровня стоит словом в метке под именем шкалы, поэтому подписи не спорят за место и особого тесного режима линейке не нужно. Две колонки секции схлопываются в один столбец. Кадр — окно плеера 1280&times;800 (тумблер в навбаре переключает на 1024&times;640): шапка закреплена сверху, подвал прижат к низу, прокручивается только тело сцены.</p>
+    <div class="wf-viewport wf-viewport--narrow">
       <div class="tb-scene">
 
         <header class="tb-scene__header tb-scene__header--flush">
@@ -978,6 +989,21 @@
         <td>§7</td>
       </tr>
       <tr>
+        <td>Экран живёт в окне: шапка сверху, подвал снизу, прокручивается тело</td>
+        <td>Контракт сцены уже в шаблоне (<code>theme.css</code>: <code>.tb-scene</code> — колонка <code>height:100%</code> с <code>overflow:hidden</code>, шапка и подвал <code>flex:none</code>, тело <code>flex:1</code> + <code>overflow:auto</code>), PRD-29 в нём ничего не меняет. Кадр эскиза поэтому имеет фиксированную высоту: 1280&times;800 и 1024&times;640 по тумблеру, узкий — 360&times;640. Горизонтальной прокрутки нет ни на одной ширине</td>
+        <td>§8.2</td>
+      </tr>
+      <tr>
+        <td>Сколько видно без прокрутки</td>
+        <td>Замер на холсте, сверен со снимками. <strong>1280&times;800</strong> — тело сцены 650px при содержимом 1186px (1,8 экрана): методика показывает без прокрутки блок «Ваш результат» целиком и ДВЕ шкалы из трёх (у второй за сгибом остаётся только её нижняя отбивка), третья шкала и рекомендации — прокруткой; смешанный (тело 656px при 1600px, 2,4 экрана) — сводку баллов, «Ваш результат» и первую шкалу. <strong>1024&times;640</strong> — тело 490px при 1242px (2,5 экрана): методика показывает «Ваш результат» и первую шкалу; смешанный (тело 496px при 1656px, 3,3 экрана) — сводку и «Ваш результат», шкалы начинаются за сгибом. <strong>360&times;640</strong> — тело 396px при 1594px (4 экрана), подвал в две строки: виден «Ваш результат», у первой шкалы — только имя</td>
+        <td>§8.2</td>
+      </tr>
+      <tr>
+        <td>Высота одного измерения</td>
+        <td>Секция шкалы: 185px при ширине окна 1280, 205px при 1024 (толкование переносится на вторую строку), 287px при 360 (колонки схлопнуты). Блок из трёх шкал — 554 / 594 / 860px соответственно; секция показателя — 152 / 168 / 224px. Числа приведены для решения «принять прокрутку или ужать»: сокращать нечего, кроме отбивки <code>ou-formsection</code> (32px сверху и снизу) и ступеней размера</td>
+        <td>§8.3</td>
+      </tr>
+      <tr>
         <td>Данные холста</td>
         <td>Референсная методика §1.1 — опросник выгорания Маслача: показатель «Состояние» и три шкалы с их доменами, интервалами и толкованиями. Числа не выдуманы: 27 из 45, 6 из 25, 30 из 40</td>
         <td>§1.1</td>
@@ -1046,6 +1072,16 @@
     if (btn) {
       btn.textContent = isCompact ? 'Compact' : 'Normal';
       btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  /* Размер окна плеера: рабочий 1280x800 и вариант 1024x640. Узкий кадр (360)
+     живёт своей шириной и меняет только высоту. */
+  window.toggleWindow = function toggleWindow(btn) {
+    var small = document.body.classList.toggle('wf-window-s');
+    if (btn) {
+      btn.textContent = small ? 'Окно 1024×640' : 'Окно 1280×800';
+      btn.classList.toggle('active', small);
     }
   };
 
