@@ -14,6 +14,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
+import { collectStringLiterals, findUnknownOutcomes } from "@shared/formula/outcome-literals";
 import { OutcomesEditor } from "../outcomes-editor";
 import { apiToEditorModel } from "../../test-editor.mappers";
 import { saveScales } from "../../scales-api";
@@ -218,5 +219,30 @@ describe("круговой обход толкований через config_jso
     ];
     await saveResultVariables("t1", draft, snapshot);
     expect(fetchMock.mock.calls.map((c) => c[1]?.method)).toEqual(["PUT"]);
+  });
+});
+
+describe("подсказка кодов из формулы", () => {
+  it("предлагает коды, когда перечень исходов ещё пуст", () => {
+    // Главный сценарий PRD-29 §5.1: методику импортировали с готовой формулой,
+    // перечень исходов не заполнен, и подсказка засевает его одним нажатием.
+    // Предупреждение в этот момент молчит намеренно — автор ещё не ошибся.
+    render(
+      <OutcomesEditor
+        outcomes={[]}
+        index={0}
+        readOnly={false}
+        onChange={() => {}}
+        suggestedCodes={collectStringLiterals('IF(percent >= 0, "growing", "burnout")').sort()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "burnout" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "growing" })).toBeInTheDocument();
+  });
+
+  it("предупреждение молчит на пустом перечне, а подсказка — нет", () => {
+    const formula = 'IF(percent >= 0, "growing", "burnout")';
+    expect(findUnknownOutcomes(formula, [])).toEqual([]);
+    expect(collectStringLiterals(formula).sort()).toEqual(["burnout", "growing"]);
   });
 });

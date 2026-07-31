@@ -44,7 +44,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-import { findUnknownOutcomes } from "@shared/formula/outcome-literals";
+import { collectStringLiterals, findUnknownOutcomes } from "@shared/formula/outcome-literals";
 
 import type {
   ResultVariableControlsStatus,
@@ -435,12 +435,31 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
 
   const isBoolean = v.type === "boolean";
 
-  // PRD-29 Task 15: codes the formula can return but the outcome list does not
-  // declare yet. Recomputed on every formula/outcomes edit; feeds BOTH the warning
-  // banner below and `OutcomesEditor`'s `suggestedCodes`, so the two never diverge.
+  const declaredCodes = useMemo(
+    () => v.outcomes.map((o) => o.code.trim()).filter((c) => c !== ""),
+    [v.outcomes],
+  );
+
+  /**
+   * PRD-29 Task 15: codes the formula can return that the list does not declare —
+   * the WARNING. Suppressed while the list is empty (`findUnknownOutcomes`): an
+   * author who has not started declaring outcomes is not doing anything wrong yet.
+   */
   const unknownOutcomeCodes = useMemo(
-    () => findUnknownOutcomes(v.formula, v.outcomes.map((o) => o.code.trim()).filter((c) => c !== "")),
-    [v.formula, v.outcomes],
+    () => findUnknownOutcomes(v.formula, declaredCodes),
+    [v.formula, declaredCodes],
+  );
+
+  /**
+   * The same codes as SUGGESTIONS — deliberately NOT suppressed on an empty list.
+   * Seeding an imported formula's outcome list in one click is the main scenario
+   * (PRD-29 §5.1), and it happens precisely when nothing is declared yet; reusing
+   * the warning's suppression here would switch the feature off exactly when it is
+   * needed most.
+   */
+  const suggestedOutcomeCodes = useMemo(
+    () => collectStringLiterals(v.formula).filter((code) => !declaredCodes.includes(code)),
+    [v.formula, declaredCodes],
   );
 
   // DSL «Функции» reference + insert-at-cursor.
@@ -565,7 +584,7 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
           index={index}
           readOnly={readOnly}
           onChange={(outcomes) => onChange({ outcomes })}
-          suggestedCodes={unknownOutcomeCodes}
+          suggestedCodes={suggestedOutcomeCodes}
         />
       )}
       {v.type !== "number" && unknownOutcomeCodes.length > 0 && (
