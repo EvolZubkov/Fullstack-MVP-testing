@@ -93,6 +93,8 @@ export type ContentTemplateSetting = {
   label?: string;
   required?: boolean;
   options?: string[];
+  /** Human-readable label per option value (PRD-29); falls back to the raw value when absent. */
+  optionLabels?: Record<string, string>;
   default?: unknown;
 };
 

@@ -1970,7 +1970,7 @@ function PlaceholderControl(props: {
  * among placeholders, because they configure the page instead of filling the
  * layout. `sequence` gets the identifier picker.
  */
-function SettingControl(props: {
+export function SettingControl(props: {
   setting: ContentTemplateSetting;
   value: unknown;
   onChange: (value: unknown) => void;
@@ -2035,7 +2035,7 @@ function SettingControl(props: {
           size="m"
           fullWidth
           value={(value as string) || ""}
-          options={(st.options ?? []).map((o) => ({ value: o, label: o }))}
+          options={(st.options ?? []).map((o) => ({ value: o, label: st.optionLabels?.[o] ?? o }))}
           onChange={(next) => onChange(next)}
           data-testid={testId}
         />
