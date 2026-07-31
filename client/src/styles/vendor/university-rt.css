@@ -5542,6 +5542,14 @@ span.ou-quiz__dot:hover { transform: none; }
   height: 20px;
   color: var(--ou-fg-subtle);
   flex-shrink: 0;
+  /* The grip is the drag HANDLE, so it must opt out of the browser's touch
+   * gestures: without this a touch drag is claimed for scrolling and the pointer
+   * engine receives a `pointercancel` instead of a drop — reordering by finger
+   * does not work at all. Declared on the grip and not on `.ou-rank__item`
+   * deliberately: taking `touch-action` away from the whole row would also take
+   * away vertical scrolling from a list that can fill the screen.
+   * `.ou-match__card--drag` carries the same declaration for the same reason. */
+  touch-action: none;
 }
 .ou-rank__grip svg { width: 18px; height: 18px; display: block; }
 .ou-rank__item:hover .ou-rank__grip { color: var(--ou-fg-muted); }

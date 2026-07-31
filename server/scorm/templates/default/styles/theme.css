@@ -104,7 +104,20 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
    ================================================================= */
 
 /* ── Scene frame ────────────────────────────────────────────────── */
+/* The scene is the layout's size CONTAINER (`tbscene`), and every width-dependent rule
+   in this file is a `@container tbscene (…)` query rather than a viewport `@media`.
+   Reason — the same one already stated for `tbhead` further down: on the web host the
+   scene lives inside a Shadow DOM whose box is NOT the viewport (narrow preview modals,
+   the debug player's inset frame), and in the LMS it lives inside an iframe. A viewport
+   query measures the wrong box in exactly the cases the mobile layout has to be right in.
+   `inline-size` gives no size containment on the block axis, so `height:100%` /
+   `flex:1` / `overflow:hidden` below keep resolving as before.
+
+   Steps: 900 (S1, ported from the old viewport queries — desktop unchanged),
+   700 (S2, two-column grids fold; chosen below 768 so a tablet KEEPS them),
+   520 (S3, phone portrait). */
 .tb-scene {
+  container: tbscene / inline-size;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -153,7 +166,7 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   flex-direction: column;
   gap: var(--ou-space-4);
 }
-@media (max-width: 900px) {
+@container tbscene (max-width: 900px) {
   .tb-scene__col { width: 100%; }
 }
 /* Footer action panel — shared look for the host-rendered nav row. Vertical padding
@@ -307,7 +320,7 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 /* Placeholder shown by the image-right start VARIANT when no start image is set —
    keeps the right media panel visible so the layout reads as «image right». */
 .tb-cover__media-ph { width: 100%; height: 100%; min-height: 220px; display: flex; align-items: center; justify-content: center; color: var(--ou-fg-muted); opacity: 0.55; }
-@media (max-width: 900px) { .tb-cover--media { grid-template-columns: 1fr; } .tb-cover__media { min-height: 220px; } }
+@container tbscene (max-width: 900px) { .tb-cover--media { grid-template-columns: 1fr; } .tb-cover__media { min-height: 220px; } }
 
 /* Facts strip — big number + small label, spaced (start screen). */
 .tb-facts { display: flex; flex-wrap: wrap; gap: var(--ou-space-9); }
@@ -317,9 +330,14 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 
 /* Centred column (section intro / blocked / short system screens): balanced,
    reading measure, vertically centred — no unjustified vertical stretching. */
+/* `min-height` (not `height`) plus `safe center`: a centred column whose content is
+   TALLER than the field would otherwise be centred past the top edge, and the part
+   above the fold becomes unreachable — the body scrolls to its own top, which is
+   already below the content's start. `safe` degrades to flex-start exactly then. The
+   same pairing is used by `.tb-content-body` below. */
 .tb-scene__col--center {
-  max-width: 680px; margin: 0 auto; height: 100%;
-  align-items: center; justify-content: center; text-align: center;
+  max-width: 680px; margin: 0 auto; min-height: 100%;
+  align-items: center; justify-content: safe center; text-align: center;
   gap: var(--ou-space-5);
 }
 .tb-scene__col--narrow { max-width: 640px; }
@@ -363,8 +381,16 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   align-items: start;
 }
 .tb-qbody__media:empty { display: none; }
+/* `max-width` matters as much as `width`: the web host prints question media with an
+   inline `max-height` but no width cap (template-question-screen), so a wide asset
+   would push the answer column past the scene on a phone. */
 .tb-qbody__media img,
-.tb-qbody__media video { width: 100%; border-radius: var(--ou-radius-m); }
+.tb-qbody__media video { width: 100%; max-width: 100%; height: auto; border-radius: var(--ou-radius-m); }
+/* Result-variable rings are printed with `width`/`height` ATTRIBUTES from the author's
+   `size` option (renderers.ts ringChart, default 120 and up), which a narrow field
+   cannot override — cap them here so an indicator cannot overflow the scene. */
+.renderer__ring,
+.ou-ring__svg { max-width: 100%; height: auto; }
 .tb-qbody__answers { min-height: 0; display: flex; flex-direction: column; }
 /* Verdict banner sits ABOVE the options — keep it off the first option (only when
    filled, so the empty slot adds no phantom gap). */
@@ -385,9 +411,11 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
    this one file, so the flip point cannot differ between the web run and the LMS
    package. The count-based half of the rule (more than seven graduations) is applied
    by renderScale; this is the WIDTH half: a narrow answer column cannot fit a row of
-   labelled points, so the scale stands up. */
+   labelled points, so the scale stands up. The flip rides the S2 step (700) rather than
+   its old 640 viewport value: the answer column is 7/12 of the scene, so a scene of 700
+   is already the point where a labelled row stops fitting. */
 .tb-scene .ou-stepper--choice { width: 100%; margin-block: var(--ou-space-4); }
-@media (max-width: 640px) {
+@container tbscene (max-width: 700px) {
   .tb-scene .ou-stepper--choice { flex-direction: column; align-items: stretch; }
   .tb-scene .ou-stepper--choice .ou-stepper__step {
     flex: 0 0 auto; flex-direction: row; align-items: center;
@@ -516,8 +544,11 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-scene__col--wide { width: 100%; }
 /* Score strip: ring + facts side by side. */
 .tb-score-strip { display: flex; align-items: center; gap: var(--ou-space-8); flex-wrap: wrap; }
-/* Per-topic cards — responsive grid. */
-.tb-topics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--ou-space-4); }
+/* Per-topic cards — responsive grid. The track floor is `min(340px, 100%)`, not a
+   bare 340px: a bare floor cannot shrink below itself, so on a 360px phone (312px of
+   field) auto-fit still lays a 340px track and the BODY gets a horizontal scrollbar.
+   `min()` lets the single remaining track fall back to the field width. */
+.tb-topics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: var(--ou-space-4); }
 .tb-topic-card .ou-card__body { display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: flex-start; }
 .tb-topic-card__name { font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
 .tb-topic-card__bar { width: 100%; margin-top: var(--ou-space-1); }
@@ -542,6 +573,15 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   text-decoration: none;
 }
 a.tb-rec:hover { border-color: var(--ou-accent-default); }
+/* Chip pictogram. Courses and events land in ONE unlabelled row here — unlike the
+   report, which gives each kind its own titled section — so the glyph is the only
+   thing telling them apart. The glyphs are the ones the author side already uses for
+   the same three groups (features/tests/editor/sections/feedback-preview): a link for
+   a course, a calendar for an event. Muted by default so the chip reads as its title
+   first; it picks up the accent with the link's hover, like the border does. */
+.tb-rec__ico { flex: none; display: inline-flex; color: var(--ou-fg-muted); }
+.tb-rec__ico svg { display: block; }
+a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 
 /* Adaptive results: centred hero (no score ring) + level cards. */
 .tb-adaptive-hero { display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-3); text-align: center; margin-bottom: var(--ou-space-2); }
@@ -704,7 +744,7 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
    page-content slot, on both hosts and in the «Структура» preview. */
 /* Same footprint as the results «Результаты по темам» grid (.tb-topics-grid): min
    column 340px and the DS card spacing, so hub cards read at the same size. */
-.router-topic-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--ou-space-4); margin-top: 24px; }
+.router-topic-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: var(--ou-space-4); margin-top: 24px; }
 .router-progress { margin: 18px 0 4px; }
 .router-progress__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
 .router-progress__label { font-size: 13px; font-weight: 600; color: var(--ou-fg-muted); }
@@ -754,3 +794,297 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
 }
 .router-stat__label { font-size: 11px; color: var(--ou-fg-muted); }
 .router-stat__value { font-size: 14px; font-weight: 700; color: var(--ou-fg-default); font-variant-numeric: tabular-nums; }
+
+/* =================================================================
+   MOBILE LAYER — tablet (S2) and phone portrait (S3)
+   ─────────────────────────────────────────────────────────────────
+   Every query here measures the SCENE (`@container tbscene`, declared on
+   `.tb-scene` at the top of this file), never the viewport. The whole layer
+   lives at the END of the file on purpose: its rules mirror selectors declared
+   above at the SAME specificity, so cascade ORDER is what makes them win. There is
+   exactly ONE `!important` in the layer — on the matching grid, whose columns the
+   renderer prints inline and which therefore cannot be reached any other way; the
+   rule carries its own explanation.
+
+   One constraint shapes all of it: NOT ONE LAYOUT FILE MAY CHANGE.
+   `tests/template-layout-parity.test.ts` requires the 19 layouts to stay byte
+   for byte equal to the `certification` template's, and the template DSL has no
+   expressions, so a layout cannot branch on width. Everything below is therefore
+   pure CSS over unchanged markup.
+
+   Note the one rule of container queries that shapes the selectors: a query can
+   style the container's DESCENDANTS but never the container itself — `.tb-scene`
+   is not addressable in here, only what it contains.
+   ================================================================= */
+
+/* ── S2 · scene <= 700px — tablet portrait and narrow embeds ────────
+   The two-column grids fold. The step sits BELOW 768 deliberately: on a tablet
+   "media left / answers right" is still a good composition (media ~291px, text
+   ~385px), and folding it there would only add scrolling. */
+@container tbscene (max-width: 700px) {
+  /* Media + answers, and the content page's image + text: one column. */
+  .tb-qbody:has([data-slot="question-media"]:not(:empty)) { grid-template-columns: 1fr; }
+  .tb-content--image,
+  .tb-content--image-right { grid-template-columns: 1fr; gap: var(--ou-space-5); }
+
+  /* Matching stands up.
+     `!important` is required here and only here, and it is not a shortcut: the
+     renderer prints `grid-template-columns` INLINE on `.ou-match` to give the
+     wordier side a 2:1 share (question-interaction, renderMatching), and an inline
+     declaration outranks every stylesheet rule. DS ships its own fold at
+     `max-width: 560px` and it has never worked for exactly this reason — worse, it
+     hides `.ou-match__gap` while the inline template keeps THREE tracks, so the
+     cards auto-place into the wrong ones and visibly overlap on a phone. Folding to
+     one track puts prompt over chip, which is the intended narrow layout.
+     A cleaner fix belongs upstream: have the renderer print the ratio as a custom
+     property that a stylesheet can override. Left as a proposal — it changes shared
+     render code and the DS, both of which serve the certification template too. */
+  .tb-scene .ou-match { grid-template-columns: 1fr !important; }
+  .tb-scene .ou-match__gap { display: none; }
+
+  /* Typography, first step down. `clamp()` WRAPS the runtime variable rather than
+     replacing it: `--tb-question-fs` / `--tb-answer-fs` are set inline on the
+     ancestor `.tb-scene__col` (by fit-font before render and fitQuestionScene
+     after it), while `font-size` is declared on the descendant — so a rule here
+     wins without `!important` and still honours the fitted value between the
+     bounds. The ceiling stops a short prompt from printing at 32px in a narrow
+     column; the floor stops the height-fitter from shrinking text to 14px on a
+     phone, where scrolling is the better trade. Keep these numbers in sync with
+     the narrow profile in `shared/template/fit-question.ts`. */
+  .tb-scene__qtitle,
+  .tb-content__title { font-size: clamp(20px, var(--tb-question-fs, 30px), 26px); }
+  .tb-scene__hero { font-size: clamp(22px, var(--tb-question-fs, 32px), 28px); }
+  .tb-scene .ou-radio-card__title,
+  .tb-scene .ou-rank__text,
+  .tb-scene .ou-match__card-title { font-size: clamp(15px, var(--tb-answer-fs, 20px), 19px); }
+  .tb-scene__hero--s { font-size: 24px; }
+  .tb-cover__title { font-size: 34px; }
+
+  /* Spacing built for a wide field: halve the largest gaps. */
+  .tb-facts { gap: var(--ou-space-6); }
+  .tb-score-strip { gap: var(--ou-space-6); }
+  .tb-cover { gap: var(--ou-space-6); }
+  .tb-cover__logo { margin-bottom: var(--ou-space-5); }
+  .tb-scene__timers { gap: var(--ou-space-4); }
+  .card { padding: var(--ou-space-5); }
+  .navigation { margin-top: var(--ou-space-5); }
+  .renderer__value { font-size: 32px; }
+  .content-placeholder--title { font-size: 24px; }
+}
+
+/* ── S3 · scene <= 520px — phone portrait (360 / 390) ───────────────
+   520 rather than 640 so that neither a tablet nor a phone in landscape falls
+   into the phone layout. */
+@container tbscene (max-width: 520px) {
+
+  /* Frame padding: 24px took 13% of a 360px screen. */
+  .tb-scene__header { padding: var(--ou-space-3) 16px calc(var(--ou-space-2) + 2px); }
+  .tb-scene__body { padding: 16px; }
+  .tb-scene__header--flush { padding-bottom: var(--ou-space-3); }
+  .tb-scene--cover .tb-scene__body { padding: var(--ou-space-5) 16px; }
+  .tb-scene__col { gap: var(--ou-space-3); }
+  .tb-scene__col--doc { gap: var(--ou-space-4); }
+
+  /* Header. Measured on a phone the old stack cost 162px of an 844px screen: a brand
+     row, then a tier for the timers (the DS digital timer stacks a label OVER a 22px
+     number), then a tier for the counters. Here the header itself becomes the wrapping
+     row and BOTH inner wrappers dissolve, so the title, the timers and the counters are
+     its own children and can share lines: title on the first, timers + counters on the
+     second. Dissolving `.tb-scene__map` is safe at this step because its dots and legend
+     are already hidden below — only the two counters are left inside it.
+
+     The logo steps aside on a phone: 36px plus a gap of horizontal space, spent on a
+     decorative tile while the test name wraps to two lines, is the wrong trade at 360px.
+     Branding still opens the run — the start screen's cover carries the logo large. */
+  .tb-scene__header {
+    flex-direction: row; flex-wrap: wrap; align-items: center;
+    row-gap: var(--ou-space-2);
+  }
+  .tb-scene__brandrow,
+  .tb-scene__map { display: contents; }
+  .tb-scene__logo { display: none; }
+  .tb-scene__title { font: var(--ou-text-heading-m); }
+  .tb-scene__titles { flex: 1 1 100%; min-width: 0; order: 1; }
+  /* Timers lie flat — label BESIDE the number, not above it. This one change returns
+     24px; the empty wrapper costs nothing when no timer runs, because the layout ships
+     both `.ou-timer`s hidden. */
+  .tb-scene__timers { flex: 0 0 auto; order: 2; margin-left: 0; gap: var(--ou-space-4); }
+  .tb-scene__timers .ou-timer--digital { flex-direction: row; align-items: baseline; gap: 6px; }
+  .tb-scene__timers .ou-timer--digital .ou-timer__num { font-size: 15px; }
+
+  /* Question map: the DOTS and the legend go away on a phone; the counters stay.
+     Twelve touch-sized dots plus the legend cost ~100px of a 740px screen, and
+     the map is an ACCELERATOR — the review screen keeps a full, touch-sized map
+     and the "К обзору" action stays in the footer, so nothing becomes
+     unreachable. Only the two counters are addressed separately because they sit
+     INSIDE `.tb-scene__map` in the layout, next to the dots. */
+  .tb-scene__map .ou-quiz__dots,
+  .tb-scene__map .ou-quiz__legend { display: none; }
+  .tb-scene__mapcount { font: var(--ou-text-body-s); }
+  .tb-scene__mapcount--answered { flex: 0 1 auto; order: 3; margin-left: auto; text-align: right; }
+  .tb-scene__mapcount--skipped { flex: 0 1 auto; order: 4; margin-left: var(--ou-space-3); }
+  .tb-scene__mapcount--skipped::before { content: none; }
+
+  /* Prompt cap (fit-question phase 4). The two properties are written by the shared
+     fitter and are ABSENT unless it decided to cap, so a short prompt keeps its natural
+     height with no scrollbar and no faded last line. The mask is the only cue that the
+     text continues — without it a hard cut reads as the end of the sentence. */
+  .tb-scene__q {
+    max-height: var(--tb-prompt-max-h, none);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-mask-image: var(--tb-prompt-mask, none);
+            mask-image: var(--tb-prompt-mask, none);
+  }
+
+  /* Centred / narrow columns stop capping below the field width. */
+  .tb-scene__col--center,
+  .tb-scene__col--narrow { max-width: none; }
+
+  /* Cover (start screen). */
+  .tb-cover__title { font-size: 28px; }
+  .tb-cover__desc { font: var(--ou-text-body-m); }
+  .tb-cover__content { gap: var(--ou-space-4); justify-content: flex-start; }
+  .tb-cover__media,
+  .tb-cover__media-ph { min-height: 160px; }
+  .tb-facts { gap: var(--ou-space-4) var(--ou-space-5); }
+  .tb-facts__num { font: var(--ou-text-heading-m); }
+
+  /* Results / review. */
+  .tb-ring { width: 112px; height: 112px; }
+  .tb-ring .ou-ring__svg { width: 112px; height: 112px; }
+  .tb-score-strip { gap: var(--ou-space-4); }
+  .tb-topics-grid,
+  .router-topic-cards { grid-template-columns: 1fr; }
+  .tb-unanswered__row { flex-wrap: wrap; row-gap: var(--ou-space-2); }
+  .tb-unanswered__go { margin-left: auto; }
+
+  /* Content pages. 4:3 is too tall on a 328px field — 3:2 gives the text room. */
+  .tb-content__media { aspect-ratio: 3 / 2; }
+  .tb-content--text,
+  .tb-content--image { max-width: none; }
+  .tb-content--image { gap: var(--ou-space-4); }
+  .tb-card { padding: var(--ou-space-4); }
+  .tb-meta-dots { gap: var(--ou-space-3); }
+  .content-placeholder--heroImage,
+  .content-placeholder--image { height: 180px; }
+
+  /* System screens. */
+  .tb-transition-icon { width: 64px; height: 64px; }
+  .tb-blocked-icon { width: 60px; height: 60px; }
+  .tb-adaptive-hero__icon { width: 52px; height: 52px; }
+  .retake-wall { padding: 16px; }
+  .retake-wall__card { padding: var(--ou-space-5); }
+
+  /* Typography, second step down. */
+  .tb-scene__qtitle,
+  .tb-content__title { font-size: clamp(18px, var(--tb-question-fs, 30px), 22px); }
+  .tb-scene__hero { font-size: clamp(20px, var(--tb-question-fs, 32px), 24px); }
+  .tb-scene .ou-radio-card__title,
+  .tb-scene .ou-rank__text,
+  .tb-scene .ou-match__card-title { font-size: clamp(15px, var(--tb-answer-fs, 20px), 17px); }
+
+  /* ── Footer ──────────────────────────────────────────────────────
+     Measured on the package at 360: the question row alone wants 383px of the
+     312px available, and the primary button hung 59px OFF-SCREEN — the main
+     action was partly unreachable, not merely cramped.
+
+     The fix leans on the ONE node every footer in this template shares: the
+     spacer. It stops pushing right and becomes a zero-height line break, so the
+     row splits into "secondary actions" over "primary action". `order` puts the
+     primary last no matter where it sits in the markup — on the start and
+     results screens secondary buttons FOLLOW it in the DOM, and without this
+     they would land on a third row. Secondary buttons are compressed rather than
+     stretched: `.ou-btn` is `white-space: nowrap`, so they cannot reflow. */
+  .tb-scene__foot {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 16px;
+    /* Keeps the primary action clear of the iOS home indicator. */
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+  /* The spacer stops laying out entirely rather than forcing a line break: letting the
+     wrap decide costs 26px less than a hard second row, and on a wider phone the whole
+     footer can still collapse to one line. `order` keeps the primary last regardless —
+     on the start and results screens secondary buttons FOLLOW it in the markup. */
+  .tb-scene__foot-spacer { display: none; }
+  .tb-scene__foot .ou-btn--ghost,
+  .tb-scene__foot .ou-btn--secondary {
+    flex: 0 1 auto; padding-inline: var(--ou-space-3); font-size: 13px;
+    height: 44px; min-height: 44px;
+  }
+  /* 48px, not the DS `--l` 56: still past the 44px touch floor, and the 8px go back to
+     the question. `flex: 1 1 auto` makes it fill whatever line it lands on. */
+  .tb-scene__foot .ou-btn--primary {
+    order: 99; flex: 1 1 auto; min-width: 150px; height: 48px; min-height: 48px;
+  }
+  .tb-scene__foot .tb-scene__note { flex: 0 0 100%; font: var(--ou-text-body-s); }
+}
+
+/* ── Touch density ─────────────────────────────────────────────────
+   Sized by the POINTER, not by width — a phone and a 10" tablet both need a
+   finger-sized target, and a narrow window on a desktop does not. `pointer:
+   coarse` describes the PRIMARY pointing device, so a touchscreen laptop driven
+   by its trackpad stays `fine` and the desktop layout is untouched. Deliberately
+   NOT `any-pointer: coarse`, which matches every touch-capable laptop.
+
+   This is the size half of the DS `.ou--spacious` density (university-rt.css),
+   without its spacing half: that class also scales the whole `--ou-space-*` ramp
+   by ~30%, which on a 360px screen would hand the cover 128px of horizontal
+   padding. It also leaves `.ou-quiz__dot` at its literal 26px, so it would not
+   have fixed the worst target anyway.
+
+   The tokens are declared on `.tb-scene` — NOT on `.ou` or `:host`. On the web
+   host the scene lives in a Shadow DOM, and by the cascade's encapsulation-context
+   rule a normal declaration from the OUTER tree wins: the document's own `.ou`
+   rule (client/src/index.css) would beat a `:host` override from this stylesheet
+   and the density would silently never apply. `.tb-scene` lives inside the shadow
+   tree, where nothing outside can outrank it. */
+@media (pointer: coarse) {
+  .tb-scene,
+  .tb-scene__foot {
+    --ou-size-control-xs: 32px;
+    --ou-size-control-s: 40px;
+    --ou-size-control-m: 48px;
+    --ou-size-control-l: 56px;
+    --ou-size-row: 56px;
+    --ou-size-row-compact: 48px;
+  }
+
+  /* Answer rows: the 52px baseline set above becomes a full touch row. */
+  .tb-scene .ou-radio-card,
+  .tb-scene .ou-rank__item { min-height: var(--ou-size-row); }
+
+  /* The question map sizes itself from a literal `--qsize`, which the density
+     tokens do not reach — raise it explicitly. The review screen's map is the
+     primary navigation on a phone (the header map is hidden at S3), so it gets
+     the full 44px target. */
+  .tb-scene__map .ou-quiz__dot { --qsize: 36px; }
+  .tb-review-map .ou-quiz__dot { --qsize: 44px; }
+
+  /* ── Ranking: drag from the grip ────────────────────────────────
+     `touch-action: none` is what lets a pointer drag survive on a touchscreen —
+     without it the browser claims the gesture for scrolling and the engine gets
+     a `pointercancel` (which is why ranking drag did not work on a phone at all).
+     It is applied to the GRIP only, in the DS: putting it on the whole row would
+     take vertical scrolling away from a list that fills the screen — a worse
+     regression than the bug. Gesture from the grip drags; gesture from the row
+     scrolls; the up/down buttons remain the primary, accessible path.
+
+     DS hides the grip and collapses the row to three columns below 480px
+     (university-rt.css). Restoring the grip therefore has to restore the FOURTH
+     column too — otherwise the controls wrap to a second line and the row
+     doubles in height. */
+  .tb-scene .ou-rank__item { grid-template-columns: auto auto 1fr auto; gap: var(--ou-space-2); }
+  .tb-scene .ou-rank__grip {
+    display: inline-flex; align-items: center; justify-content: center;
+    /* `height: auto` is load-bearing: DS pins the grip to 20px, and a definite
+       height makes `align-self: stretch` a no-op — the drag target stayed 28x20,
+       under the 44px touch minimum on the axis that matters for a vertical list.
+       Stretched, the handle spans the row, which is also how a drag handle reads. */
+    align-self: stretch; height: auto; min-width: 28px;
+    touch-action: none;
+  }
+  .tb-scene .ou-rank__btn { min-width: 44px; min-height: 44px; }
+}
