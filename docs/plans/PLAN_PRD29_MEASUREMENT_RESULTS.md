@@ -3400,13 +3400,30 @@ export type OutcomeModel = {
 };
 ```
 
-- [ ] **Step 5: Встроить редакторы**
+- [ ] **Step 5: Провести новые поля через круговой обход**
+
+Это самый опасный шаг задачи. Сохранение шкалы переписывает `config_json` ЦЕЛИКОМ:
+`toConfigJson` в `scales-api.ts` собирает объект заново из модели редактора. Пока модель
+не несла `text` / `tone` / `feedback`, терять было нечего. Как только эта задача их
+добавляет, любое сохранение шкалы сотрёт толкования, если обе стороны не доработаны:
+
+- ЗАПИСЬ — `bandsToPayload` в `client/src/features/tests/editor/scales-api.ts`: класть
+  `text` и `tone` (пустые значения не писать, чтобы конфиг не пух), а также `feedback`;
+- ЧТЕНИЕ — `buildScalesFromApi` в `client/src/features/tests/editor/test-editor.mappers.ts`
+  (около строки 673): разбирать те же поля обратно в модель, с защитой от мусора, как это
+  сделано для остальных полей шкалы.
+
+Тест на круговой обход обязателен: модель с заполненными `text`, `tone` и `feedback`
+после `toConfigJson` и обратного разбора обязана совпасть с исходной. Без него регресс
+пройдёт незамеченным — интерфейс покажет пустые поля только после перезагрузки страницы.
+
+- [ ] **Step 6: Встроить редакторы**
 
 В карточке показателя (`result-variables-section.tsx`): `OutcomesEditor` для типов `string`
-и `boolean`, расширенный `BandsEditor` для `number`. Значения складываются в `configJson`
-показателя при сохранении — как это уже делается для интервалов шкалы.
+и `boolean`, расширенный `BandsEditor` для `number`. Для показателя круговой обход через
+`config_json` устроить так же, как для шкалы, — запись и чтение симметричными парами.
 
-- [ ] **Step 6: Убедиться, что тесты проходят**
+- [ ] **Step 7: Убедиться, что тесты проходят**
 
 Run: `npm test -- client/src/features/tests/editor`
 Expected: PASS. Существующие тесты `BandsEditor` обязаны остаться зелёными: добавление
@@ -3416,10 +3433,19 @@ Expected: PASS. Существующие тесты `BandsEditor` обязаны
 Run: `npm run check`
 Expected: 0 ошибок.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
+
+Коммитить ПОИМЁННО: в `client/src/features/tests/editor/sections/` лежит незакоммиченный
+чужой `feedback-preview.tsx`, и `git add` по каталогу утащил бы его в индекс.
 
 ```bash
-git add client/src/features/tests/editor
+git add client/src/features/tests/editor/test-editor.types.ts
+git add client/src/features/tests/editor/test-editor.mappers.ts
+git add client/src/features/tests/editor/scales-api.ts
+git add client/src/features/tests/editor/sections/scales-section.tsx
+git add client/src/features/tests/editor/sections/outcomes-editor.tsx
+git add client/src/features/tests/editor/sections/result-variables-section.tsx
+git add client/src/features/tests/editor/sections/__tests__/interpretation-editor.test.tsx
 git commit -m "feat(prd-29): толкования интервалов и перечень исходов в редакторе"
 ```
 
