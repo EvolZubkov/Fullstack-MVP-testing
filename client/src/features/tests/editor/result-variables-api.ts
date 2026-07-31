@@ -28,7 +28,7 @@ function toPayload(v: ResultVariableModel, sortOrder: number) {
     label: v.label,
     type: v.type,
     formula: v.formula,
-    showToLearner: v.showToLearner,
+    learnerVisibility: v.learnerVisibility,
     scormTarget: v.scormTarget,
     controlsStatus: v.controlsStatus,
     sortOrder,
@@ -42,7 +42,7 @@ function sameVariable(a: ResultVariableModel, b: ResultVariableModel): boolean {
     a.label === b.label &&
     a.type === b.type &&
     a.formula === b.formula &&
-    a.showToLearner === b.showToLearner &&
+    a.learnerVisibility === b.learnerVisibility &&
     a.scormTarget === b.scormTarget &&
     a.controlsStatus === b.controlsStatus &&
     a.sortOrder === b.sortOrder

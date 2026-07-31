@@ -61,7 +61,7 @@ const validBody = {
   label: "Зачёт",
   type: "boolean",
   formula: "percent >= 50",
-  showToLearner: true,
+  learnerVisibility: "level_and_value",
   scormTarget: "both",
   controlsStatus: "none",
 };

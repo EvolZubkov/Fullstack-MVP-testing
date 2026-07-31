@@ -58,7 +58,7 @@ function makeVar(over: Partial<ResultVariableModel> = {}): ResultVariableModel {
     label: "",
     type: "boolean",
     formula: "",
-    showToLearner: false,
+    learnerVisibility: "hidden",
     scormTarget: "both",
     controlsStatus: "none",
     sortOrder: 0,
@@ -75,7 +75,7 @@ function scaleWithLevels(): ScaleModel {
       { min: "0", max: "5", label: "Низкий", level: "low" },
       { min: "6", max: "10", label: "Высокий", level: "high" },
     ],
-    showToLearner: false, scormTarget: "none", sortOrder: 0,
+    learnerVisibility: "hidden", scormTarget: "none", sortOrder: 0,
   };
 }
 

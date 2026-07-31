@@ -1615,7 +1615,15 @@ export const resultVariables = pgTable("result_variables", {
   label: text("label").notNull(),
   type: text("type", { enum: ["boolean", "number", "string"] }).notNull(),
   formula: text("formula").notNull(),
-  showToLearner: boolean("show_to_learner").notNull().default(false),
+  // PRD-29: interpretation of the indicator — the outcome list for string/boolean
+  // values, bands for numeric ones. `scales` already has its own config_json.
+  configJson: jsonb("config_json").$type<Record<string, unknown>>().notNull().default({}),
+  // PRD-29: three positions instead of a boolean. Psychodiagnostics routinely needs
+  // the LEVEL disclosed while the raw score stays hidden — the score invites
+  // self-diagnosis and comparison between people.
+  learnerVisibility: text("learner_visibility", { enum: ["hidden", "level", "level_and_value"] })
+    .notNull()
+    .default("hidden"),
   scormTarget: text("scorm_target", { enum: ["interaction", "suspend_data", "both", "none"] }).notNull().default("both"),
   controlsStatus: text("controls_status", { enum: ["none", "success", "completion"] }).notNull().default("none"),
   sortOrder: integer("sort_order").notNull().default(0),
@@ -1648,6 +1656,10 @@ export const insertResultVariableSchema = createInsertSchema(resultVariables)
     // allowed; consumers fall back to the name for display. Column is NOT NULL, so
     // "" (not null) is stored.
     label: z.string().max(120).default(""),
+    configJson: z.record(z.string(), z.unknown()).default({}),
+    // PRD-29: see the same note on insertScaleSchema — drizzle-zod does not carry
+    // the column default into the parsed value.
+    learnerVisibility: z.enum(["hidden", "level", "level_and_value"]).default("hidden"),
   });
 
 export type InsertResultVariable = z.infer<typeof insertResultVariableSchema>;
@@ -1668,7 +1680,12 @@ export const scales = pgTable("scales", {
   normalization: text("normalization", { enum: ["none", "percent", "custom"] }).notNull().default("none"),
   direction: text("direction", { enum: ["positive", "inverse"] }).notNull().default("positive"),
   configJson: jsonb("config_json").$type<Record<string, unknown>>().notNull().default({}),
-  showToLearner: boolean("show_to_learner").notNull().default(false),
+  // PRD-29: three positions instead of a boolean. Psychodiagnostics routinely needs
+  // the LEVEL disclosed while the raw score stays hidden — the score invites
+  // self-diagnosis and comparison between people.
+  learnerVisibility: text("learner_visibility", { enum: ["hidden", "level", "level_and_value"] })
+    .notNull()
+    .default("hidden"),
   scormTarget: text("scorm_target", { enum: ["none", "suspend_data", "interaction", "both"] }).notNull().default("none"),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -1691,6 +1708,10 @@ export const insertScaleSchema = createInsertSchema(scales)
     // Label is OPTIONAL (per the approved wireframe). Empty is allowed; consumers
     // fall back to the key for display. Column is NOT NULL, so "" (not null) is stored.
     label: z.string().max(120).default(""),
+    // PRD-29: drizzle-zod marks a defaulted column optional but does NOT carry the
+    // column default into the parsed value, so state it here — an insert payload
+    // must always name what the learner sees.
+    learnerVisibility: z.enum(["hidden", "level", "level_and_value"]).default("hidden"),
   });
 
 export type InsertScale = z.infer<typeof insertScaleSchema>;

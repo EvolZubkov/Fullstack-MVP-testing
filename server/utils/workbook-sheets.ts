@@ -17,6 +17,7 @@
  */
 
 import type { ScaleBand } from "@shared/scales/engine";
+import type { LearnerVisibility } from "@shared/scales/interpretation";
 import type { DrawStratum, QuestionScoring } from "@shared/schema";
 import { scales, resultVariables } from "@shared/schema";
 import { normalizeTags, TAG_MAX_LENGTH } from "@shared/tags";
@@ -210,6 +211,24 @@ export function serializeBands(bands: ScaleBand[] | undefined): string {
     .join("; ");
 }
 
+// ─── Видимость ученику (PRD-29) ───────────────────────────────────────────────
+
+/**
+ * The «Показывать ученику» cell stays a yes/no pair: the workbook contract (and
+ * every file authors already hold) predates PRD-29's three positions. Only the
+ * OUTER two are expressible here — the same mapping migration 036 applies to the
+ * legacy boolean column. Authoring the middle position ("level" — level and
+ * interpretation without the raw value) belongs to the editor, not the workbook.
+ */
+function parseLearnerVisibility(raw: unknown): LearnerVisibility {
+  return parseBool(raw) ? "level_and_value" : "hidden";
+}
+
+/** Serialize the three positions back into the yes/no cell: publication yes/no. */
+function serLearnerVisibility(v: LearnerVisibility): string {
+  return serBool(v !== "hidden");
+}
+
 // ─── «Шкалы» ──────────────────────────────────────────────────────────────────
 
 /** Parse a «Шкалы» row into an `insertScaleSchema` input (без testId/sortOrder). */
@@ -231,7 +250,7 @@ export function parseScaleRow(row: Record<string, unknown>): ParseResult<Record<
       normalization: String(row["Нормализация"] ?? "").trim() || "none",
       direction: String(row["Направление"] ?? "").trim() || "positive",
       configJson: bands.value.length ? { bands: bands.value } : {},
-      showToLearner: parseBool(row["Показывать ученику"]),
+      learnerVisibility: parseLearnerVisibility(row["Показывать ученику"]),
       scormTarget: String(row["SCORM"] ?? "").trim() || "none",
     },
   };
@@ -247,7 +266,7 @@ export function serializeScaleRow(s: {
   normalization: string;
   direction: string;
   configJson: unknown;
-  showToLearner: boolean;
+  learnerVisibility: LearnerVisibility;
   scormTarget: string;
 }): Record<string, unknown> {
   const bands = (s.configJson as { bands?: ScaleBand[] })?.bands;
@@ -260,7 +279,7 @@ export function serializeScaleRow(s: {
     "Нормализация": s.normalization,
     "Направление": s.direction,
     "Диапазоны": serializeBands(bands),
-    "Показывать ученику": serBool(s.showToLearner),
+    "Показывать ученику": serLearnerVisibility(s.learnerVisibility),
     "SCORM": s.scormTarget,
   };
 }
@@ -285,7 +304,7 @@ export function parseResultVariableRow(row: Record<string, unknown>): ParseResul
       label: String(row["Метка"] ?? "").trim(),
       type: String(row["Тип"] ?? "").trim(),
       formula: String(row["Формула"] ?? "").trim(),
-      showToLearner: parseBool(row["Показывать ученику"]),
+      learnerVisibility: parseLearnerVisibility(row["Показывать ученику"]),
       scormTarget: String(row["SCORM"] ?? "").trim() || "both",
       controlsStatus,
     },
@@ -298,7 +317,7 @@ export function serializeResultVariableRow(rv: {
   label: string;
   type: string;
   formula: string;
-  showToLearner: boolean;
+  learnerVisibility: LearnerVisibility;
   scormTarget: string;
   controlsStatus: string;
 }): Record<string, unknown> {
@@ -307,7 +326,7 @@ export function serializeResultVariableRow(rv: {
     "Метка": rv.label,
     "Тип": rv.type,
     "Формула": rv.formula,
-    "Показывать ученику": serBool(rv.showToLearner),
+    "Показывать ученику": serLearnerVisibility(rv.learnerVisibility),
     "SCORM": rv.scormTarget,
     "Управляет статусом": CONTROLS_TO[rv.controlsStatus] ?? rv.controlsStatus,
   };

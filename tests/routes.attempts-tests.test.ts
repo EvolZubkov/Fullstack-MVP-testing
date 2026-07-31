@@ -855,7 +855,7 @@ describe("Attempts routes — finish attempt", () => {
     // even though the answer below is correct (parity with the SCORM runtime).
     storageMock.getResultVariables.mockResolvedValue([
       { id: "rv1", testId: "test1", name: "ok", label: "OK", type: "boolean",
-        formula: "percent >= 200", controlsStatus: "success", showToLearner: false,
+        formula: "percent >= 200", controlsStatus: "success", learnerVisibility: "hidden",
         scormTarget: "both", sortOrder: 0 },
     ]);
     storageMock.updateAttempt.mockResolvedValue(finishedAttempt);

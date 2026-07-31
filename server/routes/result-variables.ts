@@ -37,6 +37,22 @@ async function controlsStatusConflict(
   return existing.some((rv) => rv.id !== excludeId && rv.controlsStatus === controlsStatus);
 }
 
+/**
+ * Keep only the fields the client actually sent. `insertResultVariableSchema
+ * .partial()` still APPLIES the schema defaults, so a PUT touching one field
+ * would otherwise silently reset every defaulted column — including
+ * `config_json`, which carries the indicator's interpretation (PRD-29). An
+ * update must never write what it was not asked to write.
+ */
+function onlyProvided<T extends object>(parsed: T, body: unknown): Partial<T> {
+  const sent = (body ?? {}) as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (Object.prototype.hasOwnProperty.call(sent, key)) out[key] = value;
+  }
+  return out as Partial<T>;
+}
+
 // ─── GET /api/tests/:id/result-variables ─────────────────────────────────────
 router.get("/:id/result-variables", requirePermission("tests.read"), requireTestScope("read"), async (req, res) => {
   try {
@@ -142,7 +158,7 @@ router.put("/:id/result-variables/:varId", requirePermission("tests.edit"), requ
       const first = parsed.error.issues[0];
       return res.status(422).json({ error: first.message, field: first.path.join(".") });
     }
-    const updates = parsed.data;
+    const updates = onlyProvided(parsed.data, req.body);
     const merged = { ...current, ...updates };
 
     if (await controlsStatusConflict(testId, merged.controlsStatus, varId)) {

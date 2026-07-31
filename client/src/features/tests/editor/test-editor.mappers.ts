@@ -20,6 +20,7 @@
  */
 import type { DrawBlueprint, EligibilityPluginRef, FormSet, RetakePolicy } from "@shared/schema";
 import type { ReportSettings } from "@shared/schema";
+import type { LearnerVisibility } from "@shared/scales/interpretation";
 import { formSetSchema } from "@shared/schema";
 import type {
   AdaptiveLevelConfig,
@@ -545,6 +546,14 @@ const RESULT_VAR_TYPES = new Set(["number", "string", "boolean"]);
 const RESULT_VAR_TARGETS = new Set(["none", "suspend_data", "interaction", "both"]);
 const RESULT_VAR_STATUS = new Set(["none", "success", "completion"]);
 
+// PRD-29: shared by scales and result variables — an unknown value degrades to
+// "hidden", so a malformed row never leaks a measurement to the learner.
+const LEARNER_VISIBILITIES = new Set(["hidden", "level", "level_and_value"]);
+
+function toLearnerVisibility(raw: unknown): LearnerVisibility {
+  return LEARNER_VISIBILITIES.has(raw as string) ? (raw as LearnerVisibility) : "hidden";
+}
+
 /**
  * Map the `resultVariables` array from the API test response into editor models,
  * ordered by `sortOrder`. Unknown enum values fall back to safe defaults so a
@@ -565,7 +574,7 @@ function buildResultVariablesFromApi(src: ApiTestResponse): ResultVariableModel[
         ? (r.type as ResultVariableModel["type"])
         : "number",
       formula: typeof r.formula === "string" ? r.formula : "",
-      showToLearner: r.showToLearner === true,
+      learnerVisibility: toLearnerVisibility(r.learnerVisibility),
       scormTarget: RESULT_VAR_TARGETS.has(r.scormTarget as string)
         ? (r.scormTarget as ResultVariableModel["scormTarget"])
         : "both",
@@ -661,7 +670,7 @@ function buildScalesFromApi(src: ApiTestResponse): ScaleModel[] {
         ? (r.direction as ScaleModel["direction"])
         : "positive",
       bands: buildScaleBands(r.configJson),
-      showToLearner: r.showToLearner === true,
+      learnerVisibility: toLearnerVisibility(r.learnerVisibility),
       scormTarget: SCALE_TARGETS.has(r.scormTarget as string)
         ? (r.scormTarget as ScaleModel["scormTarget"])
         : "none",

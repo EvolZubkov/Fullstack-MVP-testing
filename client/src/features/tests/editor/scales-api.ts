@@ -47,7 +47,7 @@ function toPayload(s: ScaleModel, sortOrder: number) {
     normalization: s.normalization,
     direction: s.direction,
     configJson: { bands: bandsToPayload(s.bands) },
-    showToLearner: s.showToLearner,
+    learnerVisibility: s.learnerVisibility,
     scormTarget: s.scormTarget,
     sortOrder,
   };
@@ -62,7 +62,7 @@ function sameScale(a: ScaleModel, b: ScaleModel): boolean {
     a.aggregation === b.aggregation &&
     a.normalization === b.normalization &&
     a.direction === b.direction &&
-    a.showToLearner === b.showToLearner &&
+    a.learnerVisibility === b.learnerVisibility &&
     a.scormTarget === b.scormTarget &&
     a.sortOrder === b.sortOrder &&
     JSON.stringify(bandsToPayload(a.bands)) === JSON.stringify(bandsToPayload(b.bands))

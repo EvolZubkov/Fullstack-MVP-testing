@@ -42,6 +42,22 @@ async function keyConflict(testId: string, key: string, excludeId?: string): Pro
 
 const measurementRowSchema = insertQuestionMeasurementSchema.omit({ testId: true, questionId: true });
 
+/**
+ * Keep only the fields the client actually sent. `insertScaleSchema.partial()`
+ * still APPLIES the schema defaults, so a PUT touching one field would otherwise
+ * silently reset every defaulted column — including `config_json`, which carries
+ * the scale's interpretation (PRD-29). An update must never write what it was
+ * not asked to write.
+ */
+function onlyProvided<T extends object>(parsed: T, body: unknown): Partial<T> {
+  const sent = (body ?? {}) as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (Object.prototype.hasOwnProperty.call(sent, key)) out[key] = value;
+  }
+  return out as Partial<T>;
+}
+
 /** DB scale row -> engine {@link ScaleSpec} (bands live in config_json). */
 function toScaleSpec(s: Scale): ScaleSpec {
   const config = (s.configJson as { bands?: ScaleBand[] }) ?? {};
@@ -147,7 +163,7 @@ router.put("/:id/scales/:scaleId", requirePermission("tests.edit"), requireTestS
       const first = parsed.error.issues[0];
       return res.status(422).json({ error: first.message, field: first.path.join(".") });
     }
-    const updates = parsed.data;
+    const updates = onlyProvided(parsed.data, req.body);
     if (updates.key && (await keyConflict(testId, updates.key, scaleId))) {
       return res.status(422).json({ error: `Шкала с ключом «${updates.key}» уже существует`, field: "key" });
     }

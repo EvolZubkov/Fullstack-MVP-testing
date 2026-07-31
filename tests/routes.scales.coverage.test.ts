@@ -57,7 +57,7 @@ const validScale = { key: "ee", label: "Истощение", type: "number" };
 const savedScale = {
   id: "scale-1", testId: "test-1", ...validScale,
   aggregation: "sum", normalization: "none", direction: "positive",
-  configJson: {}, showToLearner: false, scormTarget: "none", sortOrder: 0,
+  configJson: {}, learnerVisibility: "hidden", scormTarget: "none", sortOrder: 0,
 };
 
 beforeEach(() => {
@@ -252,7 +252,7 @@ describe("POST /api/tests/:id/scales/preview (coverage)", () => {
     const scaleA = {
       id: "sa", testId: "test-1", key: "aa", label: "", type: "number",
       aggregation: "sum", normalization: "none", direction: "positive",
-      configJson: null, showToLearner: false, scormTarget: "none", sortOrder: 0,
+      configJson: null, learnerVisibility: "hidden", scormTarget: "none", sortOrder: 0,
     };
     storageMock.getScales.mockResolvedValue([scaleA]);
     storageMock.getQuestionMeasurements.mockResolvedValue([

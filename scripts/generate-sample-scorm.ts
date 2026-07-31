@@ -237,7 +237,7 @@ const scales = [
       { min: 2, max: 3, level: "mid", label: "Средний" },
       { min: 4, max: 9, level: "high", label: "Высокий" },
     ] },
-    showToLearner: true, scormTarget: "both", sortOrder: 0, createdAt: new Date(), updatedAt: new Date(),
+    learnerVisibility: "level_and_value", scormTarget: "both", sortOrder: 0, createdAt: new Date(), updatedAt: new Date(),
   },
   {
     id: SCALE_ASYM, testId: TEST_ID, key: "asym", label: "Асимметричная криптография",
@@ -247,7 +247,7 @@ const scales = [
       { min: 3, max: 5, level: "mid", label: "Средний" },
       { min: 6, max: 99, level: "high", label: "Высокий" },
     ] },
-    showToLearner: true, scormTarget: "both", sortOrder: 1, createdAt: new Date(), updatedAt: new Date(),
+    learnerVisibility: "level_and_value", scormTarget: "both", sortOrder: 1, createdAt: new Date(), updatedAt: new Date(),
   },
 ];
 
@@ -274,8 +274,8 @@ const measurements = [
 
 function rv(name: string, label: string, type: string, formula: string, sortOrder: number) {
   return {
-    id: `rv-${name}`, testId: TEST_ID, name, label, type, formula,
-    showToLearner: true, scormTarget: "both", controlsStatus: "none", sortOrder,
+    id: `rv-${name}`, testId: TEST_ID, name, label, type, formula, configJson: {},
+    learnerVisibility: "level_and_value", scormTarget: "both", controlsStatus: "none", sortOrder,
     createdAt: new Date(), updatedAt: new Date(),
   };
 }

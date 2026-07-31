@@ -90,7 +90,7 @@ describe("parseScaleRow", () => {
       label: "Истощение",
       type: "level",
       aggregation: "sum",
-      showToLearner: true,
+      learnerVisibility: "level_and_value",
       scormTarget: "both",
       configJson: { bands: [{ min: 0, max: 16, level: "low", label: "Низкий" }] },
     });

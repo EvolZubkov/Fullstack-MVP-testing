@@ -264,7 +264,7 @@ describe("buildTestJson: scales and measurements", () => {
     normalization: "percent",
     direction: "inverse",
     configJson: { bands: [{ min: 0, max: 16, level: "low", label: "Низкий" }] },
-    showToLearner: false,
+    learnerVisibility: "hidden",
     scormTarget: "both",
     sortOrder: 0,
   };

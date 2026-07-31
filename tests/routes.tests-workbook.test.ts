@@ -704,11 +704,11 @@ const exportQuestion = {
 const exportScale = {
   id: "s-1", testId: "test-1", key: "ee", label: "Истощение", description: null, type: "number",
   aggregation: "sum", normalization: "none", direction: "positive", configJson: {},
-  showToLearner: false, scormTarget: "none", sortOrder: 0,
+  learnerVisibility: "hidden", scormTarget: "none", sortOrder: 0,
 };
 const exportRv = {
   id: "rv-1", testId: "test-1", name: "passed", label: "Сдал", type: "boolean", formula: "score >= 60",
-  showToLearner: false, scormTarget: "both", controlsStatus: "none", sortOrder: 0,
+  learnerVisibility: "hidden", scormTarget: "both", controlsStatus: "none", sortOrder: 0,
 };
 const exportMeasurement = {
   id: "m-1", testId: "test-1", questionId: "q-1", scaleId: "s-1",

@@ -16,7 +16,7 @@ function rv(overrides: Partial<ResultVariableModel> = {}): ResultVariableModel {
     label: "Балл",
     type: "number",
     formula: "percent",
-    showToLearner: false,
+    learnerVisibility: "hidden",
     scormTarget: "both",
     controlsStatus: "none",
     sortOrder: 0,

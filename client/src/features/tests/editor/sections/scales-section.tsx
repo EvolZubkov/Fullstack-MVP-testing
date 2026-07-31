@@ -62,7 +62,7 @@ import { FoldAllButtons, useSectionFold } from "./section-fold";
 import { isSingleIndexChoice } from "@shared/questions/question-type";
 
 // Вывод шкал ученику — отдельный PRD (дальняя перспектива). До него тогл
-// «Показывать результат обучающемуся» скрыт; поле showToLearner сохранено в модели.
+// «Показывать результат обучающемуся» скрыт; поле learnerVisibility сохранено в модели.
 const SHOW_LEARNER_RESULT_TOGGLE: boolean = false;
 
 export type ScalesSectionProps = {
@@ -150,7 +150,7 @@ function emptyScale(sortOrder: number): ScaleModel {
     normalization: "none",
     direction: "positive",
     bands: [],
-    showToLearner: false,
+    learnerVisibility: "hidden",
     scormTarget: "none",
     sortOrder,
   };
@@ -611,9 +611,11 @@ function ScaleForm({
           <hr className="wf-sep" />
           <Switch
             label="Показывать результат обучающемуся"
-            checked={s.showToLearner}
+            checked={s.learnerVisibility !== "hidden"}
             disabled={readOnly}
-            onChange={(e) => onChange({ showToLearner: e.target.checked })}
+            // PRD-29 stores three positions; this legacy two-state toggle maps onto
+            // the outer two. The three-way control lands with the learner-facing screen.
+            onChange={(e) => onChange({ learnerVisibility: e.target.checked ? "level_and_value" : "hidden" })}
             data-testid={`scales-show-${index}`}
           />
         </>

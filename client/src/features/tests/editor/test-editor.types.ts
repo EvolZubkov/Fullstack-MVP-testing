@@ -9,6 +9,7 @@
 
 import type { DrawBlueprint, FormSet, RetakePolicy } from "@shared/schema";
 import type { ReportSettings } from "@shared/schema";
+import type { LearnerVisibility } from "@shared/scales/interpretation";
 import type { QuestionScoringOverride } from "./scoring-api";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -253,7 +254,8 @@ export type ResultVariableModel = {
   label: string;
   type: ResultVariableType;
   formula: string;
-  showToLearner: boolean;
+  /** PRD-29: what the learner sees — nothing, the level only, or level + value. */
+  learnerVisibility: LearnerVisibility;
   scormTarget: ResultVariableScormTarget;
   controlsStatus: ResultVariableControlsStatus;
   sortOrder: number;
@@ -304,7 +306,8 @@ export type ScaleModel = {
   normalization: ScaleNormalization;
   direction: ScaleDirection;
   bands: ScaleBandModel[];
-  showToLearner: boolean;
+  /** PRD-29: what the learner sees — nothing, the level only, or level + value. */
+  learnerVisibility: LearnerVisibility;
   scormTarget: ScaleScormTarget;
   sortOrder: number;
 };

@@ -417,7 +417,7 @@ export function buildTestJson(data: ExportData): string {
       label: rv.label.trim() ? rv.label : rv.name,
       type: rv.type,
       formula: rv.formula,
-      showToLearner: rv.showToLearner,
+      learnerVisibility: rv.learnerVisibility,
       scormTarget: rv.scormTarget,
       controlsStatus: rv.controlsStatus,
       sortOrder: rv.sortOrder,
@@ -442,7 +442,7 @@ export function buildTestJson(data: ExportData): string {
         normalization: s.normalization,
         direction: s.direction,
         bands: Array.isArray(config.bands) ? config.bands : [],
-        showToLearner: s.showToLearner,
+        learnerVisibility: s.learnerVisibility,
         scormTarget: s.scormTarget,
         sortOrder: s.sortOrder,
       };

@@ -116,7 +116,7 @@ function emptyVariable(sortOrder: number): ResultVariableModel {
     label: "",
     type: "boolean",
     formula: "",
-    showToLearner: false,
+    learnerVisibility: "hidden",
     scormTarget: "both",
     controlsStatus: "none",
     sortOrder,

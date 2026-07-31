@@ -24,7 +24,7 @@ function scale(overrides: Partial<ScaleModel> = {}): ScaleModel {
     normalization: "none",
     direction: "positive",
     bands: [],
-    showToLearner: false,
+    learnerVisibility: "hidden",
     scormTarget: "none",
     sortOrder: 0,
     ...overrides,
@@ -56,7 +56,7 @@ describe("apiToEditorModel — scales", () => {
           direction: "inverse",
           configJson: { bands: [{ min: 0, max: 27, level: "high", label: "Высокий" }] },
           scormTarget: "both",
-          showToLearner: true,
+          learnerVisibility: "level_and_value",
           sortOrder: 2,
         },
         { id: "a", key: "ee", label: "EE", type: "number", configJson: {}, sortOrder: 1 },
@@ -68,7 +68,7 @@ describe("apiToEditorModel — scales", () => {
     expect(d.normalization).toBe("percent");
     expect(d.direction).toBe("inverse");
     expect(d.scormTarget).toBe("both");
-    expect(d.showToLearner).toBe(true);
+    expect(d.learnerVisibility).toBe("level_and_value");
     expect(d.bands).toEqual([{ min: "0", max: "27", label: "Высокий", level: "high" }]);
   });
 

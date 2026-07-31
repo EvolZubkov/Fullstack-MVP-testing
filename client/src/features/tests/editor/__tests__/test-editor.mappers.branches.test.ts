@@ -599,7 +599,7 @@ describe("apiToEditorModel — result variables", () => {
           label: "B",
           type: "string",
           formula: "1+1",
-          showToLearner: true,
+          learnerVisibility: "level_and_value",
           scormTarget: "interaction",
           controlsStatus: "success",
           sortOrder: 2,
@@ -615,7 +615,7 @@ describe("apiToEditorModel — result variables", () => {
     expect(bare.label).toBe("");
     expect(bare.type).toBe("number"); // invalid → default
     expect(bare.formula).toBe("");
-    expect(bare.showToLearner).toBe(false); // non-true
+    expect(bare.learnerVisibility).toBe("hidden"); // absent → hidden
     expect(bare.scormTarget).toBe("both"); // invalid → default
     expect(bare.controlsStatus).toBe("none"); // invalid → default
 
@@ -623,7 +623,7 @@ describe("apiToEditorModel — result variables", () => {
     expect(full.type).toBe("string");
     expect(full.scormTarget).toBe("interaction");
     expect(full.controlsStatus).toBe("success");
-    expect(full.showToLearner).toBe(true);
+    expect(full.learnerVisibility).toBe("level_and_value");
   });
 
   it("falls back sortOrder to the row index when absent", () => {
@@ -654,7 +654,7 @@ describe("apiToEditorModel — scales and bands", () => {
           aggregation: "avg",
           normalization: "percent",
           direction: "inverse",
-          showToLearner: true,
+          learnerVisibility: "level_and_value",
           scormTarget: "both",
           sortOrder: 0,
           configJson: {
@@ -672,7 +672,7 @@ describe("apiToEditorModel — scales and bands", () => {
     expect(scale.aggregation).toBe("avg");
     expect(scale.normalization).toBe("percent");
     expect(scale.direction).toBe("inverse");
-    expect(scale.showToLearner).toBe(true);
+    expect(scale.learnerVisibility).toBe("level_and_value");
     expect(scale.bands).toEqual([
       { min: "0", max: "10", label: "Low", level: "low" },
       { min: "11", max: "20", label: "", level: "" },
@@ -694,7 +694,7 @@ describe("apiToEditorModel — scales and bands", () => {
     expect(bad.normalization).toBe("none");
     expect(bad.direction).toBe("positive");
     expect(bad.scormTarget).toBe("none");
-    expect(bad.showToLearner).toBe(false);
+    expect(bad.learnerVisibility).toBe("hidden");
     expect(scales[0].bands).toEqual([]); // config_json not an object → no bands
   });
 });
