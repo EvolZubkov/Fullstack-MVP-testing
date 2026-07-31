@@ -165,6 +165,7 @@ export interface CtxRecommendations {
 | `server/scorm/templates/default/layouts/results.html` (править) | блоки показателей, шкал и рекомендаций |
 | `server/scorm/templates/default/styles/theme.css` (править) | токены тона, линейка, маркер |
 | `server/scorm/templates/default/manifest.json` (править) | параметры схемы и видов, настройки блоков |
+| `client/src/features/tests/editor/sections/start-pages-section.tsx` (править) | подписи `optionLabels` у настроек страницы |
 | `client/src/features/tests/editor/sections/scales-section.tsx` (править) | домен, направление, толкования, видимость |
 | `client/src/features/tests/editor/sections/result-variables-section.tsx` (править) | перечень исходов, видимость |
 | `docs/wireframes/prd29-measurement-results.html` (создать) | эскиз экрана |
@@ -2570,9 +2571,22 @@ git commit -m "feat(prd-29): стили строки измерения пове
 **Files:**
 
 - Modify: `server/scorm/templates/default/manifest.json`
+- Modify: `client/src/features/tests/editor/sections/start-pages-section.tsx` (подписи у настроек)
 - Test: `server/__tests__/template-manifest-prd29.test.ts`
+- Test: `client/src/features/tests/editor/sections/__tests__/setting-option-labels.test.tsx`
 
-- [ ] **Step 1: Написать падающий тест**
+Формат объявления в манифесте фиксирован существующим кодом, отступать от него нельзя:
+`select` несёт `options` МАССИВОМ СТРОК, а человекочитаемые подписи лежат отдельно в
+`optionLabels` — словаре «значение в подпись». Так уже объявлен параметр `progressMode`
+в этом же манифесте, и так его читает `design-section.tsx`.
+
+Есть асимметрия, которую надо закрыть: у параметров дизайна `optionLabels` поддержан, а у
+настроек страницы (`contentTemplates[].settings[]`) — нет, `start-pages-section.tsx`
+подставляет в подпись само значение. Оставить как есть нельзя: автор увидел бы в списке
+английские коды `auto`, `show`, `hide`. Переводить сами значения на русский тоже нельзя —
+их сравнивает код. Поэтому пробел закрывается в общем механизме, а не обходится локально.
+
+- [ ] **Step 1: Написать падающий тест на манифест**
 
 ```ts
 // server/__tests__/template-manifest-prd29.test.ts
@@ -2583,11 +2597,15 @@ const params = manifest.params as Array<Record<string, unknown>>;
 const byKey = (key: string) => params.find((p) => p.key === key);
 
 describe("manifest params (PRD-29)", () => {
-  it("объявляет схему уровней с четырьмя значениями", () => {
+  it("объявляет схему уровней списком строк с подписями", () => {
     const p = byKey("levelScheme");
     expect(p?.type).toBe("select");
-    expect((p?.options as Array<{ value: string }>).map((o) => o.value))
-      .toEqual(["traffic", "neutral", "custom"]);
+    expect(p?.options).toEqual(["traffic", "neutral", "custom"]);
+    expect(Object.keys(p?.optionLabels as Record<string, string>)).toEqual([
+      "traffic",
+      "neutral",
+      "custom",
+    ]);
   });
 
   it("объявляет три цвета рампы с пустым значением по умолчанию", () => {
@@ -2595,48 +2613,64 @@ describe("manifest params (PRD-29)", () => {
       const p = byKey(key);
       expect(p?.type).toBe("color");
       expect(p?.default).toBeNull();
+      expect(typeof p?.cssVar).toBe("string");
     }
   });
 
   it("объявляет виды рендера для шкал и показателей", () => {
-    expect(byKey("scaleRenderKind")?.type).toBe("select");
-    expect(byKey("indicatorRenderKind")?.type).toBe("select");
+    for (const key of ["scaleRenderKind", "indicatorRenderKind"]) {
+      const p = byKey(key);
+      expect(p?.type).toBe("select");
+      expect(p?.options).toEqual([
+        "label",
+        "value",
+        "value_of_max",
+        "ring",
+        "band_ruler",
+        "gradient_bar",
+      ]);
+      expect(p?.optionLabels).toBeTruthy();
+    }
   });
 });
 
 describe("manifest contentTemplates (PRD-29)", () => {
-  it("вид итогов получает три настройки блоков", () => {
+  it("вид итогов получает три настройки блоков с русскими подписями", () => {
     const results = (manifest.contentTemplates as Array<Record<string, unknown>>)
       .find((c) => c.kind === "results");
-    const settings = results?.settings as Array<{ key: string; type: string; default: string }>;
-    const keys = settings.map((s) => s.key);
-    expect(keys).toEqual(["scoreSummary", "indicators", "scales"]);
+    const settings = results?.settings as Array<Record<string, unknown>>;
+    expect(settings.map((s) => s.key)).toEqual(["scoreSummary", "indicators", "scales"]);
     settings.forEach((s) => {
       expect(s.type).toBe("select");
       expect(s.default).toBe("auto");
+      expect(s.options).toEqual(["auto", "show", "hide"]);
+      expect(s.optionLabels).toEqual({
+        auto: "Автоматически",
+        show: "Показывать",
+        hide: "Скрывать",
+      });
     });
   });
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
-
 Run: `npm test -- server/__tests__/template-manifest-prd29.test.ts`
 Expected: FAIL, параметры не найдены.
 
-- [ ] **Step 3: Добавить параметры в манифест**
+- [ ] **Step 2: Добавить параметры в манифест**
 
-В массив `params` дописать (группа существующая — «Цвета», секция `branding`):
+В массив `params` дописать (группа «Цвета» существует, группа «Итоги» новая):
 
 ```json
 { "key": "levelScheme", "type": "select", "label": "Цветовая схема уровней",
   "default": "traffic", "group": "Цвета", "section": "branding",
-  "description": "Как окрашиваются уровни шкал и показателей. «Своя» открывает три поля цвета.",
-  "options": [
-    { "value": "traffic", "label": "Зелёный — жёлтый — красный" },
-    { "value": "neutral", "label": "Нейтральная, оттенки одного цвета" },
-    { "value": "custom", "label": "Своя" }
-  ] },
+  "options": ["traffic", "neutral", "custom"],
+  "optionLabels": {
+    "traffic": "Зелёный — жёлтый — красный",
+    "neutral": "Нейтральная, оттенки одного цвета",
+    "custom": "Своя"
+  },
+  "description": "Как окрашиваются уровни шкал и показателей. «Своя» задействует три поля цвета ниже." },
 { "key": "levelColorFavorable", "type": "color", "cssVar": "--tb-level-favorable",
   "label": "Цвет благоприятного края", "default": null, "group": "Цвета", "section": "branding",
   "description": "Применяется, когда выбрана схема «Своя»." },
@@ -2648,72 +2682,131 @@ Expected: FAIL, параметры не найдены.
   "description": "Применяется, когда выбрана схема «Своя»." },
 { "key": "scaleRenderKind", "type": "select", "label": "Вид шкал",
   "default": "band_ruler", "group": "Итоги", "section": "branding",
-  "description": "Применяется там, где выполним; иначе откатывается на ближайший доступный.",
-  "options": [
-    { "value": "label", "label": "Только уровень" },
-    { "value": "value", "label": "Значение" },
-    { "value": "value_of_max", "label": "Значение из максимума" },
-    { "value": "ring", "label": "Кольцо" },
-    { "value": "band_ruler", "label": "Линейка с зонами" },
-    { "value": "gradient_bar", "label": "Полоса-градусник" }
-  ] },
+  "options": ["label", "value", "value_of_max", "ring", "band_ruler", "gradient_bar"],
+  "optionLabels": {
+    "label": "Только уровень",
+    "value": "Значение",
+    "value_of_max": "Значение из максимума",
+    "ring": "Кольцо",
+    "band_ruler": "Линейка с зонами",
+    "gradient_bar": "Полоса-градусник"
+  },
+  "description": "Применяется там, где выполним; иначе откатывается на ближайший доступный." },
 { "key": "indicatorRenderKind", "type": "select", "label": "Вид показателей",
   "default": "label", "group": "Итоги", "section": "branding",
-  "description": "Применяется там, где выполним; иначе откатывается на ближайший доступный.",
-  "options": [
-    { "value": "label", "label": "Только уровень" },
-    { "value": "value", "label": "Значение" },
-    { "value": "value_of_max", "label": "Значение из максимума" },
-    { "value": "ring", "label": "Кольцо" },
-    { "value": "band_ruler", "label": "Линейка с зонами" },
-    { "value": "gradient_bar", "label": "Полоса-градусник" }
-  ] }
+  "options": ["label", "value", "value_of_max", "ring", "band_ruler", "gradient_bar"],
+  "optionLabels": {
+    "label": "Только уровень",
+    "value": "Значение",
+    "value_of_max": "Значение из максимума",
+    "ring": "Кольцо",
+    "band_ruler": "Линейка с зонами",
+    "gradient_bar": "Полоса-градусник"
+  },
+  "description": "Применяется там, где выполним; иначе откатывается на ближайший доступный." }
 ```
 
-- [ ] **Step 4: Добавить настройки виду итогов**
+- [ ] **Step 3: Добавить настройки виду итогов**
 
 В `contentTemplates` у записи с `"kind": "results"` заменить `"settings": []` на:
 
 ```json
 "settings": [
   { "key": "scoreSummary", "type": "select", "label": "Сводка баллов", "default": "auto",
-    "options": [
-      { "value": "auto", "label": "Автоматически" },
-      { "value": "show", "label": "Показывать" },
-      { "value": "hide", "label": "Скрывать" }
-    ] },
+    "options": ["auto", "show", "hide"],
+    "optionLabels": { "auto": "Автоматически", "show": "Показывать", "hide": "Скрывать" } },
   { "key": "indicators", "type": "select", "label": "Показатели", "default": "auto",
-    "options": [
-      { "value": "auto", "label": "Автоматически" },
-      { "value": "show", "label": "Показывать" },
-      { "value": "hide", "label": "Скрывать" }
-    ] },
+    "options": ["auto", "show", "hide"],
+    "optionLabels": { "auto": "Автоматически", "show": "Показывать", "hide": "Скрывать" } },
   { "key": "scales", "type": "select", "label": "Шкалы", "default": "auto",
-    "options": [
-      { "value": "auto", "label": "Автоматически" },
-      { "value": "show", "label": "Показывать" },
-      { "value": "hide", "label": "Скрывать" }
-    ] }
+    "options": ["auto", "show", "hide"],
+    "optionLabels": { "auto": "Автоматически", "show": "Показывать", "hide": "Скрывать" } }
 ]
 ```
 
 Поднять `"version"` манифеста с `1.3.0` до `1.4.0`.
 
-- [ ] **Step 5: Убедиться, что тест проходит**
+- [ ] **Step 4: Написать падающий тест на подписи настроек**
+
+```tsx
+// client/src/features/tests/editor/sections/__tests__/setting-option-labels.test.tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { renderSettingControl } from "../start-pages-section";
+
+describe("настройка типа select", () => {
+  it("показывает человекочитаемую подпись из optionLabels", () => {
+    render(
+      renderSettingControl(
+        {
+          key: "scales",
+          type: "select",
+          label: "Шкалы",
+          options: ["auto", "show", "hide"],
+          optionLabels: { auto: "Автоматически", show: "Показывать", hide: "Скрывать" },
+        },
+        "auto",
+        () => {},
+      ),
+    );
+    expect(screen.getByText("Автоматически")).toBeInTheDocument();
+  });
+
+  it("падает обратно на значение, когда подписи не объявлены", () => {
+    render(
+      renderSettingControl(
+        { key: "mode", type: "select", label: "Режим", options: ["fast", "slow"] },
+        "fast",
+        () => {},
+      ),
+    );
+    expect(screen.getByText("fast")).toBeInTheDocument();
+  });
+});
+```
+
+Если функция отрисовки контрола в `start-pages-section.tsx` не экспортирована, экспортировать
+её — это уже нужно для проверки; менять её сигнатуру не требуется.
+
+- [ ] **Step 5: Поддержать подписи у настроек страницы**
+
+В `client/src/features/tests/editor/sections/start-pages-section.tsx` в ветке `case "select"`
+заменить построение списка:
+
+```tsx
+          options={(st.options ?? []).map((o) => ({ value: o, label: st.optionLabels?.[o] ?? o }))}
+```
+
+и добавить `optionLabels?: Record<string, string>` в тип объявленной настройки — рядом с
+`options`, как это уже сделано для параметров дизайна в `use-design-settings.ts`.
+
+Без этого автор увидит в списке `auto`, `show`, `hide` — английские коды в интерфейсе.
+Переводить сами ЗНАЧЕНИЯ нельзя: их сравнивает `resolveResultsBlocks`.
+
+- [ ] **Step 6: Убедиться, что тесты проходят**
 
 Run: `npm test -- server/__tests__/template-manifest-prd29.test.ts`
 Expected: PASS, 4 теста.
 
-- [ ] **Step 6: Проверить валидатор манифеста**
+Run: `npm test -- client/src/features/tests/editor/sections/__tests__/setting-option-labels.test.tsx`
+Expected: PASS, 2 теста.
 
-Run: `npm test -- server/__tests__` и `npm run check`
-Expected: PASS. Если валидатор не знает `options` у `select`, добавить поддержку в
-`server/template-registry.ts` вместе с тестом.
+- [ ] **Step 7: Проверить валидатор манифеста и типы**
 
-- [ ] **Step 7: Commit**
+Run: `npm run check`
+Expected: 0 ошибок.
+
+Run: `npm test -- shared/template/__tests__ server/__tests__`
+Expected: PASS. Валидатор (`shared/template/field-types.ts`) требует у `select` непустой
+`options` и не запрещает `optionLabels`, поэтому новых правил вводить не нужно; если
+проверка манифеста всё же покраснела — остановиться и доложить, а не ослаблять валидатор.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add server/scorm/templates/default/manifest.json server/__tests__/template-manifest-prd29.test.ts
+git add client/src/features/tests/editor/sections/start-pages-section.tsx
+git add client/src/features/tests/editor/sections/__tests__/setting-option-labels.test.tsx
 git commit -m "feat(prd-29): параметры схемы уровней, видов рендера и блоков итогов"
 ```
 
