@@ -103,7 +103,7 @@ describe("ScalesSection (PRD-29)", () => {
   });
 
   it("переключатель ручных границ работает в обе стороны", () => {
-    renderExpanded(modelWithScale({ bands: [{ min: "0", max: "45", label: "", level: "low" }] }));
+    renderExpanded(modelWithScale({ bands: [{ min: "0", max: "45", label: "", level: "low", text: "", tone: "" }] }));
     const toggle = screen.getByTestId("scales-domain-manual-0");
     expect(toggle).not.toBeChecked();
 

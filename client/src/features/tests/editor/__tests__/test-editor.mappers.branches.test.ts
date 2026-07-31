@@ -674,8 +674,8 @@ describe("apiToEditorModel — scales and bands", () => {
     expect(scale.direction).toBe("inverse");
     expect(scale.learnerVisibility).toBe("level_and_value");
     expect(scale.bands).toEqual([
-      { min: "0", max: "10", label: "Low", level: "low" },
-      { min: "11", max: "20", label: "", level: "" },
+      { min: "0", max: "10", label: "Low", level: "low", text: "", tone: "" },
+      { min: "11", max: "20", label: "", level: "", text: "", tone: "" },
     ]);
   });
 
@@ -1167,7 +1167,7 @@ describe("residual type-guard branches", () => {
     const [scale] = apiToEditorModel({
       scales: [{ id: "s1", key: "k", sortOrder: 0, configJson: { bands: [{ min: true, max: null, label: "L", level: "v" }] } }],
     }).scales;
-    expect(scale.bands).toEqual([{ min: "", max: "", label: "L", level: "v" }]);
+    expect(scale.bands).toEqual([{ min: "", max: "", label: "L", level: "v", text: "", tone: "" }]);
   });
 
   it("scale coerces a non-string key and a missing sortOrder (falls back to index)", () => {

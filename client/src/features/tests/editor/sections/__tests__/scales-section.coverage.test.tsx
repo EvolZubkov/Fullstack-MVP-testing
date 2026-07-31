@@ -194,8 +194,8 @@ describe("<ScalesSection /> — «Список шкал»", () => {
     const model = baseModel({
       scales: [
         makeScale({ clientKey: "a", key: "comp", bands: [
-          { min: "0", max: "5", label: "Низкий", level: "low" },
-          { min: "6", max: "10", label: "Высокий", level: "high" },
+          { min: "0", max: "5", label: "Низкий", level: "low", text: "", tone: "" },
+          { min: "6", max: "10", label: "Высокий", level: "high", text: "", tone: "" },
         ] }),
         makeScale({ clientKey: "b", key: "risk", label: "Риск", sortOrder: 1 }),
       ],
@@ -269,11 +269,11 @@ describe("<ScalesSection /> — «Список шкал»", () => {
 
 describe("<ScalesSection /> — validation banners", () => {
   it.each([
-    ["non-numeric band", [{ min: "x", max: "1", label: "", level: "hi" }], /укажите числовые min и max/],
-    ["min greater than max", [{ min: "5", max: "1", label: "", level: "hi" }], /min не может быть больше max/],
+    ["non-numeric band", [{ min: "x", max: "1", label: "", level: "hi", text: "", tone: "" as const }], /укажите числовые min и max/],
+    ["min greater than max", [{ min: "5", max: "1", label: "", level: "hi", text: "", tone: "" as const }], /min не может быть больше max/],
     [
       "overlapping bands",
-      [{ min: "0", max: "5", label: "", level: "a" }, { min: "3", max: "8", label: "", level: "b" }],
+      [{ min: "0", max: "5", label: "", level: "a", text: "", tone: "" as const }, { min: "3", max: "8", label: "", level: "b", text: "", tone: "" as const }],
       /пересекается с предыдущим/,
     ],
   ])("flags %s", (_name, bands, message) => {

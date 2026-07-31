@@ -53,6 +53,8 @@ const RESULT_VAR = {
   learnerVisibility: "hidden",
   scormTarget: "both" as const,
   controlsStatus: "none" as const,
+  bands: [],
+  outcomes: [],
   sortOrder: 0,
 };
 

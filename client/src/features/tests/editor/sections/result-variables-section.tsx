@@ -77,6 +77,8 @@ import {
   type ScaleRef,
   type TopicRef,
 } from "../result-variables-builder";
+import { BandsEditor } from "./scales-section";
+import { OutcomesEditor } from "./outcomes-editor";
 
 const STATUS_OPTIONS: Array<{ value: ResultVariableControlsStatus; label: string }> = [
   { value: "none", label: "Нет" },
@@ -119,6 +121,8 @@ function emptyVariable(sortOrder: number): ResultVariableModel {
     learnerVisibility: "hidden",
     scormTarget: "both",
     controlsStatus: "none",
+    bands: [],
+    outcomes: [],
     sortOrder,
   };
 }
@@ -530,6 +534,38 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
       {validation.banner && (
         <Banner tone={validation.banner.tone} size="sm" description={validation.banner.text} />
       )}
+
+      <hr className="wf-sep" />
+
+      {/* PRD-29: the indicator's interpretation. A numeric result is interpreted by
+          INTERVAL (the same editor the scales tab uses); a string or boolean one has
+          no intervals — the formula returns a CODE, so the author enumerates them. */}
+      <div className="tb-section-label">Толкование результата</div>
+      {v.type === "number" ? (
+        <BandsEditor
+          bands={v.bands}
+          index={index}
+          readOnly={readOnly}
+          testIdPrefix="metrics"
+          onChange={(bands) => onChange({ bands })}
+        />
+      ) : (
+        <OutcomesEditor
+          outcomes={v.outcomes}
+          index={index}
+          readOnly={readOnly}
+          onChange={(outcomes) => onChange({ outcomes })}
+        />
+      )}
+      <Banner
+        tone="info"
+        size="sm"
+        description={
+          v.type === "number"
+            ? "Толкование привязано к интервалу значения. «Оценка» — методологическое состояние уровня; как оно выглядит, решает шаблон."
+            : "Формула возвращает код исхода. Перечислите коды, которые она может вернуть, и что каждый из них означает для обучающегося."
+        }
+      />
 
       <hr className="wf-sep" />
 

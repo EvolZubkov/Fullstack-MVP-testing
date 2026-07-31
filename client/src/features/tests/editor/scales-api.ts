@@ -14,14 +14,49 @@
 
 import { parseAuthorNumber } from "./numeric-input";
 import type { QuestionMeasurementModel, ScaleBandModel, ScaleModel } from "./test-editor.types";
+import type { LevelTone } from "@shared/scales/interpretation";
+import type { FeedbackEditorValue } from "./sections/feedback-editor-modal";
 
 // ─── Persisted payload + diff ───────────────────────────────────────────────────
 
-/** One interpretation band as persisted in `config_json.bands`. */
-type BandPayload = { min: number; max: number; level: string; label?: string };
+/**
+ * True when a level's recommendations actually carry something. An empty block
+ * must not reach `config_json` — it would only inflate the config — and must not
+ * make the editor claim that recommendations are set. Lives next to the
+ * serializers because it is exactly the rule that decides what gets serialized.
+ */
+export function hasFeedbackContent(value: FeedbackEditorValue | undefined): boolean {
+  if (!value) return false;
+  return (
+    value.text.trim() !== "" ||
+    value.links.length > 0 ||
+    value.assets.length > 0 ||
+    (value.events?.length ?? 0) > 0
+  );
+}
 
-/** Drop empty draft rows and parse min/max; bands the validator rejected never reach here. */
-function bandsToPayload(bands: ScaleBandModel[]): BandPayload[] {
+/**
+ * One interpretation band as persisted in `config_json.bands` (mirror of the
+ * shared `InterpretationBand`). Everything past `level` is PRD-29 and optional:
+ * empty values are left out so the config does not swell with blanks.
+ */
+type BandPayload = {
+  min: number;
+  max: number;
+  level: string;
+  label?: string;
+  text?: string;
+  tone?: LevelTone;
+  feedback?: FeedbackEditorValue;
+};
+
+/**
+ * Drop empty draft rows and parse min/max; bands the validator rejected never
+ * reach here. The PRD-29 interpretation fields (text, tone, recommendations) are
+ * written here and read back by `buildScaleBands` — the two must stay a pair, or
+ * a save would rewrite `config_json` without them and erase the author's work.
+ */
+export function bandsToPayload(bands: ScaleBandModel[]): BandPayload[] {
   const out: BandPayload[] = [];
   for (const b of bands) {
     const minRaw = b.min.trim();
@@ -32,6 +67,9 @@ function bandsToPayload(bands: ScaleBandModel[]): BandPayload[] {
     if (min === null || max === null) continue;
     const payload: BandPayload = { min, max, level: b.level.trim() };
     if (b.label.trim() !== "") payload.label = b.label.trim();
+    if (b.text.trim() !== "") payload.text = b.text.trim();
+    if (b.tone !== "") payload.tone = b.tone;
+    if (hasFeedbackContent(b.feedback)) payload.feedback = b.feedback;
     out.push(payload);
   }
   return out;

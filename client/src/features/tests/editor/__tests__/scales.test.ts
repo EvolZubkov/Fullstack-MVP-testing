@@ -12,7 +12,7 @@ import { saveScales, saveMeasurements, loadContributionQuestions, previewScales 
 import type { QuestionMeasurementModel, ScaleBandModel, ScaleModel, TestEditorModel } from "../test-editor.types";
 
 function band(overrides: Partial<ScaleBandModel> = {}): ScaleBandModel {
-  return { min: "0", max: "10", label: "Низкий", level: "low", ...overrides };
+  return { min: "0", max: "10", label: "Низкий", level: "low", text: "", tone: "", ...overrides };
 }
 
 function scale(overrides: Partial<ScaleModel> = {}): ScaleModel {
@@ -72,7 +72,7 @@ describe("apiToEditorModel — scales", () => {
     expect(d.direction).toBe("inverse");
     expect(d.scormTarget).toBe("both");
     expect(d.learnerVisibility).toBe("level_and_value");
-    expect(d.bands).toEqual([{ min: "0", max: "27", label: "Высокий", level: "high" }]);
+    expect(d.bands).toEqual([{ min: "0", max: "27", label: "Высокий", level: "high", text: "", tone: "" }]);
   });
 
   it("defaults unknown enum values and missing fields safely", () => {
@@ -143,7 +143,7 @@ describe("validateTestEditor — scales", () => {
   });
 
   it("ignores a fully-empty trailing band row", () => {
-    const bands = [band({ min: "0", max: "16" }), { min: "", max: "", label: "", level: "" }];
+    const bands = [band({ min: "0", max: "16" }), { min: "", max: "", label: "", level: "", text: "", tone: "" as const }];
     expect(scaleErrors([scale({ bands })])).toEqual([]);
   });
 });

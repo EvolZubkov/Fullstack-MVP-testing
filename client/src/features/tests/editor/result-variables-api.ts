@@ -11,7 +11,10 @@
  * validation as the author types.
  */
 
-import type { ResultVariableModel } from "./test-editor.types";
+import type { LevelTone } from "@shared/scales/interpretation";
+import type { OutcomeModel, ResultVariableModel } from "./test-editor.types";
+import { bandsToPayload, hasFeedbackContent } from "./scales-api";
+import type { FeedbackEditorValue } from "./sections/feedback-editor-modal";
 
 /** Shape returned by the shared DSL validator (mirror of `@shared/formula` `validate`). */
 export type ResultVariableFormulaValidation = {
@@ -21,6 +24,49 @@ export type ResultVariableFormulaValidation = {
   warnings: Array<{ message: string; position?: number }>;
 };
 
+/** One outcome as persisted in `config_json.outcomes` (mirror of `InterpretationOutcome`). */
+type OutcomePayload = {
+  code: string;
+  label: string;
+  text?: string;
+  tone?: LevelTone;
+  feedback?: FeedbackEditorValue;
+};
+
+/**
+ * Drop draft rows without a code — the code IS the match, so a codeless outcome
+ * can never fire — and leave out every empty optional so the config stays lean.
+ * Read back by `buildOutcomes` in test-editor.mappers; the two are a pair.
+ */
+function outcomesToPayload(outcomes: OutcomeModel[]): OutcomePayload[] {
+  const out: OutcomePayload[] = [];
+  for (const o of outcomes) {
+    const code = o.code.trim();
+    if (code === "") continue;
+    const payload: OutcomePayload = { code, label: o.label.trim() };
+    if (o.text.trim() !== "") payload.text = o.text.trim();
+    if (o.tone !== "") payload.tone = o.tone;
+    if (hasFeedbackContent(o.feedback)) payload.feedback = o.feedback;
+    out.push(payload);
+  }
+  return out;
+}
+
+/**
+ * PRD-29: the indicator's `config_json` — its interpretation. Bands for a numeric
+ * indicator, the outcome list for a string/boolean one; both are written when both
+ * are filled, because the type is derived from the formula and may flip back.
+ * Empty collections are omitted entirely rather than stored as `[]`.
+ */
+function toConfigJson(v: ResultVariableModel): Record<string, unknown> {
+  const config: Record<string, unknown> = {};
+  const bands = bandsToPayload(v.bands);
+  if (bands.length > 0) config.bands = bands;
+  const outcomes = outcomesToPayload(v.outcomes);
+  if (outcomes.length > 0) config.outcomes = outcomes;
+  return config;
+}
+
 /** Fields sent to the create/update endpoints. */
 function toPayload(v: ResultVariableModel, sortOrder: number) {
   return {
@@ -28,6 +74,7 @@ function toPayload(v: ResultVariableModel, sortOrder: number) {
     label: v.label,
     type: v.type,
     formula: v.formula,
+    configJson: toConfigJson(v),
     learnerVisibility: v.learnerVisibility,
     scormTarget: v.scormTarget,
     controlsStatus: v.controlsStatus,
@@ -45,7 +92,10 @@ function sameVariable(a: ResultVariableModel, b: ResultVariableModel): boolean {
     a.learnerVisibility === b.learnerVisibility &&
     a.scormTarget === b.scormTarget &&
     a.controlsStatus === b.controlsStatus &&
-    a.sortOrder === b.sortOrder
+    a.sortOrder === b.sortOrder &&
+    // One comparison for the whole config_json (bands + outcomes): a per-field
+    // list would drift the moment another interpretation field is added.
+    JSON.stringify(toConfigJson(a)) === JSON.stringify(toConfigJson(b))
   );
 }
 

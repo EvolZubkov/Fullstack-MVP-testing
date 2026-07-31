@@ -9,8 +9,9 @@
 
 import type { DrawBlueprint, FormSet, RetakePolicy } from "@shared/schema";
 import type { ReportSettings } from "@shared/schema";
-import type { LearnerVisibility, Valence } from "@shared/scales/interpretation";
+import type { LearnerVisibility, LevelTone, Valence } from "@shared/scales/interpretation";
 import type { QuestionScoringOverride } from "./scoring-api";
+import type { FeedbackEditorValue } from "./sections/feedback-editor-modal";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // All enums are frozen by docs/prd-7-decisions.md section 2.
@@ -258,6 +259,14 @@ export type ResultVariableModel = {
   learnerVisibility: LearnerVisibility;
   scormTarget: ResultVariableScormTarget;
   controlsStatus: ResultVariableControlsStatus;
+  /**
+   * PRD-29: interpretation of a NUMERIC indicator, persisted in the indicator's
+   * own `config_json`. Empty for string/boolean indicators — those interpret
+   * through {@link ResultVariableModel.outcomes}.
+   */
+  bands: ScaleBandModel[];
+  /** PRD-29: interpretation of a string/boolean indicator, matched by exact code. */
+  outcomes: OutcomeModel[];
   sortOrder: number;
 };
 
@@ -287,6 +296,31 @@ export type ScaleBandModel = {
   max: string;
   label: string;
   level: string;
+  /** PRD-29: what this level MEANS, shown to the learner under the ruler. */
+  text: string;
+  /**
+   * PRD-29: author's override of the tone derived from the ramp position. Empty =
+   * derive it. A closed list of METHODOLOGICAL states, never a colour — the template
+   * decides how each state looks.
+   */
+  tone: LevelTone | "";
+  /** PRD-29: recommendations that fire when the learner lands in this band. */
+  feedback?: FeedbackEditorValue;
+};
+
+/**
+ * PRD-29: one outcome of a non-numeric interpretation — the string/boolean twin of
+ * {@link ScaleBandModel}. The match is an exact `code` (what the formula returns)
+ * instead of a numeric interval; everything the learner sees is the same triple of
+ * label, explanatory text and optional tone/recommendations.
+ */
+export type OutcomeModel = {
+  clientKey?: string;
+  code: string;
+  label: string;
+  text: string;
+  tone: LevelTone | "";
+  feedback?: FeedbackEditorValue;
 };
 
 /**

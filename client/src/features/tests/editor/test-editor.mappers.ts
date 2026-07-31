@@ -20,8 +20,9 @@
  */
 import type { DrawBlueprint, EligibilityPluginRef, FormSet, RetakePolicy } from "@shared/schema";
 import type { ReportSettings } from "@shared/schema";
-import type { LearnerVisibility } from "@shared/scales/interpretation";
+import type { LearnerVisibility, LevelTone } from "@shared/scales/interpretation";
 import { formSetSchema } from "@shared/schema";
+import type { FeedbackEditorValue } from "./sections/feedback-editor-modal";
 import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
@@ -38,6 +39,7 @@ import type {
   FlowPolicyPayload,
   FlowRouterSettings,
   FlowSettings,
+  OutcomeModel,
   OverallPassRule,
   OverallPassType,
   PassDecisionPolicy,
@@ -581,6 +583,11 @@ function buildResultVariablesFromApi(src: ApiTestResponse): ResultVariableModel[
       controlsStatus: RESULT_VAR_STATUS.has(r.controlsStatus as string)
         ? (r.controlsStatus as ResultVariableModel["controlsStatus"])
         : "none",
+      // PRD-29: the indicator's own interpretation. Both forms are read regardless
+      // of the current type — the type is DERIVED from the formula and flips while
+      // the author edits, and dropping the other form here would lose their work.
+      bands: buildScaleBands(r.configJson),
+      outcomes: buildOutcomes(r.configJson),
       sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : index,
     });
   });
@@ -647,7 +654,29 @@ const SCALE_NORMALIZATIONS = new Set(["none", "percent", "custom"]);
 const SCALE_DIRECTIONS = new Set(["positive", "inverse"]);
 const SCALE_TARGETS = new Set(["none", "suspend_data", "interaction", "both"]);
 
-/** Map the bands stored in a scale's `config_json` into editor band models. */
+const LEVEL_TONES = new Set(["favorable", "neutral", "attention", "critical"]);
+
+/** PRD-29: the author's tone override; anything unknown degrades to «derive it». */
+function buildLevelTone(raw: unknown): LevelTone | "" {
+  return LEVEL_TONES.has(raw as string) ? (raw as LevelTone) : "";
+}
+
+/**
+ * PRD-29: read a level's recommendations back into the shape the shared feedback
+ * editor takes. Absent (or malformed) feedback stays `undefined` rather than
+ * becoming an empty block, so a level without recommendations round-trips as one.
+ */
+function buildInterpretationFeedback(raw: unknown): FeedbackEditorValue | undefined {
+  if (!isPlainObject(raw)) return undefined;
+  const { content, links, assets, events } = parseFeedbackObject(raw);
+  return { format: content.format, text: content.text, links, assets, events };
+}
+
+/**
+ * Map the bands stored in a scale's (or a numeric indicator's) `config_json` into
+ * editor band models. The PRD-29 counterpart of `bandsToPayload` in scales-api:
+ * every field written there is read back here, or a save would erase it.
+ */
 function buildScaleBands(configJson: unknown): ScaleBandModel[] {
   const bands = isPlainObject(configJson) ? (configJson as { bands?: unknown }).bands : undefined;
   if (!Array.isArray(bands)) return [];
@@ -655,11 +684,41 @@ function buildScaleBands(configJson: unknown): ScaleBandModel[] {
   bands.forEach((b) => {
     if (!isPlainObject(b)) return;
     const band = b as Record<string, unknown>;
+    const feedback = buildInterpretationFeedback(band.feedback);
     out.push({
       min: typeof band.min === "number" ? String(band.min) : typeof band.min === "string" ? band.min : "",
       max: typeof band.max === "number" ? String(band.max) : typeof band.max === "string" ? band.max : "",
       label: typeof band.label === "string" ? band.label : "",
       level: typeof band.level === "string" ? band.level : "",
+      text: typeof band.text === "string" ? band.text : "",
+      tone: buildLevelTone(band.tone),
+      ...(feedback ? { feedback } : {}),
+    });
+  });
+  return out;
+}
+
+/**
+ * PRD-29: map the outcome list stored in an indicator's `config_json` into editor
+ * models. A codeless row is dropped — the code IS the match, so a row without one
+ * can never fire.
+ */
+function buildOutcomes(configJson: unknown): OutcomeModel[] {
+  const raw = isPlainObject(configJson) ? (configJson as { outcomes?: unknown }).outcomes : undefined;
+  if (!Array.isArray(raw)) return [];
+  const out: OutcomeModel[] = [];
+  raw.forEach((item) => {
+    if (!isPlainObject(item)) return;
+    const o = item as Record<string, unknown>;
+    const code = typeof o.code === "string" ? o.code : "";
+    if (code === "") return;
+    const feedback = buildInterpretationFeedback(o.feedback);
+    out.push({
+      code,
+      label: typeof o.label === "string" ? o.label : "",
+      text: typeof o.text === "string" ? o.text : "",
+      tone: buildLevelTone(o.tone),
+      ...(feedback ? { feedback } : {}),
     });
   });
   return out;

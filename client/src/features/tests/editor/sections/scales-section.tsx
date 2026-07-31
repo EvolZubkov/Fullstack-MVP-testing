@@ -36,6 +36,7 @@ import {
   Stack,
   Switch,
   Tag,
+  Textarea,
 } from "@universityrt/ui-kit";
 import { Check, ChevronDown, ChevronRight, Info, Plus, Trash2 } from "lucide-react";
 
@@ -51,6 +52,7 @@ import {
   loadContributionQuestions,
   loadScalePreviewContext,
   previewScales,
+  hasFeedbackContent,
   type ContributionQuestion,
   type ContributionUnit,
   type PreviewAnswer,
@@ -62,7 +64,9 @@ import { formatAuthorNumber, parseAuthorNumber, sanitizeAuthorNumberInput } from
 import { FoldAllButtons, useSectionFold } from "./section-fold";
 import { isSingleIndexChoice, type QuestionType } from "@shared/questions/question-type";
 import { achievableRange } from "@shared/scales/engine";
-import type { LearnerVisibility, Valence } from "@shared/scales/interpretation";
+import type { LearnerVisibility, LevelTone, Valence } from "@shared/scales/interpretation";
+import { FeedbackEditorModal } from "./feedback-editor-modal";
+import { TONE_OPTIONS, emptyFeedbackValue } from "./outcomes-editor";
 
 export type ScalesSectionProps = {
   model: TestEditorModel;
@@ -158,7 +162,7 @@ function recalcPatch(v: RecalcValue): Pick<ScaleModel, "normalization" | "direct
 
 function emptyBand(): ScaleBandModel {
   localKeyCounter += 1;
-  return { clientKey: `band-${localKeyCounter}`, min: "", max: "", label: "", level: "" };
+  return { clientKey: `band-${localKeyCounter}`, min: "", max: "", label: "", level: "", text: "", tone: "" };
 }
 
 function emptyScale(sortOrder: number): ScaleModel {
@@ -835,26 +839,43 @@ function ScaleForm({
 
 // ─── Bands editor ───────────────────────────────────────────────────────────────
 
-function BandsEditor({
+/**
+ * The numeric interpretation editor. Also used by the «Показатели» tab for a
+ * NUMERIC indicator (PRD-29) — a numeric interpretation is one notion, and a
+ * second table would drift from this one the moment either side changed. Its
+ * non-numeric twin is {@link OutcomesEditor}.
+ *
+ * @public
+ */
+export function BandsEditor({
   bands,
   index,
   readOnly,
   onChange,
+  testIdPrefix = "scales",
 }: {
   bands: ScaleBandModel[];
   index: number;
   readOnly: boolean;
   onChange: (bands: ScaleBandModel[]) => void;
+  /** Distinguishes the scale card's table from the indicator card's one. */
+  testIdPrefix?: string;
 }) {
+  // Which row's recommendations modal is open (row index, not the row itself).
+  const [feedbackFor, setFeedbackFor] = useState<number | null>(null);
+
   const update = (j: number, patch: Partial<ScaleBandModel>) =>
     onChange(bands.map((b, i) => (i === j ? { ...b, ...patch } : b)));
   const remove = (j: number) => onChange(bands.filter((_, i) => i !== j));
   const add = () => onChange([...bands, emptyBand()]);
 
+  const open = feedbackFor !== null ? bands[feedbackFor] : undefined;
+
   return (
     <>
-      <table className="tb-table tb-table--mb tb-bands-table" data-testid={`scales-bands-${index}`}>
+      <table className="tb-table tb-table--mb tb-bands-table" data-testid={`${testIdPrefix}-bands-${index}`}>
         <colgroup>
+          <col />
           <col />
           <col />
           <col />
@@ -867,19 +888,21 @@ function BandsEditor({
             <th>max</th>
             <th>Метка (опц.)</th>
             <th>Уровень</th>
+            <th>Оценка</th>
             <th><span className="sr-only">Действия</span></th>
           </tr>
         </thead>
         <tbody>
           {bands.length === 0 ? (
             <tr>
-              <td colSpan={5}><span className="tb-card-desc">Диапазоны не заданы</span></td>
+              <td colSpan={6}><span className="tb-card-desc">Диапазоны не заданы</span></td>
             </tr>
           ) : (
             bands.map((b, j) => {
               const k = b.clientKey ?? `band-${j}`;
               return (
-                <tr key={k}>
+                <Fragment key={k}>
+                <tr>
                   <td>
                     <Input
                       size="s"
@@ -919,6 +942,16 @@ function BandsEditor({
                     />
                   </td>
                   <td>
+                    <Select<LevelTone | "">
+                      size="s"
+                      value={b.tone}
+                      disabled={readOnly}
+                      options={TONE_OPTIONS}
+                      aria-label={`оценка диапазона ${j + 1}`}
+                      onChange={(value) => update(j, { tone: value })}
+                    />
+                  </td>
+                  <td>
                     {!readOnly && (
                       <IconButton
                         icon={<Trash2 width={14} height={14} aria-hidden="true" />}
@@ -930,6 +963,31 @@ function BandsEditor({
                     )}
                   </td>
                 </tr>
+                {/* Continuation row: the explanatory text is a paragraph and does
+                    not fit a table cell, so it lives under the row and the table
+                    itself stays compact. */}
+                <tr className="tb-bands-table__detail">
+                  <td colSpan={6}>
+                    <Stack gap={2} align="start">
+                      <Textarea
+                        size="s"
+                        fullWidth
+                        rows={2}
+                        value={b.text}
+                        disabled={readOnly}
+                        placeholder="Что означает этот уровень — текст для обучающегося"
+                        aria-label={`толкование диапазона ${j + 1}`}
+                        onChange={(e) => update(j, { text: e.target.value })}
+                      />
+                      {!readOnly && (
+                        <Button size="s" variant="ghost" onClick={() => setFeedbackFor(j)}>
+                          {hasFeedbackContent(b.feedback) ? "Рекомендации заданы" : "Рекомендации"}
+                        </Button>
+                      )}
+                    </Stack>
+                  </td>
+                </tr>
+                </Fragment>
               );
             })
           )}
@@ -941,10 +999,26 @@ function BandsEditor({
           size="s"
           leadingIcon={<Plus size={16} aria-hidden="true" />}
           onClick={add}
-          data-testid={`scales-band-add-${index}`}
+          data-testid={`${testIdPrefix}-band-add-${index}`}
         >
           Добавить диапазон
         </Button>
+      )}
+
+      {open && feedbackFor !== null && (
+        <FeedbackEditorModal
+          open
+          title={`Рекомендации для уровня «${open.label.trim() || open.level.trim() || `диапазон ${feedbackFor + 1}`}»`}
+          description="Текст и подборка материалов, которые увидит обучающийся с этим уровнем"
+          value={open.feedback ?? emptyFeedbackValue()}
+          hideAssets={false}
+          onCancel={() => setFeedbackFor(null)}
+          onSave={(value) => {
+            update(feedbackFor, { feedback: value });
+            setFeedbackFor(null);
+          }}
+          testId={`${testIdPrefix}-band-feedback-${index}`}
+        />
       )}
     </>
   );

@@ -19,6 +19,8 @@ function rv(overrides: Partial<ResultVariableModel> = {}): ResultVariableModel {
     learnerVisibility: "hidden",
     scormTarget: "both",
     controlsStatus: "none",
+    bands: [],
+    outcomes: [],
     sortOrder: 0,
     ...overrides,
   };

@@ -61,6 +61,8 @@ function makeVar(over: Partial<ResultVariableModel> = {}): ResultVariableModel {
     learnerVisibility: "hidden",
     scormTarget: "both",
     controlsStatus: "none",
+    bands: [],
+    outcomes: [],
     sortOrder: 0,
     ...over,
   };
@@ -72,8 +74,8 @@ function scaleWithLevels(): ScaleModel {
     key: "comp", label: "Компетенция", type: "number", aggregation: "sum",
     normalization: "none", direction: "positive",
     bands: [
-      { min: "0", max: "5", label: "Низкий", level: "low" },
-      { min: "6", max: "10", label: "Высокий", level: "high" },
+      { min: "0", max: "5", label: "Низкий", level: "low", text: "", tone: "" },
+      { min: "6", max: "10", label: "Высокий", level: "high", text: "", tone: "" },
     ],
     domainMin: null, domainMax: null, valence: "none",
     learnerVisibility: "hidden", scormTarget: "none", sortOrder: 0,
