@@ -2231,18 +2231,32 @@ git commit -m "feat(prd-29): шкалы, показатели и рекомен�
 ровно это и есть: его варианты `success`/`info`/`warning`/`error` ложатся на четыре тона
 один в один. Своего контейнера показателю не нужно.
 
+Строка показателя устроена ТАК ЖЕ, как строка шкалы: `ou-formsection`, слева имя, справа
+содержимое. Иначе имя показателя, вынесенное надзаголовком, встаёт на то же место и в тот
+же вес, что заголовок блока «По шкалам», и два разных по уровню элемента выглядят
+одинаково значимыми. Заголовок блока — всегда `tb-scene__subhead`, имя сущности — всегда
+левая колонка секции.
+
 ```html
       {{#if result.indicators}}
       <div class="tb-scene__q"><h3 class="tb-scene__subhead">Ваш результат</h3></div>
-      {{#each result.indicators}}
-      <span class="tb-eyebrow">{{name}}</span>
-      <div class="ou-banner ou-banner--subtle ou-banner--{{bannerVariant}}">
-        <div class="ou-banner__body">
-          <div class="ou-banner__title">{{levelLabel}}</div>
-          {{#if text}}<div class="ou-banner__desc">{{text}}</div>{{/if}}
+      <div class="tb-measures">
+        {{#each result.indicators}}
+        <div class="ou-formsection tb-measure">
+          <div class="ou-formsection__intro">
+            <h4 class="ou-formsection__title">{{name}}</h4>
+          </div>
+          <div class="ou-formsection__body">
+            <div class="ou-banner ou-banner--subtle ou-banner--{{bannerVariant}}">
+              <div class="ou-banner__body">
+                <div class="ou-banner__title">{{levelLabel}}</div>
+                {{#if text}}<div class="ou-banner__desc">{{text}}</div>{{/if}}
+              </div>
+            </div>
+          </div>
         </div>
+        {{/each}}
       </div>
-      {{/each}}
       {{/if}}
 ```
 
@@ -2385,6 +2399,12 @@ git commit -m "feat(prd-29): блоки показателей, шкал и ре
 .tb-measure__slider .ou-slider__header { justify-content: flex-end; }
 .tb-measure__slider .ou-slider__rail { margin-bottom: 18px; }
 .tb-measure__marker { cursor: default; pointer-events: none; }
+
+/* The value is the reading the learner came for, so it carries display weight while
+   the domain stays quiet. At the slider's own body-s it read as a footnote next to a
+   20px scale name. */
+.tb-measure__slider .ou-slider__val { font: var(--ou-text-body-m); }
+.tb-measure__slider .ou-slider__val strong { font: var(--ou-text-display-s); }
 
 /* Below the two-column breakpoint the DS switches the section to a single stack —
    its own answer for narrow screens, so no custom rule is needed beyond the switch. */
