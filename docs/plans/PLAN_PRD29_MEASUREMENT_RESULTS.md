@@ -2728,57 +2728,72 @@ Expected: FAIL, параметры не найдены.
 
 - [ ] **Step 4: Написать падающий тест на подписи настроек**
 
+Контрол настройки — это КОМПОНЕНТ `SettingControl` в `start-pages-section.tsx` (около
+строки 1972), принимающий ОДИН объект пропсов. Кроме `setting` / `value` / `onChange` он
+требует `sequenceIds`, `sequenceTotal` и `testId` — они нужны ветке `sequence` того же
+диспетчера. Тест передаёт их заглушками: ветка `select` их не читает.
+
+Компонент не экспортирован — экспортировать его под СВОИМ именем. Ни переименовывать, ни
+переводить на позиционные аргументы не нужно: подгонять боевой код под форму теста —
+это ставить телегу впереди лошади.
+
 ```tsx
 // client/src/features/tests/editor/sections/__tests__/setting-option-labels.test.tsx
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { renderSettingControl } from "../start-pages-section";
+import { SettingControl } from "../start-pages-section";
 
-describe("настройка типа select", () => {
+const STUBS = { sequenceIds: [], sequenceTotal: 0, testId: "setting" };
+
+describe("настройка страницы типа select", () => {
   it("показывает человекочитаемую подпись из optionLabels", () => {
     render(
-      renderSettingControl(
-        {
+      <SettingControl
+        {...STUBS}
+        setting={{
           key: "scales",
           type: "select",
           label: "Шкалы",
           options: ["auto", "show", "hide"],
           optionLabels: { auto: "Автоматически", show: "Показывать", hide: "Скрывать" },
-        },
-        "auto",
-        () => {},
-      ),
+        }}
+        value="auto"
+        onChange={() => {}}
+      />,
     );
     expect(screen.getByText("Автоматически")).toBeInTheDocument();
+    expect(screen.queryByText("auto")).toBeNull();
   });
 
   it("падает обратно на значение, когда подписи не объявлены", () => {
     render(
-      renderSettingControl(
-        { key: "mode", type: "select", label: "Режим", options: ["fast", "slow"] },
-        "fast",
-        () => {},
-      ),
+      <SettingControl
+        {...STUBS}
+        setting={{ key: "mode", type: "select", label: "Режим", options: ["fast", "slow"] }}
+        value="fast"
+        onChange={() => {}}
+      />,
     );
     expect(screen.getByText("fast")).toBeInTheDocument();
   });
 });
 ```
 
-Если функция отрисовки контрола в `start-pages-section.tsx` не экспортирована, экспортировать
-её — это уже нужно для проверки; менять её сигнатуру не требуется.
+Run: `npm test -- client/src/features/tests/editor/sections/__tests__/setting-option-labels.test.tsx`
+Expected: FAIL — `SettingControl` не экспортирован.
 
 - [ ] **Step 5: Поддержать подписи у настроек страницы**
 
-В `client/src/features/tests/editor/sections/start-pages-section.tsx` в ветке `case "select"`
-заменить построение списка:
+Три точечные правки, сигнатуры не меняются:
 
-```tsx
-          options={(st.options ?? []).map((o) => ({ value: o, label: st.optionLabels?.[o] ?? o }))}
-```
+1. В `client/src/features/tests/editor/use-content-pages.ts` в тип `ContentTemplateSetting`
+   добавить `optionLabels?: Record<string, string>;` рядом с `options` — сейчас поля нет,
+   и подписи просто некуда положить.
 
-и добавить `optionLabels?: Record<string, string>` в тип объявленной настройки — рядом с
-`options`, как это уже сделано для параметров дизайна в `use-design-settings.ts`.
+2. В `client/src/features/tests/editor/sections/start-pages-section.tsx` в ветке
+   `case "select"` заменить построение списка на
+   `options={(st.options ?? []).map((o) => ({ value: o, label: st.optionLabels?.[o] ?? o }))}`.
+3. Там же экспортировать `SettingControl` (`export function SettingControl`).
 
 Без этого автор увидит в списке `auto`, `show`, `hide` — английские коды в интерфейсе.
 Переводить сами ЗНАЧЕНИЯ нельзя: их сравнивает `resolveResultsBlocks`.
