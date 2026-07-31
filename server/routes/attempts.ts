@@ -1216,6 +1216,9 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
           ctx.result.nav = buildResultsNav({
             canReport: true,
             canRetry: !resultJson?.overallPassed && canRetake,
+            // Attempts alone — the adaptive footer re-runs the test rather than
+            // offering a remedy, so a pass does not close it (see results-nav).
+            canRetake,
             hasPostPages: false,
             finishLabel: "К списку тестов",
           });

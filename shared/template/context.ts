@@ -138,6 +138,11 @@ export interface CtxResultsNav {
   showReport: boolean;
   /** Render «Пройти заново» (failed and attempts remain). */
   canRetry: boolean;
+  /**
+   * Attempts remain — the verdict does not matter. Weaker than {@link canRetry}:
+   * a learner who PASSED may still run the test again while the cap allows it.
+   */
+  canRetake: boolean;
   /** `data-action` of the primary button. */
   primaryAction: string;
   /** Its caption. */

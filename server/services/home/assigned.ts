@@ -19,6 +19,24 @@ const RESULTS_LIMIT = 3;
 const DELETED_TEST_TITLE = "Тест удалён";
 
 /**
+ * A test that can no longer be taken: the attempt cap is spent and nothing is
+ * running. The section drops it entirely — the only action it could offer is the
+ * one the server refuses (`ATTEMPTS_EXHAUSTED`, `POST /api/attempts`), and a row
+ * whose button leads nowhere is worse than no row. The finished run is not lost:
+ * it stays in «Мои результаты» and in the attempt history.
+ *
+ * A CLOSED COOLDOWN is deliberately not spent: that test is takeable again, just
+ * later, and its row carries the date instead of a button (PRD-6).
+ */
+function isSpent(item: AssignedTestItem): boolean {
+  return (
+    item.inProgressAttemptId === null &&
+    item.maxAttempts !== null &&
+    item.completedAttempts >= item.maxAttempts
+  );
+}
+
+/**
  * Assigned tests for the learner, in-progress first, capped at {@link ASSIGNED_LIMIT}.
  * `total` reports the true assignment count so the UI can label the «показать все» link.
  */
@@ -55,10 +73,14 @@ export async function buildAssigned(
     }),
   );
 
+  // Only what the learner can still take (FR-07); `total` counts the same list, so
+  // «Показаны N из M» never promises rows the full list will not show either.
+  const playable = built.filter((i) => !isSpent(i));
+
   // In-progress first (FR-07); the rest keep the assignment order.
   const ordered = [
-    ...built.filter((i) => i.inProgressAttemptId !== null),
-    ...built.filter((i) => i.inProgressAttemptId === null),
+    ...playable.filter((i) => i.inProgressAttemptId !== null),
+    ...playable.filter((i) => i.inProgressAttemptId === null),
   ];
   return { items: ordered.slice(0, ASSIGNED_LIMIT), total: ordered.length };
 }

@@ -69,6 +69,63 @@ describe("buildAssigned", () => {
     expect(result.total).toBe(2);
   });
 
+  it("drops a test whose attempt cap is spent", async () => {
+    storageMock.getAssignedTestsForUser.mockResolvedValue([t1, t2]);
+    storageMock.getAttemptsByUserAndTest.mockImplementation(async (_u: string, testId: string) =>
+      testId === "t1"
+        ? [
+            { id: "a1", finishedAt: daysAgo(3), variantJson: null },
+            { id: "a2", finishedAt: daysAgo(2), variantJson: null },
+          ]
+        : [],
+    );
+
+    const result = await buildAssigned("u1");
+
+    expect(result.items.map((i) => i.testId)).toEqual(["t2"]);
+    expect(result.total).toBe(1);
+  });
+
+  it("keeps a spent test while its attempt is still running", async () => {
+    storageMock.getAssignedTestsForUser.mockResolvedValue([t1]);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([
+      { id: "a1", finishedAt: daysAgo(3), variantJson: null },
+      { id: "a2", finishedAt: daysAgo(2), variantJson: null },
+      { id: "a3", finishedAt: null, variantJson: null },
+    ]);
+
+    const result = await buildAssigned("u1");
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].inProgressAttemptId).toBe("a3");
+  });
+
+  it("keeps an uncapped test however many attempts are behind it", async () => {
+    storageMock.getAssignedTestsForUser.mockResolvedValue([t2]);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([
+      { id: "a1", finishedAt: daysAgo(3), variantJson: null },
+      { id: "a2", finishedAt: daysAgo(2), variantJson: null },
+    ]);
+
+    const result = await buildAssigned("u1");
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].completedAttempts).toBe(2);
+  });
+
+  it("keeps a test the cooldown blocks — it is takeable later, just not now", async () => {
+    const gated = { ...t1, retakePolicyJson: { enabled: true, cooldownPeriodDays: 30 } };
+    storageMock.getAssignedTestsForUser.mockResolvedValue([gated]);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([
+      { id: "a1", finishedAt: daysAgo(1), variantJson: null },
+    ]);
+
+    const result = await buildAssigned("u1");
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].blockedUntil).not.toBeNull();
+  });
+
   it("caps the list at four items but reports the true total", async () => {
     storageMock.getAssignedTestsForUser.mockResolvedValue([t1, t2, t1, t2, t1, t2]);
     storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);

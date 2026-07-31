@@ -40,6 +40,14 @@ export interface ResultsNavState {
   canReport: boolean;
   /** The attempt failed and attempts remain. */
   canRetry: boolean;
+  /**
+   * Attempts remain, whatever the verdict. Two facts, not one, because the two
+   * results layouts ask different questions: the standard footer offers a retake
+   * as a REMEDY (only after a failure — `canRetry`), while the adaptive one offers
+   * it as a plain re-run, which stays meaningful after a pass. Both stop at the
+   * attempt cap, since past it the server answers `ATTEMPTS_EXHAUSTED`.
+   */
+  canRetake?: boolean;
   /** Content pages follow the results screen («После теста»). */
   hasPostPages: boolean;
   /** Caption of the closing action when nothing follows. Host wording. */
@@ -50,6 +58,7 @@ export interface ResultsNavState {
 export interface ResultsNav {
   showReport: boolean;
   canRetry: boolean;
+  canRetake: boolean;
   primaryAction: string;
   primaryLabel: string;
 }
@@ -65,6 +74,9 @@ export function buildResultsNav(state: ResultsNavState): ResultsNav {
   return {
     showReport: !!state.canReport,
     canRetry: !!state.canRetry,
+    // A footer that offers the remedy necessarily has the attempt to spend on it,
+    // so `canRetry` implies `canRetake` — a host may fill either fact alone.
+    canRetake: !!state.canRetake || !!state.canRetry,
     ...(state.hasPostPages
       ? { primaryAction: A.next, primaryLabel: "Далее" }
       : { primaryAction: A.finish, primaryLabel: state.finishLabel || "Завершить" }),

@@ -47,12 +47,18 @@
     </div>
   </main>
 
+  <!-- Footer of the adaptive results screen. `result.canRetry` / `showFinish` are the
+       PACKAGE's action flags; the WEB host fills `result.nav` instead (see
+       shared/template/results-nav), and its «Пройти снова» obeys `nav.canRetake` —
+       ATTEMPTS ONLY, since re-running an adaptive test stays meaningful after a pass;
+       past the cap the server answers ATTEMPTS_EXHAUSTED and the button would be dead.
+       The web's exit stays `result.showBack`. -->
   <footer class="tb-scene__foot">
     {{#if result.showBack}}<button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="results-back">← К списку тестов</button>{{/if}}
     {{#if result.nav.showReport}}<button type="button" class="ou-btn ou-btn--secondary ou-btn--m" data-action="download-report">Скачать отчёт</button>{{/if}}
     <div class="tb-scene__foot-spacer"></div>
     {{#if result.canRetry}}<button type="button" class="ou-btn ou-btn--secondary ou-btn--l" data-action="restart-adaptive">Пройти заново</button>{{/if}}
     {{#if result.showFinish}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="finish">Завершить тест</button>{{/if}}
-    {{#unless result.hasScormActions}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="restart">Пройти снова</button>{{/unless}}
+    {{#unless result.hasScormActions}}{{#if result.nav.canRetake}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="restart">Пройти снова</button>{{/if}}{{/unless}}
   </footer>
 </div>
