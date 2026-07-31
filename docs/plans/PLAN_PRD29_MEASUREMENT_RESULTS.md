@@ -1947,6 +1947,37 @@ describe("buildResultContext + measures", () => {
     expect(ctx.result.recommendations!.links).toHaveLength(1);
   });
 
+  it("приводит вложения к ссылке и отбрасывает незагруженные", () => {
+    // Редактор хранит канонический дескриптор PDF, где адрес лежит в scormHref.
+    const withAssets = {
+      ...MEASURES,
+      indicators: [
+        {
+          ...MEASURES.indicators[0],
+          interpretation: {
+            ...MEASURES.indicators[0].interpretation,
+            outcomes: [
+              {
+                code: "growing",
+                label: "Возрастающее истощение",
+                feedback: {
+                  assets: [
+                    { title: "Памятка.pdf", fileName: "p.pdf", mimeType: "application/pdf", scormHref: "/a/p.pdf" },
+                    { title: "Не загружено.pdf", fileName: "q.pdf", mimeType: "application/pdf" },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      ],
+      scales: [],
+      testFeedback: null,
+    };
+    const ctx = buildResultContext(BASE, "Маслач", { measures: withAssets });
+    expect(ctx.result.recommendations!.assets).toEqual([{ title: "Памятка.pdf", url: "/a/p.pdf" }]);
+  });
+
   it("берёт рекомендации только у сработавших интервалов", () => {
     const low = { ...MEASURES, scales: [{ ...MEASURES.scales[0], value: 5 }], indicators: [], testFeedback: null };
     const ctx = buildResultContext(BASE, "Маслач", { measures: low });
@@ -2120,16 +2151,45 @@ export interface MeasuresInput {
   testFeedback?: FeedbackBlock | null;
 }
 
+/**
+ * Feedback of the level that actually fired, NORMALISED for the recommendations
+ * block.
+ *
+ * The author's editor stores the canonical `feedbackContentSchema` shape, where an
+ * asset is a PDF descriptor — `{ title, fileName, mimeType, scormHref? }` — and the
+ * address lives in `scormHref`, not `url`. `collectRecommendations` works on
+ * `RecommendationLink { title, url? }`, so the host adapts before handing over;
+ * without this the «Материалы» block renders links with an empty href.
+ *
+ * An asset with no persisted href is DROPPED rather than rendered dead: the file was
+ * never uploaded, so there is nothing to open.
+ */
+function normalizeFeedback(raw: unknown): FeedbackBlock | null {
+  if (!raw || typeof raw !== "object") return null;
+  const f = raw as Record<string, unknown>;
+  const links = (f.links as Array<{ title?: string; url?: string }> | undefined) ?? [];
+  const events = (f.events as Array<{ title?: string; url?: string }> | undefined) ?? [];
+  const assets = (f.assets as Array<{ title?: string; scormHref?: string }> | undefined) ?? [];
+  return {
+    ...(f.text ? { text: String(f.text) } : {}),
+    links: links.map((l) => ({ title: String(l.title ?? ""), ...(l.url ? { url: l.url } : {}) })),
+    events: events.map((e) => ({ title: String(e.title ?? ""), ...(e.url ? { url: e.url } : {}) })),
+    assets: assets
+      .filter((a) => !!a.scormHref)
+      .map((a) => ({ title: String(a.title ?? ""), url: a.scormHref as string })),
+  };
+}
+
 /** Feedback of the level that actually fired, for the recommendations block. */
 function firedFeedback(m: MeasureInput): FeedbackBlock | null {
   const { interpretation } = m;
   if (typeof m.value === "number") {
     const band = interpretation.bands.find((b) => (m.value as number) >= b.min && (m.value as number) <= b.max);
-    return band?.feedback ?? null;
+    return normalizeFeedback(band?.feedback);
   }
   const outcomes = (interpretation as IndicatorInterpretation).outcomes ?? [];
   const outcome = outcomes.find((o) => o.code === String(m.value));
-  return outcome?.feedback ?? null;
+  return normalizeFeedback(outcome?.feedback);
 }
 ```
 
@@ -2181,7 +2241,7 @@ function firedFeedback(m: MeasureInput): FeedbackBlock | null {
 - [ ] **Step 7: Убедиться, что тест проходит**
 
 Run: `npm test -- shared/template/__tests__/result-context-measures.test.ts`
-Expected: PASS, 5 тестов. Тест «не добавляет новых полей, когда измерений нет» проверяет, что
+Expected: PASS, 6 тестов. Тест «не добавляет новых полей, когда измерений нет» проверяет, что
 `opts.measures` отсутствует целиком — тогда и `showScoreSummary` не появляется и контрольный
 экран остаётся прежним.
 
