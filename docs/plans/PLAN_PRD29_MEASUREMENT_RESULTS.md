@@ -3032,10 +3032,27 @@ describe("ScalesSection (PRD-29)", () => {
     expect(screen.getByTestId("scales-visibility-0")).toBeInTheDocument();
   });
 
-  it("показывает поля домена", () => {
+  it("по умолчанию поля домена скрыты — он выводится из интервалов", () => {
     render(<ScalesSection model={modelWithScale()} updateModel={() => {}} />);
+    expect(screen.getByTestId("scales-domain-manual-0")).toBeInTheDocument();
+    expect(screen.queryByTestId("scales-domain-min-0")).toBeNull();
+  });
+
+  it("показывает поля домена, когда границы заданы вручную", () => {
+    const model = modelWithScale();
+    model.scales[0].domainMin = 0;
+    model.scales[0].domainMax = 45;
+    render(<ScalesSection model={model} updateModel={() => {}} />);
     expect(screen.getByTestId("scales-domain-min-0")).toBeInTheDocument();
     expect(screen.getByTestId("scales-domain-max-0")).toBeInTheDocument();
+  });
+
+  it("ноль остаётся законным значением границы, а не признаком «не задано»", () => {
+    const model = modelWithScale();
+    model.scales[0].domainMin = 0;
+    model.scales[0].domainMax = 45;
+    render(<ScalesSection model={model} updateModel={() => {}} />);
+    expect(screen.getByTestId("scales-domain-min-0")).toHaveValue(0);
   });
 
   it("показывает выбор благоприятного направления", () => {
@@ -3076,21 +3093,52 @@ Expected: FAIL, элементы не найдены.
 
 - [ ] **Step 4: Добавить домен и направление**
 
+Числовые поля — `NumberInput` из ui-kit (со степпером), а не `Input type="number"`: весь
+редактор уже собран на нём.
+
+Ловушка с «пусто»: `NumberInput.value` обязательно число, и в проекте отсутствующее
+значение выражают нулём-сигналом плюс подсказкой («Оставьте 0 для неограниченного числа
+попыток»). ЗДЕСЬ так нельзя — ноль законное значение домена, все три домена референсной
+методики начинаются с нуля. Поэтому «не задан» выражается явным переключателем, а не
+значением поля: выключен — домен выводится из охвата интервалов, ровно как это делает
+`parseScaleInterpretation`; включён — появляются два поля, засеянные текущим доменом.
+
 ```tsx
-          <div className="ou-formgroup ou-formgroup--two">
-            <Input
-              size="m" type="number" label="Минимум шкалы"
-              value={s.domainMin ?? ""} disabled={readOnly}
-              onChange={(e) => onChange({ domainMin: e.target.value === "" ? null : Number(e.target.value) })}
-              data-testid={`scales-domain-min-${index}`}
-            />
-            <Input
-              size="m" type="number" label="Максимум шкалы"
-              value={s.domainMax ?? ""} disabled={readOnly}
-              onChange={(e) => onChange({ domainMax: e.target.value === "" ? null : Number(e.target.value) })}
-              data-testid={`scales-domain-max-${index}`}
+          <div className="ou-formfield">
+            <Switch
+              label="Задать границы шкалы вручную"
+              checked={s.domainMin !== null && s.domainMax !== null}
+              disabled={readOnly}
+              onChange={(e) =>
+                onChange(
+                  e.target.checked
+                    ? { domainMin: effectiveDomain(s).min, domainMax: effectiveDomain(s).max }
+                    : { domainMin: null, domainMax: null },
+                )
+              }
+              data-testid={`scales-domain-manual-${index}`}
             />
           </div>
+          {s.domainMin !== null && s.domainMax !== null && (
+            <div className="ou-formgroup ou-formgroup--two">
+              <div className="ou-formfield">
+                <NumberInput
+                  size="m" label="Минимум шкалы"
+                  value={s.domainMin} disabled={readOnly}
+                  onChange={(next) => onChange({ domainMin: next })}
+                  data-testid={`scales-domain-min-${index}`}
+                />
+              </div>
+              <div className="ou-formfield">
+                <NumberInput
+                  size="m" label="Максимум шкалы"
+                  value={s.domainMax} disabled={readOnly}
+                  onChange={(next) => onChange({ domainMax: next })}
+                  data-testid={`scales-domain-max-${index}`}
+                />
+              </div>
+            </div>
+          )}
           <Select<Valence>
             size="m" fullWidth label="Благоприятное направление"
             value={s.valence} disabled={readOnly}
