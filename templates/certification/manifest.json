@@ -138,6 +138,105 @@
       "group": "Навигация",
       "section": "progress",
       "description": "Полоса заполнения под счётчиком в шапке."
+    },
+{
+      "key": "levelScheme",
+      "type": "select",
+      "label": "Цветовая схема уровней",
+      "default": "traffic",
+      "group": "Цвета",
+      "section": "branding",
+      "options": [
+        "traffic",
+        "neutral",
+        "custom"
+      ],
+      "optionLabels": {
+        "traffic": "Зелёный — жёлтый — красный",
+        "neutral": "Нейтральная, оттенки одного цвета",
+        "custom": "Своя"
+      },
+      "description": "Как окрашиваются уровни шкал и показателей. «Своя» задействует три поля цвета ниже."
+    },
+    {
+      "key": "levelColorFavorable",
+      "type": "color",
+      "cssVar": "--tb-level-favorable",
+      "label": "Цвет благоприятного края",
+      "default": null,
+      "group": "Цвета",
+      "section": "branding",
+      "description": "Применяется, когда выбрана схема «Своя»."
+    },
+    {
+      "key": "levelColorMid",
+      "type": "color",
+      "cssVar": "--tb-level-mid",
+      "label": "Цвет середины",
+      "default": null,
+      "group": "Цвета",
+      "section": "branding",
+      "description": "Необязателен: без него переход идёт напрямую из края в край."
+    },
+    {
+      "key": "levelColorUnfavorable",
+      "type": "color",
+      "cssVar": "--tb-level-unfavorable",
+      "label": "Цвет неблагоприятного края",
+      "default": null,
+      "group": "Цвета",
+      "section": "branding",
+      "description": "Применяется, когда выбрана схема «Своя»."
+    },
+    {
+      "key": "scaleRenderKind",
+      "type": "select",
+      "label": "Вид шкал",
+      "default": "band_ruler",
+      "group": "Итоги",
+      "section": "branding",
+      "options": [
+        "label",
+        "value",
+        "value_of_max",
+        "ring",
+        "band_ruler",
+        "gradient_bar"
+      ],
+      "optionLabels": {
+        "label": "Только уровень",
+        "value": "Значение",
+        "value_of_max": "Значение из максимума",
+        "ring": "Кольцо",
+        "band_ruler": "Линейка с зонами",
+        "gradient_bar": "Полоса-градусник"
+      },
+      "description": "Применяется там, где выполним; иначе откатывается на ближайший доступный."
+    },
+    {
+      "key": "indicatorRenderKind",
+      "type": "select",
+      "label": "Вид показателей",
+      "default": "label",
+      "group": "Итоги",
+      "section": "branding",
+      "options": [
+        "label",
+        "value",
+        "value_of_max",
+        "ring",
+        "band_ruler",
+        "gradient_bar"
+      ],
+      "optionLabels": {
+        "label": "Только уровень",
+        "value": "Значение",
+        "value_of_max": "Значение из максимума",
+        "ring": "Кольцо",
+        "band_ruler": "Линейка с зонами",
+        "gradient_bar": "Полоса-градусник"
+      },
+      "description": "Применяется там, где выполним; иначе откатывается на ближайший доступный."
     }
   ],
   "contentTemplates": [
