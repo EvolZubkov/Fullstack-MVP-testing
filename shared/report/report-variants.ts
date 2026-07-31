@@ -17,6 +17,7 @@
  */
 
 import { validateVariantFields, isSettingType, SETTING_TYPES } from "../template/field-types";
+import { reportImageKeys, resolveReportImageValues } from "./report-assets";
 
 /** Виды отчёта. Обычный режим и адаптивный — разные виды (D-5). */
 export const REPORT_KINDS = ["report", "report.adaptive"] as const;
@@ -133,6 +134,12 @@ export interface ReportBake {
   /** Выбранный вариант; `null` — шаблон видов не объявил, идёт деградация (FR-10/FR-15). */
   variantKey: string | null;
   /**
+   * Ключи полей-картинок варианта (FR-05). Хост инлайнит именно их в data-URL перед
+   * растеризацией: растеризатор дозагружать ничего не станет, а незагруженная подложка
+   * молча меняет PDF.
+   */
+  imageKeys: string[];
+  /**
    * Ключ, под которым макет лежит у рантайма. Вариант называет свой файл (`layoutFile`),
    * и загрузчик пакета регистрирует его ПО ПУТИ; когда файла нет, остаётся канонический
    * ключ вида — тот самый, по которому работает деградация на «Стандартный».
@@ -153,19 +160,26 @@ export interface ReportBake {
  * @param manifest Разобранный `manifest.json` активного шаблона.
  * @param kind Вид отчёта, отвечающий режиму теста.
  * @param branch Ветка `tests.report_settings_json` этого режима (может отсутствовать).
+ * @param assetBase Где у ЭТОГО хоста лежат файлы шаблона, со слешем на конце
+ *   (`template/` в пакете, `/api/templates/<id>/assets/` на вебе). Пути картинок из
+ *   манифеста разрешаются против неё (FR-05); пустая база оставляет их как есть.
  */
 export function resolveReportBake(
   manifest: unknown,
   kind: ReportKind,
   branch?: { variantKey?: string | null; values?: Record<string, unknown> | null } | null,
+  assetBase = "",
 ): ReportBake {
   const variant = resolveReportVariant(manifest, kind, branch?.variantKey);
   const layoutFile = typeof variant?.layoutFile === "string" ? variant.layoutFile : "";
+  const imageKeys = reportImageKeys(variant);
+  const values = resolveReportValues(variant, branch?.values ?? null);
   return {
     variantKey: variant?.key ?? null,
+    imageKeys,
     layoutKey: layoutFile || kind,
     styleFile: typeof variant?.styleFile === "string" && variant.styleFile ? variant.styleFile : null,
-    values: resolveReportValues(variant, branch?.values ?? null),
+    values: assetBase ? resolveReportImageValues(values, imageKeys, assetBase) : values,
   };
 }
 

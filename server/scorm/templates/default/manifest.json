@@ -1,7 +1,7 @@
 {
   "id": "default",
   "name": "Стандартный",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "templateApiVersion": "1.0",
   "description": "Базовый одноколоночный плеер. Используется по умолчанию для обратной совместимости.",
   "themes": [
@@ -179,7 +179,22 @@
       "layoutFile": "layouts/report.html",
       "styleFile": "styles/report.css",
       "isDefault": true,
-      "settings": [],
+      "settings": [
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Подложка страницы",
+          "description": "Фон страницы отчёта. Без изображения печатается градиент шаблона.",
+          "default": "assets/report/bg.png"
+        },
+        {
+          "key": "logoImage",
+          "type": "image",
+          "label": "Логотип в отчёте",
+          "description": "Показывается над заголовком. Пусто — строки логотипа нет.",
+          "default": "assets/report/logo.png"
+        }
+      ],
       "placeholders": []
     },
     {
@@ -189,7 +204,22 @@
       "layoutFile": "layouts/report.adaptive.html",
       "styleFile": "styles/report.css",
       "isDefault": true,
-      "settings": [],
+      "settings": [
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Подложка страницы",
+          "description": "Фон страницы отчёта. Без изображения печатается градиент шаблона.",
+          "default": "assets/report/bg.png"
+        },
+        {
+          "key": "logoImage",
+          "type": "image",
+          "label": "Логотип в отчёте",
+          "description": "Показывается над заголовком. Пусто — строки логотипа нет.",
+          "default": "assets/report/logo.png"
+        }
+      ],
       "placeholders": []
     },
     {
@@ -1069,7 +1099,10 @@
     "scripts": [
       "scripts/template.js"
     ],
-    "images": [],
+    "images": [
+      "assets/report/bg.png",
+      "assets/report/logo.png"
+    ],
     "preview": "preview.svg"
   },
   "capabilities": {

@@ -104,17 +104,19 @@ describe("контекст обычного отчёта", () => {
     expect(buildReportContext(input()).result.topicResults?.[0].pointsLabel).toBe("3 / 5");
   });
 
-  it("отдаёт ассеты строками и гейт логотипа", () => {
-    const withAssets = buildReportContext(input(), {
-      assets: { backgroundDataUrl: "data:image/png;base64,AA", logoDataUrl: "data:image/png;base64,BB" },
+  it("картинки приходят значениями полей ВАРИАНТА, а не отдельным блоком (FR-05)", () => {
+    // Ядро не знает ни имён этих полей, ни их файлов: и то и другое объявляет шаблон.
+    const withImages = buildReportContext(input(), {
+      values: { backgroundImage: "data:image/png;base64,AA", logoImage: "data:image/png;base64,BB" },
     });
-    expect(withAssets.report.backgroundUrl).toBe("data:image/png;base64,AA");
-    expect(withAssets.report.hasLogo).toBe(true);
+    expect(withImages.report.values.backgroundImage).toBe("data:image/png;base64,AA");
+    expect(withImages.report.values.logoImage).toBe("data:image/png;base64,BB");
 
+    // Вариант без картинок — в контексте их и нет, макет гейтит свои строки сам.
     const plain = buildReportContext(input());
-    expect(plain.report.backgroundUrl).toBe("");
-    expect(plain.report.logoUrl).toBe("");
-    expect(plain.report.hasLogo).toBe(false);
+    expect(plain.report.values).toEqual({});
+    expect((plain.report as unknown as Record<string, unknown>).backgroundUrl).toBeUndefined();
+    expect((plain.report as unknown as Record<string, unknown>).hasLogo).toBeUndefined();
   });
 
   it("значения settings[] варианта приходят в report.values", () => {

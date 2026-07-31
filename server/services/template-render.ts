@@ -29,6 +29,19 @@ import {
   resolveReportValues,
   type ReportKind,
 } from "@shared/report/report-variants";
+import { reportImageKeys, resolveReportImageValues } from "@shared/report/report-assets";
+
+/**
+ * Where the browser reaches ONE template's own files (`GET /api/templates/:id/assets/*`).
+ *
+ * The web host has no package directory to resolve template-relative paths against, so
+ * a report variant's pictures are addressed through that route (PRD-27 FR-05).
+ *
+ * @param templateId Template whose files back the report page.
+ */
+function templateAssetBase(templateId: string): string {
+  return `/api/templates/${encodeURIComponent(templateId)}/assets/`;
+}
 
 /**
  * The test's stored design settings, as the routes read them off the test row.
@@ -352,6 +365,10 @@ export function readResultsRenderPayload(
  * @param design The test's design settings (branding / pinned palette).
  * @param paramsDir Directory whose manifest the design params were set against — the
  *   ACTIVE template, even when the layout falls back to `default`.
+ * @param assetTemplateId Template id whose files back this variant's pictures — the id
+ *   `GET /api/templates/:id/assets/*` serves (PRD-27 FR-05). It follows the LAYOUT, so
+ *   on a fallback it is `default`, not the active template. Omitted (dev/tests) leaves
+ *   template-relative paths unresolved rather than pointing them at the wrong template.
  * @returns Payload, or `null` when this directory offers no such variant.
  */
 export function readReportRenderPayload(
@@ -360,7 +377,17 @@ export function readReportRenderPayload(
   authored: { variantKey?: string | null; values?: Record<string, unknown> | null } | null | undefined,
   design?: DesignSettingsInput | null,
   paramsDir?: string,
-): { layout: string; css: string; variantKey: string; values: Record<string, unknown>; cssVars?: Record<string, string>; themeCss?: string; design?: Record<string, string> } | null {
+  assetTemplateId?: string,
+): {
+  layout: string;
+  css: string;
+  variantKey: string;
+  values: Record<string, unknown>;
+  imageKeys: string[];
+  cssVars?: Record<string, string>;
+  themeCss?: string;
+  design?: Record<string, string>;
+} | null {
   try {
     const raw = readFileSafe(path.join(dir, "manifest.json"));
     if (!raw) return null;
@@ -377,11 +404,19 @@ export function readReportRenderPayload(
     // Токены отчёта ставятся на КОНТЕЙНЕР, а не на `:host`: сцены здесь нет.
     const themeCss = buildTemplateThemeCss(design, brandingManifest, { rootSelector: ".tb-report" });
     const logoUrl = resolveMediaUrl(base?.logoUrl);
+    // FR-05: картинки варианта — файлы шаблона, а браузеру они видны только через
+    // роут ассетов. Инлайнит их в data-URL уже клиент: сюда они не кладутся, чтобы
+    // ответ с результатом попытки не тащил сотни килобайт base64.
+    const imageKeys = reportImageKeys(variant);
+    const values = resolveReportValues(variant, authored?.values ?? null);
     return {
       layout,
       css,
       variantKey: variant.key,
-      values: resolveReportValues(variant, authored?.values ?? null),
+      values: assetTemplateId
+        ? resolveReportImageValues(values, imageKeys, templateAssetBase(assetTemplateId))
+        : values,
+      imageKeys,
       ...(Object.keys(cssVars).length > 0 ? { cssVars } : {}),
       ...(themeCss ? { themeCss } : {}),
       ...(logoUrl ? { design: { logoUrl } } : {}),

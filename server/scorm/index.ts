@@ -44,32 +44,6 @@ function tryReadAsset(paths: string[]): string {
   return "";
 }
 
-function tryReadBinaryAsset(relativePath: string): Buffer | null {
-  const possiblePaths = [
-    path.resolve(__dirname, "template", relativePath),
-    path.resolve(__dirname, relativePath),
-    path.resolve(__dirname, "assets", relativePath),
-    path.resolve(process.cwd(), "server", "scorm", "template", relativePath),
-    path.resolve(process.cwd(), "dist", "scorm", "template", relativePath),
-    path.resolve(process.cwd(), "scorm", "template", relativePath),
-  ];
-  
-  logger.info("[tryReadBinaryAsset] Looking for: " + relativePath);
-  
-  for (const p of possiblePaths) {
-    try {
-      if (fs.existsSync(p)) {
-        logger.info("[tryReadBinaryAsset] Found at: " + p);
-        return fs.readFileSync(p);
-      }
-    } catch {
-      continue;
-    }
-  }
-  logger.info("[tryReadBinaryAsset] Not found: " + relativePath);
-  return null;
-}
-
 /**
  * System screens that fall back to the `default` template when the active template
  * does not declare them (PRD-1 §4.3.2, PRD-3 NFR-06), mapped to the layout key the
@@ -81,6 +55,11 @@ function tryReadBinaryAsset(relativePath: string): Buffer | null {
  * layout, so swapping in the standard template's identical generic layout would buy
  * nothing; their real fallback is at the variant level (`variant-binding.ts`).
  */
+/** Where the ACTIVE template's own files sit inside the package. */
+const PACKAGE_TEMPLATE_DIR = "template";
+/** Where the bundled `default` sits when the active template needs fallbacks (G21). */
+const PACKAGE_DEFAULT_TEMPLATE_DIR = "template-default";
+
 const FALLBACK_KIND_LAYOUT: Record<string, string> = {
   start: "start",
   results: "results",
@@ -185,13 +164,23 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     (data.test.reportSettingsJson as ReportSettings | null)?.[
       data.test.mode === "adaptive" ? "adaptive" : "standard"
     ] ?? null,
+    // FR-05: картинки варианта — файлы ШАБЛОНА, а он лежит в пакете под `template/`.
+    // Резолвятся здесь, а не в рантайме: только сборщик знает, из какого каталога
+    // приехал вариант.
+    `${PACKAGE_TEMPLATE_DIR}/`,
   );
   if (!reportBake.variantKey) {
     // Активный шаблон вида не объявил. Макет приходит из вложенного «Стандартного» по
     // КАНОНИЧЕСКОМУ ключу (так его находит `systemLayout`), а стиль — из его же
     // варианта: без этого шага страница собиралась бы вообще без оформления, потому
-    // что своего `styleFile` у несуществующего варианта нет.
-    const fromDefault = resolveReportBake(readTemplateManifest(defaultDir), reportKind, null);
+    // что своего `styleFile` у несуществующего варианта нет. Оттуда же берутся и его
+    // картинки — база другая, потому что `default` лежит в пакете рядом, отдельно.
+    const fromDefault = resolveReportBake(
+      readTemplateManifest(defaultDir),
+      reportKind,
+      null,
+      `${PACKAGE_DEFAULT_TEMPLATE_DIR}/`,
+    );
     reportBake = { ...fromDefault, variantKey: null, layoutKey: reportKind };
   }
   if (data.designSettings) data.designSettings.report = reportBake;
@@ -444,28 +433,16 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     bootstrapMainJs,
   ]).replace("__TEST_JSON_B64__", testJsonB64);
 
+  // Картинки отчёта здесь больше не перечисляются: с PRD-27 FR-05 подложка и логотип —
+  // файлы ШАБЛОНА, они приезжают вместе с его каталогом (`template/…`) и попадают в
+  // манифест ниже, вместе со всеми прочими файлами шаблона.
   const mediaHrefs = Object.keys(assets);
-
-  // Добавляем PDF-ассеты в список файлов для манифеста
-  const pdfAssetPaths = [
-    "assets/media/pdf-bg-1.png",
-    "assets/media/pdf-bg-2.png", 
-    "assets/media/pdf-bg-3.png",
-    "assets/media/logo-light.png"
-  ];
-
-  // Добавляем только те PDF-ассеты, которые реально существуют
-  pdfAssetPaths.forEach(assetPath => {
-    if (tryReadBinaryAsset(assetPath)) {
-      mediaHrefs.push(assetPath);
-    }
-  });
 
   // templateId / builtinRoot / templateDir / defaultDir / fallbackLayoutKeys were
   // resolved at the top of the function (needed before buildTestJson).
   const templateFiles: Record<string, string | Buffer> = {};
   if (fs.existsSync(templateDir)) {
-    copyDirToFiles(templateDir, "template", templateFiles);
+    copyDirToFiles(templateDir, PACKAGE_TEMPLATE_DIR, templateFiles);
   } else {
     logger.warn(`Template directory not found for "${templateId}" (${templateDir})`, "scorm-export");
   }
@@ -473,7 +450,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   // runtime can render fallback system screens (start/results the active template
   // doesn't declare) from default's own layout + CSS.
   if (fallbackLayoutKeys.length > 0 && fs.existsSync(defaultDir) && path.resolve(defaultDir) !== path.resolve(templateDir)) {
-    copyDirToFiles(defaultDir, "template-default", templateFiles);
+    copyDirToFiles(defaultDir, PACKAGE_DEFAULT_TEMPLATE_DIR, templateFiles);
   }
   // Revision «Стандартный» on ui-kit: brand-font woff2 embedded under assets/fonts/,
   // referenced by the vendored DS `@font-face` in styles.css. Declared in the manifest
@@ -542,21 +519,6 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   };
   if (stylesDefaultCss) files["styles-default.css"] = stylesDefaultCss;
 
-  // Добавляем подложки и логотипы для PDF (только в assets/media/)
-  try {
-    const pdfBg1 = tryReadBinaryAsset("assets/media/pdf-bg-1.png");
-    const pdfBg2 = tryReadBinaryAsset("assets/media/pdf-bg-2.png");
-    const pdfBg3 = tryReadBinaryAsset("assets/media/pdf-bg-3.png");
-    const logoLight = tryReadBinaryAsset("assets/media/logo-light.png");
-    
-    if (pdfBg1) files["assets/media/pdf-bg-1.png"] = pdfBg1;
-    if (pdfBg2) files["assets/media/pdf-bg-2.png"] = pdfBg2;
-    if (pdfBg3) files["assets/media/pdf-bg-3.png"] = pdfBg3;
-    if (logoLight) files["assets/media/logo-light.png"] = logoLight;
-  } catch (e) {
-    logger.info("PDF assets not found, skipping");
-  }
-  
   for (const [zipPath, buf] of Object.entries(assets)) {
     files[zipPath] = buf;
   }

@@ -3,14 +3,15 @@
 // The package's side of the attempt REPORT. The markup and the export pipeline are
 // SHARED (shared/report/*, reached through the TBTemplate bundle) — the web host runs
 // the same two functions, so a learner gets the same PDF in the LMS and in the browser.
-// What stays here is package-specific: where the report assets live inside the ZIP,
-// how the runtime result maps onto the normalized report input, and the loading overlay.
+// What stays here is package-specific: how the runtime result maps onto the normalized
+// report input, and the loading overlay.
+//
+// The report's pictures are NOT known here: since PRD-27 FR-05 the background and the
+// logo are files of the TEMPLATE, declared by the chosen variant and resolved to
+// package paths by the builder — this side only inlines them for the rasterizer.
 
-/** Report assets ship in the package under this prefix (see server/scorm/index.ts). */
-var PDF_ASSET_BASE = 'assets/media/';
-
-/** Cached background/logo data URLs — resolving them costs a few hundred KB of decode. */
-var pdfAssets = null;
+/** Inlined pictures of the report variant, resolved once per session. */
+var pdfImageValues = null;
 
 /**
  * Show the blocking «Генерация PDF…» overlay.
@@ -106,10 +107,11 @@ function pdfAdaptiveInput(results) {
 }
 
 /**
- * Запечённый сборщиком выбор варианта отчёта (PRD-27 FR-22): макет, значения полей.
- * Отсутствует у пакетов, собранных до этого PRD, — тогда работает деградация по виду.
+ * Запечённый сборщиком выбор варианта отчёта (PRD-27 FR-22): макет, значения полей и
+ * ключи полей-картинок (FR-05). Отсутствует у пакетов, собранных до этого PRD, — тогда
+ * работает деградация по виду, а картинок у отчёта нет.
  *
- * @returns {{layoutKey: string, values: Object}|null}
+ * @returns {{layoutKey: string, values: Object, imageKeys: string[]}|null}
  */
 function pdfReportBake() {
   var ds = (typeof TEST_DATA !== 'undefined' && TEST_DATA) ? TEST_DATA.designSettings : null;
@@ -151,8 +153,6 @@ async function exportResultsToPDF(results, testName, learnerName, timestamp) {
     var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
     if (!TB || !TB.exportReportPdf) throw new Error('Общий модуль отчёта недоступен в пакете');
 
-    if (!pdfAssets) pdfAssets = await TB.loadReportAssets(PDF_ASSET_BASE);
-
     var isAdaptive = TEST_DATA.mode === 'adaptive';
     var kind = isAdaptive ? 'report.adaptive' : 'report';
     // Макет ВЫБРАННОГО автором варианта; когда выбора в пакете нет (сборка до PRD-27)
@@ -162,6 +162,16 @@ async function exportResultsToPDF(results, testName, learnerName, timestamp) {
     if (!layout) layout = pdfReportLayout(kind);
     if (!layout) throw new Error('Шаблон не предоставил макет отчёта');
 
+    // Картинки варианта — в data-URL, ОДИН раз за сессию: растеризатор снимает то, что
+    // уже лежит в документе, и не станет ничего догружать (FR-05). Пути сюда приходят
+    // от сборщика, уже разрешёнными в каталог шаблона внутри пакета.
+    if (!pdfImageValues) {
+      pdfImageValues = await TB.inlineReportImageValues(
+        bake && bake.values ? bake.values : null,
+        bake && bake.imageKeys ? bake.imageKeys : []
+      );
+    }
+
     var meta = {
       testName: testName,
       learnerName: learnerName,
@@ -169,10 +179,9 @@ async function exportResultsToPDF(results, testName, learnerName, timestamp) {
       attemptsCount: (typeof getAllAttempts === 'function') ? getAllAttempts().length : 1
     };
     var opts = {
-      assets: pdfAssets,
       design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {},
       // Значения полей варианта — те, что автор задал в блоке обратной связи (FR-16).
-      values: (bake && bake.values) ? bake.values : null
+      values: pdfImageValues
     };
     var context = isAdaptive
       ? TB.buildAdaptiveReportContext(Object.assign({}, meta, { result: pdfAdaptiveInput(results) }), opts)

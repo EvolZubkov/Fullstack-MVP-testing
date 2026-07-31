@@ -3,16 +3,16 @@
  * @description Guards the endpoints that let the WEB host build the attempt report.
  *
  * The report is generated in the browser by `shared/report/*` — the same generator the
- * SCORM package runs. The browser gets the two package-only ingredients from here: the
- * vendored rasterizer/PDF writer and the report's background plates + logo. Both are
- * allowlisted by name, so a caller cannot walk out of the asset directory.
+ * SCORM package runs. What the browser needs from here is the package-only pair of
+ * libraries (rasterizer + PDF writer), allowlisted by name so a caller cannot walk out
+ * of the asset directory. The report's PICTURES are NOT served here since PRD-27 FR-05:
+ * they belong to the template and travel through `/api/templates/:id/assets/*`.
  */
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import express from "express";
 import reportRouter from "../server/routes/report";
 import { readBinaryAsset } from "../server/scorm/assets/read-asset";
-import { REPORT_BACKGROUND_FILES, REPORT_LOGO_FILE } from "../shared/report/export-pdf";
 
 const app = express();
 // A signed-in learner: the router's own gate only checks that a session exists.
@@ -53,45 +53,34 @@ describe("GET /api/report/lib/:file", () => {
       expect(res.status, bad).toBe(404);
     }
   });
+
+  it("caches immutably — the learner pays for the libraries once", async () => {
+    const res = await request(app).get("/api/report/lib/jspdf.umd.min.js");
+    expect(res.headers["cache-control"]).toContain("immutable");
+  });
 });
 
-describe("GET /api/report/asset/:file", () => {
-  it("serves every plate and the logo the shared module asks for", async () => {
-    for (const file of [...REPORT_BACKGROUND_FILES, REPORT_LOGO_FILE]) {
+describe("картинки отчёта здесь больше не живут (PRD-27 FR-05)", () => {
+  it("прежний ассетный роут отдаёт 404: подложка и логотип — файлы шаблона", async () => {
+    for (const file of ["pdf-bg-1.png", "logo-light.png"]) {
       const res = await request(app).get(`/api/report/asset/${file}`);
-      expect(res.status, file).toBe(200);
-      expect(res.headers["content-type"]).toBe("image/png");
-      expect(res.body.length).toBeGreaterThan(1000);
+      expect(res.status, file).toBe(404);
     }
-  });
-
-  it("serves nothing outside the allowlist", async () => {
-    for (const bad of ["logo-dark.png", "..%2F..%2F.env", "pdf-bg-4.png"]) {
-      const res = await request(app).get(`/api/report/asset/${bad}`);
-      expect(res.status, bad).toBe(404);
-    }
-  });
-
-  it("caches immutably — the learner pays for the plates once", async () => {
-    const res = await request(app).get(`/api/report/asset/${REPORT_LOGO_FILE}`);
-    expect(res.headers["cache-control"]).toContain("immutable");
   });
 });
 
 describe("report ingredients require a session", () => {
   it("rejects an anonymous caller", async () => {
     expect((await request(anonApp).get("/api/report/lib/jspdf.umd.min.js")).status).toBe(401);
-    expect((await request(anonApp).get(`/api/report/asset/${REPORT_LOGO_FILE}`)).status).toBe(401);
   });
 });
 
 describe("readBinaryAsset", () => {
-  it("возвращает байты существующего ассета отчёта", () => {
-    expect(readBinaryAsset(`media/${REPORT_LOGO_FILE}`)?.length).toBeGreaterThan(1000);
+  it("возвращает байты существующего ассета пакета", () => {
+    expect(readBinaryAsset("media/logo-dark.png")?.length).toBeGreaterThan(1000);
   });
 
   it("возвращает null, а не бросает, когда файла нет ни по одному из путей", () => {
-    // Деплой без подложек — не ошибка: отчёт откатывается к градиенту (см. report-html).
     expect(readBinaryAsset("media/does-not-exist.png")).toBeNull();
   });
 });

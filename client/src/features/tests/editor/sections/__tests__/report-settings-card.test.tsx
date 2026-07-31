@@ -30,6 +30,7 @@ const MANIFEST = {
         settings: [
           { key: "headline", type: "text", label: "Заголовок отчёта", default: "Итоги" },
           { key: "showRecs", type: "boolean", label: "Показывать рекомендации", default: true },
+          { key: "backgroundImage", type: "image", label: "Подложка страницы", default: "assets/report/bg.png" },
         ],
       },
       {
@@ -229,5 +230,23 @@ describe("смена вида (FR-14)", () => {
     renderCard();
     await openSelect();
     expect(screen.queryByTestId("report-drop-warning")).toBeNull();
+  });
+
+  it("незаполненная картинка показывает файл ШАБЛОНА заполнителем, а не пустоту (FR-05)", async () => {
+    // Пустое поле не значит «картинки не будет»: отчёт возьмёт файл шаблона. Автору это
+    // надо видеть до того, как он решит, что подложка пропала.
+    mockFetch({ certification: MANIFEST });
+    renderCard();
+    const input = await screen.findByLabelText("Подложка страницы");
+    expect((input as HTMLInputElement).value).toBe("");
+    expect(input.getAttribute("placeholder")).toContain("assets/report/bg.png");
+  });
+
+  it("дефолт шаблона в черновик не пишется", async () => {
+    mockFetch({ certification: MANIFEST });
+    const { onChange } = renderCard();
+    await screen.findByLabelText("Подложка страницы");
+    // Открытие карточки ничего не меняет: значение по умолчанию живёт в манифесте.
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

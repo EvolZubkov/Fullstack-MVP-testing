@@ -25,6 +25,7 @@ import {
   type ReportPreviewSection,
 } from "@shared/report/report-preview";
 import { reportKindForMode } from "@shared/report/report-variants";
+import { reportImageKeys, resolveReportImageValues } from "@shared/report/report-assets";
 import { useTemplateBundle } from "./use-template-bundle";
 import type { ReportVariantOption } from "../use-report-variants";
 
@@ -73,15 +74,30 @@ export function ReportPreviewModal({
     return byFile ?? bundle.layouts[reportKindForMode(mode)];
   }, [bundle, variant, mode]);
 
+  // Картинки вида объявлены путями внутри шаблона (FR-05), а браузер видит файлы
+  // шаблона только через роут ассетов. Без этого автор смотрел бы предпросмотр без
+  // подложки и логотипа — а обучающийся получал бы их.
+  const previewValues = useMemo(
+    () =>
+      templateId
+        ? resolveReportImageValues(
+            values,
+            reportImageKeys(variant),
+            `/api/templates/${encodeURIComponent(templateId)}/assets/`,
+          )
+        : values,
+    [values, variant, templateId],
+  );
+
   const context = useMemo(() => {
     const test = { testName, sections, levelNames };
     const design = params as Record<string, unknown>;
     // `isPreview` — тот же флаг, что и у выдачи: макет вправе пометить страницу образцом.
-    const opts = { values, design, isPreview: true };
+    const opts = { values: previewValues, design, isPreview: true };
     return adaptive
       ? buildAdaptiveReportContext(buildAdaptiveReportPreviewInput(test, outcome), opts)
       : buildReportContext(buildReportPreviewInput(test, outcome), opts);
-  }, [adaptive, testName, sections, levelNames, outcome, values, params]);
+  }, [adaptive, testName, sections, levelNames, outcome, previewValues, params]);
 
   const cssVars = useMemo(
     () => buildTemplateCssVars(params, bundle?.manifest.params),

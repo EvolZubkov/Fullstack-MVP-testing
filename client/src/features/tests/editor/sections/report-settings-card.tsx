@@ -30,6 +30,7 @@ import {
   type ReportSettingDecl,
   type ReportVariantOption,
 } from "../use-report-variants";
+import { resolveReportValues } from "@shared/report/report-variants";
 import { ReportPreviewModal } from "./report-preview-modal";
 
 /** Одно поле варианта: тип решает, каким компонентом дизайн-системы его показать. */
@@ -97,7 +98,11 @@ function ReportField(props: {
   }
 
   // `image` показывается адресом файла: загрузчик медиа приходит в Фазе 4 вместе с
-  // предпросмотром, а до него автор вправе указать уже загруженный файл.
+  // предпросмотром, а до него автор вправе указать уже загруженный файл. Пустое поле —
+  // это НЕ «картинки нет»: отчёт возьмёт файл шаблона (FR-05), поэтому дефолт варианта
+  // показывается заполнителем, а в черновик не пишется — иначе значение застыло бы и
+  // перестало следовать за шаблоном.
+  const templateDefault = typeof field.default === "string" ? field.default : "";
   return (
     <div className="ou-formfield">
       <Input
@@ -106,6 +111,7 @@ function ReportField(props: {
         fullWidth
         label={label}
         hint={field.description}
+        placeholder={templateDefault ? `Из шаблона: ${templateDefault}` : undefined}
         value={String(value ?? "")}
         disabled={props.disabled}
         onChange={(e) => props.onChange(e.target.value)}
@@ -258,8 +264,10 @@ export function ReportSettingsCard(props: {
         templateId={catalogue.templateId}
         params={props.designParams ?? {}}
         variant={catalogue.selected}
-        // FR-20: в предпросмотр уходят значения ЧЕРНОВИКА, а не сохранённые.
-        values={values}
+        // FR-20: в предпросмотр уходят значения ЧЕРНОВИКА, а не сохранённые. Поверх
+        // умолчаний варианта (FR-04): незаполненное поле показывается ровно так же, как
+        // придёт обучающемуся, иначе автор смотрел бы отчёт без подложки и логотипа.
+        values={resolveReportValues(catalogue.selected, values)}
         testName={props.testName ?? ""}
         sections={props.sections ?? []}
         levelNames={props.levelNames}

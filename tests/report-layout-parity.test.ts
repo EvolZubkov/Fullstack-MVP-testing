@@ -208,12 +208,12 @@ describe("report.html: макет повторяет страницу, кото�
     expect(root.querySelector(".tb-report__headline")).not.toBeNull();
   });
 
-  it("логотип и подложку ставит контекст, без них строк нет", () => {
+  it("логотип ставит поле ВАРИАНТА, без него строки нет", () => {
     const plain = renderToRoot(REPORT, buildReportContext(STANDARD));
     expect(plain.querySelector(".tb-report__brand")).toBeNull();
     const branded = renderToRoot(
       REPORT,
-      buildReportContext(STANDARD, { assets: { logoDataUrl: "data:image/png;base64,AA" } }),
+      buildReportContext(STANDARD, { values: { logoImage: "data:image/png;base64,AA" } }),
     );
     expect(branded.querySelector(".tb-report__brand img")?.getAttribute("src")).toBe("data:image/png;base64,AA");
   });
@@ -366,10 +366,10 @@ describe("содержательные правила отчёта, перене
     expect(text).not.toContain("Рекомендуемые мероприятия");
   });
 
-  it("подложка приходит из контекста, без неё макет держит свой фон", () => {
+  it("подложка приходит полем варианта, без неё макет держит свой фон", () => {
     const withBg = renderToRoot(
       REPORT,
-      buildReportContext(STANDARD, { assets: { backgroundDataUrl: "data:image/png;base64,AA" } }),
+      buildReportContext(STANDARD, { values: { backgroundImage: "data:image/png;base64,AA" } }),
     );
     expect(withBg.querySelector<HTMLElement>(".tb-report")?.style.backgroundImage).toContain("data:image/png;base64,AA");
     const plain = renderToRoot(REPORT, buildReportContext(STANDARD));

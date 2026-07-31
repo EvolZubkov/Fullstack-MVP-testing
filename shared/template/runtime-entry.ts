@@ -170,4 +170,4 @@ export {
 // The package reaches them through this bundle; the web host imports them directly.
 export { reportFileName, formatTimestamp as reportTimestamp } from "../report/report-html";
 export { buildReportContext, buildAdaptiveReportContext } from "../report/report-context";
-export { exportReportPdf, loadReportAssets } from "../report/export-pdf";
+export { exportReportPdf, inlineReportImageValues } from "../report/export-pdf";

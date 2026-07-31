@@ -24,6 +24,7 @@
 import { renderScreenInto, type ScreenRenderInput } from "./render-screen";
 import { buildScreenInputs, type PreviewDemoDataset, type PreviewManifest } from "./preview-context";
 import { REPORT_KINDS, reportVariants, resolveReportValues } from "../report/report-variants";
+import { reportImageKeys, resolveReportImageValues } from "../report/report-assets";
 import { buildAdaptiveReportContext, buildReportContext } from "../report/report-context";
 import {
   buildAdaptiveReportPreviewInput,
@@ -73,6 +74,13 @@ export interface SmokeRunOptions {
   createContainer?: () => HTMLElement;
   /** Renderer override (default {@link renderScreenInto}); injectable for tests. */
   render?: (root: HTMLElement, input: ScreenRenderInput) => void;
+  /**
+   * Where this host reaches the template's own files, with a trailing slash. Report
+   * variants address their pictures by a template-relative path (PRD-27 FR-05), which
+   * only becomes fetchable against a base. Absent: the paths stay as declared and the
+   * report renders without them — which is a check of the LAYOUT, not of the pictures.
+   */
+  assetBase?: string;
 }
 
 /** Default container: a detached div on the ambient document (browser / jsdom). */
@@ -220,10 +228,13 @@ function checkTemplateJs(src: string): SmokeRouteResult {
  *
  * @param manifest Манифест проверяемого шаблона.
  * @param dataset Демонстрационный набор шаблона — из него берутся название и темы.
+ * @param assetBase База файлов шаблона у этого хоста (FR-05); пусто — картинки
+ *   остаются путями и просто не покажутся.
  */
 function reportSpecs(
   manifest: PreviewManifest,
   dataset: PreviewDemoDataset,
+  assetBase?: string,
 ): ReturnType<typeof buildScreenInputs> {
   const out: ReturnType<typeof buildScreenInputs> = [];
   const test: ReportPreviewTest = {
@@ -234,7 +245,11 @@ function reportSpecs(
     const variants = reportVariants(manifest, kind);
     if (variants.length === 0) continue;
     const variant = variants.find((v) => v.isDefault === true) ?? variants[0];
-    const values = resolveReportValues(variant, null);
+    const declared = resolveReportValues(variant, null);
+    const imageKeys = reportImageKeys(variant);
+    // Картинки объявляет ШАБЛОН своими полями, и адресуются они против базы хоста —
+    // проверка обязана гонять ту же страницу, что уйдёт в PDF, вместе с подложкой.
+    const values = assetBase ? resolveReportImageValues(declared, imageKeys, assetBase) : declared;
     // Исход «не пройден»: на нём страница показывает БОЛЬШЕ — вердикт, непройденные
     // темы и блок рекомендаций, — то есть отрисовывается больше макета.
     const context =
@@ -265,7 +280,7 @@ export function runSmokeChecks(opts: SmokeRunOptions): SmokeReport {
   const routes: SmokeRouteResult[] = specs.map((spec) => checkScreen(spec, opts, render));
 
   // PRD-27 FR-26: виды отчёта проверяются наравне с экранами.
-  for (const spec of reportSpecs(opts.manifest, opts.dataset)) {
+  for (const spec of reportSpecs(opts.manifest, opts.dataset, opts.assetBase)) {
     routes.push(checkScreen(spec, opts, render));
   }
 

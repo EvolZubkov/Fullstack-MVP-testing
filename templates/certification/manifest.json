@@ -1,7 +1,7 @@
 {
   "id": "certification",
   "name": "Сертификация (РТК)",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "templateApiVersion": "1.0",
   "description": "Сертификационный тест РТК: брендовая палитра Ростелекома (светлая и тёмная) с переопределяемыми цветами, оранжевый акцент, страница-роутер, кнопки навигации, пропуск и возврат к неотвеченным, экран обзора. Набор вариантов страниц совпадает со стандартным шаблоном — тест переключается между ними без переназначения страниц.",
   "themes": [
@@ -179,7 +179,22 @@
       "layoutFile": "layouts/report.html",
       "styleFile": "styles/report.css",
       "isDefault": true,
-      "settings": [],
+      "settings": [
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Подложка страницы",
+          "description": "Фон страницы отчёта. Без изображения печатается градиент шаблона.",
+          "default": "assets/report/bg.png"
+        },
+        {
+          "key": "logoImage",
+          "type": "image",
+          "label": "Логотип в отчёте",
+          "description": "Показывается над заголовком. Пусто — строки логотипа нет.",
+          "default": "assets/report/logo.png"
+        }
+      ],
       "placeholders": []
     },
     {
@@ -189,7 +204,22 @@
       "layoutFile": "layouts/report.adaptive.html",
       "styleFile": "styles/report.css",
       "isDefault": true,
-      "settings": [],
+      "settings": [
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Подложка страницы",
+          "description": "Фон страницы отчёта. Без изображения печатается градиент шаблона.",
+          "default": "assets/report/bg.png"
+        },
+        {
+          "key": "logoImage",
+          "type": "image",
+          "label": "Логотип в отчёте",
+          "description": "Показывается над заголовком. Пусто — строки логотипа нет.",
+          "default": "assets/report/logo.png"
+        }
+      ],
       "placeholders": []
     },
     {
@@ -1075,7 +1105,10 @@
     "scripts": [
       "scripts/template.js"
     ],
-    "images": [],
+    "images": [
+      "assets/report/bg.png",
+      "assets/report/logo.png"
+    ],
     "preview": "preview.svg"
   },
   "capabilities": {

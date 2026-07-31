@@ -1260,13 +1260,28 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
         (deliveredTest?.reportSettingsJson as ReportSettings | null)?.[
           resultJson.mode === "adaptive" ? "adaptive" : "standard"
         ] ?? null;
-      reportRender = readReportRenderPayload(activeDir, reportKind, authoredReport, test?.designSettingsJson as any, activeDir);
+      reportRender = readReportRenderPayload(
+        activeDir,
+        reportKind,
+        authoredReport,
+        test?.designSettingsJson as any,
+        activeDir,
+        templateId,
+      );
       if (!reportRender) {
         const fallbackDir = await resolveTemplateDir("default", { activeOnly: false });
         if (path.resolve(fallbackDir) !== path.resolve(activeDir)) {
           // Деградация на «Стандартный»: выбранного варианта там нет, поэтому берётся
-          // его `isDefault`, а значения полей чужого варианта не переносятся.
-          reportRender = readReportRenderPayload(fallbackDir, reportKind, null, test?.designSettingsJson as any, activeDir);
+          // его `isDefault`, а значения полей чужого варианта не переносятся. Картинки
+          // приезжают оттуда же, откуда макет, — из «Стандартного» (FR-05).
+          reportRender = readReportRenderPayload(
+            fallbackDir,
+            reportKind,
+            null,
+            test?.designSettingsJson as any,
+            activeDir,
+            "default",
+          );
         }
       }
     }

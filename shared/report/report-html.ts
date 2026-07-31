@@ -17,14 +17,6 @@
 
 import type { ResultInput, AdaptiveResultInput, AdaptiveTopicInput } from "../template/result-context";
 
-/** Background + logo of the report page, already resolved to data URLs. */
-export interface ReportAssets {
-  /** Page background (one of the `pdf-bg-*.png` plates); absent = gradient fallback. */
-  backgroundDataUrl?: string | null;
-  /** Brand logo printed above the headline; absent = no logo row. */
-  logoDataUrl?: string | null;
-}
-
 /** What the report prints besides the result itself. */
 export interface ReportMeta {
   /**

@@ -1,5 +1,5 @@
-<div class="tb-report tb-report--adaptive" style="{{#if report.backgroundUrl}}background-image: url({{ report.backgroundUrl }});{{/if}}">
-  {{#if report.hasLogo}}<div class="tb-report__brand"><img src="{{ report.logoUrl }}" alt=""></div>{{/if}}
+<div class="tb-report tb-report--adaptive" style="{{#if report.values.backgroundImage}}background-image: url({{ report.values.backgroundImage }});{{/if}}">
+  {{#if report.values.logoImage}}<div class="tb-report__brand"><img src="{{ report.values.logoImage }}" alt=""></div>{{/if}}
 
   <div class="tb-report__headline">Результаты теста</div>
   <div class="tb-report__attempts">Адаптивное тестирование</div>

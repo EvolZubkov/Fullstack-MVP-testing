@@ -98,7 +98,16 @@ describe("исходник экспорта", () => {
   it("значения полей варианта уходят в построитель контекста", () => {
     // Иначе автор задаёт параметры вида, а в PDF они не приезжают — и понять это
     // можно только скачав файл.
-    expect(SRC).toMatch(/values:\s*\(bake && bake\.values\)/);
+    expect(SRC).toMatch(/values:\s*pdfImageValues/);
+  });
+
+  it("картинки варианта инлайнятся общим модулем, а не грузятся по зашитым путям", () => {
+    // FR-05: пакет не знает ни имён файлов подложки и логотипа, ни каталога, где они
+    // лежали до PRD-27 — пути приходят от сборщика вместе с ключами полей.
+    expect(SRC).toContain("TB.inlineReportImageValues(");
+    expect(SRC).toMatch(/bake && bake\.imageKeys \? bake\.imageKeys : \[\]/);
+    expect(SRC).not.toContain("assets/media/");
+    expect(SRC).not.toContain("loadReportAssets");
   });
 
   it("сначала пробуется макет варианта, потом канонический вид", () => {

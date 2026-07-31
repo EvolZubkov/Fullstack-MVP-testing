@@ -193,29 +193,38 @@ export function loadImageDataUrl(src: string): Promise<string | null> {
   });
 }
 
-/** The report's background plates — one is picked per export. */
-export const REPORT_BACKGROUND_FILES = ["pdf-bg-1.png", "pdf-bg-2.png", "pdf-bg-3.png"] as const;
-/** The report's brand logo (the report page is always dark, so the light logo). */
-export const REPORT_LOGO_FILE = "logo-light.png";
-
 /**
- * Resolve the report's background + logo from a base URL.
+ * Inline the variant's pictures as data URLs, ready for the rasterizer (PRD-27 FR-05).
  *
- * @param baseUrl Where the report assets live, with a trailing slash
- *   (`assets/media/` inside a package, an API path on the web).
- * @param pick Chooses the background plate; defaults to a random one, as the package
- *   has always done. Injectable so a test gets a deterministic page.
- * @returns Data URLs for {@link module:shared/report/report-html}'s `ReportAssets`.
+ * The rasterizer never fetches anything: it snapshots what the DOM already has, and a
+ * canvas tainted by a cross-origin image silently drops the picture. So every image the
+ * page prints is read here first — the background and logo the TEMPLATE declared, or
+ * whatever the author put in their place.
+ *
+ * An image that cannot be read resolves to an empty string rather than failing the
+ * export: the layout gates its rows on the value, so the report degrades to «no
+ * background / no logo» instead of not existing.
+ *
+ * @param values Values of the variant's `settings[]`, already resolved to URLs by
+ *   {@link module:shared/report/report-assets resolveReportImageValues}.
+ * @param imageKeys Which keys hold pictures (`ReportBake.imageKeys`).
+ * @returns A copy of `values` with those keys replaced by data URLs.
  */
-export async function loadReportAssets(
-  baseUrl: string,
-  pick: (count: number) => number = (count) => Math.floor(Math.random() * count),
-): Promise<{ backgroundDataUrl: string | null; logoDataUrl: string | null }> {
-  const plates = await Promise.all(REPORT_BACKGROUND_FILES.map((f) => loadImageDataUrl(baseUrl + f)));
-  const available = plates.filter((p): p is string => !!p);
-  const logoDataUrl = await loadImageDataUrl(baseUrl + REPORT_LOGO_FILE);
-  return {
-    backgroundDataUrl: available.length > 0 ? available[pick(available.length)] ?? available[0] : null,
-    logoDataUrl,
-  };
+export async function inlineReportImageValues(
+  values: Record<string, unknown> | null | undefined,
+  imageKeys: readonly string[],
+): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = { ...(values ?? {}) };
+  await Promise.all(
+    imageKeys.map(async (key) => {
+      const src = typeof out[key] === "string" ? (out[key] as string) : "";
+      if (!src) {
+        out[key] = "";
+        return;
+      }
+      if (src.startsWith("data:")) return;
+      out[key] = (await loadImageDataUrl(src)) ?? "";
+    }),
+  );
+  return out;
 }

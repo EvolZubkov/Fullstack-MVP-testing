@@ -151,6 +151,37 @@ describe("данные предпросмотра", () => {
     expect(lastContext().report.values.headline).toBe("Аттестация 2026");
   });
 
+  it("картинки вида адресуются роутом ассетов шаблона (FR-05)", async () => {
+    // Путь внутри шаблона браузеру ничего не говорит: без роута предпросмотр показал бы
+    // страницу без подложки, а обучающийся получил бы её.
+    mockFetch(BUNDLE);
+    renderModal({
+      templateId: "certification",
+      variant: {
+        ...CERTIFICATE,
+        settings: [{ key: "backgroundImage", type: "image", label: "Подложка" }],
+      },
+      values: { backgroundImage: "assets/report/bg.png" },
+    });
+    await waitFor(() => expect(rendered.length).toBeGreaterThan(0));
+    expect(lastContext().report.values.backgroundImage).toBe(
+      "/api/templates/certification/assets/assets/report/bg.png",
+    );
+  });
+
+  it("картинка автора остаётся своей ссылкой, а не подставляется под шаблон", async () => {
+    mockFetch(BUNDLE);
+    renderModal({
+      variant: {
+        ...CERTIFICATE,
+        settings: [{ key: "backgroundImage", type: "image", label: "Подложка" }],
+      },
+      values: { backgroundImage: { url: "/uploads/media/own.png" } },
+    });
+    await waitFor(() => expect(rendered.length).toBeGreaterThan(0));
+    expect(lastContext().report.values.backgroundImage).toBe("/uploads/media/own.png");
+  });
+
   it("страница помечена образцом", async () => {
     mockFetch(BUNDLE);
     renderModal();

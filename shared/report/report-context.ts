@@ -23,7 +23,7 @@ import {
   buildAdaptiveResultContext,
   type ResultRenderContext,
 } from "../template/result-context";
-import type { ReportInput, AdaptiveReportInput, ReportAssets, ReportMeta } from "./report-html";
+import type { ReportInput, AdaptiveReportInput, ReportMeta } from "./report-html";
 import { formatTimestamp, pluralize } from "./report-html";
 
 /** Блок `report.*` — то, чего на экране результатов нет (§5.3). */
@@ -40,14 +40,12 @@ export interface ReportBlock {
   gridColumns: number;
   /** Предпросмотр: макет может показать пометку «образец». */
   isPreview: boolean;
-  /** Значения `settings[]` варианта (§5.4), картинки — уже строками-URL. */
+  /**
+   * Значения `settings[]` варианта (§5.4). Картинки приходят строками, готовыми к
+   * печати: подложку и логотип объявляет ШАБЛОН своими полями (FR-05), а хост
+   * разрешает их в data-URL — ядро не знает ни имён этих полей, ни их файлов.
+   */
   values: Record<string, unknown>;
-  /** Подложка страницы, разрешённая в data-URL; пусто — макет рисует свой фон. */
-  backgroundUrl: string;
-  /** Логотип, разрешённый в data-URL; пусто — строки логотипа нет. */
-  logoUrl: string;
-  /** Гейт строки логотипа. */
-  hasLogo: boolean;
   /** Заголовок отчёта: «Тест пройден» / «Тест не пройден». */
   verdictHeadline: string;
   /** Подпись бейджа вердикта — строчными, как в отчёте. */
@@ -92,9 +90,10 @@ export interface ReportRenderContext extends ResultRenderContext {
 
 /** Что хост добавляет к результату при сборке контекста. */
 export interface ReportContextOptions {
-  /** Разрешённые подложка и логотип. */
-  assets?: ReportAssets;
-  /** Значения `settings[]` выбранного варианта (см. `resolveReportValues`). */
+  /**
+   * Значения `settings[]` выбранного варианта (см. `resolveReportValues`), картинки
+   * в которых хост уже инлайнил в data-URL (FR-05).
+   */
   values?: Record<string, unknown> | null;
   /** Параметры оформления активного шаблона (`design.*`). */
   design?: Record<string, unknown> | null;
@@ -118,8 +117,6 @@ export function attemptsCountLabel(count?: number): string {
 /** Общая часть блока `report.*` для обоих видов. */
 function reportBlock(meta: ReportMeta, topicCount: number, opts: ReportContextOptions): ReportBlock {
   const learnerName = String(meta.learnerName ?? "").trim();
-  const background = opts.assets?.backgroundDataUrl ?? "";
-  const logo = opts.assets?.logoDataUrl ?? "";
   return {
     attemptDateLabel: formatTimestamp(meta.timestamp),
     attemptsCountLabel: attemptsCountLabel(meta.attemptsCount),
@@ -128,9 +125,6 @@ function reportBlock(meta: ReportMeta, topicCount: number, opts: ReportContextOp
     gridColumns: reportGridColumns(topicCount),
     isPreview: !!opts.isPreview,
     values: { ...(opts.values ?? {}) },
-    backgroundUrl: background || "",
-    logoUrl: logo || "",
-    hasLogo: !!logo,
     // Значения вердикта и счёта заполняются вызывающим: у адаптивного отчёта их нет.
     verdictHeadline: "",
     verdictBadge: "",

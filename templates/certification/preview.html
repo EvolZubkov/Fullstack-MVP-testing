@@ -576,9 +576,9 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--ou-accent-soft); color: var(--ou-accent-default);
 }
-/* The adaptive level tag needs no rule here: its tone is a DS modifier
-   (`ou-tag--success|--accent|--warning|--error`) chosen by the level's POSITION on
-   the topic's ladder — see levelToneClass in shared/template/result-context. */
+/* The adaptive level tag needs no rule here: its tone comes as DS modifiers from the
+   context — solid accent when a level was confirmed, solid error when the test's
+   minimum was not (shared/template/result-context). Mirrors the standard template. */
 
 /* ── Verdict (results / section-results) ────────────────────────── */
 /* passClass (is-pass/is-fail) drives the DS ring fill + verdict tag colour. */
@@ -894,6 +894,227 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
   z-index: 0;
 }
 .tb-scene.has-slide-bg > * { position: relative; z-index: 1; }
+
+/* styles/report.css */
+/* Страница отчёта о результатах шаблона «Стандартный» (PRD-27).
+ *
+ * Всё скоуплено в `.tb-report`: отчёт рендерится в служебном контейнере ГЛАВНОГО
+ * документа, вне сцены, и не вправе ни зависеть от `theme.css`, ни протечь в приложение
+ * (§6.3). Селекторов `:root`/`html`/`body` здесь нет и быть не может — проверяется
+ * валидацией манифеста.
+ *
+ * Оформление воспроизводит страницу отчёта, которая до PRD-27 собиралась кодом
+ * инлайн-стилями: перенос, а не редизайн (§6.2). Поэтому цвета заданы значениями, а не
+ * токенами: те же значения, что печатались раньше.
+ */
+
+.tb-report {
+  width: 595px;
+  min-height: 842px;
+  padding: 20px 25px;
+  box-sizing: border-box;
+  position: relative;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #ffffff;
+  /* Подложку ставит МАКЕТ инлайном из `report.backgroundUrl`; без неё — этот градиент. */
+  background: linear-gradient(180deg, #1c1c2b 0%, #7700ff 100%);
+  background-size: cover;
+  background-position: center;
+}
+
+.tb-report__brand { margin-bottom: 15px; }
+.tb-report__brand img { height: 32px; }
+
+.tb-report__headline {
+  font-size: 42px;
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: 4px;
+  color: #ffffff;
+}
+.tb-report.is-pass .tb-report__headline { color: #22c55e; }
+
+.tb-report__attempts { font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 8px; }
+.tb-report__learner { font-size: 13px; color: #ffffff; margin-bottom: 4px; }
+.tb-report__date { font-size: 12px; color: #aca9a9; margin-bottom: 15px; }
+
+.tb-report__card {
+  background: rgba(31, 33, 41, 0.68);
+  border-radius: 18px;
+  padding: 18px 20px;
+  margin-bottom: 15px;
+}
+
+.tb-report__title { font-size: 22px; font-weight: 400; margin-bottom: 4px; }
+.tb-report__title--tight { margin-bottom: 15px; }
+.tb-report__title--solid { font-weight: 500; margin-bottom: 0; }
+.tb-report__subtitle { font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 20px; }
+.tb-report__lead { font-size: 11px; font-weight: 300; color: #aca9a9; margin-bottom: 15px; line-height: 1.5; }
+
+/* Счёт: метрики, кольцо процента, бейдж вердикта — одной строкой. */
+.tb-report__score { display: flex; align-items: center; gap: 20px; }
+.tb-report__metrics { display: flex; gap: 30px; }
+.tb-report__metric { text-align: center; }
+.tb-report__metric-num { font-size: 28px; font-weight: 900; }
+.tb-report__metric-lbl { font-size: 12px; font-weight: 300; color: #aca9a9; }
+
+.tb-report__ring {
+  width: 100px;
+  height: 100px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tb-report__ring svg {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.tb-report__ring-track { stroke: #2f2f2f; }
+.tb-report__ring-fill { stroke: #ef4444; }
+.tb-report.is-pass .tb-report__ring-fill { stroke: #22c55e; }
+.tb-report__ring-value { font-size: 28px; font-weight: 900; z-index: 1; }
+
+.tb-report__badge {
+  margin-left: auto;
+  padding: 10px 20px;
+  border-radius: 50px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #432027;
+  border: 2px solid #eb1e1e;
+  color: #ff3131;
+}
+.tb-report.is-pass .tb-report__badge {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: #22c55e;
+  color: #22c55e;
+}
+
+/* Темы: сетка, число колонок ставит хост инлайном по `report.gridColumns`. */
+.tb-report__topics { display: grid; gap: 10px; }
+
+.tb-report__topic {
+  background: linear-gradient(135deg, #2a2a3d 0%, #1f1f2e 100%);
+  border-radius: 10px;
+  padding: 10px;
+  position: relative;
+  overflow: hidden;
+}
+.tb-report__topic--level { padding: 12px; }
+
+.tb-report__topic-stripe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #ef4444;
+}
+.tb-report__topic.is-pass .tb-report__topic-stripe { background: #22c55e; }
+.tb-report__topic.is-achieved .tb-report__topic-stripe { background: #3b82f6; }
+.tb-report__topic.is-below .tb-report__topic-stripe { background: #6b7280; }
+
+.tb-report__topic-head { margin-bottom: 6px; }
+.tb-report__topic--level .tb-report__topic-head { margin-bottom: 8px; }
+.tb-report__topic-name { font-size: 12px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.tb-report__topic--level .tb-report__topic-name { font-size: 13px; }
+
+/* Вердикт темы стоит ПОД названием: рядом плашка не влезала в трёхколоночную
+   карточку и обрезалась по `overflow: hidden`. */
+.tb-report__topic-verdict {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 6px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+.tb-report__topic.is-pass .tb-report__topic-verdict {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+/* Подпись уровня переносится: это либо авторское название уровня, либо полный
+   вердикт «минимально требуемый уровень не подтверждён» — и то, и другое длиннее
+   карточки. */
+.tb-report__topic-level {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: 5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.35;
+  background: rgba(107, 114, 128, 0.2);
+  color: #6b7280;
+}
+.tb-report__topic.is-achieved .tb-report__topic-level {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+}
+
+.tb-report__topic-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 7px;
+  color: #aca9a9;
+  margin-bottom: 5px;
+}
+.tb-report__topic-counts { font-size: 11px; color: #aca9a9; margin-bottom: 6px; }
+
+.tb-report__topic-bar {
+  height: 3px;
+  background: #2f2f2f;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.tb-report__topic-bar-fill { height: 100%; border-radius: 2px; background: #ef4444; }
+.tb-report__topic.is-pass .tb-report__topic-bar-fill { background: #22c55e; }
+
+.tb-report__topic-fb {
+  font-size: 10px;
+  font-weight: 300;
+  line-height: 1.3;
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.7);
+}
+.tb-report__topic-fb--sep {
+  line-height: 1.4;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Рекомендации. Чип несёт `pdf-link-btn` + `data-url`: конвейер экспорта делает из
+   него настоящую ссылку PDF, иначе курс останется картинкой. */
+.tb-report__rec {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.tb-report__rec--plain { justify-content: flex-start; }
+.tb-report__rec-topic { font-size: 14px; font-weight: 700; }
+.tb-report__rec-chip {
+  padding: 10px 25px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 300;
+  color: #fafafa;
+  background: #59209b;
+}
+.tb-report__rec-chip--level { background: #1e40af; }
+.tb-report__event { font-size: 14px; font-weight: 300; color: #fafafa; }
 </style>
   <style id="pv-fixes">
     /* Undo template global resets that break the preview chrome */
@@ -937,7 +1158,7 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
       </div>
 
       <div class="pv-dialog-foot">
-        <span>27 экранов · 21 шаблонов контента · шаблон «Сертификация (РТК)» v1.4.0</span>
+        <span>27 экранов · 23 шаблонов контента · шаблон «Сертификация (РТК)» v1.5.0</span>
         <button type="button" class="pv-btn">Закрыть</button>
       </div>
     </div>
@@ -949,7 +1170,7 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
   window.PRD1_PREVIEW_MANIFEST  = {
   "id": "certification",
   "name": "Сертификация (РТК)",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "templateApiVersion": "1.0",
   "description": "Сертификационный тест РТК: брендовая палитра Ростелекома (светлая и тёмная) с переопределяемыми цветами, оранжевый акцент, страница-роутер, кнопки навигации, пропуск и возврат к неотвеченным, экран обзора. Набор вариантов страниц совпадает со стандартным шаблоном — тест переключается между ними без переназначения страниц.",
   "themes": [
@@ -1118,6 +1339,56 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
       "kind": "results",
       "pageKind": "results",
       "layoutFile": "layouts/results.html",
+      "placeholders": []
+    },
+    {
+      "key": "report.standard",
+      "label": "Отчёт: стандартный",
+      "kind": "report",
+      "layoutFile": "layouts/report.html",
+      "styleFile": "styles/report.css",
+      "isDefault": true,
+      "settings": [
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Подложка страницы",
+          "description": "Фон страницы отчёта. Без изображения печатается градиент шаблона.",
+          "default": "assets/report/bg.png"
+        },
+        {
+          "key": "logoImage",
+          "type": "image",
+          "label": "Логотип в отчёте",
+          "description": "Показывается над заголовком. Пусто — строки логотипа нет.",
+          "default": "assets/report/logo.png"
+        }
+      ],
+      "placeholders": []
+    },
+    {
+      "key": "report.adaptive.standard",
+      "label": "Отчёт: уровни",
+      "kind": "report.adaptive",
+      "layoutFile": "layouts/report.adaptive.html",
+      "styleFile": "styles/report.css",
+      "isDefault": true,
+      "settings": [
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Подложка страницы",
+          "description": "Фон страницы отчёта. Без изображения печатается градиент шаблона.",
+          "default": "assets/report/bg.png"
+        },
+        {
+          "key": "logoImage",
+          "type": "image",
+          "label": "Логотип в отчёте",
+          "description": "Показывается над заголовком. Пусто — строки логотипа нет.",
+          "default": "assets/report/logo.png"
+        }
+      ],
       "placeholders": []
     },
     {
@@ -1991,16 +2262,22 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
     "section-results": "layouts/section-results.html",
     "section-intro": "layouts/section-intro.html",
     "system.blocked": "layouts/system.blocked.html",
-    "system.transition": "layouts/system.transition.html"
+    "system.transition": "layouts/system.transition.html",
+    "report": "layouts/report.html",
+    "report.adaptive": "layouts/report.adaptive.html"
   },
   "assets": {
     "styles": [
-      "styles/theme.css"
+      "styles/theme.css",
+      "styles/report.css"
     ],
     "scripts": [
       "scripts/template.js"
     ],
-    "images": [],
+    "images": [
+      "assets/report/bg.png",
+      "assets/report/logo.png"
+    ],
     "preview": "preview.svg"
   },
   "capabilities": {
@@ -2738,7 +3015,9 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
   "section-results": "<div class=\"tb-scene\">\n  <header class=\"tb-scene__header\">\n    <div class=\"tb-scene__brandrow tb-scene__brandrow--center\">\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\n      <div class=\"tb-scene__titles\">\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\n      </div>\n      {{#if sectionResult.sectionLabel}}<div class=\"tb-scene__headtag\"><span class=\"ou-tag ou-tag--neutral\" data-path=\"sectionResult.sectionLabel\"></span></div>{{/if}}\n      <div class=\"tb-scene__timers\">\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"timer-display\">\n          <span class=\"ou-timer__lbl\">тест</span><span class=\"ou-timer__num\"></span>\n        </div>\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"section-timer-display\">\n          <span class=\"ou-timer__lbl\">раздел</span><span class=\"ou-timer__num\"></span>\n        </div>\n      </div>\n    </div>\n    {{#if sectionResult.sectionLabel}}<div class=\"tb-scene__progress\"><div class=\"tb-scene__progress-fill\" style=\"width:{{sectionResult.progressPercent}}%\"></div></div>{{/if}}\n  </header>\n\n  <main class=\"tb-scene__body\">\n    <div class=\"tb-scene__col tb-scene__col--center tb-scene__col--narrow\">\n      <span class=\"tb-eyebrow\">Итоги раздела</span>\n      <h2 class=\"tb-scene__hero tb-scene__hero--s\">Раздел «<span data-path=\"sectionResult.topicName\"></span>»</h2>\n\n      <div class=\"ou-ring tb-ring\">\n        <svg class=\"ou-ring__svg\" width=\"140\" height=\"140\" viewBox=\"0 0 140 140\">\n          <circle class=\"ou-ring__track\" cx=\"70\" cy=\"70\" r=\"63\" stroke-width=\"12\"></circle>\n          <circle class=\"ou-ring__fill {{ sectionResult.passClass }}\" cx=\"70\" cy=\"70\" r=\"63\" stroke-width=\"12\" stroke-linecap=\"round\" stroke-dasharray=\"395.84\" stroke-dashoffset=\"{{ sectionResult.ringDashoffset }}\"></circle>\n        </svg>\n        <div class=\"ou-ring__center\">\n          <div class=\"ou-ring__value\"><span data-path=\"sectionResult.scorePercent\"></span>%</div>\n          <div class=\"ou-ring__label\">баллы</div>\n        </div>\n      </div>\n\n      {{#if sectionResult.hasVerdict}}<span class=\"ou-tag {{ sectionResult.passClass }}\" data-path=\"sectionResult.statusLabel\"></span>{{/if}}\n\n      <div class=\"tb-facts tb-facts--center\">\n        <div class=\"tb-facts__item\">\n          <div class=\"tb-facts__num\" data-path=\"sectionResult.total\"></div>\n          <div class=\"tb-facts__lbl\">вопросов</div>\n        </div>\n        <div class=\"tb-facts__item\">\n          <div class=\"tb-facts__num\">{{sectionResult.correct}} / {{sectionResult.total}}</div>\n          <div class=\"tb-facts__lbl\">верно</div>\n        </div>\n      </div>\n    </div>\n  </main>\n\n  <footer class=\"tb-scene__foot\">\n    <div class=\"tb-scene__foot-spacer\"></div>\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"section-continue\">{{ sectionResult.continueLabel }}</button>\n  </footer>\n</div>\n",
   "section-intro": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow tb-scene__brandrow--center\">\r\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__headtag\"><span class=\"ou-tag ou-tag--neutral\" data-path=\"sectionIntro.eyebrow\"></span></div>\n      <div class=\"tb-scene__timers\">\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"timer-display\">\n          <span class=\"ou-timer__lbl\">тест</span><span class=\"ou-timer__num\"></span>\n        </div>\n        <div class=\"ou-timer ou-timer--digital ou-timer--s q-timer--hidden\" id=\"section-timer-display\">\n          <span class=\"ou-timer__lbl\">раздел</span><span class=\"ou-timer__num\"></span>\n        </div>\n      </div>\r\n    </div>\r\n    {{#if sectionIntro.progressPercent}}<div class=\"tb-scene__progress\"><div class=\"tb-scene__progress-fill\" style=\"width:{{sectionIntro.progressPercent}}%\"></div></div>{{/if}}\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-scene__col tb-scene__col--center\">\r\n      <span class=\"tb-eyebrow\">{{ sectionIntro.eyebrow }}</span>\r\n      <h2 class=\"tb-scene__hero\" data-path=\"sectionIntro.topicName\"></h2>\r\n      {{#if sectionIntro.hasDescription}}<span class=\"tb-scene__lead\" data-path=\"sectionIntro.description\"></span>{{/if}}\r\n      <div class=\"tb-meta-dots\">\r\n        <span class=\"tb-meta-dots__item\"><span class=\"tb-meta-dots__dot\" aria-hidden=\"true\"></span>{{ sectionIntro.questionCountLabel }}</span>\r\n        {{#if sectionIntro.hasTimeLimit}}<span class=\"tb-meta-dots__item\"><span class=\"tb-meta-dots__dot\" aria-hidden=\"true\"></span>{{ sectionIntro.timeLimitLabel }}</span>{{/if}}\r\n      </div>\r\n      {{#if sectionIntro.hasInstruction}}\r\n      <div class=\"tb-card\">\r\n        <span class=\"tb-card__head\">Инструкция</span>\r\n        <span class=\"tb-card__body\" data-slot=\"instruction\"></span>\r\n      </div>\r\n      {{/if}}\r\n    </div>\r\n  </main>\r\n  <footer class=\"tb-scene__foot\">\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"section-intro-continue\">{{ sectionIntro.continueLabel }}</button>\r\n  </footer>\r\n</div>\r\n",
   "system.blocked": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow tb-scene__brandrow--center\">\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        <span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>\r\n      </div>\r\n      <div class=\"tb-scene__headtag\"><span class=\"ou-tag ou-tag--neutral\">Доступ ограничен</span></div>\r\n    </div>\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-scene__col tb-scene__col--center tb-scene__col--narrow\" data-testid=\"retake-wall\">\r\n      <span class=\"tb-blocked-icon\" role=\"img\" aria-label=\"Доступ ограничен\">\r\n        <svg width=\"34\" height=\"34\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/></svg>\r\n      </span>\r\n      <div class=\"tb-blocked-branch\" data-retake-branch=\"default\">\r\n        <h2 class=\"tb-scene__hero tb-scene__hero--s\">Доступ к тесту ограничен</h2>\r\n        <span class=\"tb-scene__lead\">Для этого теста больше нет доступных попыток.</span>\r\n      </div>\r\n      <div class=\"tb-blocked-branch\" data-retake-branch=\"cooldown\" hidden>\r\n        <h2 class=\"tb-scene__hero tb-scene__hero--s\">Повторное прохождение пока недоступно</h2>\r\n        <span class=\"tb-scene__lead\">Этот курс можно проходить не чаще, чем раз в <span data-path=\"retake.cooldownPeriodDays\">&mdash;</span> дн.</span>\r\n        <span class=\"tb-scene__lead\" data-retake-available>Повторный запуск будет доступен с <strong data-path=\"retake.availableDateHuman\">&mdash;</strong>.</span>\r\n      </div>\r\n      <div class=\"tb-blocked-branch\" data-retake-branch=\"error\" hidden>\r\n        <h2 class=\"tb-scene__hero tb-scene__hero--s\">Не удалось проверить доступ</h2>\r\n        <span class=\"tb-scene__lead\">Не удалось проверить доступность повторного прохождения. Обратитесь к администратору курса.</span>\r\n      </div>\r\n    </div>\r\n  </main>\r\n</div>\r\n",
-  "system.transition": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow tb-scene__brandrow--center\">\r\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__headtag\"><span class=\"ou-tag ou-tag--neutral\">Адаптивный тест</span></div>\r\n    </div>\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-scene__col tb-scene__col--center tb-scene__col--narrow\">\r\n      <span class=\"tb-transition-icon {{ transition.level.class }}\" aria-hidden=\"true\">\r\n        {{#if transition.level.isUp}}<svg width=\"34\" height=\"34\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 19V5M5 12l7-7 7 7\"/></svg>{{/if}}\r\n        {{#if transition.level.isDown}}<svg width=\"34\" height=\"34\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 5v14M5 12l7 7 7-7\"/></svg>{{/if}}\r\n        {{#if transition.level.isComplete}}<svg width=\"34\" height=\"34\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"m9 12 2 2 4-4\"/></svg>{{/if}}\r\n      </span>\r\n      {{#if transition.topicName}}<span class=\"tb-eyebrow\">Тема «<span data-path=\"transition.topicName\"></span>»</span>{{/if}}\r\n      <h2 class=\"tb-scene__hero tb-scene__hero--s\">{{ transition.title }}</h2>\r\n      <span class=\"tb-scene__lead\" data-path=\"transition.level.message\"></span>\r\n    </div>\r\n  </main>\r\n\r\n  {{#if transition.showContinue}}\r\n  <footer class=\"tb-scene__foot\">\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"continue\">Продолжить</button>\r\n  </footer>\r\n  {{/if}}\r\n</div>\r\n"
+  "system.transition": "<div class=\"tb-scene\">\r\n  <header class=\"tb-scene__header\">\r\n    <div class=\"tb-scene__brandrow tb-scene__brandrow--center\">\r\n      {{#if design.logoUrl}}<span class=\"tb-scene__logo\"><img src=\"{{ design.logoUrl }}\" alt=\"\"></span>{{/if}}\r\n      <div class=\"tb-scene__titles\">\r\n        <h1 class=\"tb-scene__title\" data-path=\"course.title\"></h1>\r\n        {{#if course.subtitle}}<span class=\"tb-scene__subtitle\" data-path=\"course.subtitle\"></span>{{/if}}\r\n      </div>\r\n      <div class=\"tb-scene__headtag\"><span class=\"ou-tag ou-tag--neutral\">Адаптивный тест</span></div>\r\n    </div>\r\n  </header>\r\n\r\n  <main class=\"tb-scene__body\">\r\n    <div class=\"tb-scene__col tb-scene__col--center tb-scene__col--narrow\">\r\n      <span class=\"tb-transition-icon {{ transition.level.class }}\" aria-hidden=\"true\">\r\n        {{#if transition.level.isUp}}<svg width=\"34\" height=\"34\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 19V5M5 12l7-7 7 7\"/></svg>{{/if}}\r\n        {{#if transition.level.isDown}}<svg width=\"34\" height=\"34\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 5v14M5 12l7 7 7-7\"/></svg>{{/if}}\r\n        {{#if transition.level.isComplete}}<svg width=\"34\" height=\"34\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"m9 12 2 2 4-4\"/></svg>{{/if}}\r\n      </span>\r\n      {{#if transition.topicName}}<span class=\"tb-eyebrow\">Тема «<span data-path=\"transition.topicName\"></span>»</span>{{/if}}\r\n      <h2 class=\"tb-scene__hero tb-scene__hero--s\">{{ transition.title }}</h2>\r\n      <span class=\"tb-scene__lead\" data-path=\"transition.level.message\"></span>\r\n    </div>\r\n  </main>\r\n\r\n  {{#if transition.showContinue}}\r\n  <footer class=\"tb-scene__foot\">\r\n    <div class=\"tb-scene__foot-spacer\"></div>\r\n    <button type=\"button\" class=\"ou-btn ou-btn--primary ou-btn--l\" data-action=\"continue\">Продолжить</button>\r\n  </footer>\r\n  {{/if}}\r\n</div>\r\n",
+  "report": "<div class=\"tb-report {{ report.verdictClass }}\" style=\"{{#if report.values.backgroundImage}}background-image: url({{ report.values.backgroundImage }});{{/if}}\">\n  {{#if report.values.logoImage}}<div class=\"tb-report__brand\"><img src=\"{{ report.values.logoImage }}\" alt=\"\"></div>{{/if}}\n\n  <div class=\"tb-report__headline\" data-path=\"report.verdictHeadline\"></div>\n  <div class=\"tb-report__attempts\" data-path=\"report.attemptsCountLabel\"></div>\n  {{#if report.hasLearnerName}}<div class=\"tb-report__learner\">Слушатель: <span data-path=\"report.learnerName\"></span></div>{{/if}}\n  <div class=\"tb-report__date\">Дата прохождения: <span data-path=\"report.attemptDateLabel\"></span></div>\n\n  <section class=\"tb-report__card\">\n    <div class=\"tb-report__title\" data-path=\"course.title\"></div>\n    <div class=\"tb-report__subtitle\">Результат теста</div>\n\n    <div class=\"tb-report__score\">\n      <div class=\"tb-report__metrics\">\n        <div class=\"tb-report__metric\">\n          <div class=\"tb-report__metric-num\" data-path=\"result.totalQuestions\"></div>\n          <div class=\"tb-report__metric-lbl\">вопросов</div>\n        </div>\n        <div class=\"tb-report__metric\">\n          <div class=\"tb-report__metric-num\" data-path=\"report.correctLabel\"></div>\n          <div class=\"tb-report__metric-lbl\">верно</div>\n        </div>\n        <div class=\"tb-report__metric\">\n          <div class=\"tb-report__metric-num\" data-path=\"report.earnedPointsLabel\"></div>\n          <div class=\"tb-report__metric-lbl\">баллов</div>\n        </div>\n      </div>\n\n      <div class=\"tb-report__ring\">\n        <svg viewBox=\"0 0 100 100\">\n          <circle class=\"tb-report__ring-track\" cx=\"50\" cy=\"50\" r=\"44\" fill=\"none\" stroke-width=\"12\"/>\n          <circle class=\"tb-report__ring-fill\" cx=\"50\" cy=\"50\" r=\"44\" fill=\"none\" stroke-width=\"12\" stroke-linecap=\"round\" stroke-dasharray=\"{{ report.ringDasharray }}\" stroke-dashoffset=\"{{ report.ringDashoffset }}\"/>\n        </svg>\n        <div class=\"tb-report__ring-value\"><span data-path=\"result.scorePercent\"></span>%</div>\n      </div>\n\n      <div class=\"tb-report__badge\" data-path=\"report.verdictBadge\"></div>\n    </div>\n  </section>\n\n  {{#if report.hasTopics}}\n  <section class=\"tb-report__card\">\n    <div class=\"tb-report__title tb-report__title--tight\">Результаты по темам</div>\n    <div class=\"tb-report__topics\" style=\"grid-template-columns: repeat({{ report.gridColumns }}, 1fr);\">\n      {{#each result.topicResults}}\n      <div class=\"tb-report__topic {{ passClass }}\">\n        <div class=\"tb-report__topic-stripe\"></div>\n        <div class=\"tb-report__topic-head\">\n          <div class=\"tb-report__topic-name\">{{ topicName }}</div>\n          <div class=\"tb-report__topic-verdict\">{{ verdictLabel }}</div>\n        </div>\n        <div class=\"tb-report__topic-stats\">\n          <span>{{ countsLabel }}</span>\n          <span>{{ pointsFixedLabel }}</span>\n        </div>\n        <div class=\"tb-report__topic-bar\"><div class=\"tb-report__topic-bar-fill\" style=\"width: {{ barPercent }}%;\"></div></div>\n        {{#if showFeedback}}<div class=\"tb-report__topic-fb\">{{ feedback }}</div>{{/if}}\n      </div>\n      {{/each}}\n    </div>\n  </section>\n  {{/if}}\n\n  {{#if report.hasCourses}}\n  <section class=\"tb-report__card\">\n    <div class=\"tb-report__title tb-report__title--tight\">Рекомендации по курсам</div>\n    <div class=\"tb-report__lead\">Изучите эти материалы для улучшения знаний по темам, которые требуют внимания.</div>\n    {{#each report.courses}}\n    <div class=\"tb-report__rec\">\n      <div class=\"pdf-link-btn tb-report__rec-chip\" data-url=\"{{ url }}\">{{ title }}</div>\n    </div>\n    {{/each}}\n  </section>\n  {{/if}}\n\n  {{#if report.hasEvents}}\n  <section class=\"tb-report__card\">\n    <div class=\"tb-report__title tb-report__title--tight\">Рекомендуемые мероприятия</div>\n    <div class=\"tb-report__lead\">Посетите очные мероприятия для углублённого изучения материала.</div>\n    {{#each report.events}}\n    <div class=\"tb-report__rec tb-report__rec--plain\">\n      <div class=\"tb-report__event\">{{ title }}</div>\n    </div>\n    {{/each}}\n  </section>\n  {{/if}}\n</div>\n",
+  "report.adaptive": "<div class=\"tb-report tb-report--adaptive\" style=\"{{#if report.values.backgroundImage}}background-image: url({{ report.values.backgroundImage }});{{/if}}\">\n  {{#if report.values.logoImage}}<div class=\"tb-report__brand\"><img src=\"{{ report.values.logoImage }}\" alt=\"\"></div>{{/if}}\n\n  <div class=\"tb-report__headline\">Результаты теста</div>\n  <div class=\"tb-report__attempts\">Адаптивное тестирование</div>\n  {{#if report.hasLearnerName}}<div class=\"tb-report__learner\">Слушатель: <span data-path=\"report.learnerName\"></span></div>{{/if}}\n  <div class=\"tb-report__date\">Дата прохождения: <span data-path=\"report.attemptDateLabel\"></span></div>\n\n  <section class=\"tb-report__card\">\n    <div class=\"tb-report__title tb-report__title--solid\" data-path=\"course.title\"></div>\n  </section>\n\n  {{#if report.hasTopics}}\n  <section class=\"tb-report__card\">\n    <div class=\"tb-report__title tb-report__title--tight\">Результаты по темам</div>\n    <div class=\"tb-report__topics\" style=\"grid-template-columns: repeat({{ report.gridColumns }}, 1fr);\">\n      {{#each result.topicResults}}\n      <div class=\"tb-report__topic tb-report__topic--level {{ achievedClass }}\">\n        <div class=\"tb-report__topic-stripe\"></div>\n        <div class=\"tb-report__topic-head\">\n          <div class=\"tb-report__topic-name\">{{ topicName }}</div>\n          <div class=\"tb-report__topic-level\">{{ levelLabel }}</div>\n        </div>\n        {{#if hasCounts}}\n        <div class=\"tb-report__topic-counts\">\n          <div>{{ answeredLabel }}</div>\n          <div>{{ correctLabel }}</div>\n        </div>\n        {{/if}}\n        {{#if hasFeedback}}<div class=\"tb-report__topic-fb tb-report__topic-fb--sep\">{{ feedback }}</div>{{/if}}\n      </div>\n      {{/each}}\n    </div>\n  </section>\n  {{/if}}\n\n  {{#if report.hasCourses}}\n  <section class=\"tb-report__card\">\n    <div class=\"tb-report__title tb-report__title--tight\">Рекомендуемые материалы</div>\n    <div class=\"tb-report__lead\">Изучите эти материалы для улучшения знаний.</div>\n    {{#each report.courses}}\n    <div class=\"tb-report__rec\">\n      <div class=\"tb-report__rec-topic\">{{ topicName }}</div>\n      <div class=\"pdf-link-btn tb-report__rec-chip tb-report__rec-chip--level\" data-url=\"{{ url }}\">{{ title }}</div>\n    </div>\n    {{/each}}\n  </section>\n  {{/if}}\n</div>\n"
 };
 
   /* ── Shared helpers expected by contentPage.js ── */
@@ -4696,7 +4975,7 @@ var TBTemplate = (() => {
     applyTypography: () => applyTypography,
     attachPointerDnd: () => attachPointerDnd,
     baseParams: () => baseParams,
-    buildAdaptiveReportHtml: () => buildAdaptiveReportHtml,
+    buildAdaptiveReportContext: () => buildAdaptiveReportContext,
     buildAdaptiveResultContext: () => buildAdaptiveResultContext,
     buildAfterZone: () => buildAfterZone,
     buildBeforeZone: () => buildBeforeZone,
@@ -4710,7 +4989,7 @@ var TBTemplate = (() => {
     buildPaletteBridge: () => buildPaletteBridge,
     buildQuestionNav: () => buildQuestionNav,
     buildQuestionProgress: () => buildQuestionProgress,
-    buildReportHtml: () => buildReportHtml,
+    buildReportContext: () => buildReportContext,
     buildResultContext: () => buildResultContext,
     buildResultsNav: () => buildResultsNav,
     buildReviewContext: () => buildReviewContext,
@@ -4743,6 +5022,7 @@ var TBTemplate = (() => {
     getPageValues: () => getPageValues,
     hasFixedOptionOrder: () => hasFixedOptionOrder,
     hasOptionList: () => hasOptionList,
+    inlineReportImageValues: () => inlineReportImageValues,
     inputModesFor: () => inputModesFor,
     isFlowContentPage: () => isFlowContentPage,
     isMeasurementOnly: () => isMeasurementOnly,
@@ -4752,7 +5032,6 @@ var TBTemplate = (() => {
     isSettingType: () => isSettingType,
     isSingleIndexChoice: () => isSingleIndexChoice,
     isTestTheme: () => isTestTheme,
-    loadReportAssets: () => loadReportAssets,
     mediaUrlOf: () => mediaUrlOf,
     nextScaleIndex: () => nextScaleIndex,
     normalizePool: () => normalizePool,
@@ -5783,20 +6062,15 @@ var TBTemplate = (() => {
       sectionIntro
     };
   }
-  function levelToneClass(index, count) {
-    if (index === null || index === void 0) return "ou-tag--error";
-    if (typeof count !== "number" || !Number.isFinite(count) || count < 1) return "ou-tag--accent";
-    if (index >= count - 1) return "ou-tag--success";
-    if (index <= 0) return "ou-tag--warning";
-    return "ou-tag--accent";
-  }
+  var TONE_CONFIRMED = "ou-tag--solid ou-tag--accent";
+  var TONE_BELOW_MINIMUM = "ou-tag--solid ou-tag--error";
   var NO_LEVEL_CONFIRMED_LABEL = "\u041C\u0438\u043D\u0438\u043C\u0430\u043B\u044C\u043D\u043E \u0442\u0440\u0435\u0431\u0443\u0435\u043C\u044B\u0439 \u0443\u0440\u043E\u0432\u0435\u043D\u044C \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D";
   function adaptiveTopicView(t) {
     const achieved = t.achievedLevelIndex !== null && t.achievedLevelIndex !== void 0;
     return {
       topicName: t.topicName || "",
       levelLabel: achieved ? t.achievedLevelName : NO_LEVEL_CONFIRMED_LABEL,
-      levelClass: levelToneClass(t.achievedLevelIndex, t.levelCount),
+      levelClass: achieved ? TONE_CONFIRMED : TONE_BELOW_MINIMUM,
       ...buildTopicFeedbackView(t)
     };
   }
@@ -6095,8 +6369,6 @@ var TBTemplate = (() => {
         topicName: topic.topicName,
         achievedLevelIndex,
         achievedLevelName,
-        // The ladder the achieved level is a position ON (see AdaptiveTopicResult).
-        levelCount: topic.levels.length || topic.levelsState.length,
         levelPercent,
         totalQuestionsAnswered,
         totalCorrect,
@@ -7440,9 +7712,6 @@ var TBTemplate = (() => {
   }
 
   // shared/report/report-html.ts
-  function esc3(value) {
-    return String(value != null ? value : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  }
   function pluralize(n, one, few, many) {
     const mod10 = n % 10;
     const mod100 = n % 100;
@@ -7465,237 +7734,175 @@ var TBTemplate = (() => {
     const stamp = `${p2(date.getDate())}_${p2(date.getMonth() + 1)}_${date.getFullYear()}`;
     return `\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B_${sanitizeFileName(testName)}_${stamp}.pdf`;
   }
-  function pageOpen(assets) {
-    const bg = assets.backgroundDataUrl ? `background-image: url(${assets.backgroundDataUrl}); background-size: cover; background-position: center;` : "background: linear-gradient(180deg, #1c1c2b 0%, #7700ff 100%);";
-    return `<div style="${bg} width: 595px; min-height: 842px; font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; color: #ffffff; position: relative;"><div style="padding: 20px 25px;">`;
+
+  // shared/report/report-context.ts
+  var REPORT_RING_RADIUS = 44;
+  function fixed1(value) {
+    return (Number(value) || 0).toFixed(1);
   }
-  function logoRow(assets) {
-    if (!assets.logoDataUrl) return "";
-    return `<div style="margin-bottom: 15px;"><img src="${assets.logoDataUrl}" style="height: 32px;" /></div>`;
+  function reportGridColumns(topicCount) {
+    if (topicCount <= 1) return 1;
+    if (topicCount === 2) return 2;
+    return 3;
   }
-  function whoAndWhen(meta) {
-    let html = "";
-    if (meta.learnerName) {
-      html += `<div style="font-size: 13px; color: #ffffff; margin-bottom: 4px;">\u0421\u043B\u0443\u0448\u0430\u0442\u0435\u043B\u044C: ${esc3(meta.learnerName)}</div>`;
-    }
-    html += `<div style="font-size: 12px; color: #aca9a9; margin-bottom: 15px;">\u0414\u0430\u0442\u0430 \u043F\u0440\u043E\u0445\u043E\u0436\u0434\u0435\u043D\u0438\u044F: ${esc3(formatTimestamp(meta.timestamp))}</div>`;
-    return html;
+  function attemptsCountLabel(count) {
+    const n = count && count > 0 ? count : 1;
+    return `\u041B\u0443\u0447\u0448\u0438\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0437\u0430 ${n} ${pluralize(n, "\u043F\u043E\u043F\u044B\u0442\u043A\u0443", "\u043F\u043E\u043F\u044B\u0442\u043A\u0438", "\u043F\u043E\u043F\u044B\u0442\u043E\u043A")}`;
   }
-  function metric(value, label) {
-    return `<div style="text-align: center;"><div style="font-size: 28px; font-weight: 900;">${esc3(value)}</div><div style="font-size: 12px; font-weight: 300; color: #aca9a9;">${esc3(label)}</div></div>`;
-  }
-  function cardOpen() {
-    return '<div style="background: rgba(31, 33, 41, 0.68); border-radius: 18px; padding: 18px 20px; margin-bottom: 15px;">';
-  }
-  function gridColumns(count) {
-    return count === 1 ? 1 : count === 2 ? 2 : 3;
+  function reportBlock(meta, topicCount, opts) {
+    var _a, _b;
+    const learnerName = String((_a = meta.learnerName) != null ? _a : "").trim();
+    return {
+      attemptDateLabel: formatTimestamp(meta.timestamp),
+      attemptsCountLabel: attemptsCountLabel(meta.attemptsCount),
+      learnerName,
+      hasLearnerName: learnerName.length > 0,
+      gridColumns: reportGridColumns(topicCount),
+      isPreview: !!opts.isPreview,
+      values: { ...(_b = opts.values) != null ? _b : {} },
+      // Значения вердикта и счёта заполняются вызывающим: у адаптивного отчёта их нет.
+      verdictHeadline: "",
+      verdictBadge: "",
+      verdictClass: "",
+      hasTopics: topicCount > 0,
+      correctLabel: "",
+      earnedPointsLabel: "",
+      ringDasharray: 0,
+      ringDashoffset: 0,
+      courses: [],
+      hasCourses: false,
+      events: [],
+      hasEvents: false
+    };
   }
   function failedRecommendations(topics) {
-    var _a, _b;
-    const seenC = {};
-    const seenE = {};
+    var _a, _b, _c;
+    const seenC = /* @__PURE__ */ new Set();
+    const seenE = /* @__PURE__ */ new Set();
     const courses = [];
     const events = [];
-    for (const t of topics) {
+    for (const t of topics != null ? topics : []) {
       if (t.passed !== false) continue;
       for (const c of (_a = t.recommendedCourses) != null ? _a : []) {
-        if (!c || seenC[c.title]) continue;
-        seenC[c.title] = true;
-        courses.push({ title: c.title, ...c.url ? { url: c.url } : {} });
+        if (!c || seenC.has(c.title)) continue;
+        seenC.add(c.title);
+        courses.push({ title: c.title, url: (_b = c.url) != null ? _b : "" });
       }
-      for (const e of (_b = t.recommendedEvents) != null ? _b : []) {
-        if (!e || seenE[e.title]) continue;
-        seenE[e.title] = true;
+      for (const e of (_c = t.recommendedEvents) != null ? _c : []) {
+        if (!e || seenE.has(e.title)) continue;
+        seenE.add(e.title);
         events.push({ title: e.title });
       }
     }
     return { courses, events };
   }
-  function courseRow(title, url, index) {
-    return `<div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);"><div class="pdf-link-btn" data-url="${esc3(url)}" data-index="${index}" style="background: #59209b; border-radius: 8px; padding: 10px 25px; font-size: 12px; font-weight: 300; color: #fafafa;">${esc3(title)}</div></div>`;
-  }
-  function buildReportHtml(input, assets = {}) {
-    var _a, _b;
-    const r = input.result;
-    const percent = Math.round(Number(r.percent) || 0);
-    const passed = !!r.passed;
-    const attempts = input.attemptsCount && input.attemptsCount > 0 ? input.attemptsCount : 1;
-    const topics = (_a = r.topicResults) != null ? _a : [];
-    const statusColor = passed ? "#22c55e" : "#ef4444";
-    const statusText = passed ? "\u0422\u0435\u0441\u0442 \u043F\u0440\u043E\u0439\u0434\u0435\u043D" : "\u0422\u0435\u0441\u0442 \u043D\u0435 \u043F\u0440\u043E\u0439\u0434\u0435\u043D";
-    const statusBadge = passed ? "\u043F\u0440\u043E\u0439\u0434\u0435\u043D" : "\u043D\u0435 \u043F\u0440\u043E\u0439\u0434\u0435\u043D";
-    const statusBadgeBg = passed ? "rgba(34, 197, 94, 0.2)" : "#432027";
-    const statusBadgeBorder = passed ? "#22c55e" : "#eb1e1e";
-    const statusBadgeColor = passed ? "#22c55e" : "#ff3131";
-    let html = pageOpen(assets);
-    html += logoRow(assets);
-    html += `<div style="font-size: 42px; font-weight: 900; margin-bottom: 4px; line-height: 1; color: ${passed ? "#22c55e" : "#ffffff"};">${esc3(statusText)}</div>`;
-    html += `<div style="font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 8px;">\u041B\u0443\u0447\u0448\u0438\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0437\u0430 ${attempts} ${pluralize(attempts, "\u043F\u043E\u043F\u044B\u0442\u043A\u0443", "\u043F\u043E\u043F\u044B\u0442\u043A\u0438", "\u043F\u043E\u043F\u044B\u0442\u043E\u043A")}</div>`;
-    html += whoAndWhen(input);
-    html += cardOpen();
-    html += `<div style="font-size: 22px; font-weight: 400; margin-bottom: 4px;">${esc3(input.testName || "\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u0442\u0435\u0441\u0442\u0430")}</div>`;
-    html += '<div style="font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 20px;">\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0442\u0435\u0441\u0442\u0430</div>';
-    html += '<div style="display: flex; align-items: center; gap: 20px;">';
-    html += '<div style="display: flex; gap: 30px;">';
-    html += metric(r.totalQuestions, "\u0432\u043E\u043F\u0440\u043E\u0441\u043E\u0432");
-    html += metric(`${r.correct}/${r.totalQuestions}`, "\u0432\u0435\u0440\u043D\u043E");
-    html += metric((Number(r.earnedPoints) || 0).toFixed(1), "\u0431\u0430\u043B\u043B\u043E\u0432");
-    html += "</div>";
-    const circumference = 2 * Math.PI * 44;
-    const offset = circumference - circumference * percent / 100;
-    html += '<div style="width: 100px; height: 100px; position: relative; display: flex; align-items: center; justify-content: center;">';
-    html += '<svg viewBox="0 0 100 100" style="position: absolute; width: 100%; height: 100%; transform: rotate(-90deg);">';
-    html += '<circle cx="50" cy="50" r="44" fill="none" stroke="#2f2f2f" stroke-width="12"/>';
-    html += `<circle cx="50" cy="50" r="44" fill="none" stroke="${statusColor}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"/>`;
-    html += "</svg>";
-    html += `<div style="font-size: 28px; font-weight: 900; z-index: 1;">${percent}%</div>`;
-    html += "</div>";
-    html += `<div style="margin-left: auto; padding: 10px 20px; border-radius: 50px; font-size: 12px; font-weight: 500; background: ${statusBadgeBg}; border: 2px solid ${statusBadgeBorder}; color: ${statusBadgeColor};">${statusBadge}</div>`;
-    html += "</div>";
-    html += "</div>";
-    if (topics.length > 0) {
-      html += cardOpen();
-      html += '<div style="font-size: 22px; font-weight: 400; margin-bottom: 15px;">\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u043F\u043E \u0442\u0435\u043C\u0430\u043C</div>';
-      html += `<div style="display: grid; grid-template-columns: repeat(${gridColumns(topics.length)}, 1fr); gap: 10px;">`;
-      for (const t of topics) {
-        const tPercent = Math.round(Number(t.percent) || 0);
-        const tPassed = !!t.passed;
-        const color = tPassed ? "#22c55e" : "#ef4444";
-        const badgeBg = tPassed ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)";
-        html += '<div style="background: linear-gradient(135deg, #2a2a3d 0%, #1f1f2e 100%); border-radius: 10px; padding: 10px; position: relative; overflow: hidden;">';
-        html += `<div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: ${color};"></div>`;
-        html += '<div style="margin-bottom: 6px;">';
-        html += `<div style="font-size: 12px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere;">${esc3(t.topicName || "\u0422\u0435\u043C\u0430")}</div>`;
-        html += `<div style="display: inline-block; margin-top: 4px; font-size: 6px; font-weight: 500; padding: 2px 6px; border-radius: 3px; white-space: nowrap; background: ${badgeBg}; color: ${color};">${tPassed ? "\u041F\u0440\u043E\u0439\u0434\u0435\u043D" : "\u041D\u0435 \u043F\u0440\u043E\u0439\u0434\u0435\u043D"}</div>`;
-        html += "</div>";
-        html += '<div style="display: flex; justify-content: space-between; font-size: 7px; color: #aca9a9; margin-bottom: 5px;">';
-        html += `<span>${t.correct} \u0438\u0437 ${t.total} (${tPercent}%)</span>`;
-        html += `<span>${(Number(t.earnedPoints) || 0).toFixed(1)}/${(Number(t.possiblePoints) || 0).toFixed(1)}</span>`;
-        html += "</div>";
-        html += '<div style="height: 3px; background: #2f2f2f; border-radius: 2px; overflow: hidden; margin-bottom: 6px;">';
-        html += `<div style="height: 100%; width: ${tPercent}%; background: ${color}; border-radius: 2px;"></div>`;
-        html += "</div>";
-        const fb = String((_b = t.feedback) != null ? _b : "").trim();
-        if (!tPassed && fb) {
-          html += `<div style="font-size: 10px; font-weight: 300; color: rgba(255, 255, 255, 0.7); line-height: 1.3; margin-top: 4px;">${esc3(fb)}</div>`;
-        }
-        html += "</div>";
-      }
-      html += "</div>";
-      html += "</div>";
-    }
-    const rec = failedRecommendations(topics);
-    if (rec.courses.length > 0) {
-      html += cardOpen();
-      html += '<div style="font-size: 22px; font-weight: 400; margin-bottom: 8px;">\u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0438 \u043F\u043E \u043A\u0443\u0440\u0441\u0430\u043C</div>';
-      html += '<div style="font-size: 11px; font-weight: 300; color: #aca9a9; margin-bottom: 15px; line-height: 1.5;">\u0418\u0437\u0443\u0447\u0438\u0442\u0435 \u044D\u0442\u0438 \u043C\u0430\u0442\u0435\u0440\u0438\u0430\u043B\u044B \u0434\u043B\u044F \u0443\u043B\u0443\u0447\u0448\u0435\u043D\u0438\u044F \u0437\u043D\u0430\u043D\u0438\u0439 \u043F\u043E \u0442\u0435\u043C\u0430\u043C, \u043A\u043E\u0442\u043E\u0440\u044B\u0435 \u0442\u0440\u0435\u0431\u0443\u044E\u0442 \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u044F.</div>';
-      rec.courses.forEach((c, i) => {
-        html += courseRow(c.title, c.url, i);
-      });
-      html += "</div>";
-    }
-    if (rec.events.length > 0) {
-      html += cardOpen();
-      html += '<div style="font-size: 22px; font-weight: 400; margin-bottom: 8px;">\u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0443\u0435\u043C\u044B\u0435 \u043C\u0435\u0440\u043E\u043F\u0440\u0438\u044F\u0442\u0438\u044F</div>';
-      html += '<div style="font-size: 11px; font-weight: 300; color: #aca9a9; margin-bottom: 15px; line-height: 1.5;">\u041F\u043E\u0441\u0435\u0442\u0438\u0442\u0435 \u043E\u0447\u043D\u044B\u0435 \u043C\u0435\u0440\u043E\u043F\u0440\u0438\u044F\u0442\u0438\u044F \u0434\u043B\u044F \u0443\u0433\u043B\u0443\u0431\u043B\u0451\u043D\u043D\u043E\u0433\u043E \u0438\u0437\u0443\u0447\u0435\u043D\u0438\u044F \u043C\u0430\u0442\u0435\u0440\u0438\u0430\u043B\u0430.</div>';
-      for (const e of rec.events) {
-        html += '<div style="display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">';
-        html += `<div style="font-size: 14px; font-weight: 300; color: #fafafa;">${esc3(e.title)}</div>`;
-        html += "</div>";
-      }
-      html += "</div>";
-    }
-    html += "</div></div>";
-    return html;
-  }
-  function buildAdaptiveReportHtml(input, assets = {}) {
-    var _a, _b, _c, _d, _e, _f;
+  function buildReportContext(input, opts = {}) {
+    var _a, _b, _c;
+    const base = buildResultContext(input.result, input.testName || "", { withTopicPoints: true });
     const topics = (_a = input.result.topicResults) != null ? _a : [];
-    let html = pageOpen(assets);
-    html += logoRow(assets);
-    html += '<div style="font-size: 42px; font-weight: 900; margin-bottom: 4px; line-height: 1; color: #ffffff;">\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u0442\u0435\u0441\u0442\u0430</div>';
-    html += '<div style="font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 8px;">\u0410\u0434\u0430\u043F\u0442\u0438\u0432\u043D\u043E\u0435 \u0442\u0435\u0441\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435</div>';
-    html += whoAndWhen(input);
-    html += cardOpen();
-    html += `<div style="font-size: 22px; font-weight: 500;">${esc3(input.testName || "\u0422\u0435\u0441\u0442")}</div>`;
-    html += "</div>";
-    if (topics.length > 0) {
-      html += cardOpen();
-      html += '<div style="font-size: 22px; font-weight: 400; margin-bottom: 15px;">\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u044B \u043F\u043E \u0442\u0435\u043C\u0430\u043C</div>';
-      html += `<div style="display: grid; grid-template-columns: repeat(${gridColumns(topics.length)}, 1fr); gap: 10px;">`;
-      for (const t of topics) {
-        const achieved = t.achievedLevelIndex !== null && t.achievedLevelIndex !== void 0;
-        const levelName = achieved ? String((_b = t.achievedLevelName) != null ? _b : "") : NO_LEVEL_CONFIRMED_LABEL;
-        const levelColor = achieved ? "#3b82f6" : "#6b7280";
-        const levelBg = achieved ? "rgba(59, 130, 246, 0.2)" : "rgba(107, 114, 128, 0.2)";
-        html += '<div style="background: linear-gradient(135deg, #2a2a3d 0%, #1f1f2e 100%); border-radius: 10px; padding: 12px; position: relative; overflow: hidden;">';
-        html += `<div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: ${levelColor};"></div>`;
-        html += '<div style="margin-bottom: 8px;">';
-        html += `<div style="font-size: 13px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere;">${esc3(t.topicName || "\u0422\u0435\u043C\u0430")}</div>`;
-        html += `<div style="display: inline-block; margin-top: 5px; font-size: 9px; font-weight: 500; padding: 3px 8px; border-radius: 4px; white-space: nowrap; background: ${levelBg}; color: ${levelColor};">${esc3(levelName)}</div>`;
-        html += "</div>";
-        if (t.totalQuestionsAnswered != null || t.totalCorrect != null) {
-          html += '<div style="font-size: 11px; color: #aca9a9; margin-bottom: 6px;">';
-          html += `<div>\u0412\u043E\u043F\u0440\u043E\u0441\u043E\u0432: ${(_c = t.totalQuestionsAnswered) != null ? _c : 0}</div>`;
-          html += `<div>\u041F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u044B\u0445: ${(_d = t.totalCorrect) != null ? _d : 0}</div>`;
-          html += "</div>";
-        }
-        const fb = String((_e = t.feedback) != null ? _e : "").trim();
-        if (fb) {
-          html += `<div style="font-size: 10px; font-weight: 300; color: rgba(255, 255, 255, 0.8); line-height: 1.4; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">${esc3(fb)}</div>`;
-        }
-        html += "</div>";
-      }
-      html += "</div></div>";
-    }
-    const links = [];
-    for (const t of topics) {
-      for (const c of (_f = t.recommendedCourses) != null ? _f : []) {
-        if (c) links.push({ topicName: t.topicName || "", title: c.title, ...c.url ? { url: c.url } : {} });
-      }
-    }
-    if (links.length > 0) {
-      html += cardOpen();
-      html += '<div style="font-size: 22px; font-weight: 400; margin-bottom: 8px;">\u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0443\u0435\u043C\u044B\u0435 \u043C\u0430\u0442\u0435\u0440\u0438\u0430\u043B\u044B</div>';
-      html += '<div style="font-size: 11px; font-weight: 300; color: #aca9a9; margin-bottom: 15px; line-height: 1.5;">\u0418\u0437\u0443\u0447\u0438\u0442\u0435 \u044D\u0442\u0438 \u043C\u0430\u0442\u0435\u0440\u0438\u0430\u043B\u044B \u0434\u043B\u044F \u0443\u043B\u0443\u0447\u0448\u0435\u043D\u0438\u044F \u0437\u043D\u0430\u043D\u0438\u0439.</div>';
-      links.forEach((l, i) => {
-        html += '<div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">';
-        html += `<div style="font-size: 14px; font-weight: 700;">${esc3(l.topicName)}</div>`;
-        html += `<div class="pdf-link-btn" data-url="${esc3(l.url)}" data-index="${i}" style="background: #1e40af; border-radius: 8px; padding: 10px 25px; font-size: 12px; font-weight: 300; color: #fafafa;">${esc3(l.title)}</div>`;
-        html += "</div>";
+    const passed = !!input.result.passed;
+    const percent = (_b = base.result.scorePercent) != null ? _b : 0;
+    const circumference = 2 * Math.PI * REPORT_RING_RADIUS;
+    const rec = failedRecommendations(topics);
+    const report = reportBlock(input, topics.length, opts);
+    report.verdictHeadline = passed ? "\u0422\u0435\u0441\u0442 \u043F\u0440\u043E\u0439\u0434\u0435\u043D" : "\u0422\u0435\u0441\u0442 \u043D\u0435 \u043F\u0440\u043E\u0439\u0434\u0435\u043D";
+    report.verdictBadge = passed ? "\u043F\u0440\u043E\u0439\u0434\u0435\u043D" : "\u043D\u0435 \u043F\u0440\u043E\u0439\u0434\u0435\u043D";
+    report.verdictClass = passed ? "is-pass" : "is-fail";
+    report.correctLabel = `${input.result.correct}/${input.result.totalQuestions}`;
+    report.earnedPointsLabel = fixed1(input.result.earnedPoints);
+    report.ringDasharray = circumference;
+    report.ringDashoffset = circumference - circumference * percent / 100;
+    report.courses = rec.courses;
+    report.hasCourses = rec.courses.length > 0;
+    report.events = rec.events;
+    report.hasEvents = rec.events.length > 0;
+    const ctx = { ...base, design: { ...(_c = opts.design) != null ? _c : {} }, report };
+    const rows = ctx.result.topicResults;
+    if (Array.isArray(rows)) {
+      rows.forEach((row, i) => {
+        var _a2;
+        const src = topics[i];
+        if (!src) return;
+        const topicPassed = src.passed === true;
+        const target = row;
+        const topicPercent = Math.round(Number(src.percent) || 0);
+        target.verdictLabel = topicPassed ? "\u041F\u0440\u043E\u0439\u0434\u0435\u043D" : "\u041D\u0435 \u043F\u0440\u043E\u0439\u0434\u0435\u043D";
+        target.barPercent = topicPercent;
+        target.countsLabel = `${src.correct} \u0438\u0437 ${src.total} (${topicPercent}%)`;
+        target.pointsFixedLabel = `${fixed1(src.earnedPoints)}/${fixed1(src.possiblePoints)}`;
+        target.showFeedback = !topicPassed && String((_a2 = src.feedback) != null ? _a2 : "").trim().length > 0;
       });
-      html += "</div>";
     }
-    html += "</div></div>";
-    return html;
+    return ctx;
+  }
+  function buildAdaptiveReportContext(input, opts = {}) {
+    var _a, _b, _c, _d;
+    const base = buildAdaptiveResultContext(input.result, input.testName || "");
+    const topics = (_a = input.result.topicResults) != null ? _a : [];
+    const report = reportBlock(input, topics.length, opts);
+    for (const t of topics) {
+      for (const c of (_b = t.recommendedCourses) != null ? _b : []) {
+        if (!c) continue;
+        report.courses.push({ topicName: t.topicName || "", title: c.title, url: (_c = c.url) != null ? _c : "" });
+      }
+    }
+    report.hasCourses = report.courses.length > 0;
+    const ctx = { ...base, design: { ...(_d = opts.design) != null ? _d : {} }, report };
+    const rows = ctx.result.topicResults;
+    if (Array.isArray(rows)) {
+      rows.forEach((row, i) => {
+        const src = topics[i];
+        if (!src) return;
+        const answered = src.totalQuestionsAnswered;
+        const correct = src.totalCorrect;
+        const target = row;
+        target.hasCounts = answered != null || correct != null;
+        target.answeredLabel = `\u0412\u043E\u043F\u0440\u043E\u0441\u043E\u0432: ${answered != null ? answered : 0}`;
+        target.correctLabel = `\u041F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u044B\u0445: ${correct != null ? correct : 0}`;
+        target.achievedClass = src.achievedLevelIndex !== null && src.achievedLevelIndex !== void 0 ? "is-achieved" : "is-below";
+      });
+    }
+    return ctx;
   }
 
   // shared/report/export-pdf.ts
   var A4_WIDTH_MM = 210;
   var A4_HEIGHT_MM = 297;
   var PAGE_WIDTH_PX = 595;
-  async function exportReportPdf(html, testName, deps) {
+  async function exportReportPdf(page, testName, deps) {
+    var _a;
     const doc = deps.document || (typeof document !== "undefined" ? document : null);
     if (!doc) throw new Error("\u042D\u043A\u0441\u043F\u043E\u0440\u0442 \u043E\u0442\u0447\u0451\u0442\u0430 \u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u043D\u043E\u0433\u043E \u043E\u043A\u0440\u0443\u0436\u0435\u043D\u0438\u044F");
     if (!deps.jsPDF || !deps.html2canvas) throw new Error("\u0411\u0438\u0431\u043B\u0438\u043E\u0442\u0435\u043A\u0438 jsPDF \u0438\u043B\u0438 html2canvas \u043D\u0435 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D\u044B");
+    if (!page || !page.layout) throw new Error("\u0428\u0430\u0431\u043B\u043E\u043D \u043D\u0435 \u043F\u0440\u0435\u0434\u043E\u0441\u0442\u0430\u0432\u0438\u043B \u043C\u0430\u043A\u0435\u0442 \u043E\u0442\u0447\u0451\u0442\u0430");
     const container = doc.createElement("div");
-    container.innerHTML = html;
     container.style.position = "absolute";
     container.style.left = "-9999px";
     container.style.top = "0";
+    if (page.css) {
+      const style = doc.createElement("style");
+      style.textContent = page.css;
+      container.appendChild(style);
+    }
+    const stage = doc.createElement("div");
+    for (const [name, value] of Object.entries((_a = page.cssVars) != null ? _a : {})) {
+      stage.style.setProperty(name, value);
+    }
+    container.appendChild(stage);
     doc.body.appendChild(container);
     try {
-      const page = container.firstElementChild;
-      if (!page) throw new Error("\u041F\u0443\u0441\u0442\u0430\u044F \u0440\u0430\u0437\u043C\u0435\u0442\u043A\u0430 \u043E\u0442\u0447\u0451\u0442\u0430");
+      renderScreenInto(stage, { layout: page.layout, context: page.context });
+      const rendered = stage.firstElementChild;
+      if (!rendered) throw new Error("\u041C\u0430\u043A\u0435\u0442 \u043E\u0442\u0447\u0451\u0442\u0430 \u043D\u0438\u0447\u0435\u0433\u043E \u043D\u0435 \u043E\u0442\u0440\u0438\u0441\u043E\u0432\u0430\u043B");
       await new Promise((resolve) => setTimeout(resolve, 100));
-      const canvas = await deps.html2canvas(page, {
+      const canvas = await deps.html2canvas(rendered, {
         scale: 2,
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
         logging: false
       });
-      const pageRect = page.getBoundingClientRect();
+      const pageRect = rendered.getBoundingClientRect();
       const links = [];
       container.querySelectorAll(".pdf-link-btn").forEach((chip) => {
         const url = chip.getAttribute("data-url");
@@ -7751,17 +7958,21 @@ var TBTemplate = (() => {
       img.src = src;
     });
   }
-  var REPORT_BACKGROUND_FILES = ["pdf-bg-1.png", "pdf-bg-2.png", "pdf-bg-3.png"];
-  var REPORT_LOGO_FILE = "logo-light.png";
-  async function loadReportAssets(baseUrl, pick = (count) => Math.floor(Math.random() * count)) {
-    var _a;
-    const plates = await Promise.all(REPORT_BACKGROUND_FILES.map((f) => loadImageDataUrl(baseUrl + f)));
-    const available = plates.filter((p) => !!p);
-    const logoDataUrl = await loadImageDataUrl(baseUrl + REPORT_LOGO_FILE);
-    return {
-      backgroundDataUrl: available.length > 0 ? (_a = available[pick(available.length)]) != null ? _a : available[0] : null,
-      logoDataUrl
-    };
+  async function inlineReportImageValues(values, imageKeys) {
+    const out = { ...values != null ? values : {} };
+    await Promise.all(
+      imageKeys.map(async (key) => {
+        var _a;
+        const src = typeof out[key] === "string" ? out[key] : "";
+        if (!src) {
+          out[key] = "";
+          return;
+        }
+        if (src.startsWith("data:")) return;
+        out[key] = (_a = await loadImageDataUrl(src)) != null ? _a : "";
+      })
+    );
+    return out;
   }
   return __toCommonJS(runtime_entry_exports);
 })();
