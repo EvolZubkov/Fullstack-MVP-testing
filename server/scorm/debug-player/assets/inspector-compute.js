@@ -875,11 +875,46 @@
     // start past ~44px or the badge touches the text; 52px leaves a clear gutter.
     el.style.paddingLeft = "52px";
   }
+  // The question CURRENTLY on screen. Which state holds it depends on the delivery
+  // mode, and the overlay must follow the render, not a parallel index:
+  //  - adaptive → the level engine drives the screen from
+  //    `adaptiveState.currentQuestionId` (getCurrentAdaptiveQuestion). The flat draw is
+  //    a DIFFERENT set (empty in legacy linear_flat adaptive, an unrelated variant in the
+  //    sectional modes), so `flatQuestions[currentIndex]` is another question entirely —
+  //    reading it painted a foreign answer key: a single-choice key (one ✓) on a
+  //    multiple-choice screen and a multi-key (several ✓) on a single-choice one.
+  //  - everything else → the flat draw at the current position, as the standard render does.
+  // Returns null when the on-screen question cannot be resolved: no overlay is far
+  // better than a confident overlay of the wrong answer key.
+  function currentScreenQuestion(iframeWin, st) {
+    var ad = st.adaptiveState;
+    if (ad && !ad.isFinished) {
+      // Preferred: the package's OWN resolver — the same call the adaptive render makes,
+      // so the overlay cannot drift from what is rendered.
+      try {
+        if (typeof iframeWin.getCurrentAdaptiveQuestion === "function") {
+          var qd = iframeWin.getCurrentAdaptiveQuestion();
+          if (qd && qd.question) return qd.question;
+        }
+      } catch (e) {}
+      // Fallback: resolve the pinned id against the package's adaptive banks.
+      var qid = ad.currentQuestionId;
+      if (!qid) return null;
+      var topics = (iframeWin.TEST_DATA && iframeWin.TEST_DATA.adaptiveTopics) || [];
+      for (var t = 0; t < topics.length; t++) {
+        var bank = topics[t].questions || [];
+        for (var b = 0; b < bank.length; b++) if (bank[b].id === qid) return bank[b];
+      }
+      return null;
+    }
+    var curFq = (st.flatQuestions || [])[st.currentIndex];
+    return (curFq && curFq.question) || null;
+  }
   function applyReference(iframeWin) {
     var doc = iframeWin && iframeWin.document;
     var st = null;
     try { st = iframeWin.state; } catch (e) {}
-    if (!doc || !st || !st.flatQuestions) return;
+    if (!doc || !st) return;
     // Never repaint mid-drag — see dragInFlight. Leaving the overlay untouched keeps
     // the captured chip's subtree stable so the gesture can complete.
     if (dragInFlight(doc)) return;
@@ -888,8 +923,7 @@
     // The debug player shows ONE question at a time. The revised «Стандартный»
     // markup (ou-radio-card / ou-rank / ou-match) no longer carries the qid on the
     // option, so the reference targets the CURRENT question from the live state.
-    var curFq = st.flatQuestions[st.currentIndex];
-    var curQ = curFq && curFq.question;
+    var curQ = currentScreenQuestion(iframeWin, st);
     if (!curQ) return;
     var data = curQ.data || {};
     var c = curQ.correct || {};

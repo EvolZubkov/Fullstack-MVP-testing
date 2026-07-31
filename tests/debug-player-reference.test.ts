@@ -124,6 +124,71 @@ describe("Эталон overlay — applyReference", () => {
     expect(marks()).toHaveLength(0);
   });
 
+  it("in adaptive mode keys off the question ON SCREEN, not flatQuestions[currentIndex]", () => {
+    // Adaptive delivery drives the screen from adaptiveState (getCurrentAdaptiveQuestion);
+    // the flat draw is a DIFFERENT question set. Keying the overlay off
+    // flatQuestions[currentIndex] painted another question's answer key — a single-choice
+    // key on a multiple-choice screen and vice versa.
+    document.body.innerHTML =
+      '<label class="ou-radio-card" data-index="0"></label>' +
+      '<label class="ou-radio-card" data-index="1"></label>' +
+      '<label class="ou-radio-card" data-index="2"></label>' +
+      '<label class="ou-radio-card" data-index="3"></label>';
+    const onScreen = { id: "qm", type: "multiple", correct: { correctIndices: [0, 3] } };
+    const win = {
+      document,
+      // The package's own resolver — the same one the adaptive render calls.
+      getCurrentAdaptiveQuestion: () => ({ id: "qm", question: onScreen }),
+      state: {
+        currentIndex: 0,
+        adaptiveState: { isFinished: false, currentQuestionId: "qm" },
+        // The flat draw holds an unrelated single-choice question at currentIndex.
+        flatQuestions: [{ question: { id: "qs", type: "single", correct: { correctIndex: 1 } } }],
+      },
+    };
+    ref().applyReference(win);
+    const hit = Array.from(marks()).map((n) => n.closest(".ou-radio-card")?.getAttribute("data-index"));
+    expect(hit).toEqual(["0", "3"]);
+  });
+
+  it("adaptive: resolves the on-screen question from TEST_DATA when the package resolver is unavailable", () => {
+    document.body.innerHTML =
+      '<label class="ou-radio-card" data-index="0"></label>' +
+      '<label class="ou-radio-card" data-index="1"></label>';
+    const win = {
+      document,
+      TEST_DATA: {
+        mode: "adaptive",
+        adaptiveTopics: [{ topicId: "T", questions: [{ id: "qm", type: "single", correct: { correctIndex: 1 } }] }],
+      },
+      state: {
+        currentIndex: 0,
+        adaptiveState: { isFinished: false, currentQuestionId: "qm" },
+        flatQuestions: [{ question: { id: "qs", type: "multiple", correct: { correctIndices: [0, 1] } } }],
+      },
+    };
+    ref().applyReference(win);
+    const hit = Array.from(marks()).map((n) => n.closest(".ou-radio-card")?.getAttribute("data-index"));
+    expect(hit).toEqual(["1"]);
+  });
+
+  it("adaptive: paints nothing when the on-screen question cannot be resolved (never a foreign key)", () => {
+    document.body.innerHTML =
+      '<label class="ou-radio-card" data-index="0"></label>' +
+      '<label class="ou-radio-card" data-index="1"></label>';
+    const win = {
+      document,
+      TEST_DATA: { mode: "adaptive", adaptiveTopics: [] },
+      state: {
+        currentIndex: 0,
+        adaptiveState: { isFinished: false, currentQuestionId: "unknown" },
+        flatQuestions: [{ question: { id: "qs", type: "multiple", correct: { correctIndices: [0, 1] } } }],
+      },
+    };
+    ref().applyReference(win);
+    expect(marks()).toHaveLength(0);
+  });
+
   it("does NOT touch the DOM while a drag gesture is in flight (leaves the captured chip stable)", () => {
     // The shared DnD engine appends a `[data-drag-ghost]` card for the whole gesture.
     // Repainting the overlay then mutates the captured chip's subtree and Chromium
