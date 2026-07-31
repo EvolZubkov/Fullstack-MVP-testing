@@ -149,7 +149,7 @@ export interface CtxRecommendations {
 | Файл | Ответственность |
 | --- | --- |
 | `shared/scales/interpretation.ts` (создать) | типы толкования, поиск интервала по числу и исхода по коду, разбор `config_json` |
-| `shared/scales/domain.ts` (создать) | расчёт домена шкалы по вкладам вопросов |
+| `shared/scales/engine.ts` (править) | вынести `achievableRange` — общий расчёт достижимого диапазона |
 | `shared/template/level-ramp.ts` (создать) | арифметика HSL, интерполяция рампы, цвет зоны по позиции |
 | `shared/template/measure-view.ts` (создать) | сборка `CtxMeasureView`: откат вида, зоны, маркер, кольцо |
 | `shared/template/recommendations.ts` (создать) | сбор рекомендаций из трёх источников и дедупликация |
@@ -532,23 +532,41 @@ git commit -m "feat(prd-29): модель толкования для шкал �
 
 ---
 
-## Task 3: Расчёт домена шкалы по вкладам
+## Task 3: Достижимый диапазон шкалы
 
 **Files:**
 
-- Create: `shared/scales/domain.ts`
-- Test: `shared/scales/__tests__/domain.test.ts`
+- Modify: `shared/scales/engine.ts` (вынести и экспортировать `achievableRange`)
+- Test: `shared/scales/__tests__/achievable-range.test.ts`
+
+Домен шкалы предзаполняется её теоретическим диапазоном. Наивно вывести его как «сумма
+максимальных вкладов каждого вопроса» НЕЛЬЗЯ — движок уже считает этот диапазон, и
+считает иначе:
+
+- у одноиндексного вопроса (`single`, `scale`) срабатывает ровно ОДИН вклад, а
+  неизмеряемый вариант даёт ноль, поэтому диапазон вопроса — `[min(0, …), max(0, …)]`;
+- у `multiple` / `matching` / `ranking` вкладов срабатывает несколько, поэтому крайние
+  значения — суммы отрицательных и положительных вкладов;
+- агрегация применяется к пер-вопросным крайним значениям тем же `aggregate`, включая
+  `weighted_avg`.
+
+Эта математика живёт в `rawRange` (`shared/scales/engine.ts`). Второй экземпляр той же
+логики разъедется с первым: домен, посчитанный иначе, чем движок нормирует `percent`,
+даст линейку, на которой значение стоит не там, где стоит его уровень. Поэтому задача —
+не написать новый расчёт, а ВЫНЕСТИ существующий и позвать его с другим входом.
+
+Разница входов ровно одна: `rawRange` берёт только ВЫДАННЫЕ вопросы (у которых есть
+запись в `answers`), потому что невыданный вопрос вносит ноль и его крайние значения
+вытолкнули бы `raw` за границы. Домен же теоретический — он считается по ВСЕМ
+объявленным вкладам, независимо от выдачи.
 
 - [ ] **Step 1: Написать падающий тест**
 
-Данные взяты из референсной книги: девять вопросов шкалы `emotional_exhaustion`, у каждого
-шесть вариантов со значениями 0..5 и весом 1. Теоретический максимум — 45.
-
 ```ts
-// shared/scales/__tests__/domain.test.ts
+// shared/scales/__tests__/achievable-range.test.ts
 import { describe, it, expect } from "vitest";
-import { computeScaleDomain } from "../domain";
-import type { MeasurementSpec } from "../engine";
+import { achievableRange } from "../engine";
+import type { MeasurementSpec, QuestionType } from "../engine";
 
 /** Nine questions, six graduations each (0..5), weight 1 — the Maslach EE scale. */
 function maslachEE(): MeasurementSpec[] {
@@ -568,9 +586,16 @@ function maslachEE(): MeasurementSpec[] {
   return out;
 }
 
-describe("computeScaleDomain", () => {
-  it("для sum складывает максимальный вклад каждого вопроса", () => {
-    expect(computeScaleDomain("sum", maslachEE())).toEqual({ min: 0, max: 45 });
+/** Every question of the Maslach scale is a graduated `scale` question. */
+function maslachTypes(): Record<string, QuestionType> {
+  const types: Record<string, QuestionType> = {};
+  for (let q = 1; q <= 9; q += 1) types[`q${q}`] = "scale";
+  return types;
+}
+
+describe("achievableRange", () => {
+  it("для sum складывает достижимые крайние значения каждого вопроса", () => {
+    expect(achievableRange(maslachEE(), "sum", maslachTypes())).toEqual({ min: 0, max: 45 });
   });
 
   it("учитывает вес", () => {
@@ -578,16 +603,23 @@ describe("computeScaleDomain", () => {
       { questionId: "q1", scaleKey: "s", sourceType: "option", sourceKey: "0", value: 2, weight: 3 },
       { questionId: "q1", scaleKey: "s", sourceType: "option", sourceKey: "1", value: 1, weight: 3 },
     ];
-    expect(computeScaleDomain("sum", m)).toEqual({ min: 0, max: 6 });
+    expect(achievableRange(m, "sum", { q1: "single" })).toEqual({ min: 0, max: 6 });
   });
 
-  it("для avg берёт границы одного вклада", () => {
-    expect(computeScaleDomain("avg", maslachEE())).toEqual({ min: 0, max: 5 });
+  it("зажимает нижнюю границу нулём: одноиндексный вопрос может не выбрать измеряемый вариант", () => {
+    const m: MeasurementSpec[] = [
+      { questionId: "q1", scaleKey: "s", sourceType: "option", sourceKey: "0", value: 3, weight: 1 },
+      { questionId: "q1", scaleKey: "s", sourceType: "option", sourceKey: "1", value: 5, weight: 1 },
+    ];
+    expect(achievableRange(m, "sum", { q1: "single" })).toEqual({ min: 0, max: 5 });
   });
 
-  it("для max и min берёт границы множества вкладов", () => {
-    expect(computeScaleDomain("max", maslachEE())).toEqual({ min: 0, max: 5 });
-    expect(computeScaleDomain("min", maslachEE())).toEqual({ min: 0, max: 5 });
+  it("для множественного выбора складывает вклады внутри вопроса", () => {
+    const m: MeasurementSpec[] = [
+      { questionId: "q1", scaleKey: "s", sourceType: "option", sourceKey: "0", value: 2, weight: 1 },
+      { questionId: "q1", scaleKey: "s", sourceType: "option", sourceKey: "1", value: 3, weight: 1 },
+    ];
+    expect(achievableRange(m, "sum", { q1: "multiple" })).toEqual({ min: 0, max: 5 });
   });
 
   it("учитывает отрицательные вклады в нижней границе", () => {
@@ -595,98 +627,138 @@ describe("computeScaleDomain", () => {
       { questionId: "q1", scaleKey: "s", sourceType: "option", sourceKey: "0", value: -2, weight: 1 },
       { questionId: "q1", scaleKey: "s", sourceType: "option", sourceKey: "1", value: 3, weight: 1 },
     ];
-    expect(computeScaleDomain("sum", m)).toEqual({ min: -2, max: 3 });
+    expect(achievableRange(m, "sum", { q1: "single" })).toEqual({ min: -2, max: 3 });
+  });
+
+  it("для avg берёт границы одного вклада", () => {
+    expect(achievableRange(maslachEE(), "avg", maslachTypes())).toEqual({ min: 0, max: 5 });
+  });
+
+  it("для max и min берёт границы множества вкладов", () => {
+    expect(achievableRange(maslachEE(), "max", maslachTypes())).toEqual({ min: 0, max: 5 });
+    expect(achievableRange(maslachEE(), "min", maslachTypes())).toEqual({ min: 0, max: 5 });
+  });
+
+  it("считает и weighted_avg", () => {
+    expect(achievableRange(maslachEE(), "weighted_avg", maslachTypes())).toEqual({ min: 0, max: 5 });
   });
 
   it("возвращает null на пустом списке вкладов", () => {
-    expect(computeScaleDomain("sum", [])).toBeNull();
+    expect(achievableRange([], "sum", {})).toBeNull();
   });
 
-  it("для weighted_avg возвращает null — домен считать нечем", () => {
-    expect(computeScaleDomain("weighted_avg", maslachEE())).toBeNull();
+  it("не зависит от порядка вкладов", () => {
+    const straight = achievableRange(maslachEE(), "sum", maslachTypes());
+    const reversed = achievableRange(maslachEE().reverse(), "sum", maslachTypes());
+    expect(reversed).toEqual(straight);
   });
 });
 ```
 
 - [ ] **Step 2: Убедиться, что тест падает**
 
-Run: `npm test -- shared/scales/__tests__/domain.test.ts`
-Expected: FAIL, «Cannot find module '../domain'».
+Run: `npm test -- shared/scales/__tests__/achievable-range.test.ts`
+Expected: FAIL, `achievableRange` не экспортируется из `../engine`.
 
-- [ ] **Step 3: Реализовать модуль**
+- [ ] **Step 3: Вынести расчёт из `rawRange`**
+
+В `shared/scales/engine.ts` заменить тело `rawRange` на фильтр плюс вызов, а саму
+математику поднять в новую экспортируемую функцию. Комментарий, объясняющий пер-вопросные
+крайние значения, переезжает вместе с кодом.
 
 ```ts
 /**
- * @module shared/scales/domain
+ * Achievable `{ min, max }` of a scale over a set of measurement units — the range
+ * `raw` can land in. Exported because two callers need the SAME arithmetic on
+ * different inputs: `percent` normalization runs it over the DELIVERED units, while
+ * PRD-29 seeds a scale's stored domain from ALL declared ones. A second copy would
+ * drift, and a domain computed differently from the one `percent` normalizes against
+ * puts the ruler's marker somewhere other than its own level.
  *
- * Theoretical range of a scale, derived from its declared measurement units.
+ * Per-question achievable contribution:
+ * - single / scale: exactly one unit fires and an unmeasured option scores 0, so the
+ *   range is `[min(0, …vals), max(0, …vals)]`;
+ * - multiple / matching / ranking: several units can fire together (a subset of
+ *   options, every formed pair, every placement), so the extremes are the sums of the
+ *   negative / positive units — the same way `raw` sums the active ones.
  *
- * A scale needs a domain before it can be drawn as a ruler, a ring or an "X of Y"
- * value: `normalization: none` leaves `percent` undefined, so geometry has nothing
- * to anchor on. Asking the methodologist to compute it by hand is avoidable — the
- * contributions are explicit, so the extremes follow from them.
- *
- * The result SEEDS the stored domain; it is never used at render time. Recomputing
- * on every render would silently reinterpret past results the moment a question is
- * added to the test (see PRD-29 §4.1).
- *
- * Pure — no DOM, no Node.
+ * `null` when there is nothing to measure: an empty set has no range, and reporting
+ * `{ min: 0, max: 0 }` would look like a legitimate zero-width domain.
  */
-
-import type { MeasurementSpec, ScaleAggregation } from "./engine";
-
-export interface ScaleDomain { min: number; max: number }
-
-/**
- * Theoretical `{ min, max }` of a scale over its measurement units, or `null` when
- * it cannot be derived (no units, or `weighted_avg` whose divisor depends on which
- * units actually fire).
- *
- * For `sum` exactly one unit per question contributes, so the extremes are the sums
- * of the per-question extremes. For `avg`, `max` and `min` the result is bounded by
- * a single unit, so the extremes are those of the whole set.
- */
-export function computeScaleDomain(
-  aggregation: ScaleAggregation,
+export function achievableRange(
   measurements: MeasurementSpec[],
-): ScaleDomain | null {
+  agg: ScaleAggregation,
+  questionTypes: Record<string, QuestionType>,
+): { min: number; max: number } | null {
   if (measurements.length === 0) return null;
-  if (aggregation === "weighted_avg") return null;
 
-  const deltas = measurements.map((m) => m.value * (m.weight ?? 1));
-
-  if (aggregation === "sum") {
-    const byQuestion = new Map<string, { min: number; max: number }>();
-    measurements.forEach((m, i) => {
-      const delta = deltas[i];
-      const cur = byQuestion.get(m.questionId);
-      if (!cur) byQuestion.set(m.questionId, { min: delta, max: delta });
-      else byQuestion.set(m.questionId, { min: Math.min(cur.min, delta), max: Math.max(cur.max, delta) });
-    });
-    let min = 0;
-    let max = 0;
-    byQuestion.forEach((r) => {
-      min += r.min;
-      max += r.max;
-    });
-    return { min, max };
+  const byQuestion = new Map<string, MeasurementSpec[]>();
+  for (const m of measurements) {
+    const list = byQuestion.get(m.questionId) ?? [];
+    list.push(m);
+    byQuestion.set(m.questionId, list);
   }
 
-  return { min: Math.min(...deltas), max: Math.max(...deltas) };
+  const mins: number[] = [];
+  const maxes: number[] = [];
+  const weights: number[] = [];
+  for (const [questionId, ms] of byQuestion) {
+    const vals = ms.map((m) => m.value * m.weight);
+    if (isSingleIndexChoice(questionTypes[questionId] ?? "")) {
+      mins.push(Math.min(0, ...vals));
+      maxes.push(Math.max(0, ...vals));
+    } else {
+      mins.push(vals.filter((v) => v < 0).reduce((s, v) => s + v, 0));
+      maxes.push(vals.filter((v) => v > 0).reduce((s, v) => s + v, 0));
+    }
+    weights.push(ms.reduce((s, m) => s + m.weight, 0) / ms.length);
+  }
+
+  return { min: aggregate(mins, agg, weights), max: aggregate(maxes, agg, weights) };
+}
+```
+
+`rawRange` сокращается до фильтра по выданным вопросам и делегирования. Прежнее поведение
+сохраняется: пустой отфильтрованный список раньше давал `aggregate([], …) = 0` для обеих
+границ, поэтому `null` здесь разворачивается обратно в нули.
+
+```ts
+function rawRange(
+  scaleMeasurements: MeasurementSpec[],
+  agg: ScaleAggregation,
+  questionTypes: Record<string, QuestionType>,
+  answers: Record<string, Answer>,
+): { min: number; max: number } {
+  // Only units the learner was actually given bound the range: a bank question the
+  // draw did not deliver contributes 0 to `raw`, so counting its extremes would push
+  // `raw` outside [min, max] and make percent go negative / exceed 100.
+  const delivered = scaleMeasurements.filter((m) =>
+    Object.prototype.hasOwnProperty.call(answers, m.questionId),
+  );
+  return achievableRange(delivered, agg, questionTypes) ?? { min: 0, max: 0 };
 }
 ```
 
 - [ ] **Step 4: Убедиться, что тест проходит**
 
-Run: `npm test -- shared/scales/__tests__/domain.test.ts`
-Expected: PASS, 7 тестов. Первый тест — контрольный: 45 совпадает с верхней границей
+Run: `npm test -- shared/scales/__tests__/achievable-range.test.ts`
+Expected: PASS, 10 тестов. Первый — контрольный: 45 совпадает с верхней границей
 интервалов референсной книги.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Убедиться, что движок не сломан**
+
+Run: `npm test -- shared/scales/engine.test.ts`
+Expected: PASS без единого изменения в самом файле теста. Если хоть один тест движка
+покраснел — вынос выполнен неверно, чинить вынос, а не тест.
+
+Run: `npm run check`
+Expected: 0 ошибок.
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add shared/scales/domain.ts shared/scales/__tests__/domain.test.ts
-git commit -m "feat(prd-29): расчёт домена шкалы по вкладам вопросов"
+git add shared/scales/engine.ts shared/scales/__tests__/achievable-range.test.ts
+git commit -m "feat(prd-29): достижимый диапазон шкалы вынесен из rawRange"
 ```
 
 ---
@@ -2913,13 +2985,19 @@ Expected: FAIL, элементы не найдены.
 
 - [ ] **Step 5: Предзаполнить домен расчётом**
 
-Под полями домена — кнопка, вызывающая `computeScaleDomain` по вкладам этой шкалы из модели:
+Под полями домена — кнопка, вызывающая `achievableRange` (Task 3) по вкладам этой шкалы.
+Функции нужны типы вопросов: без них множественный выбор посчитается как одноиндексный
+и максимум выйдет заниженным. Типы берутся из той же модели редактора, что и вклады.
 
 ```tsx
           <Button
             size="s" variant="secondary" disabled={readOnly}
             onClick={() => {
-              const domain = computeScaleDomain(s.aggregation, measurementsOf(model, s));
+              const domain = achievableRange(
+                measurementsOf(model, s),
+                s.aggregation,
+                questionTypesOf(model),
+              );
               if (domain) onChange({ domainMin: domain.min, domainMax: domain.max });
             }}
             data-testid={`scales-domain-suggest-${index}`}
