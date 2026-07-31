@@ -10,28 +10,34 @@
     ЧТО ЭТО. Экран итогов сегодня рисует только контрольную сводку: кольцо
     процентов, «вопросов / верно / баллов» и результаты по темам
     (server/scorm/templates/default/layouts/results.html). Эскиз показывает, как
-    в ТОТ ЖЕ макет встают три новых блока — показатели, шкалы и единый блок
-    рекомендаций — и что при этом происходит с контрольным тестом.
+    в ТОТ ЖЕ макет встают показатели, шкалы и единый блок рекомендаций — и что
+    при этом происходит с контрольным тестом.
+
+    НА ЧЁМ СОБРАН. Шкала — это готовая анатомия ДС `ou-slider` (шапка со
+    значением, дорожка, заливки, ручка, засечки с подписями). Показатель —
+    `ou-banner--subtle`, у которого четыре тона ложатся на тоны толкования один
+    в один. Никаких вложенных карточек: и шкалы, и показатель лежат прямо на
+    сцене, собственную поверхность заводит только существующая сетка тем.
 
     ИСТОЧНИКИ РАЗМЕТКИ.
       - сцена и все существующие блоки — реальный шаблон «Стандартный»
         (server/scorm/templates/default/styles/theme.css, подключён как есть);
       - компоненты — дизайн-система UniversityRT
         (client/src/styles/vendor/university-rt.css, подключена как есть);
-      - НОВОЕ (карточка измерения и линейка с зонами) объявлено в блоке
-        «Дельта шаблона» ниже: это предлагаемое дополнение к theme.css, а не
-        эскизный слой. Классы с префиксом wf- — каркас эскиза, не UI.
+      - в блоке «Дельта шаблона» ниже остаётся только раскладка строки измерения
+        и три поправки к `ou-slider`: компонент спроектирован как элемент
+        управления, а здесь он ничего не меняет, а показывает.
+      Классы с префиксом wf- — каркас эскиза, не UI.
 
     ДАННЫЕ. Референсная методика PRD-29 §1.1 — опросник профессионального
     выгорания Маслача: три шкалы и один строковый показатель. Числа и тексты
     взяты из требований, а не придуманы.
 
     СОСТОЯНИЯ:
-      s-measurement  измерительная методика: показатели, шкалы, рекомендации
+      s-measurement  измерительная методика: показатель, шкалы, рекомендации
       s-control      контрольный тест: экран как сегодня, новых блоков нет
       s-mixed        смешанный: все блоки в порядке §8.2
-      s-narrow       та же методика в контейнере 360px: подписаны текущая зона
-                     и края домена
+      s-narrow       та же методика в контейнере 360px
 
     Правила и соответствие разделам PRD-29 — в таблицах под холстом.
   -->
@@ -49,99 +55,61 @@
          --wf-nav-offset через --wf-size-52, поэтому размер обязан быть здесь. */
       --wf-size-52:     52px;
       --wf-size-360:   360px;
-      --wf-size-420:   420px;
       --wf-size-900:   900px;
       --wf-size-1200: 1200px;
-      /* Линейка с зонами: высота полосы и засечки-маркера. */
-      --wf-ruler-h:     12px;
-      --wf-marker-w:     3px;
+      /* Шаг между дорожкой и строкой вердикта и зазор под дорожкой:
+         промежуточных значений в шкале ДС нет (8 → 12, 16 → 20). */
+      --wf-gap-10:      10px;
+      --wf-rail-gap:    18px;
       /* gate-skip-end */
     }
 
     /* ══════════════════════════════════════════════════════════════════════
        ДЕЛЬТА ШАБЛОНА — предлагаемое дополнение к
        server/scorm/templates/default/styles/theme.css.
-       Только раскладка и токены --ou-*; собственных цветов слой не заводит.
+       Только раскладка строки и поправки к ou-slider; своих цветов, кроме
+       тонов зон (они приходят параметрами оформления), слой не заводит.
        ══════════════════════════════════════════════════════════════════════ */
 
-    /* Блок показателей и блок шкал устроены ОДИНАКОВО (PRD-29 §8.3):
-       различается только заголовок блока. Отсюда одна сетка и одна карточка на
-       обе сущности. Минимум колонки зажат по 100% ширины — иначе в тесном
-       контейнере он распирает сетку за края сцены. */
-    .tb-measures {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(var(--wf-size-420), 100%), 1fr));
-      gap: var(--ou-space-4);
-    }
-    /* Карточка объявлена контейнером: тесноту линейки решает ШИРИНА КАРТОЧКИ, а
-       не ширина окна. Экран живёт то в окне LMS, то внутри страницы приложения,
-       то в iframe отладчика — медиазапрос мерил бы не тот кадр. */
-    .tb-measure-card { container: tbmeasure / inline-size; }
-    .tb-measure-card .ou-card__body {
-      display: flex; flex-direction: column; align-items: flex-start;
-      gap: var(--ou-space-3);
-    }
-    /* Слот 1 — название. */
-    .tb-measure-card__name { font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
-    /* Слот 4 — текст толкования. */
-    .tb-measure-card__text { margin: 0; font: var(--ou-text-body-s); color: var(--ou-fg-soft); }
-
-    /* Слот 2 — значение, вид «линейка с зонами» (band_ruler, PRD-29 §6.4). */
-    .tb-ruler { width: 100%; display: flex; flex-direction: column; gap: var(--ou-space-2); }
-    .tb-ruler__value { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
-    .tb-ruler__value strong { font: var(--ou-text-heading-m); color: var(--ou-fg-default); }
-    /* Полоса и засечка лежат в общем кадре: полоса обрезает зоны по скруглению,
-       засечка выступает за неё сверху и снизу и потому не обрезается. */
-    .tb-ruler__bar { position: relative; padding-block: var(--ou-space-1); }
-    .tb-ruler__track {
-      display: flex; width: 100%; height: var(--wf-ruler-h);
-      border-radius: var(--ou-radius-pill); overflow: hidden;
-      background: var(--ou-bg-surface-3);
-    }
-    /* Зоны заливаются ДИСКРЕТНО (§6.3): у каждой свой плоский цвет, градиента
-       нет. Ширина зоны — от её начала до начала следующей, последняя доходит до
-       максимума домена; проценты приходят из ядра готовыми (§9). */
-    .tb-ruler__zone { height: 100%; }
-    /* Насечка границы: зоны разделены волоском цвета поверхности, поэтому
-       граница читается и там, где соседние зоны одного тона. */
-    .tb-ruler__zone + .tb-ruler__zone { border-left: var(--wf-border-w) solid var(--ou-bg-elevated); }
-    .tb-ruler__zone.is-favorable { background: var(--ou-success-soft); }
-    .tb-ruler__zone.is-attention { background: var(--ou-warning-soft); }
-    .tb-ruler__zone.is-critical  { background: var(--ou-error-soft); }
-    /* Маркер — точная позиция значения внутри зоны: заливка сообщает категорию,
-       засечка — что человек стоит у самого края. Тон сплошной, поверх — обводка
-       цветом поверхности, чтобы засечка не сливалась с заливкой зоны. */
-    .tb-ruler__marker {
-      position: absolute; top: 0; bottom: 0; width: var(--wf-marker-w);
-      transform: translateX(-50%); border-radius: var(--ou-radius-pill);
-      box-shadow: 0 0 0 var(--wf-border-w) var(--ou-bg-elevated);
-    }
-    .tb-ruler__marker.is-favorable { background: var(--ou-success-default); }
-    .tb-ruler__marker.is-attention { background: var(--ou-warning-default); }
-    .tb-ruler__marker.is-critical  { background: var(--ou-error-default); }
-    /* Подписи зон стоят по ЦЕНТРУ своей зоны, а не в её габаритах: узкая зона
-       иначе обрезала бы своё же название. */
-    .tb-ruler__labels { position: relative; min-height: var(--ou-space-5); }
-    .tb-ruler__zone-label {
-      position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap;
-      font: var(--ou-text-body-xs); color: var(--ou-fg-muted);
-    }
-    .tb-ruler__zone-label.is-current { color: var(--ou-fg-default); font-weight: 600; }
-    /* Края домена печатаются только в тесной линейке — в просторной их роль
-       выполняют подписи всех зон и строка «значение из максимума». */
-    .tb-ruler__edge { position: absolute; top: 0; font: var(--ou-text-body-xs); color: var(--ou-fg-muted); display: none; }
-    .tb-ruler__edge--min { left: 0; }
-    .tb-ruler__edge--max { right: 0; }
-    /* Тесная линейка (§6.5): подписаны текущая зона и края домена, прочие
-       границы остаются насечками. */
+    /* Шкалы — плоские строки одна под другой, без вложенных поверхностей:
+       рамка на каждом измерении превратила бы экран в стопку карточек внутри
+       карточек. */
+    .tb-measures { display: flex; flex-direction: column; gap: var(--ou-space-5); }
+    .tb-measure { display: flex; flex-direction: column; gap: var(--wf-gap-10); }
+    /* ДС ограничивает слайдер по ширине — он рассчитан на поле формы. Здесь это
+       вывод результата, он занимает всю меру колонки. */
+    .tb-measure__slider { max-width: none; display: flex; }
+    /* Подписи границ ДС кладёт под дорожку абсолютом (места они не занимают),
+       поэтому зазор рельсу нужно дать явно — иначе числа наезжают на вердикт. */
+    .tb-measure__slider .ou-slider__rail { margin-bottom: var(--wf-rail-gap); }
+    /* Ручку здесь не таскают: это отметка значения, а не орган управления. */
+    .tb-measure__marker { cursor: default; pointer-events: none; }
     /* gate-skip-start */
-    /* Порог контейнерного запроса — литерал: условие @container не принимает
-       var(), это единственное место, где величина не может прийти токеном. */
-    @container tbmeasure (max-width: 380px) {
-      .tb-ruler__zone-label:not(.is-current) { display: none; }
-      .tb-ruler__edge { display: block; }
-    }
+    /* Зона — та же заливка `ou-slider__fill`, но своим тоном. Цвет приходит
+       ТРОЙКОЙ HSL, как уже устроены параметры оформления
+       (shared/template/params-css.ts, §6.2): интерполяцию рампы считает ядро и
+       отдаёт готовое значение, CSS ничего не вычисляет. Заливки стыкуются
+       встык — скругление остаётся только на краях домена, иначе на границе
+       интервала появляется зазор, которого в методике нет. */
+    .tb-zone { background: hsl(var(--tb-zone)); border-radius: 0; }
     /* gate-skip-end */
+    .tb-zone:first-of-type {
+      border-start-start-radius: var(--ou-radius-pill);
+      border-end-start-radius: var(--ou-radius-pill);
+    }
+    .tb-zone:last-of-type {
+      border-start-end-radius: var(--ou-radius-pill);
+      border-end-end-radius: var(--ou-radius-pill);
+    }
+    /* Вердикт: метка уровня словом и толкование в одну строку под дорожкой. */
+    .tb-measure__verdict { display: flex; align-items: baseline; gap: var(--wf-gap-10); flex-wrap: wrap; }
+    .tb-measure__text { color: var(--ou-fg-muted); font: var(--ou-text-body-s); }
+    /* Именованные тоны толкования (favorable / neutral / attention / critical)
+       выводятся из тех же семантических семей ДС, что и баннер показателя. */
+    .tb-scene .ou-tag.tb-tone--favorable { background: var(--ou-success-soft); color: var(--ou-success-on-soft); }
+    .tb-scene .ou-tag.tb-tone--neutral   { background: var(--ou-info-soft);    color: var(--ou-info-on-soft); }
+    .tb-scene .ou-tag.tb-tone--attention { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
+    .tb-scene .ou-tag.tb-tone--critical  { background: var(--ou-error-soft);   color: var(--ou-error-on-soft); }
 
     /* Единый блок рекомендаций (§7.2): членится по ТИПУ РЕСУРСА, а не по
        поводу. Пустая подсекция не рисуется; если пусты все четыре, блока нет. */
@@ -174,8 +142,8 @@
     .wf-caption { max-width: var(--wf-size-1200); margin: 0 auto var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
     /* Якорь метки требования. Своё display элементы раскладки держат сами. */
     .wf-annot-wrap { position: relative; }
-    /* Метка лежит ВНУТРИ якоря: карточка ДС (.ou-card) обрезает выход за свои
-       границы (overflow: hidden), и метка со свесом теряла бы хвост. */
+    /* Метка лежит ВНУТРИ якоря: поверхности ДС обрезают выход за свои границы
+       (overflow: hidden), и метка со свесом теряла бы хвост. */
     .wf-annot {
       display: none; position: absolute; top: 0; right: 0;
       z-index: 200; background: var(--ou-warning-default); color: var(--ou-fg-default);
@@ -207,7 +175,7 @@
 <!-- ══════════════════ Измерительная методика ══════════════════ -->
 <section class="wf-state active" id="s-measurement">
   <div class="wf-page">
-    <p class="wf-caption">Измерительная методика: порога прохождения нет, нормализация шкал — <code>none</code>, поэтому ни кольца процентов, ни полосы прогресса в шапке. Блоки идут в порядке §8.2: показатели, шкалы, рекомендации. Кадр растянут по высоте содержимого: в реальном окне прокручивается тело сцены.</p>
+    <p class="wf-caption">Измерительная методика: порога прохождения нет, нормализация шкал — <code>none</code>, поэтому ни кольца процентов, ни полосы прогресса в шапке. Блоки идут в порядке §8.2: показатель, шкалы, рекомендации. Кадр растянут по высоте содержимого: в реальном окне прокручивается тело сцены.</p>
     <div class="wf-viewport wf-viewport--flow">
       <div class="tb-scene">
 
@@ -224,21 +192,13 @@
         <main class="tb-scene__body">
           <div class="tb-scene__col tb-scene__col--wide">
 
-            <!-- ── Блок 2 порядка §8.2: показатели ── -->
-            <div class="tb-scene__q wf-annot-wrap">
-              <span class="wf-annot">§8.2 · блок 2</span>
-              <h3 class="tb-scene__subhead">Показатели</h3>
-            </div>
-            <div class="tb-measures">
-              <div class="ou-card tb-measure-card wf-annot-wrap">
-                <span class="wf-annot">§8.3 · 4 слота</span>
-                <div class="ou-card__body">
-                  <span class="tb-measure-card__name">Состояние</span>
-                  <!-- Слот значения пуст: показатель строковый, числовые
-                       интервалы к нему неприменимы (§5.2 — только метка). -->
-                  <span class="ou-tag ou-tag--l ou-tag--warning">Возрастающее истощение</span>
-                  <p class="tb-measure-card__text">Вы тратите на работу больше ресурса, чем восстанавливаете. Отношение к работе пока сохраняется, но запас прочности снижается.</p>
-                </div>
+            <!-- ── Блок 2 порядка §8.2: показатель ── -->
+            <span class="tb-eyebrow">Состояние</span>
+            <div class="ou-banner ou-banner--subtle ou-banner--warning wf-annot-wrap">
+              <span class="wf-annot">§8.2 · блок 2 · ou-banner</span>
+              <div class="ou-banner__body">
+                <div class="ou-banner__title">Возрастающее истощение</div>
+                <div class="ou-banner__desc">Вы тратите на работу больше ресурса, чем восстанавливаете. Отношение к работе пока сохраняется, но запас прочности снижается.</div>
               </div>
             </div>
 
@@ -246,93 +206,100 @@
 
             <!-- ── Блок 3 порядка §8.2: шкалы ── -->
             <div class="tb-scene__q wf-annot-wrap">
-              <span class="wf-annot">§8.2 · блок 3</span>
+              <span class="wf-annot">§8.2 · блок 3 · ou-slider</span>
               <h3 class="tb-scene__subhead">Шкалы</h3>
             </div>
             <div class="tb-measures">
 
               <!-- Шкала 1: чем больше, тем хуже — благоприятный край СЛЕВА. -->
-              <div class="ou-card tb-measure-card">
-                <div class="ou-card__body">
-                  <span class="tb-measure-card__name">Эмоциональное истощение</span>
-                  <div class="tb-ruler wf-annot-wrap">
-                    <span class="wf-annot">§6.3 · дискретные зоны + маркер</span>
-                    <div class="tb-ruler__value"><strong>27</strong> из 45</div>
-                    <div class="tb-ruler__bar">
-                      <div class="tb-ruler__track" role="img" aria-label="Низкий 0–14, умеренный 15–24, высокий 25–45; значение 27 — высокий уровень">
-                        <span class="tb-ruler__zone is-favorable" style="width: 33.33%"></span>
-                        <span class="tb-ruler__zone is-attention" style="width: 22.22%"></span>
-                        <span class="tb-ruler__zone is-critical" style="width: 44.45%"></span>
-                      </div>
-                      <span class="tb-ruler__marker is-critical" style="left: 60%"></span>
-                    </div>
-                    <div class="tb-ruler__labels">
-                      <span class="tb-ruler__edge tb-ruler__edge--min">0</span>
-                      <span class="tb-ruler__zone-label" style="left: 16.67%">Низкий</span>
-                      <span class="tb-ruler__zone-label" style="left: 44.44%">Умеренный</span>
-                      <span class="tb-ruler__zone-label is-current" style="left: 72.22%">Высокий</span>
-                      <span class="tb-ruler__edge tb-ruler__edge--max">45</span>
+              <div class="tb-measure" data-render="band_ruler">
+                <div class="ou-slider ou-slider--h tb-measure__slider">
+                  <div class="ou-slider__header">
+                    <span class="ou-slider__lbl">Эмоциональное истощение</span>
+                    <span class="ou-slider__val"><strong>27</strong> из 45</span>
+                  </div>
+                  <div class="ou-slider__rail" role="img" aria-label="Низкий 0–14, умеренный 15–24, высокий 25–45; значение 27 — высокий уровень">
+                    <span class="ou-slider__fill tb-zone" style="left: 0%; width: 33.3%; --tb-zone: 142 76% 36%"></span>
+                    <span class="ou-slider__fill tb-zone" style="left: 33.3%; width: 22.2%; --tb-zone: 38 92% 50%"></span>
+                    <span class="ou-slider__fill tb-zone is-current" style="left: 55.6%; width: 44.4%; --tb-zone: 0 84% 60%"></span>
+                    <span class="ou-slider__thumb tb-measure__marker" style="left: 60%"></span>
+                    <div class="ou-slider__marks">
+                      <span class="ou-slider__mark" style="left: 0%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                      <span class="ou-slider__mark" style="left: 33.3%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 33.3%">15</span>
+                      <span class="ou-slider__mark" style="left: 55.6%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 55.6%">25</span>
+                      <span class="ou-slider__mark" style="left: 100%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 100%">45</span>
                     </div>
                   </div>
-                  <span class="ou-tag ou-tag--l ou-tag--error">Высокий</span>
-                  <p class="tb-measure-card__text">Ресурс расходуется быстрее, чем восстанавливается: усталость к концу дня стала фоном.</p>
+                </div>
+                <div class="tb-measure__verdict">
+                  <span class="ou-tag ou-tag--s tb-tone--critical">Высокий</span>
+                  <span class="tb-measure__text">Ресурс расходуется быстрее, чем восстанавливается: усталость к концу дня стала фоном.</span>
                 </div>
               </div>
 
-              <!-- Шкала 2: маркер у ЛЕВОГО края своей зоны. -->
-              <div class="ou-card tb-measure-card">
-                <div class="ou-card__body">
-                  <span class="tb-measure-card__name">Отстранённость</span>
-                  <div class="tb-ruler">
-                    <div class="tb-ruler__value"><strong>6</strong> из 25</div>
-                    <div class="tb-ruler__bar">
-                      <div class="tb-ruler__track" role="img" aria-label="Низкая 0–4, умеренная 5–9, высокая 10–25; значение 6 — умеренная">
-                        <span class="tb-ruler__zone is-favorable" style="width: 20%"></span>
-                        <span class="tb-ruler__zone is-attention" style="width: 20%"></span>
-                        <span class="tb-ruler__zone is-critical" style="width: 60%"></span>
-                      </div>
-                      <span class="tb-ruler__marker is-attention" style="left: 24%"></span>
-                    </div>
-                    <div class="tb-ruler__labels">
-                      <span class="tb-ruler__edge tb-ruler__edge--min">0</span>
-                      <span class="tb-ruler__zone-label" style="left: 10%">Низкая</span>
-                      <span class="tb-ruler__zone-label is-current" style="left: 30%">Умеренная</span>
-                      <span class="tb-ruler__zone-label" style="left: 70%">Высокая</span>
-                      <span class="tb-ruler__edge tb-ruler__edge--max">25</span>
+              <!-- Шкала 2: отметка у ЛЕВОГО края своей зоны. -->
+              <div class="tb-measure" data-render="band_ruler">
+                <div class="ou-slider ou-slider--h tb-measure__slider">
+                  <div class="ou-slider__header">
+                    <span class="ou-slider__lbl">Отстранённость</span>
+                    <span class="ou-slider__val"><strong>6</strong> из 25</span>
+                  </div>
+                  <div class="ou-slider__rail" role="img" aria-label="Низкая 0–4, умеренная 5–9, высокая 10–25; значение 6 — умеренная">
+                    <span class="ou-slider__fill tb-zone" style="left: 0%; width: 20%; --tb-zone: 142 76% 36%"></span>
+                    <span class="ou-slider__fill tb-zone is-current" style="left: 20%; width: 20%; --tb-zone: 38 92% 50%"></span>
+                    <span class="ou-slider__fill tb-zone" style="left: 40%; width: 60%; --tb-zone: 0 84% 60%"></span>
+                    <span class="ou-slider__thumb tb-measure__marker" style="left: 24%"></span>
+                    <div class="ou-slider__marks">
+                      <span class="ou-slider__mark" style="left: 0%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                      <span class="ou-slider__mark" style="left: 20%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 20%">5</span>
+                      <span class="ou-slider__mark" style="left: 40%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 40%">10</span>
+                      <span class="ou-slider__mark" style="left: 100%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 100%">25</span>
                     </div>
                   </div>
-                  <span class="ou-tag ou-tag--l ou-tag--warning">Умеренная</span>
-                  <p class="tb-measure-card__text">Появляется дистанция в отношении к людям и задачам — обычная защитная реакция на перегрузку.</p>
+                </div>
+                <div class="tb-measure__verdict">
+                  <span class="ou-tag ou-tag--s tb-tone--attention">Умеренная</span>
+                  <span class="tb-measure__text">Появляется дистанция в отношении к людям и задачам — обычная защитная реакция на перегрузку.</span>
                 </div>
               </div>
 
               <!-- Шкала 3: чем больше, тем ЛУЧШЕ — благоприятный край СПРАВА,
                    окраска зон зеркальна двум предыдущим при той же цветовой
                    схеме (§4.2: направление живёт в данных, не в оформлении). -->
-              <div class="ou-card tb-measure-card wf-annot-wrap">
-                <span class="wf-annot">§4.2 · зелёный край СПРАВА</span>
-                <div class="ou-card__body">
-                  <span class="tb-measure-card__name">Обесценивание достижений</span>
-                  <div class="tb-ruler">
-                    <div class="tb-ruler__value"><strong>30</strong> из 40</div>
-                    <div class="tb-ruler__bar">
-                      <div class="tb-ruler__track" role="img" aria-label="Высокое 0–27, умеренное 28–32, низкое 33–40; значение 30 — умеренное">
-                        <span class="tb-ruler__zone is-critical" style="width: 70%"></span>
-                        <span class="tb-ruler__zone is-attention" style="width: 12.5%"></span>
-                        <span class="tb-ruler__zone is-favorable" style="width: 17.5%"></span>
-                      </div>
-                      <span class="tb-ruler__marker is-attention" style="left: 75%"></span>
-                    </div>
-                    <div class="tb-ruler__labels">
-                      <span class="tb-ruler__edge tb-ruler__edge--min">0</span>
-                      <span class="tb-ruler__zone-label" style="left: 35%">Высокое</span>
-                      <span class="tb-ruler__zone-label is-current" style="left: 76.25%">Умеренное</span>
-                      <span class="tb-ruler__zone-label" style="left: 91.25%">Низкое</span>
-                      <span class="tb-ruler__edge tb-ruler__edge--max">40</span>
+              <div class="tb-measure" data-render="band_ruler">
+                <div class="ou-slider ou-slider--h tb-measure__slider">
+                  <div class="ou-slider__header">
+                    <span class="ou-slider__lbl">Обесценивание достижений</span>
+                    <span class="ou-slider__val"><strong>30</strong> из 40</span>
+                  </div>
+                  <div class="ou-slider__rail" role="img" aria-label="Высокое 0–27, умеренное 28–32, низкое 33–40; значение 30 — умеренное">
+                    <span class="ou-slider__fill tb-zone" style="left: 0%; width: 70%; --tb-zone: 0 84% 60%"></span>
+                    <span class="ou-slider__fill tb-zone is-current" style="left: 70%; width: 12.5%; --tb-zone: 38 92% 50%"></span>
+                    <span class="ou-slider__fill tb-zone" style="left: 82.5%; width: 17.5%; --tb-zone: 142 76% 36%"></span>
+                    <span class="ou-slider__thumb tb-measure__marker" style="left: 75%"></span>
+                    <div class="ou-slider__marks">
+                      <span class="ou-slider__mark" style="left: 0%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                      <span class="ou-slider__mark" style="left: 70%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 70%">28</span>
+                      <span class="ou-slider__mark" style="left: 82.5%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 82.5%">33</span>
+                      <span class="ou-slider__mark" style="left: 100%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 100%">40</span>
                     </div>
                   </div>
-                  <span class="ou-tag ou-tag--l ou-tag--warning">Умеренное</span>
-                  <p class="tb-measure-card__text">Вы в основном видите отдачу от своей работы, но уверенность в собственной эффективности неустойчива.</p>
+                </div>
+                <div class="tb-measure__verdict">
+                  <span class="ou-tag ou-tag--s tb-tone--attention">Умеренное</span>
+                  <span class="tb-measure__text">Вы в основном видите отдачу от своей работы, но уверенность в собственной эффективности неустойчива.</span>
                 </div>
               </div>
 
@@ -468,7 +435,7 @@
 <!-- ══════════════════ Смешанный тест ══════════════════ -->
 <section class="wf-state" id="s-mixed">
   <div class="wf-page">
-    <p class="wf-caption">Смешанный тест: есть и порог прохождения, и шкалы с показателем. Все пять блоков в фиксированном порядке §8.2 — сводка баллов, показатели, шкалы, результаты по темам, рекомендации. Второго вида макета «Итоги: измерение» не заводится (§8.1). Кадр растянут по высоте содержимого: в реальном окне прокручивается тело сцены.</p>
+    <p class="wf-caption">Смешанный тест: есть и порог прохождения, и шкалы с показателем. Все пять блоков в фиксированном порядке §8.2 — сводка баллов, показатель, шкалы, результаты по темам, рекомендации. Второго вида макета «Итоги: измерение» не заводится (§8.1). Кадр растянут по высоте содержимого: в реальном окне прокручивается тело сцены.</p>
     <div class="wf-viewport wf-viewport--flow">
       <div class="tb-scene">
 
@@ -509,18 +476,13 @@
 
             <hr class="ou-separator ou-separator--horizontal">
 
-            <!-- ── Блок 2: показатели ── -->
-            <div class="tb-scene__q wf-annot-wrap">
+            <!-- ── Блок 2: показатель ── -->
+            <span class="tb-eyebrow">Состояние</span>
+            <div class="ou-banner ou-banner--subtle ou-banner--warning wf-annot-wrap">
               <span class="wf-annot">§8.2 · блок 2</span>
-              <h3 class="tb-scene__subhead">Показатели</h3>
-            </div>
-            <div class="tb-measures">
-              <div class="ou-card tb-measure-card">
-                <div class="ou-card__body">
-                  <span class="tb-measure-card__name">Состояние</span>
-                  <span class="ou-tag ou-tag--l ou-tag--warning">Возрастающее истощение</span>
-                  <p class="tb-measure-card__text">Вы тратите на работу больше ресурса, чем восстанавливаете. Отношение к работе пока сохраняется, но запас прочности снижается.</p>
-                </div>
+              <div class="ou-banner__body">
+                <div class="ou-banner__title">Возрастающее истощение</div>
+                <div class="ou-banner__desc">Вы тратите на работу больше ресурса, чем восстанавливаете. Отношение к работе пока сохраняется, но запас прочности снижается.</div>
               </div>
             </div>
 
@@ -532,81 +494,94 @@
               <h3 class="tb-scene__subhead">Шкалы</h3>
             </div>
             <div class="tb-measures">
-              <div class="ou-card tb-measure-card">
-                <div class="ou-card__body">
-                  <span class="tb-measure-card__name">Эмоциональное истощение</span>
-                  <div class="tb-ruler">
-                    <div class="tb-ruler__value"><strong>27</strong> из 45</div>
-                    <div class="tb-ruler__bar">
-                      <div class="tb-ruler__track" role="img" aria-label="Низкий 0–14, умеренный 15–24, высокий 25–45; значение 27 — высокий уровень">
-                        <span class="tb-ruler__zone is-favorable" style="width: 33.33%"></span>
-                        <span class="tb-ruler__zone is-attention" style="width: 22.22%"></span>
-                        <span class="tb-ruler__zone is-critical" style="width: 44.45%"></span>
-                      </div>
-                      <span class="tb-ruler__marker is-critical" style="left: 60%"></span>
-                    </div>
-                    <div class="tb-ruler__labels">
-                      <span class="tb-ruler__edge tb-ruler__edge--min">0</span>
-                      <span class="tb-ruler__zone-label" style="left: 16.67%">Низкий</span>
-                      <span class="tb-ruler__zone-label" style="left: 44.44%">Умеренный</span>
-                      <span class="tb-ruler__zone-label is-current" style="left: 72.22%">Высокий</span>
-                      <span class="tb-ruler__edge tb-ruler__edge--max">45</span>
+
+              <div class="tb-measure" data-render="band_ruler">
+                <div class="ou-slider ou-slider--h tb-measure__slider">
+                  <div class="ou-slider__header">
+                    <span class="ou-slider__lbl">Эмоциональное истощение</span>
+                    <span class="ou-slider__val"><strong>27</strong> из 45</span>
+                  </div>
+                  <div class="ou-slider__rail" role="img" aria-label="Низкий 0–14, умеренный 15–24, высокий 25–45; значение 27 — высокий уровень">
+                    <span class="ou-slider__fill tb-zone" style="left: 0%; width: 33.3%; --tb-zone: 142 76% 36%"></span>
+                    <span class="ou-slider__fill tb-zone" style="left: 33.3%; width: 22.2%; --tb-zone: 38 92% 50%"></span>
+                    <span class="ou-slider__fill tb-zone is-current" style="left: 55.6%; width: 44.4%; --tb-zone: 0 84% 60%"></span>
+                    <span class="ou-slider__thumb tb-measure__marker" style="left: 60%"></span>
+                    <div class="ou-slider__marks">
+                      <span class="ou-slider__mark" style="left: 0%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                      <span class="ou-slider__mark" style="left: 33.3%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 33.3%">15</span>
+                      <span class="ou-slider__mark" style="left: 55.6%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 55.6%">25</span>
+                      <span class="ou-slider__mark" style="left: 100%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 100%">45</span>
                     </div>
                   </div>
-                  <span class="ou-tag ou-tag--l ou-tag--error">Высокий</span>
-                  <p class="tb-measure-card__text">Ресурс расходуется быстрее, чем восстанавливается: усталость к концу дня стала фоном.</p>
+                </div>
+                <div class="tb-measure__verdict">
+                  <span class="ou-tag ou-tag--s tb-tone--critical">Высокий</span>
+                  <span class="tb-measure__text">Ресурс расходуется быстрее, чем восстанавливается: усталость к концу дня стала фоном.</span>
                 </div>
               </div>
-              <div class="ou-card tb-measure-card">
-                <div class="ou-card__body">
-                  <span class="tb-measure-card__name">Отстранённость</span>
-                  <div class="tb-ruler">
-                    <div class="tb-ruler__value"><strong>6</strong> из 25</div>
-                    <div class="tb-ruler__bar">
-                      <div class="tb-ruler__track" role="img" aria-label="Низкая 0–4, умеренная 5–9, высокая 10–25; значение 6 — умеренная">
-                        <span class="tb-ruler__zone is-favorable" style="width: 20%"></span>
-                        <span class="tb-ruler__zone is-attention" style="width: 20%"></span>
-                        <span class="tb-ruler__zone is-critical" style="width: 60%"></span>
-                      </div>
-                      <span class="tb-ruler__marker is-attention" style="left: 24%"></span>
-                    </div>
-                    <div class="tb-ruler__labels">
-                      <span class="tb-ruler__edge tb-ruler__edge--min">0</span>
-                      <span class="tb-ruler__zone-label" style="left: 10%">Низкая</span>
-                      <span class="tb-ruler__zone-label is-current" style="left: 30%">Умеренная</span>
-                      <span class="tb-ruler__zone-label" style="left: 70%">Высокая</span>
-                      <span class="tb-ruler__edge tb-ruler__edge--max">25</span>
+
+              <div class="tb-measure" data-render="band_ruler">
+                <div class="ou-slider ou-slider--h tb-measure__slider">
+                  <div class="ou-slider__header">
+                    <span class="ou-slider__lbl">Отстранённость</span>
+                    <span class="ou-slider__val"><strong>6</strong> из 25</span>
+                  </div>
+                  <div class="ou-slider__rail" role="img" aria-label="Низкая 0–4, умеренная 5–9, высокая 10–25; значение 6 — умеренная">
+                    <span class="ou-slider__fill tb-zone" style="left: 0%; width: 20%; --tb-zone: 142 76% 36%"></span>
+                    <span class="ou-slider__fill tb-zone is-current" style="left: 20%; width: 20%; --tb-zone: 38 92% 50%"></span>
+                    <span class="ou-slider__fill tb-zone" style="left: 40%; width: 60%; --tb-zone: 0 84% 60%"></span>
+                    <span class="ou-slider__thumb tb-measure__marker" style="left: 24%"></span>
+                    <div class="ou-slider__marks">
+                      <span class="ou-slider__mark" style="left: 0%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                      <span class="ou-slider__mark" style="left: 20%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 20%">5</span>
+                      <span class="ou-slider__mark" style="left: 40%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 40%">10</span>
+                      <span class="ou-slider__mark" style="left: 100%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 100%">25</span>
                     </div>
                   </div>
-                  <span class="ou-tag ou-tag--l ou-tag--warning">Умеренная</span>
-                  <p class="tb-measure-card__text">Появляется дистанция в отношении к людям и задачам — обычная защитная реакция на перегрузку.</p>
+                </div>
+                <div class="tb-measure__verdict">
+                  <span class="ou-tag ou-tag--s tb-tone--attention">Умеренная</span>
+                  <span class="tb-measure__text">Появляется дистанция в отношении к людям и задачам — обычная защитная реакция на перегрузку.</span>
                 </div>
               </div>
-              <div class="ou-card tb-measure-card">
-                <div class="ou-card__body">
-                  <span class="tb-measure-card__name">Обесценивание достижений</span>
-                  <div class="tb-ruler">
-                    <div class="tb-ruler__value"><strong>30</strong> из 40</div>
-                    <div class="tb-ruler__bar">
-                      <div class="tb-ruler__track" role="img" aria-label="Высокое 0–27, умеренное 28–32, низкое 33–40; значение 30 — умеренное">
-                        <span class="tb-ruler__zone is-critical" style="width: 70%"></span>
-                        <span class="tb-ruler__zone is-attention" style="width: 12.5%"></span>
-                        <span class="tb-ruler__zone is-favorable" style="width: 17.5%"></span>
-                      </div>
-                      <span class="tb-ruler__marker is-attention" style="left: 75%"></span>
-                    </div>
-                    <div class="tb-ruler__labels">
-                      <span class="tb-ruler__edge tb-ruler__edge--min">0</span>
-                      <span class="tb-ruler__zone-label" style="left: 35%">Высокое</span>
-                      <span class="tb-ruler__zone-label is-current" style="left: 76.25%">Умеренное</span>
-                      <span class="tb-ruler__zone-label" style="left: 91.25%">Низкое</span>
-                      <span class="tb-ruler__edge tb-ruler__edge--max">40</span>
+
+              <div class="tb-measure" data-render="band_ruler">
+                <div class="ou-slider ou-slider--h tb-measure__slider">
+                  <div class="ou-slider__header">
+                    <span class="ou-slider__lbl">Обесценивание достижений</span>
+                    <span class="ou-slider__val"><strong>30</strong> из 40</span>
+                  </div>
+                  <div class="ou-slider__rail" role="img" aria-label="Высокое 0–27, умеренное 28–32, низкое 33–40; значение 30 — умеренное">
+                    <span class="ou-slider__fill tb-zone" style="left: 0%; width: 70%; --tb-zone: 0 84% 60%"></span>
+                    <span class="ou-slider__fill tb-zone is-current" style="left: 70%; width: 12.5%; --tb-zone: 38 92% 50%"></span>
+                    <span class="ou-slider__fill tb-zone" style="left: 82.5%; width: 17.5%; --tb-zone: 142 76% 36%"></span>
+                    <span class="ou-slider__thumb tb-measure__marker" style="left: 75%"></span>
+                    <div class="ou-slider__marks">
+                      <span class="ou-slider__mark" style="left: 0%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                      <span class="ou-slider__mark" style="left: 70%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 70%">28</span>
+                      <span class="ou-slider__mark" style="left: 82.5%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 82.5%">33</span>
+                      <span class="ou-slider__mark" style="left: 100%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 100%">40</span>
                     </div>
                   </div>
-                  <span class="ou-tag ou-tag--l ou-tag--warning">Умеренное</span>
-                  <p class="tb-measure-card__text">Вы в основном видите отдачу от своей работы, но уверенность в собственной эффективности неустойчива.</p>
+                </div>
+                <div class="tb-measure__verdict">
+                  <span class="ou-tag ou-tag--s tb-tone--attention">Умеренное</span>
+                  <span class="tb-measure__text">Вы в основном видите отдачу от своей работы, но уверенность в собственной эффективности неустойчива.</span>
                 </div>
               </div>
+
             </div>
 
             <hr class="ou-separator ou-separator--horizontal">
@@ -692,7 +667,7 @@
 <!-- ══════════════════ Узкий контейнер 360 ══════════════════ -->
 <section class="wf-state" id="s-narrow">
   <div class="wf-page">
-    <p class="wf-caption">Та же методика в контейнере шириной 360px. Карточка измерения объявлена контейнером, поэтому линейка сама переходит в тесный режим: подписаны текущая зона и края домена, прочие границы остаются насечками (§6.5). Метка уровня словом и толкование остаются на месте — цвет не единственный носитель смысла. Кадр растянут по высоте содержимого: в реальном окне прокручивается тело сцены.</p>
+    <p class="wf-caption">Та же методика в контейнере шириной 360px. Под дорожкой стоят только числовые границы, а название уровня — словом в метке рядом, поэтому подписи не спорят за место и особого тесного режима линейке не нужно. Кадр растянут по высоте содержимого: в реальном окне прокручивается тело сцены.</p>
     <div class="wf-viewport wf-viewport--flow wf-viewport--narrow">
       <div class="tb-scene">
 
@@ -708,14 +683,11 @@
         <main class="tb-scene__body">
           <div class="tb-scene__col tb-scene__col--wide">
 
-            <div class="tb-scene__q"><h3 class="tb-scene__subhead">Показатели</h3></div>
-            <div class="tb-measures">
-              <div class="ou-card tb-measure-card">
-                <div class="ou-card__body">
-                  <span class="tb-measure-card__name">Состояние</span>
-                  <span class="ou-tag ou-tag--l ou-tag--warning">Возрастающее истощение</span>
-                  <p class="tb-measure-card__text">Вы тратите на работу больше ресурса, чем восстанавливаете. Отношение к работе пока сохраняется, но запас прочности снижается.</p>
-                </div>
+            <span class="tb-eyebrow">Состояние</span>
+            <div class="ou-banner ou-banner--subtle ou-banner--warning">
+              <div class="ou-banner__body">
+                <div class="ou-banner__title">Возрастающее истощение</div>
+                <div class="ou-banner__desc">Вы тратите на работу больше ресурса, чем восстанавливаете. Отношение к работе пока сохраняется, но запас прочности снижается.</div>
               </div>
             </div>
 
@@ -723,81 +695,94 @@
 
             <div class="tb-scene__q"><h3 class="tb-scene__subhead">Шкалы</h3></div>
             <div class="tb-measures">
-              <div class="ou-card tb-measure-card">
-                <div class="ou-card__body">
-                  <span class="tb-measure-card__name">Эмоциональное истощение</span>
-                  <div class="tb-ruler">
-                    <div class="tb-ruler__value"><strong>27</strong> из 45</div>
-                    <div class="tb-ruler__bar">
-                      <div class="tb-ruler__track" role="img" aria-label="Низкий 0–14, умеренный 15–24, высокий 25–45; значение 27 — высокий уровень">
-                        <span class="tb-ruler__zone is-favorable" style="width: 33.33%"></span>
-                        <span class="tb-ruler__zone is-attention" style="width: 22.22%"></span>
-                        <span class="tb-ruler__zone is-critical" style="width: 44.45%"></span>
-                      </div>
-                      <span class="tb-ruler__marker is-critical" style="left: 60%"></span>
-                    </div>
-                    <div class="tb-ruler__labels">
-                      <span class="tb-ruler__edge tb-ruler__edge--min">0</span>
-                      <span class="tb-ruler__zone-label" style="left: 16.67%">Низкий</span>
-                      <span class="tb-ruler__zone-label" style="left: 44.44%">Умеренный</span>
-                      <span class="tb-ruler__zone-label is-current" style="left: 72.22%">Высокий</span>
-                      <span class="tb-ruler__edge tb-ruler__edge--max">45</span>
+
+              <div class="tb-measure" data-render="band_ruler">
+                <div class="ou-slider ou-slider--h tb-measure__slider">
+                  <div class="ou-slider__header">
+                    <span class="ou-slider__lbl">Эмоциональное истощение</span>
+                    <span class="ou-slider__val"><strong>27</strong> из 45</span>
+                  </div>
+                  <div class="ou-slider__rail" role="img" aria-label="Низкий 0–14, умеренный 15–24, высокий 25–45; значение 27 — высокий уровень">
+                    <span class="ou-slider__fill tb-zone" style="left: 0%; width: 33.3%; --tb-zone: 142 76% 36%"></span>
+                    <span class="ou-slider__fill tb-zone" style="left: 33.3%; width: 22.2%; --tb-zone: 38 92% 50%"></span>
+                    <span class="ou-slider__fill tb-zone is-current" style="left: 55.6%; width: 44.4%; --tb-zone: 0 84% 60%"></span>
+                    <span class="ou-slider__thumb tb-measure__marker" style="left: 60%"></span>
+                    <div class="ou-slider__marks">
+                      <span class="ou-slider__mark" style="left: 0%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                      <span class="ou-slider__mark" style="left: 33.3%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 33.3%">15</span>
+                      <span class="ou-slider__mark" style="left: 55.6%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 55.6%">25</span>
+                      <span class="ou-slider__mark" style="left: 100%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 100%">45</span>
                     </div>
                   </div>
-                  <span class="ou-tag ou-tag--l ou-tag--error">Высокий</span>
-                  <p class="tb-measure-card__text">Ресурс расходуется быстрее, чем восстанавливается: усталость к концу дня стала фоном.</p>
+                </div>
+                <div class="tb-measure__verdict">
+                  <span class="ou-tag ou-tag--s tb-tone--critical">Высокий</span>
+                  <span class="tb-measure__text">Ресурс расходуется быстрее, чем восстанавливается: усталость к концу дня стала фоном.</span>
                 </div>
               </div>
-              <div class="ou-card tb-measure-card">
-                <div class="ou-card__body">
-                  <span class="tb-measure-card__name">Отстранённость</span>
-                  <div class="tb-ruler">
-                    <div class="tb-ruler__value"><strong>6</strong> из 25</div>
-                    <div class="tb-ruler__bar">
-                      <div class="tb-ruler__track" role="img" aria-label="Низкая 0–4, умеренная 5–9, высокая 10–25; значение 6 — умеренная">
-                        <span class="tb-ruler__zone is-favorable" style="width: 20%"></span>
-                        <span class="tb-ruler__zone is-attention" style="width: 20%"></span>
-                        <span class="tb-ruler__zone is-critical" style="width: 60%"></span>
-                      </div>
-                      <span class="tb-ruler__marker is-attention" style="left: 24%"></span>
-                    </div>
-                    <div class="tb-ruler__labels">
-                      <span class="tb-ruler__edge tb-ruler__edge--min">0</span>
-                      <span class="tb-ruler__zone-label" style="left: 10%">Низкая</span>
-                      <span class="tb-ruler__zone-label is-current" style="left: 30%">Умеренная</span>
-                      <span class="tb-ruler__zone-label" style="left: 70%">Высокая</span>
-                      <span class="tb-ruler__edge tb-ruler__edge--max">25</span>
+
+              <div class="tb-measure" data-render="band_ruler">
+                <div class="ou-slider ou-slider--h tb-measure__slider">
+                  <div class="ou-slider__header">
+                    <span class="ou-slider__lbl">Отстранённость</span>
+                    <span class="ou-slider__val"><strong>6</strong> из 25</span>
+                  </div>
+                  <div class="ou-slider__rail" role="img" aria-label="Низкая 0–4, умеренная 5–9, высокая 10–25; значение 6 — умеренная">
+                    <span class="ou-slider__fill tb-zone" style="left: 0%; width: 20%; --tb-zone: 142 76% 36%"></span>
+                    <span class="ou-slider__fill tb-zone is-current" style="left: 20%; width: 20%; --tb-zone: 38 92% 50%"></span>
+                    <span class="ou-slider__fill tb-zone" style="left: 40%; width: 60%; --tb-zone: 0 84% 60%"></span>
+                    <span class="ou-slider__thumb tb-measure__marker" style="left: 24%"></span>
+                    <div class="ou-slider__marks">
+                      <span class="ou-slider__mark" style="left: 0%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                      <span class="ou-slider__mark" style="left: 20%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 20%">5</span>
+                      <span class="ou-slider__mark" style="left: 40%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 40%">10</span>
+                      <span class="ou-slider__mark" style="left: 100%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 100%">25</span>
                     </div>
                   </div>
-                  <span class="ou-tag ou-tag--l ou-tag--warning">Умеренная</span>
-                  <p class="tb-measure-card__text">Появляется дистанция в отношении к людям и задачам — обычная защитная реакция на перегрузку.</p>
+                </div>
+                <div class="tb-measure__verdict">
+                  <span class="ou-tag ou-tag--s tb-tone--attention">Умеренная</span>
+                  <span class="tb-measure__text">Появляется дистанция в отношении к людям и задачам — обычная защитная реакция на перегрузку.</span>
                 </div>
               </div>
-              <div class="ou-card tb-measure-card">
-                <div class="ou-card__body">
-                  <span class="tb-measure-card__name">Обесценивание достижений</span>
-                  <div class="tb-ruler">
-                    <div class="tb-ruler__value"><strong>30</strong> из 40</div>
-                    <div class="tb-ruler__bar">
-                      <div class="tb-ruler__track" role="img" aria-label="Высокое 0–27, умеренное 28–32, низкое 33–40; значение 30 — умеренное">
-                        <span class="tb-ruler__zone is-critical" style="width: 70%"></span>
-                        <span class="tb-ruler__zone is-attention" style="width: 12.5%"></span>
-                        <span class="tb-ruler__zone is-favorable" style="width: 17.5%"></span>
-                      </div>
-                      <span class="tb-ruler__marker is-attention" style="left: 75%"></span>
-                    </div>
-                    <div class="tb-ruler__labels">
-                      <span class="tb-ruler__edge tb-ruler__edge--min">0</span>
-                      <span class="tb-ruler__zone-label" style="left: 35%">Высокое</span>
-                      <span class="tb-ruler__zone-label is-current" style="left: 76.25%">Умеренное</span>
-                      <span class="tb-ruler__zone-label" style="left: 91.25%">Низкое</span>
-                      <span class="tb-ruler__edge tb-ruler__edge--max">40</span>
+
+              <div class="tb-measure" data-render="band_ruler">
+                <div class="ou-slider ou-slider--h tb-measure__slider">
+                  <div class="ou-slider__header">
+                    <span class="ou-slider__lbl">Обесценивание достижений</span>
+                    <span class="ou-slider__val"><strong>30</strong> из 40</span>
+                  </div>
+                  <div class="ou-slider__rail" role="img" aria-label="Высокое 0–27, умеренное 28–32, низкое 33–40; значение 30 — умеренное">
+                    <span class="ou-slider__fill tb-zone" style="left: 0%; width: 70%; --tb-zone: 0 84% 60%"></span>
+                    <span class="ou-slider__fill tb-zone is-current" style="left: 70%; width: 12.5%; --tb-zone: 38 92% 50%"></span>
+                    <span class="ou-slider__fill tb-zone" style="left: 82.5%; width: 17.5%; --tb-zone: 142 76% 36%"></span>
+                    <span class="ou-slider__thumb tb-measure__marker" style="left: 75%"></span>
+                    <div class="ou-slider__marks">
+                      <span class="ou-slider__mark" style="left: 0%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                      <span class="ou-slider__mark" style="left: 70%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 70%">28</span>
+                      <span class="ou-slider__mark" style="left: 82.5%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 82.5%">33</span>
+                      <span class="ou-slider__mark" style="left: 100%"></span>
+                      <span class="ou-slider__mark-lbl" style="left: 100%">40</span>
                     </div>
                   </div>
-                  <span class="ou-tag ou-tag--l ou-tag--warning">Умеренное</span>
-                  <p class="tb-measure-card__text">Вы в основном видите отдачу от своей работы, но уверенность в собственной эффективности неустойчива.</p>
+                </div>
+                <div class="tb-measure__verdict">
+                  <span class="ou-tag ou-tag--s tb-tone--attention">Умеренное</span>
+                  <span class="tb-measure__text">Вы в основном видите отдачу от своей работы, но уверенность в собственной эффективности неустойчива.</span>
                 </div>
               </div>
+
             </div>
 
             <hr class="ou-separator ou-separator--horizontal">
@@ -852,8 +837,13 @@
     <tbody>
       <tr>
         <td>Порядок блоков фиксирован и не настраивается</td>
-        <td>Сводка баллов, показатели, шкалы, результаты по темам, рекомендации. Вывод методики читается первым, расшифровка под ним; обратный порядок означал бы «вот вам цифры, догадайтесь сами». Состояние «Смешанный» показывает все пять блоков подряд</td>
+        <td>Сводка баллов, показатели, шкалы, результаты по темам, рекомендации. Вывод методики читается первым, расшифровка под ним; обратный порядок означал бы «вот вам цифры, догадайтесь сами». Состояние «Смешанный» показывает все пять блоков подряд, границы блоков держат разделители</td>
         <td>§8.2</td>
+      </tr>
+      <tr>
+        <td>Ни одной вложенной поверхности</td>
+        <td>Шкалы и показатель лежат прямо на сцене: шкала — строка на дорожке <code>ou-slider</code>, показатель — <code>ou-banner--subtle</code>. Собственную поверхность заводит только существующая сетка тем. Рамка вокруг каждого измерения превратила бы экран в стопку карточек внутри карточек</td>
+        <td>§8.3</td>
       </tr>
       <tr>
         <td>Макет один, блоки включаются настройками</td>
@@ -861,34 +851,39 @@
         <td>§8.1</td>
       </tr>
       <tr>
-        <td>Карточка — четыре слота в фиксированном порядке</td>
-        <td>Название, значение, метка уровня, толкование. Композиция общая для шкалы и показателя, различается только заголовок блока. Метка уровня присутствует ВСЕГДА; слот значения пуст при видимости <code>level</code> и у строкового показателя (карточка «Состояние»)</td>
+        <td>Четыре слота в фиксированном порядке</td>
+        <td>Название и значение стоят в шапке дорожки (<code>ou-slider__lbl</code> и <code>ou-slider__val</code>), метка уровня и толкование — в строке вердикта под ней. Метка уровня присутствует ВСЕГДА; слот значения пуст при видимости <code>level</code>, а у строкового показателя дорожки нет вовсе — его метка уровня становится заголовком баннера</td>
         <td>§8.3, §6.1</td>
       </tr>
       <tr>
         <td>Цвет никогда не единственный носитель смысла</td>
-        <td>Рядом с каждой линейкой стоит метка уровня словом, зоны подписаны, текущая зона выделена начертанием. Экран остаётся читаемым в оттенках серого и в тесном контейнере</td>
+        <td>Рядом с каждой дорожкой стоит метка уровня словом, под дорожкой — числовые границы интервалов. Экран остаётся читаемым в оттенках серого</td>
         <td>§6.5</td>
       </tr>
       <tr>
         <td>Отдельной цветовой легенды нет и не вводится</td>
-        <td>Легенда была бы неверна: у трёх шкал разное число зон, разные метки, а у «Обесценивания достижений» благоприятный край противоположен остальным. Линейка подписана метками своих интервалов — этого достаточно</td>
+        <td>Легенда была бы неверна: у трёх шкал разное число зон, разные метки, а у «Обесценивания достижений» благоприятный край противоположен остальным. Метка уровня словом закрывает вопрос «что у меня сейчас»</td>
+        <td>§6.5</td>
+      </tr>
+      <tr>
+        <td>Под дорожкой — только числовые границы</td>
+        <td>Названия уровней под дорожку не идут: три подписи на дорожке в 6px спорят за место, а на узком экране не помещаются вовсе. Название текущего уровня стоит словом в метке рядом; прочие уровни ученику знать незачем</td>
         <td>§6.5</td>
       </tr>
       <tr>
         <td>Зоны дискретны, градиента нет</td>
-        <td>У каждой зоны свой плоский цвет. Ширина зоны — от её начала до начала следующей, последняя доходит до максимума домена (27 из 45: 33,33% / 22,22% / 44,45%). Нюанс внутри зоны показывает маркер точной позиции: на «Отстранённости» видно, что 6 стоит у самого левого края умеренной зоны</td>
+        <td>Каждая зона — отдельная заливка своим плоским тоном, заливки стыкуются встык. Ширина зоны — от её начала до начала следующей, последняя доходит до максимума домена (27 из 45: 33,3% / 22,2% / 44,4%). Нюанс внутри зоны показывает отметка значения: на «Отстранённости» видно, что 6 стоит у самого левого края умеренной зоны</td>
         <td>§6.3</td>
       </tr>
       <tr>
         <td>Благоприятное направление живёт в данных, а не в оформлении</td>
-        <td>Цветовая схема одна на весь тест, но у «Обесценивания достижений» <code>valence = higher_is_better</code>, поэтому зелёный край СПРАВА, а красный слева — окраска зеркальна двум предыдущим шкалам</td>
+        <td>Цветовая схема одна на весь тест, но у «Обесценивания достижений» <code>valence = higher_is_better</code>, поэтому зелёная зона СПРАВА, а красная слева — окраска зеркальна двум предыдущим шкалам</td>
         <td>§4.2</td>
       </tr>
       <tr>
-        <td>Когда подписи не помещаются</td>
-        <td>Подписываются текущая зона и края домена, прочие границы остаются насечками. Переключает не медиазапрос по окну, а контейнерный запрос по ширине САМОЙ карточки: экран живёт то в окне LMS, то внутри страницы приложения, то в iframe отладчика</td>
-        <td>§6.5</td>
+        <td>Цвет зоны считает ядро</td>
+        <td>Тон приходит тройкой HSL в <code>--tb-zone</code> — тем же способом, каким уже устроены параметры оформления (<code>shared/template/params-css.ts</code>). Интерполяцию рампы делает ядро и отдаёт готовое значение; разметка и CSS ничего не вычисляют, поэтому веб и пакет красят одинаково</td>
+        <td>§6.2, §9</td>
       </tr>
       <tr>
         <td>Рекомендации — единый блок внизу</td>
@@ -902,7 +897,7 @@
       </tr>
       <tr>
         <td>Толкование и рекомендация — разные поля</td>
-        <td>Толкование отвечает на «что это значит» и печатается в карточке. Рекомендация отвечает на «что делать» и уходит в общий блок: у референсной методики сработают три интервала и один исход, то есть до четырёх частично совпадающих россыпей</td>
+        <td>Толкование отвечает на «что это значит» и печатается в строке измерения. Рекомендация отвечает на «что делать» и уходит в общий блок: у референсной методики сработают три интервала и один исход, то есть до четырёх частично совпадающих россыпей</td>
         <td>§7</td>
       </tr>
       <tr>
@@ -916,25 +911,25 @@
 
 <section class="wf-mapping">
   <h2 class="wf-mapping-title">Соответствие блоков разделам PRD-29</h2>
-  <p class="wf-mapping-sub">Существующая разметка — реальный шаблон «Стандартный» (<code>layouts/results.html</code> + <code>styles/theme.css</code>, подключён в эскиз как есть). Новое объявлено в блоке «Дельта шаблона» и предлагается как дополнение к тому же <code>theme.css</code>; собственных цветов слой не заводит.</p>
+  <p class="wf-mapping-sub">Существующая разметка — реальный шаблон «Стандартный» (<code>layouts/results.html</code> + <code>styles/theme.css</code>, подключён в эскиз как есть); компоненты — дизайн-система UniversityRT. Собственного в шаблоне остаётся только раскладка строки измерения и три поправки к <code>ou-slider</code>, который спроектирован как элемент управления, а здесь показывает результат.</p>
   <table>
-    <thead><tr><th>Блок эскиза</th><th>Разметка и классы</th><th>Раздел PRD-29</th><th>Новое?</th></tr></thead>
+    <thead><tr><th>Блок эскиза</th><th>Компонент ДС и классы</th><th>Раздел PRD-29</th><th>Новое?</th></tr></thead>
     <tbody>
       <tr><td>Сводка баллов</td><td><code>.tb-score-strip</code> + <code>.ou-ring</code>/<code>.tb-ring</code> + <code>.tb-facts</code></td><td>§8.1 <code>scoreSummary</code>, §8.2 п.1</td><td>нет</td></tr>
-      <tr><td>Показатели</td><td><code>.tb-measures</code> + <code>.ou-card.tb-measure-card</code>; слот значения отсутствует (строковый тип — только метка)</td><td>§5.2, §6.1, §8.2 п.2, §8.3</td><td>да</td></tr>
-      <tr><td>Шкалы</td><td>те же <code>.tb-measure-card</code> + <code>.tb-ruler</code> (вид <code>band_ruler</code>)</td><td>§4.1, §6.4, §8.2 п.3, §8.3</td><td>да</td></tr>
-      <tr><td>Название измерения (слот 1)</td><td><code>.tb-measure-card__name</code></td><td>§8.3 слот 1</td><td>да</td></tr>
-      <tr><td>Значение (слот 2)</td><td><code>.tb-ruler__value</code> — «27 из 45»; печатается при видимости <code>level_and_value</code></td><td>§6.1, §6.4 <code>value_of_max</code>, §8.3 слот 2</td><td>да</td></tr>
-      <tr><td>Зоны линейки</td><td><code>.tb-ruler__zone.is-favorable</code> / <code>.is-attention</code> / <code>.is-critical</code> на токенах <code>--ou-success-soft</code>, <code>--ou-warning-soft</code>, <code>--ou-error-soft</code>; ширина зоны приходит из ядра процентом</td><td>§6.2, §6.3</td><td>да</td></tr>
-      <tr><td>Маркер положения</td><td><code>.tb-ruler__marker</code> — сплошной тон (<code>--ou-*-default</code>) с обводкой цветом поверхности</td><td>§6.3</td><td>да</td></tr>
-      <tr><td>Подписи зон и края домена</td><td><code>.tb-ruler__zone-label</code> (текущая — <code>.is-current</code>), <code>.tb-ruler__edge</code>; переключение — <code>@container tbmeasure</code></td><td>§6.5</td><td>да</td></tr>
-      <tr><td>Метка уровня (слот 3)</td><td><code>.ou-tag.ou-tag--l</code> + тон <code>--success</code>/<code>--warning</code>/<code>--error</code>; тон приходит из контекста, разметка его не вычисляет</td><td>§3 (<code>label</code>, <code>tone</code>), §6.2, §8.3 слот 3</td><td>да</td></tr>
-      <tr><td>Толкование (слот 4)</td><td><code>.tb-measure-card__text</code></td><td>§3 (<code>text</code>), §8.3 слот 4</td><td>да</td></tr>
-      <tr><td>Результаты по темам</td><td><code>.tb-topics-grid</code> + <code>.tb-topic-card</code> — без изменений</td><td>§8.2 п.4</td><td>нет</td></tr>
+      <tr><td>Показатель</td><td>Banner: <code>.ou-banner.ou-banner--subtle</code> + тон <code>--success</code>/<code>--info</code>/<code>--warning</code>/<code>--error</code>; название — надзаголовок <code>.tb-eyebrow</code>, метка уровня — <code>.ou-banner__title</code>, толкование — <code>.ou-banner__desc</code></td><td>§5.2, §6.1, §8.2 п.2, §8.3</td><td>да (применение)</td></tr>
+      <tr><td>Шкала (строка целиком)</td><td><code>.tb-measure</code> — раскладка шаблона: дорожка сверху, вердикт снизу</td><td>§8.2 п.3, §8.3</td><td>да</td></tr>
+      <tr><td>Название и значение (слоты 1 и 2)</td><td>Slider: <code>.ou-slider__header</code> → <code>.ou-slider__lbl</code> и <code>.ou-slider__val</code> («27 из 45»; печатается при видимости <code>level_and_value</code>)</td><td>§6.1, §6.4 <code>value_of_max</code>, §8.3 слоты 1–2</td><td>нет (компонент ДС)</td></tr>
+      <tr><td>Дорожка и зоны</td><td>Slider: <code>.ou-slider__rail</code> + <code>.ou-slider__fill.tb-zone</code>; геометрия — <code>left</code>/<code>width</code> в процентах, тон — тройка HSL в <code>--tb-zone</code>; скругление только на краях домена</td><td>§6.2, §6.3, §6.4 <code>band_ruler</code></td><td>да (тон зоны)</td></tr>
+      <tr><td>Отметка значения</td><td>Slider: <code>.ou-slider__thumb.tb-measure__marker</code> — ручка ДС, лишённая перетаскивания (<code>pointer-events: none</code>): это значение, а не орган управления</td><td>§6.3</td><td>да (поправка)</td></tr>
+      <tr><td>Границы интервалов</td><td>Slider: <code>.ou-slider__marks</code> → <code>.ou-slider__mark</code> + <code>.ou-slider__mark-lbl</code>; печатаются только числа</td><td>§6.5</td><td>нет (компонент ДС)</td></tr>
+      <tr><td>Метка уровня (слот 3)</td><td>Tag: <code>.ou-tag.ou-tag--s</code> + именованный тон <code>.tb-tone--favorable</code>/<code>--neutral</code>/<code>--attention</code>/<code>--critical</code> на семантических семьях ДС; тон приходит из контекста, разметка его не вычисляет</td><td>§3 (<code>label</code>, <code>tone</code>), §6.2, §8.3 слот 3</td><td>да (карта тонов)</td></tr>
+      <tr><td>Толкование (слот 4)</td><td><code>.tb-measure__text</code> в строке вердикта рядом с меткой</td><td>§3 (<code>text</code>), §8.3 слот 4</td><td>да</td></tr>
+      <tr><td>Результаты по темам</td><td><code>.tb-topics-grid</code> + <code>.tb-topic-card</code> (<code>ou-card</code>) — без изменений</td><td>§8.2 п.4</td><td>нет</td></tr>
       <tr><td>Рекомендации</td><td><code>.tb-recs-block</code> + <code>.tb-recs-group</code>; подписи подсекций — <code>.tb-eyebrow</code>, ссылки и мероприятия — существующие <code>.tb-recs</code>/<code>.tb-rec</code></td><td>§7.1, §7.2, §8.2 п.5</td><td>да (подсекции), нет (чипы)</td></tr>
-      <tr><td>Разделители блоков</td><td><code>.ou-separator.ou-separator--horizontal</code> — тот же приём, что перед «Результатами по темам» сегодня</td><td>§8.2</td><td>нет</td></tr>
+      <tr><td>Разделители блоков</td><td>Separator: <code>.ou-separator.ou-separator--horizontal</code> — тот же приём, что перед «Результатами по темам» сегодня</td><td>§8.2</td><td>нет</td></tr>
       <tr><td>Панель действий</td><td><code>.tb-scene__foot</code> + <code>.ou-btn</code>; «Скачать отчёт» по <code>result.nav.showReport</code></td><td>§13.1 (отчёт — отдельная спека)</td><td>нет</td></tr>
-      <tr><td>Источник значений</td><td>Ядро отдаёт готовые к отрисовке поля: значение и подпись, метка, толкование, тон, вид, зоны с цветами и геометрией, позиция маркера. Контекст — <code>result.scales[]</code>, <code>result.indicators[]</code>, <code>result.recommendations</code>; разметка и DSL не считают ничего</td><td>§9</td><td>да</td></tr>
+      <tr><td>Источник значений</td><td>Ядро отдаёт готовые к отрисовке поля: значение и подпись, метка, толкование, тон, вид, зоны с цветами и геометрией, позиция отметки. Контекст — <code>result.scales[]</code>, <code>result.indicators[]</code>, <code>result.recommendations</code>; разметка и DSL не считают ничего</td><td>§9</td><td>да</td></tr>
+      <tr><td>Класс <code>is-current</code> на зоне</td><td>Хук текущего интервала для рантайма и отладчика; оформления не несёт — текущий уровень называет метка словом</td><td>§6.3</td><td>да</td></tr>
     </tbody>
   </table>
 </section>
