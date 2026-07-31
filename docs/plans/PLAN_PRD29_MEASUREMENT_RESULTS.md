@@ -2248,11 +2248,18 @@ git commit -m "feat(prd-29): шкалы, показатели и рекомен�
 
 - [ ] **Step 4: Добавить блок шкал**
 
-Шкала — это плоская строка на сцене, а не карточка: вложенные скруглённые прямоугольники
-внутри уже скруглённой сцены дают «плитку ради плитки». Рельс собирается из готовой
-анатомии `ou-slider`: `__header` несёт название и значение, `__rail` — дорожку, `__fill` —
-залитый отрезок (по одному на зону), `__thumb` — маркер, `__marks` — засечки границ с
-числовыми подписями. Название уровня словом стоит в `ou-tag` рядом, не под рельсом.
+Шкала — не карточка: вложенные скруглённые прямоугольники внутри уже скруглённой сцены
+дают «плитку ради плитки». Но и плоский список из одинаковых по ритму строк слипается —
+конец одной шкалы неотличим от начала следующей.
+
+Структуру даёт готовый примитив `ou-formsection`: сетка «колонка подписи 280px плюс
+содержимое», отбивка 32px и волосяная линия между секциями (у последней её нет). Слева —
+название шкалы и плашка уровня, справа — рельс, границы и толкование. Это же снимает
+разнос значения по всей ширине: рельс живёт в своей колонке.
+
+Рельс собирается из анатомии `ou-slider`: `__header` несёт значение, `__rail` — дорожку,
+`__fill` — залитый отрезок (по одному на зону), `__thumb` — маркер, `__marks` — засечки
+границ с числовыми подписями. Название уровня словом стоит в `ou-tag` слева, не под рельсом.
 
 ```html
       {{#if result.scales}}
@@ -2260,10 +2267,14 @@ git commit -m "feat(prd-29): шкалы, показатели и рекомен�
       <div class="tb-scene__q"><h3 class="tb-scene__subhead">По шкалам</h3></div>
       <div class="tb-measures">
         {{#each result.scales}}
-        <div class="tb-measure" data-render="{{renderKind}}">
+        <div class="ou-formsection tb-measure" data-render="{{renderKind}}">
+          <div class="ou-formsection__intro">
+            <h4 class="ou-formsection__title">{{name}}</h4>
+            <span class="ou-tag ou-tag--s tb-measure__level {{toneClass}}">{{levelLabel}}</span>
+          </div>
+          <div class="ou-formsection__body">
           <div class="ou-slider ou-slider--h tb-measure__slider">
             <div class="ou-slider__header">
-              <span class="ou-slider__lbl">{{name}}</span>
               {{#if showValue}}<span class="ou-slider__val"><strong>{{valueText}}</strong> из {{maxText}}</span>{{/if}}
             </div>
             {{#if zones}}
@@ -2282,9 +2293,7 @@ git commit -m "feat(prd-29): шкалы, показатели и рекомен�
             </div>
             {{/if}}
           </div>
-          <div class="tb-measure__verdict">
-            <span class="ou-tag ou-tag--s {{toneClass}}">{{levelLabel}}</span>
-            {{#if text}}<span class="tb-measure__text">{{text}}</span>{{/if}}
+            {{#if text}}<p class="ou-formsection__sub">{{text}}</p>{{/if}}
           </div>
         </div>
         {{/each}}
@@ -2364,15 +2373,24 @@ git commit -m "feat(prd-29): блоки показателей, шкал и ре
 который спроектирован как интерактивный элемент управления, а здесь только показывает.
 
 ```css
-/* PRD-29: measure row — a flat row on the scene, not a nested card. */
-.tb-measures { display: flex; flex-direction: column; gap: 20px; }
-.tb-measure { display: flex; flex-direction: column; gap: 10px; }
+/* PRD-29: measure row. `ou-formsection` already supplies the two-column grid, the
+   32px rhythm and the hairline between rows — the delta is only what the DS cannot
+   know: the zone colour and the read-only state of a control-shaped element. */
+.tb-measure__level { align-self: flex-start; }
 
-/* The DS slider is a 360px-wide control; on the results screen it is a full-width
-   readout, so the cap is relaxed and the grab affordances are removed. */
+/* The DS slider is a 360px-wide control; here it is a full-width readout inside the
+   content column, so the cap is relaxed and the grab affordances are removed. With
+   the name moved to the label column the header holds the value alone — keep it right. */
 .tb-measure__slider { max-width: none; display: flex; }
+.tb-measure__slider .ou-slider__header { justify-content: flex-end; }
 .tb-measure__slider .ou-slider__rail { margin-bottom: 18px; }
 .tb-measure__marker { cursor: default; pointer-events: none; }
+
+/* Below the two-column breakpoint the DS switches the section to a single stack —
+   its own answer for narrow screens, so no custom rule is needed beyond the switch. */
+@media (max-width: 640px) {
+  .tb-measure.ou-formsection { display: flex; flex-direction: column; gap: 16px; }
+}
 
 /* Zones paint the rail DISCRETELY: the finding of a banded method is categorical, and
    a gradient would hide the step across a boundary. `ou-slider__fill` already gives the
@@ -2382,8 +2400,8 @@ git commit -m "feat(prd-29): блоки показателей, шкал и ре
 .tb-zone:first-of-type { border-start-start-radius: 999px; border-end-start-radius: 999px; }
 .tb-zone:last-of-type { border-start-end-radius: 999px; border-end-end-radius: 999px; }
 
-.tb-measure__verdict { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.tb-measure__text { color: var(--ou-fg-muted); font: var(--ou-text-body-s); }
+
+
 
 /* PRD-29: the single recommendations block, structured by resource type. */
 .tb-recos { display: flex; flex-direction: column; gap: 12px; }
