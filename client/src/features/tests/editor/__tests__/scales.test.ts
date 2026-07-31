@@ -24,6 +24,9 @@ function scale(overrides: Partial<ScaleModel> = {}): ScaleModel {
     normalization: "none",
     direction: "positive",
     bands: [],
+    domainMin: null,
+    domainMax: null,
+    valence: "none",
     learnerVisibility: "hidden",
     scormTarget: "none",
     sortOrder: 0,
@@ -147,6 +150,43 @@ describe("validateTestEditor — scales", () => {
 
 // ─── Save orchestrator ──────────────────────────────────────────────────────
 
+describe("apiToEditorModel — домен и направление шкалы (PRD-29)", () => {
+  const readScale = (configJson: unknown) =>
+    apiToEditorModel({
+      id: "t1",
+      title: "T",
+      scales: [{ id: "a", key: "ee", label: "EE", type: "number", configJson, sortOrder: 0 }],
+    }).scales[0];
+
+  it("читает заданные границы и направление", () => {
+    const s = readScale({ bands: [], domainMin: 0, domainMax: 45, valence: "lower_is_better" });
+    expect(s.domainMin).toBe(0);
+    expect(s.domainMax).toBe(45);
+    expect(s.valence).toBe("lower_is_better");
+  });
+
+  it("ноль читается как граница, а не как «не задано»", () => {
+    expect(readScale({ domainMin: 0, domainMax: 0 })).toMatchObject({ domainMin: 0, domainMax: 0 });
+  });
+
+  it("границ нет → null, направления нет → «без оценки»", () => {
+    // Охват интервалов НЕ подставляется: редактору нужно отличать заданный
+    // домен от выводимого, иначе переключатель ручных границ соврёт.
+    const s = readScale({ bands: [{ min: 0, max: 45, level: "low" }] });
+    expect(s.domainMin).toBeNull();
+    expect(s.domainMax).toBeNull();
+    expect(s.valence).toBe("none");
+  });
+
+  it("половина пары границ = границы не заданы", () => {
+    expect(readScale({ domainMin: 0 })).toMatchObject({ domainMin: null, domainMax: null });
+  });
+
+  it("неизвестное направление вырождается в «без оценки»", () => {
+    expect(readScale({ valence: "sideways" }).valence).toBe("none");
+  });
+});
+
 describe("saveScales — diff on save", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -171,6 +211,37 @@ describe("saveScales — diff on save", () => {
     await saveScales("t1", [scale({ bands: [band({ label: "  " })] })], []);
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.configJson.bands[0]).toEqual({ min: 0, max: 10, level: "low" });
+  });
+
+  it("кладёт границы и направление в config_json (PRD-29)", async () => {
+    await saveScales(
+      "t1",
+      [scale({ key: "ee", domainMin: 0, domainMax: 45, valence: "lower_is_better" })],
+      [],
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.configJson).toMatchObject({ domainMin: 0, domainMax: 45, valence: "lower_is_better" });
+  });
+
+  it("не задан домен → в config_json его нет, но направление пишется всегда", async () => {
+    await saveScales("t1", [scale({ key: "ee" })], []);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.configJson).not.toHaveProperty("domainMin");
+    expect(body.configJson.valence).toBe("none");
+  });
+
+  it("PUTs when only the domain changed", async () => {
+    const snap = [scale({ id: "a", key: "a" })];
+    const draft = [scale({ id: "a", key: "a", domainMin: 0, domainMax: 45 })];
+    await saveScales("t1", draft, snap);
+    expect(calls()).toEqual([["PUT", `${base}/a`]]);
+  });
+
+  it("PUTs when only the valence changed", async () => {
+    const snap = [scale({ id: "a", key: "a" })];
+    const draft = [scale({ id: "a", key: "a", valence: "higher_is_better" })];
+    await saveScales("t1", draft, snap);
+    expect(calls()).toEqual([["PUT", `${base}/a`]]);
   });
 
   it("DELETEs scales dropped from the draft", async () => {
