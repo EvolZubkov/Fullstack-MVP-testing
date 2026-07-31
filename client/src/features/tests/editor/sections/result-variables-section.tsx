@@ -44,6 +44,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
+import { findUnknownOutcomes } from "@shared/formula/outcome-literals";
+
 import type {
   ResultVariableControlsStatus,
   ResultVariableModel,
@@ -433,6 +435,14 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
 
   const isBoolean = v.type === "boolean";
 
+  // PRD-29 Task 15: codes the formula can return but the outcome list does not
+  // declare yet. Recomputed on every formula/outcomes edit; feeds BOTH the warning
+  // banner below and `OutcomesEditor`'s `suggestedCodes`, so the two never diverge.
+  const unknownOutcomeCodes = useMemo(
+    () => findUnknownOutcomes(v.formula, v.outcomes.map((o) => o.code.trim()).filter((c) => c !== "")),
+    [v.formula, v.outcomes],
+  );
+
   // DSL «Функции» reference + insert-at-cursor.
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [fnOpen, setFnOpen] = useState(false);
@@ -555,6 +565,15 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
           index={index}
           readOnly={readOnly}
           onChange={(outcomes) => onChange({ outcomes })}
+          suggestedCodes={unknownOutcomeCodes}
+        />
+      )}
+      {v.type !== "number" && unknownOutcomeCodes.length > 0 && (
+        <Banner
+          tone="warning"
+          size="sm"
+          description={`В формуле встречаются коды, которых нет в перечне: ${unknownOutcomeCodes.join(", ")}. Сохранение не заблокировано — добавьте их в перечень ниже.`}
+          data-testid={`metrics-unknown-outcomes-${index}`}
         />
       )}
       <Banner
