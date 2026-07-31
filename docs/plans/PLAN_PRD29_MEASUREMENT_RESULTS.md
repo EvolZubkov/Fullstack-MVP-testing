@@ -102,17 +102,33 @@ export interface CtxMeasureZone {
   current: boolean;
 }
 
-/** Карточка шкалы или показателя на экране итогов. */
+/** Засечка границы на рельсе (`ou-slider__mark` + `ou-slider__mark-lbl`). */
+export interface CtxMeasureMark {
+  percent: number;
+  label: string;
+}
+
+/** Строка шкалы или показателя на экране итогов. */
 export interface CtxMeasureView {
   key: string;
   name: string;
   renderKind: RenderKind;
   showValue: boolean;
+  /** Число и максимум порознь: `ou-slider__val` печатает `<strong>27</strong> из 45`. */
+  valueText: string;
+  maxText: string;
+  /** Единой строкой — для видов без рельса (`value`, `value_of_max`). */
   valueLabel: string;
   levelLabel: string;
   tone: LevelTone;
+  /** Core-prepared класс плашки уровня. */
+  toneClass: string;
+  /** Core-prepared модификатор `ou-banner--*` для блока показателя. */
+  bannerVariant: "success" | "info" | "warning" | "error";
   text?: string;
   zones: CtxMeasureZone[];
+  /** Числовые границы под рельсом: края домена и начала интервалов. */
+  marks: CtxMeasureMark[];
   markerPercent?: number;
   percent?: number;
   ringDashoffset?: number;
@@ -901,7 +917,7 @@ git commit -m "feat(prd-29): рампа цветов уровней по обр�
 
 ---
 
-## Task 5: Сборка карточки шкалы и показателя
+## Task 5: Сборка строки шкалы и показателя
 
 **Files:**
 
@@ -973,6 +989,27 @@ describe("buildMeasureView", () => {
 
   it("подписывает значение как «X из Y»", () => {
     expect(ee().valueLabel).toBe("27 из 45");
+  });
+
+  it("отдаёт число и максимум порознь для ou-slider__val", () => {
+    expect(ee().valueText).toBe("27");
+    expect(ee().maxText).toBe("45");
+  });
+
+  it("ставит засечки на края домена и начала интервалов", () => {
+    expect(ee().marks).toEqual([
+      { percent: 0, label: "0" },
+      { percent: 33.3, label: "15" },
+      { percent: 55.6, label: "25" },
+      { percent: 100, label: "45" },
+    ]);
+  });
+
+  it("готовит класс плашки и вариант баннера по тону", () => {
+    const v = ee();
+    expect(v.tone).toBe("critical");
+    expect(v.toneClass).toBe("tb-tone--critical");
+    expect(v.bannerVariant).toBe("error");
   });
 
   it("скрывает значение при видимости level", () => {
@@ -1116,20 +1153,43 @@ export interface CtxMeasureZone {
   current: boolean;
 }
 
+export interface CtxMeasureMark {
+  percent: number;
+  label: string;
+}
+
+export type BannerVariant = "success" | "info" | "warning" | "error";
+
 export interface CtxMeasureView {
   key: string;
   name: string;
   renderKind: RenderKind;
   showValue: boolean;
+  valueText: string;
+  maxText: string;
   valueLabel: string;
   levelLabel: string;
   tone: LevelTone;
+  toneClass: string;
+  bannerVariant: BannerVariant;
   text?: string;
   zones: CtxMeasureZone[];
+  marks: CtxMeasureMark[];
   markerPercent?: number;
   percent?: number;
   ringDashoffset?: number;
 }
+
+/**
+ * Tone to DS presentation. The tag gets a template class, the indicator banner a
+ * DS modifier — the layout binds a prepared string and never maps anything itself.
+ */
+const BANNER_BY_TONE: Record<LevelTone, BannerVariant> = {
+  favorable: "success",
+  neutral: "info",
+  attention: "warning",
+  critical: "error",
+};
 
 export interface MeasureCapabilities {
   hasDomain: boolean;
@@ -1254,20 +1314,28 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
     name: input.name,
     renderKind,
     showValue,
+    valueText: "",
+    maxText: "",
     valueLabel: "",
     levelLabel: "",
     tone: "neutral",
+    toneClass: "tb-tone--neutral",
+    bannerVariant: "info",
     zones: [],
+    marks: [],
   };
 
   if (!isNumeric) {
     const outcomes = outcomesOf(interpretation);
     const outcome = findOutcome(outcomes, input.value as string | boolean);
     if (!outcome) return base;
+    const tone = outcome.tone ?? "neutral";
     return {
       ...base,
       levelLabel: outcome.label,
-      tone: outcome.tone ?? "neutral",
+      tone,
+      toneClass: `tb-tone--${tone}`,
+      bannerVariant: BANNER_BY_TONE[tone],
       ...(outcome.text ? { text: outcome.text } : {}),
     };
   }
@@ -1278,11 +1346,16 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
   const band = findBand(interpretation.bands, value);
   const bandIndex = band ? interpretation.bands.indexOf(band) : -1;
 
+  const tone = toneOf(input, band?.tone, bandIndex, interpretation.bands.length);
   const view: CtxMeasureView = {
     ...base,
+    valueText: String(round1(value)),
+    maxText: hasDomain ? String(round1(domainMax)) : "",
     valueLabel: hasDomain ? `${round1(value)} из ${round1(domainMax)}` : String(round1(value)),
     levelLabel: band ? band.label ?? band.level : "",
-    tone: toneOf(input, band?.tone, bandIndex, interpretation.bands.length),
+    tone,
+    toneClass: `tb-tone--${tone}`,
+    bannerVariant: BANNER_BY_TONE[tone],
     ...(band?.text ? { text: band.text } : {}),
   };
 
@@ -1295,6 +1368,16 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
   if (renderKind === "band_ruler") {
     view.zones = buildZones(input, domainMin, domainMax, band?.level ?? "");
     view.markerPercent = round1(clamped * 100);
+    // Boundaries are NUMBERS under the rail; the level NAME lives in the tag beside
+    // it. Printing zone names under the rail crowds three labels into a 6px track and
+    // breaks entirely on a narrow screen — the tag says it once, unambiguously.
+    view.marks = [
+      { percent: 0, label: String(round1(domainMin)) },
+      ...interpretation.bands
+        .slice(1)
+        .map((b) => ({ percent: round1(((b.min - domainMin) / span) * 100), label: String(round1(b.min)) })),
+      { percent: 100, label: String(round1(domainMax)) },
+    ];
   }
   if (renderKind === "gradient_bar") {
     view.markerPercent = round1(clamped * 100);
@@ -1320,7 +1403,7 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
 - [ ] **Step 4: Убедиться, что тест проходит**
 
 Run: `npm test -- shared/template/__tests__/measure-view.test.ts`
-Expected: PASS, 20 тестов.
+Expected: PASS, 23 теста.
 
 - [ ] **Step 5: Commit**
 
@@ -2144,24 +2227,32 @@ git commit -m "feat(prd-29): шкалы, показатели и рекомен�
 
 - [ ] **Step 3: Добавить блок показателей перед блоком тем**
 
+Вывод методики — это утверждение с пояснением и оценочным тоном, а `ou-banner--subtle`
+ровно это и есть: его варианты `success`/`info`/`warning`/`error` ложатся на четыре тона
+один в один. Своего контейнера показателю не нужно.
+
 ```html
       {{#if result.indicators}}
       <div class="tb-scene__q"><h3 class="tb-scene__subhead">Ваш результат</h3></div>
-      <div class="tb-measures tb-measures--lead">
-        {{#each result.indicators}}
-        <div class="ou-card tb-measure tb-measure--{{tone}}">
-          <div class="ou-card__body">
-            <span class="tb-measure__name">{{name}}</span>
-            <span class="ou-tag ou-tag--s tb-measure__level">{{levelLabel}}</span>
-            {{#if text}}<p class="tb-measure__text">{{text}}</p>{{/if}}
-          </div>
+      {{#each result.indicators}}
+      <span class="tb-eyebrow">{{name}}</span>
+      <div class="ou-banner ou-banner--subtle ou-banner--{{bannerVariant}}">
+        <div class="ou-banner__body">
+          <div class="ou-banner__title">{{levelLabel}}</div>
+          {{#if text}}<div class="ou-banner__desc">{{text}}</div>{{/if}}
         </div>
-        {{/each}}
       </div>
+      {{/each}}
       {{/if}}
 ```
 
 - [ ] **Step 4: Добавить блок шкал**
+
+Шкала — это плоская строка на сцене, а не карточка: вложенные скруглённые прямоугольники
+внутри уже скруглённой сцены дают «плитку ради плитки». Рельс собирается из готовой
+анатомии `ou-slider`: `__header` несёт название и значение, `__rail` — дорожку, `__fill` —
+залитый отрезок (по одному на зону), `__thumb` — маркер, `__marks` — засечки границ с
+числовыми подписями. Название уровня словом стоит в `ou-tag` рядом, не под рельсом.
 
 ```html
       {{#if result.scales}}
@@ -2169,31 +2260,36 @@ git commit -m "feat(prd-29): шкалы, показатели и рекомен�
       <div class="tb-scene__q"><h3 class="tb-scene__subhead">По шкалам</h3></div>
       <div class="tb-measures">
         {{#each result.scales}}
-        <div class="ou-card tb-measure tb-measure--{{tone}}" data-render="{{renderKind}}">
-          <div class="ou-card__body">
-            <div class="tb-measure__head">
-              <span class="tb-measure__name">{{name}}</span>
-              {{#if showValue}}<span class="tb-measure__value">{{valueLabel}}</span>{{/if}}
+        <div class="tb-measure" data-render="{{renderKind}}">
+          <div class="ou-slider ou-slider--h tb-measure__slider">
+            <div class="ou-slider__header">
+              <span class="ou-slider__lbl">{{name}}</span>
+              {{#if showValue}}<span class="ou-slider__val"><strong>{{valueText}}</strong> из {{maxText}}</span>{{/if}}
             </div>
             {{#if zones}}
-            <div class="tb-ruler">
-              <div class="tb-ruler__track">
-                {{#each zones}}
-                <span class="tb-ruler__zone{{#if current}} is-current{{/if}}"
-                      style="left:{{leftPercent}}%;width:{{widthPercent}}%;--tb-zone:{{color}}">
-                  <span class="tb-ruler__zone-label">{{label}}</span>
-                </span>
+            <div class="ou-slider__rail">
+              {{#each zones}}
+              <span class="ou-slider__fill tb-zone{{#if current}} is-current{{/if}}"
+                    style="left:{{leftPercent}}%;width:{{widthPercent}}%;--tb-zone:{{color}}"></span>
+              {{/each}}
+              <span class="ou-slider__thumb tb-measure__marker" style="left:{{markerPercent}}%"></span>
+              <div class="ou-slider__marks">
+                {{#each marks}}
+                <span class="ou-slider__mark" style="left:{{percent}}%"></span>
+                <span class="ou-slider__mark-lbl" style="left:{{percent}}%">{{label}}</span>
                 {{/each}}
               </div>
-              <span class="tb-ruler__marker" style="left:{{markerPercent}}%"></span>
             </div>
             {{/if}}
-            <span class="ou-tag ou-tag--s tb-measure__level">{{levelLabel}}</span>
-            {{#if text}}<p class="tb-measure__text">{{text}}</p>{{/if}}
+          </div>
+          <div class="tb-measure__verdict">
+            <span class="ou-tag ou-tag--s {{toneClass}}">{{levelLabel}}</span>
+            {{#if text}}<span class="tb-measure__text">{{text}}</span>{{/if}}
           </div>
         </div>
         {{/each}}
       </div>
+      <hr class="ou-separator ou-separator--horizontal">
       {{/if}}
 ```
 
@@ -2242,7 +2338,7 @@ git commit -m "feat(prd-29): блоки показателей, шкал и ре
 
 ---
 
-## Task 10: Стили карточки и линейки
+## Task 10: Стили строки измерения
 
 **Files:**
 
@@ -2256,55 +2352,50 @@ git commit -m "feat(prd-29): блоки показателей, шкал и ре
 ```css
 /* PRD-29: interpretation tones. Named in methodology terms; the DS semantic families
    already carry the three roles a zone needs — solid, soft fill, text on fill. */
-.tb-scene {
-  --tb-tone-favorable: var(--ou-success-default);
-  --tb-tone-neutral: var(--ou-info-default);
-  --tb-tone-attention: var(--ou-warning-default);
-  --tb-tone-critical: var(--ou-error-default);
-}
-.tb-measure--favorable .tb-measure__level { background: var(--ou-success-soft); color: var(--ou-success-on-soft); }
-.tb-measure--neutral   .tb-measure__level { background: var(--ou-info-soft);    color: var(--ou-info-on-soft); }
-.tb-measure--attention .tb-measure__level { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
-.tb-measure--critical  .tb-measure__level { background: var(--ou-error-soft);   color: var(--ou-error-on-soft); }
+.tb-scene .ou-tag.tb-tone--favorable { background: var(--ou-success-soft); color: var(--ou-success-on-soft); }
+.tb-scene .ou-tag.tb-tone--neutral   { background: var(--ou-info-soft);    color: var(--ou-info-on-soft); }
+.tb-scene .ou-tag.tb-tone--attention { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
+.tb-scene .ou-tag.tb-tone--critical  { background: var(--ou-error-soft);   color: var(--ou-error-on-soft); }
 ```
 
-- [ ] **Step 2: Добавить стили карточки и линейки**
+- [ ] **Step 2: Добавить стили строки шкалы**
+
+Собственных правил остаётся минимум: раскладка строки и три поправки к `ou-slider`,
+который спроектирован как интерактивный элемент управления, а здесь только показывает.
 
 ```css
-/* PRD-29: measure card — name, value, ruler, level, explanation. */
-.tb-measures { display: flex; flex-direction: column; gap: 12px; }
-.tb-measure__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.tb-measure__name { font-weight: 600; }
-.tb-measure__value { font-variant-numeric: tabular-nums; color: hsl(var(--muted-foreground)); }
-.tb-measure__text { margin: 8px 0 0; color: hsl(var(--muted-foreground)); }
+/* PRD-29: measure row — a flat row on the scene, not a nested card. */
+.tb-measures { display: flex; flex-direction: column; gap: 20px; }
+.tb-measure { display: flex; flex-direction: column; gap: 10px; }
 
-/* The ruler paints zones DISCRETELY — the finding of a banded method is categorical,
-   and a gradient would hide the step across a band boundary. The marker carries the
-   nuance inside a zone instead. */
-.tb-ruler { position: relative; margin: 12px 0 8px; padding-bottom: 18px; }
-.tb-ruler__track { position: relative; height: 10px; border-radius: 5px; overflow: hidden; }
-.tb-ruler__zone { position: absolute; top: 0; height: 100%; background: hsl(var(--tb-zone)); }
-.tb-ruler__zone-label {
-  position: absolute; top: 12px; left: 0; font-size: 11px; white-space: nowrap;
-  color: hsl(var(--muted-foreground)); opacity: 0;
-}
-.tb-ruler__zone.is-current .tb-ruler__zone-label { opacity: 1; }
-.tb-ruler__marker {
-  position: absolute; top: -3px; width: 2px; height: 16px; margin-left: -1px;
-  background: hsl(var(--foreground)); border-radius: 1px;
-}
+/* The DS slider is a 360px-wide control; on the results screen it is a full-width
+   readout, so the cap is relaxed and the grab affordances are removed. */
+.tb-measure__slider { max-width: none; display: flex; }
+.tb-measure__slider .ou-slider__rail { margin-bottom: 18px; }
+.tb-measure__marker { cursor: default; pointer-events: none; }
 
-/* Wide enough for every label; below that only the current zone stays legible. */
-@media (min-width: 640px) {
-  .tb-ruler__zone-label { opacity: 1; }
-}
+/* Zones paint the rail DISCRETELY: the finding of a banded method is categorical, and
+   a gradient would hide the step across a boundary. `ou-slider__fill` already gives the
+   absolute positioning and the pill radius; only the colour is ours. Square inner
+   corners keep adjacent zones from showing a gap. */
+.tb-zone { background: hsl(var(--tb-zone)); border-radius: 0; }
+.tb-zone:first-of-type { border-start-start-radius: 999px; border-end-start-radius: 999px; }
+.tb-zone:last-of-type { border-start-end-radius: 999px; border-end-end-radius: 999px; }
+
+.tb-measure__verdict { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.tb-measure__text { color: var(--ou-fg-muted); font: var(--ou-text-body-s); }
 
 /* PRD-29: the single recommendations block, structured by resource type. */
 .tb-recos { display: flex; flex-direction: column; gap: 12px; }
 .tb-recos__text { margin: 0; }
 .tb-recos__group { display: flex; flex-direction: column; gap: 6px; }
-.tb-recos__group-title { font-size: 12px; text-transform: uppercase; color: hsl(var(--muted-foreground)); }
+.tb-recos__group-title { font: var(--ou-text-body-xs); text-transform: uppercase; color: var(--ou-fg-muted); }
 ```
+
+Проверить в браузере, что засечки `ou-slider__mark-lbl` не наезжают друг на друга при
+близких границах (у «Отстранённости» это 4 и 9 на домене 0..25). Если наезжают — прятать
+подписи промежуточных границ ниже 480 px, оставляя края домена. Название уровня при этом
+не теряется: оно стоит словом в `ou-tag`.
 
 - [ ] **Step 3: Проверить существование использованных токенов**
 
@@ -2321,7 +2412,7 @@ Expected: каждое имя найдено. Отсутствующий ток�
 
 ```bash
 git add server/scorm/templates/default/styles/theme.css
-git commit -m "feat(prd-29): стили карточки измерения и линейки с зонами"
+git commit -m "feat(prd-29): стили строки измерения поверх ou-slider"
 ```
 
 ---
