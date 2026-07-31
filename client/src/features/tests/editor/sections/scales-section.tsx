@@ -16,7 +16,7 @@
  * yet compute scale-of-scales — so that source option is shown disabled.
  */
 
-import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, Fragment, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Banner,
   Button,
@@ -935,6 +935,22 @@ function cellKey(questionId: string, sourceType: string, sourceKey: string, scal
 }
 
 /**
+ * A scale key is a single unbreakable word ("EMOTIONAL_EXHAUSTION"): an underscore
+ * offers no line-break opportunity, so in the fixed-width matrix column the header
+ * would overflow onto its neighbours. Emit an explicit <wbr> after each underscore
+ * so the key wraps at its own segment boundaries instead of mid-word.
+ */
+function scaleKeyHeader(key: string): ReactNode {
+  const parts = key.toUpperCase().split(/(?<=_)/);
+  return parts.map((part, i) => (
+    <Fragment key={i}>
+      {part}
+      {i < parts.length - 1 && <wbr />}
+    </Fragment>
+  ));
+}
+
+/**
  * «Вклады вопросов»: the contribution matrix. Each measured question is a card;
  * expanded, it shows a «unit × scale» grid where the author types the explicit
  * numeric contribution of each answer unit into each scale (empty = no row; 0 and
@@ -1223,7 +1239,9 @@ function QuestionContribCard({
                   <tr>
                     <th className="tb-contrib-grid__unit-col">{UNIT_HEADER[q.type]}</th>
                     {scales.map((s) => (
-                      <th key={s.key} className="tb-contrib-grid__val-col" title={s.label}>{s.key.toUpperCase()}</th>
+                      <th key={s.key} className="tb-contrib-grid__val-col" title={s.label || s.key}>
+                        {scaleKeyHeader(s.key)}
+                      </th>
                     ))}
                   </tr>
                 </thead>

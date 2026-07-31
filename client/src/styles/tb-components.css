@@ -243,6 +243,14 @@
 
 /* Scale value columns: ~half their prior auto width (input fills the cell). */
 .tb-contrib-grid__val-col { width: var(--tb-contrib-val-w, 7rem); }
+/* A scale key ("EMOTIONAL_EXHAUSTION") is one unbreakable word — an underscore is
+   not a break opportunity — so in a fixed-width column it overflows and paints
+   over the neighbouring headers. The markup supplies <wbr> break points at each
+   underscore; `anywhere` is the fallback for a long key with no underscores. */
+.tb-contrib-grid th.tb-contrib-grid__val-col {
+  overflow-wrap: anywhere;
+  vertical-align: bottom;
+}
 
 /* Compact rule cell inside table (custom rule + fields + unit). */
 .tb-rule-cell { display: flex; flex-direction: column; gap: var(--ou-space-1); }
