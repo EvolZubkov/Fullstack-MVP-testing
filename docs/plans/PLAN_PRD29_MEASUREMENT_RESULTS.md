@@ -2480,6 +2480,9 @@ git commit -m "feat(prd-29): шкалы, показатели и рекомен�
 - [ ] **Step 5: Добавить блок рекомендаций после блока тем**
 
 ```html
+      <!-- Пиктограммы в чипах взяты ДОСЛОВНО из блока обратной связи темы: ссылка для
+           курса и материала, календарь для мероприятия. Без них измерительный экран
+           показал бы голые чипы рядом с иконованными на том же экране. -->
       {{#if result.recommendations.hasAny}}
       <hr class="ou-separator ou-separator--horizontal">
       <div class="tb-scene__q"><h3 class="tb-scene__subhead">Что можно сделать</h3></div>
@@ -2488,19 +2491,19 @@ git commit -m "feat(prd-29): шкалы, показатели и рекомен�
         {{#if result.recommendations.links}}
         <div class="tb-recos__group">
           <span class="tb-recos__group-title">Пройти обучение</span>
-          {{#each result.recommendations.links}}<a class="tb-rec" href="{{url}}" target="_blank" rel="noopener noreferrer">{{title}}</a>{{/each}}
+          {{#each result.recommendations.links}}<a class="tb-rec" href="{{url}}" target="_blank" rel="noopener noreferrer"><span class="tb-rec__ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>{{title}}</a>{{/each}}
         </div>
         {{/if}}
         {{#if result.recommendations.events}}
         <div class="tb-recos__group">
           <span class="tb-recos__group-title">Мероприятия</span>
-          {{#each result.recommendations.events}}<span class="tb-rec">{{title}}</span>{{/each}}
+          {{#each result.recommendations.events}}<span class="tb-rec"><span class="tb-rec__ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg></span>{{title}}</span>{{/each}}
         </div>
         {{/if}}
         {{#if result.recommendations.assets}}
         <div class="tb-recos__group">
           <span class="tb-recos__group-title">Материалы</span>
-          {{#each result.recommendations.assets}}<a class="tb-rec" href="{{url}}" target="_blank" rel="noopener noreferrer">{{title}}</a>{{/each}}
+          {{#each result.recommendations.assets}}<a class="tb-rec" href="{{url}}" target="_blank" rel="noopener noreferrer"><span class="tb-rec__ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>{{title}}</a>{{/each}}
         </div>
         {{/if}}
       </div>
@@ -2577,9 +2580,12 @@ git commit -m "feat(prd-29): блоки показателей, шкал и ре
 .tb-measure__slider .ou-slider__val { font: var(--ou-text-body-m); }
 .tb-measure__slider .ou-slider__val strong { font: var(--ou-text-display-s); }
 
-/* Below the two-column breakpoint the DS switches the section to a single stack —
-   its own answer for narrow screens, so no custom rule is needed beyond the switch. */
-@media (max-width: 640px) {
+/* Narrow scene: the two-column section collapses to a single stack. The query
+   measures the SCENE (`@container tbscene`), not the viewport — the whole mobile
+   adaptation of this template is built on container steps 900 / 700 / 520, and a
+   viewport `@media` here would fire out of step with everything around it. 700 is
+   the step where the rest of the scene already goes single-column. */
+@container tbscene (max-width: 700px) {
   .tb-measure.ou-formsection { display: flex; flex-direction: column; gap: 16px; }
 }
 
