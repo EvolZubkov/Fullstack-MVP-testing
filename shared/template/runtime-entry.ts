@@ -31,6 +31,16 @@ export {
 } from "./dnd/matching-model";
 export { attachPointerDnd } from "./dnd/pointer-dnd";
 export { buildResultContext, buildAdaptiveResultContext, buildSectionResultContext, buildSectionIntroContext } from "./result-context";
+// PRD-29: the package assembles the measures input for the results screen ITSELF,
+// to the very shape `server/services/result-context` assembles on the web host —
+// so the two players draw the same scale/indicator cards. That needs the level
+// ramp, the interpretation parsers and the feedback normaliser out here.
+// `normalizeFeedback` is deliberately NOT idempotent (a normalised block has lost
+// its `scormHref`), so it is the HOST's single pass over the test-level block; the
+// band/outcome blocks are normalised inside the builder.
+export { normalizeFeedback } from "./result-context";
+export { LEVEL_SCHEMES } from "./level-ramp";
+export { parseScaleInterpretation, parseIndicatorInterpretation } from "../scales/interpretation";
 // PRD-18: the SINGLE standard result-aggregation + pass-rule engine shared by the
 // SCORM runtime (resultsPage.js) and the web grader (attempts.ts).
 export { aggregateStandardResult, aggregateAdaptiveResult } from "../scoring/aggregate";

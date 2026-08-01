@@ -3,6 +3,7 @@ import { sanitizeHtml, placeholderScope } from "../../utils/html-sanitizer";
 import { findEligibilityPlugin, findEligibilityConfig } from "@shared/eligibility/registry";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 import { buildTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
+import { parseScaleInterpretation } from "@shared/scales/interpretation";
 import type { ReportBake } from "@shared/report/report-variants";
 
 interface AdaptiveLevelWithLinks extends AdaptiveLevel {
@@ -162,6 +163,12 @@ export function buildTestJson(data: ExportData): string {
     overallPassRule: overallPassRule,
     webhookUrl: data.test.webhookUrl,
     testFeedback: data.test.feedback || null,
+    // PRD-29 §7.1: the test's OWN feedback block (`tests.feedback_json`) is one of the
+    // three equal sources of the results-screen recommendations, so the WHOLE block
+    // travels — text, courses, events and PDF assets — not just the legacy plain-text
+    // `testFeedback` above (a different column, left untouched). Included only when
+    // authored, so a test without it keeps exactly the TEST_DATA shape it had (FR-02).
+    ...(data.test.feedbackJson ? { testFeedbackJson: data.test.feedbackJson } : {}),
     timeLimitMinutes: data.test.timeLimitMinutes || null,
     maxAttempts: data.test.maxAttempts || null,
     showCorrectAnswers: data.test.showCorrectAnswers || false,
@@ -421,6 +428,10 @@ export function buildTestJson(data: ExportData): string {
       scormTarget: rv.scormTarget,
       controlsStatus: rv.controlsStatus,
       sortOrder: rv.sortOrder,
+      // PRD-29: the indicator's interpretation (outcomes for string/boolean, bands for
+      // numbers) travels raw — the runtime parses it with the SAME shared parser the
+      // web host uses, so the card is built from one source.
+      configJson: rv.configJson ?? {},
     }));
   }
 
@@ -432,7 +443,12 @@ export function buildTestJson(data: ExportData): string {
   // meaningless, and a scale with no rows is still valid (empty aggregate).
   if (data.scales && data.scales.length > 0) {
     test.scales = data.scales.map((s) => {
-      const config = (s.configJson as { bands?: unknown }) ?? {};
+      // PRD-29: the package draws the SAME scale cards as the web host, so it needs the
+      // WHOLE interpretation — the domain, the favourable direction and the per-level
+      // label/text/feedback — not only the bands the scale engine grades with. Parsed
+      // here (once, at bake time) with the shared parser, and laid out FLAT so the
+      // runtime can re-read it through that very same parser.
+      const interpretation = parseScaleInterpretation(s.configJson);
       return {
         key: s.key,
         // Label is optional; fall back to the key so the package never shows blank.
@@ -441,7 +457,10 @@ export function buildTestJson(data: ExportData): string {
         aggregation: s.aggregation,
         normalization: s.normalization,
         direction: s.direction,
-        bands: Array.isArray(config.bands) ? config.bands : [],
+        domainMin: interpretation.domainMin,
+        domainMax: interpretation.domainMax,
+        valence: interpretation.valence,
+        bands: interpretation.bands,
         learnerVisibility: s.learnerVisibility,
         scormTarget: s.scormTarget,
         sortOrder: s.sortOrder,

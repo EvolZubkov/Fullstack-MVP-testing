@@ -185,6 +185,17 @@ function generateVariant() {
 function renderResults() {
   var results = calculateResults();
 
+  // PRD-29: scale.* and result.* are computed BEFORE the attempt is persisted, so the
+  // record carries the values `saveAttemptResult` already reserves fields for — without
+  // them «Мой результат» would later redraw this attempt with empty measurement cards.
+  // Both helpers are no-ops for a test that declares no scales / no indicators.
+  if (typeof computeTestScales === 'function') {
+    results.scaleComputation = computeTestScales();
+    if (typeof computeTestResultVariables === 'function') {
+      results.resultComputation = computeTestResultVariables(results, results.scaleComputation);
+    }
+  }
+
   // ✅ Сразу сохраняем результат попытки при показе результатов
   if (typeof saveAttemptResult === 'function' && !state.attemptSavedForThisSession) {
     saveAttemptResult(results);
