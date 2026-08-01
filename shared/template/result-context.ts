@@ -254,22 +254,35 @@ export function buildResultContext(
   if (opts.measures) {
     const visibleScales = opts.measures.scales.filter((m) => m.visibility !== "hidden");
     const visibleIndicators = opts.measures.indicators.filter((m) => m.visibility !== "hidden");
-    // ONE source of truth for «does the test have a pass threshold»: it answers both
-    // the score summary (`auto`) and the verdict below.
-    const hasPassThreshold = opts.measures.hasPassThreshold === true;
+    // ONE source of truth for «is there a graded score to speak about»: it answers
+    // both the score summary (`auto`) and the verdict below. TWO conditions, not one
+    // — a threshold IS set AND there is something to grade. Every new test carries the
+    // default 70% threshold, so the threshold alone would call a measurement
+    // questionnaire graded and paint «0 %», «0 из 0 верно» and a green «Пройден» on
+    // its results screen: the exact nonsense PRD-29 removes. The author of a burnout
+    // inventory never opens that setting, and should not have to — such a method has
+    // no threshold by nature, not by configuration.
+    //
+    // «Nothing to grade» is read off `possiblePoints`, which both hosts already pass
+    // in: a measurement question has no correct grading, so it brings no points and
+    // never can. Deriving it from the builder's own input also makes it true for
+    // attempts finished before this rule existed — no migration, no new stored field.
+    // (`scoredQuestions` in `shared/scoring/aggregate.ts` describes this very contract
+    // but is absent from the stored result schema, so it cannot answer for them.)
+    const hasGradedScore = opts.measures.hasPassThreshold === true && round1(input.possiblePoints) > 0;
     const blocks = resolveResultsBlocks(opts.measures.blockSettings ?? {}, {
-      hasPassThreshold,
+      hasPassThreshold: hasGradedScore,
       hasVisibleScales: visibleScales.length > 0,
       hasVisibleIndicators: visibleIndicators.length > 0,
     });
-    // No threshold — no verdict. A measurement method checks nothing, so «Не пройден»
-    // would be a false statement about the learner, not a cosmetic default. The third
-    // state is the one the topic rows already use (passed === true / false / ""), and
-    // the layout drops the tag entirely on an empty label. It follows the THRESHOLD,
-    // not the score-summary block: an author who force-shows the summary of a
-    // thresholdless test still gets no verdict, and hiding the summary of a control
-    // test does not erase its verdict.
-    if (!hasPassThreshold) {
+    // No graded score — no verdict. A measurement method checks nothing, so both
+    // «Пройден» and «Не пройден» would be false statements about the learner, not a
+    // cosmetic default. The third state is the one the topic rows already use
+    // (passed === true / false / ""), and the layout drops the tag entirely on an
+    // empty label. It follows the THRESHOLD-and-points pair, not the score-summary
+    // block: an author who force-shows the summary of an ungraded test still gets no
+    // verdict, and hiding the summary of a control test does not erase its verdict.
+    if (!hasGradedScore) {
       result.passClass = "";
       result.statusLabel = "";
     }

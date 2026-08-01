@@ -153,11 +153,14 @@ describe("вердикт теста", () => {
   });
 
   it("тест с порогом сохраняет вердикт и при наличии измерений", () => {
-    const ctx = buildResultContext({ ...BASE, passed: true }, "Смешанный", {
+    // У смешанного теста есть оцениваемые вопросы, поэтому возможных баллов больше нуля
+    // — это второй признак, без которого порог по умолчанию 70% ничего не значит.
+    const ctx = buildResultContext({ ...BASE, passed: true, earnedPoints: 8, possiblePoints: 10 }, "Смешанный", {
       measures: { ...MEASURES, hasPassThreshold: true },
     });
     expect(ctx.result.statusLabel).toBe("Пройден");
     expect(ctx.result.passClass).toBe("is-pass");
+    expect(ctx.result.hideScoreSummary).toBeUndefined();
   });
 
   it("вердикт следует за порогом, а не за настройкой блока сводки", () => {
@@ -167,7 +170,7 @@ describe("вердикт теста", () => {
     });
     expect(shown.result.statusLabel).toBe("");
     // И наоборот: спрятанная сводка контрольного теста вердикта не отменяет.
-    const hidden = buildResultContext({ ...BASE, passed: false }, "Контрольный", {
+    const hidden = buildResultContext({ ...BASE, passed: false, earnedPoints: 3, possiblePoints: 10 }, "Контрольный", {
       measures: { ...MEASURES, hasPassThreshold: true, blockSettings: { scoreSummary: "hide" as const } },
     });
     expect(hidden.result.statusLabel).toBe("Не пройден");
@@ -191,5 +194,44 @@ describe("сводка баллов", () => {
       measures: { ...MEASURES, blockSettings: { scoreSummary: "show" } },
     });
     expect(ctx.result.hideScoreSummary).toBeUndefined();
+  });
+});
+
+describe("нечего оценивать", () => {
+  // Любой новый тест несёт порог 70% по умолчанию, поэтому у измерительного теста
+  // признак порога стоит, а оценивать при этом нечего: возможных баллов ноль.
+  const NOTHING = { ...BASE, possiblePoints: 0, earnedPoints: 0 };
+
+  it("измерительный тест с порогом по умолчанию не показывает сводку", () => {
+    const ctx = buildResultContext(NOTHING, "Маслач", {
+      measures: { ...MEASURES, hasPassThreshold: true },
+    });
+    expect(ctx.result.hideScoreSummary).toBe(true);
+  });
+
+  it("и не показывает вердикт", () => {
+    const ctx = buildResultContext(NOTHING, "Маслач", {
+      measures: { ...MEASURES, hasPassThreshold: true },
+    });
+    expect(ctx.result.statusLabel).toBe("");
+    expect(ctx.result.passClass).toBe("");
+  });
+
+  it("контрольный тест с баллами вердикт и сводку сохраняет", () => {
+    const ctx = buildResultContext(
+      { ...BASE, possiblePoints: 10, earnedPoints: 8, passed: true },
+      "Контрольный",
+    );
+    expect(ctx.result.hideScoreSummary).toBeUndefined();
+    expect(ctx.result.statusLabel).toBe("Пройден");
+  });
+
+  it("настройка show перебивает автоматику и при нулевых баллах", () => {
+    const ctx = buildResultContext(NOTHING, "Маслач", {
+      measures: { ...MEASURES, hasPassThreshold: true, blockSettings: { scoreSummary: "show" as const } },
+    });
+    expect(ctx.result.hideScoreSummary).toBeUndefined();
+    // Вердикт следует за парой «порог и есть что оценивать», а не за настройкой блока.
+    expect(ctx.result.statusLabel).toBe("");
   });
 });
