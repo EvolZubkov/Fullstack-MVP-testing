@@ -18,9 +18,81 @@ import {
   type TopicInput,
   type AdaptiveTopicInput,
 } from "@shared/template/result-context";
+import type { MeasureInput, MeasuresInput } from "@shared/template/result-context";
 import type { ReportInput, AdaptiveReportInput, ReportMeta } from "@shared/report/report-html";
+import { LEVEL_SCHEMES, type LevelRamp } from "@shared/template/level-ramp";
+import { parseIndicatorInterpretation, parseScaleInterpretation } from "@shared/scales/interpretation";
+import type { RenderKind } from "@shared/template/measure-view";
+import type { ResultsBlockSettings } from "@shared/template/results-blocks";
+import type { ResultVariable, Scale } from "@shared/schema";
+import type { ScaleResult } from "@shared/formula/types";
 
 export type { ResultRenderContext };
+
+/** Rows and computed values the measures block needs, gathered by the caller. */
+export interface MeasuresSource {
+  scales: Scale[];
+  variables: ResultVariable[];
+  scaleResults: Record<string, ScaleResult>;
+  variableValues: Record<string, unknown>;
+  /** Effective design params of the test (already merged with manifest defaults). */
+  params: Record<string, unknown>;
+  /** Settings of the chosen `results` variant. */
+  blockSettings: ResultsBlockSettings;
+  hasPassThreshold: boolean;
+  testFeedback?: { text?: string } | null;
+}
+
+/**
+ * The ramp: a named scheme, or the author's three triples when `custom` is chosen.
+ * A missing custom colour falls back to the traffic scheme's own end, so a
+ * half-filled form still renders a sane ramp instead of a blank one.
+ */
+function resolveRamp(params: Record<string, unknown>): LevelRamp {
+  const scheme = String(params.levelScheme ?? "traffic");
+  if (scheme !== "custom") return LEVEL_SCHEMES[scheme === "neutral" ? "neutral" : "traffic"];
+  return {
+    favorable: String(params.levelColorFavorable ?? LEVEL_SCHEMES.traffic.favorable),
+    mid: params.levelColorMid ? String(params.levelColorMid) : null,
+    unfavorable: String(params.levelColorUnfavorable ?? LEVEL_SCHEMES.traffic.unfavorable),
+  };
+}
+
+/** Build the PRD-29 measures input for the results context. */
+export function buildMeasuresInput(source: MeasuresSource): MeasuresInput {
+  const scales: MeasureInput[] = source.scales
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((s) => ({
+      key: s.key,
+      name: s.label || s.key,
+      value: source.scaleResults[s.key]?.raw ?? null,
+      visibility: s.learnerVisibility,
+      interpretation: parseScaleInterpretation(s.configJson),
+    }));
+
+  const indicators: MeasureInput[] = source.variables
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((v) => ({
+      key: v.name,
+      name: v.label || v.name,
+      value: source.variableValues[v.name] as number | string | boolean | null,
+      visibility: v.learnerVisibility,
+      interpretation: parseIndicatorInterpretation(v.configJson),
+    }));
+
+  return {
+    ramp: resolveRamp(source.params),
+    scaleKind: String(source.params.scaleRenderKind ?? "band_ruler") as RenderKind,
+    indicatorKind: String(source.params.indicatorRenderKind ?? "label") as RenderKind,
+    scales,
+    indicators,
+    testFeedback: source.testFeedback ?? null,
+    hasPassThreshold: source.hasPassThreshold,
+    blockSettings: source.blockSettings,
+  };
+}
 
 /** Map a server topic result to the normalized topic input. */
 function toTopicInput(t: TopicResult): TopicInput {
@@ -59,11 +131,20 @@ function dedupRecommendations(items: { title: string; url?: string }[]): { title
  * Recommended courses (links) and events from FAILED topics are aggregated and
  * deduped, matching the SCORM runtime, so the web template results screen shows
  * them too (TD-02). The shared builder owns the actual shaping/rendering.
+ *
+ * PRD-29: `measures` is passed on to the shared builder ONLY when the test actually
+ * defines scales or indicators — otherwise `opts.measures` stays undefined and the
+ * control-test screen keeps exactly the context it has always had.
  */
-export function buildResultContext(result: AttemptResult, testTitle: string): ResultRenderContext {
+export function buildResultContext(
+  result: AttemptResult,
+  testTitle: string,
+  measures?: MeasuresSource,
+): ResultRenderContext {
   const failed = (result.topicResults || []).filter((t) => t.passed === false);
   const recommendedCourses = dedupRecommendations(failed.flatMap((t) => t.recommendedCourses ?? []));
   const recommendedEvents = dedupRecommendations(failed.flatMap((t) => t.recommendedEvents ?? []));
+  const hasMeasures = !!measures && (measures.scales.length > 0 || measures.variables.length > 0);
   return buildSharedResultContext(
     {
       passed: result.overallPassed,
@@ -78,6 +159,7 @@ export function buildResultContext(result: AttemptResult, testTitle: string): Re
     {
       ...(recommendedCourses.length ? { recommendedCourses } : {}),
       ...(recommendedEvents.length ? { recommendedEvents } : {}),
+      ...(hasMeasures ? { measures: buildMeasuresInput(measures as MeasuresSource) } : {}),
     },
   );
 }

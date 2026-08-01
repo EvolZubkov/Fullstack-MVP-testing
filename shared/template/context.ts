@@ -18,6 +18,9 @@
  * into the builders' normalized inputs.
  */
 
+import type { CtxMeasureView } from "./measure-view";
+import type { CtxRecommendations } from "./recommendations";
+
 /** Test-level info shown on the start screen and as the screen title (`course.*`). */
 export interface CtxCourse {
   title: string;
@@ -129,6 +132,16 @@ export interface CtxResult {
    * layout as written, so the same screen offered different actions.
    */
   nav?: CtxResultsNav;
+  /**
+   * PRD-29: measurement blocks. Present only when the test has visible scales /
+   * indicators AND the block is on — absence keeps the control-test screen
+   * byte-identical, so the layout gates on presence alone.
+   */
+  scales?: CtxMeasureView[];
+  indicators?: CtxMeasureView[];
+  recommendations?: CtxRecommendations;
+  /** The score summary always HAS data, so it needs its own flag. */
+  showScoreSummary?: boolean;
   [key: string]: unknown;
 }
 

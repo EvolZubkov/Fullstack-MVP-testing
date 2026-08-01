@@ -24,6 +24,16 @@ import type {
   CtxAdaptiveTopicView,
   CtxRecommendation,
 } from "./context";
+import { buildMeasureView, type RenderKind } from "./measure-view";
+import { collectRecommendations } from "./recommendations";
+import { resolveResultsBlocks, type ResultsBlockSettings } from "./results-blocks";
+import type {
+  FeedbackBlock,
+  IndicatorInterpretation,
+  LearnerVisibility,
+  ScaleInterpretation,
+} from "../scales/interpretation";
+import type { LevelRamp } from "./level-ramp";
 
 /** Ring geometry from `layouts/results.html` (`<circle r="63">`). */
 const RING_RADIUS = 63;
@@ -94,6 +104,69 @@ export interface ResultInput {
   topicResults: TopicInput[];
 }
 
+/** One scale or indicator as the host hands it over, before presentational shaping. */
+export interface MeasureInput {
+  key: string;
+  name: string;
+  value: number | string | boolean | null | undefined;
+  visibility: LearnerVisibility;
+  interpretation: ScaleInterpretation | IndicatorInterpretation;
+}
+
+/** PRD-29 measurement input: the visible measures plus the design-param choices. */
+export interface MeasuresInput {
+  ramp: LevelRamp;
+  scaleKind: RenderKind;
+  indicatorKind: RenderKind;
+  scales: MeasureInput[];
+  indicators: MeasureInput[];
+  testFeedback?: FeedbackBlock | null;
+  /** Whether the test has a pass threshold — the `auto` answer for the score summary. */
+  hasPassThreshold?: boolean;
+  blockSettings?: ResultsBlockSettings;
+}
+
+/**
+ * Feedback of the level that actually fired, NORMALISED for the recommendations
+ * block.
+ *
+ * The author's editor stores the canonical `feedbackContentSchema` shape, where an
+ * asset is a PDF descriptor — `{ title, fileName, mimeType, scormHref? }` — and the
+ * address lives in `scormHref`, not `url`. `collectRecommendations` works on
+ * `RecommendationLink { title, url? }`, so the host adapts before handing over;
+ * without this the «Материалы» block renders links with an empty href.
+ *
+ * An asset with no persisted href is DROPPED rather than rendered dead: the file was
+ * never uploaded, so there is nothing to open.
+ */
+function normalizeFeedback(raw: unknown): FeedbackBlock | null {
+  if (!raw || typeof raw !== "object") return null;
+  const f = raw as Record<string, unknown>;
+  const links = (f.links as Array<{ title?: string; url?: string }> | undefined) ?? [];
+  const events = (f.events as Array<{ title?: string; url?: string }> | undefined) ?? [];
+  const assets = (f.assets as Array<{ title?: string; scormHref?: string }> | undefined) ?? [];
+  return {
+    ...(f.text ? { text: String(f.text) } : {}),
+    links: links.map((l) => ({ title: String(l.title ?? ""), ...(l.url ? { url: l.url } : {}) })),
+    events: events.map((e) => ({ title: String(e.title ?? ""), ...(e.url ? { url: e.url } : {}) })),
+    assets: assets
+      .filter((a) => !!a.scormHref)
+      .map((a) => ({ title: String(a.title ?? ""), url: a.scormHref as string })),
+  };
+}
+
+/** Feedback of the level that actually fired, for the recommendations block. */
+function firedFeedback(m: MeasureInput): FeedbackBlock | null {
+  const { interpretation } = m;
+  if (typeof m.value === "number") {
+    const band = interpretation.bands.find((b) => (m.value as number) >= b.min && (m.value as number) <= b.max);
+    return normalizeFeedback(band?.feedback);
+  }
+  const outcomes = (interpretation as IndicatorInterpretation).outcomes ?? [];
+  const outcome = outcomes.find((o) => o.code === String(m.value));
+  return normalizeFeedback(outcome?.feedback);
+}
+
 /** Optional SCORM-richer additions to the standard results context. */
 export interface ResultContextOptions {
   /** Add the per-topic "Баллов" row (`pointsLabel`) — SCORM shows it, web omits. */
@@ -102,6 +175,11 @@ export interface ResultContextOptions {
   recommendedEvents?: CtxRecommendation[];
   backAction?: string;
   backLabel?: string;
+  /**
+   * PRD-29 measurement blocks. Absent (a test with neither scales nor indicators)
+   * leaves the context byte-identical to what a control test has always produced.
+   */
+  measures?: MeasuresInput;
 }
 
 /** Built `{ course, result }` for the results layouts. */
@@ -159,6 +237,34 @@ export function buildResultContext(
   if (opts.backAction) {
     result.backAction = opts.backAction;
     result.backLabel = opts.backLabel;
+  }
+  if (opts.measures) {
+    const visibleScales = opts.measures.scales.filter((m) => m.visibility !== "hidden");
+    const visibleIndicators = opts.measures.indicators.filter((m) => m.visibility !== "hidden");
+    const blocks = resolveResultsBlocks(opts.measures.blockSettings ?? {}, {
+      hasPassThreshold: opts.measures.hasPassThreshold === true,
+      hasVisibleScales: visibleScales.length > 0,
+      hasVisibleIndicators: visibleIndicators.length > 0,
+    });
+    result.showScoreSummary = blocks.scoreSummary;
+
+    if (blocks.scales && visibleScales.length) {
+      result.scales = visibleScales.map((m) =>
+        buildMeasureView({ ...m, requestedKind: opts.measures!.scaleKind, ramp: opts.measures!.ramp }));
+    }
+    if (blocks.indicators && visibleIndicators.length) {
+      result.indicators = visibleIndicators.map((m) =>
+        buildMeasureView({ ...m, requestedKind: opts.measures!.indicatorKind, ramp: opts.measures!.ramp }));
+    }
+    // Order matters: general first, then the profile, then the scales — dedup keeps
+    // the first occurrence, so a general recommendation outranks its specific copy.
+    // A hidden block contributes nothing: the learner never saw what caused it.
+    const recommendations = collectRecommendations([
+      opts.measures.testFeedback,
+      ...(blocks.indicators ? visibleIndicators.map(firedFeedback) : []),
+      ...(blocks.scales ? visibleScales.map(firedFeedback) : []),
+    ]);
+    if (recommendations.hasAny) result.recommendations = recommendations;
   }
   return { course: { title }, result };
 }

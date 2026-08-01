@@ -13,6 +13,7 @@
  */
 
 import type { ScaleSpec, MeasurementSpec } from "@shared/scales/engine";
+import { parseScaleInterpretation } from "@shared/scales/interpretation";
 import type { ResultVariableSpec } from "@shared/formula/result-variables";
 import { storage } from "../storage";
 import type { ScoringConfig } from "./result-compute";
@@ -41,14 +42,16 @@ export async function loadScoringConfig(
     source.getResultVariables(testId),
   ]);
 
+  // PRD-29: read the WHOLE interpretation, not just `bands` — the domain and the
+  // valence travel in the same `config_json` and downstream consumers need them.
   const scales: ScaleSpec[] = scaleRows.map((s) => {
-    const config = (s.configJson as { bands?: unknown }) ?? {};
+    const interpretation = parseScaleInterpretation(s.configJson);
     return {
       key: s.key,
       aggregation: s.aggregation as ScaleSpec["aggregation"],
       normalization: s.normalization as ScaleSpec["normalization"],
       direction: s.direction as ScaleSpec["direction"],
-      bands: Array.isArray(config.bands) ? (config.bands as ScaleSpec["bands"]) : [],
+      bands: interpretation.bands,
     };
   });
 
