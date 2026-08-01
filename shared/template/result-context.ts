@@ -247,11 +247,25 @@ export function buildResultContext(
   if (opts.measures) {
     const visibleScales = opts.measures.scales.filter((m) => m.visibility !== "hidden");
     const visibleIndicators = opts.measures.indicators.filter((m) => m.visibility !== "hidden");
+    // ONE source of truth for «does the test have a pass threshold»: it answers both
+    // the score summary (`auto`) and the verdict below.
+    const hasPassThreshold = opts.measures.hasPassThreshold === true;
     const blocks = resolveResultsBlocks(opts.measures.blockSettings ?? {}, {
-      hasPassThreshold: opts.measures.hasPassThreshold === true,
+      hasPassThreshold,
       hasVisibleScales: visibleScales.length > 0,
       hasVisibleIndicators: visibleIndicators.length > 0,
     });
+    // No threshold — no verdict. A measurement method checks nothing, so «Не пройден»
+    // would be a false statement about the learner, not a cosmetic default. The third
+    // state is the one the topic rows already use (passed === true / false / ""), and
+    // the layout drops the tag entirely on an empty label. It follows the THRESHOLD,
+    // not the score-summary block: an author who force-shows the summary of a
+    // thresholdless test still gets no verdict, and hiding the summary of a control
+    // test does not erase its verdict.
+    if (!hasPassThreshold) {
+      result.passClass = "";
+      result.statusLabel = "";
+    }
     // INVERTED on purpose. A control test never passes `measures`, so a positive
     // flag would be absent — and `{{#if result.showScoreSummary}}` would erase the
     // score ring from every control test in every package and in the preview. The

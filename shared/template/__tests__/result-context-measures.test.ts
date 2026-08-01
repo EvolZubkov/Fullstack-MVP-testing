@@ -139,6 +139,42 @@ describe("buildResultContext + measures", () => {
   });
 });
 
+describe("вердикт теста", () => {
+  it("измерительный тест без порога не получает вердикта", () => {
+    const ctx = buildResultContext(BASE, "Маслач", { measures: MEASURES });
+    expect(ctx.result.statusLabel).toBe("");
+    expect(ctx.result.passClass).toBe("");
+  });
+
+  it("контрольный тест вердикт сохраняет", () => {
+    const ctx = buildResultContext({ ...BASE, passed: true }, "Контрольный");
+    expect(ctx.result.statusLabel).toBe("Пройден");
+    expect(ctx.result.passClass).toBe("is-pass");
+  });
+
+  it("тест с порогом сохраняет вердикт и при наличии измерений", () => {
+    const ctx = buildResultContext({ ...BASE, passed: true }, "Смешанный", {
+      measures: { ...MEASURES, hasPassThreshold: true },
+    });
+    expect(ctx.result.statusLabel).toBe("Пройден");
+    expect(ctx.result.passClass).toBe("is-pass");
+  });
+
+  it("вердикт следует за порогом, а не за настройкой блока сводки", () => {
+    // Автор принудительно показал сводку баллов, но порога у теста по-прежнему нет.
+    const shown = buildResultContext(BASE, "Маслач", {
+      measures: { ...MEASURES, blockSettings: { scoreSummary: "show" as const } },
+    });
+    expect(shown.result.statusLabel).toBe("");
+    // И наоборот: спрятанная сводка контрольного теста вердикта не отменяет.
+    const hidden = buildResultContext({ ...BASE, passed: false }, "Контрольный", {
+      measures: { ...MEASURES, hasPassThreshold: true, blockSettings: { scoreSummary: "hide" as const } },
+    });
+    expect(hidden.result.statusLabel).toBe("Не пройден");
+    expect(hidden.result.hideScoreSummary).toBe(true);
+  });
+});
+
 describe("сводка баллов", () => {
   it("контрольный тест не получает признака скрытия — отсутствие означает «показывать»", () => {
     const ctx = buildResultContext(BASE, "Контрольный");

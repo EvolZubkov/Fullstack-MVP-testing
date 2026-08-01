@@ -6,7 +6,7 @@
         <h1 class="tb-scene__title" data-path="course.title"></h1>
         {{#if course.subtitle}}<span class="tb-scene__subtitle" data-path="course.subtitle"></span>{{/if}}
       </div>
-      <div class="tb-scene__headtag"><span class="ou-tag {{ result.passClass }}" data-path="result.statusLabel"></span></div>
+      <div class="tb-scene__headtag">{{#if result.statusLabel}}<span class="ou-tag {{ result.passClass }}" data-path="result.statusLabel"></span>{{/if}}</div>
     </div>
     <div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width: {{result.scorePercent}}%"></div></div>
   </header>
@@ -63,7 +63,7 @@
         <div class="ou-formsection tb-measure" data-render="{{renderKind}}">
           <div class="ou-formsection__intro">
             <h4 class="ou-formsection__title">{{name}}</h4>
-            <span class="ou-tag ou-tag--l tb-measure__level {{toneClass}}">{{levelLabel}}</span>
+            {{#if levelLabel}}<span class="ou-tag ou-tag--l tb-measure__level {{toneClass}}">{{levelLabel}}</span>{{/if}}
           </div>
           <div class="ou-formsection__body">
             {{#if zones}}

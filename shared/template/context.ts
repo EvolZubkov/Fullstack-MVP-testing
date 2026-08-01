@@ -103,8 +103,9 @@ export interface CtxAdaptiveTopicView extends CtxTopicFeedback {
  */
 export interface CtxResult {
   passed: boolean;
-  /** Core-prepared class `is-pass`/`is-fail`. */
+  /** Core-prepared class `is-pass`/`is-fail`/`""` (empty when the test has no threshold). */
   passClass?: string;
+  /** Verdict label «Пройден»/«Не пройден»/`""` — empty drops the header tag. */
   statusLabel?: string;
   scorePercent?: number;
   /** Core-prepared SVG ring dash offset (precomputed; layout binds it directly). */

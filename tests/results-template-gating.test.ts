@@ -99,6 +99,37 @@ describe("results.html — superset gating", () => {
   });
 });
 
+describe("results.html — пустая плашка не рисуется", () => {
+  it("тест без вердикта не оставляет цветной прямоугольник в шапке", () => {
+    const root = render(resultsLayout, {
+      course: { title: "Опросник" },
+      result: { ...webResult.result, passed: false, passClass: "", statusLabel: "", hideScoreSummary: true },
+    });
+    expect(root.querySelector(".tb-scene__headtag .ou-tag")).toBeNull();
+    expect(root.querySelector(".tb-scene__headtag")).not.toBeNull();
+  });
+
+  it("шкала без сработавшего интервала не оставляет плашку уровня", () => {
+    const root = render(resultsLayout, {
+      course: { title: "Опросник" },
+      result: {
+        passed: false,
+        passClass: "",
+        statusLabel: "",
+        hideScoreSummary: true,
+        topicResults: [],
+        scales: [
+          { name: "Без интервалов", levelLabel: "", toneClass: "", renderKind: "band_ruler" },
+          { name: "С уровнем", levelLabel: "Высокий", toneClass: "ou-tag--error", renderKind: "band_ruler" },
+        ],
+      },
+    });
+    const levels = root.querySelectorAll(".tb-measure__level");
+    expect(levels.length).toBe(1);
+    expect(levels[0].textContent).toBe("Высокий");
+  });
+});
+
 const webAdaptive = {
   course: { title: "Адаптивный тест" },
   result: {
