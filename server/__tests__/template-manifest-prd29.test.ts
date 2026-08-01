@@ -47,8 +47,14 @@ describe("manifest contentTemplates (PRD-29)", () => {
     const results = (manifest.contentTemplates as Array<Record<string, unknown>>)
       .find((c) => c.kind === "results");
     const settings = results?.settings as Array<Record<string, unknown>>;
-    expect(settings.map((s) => s.key)).toEqual(["scoreSummary", "indicators", "scales"]);
-    settings.forEach((s) => {
+    // Проверяем ПРИСУТСТВИЕ своих трёх настроек, а не то, что других нет: вид «Итоги»
+    // общий, и соседние работы законно добавляют к нему свои (например радар PRD-35).
+    // Утверждение о точном составе делало наш тест сторожем чужой области.
+    const keys = settings.map((s) => s.key);
+    expect(keys).toEqual(expect.arrayContaining(["scoreSummary", "indicators", "scales"]));
+    settings
+      .filter((s) => ["scoreSummary", "indicators", "scales"].includes(s.key as string))
+      .forEach((s) => {
       expect(s.type).toBe("select");
       expect(s.default).toBe("auto");
       expect(s.options).toEqual(["auto", "show", "hide"]);
