@@ -2553,6 +2553,13 @@ git commit -m "feat(prd-29): проброс измерений на веб-хо�
 **Files:**
 
 - Modify: `server/scorm/templates/default/layouts/results.html`
+- Modify: `templates/certification/layouts/results.html` (побайтовая копия)
+
+Копия в шаблоне сертификации обязана совпадать со стандартной побайтово — это стережёт
+`tests/template-layout-parity.test.ts`, и для `results.html` исключений в нём не объявлено.
+Не копировать значило бы объявить, что измерительный тест на шаблоне сертификации не
+показывает ничего; это регресс, а не решение. Ревизии самого шаблона это не касается: она
+про экран вопроса и идёт своей дорожкой.
 
 Разметка обязана повторять утверждённый эскиз `docs/wireframes/prd29-measurement-results.html`.
 Классы и заголовки берутся ОТТУДА дословно, а не придумываются заново.
@@ -2614,7 +2621,11 @@ git commit -m "feat(prd-29): проброс измерений на веб-хо�
 Слот значения ветвится по виду. Рельс печатает число и максимум порознь, чтобы шапка
 `ou-slider__val` выглядела как в дизайн-системе; виды без рельса печатают готовую строку
 `valueLabel` — она заведена контрактом ровно для них, и при отсутствии домена «27 из »
-не получится. Кольцо опознаётся признаком `isRing`, а НЕ числом `ringDashoffset`: на максимуме шкалы
+не получится. В центре кольца стоит ЗНАЧЕНИЕ, а не процент. Дуга и так кодирует долю, а подпись «60 %»
+у шкалы с `normalization: none` читалась бы как оценка — тот самый процент, которого
+методика не даёт и ради отказа от которого затевался весь PRD.
+
+Кольцо опознаётся признаком `isRing`, а НЕ числом `ringDashoffset`: на максимуме шкалы
 смещение дуги равно нулю, и проверка числа спрятала бы кольцо ровно у того результата,
 который его заполняет. Ту же ошибку мы уже допустили с признаком сводки.
 
@@ -2658,7 +2669,7 @@ git commit -m "feat(prd-29): проброс измерений на веб-хо�
                         stroke-dasharray="395.84" stroke-dashoffset="{{ringDashoffset}}"></circle>
               </svg>
               <div class="ou-ring__center">
-                <div class="ou-ring__value"><span>{{percent}}</span>%</div>
+                <div class="ou-ring__value">{{valueText}}</div>
                 <div class="ou-ring__label">{{levelLabel}}</div>
               </div>
             </div>
@@ -2740,7 +2751,7 @@ Expected: PASS.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add server/scorm/templates/default/layouts/results.html
+git add server/scorm/templates/default/layouts/results.html templates/certification/layouts/results.html
 git commit -m "feat(prd-29): блоки показателей, шкал и рекомендаций в макете итогов"
 ```
 
