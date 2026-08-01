@@ -169,6 +169,7 @@ function buildResultsMeasures(scaleComputation, varComputation) {
   });
 
   var passRule = TD.overallPassRule;
+  var blockSettings = resultsBlockSettings();
   return {
     ramp: resultsLevelRamp(params),
     scaleKind: String(params.scaleRenderKind || 'band_ruler'),
@@ -181,7 +182,11 @@ function buildResultsMeasures(scaleComputation, varComputation) {
     // while the fired band/outcome blocks are normalised inside the builder.
     testFeedback: TB.normalizeFeedback(TD.testFeedbackJson || null),
     hasPassThreshold: !!(passRule && passRule.type && passRule.type !== 'none'),
-    blockSettings: resultsBlockSettings()
+    blockSettings: blockSettings,
+    // PRD-35: the radar switch travels in the SAME settings of the «Итоги» variant.
+    // Explicitly `=== true`, so a package built before PRD-35 (no key at all) keeps
+    // the screen exactly as it was.
+    showRadar: blockSettings.showCompetencyRadar === true
   };
 }
 
