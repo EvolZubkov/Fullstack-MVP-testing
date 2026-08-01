@@ -1077,7 +1077,7 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 
   /* Typography, second step down. */
   .tb-scene__qtitle,
-  .tb-content__title { font-size: clamp(18px, var(--tb-question-fs, 30px), 22px); }
+  .tb-content__title { font-size: clamp(15px, var(--tb-question-fs, 30px), 22px); }
   .tb-scene__hero { font-size: clamp(20px, var(--tb-question-fs, 32px), 24px); }
   .tb-scene .ou-radio-card__title,
   .tb-scene .ou-rank__text,

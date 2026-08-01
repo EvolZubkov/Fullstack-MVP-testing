@@ -57,12 +57,12 @@ describe("fitQuestionScene: профиль по ширине поля", () => {
     expect(readVar(col, "--tb-answer-fs")).toBe(17);
   });
 
-  it("на узком поле не опускается ниже пола 18 / 15 даже при переполнении", () => {
+  it("на узком поле не опускается ниже общего пола 15 даже при переполнении", () => {
     // Раньше поле телефона гнало кегль до 16 / 14: на маленьком экране переполнение
     // неизбежно, и правильный размен — прокрутка, а не нечитаемый текст.
     const { field, col, headerEnd } = makeScene(360, true);
     fitQuestionScene(field, col, headerEnd);
-    expect(readVar(col, "--tb-question-fs")).toBeGreaterThanOrEqual(18);
+    expect(readVar(col, "--tb-question-fs")).toBeGreaterThanOrEqual(15);
     expect(readVar(col, "--tb-answer-fs")).toBeGreaterThanOrEqual(15);
   });
 
@@ -76,10 +76,10 @@ describe("fitQuestionScene: профиль по ширине поля", () => {
     expect(readVar(col, "--tb-answer-fs")).toBe(14);
   });
 
-  it("узкий профиль при той же геометрии не пускает заголовок ниже 18", () => {
+  it("узкий профиль при той же геометрии не пускает заголовок ниже 15", () => {
     const { field, col, headerEnd } = makeScene(360, true, 400);
     fitQuestionScene(field, col, headerEnd);
-    expect(readVar(col, "--tb-question-fs")).toBe(18);
+    expect(readVar(col, "--tb-question-fs")).toBe(15);
     expect(readVar(col, "--tb-answer-fs")).toBe(15);
   });
 

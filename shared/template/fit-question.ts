@@ -26,7 +26,7 @@
 
 /** Tuning for {@link fitQuestionScene}; all optional with design defaults. */
 export interface FitQuestionOptions {
-  /** Prompt font range (px). Defaults to the width profile: 32/16 wide, 22/18 narrow. */
+  /** Prompt font range (px). Defaults to the width profile: 32/16 wide, 22/15 narrow. */
   questionMax?: number;
   questionMin?: number;
   /** Option font range (px). Defaults to the width profile: 22/14 wide, 17/15 narrow. */
@@ -49,14 +49,22 @@ export interface FitQuestionOptions {
 export const NARROW_FIELD_PX = 520;
 
 /**
- * Font ranges per profile. The narrow one is deliberately shallow: on a phone the
- * field is small enough that SOME scrolling is unavoidable, and shrinking a prompt
- * to 16px to avoid it trades the wrong thing. Mirrors the `clamp()` bounds in the
- * template's S3 block.
+ * Font ranges per profile, mirroring the `clamp()` bounds in the template's S3 block.
+ *
+ * The narrow profile starts lower and ends lower than the wide one: a phone field is
+ * small, and the fitter's only lever is type size, so a shallow range leaves it nothing
+ * to work with and pushes long prompts into the phase-4 cap — where the learner has to
+ * scroll the prompt separately. 15px is the floor for BOTH the prompt and the options
+ * there, which is as low as text meant to be read should go.
  */
 const PROFILES = {
   wide: { qMax: 32, qMin: 16, aMax: 22, aMin: 14 },
-  narrow: { qMax: 22, qMin: 18, aMax: 17, aMin: 15 },
+  // Пол вопроса РАВЕН полу варианта: у подгонки один рычаг — кегль, и чем ниже
+  // он может опуститься, тем реже приходится упирать вопрос в потолок высоты и
+  // прокручивать его отдельно. Иерархия «вопрос над вариантом» держится
+  // насыщенностью (600 против 400), а не размером, так что совпадение полов её
+  // не ломает.
+  narrow: { qMax: 22, qMin: 15, aMax: 17, aMin: 15 },
 } as const;
 
 /**
