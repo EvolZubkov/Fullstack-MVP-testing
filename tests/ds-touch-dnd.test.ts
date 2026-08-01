@@ -54,6 +54,32 @@ describe("тач-перетаскивание", () => {
   });
 });
 
+describe("сетка сопоставления переопределяема", () => {
+  const render = fs.readFileSync(
+    path.resolve(__dirname, "../shared/template/question-interaction.ts"),
+    "utf8",
+  );
+
+  it("рендерер отдаёт пропорцию колонок переменной, а не инлайновым track list", () => {
+    // Инлайновый `grid-template-columns` не перебивается ничем, кроме `!important`:
+    // из-за него сворачивание сетки на узком экране не работало вовсе, а колонка-зазор
+    // при этом пряталась — три трека на два элемента, и карточки наезжали друг на друга.
+    // Именно КОРЕНЬ сетки: `ou-match__card` тоже начинается с `ou-match`.
+    const tag = render.match(/<div class="ou-match ou-match--[^`]*?>/);
+    expect(tag, "не найден корневой тег .ou-match").toBeTruthy();
+    expect(tag![0]).toContain("--ou-match-cols:");
+    expect(tag![0]).not.toMatch(/style="grid-template-columns/);
+  });
+
+  it("DS читает эту переменную с прежним значением по умолчанию", () => {
+    // Фолбэк обязан повторять прежний жёсткий track list, иначе потребитель,
+    // который переменную не ставит, получит другую раскладку.
+    expect(vendorCss).toMatch(
+      /grid-template-columns:\s*var\(--ou-match-cols,\s*minmax\(0, 1fr\)\s*var\(--ou-match-gap-w\)\s*minmax\(0, 1fr\)\)/,
+    );
+  });
+});
+
 describe("движок перетаскивания", () => {
   const src = fs.readFileSync(
     path.resolve(__dirname, "../shared/template/dnd/pointer-dnd.ts"),

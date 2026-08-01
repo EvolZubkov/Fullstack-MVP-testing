@@ -453,7 +453,13 @@ export function renderMatching(
       : `minmax(0, 1fr) ${gapCol} minmax(0, 2fr)`;
 
   let poolSlot = 0;
-  let html = `<div class="ou-match ou-match--gap-wide ou-match--side-r ou-match--icon-dots" style="grid-template-columns:${columns}">`;
+  // The ratio goes out as a CUSTOM PROPERTY, never as `grid-template-columns` itself.
+  // An inline track list outranks every stylesheet, so the narrow-screen fold could not
+  // touch it — the grid kept three tracks while the gap column was hidden and the cards
+  // auto-placed into the wrong ones, overlapping on a phone. The DS base rule reads this
+  // variable (`.ou-match`), so the ratio still applies while a rule can still override
+  // the whole track list.
+  let html = `<div class="ou-match ou-match--gap-wide ou-match--side-r ou-match--icon-dots" style="--ou-match-cols:${columns}">`;
   for (const ri of rightMapping) {
     const matchedLeft = rightToLeft[ri];
     const isJoined = matchedLeft !== undefined;

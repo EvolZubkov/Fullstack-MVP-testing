@@ -4066,10 +4066,18 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
   --ou-match-card-min: var(--ou-size-row);
 
   display: grid;
-  grid-template-columns:
+  /* The column ratio is a VARIABLE, not a hardcoded track list: the renderer gives the
+   * wordier side a 2:1 share and used to print `grid-template-columns` inline, which
+   * no stylesheet can override — so the narrow-screen fold below never worked, and it
+   * hid the gap column while three tracks remained, leaving the cards to auto-place
+   * into the wrong ones. Setting only the variable keeps the ratio and lets a rule win
+   * normally. Fallback = the previous hardcoded value, so a consumer that sets nothing
+   * is unaffected.
+   */
+  grid-template-columns: var(--ou-match-cols,
     minmax(0, 1fr)
     var(--ou-match-gap-w)
-    minmax(0, 1fr);
+    minmax(0, 1fr));
   row-gap: var(--ou-space-2);
   -moz-column-gap: 0;
        column-gap: 0;
