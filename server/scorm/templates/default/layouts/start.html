@@ -71,6 +71,14 @@
             </div>
           </div>
           {{/if}}
+
+          {{#if state.resumeNote}}
+          <div class="ou-banner ou-banner--sm tb-resume">
+            <div class="ou-banner__body">
+              <div class="ou-banner__title" data-path="state.resumeNote"></div>
+            </div>
+          </div>
+          {{/if}}
         </div>
       </div>
 
@@ -83,7 +91,6 @@
   <footer class="tb-scene__foot">
     {{#if state.showBack}}<button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="back">К списку тестов</button>{{/if}}
     <div class="tb-scene__foot-spacer"></div>
-    {{#if state.resumeNote}}<span class="tb-scene__note">{{state.resumeNote}}</span>{{/if}}
     {{#if state.canResume}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="resume">{{state.resumeLabel}}</button>{{/if}}
     {{#if state.cooldown}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" disabled aria-disabled="true">Начать тестирование</button>{{/if}}
     {{#if state.canStart}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="start-test">{{state.startLabel}}</button>{{/if}}

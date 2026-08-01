@@ -1124,16 +1124,6 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   .tb-scene__foot .ou-btn--primary {
     order: 99; flex: 1 1 auto; min-width: 150px; height: 48px; min-height: 48px;
   }
-  /* The start screen's footer carries a STATUS line («Незавершённый тест — вопрос N
-     из M») among its actions, and in markup order it sits between them — breaking the
-     row where it stands and leaving the lone ghost «К списку тестов» on top, where it
-     reads as a heading rather than an action. Pulled to the front it becomes a caption
-     for what follows, and the wrap then groups the footer as it should: status, then
-     the alternatives side by side, then the main action full width. 4 rows -> 3. */
-  .tb-scene__foot .tb-scene__note {
-    order: -1; flex: 0 0 100%;
-    font: var(--ou-text-body-s); color: var(--ou-fg-muted);
-  }
 }
 
 /* ── Touch density ─────────────────────────────────────────────────
