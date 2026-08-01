@@ -2762,6 +2762,13 @@ git commit -m "feat(prd-29): блоки показателей, шкал и ре
 **Files:**
 
 - Modify: `server/scorm/templates/default/styles/theme.css`
+- Modify: `templates/certification/styles/theme.css`
+
+Стили нужны ОБОИМ шаблонам: макет измерения Task 9 положила в обе копии, и без дельты на
+сертификации блоки отрисуются неоформленными. При этом побайтового совпадения здесь НЕ
+требуется — паритет стережёт только макеты и параметры, а у сертификации своя палитра.
+Переносится структурная часть (раскладка строки, зоны, маркер, блок рекомендаций); всё, что
+берётся из токенов дизайн-системы, подхватится палитрой шаблона само.
 
 - [ ] **Step 1: Объявить токены тона рядом с существующими pass/fail**
 
@@ -2871,7 +2878,7 @@ Expected: каждое имя найдено. Отсутствующий ток�
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/scorm/templates/default/styles/theme.css
+git add server/scorm/templates/default/styles/theme.css templates/certification/styles/theme.css
 git commit -m "feat(prd-29): стили строки измерения поверх ou-slider"
 ```
 
