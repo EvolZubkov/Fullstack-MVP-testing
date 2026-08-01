@@ -1315,6 +1315,9 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
     let render = null;
     let report: ReportInput | AdaptiveReportInput | null = null;
     let reportRender: ReturnType<typeof readReportRenderPayload> = null;
+    // PRD-35: измерения нужны не только экрану, но и ОТЧЁТУ, который собирается на
+    // клиенте. Объявлены здесь, а не внутри ветки экрана, чтобы уехать в ответ.
+    let measures: Awaited<ReturnType<typeof measuresForAttempt>> | undefined;
     if (resultJson && Array.isArray(resultJson.topicResults)) {
       const templateId = ((test?.designSettingsJson as any)?.templateId as string) || "default";
       // Learner-facing render: never serve a non-active template, and when the
@@ -1327,8 +1330,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       // PRD-29: the measurement blocks (scales / indicators / recommendations). Only
       // for a STANDARD result — an adaptive one composes its own levels and takes no
       // measures — and only for a test that actually defines any.
-      const measures =
-        resultJson.mode === "adaptive" ? undefined : await measuresForAttempt(attempt, test);
+      measures = resultJson.mode === "adaptive" ? undefined : await measuresForAttempt(attempt, test);
       render = readResultsRenderPayload(
         dir,
         resultJson,
@@ -1445,6 +1447,10 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       render,
       report,
       reportRender,
+      // PRD-35: те же измерения, что у экрана. Клиент печатает по ним шкалы и радар
+      // в отчёте; включает ли он диаграмму — решает СВОЙ переключатель варианта
+      // отчёта, который лежит в `reportRender.values`.
+      measures,
       attemptsInfo:
         maxAttempts !== null
           ? {

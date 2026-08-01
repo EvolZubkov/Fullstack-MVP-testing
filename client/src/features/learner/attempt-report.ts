@@ -12,6 +12,7 @@
  */
 
 import type { ReportInput, AdaptiveReportInput } from "@shared/report/report-html";
+import type { MeasuresInput } from "@shared/template/result-context";
 import { buildReportContext, buildAdaptiveReportContext } from "@shared/report/report-context";
 import { exportReportPdf, inlineReportImageValues } from "@shared/report/export-pdf";
 
@@ -101,6 +102,7 @@ export interface AttemptReportRender {
 export async function downloadAttemptReport(
   report: AttemptReport,
   render: AttemptReportRender,
+  measures?: MeasuresInput,
 ): Promise<string> {
   await ensureLibs();
   // Картинки варианта читаются ЗДЕСЬ: растеризатору нужны data-URL, а сервер отдал
@@ -108,7 +110,16 @@ export async function downloadAttemptReport(
   // подложки и без логотипа, а не падает.
   const values = await inlineReportImageValues(render.values, render.imageKeys ?? []);
   // Сам построитель контекста — общий с пакетом.
-  const opts = { values, design: render.design };
+  // PRD-35: у отчёта СВОЙ переключатель радара — он в полях варианта отчёта, а не в
+  // настройках экрана итогов. Документ уносят специалисту, и профиль там уместен
+  // даже тогда, когда ученику на экране его не показывают (и наоборот).
+  const opts = {
+    values,
+    design: render.design,
+    ...(measures
+      ? { measures: { ...measures, showRadar: values.showCompetencyRadar === true } }
+      : {}),
+  };
   // The server flags the mode (`adaptive`) — the page differs, the input shape follows.
   const context = report.adaptive
     ? buildAdaptiveReportContext(report as AdaptiveReportInput, opts)

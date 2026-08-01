@@ -21,6 +21,7 @@
 import {
   buildResultContext,
   buildAdaptiveResultContext,
+  type MeasuresInput,
   type ResultRenderContext,
 } from "../template/result-context";
 import type { ReportInput, AdaptiveReportInput, ReportMeta } from "./report-html";
@@ -99,6 +100,15 @@ export interface ReportContextOptions {
   design?: Record<string, unknown> | null;
   /** Предпросмотр в настройках теста, а не выдача обучающемуся. */
   isPreview?: boolean;
+  /**
+   * PRD-29/PRD-35: измерения попытки — шкалы, показатели, рекомендации и радар.
+   *
+   * Приходят так же, как `values` и `design`: хост уже собрал их для экрана итогов,
+   * а отчёт печатает то же самое. До PRD-35 отчёт измерений не получал вовсе, и
+   * измерительная методика уносила с собой документ, в котором её вывода не было.
+   * Отсутствие поля сохраняет прежний отчёт байт в байт.
+   */
+  measures?: MeasuresInput;
 }
 
 /** Колонки сетки тем — не больше трёх: на A4 шириной 595 px четвёртая нечитаема. */
@@ -175,7 +185,10 @@ function failedRecommendations(topics: ReportInput["result"]["topicResults"]): {
 export function buildReportContext(input: ReportInput, opts: ReportContextOptions = {}): ReportRenderContext {
   // `withTopicPoints` — в отчёте строка «Баллов» по теме нужна всегда: это документ,
   // а не экран, и досчитать её потом читателю нечем.
-  const base = buildResultContext(input.result, input.testName || "", { withTopicPoints: true });
+  const base = buildResultContext(input.result, input.testName || "", {
+    withTopicPoints: true,
+    ...(opts.measures ? { measures: opts.measures } : {}),
+  });
   const topics = input.result.topicResults ?? [];
   const passed = !!input.result.passed;
   const percent = base.result.scorePercent ?? 0;

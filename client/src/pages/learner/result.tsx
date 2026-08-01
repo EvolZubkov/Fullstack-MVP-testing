@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
 import type { Attempt, AttemptResult } from "@shared/schema";
+import type { MeasuresInput } from "@shared/template/result-context";
 
 interface AttemptWithResult extends Attempt {
   testTitle: string;
@@ -50,6 +51,11 @@ interface AttemptWithResult extends Attempt {
    * только когда макета не дал ни активный шаблон, ни «Стандартный».
    */
   reportRender?: AttemptReportRender | null;
+  /**
+   * PRD-29/PRD-35: измерения попытки — те же, по которым сервер отрисовал экран.
+   * Отчёт собирается на клиенте, поэтому шкалы и радар печатаются из них.
+   */
+  measures?: MeasuresInput | null;
 }
 
 export default function ResultPage() {
@@ -146,7 +152,7 @@ function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
     reportBusy.current = true;
     toast({ variant: "info", title: "Готовим отчёт", description: "Файл скачается автоматически." });
     try {
-      await downloadAttemptReport(attempt.report, attempt.reportRender);
+      await downloadAttemptReport(attempt.report, attempt.reportRender, attempt.measures ?? undefined);
     } catch (e) {
       toast({
         variant: "destructive",

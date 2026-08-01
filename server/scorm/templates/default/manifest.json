@@ -337,6 +337,13 @@
       "isDefault": true,
       "settings": [
         {
+          "key": "showCompetencyRadar",
+          "type": "boolean",
+          "label": "Радар компетенций",
+          "description": "Профиль по шкалам одной диаграммой. Независим от экрана итогов: отчёт уносят с собой и показывают специалисту.",
+          "default": false
+        },
+        {
           "key": "backgroundImage",
           "type": "image",
           "label": "Подложка страницы",
@@ -361,6 +368,13 @@
       "styleFile": "styles/report.css",
       "isDefault": true,
       "settings": [
+        {
+          "key": "showCompetencyRadar",
+          "type": "boolean",
+          "label": "Радар компетенций",
+          "description": "Профиль по шкалам одной диаграммой. Независим от экрана итогов: отчёт уносят с собой и показывают специалисту.",
+          "default": false
+        },
         {
           "key": "backgroundImage",
           "type": "image",
