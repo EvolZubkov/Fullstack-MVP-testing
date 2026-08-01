@@ -114,6 +114,23 @@ describe.each(THEMES)("мобильный слой: %s", (rel) => {
       expect(Number(m![1])).toBe(3);
     });
 
+    it("читаемый слой на телефоне набран body-m, а метки остаются body-s", () => {
+      // 12px (`body-s`, 12/16) — размер подписи. Текст, который учащийся ЧИТАЕТ —
+      // подсказка к вопросу, обратная связь по теме, подписи рекомендаций — переведён
+      // на `body-m` (14/20): плюс два пикселя и плюс четверть межстрочного, что на
+      // абзаце важнее размера. То, что сканируют, намеренно осталось на 12px.
+      const s3 = declarations.match(/@container\s+tbscene\s*\(max-width:\s*520px\)\s*\{([\s\S]*)$/);
+      expect(s3).toBeTruthy();
+      const block = s3![1].match(/\.tb-scene__qhint[\s\S]{0,260}?\{[^}]*\}/);
+      expect(block, "нет правила читаемого слоя в S3").toBeTruthy();
+      expect(block![0]).toContain("--ou-text-body-m");
+      for (const sel of [".tb-scene__subtitle", ".tb-topic-card__fb-text", ".tb-rec"]) {
+        expect(block![0], `${sel} выпал из читаемого слоя`).toContain(sel);
+      }
+      // Счётчики карты — метка, их поднимать не следует.
+      expect(s3![1]).toMatch(/\.tb-scene__mapcount\s*\{[^}]*--ou-text-body-s/);
+    });
+
     it("центрированная колонка не обрезает контент выше поля", () => {
       expect(declarations).toMatch(/\.tb-scene__col--center\s*\{[^}]*min-height:\s*100%/);
       expect(declarations).toMatch(/\.tb-scene__col--center\s*\{[^}]*justify-content:\s*safe center/);

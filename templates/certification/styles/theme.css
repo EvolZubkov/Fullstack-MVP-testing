@@ -1179,6 +1179,19 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   .retake-wall { padding: 16px; }
   .retake-wall__card { padding: var(--ou-space-5); }
 
+  /* Readable layer: 12px is a caption size, and the text set in it here is not a
+     caption — the question hint, the per-topic feedback, «требуется N%» and the
+     recommendation chips are the message the author writes FOR the learner. DS
+     `body-s` is 12/16 and `body-m` is 14/20, so the step buys a quarter more leading
+     as well as the two pixels, which matters more on a feedback paragraph than the
+     size does. Labels that are SCANNED rather than read — the answered/skipped
+     counters, fact captions, eyebrows, tags — deliberately stay at 12px. */
+  .tb-scene__qhint,
+  .tb-scene__subtitle,
+  .tb-topic-card__req,
+  .tb-topic-card__fb-text,
+  .tb-rec { font: var(--ou-text-body-m); }
+
   /* Typography, second step down. */
   .tb-scene__qtitle,
   .tb-content__title { font-size: clamp(15px, var(--tb-question-fs, 30px), 22px); }
