@@ -138,3 +138,22 @@ describe("buildResultContext + measures", () => {
     ]);
   });
 });
+
+describe("сводка баллов", () => {
+  it("контрольный тест не получает признака скрытия — отсутствие означает «показывать»", () => {
+    const ctx = buildResultContext(BASE, "Контрольный");
+    expect(ctx.result.hideScoreSummary).toBeUndefined();
+  });
+
+  it("измерительный тест без порога скрывает сводку явно", () => {
+    const ctx = buildResultContext(BASE, "Маслач", { measures: MEASURES });
+    expect(ctx.result.hideScoreSummary).toBe(true);
+  });
+
+  it("настройка show возвращает сводку при отсутствии порога", () => {
+    const ctx = buildResultContext(BASE, "Маслач", {
+      measures: { ...MEASURES, blockSettings: { scoreSummary: "show" } },
+    });
+    expect(ctx.result.hideScoreSummary).toBeUndefined();
+  });
+});

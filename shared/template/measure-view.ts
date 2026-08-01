@@ -62,6 +62,12 @@ export interface CtxMeasureView {
   markerPercent?: number;
   percent?: number;
   ringDashoffset?: number;
+  /**
+   * Screen-reader label for the rail: a stack of `span`s conveys nothing without it.
+   * Core-prepared because the layout has no way to assemble the sentence from the
+   * parts it binds.
+   */
+  ariaLabel?: string;
 }
 
 /**
@@ -299,6 +305,11 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
   if (renderKind === "ring") {
     view.percent = Math.round(clamped * 100);
     view.ringDashoffset = round1(RING_CIRCUMFERENCE * (1 - clamped));
+  }
+
+  if (renderKind === "band_ruler" || renderKind === "gradient_bar" || renderKind === "ring") {
+    const level = view.levelLabel ? `, уровень: ${view.levelLabel}` : "";
+    view.ariaLabel = `${input.name}: ${view.valueText} из ${view.maxText}${level}`;
   }
 
   return view;

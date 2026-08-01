@@ -252,7 +252,11 @@ export function buildResultContext(
       hasVisibleScales: visibleScales.length > 0,
       hasVisibleIndicators: visibleIndicators.length > 0,
     });
-    result.showScoreSummary = blocks.scoreSummary;
+    // INVERTED on purpose. A control test never passes `measures`, so a positive
+    // flag would be absent — and `{{#if result.showScoreSummary}}` would erase the
+    // score ring from every control test in every package and in the preview. The
+    // absent state has to mean «show», so only the suppression is recorded.
+    if (!blocks.scoreSummary) result.hideScoreSummary = true;
 
     if (blocks.scales && visibleScales.length) {
       result.scales = visibleScales.map((m) =>

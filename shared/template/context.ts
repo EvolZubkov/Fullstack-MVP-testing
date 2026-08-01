@@ -140,8 +140,12 @@ export interface CtxResult {
   scales?: CtxMeasureView[];
   indicators?: CtxMeasureView[];
   recommendations?: CtxRecommendations;
-  /** The score summary always HAS data, so it needs its own flag. */
-  showScoreSummary?: boolean;
+  /**
+   * The score summary always HAS data, so it needs its own flag — and the flag is
+   * NEGATIVE. A control test passes no measures at all, so any positive flag would
+   * be absent and the layout would hide the summary everywhere. Absent = shown.
+   */
+  hideScoreSummary?: boolean;
   [key: string]: unknown;
 }
 
