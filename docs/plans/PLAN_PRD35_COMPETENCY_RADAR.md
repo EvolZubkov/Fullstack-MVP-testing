@@ -1180,11 +1180,24 @@ git commit -m "feat(prd-35): материализация домена шкал�
 
 ## Task 7: Редактор — переключатель и объяснение автору
 
+**Как это вышло на деле** (правка по итогам исполнения, 2026-08-01):
+
+- отдельный контрол писать не понадобилось: булево свойство варианта уже рисуется
+  `Switch`-ем в `start-pages-section.tsx` — там же живёт форма страницы структуры;
+- вместо динамической подсказки «видимых шкал меньше трёх» показывается `description`
+  свойства из манифеста. Причина: форма страницы (`PageEditForm`) отделена от модели
+  теста семью вызовами `SystemPageRow`, и проброс числа шкал через них ради одной
+  фразы стоит дороже, чем даёт. Условие при этом автор ВИДИТ — оно напечатано под
+  переключателем; отказ перед учеником остаётся молчаливым, как требует §6;
+- баннер «домен не задан, будет вычислен» не нужен: после Task 6 сервер записывает
+  домен сам — при сохранении шкалы, при правке вкладов и при публикации. Ситуация,
+  ради которой баннер задумывался, больше не наступает.
+
 **Files:**
 
-- Modify: `client/src/features/tests/editor/sections/topics-structure-section.tsx` (настройки страницы `results`)
-- Modify: `client/src/features/tests/editor/sections/scales-section.tsx` (баннер про домен)
-- Test: `client/src/features/tests/editor/sections/__tests__/radar-toggle.test.tsx`
+- Modify: `client/src/features/tests/editor/sections/start-pages-section.tsx` (показ `description` у булева свойства)
+- Modify: `client/src/features/tests/editor/use-content-pages.ts` (поле `description` в типе свойства)
+- Test: `client/src/features/tests/editor/sections/__tests__/setting-description.test.tsx`
 
 - [ ] **Step 1: Написать падающий тест**
 

@@ -244,3 +244,12 @@
 .tb-report .tb-radar__dot--quantized { fill: #11151e; stroke: hsl(var(--tb-zone)); }
 .tb-report .tb-radar__label { fill: #fafafa; font-size: 11px; }
 .tb-report .tb-radar__level { fill: rgba(250, 250, 250, 0.7); font-size: 10px; }
+
+/* Тон уровня в списке шкал. На экране его несут семантические токены ДС, но отчёт
+   печатается со своей палитрой и без ДС, поэтому оттенки заданы здесь — теми же,
+   что даёт светофорная рампа ядра. Без этого метка «Высокий» ушла бы в документ
+   обычным текстом, и цвет вершины на диаграмме остался бы без пары в списке. */
+.tb-report .tb-report__scale-lvl.tb-tone--favorable { color: hsl(142 76% 45%); }
+.tb-report .tb-report__scale-lvl.tb-tone--neutral   { color: hsl(217 91% 65%); }
+.tb-report .tb-report__scale-lvl.tb-tone--attention { color: hsl(38 92% 55%); }
+.tb-report .tb-report__scale-lvl.tb-tone--critical  { color: hsl(0 84% 65%); }
