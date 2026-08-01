@@ -263,6 +263,17 @@ export const questions = pgTable("questions", {
   mediaUrl: text("media_url"),
   mediaType: text("media_type", { enum: ["image", "audio", "video"] }),
   shuffleAnswers: boolean("shuffle_answers").notNull().default(true),
+  /**
+   * PRD-30 FR-01: author-defined position of the question inside its topic
+   * («Индекс в теме»). NULL = not set — such questions are delivered after all
+   * indexed ones (FR-04). Nullable WITHOUT a default on purpose: any non-null
+   * default would migrate every existing question into one group of equals, and
+   * no topic would gain an order. Values need not be dense or unique — equal
+   * indices form a group that the delivery engine shuffles inside (FR-05).
+   * Named `order_index`, not `sort_order`: `test_sections.sort_order` is a dense
+   * technical order the editor rewrites on every save, this one is author data.
+   */
+  orderIndex: integer("order_index"),
   feedback: text("feedback"),
   feedbackMode: text("feedback_mode", { enum: ["general", "conditional"] }).notNull().default("general"),
   feedbackCorrect: text("feedback_correct"),
@@ -500,6 +511,16 @@ export const testSections = pgTable("test_sections", {
   // draw_count/draw_all/draw_blueprint are then not applied (FR-03). Null = legacy
   // draw (uniform / quotas), backward-compatible.
   formSetJson: jsonb("form_set_json").$type<FormSet>(),
+  /**
+   * PRD-30 FR-02: how this topic's questions are ordered on delivery. `random`
+   * (default) is today's behaviour — the drawn set is shuffled; `fixed` orders
+   * it by `questions.order_index` (FR-03), or, in variants mode, by the
+   * variant's own list (FR-07). An enum rather than a boolean so the next
+   * position («by ascending difficulty») needs no second migration.
+   */
+  questionOrder: text("question_order", { enum: ["random", "fixed"] })
+    .notNull()
+    .default("random"),
   // PRD-15 block D (FR-31): per-section default price of a question. Null = no
   // default — the chain falls through to the test default, then the system 1.
   defaultPoints: integer("default_points"),

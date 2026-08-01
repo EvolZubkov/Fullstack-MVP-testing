@@ -121,6 +121,7 @@ CREATE TABLE "questions" (
 	"media_url" text,
 	"media_type" text,
 	"shuffle_answers" boolean DEFAULT true NOT NULL,
+	"order_index" integer,
 	"feedback" text,
 	"feedback_mode" text DEFAULT 'general' NOT NULL,
 	"feedback_correct" text,
@@ -296,6 +297,7 @@ CREATE TABLE "test_sections" (
 	"feedback_json" jsonb,
 	"draw_blueprint_json" jsonb,
 	"form_set_json" jsonb,
+	"question_order" text DEFAULT 'random' NOT NULL,
 	"default_points" integer,
 	"sort_order" integer DEFAULT 0 NOT NULL
 );
