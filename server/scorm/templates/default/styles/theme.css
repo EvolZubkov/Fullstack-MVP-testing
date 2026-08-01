@@ -602,6 +602,14 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
    their own: the ladder is the author's and differs from test to test. */
 
 /* ── Verdict (results / section-results) ────────────────────────── */
+/* PRD-29: interpretation tones. Named in methodology terms; the DS semantic families
+   already carry the three roles a zone needs — solid, soft fill, text on fill. One tone
+   class per measure rather than the DS modifiers directly, because the SAME class also
+   paints the ring arc, where the DS names differ (`--success` / `--warn` / `--danger`). */
+.tb-scene .ou-tag.tb-tone--favorable { background: var(--ou-success-soft); color: var(--ou-success-on-soft); }
+.tb-scene .ou-tag.tb-tone--neutral   { background: var(--ou-info-soft);    color: var(--ou-info-on-soft); }
+.tb-scene .ou-tag.tb-tone--attention { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
+.tb-scene .ou-tag.tb-tone--critical  { background: var(--ou-error-soft);   color: var(--ou-error-on-soft); }
 /* passClass (is-pass/is-fail) drives the DS ring fill + verdict tag colour. */
 .ou-ring__fill.is-pass { stroke: var(--ou-success-default); }
 .ou-ring__fill.is-fail { stroke: var(--ou-error-default); }
@@ -609,6 +617,99 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 .ou-tag.is-pass { background: var(--ou-success-soft); color: var(--ou-success-on-soft); }
 .ou-tag.is-fail { background: var(--ou-error-soft); color: var(--ou-error-on-soft); }
 .ou-tag.is-partial { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
+
+/* ── PRD-29: measure row (a scale or an indicator on the results screen) ──
+   `ou-formsection` supplies the two-column grid, the rhythm and the hairline between
+   rows; the delta is only what the DS cannot know — the zone colour, the read-only
+   state of a control-shaped element, and the vertical budget of THIS screen.
+
+   The section's own 32px rhythm is meant for a settings form that scrolls freely. Here
+   four sections spend 256px of a 650px body on padding alone, which pushes the third
+   scale below the fold — and a measurement result exists to be read as a whole. */
+.tb-measure.ou-formsection { padding: var(--ou-space-4) 0; }
+/* The level tag does not stretch across the label column. */
+.tb-measure__level { align-self: flex-start; }
+/* The entity name sits one step BELOW the block heading. The DS gives a form section's
+   title heading-m because there the section is its own top level; here a block heading
+   («По шкалам», `tb-scene__subhead`, heading-s) stands above it, and the name of a
+   single scale must not out-shout it. The block heading is NOT raised instead — it is
+   shared with «Результаты по темам» on the control screen, which stays as it was — so
+   the two levels are parted by WEIGHT: the heading keeps 600, the name drops to 400. */
+.tb-measure .ou-formsection__title { font: var(--ou-text-heading-s); font-weight: 400; }
+
+/* The DS slider is a 360px-wide form control; here it is a full-width readout inside
+   the content column, so the cap is relaxed. With the name moved to the label column
+   the header holds the value alone — keep it against the right end of the rail. */
+.tb-measure__slider { max-width: none; display: flex; }
+.tb-measure__slider .ou-slider__header { justify-content: flex-end; }
+/* Sizes: this is not a control operated at arm's length in a dense form but a readout
+   taken in at a glance, so the rail and the boundary labels move one step up the DS
+   scale. The DS lays the labels UNDER the rail absolutely, so they take no space of
+   their own — the clearance below has to be given to the rail explicitly, or the
+   numbers run into the interpretation text. */
+.tb-measure__slider .ou-slider__rail { height: var(--ou-space-3); margin-bottom: var(--ou-space-6); }
+.tb-measure__slider .ou-slider__mark-lbl { font: var(--ou-text-body-s); top: var(--ou-space-5); }
+/* Nobody drags this handle: it marks a value, it is not a control. The diameter is a
+   literal because the DS has no size token for a control part — it follows the rail,
+   which is now 12px, and the DS 18px thumb would sit on it too tightly. */
+.tb-measure__marker { cursor: default; pointer-events: none; width: 22px; height: 22px; }
+
+/* The value is the reading the learner came for, so it carries display weight while the
+   domain stays quiet. At the slider's own body-s it read as a footnote next to the
+   scale name.
+
+   Scoped to the ROW, not to the slider: a scale with no domain prints its value OUTSIDE
+   the slider wrapper (the `{{#unless zones}}` branch of results.html), and scoping to
+   `.tb-measure__slider` would leave it small and muted next to a large one in the same
+   list. The interpretation text under the readout is the finding itself, not a form
+   hint, so it leaves the DS caption size too. */
+.tb-measure .ou-slider__val { font: var(--ou-text-body-m); }
+.tb-measure .ou-slider__val strong { font: var(--ou-text-display-s); }
+.tb-measure .ou-formsection__sub { font: var(--ou-text-body-m); }
+
+/* The ring arc defaults to the accent colour; the measure's tone lives in `toneClass`,
+   so the ring has to pick it up too — otherwise a critical level draws in the brand
+   colour while the tag beside it is red. */
+.tb-scene .ou-ring__fill.tb-tone--favorable { stroke: var(--ou-success-default); }
+.tb-scene .ou-ring__fill.tb-tone--neutral   { stroke: var(--ou-info-default); }
+.tb-scene .ou-ring__fill.tb-tone--attention { stroke: var(--ou-warning-default); }
+.tb-scene .ou-ring__fill.tb-tone--critical  { stroke: var(--ou-error-default); }
+
+/* Narrow scene: the two-column section collapses to a single stack. The query measures
+   the SCENE (`@container tbscene`), not the viewport — the whole mobile adaptation of
+   this template is built on container steps 900 / 700 / 520, and a viewport `@media`
+   here would fire out of step with everything around it. 700 is the step where the rest
+   of the scene already goes single-column. */
+@container tbscene (max-width: 700px) {
+  .tb-measure.ou-formsection { display: flex; flex-direction: column; gap: var(--ou-space-4); }
+}
+
+/* Zones paint the rail DISCRETELY: the finding of a banded method is categorical, and a
+   gradient would hide the step across a boundary. `ou-slider__fill` already gives the
+   absolute positioning and the pill radius; only the colour is ours, and it arrives as
+   an HSL TRIPLE the way design params are already carried (shared/template/params-css)
+   — the ramp is interpolated by the core, CSS computes nothing. Square inner corners
+   keep adjacent zones from showing a gap the method does not have. */
+.tb-zone { background: hsl(var(--tb-zone)); border-radius: 0; }
+/* Only the DOMAIN ends stay rounded. Note the sibling tests: `:first-of-type` /
+   `:last-of-type` match by ELEMENT type, and the rail's last `span` is the MARKER, not
+   a zone — `:last-of-type` would therefore match nothing and the right end would stay
+   square over the rail's own pill. */
+.tb-zone:first-child {
+  border-start-start-radius: var(--ou-radius-pill);
+  border-end-start-radius: var(--ou-radius-pill);
+}
+.tb-zone:not(:has(~ .tb-zone)) {
+  border-start-end-radius: var(--ou-radius-pill);
+  border-end-end-radius: var(--ou-radius-pill);
+}
+
+/* PRD-29: the single recommendations block, structured by resource type. The chip row
+   (`tb-recs`) and the chip itself (`tb-rec`) already exist above and are reused as they
+   are; an empty group is not printed at all. */
+.tb-recs-block { display: flex; flex-direction: column; gap: var(--ou-space-4); }
+.tb-recs-group { display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: flex-start; }
+.tb-recs-group__text { margin: 0; font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
 
 /* ── Content / gallery pages ────────────────────────────────────── */
 /* The body CENTRES its block — reading measure, balanced, no vertical stretching
