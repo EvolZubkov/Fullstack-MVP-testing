@@ -30,6 +30,8 @@ export const QUESTION_HEADERS = [
   "Тип вопроса",
   "Текст вопроса",
   "Сложность",
+  // PRD-30 FR-15: author's position of the question inside its topic.
+  "Индекс в теме",
   "Тексты вариантов ответа",
   "Номера правильных ответов",
   "Следование вариантов ответов",
@@ -41,7 +43,7 @@ export const QUESTION_HEADERS = [
 ];
 
 /** Column widths matching {@link QUESTION_HEADERS}. */
-export const QUESTION_WIDTHS = [36, 25, 18, 50, 12, 60, 25, 15, 40, 25, 12, 30, 30];
+export const QUESTION_WIDTHS = [36, 25, 18, 50, 12, 14, 60, 25, 15, 40, 25, 12, 30, 30];
 
 // ─── canonical cell values of the enumerated «Вопросы» columns ───────────────
 //
@@ -93,6 +95,10 @@ export function serializeQuestionRow(q: Question, topicName: string): Record<str
     "Тип вопроса": typeToExcel[q.type] || q.type,
     "Текст вопроса": q.prompt,
     "Сложность": q.difficulty ?? 50,
+    // PRD-30 FR-01: an empty cell means «не задано». The fallback is the EMPTY
+    // STRING, not a number: 0 is a real index, and a default like the one above
+    // would invent an order the author never set.
+    "Индекс в теме": q.orderIndex ?? "",
     "Тексты вариантов ответа": optionsStr,
     "Номера правильных ответов": correctStr,
     "Следование вариантов ответов": q.shuffleAnswers === false ? "Fixed" : "Random",

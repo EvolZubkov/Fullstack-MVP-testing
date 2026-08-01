@@ -129,6 +129,8 @@ export function QuestionEditorDrawer({
   const [shuffleAnswers, setShuffleAnswers] = useState<boolean>(true);
   // PRD-16: difficulty is unset («Не задано») by default for a new question.
   const [difficulty, setDifficulty] = useState<number | null>(null);
+  // PRD-30 FR-01: «Индекс в теме» — empty means «не задано» (delivered last).
+  const [orderIndex, setOrderIndex] = useState<number | null>(null);
   const [feedbackMode, setFeedbackMode] = useState<"general" | "conditional">("general");
   const [feedback, setFeedback] = useState<string>("");
   const [feedbackCorrect, setFeedbackCorrect] = useState<string>("");
@@ -174,6 +176,7 @@ export function QuestionEditorDrawer({
     setMediaType("");
     setShuffleAnswers(true);
     setDifficulty(null);
+    setOrderIndex(null);
     setFeedbackMode("general");
     setFeedback("");
     setFeedbackCorrect("");
@@ -221,6 +224,7 @@ export function QuestionEditorDrawer({
       setMediaType((question.mediaType as "image" | "audio" | "video" | "") || "");
       setShuffleAnswers(question.shuffleAnswers !== false);
       setDifficulty(question.difficulty);
+      setOrderIndex(question.orderIndex ?? null);
       setFeedbackMode((question.feedbackMode as "general" | "conditional") || "general");
       setFeedback(question.feedback || "");
       setFeedbackCorrect(question.feedbackCorrect || "");
@@ -341,6 +345,8 @@ export function QuestionEditorDrawer({
       mediaType: mediaType || null,
       shuffleAnswers,
       difficulty,
+      // PRD-30 FR-01: null CLEARS the index — «не задано» is a value.
+      orderIndex,
       feedbackMode,
       feedback: feedbackMode === "general" ? (feedback.trim() || null) : null,
       feedbackCorrect: feedbackMode === "conditional" ? (feedbackCorrect.trim() || null) : null,
@@ -648,6 +654,31 @@ export function QuestionEditorDrawer({
                 <Text as="p" variant="body-xs" tone="muted">{t.questions.difficultyHint}</Text>
               </>
             )}
+          </Stack>
+
+          {/* PRD-30 FR-01: «Индекс в теме». No slider (unlike difficulty): the
+              range is unbounded, and «не задано» is expressed by an empty field,
+              so no separate switch is needed either. */}
+          <Stack gap={2}>
+            <Label>{t.questions.orderIndex}</Label>
+            <Cluster gap={4} wrap={false}>
+              {/* `Input type=number`, not the DS stepper: NumberInput takes a
+                  REQUIRED number, and this field must be able to be empty
+                  («не задано»). Same control the difficulty number uses above. */}
+              <Input
+                type="number"
+                value={orderIndex ?? ""}
+                aria-label={t.questions.orderIndex}
+                onChange={(e) => {
+                  const raw = e.target.value.trim();
+                  // Empty clears the index; parseInt keeps 0 and negatives.
+                  const parsed = Number.parseInt(raw, 10);
+                  setOrderIndex(raw === "" || Number.isNaN(parsed) ? null : parsed);
+                }}
+                data-testid="input-question-order-index"
+              />
+            </Cluster>
+            <Text as="p" variant="body-xs" tone="muted">{t.questions.orderIndexHint}</Text>
           </Stack>
 
           <Stack gap={4}>

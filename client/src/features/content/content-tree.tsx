@@ -519,6 +519,7 @@ export function ContentTree() {
         </div>
         <div className="ct-owner">{ownerLabel(topic.ownerId ?? null)}</div>
         <div className="ct-cell" />
+        <div className="ct-cell" />
         <div className="ct-cell">{contentActive ? `${shown.length} / ${total}` : `${total}`}</div>
         <RowActions open={menuOpen} label={t.content.actionsTopic} onToggle={() => setMenu(menuOpen ? null : { kind: "topic", id: topic.id })}>
           {can("questions.manage") && <MenuItem icon={<Plus size={16} />} onClick={() => { setMenu(null); setEditorTarget({ question: null, defaultTopicId: topic.id }); }} testId={`ct-topic-addq-${topic.id}`}>{t.content.addQuestion}</MenuItem>}
@@ -551,6 +552,9 @@ export function ContentTree() {
           {q.mediaType ? <span className="ct-qmedia" title="С медиа"><ImageIcon size={16} /></span> : null}
         </div>
         <div className="ct-owner" />
+        <div className="ct-cell">
+          {q.orderIndex != null ? q.orderIndex : <span className="ct-na">{t.content.orderIndexNotSet}</span>}
+        </div>
         <div className="ct-cell">{q.difficulty != null ? q.difficulty : <span className="ct-na">{t.questions.difficultyNotSet}</span>}</div>
         <div className="ct-cell" />
         <RowActions open={menuOpen} label={t.content.actionsQuestion} onToggle={() => setMenu(menuOpen ? null : { kind: "question", id: q.id })}>
@@ -588,6 +592,7 @@ export function ContentTree() {
           <span className="ct-foldercount">{countsLabel(totals)}</span>
         </div>
         <div className="ct-owner" />
+        <div className="ct-cell" />
         <div className="ct-cell" />
         <div className="ct-cell" />
         <RowActions open={menuOpen} label={t.content.actionsFolder} onToggle={() => setMenu(menuOpen ? null : { kind: "folder", id: folder.id })}>
@@ -718,6 +723,9 @@ export function ContentTree() {
           <div className="ct-thead">
             <div>{t.content.colName}</div>
             <div>{t.content.colOwner}</div>
+            {/* PRD-30 FR-08: the bank is sorted by this index, so the number has
+                to be visible — otherwise the row order is unexplainable. */}
+            <div>{t.content.colOrderIndex}</div>
             <div>{t.content.colDifficulty}</div>
             <div>{t.content.colQuestions}</div>
             <div />

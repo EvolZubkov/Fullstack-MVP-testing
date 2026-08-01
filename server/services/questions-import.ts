@@ -395,6 +395,17 @@ export async function importQuestionRows(
         continue;
       }
 
+      // PRD-30 FR-01/FR-15: «Индекс в теме». Пустая ячейка = «не задано» (NULL),
+      // а не 0 — ноль здесь обычный индекс. Книга без колонки не трогает
+      // сохранённое значение (см. hasCol ниже).
+      const orderIndexRaw = String(row["Индекс в теме"] ?? "").trim();
+      const parsedOrderIndex = orderIndexRaw === "" ? null : Number(orderIndexRaw);
+      if (parsedOrderIndex !== null && !Number.isInteger(parsedOrderIndex)) {
+        result.errors.push(`Строка ${rowNum}: «Индекс в теме» должен быть целым ("${row["Индекс в теме"]}")`);
+        continue;
+      }
+      const orderIndex = parsedOrderIndex;
+
       // PRD-14 Ф1 (FR-06): теги — разделители `;`/`,`.
       const tags = normalizeTags(String(row["Теги"] ?? "").split(/[;,]/));
 
@@ -485,6 +496,7 @@ export async function importQuestionRows(
             contentHash,
           };
           if (hasCol("Сложность")) updatePayload.difficulty = difficulty;
+          if (hasCol("Индекс в теме")) updatePayload.orderIndex = orderIndex;
           if (hasCol("Следование вариантов ответов")) updatePayload.shuffleAnswers = shuffleAnswers;
           if (hasCol("Обратная связь")) updatePayload.feedback = feedback;
           if (hasCol("ОС при верном")) updatePayload.feedbackCorrect = feedbackCorrect;
@@ -542,6 +554,7 @@ export async function importQuestionRows(
           feedbackCorrect: feedbackMode === "conditional" ? feedbackCorrect : null,
           feedbackIncorrect: feedbackMode === "conditional" ? feedbackIncorrect : null,
           tags,
+          orderIndex,
           contentHash,
           createdBy: actor?.id ?? null,
         } as any);

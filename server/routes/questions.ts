@@ -100,6 +100,12 @@ interface CreateQuestionBody {
   feedbackIncorrect?: string;
   /** PRD-11 §3a: sub-topic tags; normalized on save (trim/collapse, dedup, cap). */
   tags?: string[];
+  /**
+   * PRD-30 FR-01: author-defined index inside the topic («Индекс в теме»).
+   * `null` clears it («не задано»); an absent field leaves the stored value
+   * alone. Values need not be dense or unique.
+   */
+  orderIndex?: number | null;
 }
 
 interface UpdateQuestionBody extends Partial<CreateQuestionBody> {}
@@ -165,6 +171,7 @@ router.post(
         feedbackCorrect,
         feedbackIncorrect,
         tags,
+        orderIndex,
       } = req.body;
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
@@ -198,6 +205,9 @@ router.post(
         feedbackCorrect: normalizeAuthorText(feedbackCorrect) || null,
         feedbackIncorrect: normalizeAuthorText(feedbackIncorrect) || null,
         tags: normalizeTags(Array.isArray(tags) ? tags : []),
+        // PRD-30 FR-01: `??` and not `||` — 0 is a legitimate index; absent
+        // means «не задано» and stores NULL.
+        orderIndex: orderIndex ?? null,
         createdBy: req.currentUser?.id ?? null,
       } as any);
 
@@ -232,6 +242,7 @@ router.put(
         feedbackCorrect,
         feedbackIncorrect,
         tags,
+        orderIndex,
       } = req.body as UpdateQuestionBody;
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
@@ -294,6 +305,9 @@ router.put(
         feedbackIncorrect: normalizeOptionalText(feedbackIncorrect),
         // Only touch tags when the client sent them; otherwise leave unchanged.
         tags: Array.isArray(tags) ? normalizeTags(tags) : undefined,
+        // PRD-30 FR-01: `null` CLEARS the index, `undefined` leaves it alone —
+        // the storage layer reads undefined as «unchanged».
+        orderIndex,
       } as any);
 
       if (!updated) {

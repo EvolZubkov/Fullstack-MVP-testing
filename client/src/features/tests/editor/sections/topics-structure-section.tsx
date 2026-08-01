@@ -189,6 +189,10 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
               ...(drawAll ? { drawCount: Math.max(section.maxQuestions, 1) } : {}),
             })
           }
+          onToggleQuestionOrder={(random) =>
+            updateSection(section.topicId, { questionOrder: random ? "random" : "fixed" })
+          }
+          flatFlow={model.flowMode === "linear_flat"}
           onToggleRequired={(required) =>
             updateSection(section.topicId, { required })
           }
@@ -247,6 +251,14 @@ function TopicRow(props: {
   onChangeDrawCount: (n: number) => void;
   /** Toggle the manual "draw the whole topic" flag. */
   onToggleDrawAll: (drawAll: boolean) => void;
+  /** PRD-30 FR-02: toggle the topic's delivery order (on = random, off = fixed). */
+  onToggleQuestionOrder: (random: boolean) => void;
+  /**
+   * PRD-30 FR-12: the test builds one flat question stream (`linear_flat`), so
+   * questions of ALL topics are shuffled together and a fixed order inside a
+   * topic cannot survive. Drives the warning under the switch.
+   */
+  flatFlow?: boolean;
   onToggleRequired: (required: boolean) => void;
   /** Replace this section's draw blueprint (`null` = uniform draw). */
   onChangeBlueprint: (bp: DrawBlueprint | null) => void;
@@ -288,6 +300,9 @@ function TopicRow(props: {
       : undefined;
   // The draw-count error only applies to an editable partial whole-topic draw.
   const drawCountError = !partialDrawLocked ? props.drawCountError : undefined;
+  // PRD-30 FR-02: the switch reads «Случайный порядок вопросов», so ON = random.
+  // Anything but an explicit "fixed" is random — a legacy section has no value.
+  const questionOrderRandom = section.questionOrder !== "fixed";
 
   return (
     <>
@@ -364,6 +379,42 @@ function TopicRow(props: {
             <p className="tb-field-error" role="alert" data-testid={`topic-drawcount-error-${section.topicId}`}>
               {drawCountError}
             </p>
+          )}
+
+          {/* PRD-30 FR-02 (эскиз approved/prd30-question-order.html, состояние
+              fixed): the delivery-order switch sits right under «Вопросов в
+              тест», so the three delivery parameters read as one row — how
+              many, in what order, in what slices. */}
+          <label className="tb-question-order-row">
+            <Switch
+              checked={questionOrderRandom}
+              onChange={(e) => props.onToggleQuestionOrder(e.target.checked)}
+              aria-label={`Случайный порядок вопросов: ${section.topicName}`}
+              data-testid={`topic-question-order-${section.topicId}`}
+            />
+            <span className="tb-question-order-row__lbl">Случайный порядок вопросов</span>
+            {!questionOrderRandom && (
+              <span className="tb-question-order-row__hint">
+                {variantsOn
+                  ? "выключен — в порядке списка варианта"
+                  : "выключен — по индексу, заданному в теме"}
+              </span>
+            )}
+          </label>
+          {/* FR-12: in a flat stream the questions of every topic are shuffled
+              together, so a fixed order inside one topic cannot survive. Warning
+              tone, not error — saving is not blocked. */}
+          {!questionOrderRandom && props.flatFlow && (
+            <Banner
+              tone="warning"
+              variant="subtle"
+              description={
+                "Тест собирается сплошным списком: вопросы всех тем перемешиваются между собой, " +
+                "поэтому заданный порядок внутри темы не сохранится. Порядок работает в режимах с " +
+                "разбивкой по темам — измените режим на вкладке «Структура»."
+              }
+              data-testid={`topic-question-order-flat-warning-${section.topicId}`}
+            />
           )}
 
           <QuotaEditor

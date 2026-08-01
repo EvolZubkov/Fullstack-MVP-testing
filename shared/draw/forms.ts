@@ -24,6 +24,7 @@
 
 import type { Form, FormSet } from "../schema";
 import type { ShuffleFn } from "./blueprint";
+import type { QuestionOrderMode } from "./order-questions";
 
 export interface SelectFormResult {
   /** Stable id of the chosen variant — pinned in the attempt for rotation (FR-08). */
@@ -43,6 +44,13 @@ export interface SelectFormOptions {
   availableIds?: ReadonlySet<string> | null;
   /** Injected shuffle (Fisher-Yates at runtime; deterministic permutation in tests). */
   shuffle: ShuffleFn;
+  /**
+   * PRD-30 FR-07: how the delivered variant is ordered. `random` (the default,
+   * and PRD-17's original behaviour) shuffles the presentation order; `fixed`
+   * delivers the variant's OWN list order — the author already sequenced it
+   * there, so `questions.order_index` is NOT applied on top.
+   */
+  order?: QuestionOrderMode;
 }
 
 /**
@@ -51,7 +59,7 @@ export interface SelectFormOptions {
  * only invokes this when the section is in variants mode.
  */
 export function selectForm(forms: Form[], opts: SelectFormOptions): SelectFormResult {
-  const { previousFormIds, availableIds, shuffle } = opts;
+  const { previousFormIds, availableIds, shuffle, order = "random" } = opts;
 
   const used = new Set(previousFormIds);
   // Rotation: prefer variants not seen in prior completed attempts; when all have
@@ -62,11 +70,13 @@ export function selectForm(forms: Form[], opts: SelectFormOptions): SelectFormRe
   const chosen = shuffle(candidates.slice())[0];
 
   // Deliver the whole variant; drop questions no longer in the bank (FR-17), then
-  // randomise presentation order (FR-15).
+  // randomise presentation order (FR-15) — unless the topic runs in `fixed`
+  // order, where the variant's own list IS the order (PRD-30 FR-07). A dropped
+  // question simply falls out; the remaining ones keep their relative places.
   const present = availableIds
     ? chosen.questionIds.filter((id) => availableIds.has(id))
     : chosen.questionIds.slice();
-  const questionIds = shuffle(present.slice());
+  const questionIds = order === "fixed" ? present : shuffle(present.slice());
 
   return { formId: chosen.id, questionIds };
 }

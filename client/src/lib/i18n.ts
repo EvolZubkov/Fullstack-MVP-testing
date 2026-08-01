@@ -279,6 +279,9 @@ export const t = {
     allTopics: "Все темы",
     colName: "Название",
     colOwner: "Владелец",
+    // PRD-30: author-defined position of the question inside its topic.
+    colOrderIndex: "Индекс",
+    orderIndexNotSet: "—",
     colDifficulty: "Сложность",
     colQuestions: "Вопросов",
     loading: "Загрузка…",

@@ -22,7 +22,13 @@ import { touchTopics } from "./shared";
 /** Repository for the `questions` table. */
 export class QuestionsRepository {
   async getQuestions(): Promise<Question[]> {
-    return db.select().from(questions);
+    // PRD-30 FR-08: the whole-bank read feeds the author's «Темы и вопросы»
+    // tree, which groups by topic — so it needs the SAME order as the per-topic
+    // read below, otherwise the tree and the delivery disagree about the order.
+    return db
+      .select()
+      .from(questions)
+      .orderBy(questions.topicId, sql`${questions.orderIndex} ASC NULLS LAST`, questions.id);
   }
 
   async getQuestionsByTopic(topicId: string): Promise<Question[]> {

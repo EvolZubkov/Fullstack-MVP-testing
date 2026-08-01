@@ -392,6 +392,9 @@ function buildSectionsFromApi(src: ApiTestResponse): {
       formSet: readFormSetFromApi(raw.formSetJson),
       // PRD-15 block D (FR-31): per-section default price (null = inherit test).
       defaultPoints: typeof raw.defaultPoints === "number" ? raw.defaultPoints : null,
+      // PRD-30 FR-02: anything but an explicit "fixed" is today's random order —
+      // a legacy section without the column must keep behaving as before.
+      questionOrder: raw.questionOrder === "fixed" ? "fixed" : "random",
     });
   }
 
@@ -1169,6 +1172,8 @@ export function mapEditorSectionsToPayload(model: TestEditorModel): TestSectionP
       formSetJson: section.formSet ?? null,
       // PRD-15 block D (FR-31): per-section default price.
       defaultPoints: section.defaultPoints ?? null,
+      // PRD-30 FR-02: delivery order of the topic's questions.
+      questionOrder: section.questionOrder ?? "random",
     };
   });
 }

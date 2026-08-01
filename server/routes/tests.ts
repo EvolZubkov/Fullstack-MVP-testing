@@ -58,6 +58,9 @@ const sectionBodySchema = z
     formSetJson: formSetSchema.nullish(),
     // PRD-15 block D (FR-31): per-section default price; null = inherit test.
     defaultPoints: z.number().int().min(0).nullable().optional(),
+    // PRD-30 FR-02: delivery order. MUST be listed here for the same reason as
+    // formSetJson above — an unlisted key is stripped and silently lost.
+    questionOrder: z.enum(["random", "fixed"]).optional(),
   })
   .superRefine((s, ctx) => {
     // PRD-11 FR-05: the quotas are minimums inside the topic's sample, so their

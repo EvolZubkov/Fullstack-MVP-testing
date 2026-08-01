@@ -161,6 +161,8 @@ router.get(
           drawCount: s.drawCount,
           topicPassRuleJson: s.topicPassRuleJson,
           required: s.required,
+          // PRD-30 FR-15: delivery order of the topic's questions.
+          questionOrder: s.questionOrder,
         }),
       );
       const quotaRows: Record<string, unknown>[] = [];

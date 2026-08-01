@@ -582,6 +582,8 @@ export async function importWorkbook(
           drawCount: sec.drawCount,
           topicPassRuleJson: sec.passRule,
           required: sec.required,
+          // PRD-30 FR-02/FR-15: delivery order («Случайный порядок вопросов»).
+          questionOrder: sec.questionOrder,
           drawBlueprintJson: strata.length ? { strata } : null,
           formSetJson,
         },

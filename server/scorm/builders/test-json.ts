@@ -219,6 +219,11 @@ export function buildTestJson(data: ExportData): string {
       // degrades to a random pick (R-6). The whole bank ships (every variant's
       // questions+keys, R-7) — selection happens client-side.
       ...(s.formSetJson ? { formSet: s.formSetJson } : {}),
+      // PRD-30 FR-02/FR-14: delivery order of the topic's questions. Baked only
+      // when `fixed` (the default is `random`) so packages of tests that never
+      // touched the setting stay byte-identical; the runtime reads
+      // section.questionOrder and falls back to `random` when absent.
+      ...(s.questionOrder === "fixed" ? { questionOrder: "fixed" as const } : {}),
       topicFeedback: s.topic.feedback || null,
       recommendedCourses: s.courses.map((c) => ({ title: c.title, url: c.url })),
       recommendedEvents: s.events.map((e) => ({ title: e.title })),
@@ -253,6 +258,13 @@ export function buildTestJson(data: ExportData): string {
           // (the default is on) so packages of untouched tests stay
           // byte-identical (FR-02).
           ...(q.shuffleAnswers === false ? { shuffleAnswers: false } : {}),
+          // PRD-30 FR-01: the author's index inside the topic. Baked only when
+          // the section actually orders by it AND the question has one, so
+          // packages of untouched tests stay byte-identical (FR-14); the
+          // runtime treats an absent value as «not set» (delivered last).
+          ...(s.questionOrder === "fixed" && typeof q.orderIndex === "number"
+            ? { orderIndex: q.orderIndex }
+            : {}),
         };
       }),
     })),

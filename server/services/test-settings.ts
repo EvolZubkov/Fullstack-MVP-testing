@@ -132,6 +132,12 @@ export interface SectionPayload {
   formSetJson?: FormSet | null;
   /** PRD-15 block D (FR-31): per-section default price; null = inherit test. */
   defaultPoints?: number | null;
+  /**
+   * PRD-30 FR-02: delivery order of the topic's questions. `random` (the
+   * default) shuffles as before; `fixed` orders by `questions.order_index`,
+   * or by the variant's own list in variants mode (FR-07).
+   */
+  questionOrder?: "random" | "fixed";
 }
 
 export interface AdaptiveLevelPayload {
@@ -626,6 +632,7 @@ export class TestSettingsService {
         drawBlueprintJson: s.drawBlueprintJson ?? null,
         formSetJson: s.formSetJson ?? null,
         defaultPoints: s.defaultPoints ?? null,
+        questionOrder: s.questionOrder ?? "random",
         sortOrder: i,
       });
     }

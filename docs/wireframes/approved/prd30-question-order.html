@@ -101,9 +101,9 @@
       .ou-formfield.is-na .qd-diffrow__num,
       .ou-formfield.is-na .qd-hint { display: none; }
       .qd-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
-      /* Поле «Индекс в теме» не тянется на ширину формы: это короткое число,
-         как «Вопросов в тест». Ширину задаёт содержимое степпера, а не колонка. */
-      .qd-order__num { width: max-content; }
+      /* Поле «Индекс в теме» не тянется на ширину формы: это короткое число.
+         Ширина — как у числового поля сложности рядом. */
+      .qd-order__num { width: var(--wf-size-160); flex: none; }
 
       /* Аннотационные бейджи (канон prd11). */
       .wf-annot { display: none; }
@@ -472,7 +472,11 @@
                  «не задано» выражается пустым полем, отдельный свитч не нужен. -->
             <div class="ou-formfield">
               <span class="ou-formfield__lbl">Индекс в теме</span>
-              <div class="ou-number ou-number--m ou-number--split qd-order__num"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="20" aria-label="Индекс в теме" /><button type="button" class="ou-number__btn" aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+              <!-- Числовое ПОЛЕ, а не степпер ДС: NumberInput принимает
+                   ОБЯЗАТЕЛЬНОЕ число и пустое значение не выражает, а «не
+                   задано» здесь — штатное состояние. Тот же контрол, что у
+                   числа сложности выше. -->
+              <div class="ou-field ou-field--m qd-order__num"><div class="ou-field__box"><input class="ou-field__input" type="number" value="20" aria-label="Индекс в теме" /></div></div>
               <span class="qd-hint">Пусто — индекс не задан: такие вопросы идут последними. Одинаковый индекс у нескольких вопросов допустим — внутри такой группы порядок случайный. Задавайте с шагом 10, чтобы вставлять вопросы между соседними. Действует, когда у темы в тесте выключен случайный порядок.</span>
               <span class="wf-annot">questions.order_index (nullable)</span>
             </div>
@@ -569,7 +573,7 @@
               <thead><tr><th>Элемент эскиза</th><th>DS-компонент</th><th>Примечание</th></tr></thead>
               <tbody>
                 <tr><td>Свитч порядка</td><td><code>Switch</code> (<code>ou-switch-field</code>)</td><td>Тот же компонент, что «Все вопросы темы» и «Обязательная»</td></tr>
-                <tr><td>Поле «Индекс в теме»</td><td><code>NumberInput</code> (<code>ou-number--split</code>)</td><td>Тот же компонент, что «Вопросов в тест»</td></tr>
+                <tr><td>Поле «Индекс в теме»</td><td><code>Input type=number</code> (<code>ou-field</code>)</td><td>Тот же контрол, что число сложности. НЕ степпер: <code>NumberInput</code> ДС требует обязательное число и не выражает «не задано»</td></tr>
                 <tr><td>Подсказка поля</td><td><code>Text</code> tone=muted (<code>qd-hint</code>)</td><td>Как подсказка «Сложности»</td></tr>
                 <tr><td>Предупреждение <code>linear_flat</code></td><td><code>Banner</code> subtle/warning</td><td>Тон warning: сохранение не блокируется</td></tr>
                 <tr><td>Колонка «Индекс»</td><td>ячейка дерева (<code>cb-cell</code>)</td><td>Разметка колонки «Сложность» без изменений</td></tr>

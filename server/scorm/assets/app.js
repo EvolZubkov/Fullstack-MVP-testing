@@ -46,7 +46,40 @@ function drawSection(questions, drawCount, blueprint, shuffleFn) {
 // no cross-attempt store (NFR-17), so previousFormIds is always empty here →
 // rotation degrades to a random pick (a known web/SCORM parity gap, R-6). Kept in
 // golden parity with the TS source by tests/forms-port.test.ts.
-function selectForm(forms, previousFormIds, availableIds, shuffleFn) {
+// PRD-30 delivery order — plain-JS port of shared/draw/order-questions.ts.
+// Ordering is separate from selection: drawSection/selectForm decide WHICH
+// questions the topic delivers, this decides in WHAT ORDER. `fixed` = ascending
+// `orderIndex`, questions without one last, equal indices shuffled INSIDE their
+// group (FR-03/04/05); anything else keeps the pre-PRD-30 whole-list shuffle.
+// Kept in golden parity with the TS source by tests/order-questions-port.test.ts.
+function orderQuestions(questions, mode, shuffleFn) {
+  if (mode !== 'fixed') return shuffleFn(questions.slice());
+  var keys = [];
+  var groups = {};
+  var unindexed = [];
+  questions.forEach(function (question) {
+    var index = question.orderIndex;
+    // 0 and negatives are ordinary indices — only null/undefined mean «not set».
+    if (typeof index !== 'number' || !isFinite(index)) {
+      unindexed.push(question);
+      return;
+    }
+    if (!groups[index]) {
+      groups[index] = [];
+      keys.push(index);
+    }
+    groups[index].push(question);
+  });
+  var ordered = [];
+  keys.sort(function (a, b) { return a - b; }).forEach(function (index) {
+    // Every group goes through the shuffle, single-member ones included: the
+    // injected function is the only source of order inside a group.
+    ordered = ordered.concat(shuffleFn(groups[index].slice()));
+  });
+  return ordered.concat(shuffleFn(unindexed.slice()));
+}
+
+function selectForm(forms, previousFormIds, availableIds, shuffleFn, order) {
   var used = {};
   (previousFormIds || []).forEach(function (id) { used[id] = true; });
   // Rotation: prefer variants not seen before; when all seen, reset and cycle.
@@ -54,11 +87,12 @@ function selectForm(forms, previousFormIds, availableIds, shuffleFn) {
   if (candidates.length === 0) candidates = forms.slice();
   var chosen = shuffleFn(candidates.slice())[0];
   // Deliver the whole variant; drop questions no longer in the bank (FR-17), then
-  // randomise presentation order (FR-15).
+  // randomise presentation order (FR-15) — unless the topic runs in `fixed`
+  // order, where the variant's own list IS the order (PRD-30 FR-07).
   var present = availableIds
     ? chosen.questionIds.filter(function (id) { return availableIds[id]; })
     : chosen.questionIds.slice();
-  return { formId: chosen.id, questionIds: shuffleFn(present.slice()) };
+  return { formId: chosen.id, questionIds: order === 'fixed' ? present : shuffleFn(present.slice()) };
 }
 
 // PRD-18 (debug player only): read the per-topic variant PINS the in-service debug
@@ -108,17 +142,25 @@ function generateVariant() {
         ? section.formSet.forms.filter(function (f) { return f.id === forcedId; })[0]
         : null;
       var picked;
+      // PRD-30 FR-07: in `fixed` the variant's own list is the delivery order —
+      // for the pinned debug form too, so debugging shows what ships.
+      var questionOrder = section.questionOrder || 'random';
       if (forcedForm) {
         var present = forcedForm.questionIds.filter(function (id) { return availIds[id]; });
-        picked = { formId: forcedForm.id, questionIds: shuffle(present.slice()) };
+        picked = {
+          formId: forcedForm.id,
+          questionIds: questionOrder === 'fixed' ? present : shuffle(present.slice()),
+        };
       } else {
-        picked = selectForm(section.formSet.forms, [], availIds, shuffle);
+        picked = selectForm(section.formSet.forms, [], availIds, shuffle, questionOrder);
       }
       questions = picked.questionIds.map(function (id) { return byId[id]; }).filter(Boolean);
       deliveredFormId = picked.formId;
     } else {
       var drawn = drawSection(available, section.drawCount, section.drawBlueprint, shuffle);
-      questions = drawn.selected;
+      // PRD-30: selection is untouched (quotas + random pick); the ORDER is
+      // applied on top of what the draw returned (FR-03/04/06).
+      questions = orderQuestions(drawn.selected, section.questionOrder || 'random', shuffle);
       if (drawn.warnings.length && typeof console !== 'undefined' && console.warn) {
         drawn.warnings.forEach(function (w) {
           console.warn('PRD-11 quota shortfall: tag "' + w.tag + '" requested ' + w.requested + ', available ' + w.available);

@@ -119,6 +119,25 @@ describe("getQuestionsByTopic — bank order (PRD-30 FR-08)", () => {
     expect(prompts.slice(3).sort()).toEqual(["no index A", "no index B"]);
   });
 
+  // Regression from the Э5 browser acceptance: the author's tree reads the WHOLE
+  // bank through getQuestions(), not the per-topic method, so it kept showing the
+  // old arbitrary order while delivery was already sorted.
+  it("getQuestions returns the whole bank grouped by topic and ordered inside it", async () => {
+    const first = await makeTopic("T-all-1");
+    const second = await makeTopic("T-all-2");
+    await storage.createQuestion(singleQ(first, { prompt: "a-tail" }));
+    await storage.createQuestion(singleQ(first, { prompt: "a-lead", orderIndex: 10 }));
+    await storage.createQuestion(singleQ(second, { prompt: "b-lead", orderIndex: 10 }));
+    await storage.createQuestion(singleQ(second, { prompt: "b-second", orderIndex: 20 }));
+
+    const all = await storage.getQuestions();
+    const byTopic = (topicId: string) =>
+      all.filter((q) => q.topicId === topicId).map((q) => q.prompt);
+
+    expect(byTopic(first)).toEqual(["a-lead", "a-tail"]);
+    expect(byTopic(second)).toEqual(["b-lead", "b-second"]);
+  });
+
   it("keeps questions with equal indices together, before the unindexed tail", async () => {
     const topicId = await makeTopic("T-ties");
     await storage.createQuestion(singleQ(topicId, { prompt: "tail" }));

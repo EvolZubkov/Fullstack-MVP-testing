@@ -443,9 +443,12 @@ export function serializeMeasurementRow(m: {
 
 /** Canonical «Структура» headers (one row per section). */
 export const STRUCTURE_HEADERS = [
+  // NB: «Порядок» here is the ORDER OF SECTIONS in the test (sort_order), which
+  // is why the PRD-30 delivery setting is a separate, explicitly named column.
   "Раздел", "Порядок", "Вопросов в выборке", "Тип порога", "Порог", "Обязательный",
+  "Случайный порядок вопросов",
 ];
-export const STRUCTURE_WIDTHS = [28, 10, 20, 16, 10, 14];
+export const STRUCTURE_WIDTHS = [28, 10, 20, 16, 10, 14, 26];
 
 /** Canonical «Квоты» headers (one row per PRD-11 stratum). */
 export const QUOTA_HEADERS = ["Раздел", "Тег", "Количество", "Режим"];
@@ -509,6 +512,8 @@ export interface ParsedSection {
   /** Editor-shape `topicPassRuleJson` (PRD-7): `{source, type?, value?}`. */
   passRule: Record<string, unknown>;
   required: boolean;
+  /** PRD-30 FR-02: delivery order of the topic's questions. */
+  questionOrder: "random" | "fixed";
 }
 
 /** Parse a «Структура» row. `rowIndex` (0-based) is the «Порядок» fallback. */
@@ -555,7 +560,15 @@ export function parseStructureRow(
   const requiredRaw = String(row["Обязательный"] ?? "").trim();
   const required = requiredRaw === "" ? true : parseBool(requiredRaw);
 
-  return { ok: true, value: { topicName, sortOrder, drawCount, passRule, required } };
+  // PRD-30 FR-02: an empty cell — and a workbook without the column at all —
+  // means «да», today's random delivery. Only an explicit «нет» fixes the order.
+  const randomRaw = String(row["Случайный порядок вопросов"] ?? "").trim();
+  const questionOrder = randomRaw !== "" && !parseBool(randomRaw) ? "fixed" : "random";
+
+  return {
+    ok: true,
+    value: { topicName, sortOrder, drawCount, passRule, required, questionOrder },
+  };
 }
 
 /** Serialize a section to a «Структура» row (export). */
@@ -565,6 +578,8 @@ export function serializeStructureRow(s: {
   drawCount: number;
   topicPassRuleJson: unknown;
   required: boolean;
+  /** PRD-30 FR-02: absent = `random`, the legacy behaviour. */
+  questionOrder?: "random" | "fixed";
 }): Record<string, unknown> {
   const rule = (s.topicPassRuleJson ?? {}) as { source?: string; type?: string; value?: number };
   let passType = "Как у теста";
@@ -584,6 +599,7 @@ export function serializeStructureRow(s: {
     "Тип порога": passType,
     "Порог": passValue,
     "Обязательный": serBool(s.required),
+    "Случайный порядок вопросов": serBool(s.questionOrder !== "fixed"),
   };
 }
 

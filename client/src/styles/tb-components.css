@@ -705,6 +705,18 @@
 .tb-draw-all-row__lbl { font: var(--ou-text-body-s); }
 .tb-draw-all-row__hint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 
+/* PRD-30: «Случайный порядок вопросов» — switch row in the topic card body.
+   Same anatomy as .tb-draw-all-row above (switch + label + muted hint): the new
+   row must sit in the SAME rank as «Все вопросы темы», otherwise the card body
+   falls apart into two different kinds of switch rows. */
+.tb-question-order-row {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  margin-bottom: var(--ou-space-2);
+  cursor: pointer;
+}
+.tb-question-order-row__lbl { font: var(--ou-text-body-s); }
+.tb-question-order-row__hint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
 /* Draw-count row: «Вопросов в тест [ N ] из M» — standard mode. */
 .tb-draw-count-row {
   display: flex; align-items: center; gap: var(--ou-space-2);

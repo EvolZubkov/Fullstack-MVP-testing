@@ -26,6 +26,8 @@ type PortSelect = (
   previousFormIds: string[],
   availableIds: Record<string, boolean> | null,
   shuffle: ShuffleFn,
+  // PRD-30 FR-07: delivery order of the chosen variant.
+  order?: string,
 ) => { formId: string; questionIds: string[] };
 // eslint-disable-next-line @typescript-eslint/no-implied-eval
 const portSelect = new Function(`${match[0]}\n;return selectForm;`)() as PortSelect;
@@ -38,7 +40,13 @@ function f(id: string, ...questionIds: string[]): Form {
 }
 const FORMS: Form[] = [f("v1", "q1", "q2", "q3"), f("v2", "q3", "q4"), f("v3", "q5", "q6", "q7")];
 
-const scenarios: Array<{ name: string; prev: string[]; avail: string[] | null }> = [
+const scenarios: Array<{
+  name: string;
+  prev: string[];
+  avail: string[] | null;
+  /** PRD-30 FR-07: absent = `random`, today's behaviour. */
+  order?: "random" | "fixed";
+}> = [
   { name: "no rotation, no bank filter", prev: [], avail: null },
   { name: "no rotation, full bank present", prev: [], avail: ["q1", "q2", "q3", "q4", "q5", "q6", "q7"] },
   { name: "rotation excludes v1", prev: ["v1"], avail: null },
@@ -46,18 +54,29 @@ const scenarios: Array<{ name: string; prev: string[]; avail: string[] | null }>
   { name: "all used -> cycle resets candidates", prev: ["v1", "v2", "v3"], avail: null },
   { name: "soft shortfall: q3 removed from bank", prev: [], avail: ["q1", "q2", "q4", "q5", "q6", "q7"] },
   { name: "rotation + shortfall combined", prev: ["v1"], avail: ["q4", "q5", "q6"] },
+  // PRD-30 FR-07: in `fixed` the variant's own list is the order — both hosts
+  // must skip the presentation shuffle, including when the bank dropped one.
+  { name: "fixed order: variant list as authored", prev: [], avail: null, order: "fixed" },
+  {
+    name: "fixed order + shortfall: survivors keep their places",
+    prev: [],
+    avail: ["q1", "q3", "q5", "q6", "q7"],
+    order: "fixed",
+  },
+  { name: "explicit random behaves like the default", prev: [], avail: null, order: "random" },
 ];
 
 describe("variant selection — TS ↔ JS port parity", () => {
   for (const sh of [{ n: "identity", f: identity as ShuffleFn }, { n: "reverse", f: reverse as ShuffleFn }]) {
-    it.each(scenarios)(`[${sh.n}] $name`, ({ prev, avail }) => {
+    it.each(scenarios)(`[${sh.n}] $name`, ({ prev, avail, order }) => {
       const a = tsSelect(FORMS, {
         previousFormIds: prev,
         availableIds: avail ? new Set(avail) : null,
         shuffle: sh.f,
+        order,
       });
       const map = avail ? Object.fromEntries(avail.map((id) => [id, true])) : null;
-      const b = portSelect(FORMS, prev, map, sh.f);
+      const b = portSelect(FORMS, prev, map, sh.f, order);
       expect(b.formId).toEqual(a.formId);
       expect(b.questionIds).toEqual(a.questionIds);
     });

@@ -241,6 +241,9 @@ describe("parseStructureRow", () => {
       drawCount: 12,
       passRule: { source: "custom", type: "absolute", value: 15 },
       required: true,
+      // PRD-30 FR-02: книга без колонки «Случайный порядок вопросов» читается
+      // как сегодняшняя случайная выдача.
+      questionOrder: "random",
     });
   });
 

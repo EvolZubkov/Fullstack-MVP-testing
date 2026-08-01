@@ -8,6 +8,7 @@ import { aggregateStandardResult, aggregateAdaptiveResult, type AggregateSection
 import type { CorrectData, Answer } from "@shared/scoring/engine";
 import { drawSection } from "@shared/draw/blueprint";
 import { selectForm } from "@shared/draw/forms";
+import { orderQuestions } from "@shared/draw/order-questions";
 import { loadScoringConfig } from "../services/scoring-config";
 import { loadTestScoringContext } from "../services/effective-scoring";
 import { computeAttemptResult } from "../services/result-compute";
@@ -349,6 +350,8 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
         // it WHOLE in random order, rotating away from variants seen in prior
         // completed attempts. draw_count/draw_all/quotas are not applied here.
         const picked = selectForm(section.formSetJson.forms, {
+          // PRD-30 FR-07: in `fixed` the variant's own list is the order.
+          order: section.questionOrder,
           previousFormIds: previousFormIdsForTopic(section.topicId),
           availableIds: new Set(questions.map((q) => q.id)),
           shuffle: shuffleInPlace,
@@ -359,7 +362,9 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
         // PRD-11: stratified draw by tag quotas when a blueprint is set; otherwise
         // a uniform draw (FR-02). Shared with the SCORM runtime via shared/draw.
         const { selected } = drawSection(questions, section.drawCount, section.drawBlueprintJson, shuffleInPlace);
-        qIds = selected.map((q) => q.id);
+        // PRD-30 (FR-03/04/06): selection stays as it was — quotas and the random
+        // pick are untouched — and the ORDER is applied on top of the result.
+        qIds = orderQuestions(selected, section.questionOrder ?? "random", shuffleInPlace).map((q) => q.id);
       }
 
       variant.sections.push({
@@ -460,6 +465,11 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
     const sectionLimitMap = new Map(
       adaptiveSections.map((s) => [s.topicId, s.timeLimitMinutes ?? null]),
     );
+    // PRD-30 §6.3: the ordering setting lives on the section; adaptive delivery
+    // joins it by topicId exactly like the per-topic time budget above.
+    const sectionOrderMap = new Map(
+      adaptiveSections.map((s) => [s.topicId, s.questionOrder ?? "random"]),
+    );
 
     if (adaptiveSettings.length === 0) {
       return res.status(400).json({ error: "Adaptive test has no settings configured" });
@@ -492,7 +502,14 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
 
         const shuffled = levelQuestions.sort(() => Math.random() - 0.5);
         const selected = shuffled.slice(0, level.questionsCount);
-        const questionIds = selected.map((q) => q.id);
+        // PRD-30 §6.3: ordering applies INSIDE the level — which questions the
+        // level got (the random pick above) and the order of the levels
+        // themselves are not touched.
+        const questionIds = orderQuestions(
+          selected,
+          sectionOrderMap.get(topicSettings.topicId) ?? "random",
+          shuffleInPlace,
+        ).map((q) => q.id);
 
         levelsState.push({
           levelIndex: level.levelIndex,

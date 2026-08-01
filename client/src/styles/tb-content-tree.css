@@ -60,7 +60,8 @@
 .tb-content-tree .ct-thead,
 .tb-content-tree .ct-row {
   display: grid;
-  grid-template-columns: 1fr var(--wf-size-150, 150px) var(--wf-size-110, 116px) var(--wf-size-95, 96px) var(--wf-size-90, 88px);
+  /* PRD-30: «Индекс» added between the owner and the difficulty column. */
+  grid-template-columns: 1fr var(--wf-size-150, 150px) var(--wf-size-95, 96px) var(--wf-size-110, 116px) var(--wf-size-95, 96px) var(--wf-size-90, 88px);
   align-items: center;
   border-bottom: 1px solid var(--ou-border-default);
 }

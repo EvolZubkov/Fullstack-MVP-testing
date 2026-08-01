@@ -208,6 +208,15 @@ export type EditorSection = {
    */
   formSet?: FormSet | null;
   /**
+   * PRD-30 FR-02: delivery order of this topic's questions. `random` (the
+   * default) = today's shuffle; `fixed` = by the author's «Индекс в теме», or
+   * by the variant's own list when the section runs in variants mode (FR-07).
+   * Optional like the other delivery extras (`drawBlueprint`, `formSet`): a
+   * section built locally before the API round-trip simply has no value yet,
+   * and every read defaults it to `random`.
+   */
+  questionOrder?: "random" | "fixed";
+  /**
    * PRD-15 block D (FR-31): per-section default price of a question. `null` =
    * inherit the test default. Edited in the «Оценка» tab, persisted with the
    * section row.
@@ -529,6 +538,8 @@ export type TestSectionPayload = {
   formSetJson: FormSet | null;
   /** PRD-15 block D (FR-31): per-section default price; `null` = inherit test. */
   defaultPoints: number | null;
+  /** PRD-30 FR-02: delivery order of the topic's questions. */
+  questionOrder: "random" | "fixed";
 };
 
 export type AdaptiveSettingsPayload = {
