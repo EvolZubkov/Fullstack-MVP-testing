@@ -65,12 +65,17 @@ export interface ReviewCorrect {
 /**
  * The learner guidance shown as the question subtitle, by type — the SAME copy on both
  * hosts (the wireframe places it under the question title). Empty for unknown types.
+ *
+ * The copy must not name a POSITION: the matching grid stands the two columns up on a
+ * narrow scene (theme.css step S2), so «карточка справа» is simply false on a phone —
+ * there the chip sits under its prompt, not beside it. Naming the object instead of its
+ * place is true at every width.
  */
 const QUESTION_HINTS: Readonly<Record<string, string>> = {
   single: "Выберите один вариант ответа",
   multiple: "Выберите один или несколько вариантов",
   ranking: "Расставьте элементы в правильном порядке — перетащите или кнопками ↑/↓",
-  matching: "Перетащите карточку справа на нужную строку",
+  matching: "Перетащите карточку на нужную строку",
   scale: "Выберите ответ на шкале",
 };
 
