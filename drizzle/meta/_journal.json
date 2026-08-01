@@ -43,6 +43,13 @@
       "when": 1785424467615,
       "tag": "0005_role_developer",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785565530639,
+      "tag": "0006_prd29_measurement_results",
+      "breakpoints": true
     }
   ]
 }

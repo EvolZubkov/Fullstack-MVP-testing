@@ -40,12 +40,11 @@ BEGIN
   END LOOP;
 END $$;
 
-ALTER TABLE scales DROP CONSTRAINT IF EXISTS scales_learner_visibility_check;
-ALTER TABLE scales ADD CONSTRAINT scales_learner_visibility_check
-  CHECK (learner_visibility IN ('hidden', 'level', 'level_and_value'));
-ALTER TABLE result_variables DROP CONSTRAINT IF EXISTS result_variables_learner_visibility_check;
-ALTER TABLE result_variables ADD CONSTRAINT result_variables_learner_visibility_check
-  CHECK (learner_visibility IN ('hidden', 'level', 'level_and_value'));
+-- Проверочного ограничения на перечень НЕТ намеренно. В проекте `check` объявлен только
+-- для двух регулярок-идентификаторов, а все текстовые перечисления (31 колонка) живут без
+-- ограничения в базе — допустимые значения держит тип в схеме и разбор zod. Ограничение,
+-- добавленное только здесь, вдобавок разъехалось бы со снимком drizzle, который проверки
+-- отслеживает: очередная генерация увидела бы его как лишнее.
 
 ALTER TABLE scales DROP COLUMN IF EXISTS show_to_learner;
 ALTER TABLE result_variables DROP COLUMN IF EXISTS show_to_learner;
