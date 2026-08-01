@@ -897,6 +897,77 @@ describe("<SettingsSection /> — Повторное прохождение pane
     const next = runUpdater(updateModel, model);
     expect(next.retakePolicy.eligibilityPlugin?.failPolicy).toBe("failClosed");
   });
+
+  // ─── PRD-31: интервал между попытками ────────────────────────────────────
+  //
+  // Второй барьер НЕЗАВИСИМ от кулдауна (FR-03): он должен настраиваться и при
+  // выключенном «Ограничить повторное прохождение» — это и есть новый случай,
+  // ради которого `cooldownPeriodDays` перестал быть обязательным.
+
+  it("shows the interval switch even when the cooldown is off", () => {
+    renderRetake(baseModel());
+    expect(screen.getByTestId("settings-attempt-interval-switch")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-attempt-interval-input")).toBeNull();
+  });
+
+  it("enabling the interval seeds 24 hours and reveals the field", () => {
+    const updateModel = vi.fn();
+    const model = baseModel();
+    renderRetake(model, updateModel);
+    fireEvent.click(screen.getByTestId("settings-attempt-interval-switch"));
+    const next = runUpdater(updateModel, model);
+    expect(next.retakePolicy.attemptInterval).toEqual({ enabled: true, hours: 24 });
+    // Включение интервала НЕ включает кулдаун: барьеры независимы.
+    expect(next.retakePolicy.enabled).toBe(false);
+  });
+
+  it("renders the hours field when the interval is on", () => {
+    renderRetake({
+      ...baseModel(),
+      retakePolicy: {
+        ...baseModel().retakePolicy,
+        attemptInterval: { enabled: true, hours: 12 },
+      },
+    });
+    const input = screen.getByTestId("settings-attempt-interval-input") as HTMLInputElement;
+    expect(input).toBeInTheDocument();
+    expect(input.value).toBe("12");
+  });
+
+  it("clamps the interval into [1, 8760]", () => {
+    const updateModel = vi.fn();
+    const model = {
+      ...baseModel(),
+      retakePolicy: {
+        ...baseModel().retakePolicy,
+        attemptInterval: { enabled: true, hours: 24 },
+      },
+    };
+    renderRetake(model, updateModel);
+    const input = screen.getByTestId("settings-attempt-interval-input");
+    fireEvent.change(input, { target: { value: "9000" } });
+    expect(runUpdater(updateModel, model).retakePolicy.attemptInterval?.hours).toBe(8760);
+    // `runUpdater` reads the FIRST recorded call unless told otherwise, so the
+    // second change has to be addressed by index — otherwise this would silently
+    // re-assert the previous one.
+    fireEvent.change(input, { target: { value: "0" } });
+    expect(runUpdater(updateModel, model, 1).retakePolicy.attemptInterval?.hours).toBe(1);
+  });
+
+  it("turning the interval off keeps the hours value for a later re-enable", () => {
+    const updateModel = vi.fn();
+    const model = {
+      ...baseModel(),
+      retakePolicy: {
+        ...baseModel().retakePolicy,
+        attemptInterval: { enabled: true, hours: 48 },
+      },
+    };
+    renderRetake(model, updateModel);
+    fireEvent.click(screen.getByTestId("settings-attempt-interval-switch"));
+    const next = runUpdater(updateModel, model);
+    expect(next.retakePolicy.attemptInterval).toEqual({ enabled: false, hours: 48 });
+  });
 });
 
 // ─── PRD-24: «По вариантам» ──────────────────────────────────────────────────

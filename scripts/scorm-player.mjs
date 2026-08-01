@@ -91,20 +91,37 @@ async function loadZipBuffer(buffer) {
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
 
-// PRD-6 trusted-date acceptance: pin the server clock the gate reads. Node sets `Date`
-// automatically from the host clock, so a run cannot otherwise exercise "LMS clock
-// disagrees with the machine clock". `--server-date=2026-05-30` (or the env var) makes
-// the stand answer with that date while the OS clock stays whatever the tester set.
+// PRD-6 trusted-date / PRD-31 acceptance: pin the server clock the runtime reads. Node
+// sets `Date` automatically from the host clock, so a run cannot otherwise exercise "LMS
+// clock disagrees with the machine clock". `--server-date=` (or the env var) makes the
+// stand answer with the pinned value while the OS clock stays whatever the tester set.
+//
+// A bare date (`2026-05-30`) is taken at noon UTC — enough for the calendar cooldown.
+// PRD-31's interval is measured in HOURS, so pass a full instant for it:
+// `--server-date=2026-08-01T14:30:00Z`.
 const SERVER_DATE =
   (process.argv.find((a) => a.startsWith("--server-date=")) || "").split("=")[1] ||
   process.env.SCORM_PLAYER_SERVER_DATE ||
   "";
 
+const SERVER_DATE_MS = SERVER_DATE
+  ? Date.parse(SERVER_DATE.length === 10 ? `${SERVER_DATE}T12:00:00Z` : SERVER_DATE)
+  : NaN;
+
+// Say it out loud. An unparseable value used to be dropped silently, which during an
+// acceptance run is indistinguishable from "the trusted date does not work" — the
+// tester would chase the runtime instead of their own argument.
+if (SERVER_DATE && !Number.isFinite(SERVER_DATE_MS)) {
+  console.error(
+    `[stand] --server-date="${SERVER_DATE}" не разобран — заголовок Date будет с часов машины. ` +
+      "Ожидается 2026-05-30 или 2026-08-01T14:30:00Z.",
+  );
+} else if (Number.isFinite(SERVER_DATE_MS)) {
+  console.log(`[stand] Date отвечает как ${new Date(SERVER_DATE_MS).toUTCString()}`);
+}
+
 app.use((_req, res, next) => {
-  if (SERVER_DATE) {
-    const ts = Date.parse(SERVER_DATE.length === 10 ? `${SERVER_DATE}T12:00:00Z` : SERVER_DATE);
-    if (Number.isFinite(ts)) res.setHeader("Date", new Date(ts).toUTCString());
-  }
+  if (Number.isFinite(SERVER_DATE_MS)) res.setHeader("Date", new Date(SERVER_DATE_MS).toUTCString());
   next();
 });
 

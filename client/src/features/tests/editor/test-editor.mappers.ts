@@ -805,13 +805,19 @@ function clampCooldown(value: number): number {
   return Math.min(3650, Math.max(1, Math.round(value)));
 }
 
-/** Default (disabled) retake policy — legacy behaviour, no cooldown (PRD-6 FR-02). */
+/** Clamp an attempt-interval value into the schema-valid `[1, 8760]` hours (PRD-31). */
+export function clampIntervalHours(value: number): number {
+  return Math.min(8760, Math.max(1, Math.round(value || 1)));
+}
+
+/** Default (disabled) retake policy — legacy behaviour, no barrier (PRD-6 FR-02, PRD-31 FR-14). */
 export function defaultRetakePolicy(): RetakePolicy {
   return {
     enabled: false,
     cooldownPeriodDays: 30,
     gateMode: "before_internal_start",
     eligibilityPlugin: null,
+    attemptInterval: null,
   };
 }
 
@@ -866,11 +872,23 @@ function readRetakePolicyFromApi(api: ApiTestResponse): RetakePolicy {
     }
   }
 
+  // PRD-31 barrier B. Read only as a whole: a branch without `enabled: true` is
+  // treated as absent, so a half-written value cannot switch the barrier on.
+  let attemptInterval: RetakePolicy["attemptInterval"] = null;
+  if (isPlainObject(r.attemptInterval)) {
+    const i = r.attemptInterval as Record<string, unknown>;
+    attemptInterval = {
+      enabled: i.enabled === true,
+      hours: clampIntervalHours(typeof i.hours === "number" ? i.hours : 24),
+    };
+  }
+
   return {
     enabled: r.enabled === true,
     cooldownPeriodDays: clampCooldown(cooldownRaw),
     gateMode: "before_internal_start",
     eligibilityPlugin,
+    attemptInterval,
     ...(typeof r.blockedPageId === "string" ? { blockedPageId: r.blockedPageId } : {}),
   };
 }

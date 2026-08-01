@@ -38,6 +38,9 @@ import {
 } from "@universityrt/ui-kit";
 import type { EligibilityPluginRef, Form, RetakePolicy } from "@shared/schema";
 import { resolveEffectiveScoring } from "@shared/scoring/effective-scoring";
+// PRD-31: the clamp is shared with the mapper so the field and a value read back
+// from the server can never disagree about the valid range.
+import { clampIntervalHours } from "../test-editor.mappers";
 import {
   FeedbackEditorModal,
   type FeedbackEditorValue,
@@ -644,6 +647,24 @@ function RetakePane({ model, updateModel }: SettingsSectionProps) {
   const setPolicy = (patch: Partial<RetakePolicy>) =>
     updateModel((m) => ({ ...m, retakePolicy: { ...m.retakePolicy, ...patch } }));
 
+  // PRD-31 barrier B. Independent of the switch above: a test may carry only the
+  // hour interval, which is why `cooldownPeriodDays` became optional in the schema.
+  const interval = policy.attemptInterval ?? null;
+  const intervalOn = interval?.enabled === true;
+
+  const setInterval = (patch: Partial<NonNullable<RetakePolicy["attemptInterval"]>>) =>
+    updateModel((m) => ({
+      ...m,
+      retakePolicy: {
+        ...m.retakePolicy,
+        attemptInterval: {
+          enabled: m.retakePolicy.attemptInterval?.enabled === true,
+          hours: m.retakePolicy.attemptInterval?.hours ?? 24,
+          ...patch,
+        },
+      },
+    }));
+
   const setPlugin = (patch: Partial<EligibilityPluginRef>) =>
     updateModel((m) => {
       const base: EligibilityPluginRef =
@@ -759,6 +780,69 @@ function RetakePane({ model, updateModel }: SettingsSectionProps) {
               Если проверку не удалось выполнить — открыть курс или показать экран блокировки.
             </div>
           </div>
+        </>
+      )}
+
+      {/* PRD-31 барьер B: интервал между попытками ВНУТРИ одного назначения.
+          Отделён от группы выше, потому что барьеры независимы (FR-03) и стоят
+          на разных границах: кулдаун — между назначениями, интервал — внутри. */}
+      <div className="ou-card__divider" />
+
+      <label className="ou-switch-field">
+        <Switch
+          size="m"
+          checked={intervalOn}
+          aria-label="Ограничение между попытками"
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              retakePolicy: {
+                ...m.retakePolicy,
+                // Часы сохраняются и при выключении: автор, выключивший барьер на
+                // время, не должен вводить значение заново.
+                attemptInterval: { enabled: checked, hours: m.retakePolicy.attemptInterval?.hours ?? 24 },
+              },
+            }));
+          }}
+          data-testid="settings-attempt-interval-switch"
+        />
+        <span className="ou-switch-field__text">
+          <span className="ou-switch-field__label">Ограничение между попытками</span>
+          <span className="ou-switch-field__desc">
+            {intervalOn
+              ? "Следующая попытка внутри назначения открывается не сразу."
+              : "Выключено — попытки внутри одного назначения идут подряд."}
+          </span>
+        </span>
+      </label>
+
+      {intervalOn && (
+        <>
+          <div className="ou-formfield">
+            <NumberInput
+              id="settings-attempt-interval"
+              size="m"
+              label="Интервал, часов"
+              hint="От 1 до 8760 часов (до года)."
+              value={interval?.hours ?? 24}
+              min={1}
+              max={8760}
+              data-testid="settings-attempt-interval-input"
+              onChange={(next) => setInterval({ hours: clampIntervalHours(next) })}
+            />
+          </div>
+
+          <Banner
+            tone="info"
+            size="sm"
+            description={
+              enabled
+                ? "Период охлаждения действует между назначениями, ограничение между попытками — внутри одного назначения."
+                : "Ограничение между попытками действует внутри одного назначения. Период охлаждения выше — между назначениями."
+            }
+            data-testid="settings-attempt-interval-note"
+          />
         </>
       )}
     </>
