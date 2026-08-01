@@ -42,15 +42,16 @@
          луч показывает значение, а оценку несёт цвет вершины и метка уровня;
       2. вершина третьей оси при этом окрашена по своей шкале, а не «как у
          соседей»: направления в одном тесте разные (PRD-29 §4.2);
-      3. при видимости «уровень без значения» луч квантуется по середине зоны,
-         засечки нет, число в подписи отсутствует;
+      3. при видимости «уровень без значения» луч квантуется по середине зоны и
+         вершина становится полой; цифр на диаграмме нет НИ У ОДНОЙ оси —
+         значение печатает карточка, диаграмма показывает форму профиля;
       4. кольца сетки БЕЗЫМЯННЫЕ: у трёх шкал разные границы интервалов, общая
          подписанная сетка была бы ложью (тот же довод, что у PRD-29 §6.5);
       5. на узком экране две колонки схлопываются: радар над карточками;
       6. с выключенным переключателем экран равен согласованному PRD-29.
 
     СОСТОЯНИЯ:
-      s-wide    радар сбоку от карточек, все три шкалы со значениями
+      s-wide    радар сбоку от карточек, все три шкалы видимы полностью
       s-level   у «Отстранённости» видимость «уровень без значения»
       s-narrow  та же методика в контейнере 360
       s-off     переключатель выключен — экран как в PRD-29
@@ -290,13 +291,13 @@
                   <circle class="tb-radar__dot" cx="105" cy="187.5" r="6" style="--tb-zone: 38 92% 50%"></circle>
 
                   <text class="tb-radar__label" x="170" y="16" text-anchor="middle">Эмоциональное<tspan x="170" dy="15">истощение</tspan></text>
-                  <text class="tb-radar__level" x="170" y="45" text-anchor="middle">Высокий · 27 из 45</text>
+                  <text class="tb-radar__level" x="170" y="45" text-anchor="middle">Высокий</text>
 
                   <text class="tb-radar__label" x="256.6" y="232" text-anchor="middle">Отстранённость</text>
-                  <text class="tb-radar__level" x="256.6" y="248" text-anchor="middle">Умеренная · 6 из 25</text>
+                  <text class="tb-radar__level" x="256.6" y="248" text-anchor="middle">Умеренная</text>
 
                   <text class="tb-radar__label" x="83.4" y="232" text-anchor="middle">Обесценивание<tspan x="83.4" dy="15">достижений</tspan></text>
-                  <text class="tb-radar__level" x="83.4" y="263" text-anchor="middle">Умеренное · 30 из 40</text>
+                  <text class="tb-radar__level" x="83.4" y="263" text-anchor="middle">Умеренное</text>
                 </svg>
               </div>
 
@@ -446,13 +447,13 @@
                   <circle class="tb-radar__dot" cx="105" cy="187.5" r="6" style="--tb-zone: 38 92% 50%"></circle>
 
                   <text class="tb-radar__label" x="170" y="16" text-anchor="middle">Эмоциональное<tspan x="170" dy="15">истощение</tspan></text>
-                  <text class="tb-radar__level" x="170" y="45" text-anchor="middle">Высокий · 27 из 45</text>
+                  <text class="tb-radar__level" x="170" y="45" text-anchor="middle">Высокий</text>
 
                   <text class="tb-radar__label" x="256.6" y="232" text-anchor="middle">Отстранённость</text>
                   <text class="tb-radar__level" x="256.6" y="248" text-anchor="middle">Умеренная</text>
 
                   <text class="tb-radar__label" x="83.4" y="232" text-anchor="middle">Обесценивание<tspan x="83.4" dy="15">достижений</tspan></text>
-                  <text class="tb-radar__level" x="83.4" y="263" text-anchor="middle">Умеренное · 30 из 40</text>
+                  <text class="tb-radar__level" x="83.4" y="263" text-anchor="middle">Умеренное</text>
                 </svg>
               </div>
 
@@ -570,7 +571,7 @@
                   <circle class="tb-radar__dot" cx="105" cy="187.5" r="6" style="--tb-zone: 38 92% 50%"></circle>
 
                   <text class="tb-radar__label" x="170" y="16" text-anchor="middle">Эмоциональное<tspan x="170" dy="15">истощение</tspan></text>
-                  <text class="tb-radar__level" x="170" y="45" text-anchor="middle">Высокий · 27 из 45</text>
+                  <text class="tb-radar__level" x="170" y="45" text-anchor="middle">Высокий</text>
 
                   <text class="tb-radar__label" x="256.6" y="232" text-anchor="middle">Отстранённость</text>
                   <text class="tb-radar__level" x="256.6" y="248" text-anchor="middle">Умеренная</text>
@@ -734,8 +735,13 @@
       </tr>
       <tr>
         <td>Видимость «уровень без значения» квантует луч</td>
-        <td>Состояние «Уровень без значения»: луч «Отстранённости» стоит на середине зоны 5–10, вершина полая, засечки нет, в подписи только «Умеренная»</td>
+        <td>Состояние «Уровень без значения»: луч «Отстранённости» стоит на середине зоны 5–10, вершина полая, засечки точного положения нет</td>
         <td>§4.3</td>
+      </tr>
+      <tr>
+        <td>Цифр на диаграмме нет ни у одной оси</td>
+        <td>Подпись луча — название шкалы и метка уровня. Значение печатает карточка рядом, с линейкой и границами интервалов; на диаграмме та же цифра была бы вторым экземпляром и заставляла бы читать профиль как таблицу. Побочный выигрыш — подписи короче, а это главный риск при пяти и более осях</td>
+        <td>§4.3, §7</td>
       </tr>
       <tr>
         <td>Кольца сетки безымянные</td>

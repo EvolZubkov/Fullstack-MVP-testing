@@ -58,34 +58,45 @@ Vitest (`npm test -- <путь>`), plain-JS SCORM runtime (`server/scorm/**`), S
 export interface CtxRadarAxis {
   key: string;
   label: string;
-  levelLabel: string;
-  valueText: string;
-  showValue: boolean;
+  /** Метка уровня. Пусто, когда значение не попало ни в один интервал. */
+  levelText: string;
   tone: LevelTone;
-  toneClass: string;
   color: HslTriple;
+  /** "" либо `tb-radar__dot--quantized`: DSL не умеет условных классов. */
+  quantizedClass: string;
   radiusPercent: number;
-  quantized: boolean;
+  cx: number;
+  cy: number;
   x: number;
   y: number;
   axisX: number;
   axisY: number;
   labelX: number;
   labelY: number;
+  levelY: number;
   labelAnchor: "start" | "middle" | "end";
+}
+
+/** Кольцо сетки. Центр несёт каждое кольцо: в цикле DSL родителя не достать. */
+export interface CtxRadarRing {
+  cx: number;
+  cy: number;
+  radius: number;
 }
 
 /** Диаграмма целиком; `null` означает «радар не рисуется». */
 export interface CtxRadarChart {
-  size: number;
-  center: number;
-  radius: number;
+  width: number;
+  height: number;
   axes: CtxRadarAxis[];
-  rings: Array<{ radius: number }>;
+  rings: CtxRadarRing[];
   polygonPoints: string;
   ariaLabel: string;
 }
 ```
+
+Числовых значений в контракте нет намеренно: цифры печатает карточка шкалы, диаграмма
+показывает форму профиля (PRD-35 §4.3).
 
 Ключ настройки — `showCompetencyRadar` (одинаково у `results` и у видов отчёта).
 Поле контекста — `result.scalesChart`.
@@ -200,10 +211,28 @@ describe("buildRadarChart", () => {
     });
     expect(chart).not.toBeNull();
     expect(chart!.axes).toHaveLength(3);
-    expect(chart!.axes[0].x).toBeCloseTo(chart!.center, 1);
-    expect(chart!.axes[0].y).toBeCloseTo(chart!.center - chart!.radius, 1);
-    expect(chart!.axes[0].radiusPercent).toBe(100);
+    const top = chart!.axes[0];
+    expect(top.x).toBeCloseTo(top.cx, 1);
+    expect(top.y).toBeLessThan(top.cy);
+    expect(top.y).toBeCloseTo(top.axisY, 1);
+    expect(top.radiusPercent).toBe(100);
     expect(chart!.axes[1].radiusPercent).toBe(0);
+    expect(chart!.rings).toHaveLength(4);
+    expect(chart!.rings[0].cx).toBe(top.cx);
+  });
+
+  it("не печатает числовых значений: подпись — название и уровень", () => {
+    const chart = buildRadarChart({
+      ramp,
+      axes: [
+        axis("a", 40, scale("a", 45, [0, 15, 25])),
+        axis("b", 3, scale("b", 25, [0, 5, 10])),
+        axis("c", 20, scale("c", 40, [0, 28, 33])),
+      ],
+    });
+    const values = Object.values(chart!.axes[0]).filter((v) => typeof v === "string");
+    expect(chart!.axes[0].levelText).toBe("Уровень 2");
+    expect(values.some((v) => v.includes("из"))).toBe(false);
   });
 
   it("возвращает null при менее чем трёх видимых шкалах", () => {
@@ -237,10 +266,8 @@ describe("buildRadarChart", () => {
     });
     // Зона 10..20 из домена 0..40 — середина 15, то есть 37.5 % радиуса.
     expect(chart!.axes[0].radiusPercent).toBe(37.5);
-    expect(chart!.axes[0].quantized).toBe(true);
-    expect(chart!.axes[0].showValue).toBe(false);
-    expect(chart!.axes[0].valueText).toBe("");
-    expect(chart!.axes[1].quantized).toBe(false);
+    expect(chart!.axes[0].quantizedClass).toBe("tb-radar__dot--quantized");
+    expect(chart!.axes[1].quantizedClass).toBe("");
   });
 
   it("не рисует радар, когда у видимой шкалы нет ни домена, ни интервалов", () => {
@@ -339,12 +366,21 @@ import { rampColor, zoneColors, type HslTriple, type LevelRamp } from "./level-r
 /** Below three axes there is no figure to read — a pair of rulers reads better. */
 const MIN_AXES = 3;
 
-/** Square viewport; the rendered size is CSS's business, so print reuses it as is. */
-const SIZE = 280;
-const CENTER = SIZE / 2;
-/** Leaves room for two-line labels outside the outer ring. */
-const RADIUS = 92;
-const LABEL_GAP = 18;
+/**
+ * Viewport of the widget, in its own coordinates — the rendered size is CSS's
+ * business, so print and a 360px phone reuse the same numbers. Not square: the
+ * labels need horizontal room, the rings do not (values taken from the approved
+ * wireframe docs/wireframes/prd35-competency-radar.html).
+ */
+const WIDTH = 340;
+const HEIGHT = 300;
+const CENTER_X = 170;
+const CENTER_Y = 150;
+const RADIUS = 100;
+/** Distance from the centre to the axis label, past the outer ring. */
+const LABEL_GAP = 30;
+/** Baseline step from the scale name down to its level label. */
+const LEVEL_STEP = 16;
 /** Grid rings at quarter steps of the domain; unlabelled on purpose (see below). */
 const RING_STEPS = [0.25, 0.5, 0.75, 1];
 
@@ -359,29 +395,34 @@ export interface RadarAxisInput {
 export interface CtxRadarAxis {
   key: string;
   label: string;
-  levelLabel: string;
-  valueText: string;
-  showValue: boolean;
+  levelText: string;
   tone: LevelTone;
-  toneClass: string;
   color: HslTriple;
+  quantizedClass: string;
   radiusPercent: number;
-  quantized: boolean;
+  cx: number;
+  cy: number;
   x: number;
   y: number;
   axisX: number;
   axisY: number;
   labelX: number;
   labelY: number;
+  levelY: number;
   labelAnchor: "start" | "middle" | "end";
 }
 
-export interface CtxRadarChart {
-  size: number;
-  center: number;
+export interface CtxRadarRing {
+  cx: number;
+  cy: number;
   radius: number;
+}
+
+export interface CtxRadarChart {
+  width: number;
+  height: number;
   axes: CtxRadarAxis[];
-  rings: Array<{ radius: number }>;
+  rings: CtxRadarRing[];
   polygonPoints: string;
   ariaLabel: string;
 }
@@ -432,9 +473,15 @@ function radiusRatio(
   return clamp01((middle - domainMin) / span);
 }
 
+/**
+ * Labels sit UNDER the ray end and are centred; only a genuinely horizontal axis
+ * (four, eight, … axes) gets a side anchor, because there the label would collide
+ * with the figure. Centring is what keeps long Russian scale names inside the
+ * viewport — anchoring them outwards pushed «Обесценивание достижений» off canvas.
+ */
 function anchorFor(cos: number): "start" | "middle" | "end" {
-  if (cos > 0.2) return "start";
-  if (cos < -0.2) return "end";
+  if (cos > 0.95) return "start";
+  if (cos < -0.95) return "end";
   return "middle";
 }
 
@@ -485,36 +532,37 @@ export function buildRadarChart(input: RadarChartInput): CtxRadarChart | null {
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
 
+    const labelY = round1(CENTER_Y + sin * (RADIUS + LABEL_GAP));
+
     prepared.push({
       key: source.key,
       label: source.name,
-      levelLabel: band ? band.label ?? band.level : "",
-      valueText: quantized ? "" : String(round1(value)),
-      showValue: !quantized,
+      levelText: band ? band.label ?? band.level : "",
       tone: effectiveTone,
-      toneClass: `tb-tone--${effectiveTone}`,
       color,
+      quantizedClass: quantized ? "tb-radar__dot--quantized" : "",
       radiusPercent: round1(ratio * 100),
-      quantized,
-      x: round1(CENTER + cos * RADIUS * ratio),
-      y: round1(CENTER + sin * RADIUS * ratio),
-      axisX: round1(CENTER + cos * RADIUS),
-      axisY: round1(CENTER + sin * RADIUS),
-      labelX: round1(CENTER + cos * (RADIUS + LABEL_GAP)),
-      labelY: round1(CENTER + sin * (RADIUS + LABEL_GAP)),
+      cx: CENTER_X,
+      cy: CENTER_Y,
+      x: round1(CENTER_X + cos * RADIUS * ratio),
+      y: round1(CENTER_Y + sin * RADIUS * ratio),
+      axisX: round1(CENTER_X + cos * RADIUS),
+      axisY: round1(CENTER_Y + sin * RADIUS),
+      labelX: round1(CENTER_X + cos * (RADIUS + LABEL_GAP)),
+      labelY,
+      levelY: round1(labelY + LEVEL_STEP),
       labelAnchor: anchorFor(cos),
     });
   }
 
   return {
-    size: SIZE,
-    center: CENTER,
-    radius: RADIUS,
+    width: WIDTH,
+    height: HEIGHT,
     axes: prepared,
-    rings: RING_STEPS.map((s) => ({ radius: round1(RADIUS * s) })),
+    rings: RING_STEPS.map((s) => ({ cx: CENTER_X, cy: CENTER_Y, radius: round1(RADIUS * s) })),
     polygonPoints: prepared.map((a) => `${a.x},${a.y}`).join(" "),
     ariaLabel: `Профиль по шкалам: ${prepared
-      .map((a) => `${a.label} — ${a.levelLabel || "уровень не определён"}`)
+      .map((a) => `${a.label} — ${a.levelText || "уровень не определён"}`)
       .join("; ")}`,
   };
 }
