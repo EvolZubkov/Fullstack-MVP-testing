@@ -2023,6 +2023,11 @@ export function SettingControl(props: {
       return (
         <Switch
           label={label}
+          // The manifest may explain WHEN a switch has an effect — «Радар компетенций»
+          // is drawn only from three visible scales up (PRD-35 §6), and without the
+          // description an author whose test has two sees a switch that does nothing
+          // and no reason why. The report card already shows it; the structure did not.
+          description={st.description}
           checked={Boolean(value)}
           onChange={(e) => onChange(e.target.checked)}
           data-testid={testId}

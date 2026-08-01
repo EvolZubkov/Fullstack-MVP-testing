@@ -91,6 +91,13 @@ export type ContentTemplateSetting = {
   key: string;
   type: string;
   label?: string;
+  /**
+   * When the property has a non-obvious condition, the manifest explains it here
+   * (PRD-35: the radar is drawn only from three visible scales up). The report card
+   * already rendered this field; the structure form dropped it, so the author saw a
+   * switch with no stated effect.
+   */
+  description?: string;
   required?: boolean;
   options?: string[];
   /** Human-readable label per option value (PRD-29); falls back to the raw value when absent. */
