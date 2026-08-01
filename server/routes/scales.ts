@@ -22,6 +22,7 @@ import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { logger } from "../logger";
+import { materializeScaleDomains } from "../services/scale-domain";
 import { insertScaleSchema, insertQuestionMeasurementSchema, type Scale, type QuestionMeasurement } from "@shared/schema";
 import {
   computeScales,
@@ -33,6 +34,23 @@ import {
 } from "@shared/scales/engine";
 
 const router = Router();
+
+/**
+ * PRD-35: writes the missing domains of the test's scales, never failing the request.
+ *
+ * The domain must EXIST by the time an attempt is taken (a radar has no radius
+ * without it), but it is repair of missing data, not the operation the author asked
+ * for — a failure here must not turn a successful save into an error. Idempotent, so
+ * calling it after every scale or measurement write costs one read when the domains
+ * are already in place.
+ */
+async function fillDomains(testId: string): Promise<void> {
+  try {
+    await materializeScaleDomains(testId);
+  } catch (error) {
+    logger.error("Materialize scale domains error: " + (error as Error).message, "scales");
+  }
+}
 
 /** True when another scale in the test already uses `key` (excluding `excludeId`). */
 async function keyConflict(testId: string, key: string, excludeId?: string): Promise<boolean> {
@@ -123,6 +141,7 @@ router.post("/:id/scales", requirePermission("tests.edit"), requireTestScope("ed
       return res.status(422).json({ error: `Шкала с ключом «${data.key}» уже существует`, field: "key" });
     }
     const created = await storage.createScale(data);
+    await fillDomains(testId);
     res.status(201).json(created);
   } catch (error) {
     logger.error("Create scale error: " + (error as Error).message, "scales");
@@ -168,6 +187,7 @@ router.put("/:id/scales/:scaleId", requirePermission("tests.edit"), requireTestS
       return res.status(422).json({ error: `Шкала с ключом «${updates.key}» уже существует`, field: "key" });
     }
     const saved = await storage.updateScale(scaleId, updates);
+    await fillDomains(testId);
     res.json(saved);
   } catch (error) {
     logger.error("Update scale error: " + (error as Error).message, "scales");
@@ -226,6 +246,9 @@ router.put("/:id/measurements/:questionId", requirePermission("tests.edit"), req
       rows.push({ ...parsed.data, testId, questionId });
     }
     const saved = await storage.upsertQuestionMeasurements(testId, questionId, rows);
+    // Вклады и есть источник расчётного домена, поэтому после их правки шкала без
+    // собственных границ получает их здесь же.
+    await fillDomains(testId);
     res.json(saved);
   } catch (error) {
     logger.error("Upsert measurements error: " + (error as Error).message, "scales");

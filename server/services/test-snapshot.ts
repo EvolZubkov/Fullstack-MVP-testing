@@ -25,6 +25,7 @@
  */
 
 import { storage } from "../storage";
+import { materializeScaleDomains } from "./scale-domain";
 import type {
   Test,
   TestSection,
@@ -100,6 +101,12 @@ export interface TestDataSource {
 export async function buildSnapshotContent(testId: string): Promise<TestSnapshotContent | null> {
   const test = await storage.getTest(testId);
   if (!test) return null;
+
+  // PRD-35: the domain of a scale must be inside the frozen version, not derived
+  // later — a snapshot exists to keep the delivered artefacts reproducible (NFR-21).
+  // This is the safety net for tests whose scales the author never opened in the
+  // editor; it writes nothing when the bounds are already there.
+  await materializeScaleDomains(testId);
 
   const [sections, allTopics, scales, measurements, resultVariables, contentPages, questionScoring] =
     await Promise.all([
