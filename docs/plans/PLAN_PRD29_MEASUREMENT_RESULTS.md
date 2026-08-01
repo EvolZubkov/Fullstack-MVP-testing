@@ -2110,8 +2110,13 @@ Expected: PASS, 6 тестов.
   scales?: CtxMeasureView[];
   indicators?: CtxMeasureView[];
   recommendations?: CtxRecommendations;
-  /** The score summary always HAS data, so it needs its own flag. */
-  showScoreSummary?: boolean;
+  /**
+   * The score summary always HAS data, so it needs its own flag — and the flag is
+   * NEGATIVE. A control test passes no measures at all, so a positive flag would be
+   * absent and the layout would hide the summary in every package and preview.
+   * Absent = shown; only the suppression is recorded.
+   */
+  hideScoreSummary?: boolean;
 ```
 
 и импорт типов в шапке файла:
@@ -2205,7 +2210,8 @@ function firedFeedback(m: MeasureInput): FeedbackBlock | null {
       hasVisibleScales: visibleScales.length > 0,
       hasVisibleIndicators: visibleIndicators.length > 0,
     });
-    result.showScoreSummary = blocks.scoreSummary;
+    // INVERTED on purpose — see the contract note on `hideScoreSummary`.
+    if (!blocks.scoreSummary) result.hideScoreSummary = true;
 
     if (blocks.scales && visibleScales.length) {
       result.scales = visibleScales.map((m) =>
@@ -2242,8 +2248,8 @@ function firedFeedback(m: MeasureInput): FeedbackBlock | null {
 
 Run: `npm test -- shared/template/__tests__/result-context-measures.test.ts`
 Expected: PASS, 6 тестов. Тест «не добавляет новых полей, когда измерений нет» проверяет, что
-`opts.measures` отсутствует целиком — тогда и `showScoreSummary` не появляется и контрольный
-экран остаётся прежним.
+`opts.measures` отсутствует целиком — тогда не появляется и `hideScoreSummary`, а его
+отсутствие означает «показывать», так что контрольный экран остаётся прежним.
 
 - [ ] **Step 8: Прокинуть толкование через загрузчик конфигурации**
 
@@ -2548,30 +2554,33 @@ git commit -m "feat(prd-29): проброс измерений на веб-хо�
 
 - Modify: `server/scorm/templates/default/layouts/results.html`
 
+Разметка обязана повторять утверждённый эскиз `docs/wireframes/prd29-measurement-results.html`.
+Классы и заголовки берутся ОТТУДА дословно, а не придумываются заново.
+
+Два правила, из которых следует всё остальное:
+
+- ядро отдаёт готовое, разметка ничего не вычисляет;
+- контрольный тест обязан остаться прежним, поэтому признак сводки ОТРИЦАТЕЛЬНЫЙ:
+  `hideScoreSummary` пишется только при подавлении, а его отсутствие означает «показывать».
+  Положительный признак был бы ложью для всех, кто не передаёт измерения, — а это SCORM-рантайм,
+  предпросмотр и любой контрольный тест.
+
 - [ ] **Step 1: Свериться с утверждённым эскизом**
 
-Открыть `docs/wireframes/prd29-measurement-results.html`. Разметка обязана повторять эскиз;
-отступление означает откат и повторное согласование.
+Открыть `docs/wireframes/prd29-measurement-results.html`. Отступление означает откат работы.
 
 - [ ] **Step 2: Обернуть существующую сводку в условие**
 
-Заменить блок `<div class="tb-score-strip">…</div>` (строки 16-32) на тот же блок, обёрнутый
-в `{{#if result.showScoreSummary}}` … `{{/if}}`. Внутренняя разметка не меняется ни на символ:
-контрольный тест обязан выглядеть как сегодня.
+Блок `<div class="tb-score-strip">…</div>` обернуть в `{{#unless result.hideScoreSummary}}` …
+`{{/unless}}`. Внутреннюю разметку не менять НИ НА СИМВОЛ.
 
 - [ ] **Step 3: Добавить блок показателей перед блоком тем**
 
-Вывод методики — это утверждение с пояснением и оценочным тоном, а `ou-banner--subtle`
-ровно это и есть: его варианты `success`/`info`/`warning`/`error` ложатся на четыре тона
-один в один. Своего контейнера показателю не нужно.
-
-Строка показателя устроена ТАК ЖЕ, как строка шкалы: `ou-formsection`, слева имя, справа
-содержимое. Иначе имя показателя, вынесенное надзаголовком, встаёт на то же место и в тот
-же вес, что заголовок блока «По шкалам», и два разных по уровню элемента выглядят
-одинаково значимыми. Заголовок блока — всегда `tb-scene__subhead`, имя сущности — всегда
-левая колонка секции.
+Ведущий разделитель ставится только тогда, когда выше действительно есть сводка: блоку
+показателей может предшествовать лишь она, поэтому признак точен.
 
 ```html
+      {{#unless result.hideScoreSummary}}<hr class="ou-separator ou-separator--horizontal">{{/unless}}
       {{#if result.indicators}}
       <div class="tb-scene__q"><h3 class="tb-scene__subhead">Ваш результат</h3></div>
       <div class="tb-measures">
@@ -2596,18 +2605,13 @@ git commit -m "feat(prd-29): проброс измерений на веб-хо�
 
 - [ ] **Step 4: Добавить блок шкал**
 
-Шкала — не карточка: вложенные скруглённые прямоугольники внутри уже скруглённой сцены
-дают «плитку ради плитки». Но и плоский список из одинаковых по ритму строк слипается —
-конец одной шкалы неотличим от начала следующей.
+Хвостового разделителя у блока НЕТ: следующий блок несёт свой ведущий, иначе между блоками
+встанет двойная линейка.
 
-Структуру даёт готовый примитив `ou-formsection`: сетка «колонка подписи 280px плюс
-содержимое», отбивка 32px и волосяная линия между секциями (у последней её нет). Слева —
-название шкалы и плашка уровня, справа — рельс, границы и толкование. Это же снимает
-разнос значения по всей ширине: рельс живёт в своей колонке.
-
-Рельс собирается из анатомии `ou-slider`: `__header` несёт значение, `__rail` — дорожку,
-`__fill` — залитый отрезок (по одному на зону), `__thumb` — маркер, `__marks` — засечки
-границ с числовыми подписями. Название уровня словом стоит в `ou-tag` слева, не под рельсом.
+Слот значения ветвится по виду. Рельс печатает число и максимум порознь, чтобы шапка
+`ou-slider__val` выглядела как в дизайн-системе; виды без рельса печатают готовую строку
+`valueLabel` — она заведена контрактом ровно для них, и при отсутствии домена «27 из »
+не получится. Кольцо использует подготовленные ядром `percent` и `ringDashoffset`.
 
 ```html
       {{#if result.scales}}
@@ -2618,78 +2622,117 @@ git commit -m "feat(prd-29): проброс измерений на веб-хо�
         <div class="ou-formsection tb-measure" data-render="{{renderKind}}">
           <div class="ou-formsection__intro">
             <h4 class="ou-formsection__title">{{name}}</h4>
-            <span class="ou-tag ou-tag--s tb-measure__level {{toneClass}}">{{levelLabel}}</span>
+            <span class="ou-tag ou-tag--l tb-measure__level {{toneClass}}">{{levelLabel}}</span>
           </div>
           <div class="ou-formsection__body">
-          <div class="ou-slider ou-slider--h tb-measure__slider">
-            <div class="ou-slider__header">
-              {{#if showValue}}<span class="ou-slider__val"><strong>{{valueText}}</strong> из {{maxText}}</span>{{/if}}
-            </div>
             {{#if zones}}
-            <div class="ou-slider__rail">
-              {{#each zones}}
-              <span class="ou-slider__fill tb-zone{{#if current}} is-current{{/if}}"
-                    style="left:{{leftPercent}}%;width:{{widthPercent}}%;--tb-zone:{{color}}"></span>
-              {{/each}}
-              <span class="ou-slider__thumb tb-measure__marker" style="left:{{markerPercent}}%"></span>
-              <div class="ou-slider__marks">
-                {{#each marks}}
-                <span class="ou-slider__mark" style="left:{{percent}}%"></span>
-                <span class="ou-slider__mark-lbl" style="left:{{percent}}%">{{label}}</span>
+            <div class="ou-slider ou-slider--h tb-measure__slider">
+              <div class="ou-slider__header">
+                {{#if showValue}}<span class="ou-slider__val"><strong>{{valueText}}</strong> из {{maxText}}</span>{{/if}}
+              </div>
+              <div class="ou-slider__rail" role="img" aria-label="{{ariaLabel}}">
+                {{#each zones}}
+                <span class="ou-slider__fill tb-zone{{#if current}} is-current{{/if}}"
+                      style="left:{{leftPercent}}%;width:{{widthPercent}}%;--tb-zone:{{color}}"></span>
                 {{/each}}
+                <span class="ou-slider__thumb tb-measure__marker" style="left:{{markerPercent}}%"></span>
+                <div class="ou-slider__marks">
+                  {{#each marks}}
+                  <span class="ou-slider__mark" style="left:{{percent}}%"></span>
+                  <span class="ou-slider__mark-lbl" style="left:{{percent}}%">{{label}}</span>
+                  {{/each}}
+                </div>
               </div>
             </div>
             {{/if}}
-          </div>
+            {{#if ringDashoffset}}
+            <div class="ou-ring tb-ring" role="img" aria-label="{{ariaLabel}}">
+              <svg class="ou-ring__svg" width="140" height="140" viewBox="0 0 140 140">
+                <circle class="ou-ring__track" cx="70" cy="70" r="63" stroke-width="12"></circle>
+                <circle class="ou-ring__fill" cx="70" cy="70" r="63" stroke-width="12" stroke-linecap="round"
+                        stroke-dasharray="395.84" stroke-dashoffset="{{ringDashoffset}}"></circle>
+              </svg>
+              <div class="ou-ring__center">
+                <div class="ou-ring__value"><span>{{percent}}</span>%</div>
+                <div class="ou-ring__label">{{levelLabel}}</div>
+              </div>
+            </div>
+            {{/if}}
+            {{#unless zones}}{{#unless ringDashoffset}}
+            {{#if showValue}}<span class="ou-slider__val"><strong>{{valueLabel}}</strong></span>{{/if}}
+            {{/unless}}{{/unless}}
             {{#if text}}<p class="ou-formsection__sub">{{text}}</p>{{/if}}
           </div>
         </div>
         {{/each}}
       </div>
-      <hr class="ou-separator ou-separator--horizontal">
       {{/if}}
 ```
 
 - [ ] **Step 5: Добавить блок рекомендаций после блока тем**
 
+Классы взяты из эскиза: `tb-recs-block` — обёртка, `tb-recs-group` — группа по типу ресурса,
+`tb-recs-group__text` — абзац текста, `tb-eyebrow` — надзаголовок группы, `tb-recs` — ряд
+чипов (он даёт перенос и зазор, без него чипы слипнутся).
+
+Пиктограммы в чипах взяты дословно из блока обратной связи темы этого же файла: ссылка у
+курса и материала, календарь у мероприятия. Эскиз старше этой правки и показывает чипы
+голыми — здесь верен файл, иначе на одном экране окажутся чипы с иконками и без.
+
 ```html
-      <!-- Пиктограммы в чипах взяты ДОСЛОВНО из блока обратной связи темы: ссылка для
-           курса и материала, календарь для мероприятия. Без них измерительный экран
-           показал бы голые чипы рядом с иконованными на том же экране. -->
       {{#if result.recommendations.hasAny}}
       <hr class="ou-separator ou-separator--horizontal">
-      <div class="tb-scene__q"><h3 class="tb-scene__subhead">Что можно сделать</h3></div>
-      <div class="tb-recos">
-        {{#each result.recommendations.texts}}<p class="tb-recos__text">{{this}}</p>{{/each}}
+      <div class="tb-scene__q"><h3 class="tb-scene__subhead">Рекомендации</h3></div>
+      <div class="tb-recs-block">
+        {{#if result.recommendations.texts}}
+        <div class="tb-recs-group">
+          {{#each result.recommendations.texts}}<p class="tb-recs-group__text">{{this}}</p>{{/each}}
+        </div>
+        {{/if}}
         {{#if result.recommendations.links}}
-        <div class="tb-recos__group">
-          <span class="tb-recos__group-title">Пройти обучение</span>
-          {{#each result.recommendations.links}}<a class="tb-rec" href="{{url}}" target="_blank" rel="noopener noreferrer"><span class="tb-rec__ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>{{title}}</a>{{/each}}
+        <div class="tb-recs-group">
+          <span class="tb-eyebrow">Пройти обучение</span>
+          <div class="tb-recs">
+            {{#each result.recommendations.links}}<a class="tb-rec" href="{{url}}" target="_blank" rel="noopener noreferrer">{{ICO_LINK}}{{title}}</a>{{/each}}
+          </div>
         </div>
         {{/if}}
         {{#if result.recommendations.events}}
-        <div class="tb-recos__group">
-          <span class="tb-recos__group-title">Мероприятия</span>
-          {{#each result.recommendations.events}}<span class="tb-rec"><span class="tb-rec__ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg></span>{{title}}</span>{{/each}}
+        <div class="tb-recs-group">
+          <span class="tb-eyebrow">Мероприятия</span>
+          <div class="tb-recs">
+            {{#each result.recommendations.events}}<span class="tb-rec">{{ICO_CAL}}{{title}}</span>{{/each}}
+          </div>
         </div>
         {{/if}}
         {{#if result.recommendations.assets}}
-        <div class="tb-recos__group">
-          <span class="tb-recos__group-title">Материалы</span>
-          {{#each result.recommendations.assets}}<a class="tb-rec" href="{{url}}" target="_blank" rel="noopener noreferrer"><span class="tb-rec__ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>{{title}}</a>{{/each}}
+        <div class="tb-recs-group">
+          <span class="tb-eyebrow">Материалы</span>
+          <div class="tb-recs">
+            {{#each result.recommendations.assets}}<a class="tb-rec" href="{{url}}" target="_blank" rel="noopener noreferrer">{{ICO_LINK}}{{title}}</a>{{/each}}
+          </div>
         </div>
         {{/if}}
       </div>
       {{/if}}
 ```
 
-- [ ] **Step 6: Проверить поддержку конструкции в DSL**
+`{{ICO_LINK}}` и `{{ICO_CAL}}` — НЕ конструкции движка, а указание подставить сюда дословно
+разметку `<span class="tb-rec__ico">…</span>` из блока обратной связи темы того же файла:
+первую (со скрепкой-ссылкой) для курсов и материалов, вторую (с календарём) для мероприятий.
+
+- [ ] **Step 6: Проверить поддержку конструкций движком**
 
 Run: `npm test -- shared/template/dsl.test.ts`
-Expected: PASS. Если `{{#each}}` по массиву строк с `{{this}}` не поддержан, добавить
-поддержку в `shared/template/dsl.ts` вместе с тестом в том же коммите.
+Expected: PASS. Перебор массива строк с `{{this}}` уже поддержан и покрыт тестом, правка
+движка не нужна. Пустой массив в `{{#if}}` ложен, поэтому «нет данных — нет блока» держится.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Проверить, что контрольный экран не изменился**
+
+Run: `npm test -- tests/results-template-gating.test.ts tests/template-layout-parity.test.ts`
+Expected: PASS.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add server/scorm/templates/default/layouts/results.html
@@ -2773,11 +2816,12 @@ git commit -m "feat(prd-29): блоки показателей, шкал и ре
 
 
 
-/* PRD-29: the single recommendations block, structured by resource type. */
-.tb-recos { display: flex; flex-direction: column; gap: 12px; }
-.tb-recos__text { margin: 0; }
-.tb-recos__group { display: flex; flex-direction: column; gap: 6px; }
-.tb-recos__group-title { font: var(--ou-text-body-xs); text-transform: uppercase; color: var(--ou-fg-muted); }
+/* PRD-29: the single recommendations block, structured by resource type. Class names
+   come from the approved wireframe; the chip row (`tb-recs`) and the chip itself
+   (`tb-rec`) already exist in this file and are reused as they are. */
+.tb-recs-block { display: flex; flex-direction: column; gap: var(--ou-space-4); }
+.tb-recs-group { display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: flex-start; }
+.tb-recs-group__text { margin: 0; font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
 ```
 
 Проверить в браузере, что засечки `ou-slider__mark-lbl` не наезжают друг на друга при
