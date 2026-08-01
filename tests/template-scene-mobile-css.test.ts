@@ -149,6 +149,15 @@ describe.each(THEMES)("мобильный слой: %s", (rel) => {
   });
 
   describe("пороги CSS и подгонки шрифта не разъезжаются", () => {
+    /** Тело ступени: от её заголовка до конца файла (S3 — последняя). */
+    function step(px: number): string {
+      const m = declarations.match(
+        new RegExp(`@container\\s+tbscene\\s*\\(max-width:\\s*${px}px\\)\\s*\\{([\\s\\S]*)$`),
+      );
+      expect(m, `нет ступени ${px}`).toBeTruthy();
+      return m![1];
+    }
+
     /** Границы clamp() для заданного селектора внутри ступени S3. */
     function clampBounds(selector: string): [number, number] {
       const s3 = declarations.match(/@container\s+tbscene\s*\(max-width:\s*520px\)\s*\{([\s\S]*)$/);
@@ -178,6 +187,25 @@ describe.each(THEMES)("мобильный слой: %s", (rel) => {
 
       expect(clampBounds("\\.tb-scene__qtitle")).toEqual([qMin, qMax]);
       expect(clampBounds("\\.ou-radio-card__title")).toEqual([aMin, aMax]);
+    });
+
+    it("на планшетной ступени CSS не обрезает подгонку снизу", () => {
+      // S2 действует там, где активен ШИРОКИЙ профиль, поэтому пол clamp() обязан
+      // совпадать с его полом. Пол выше профильного делает нижнюю часть диапазона
+      // недостижимой: подгонка считает 16px, а CSS печатает 20 — и цикл ужимания
+      // работает вхолостую ровно тогда, когда он нужнее всего.
+      const wide = fitSrc.match(/wide:\s*\{\s*qMax:\s*(\d+),\s*qMin:\s*(\d+),\s*aMax:\s*(\d+),\s*aMin:\s*(\d+)/);
+      expect(wide, "не найден широкий профиль в fit-question.ts").toBeTruthy();
+      const [, , qMin, , aMin] = wide!.map(Number);
+
+      const s2 = step(700);
+      const floor = (selector: string) => {
+        const m = s2.match(new RegExp(`${selector}[^{]*\\{[^}]*clamp\\(\\s*(\\d+)px`));
+        expect(m, `нет clamp() для ${selector} в S2`).toBeTruthy();
+        return Number(m![1]);
+      };
+      expect(floor("\\.tb-scene__qtitle")).toBe(qMin);
+      expect(floor("\\.ou-radio-card__title")).toBe(aMin);
     });
   });
 });

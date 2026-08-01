@@ -959,11 +959,11 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
      phone, where scrolling is the better trade. Keep these numbers in sync with
      the narrow profile in `shared/template/fit-question.ts`. */
   .tb-scene__qtitle,
-  .tb-content__title { font-size: clamp(20px, var(--tb-question-fs, 30px), 26px); }
+  .tb-content__title { font-size: clamp(16px, var(--tb-question-fs, 30px), 26px); }
   .tb-scene__hero { font-size: clamp(22px, var(--tb-question-fs, 32px), 28px); }
   .tb-scene .ou-radio-card__title,
   .tb-scene .ou-rank__text,
-  .tb-scene .ou-match__card-title { font-size: clamp(15px, var(--tb-answer-fs, 20px), 19px); }
+  .tb-scene .ou-match__card-title { font-size: clamp(14px, var(--tb-answer-fs, 20px), 19px); }
   .tb-scene__hero--s { font-size: 24px; }
   .tb-cover__title { font-size: 34px; }
 
