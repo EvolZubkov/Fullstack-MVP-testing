@@ -3,7 +3,8 @@
  * @description «Показатели» editor tab (PRD-2). Lists the test's result
  * variables as reorderable accordion cards. Each card is three blocks:
  * (1) Имя · Метка, (2) Формула (Конструктор/DSL → шаблон → расчёт), (3) Вывод
- * (управление статусом — только для булевых — + передача в LMS). The result type
+ * (видимость для обучающегося + управление статусом — только для булевых — +
+ * передача в LMS). The result type
  * is DERIVED (template in the constructor, inferred from the formula in DSL mode)
  * — there is no manual «Тип» field. Edits flow into the test draft via
  * `updateModel`; the single drawer «Сохранить» persists them through the
@@ -46,6 +47,8 @@ import { CSS } from "@dnd-kit/utilities";
 
 import { collectStringLiterals, findUnknownOutcomes } from "@shared/formula/outcome-literals";
 
+import type { LearnerVisibility } from "@shared/scales/interpretation";
+
 import type {
   ResultVariableControlsStatus,
   ResultVariableModel,
@@ -79,7 +82,7 @@ import {
   type ScaleRef,
   type TopicRef,
 } from "../result-variables-builder";
-import { BandsEditor } from "./scales-section";
+import { BandsEditor, VISIBILITY_OPTIONS } from "./scales-section";
 import { OutcomesEditor } from "./outcomes-editor";
 
 const STATUS_OPTIONS: Array<{ value: ResultVariableControlsStatus; label: string }> = [
@@ -608,7 +611,23 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
       <hr className="wf-sep" />
 
       <div className="tb-section-label">Вывод</div>
-      <Grid cols={isBoolean ? 2 : 1} gap={3}>
+      <Grid cols={2} gap={3}>
+        {/*
+          PRD-29 (defect D-1): without this control `learnerVisibility` stays
+          `hidden` forever and the methodology verdict — the very result a
+          measurement test exists for — can never reach the learner. Same option
+          list as the scales tab, deliberately imported rather than duplicated.
+        */}
+        <Select<LearnerVisibility>
+          size="m"
+          fullWidth
+          label="Показывать обучающемуся"
+          value={v.learnerVisibility}
+          disabled={readOnly}
+          options={VISIBILITY_OPTIONS}
+          onChange={(value) => onChange({ learnerVisibility: value })}
+          data-testid={`metrics-visibility-${index}`}
+        />
         {isBoolean && (
           <Select<ResultVariableControlsStatus>
             size="m"

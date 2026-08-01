@@ -124,8 +124,11 @@ const VALENCE_OPTIONS: Array<{ value: Valence; label: string }> = [
  * PRD-29. The middle position is a working need of psychodiagnostics: the level may
  * be disclosed while the raw score stays hidden — a score invites self-diagnosis and
  * comparison between people.
+ *
+ * Shared with the «Показатели» tab (result-variables-section): one wording for both
+ * tabs, because differing labels would read to the author as differing meaning.
  */
-const VISIBILITY_OPTIONS: Array<{ value: LearnerVisibility; label: string }> = [
+export const VISIBILITY_OPTIONS: Array<{ value: LearnerVisibility; label: string }> = [
   { value: "hidden", label: "Не показывать" },
   { value: "level", label: "Уровень и толкование" },
   { value: "level_and_value", label: "Уровень, толкование и значение" },
