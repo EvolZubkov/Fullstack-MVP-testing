@@ -369,6 +369,17 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
    keeps the right media panel visible so the layout reads as «image right». */
 .tb-cover__media-ph { width: 100%; height: 100%; min-height: 220px; display: flex; align-items: center; justify-content: center; color: var(--ou-fg-muted); opacity: 0.55; }
 @container tbscene (max-width: 900px) { .tb-cover--media { grid-template-columns: 1fr; } .tb-cover__media { min-height: 220px; } }
+/* Image-right cover WITHOUT an image. The slot used to draw a hollow frame — a bordered
+   grey box with a picture glyph — which reads as a broken image rather than as design.
+   It becomes an abstract panel instead, the same device the certification template
+   already uses for its own coverless variant (its `.tb-cover:not(.tb-cover--media)::after`).
+   The glyph goes: a panel that says nothing needs no icon explaining that it says nothing. */
+.tb-cover__media:has(.tb-cover__media-ph) {
+  background: linear-gradient(140deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.82) 100%);
+  box-shadow: inset -6rem -7rem 0 -5.6rem hsl(0 0% 100% / 0.16);
+}
+.tb-cover__media-ph { display: none; }
+
 
 /* Facts strip — big number + small label, spaced (start screen). */
 .tb-facts { display: flex; flex-wrap: wrap; gap: var(--ou-space-9); }
@@ -1073,6 +1084,14 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   .tb-cover__content { gap: var(--ou-space-4); justify-content: flex-start; }
   .tb-cover__media,
   .tb-cover__media-ph { min-height: 160px; }
+
+  /* On a phone the decorative panel is dropped outright: with no image behind it, it
+     carries nothing and would take about a third of the screen away from the facts and
+     the start button. An image the author DID set still shows — only the placeholder
+     goes. */
+  .tb-cover--media:has(.tb-cover__media-ph) { grid-template-columns: 1fr; }
+  .tb-cover__media:has(.tb-cover__media-ph) { display: none; }
+
   .tb-facts { gap: var(--ou-space-4) var(--ou-space-5); }
   .tb-facts__num { font: var(--ou-text-heading-m); }
 
@@ -1145,7 +1164,16 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   .tb-scene__foot .ou-btn--primary {
     order: 99; flex: 1 1 auto; min-width: 150px; height: 48px; min-height: 48px;
   }
-  .tb-scene__foot .tb-scene__note { flex: 0 0 100%; font: var(--ou-text-body-s); }
+  /* The start screen's footer carries a STATUS line («Незавершённый тест — вопрос N
+     из M») among its actions, and in markup order it sits between them — breaking the
+     row where it stands and leaving the lone ghost «К списку тестов» on top, where it
+     reads as a heading rather than an action. Pulled to the front it becomes a caption
+     for what follows, and the wrap then groups the footer as it should: status, then
+     the alternatives side by side, then the main action full width. 4 rows -> 3. */
+  .tb-scene__foot .tb-scene__note {
+    order: -1; flex: 0 0 100%;
+    font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+  }
 }
 
 /* ── Touch density ─────────────────────────────────────────────────
@@ -6353,10 +6381,299 @@ var TBTemplate = (() => {
     };
   }
 
+  // shared/scales/interpretation.ts
+  function findBand(bands, value) {
+    for (const band of bands) {
+      if (value >= band.min && value <= band.max) return band;
+    }
+    return null;
+  }
+  function findOutcome(outcomes, value) {
+    if (value === null || value === void 0) return null;
+    const code = String(value);
+    for (const outcome of outcomes) {
+      if (outcome.code === code) return outcome;
+    }
+    return null;
+  }
+
+  // shared/template/level-ramp.ts
+  var LEVEL_SCHEMES = {
+    traffic: { favorable: "142 76% 36%", mid: "38 92% 50%", unfavorable: "0 84% 60%" },
+    neutral: { favorable: "215 16% 65%", mid: null, unfavorable: "215 16% 35%" }
+  };
+  var HSL_RE = /^\s*(-?[\d.]+)\s+(-?[\d.]+)%\s+(-?[\d.]+)%\s*$/;
+  function parseHsl(triple) {
+    const m = HSL_RE.exec(String(triple != null ? triple : ""));
+    if (!m) return null;
+    return { h: Number(m[1]), s: Number(m[2]), l: Number(m[3]) };
+  }
+  function formatHsl(c) {
+    const round = (n) => Math.round(n * 10) / 10;
+    return `${round(c.h)} ${round(c.s)}% ${round(c.l)}%`;
+  }
+  function lerpHue(from, to, t) {
+    let delta = ((to - from) % 360 + 540) % 360 - 180;
+    const h = from + delta * t;
+    return (h % 360 + 360) % 360;
+  }
+  function lerp(from, to, t) {
+    return {
+      h: lerpHue(from.h, to.h, t),
+      s: from.s + (to.s - from.s) * t,
+      l: from.l + (to.l - from.l) * t
+    };
+  }
+  function clamp01(t) {
+    if (!Number.isFinite(t)) return 0;
+    return t < 0 ? 0 : t > 1 ? 1 : t;
+  }
+  function rampColor(ramp, t) {
+    var _a;
+    const p = clamp01(t);
+    if (p === 0) return ramp.unfavorable;
+    if (p === 1) return ramp.favorable;
+    const low = parseHsl(ramp.unfavorable);
+    const high = parseHsl(ramp.favorable);
+    if (!low || !high) return (_a = ramp.mid) != null ? _a : ramp.favorable;
+    const mid = ramp.mid ? parseHsl(ramp.mid) : null;
+    if (!mid) return formatHsl(lerp(low, high, p));
+    if (p === 0.5) return ramp.mid;
+    return p < 0.5 ? formatHsl(lerp(low, mid, p / 0.5)) : formatHsl(lerp(mid, high, (p - 0.5) / 0.5));
+  }
+  function zoneColors(ramp, count, valence) {
+    if (count <= 0) return [];
+    const effective = valence === "none" ? LEVEL_SCHEMES.neutral : ramp;
+    if (count === 1) return [rampColor(effective, 0.5)];
+    const out = [];
+    for (let i = 0; i < count; i += 1) {
+      const position = i / (count - 1);
+      out.push(rampColor(effective, valence === "lower_is_better" ? 1 - position : position));
+    }
+    return out;
+  }
+
+  // shared/template/measure-view.ts
+  var RING_CIRCUMFERENCE = 2 * Math.PI * 63;
+  var BANNER_BY_TONE = {
+    favorable: "success",
+    neutral: "info",
+    attention: "warning",
+    critical: "error"
+  };
+  var FALLBACK_CHAINS = {
+    gradient_bar: ["gradient_bar", "band_ruler", "value_of_max", "value", "label"],
+    band_ruler: ["band_ruler", "value_of_max", "value", "label"],
+    ring: ["ring", "value_of_max", "value", "label"],
+    value_of_max: ["value_of_max", "value", "label"],
+    value: ["value", "label"],
+    label: ["label"]
+  };
+  function isFeasible(kind, caps) {
+    if (!caps.isNumeric) return kind === "label";
+    switch (kind) {
+      case "gradient_bar":
+        return caps.hasDomain && !caps.hasBands;
+      case "band_ruler":
+        return caps.hasDomain && caps.hasBands;
+      case "ring":
+      case "value_of_max":
+        return caps.hasDomain;
+      case "value":
+      case "label":
+        return true;
+    }
+  }
+  function resolveRenderKind(requested, caps) {
+    var _a;
+    for (const kind of (_a = FALLBACK_CHAINS[requested]) != null ? _a : ["label"]) {
+      if (isFeasible(kind, caps)) return kind;
+    }
+    return "label";
+  }
+  function round1(n) {
+    return Math.round(n * 10) / 10;
+  }
+  function outcomesOf(i) {
+    var _a;
+    return (_a = i.outcomes) != null ? _a : [];
+  }
+  function buildZones(input, domainMin, domainMax, currentLevel) {
+    const bands = input.interpretation.bands;
+    const span = domainMax - domainMin;
+    if (span <= 0) return [];
+    const colors = zoneColors(input.ramp, bands.length, input.interpretation.valence);
+    return bands.map((band, i) => {
+      var _a;
+      const right = i + 1 < bands.length ? bands[i + 1].min : domainMax;
+      return {
+        label: (_a = band.label) != null ? _a : band.level,
+        leftPercent: round1((band.min - domainMin) / span * 100),
+        widthPercent: round1((right - band.min) / span * 100),
+        color: colors[i],
+        current: band.level === currentLevel && currentLevel !== ""
+      };
+    });
+  }
+  function toneOf(input, override, index, count) {
+    if (override) return override;
+    const { valence } = input.interpretation;
+    if (valence === "none" || count <= 1 || index < 0) return "neutral";
+    const position = index / (count - 1);
+    const t = valence === "lower_is_better" ? 1 - position : position;
+    if (t >= 0.75) return "favorable";
+    if (t >= 0.375) return "attention";
+    return "critical";
+  }
+  function buildMeasureView(input) {
+    var _a, _b, _c, _d, _e;
+    const { interpretation } = input;
+    const isNumeric = typeof input.value === "number" && Number.isFinite(input.value);
+    const hasDomain = interpretation.domainMin !== null && interpretation.domainMax !== null;
+    const hasBands = interpretation.bands.length > 0;
+    const renderKind = resolveRenderKind(input.requestedKind, { hasDomain, hasBands, isNumeric });
+    const showValue = input.visibility === "level_and_value" && renderKind !== "label";
+    const base = {
+      key: input.key,
+      name: input.name,
+      renderKind,
+      showValue,
+      valueText: "",
+      maxText: "",
+      valueLabel: "",
+      levelLabel: "",
+      tone: "neutral",
+      toneClass: "tb-tone--neutral",
+      bannerVariant: "info",
+      zones: [],
+      marks: []
+    };
+    if (!isNumeric) {
+      const outcomes = outcomesOf(interpretation);
+      const outcome = findOutcome(outcomes, input.value);
+      if (!outcome) return base;
+      const tone2 = (_a = outcome.tone) != null ? _a : "neutral";
+      return {
+        ...base,
+        levelLabel: outcome.label,
+        tone: tone2,
+        toneClass: `tb-tone--${tone2}`,
+        bannerVariant: BANNER_BY_TONE[tone2],
+        ...outcome.text ? { text: outcome.text } : {}
+      };
+    }
+    const value = input.value;
+    const domainMin = (_b = interpretation.domainMin) != null ? _b : 0;
+    const domainMax = (_c = interpretation.domainMax) != null ? _c : 0;
+    const band = findBand(interpretation.bands, value);
+    const bandIndex = band ? interpretation.bands.indexOf(band) : -1;
+    const tone = toneOf(input, band == null ? void 0 : band.tone, bandIndex, interpretation.bands.length);
+    const view = {
+      ...base,
+      valueText: String(round1(value)),
+      maxText: hasDomain ? String(round1(domainMax)) : "",
+      valueLabel: hasDomain ? `${round1(value)} \u0438\u0437 ${round1(domainMax)}` : String(round1(value)),
+      levelLabel: band ? (_d = band.label) != null ? _d : band.level : "",
+      tone,
+      toneClass: `tb-tone--${tone}`,
+      bannerVariant: BANNER_BY_TONE[tone],
+      ...(band == null ? void 0 : band.text) ? { text: band.text } : {}
+    };
+    if (!hasDomain) return view;
+    const span = domainMax - domainMin;
+    const ratio = span > 0 ? (value - domainMin) / span : 0;
+    const clamped = ratio < 0 ? 0 : ratio > 1 ? 1 : ratio;
+    if (renderKind === "band_ruler") {
+      view.zones = buildZones(input, domainMin, domainMax, (_e = band == null ? void 0 : band.level) != null ? _e : "");
+      view.markerPercent = round1(clamped * 100);
+      view.marks = [
+        { percent: 0, label: String(round1(domainMin)) },
+        ...interpretation.bands.slice(1).map((b) => ({ percent: round1((b.min - domainMin) / span * 100), label: String(round1(b.min)) })),
+        { percent: 100, label: String(round1(domainMax)) }
+      ];
+    }
+    if (renderKind === "gradient_bar") {
+      view.markerPercent = round1(clamped * 100);
+      view.zones = [
+        {
+          label: "",
+          leftPercent: 0,
+          widthPercent: 100,
+          color: rampColor(input.ramp, interpretation.valence === "lower_is_better" ? 1 - clamped : clamped),
+          current: true
+        }
+      ];
+    }
+    if (renderKind === "ring") {
+      view.percent = Math.round(clamped * 100);
+      view.ringDashoffset = round1(RING_CIRCUMFERENCE * (1 - clamped));
+    }
+    return view;
+  }
+
+  // shared/template/recommendations.ts
+  function dedupLinks(items) {
+    var _a;
+    const seen = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const item of items) {
+      const key = `${item.title}|${(_a = item.url) != null ? _a : ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+    return out;
+  }
+  function collectRecommendations(sources) {
+    var _a;
+    const present = sources.filter((s) => !!s);
+    const texts = [];
+    const seenText = /* @__PURE__ */ new Set();
+    for (const source of present) {
+      const text = String((_a = source.text) != null ? _a : "").trim();
+      if (!text || seenText.has(text)) continue;
+      seenText.add(text);
+      texts.push(text);
+    }
+    const links = dedupLinks(present.flatMap((s) => {
+      var _a2;
+      return (_a2 = s.links) != null ? _a2 : [];
+    }));
+    const events = dedupLinks(present.flatMap((s) => {
+      var _a2;
+      return (_a2 = s.events) != null ? _a2 : [];
+    }));
+    const assets = dedupLinks(present.flatMap((s) => {
+      var _a2;
+      return (_a2 = s.assets) != null ? _a2 : [];
+    }));
+    return {
+      texts,
+      links,
+      events,
+      assets,
+      hasAny: texts.length > 0 || links.length > 0 || events.length > 0 || assets.length > 0
+    };
+  }
+
+  // shared/template/results-blocks.ts
+  function resolve(setting, auto) {
+    if (setting === "show") return true;
+    if (setting === "hide") return false;
+    return auto;
+  }
+  function resolveResultsBlocks(settings, state) {
+    return {
+      scoreSummary: resolve(settings.scoreSummary, state.hasPassThreshold),
+      indicators: resolve(settings.indicators, state.hasVisibleIndicators),
+      scales: resolve(settings.scales, state.hasVisibleScales)
+    };
+  }
+
   // shared/template/result-context.ts
   var RING_RADIUS = 63;
-  var RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
-  function round1(n) {
+  var RING_CIRCUMFERENCE2 = 2 * Math.PI * RING_RADIUS;
+  function round12(n) {
     return Math.round((Number(n) || 0) * 10) / 10;
   }
   function buildTopicFeedbackView(t) {
@@ -6372,6 +6689,40 @@ var TBTemplate = (() => {
       hasRecommendations: courses.length > 0 || events.length > 0
     };
   }
+  function normalizeFeedback(raw) {
+    var _a, _b, _c;
+    if (!raw || typeof raw !== "object") return null;
+    const f = raw;
+    const links = (_a = f.links) != null ? _a : [];
+    const events = (_b = f.events) != null ? _b : [];
+    const assets = (_c = f.assets) != null ? _c : [];
+    return {
+      ...f.text ? { text: String(f.text) } : {},
+      links: links.map((l) => {
+        var _a2;
+        return { title: String((_a2 = l.title) != null ? _a2 : ""), ...l.url ? { url: l.url } : {} };
+      }),
+      events: events.map((e) => {
+        var _a2;
+        return { title: String((_a2 = e.title) != null ? _a2 : ""), ...e.url ? { url: e.url } : {} };
+      }),
+      assets: assets.filter((a) => !!a.scormHref).map((a) => {
+        var _a2;
+        return { title: String((_a2 = a.title) != null ? _a2 : ""), url: a.scormHref };
+      })
+    };
+  }
+  function firedFeedback(m) {
+    var _a;
+    const { interpretation } = m;
+    if (typeof m.value === "number") {
+      const band = interpretation.bands.find((b) => m.value >= b.min && m.value <= b.max);
+      return normalizeFeedback(band == null ? void 0 : band.feedback);
+    }
+    const outcomes = (_a = interpretation.outcomes) != null ? _a : [];
+    const outcome = outcomes.find((o) => o.code === String(m.value));
+    return normalizeFeedback(outcome == null ? void 0 : outcome.feedback);
+  }
   function topicView(t, withPoints) {
     const passed = t.passed;
     const view = {
@@ -6385,11 +6736,12 @@ var TBTemplate = (() => {
       // Unified feedback composition (feedback + courses + events) — same as adaptive.
       ...buildTopicFeedbackView(t)
     };
-    if (withPoints) view.pointsLabel = round1(t.earnedPoints) + " / " + round1(t.possiblePoints);
+    if (withPoints) view.pointsLabel = round12(t.earnedPoints) + " / " + round12(t.possiblePoints);
     if (t.requiredLabel) view.requiredLabel = t.requiredLabel;
     return view;
   }
   function buildResultContext(input, title, opts = {}) {
+    var _a;
     const passed = !!input.passed;
     const percent = Math.round(input.percent || 0);
     const result = {
@@ -6397,11 +6749,11 @@ var TBTemplate = (() => {
       passClass: passed ? "is-pass" : "is-fail",
       statusLabel: passed ? "\u041F\u0440\u043E\u0439\u0434\u0435\u043D" : "\u041D\u0435 \u043F\u0440\u043E\u0439\u0434\u0435\u043D",
       scorePercent: percent,
-      ringDashoffset: Math.round(RING_CIRCUMFERENCE * (1 - percent / 100)),
+      ringDashoffset: Math.round(RING_CIRCUMFERENCE2 * (1 - percent / 100)),
       totalQuestions: input.totalQuestions,
       correct: input.correct,
-      earnedPoints: round1(input.earnedPoints),
-      possiblePoints: round1(input.possiblePoints),
+      earnedPoints: round12(input.earnedPoints),
+      possiblePoints: round12(input.possiblePoints),
       topicResults: (input.topicResults || []).map((t) => topicView(t, !!opts.withTopicPoints))
     };
     if (opts.recommendedCourses && opts.recommendedCourses.length) result.recommendedCourses = opts.recommendedCourses;
@@ -6409,6 +6761,28 @@ var TBTemplate = (() => {
     if (opts.backAction) {
       result.backAction = opts.backAction;
       result.backLabel = opts.backLabel;
+    }
+    if (opts.measures) {
+      const visibleScales = opts.measures.scales.filter((m) => m.visibility !== "hidden");
+      const visibleIndicators = opts.measures.indicators.filter((m) => m.visibility !== "hidden");
+      const blocks = resolveResultsBlocks((_a = opts.measures.blockSettings) != null ? _a : {}, {
+        hasPassThreshold: opts.measures.hasPassThreshold === true,
+        hasVisibleScales: visibleScales.length > 0,
+        hasVisibleIndicators: visibleIndicators.length > 0
+      });
+      result.showScoreSummary = blocks.scoreSummary;
+      if (blocks.scales && visibleScales.length) {
+        result.scales = visibleScales.map((m) => buildMeasureView({ ...m, requestedKind: opts.measures.scaleKind, ramp: opts.measures.ramp }));
+      }
+      if (blocks.indicators && visibleIndicators.length) {
+        result.indicators = visibleIndicators.map((m) => buildMeasureView({ ...m, requestedKind: opts.measures.indicatorKind, ramp: opts.measures.ramp }));
+      }
+      const recommendations = collectRecommendations([
+        opts.measures.testFeedback,
+        ...blocks.indicators ? visibleIndicators.map(firedFeedback) : [],
+        ...blocks.scales ? visibleScales.map(firedFeedback) : []
+      ]);
+      if (recommendations.hasAny) result.recommendations = recommendations;
     }
     return { course: { title }, result };
   }
@@ -6418,7 +6792,7 @@ var TBTemplate = (() => {
     const sectionResult = {
       topicName: input.topicName || "",
       scorePercent: percent,
-      ringDashoffset: Math.round(RING_CIRCUMFERENCE * (1 - percent / 100)),
+      ringDashoffset: Math.round(RING_CIRCUMFERENCE2 * (1 - percent / 100)),
       passClass: input.passed === true ? "is-pass" : input.passed === false ? "is-fail" : "",
       statusLabel: input.passed === true ? "\u0420\u0430\u0437\u0434\u0435\u043B \u043F\u0440\u043E\u0439\u0434\u0435\u043D" : input.passed === false ? "\u0420\u0430\u0437\u0434\u0435\u043B \u043D\u0435 \u043F\u0440\u043E\u0439\u0434\u0435\u043D" : "",
       hasVerdict,
@@ -6527,7 +6901,7 @@ var TBTemplate = (() => {
   }
 
   // shared/scoring/engine.ts
-  function clamp01(v) {
+  function clamp012(v) {
     return Math.max(0, Math.min(1, v));
   }
   function maxOf(nums) {
@@ -6632,7 +7006,7 @@ var TBTemplate = (() => {
         score2 = weights[answer];
       }
       score2 = Math.max(0, score2);
-      return { score: score2, sMax, ratio: sMax > 0 ? clamp01(score2 / sMax) : 0 };
+      return { score: score2, sMax, ratio: sMax > 0 ? clamp012(score2 / sMax) : 0 };
     }
     if (kind === "tiered") {
       const tiers = scoring && scoring.kind === "tiered" ? scoring.tiers : [];
@@ -6644,7 +7018,7 @@ var TBTemplate = (() => {
         if (hit) score2 = hit.score;
       }
       score2 = Math.max(0, score2);
-      return { score: score2, sMax, ratio: sMax > 0 ? clamp01(score2 / sMax) : 0 };
+      return { score: score2, sMax, ratio: sMax > 0 ? clamp012(score2 / sMax) : 0 };
     }
     const score = exactCorrect(type, correct, answer);
     return { score, sMax: 1, ratio: score };
@@ -8354,7 +8728,7 @@ var TBTemplate = (() => {
       renderScreenInto(stage, { layout: page.layout, context: page.context });
       const rendered = stage.firstElementChild;
       if (!rendered) throw new Error("\u041C\u0430\u043A\u0435\u0442 \u043E\u0442\u0447\u0451\u0442\u0430 \u043D\u0438\u0447\u0435\u0433\u043E \u043D\u0435 \u043E\u0442\u0440\u0438\u0441\u043E\u0432\u0430\u043B");
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve2) => setTimeout(resolve2, 100));
       const canvas = await deps.html2canvas(rendered, {
         scale: 2,
         useCORS: true,
@@ -8398,7 +8772,7 @@ var TBTemplate = (() => {
     }
   }
   function loadImageDataUrl(src) {
-    return new Promise((resolve) => {
+    return new Promise((resolve2) => {
       const img = new Image();
       img.crossOrigin = "anonymous";
       img.onload = () => {
@@ -8407,14 +8781,14 @@ var TBTemplate = (() => {
           canvas.width = img.width;
           canvas.height = img.height;
           const ctx = canvas.getContext("2d");
-          if (!ctx) return resolve(null);
+          if (!ctx) return resolve2(null);
           ctx.drawImage(img, 0, 0);
-          resolve(canvas.toDataURL("image/png"));
+          resolve2(canvas.toDataURL("image/png"));
         } catch (e) {
-          resolve(null);
+          resolve2(null);
         }
       };
-      img.onerror = () => resolve(null);
+      img.onerror = () => resolve2(null);
       img.src = src;
     });
   }
