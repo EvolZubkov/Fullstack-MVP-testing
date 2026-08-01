@@ -14,7 +14,8 @@ import { computeAttemptResult } from "../services/result-compute";
 import { decideRetake, lastCompletedAttemptDate, toIsoDateUTC } from "../services/retake-gate";
 import { readResultsRenderPayload, readReportRenderPayload } from "../services/template-render";
 import { reportKindForMode } from "@shared/report/report-variants";
-import { buildReportInput, buildAdaptiveReportInput } from "../services/result-context";
+import { buildReportInput, buildAdaptiveReportInput, type MeasuresSource } from "../services/result-context";
+import type { ResultsBlockSettings } from "@shared/template/results-blocks";
 import type { ReportInput, AdaptiveReportInput } from "@shared/report/report-html";
 import { pingSection } from "../services/section-timer";
 import { buildResultsNav, RESULTS_NAV_ACTIONS } from "@shared/template/results-nav";
@@ -28,7 +29,16 @@ import {
 } from "../services/test-snapshot";
 import type { QuestionType } from "@shared/scales/engine";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
-import type { Test, TestVariant, AttemptResult, TopicResult, PassRule, RetakePolicy, ReportSettings } from "@shared/schema";
+import type {
+  Test,
+  TestVariant,
+  AttemptResult,
+  TopicResult,
+  PassRule,
+  RetakePolicy,
+  ReportSettings,
+  FeedbackContent,
+} from "@shared/schema";
 // Brings the `SessionData.magic` augmentation (PRD magic-link scope) into scope.
 import "../middleware/magic-scope";
 
@@ -108,6 +118,54 @@ async function sourceForStart(
     }
   }
   return { src: liveDataSource(), snapshotId: null, test: liveTest };
+}
+
+/**
+ * PRD-29: the measurement material of the results screen — the test's scale and
+ * indicator ROWS, the settings of its «Итоги» variant, whether the test has a pass
+ * threshold at all, and the test's own feedback block.
+ *
+ * Rows are read through the SAME source the attempt was graded against (the one
+ * `loadScoringConfig` takes): an attempt pinned to a snapshot (PRD-15 block B) reads
+ * the FROZEN scales and indicators, so an interpretation edited today cannot rewrite
+ * the verdict of an attempt taken yesterday. The measured VALUES are deliberately NOT
+ * gathered here — they are already in the saved `AttemptResult` and must never be
+ * recomputed.
+ *
+ * `undefined` for a test with neither scales nor indicators: the results context then
+ * gains no new field at all.
+ */
+async function measuresForAttempt(
+  attempt: { testId: string; snapshotId: string | null },
+  liveTest: Test | undefined,
+): Promise<MeasuresSource | undefined> {
+  try {
+    const src = await dataSourceForAttempt(attempt.snapshotId);
+    const [scales, variables] = await Promise.all([
+      src.getScales(attempt.testId),
+      src.getResultVariables(attempt.testId),
+    ]);
+    if (scales.length === 0 && variables.length === 0) return undefined;
+    const deliveredTest = (await src.getTest(attempt.testId)) ?? liveTest;
+    const pages = await src.getContentPages(attempt.testId);
+    // No `results` page, or a page with no settings: all three blocks stay on
+    // «Автоматически» and the state of the test decides.
+    const blockSettings = (pages.find((p) => p.kind === "results")?.settingsJson ?? {}) as ResultsBlockSettings;
+    const passRule = deliveredTest?.overallPassRuleJson as PassRule | null | undefined;
+    return {
+      scales,
+      variables,
+      blockSettings,
+      hasPassThreshold: !!passRule && passRule.type !== "none",
+      testFeedback: (deliveredTest?.feedbackJson as Partial<FeedbackContent> | null) ?? null,
+    };
+  } catch (error) {
+    // The results screen must not fail because the measurement material could not be
+    // read: the score, the per-topic rows and the report do not depend on it. The
+    // learner then sees the screen a test without measurements would produce.
+    logger.warn("PRD-29: measures source unavailable — " + (error as Error).message);
+    return undefined;
+  }
 }
 
 /** Fisher-Yates in-place shuffle for the server-side variant draw (PRD-11). */
@@ -1191,7 +1249,20 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       // Branding/cssVars resolve against the ACTIVE template manifest even when the
       // results layout falls back to `default` (active template owns no `results`).
       const paramsDir = await resolveTemplateDir(templateId, { activeOnly: true });
-      render = readResultsRenderPayload(dir, resultJson, test?.title || "", test?.designSettingsJson as any, paramsDir);
+      // PRD-29: the measurement blocks (scales / indicators / recommendations). Only
+      // for a STANDARD result — an adaptive one composes its own levels and takes no
+      // measures — and only for a test that actually defines any.
+      const measures =
+        resultJson.mode === "adaptive" ? undefined : await measuresForAttempt(attempt, test);
+      render = readResultsRenderPayload(
+        dir,
+        resultJson,
+        test?.title || "",
+        test?.designSettingsJson as any,
+        paramsDir,
+        undefined,
+        measures,
+      );
       // File-level fallback (PRD-1 §4.3.2, PRD-3 NFR-06): a template that declares a
       // `results` variant but ships no results layout still renders — from the
       // standard template — instead of dropping to the legacy React markup.
@@ -1204,6 +1275,8 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
             test?.title || "",
             test?.designSettingsJson as any,
             paramsDir,
+            undefined,
+            measures,
           );
         }
       }

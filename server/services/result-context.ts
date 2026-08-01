@@ -14,6 +14,7 @@ import type { AttemptResult, TopicResult } from "@shared/schema";
 import {
   buildResultContext as buildSharedResultContext,
   buildAdaptiveResultContext as buildSharedAdaptiveResultContext,
+  normalizeFeedback,
   type ResultRenderContext,
   type TopicInput,
   type AdaptiveTopicInput,
@@ -24,7 +25,7 @@ import { LEVEL_SCHEMES, type LevelRamp } from "@shared/template/level-ramp";
 import { parseIndicatorInterpretation, parseScaleInterpretation } from "@shared/scales/interpretation";
 import type { RenderKind } from "@shared/template/measure-view";
 import type { ResultsBlockSettings } from "@shared/template/results-blocks";
-import type { ResultVariable, Scale } from "@shared/schema";
+import type { FeedbackContent, ResultVariable, Scale } from "@shared/schema";
 import type { ScaleResult } from "@shared/formula/types";
 
 export type { ResultRenderContext };
@@ -33,14 +34,33 @@ export type { ResultRenderContext };
 export interface MeasuresSource {
   scales: Scale[];
   variables: ResultVariable[];
-  scaleResults: Record<string, ScaleResult>;
-  variableValues: Record<string, unknown>;
-  /** Effective design params of the test (already merged with manifest defaults). */
-  params: Record<string, unknown>;
+  /**
+   * Scale values of the attempt. Omitted by the web route: they are read from the
+   * SAVED `AttemptResult` by {@link module:server/services/template-render
+   * readResultsRenderPayload}, never recomputed — a later edit of the scale
+   * configuration must not change what a finished attempt scored.
+   */
+  scaleResults?: Record<string, ScaleResult>;
+  /** Indicator values of the attempt; same source and same rule as {@link scaleResults}. */
+  variableValues?: Record<string, unknown>;
+  /**
+   * Effective design params of the test (already resolved against the template
+   * manifest). Omitted by the web route: `readResultsRenderPayload` fills them from
+   * the ONE resolution `readScreenTemplate` performs for the layout, so the ramp and
+   * the render kinds cannot drift from the CSS the same screen is painted with.
+   */
+  params?: Record<string, unknown>;
   /** Settings of the chosen `results` variant. */
   blockSettings: ResultsBlockSettings;
   hasPassThreshold: boolean;
-  testFeedback?: { text?: string } | null;
+  /**
+   * The test's own feedback block AS STORED (`tests.feedback_json`): text, course
+   * links, events and PDF assets whose address lives in `scormHref`. PRD-29 §7.1
+   * counts the test as one of the three equal sources of recommendations, so the
+   * WHOLE block travels — not just its text — and goes through the same
+   * {@link normalizeFeedback} the band and outcome blocks go through.
+   */
+  testFeedback?: Partial<FeedbackContent> | null;
 }
 
 /**
@@ -60,13 +80,16 @@ function resolveRamp(params: Record<string, unknown>): LevelRamp {
 
 /** Build the PRD-29 measures input for the results context. */
 export function buildMeasuresInput(source: MeasuresSource): MeasuresInput {
+  const params = source.params ?? {};
+  const scaleResults = source.scaleResults ?? {};
+  const variableValues = source.variableValues ?? {};
   const scales: MeasureInput[] = source.scales
     .slice()
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((s) => ({
       key: s.key,
       name: s.label || s.key,
-      value: source.scaleResults[s.key]?.raw ?? null,
+      value: scaleResults[s.key]?.raw ?? null,
       visibility: s.learnerVisibility,
       interpretation: parseScaleInterpretation(s.configJson),
     }));
@@ -77,18 +100,21 @@ export function buildMeasuresInput(source: MeasuresSource): MeasuresInput {
     .map((v) => ({
       key: v.name,
       name: v.label || v.name,
-      value: source.variableValues[v.name] as number | string | boolean | null,
+      value: variableValues[v.name] as number | string | boolean | null,
       visibility: v.learnerVisibility,
       interpretation: parseIndicatorInterpretation(v.configJson),
     }));
 
   return {
-    ramp: resolveRamp(source.params),
-    scaleKind: String(source.params.scaleRenderKind ?? "band_ruler") as RenderKind,
-    indicatorKind: String(source.params.indicatorRenderKind ?? "label") as RenderKind,
+    ramp: resolveRamp(params),
+    scaleKind: String(params.scaleRenderKind ?? "band_ruler") as RenderKind,
+    indicatorKind: String(params.indicatorRenderKind ?? "label") as RenderKind,
     scales,
     indicators,
-    testFeedback: source.testFeedback ?? null,
+    // The stored block carries PDF assets addressed by `scormHref`; the shared
+    // builder consumes `RecommendationLink`, so the test's feedback is adapted here
+    // — the SAME normaliser the fired band/outcome blocks pass through.
+    testFeedback: normalizeFeedback(source.testFeedback),
     hasPassThreshold: source.hasPassThreshold,
     blockSettings: source.blockSettings,
   };

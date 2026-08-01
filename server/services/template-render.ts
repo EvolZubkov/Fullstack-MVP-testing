@@ -17,10 +17,11 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { buildResultContext, buildAdaptiveResultContext } from "./result-context";
+import { buildResultContext, buildAdaptiveResultContext, type MeasuresSource } from "./result-context";
 import { buildTemplateCssVars, type TemplateParamDef } from "@shared/template/params-css";
 import { buildPaletteBridge } from "@shared/template/palette-bridge";
 import { baseParams, buildTemplateThemeCss, sceneThemeAttribute } from "@shared/template/theme-css";
+import { resolveThemeParams } from "@shared/template/theme-params";
 import { supportsThemes } from "@shared/template/themes";
 import type { StoredDesignSettings } from "@shared/template/theme-params";
 import type { AttemptResult } from "@shared/schema";
@@ -100,6 +101,21 @@ export interface ScreenRenderPayload {
    * declare one (`startImageForVariant`).
    */
   design?: { logoUrl?: string; startImageUrl?: string };
+  /**
+   * PRD-29: the test's design params RESOLVED against the ACTIVE template's manifest
+   * — the very resolution the CSS variables above are printed from, handed out so a
+   * consumer can read the params that carry no CSS variable at all (the level colour
+   * scheme, the render kinds of scales and indicators). Resolving the design a
+   * SECOND time next to the payload is what this field exists to prevent: the two
+   * calculations would drift on the first edit of either.
+   *
+   * PRD-23 caveat: a themed template keeps its COLOUR params per palette, so the
+   * pinned palette's colours are folded in; under «Авто» the palette is only chosen
+   * in the browser, so only the palette-independent params travel.
+   *
+   * Omitted when the test overrides nothing.
+   */
+  params?: Record<string, unknown>;
 }
 
 /**
@@ -278,7 +294,8 @@ export function readScreenTemplate(
     // template without themes `baseParams` is the whole param set and `themeCss` is
     // empty — the payload is byte-identical to what it was before.
     const manifest = readBrandingManifest(paramsDir || dir);
-    const base = baseParams(design, manifest);
+    const resolved = resolveThemeParams(design, manifest);
+    const base = resolved.base;
     const cssVars = buildTemplateCssVars(base, manifest.params);
     const themeCss = buildTemplateThemeCss(design, manifest, { rootSelector: ":host" });
     const dataTheme = sceneThemeAttribute(design, manifest);
@@ -296,6 +313,11 @@ export function readScreenTemplate(
       card: paletteVar("--card", cssVars, themeCss, css),
       border: paletteVar("--border", cssVars, themeCss, css),
     });
+    // PRD-29: the params Core reads (level scheme, render kinds, custom ramp colours)
+    // come from THIS resolution, not from a second one. A pinned palette contributes
+    // its colours; under «Авто» there is no server-side answer to which palette the
+    // browser will paint, so only the palette-independent params travel.
+    const params = { ...base, ...(dataTheme ? resolved.byTheme[dataTheme] ?? {} : {}) };
     return {
       layout,
       css: bridge ? `${css}\n${bridge}` : css,
@@ -304,6 +326,7 @@ export function readScreenTemplate(
       ...(themeCss ? { themeCss } : {}),
       ...(dataTheme ? { dataTheme } : {}),
       ...(supportsThemes(manifest) ? { themed: true } : {}),
+      ...(Object.keys(params).length ? { params } : {}),
       ...(Object.keys(design_).length ? { design: design_ } : {}),
     };
   } catch {
@@ -312,9 +335,41 @@ export function readScreenTemplate(
 }
 
 /**
+ * Completes the caller's measures source with what the payload already knows.
+ *
+ * Two things travel from here rather than from the route. The design params are the
+ * ONE resolution {@link readScreenTemplate} did for this very screen, so the ramp and
+ * the render kinds can never disagree with the CSS the screen is painted with. The
+ * measured VALUES are read off the SAVED {@link AttemptResult} and are never
+ * recomputed: grading a finished attempt again against today's configuration would
+ * change what the learner already scored.
+ *
+ * A caller that supplies either of them keeps its own — nothing is overwritten
+ * silently.
+ */
+function completeMeasures(
+  measures: MeasuresSource,
+  payloadParams: Record<string, unknown> | undefined,
+  result: AttemptResult,
+): MeasuresSource {
+  return {
+    ...measures,
+    params: { ...payloadParams, ...measures.params },
+    scaleResults:
+      measures.scaleResults ?? ((result.scaleResults ?? {}) as NonNullable<MeasuresSource["scaleResults"]>),
+    variableValues: measures.variableValues ?? result.resultVariables ?? {},
+  };
+}
+
+/**
  * Build the render payload for the RESULTS screen of a completed standard attempt.
  * Returns null when the layout is missing or the result is not a standard result
  * (e.g. adaptive), so the caller can fall back to legacy rendering.
+ *
+ * PRD-29: `measures` carries the test's scales and indicators (rows, block settings,
+ * test feedback). Absent — the context builder is called with two arguments and the
+ * screen of a test without measurements stays exactly what it has always been. The
+ * ADAPTIVE branch never takes them: an adaptive result composes its own levels.
  */
 export function readResultsRenderPayload(
   dir: string,
@@ -323,6 +378,7 @@ export function readResultsRenderPayload(
   design?: DesignSettingsInput | null,
   paramsDir?: string,
   subtitle?: string,
+  measures?: MeasuresSource,
 ): ScreenRenderPayload | null {
   try {
     const isAdaptive = (result as { mode?: string }).mode === "adaptive";
@@ -335,7 +391,13 @@ export function readResultsRenderPayload(
     if (!base) return null;
     const context = isAdaptive
       ? buildAdaptiveResultContext(result, testTitle)
-      : buildResultContext(result as AttemptResult, testTitle);
+      : measures
+        ? buildResultContext(
+            result as AttemptResult,
+            testTitle,
+            completeMeasures(measures, base.params, result as AttemptResult),
+          )
+        : buildResultContext(result as AttemptResult, testTitle);
     // Header subtitle «Попытка N из M» (Core-prepared by the caller), same as the
     // other learner screens — merged into the server-built course context.
     if (subtitle) (context as { course: { subtitle?: string } }).course.subtitle = subtitle;

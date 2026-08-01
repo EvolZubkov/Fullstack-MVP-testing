@@ -138,8 +138,14 @@ export interface MeasuresInput {
  *
  * An asset with no persisted href is DROPPED rather than rendered dead: the file was
  * never uploaded, so there is nothing to open.
+ *
+ * Exported for the hosts: the TEST-level feedback block (`tests.feedback_json`) is
+ * stored in the very same shape and reaches the builder from the host adapter, so it
+ * must pass through THIS normaliser and not a second copy of the rule. NOT idempotent
+ * by design — an already-normalised block has no `scormHref`, so normalising twice
+ * would drop its assets; each block goes through exactly once.
  */
-function normalizeFeedback(raw: unknown): FeedbackBlock | null {
+export function normalizeFeedback(raw: unknown): FeedbackBlock | null {
   if (!raw || typeof raw !== "object") return null;
   const f = raw as Record<string, unknown>;
   const links = (f.links as Array<{ title?: string; url?: string }> | undefined) ?? [];
