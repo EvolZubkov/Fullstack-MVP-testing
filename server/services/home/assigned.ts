@@ -7,7 +7,7 @@
  * page and the start screen can never disagree about whether a retake is open.
  */
 import { storage } from "../../storage";
-import { decideRetake, lastCompletedAttemptDate, toIsoDateUTC } from "../retake-gate";
+import { decideRetake, countAttemptsInAssignment } from "../retake-gate";
 import type { RetakePolicy, AttemptResult } from "@shared/schema";
 import type { AssignedTestItem, RecentResultItem } from "@shared/home/contract";
 
@@ -50,24 +50,35 @@ export async function buildAssigned(
       const sections = await storage.getTestSections(test.id);
       const questionCount = sections.reduce((sum, s) => sum + (s.drawCount ?? 0), 0);
       const attempts = await storage.getAttemptsByUserAndTest(userId, test.id);
-      const completed = attempts.filter((a) => a.finishedAt !== null);
       const inProgress = attempts.find((a) => a.finishedAt === null) ?? null;
+      // PRD-31: the assignment is the unit of access, so both the counter and the
+      // barriers are scoped to it — the card must agree with the start screen and
+      // with the start route, which now count the same way.
+      const currentAssignmentId = await storage.getCurrentAssignmentId(userId, test.id);
+      const attemptFacts = attempts.map((a) => ({
+        assignmentId: a.assignmentId,
+        finishedAt: a.finishedAt,
+      }));
 
-      const gate = decideRetake(
-        test.retakePolicyJson as RetakePolicy | null,
-        lastCompletedAttemptDate(completed.map((a) => a.finishedAt)),
-        toIsoDateUTC(new Date()),
-      );
+      const gate = decideRetake(test.retakePolicyJson as RetakePolicy | null, {
+        currentAssignmentId,
+        attempts: attemptFacts,
+        now: new Date(),
+      });
 
       const item: AssignedTestItem = {
         testId: test.id,
         title: test.title,
         description: test.description ?? null,
         questionCount,
-        completedAttempts: completed.length,
+        completedAttempts: countAttemptsInAssignment(attemptFacts, currentAssignmentId),
         maxAttempts: test.maxAttempts ?? null,
         inProgressAttemptId: inProgress?.id ?? null,
-        blockedUntil: gate.allowed ? null : (gate.availableDate ?? null),
+        // Barrier A opens on a DATE, barrier B at an INSTANT; the card shows a date
+        // either way, so the instant is trimmed to its calendar day.
+        blockedUntil: gate.allowed
+          ? null
+          : (gate.availableDate ?? (gate.availableAt ? gate.availableAt.slice(0, 10) : null)),
       };
       return item;
     }),

@@ -310,8 +310,25 @@ export const eligibilityPluginRefSchema = z.object({
 });
 
 /**
- * `tests.retake_policy_json`. `cooldownPeriodDays` is whole calendar days
- * (1–3650); legacy `cooldownDays` is accepted on input and normalized.
+ * PRD-31 barrier B: minimum interval between attempts INSIDE one assignment.
+ * Wall-clock hours, so an author asking for "once a day" gets 24 h rather than a
+ * calendar boundary. Absence of the whole branch = the barrier is off.
+ */
+export const attemptIntervalSchema = z.object({
+  enabled: z.boolean().default(false),
+  /** Whole hours, 1..8760 (one year). Required when `enabled` (see the refine below). */
+  hours: z.number().int().min(1).max(8760).optional(),
+});
+
+/**
+ * `tests.retake_policy_json`. Two INDEPENDENT barriers (PRD-31 §3), applied at
+ * disjoint moments:
+ *   - `enabled` + `cooldownPeriodDays` — barrier A, calendar days BETWEEN assignments;
+ *   - `attemptInterval` — barrier B, wall-clock hours INSIDE one assignment.
+ *
+ * `cooldownPeriodDays` is optional at the type level and required only when barrier
+ * A is on, so a test can carry barrier B alone without inventing a cooldown value
+ * for a switch that is off. Legacy `cooldownDays` is accepted and normalized.
  */
 export const retakePolicySchema = z.preprocess(
   (val) => {
@@ -323,16 +340,35 @@ export const retakePolicySchema = z.preprocess(
     }
     return val;
   },
-  z.object({
-    enabled: z.boolean().default(false),
-    cooldownPeriodDays: z.number().int().min(1).max(3650),
-    gateMode: z.literal("before_internal_start").default("before_internal_start"),
-    eligibilityPlugin: eligibilityPluginRefSchema.nullish(),
-    blockedPageId: z.string().optional(),
-  }),
+  z
+    .object({
+      enabled: z.boolean().default(false),
+      cooldownPeriodDays: z.number().int().min(1).max(3650).optional(),
+      gateMode: z.literal("before_internal_start").default("before_internal_start"),
+      eligibilityPlugin: eligibilityPluginRefSchema.nullish(),
+      blockedPageId: z.string().optional(),
+      attemptInterval: attemptIntervalSchema.nullish(),
+    })
+    .superRefine((v, ctx) => {
+      if (v.enabled && v.cooldownPeriodDays == null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["cooldownPeriodDays"],
+          message: "cooldownPeriodDays обязателен при включённом кулдауне",
+        });
+      }
+      if (v.attemptInterval?.enabled && v.attemptInterval.hours == null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["attemptInterval", "hours"],
+          message: "Интервал в часах обязателен при включённом ограничении между попытками",
+        });
+      }
+    }),
 );
 
 export type EligibilityPluginRef = z.infer<typeof eligibilityPluginRefSchema>;
+export type AttemptInterval = z.infer<typeof attemptIntervalSchema>;
 export type RetakePolicy = z.infer<typeof retakePolicySchema>;
 
 /** Выбор варианта отчёта и значения его полей для ОДНОГО режима (PRD-27 §4.1). */
@@ -572,6 +608,19 @@ export const attempts = pgTable("attempts", {
   // and graded from. NULL = legacy/live delivery (drafts, preview, or attempts
   // started before snapshots existed) — the transitional mode.
   snapshotId: varchar("snapshot_id", { length: 36 }),
+  /**
+   * PRD-31 (FR-12): the assignment this attempt was taken under. The assignment is
+   * the UNIT OF ACCESS: `maxAttempts` and the hour interval (barrier B) are counted
+   * INSIDE it, while the calendar cooldown (barrier A) gates the FIRST attempt of a
+   * new one. NULL = a legacy row or an attempt taken outside any assignment; all
+   * such rows behave as ONE implicit assignment (FR-13). No FK on purpose — a
+   * deleted assignment simply stops being "current", which is the intended meaning.
+   *
+   * Deliberately NOT indexed: every caller already loads a learner's attempts of one
+   * test through `(user_id, test_id)` and splits them by assignment in memory, so a
+   * third index would only cost writes on the fastest-growing table.
+   */
+  assignmentId: varchar("assignment_id", { length: 36 }),
   variantJson: jsonb("variant_json").notNull(),
   answersJson: jsonb("answers_json"),
   resultJson: jsonb("result_json"),

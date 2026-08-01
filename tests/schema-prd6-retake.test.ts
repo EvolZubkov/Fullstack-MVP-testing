@@ -46,3 +46,47 @@ describe("retakePolicySchema", () => {
     expect(() => n.parse(undefined)).not.toThrow();
   });
 });
+
+describe("retakePolicySchema — PRD-31 attemptInterval", () => {
+  it("accepts an interval-only policy without cooldownPeriodDays", () => {
+    const parsed = retakePolicySchema.parse({
+      enabled: false,
+      attemptInterval: { enabled: true, hours: 24 },
+    });
+    expect(parsed.attemptInterval).toEqual({ enabled: true, hours: 24 });
+    expect(parsed.cooldownPeriodDays).toBeUndefined();
+  });
+
+  it("still requires cooldownPeriodDays when the cooldown is enabled", () => {
+    expect(() => retakePolicySchema.parse({ enabled: true })).toThrow();
+  });
+
+  it("requires hours when the interval is enabled", () => {
+    expect(() =>
+      retakePolicySchema.parse({ enabled: false, attemptInterval: { enabled: true } }),
+    ).toThrow();
+  });
+
+  it("rejects an interval out of [1, 8760]", () => {
+    for (const hours of [0, 8761, 1.5]) {
+      expect(() =>
+        retakePolicySchema.parse({ enabled: false, attemptInterval: { enabled: true, hours } }),
+      ).toThrow();
+    }
+  });
+
+  it("treats an absent attemptInterval as disabled", () => {
+    const parsed = retakePolicySchema.parse({ enabled: true, cooldownPeriodDays: 30 });
+    expect(parsed.attemptInterval ?? null).toBeNull();
+  });
+
+  it("keeps both barriers when both are configured", () => {
+    const parsed = retakePolicySchema.parse({
+      enabled: true,
+      cooldownPeriodDays: 30,
+      attemptInterval: { enabled: true, hours: 24 },
+    });
+    expect(parsed.cooldownPeriodDays).toBe(30);
+    expect(parsed.attemptInterval).toEqual({ enabled: true, hours: 24 });
+  });
+});

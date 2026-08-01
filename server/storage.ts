@@ -131,6 +131,8 @@ export interface IStorage {
   createTestAssignment(assignment: InsertTestAssignment & { assignedBy: string }): Promise<TestAssignment>;
   deleteTestAssignment(id: string): Promise<boolean>;
   getAssignedTestsForUser(userId: string): Promise<Test[]>;
+  /** PRD-31 §5.3: assignment a new attempt belongs to; null = implicit legacy bucket. */
+  getCurrentAssignmentId(userId: string, testId: string): Promise<string | null>;
 
   // Password Reset Tokens
   createPasswordResetToken(userId: string, tokenHash: string, requestIp: string, ttlMs?: number): Promise<PasswordResetToken>;
@@ -569,6 +571,10 @@ export class DatabaseStorage implements IStorage {
 
   getAssignedTestsForUser(userId: string): Promise<Test[]> {
     return this.assignmentsRepo.getAssignedTestsForUser(userId);
+  }
+
+  getCurrentAssignmentId(userId: string, testId: string): Promise<string | null> {
+    return this.assignmentsRepo.getCurrentAssignmentId(userId, testId);
   }
 
   // ============================================

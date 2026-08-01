@@ -1,32 +1,62 @@
 /**
  * @module server/services/retake-gate
  *
- * Server-side retake cooldown decision for the web learner runtime (PRD-6 in the
- * web; PRD-12). It reuses the authoritative calendar-day cooldown math
- * (`@shared/eligibility/engine.cooldownDecision`) but sources the date from the
- * server's own completed attempts (`attempts.finishedAt`) instead of an LMS
- * plugin — in the web the server is the authoritative date source, so the
- * `eligibilityPlugin` machinery (webtutor_cooldown) is not involved.
+ * Server-side access decision for the web learner runtime (PRD-6 barrier A,
+ * PRD-31 barrier B). The assignment is the unit of access (PRD-31 §3):
  *
- * Storage-free and unit-testable: the route supplies `lastAttemptDate` from the
- * DB. The gate is inert unless the test's `retakePolicy.enabled === true`, so
- * legacy tests are unaffected.
+ *   - inside the current assignment only barrier B applies — the hour interval
+ *     since the PREVIOUS attempt of that same assignment;
+ *   - on the first attempt of an assignment only barrier A applies — the calendar
+ *     cooldown since the last attempt of ANY OTHER assignment.
+ *
+ * The two never fire at once, so a single `blockedBy` names the one in force.
+ * Consulting barrier A inside an assignment would turn it back into a
+ * between-attempts barrier — precisely the defect this module now avoids.
+ *
+ * The math is shared with the SCORM package (`@shared/eligibility/engine`), so both
+ * hosts decide identically from identical facts; only the FACTS differ (here the
+ * DB, there `suspend_data` plus the LMS learning records).
+ *
+ * Storage-free and unit-testable: the caller supplies the attempts and the clock.
  */
 
-import { cooldownDecision, daysUntilDate } from "@shared/eligibility/engine";
+import {
+  attemptIntervalDecision,
+  cooldownDecision,
+  daysUntilDate,
+  formatIsoInstant,
+} from "@shared/eligibility/engine";
 import type { RetakePolicy } from "@shared/schema";
 
-/** Outcome of the retake gate; spread into the 403 deny body when blocked. */
+/** One attempt as the decision sees it. */
+export interface AttemptFact {
+  assignmentId: string | null;
+  finishedAt: Date | string | null;
+}
+
+/** Everything the decision needs; a route loads it once and reuses it. */
+export interface RetakeFacts {
+  currentAssignmentId: string | null;
+  attempts: AttemptFact[];
+  now: Date;
+}
+
+/** Outcome of the access decision; spread into the 403 deny body when blocked. */
 export interface RetakeGateResult {
   allowed: boolean;
+  /** Which barrier is in force; absent when access is open. */
+  blockedBy?: "cooldown" | "attemptInterval";
   reason?: string;
   cooldownPeriodDays?: number;
+  intervalHours?: number;
   lastAttemptDate?: string | null;
-  /** Calendar date (`YYYY-MM-DD`) from which a retake is allowed, if known. */
+  /** Calendar date (`YYYY-MM-DD`) barrier A opens on. */
   availableDate?: string | null;
+  /** ISO instant barrier B opens at. */
+  availableAt?: string | null;
   /**
-   * Whole days from the SERVER date to `availableDate`; `null` when access is
-   * open (no countdown to show).
+   * Whole days from the SERVER date to `availableDate`; `null` when access is open
+   * or when barrier B is in force (an hour interval has no day countdown).
    */
   daysUntil?: number | null;
 }
@@ -49,27 +79,82 @@ export function lastCompletedAttemptDate(
   return max > 0 ? toIsoDateUTC(new Date(max)) : null;
 }
 
+/** Latest finish instant among the given attempts, as an ISO string; null when none. */
+function lastFinishedInstant(attempts: AttemptFact[]): string | null {
+  let max = 0;
+  for (const a of attempts) {
+    if (!a.finishedAt) continue;
+    const t = new Date(a.finishedAt).getTime();
+    if (Number.isFinite(t) && t > max) max = t;
+  }
+  return max > 0 ? formatIsoInstant(max) : null;
+}
+
 /**
- * Decides whether a new attempt is allowed under the test's retake policy. Inert
- * (always allowed) unless `enabled === true`; otherwise applies a calendar-day
- * cooldown against the last completed attempt.
+ * PRD-31 (FR-07): completed attempts of the CURRENT assignment — the number
+ * `maxAttempts` is compared against. A new assignment hands out a fresh set, which
+ * is how the web now matches the SCORM package (one registration = one set).
+ */
+export function countAttemptsInAssignment(
+  attempts: AttemptFact[],
+  currentAssignmentId: string | null,
+): number {
+  return attempts.filter((a) => a.finishedAt != null && a.assignmentId === currentAssignmentId).length;
+}
+
+/**
+ * Decides whether a new attempt is allowed. Inert (always allowed) unless at least
+ * one barrier is enabled AND configured; the barriers are independent (FR-03) and
+ * apply at disjoint moments (§3).
  */
 export function decideRetake(
   retakePolicy: RetakePolicy | null | undefined,
-  lastAttemptDate: string | null,
-  todayDate: string,
+  facts: RetakeFacts,
 ): RetakeGateResult {
-  if (!retakePolicy || retakePolicy.enabled !== true) {
-    return { allowed: true };
+  const cooldownDays = retakePolicy?.enabled === true ? retakePolicy.cooldownPeriodDays : undefined;
+  const intervalHours =
+    retakePolicy?.attemptInterval?.enabled === true ? retakePolicy.attemptInterval.hours : undefined;
+  if (cooldownDays == null && intervalHours == null) return { allowed: true };
+
+  const finished = facts.attempts.filter((a) => a.finishedAt != null);
+  const inside = finished.filter((a) => a.assignmentId === facts.currentAssignmentId);
+
+  if (inside.length > 0) {
+    // A repeat INSIDE the assignment: barrier B only. Barrier A is deliberately not
+    // consulted — it guards the boundary BETWEEN assignments (§3).
+    if (intervalHours == null) return { allowed: true };
+    const decision = attemptIntervalDecision(
+      lastFinishedInstant(inside),
+      formatIsoInstant(facts.now.getTime()),
+      intervalHours,
+    );
+    if (decision.allowed) return { allowed: true };
+    return {
+      allowed: false,
+      blockedBy: "attemptInterval",
+      reason: "attempt_interval_active",
+      intervalHours,
+      availableAt: decision.availableAt,
+      availableDate: null,
+      daysUntil: null,
+    };
   }
-  const cooldownPeriodDays = retakePolicy.cooldownPeriodDays;
-  const decision = cooldownDecision(lastAttemptDate, todayDate, cooldownPeriodDays);
+
+  // The FIRST attempt of this assignment: barrier A only, measured against attempts
+  // of every OTHER assignment (the legacy NULL bucket counts as one of them).
+  if (cooldownDays == null) return { allowed: true };
+  const outside = finished.filter((a) => a.assignmentId !== facts.currentAssignmentId);
+  const lastAttemptDate = lastCompletedAttemptDate(outside.map((a) => a.finishedAt));
+  const decision = cooldownDecision(lastAttemptDate, toIsoDateUTC(facts.now), cooldownDays);
+  if (decision.allowed) return { allowed: true };
   return {
-    allowed: decision.allowed,
-    reason: decision.allowed ? undefined : "cooldown_active",
-    cooldownPeriodDays,
+    allowed: false,
+    blockedBy: "cooldown",
+    reason: "cooldown_active",
+    cooldownPeriodDays: cooldownDays,
     lastAttemptDate,
     availableDate: decision.availableDate,
-    daysUntil: decision.allowed ? null : daysUntilDate(decision.availableDate, decision.effectiveToday),
+    availableAt: null,
+    daysUntil: daysUntilDate(decision.availableDate, decision.effectiveToday),
   };
 }

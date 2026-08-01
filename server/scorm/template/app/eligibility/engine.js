@@ -63,6 +63,38 @@ var EligibilityEngine = (function () {
     return diff > 0 ? diff : null;
   }
 
+  // PRD-31 barrier B — plain-JS twin of attemptIntervalDecision. Wall-clock hours
+  // between attempts INSIDE one assignment, decided on the instant the previous
+  // attempt finished (suspend_data.attempts[].completedAt in the package). A "now"
+  // earlier than that attempt is an impossible state (rolled-back clock), so the
+  // interval runs its full length from the attempt -- the rule the calendar
+  // cooldown already applies.
+  function parseIsoInstant(value) {
+    if (!value) return null;
+    var t = Date.parse(String(value));
+    return isFinite(t) ? t : null;
+  }
+
+  function formatIsoInstant(ms) {
+    return new Date(ms).toISOString();
+  }
+
+  function attemptIntervalDecision(lastFinishedAt, nowIso, intervalHours) {
+    var reportedNow = parseIsoInstant(nowIso);
+    var last = parseIsoInstant(lastFinishedAt);
+    if (last == null || reportedNow == null) {
+      return { allowed: true, availableAt: null, msSince: null, effectiveNow: null };
+    }
+    var now = Math.max(reportedNow, last);
+    var msSince = now - last;
+    return {
+      allowed: msSince >= intervalHours * 3600000,
+      availableAt: formatIsoInstant(last + intervalHours * 3600000),
+      msSince: msSince,
+      effectiveNow: formatIsoInstant(now)
+    };
+  }
+
   var CORE_DEFAULT_RESULT = {
     allowed: true,
     reason: 'plugin_not_defined',
@@ -120,6 +152,9 @@ var EligibilityEngine = (function () {
     formatIsoDate: formatIsoDate,
     cooldownDecision: cooldownDecision,
     daysUntilDate: daysUntilDate,
+    parseIsoInstant: parseIsoInstant,
+    formatIsoInstant: formatIsoInstant,
+    attemptIntervalDecision: attemptIntervalDecision,
     CORE_DEFAULT_RESULT: CORE_DEFAULT_RESULT,
     normalizeVerdict: normalizeVerdict,
     applyFailPolicy: applyFailPolicy,

@@ -695,7 +695,11 @@ function RetakePane({ model, updateModel }: SettingsSectionProps) {
               size="m"
               label="Период охлаждения, календарных дней"
               hint="От 1 до 3650 дней."
-              value={policy.cooldownPeriodDays}
+              // PRD-31: the field is optional in the schema (a policy may carry the
+              // hour interval alone), so the editor shows the default when barrier A
+              // has never been configured. The value is only persisted once the
+              // switch above is on, which is exactly when the schema requires it.
+              value={policy.cooldownPeriodDays ?? 30}
               min={1}
               max={3650}
               data-testid="settings-retake-cooldown-input"

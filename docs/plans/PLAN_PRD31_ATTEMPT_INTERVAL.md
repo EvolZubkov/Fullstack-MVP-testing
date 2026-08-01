@@ -41,7 +41,7 @@
 
 | Файл | Ответственность |
 | --- | --- |
-| `migrations/037_prd31_attempt_assignment.sql` | колонка `attempts.assignment_id` + индекс |
+| `migrations/037_prd31_attempt_assignment.sql` | колонка `attempts.assignment_id` |
 | `server/scorm/template/app/utils/trusted-now.js` | доверенное «сейчас» из заголовка `Date` портала |
 | `tests/attempt-interval-engine.test.ts` | движок барьера B |
 | `tests/retake-gate-assignment.test.ts` | веб-решение по модели назначения |
@@ -132,8 +132,8 @@ describe("attemptIntervalDecision", () => {
   });
 
   it("parses and formats ISO instants round-trip", () => {
-    expect(parseIsoInstant("2026-08-01T10:00:00.000Z")).toBe(1785931200000);
-    expect(formatIsoInstant(1785931200000)).toBe("2026-08-01T10:00:00.000Z");
+    expect(parseIsoInstant("2026-08-01T10:00:00.000Z")).toBe(1785578400000);
+    expect(formatIsoInstant(1785578400000)).toBe("2026-08-01T10:00:00.000Z");
     expect(parseIsoInstant("")).toBeNull();
     expect(parseIsoInstant("garbage")).toBeNull();
   });
@@ -456,17 +456,10 @@ export type AttemptInterval = z.infer<typeof attemptIntervalSchema>;
   assignmentId: varchar("assignment_id", { length: 36 }),
 ```
 
-В блок индексов дописать:
-
-```ts
-  // PRD-31: the access decision reads a learner's attempts of one test split by
-  // assignment; the leading columns already serve the existing (user, test) lookups.
-  userTestAssignmentIdx: index("attempts_user_test_assignment_idx").on(
-    table.userId,
-    table.testId,
-    table.assignmentId,
-  ),
-```
+Индекс НЕ добавляется. Каждый потребитель и так грузит попытки учащегося по тесту через существующий
+`(user_id, test_id)` и делит их по назначению в памяти, поэтому третий индекс на самой быстрорастущей
+таблице стоил бы записей и не купил бы ни одного чтения. Причину записать комментарием у колонки, иначе
+следующий читатель добавит индекс «на всякий случай».
 
 - [ ] **Шаг 2: написать миграцию**
 
@@ -480,17 +473,15 @@ export type AttemptInterval = z.infer<typeof attemptIntervalSchema>;
 -- Existing rows keep NULL: the link cannot be reconstructed after the fact and must not be
 -- guessed. All NULL rows behave as ONE implicit legacy assignment (spec FR-13).
 -- No foreign key by design — a deleted assignment stops being "current", which is correct.
+-- No index by design either: callers split the attempts of one (user, test) in memory.
 --
 -- The schema structure is the source of truth (applied via `drizzle-kit push`, npm run db:push).
--- This file documents the change and is safe to run directly: both statements are idempotent.
+-- This file documents the change and is safe to run directly: ADD COLUMN IF NOT EXISTS is idempotent.
 
 BEGIN;
 
 ALTER TABLE "attempts"
   ADD COLUMN IF NOT EXISTS "assignment_id" varchar(36);
-
-CREATE INDEX IF NOT EXISTS "attempts_user_test_assignment_idx"
-  ON "attempts" ("user_id", "test_id", "assignment_id");
 
 COMMIT;
 ```

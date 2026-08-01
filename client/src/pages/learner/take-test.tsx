@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
 import { TemplateQuestionScreen } from "./template-question-screen";
-import { fmtIsoDateHuman } from "./cooldown-format";
+import { fmtIsoDateHuman, fmtIsoInstantHuman } from "./cooldown-format";
 import { deliversShuffledOrder, hasAnswer, rankingDeliveryOrder } from "./answer-gate";
 import { isSingleIndexChoice, isMeasurementOnly } from "@shared/questions/question-type";
 import { buildStartState } from "@shared/template/start-state";
@@ -218,10 +218,28 @@ function adaptiveFeedbackHtml(question: any, result: any): string {
   return feedbackBanner(ok ? "success" : "error", ok ? "Правильно!" : "Неверно", body);
 }
 
-/** Cooldown facts as the server delivers them (start-screen block or the 403 body). */
-type RetakeCooldownFacts = { cooldownPeriodDays?: number; availableDate?: string | null; daysUntil?: number | null };
-/** Normalized cooldown facts held in component state. */
-type RetakeGateState = { cooldownPeriodDays: number | null; availableDate: string | null; daysUntil: number | null };
+/**
+ * Access-barrier facts as the server delivers them (start-screen block or the 403
+ * body). PRD-31: `blockedBy` names the barrier in force — the calendar cooldown
+ * between assignments (a DATE) or the hour interval inside one (an INSTANT).
+ */
+type RetakeCooldownFacts = {
+  blockedBy?: "cooldown" | "attemptInterval" | null;
+  cooldownPeriodDays?: number;
+  intervalHours?: number;
+  availableDate?: string | null;
+  availableAt?: string | null;
+  daysUntil?: number | null;
+};
+/** Normalized barrier facts held in component state. */
+type RetakeGateState = {
+  blockedBy: "cooldown" | "attemptInterval" | null;
+  cooldownPeriodDays: number | null;
+  intervalHours: number | null;
+  availableDate: string | null;
+  availableAt: string | null;
+  daysUntil: number | null;
+};
 
 /** Start-screen facts derived from one `/api/learner/tests` entry (component state shape). */
 type TestMetadata = {
@@ -270,8 +288,11 @@ function buildTestMetadataFromListEntry(test: any): TestMetadata {
     lastCompletedAttemptId: test.lastCompletedAttemptId ?? null,
     retakeGate: test.retakeGate
       ? {
+          blockedBy: test.retakeGate.blockedBy ?? null,
           cooldownPeriodDays: test.retakeGate.cooldownPeriodDays ?? null,
+          intervalHours: test.retakeGate.intervalHours ?? null,
           availableDate: test.retakeGate.availableDate ?? null,
+          availableAt: test.retakeGate.availableAt ?? null,
           daysUntil: test.retakeGate.daysUntil ?? null,
         }
       : null,
@@ -861,7 +882,11 @@ export default function TakeTestPage() {
         return;
       }
       const retake = (err as { retake?: RetakeCooldownFacts }).retake;
-      if ((err as Error)?.message === "RETAKE_COOLDOWN") {
+      // PRD-31: both barriers land here. `ATTEMPT_INTERVAL` is the hour interval
+      // inside the assignment, `RETAKE_COOLDOWN` the calendar cooldown between
+      // assignments; they render the same way, only the moment differs.
+      const barrierCode = (err as Error)?.message;
+      if (barrierCode === "RETAKE_COOLDOWN" || barrierCode === "ATTEMPT_INTERVAL") {
         // PRD-19 Block F (FR-20): a cooldown that the up-front gate missed (a race —
         // e.g. another tab consumed the last eligible window). Render the cooldown
         // state ON the start page (parity with the resolved-at-load path), not a
@@ -874,8 +899,13 @@ export default function TakeTestPage() {
               ? {
                   ...m,
                   retakeGate: {
+                    blockedBy:
+                      retake?.blockedBy ??
+                      (barrierCode === "ATTEMPT_INTERVAL" ? "attemptInterval" : "cooldown"),
                     cooldownPeriodDays: retake?.cooldownPeriodDays ?? null,
+                    intervalHours: retake?.intervalHours ?? null,
                     availableDate: retake?.availableDate ?? null,
+                    availableAt: retake?.availableAt ?? null,
                     daysUntil: retake?.daysUntil ?? null,
                   },
                 }
@@ -2478,9 +2508,15 @@ export default function TakeTestPage() {
       // completed-attempt count with no id would render a dead button.
       hasCompletedResults: testMetadata.lastCompletedAttemptId !== null,
       canStartNew: !exhausted,
+      // PRD-31: the same card carries both barriers. Barrier B opens at an instant,
+      // so it shows a date WITH a time; barrier A keeps the plain calendar date and
+      // its «через N дн.» countdown, which an hour interval has no use for.
       cooldown: gate
         ? {
-            availableDateHuman: fmtIsoDateHuman(gate.availableDate),
+            availableDateHuman:
+              gate.blockedBy === "attemptInterval"
+                ? fmtIsoInstantHuman(gate.availableAt)
+                : fmtIsoDateHuman(gate.availableDate),
             daysUntil: gate.daysUntil,
           }
         : null,

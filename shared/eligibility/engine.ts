@@ -120,6 +120,59 @@ export function daysUntilDate(
   return diff > 0 ? diff : null;
 }
 
+/** Parse an ISO instant to epoch-ms; null for empty/unparseable input. */
+export function parseIsoInstant(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const t = Date.parse(String(value));
+  return Number.isFinite(t) ? t : null;
+}
+
+/** Format epoch-ms back to a canonical ISO instant (UTC, milliseconds). */
+export function formatIsoInstant(ms: number): string {
+  return new Date(ms).toISOString();
+}
+
+export interface AttemptIntervalDecision {
+  allowed: boolean;
+  /** Instant from which the next attempt is open; null when there is no prior attempt. */
+  availableAt: string | null;
+  /** Milliseconds elapsed since the previous attempt, after clock normalization. */
+  msSince: number | null;
+  /** "Now" AFTER normalizing an untrusted clock; null when an input was unusable. */
+  effectiveNow: string | null;
+}
+
+/**
+ * PRD-31 barrier B: minimum interval between attempts INSIDE one assignment.
+ * Wall-clock hours, not calendar days — an author asking for 24 h means 24 h, and
+ * both hosts have a real timestamp for the previous attempt (`attempts.finished_at`
+ * on the web, `suspend_data.attempts[].completedAt` in the package).
+ *
+ * No previous attempt (null/unparseable) => allowed, mirroring `cooldownDecision`.
+ * A "now" that precedes the last attempt is impossible, so the clock that produced
+ * it is not trusted and the interval runs its full length from the attempt instead
+ * (the same rule FR-TD-05 applies to the calendar cooldown).
+ */
+export function attemptIntervalDecision(
+  lastFinishedAt: string | null,
+  nowIso: string,
+  intervalHours: number,
+): AttemptIntervalDecision {
+  const reportedNow = parseIsoInstant(nowIso);
+  const last = parseIsoInstant(lastFinishedAt);
+  if (last == null || reportedNow == null) {
+    return { allowed: true, availableAt: null, msSince: null, effectiveNow: null };
+  }
+  const now = Math.max(reportedNow, last);
+  const msSince = now - last;
+  return {
+    allowed: msSince >= intervalHours * 3600000,
+    availableAt: formatIsoInstant(last + intervalHours * 3600000),
+    msSince,
+    effectiveNow: formatIsoInstant(now),
+  };
+}
+
 /** Default result when no plugin is configured for the test (PRD-6 §3.4). */
 export const CORE_DEFAULT_RESULT: EligibilityResult = {
   allowed: true,

@@ -78,6 +78,24 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
     }
   });
 
+  it("attemptIntervalDecision matches", () => {
+    const cases: Array<[string | null, string, number]> = [
+      [null, "2026-08-01T10:00:00.000Z", 24],
+      ["2026-08-01T10:00:00.000Z", "2026-08-02T09:59:59.999Z", 24],
+      ["2026-08-01T10:00:00.000Z", "2026-08-02T10:00:00.000Z", 24],
+      // Clock rolled back behind the last attempt (untrusted "now").
+      ["2026-08-01T10:00:00.000Z", "2026-07-20T00:00:00.000Z", 24],
+      ["garbage", "2026-08-01T10:00:00.000Z", 24],
+      ["2026-08-01T10:00:00.000Z", "garbage", 24],
+      ["2026-08-01T10:00:00.000Z", "2026-08-01T12:00:00.000Z", 1],
+    ];
+    for (const [last, now, hours] of cases) {
+      expect(port.EligibilityEngine.attemptIntervalDecision(last, now, hours)).toEqual(
+        tsEngine.attemptIntervalDecision(last, now, hours),
+      );
+    }
+  });
+
   it("normalizeVerdict matches", () => {
     const verdicts: any[] = [
       true,

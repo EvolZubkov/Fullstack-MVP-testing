@@ -25,6 +25,10 @@ const { storageMock } = vi.hoisted(() => ({
     getQuestionsByIds: vi.fn(), getTopicCourses: vi.fn().mockResolvedValue([]),
     getTopicEvents: vi.fn().mockResolvedValue([]),
     getAssignedTestsForUser: vi.fn(),
+    // PRD-31: the assignment is the unit of access. These cases exercise the barriers
+    // and the counter, not the assignment lookup, so every attempt lands in the
+    // implicit legacy bucket (null) — which behaves as one assignment of its own.
+    getCurrentAssignmentId: vi.fn().mockResolvedValue(null),
     getAdaptiveTopicSettingsByTest: vi.fn().mockResolvedValue([]),
     getAdaptiveLevelsByTest: vi.fn().mockResolvedValue([]),
     getResultVariables: vi.fn().mockResolvedValue([]),
@@ -83,6 +87,11 @@ const dbQuestion = {
 };
 const dbAttempt = {
   id: "atmp1", userId: "learner1", testId: "test1", snapshotId: null,
+  // PRD-31: a real row always carries the column; null = the implicit legacy bucket,
+  // which is also what `getCurrentAssignmentId` returns in these tests. Leaving it
+  // undefined would put the attempt in a DIFFERENT bucket than the current
+  // assignment and quietly defeat the per-assignment counter.
+  assignmentId: null,
   variantJson: { sections: [{ topicId: "t1", topicName: "JS", questionIds: ["q1"] }] },
   answersJson: {}, resultJson: null,
   startedAt: new Date(), finishedAt: null, testVersion: 1,
@@ -129,6 +138,10 @@ let app: express.Express;
 beforeEach(() => {
   vi.clearAllMocks();
   storageMock.getUser.mockResolvedValue(learnerUser);
+  // `clearAllMocks` wipes CALLS, not implementations, so a per-case override of the
+  // current assignment would leak into every later case and silently change which
+  // bucket its attempts fall into. Restore the default (the legacy NULL bucket).
+  storageMock.getCurrentAssignmentId.mockResolvedValue(null);
   app = makeApp(attemptsRouter);
 });
 
@@ -145,9 +158,17 @@ describe("GET /learner/tests — branches", () => {
     // Section on a topic missing from getTopics -> topicName "Unknown".
     storageMock.getTopics.mockResolvedValue([]);
     storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 5 }]);
-    // A completed attempt today keeps the 30-day cooldown active.
+    // A completed attempt today keeps the 30-day cooldown active — but PRD-31 §3
+    // scopes barrier A to the boundary BETWEEN assignments, so that attempt must
+    // belong to the PREVIOUS one while the learner is now on a fresh assignment.
+    storageMock.getCurrentAssignmentId.mockResolvedValue("a-new");
     storageMock.getAttemptsByUserAndTest.mockResolvedValue([
-      { ...finishedAttempt, finishedAt: new Date(), resultJson: { overallPercent: 42, overallPassed: false, topicResults: [] } },
+      {
+        ...finishedAttempt,
+        assignmentId: "a-old",
+        finishedAt: new Date(),
+        resultJson: { overallPercent: 42, overallPassed: false, topicResults: [] },
+      },
     ]);
     const res = await asLearner(request(app).get("/api/learner/tests"));
     expect(res.status).toBe(200);
@@ -198,16 +219,52 @@ describe("POST .../attempts/start — branches", () => {
     expect(storageMock.getLatestSnapshot).toHaveBeenCalled();
   });
 
-  it("returns 403 RETAKE_COOLDOWN while the cooldown is active", async () => {
+  it("returns 403 RETAKE_COOLDOWN on the first attempt of a NEW assignment", async () => {
     storageMock.getTest.mockResolvedValue({
       ...dbTest, retakePolicyJson: { enabled: true, cooldownPeriodDays: 30 },
     });
+    // PRD-31 §3: barrier A guards the boundary BETWEEN assignments — the recent
+    // attempt belongs to the previous one, the learner is starting a fresh one.
+    storageMock.getCurrentAssignmentId.mockResolvedValue("a-new");
     storageMock.getAttemptsByUserAndTest.mockResolvedValue([
-      { ...finishedAttempt, finishedAt: new Date() },
+      { ...finishedAttempt, assignmentId: "a-old", finishedAt: new Date() },
     ]);
     const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
     expect(res.status).toBe(403);
     expect(res.body.code).toBe("RETAKE_COOLDOWN");
+    expect(res.body.blockedBy).toBe("cooldown");
+  });
+
+  it("does NOT apply the cooldown to a repeat inside the SAME assignment", async () => {
+    // The defect PRD-31 fixes: the learner still has attempts left in the assignment
+    // they were given, so the between-assignments cooldown must not stop them.
+    storageMock.getTest.mockResolvedValue({
+      ...dbTest, maxAttempts: 3, retakePolicyJson: { enabled: true, cooldownPeriodDays: 30 },
+    });
+    storageMock.getCurrentAssignmentId.mockResolvedValue("a-1");
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([
+      { ...finishedAttempt, assignmentId: "a-1", finishedAt: new Date() },
+    ]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 1 }]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([dbQuestion]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.createAttempt.mockResolvedValue(dbAttempt);
+    const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+    expect(res.status).toBe(201);
+  });
+
+  it("pins a started attempt to the current assignment", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getCurrentAssignmentId.mockResolvedValue("a-42");
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 1 }]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([dbQuestion]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.createAttempt.mockResolvedValue(dbAttempt);
+    await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+    expect(storageMock.createAttempt.mock.calls[0][0].assignmentId).toBe("a-42");
   });
 
   it("returns 500 when a store read throws", async () => {
@@ -229,12 +286,14 @@ describe("POST .../attempts/start-adaptive — branches", () => {
     expect(res.status).toBe(404);
   });
 
-  it("returns 403 RETAKE_COOLDOWN for an adaptive test in cooldown", async () => {
+  it("returns 403 RETAKE_COOLDOWN for an adaptive test on a new assignment", async () => {
     storageMock.getTest.mockResolvedValue({
       ...adaptiveTest, retakePolicyJson: { enabled: true, cooldownPeriodDays: 30 },
     });
+    // Same framing as the standard start: barrier A is a between-assignments rule.
+    storageMock.getCurrentAssignmentId.mockResolvedValue("a-new");
     storageMock.getAttemptsByUserAndTest.mockResolvedValue([
-      { ...finishedAttempt, finishedAt: new Date() },
+      { ...finishedAttempt, assignmentId: "a-old", finishedAt: new Date() },
     ]);
     const res = await asLearner(request(app).post("/api/tests/test1/attempts/start-adaptive"));
     expect(res.status).toBe(403);

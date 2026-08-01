@@ -12,7 +12,7 @@ import { orderQuestions } from "@shared/draw/order-questions";
 import { loadScoringConfig } from "../services/scoring-config";
 import { loadTestScoringContext } from "../services/effective-scoring";
 import { computeAttemptResult } from "../services/result-compute";
-import { decideRetake, lastCompletedAttemptDate, toIsoDateUTC } from "../services/retake-gate";
+import { decideRetake, countAttemptsInAssignment } from "../services/retake-gate";
 import { readResultsRenderPayload, readReportRenderPayload } from "../services/template-render";
 import { reportKindForMode } from "@shared/report/report-variants";
 import { buildReportInput, buildAdaptiveReportInput, type MeasuresSource } from "../services/result-context";
@@ -202,8 +202,16 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
 
         const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
         const completed = userAttempts.filter((a) => a.finishedAt !== null);
-        const completedAttempts = completed.length;
         const inProgressAttempt = userAttempts.find((a) => a.finishedAt === null);
+        // PRD-31 (FR-07): the attempt counter belongs to the ASSIGNMENT, so a
+        // re-assignment hands out a fresh set — the start screen must count the same
+        // way the start route does, or it would offer a run the server then refuses.
+        const currentAssignmentId = await storage.getCurrentAssignmentId(req.session.userId!, test.id);
+        const attemptFacts = userAttempts.map((a) => ({
+          assignmentId: a.assignmentId,
+          finishedAt: a.finishedAt,
+        }));
+        const completedAttempts = countAttemptsInAssignment(attemptFacts, currentAssignmentId);
 
         // Resume position from the in-progress variant (PRD-12 §10 start parity):
         // index = saved currentIndex, total = drawn question count.
@@ -221,24 +229,27 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
           .slice()
           .sort((a, b) => new Date(b.finishedAt as Date).getTime() - new Date(a.finishedAt as Date).getTime())[0];
 
-        // PRD-19 Block F (FR-19/20): resolve the retake cooldown decision up front so
-        // the START screen can render the cooldown state (date + disabled button +
+        // PRD-19 Block F (FR-19/20) + PRD-31: resolve the access decision up front so
+        // the START screen can render the blocked state (moment + disabled button +
         // prior summary) ON the standard start page — parity with the SCORM gate's
-        // `renderCooldownStart`, no separate block-wall. The date source is the
-        // server's own completed attempts (no LMS plugin in the web; PRD-12). Inert
-        // unless the policy is enabled, so legacy tests carry `retakeGate: null`.
+        // `renderCooldownStart`, no separate block-wall. Facts are scoped to the
+        // current assignment; inert unless a barrier is configured, so legacy tests
+        // carry `retakeGate: null`.
         const retakePolicy = test.retakePolicyJson as RetakePolicy | null;
-        const gate = decideRetake(
-          retakePolicy,
-          lastCompletedAttemptDate(completed.map((a) => a.finishedAt)),
-          toIsoDateUTC(new Date()),
-        );
+        const gate = decideRetake(retakePolicy, {
+          currentAssignmentId,
+          attempts: attemptFacts,
+          now: new Date(),
+        });
         const retakeGate =
           gate.allowed
             ? null
             : {
+                blockedBy: gate.blockedBy ?? null,
                 cooldownPeriodDays: gate.cooldownPeriodDays ?? null,
+                intervalHours: gate.intervalHours ?? null,
                 availableDate: gate.availableDate ?? null,
+                availableAt: gate.availableAt ?? null,
                 daysUntil: gate.daysUntil ?? null,
               };
 
@@ -253,7 +264,12 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
             ? {
                 percent: lastResult.overallPercent,
                 passed: lastResult.overallPassed ?? null,
-                attemptNumber: completedAttempts,
+                // PRD-31: «попытка K из M» counts inside the assignment, so it may only
+                // label a result that belongs to the CURRENT one. A result carried over
+                // from a previous assignment keeps its percent but loses the number —
+                // otherwise a fresh assignment would caption it «попытка 0 из 3».
+                attemptNumber:
+                  lastCompleted?.assignmentId === currentAssignmentId ? completedAttempts : null,
                 maxAttempts: test.maxAttempts ?? null,
               }
             : null;
@@ -290,25 +306,41 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
     }
     const { src, snapshotId, test } = resolved;
 
-    // Attempt gates: retake cooldown (PRD-6, web) + max attempts. Load the user's
-    // attempts once and reuse for both checks.
+    // Attempt gates (PRD-6 barrier A + PRD-31 barrier B) and the attempt counter,
+    // all scoped to the CURRENT ASSIGNMENT — the unit of access (PRD-31 §3). The
+    // assignment is resolved unconditionally because a started attempt is pinned to
+    // it even when no barrier is configured.
     const retakePolicy = test.retakePolicyJson as RetakePolicy | null;
-    if (retakePolicy?.enabled === true || test.maxAttempts !== null) {
+    const currentAssignmentId = await storage.getCurrentAssignmentId(req.session.userId!, test.id);
+    const barriersOn =
+      retakePolicy?.enabled === true || retakePolicy?.attemptInterval?.enabled === true;
+    if (barriersOn || test.maxAttempts !== null) {
       const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
-      const completed = userAttempts.filter((a) => a.finishedAt !== null);
+      const attemptFacts = userAttempts.map((a) => ({
+        assignmentId: a.assignmentId,
+        finishedAt: a.finishedAt,
+      }));
 
-      // PRD-12: retake cooldown — date sourced from the server's own completed
-      // attempts (no LMS plugin; the web is the authoritative date source).
-      const gate = decideRetake(
-        retakePolicy,
-        lastCompletedAttemptDate(completed.map((a) => a.finishedAt)),
-        toIsoDateUTC(new Date()),
-      );
+      const gate = decideRetake(retakePolicy, {
+        currentAssignmentId,
+        attempts: attemptFacts,
+        now: new Date(),
+      });
       if (!gate.allowed) {
-        return res.status(403).json({ error: "Retake cooldown active", code: "RETAKE_COOLDOWN", ...gate });
+        const interval = gate.blockedBy === "attemptInterval";
+        return res.status(403).json({
+          error: interval ? "Attempt interval active" : "Retake cooldown active",
+          code: interval ? "ATTEMPT_INTERVAL" : "RETAKE_COOLDOWN",
+          ...gate,
+        });
       }
 
-      if (test.maxAttempts !== null && completed.length >= test.maxAttempts) {
+      // FR-07: the limit belongs to the assignment, so a re-assignment hands out a
+      // fresh set of attempts — the same rule the SCORM package has always had.
+      if (
+        test.maxAttempts !== null &&
+        countAttemptsInAssignment(attemptFacts, currentAssignmentId) >= test.maxAttempts
+      ) {
         return res.status(403).json({ error: "Attempts exhausted", code: "ATTEMPTS_EXHAUSTED" });
       }
     }
@@ -389,6 +421,9 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
       testId: test.id,
       testVersion: test.version || 1,
       snapshotId,
+      // PRD-31 (FR-12): pin the attempt to the assignment it was taken under, so the
+      // access barriers and the attempt counter can be scoped to it later.
+      assignmentId: currentAssignmentId,
       variantJson: variant,
       answersJson: null,
       resultJson: null,
@@ -428,25 +463,39 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
     }
     const { src, snapshotId, test } = resolved;
 
-    // Attempt gates: retake cooldown (PRD-6, web) + max attempts. Load the user's
-    // attempts once and reuse for both checks.
+    // Attempt gates (PRD-6 barrier A + PRD-31 barrier B) and the attempt counter,
+    // scoped to the CURRENT ASSIGNMENT. Deliberately identical to the standard
+    // start above — the two paths deciding differently is what produced the defect
+    // PRD-31 fixes, so they must stay word-for-word the same.
     const retakePolicy = test.retakePolicyJson as RetakePolicy | null;
-    if (retakePolicy?.enabled === true || test.maxAttempts !== null) {
+    const currentAssignmentId = await storage.getCurrentAssignmentId(req.session.userId!, test.id);
+    const barriersOn =
+      retakePolicy?.enabled === true || retakePolicy?.attemptInterval?.enabled === true;
+    if (barriersOn || test.maxAttempts !== null) {
       const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
-      const completed = userAttempts.filter((a) => a.finishedAt !== null);
+      const attemptFacts = userAttempts.map((a) => ({
+        assignmentId: a.assignmentId,
+        finishedAt: a.finishedAt,
+      }));
 
-      // PRD-12: retake cooldown — date sourced from the server's own completed
-      // attempts (no LMS plugin; the web is the authoritative date source).
-      const gate = decideRetake(
-        retakePolicy,
-        lastCompletedAttemptDate(completed.map((a) => a.finishedAt)),
-        toIsoDateUTC(new Date()),
-      );
+      const gate = decideRetake(retakePolicy, {
+        currentAssignmentId,
+        attempts: attemptFacts,
+        now: new Date(),
+      });
       if (!gate.allowed) {
-        return res.status(403).json({ error: "Retake cooldown active", code: "RETAKE_COOLDOWN", ...gate });
+        const interval = gate.blockedBy === "attemptInterval";
+        return res.status(403).json({
+          error: interval ? "Attempt interval active" : "Retake cooldown active",
+          code: interval ? "ATTEMPT_INTERVAL" : "RETAKE_COOLDOWN",
+          ...gate,
+        });
       }
 
-      if (test.maxAttempts !== null && completed.length >= test.maxAttempts) {
+      if (
+        test.maxAttempts !== null &&
+        countAttemptsInAssignment(attemptFacts, currentAssignmentId) >= test.maxAttempts
+      ) {
         return res.status(403).json({ error: "Attempts exhausted", code: "ATTEMPTS_EXHAUSTED" });
       }
     }
@@ -561,6 +610,8 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
       testId: test.id,
       testVersion: test.version || 1,
       snapshotId,
+      // PRD-31 (FR-12): pin the attempt to the assignment it was taken under.
+      assignmentId: currentAssignmentId,
       variantJson: variant,
       answersJson: {},
       resultJson: null,
@@ -1242,7 +1293,14 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
     const test = await storage.getTest(attempt.testId);
 
     const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, attempt.testId);
-    const completedAttempts = userAttempts.filter((a) => a.finishedAt !== null).length;
+    // PRD-31 (FR-07): «Пройти ещё раз» and «попытка K из M» count inside the CURRENT
+    // assignment — the same scope the start route enforces, so the results screen
+    // cannot offer a retry the server would refuse (or hide one it would allow).
+    const currentAssignmentId = await storage.getCurrentAssignmentId(req.session.userId!, attempt.testId);
+    const completedAttempts = countAttemptsInAssignment(
+      userAttempts.map((a) => ({ assignmentId: a.assignmentId, finishedAt: a.finishedAt })),
+      currentAssignmentId,
+    );
     const maxAttempts = test?.maxAttempts || null;
     const canRetake = maxAttempts === null || completedAttempts < maxAttempts;
     // NB: the attempt counter is deliberately NOT put in the header subtitle any
