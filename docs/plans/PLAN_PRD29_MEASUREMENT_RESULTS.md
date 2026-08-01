@@ -4056,6 +4056,183 @@ git commit -m "docs(prd-29): матрица приёмки"
 
 ---
 
+## Task 17: Видимость показателя в редакторе (дефект приёмки D-1)
+
+**Files:**
+
+- Modify: `client/src/features/tests/editor/sections/scales-section.tsx` (экспорт списка значений)
+- Modify: `client/src/features/tests/editor/sections/result-variables-section.tsx`
+- Test: `client/src/features/tests/editor/sections/__tests__/indicator-visibility.test.tsx`
+
+Блокирующий дефект приёмки. У показателя поле `learnerVisibility` есть в модели, в мапперах,
+в запекании пакета и в книге — но контрола в форме НЕТ. Значение навсегда остаётся `hidden`,
+поэтому автор физически не может показать профиль ученику. Это прямая цель PRD-29: главный
+вывод методики оказался единственным, чего нельзя вывести.
+
+Причина организационная: Task 6 переименовала поле и явно запретила трогать интерфейс,
+отложив его на Task 13, а та касалась ТОЛЬКО шкал. Показатель выпал между заданиями.
+
+- [ ] **Step 1: Написать падающий тест**
+
+```tsx
+// client/src/features/tests/editor/sections/__tests__/indicator-visibility.test.tsx
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { ResultVariablesSection } from "../result-variables-section";
+import { emptyEditorModel } from "../../test-editor.mappers";
+
+function modelWithVariable() {
+  const model = emptyEditorModel({ folderId: null });
+  model.resultVariables = [
+    {
+      clientKey: "v1",
+      name: "burnout_level",
+      label: "Состояние",
+      type: "string",
+      formula: '"growing"',
+      learnerVisibility: "hidden",
+      scormTarget: "both",
+      controlsStatus: "none",
+      bands: [],
+      outcomes: [],
+      sortOrder: 0,
+    },
+  ];
+  return model;
+}
+
+describe("видимость показателя", () => {
+  it("контрол есть в форме", () => {
+    render(<ResultVariablesSection model={modelWithVariable()} updateModel={() => {}} />);
+    fireEvent.click(screen.getByText("Состояние"));
+    expect(screen.getByTestId("metrics-visibility-0")).toBeInTheDocument();
+  });
+
+  it("выбор кладётся в модель", () => {
+    const updateModel = vi.fn();
+    render(<ResultVariablesSection model={modelWithVariable()} updateModel={updateModel} />);
+    fireEvent.click(screen.getByText("Состояние"));
+    fireEvent.change(screen.getByTestId("metrics-visibility-0"), { target: { value: "level" } });
+    expect(updateModel).toHaveBeenCalled();
+  });
+});
+```
+
+Карточка показателя свёрнута по умолчанию — её нужно раскрыть, иначе контрол недостижим.
+Точное имя фабрики модели и способ раскрытия сверь с существующими тестами секции.
+
+- [ ] **Step 2: Убедиться, что тест падает**
+
+Run: `npm test -- client/src/features/tests/editor/sections/__tests__/indicator-visibility.test.tsx`
+
+- [ ] **Step 3: Вывести контрол**
+
+Список значений уже объявлен в `scales-section.tsx` (`VISIBILITY_OPTIONS`) — ЭКСПОРТИРОВАТЬ
+его оттуда и переиспользовать, а не заводить второй: расхождение формулировок между двумя
+вкладками читается как разный смысл.
+
+Контрол ставится рядом с блоком «Вывод» (управление статусом и передача в LMS) — там же, где
+у шкалы, и той же разметкой:
+
+```tsx
+          <Select<LearnerVisibility>
+            size="m"
+            fullWidth
+            label="Показывать обучающемуся"
+            value={v.learnerVisibility}
+            disabled={readOnly}
+            options={VISIBILITY_OPTIONS}
+            onChange={(value) => onChange({ learnerVisibility: value })}
+            data-testid={`metrics-visibility-${index}`}
+          />
+```
+
+- [ ] **Step 4: Прогоны**
+
+Run: `npm test -- client/src/features/tests/editor`
+Run: `npm run check`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add client/src/features/tests/editor/sections/scales-section.tsx
+git add client/src/features/tests/editor/sections/result-variables-section.tsx
+git add client/src/features/tests/editor/sections/__tests__/indicator-visibility.test.tsx
+git commit -m "fix(prd-29): видимость показателя в редакторе"
+```
+
+---
+
+## Task 18: Вердикт и плашка уровня (дефекты приёмки D-3, D-4)
+
+**Files:**
+
+- Modify: `shared/template/result-context.ts`
+- Modify: `server/scorm/templates/default/layouts/results.html`
+- Modify: `templates/certification/layouts/results.html` (побайтовая копия)
+- Test: `shared/template/__tests__/result-context-measures.test.ts`
+
+Две правки одного экрана.
+
+**D-4. Вердикт булев.** `statusLabel` в стандартном построителе принимает только «Пройден» и
+«Не пройден». У теста БЕЗ порога прохождения в шапке висит «Не пройден», хотя сводка баллов
+по тому же признаку уже скрыта — экран себе противоречит. Измерительной методике вердикт
+противопоказан: она ничего не проверяет.
+
+Третье состояние в проекте уже есть — строки тем его используют (`passed === true / false /
+""`). Нужно распространить его на тест целиком: когда порога нет, вердикта нет.
+
+**D-3. Плашка уровня без условия.** Метка уровня рисуется всегда, поэтому при пустой метке
+(шкала без интервалов или значение вне их) остаётся окрашенный прямоугольник без текста.
+
+- [ ] **Step 1: Написать падающие тесты**
+
+```ts
+describe("вердикт теста", () => {
+  it("измерительный тест без порога не получает вердикта", () => {
+    const ctx = buildResultContext(BASE, "Маслач", { measures: MEASURES });
+    expect(ctx.result.statusLabel).toBe("");
+    expect(ctx.result.passClass).toBe("");
+  });
+
+  it("контрольный тест вердикт сохраняет", () => {
+    const ctx = buildResultContext({ ...BASE, passed: true }, "Контрольный");
+    expect(ctx.result.statusLabel).toBe("Пройден");
+  });
+});
+```
+
+- [ ] **Step 2: Убрать вердикт там, где нет порога**
+
+Признак уже вычисляется — тот же, что скрывает сводку баллов. Когда порога нет, `statusLabel`
+и `passClass` становятся пустыми строками. Контрольный тест не меняется: у него порог есть.
+
+- [ ] **Step 3: Закрыть плашки условием**
+
+В обеих копиях макета обернуть плашку вердикта в шапке и плашку уровня шкалы в проверку
+непустой метки:
+
+```html
+            {{#if levelLabel}}<span class="ou-tag ou-tag--l tb-measure__level {{toneClass}}">{{levelLabel}}</span>{{/if}}
+```
+
+Копии обязаны остаться побайтово равными — это стережёт `tests/template-layout-parity.test.ts`.
+
+- [ ] **Step 4: Прогоны**
+
+Run: `npm test -- shared/template/__tests__/result-context-measures.test.ts tests/template-layout-parity.test.ts tests/results-template-gating.test.ts`
+Run: `npm run check`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add shared/template/result-context.ts server/scorm/templates/default/layouts/results.html
+git add templates/certification/layouts/results.html shared/template/__tests__/result-context-measures.test.ts
+git commit -m "fix(prd-29): нет порога — нет вердикта, пустая плашка не рисуется"
+```
+
+---
+
 ## Долг, вскрытый при реализации Task 6
 
 Оба пункта обязательны ДО закрытия PRD-29; они не были предусмотрены планом.
