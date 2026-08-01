@@ -321,6 +321,17 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
    keeps the right media panel visible so the layout reads as «image right». */
 .tb-cover__media-ph { width: 100%; height: 100%; min-height: 220px; display: flex; align-items: center; justify-content: center; color: var(--ou-fg-muted); opacity: 0.55; }
 @container tbscene (max-width: 900px) { .tb-cover--media { grid-template-columns: 1fr; } .tb-cover__media { min-height: 220px; } }
+/* Image-right cover WITHOUT an image. The slot used to draw a hollow frame — a bordered
+   grey box with a picture glyph — which reads as a broken image rather than as design.
+   It becomes an abstract panel instead, the same device the certification template
+   already uses for its own coverless variant (its `.tb-cover:not(.tb-cover--media)::after`).
+   The glyph goes: a panel that says nothing needs no icon explaining that it says nothing. */
+.tb-cover__media:has(.tb-cover__media-ph) {
+  background: linear-gradient(140deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.82) 100%);
+  box-shadow: inset -6rem -7rem 0 -5.6rem hsl(0 0% 100% / 0.16);
+}
+.tb-cover__media-ph { display: none; }
+
 
 /* Facts strip — big number + small label, spaced (start screen). */
 .tb-facts { display: flex; flex-wrap: wrap; gap: var(--ou-space-9); }
@@ -947,6 +958,14 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   .tb-cover__content { gap: var(--ou-space-4); justify-content: flex-start; }
   .tb-cover__media,
   .tb-cover__media-ph { min-height: 160px; }
+
+  /* On a phone the decorative panel is dropped outright: with no image behind it, it
+     carries nothing and would take about a third of the screen away from the facts and
+     the start button. An image the author DID set still shows — only the placeholder
+     goes. */
+  .tb-cover--media:has(.tb-cover__media-ph) { grid-template-columns: 1fr; }
+  .tb-cover__media:has(.tb-cover__media-ph) { display: none; }
+
   .tb-facts { gap: var(--ou-space-4) var(--ou-space-5); }
   .tb-facts__num { font: var(--ou-text-heading-m); }
 
@@ -1019,7 +1038,16 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   .tb-scene__foot .ou-btn--primary {
     order: 99; flex: 1 1 auto; min-width: 150px; height: 48px; min-height: 48px;
   }
-  .tb-scene__foot .tb-scene__note { flex: 0 0 100%; font: var(--ou-text-body-s); }
+  /* The start screen's footer carries a STATUS line («Незавершённый тест — вопрос N
+     из M») among its actions, and in markup order it sits between them — breaking the
+     row where it stands and leaving the lone ghost «К списку тестов» on top, where it
+     reads as a heading rather than an action. Pulled to the front it becomes a caption
+     for what follows, and the wrap then groups the footer as it should: status, then
+     the alternatives side by side, then the main action full width. 4 rows -> 3. */
+  .tb-scene__foot .tb-scene__note {
+    order: -1; flex: 0 0 100%;
+    font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+  }
 }
 
 /* ── Touch density ─────────────────────────────────────────────────
