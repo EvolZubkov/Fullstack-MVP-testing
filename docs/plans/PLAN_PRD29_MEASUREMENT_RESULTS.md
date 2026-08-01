@@ -28,7 +28,7 @@ Vitest (`npm test`), plain-JS SCORM runtime (`server/scorm/**`), ExcelJS.
 | Э1 — контракт и чистое ядро | 3, 4.1, 4.2, 6.2, 6.3, 6.4 | Task 2, 3, 4, 5 |
 | Э2 — хранение | 5.3, 6.1, 10 | Task 6 |
 | Э3 — сбор рекомендаций | 7 | Task 7 |
-| Э4 — веб-контекст и блоки | 8.1, 9 | Task 8 |
+| Э4 — веб-контекст и блоки | 8.1, 9 | Task 8, 8b |
 | Э5 — разметка и стили | 8.1, 8.2, 8.3 | Task 9, 10 |
 | Э6 — параметры варианта дизайна | 6.2, 6.4, 8.1 | Task 11 |
 | Э7 — SCORM | 9 | Task 12 |
@@ -2365,6 +2365,179 @@ git add shared/template/context.ts shared/template/result-context.ts shared/temp
 git add shared/template/__tests__/result-context-measures.test.ts shared/template/__tests__/results-blocks.test.ts
 git add server/services/result-context.ts server/services/scoring-config.ts
 git commit -m "feat(prd-29): шкалы, показатели и рекомендации в контексте итогов"
+```
+
+---
+
+## Task 8b: Проброс измерений на веб-хосте
+
+**Files:**
+
+- Modify: `server/services/template-render.ts`
+- Modify: `server/routes/attempts.ts`
+- Modify: `server/services/result-context.ts` (`testFeedback` — полный блок, а не только текст)
+- Test: `tests/results-render-measures.test.ts`
+
+Task 8 собрала `buildMeasuresInput`, но передать её результат оказалось некуда: цепочка на
+вебе идёт `routes/attempts.ts` → `template-render.readResultsRenderPayload` →
+`result-context.buildResultContext`, и `buildResultContext` зовётся ДВУМЯ аргументами. Ни
+одно звено не несёт ни строк шкал и показателей, ни эффективных параметров дизайна, ни
+настроек варианта «Итоги». Пока этого нет, экран итогов на живом вебе не меняется ни на
+байт, сколько бы ядро ни считало.
+
+Задача — дотянуть данные до построителя. Ничего нового не вычисляется: всё уже посчитано
+и лежит либо в попытке, либо в базе.
+
+### Откуда что берётся
+
+| Что нужно | Источник |
+| --- | --- |
+| Значения шкал и показателей | `AttemptResult.scaleResults` и `AttemptResult.resultVariables` — уже сохранены в попытке, пересчитывать нельзя |
+| Строки шкал и показателей | `storage.getScales` / `storage.getResultVariables`, а для попытки со снимком — из снимка |
+| Эффективные параметры дизайна | считаются ВНУТРИ `readScreenTemplate` при разрешении `design` против манифеста; наружу не отдаются |
+| Настройки варианта «Итоги» | `content_pages` с `kind = "results"`, поле `settings_json` |
+| Есть ли порог прохождения | настройки теста |
+| Обратная связь теста | `tests.feedback_json` |
+
+### Ловушка со снимком (PRD-15)
+
+Попытка, привязанная к снимку (`attempts.snapshot_id`), обязана читать шкалы и показатели
+ИЗ СНИМКА, а не из живых строк: иначе правка толкования задним числом изменит результат
+уже пройденной попытки. Механизм существует — `loadScoringConfig(testId, source)` принимает
+источник, и снимок им уже пользуется. Взять тот же источник, а не ходить в `storage`
+напрямую.
+
+- [ ] **Step 1: Написать падающий тест**
+
+```ts
+// tests/results-render-measures.test.ts
+import { describe, it, expect } from "vitest";
+import { readResultsRenderPayload } from "../server/services/template-render";
+
+const DIR = "server/scorm/templates/default";
+
+const RESULT = {
+  overallPassed: false,
+  overallPercent: 0,
+  totalQuestions: 22,
+  totalCorrect: 0,
+  totalEarnedPoints: 0,
+  totalPossiblePoints: 0,
+  topicResults: [],
+  scaleResults: { ee: { raw: 27, normalized: 27, percent: 0, level: "high", label: "Высокий", hasValue: true } },
+  resultVariables: {},
+} as never;
+
+const MEASURES = {
+  scales: [
+    {
+      key: "ee",
+      label: "Эмоциональное истощение",
+      learnerVisibility: "level_and_value",
+      sortOrder: 0,
+      configJson: {
+        domainMin: 0,
+        domainMax: 45,
+        valence: "lower_is_better",
+        bands: [
+          { min: 0, max: 24, level: "low", label: "Низкий" },
+          { min: 25, max: 45, level: "high", label: "Высокий", text: "Ресурс расходуется быстрее." },
+        ],
+      },
+    },
+  ],
+  variables: [],
+  params: {},
+  blockSettings: {},
+  hasPassThreshold: false,
+  testFeedback: null,
+} as never;
+
+describe("readResultsRenderPayload + измерения", () => {
+  it("без измерений контекст не получает новых полей", () => {
+    const payload = readResultsRenderPayload(DIR, RESULT, "Маслач");
+    expect(payload).not.toBeNull();
+    expect((payload!.context.result as Record<string, unknown>).scales).toBeUndefined();
+  });
+
+  it("с измерениями кладёт шкалу в контекст", () => {
+    const payload = readResultsRenderPayload(DIR, RESULT, "Маслач", null, undefined, undefined, MEASURES);
+    const scales = (payload!.context.result as { scales?: Array<{ levelLabel: string; valueText: string }> }).scales;
+    expect(scales).toHaveLength(1);
+    expect(scales![0].levelLabel).toBe("Высокий");
+    expect(scales![0].valueText).toBe("27");
+  });
+
+  it("скрытая шкала в контекст не попадает", () => {
+    const hidden = { ...MEASURES, scales: [{ ...MEASURES.scales[0], learnerVisibility: "hidden" }] };
+    const payload = readResultsRenderPayload(DIR, RESULT, "Маслач", null, undefined, undefined, hidden as never);
+    expect((payload!.context.result as Record<string, unknown>).scales).toBeUndefined();
+  });
+});
+```
+
+Run: `npm test -- tests/results-render-measures.test.ts`
+Expected: FAIL — седьмого параметра у `readResultsRenderPayload` нет.
+
+- [ ] **Step 2: Отдать наружу эффективные параметры дизайна**
+
+`readScreenTemplate` разрешает параметры теста против манифеста внутри себя и наружу их не
+возвращает, а рампе цветов они нужны. Добавить разрешённые параметры в возвращаемое
+значение (поле рядом с уже возвращаемыми разметкой и стилями) — БЕЗ смены сигнатуры и без
+второго разрешения параметров: второй расчёт разъедется с первым при первой же правке.
+
+- [ ] **Step 3: Принять измерения в `readResultsRenderPayload`**
+
+Добавить СЕДЬМОЙ необязательный параметр `measures?: MeasuresSource`. Когда он передан,
+подмешать в него эффективные параметры из Step 2 и отдать в `buildResultContext` третьим
+аргументом. Когда не передан — вызов остаётся двухаргументным, и контрольный экран не
+меняется ни на байт.
+
+Адаптивная ветка (`results.adaptive.html`) измерений НЕ получает: у адаптивного результата
+своя композиция уровней, и PRD-29 её не трогает.
+
+- [ ] **Step 4: Собрать источник в маршруте**
+
+В `server/routes/attempts.ts` рядом с существующим вызовом (около строки 1194) собрать
+`MeasuresSource` и передать седьмым аргументом. Собирать ТОЛЬКО когда у теста есть шкалы
+или показатели — иначе передавать `undefined`.
+
+Строки шкал и показателей брать тем же источником, что и `loadScoringConfig`: для попытки
+со `snapshot_id` — из снимка, иначе из живых строк. Значения брать из сохранённого
+`AttemptResult`, не пересчитывая.
+
+Настройки варианта «Итоги» читать из `content_pages` с `kind = "results"` (`settings_json`);
+отсутствие страницы или поля — пустой объект, и тогда все три блока работают в режиме
+«автоматически».
+
+- [ ] **Step 5: Провести обратную связь теста целиком**
+
+Сейчас `MeasuresSource.testFeedback` объявлен как `{ text?: string } | null` и уходит в
+сборщик БЕЗ нормализации, в отличие от обратной связи интервалов и исходов. Значит ссылки,
+мероприятия и материалы уровня ТЕСТА не попадут в блок никогда — а PRD-29 §7.1 называет
+тест одним из трёх равноправных источников.
+
+Расширить тип до полного блока (`tests.feedback_json` хранит текст, ссылки, мероприятия и
+вложения) и пропустить его через ту же `normalizeFeedback`, что и остальные два источника.
+Добавить тест: материал уровня теста доезжает до блока и получает адрес из `scormHref`.
+
+- [ ] **Step 6: Прогнать проверки**
+
+Run: `npm test -- tests/results-render-measures.test.ts`
+Expected: PASS.
+
+Run: `npm run check`
+Expected: 0 ошибок.
+
+Run: `npm test`
+Expected: PASS, порог покрытия держится.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add server/services/template-render.ts server/routes/attempts.ts
+git add server/services/result-context.ts tests/results-render-measures.test.ts
+git commit -m "feat(prd-29): проброс измерений на веб-хосте"
 ```
 
 ---
