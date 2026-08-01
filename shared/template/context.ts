@@ -19,6 +19,7 @@
  */
 
 import type { CtxMeasureView } from "./measure-view";
+import type { CtxRadarChart } from "./radar-view";
 import type { CtxRecommendations } from "./recommendations";
 
 /** Test-level info shown on the start screen and as the screen title (`course.*`). */
@@ -140,6 +141,18 @@ export interface CtxResult {
    */
   scales?: CtxMeasureView[];
   indicators?: CtxMeasureView[];
+  /**
+   * PRD-35: cross-scale profile. Present only when the author switched the radar ON
+   * and the chart is feasible — three or more visible scales, each with a domain.
+   */
+  scalesChart?: CtxRadarChart;
+  /**
+   * Class of the scales block: `tb-measures`, plus the `--chart` modifier when the
+   * radar is drawn. Core-prepared because the DSL cannot append a class
+   * conditionally, and a CSS `:has()` selector would depend on the engine the LMS
+   * embeds — the very dependency core-side computation exists to avoid.
+   */
+  scalesBlockClass?: string;
   recommendations?: CtxRecommendations;
   /**
    * The score summary always HAS data, so it needs its own flag — and the flag is
