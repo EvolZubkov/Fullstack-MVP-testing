@@ -646,6 +646,13 @@ npm test -- shared/template/__tests__/result-context-radar.test.ts
    * The layout binds ready coordinates: the DSL computes nothing.
    */
   scalesChart?: CtxRadarChart;
+  /**
+   * Class of the scales block: `tb-measures` alone, or with the `--chart` modifier
+   * when the radar is drawn. Core-prepared because the DSL cannot append a class
+   * conditionally, and a CSS `:has()` selector would depend on the engine the LMS
+   * embeds — the very dependency the core-side computation exists to avoid.
+   */
+  scalesBlockClass?: string;
 ```
 
 И импорт типа в шапке файла:
@@ -673,9 +680,13 @@ import { buildRadarChart } from "./radar-view";
 добавить:
 
 ```ts
+      result.scalesBlockClass = "tb-measures";
       if (opts.measures.showRadar) {
         const chart = buildRadarChart({ axes: visibleScales, ramp: opts.measures.ramp });
-        if (chart) result.scalesChart = chart;
+        if (chart) {
+          result.scalesChart = chart;
+          result.scalesBlockClass = "tb-measures tb-measures--chart";
+        }
       }
 ```
 
@@ -790,38 +801,50 @@ export interface ResultsBlockSettings {
 
 - [ ] **Step 5: Добавить разметку в макет итогов**
 
-В `server/scorm/templates/default/layouts/results.html` внутри блока `{{#if result.scales}}`,
-СРАЗУ после строки `<div class="tb-measures">`, обернуть содержимое в две колонки. Вставить перед
-циклом `{{#each result.scales}}`:
+В `server/scorm/templates/default/layouts/results.html` в блоке `{{#if result.scales}}` заменить
+жёсткий класс контейнера на биндинг и вставить диаграмму перед списком карточек. Разметка —
+из согласованного эскиза [prd35-competency-radar.html](../wireframes/prd35-competency-radar.html):
 
 ```html
+      <div class="{{result.scalesBlockClass}}">
         {{#if result.scalesChart}}
-        <div class="tb-radar" role="img" aria-label="{{result.scalesChart.ariaLabel}}">
-          <svg class="tb-radar__svg" viewBox="0 0 {{result.scalesChart.size}} {{result.scalesChart.size}}">
+        <div class="tb-radar">
+          <svg class="tb-radar__svg" viewBox="0 0 {{result.scalesChart.width}} {{result.scalesChart.height}}"
+               role="img" aria-label="{{result.scalesChart.ariaLabel}}">
             {{#each result.scalesChart.rings}}
-            <circle class="tb-radar__ring" cx="{{../result.scalesChart.center}}"
-                    cy="{{../result.scalesChart.center}}" r="{{radius}}"></circle>
+            <circle class="tb-radar__ring" cx="{{cx}}" cy="{{cy}}" r="{{radius}}"></circle>
             {{/each}}
             {{#each result.scalesChart.axes}}
-            <line class="tb-radar__axis" x1="{{../result.scalesChart.center}}"
-                  y1="{{../result.scalesChart.center}}" x2="{{axisX}}" y2="{{axisY}}"></line>
+            <line class="tb-radar__axis" x1="{{cx}}" y1="{{cy}}" x2="{{axisX}}" y2="{{axisY}}"></line>
             {{/each}}
             <polygon class="tb-radar__shape" points="{{result.scalesChart.polygonPoints}}"></polygon>
             {{#each result.scalesChart.axes}}
-            <circle class="tb-radar__dot {{toneClass}}" cx="{{x}}" cy="{{y}}" r="4"
+            <circle class="tb-radar__dot {{quantizedClass}}" cx="{{x}}" cy="{{y}}" r="6"
                     style="--tb-zone:{{color}}"></circle>
             <text class="tb-radar__label" x="{{labelX}}" y="{{labelY}}" text-anchor="{{labelAnchor}}">{{label}}</text>
-            <text class="tb-radar__level" x="{{labelX}}" y="{{labelY}}" dy="14"
-                  text-anchor="{{labelAnchor}}">{{levelLabel}}</text>
+            <text class="tb-radar__level" x="{{labelX}}" y="{{levelY}}" text-anchor="{{labelAnchor}}">{{levelText}}</text>
             {{/each}}
           </svg>
         </div>
         {{/if}}
+        <div>
+          {{#each result.scales}}
+          ... существующая карточка шкалы, без изменений ...
+          {{/each}}
+        </div>
+      </div>
 ```
 
-Класс контейнера `tb-measures` заменить на `tb-measures tb-measures--with-chart`, когда радар
-есть; в mustache-подмножестве ветвление на атрибуте недоступно, поэтому раскладку решает
-селектор соседства в CSS (следующий шаг), а не второй класс.
+Из этой разметки следует, что ядро (Task 2) обязано отдавать поля, которых нет в первой
+редакции модуля: `width` и `height` (виджет не квадратный — 340×300), `cx` / `cy` у колец и
+осей, `levelY`, `levelText` (метка уровня и значение одной строкой — «Умеренная · 6 из 25», при
+квантовании только метка) и `quantizedClass` (пустая строка либо `tb-radar__dot--quantized`).
+Их надо добавить в Task 2 вместе с тестами, а не собирать в разметке: DSL не склеивает строки
+и не считает.
+
+Карточки шкал заворачиваются в `<div>` — вторую колонку сетки. Внутри цикла ничего не меняется.
+Многострочные подписи осей эскиз рисует через `tspan`; ядро отдаёт цельную строку, перенос
+делает разметка только там, где он предусмотрен макетом.
 
 - [ ] **Step 6: Проверить, что DSL не ломает строку координат**
 
@@ -840,36 +863,41 @@ npm test -- shared/template/dsl.test.ts
 
 В `server/scorm/templates/default/styles/theme.css` в конец компонентного слоя добавить:
 
+Перенести слой «Дельта PRD-35» из эскиза дословно — он уже прошёл линтер
+`node scripts/check-wireframes-ds.mjs` (0 нарушений в файле эскиза) и браузерную сверку:
+
 ```css
 /* PRD-35. Радар компетенций: сбоку от карточек, на узком экране — над ними. */
-.tb-measures:has(.tb-radar) {
+.tb-measures--chart {
   display: grid;
-  grid-template-columns: minmax(240px, 320px) 1fr;
-  gap: var(--ou-space-l);
+  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  gap: var(--ou-space-6);
   align-items: start;
 }
-
-.tb-radar__svg { width: 100%; height: auto; }
-.tb-radar__ring { fill: none; stroke: var(--ou-border-muted); stroke-width: 1; }
-.tb-radar__axis { stroke: var(--ou-border-muted); stroke-width: 1; }
+.tb-radar { position: sticky; top: 0; }
+.tb-radar__svg { width: 100%; height: auto; display: block; }
+.tb-radar__ring,
+.tb-radar__axis { fill: none; stroke: var(--ou-border-soft); stroke-width: 1px; }
 .tb-radar__shape {
-  fill: hsl(var(--ou-accent-default) / 0.18);
-  stroke: hsl(var(--ou-accent-default));
-  stroke-width: 2;
+  fill: var(--ou-accent-default); fill-opacity: 0.16;
+  stroke: var(--ou-accent-default); stroke-width: 2;
 }
-.tb-radar__dot { fill: hsl(var(--tb-zone)); stroke: var(--ou-surface-default); stroke-width: 2; }
-.tb-radar__label { fill: var(--ou-text-default); font-size: 12px; }
-.tb-radar__level { fill: var(--ou-text-muted); font-size: 11px; }
+.tb-radar__dot { fill: hsl(var(--tb-zone)); stroke: var(--ou-bg-surface-2); stroke-width: 2; }
+.tb-radar__label { fill: var(--ou-fg-default); font: var(--ou-text-body-s); }
+.tb-radar__level { fill: var(--ou-fg-muted); font: var(--ou-text-body-xs); }
+.tb-radar__dot--quantized { fill: var(--ou-bg-surface-2); stroke: hsl(var(--tb-zone)); }
 
-@media (max-width: 720px) {
-  .tb-measures:has(.tb-radar) { grid-template-columns: 1fr; }
+@media (max-width: 860px) {
+  .tb-measures--chart { grid-template-columns: 1fr; }
+  .tb-radar { position: static; }
 }
 ```
 
-Перед фиксацией сверить каждую переменную с `vendor/ui-kit/**/university-rt.css`: несуществующий
-токен не подсветится ни линтером, ни тестом. Если `:has()` окажется недоступен в целевом движке
-LMS, заменить его на класс-модификатор, выставляемый ядром через `result.scalesChart` (в этом
-случае добавить в `CtxRadarChart` поле `containerClass`).
+Два места, где легко ошибиться. Первое: токены ДС — это ГОТОВЫЕ цвета, а не тройки HSL,
+поэтому прозрачность заливки задаётся `fill-opacity`, а не `hsl(... / .18)`; тройкой приходит
+только цвет зоны через `--tb-zone`, как уже устроено в PRD-29. Второе: `:has()` не
+используется намеренно — раскладку включает класс из ядра (`result.scalesBlockClass`), потому
+что поддержка `:has()` зависит от движка, встроенного в LMS.
 
 - [ ] **Step 8: Проверить экран в браузере**
 
