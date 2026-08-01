@@ -1037,10 +1037,8 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
    Every query here measures the SCENE (`@container tbscene`, declared on
    `.tb-scene` at the top of this file), never the viewport. The whole layer
    lives at the END of the file on purpose: its rules mirror selectors declared
-   above at the SAME specificity, so cascade ORDER is what makes them win. There is
-   exactly ONE `!important` in the layer — on the matching grid, whose columns the
-   renderer prints inline and which therefore cannot be reached any other way; the
-   rule carries its own explanation.
+   above at the SAME specificity, so cascade ORDER is what makes them win — there is
+   no `!important` anywhere in this layer.
 
    One constraint shapes all of it: NOT ONE LAYOUT FILE MAY CHANGE.
    `tests/template-layout-parity.test.ts` requires the 19 layouts to stay byte
@@ -1063,19 +1061,14 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   .tb-content--image,
   .tb-content--image-right { grid-template-columns: 1fr; gap: var(--ou-space-5); }
 
-  /* Matching stands up.
-     `!important` is required here and only here, and it is not a shortcut: the
-     renderer prints `grid-template-columns` INLINE on `.ou-match` to give the
-     wordier side a 2:1 share (question-interaction, renderMatching), and an inline
-     declaration outranks every stylesheet rule. DS ships its own fold at
-     `max-width: 560px` and it has never worked for exactly this reason — worse, it
-     hides `.ou-match__gap` while the inline template keeps THREE tracks, so the
-     cards auto-place into the wrong ones and visibly overlap on a phone. Folding to
-     one track puts prompt over chip, which is the intended narrow layout.
-     A cleaner fix belongs upstream: have the renderer print the ratio as a custom
-     property that a stylesheet can override. Left as a proposal — it changes shared
-     render code and the DS, both of which serve the certification template too. */
-  .tb-scene .ou-match { grid-template-columns: 1fr !important; }
+  /* Matching stands up: one track, prompt over chip. Plain specificity is enough now
+     that the renderer passes its column ratio as `--ou-match-cols` instead of printing
+     `grid-template-columns` inline (question-interaction, renderMatching) — an inline
+     track list used to outrank every rule, which is why DS's own fold at
+     `max-width: 560px` never worked and left three tracks with the gap column hidden,
+     auto-placing the cards into the wrong ones. Restated here in SCENE coordinates
+     because the DS rule is a viewport query and would not fire in a narrow modal. */
+  .tb-scene .ou-match { grid-template-columns: 1fr; }
   .tb-scene .ou-match__gap { display: none; }
 
   /* Typography, first step down. `clamp()` WRAPS the runtime variable rather than
@@ -7696,7 +7689,7 @@ var TBTemplate = (() => {
     const gapCol = "var(--ou-match-gap-w)";
     const columns = !skew ? `minmax(0, 1fr) ${gapCol} minmax(0, 1fr)` : leftTextLen > rightTextLen ? `minmax(0, 2fr) ${gapCol} minmax(0, 1fr)` : `minmax(0, 1fr) ${gapCol} minmax(0, 2fr)`;
     let poolSlot = 0;
-    let html = `<div class="ou-match ou-match--gap-wide ou-match--side-r ou-match--icon-dots" style="grid-template-columns:${columns}">`;
+    let html = `<div class="ou-match ou-match--gap-wide ou-match--side-r ou-match--icon-dots" style="--ou-match-cols:${columns}">`;
     for (const ri of rightMapping) {
       const matchedLeft = rightToLeft[ri];
       const isJoined = matchedLeft !== void 0;
