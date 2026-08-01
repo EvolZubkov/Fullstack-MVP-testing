@@ -18,6 +18,13 @@ export interface ResultsBlockSettings {
   scoreSummary?: BlockSetting;
   indicators?: BlockSetting;
   scales?: BlockSetting;
+  /**
+   * PRD-35. Boolean, not three-position, on purpose: `auto` exists where the
+   * manifest cannot know what the test contains, and here the answer is never
+   * derivable — a profile diagram is an editorial decision, not a consequence of
+   * the data.
+   */
+  showCompetencyRadar?: boolean;
 }
 
 /** What the test itself offers, used to answer `auto`. */

@@ -71,10 +71,21 @@ export interface CtxRadarAxis {
   y: number;
   axisX: number;
   axisY: number;
-  labelX: number;
-  labelY: number;
-  levelY: number;
-  labelAnchor: "start" | "middle" | "end";
+}
+
+/**
+ * Одна строка текста на диаграмме — часть перенесённого названия шкалы либо её
+ * уровень. Плоский самодостаточный список: цикл DSL не достаёт родителя, а разные
+ * названия переносятся на РАЗНОЕ число строк, поэтому координату и выравнивание
+ * несёт каждая строка сама.
+ */
+export interface CtxRadarLabel {
+  text: string;
+  x: number;
+  y: number;
+  anchor: "start" | "middle" | "end";
+  /** `tb-radar__label` для названия, `tb-radar__level` для уровня. */
+  className: string;
 }
 
 /** Кольцо сетки. Центр несёт каждое кольцо: в цикле DSL родителя не достать. */
@@ -90,6 +101,7 @@ export interface CtxRadarChart {
   height: number;
   axes: CtxRadarAxis[];
   rings: CtxRadarRing[];
+  labels: CtxRadarLabel[];
   polygonPoints: string;
   ariaLabel: string;
 }
@@ -97,6 +109,12 @@ export interface CtxRadarChart {
 
 Числовых значений в контракте нет намеренно: цифры печатает карточка шкалы, диаграмма
 показывает форму профиля (PRD-35 §4.3).
+
+Перенос названий по словам делает ЯДРО (`wrapLabel`), а не разметка: DSL не умеет ни
+измерять, ни разбивать текст. Браузерная проверка Task 4 показала, зачем это нужно —
+«Обесценивание достижений» одной строкой выходило за левый край поля, а трёхстрочная
+подпись верхней оси начиналась с отрицательной координаты и обрезалась сверху. Оба случая
+закрыты тестами «переносит длинное название по словам» и «держит все подписи внутри поля».
 
 Ключ настройки — `showCompetencyRadar` (одинаково у `results` и у видов отчёта).
 Поле контекста — `result.scalesChart`.

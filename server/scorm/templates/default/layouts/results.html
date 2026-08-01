@@ -58,7 +58,27 @@
       {{#if result.scales}}
       <hr class="ou-separator ou-separator--horizontal">
       <div class="tb-scene__q"><h3 class="tb-scene__subhead">По шкалам</h3></div>
-      <div class="tb-measures">
+      <div class="{{result.scalesBlockClass}}">
+        {{#if result.scalesChart}}
+        <div class="tb-radar">
+          <svg class="tb-radar__svg" viewBox="0 0 {{result.scalesChart.width}} {{result.scalesChart.height}}" role="img" aria-label="{{result.scalesChart.ariaLabel}}">
+            {{#each result.scalesChart.rings}}
+            <circle class="tb-radar__ring" cx="{{cx}}" cy="{{cy}}" r="{{radius}}"></circle>
+            {{/each}}
+            {{#each result.scalesChart.axes}}
+            <line class="tb-radar__axis" x1="{{cx}}" y1="{{cy}}" x2="{{axisX}}" y2="{{axisY}}"></line>
+            {{/each}}
+            <polygon class="tb-radar__shape" points="{{result.scalesChart.polygonPoints}}"></polygon>
+            {{#each result.scalesChart.axes}}
+            <circle class="tb-radar__dot {{quantizedClass}}" cx="{{x}}" cy="{{y}}" r="6" style="--tb-zone:{{color}}"></circle>
+            {{/each}}
+            {{#each result.scalesChart.labels}}
+            <text class="{{className}}" x="{{x}}" y="{{y}}" text-anchor="{{anchor}}">{{text}}</text>
+            {{/each}}
+          </svg>
+        </div>
+        {{/if}}
+        <div class="tb-measures__list">
         {{#each result.scales}}
         <div class="ou-formsection tb-measure" data-render="{{renderKind}}">
           <div class="ou-formsection__intro">
@@ -106,6 +126,7 @@
           </div>
         </div>
         {{/each}}
+        </div>
       </div>
       {{/if}}
 

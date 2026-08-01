@@ -52,8 +52,19 @@ const CENTER_Y = 150;
 const RADIUS = 100;
 /** Distance from the centre to the axis label, past the outer ring. */
 const LABEL_GAP = 30;
-/** Baseline step from the scale name down to its level label. */
-const LEVEL_STEP = 16;
+/** Baseline step between label lines. */
+const LINE_STEP = 15;
+/**
+ * Soft limit for one label line, in characters.
+ *
+ * A centred label at the left rim has only twice its distance to the edge to live
+ * in, and «Обесценивание достижений» set on one line overflowed the viewport — the
+ * browser check caught it, no test would have. Wrapping happens HERE and not in the
+ * layout because the DSL cannot measure, split or count anything.
+ */
+const MAX_LINE_CHARS = 14;
+/** Hard stop, so a pathological name cannot push the level label off the canvas. */
+const MAX_LINES = 3;
 /** Grid rings at quarter steps of the domain; unlabelled on purpose (see below). */
 const RING_STEPS = [0.25, 0.5, 0.75, 1];
 
@@ -82,10 +93,22 @@ export interface CtxRadarAxis {
   y: number;
   axisX: number;
   axisY: number;
-  labelX: number;
-  labelY: number;
-  levelY: number;
-  labelAnchor: "start" | "middle" | "end";
+}
+
+/**
+ * One line of text on the chart — a wrapped piece of a scale name or its level.
+ *
+ * Deliberately FLAT and self-sufficient: the layout draws every caption with a
+ * single loop, because a DSL loop cannot reach its parent for the shared x or the
+ * anchor, and a name may wrap onto a different number of lines than its neighbour.
+ */
+export interface CtxRadarLabel {
+  text: string;
+  x: number;
+  y: number;
+  anchor: "start" | "middle" | "end";
+  /** `tb-radar__label` for the name, `tb-radar__level` for the level. */
+  className: string;
 }
 
 /** One grid ring. Each carries the centre: a DSL loop cannot reach its parent. */
@@ -100,6 +123,7 @@ export interface CtxRadarChart {
   height: number;
   axes: CtxRadarAxis[];
   rings: CtxRadarRing[];
+  labels: CtxRadarLabel[];
   polygonPoints: string;
   ariaLabel: string;
 }
@@ -163,6 +187,31 @@ function anchorFor(cos: number): "start" | "middle" | "end" {
 }
 
 /**
+ * Greedy word wrap. A word longer than the limit keeps its own line rather than
+ * being cut: a truncated term is worse than a wide one, and scale names are terms.
+ */
+function wrapLabel(text: string, maxChars: number, maxLines: number): string[] {
+  const words = String(text ?? "").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    // On the last allowed line everything left is kept together: overflowing beats
+    // dropping words the reader then cannot recover.
+    const isLastLine = lines.length === maxLines - 1;
+    if (line && candidate.length > maxChars && !isLastLine) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  }
+  lines.push(line);
+  return lines;
+}
+
+/**
  * Build the chart, or `null` when it must not be drawn.
  *
  * `null` covers every refusal: fewer than {@link MIN_AXES} visible scales, a scale
@@ -175,6 +224,7 @@ export function buildRadarChart(input: RadarChartInput): CtxRadarChart | null {
   if (visible.length < MIN_AXES) return null;
 
   const prepared: CtxRadarAxis[] = [];
+  const labels: CtxRadarLabel[] = [];
   const step = (Math.PI * 2) / visible.length;
 
   for (let i = 0; i < visible.length; i += 1) {
@@ -205,12 +255,36 @@ export function buildRadarChart(input: RadarChartInput): CtxRadarChart | null {
     const angle = -Math.PI / 2 + step * i;
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
-    const labelY = round1(CENTER_Y + sin * (RADIUS + LABEL_GAP));
+    const levelText = band ? band.label ?? band.level : "";
+    const anchor = anchorFor(cos);
+    const labelX = round1(CENTER_X + cos * (RADIUS + LABEL_GAP));
+    const lines = wrapLabel(source.name, MAX_LINE_CHARS, MAX_LINES);
+    // Above the circle the block grows UPWARDS, below it downwards: otherwise a
+    // two-line name at the top axis would run into the outer ring. The clamp keeps
+    // the block on the canvas — without it a three-line caption at the top axis
+    // started at a NEGATIVE baseline and its first line was cut off by the viewport
+    // (found in the browser, not by a test).
+    const blockLines = lines.length + (levelText ? 1 : 0);
+    const baseline = CENTER_Y + sin * (RADIUS + LABEL_GAP);
+    const firstY = sin < 0 ? Math.max(LINE_STEP, baseline - (blockLines - 1) * LINE_STEP) : baseline;
+
+    lines.forEach((text, line) => {
+      labels.push({ text, x: labelX, y: round1(firstY + line * LINE_STEP), anchor, className: "tb-radar__label" });
+    });
+    if (levelText) {
+      labels.push({
+        text: levelText,
+        x: labelX,
+        y: round1(firstY + lines.length * LINE_STEP),
+        anchor,
+        className: "tb-radar__level",
+      });
+    }
 
     prepared.push({
       key: source.key,
       label: source.name,
-      levelText: band ? band.label ?? band.level : "",
+      levelText,
       tone,
       color,
       quantizedClass: quantized ? "tb-radar__dot--quantized" : "",
@@ -221,10 +295,6 @@ export function buildRadarChart(input: RadarChartInput): CtxRadarChart | null {
       y: round1(CENTER_Y + sin * RADIUS * ratio),
       axisX: round1(CENTER_X + cos * RADIUS),
       axisY: round1(CENTER_Y + sin * RADIUS),
-      labelX: round1(CENTER_X + cos * (RADIUS + LABEL_GAP)),
-      labelY,
-      levelY: round1(labelY + LEVEL_STEP),
-      labelAnchor: anchorFor(cos),
     });
   }
 
@@ -233,6 +303,7 @@ export function buildRadarChart(input: RadarChartInput): CtxRadarChart | null {
     height: HEIGHT,
     axes: prepared,
     rings: RING_STEPS.map((s) => ({ cx: CENTER_X, cy: CENTER_Y, radius: round1(RADIUS * s) })),
+    labels,
     polygonPoints: prepared.map((a) => `${a.x},${a.y}`).join(" "),
     ariaLabel: `Профиль по шкалам: ${prepared
       .map((a) => `${a.label} — ${a.levelText || "уровень не определён"}`)

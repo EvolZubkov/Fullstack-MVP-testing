@@ -131,6 +131,57 @@ describe("buildRadarChart", () => {
     expect(chart!.axes[1].tone).toBe("critical");
   });
 
+  it("переносит длинное название по словам и ставит уровень последней строкой", () => {
+    const chart = buildRadarChart({
+      ramp,
+      axes: [
+        { ...axis("a", 30, scale(40, [0, 28, 33])), name: "Обесценивание достижений" },
+        axis("b", 3, scale(25, [0, 5, 10])),
+        axis("c", 20, scale(40, [0, 28, 33])),
+      ],
+    });
+    const own = chart!.labels.filter((l) => l.x === chart!.labels[0].x);
+    const names = chart!.labels.filter((l) => l.className === "tb-radar__label");
+    expect(names.some((l) => l.text === "Обесценивание")).toBe(true);
+    expect(names.some((l) => l.text === "достижений")).toBe(true);
+    // Ни одна строка не длиннее мягкого предела, иначе подпись уедет за поле.
+    expect(names.every((l) => l.text.length <= 16)).toBe(true);
+    // Уровень идёт ПОСЛЕ строк названия того же луча.
+    const level = own.find((l) => l.className === "tb-radar__level");
+    expect(level).toBeDefined();
+    expect(level!.y).toBeGreaterThan(Math.max(...own.filter((l) => l !== level).map((l) => l.y)));
+  });
+
+  it("держит верхнюю подпись выше кольца, растя вверх", () => {
+    const chart = buildRadarChart({
+      ramp,
+      axes: [
+        { ...axis("a", 20, scale(45, [0, 15, 25])), name: "Эмоциональное истощение" },
+        axis("b", 3, scale(25, [0, 5, 10])),
+        axis("c", 20, scale(40, [0, 28, 33])),
+      ],
+    });
+    const top = chart!.axes[0];
+    const topLabels = chart!.labels.filter((l) => l.x === top.cx);
+    expect(topLabels.length).toBeGreaterThanOrEqual(3);
+    expect(Math.max(...topLabels.map((l) => l.y))).toBeLessThan(top.axisY);
+  });
+
+  it("держит все подписи внутри поля виджета", () => {
+    const chart = buildRadarChart({
+      ramp,
+      axes: [
+        { ...axis("a", 20, scale(45, [0, 15, 25])), name: "Ответственность за результат команды" },
+        { ...axis("b", 3, scale(25, [0, 5, 10])), name: "Ориентация на внутреннего заказчика" },
+        { ...axis("c", 20, scale(40, [0, 28, 33])), name: "Системное мышление" },
+      ],
+    });
+    for (const label of chart!.labels) {
+      expect(label.y).toBeGreaterThan(0);
+      expect(label.y).toBeLessThan(chart!.height);
+    }
+  });
+
   it("отдаёт строку polygonPoints по числу осей", () => {
     const chart = buildRadarChart({
       ramp,
