@@ -568,11 +568,6 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 
 /* Adaptive results: centred hero (no score ring) + level cards. */
 .tb-adaptive-hero { display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-3); text-align: center; margin-bottom: var(--ou-space-2); }
-.tb-adaptive-hero__icon {
-  width: 64px; height: 64px; flex: none; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: var(--ou-accent-soft); color: var(--ou-accent-default);
-}
 /* The adaptive level tag needs no rule here: its tone comes as DS modifiers from the
    context — solid accent when a level was confirmed, solid error when the test's
    minimum was not (shared/template/result-context). Mirrors the standard template. */
@@ -1077,7 +1072,6 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   /* System screens. */
   .tb-transition-icon { width: 64px; height: 64px; }
   .tb-blocked-icon { width: 60px; height: 60px; }
-  .tb-adaptive-hero__icon { width: 52px; height: 52px; }
   .retake-wall { padding: 16px; }
   .retake-wall__card { padding: var(--ou-space-5); }
 
