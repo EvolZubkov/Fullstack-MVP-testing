@@ -242,7 +242,7 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-scene__logo-ph { color: var(--ou-accent-default); opacity: 0.75; }
 .tb-scene__titles { min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
 .tb-scene__title { margin: 0; font: var(--ou-text-display-s); color: var(--ou-fg-default); letter-spacing: -0.01em; text-wrap: pretty; }
-.tb-scene__subtitle { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-scene__subtitle { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
 .tb-scene__timers { margin-left: auto; display: flex; align-items: flex-start; gap: var(--ou-space-6); flex: none; }
 
 /* Progress bar pinned to the header's bottom edge. */
@@ -419,7 +419,7 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   color: var(--ou-fg-default); text-wrap: pretty;
   font-size: var(--tb-question-fs, 30px);
 }
-.tb-scene__qhint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-scene__qhint { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
 
 /* Media + answers: stacked by default; side-by-side (media 5 / answers 7) when
    the media slot actually has content. */
@@ -605,7 +605,7 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-topic-card__bar { width: 100%; margin-top: var(--ou-space-1); }
 .tb-topic-card__bar.is-pass .ou-progress__fill { background: var(--ou-success-default); }
 .tb-topic-card__bar.is-fail .ou-progress__fill { background: var(--ou-error-default); }
-.tb-topic-card__req { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-topic-card__req { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
 .tb-stat-rows { display: flex; flex-direction: column; width: 100%; }
 .tb-stat-val { font: var(--ou-text-body-m); color: var(--ou-fg-default); }
 /* Per-topic feedback block — feedback text + recommendation chips, divided off. */
@@ -614,13 +614,19 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   margin-top: var(--ou-space-2); padding-top: var(--ou-space-3);
   border-top: 1px solid var(--ou-border-soft);
 }
-.tb-topic-card__fb-text { font: var(--ou-text-body-s); color: var(--ou-fg-soft); }
+.tb-topic-card__fb-text { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
+/* Readable layer, not a caption layer: the question hint, the per-topic feedback,
+   «требуется N%» and these chips carry the author's message TO the learner, so they
+   are set in `body-m` (14/20) rather than `body-s` (12/16) — the step buys a quarter
+   more leading as well as two pixels, and on a feedback paragraph the leading matters
+   more. Labels that are SCANNED rather than read — the answered/skipped counters,
+   fact captions, eyebrows, tags — stay at `body-s` on purpose. */
 .tb-recs { display: flex; flex-wrap: wrap; gap: var(--ou-space-2); }
 .tb-rec {
   display: inline-flex; align-items: center; gap: var(--ou-space-2);
   padding: var(--ou-space-1) var(--ou-space-3);
   border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-pill);
-  background: var(--ou-bg-elevated); font: var(--ou-text-body-s); color: var(--ou-fg-default);
+  background: var(--ou-bg-elevated); font: var(--ou-text-body-m); color: var(--ou-fg-default);
   text-decoration: none;
 }
 a.tb-rec:hover { border-color: var(--ou-accent-default); }
@@ -1122,19 +1128,6 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   .tb-blocked-icon { width: 60px; height: 60px; }
   .retake-wall { padding: 16px; }
   .retake-wall__card { padding: var(--ou-space-5); }
-
-  /* Readable layer: 12px is a caption size, and the text set in it here is not a
-     caption — the question hint, the per-topic feedback, «требуется N%» and the
-     recommendation chips are the message the author writes FOR the learner. DS
-     `body-s` is 12/16 and `body-m` is 14/20, so the step buys a quarter more leading
-     as well as the two pixels, which matters more on a feedback paragraph than the
-     size does. Labels that are SCANNED rather than read — the answered/skipped
-     counters, fact captions, eyebrows, tags — deliberately stay at 12px. */
-  .tb-scene__qhint,
-  .tb-scene__subtitle,
-  .tb-topic-card__req,
-  .tb-topic-card__fb-text,
-  .tb-rec { font: var(--ou-text-body-m); }
 
   /* Typography, second step down. */
   .tb-scene__qtitle,
