@@ -16,7 +16,7 @@
     // from docker/config/deploy.env: TEST_PORT). Used to build email links.
     // No trailing slash (the loader strips one anyway).
     "appUrl": "https://test-dev.edtech-rtk.ru",
-    "appName": "СкилУм (test)",
+    "appName": "Skill'Ум (test)",
     // Same reverse-proxy setup as production: TLS terminates in nginx, which
     // forwards X-Forwarded-Proto: https (trust proxy is on, see server/index.ts).
     "cookieSecure": true

@@ -58,7 +58,7 @@
     // (development only). Set to the real external URL in production.
     "appUrl": "",
     // Product name used in email subjects and the default sender name.
-    "appName": "СкилУм",
+    "appName": "Skill'Ум",
     // Emit secure session cookies (requires HTTPS end-to-end). Enable in
     // production only when a reverse proxy forwards X-Forwarded-Proto: https.
     "cookieSecure": false

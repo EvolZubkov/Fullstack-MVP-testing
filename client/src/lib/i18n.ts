@@ -67,7 +67,7 @@ export const t = {
   },
 
   auth: {
-    appName: "СкилУм",
+    appName: "Skill'Ум",
     signIn: "Вход",
     signInDescription: "Введите ваши данные для входа в систему",
     email: "Email",
@@ -536,6 +536,12 @@ export const t = {
     difficulty: "Сложность",
     difficultyHint: "0 — очень легко, 100 — очень сложно",
     difficultyUnset: "Не задано",
+    // PRD-30: author-defined position of the question inside its topic.
+    orderIndex: "Индекс в теме",
+    orderIndexHint:
+      "Пусто — индекс не задан: такие вопросы идут последними. Одинаковый индекс у нескольких " +
+      "вопросов допустим — внутри такой группы порядок случайный. Задавайте с шагом 10, чтобы " +
+      "вставлять вопросы между соседними. Действует, когда у темы в тесте выключен случайный порядок.",
     difficultyNotSet: "Не задано",
     allDifficulties: "Все уровни",
     difficultyEasy: "Лёгкие (0-33)",
