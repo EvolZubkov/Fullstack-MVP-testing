@@ -375,8 +375,10 @@ function renderAdaptiveResults() {
  * / finish — gated layout blocks the web omits) go through opts.
  */
 function renderAdaptiveResultsTemplated(app, result) {
-  var hasLimit = !!TEST_DATA.maxAttempts;
-  var canRetry = hasAttemptsLeft();
+  // PRD-31 barrier B: a closed interval between attempts withdraws the retry here
+  // too, so the adaptive results screen cannot offer a run the start would refuse.
+  var intervalOpen = (typeof attemptIntervalState !== 'function') || attemptIntervalState().allowed;
+  var canRetry = hasAttemptsLeft() && intervalOpen;
   var input = {
     passed: !!result.overallPassed,
     topicResults: (result.topicResults || []).map(function (tr) {
@@ -396,8 +398,12 @@ function renderAdaptiveResultsTemplated(app, result) {
     // `showPdf` is the LEGACY report flag, kept for external templates whose adaptive
     // layout predates the unified contract; the shipped layouts read `result.nav`.
     showPdf: true,
-    canRetry: (!hasLimit) || canRetry,
-    showFinish: (!hasLimit) || (!canRetry)
+    // `(!hasLimit) || canRetry` used to be written out here, but it was already
+    // redundant — `hasAttemptsLeft()` returns true whenever no limit is set — and
+    // with PRD-31 it became WRONG: an unlimited test would keep offering the retry
+    // straight through a closed interval. The flag now says what it means.
+    canRetry: canRetry,
+    showFinish: !canRetry
   });
   // One report contract for BOTH results layouts (shared/template/results-nav): the
   // adaptive footer used to spell it `showPdf`/`download-pdf`, which the web host never

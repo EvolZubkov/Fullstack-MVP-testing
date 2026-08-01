@@ -23,6 +23,9 @@ const coreSrc = read("server/scorm/template/app/templateCore.js");
 const engineSrc = read("server/scorm/template/app/eligibility/engine.js");
 const pluginsSrc = read("server/scorm/template/app/eligibility/plugins.js");
 const gateSrc = read("server/scorm/template/app/eligibility/gate.js");
+// PRD-31: the portal clock moved out of the gate into a shared utility (both barriers
+// need it), so the runtime under test is assembled from four parts, not three.
+const trustedNowSrc = read("server/scorm/template/app/utils/trusted-now.js");
 const blockedLayout = read("server/scorm/templates/default/layouts/system.blocked.html");
 
 /** Build a fresh RetakeGate bound to the supplied runtime globals. */
@@ -37,7 +40,7 @@ function makeGate(globals: {
     "SCORM",
     "escapeHtml",
     "loadDesignTemplate",
-    `${engineSrc}\n${pluginsSrc}\n${gateSrc}\n;return RetakeGate;`,
+    `${trustedNowSrc}\n${engineSrc}\n${pluginsSrc}\n${gateSrc}\n;return RetakeGate;`,
   );
   // No template fetch needed: tests preload state.templateLayouts; loadDesignTemplate
   // is a never-called stub here (the real one runs only when layouts are absent).
@@ -100,7 +103,10 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
           k === "cmi.suspend_data"
             ? JSON.stringify({ retake: { lastCompletedDate: "2026-05-20" } })
             : "",
-        init: () => calls.push("initialize"),
+        setValue: (k: string) => { calls.push("setValue:" + k); return true; },
+        commit: () => { calls.push("commit"); return true; },
+        init: () => { calls.push("initialize"); return true; },
+        terminate: () => { calls.push("terminate"); return true; },
       };
       const state: Record<string, unknown> = { templateLayouts: { "system.blocked": blockedLayout } };
       const gate = makeGate({ state, SCORM, escapeHtml });
@@ -125,10 +131,57 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
       expect(app.querySelector('[data-path="retake.cooldownPeriodDays"]')!.textContent).toBe("30");
       expect(app.querySelector('[data-path="retake.availableDateHuman"]')!.textContent).toBe("19.06.2026");
 
-      // NFR-01/02: blocked path never starts the course / SCORM.
+      // NFR-01 in its PRD-6 §9.1 wording + NFR-02: the requirement is about the
+      // RESULT, not the call order. The session IS opened — that is the only way to
+      // read suspend_data and tell a new assignment from a re-entry (PRD-31 §7.2) —
+      // but a blocked launch writes no `cmi.*` and is closed at once, so it never
+      // becomes a completed record and never starts the course.
       expect(started).toBe(false);
-      expect(calls).not.toContain("initialize");
+      expect(calls).toContain("initialize");
+      expect(calls).toContain("terminate");
+      expect(calls.filter((c) => c.indexOf("setValue:") === 0)).toEqual([]);
+      expect(calls).not.toContain("commit");
       expect((state.retake as any)?.allowed).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does NOT apply barrier A to a re-entry into the current assignment", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-04T10:00:00Z"));
+    try {
+      // The defect PRD-31 fixes. suspend_data carries a played attempt, i.e. this is
+      // the SAME registration — the same assignment — the learner already started.
+      // The cooldown would otherwise fire (last attempt 2026-05-20, 30-day period)
+      // and lock a learner out of their own assignment with attempts left.
+      const calls: string[] = [];
+      const SCORM = {
+        getValue: (k: string) =>
+          k === "cmi.suspend_data"
+            ? JSON.stringify({
+                attemptsUsed: 1,
+                attempts: [{ attemptNumber: 1, completedAt: "2026-05-20T10:00:00.000Z", percent: 40 }],
+                retake: { lastCompletedDate: "2026-05-20" },
+              })
+            : "",
+        setValue: (k: string) => { calls.push("setValue:" + k); return true; },
+        commit: () => { calls.push("commit"); return true; },
+        init: () => { calls.push("initialize"); return true; },
+        terminate: () => { calls.push("terminate"); return true; },
+      };
+      const state: Record<string, unknown> = { templateLayouts: { "system.blocked": blockedLayout } };
+      const gate = makeGate({ state, SCORM, escapeHtml });
+
+      let started = false;
+      gate.run(gatedTestData(), () => { started = true; });
+      await flush();
+
+      // The course runs; the interval (barrier B) is what governs the next attempt,
+      // and it is enforced on the start screen, not here.
+      expect(started).toBe(true);
+      expect(calls).not.toContain("terminate");
+      expect(document.getElementById("app")!.querySelector('[data-retake-branch="cooldown"]')).toBeNull();
     } finally {
       vi.useRealTimers();
     }

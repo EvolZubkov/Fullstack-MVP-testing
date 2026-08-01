@@ -58,7 +58,12 @@ function buildScormStartContext() {
   var used = getAttemptsUsed();
   var hasLimit = !!TEST_DATA.maxAttempts;
   var hasCompleted = !!getAllAttempts() && getAllAttempts().length > 0;
-  var canStartNew = hasAttemptsLeft();
+  // PRD-31 barrier B: the hour interval between attempts INSIDE this assignment.
+  // Decided here, post-Initialize, because its source is suspend_data — the gate
+  // could not read it before Initialize. An open interval leaves the screen exactly
+  // as it was; a closed one disables the start and shows the moment it reopens.
+  var interval = attemptIntervalState();
+  var canStartNew = hasAttemptsLeft() && interval.allowed;
   // PRD-19 FR-19 «повтор: можно»: prior-attempt summary + downloadable report from
   // the best saved attempt. Runs post-Initialize (suspend_data available); the
   // pre-Initialize cooldown gate builds its own minimal context without this.
@@ -91,6 +96,13 @@ function buildScormStartContext() {
     resume: canResume ? { index: (pendingSession.currentIndex || 0), total: pendingSession.flatQuestions.length } : null,
     hasCompletedResults: hasCompleted,
     canStartNew: canStartNew,
+    // The shared builder renders the same cooldown card for both barriers; barrier B
+    // carries a moment with a time, and no day countdown — «через N дн.» is
+    // meaningless for an interval measured in hours.
+    cooldown: interval.allowed ? null : {
+      availableDateHuman: fmtInstantHuman(interval.availableAt),
+      daysUntil: null
+    },
     priorResult: best ? {
       percent: best.percent,
       passed: best.passed,

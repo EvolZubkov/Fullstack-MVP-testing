@@ -312,7 +312,15 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     patchedTestObj?.retakePolicy?.eligibilityPlugin?.key &&
     patchedTestObj?.retakePlugin?.runtimeEntry
   );
-  const eligibilityEngineJs = retakeGated ? readOneOf(["app/eligibility/engine.js"]) : "";
+  // PRD-31 barrier B: the hour interval between attempts inside ONE assignment. It
+  // needs no plugin and no gate — it is decided AFTER Initialize from suspend_data —
+  // but it does need the engine's date math and the trusted clock. So the bundling
+  // condition splits: engine + clock for EITHER barrier, plugins + gate only for the
+  // cooldown. A package with neither barrier still gets none of it (FR-14).
+  const attemptIntervalOn = patchedTestObj?.retakePolicy?.attemptInterval?.enabled === true;
+  const needsEligibilityCore = retakeGated || attemptIntervalOn;
+  const eligibilityEngineJs = needsEligibilityCore ? readOneOf(["app/eligibility/engine.js"]) : "";
+  const trustedNowJs = needsEligibilityCore ? readOneOf(["app/utils/trusted-now.js"]) : "";
   const eligibilityPluginsJs = retakeGated ? readOneOf(["app/eligibility/plugins.js"]) : "";
   const eligibilityGateJs = retakeGated ? readOneOf(["app/eligibility/gate.js"]) : "";
 
@@ -390,6 +398,10 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   let appJs = joinJsParts([
     sharedRuntimeJs,
     escapeHtmlJs,
+    // PRD-31: the trusted clock is a UTILITY, not gate machinery — suspendAttempts
+    // stamps a finished attempt with it, so it must be defined before the parts that
+    // use it rather than sitting with the gate at the tail of the bundle.
+    trustedNowJs,
     qTypeJs,
     telemetryJs,
     shuffleJs,

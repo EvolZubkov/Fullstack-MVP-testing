@@ -24,6 +24,11 @@ const read = (p: string) => readFileSync(resolve(root, p), "utf8");
 const engineSrc = read("server/scorm/template/app/eligibility/engine.js");
 const pluginsSrc = read("server/scorm/template/app/eligibility/plugins.js");
 const gateSrc = read("server/scorm/template/app/eligibility/gate.js");
+// PRD-31: the portal clock and its memoized fetch moved OUT of the gate into a shared
+// utility, because the hour interval between attempts needs the same source. The gate
+// is no longer self-contained, so the runtime under test has to be assembled the way
+// the package assembles it.
+const trustedNowSrc = read("server/scorm/template/app/utils/trusted-now.js");
 
 /** The gate's own sub-budget for resolving the date (NFR-TD-01), mirrored from gate.js. */
 const DATE_TIMEOUT_MS = 2500;
@@ -36,7 +41,7 @@ function makeGate(state: Record<string, unknown>, SCORM: unknown) {
     "SCORM",
     "escapeHtml",
     "loadDesignTemplate",
-    `${engineSrc}\n${pluginsSrc}\n${gateSrc}\n;return RetakeGate;`,
+    `${trustedNowSrc}\n${engineSrc}\n${pluginsSrc}\n${gateSrc}\n;return RetakeGate;`,
   );
   return factory(state, SCORM, (s: unknown) => String(s == null ? "" : s), () => Promise.resolve(null));
 }

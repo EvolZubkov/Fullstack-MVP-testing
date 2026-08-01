@@ -322,7 +322,14 @@ function renderResultsTemplated(app, results) {
 
   ctx.result.nav = window.TBTemplate.buildResultsNav({
     canReport: true,
-    canRetry: !results.passed && (typeof hasAttemptsLeft === 'function') && hasAttemptsLeft(),
+    // PRD-31 barrier B: hide the retry while the interval between attempts is still
+    // closed — the start route would refuse it anyway, and an offered click that
+    // bounces reads as a broken screen. Note this is deliberately NOT folded into
+    // `attemptsExhausted` (resultsPage.js): that flag force-closes the course in the
+    // LMS, which must stay reserved for a terminal state, not a wait of a few hours.
+    canRetry: !results.passed &&
+      (typeof hasAttemptsLeft === 'function') && hasAttemptsLeft() &&
+      (typeof attemptIntervalState !== 'function' || attemptIntervalState().allowed),
     hasPostPages: !!(state.postResultsPages && state.postResultsPages.length > 0)
   });
 

@@ -270,28 +270,36 @@ export function buildTestJson(data: ExportData): string {
     })),
   };
 
-  // PRD-6: retake gate policy + resolved plugin runtime/config. Included only
-  // when enabled with a plugin so unpolicied packages stay byte-identical (FR-02);
-  // the runtime gate (RetakeGate) reads test.retakePolicy + test.retakePlugin.
+  // PRD-6 / PRD-31: the access policy and, for the cooldown, the resolved plugin.
+  // The condition SPLITS by barrier: the gate and its plugin are still baked only for
+  // barrier A (the cooldown), while barrier B — the hour interval inside one
+  // assignment — needs the policy in TEST_DATA with no plugin at all, because it is
+  // decided after Initialize from suspend_data. A test with NEITHER barrier gets
+  // neither field, so its package stays byte-identical (FR-14).
   const rp = data.test.retakePolicyJson as RetakePolicy | null | undefined;
-  if (rp && rp.enabled && rp.eligibilityPlugin?.key) {
-    const plugin = findEligibilityPlugin(rp.eligibilityPlugin.key);
-    if (plugin) {
-      const cfg = findEligibilityConfig(rp.eligibilityPlugin.key, rp.eligibilityPlugin.configId);
-      test.retakePolicy = {
-        enabled: true,
-        cooldownPeriodDays: rp.cooldownPeriodDays,
-        gateMode: rp.gateMode,
-        eligibilityPlugin: rp.eligibilityPlugin,
-        blockedPageId: rp.blockedPageId ?? null,
-      };
-      test.retakePlugin = {
-        key: plugin.key,
-        runtimeEntry: plugin.runtimeEntry,
-        bestEffort: plugin.bestEffort,
-        config: cfg?.config ?? {},
-      };
-    }
+  const gatePlugin =
+    rp && rp.enabled && rp.eligibilityPlugin?.key ? findEligibilityPlugin(rp.eligibilityPlugin.key) : undefined;
+  const intervalOn = rp?.attemptInterval?.enabled === true && rp.attemptInterval.hours != null;
+  if (rp && (gatePlugin || intervalOn)) {
+    test.retakePolicy = {
+      // `enabled` stays the COOLDOWN's switch: RetakeGate.isGated reads it, and an
+      // interval-only test must not look gated to the pre-Initialize gate.
+      enabled: rp.enabled === true && !!gatePlugin,
+      cooldownPeriodDays: rp.cooldownPeriodDays,
+      gateMode: rp.gateMode,
+      eligibilityPlugin: gatePlugin ? rp.eligibilityPlugin : null,
+      blockedPageId: rp.blockedPageId ?? null,
+      ...(intervalOn ? { attemptInterval: rp.attemptInterval } : {}),
+    };
+  }
+  if (rp && gatePlugin) {
+    const cfg = findEligibilityConfig(rp.eligibilityPlugin!.key, rp.eligibilityPlugin!.configId);
+    test.retakePlugin = {
+      key: gatePlugin.key,
+      runtimeEntry: gatePlugin.runtimeEntry,
+      bestEffort: gatePlugin.bestEffort,
+      config: cfg?.config ?? {},
+    };
   }
 
   // Add adaptive settings if present

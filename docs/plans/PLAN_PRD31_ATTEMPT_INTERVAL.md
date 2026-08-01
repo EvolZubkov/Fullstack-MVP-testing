@@ -1387,17 +1387,22 @@ function fmtInstantHuman(iso) {
 
 - [ ] **Шаг 2: закрыть «Пройти ещё раз» на экране результатов**
 
-В `resultsPage.js` заменить `var attemptsExhausted = !!TEST_DATA.maxAttempts && !hasAttemptsLeft();` на:
+НЕ трогать `attemptsExhausted` в `resultsPage.js`. Этот флаг управляет терминальным LMS-хаком: при исчерпании
+попыток курс принудительно закрывается как «пройден» с пометкой в `cmi.comments_from_learner`. Временный
+барьер туда сливать нельзя — учащегося, которому надо подождать сутки, закрыло бы навсегда.
+
+Настоящая точка — сборка навигации результатов. В `viewResults.js` в `buildResultsNav` дополнить условие:
 
 ```js
-  // PRD-31: the retry action is closed both by an exhausted limit and by the
-  // interval barrier — the learner must not be offered a click that will be refused.
-  var intervalBlocked = !attemptIntervalState().allowed;
-  var attemptsExhausted = (!!TEST_DATA.maxAttempts && !hasAttemptsLeft()) || intervalBlocked;
+    canRetry: !results.passed &&
+      (typeof hasAttemptsLeft === 'function') && hasAttemptsLeft() &&
+      (typeof attemptIntervalState !== 'function' || attemptIntervalState().allowed),
 ```
 
-В `adaptiveRender.js` заменить `var canRetry = hasAttemptsLeft();` на
-`var canRetry = hasAttemptsLeft() && attemptIntervalState().allowed;`.
+В `adaptiveRender.js` — `var canRetry = hasAttemptsLeft() && intervalOpen;`, а заодно заменить
+`canRetry: (!hasLimit) || canRetry` и `showFinish: (!hasLimit) || (!canRetry)` на `canRetry: canRetry` и
+`showFinish: !canRetry`: дизъюнкция с `!hasLimit` была избыточной (`hasAttemptsLeft()` и так истинна без
+лимита) и с появлением барьера стала неверной — тест без лимита предлагал бы повтор сквозь закрытый интервал.
 
 - [ ] **Шаг 3: собрать пакет**
 

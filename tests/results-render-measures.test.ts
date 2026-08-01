@@ -22,6 +22,9 @@ const { storageMock } = vi.hoisted(() => ({
   storageMock: {
     getAttempt: vi.fn(),
     getTest: vi.fn(),
+    // PRD-31 добавил обращение к назначению в тот же маршрут; без заглушки он падает
+    // на несуществующем методе ещё до кода, который проверяет этот файл.
+    getCurrentAssignmentId: vi.fn().mockResolvedValue(null),
     getSnapshot: vi.fn(),
     getAttemptsByUserAndTest: vi.fn().mockResolvedValue([]),
     getUser: vi.fn(),

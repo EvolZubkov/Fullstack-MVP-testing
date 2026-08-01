@@ -1,11 +1,20 @@
 // app/eligibility/gate.js
-// PRD-6 retake gate runtime. Runs BEFORE SCORM.Initialize for tests with a
-// retake policy (NFR-01/02): evaluates the configured eligibility plugin, and
-// either renders a block-wall (blocked => no Initialize, no cmi.*) or — when
-// eligible — hands straight to the normal course (Initialize + flow) with NO
-// extra gate-shell (PRD-19 FR-19: an elapsed-cooldown test is indistinguishable
-// from an ordinary test). Non-gated tests never reach here. Side effects (fetch,
-// suspend_data read, render) live here; the pure logic is
+// PRD-6 retake gate runtime — barrier A, the calendar cooldown BETWEEN assignments
+// (PRD-31 §3). Evaluates the configured eligibility plugin and either renders the
+// cooldown state on the start page (blocked) or hands straight to the normal course
+// with NO extra gate-shell (PRD-19 FR-19: an elapsed-cooldown test is
+// indistinguishable from an ordinary one). Non-gated tests never reach here.
+//
+// PRD-31 moved the VERDICT to just after Initialize. Before it, `suspend_data` is
+// unreadable (SCORM 2004 answers GetValue with error 122), so the package could not
+// tell a NEW assignment from a re-entry into the current one — and the LMS grid
+// carries no identifier that would (refuted by probes 2026-07-16 and 2026-08-01).
+// Since a record turns finished after the FIRST attempt, the old placement blocked a
+// learner INSIDE their own assignment with attempts left. NFR-01 now reads through
+// its result (PRD-6 §9.1): a blocked launch writes no `cmi.*` and is closed at once
+// with Terminate, so it never becomes a completed record.
+//
+// Side effects (fetch, suspend_data read, render) live here; the pure logic is
 // EligibilityEngine/EligibilityPlugins.
 var RetakeGate = (function () {
   var GATE_TIMEOUT_MS = 5000; // NFR-06
@@ -43,13 +52,6 @@ var RetakeGate = (function () {
     );
   }
 
-  // NFR-TD-01: the date resolution has its own sub-budget, so a slow portal can never
-  // hang the start — it just degrades to the machine clock. GATE_TIMEOUT_MS is the
-  // budget for the WHOLE gate and is SHARED, not per-step: what the date resolution
-  // spends here is deducted from what the plugin gets afterwards (see evaluate), so
-  // the worst case to a verdict stays 5 s rather than 2.5 s + 5 s.
-  var DATE_TIMEOUT_MS = 2500;
-
   // UTC calendar day of an epoch-ms value. The whole cooldown math is UTC-calendar on
   // both hosts (the web server uses toIsoDateUTC), and taking the day in UTC keeps the
   // learner's TIME ZONE out of the decision — otherwise a TZ set to UTC+14 would hand
@@ -58,66 +60,15 @@ var RetakeGate = (function () {
     return EligibilityEngine.formatIsoDate(Math.floor(ms / 86400000));
   }
 
-  // Marker resolved by the date sub-budget race so the fallback can name `timeout` as
-  // the cause instead of lumping it in with "no usable header".
-  var DATE_TIMEOUT = { timedOut: true };
-
-  // Why the trusted date was NOT used. The gate degrades silently by design (a network
-  // hiccup must never block a course), so the ONLY way to tell a mis-integration from a
-  // healthy same-origin portal is this string — see §6: the first live LMS run has to be
-  // readable off the console in one pass, without a "patched — re-uploaded" round trip.
-  function fallbackCause(page) {
-    if (page === DATE_TIMEOUT) return 'timeout after ' + DATE_TIMEOUT_MS + ' ms';
-    if (page && page.dateHeader) return 'unparseable-header: "' + page.dateHeader + '"';
-    if (page && page.failed) {
-      return 'request-failed' + (page.status ? ': HTTP ' + page.status : '') +
-        (page.error && page.error.message ? ': ' + page.error.message : '');
-    }
-    return 'no-header';
-  }
-
-  // Trusted "today" (PRD-6 trusted-date): the LMS clock, read from the `Date` response
-  // header of the portal chrome the gate already fetches. Same-origin is the EXPECTED
-  // mode — it is what webtutor_cooldown requires anyway — but it is NOT an invariant this
-  // code checks: `Date` is not on the CORS safelist, so a foreign origin normally exposes
-  // no header and the gate simply degrades; an admin who points `secidSource.endpoint` at
-  // an absolute URL whose host sends `Access-Control-Expose-Headers: Date` would have the
-  // gate trust that third party's clock. That is administrative configuration, out of the
-  // learner's reach, so it is a deployment concern rather than a bypass.
-  //
-  // Degradation to the machine clock (= legacy behaviour) happens when the header is
-  // MISSING or UNPARSEABLE, when the request REJECTS, or when the sub-budget TIMES OUT.
-  // An HTTP error carrying a valid `Date` is deliberately NOT a fallback: the header is
-  // stamped by the portal server whatever the response status, so a 500 from the portal
-  // still tells us the portal's clock — which is the whole point of the trusted date.
+  // Trusted "today" (PRD-6 trusted-date). The clock itself, its sub-budget and every
+  // degradation branch now live in the shared TrustedNow module (app/utils/trusted-now.js),
+  // because PRD-31's hour interval needs the same portal clock — with a full instant
+  // rather than a day. The gate keeps only the day conversion.
   function resolveToday(config) {
     var src = (config && config.secidSource) || {};
-    var work = fetchPortalChrome(src.endpoint || '/');
-    var timeout = new Promise(function (resolve) {
-      setTimeout(function () { resolve(DATE_TIMEOUT); }, DATE_TIMEOUT_MS);
+    return TrustedNow.resolveNowMs(src.endpoint || '/').then(function (ms) {
+      return isoDayFromMs(ms);
     });
-    // The race carries the PAGE (not a parsed timestamp) so the fallback branch can
-    // still see which degradation happened.
-    return Promise.race([work, timeout])
-      .catch(function (e) { return { dateHeader: '', failed: true, status: 0, error: e }; })
-      .then(function (page) {
-        var clientMs = Date.now();
-        var clientDay = isoDayFromMs(clientMs);
-        var header = (page && page.dateHeader) || '';
-        var serverMs = header ? Date.parse(header) : NaN;
-        if (!serverMs || !isFinite(serverMs)) {
-          glog('date source: client (' + fallbackCause(page) + ') | client:',
-            new Date(clientMs).toUTCString(), '| today:', clientDay);
-          return clientDay;
-        }
-        var serverDay = isoDayFromMs(serverMs);
-        // Both timestamps, raw, plus the skew: §6 wants the server and the client clock
-        // side by side, not just the two calendar days they happen to fall on.
-        glog('date source: network | server:', header, '=>', serverDay,
-          '| client:', new Date(clientMs).toUTCString(), '=>', clientDay,
-          '| skew sec:', Math.round((serverMs - clientMs) / 1000));
-        return serverDay;
-      });
   }
 
   function buildContext(td) {
@@ -153,43 +104,14 @@ var RetakeGate = (function () {
       .replace(/\{\{\s*personId\s*\}\}/g, personId || '');
   }
 
-  // Memoized same-origin GET of the portal chrome. SECID, cur_person_id and the
-  // trusted date all read the SAME response, so the gate touches the portal once per
-  // URL instead of once per resolver. `no-store` keeps the Date header live: a cached
-  // response would carry a stale server clock.
-  var portalChrome = {};
-
-  function fetchPortalChrome(url) {
-    var key = url || '/';
-    if (Object.prototype.hasOwnProperty.call(portalChrome, key)) return portalChrome[key];
-    portalChrome[key] = (function () {
-      // `fetch` may be missing or throw synchronously (hostile shim, ancient runtime).
-      // Turn that into a rejection so the gate degrades to the machine clock instead of
-      // escaping run() and leaving the learner on the loading screen: resolveToday now
-      // calls this synchronously from buildContext, i.e. BEFORE run's promise chain
-      // exists, so a synchronous throw would never reach run's `.catch`.
-      try { return fetch(key, { credentials: 'include', cache: 'no-store' }); }
-      catch (e) { return Promise.reject(e); }
-    })()
-      .then(function (r) {
-        var dateHeader = '';
-        try { dateHeader = (r.headers && r.headers.get && r.headers.get('Date')) || ''; } catch (e) { dateHeader = ''; }
-        return r.text().then(function (text) {
-          // `failed`/`status` are diagnostics only: an error response can still carry a
-          // usable `Date` header, so the body is handed on exactly as before.
-          return { text: text || '', dateHeader: dateHeader, failed: !r.ok, status: r.status || 0 };
-        });
-      })
-      .catch(function (e) { return { text: '', dateHeader: '', failed: true, status: 0, error: e }; });
-    return portalChrome[key];
-  }
-
   // Scrape the session SECID (32-hex) the collection POST requires. It is present in
   // the portal chrome; `secidSource.endpoint` (default "/") is fetched same-origin.
+  // The fetch itself is TrustedNow's — memoized there, so SECID, person id and the
+  // clock still cost ONE request per URL between them.
   function resolveSecid(config) {
     var src = config.secidSource || {};
     var pattern = src.pattern || '[A-F0-9]{32}';
-    return fetchPortalChrome(src.endpoint || '/').then(function (page) {
+    return TrustedNow.fetchPortalChrome(src.endpoint || '/').then(function (page) {
       var m = new RegExp(pattern).exec(page.text || '');
       return m ? m[0] : '';
     });
@@ -204,7 +126,7 @@ var RetakeGate = (function () {
     if (config.personId) return Promise.resolve(String(config.personId));
     var src = config.personIdSource || {};
     if (!src.pattern) return Promise.resolve('');
-    return fetchPortalChrome(src.endpoint || '/').then(function (page) {
+    return TrustedNow.fetchPortalChrome(src.endpoint || '/').then(function (page) {
       var m = new RegExp(src.pattern).exec(page.text || '');
       return m ? (m[1] || m[0]) : '';
     });
@@ -525,14 +447,71 @@ var RetakeGate = (function () {
     });
   }
 
+  /**
+   * Has this SCORM registration — i.e. THIS assignment — already been played? The
+   * answer lives in suspend_data and is readable only after Initialize, which is why
+   * the verdict moved here (see the module header). A registration that already
+   * carries attempts is a RE-ENTRY, and barrier A does not apply to it: the learner
+   * is inside the assignment they were given, where only `maxAttempts` and the hour
+   * interval (barrier B, enforced on the start screen) govern the next run.
+   */
+  function alreadyPlayedThisRegistration() {
+    var raw = '';
+    try {
+      raw = (typeof SCORM !== 'undefined' && SCORM.getValue) ? (SCORM.getValue('cmi.suspend_data') || '') : '';
+    } catch (e) {
+      // A suspend_data read must never decide the launch by throwing; treat an
+      // unreadable store as "not played" and let the barrier evaluate normally.
+      glog('suspend_data unreadable while checking re-entry:', (e && e.message) || e);
+      return false;
+    }
+    if (!raw) return false;
+    try {
+      var obj = JSON.parse(raw);
+      if (!obj) return false;
+      // Read DIRECTLY rather than through suspendAttempts' helpers: the gate must not
+      // depend on another part of the flat bundle being present, or a change in the
+      // concatenation order would silently revert this to the old behaviour — and the
+      // old behaviour is the defect.
+      if (typeof obj.attemptsUsed === 'number' && obj.attemptsUsed > 0) return true;
+      if (obj.attempts && obj.attempts.length > 0) return true;
+      // A suspended session counts too: an attempt in progress means this assignment
+      // is already in play. It is not covered by the two checks above — for a test
+      // with no attempt limit `registerAttemptStart` never increments the counter, and
+      // `attempts[]` only fills on completion.
+      if (obj.currentSession) return true;
+      return false;
+    } catch (e) {
+      glog('suspend_data unparseable while checking re-entry:', (e && e.message) || e);
+      return false;
+    }
+  }
+
   function run(td, onAllowedStart) {
     // Each gate run is a fresh evaluation: drop any portal response cached by a
     // previous run in this window (e.g. a prior failed fetch) so the portal is
     // always asked again rather than replaying a stale or failed result.
-    portalChrome = {};
+    TrustedNow.reset();
     // Monotonic, not Date.now(): a system-clock step during the gate must not zero the
     // remaining budget and time the plugin out on a learner who did nothing wrong.
     var startedAt = monotonicNow();
+
+    // Open the session FIRST: suspend_data is what distinguishes a new assignment
+    // from a re-entry, and it cannot be read before Initialize. runCourse calls
+    // SCORM.init() again — the wrapper makes that a no-op.
+    try {
+      if (typeof SCORM !== 'undefined' && SCORM.init) SCORM.init();
+    } catch (e) {
+      glog('SCORM.init failed before the verdict:', (e && e.message) || e);
+    }
+
+    if (alreadyPlayedThisRegistration()) {
+      glog('re-entry into the CURRENT assignment (suspend_data carries attempts)' +
+        ' — barrier A does not apply; the start screen enforces the interval');
+      onAllowedStart();
+      return;
+    }
+
     buildContext(td).then(function (ctx) {
       glog('gated. plugin:', td.retakePlugin.runtimeEntry,
         '| cooldownPeriodDays:', ctx.retakePolicy.cooldownPeriodDays,
@@ -553,12 +532,22 @@ var RetakeGate = (function () {
         glog('lastAttemptDate:', (result.data && result.data.lastAttemptDate) || '(none)',
           '| availableDate:', retake.availableDate || '(none)');
         // PRD-19 FR-19: eligible => NO gate-shell. Hand straight to the normal
-        // course (onAllowedStart = runCourse: Initialize + the standard start page),
-        // so an elapsed-cooldown test is indistinguishable from an ordinary one.
-        // FR-20: blocked => the cooldown state renders ON the standard start page
-        // (pre-Initialize), not a separate wall — NFR-01/02 still hold.
-        if (!result.allowed) renderCooldownStart(retake, td);
-        else onAllowedStart();
+        // course (onAllowedStart = runCourse: the standard start page), so an
+        // elapsed-cooldown test is indistinguishable from an ordinary one.
+        // FR-20: blocked => the cooldown state renders ON the standard start page,
+        // not a separate wall.
+        if (!result.allowed) {
+          // PRD-6 §9.1: nothing was written to `cmi.*` on this path, so closing the
+          // session at once keeps a blocked launch from becoming a completed record —
+          // which is what NFR-01 actually protects. Failure to terminate must not
+          // swallow the cooldown screen, hence the try.
+          try {
+            if (typeof SCORM !== 'undefined' && SCORM.terminate) SCORM.terminate();
+          } catch (e) {
+            glog('terminate after a blocked launch failed:', (e && e.message) || e);
+          }
+          renderCooldownStart(retake, td);
+        } else onAllowedStart();
       });
     }).catch(function (e) {
       // evaluate() already absorbs plugin errors via failPolicy, so reaching here means
