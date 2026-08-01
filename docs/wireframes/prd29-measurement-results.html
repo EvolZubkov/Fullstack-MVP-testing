@@ -128,11 +128,13 @@
        интервала появляется зазор, которого в методике нет. */
     .tb-zone { background: hsl(var(--tb-zone)); border-radius: 0; }
     /* gate-skip-end */
-    .tb-zone:first-of-type {
+    .tb-zone:first-child {
       border-start-start-radius: var(--ou-radius-pill);
       border-end-start-radius: var(--ou-radius-pill);
     }
-    .tb-zone:last-of-type {
+    /* НЕ :last-of-type — последний span в дорожке это маркер, а не зона: правый край
+       остался бы квадратным при скруглённом левом. */
+    .tb-zone:not(:has(~ .tb-zone)) {
       border-start-end-radius: var(--ou-radius-pill);
       border-end-end-radius: var(--ou-radius-pill);
     }
