@@ -2576,12 +2576,15 @@ git commit -m "feat(prd-29): проброс измерений на веб-хо�
 
 - [ ] **Step 3: Добавить блок показателей перед блоком тем**
 
-Ведущий разделитель ставится только тогда, когда выше действительно есть сводка: блоку
-показателей может предшествовать лишь она, поэтому признак точен.
+Ведущий разделитель стоит ВНУТРИ условия блока — первым потомком, а не перед ним. Снаружи
+он рисовался бы и на контрольном тесте, где показателей нет: там `hideScoreSummary`
+отсутствует, `{{#unless}}` истинно, и между сводкой и «Результатами по темам» встали бы две
+линейки вместо одной. Правило точное: линейка есть тогда и только тогда, когда блок
+показателей существует И над ним есть сводка.
 
 ```html
-      {{#unless result.hideScoreSummary}}<hr class="ou-separator ou-separator--horizontal">{{/unless}}
       {{#if result.indicators}}
+      {{#unless result.hideScoreSummary}}<hr class="ou-separator ou-separator--horizontal">{{/unless}}
       <div class="tb-scene__q"><h3 class="tb-scene__subhead">Ваш результат</h3></div>
       <div class="tb-measures">
         {{#each result.indicators}}
@@ -2611,7 +2614,9 @@ git commit -m "feat(prd-29): проброс измерений на веб-хо�
 Слот значения ветвится по виду. Рельс печатает число и максимум порознь, чтобы шапка
 `ou-slider__val` выглядела как в дизайн-системе; виды без рельса печатают готовую строку
 `valueLabel` — она заведена контрактом ровно для них, и при отсутствии домена «27 из »
-не получится. Кольцо использует подготовленные ядром `percent` и `ringDashoffset`.
+не получится. Кольцо опознаётся признаком `isRing`, а НЕ числом `ringDashoffset`: на максимуме шкалы
+смещение дуги равно нулю, и проверка числа спрятала бы кольцо ровно у того результата,
+который его заполняет. Ту же ошибку мы уже допустили с признаком сводки.
 
 ```html
       {{#if result.scales}}
@@ -2645,11 +2650,11 @@ git commit -m "feat(prd-29): проброс измерений на веб-хо�
               </div>
             </div>
             {{/if}}
-            {{#if ringDashoffset}}
+            {{#if isRing}}
             <div class="ou-ring tb-ring" role="img" aria-label="{{ariaLabel}}">
               <svg class="ou-ring__svg" width="140" height="140" viewBox="0 0 140 140">
                 <circle class="ou-ring__track" cx="70" cy="70" r="63" stroke-width="12"></circle>
-                <circle class="ou-ring__fill" cx="70" cy="70" r="63" stroke-width="12" stroke-linecap="round"
+                <circle class="ou-ring__fill {{toneClass}}" cx="70" cy="70" r="63" stroke-width="12" stroke-linecap="round"
                         stroke-dasharray="395.84" stroke-dashoffset="{{ringDashoffset}}"></circle>
               </svg>
               <div class="ou-ring__center">
@@ -2658,7 +2663,7 @@ git commit -m "feat(prd-29): проброс измерений на веб-хо�
               </div>
             </div>
             {{/if}}
-            {{#unless zones}}{{#unless ringDashoffset}}
+            {{#unless zones}}{{#unless isRing}}
             {{#if showValue}}<span class="ou-slider__val"><strong>{{valueLabel}}</strong></span>{{/if}}
             {{/unless}}{{/unless}}
             {{#if text}}<p class="ou-formsection__sub">{{text}}</p>{{/if}}
@@ -2792,9 +2797,21 @@ git commit -m "feat(prd-29): блоки показателей, шкал и ре
 
 /* The value is the reading the learner came for, so it carries display weight while
    the domain stays quiet. At the slider's own body-s it read as a footnote next to a
-   20px scale name. */
-.tb-measure__slider .ou-slider__val { font: var(--ou-text-body-m); }
-.tb-measure__slider .ou-slider__val strong { font: var(--ou-text-display-s); }
+   20px scale name.
+
+   Scoped to the ROW, not to the slider: a scale with no domain renders its value
+   outside the slider wrapper, and scoping to `.tb-measure__slider` would leave it
+   small and muted next to a large one in the same list. */
+.tb-measure .ou-slider__val { font: var(--ou-text-body-m); }
+.tb-measure .ou-slider__val strong { font: var(--ou-text-display-s); }
+
+/* The ring arc defaults to the accent colour; the measure's tone lives in `toneClass`,
+   so the ring has to pick it up too — otherwise a critical level draws in the brand
+   colour while the tag beside it is red. */
+.tb-scene .ou-ring__fill.tb-tone--favorable { stroke: var(--ou-success-default); }
+.tb-scene .ou-ring__fill.tb-tone--neutral   { stroke: var(--ou-info-default); }
+.tb-scene .ou-ring__fill.tb-tone--attention { stroke: var(--ou-warning-default); }
+.tb-scene .ou-ring__fill.tb-tone--critical  { stroke: var(--ou-error-default); }
 
 /* Narrow scene: the two-column section collapses to a single stack. The query
    measures the SCENE (`@container tbscene`), not the viewport — the whole mobile

@@ -176,6 +176,19 @@ describe("buildMeasureView", () => {
     expect(v.ringDashoffset).toBeCloseTo(158.3, 0);
   });
 
+  it("кольцо опознаётся признаком, а не смещением дуги", () => {
+    // На максимуме шкалы смещение равно нулю. Признак обязан остаться истинным,
+    // иначе кольцо пропадёт ровно у того результата, который его заполняет.
+    const v = ee({ value: 45, requestedKind: "ring" });
+    expect(v.ringDashoffset).toBe(0);
+    expect(v.isRing).toBe(true);
+    expect(v.percent).toBe(100);
+  });
+
+  it("у видов без кольца признака нет", () => {
+    expect(ee().isRing).toBeUndefined();
+  });
+
   it("значение вне интервалов даёт пустую метку без падения", () => {
     const v = ee({ value: 99 });
     expect(v.levelLabel).toBe("");

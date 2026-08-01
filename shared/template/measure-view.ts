@@ -63,6 +63,13 @@ export interface CtxMeasureView {
   percent?: number;
   ringDashoffset?: number;
   /**
+   * Explicit «this is a ring» switch. The layout cannot branch on `renderKind`
+   * (the DSL has no comparisons), and branching on `ringDashoffset` would break at
+   * the top of the scale: a learner scoring `domainMax` gets an offset of exactly 0,
+   * and the ring would silently disappear for the one result that fills it.
+   */
+  isRing?: boolean;
+  /**
    * Screen-reader label for the rail: a stack of `span`s conveys nothing without it.
    * Core-prepared because the layout has no way to assemble the sentence from the
    * parts it binds.
@@ -305,6 +312,7 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
   if (renderKind === "ring") {
     view.percent = Math.round(clamped * 100);
     view.ringDashoffset = round1(RING_CIRCUMFERENCE * (1 - clamped));
+    view.isRing = true;
   }
 
   if (renderKind === "band_ruler" || renderKind === "gradient_bar" || renderKind === "ring") {
