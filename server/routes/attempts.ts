@@ -30,6 +30,8 @@ import {
 } from "../services/test-snapshot";
 import type { QuestionType } from "@shared/scales/engine";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
+// PRD-32: ONE address rule for a feedback attachment — the same helper the SCORM bake runs.
+import { feedbackAssets } from "@shared/template/result-context";
 import type {
   Test,
   TestVariant,
@@ -1173,12 +1175,19 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
     const aggSections: AggregateSection<{
       recommendedCourses: { title: string; url: string }[];
       recommendedEvents: { title: string }[];
+      recommendedAssets: { title: string; url: string }[];
     }>[] = [];
     for (const variantSection of variant.sections) {
       const section = sectionMap.get(variantSection.topicId);
       const questions = await src.getQuestionsByIds(variantSection.questionIds);
       const courses = await src.getTopicCourses(variantSection.topicId);
       const events = await src.getTopicEvents(variantSection.topicId);
+      // PRD-32: PDF attachments of the topic AND of this test's section over it — two
+      // different storage points, both authored through the same feedback editor, both
+      // due to the learner. Read from the SAME source the attempt is graded against, so
+      // a snapshot-pinned attempt hands out the materials that were published with it.
+      const topic = await src.getTopic(variantSection.topicId);
+      const feedbackAttachments = feedbackAssets(topic?.feedbackJson, section?.feedbackJson);
       aggSections.push({
         topicId: variantSection.topicId,
         topicName: variantSection.topicName,
@@ -1199,6 +1208,7 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
         extra: {
           recommendedCourses: courses.map((c) => ({ title: c.title, url: c.url })),
           recommendedEvents: events.map((e) => ({ title: e.title })),
+          recommendedAssets: feedbackAttachments.map((a) => ({ title: a.title, url: a.url ?? "" })),
         },
       });
     }
@@ -1222,6 +1232,7 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
       passRule: t.passRule as PassRule | null,
       recommendedCourses: t.extra!.recommendedCourses,
       recommendedEvents: t.extra!.recommendedEvents,
+      recommendedAssets: t.extra!.recommendedAssets,
     }));
 
     // PRD-12: graded namespaces (scales PRD-5 + result variables PRD-2) via the

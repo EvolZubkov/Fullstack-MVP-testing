@@ -141,6 +141,11 @@ function toTopicInput(t: TopicResult): TopicInput {
     feedback: (t as { feedback?: string | null }).feedback ?? null,
     recommendedCourses: t.recommendedCourses ?? [],
     recommendedEvents: t.recommendedEvents ?? [],
+    // PRD-32: attachments of the topic + of this test's section over it, merged and
+    // address-normalised at grading time (`server/routes/attempts.ts`) and stored WITH
+    // the attempt. The shared builder pours them into the ONE «Материалы» block.
+    // Absent on attempts graded before PRD-32 — the block then simply lacks them.
+    recommendedAssets: t.recommendedAssets ?? [],
   };
 }
 

@@ -1010,6 +1010,12 @@ export const topicResultSchema = z.object({
   // TD-02: recommended events for a failed topic (url optional). `.default([])`
   // keeps legacy stored results (without the field) valid.
   recommendedEvents: z.array(z.object({ title: z.string(), url: z.string().optional() })).default([]),
+  // PRD-32: PDF attachments of the topic (`topics.feedback_json`) and of this test's
+  // section over it (`test_sections.feedback_json`), addresses already normalised at
+  // grading time. Stored WITH the attempt, like the courses above: the results screen
+  // renders from the saved result, and re-reading live content would hand a past
+  // attempt today's materials. `.default([])` keeps attempts graded before PRD-32 valid.
+  recommendedAssets: z.array(z.object({ title: z.string(), url: z.string() })).default([]),
 });
 
 export const attemptResultSchema = z.object({

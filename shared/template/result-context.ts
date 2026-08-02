@@ -32,6 +32,7 @@ import type {
   FeedbackBlock,
   IndicatorInterpretation,
   LearnerVisibility,
+  RecommendationLink,
   ScaleInterpretation,
 } from "../scales/interpretation";
 import type { LevelRamp } from "./level-ramp";
@@ -53,6 +54,18 @@ export interface TopicFeedbackInput {
   recommendedCourses?: Array<{ title: string; url?: string }> | null;
   /** Recommended events (`feedback_json.events`). */
   recommendedEvents?: Array<{ title: string; url?: string }> | null;
+  /**
+   * PRD-32 attachments the learner is to receive for this topic — the topic's OWN
+   * feedback (`topics.feedback_json`) and the feedback of this test's section over
+   * that topic (`test_sections.feedback_json`), merged by the host in that order.
+   *
+   * They do NOT render inside the topic row: the results screen carries one
+   * «Материалы» block structured by RESOURCE TYPE, not by cause (see
+   * `./recommendations`), so an attachment reaches the learner through it whatever
+   * level attached it. Addresses come pre-normalised — the host runs
+   * {@link feedbackAssets}, so the `url`-over-`scormHref` rule lives in one place.
+   */
+  recommendedAssets?: Array<{ title: string; url?: string }> | null;
 }
 
 /** Normalized per-topic input (host adapts its own field names into this). */
@@ -172,6 +185,19 @@ export function normalizeFeedback(raw: unknown): FeedbackBlock | null {
   };
 }
 
+/**
+ * Attachments of one or more STORED feedback blocks, in the order given, ready for
+ * {@link TopicFeedbackInput.recommendedAssets}.
+ *
+ * Both hosts call it — the web adapter on the topic + section blocks it grades an
+ * attempt against, the SCORM bake on the same two blocks of a section — so the address
+ * rule ({@link normalizeFeedback}: `url` wins, an addressless asset is dropped) is
+ * applied once and identically. A `null`/absent block simply contributes nothing.
+ */
+export function feedbackAssets(...blocks: unknown[]): RecommendationLink[] {
+  return blocks.flatMap((block) => normalizeFeedback(block)?.assets ?? []);
+}
+
 /** Feedback of the level that actually fired, for the recommendations block. */
 function firedFeedback(m: MeasureInput): FeedbackBlock | null {
   const { interpretation } = m;
@@ -255,6 +281,12 @@ export function buildResultContext(
     result.backAction = opts.backAction;
     result.backLabel = opts.backLabel;
   }
+  // Sources of the ONE «Материалы» block, gathered in the order dedup should keep:
+  // the general before the specific. Collected rather than merged on the spot because
+  // the measurement sources are conditional while the per-topic ones are not — a test
+  // with neither scales nor indicators still hands the learner what its topics and
+  // sections attached (PRD-32).
+  const recommendationSources: Array<FeedbackBlock | null | undefined> = [];
   if (opts.measures) {
     const visibleScales = opts.measures.scales.filter((m) => m.visibility !== "hidden");
     const visibleIndicators = opts.measures.indicators.filter((m) => m.visibility !== "hidden");
@@ -319,13 +351,23 @@ export function buildResultContext(
     // Order matters: general first, then the profile, then the scales — dedup keeps
     // the first occurrence, so a general recommendation outranks its specific copy.
     // A hidden block contributes nothing: the learner never saw what caused it.
-    const recommendations = collectRecommendations([
+    recommendationSources.push(
       opts.measures.testFeedback,
       ...(blocks.indicators ? visibleIndicators.map(firedFeedback) : []),
       ...(blocks.scales ? visibleScales.map(firedFeedback) : []),
-    ]);
-    if (recommendations.hasAny) result.recommendations = recommendations;
+    );
   }
+  // PRD-32: the attachments of the topics this attempt covered, LAST — they are the
+  // narrowest source (one topic of the test), and the same file attached to the test
+  // as a whole should keep the test's copy under dedup. Not gated by the topic's
+  // verdict: the author hung the material on the topic's feedback, which is shown for
+  // having taken the topic, not for having failed it.
+  for (const topic of input.topicResults || []) {
+    const assets = topic.recommendedAssets ?? [];
+    if (assets.length > 0) recommendationSources.push({ links: [], events: [], assets });
+  }
+  const recommendations = collectRecommendations(recommendationSources);
+  if (recommendations.hasAny) result.recommendations = recommendations;
   return { course: { title }, result };
 }
 

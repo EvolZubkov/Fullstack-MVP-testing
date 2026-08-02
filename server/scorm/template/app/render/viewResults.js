@@ -43,6 +43,24 @@ function vrRequiredLabel(tr) {
   return resolved.type === 'percent' ? 'Требуется: ' + resolved.value + '%' : undefined;
 }
 
+/**
+ * PRD-32 attachments of a topic row: the PDFs the author hung on the TOPIC
+ * (`topics.feedback_json`) and on this test's SECTION over it
+ * (`test_sections.feedback_json`), merged and address-normalised at bake time into
+ * `section.recommendedAssets`.
+ *
+ * Read off TEST_DATA rather than off the attempt: the addresses are in-package paths
+ * resolved when the ZIP was built, so they belong to the package, not to a saved run —
+ * and a run saved by a package built before PRD-32 gets them too.
+ *
+ * NOT gated by the topic's verdict (unlike `vrRecommended`, which is failed-topic
+ * guidance): the material is shown for having taken the topic, not for having failed it.
+ */
+function vrTopicAssets(tr) {
+  var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
+  return (section && section.recommendedAssets) || [];
+}
+
 /** Deduped recommended courses/events across failed topics (failed-topic guidance). */
 function vrRecommended(results) {
   var seenC = {}, seenE = {}, courses = [], events = [];
@@ -235,7 +253,9 @@ function renderViewResultsTemplated(app, results) {
         possiblePoints: tr.possiblePoints,
         passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
         requiredLabel: vrRequiredLabel(tr),
-        topicFeedback: tr.topicFeedback
+        topicFeedback: tr.topicFeedback,
+        // PRD-32: вложения темы и раздела — в общий блок «Материалы» (общий сборщик).
+        recommendedAssets: vrTopicAssets(tr)
       };
     })
   };
@@ -313,7 +333,9 @@ function renderResultsTemplated(app, results) {
         possiblePoints: tr.possiblePoints,
         passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
         requiredLabel: vrRequiredLabel(tr),
-        topicFeedback: tr.topicFeedback
+        topicFeedback: tr.topicFeedback,
+        // PRD-32: вложения темы и раздела — в общий блок «Материалы» (общий сборщик).
+        recommendedAssets: vrTopicAssets(tr)
       };
     })
   };

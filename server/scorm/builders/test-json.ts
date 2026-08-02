@@ -4,6 +4,8 @@ import { findEligibilityPlugin, findEligibilityConfig } from "@shared/eligibilit
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 import { buildTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
 import { parseScaleInterpretation } from "@shared/scales/interpretation";
+// PRD-32: ONE address rule for a feedback attachment — the same helper the web grader runs.
+import { feedbackAssets } from "@shared/template/result-context";
 import type { ReportBake } from "@shared/report/report-variants";
 
 interface AdaptiveLevelWithLinks extends AdaptiveLevel {
@@ -203,85 +205,99 @@ export function buildTestJson(data: ExportData): string {
     // for legacy clients (decisions §1, S10 §3.3).
     passPercent: passPercent,
     totalQuestions: totalQuestions,
-    sections: data.sections.map((s) => ({
-      topicId: s.topic.id,
-      topicName: s.topic.name,
-      // PRD-1 §4.3: topic description (from topic properties) — rendered on the
-      // «Введение раздела» (section-intro) screen. null/empty → no description block.
-      topicDescription: s.topic.description ?? null,
-      // Author-defined readable id (slug) for `topicById("<code>")`; null → UUID.
-      topicCode: s.topic.code ?? null,
-      drawCount: effectiveDraw(s),
-      // PRD-4 v1.1 §4.7: `required` drives routerCompletionPolicy's
-      // «all_required_*» calculation; `false` means optional (the test can
-      // finish even if this section is skipped/incomplete).
-      required: s.required ?? true,
-      // PRD-4 v1.1 §3.2 / §4.6 per-section time limit (Phase 4e).
-      // null = inherit_test (section uses the test-wide timer, no extra timer);
-      // number = custom limit in minutes (section timer starts on entry).
-      timeLimitMinutes: s.timeLimitMinutes ?? null,
-      // PRD-24: the rule may now be `{source:'by_variant', byForm}` as well, so it is
-      // baked as authored — the runtime resolves it through the shared engine.
-      topicPassRule: (s.topicPassRuleJson as unknown) ?? null,
-      // PRD-11: stratified-draw blueprint. Included only when set so packages
-      // without quotas stay byte-identical (FR-02); runtime reads section.drawBlueprint.
-      ...(s.drawBlueprintJson ? { drawBlueprint: s.drawBlueprintJson } : {}),
-      // PRD-17 (BR-12): fixed-variant set. Included only when present so packages
-      // without variants stay byte-identical (FR-02); the runtime (selectForm in
-      // app.js) picks one variant and delivers it whole, overriding the uniform/
-      // stratified draw. SCORM has no cross-attempt store (NFR-17) so rotation
-      // degrades to a random pick (R-6). The whole bank ships (every variant's
-      // questions+keys, R-7) — selection happens client-side.
-      ...(s.formSetJson ? { formSet: s.formSetJson } : {}),
-      // PRD-30 FR-02/FR-14: delivery order of the topic's questions. Baked only
-      // when `fixed` (the default is `random`) so packages of tests that never
-      // touched the setting stay byte-identical; the runtime reads
-      // section.questionOrder and falls back to `random` when absent.
-      ...(s.questionOrder === "fixed" ? { questionOrder: "fixed" as const } : {}),
-      topicFeedback: s.topic.feedback || null,
-      recommendedCourses: s.courses.map((c) => ({ title: c.title, url: c.url })),
-      recommendedEvents: s.events.map((e) => ({ title: e.title })),
-      questions: s.questions.map((q) => {
-        // PRD-15 block D: effective price / graded config / difficulty are
-        // resolved here, at bake time; the runtime keeps its plain reads.
-        const baked = bakeScoring(q);
-        return {
-          id: q.id,
-          type: q.type,
-          prompt: q.prompt,
-          data: q.dataJson,
-          correct: q.correctJson,
-          points: baked.points,
-          difficulty: baked.difficulty,
-          mediaUrl: q.mediaUrl || null,
-          mediaType: q.mediaType || null,
-          feedback: q.feedback || null,
-          feedbackMode: q.feedbackMode || "general",
-          feedbackCorrect: q.feedbackCorrect || null,
-          feedbackIncorrect: q.feedbackIncorrect || null,
-          // PRD-10: graded answer scoring. Included only when authored so packages
-          // for unscored questions stay byte-identical (FR-02); runtime reads q.scoring.
-          ...(baked.scoring ? { scoring: baked.scoring } : {}),
-          // PRD-11: sub-topic tags drive the stratified draw (drawSection matches a
-          // stratum tag against q.tags). Included only when non-empty so packages
-          // for untagged questions stay byte-identical (FR-02); the draw blueprint
-          // is useless without them.
-          ...(Array.isArray(q.tags) && q.tags.length ? { tags: q.tags } : {}),
-          // PRD-16 FR-41: «Случайный порядок вариантов» off — the runtime must
-          // deliver the authored order (shuffleMappingFor). Baked only when off
-          // (the default is on) so packages of untouched tests stay
-          // byte-identical (FR-02).
-          ...(q.shuffleAnswers === false ? { shuffleAnswers: false } : {}),
-          // PRD-30 FR-01: the author's index inside the topic. Baked only when
-          // the section actually orders by it AND the question has one, so
-          // packages of untouched tests stay byte-identical (FR-14); the
-          // runtime treats an absent value as «not set» (delivered last).
-          ...(s.questionOrder === "fixed" && typeof q.orderIndex === "number"
-            ? { orderIndex: q.orderIndex }
-            : {}),
-        };
-      }),
-    })),
+    sections: data.sections.map((s) => {
+      // PRD-32: attachments of the TOPIC and of THIS test's section over it, resolved
+      // once per section (see where they are baked below).
+      const sectionFeedbackAssets = feedbackAssets(s.topic.feedbackJson, s.feedbackJson);
+      return {
+        topicId: s.topic.id,
+        topicName: s.topic.name,
+        // PRD-1 §4.3: topic description (from topic properties) — rendered on the
+        // «Введение раздела» (section-intro) screen. null/empty → no description block.
+        topicDescription: s.topic.description ?? null,
+        // Author-defined readable id (slug) for `topicById("<code>")`; null → UUID.
+        topicCode: s.topic.code ?? null,
+        drawCount: effectiveDraw(s),
+        // PRD-4 v1.1 §4.7: `required` drives routerCompletionPolicy's
+        // «all_required_*» calculation; `false` means optional (the test can
+        // finish even if this section is skipped/incomplete).
+        required: s.required ?? true,
+        // PRD-4 v1.1 §3.2 / §4.6 per-section time limit (Phase 4e).
+        // null = inherit_test (section uses the test-wide timer, no extra timer);
+        // number = custom limit in minutes (section timer starts on entry).
+        timeLimitMinutes: s.timeLimitMinutes ?? null,
+        // PRD-24: the rule may now be `{source:'by_variant', byForm}` as well, so it is
+        // baked as authored — the runtime resolves it through the shared engine.
+        topicPassRule: (s.topicPassRuleJson as unknown) ?? null,
+        // PRD-11: stratified-draw blueprint. Included only when set so packages
+        // without quotas stay byte-identical (FR-02); runtime reads section.drawBlueprint.
+        ...(s.drawBlueprintJson ? { drawBlueprint: s.drawBlueprintJson } : {}),
+        // PRD-17 (BR-12): fixed-variant set. Included only when present so packages
+        // without variants stay byte-identical (FR-02); the runtime (selectForm in
+        // app.js) picks one variant and delivers it whole, overriding the uniform/
+        // stratified draw. SCORM has no cross-attempt store (NFR-17) so rotation
+        // degrades to a random pick (R-6). The whole bank ships (every variant's
+        // questions+keys, R-7) — selection happens client-side.
+        ...(s.formSetJson ? { formSet: s.formSetJson } : {}),
+        // PRD-30 FR-02/FR-14: delivery order of the topic's questions. Baked only
+        // when `fixed` (the default is `random`) so packages of tests that never
+        // touched the setting stay byte-identical; the runtime reads
+        // section.questionOrder and falls back to `random` when absent.
+        ...(s.questionOrder === "fixed" ? { questionOrder: "fixed" as const } : {}),
+        topicFeedback: s.topic.feedback || null,
+        recommendedCourses: s.courses.map((c) => ({ title: c.title, url: c.url })),
+        recommendedEvents: s.events.map((e) => ({ title: e.title })),
+        // PRD-32: PDF attachments of the TOPIC (`topics.feedback_json`) and of THIS test's
+        // section over it (`test_sections.feedback_json`) — two storage points, one list,
+        // topic first (the general before the specific). Baked as `/api/media/<id>`; the
+        // media packer rewrites every address in the tree to an in-package path, so the
+        // file travels with the ZIP. The runtime pours them into the shared «Материалы»
+        // block, exactly as the web host does with the same two blocks. Baked only when
+        // something is actually attached, so packages of tests that never used the feature
+        // stay byte-identical (FR-02); the runtime falls back to an empty list.
+        ...(sectionFeedbackAssets.length > 0 ? { recommendedAssets: sectionFeedbackAssets } : {}),
+        questions: s.questions.map((q) => {
+          // PRD-15 block D: effective price / graded config / difficulty are
+          // resolved here, at bake time; the runtime keeps its plain reads.
+          const baked = bakeScoring(q);
+          return {
+            id: q.id,
+            type: q.type,
+            prompt: q.prompt,
+            data: q.dataJson,
+            correct: q.correctJson,
+            points: baked.points,
+            difficulty: baked.difficulty,
+            mediaUrl: q.mediaUrl || null,
+            mediaType: q.mediaType || null,
+            feedback: q.feedback || null,
+            feedbackMode: q.feedbackMode || "general",
+            feedbackCorrect: q.feedbackCorrect || null,
+            feedbackIncorrect: q.feedbackIncorrect || null,
+            // PRD-10: graded answer scoring. Included only when authored so packages
+            // for unscored questions stay byte-identical (FR-02); runtime reads q.scoring.
+            ...(baked.scoring ? { scoring: baked.scoring } : {}),
+            // PRD-11: sub-topic tags drive the stratified draw (drawSection matches a
+            // stratum tag against q.tags). Included only when non-empty so packages
+            // for untagged questions stay byte-identical (FR-02); the draw blueprint
+            // is useless without them.
+            ...(Array.isArray(q.tags) && q.tags.length ? { tags: q.tags } : {}),
+            // PRD-16 FR-41: «Случайный порядок вариантов» off — the runtime must
+            // deliver the authored order (shuffleMappingFor). Baked only when off
+            // (the default is on) so packages of untouched tests stay
+            // byte-identical (FR-02).
+            ...(q.shuffleAnswers === false ? { shuffleAnswers: false } : {}),
+            // PRD-30 FR-01: the author's index inside the topic. Baked only when
+            // the section actually orders by it AND the question has one, so
+            // packages of untouched tests stay byte-identical (FR-14); the
+            // runtime treats an absent value as «not set» (delivered last).
+            ...(s.questionOrder === "fixed" && typeof q.orderIndex === "number"
+              ? { orderIndex: q.orderIndex }
+              : {}),
+          };
+        }),
+      };
+    }),
   };
 
   // PRD-6 / PRD-31: the access policy and, for the cooldown, the resolved plugin.
