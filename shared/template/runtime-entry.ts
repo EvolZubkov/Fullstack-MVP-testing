@@ -28,6 +28,7 @@ export { renderScreenInto } from "./render-screen";
 export { buildProtectionSpec, formatWatermarkText, QUESTION_REGIONS } from "./protection/spec";
 export { applyProtection, PROTECTED_ATTR } from "./protection/apply";
 export { applyWatermark, MARK_SLOT } from "./protection/watermark";
+export { attachBlurGuard } from "./protection/blur-guard";
 export {
   normalizePool,
   dropOnRight,
