@@ -435,7 +435,9 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
         {uploadErrors.length > 0 && (
           <Banner
             tone="error"
-            title="Файл не загружен"
+            // Deliberately NOT «Файл не загружен»: that wording belongs to the fileless row
+            // below, which states a fact about stored data. This one reports a failed attempt.
+            title="Не удалось загрузить файл"
             description={uploadErrors.join(", ")}
             onClose={() => setUploadErrors([])}
             data-testid="feedback-editor-upload-error-banner"
