@@ -34,6 +34,7 @@ import {
 import { RequiredFieldsMissingError } from "../services/required-fields-validator";
 import { FlowPolicyValidationError } from "../services/flow-policy-validator";
 import { buildTestScoringContext } from "../services/effective-scoring";
+import { syncEntityUsages } from "../services/media/usage-index";
 
 // ─── Validation schemas (PRD-7 §5.4) ─────────────────────────────────────────
 
@@ -749,6 +750,15 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
     // Empty body or explicit reset — restore defaults
     if (!body || Object.keys(body).length === 0) {
       await storage.updateTest(testId, { designSettingsJson: {} });
+      // Медиатека: a reset to defaults clears whatever media the previous
+      // design held — same fail-soft contract as the branch below. Indexing
+      // `null` (not the reloaded test row) keeps the walk scoped to design
+      // content only, mirroring the delete convention used elsewhere.
+      try {
+        await syncEntityUsages("test_design", testId, null);
+      } catch (error) {
+        logger.error(`Media usage sync failed for test design ${testId}: ${(error as Error).message}`, "tests");
+      }
       return res.json({ templateId: "default" });
     }
 
@@ -872,6 +882,20 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
     }
 
     await storage.updateTest(testId, { designSettingsJson: designSettings });
+
+    // Медиатека: сбой индексации не должен стоить автору его правки. Недостающая
+    // строка индекса безопасна (она отказывает в доступе, а не выдаёт лишнее) и
+    // чинится пересборкой; потерянное сохранение оформления не чинится ничем.
+    // Indexed value is `designSettings` (what was just saved into
+    // `designSettingsJson`), not the whole test row — the test also carries
+    // `test_feedback`-scoped media (feedbackJson) that must not be double-
+    // counted under `test_design`.
+    try {
+      await syncEntityUsages("test_design", testId, designSettings);
+    } catch (error) {
+      logger.error(`Media usage sync failed for test design ${testId}: ${(error as Error).message}`, "tests");
+    }
+
     res.json(designSettings);
   } catch (error) {
     logger.error("Update design settings error: " + (error as Error).message, "tests");
@@ -1147,6 +1171,20 @@ router.delete("/:id", requirePermission("tests.delete"), requireTestScope("delet
     // deleteTest is now the single, atomic owner of test deletion (adaptive rows,
     // sections, assignments, grants, attempts and snapshots all go with it).
     await storage.deleteTest(req.params.id);
+
+    // Медиатека: deleteTest does not cascade `media_usages` (no FK cascade by
+    // design — see shared/schema.ts on `mediaUsages`), so the test's design
+    // usage rows would otherwise dangle, pointing at a testId that no longer
+    // exists. content_pages rows are removed by the DB cascade on delete, but
+    // their `content_page`-scoped usage rows are equally orphaned — the full
+    // re-sync (Задача 11) is what ultimately reconciles those; here we clear
+    // only the entity this route owns directly (`test_design`).
+    try {
+      await syncEntityUsages("test_design", req.params.id, null);
+    } catch (error) {
+      logger.error(`Media usage sync failed for test design ${req.params.id}: ${(error as Error).message}`, "tests");
+    }
+
     res.status(204).end();
   } catch (error) {
     logger.error("Delete test error: " + (error as Error).message, "tests");

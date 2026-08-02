@@ -23,6 +23,7 @@ import { templates } from "@shared/schema";
 import { normalizeAuthorPlain, normalizeAuthorHtml } from "@shared/text";
 import { requireAuth, requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
+import { syncEntityUsages } from "../services/media/usage-index";
 import { logger } from "../logger";
 import {
   sanitizeHtmlWithDiagnostics,
@@ -535,6 +536,15 @@ router.post("/:id/content-pages", requirePermission("tests.edit"), requireTestSc
       autoAdvanceDelayMs: autoAdvanceDelayMs ?? null,
     });
 
+    // Медиатека: сбой индексации не должен стоить автору его правки. Недостающая
+    // строка индекса безопасна (она отказывает в доступе, а не выдаёт лишнее) и
+    // чинится пересборкой; потерянное сохранение страницы не чинится ничем.
+    try {
+      await syncEntityUsages("content_page", page.id, page);
+    } catch (error) {
+      logger.error(`Media usage sync failed for content page ${page.id}: ${(error as Error).message}`, "content-pages");
+    }
+
     res.status(201).json(page);
   } catch (error) {
     const err = error as Error & { status?: number; field?: string };
@@ -663,6 +673,18 @@ router.put("/:id/content-pages/:pageId", requirePermission("tests.edit"), requir
     if (normalizedSettings !== undefined) updates.settingsJson = normalizedSettings;
 
     const updated = await storage.updateContentPage(pageId, updates as Parameters<typeof storage.updateContentPage>[1]);
+
+    // Медиатека: сбой индексации не должен стоить автору его правки. Недостающая
+    // строка индекса безопасна (она отказывает в доступе, а не выдаёт лишнее) и
+    // чинится пересборкой; потерянное сохранение страницы не чинится ничем.
+    if (updated) {
+      try {
+        await syncEntityUsages("content_page", updated.id, updated);
+      } catch (error) {
+        logger.error(`Media usage sync failed for content page ${updated.id}: ${(error as Error).message}`, "content-pages");
+      }
+    }
+
     // sanitizeDiagnostics is a sibling field, not persisted - the UI consumes
     // it from the immediate PUT response and clears it on the next edit.
     res.json({ ...updated, sanitizeDiagnostics });
@@ -769,10 +791,21 @@ router.post("/:id/content-pages/:pageId/replace-variant", requirePermission("tes
       newVariant.placeholders ?? [],
     );
 
-    await storage.updateContentPage(pageId, {
+    const updated = await storage.updateContentPage(pageId, {
       templateKey: newTemplateKey,
       valuesJson: normalized,
     });
+
+    // Медиатека: replace-variant rewrites valuesJson just like the PUT route
+    // above — the same sync must run here, or a page saved only via variant
+    // replacement would keep a stale/empty usage index.
+    if (updated) {
+      try {
+        await syncEntityUsages("content_page", updated.id, updated);
+      } catch (error) {
+        logger.error(`Media usage sync failed for content page ${updated.id}: ${(error as Error).message}`, "content-pages");
+      }
+    }
 
     res.json({
       diff: { preserved, removed, added },
@@ -804,6 +837,15 @@ router.delete("/:id/content-pages/:pageId", requirePermission("tests.edit"), req
     }
 
     await storage.deleteContentPage(pageId);
+
+    // Медиатека: clears the deleted page's index rows the same way a deleted
+    // question does — see the try/catch note on the create/update routes above.
+    try {
+      await syncEntityUsages("content_page", pageId, null);
+    } catch (error) {
+      logger.error(`Media usage sync failed for content page ${pageId}: ${(error as Error).message}`, "content-pages");
+    }
+
     res.json({ ok: true });
   } catch (error) {
     logger.error("Delete content page error: " + (error as Error).message, "content-pages");
