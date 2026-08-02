@@ -36,6 +36,10 @@ export const CAPABILITIES = [
   "questions.manage",
   "questions.importExport",
   "folders.manage",
+  // Media library: registry management (usage-index rebuild, asset deletion).
+  // Reading a file is NOT a capability of its own — it is decided by the
+  // asset-access rule (ownership / visibility / linked content), not a role.
+  "media.manage",
   // Tests.
   "tests.read",
   "tests.create",
