@@ -983,6 +983,57 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
 
       <hr className="wf-sep" />
 
+      {/* PRD-34: блок «Защита». Три переключателя НЕЗАВИСИМЫ (FR-02) — водяной знак и
+          скрытие при потере фокуса осмысленны и без основной защиты, поэтому
+          подчинённости между ними нет ни здесь, ни в базе. */}
+      <div className="ou-formfield">
+        <Switch
+          label="Защищать текст задания от копирования"
+          description="На экране вопроса и на экране обзора текст не выделяется, не копируется, не перетаскивается и не печатается. В тестовом прогоне автора защита не действует."
+          checked={model.runtime.copyProtection}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, copyProtection: checked },
+            }));
+          }}
+          data-testid="settings-copy-protection-checkbox"
+        />
+      </div>
+      <div className="ou-formfield">
+        <Switch
+          label="Показывать водяной знак"
+          description="Поверх экранов вопроса, обзора, итогов раздела и итогов теста печатается обезличенный идентификатор и время. Снимок экрана остаётся возможным, но становится атрибутируемым."
+          checked={model.runtime.protectionWatermark}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, protectionWatermark: checked },
+            }));
+          }}
+          data-testid="settings-protection-watermark-checkbox"
+        />
+      </div>
+      <div className="ou-formfield">
+        <Switch
+          label="Скрывать задание при уходе из окна"
+          description="Если ученик переключился на другую вкладку, задание закрывается заглушкой и открывается снова само, как только окно активно. Таймер и ответы не затрагиваются."
+          checked={model.runtime.protectionHideOnBlur}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, protectionHideOnBlur: checked },
+            }));
+          }}
+          data-testid="settings-protection-hide-on-blur-checkbox"
+        />
+      </div>
+
+      <hr className="wf-sep" />
+
       <Card
         variant="outlined"
         size="sm"
