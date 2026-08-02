@@ -5,7 +5,7 @@
  * nowhere (PRD-32).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { act, render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { FeedbackEditorModal } from "../feedback-editor-modal";
 
 const fetchMock = vi.fn();
@@ -124,6 +124,49 @@ describe("FeedbackEditorModal — загрузка вложения", () => {
     rerender(modal(false, vi.fn()));
     rerender(modal(true, vi.fn()));
     await waitFor(() => expect(screen.getByTestId("feedback-editor-save")).not.toBeDisabled());
+  });
+
+  it("два файла с одинаковым содержимым дают две строки; удаление первой оставляет вторую", async () => {
+    // Uploads are deduplicated by checksum per owner, so identical bytes come back as ONE
+    // registry row: the asset id cannot tell the two list rows apart.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "same-asset", url: "/api/media/same-asset" }),
+    });
+    // Controlled inputs hide a shared key from the rendered markup, so the row identity is
+    // checked where it actually shows: React's own duplicate-key complaint.
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    open(vi.fn());
+
+    pick(pdf("first.pdf"), pdf("second.pdf"));
+    await screen.findByTestId("feedback-editor-asset-title-1");
+    expect(screen.getByText(/first\.pdf/)).toBeTruthy();
+    expect(screen.getByText(/second\.pdf/)).toBeTruthy();
+    expect(consoleError.mock.calls.flat().join(" ")).not.toMatch(/same key|duplicate key/i);
+
+    fireEvent.click(screen.getByTestId("feedback-editor-asset-remove-0"));
+    await waitFor(() => expect(screen.queryByTestId("feedback-editor-asset-title-1")).toBeNull());
+    expect(screen.getByText(/second\.pdf/)).toBeTruthy();
+    expect(screen.queryByText(/first\.pdf/)).toBeNull();
+    consoleError.mockRestore();
+  });
+
+  it("ответ, пришедший после переоткрытия, не попадает в свежую форму", async () => {
+    let answer!: (value: unknown) => void;
+    fetchMock.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+    const { rerender } = open(vi.fn());
+
+    pick(pdf("late.pdf"));
+    await waitFor(() => expect(screen.getByTestId("feedback-editor-save")).toBeDisabled());
+
+    rerender(modal(false, vi.fn()));
+    rerender(modal(true, vi.fn()));
+    // The answer to the abandoned upload lands only now, into a visit that never asked for it.
+    await act(async () => {
+      answer({ ok: true, json: async () => ({ id: "late", url: "/api/media/late" }) });
+    });
+    expect(screen.queryByTestId("feedback-editor-asset-title-0")).toBeNull();
+    expect(screen.getByTestId("feedback-editor-save")).not.toBeDisabled();
   });
 
   it("переоткрытие убирает баннер отказа от прошлого визита", async () => {

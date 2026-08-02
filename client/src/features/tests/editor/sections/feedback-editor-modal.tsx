@@ -22,8 +22,8 @@
  *   4. PDF assets list — a picked file is uploaded to the media library immediately
  *      (`POST /api/media/upload?purpose=feedback-asset`) and the descriptor carries the
  *      canonical address the server returned (PRD-32). The local DraftAsset type extends
- *      FeedbackAsset with an optional `size` field for UI display; it is stripped before
- *      onSave so callers only receive canonical FeedbackAsset fields.
+ *      FeedbackAsset with UI-only fields (`size` for display, `uid` for row identity); both
+ *      are stripped before onSave so callers only receive canonical FeedbackAsset fields.
  *
  * Footer: «Отменить» (secondary) + «Сохранить» (primary).
  * The modal owns a draft copy of the values; on Save it emits via `onSave`.
@@ -84,10 +84,12 @@ export type FeedbackEditorModalProps = {
 /**
  * Draft-only asset. Extends the canonical descriptor with UI-only fields:
  *   `size` — bytes shown as «245 KB» next to the file name.
+ *   `uid`  — row identity for React; see {@link nextDraftUid}.
  * The file itself is no longer kept: it goes to the server the moment it is picked, and the
- * descriptor carries the address it came back with (PRD-32).
+ * descriptor carries the address it came back with (PRD-32). Both UI-only fields are
+ * stripped before the value is emitted.
  */
-type DraftAsset = FeedbackAsset & { size?: number };
+type DraftAsset = FeedbackAsset & { size?: number; uid: string };
 
 /** Outcome of one upload: the stored asset, or a message to show the author. */
 type UploadResult =
@@ -101,6 +103,25 @@ type DraftValue = Omit<FeedbackEditorValue, "assets" | "events"> & {
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+let draftUidSeq = 0;
+
+/**
+ * Issues a row identity for the assets list.
+ *
+ * The asset id from the registry cannot serve as the React key: uploads are deduplicated by
+ * checksum per owner, so attaching the same PDF twice yields TWO rows carrying ONE id —
+ * duplicate keys on a list with editable fields and a delete button. The draft uid is unique
+ * per row by construction and never leaves the modal.
+ */
+function nextDraftUid(): string {
+  return `draft-asset-${++draftUidSeq}`;
+}
+
+/** Gives every incoming descriptor a row identity (they arrive without one). */
+function toDraftAssets(assets: FeedbackAsset[]): DraftAsset[] {
+  return assets.map((asset) => ({ ...asset, uid: nextDraftUid() }));
+}
 
 /**
  * Format byte count as human-readable KB / MB string (1 decimal place).
@@ -118,6 +139,7 @@ function formatBytes(n: number): string {
 export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
   const [draft, setDraft] = useState<DraftValue>(() => ({
     ...props.value,
+    assets: toDraftAssets(props.value.assets),
     events: props.value.events ?? [],
   }));
   /** Ref to the contenteditable RTE area (richText mode only). */
@@ -142,6 +164,13 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   /** Count of uploads still in flight — keeps «Сохранить» busy so a half-uploaded list is not saved. */
   const [uploadsInFlight, setUploadsInFlight] = useState(0);
+  /**
+   * Which visit of the modal is current. Bumped on every reset below and captured by the
+   * upload handler, which applies nothing once the two differ: the modal does not unmount
+   * between visits, so an answer that arrives after a close/reopen would otherwise land in
+   * somebody else's form — an attachment (or a rejection) the author never asked for here.
+   */
+  const visitRef = useRef(0);
 
   // Reset draft when the modal re-opens or receives a new value.
   // For richText format: initialize the RTE innerHTML via requestAnimationFrame
@@ -149,11 +178,12 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
   useEffect(() => {
     if (!props.open) return;
     const newVal = props.value;
-    setDraft({ ...newVal, events: newVal.events ?? [] });
+    setDraft({ ...newVal, assets: toDraftAssets(newVal.assets), events: newVal.events ?? [] });
     // The upload state belongs to the previous visit and must go with it. Callers render this
     // modal unconditionally and merely flip `open`, so nothing unmounts: without this a stale
     // rejection banner hangs over a fresh form, and closing mid-upload then reopening leaves
     // the counter above zero — «Сохранить» would stay busy until the abandoned answer lands.
+    visitRef.current += 1;
     setUploadErrors([]);
     setOversizedFiles([]);
     setUploadsInFlight(0);
@@ -273,7 +303,9 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
     const files = Array.from(e.target.files ?? []);
     const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
     const oversized = files.filter((f) => f.size > MAX_BYTES);
-    // S13.1-G40: surface as an in-modal Banner instead of window.alert.
+    // S13.1-G40: surface as an in-modal Banner instead of window.alert. Overwritten by each
+    // pick on purpose — a size complaint describes the CURRENT selection and expires with it,
+    // unlike a server rejection below, which is the verdict on one file and must be readable.
     setOversizedFiles(oversized.map((f) => f.name));
     // Rejections from an earlier pick are deliberately NOT cleared here: the author may not
     // have read them yet, and the banner's own close button is the way to dismiss them.
@@ -282,12 +314,15 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
     e.target.value = "";
     if (valid.length === 0) return;
 
+    const visit = visitRef.current;
     setUploadsInFlight((n) => n + valid.length);
     for (const file of valid) {
       const result = await uploadFeedbackAsset(file);
-      // Clamped at zero: reopening the modal zeroes the counter, so an answer that lands
-      // afterwards must not drive it negative and leave the next upload looking idle.
-      setUploadsInFlight((n) => Math.max(0, n - 1));
+      // The visit ended while this file was in flight (the modal was closed and reopened, or
+      // the caller supplied a new value): its outcome belongs to a form that no longer exists.
+      // The reset already zeroed the counter, so there is nothing to decrement either.
+      if (visitRef.current !== visit) return;
+      setUploadsInFlight((n) => n - 1);
       if (!result.ok) {
         setUploadErrors((prev) => [...prev, result.error]);
         continue;
@@ -297,6 +332,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
         assets: [
           ...d.assets,
           {
+            uid: nextDraftUid(),
             id: result.id,
             title: file.name.replace(/\.pdf$/i, ""),
             fileName: file.name,
@@ -309,12 +345,12 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
     }
   }
 
-  /** Strip the UI-only `size` before emitting to the caller. */
+  /** Strip the UI-only fields (`size`, `uid`) before emitting to the caller. */
   function handleSave() {
     const canonical: FeedbackEditorValue = {
       ...draft,
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      assets: draft.assets.map(({ size: _s, ...rest }) => rest),
+      assets: draft.assets.map(({ size: _s, uid: _u, ...rest }) => rest),
     };
     props.onSave(canonical);
   }
@@ -638,8 +674,9 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
             </div>
             {draft.assets.length > 0 && (
               <ul className="tb-feedback-editor__list" aria-label="Прикреплённые файлы">
+                {/* Keyed by the draft uid, not the asset id: dedup can hand two rows one id. */}
                 {draft.assets.map((asset, i) => (
-                  <li className="tb-feedback-editor__item" key={asset.id ?? i}>
+                  <li className="tb-feedback-editor__item" key={asset.uid}>
                     <div className="tb-feedback-editor__asset">
                       <Paperclip
                         className="tb-feedback-editor__asset-ico"
