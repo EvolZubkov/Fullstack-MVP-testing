@@ -6,7 +6,7 @@
  * «где используется» report can say where exactly.
  */
 import { describe, it, expect } from "vitest";
-import { parseMediaRef, collectMediaRefs } from "../server/services/media/media-refs";
+import { parseMediaRef, collectMediaRefs, findMediaRefsInText } from "../server/services/media/media-refs";
 
 describe("parseMediaRef", () => {
   it("recognises the canonical address", () => {
@@ -53,5 +53,50 @@ describe("collectMediaRefs", () => {
   it("survives null and non-object input", () => {
     expect(collectMediaRefs(null)).toEqual([]);
     expect(collectMediaRefs("строка")).toEqual([]);
+  });
+
+  it("finds media embedded in an html field", () => {
+    const page = {
+      title: "Инструкция",
+      bodyHtml: '<p>Схема:</p><img src="/uploads/media/scheme.png">',
+    };
+    expect(collectMediaRefs(page)).toEqual([
+      { field: "bodyHtml", ref: { kind: "legacy", storageKey: "media/scheme.png" } },
+    ]);
+  });
+});
+
+describe("findMediaRefsInText", () => {
+  it("finds an address inside markup", () => {
+    expect(findMediaRefsInText('<p><img src="/uploads/media/pic.png" alt="x"></p>')).toEqual([
+      { kind: "legacy", storageKey: "media/pic.png" },
+    ]);
+  });
+
+  it("returns several references in order of appearance", () => {
+    const html =
+      '<img src="/api/media/11111111-1111-1111-1111-111111111111">' +
+      '<img src="/uploads/media/second.png">';
+    expect(findMediaRefsInText(html)).toEqual([
+      { kind: "canonical", id: "11111111-1111-1111-1111-111111111111" },
+      { kind: "legacy", storageKey: "media/second.png" },
+    ]);
+  });
+
+  it("reports one reference once even when it repeats", () => {
+    const html = '<img src="/uploads/media/same.png"><img src="/uploads/media/same.png">';
+    expect(findMediaRefsInText(html)).toHaveLength(1);
+  });
+
+  it("finds an address inside an absolute URL to our own host", () => {
+    expect(findMediaRefsInText("https://lms.example.com/api/media/22222222-2222-2222-2222-222222222222")).toEqual([
+      { kind: "canonical", id: "22222222-2222-2222-2222-222222222222" },
+    ]);
+  });
+
+  it("stops the legacy key at the quote, not at the end of the markup", () => {
+    expect(findMediaRefsInText('<img src="/uploads/media/a.png"><b>tail</b>')).toEqual([
+      { kind: "legacy", storageKey: "media/a.png" },
+    ]);
   });
 });

@@ -30,7 +30,14 @@ export interface FoundMediaRef {
   ref: MediaRef;
 }
 
-/** Recognises one value. Returns `null` for anything that is not a stored file. */
+/**
+ * Recognises one value AS A WHOLE — the entire trimmed string must be the address.
+ * Returns `null` for anything that is not a stored file, including a string that merely
+ * CONTAINS one (an `<img src="…">` inside markup): use {@link findMediaRefsInText} for
+ * that case. The distinction matters for Задача 15's canonicalisation, where "the field
+ * IS the address" (safe to replace outright) has to stay separate from "the address sits
+ * inside markup" (replacing the whole value would corrupt it).
+ */
 export function parseMediaRef(value: unknown): MediaRef | null {
   if (typeof value !== "string") return null;
   const raw = value.trim();
@@ -42,14 +49,40 @@ export function parseMediaRef(value: unknown): MediaRef | null {
   return null;
 }
 
+/**
+ * Both address shapes, ANYWHERE inside a string — an `<img src="…">` in a rich-text
+ * field is as real a usage as a bare `mediaUrl` column, and content pages have an
+ * `html` mode. One alternation, so matches come back in the order they appear.
+ *
+ * The errors here are asymmetric: a missed reference loses the file (orphan collection
+ * would delete it and delivery would refuse it), while a spurious one only keeps a file
+ * alive. So this errs towards finding too much, and does not try to parse markup.
+ */
+const MEDIA_IN_TEXT = /\/api\/media\/([0-9a-fA-F-]{36})|\/uploads\/(media\/[^\s"'<>?#\\]+)/g;
+
+/** Every distinct reference inside one string, in order of appearance. */
+export function findMediaRefsInText(value: string): MediaRef[] {
+  const out: MediaRef[] = [];
+  const seen = new Set<string>();
+  for (const m of value.replace(/\\/g, "/").matchAll(MEDIA_IN_TEXT)) {
+    const ref: MediaRef = m[1]
+      ? { kind: "canonical", id: m[1] }
+      : { kind: "legacy", storageKey: m[2] };
+    const key = ref.kind === "canonical" ? `c:${ref.id}` : `l:${ref.storageKey}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(ref);
+  }
+  return out;
+}
+
 /** Walks an entity and returns every media reference it holds, in traversal order. */
 export function collectMediaRefs(entity: unknown): FoundMediaRef[] {
   const found: FoundMediaRef[] = [];
 
   function visit(node: unknown, path: string): void {
     if (typeof node === "string") {
-      const ref = parseMediaRef(node);
-      if (ref) found.push({ field: path, ref });
+      for (const ref of findMediaRefsInText(node)) found.push({ field: path, ref });
       return;
     }
     if (Array.isArray(node)) {
