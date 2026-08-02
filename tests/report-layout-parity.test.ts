@@ -21,9 +21,20 @@ import { buildReportContext, buildAdaptiveReportContext } from "../shared/report
 import type { ReportInput, AdaptiveReportInput } from "../shared/report/report-html";
 
 const DEFAULT_DIR = path.resolve(process.cwd(), "server", "scorm", "templates", "default");
+const CERT_DIR = path.resolve(process.cwd(), "templates", "certification");
 const layout = (name: string) => fs.readFileSync(path.join(DEFAULT_DIR, "layouts", name), "utf8");
 const REPORT = layout("report.html");
 const REPORT_ADAPTIVE = layout("report.adaptive.html");
+
+/** Макеты отчёта КАЖДОГО поставляемого шаблона — паритет держится вручную. */
+const REPORT_LAYOUTS: Array<[string, string, string]> = [
+  ["default", REPORT, REPORT_ADAPTIVE],
+  [
+    "certification",
+    fs.readFileSync(path.join(CERT_DIR, "layouts", "report.html"), "utf8"),
+    fs.readFileSync(path.join(CERT_DIR, "layouts", "report.adaptive.html"), "utf8"),
+  ],
+];
 
 /** Видимый текст со схлопнутыми пробелами. */
 function visibleText(source: HTMLElement): string {
@@ -132,7 +143,6 @@ describe("report.html: макет повторяет страницу, кото�
       "Не пройден",
       "1 из 12 (18%)",
       "4.0/22.0",
-      "Повторите раздел про сети",
       "Право",
       "1 из 10 (36%)",
       "5.0/14.0",
@@ -164,11 +174,13 @@ describe("report.html: макет повторяет страницу, кото�
     expect(cards[1].querySelector(".tb-report__topic-verdict")?.textContent).toBe("Не пройден");
   });
 
-  it("обратная связь печатается только по проваленной теме", () => {
+  // Слот текста в карточке темы снят: текст обратной связи печатается один раз, в
+  // консолидированном блоке (см. describe ниже). Контекст здесь нарочно несёт устаревшее
+  // поле `feedback` у проваленной темы — макет обязан его игнорировать.
+  it("карточка темы обратной связи не печатает", () => {
     const root = renderToRoot(REPORT, buildReportContext(STANDARD));
-    const cards = [...root.querySelectorAll(".tb-report__topic")];
-    expect(cards[0].querySelector(".tb-report__topic-fb")).toBeNull();
-    expect(cards[1].querySelector(".tb-report__topic-fb")?.textContent).toBe("Повторите раздел про сети");
+    expect(root.querySelector(".tb-report__topic-fb")).toBeNull();
+    expect(visibleText(root)).not.toContain("Повторите раздел про сети");
   });
 
   it("кликабельный чип один: дубль курса по двум проваленным темам убран", () => {
@@ -473,6 +485,34 @@ describe("макет печатает консолидированный бло�
   it("адаптивный отчёт без обратной связи блока не рисует", () => {
     expect(recsCard(renderToRoot(REPORT_ADAPTIVE, buildAdaptiveReportContext(ADAPTIVE)))).toBeNull();
   });
+
+  for (const [templateId, reportLayout, adaptiveLayout] of REPORT_LAYOUTS) {
+    it(`${templateId}: карточка темы не дублирует текст блока`, () => {
+      const both: ReportInput = {
+        ...WITH_FEEDBACK,
+        result: {
+          ...WITH_FEEDBACK.result,
+          topicResults: WITH_FEEDBACK.result.topicResults.map((t, i) =>
+            // Один и тот же текст и в устаревшем per-topic поле, и в источниках блока.
+            i === 1 ? { ...t, feedback: "Текст темы", feedbackTexts: ["Текст темы"] } : t,
+          ),
+        },
+      };
+      const root = renderToRoot(reportLayout, buildReportContext(both));
+      expect(root.querySelector(".tb-report__topic-fb")).toBeNull();
+      expect(visibleText(root).match(/Текст темы/g)).toHaveLength(1);
+    });
+
+    // В АДАПТИВНОМ отчёте `feedback` темы — обратная связь достигнутого уровня, а не
+    // текст темы: в блок она не подаётся, поэтому слот в карточке сохранён.
+    it(`${templateId}: адаптивная карточка печатает обратную связь уровня`, () => {
+      const root = renderToRoot(adaptiveLayout, buildAdaptiveReportContext(ADAPTIVE));
+      const cards = [...root.querySelectorAll(".tb-report__topic")];
+      expect(cards[0].querySelector(".tb-report__topic-fb")?.textContent).toBe(
+        "Ваш уровень знаний по данной теме - начальный",
+      );
+    });
+  }
 });
 
 describe("макеты отчёта соблюдают контракт среды стилей (§6.3)", () => {

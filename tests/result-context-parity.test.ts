@@ -86,7 +86,9 @@ describe("shared buildResultContext", () => {
     const t0 = (result.topicResults as any[])[0];
     expect(t0.pointsLabel).toBe("4 / 5");
     expect(t0.requiredLabel).toBe("Требуется: 70%");
-    expect(t0.feedback).toBe("ок");
+    // Текст обратной связи в строку темы не попадает и в стандартном режиме не
+    // печатается — он живёт в консолидированном блоке.
+    expect(t0.feedback).toBeUndefined();
     expect(result.recommendedCourses?.length).toBe(1);
     expect(result.backAction).toBe("back-to-start");
   });
@@ -276,31 +278,42 @@ describe("вход отчёта питает блок экрана", () => {
 });
 
 describe("unified per-topic feedback (plan 6.1)", () => {
-  // Feedback is a property of the test's settings, not the flow mode: both modes must
-  // expose the SAME per-topic composition (feedback + courses + events).
+  // Курсы и мероприятия темы — общее для обоих режимов, и составляются одинаково.
+  // ТЕКСТ обратной связи — уже нет: в стандартном режиме он живёт только в
+  // консолидированном блоке, а в адаптивном `feedback` темы означает другое (обратную
+  // связь достигнутого уровня либо текст провала темы) и в блок не подаётся.
   const fb = {
     feedback: "Повторите тему",
     recommendedCourses: [{ title: "Курс", url: "https://e.test/c" }],
     recommendedEvents: [{ title: "Вебинар" }],
   };
-  const shape = (t: any) => ({
-    hasFeedback: t.hasFeedback,
+  const links = (t: any) => ({
     courses: t.recommendedCourses.length,
     events: t.recommendedEvents.length,
     hasRec: t.hasRecommendations,
   });
-
-  it("standard and adaptive expose feedback + courses + events per topic", () => {
-    const std = sharedBuild(
-      { ...sharedInput, topicResults: [{ ...sharedInput.topicResults[0], ...fb }] },
-      "Тест",
-    );
-    const ad = sharedAdaptive(
+  const std = () =>
+    (sharedBuild({ ...sharedInput, topicResults: [{ ...sharedInput.topicResults[0], ...fb }] }, "Тест").result
+      .topicResults as any[])[0];
+  const ad = () =>
+    (sharedAdaptive(
       { passed: false, topicResults: [{ topicName: "T", achievedLevelIndex: 1, achievedLevelName: "Базовый", ...fb }] },
       "Тест",
-    );
-    expect(shape((std.result.topicResults as any[])[0])).toEqual(shape((ad.result.topicResults as any[])[0]));
-    expect(shape((std.result.topicResults as any[])[0])).toEqual({ hasFeedback: true, courses: 1, events: 1, hasRec: true });
+    ).result.topicResults as any[])[0];
+
+  it("standard and adaptive expose the same courses + events per topic", () => {
+    expect(links(std())).toEqual(links(ad()));
+    expect(links(std())).toEqual({ courses: 1, events: 1, hasRec: true });
+  });
+
+  it("стандартная строка темы текста обратной связи не несёт", () => {
+    expect(std().hasFeedback).toBeUndefined();
+    expect(std().feedback).toBeUndefined();
+  });
+
+  it("адаптивная строка темы несёт обратную связь уровня", () => {
+    expect(ad().hasFeedback).toBe(true);
+    expect(ad().feedback).toBe("Повторите тему");
   });
 });
 

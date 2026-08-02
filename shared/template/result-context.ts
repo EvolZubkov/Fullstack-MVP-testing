@@ -48,7 +48,15 @@ function round1(n: number): number {
 
 /** Per-topic feedback composition — the SAME shape for standard and adaptive. */
 export interface TopicFeedbackInput {
-  /** Per-topic feedback text (`feedback_json.text`). */
+  /**
+   * ADAPTIVE MODE ONLY: the wording of the level the learner confirmed
+   * (`adaptive_levels.feedback`), or the topic's failure text when none was. Rendered in
+   * the topic card of `results.adaptive.html` (see `adaptiveLevelFeedback`).
+   *
+   * The STANDARD mode leaves it empty on purpose. A topic's own feedback text is
+   * {@link feedbackTexts}, and it reaches the learner through the consolidated
+   * «Рекомендации» block rather than through the card.
+   */
   feedback?: string | null;
   /** Recommended courses/links (`feedback_json.links`). */
   recommendedCourses?: Array<{ title: string; url?: string }> | null;
@@ -108,24 +116,30 @@ export interface TopicInput extends TopicFeedbackInput {
 }
 
 /**
- * The unified per-topic feedback view — `feedback` text + recommended courses/events
- * with presence flags. Shared by standard and adaptive results so the feedback block
- * is composed identically in both modes (spec §3.2 / plan 6.1). Feedback is a property
- * of the test's settings, not the flow mode.
+ * The unified per-topic recommendation view — courses/events with a presence flag.
+ * Shared by standard and adaptive results so the topic card is composed identically in
+ * both modes (spec §3.2 / plan 6.1). Recommendations are a property of the test's
+ * settings, not the flow mode.
+ *
+ * It deliberately builds NO feedback text. It used to, and both results layouts carried
+ * a per-topic slot for it; once the consolidation put every text into the ONE
+ * «Рекомендации» block, that slot could only stand empty or print the same sentence a
+ * second time on the same screen. The topic's text now travels as
+ * {@link TopicFeedbackInput.feedbackTexts} into the block, and the slot is gone from the
+ * standard layouts.
+ *
+ * The ADAPTIVE card is the exception and keeps its slot — see
+ * {@link adaptiveLevelFeedback}: what `feedback` means there is a different text, with no
+ * other route to the learner.
  */
-export function buildTopicFeedbackView(t: TopicFeedbackInput): {
-  feedback?: string;
-  hasFeedback: boolean;
+export function buildTopicRecommendationsView(t: TopicFeedbackInput): {
   recommendedCourses: CtxRecommendation[];
   recommendedEvents: CtxRecommendation[];
   hasRecommendations: boolean;
 } {
-  const fb = String(t.feedback ?? "").trim();
   const courses = (t.recommendedCourses ?? []).map((l) => ({ title: l.title, ...(l.url ? { url: l.url } : {}) }));
   const events = (t.recommendedEvents ?? []).map((l) => ({ title: l.title, ...(l.url ? { url: l.url } : {}) }));
   return {
-    ...(fb ? { feedback: fb } : {}),
-    hasFeedback: fb.length > 0,
     recommendedCourses: courses,
     recommendedEvents: events,
     hasRecommendations: courses.length > 0 || events.length > 0,
@@ -398,8 +412,13 @@ function topicView(t: TopicInput, withPoints: boolean): CtxTopicResultView {
     percent: Math.round(t.percent || 0),
     passClass: passed === true ? "is-pass" : passed === false ? "is-fail" : "",
     statusLabel: passed === true ? "Пройдено" : passed === false ? "Не пройдено" : "",
-    // Unified feedback composition (feedback + courses + events) — same as adaptive.
-    ...buildTopicFeedbackView(t),
+    // Courses and events only. The topic's feedback TEXT is deliberately absent: it
+    // reaches the learner through the consolidated «Рекомендации» block (fed by
+    // `feedbackTexts` above), and the standard layouts no longer carry a per-topic slot
+    // for it. The adaptive row DOES carry one — that `feedback` is the confirmed LEVEL's
+    // wording, not the topic's, and the block is not fed from it (see
+    // `adaptiveLevelFeedback`). The asymmetry is intentional, not an unfinished edit.
+    ...buildTopicRecommendationsView(t),
   };
   if (withPoints) view.pointsLabel = round1(t.earnedPoints) + " / " + round1(t.possiblePoints);
   if (t.requiredLabel) view.requiredLabel = t.requiredLabel;
@@ -754,6 +773,26 @@ function hasAchievedLevel(t: AdaptiveTopicInput): boolean {
   return t.achievedLevelIndex !== null && t.achievedLevelIndex !== undefined;
 }
 
+/**
+ * The adaptive card's own feedback slot — the ONLY per-topic feedback text either mode
+ * still renders inside a topic card.
+ *
+ * WHY IT SURVIVED THE CONSOLIDATION. In the adaptive mode `feedback` is not the topic's
+ * feedback text at all: `aggregateAdaptiveResult` fills it with the wording of the LEVEL
+ * the learner confirmed (`adaptive_levels.feedback`), or with the topic's failure text
+ * when no level was reached. Neither is a source of the consolidated «Рекомендации»
+ * block — that one is fed from the topic's and the section's `feedback_json` — so
+ * removing the slot here would not move the text into the block, it would delete it from
+ * the product. The standard card's slot was removed precisely because its text DID move.
+ *
+ * So the two layouts differing on this point is the intended state, not an edit left
+ * half-done: `results.html` has no slot, `results.adaptive.html` has one.
+ */
+function adaptiveLevelFeedback(t: AdaptiveTopicInput): { feedback?: string; hasFeedback: boolean } {
+  const fb = String(t.feedback ?? "").trim();
+  return { ...(fb ? { feedback: fb } : {}), hasFeedback: fb.length > 0 };
+}
+
 /** Map a normalized adaptive topic to its level-based view (unified feedback). */
 function adaptiveTopicView(t: AdaptiveTopicInput): CtxAdaptiveTopicView {
   const achieved = hasAchievedLevel(t);
@@ -761,7 +800,8 @@ function adaptiveTopicView(t: AdaptiveTopicInput): CtxAdaptiveTopicView {
     topicName: t.topicName || "",
     levelLabel: achieved ? (t.achievedLevelName as string) : NO_LEVEL_CONFIRMED_LABEL,
     levelClass: achieved ? TONE_CONFIRMED : TONE_BELOW_MINIMUM,
-    ...buildTopicFeedbackView(t),
+    ...buildTopicRecommendationsView(t),
+    ...adaptiveLevelFeedback(t),
   };
 }
 

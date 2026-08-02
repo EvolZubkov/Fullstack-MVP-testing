@@ -38,6 +38,15 @@ const adaptiveLayouts: Array<[string, string]> = [
   ],
 ];
 
+/** The STANDARD results layout of every shipped design template — parity kept by hand. */
+const standardLayouts: Array<[string, string]> = [
+  ["default", resultsLayout],
+  [
+    "certification",
+    fs.readFileSync(path.join(process.cwd(), "templates", "certification", "layouts", "results.html"), "utf8"),
+  ],
+];
+
 function render(layout: string, context: unknown): HTMLElement {
   const root = document.createElement("div");
   renderScreenInto(root, { layout, context });
@@ -78,7 +87,7 @@ describe("results.html — superset gating", () => {
     expect(root.querySelectorAll(".tb-topic-card .ou-stat-row").length).toBe(1); // "Правильно" only
   });
 
-  it("SCORM context: points row + threshold + per-topic feedback + recommendations + back action", () => {
+  it("SCORM context: points row + threshold + recommendations + back action", () => {
     const scorm = {
       course: { title: "Тест" },
       result: {
@@ -88,9 +97,6 @@ describe("results.html — superset gating", () => {
             ...webResult.result.topicResults[0],
             pointsLabel: "4.0 / 5.0",
             requiredLabel: "Требуется: 70%",
-            // Unified per-topic feedback (plan 6.1): feedback + courses + events.
-            feedback: "Отличный результат",
-            hasFeedback: true,
             recommendedCourses: [{ title: "Курс A", url: "https://e/a" }],
             recommendedEvents: [{ title: "Семинар B" }],
             hasRecommendations: true,
@@ -107,12 +113,72 @@ describe("results.html — superset gating", () => {
     expect(root.querySelector(".tb-topic-card")?.textContent).toContain("Баллов");
     expect(root.textContent).toContain("4.0 / 5.0");
     // Recommendations are per-topic chips now (not a result-level section).
-    expect(root.querySelector(".tb-topic-card__fb-text")?.textContent).toContain("Отличный результат");
     const recs = [...root.querySelectorAll(".tb-topic-card .tb-rec")].map((r) => r.textContent);
     expect(recs).toContain("Курс A");
     expect(recs).toContain("Семинар B");
     expect(root.querySelector('[data-action="back-to-start"]')?.textContent).toBe("Вернуться к тесту");
   });
+});
+
+/**
+ * Текст обратной связи живёт ТОЛЬКО в консолидированном блоке. Раньше карточка темы
+ * несла собственный слот текста, и после консолидации он либо пустовал, либо печатал
+ * ту же строку второй раз — на одном экране, в двух местах.
+ *
+ * Проверяется именно МАКЕТ, а не построитель: контекст здесь нарочно несёт и
+ * `feedback`/`hasFeedback` (как их несла бы попытка, посчитанная старым построителем),
+ * и тот же текст в блоке. Слот снят — значит текст печатается один раз, откуда бы поле
+ * в контексте ни взялось.
+ */
+describe("results.html — текст обратной связи только в консолидированном блоке", () => {
+  const TEXT = "Повторите тему «Сети».";
+  const contextWithBoth = {
+    course: { title: "Тест" },
+    result: {
+      ...webResult.result,
+      topicResults: [
+        {
+          ...webResult.result.topicResults[0],
+          feedback: TEXT,
+          hasFeedback: true,
+          recommendedCourses: [{ title: "Курс A", url: "https://e/a" }],
+          recommendedEvents: [],
+          hasRecommendations: true,
+        },
+      ],
+      recommendations: { texts: [TEXT], links: [], events: [], assets: [], hasAny: true },
+    },
+  };
+
+  for (const [templateId, layout] of standardLayouts) {
+    it(`${templateId}: карточка темы текста не печатает, а блок печатает`, () => {
+      const root = render(layout, contextWithBoth);
+      const card = root.querySelector(".tb-topic-card") as HTMLElement;
+      expect(card.querySelector(".tb-topic-card__fb-text")).toBeNull();
+      expect(card.textContent).not.toContain(TEXT);
+      // Текст не потерян — он переехал в блок, и ровно один раз на весь экран.
+      expect(root.querySelector(".tb-recs-block .tb-recs-group__text")?.textContent).toBe(TEXT);
+      expect((root.textContent ?? "").match(new RegExp(TEXT, "g"))).toHaveLength(1);
+    });
+
+    it(`${templateId}: курсы и мероприятия темы в карточке остаются`, () => {
+      const root = render(layout, contextWithBoth);
+      const card = root.querySelector(".tb-topic-card") as HTMLElement;
+      expect(card.querySelector("a.tb-rec")?.getAttribute("href")).toBe("https://e/a");
+      expect(card.querySelectorAll(".tb-topic-card__fb")).toHaveLength(1);
+    });
+
+    it(`${templateId}: тема без курсов не оставляет пустой блок в карточке`, () => {
+      const root = render(layout, {
+        ...contextWithBoth,
+        result: {
+          ...contextWithBoth.result,
+          topicResults: [{ ...contextWithBoth.result.topicResults[0], recommendedCourses: [], hasRecommendations: false }],
+        },
+      });
+      expect(root.querySelector(".tb-topic-card__fb")).toBeNull();
+    });
+  }
 });
 
 describe("results.html — пустая плашка не рисуется", () => {
@@ -280,6 +346,35 @@ describe("results.adaptive.html — консолидированный блок 
       const root = render(layout, webAdaptive);
       expect(root.querySelector(".tb-recs-block")).toBeNull();
       expect(root.textContent).not.toContain("Рекомендации");
+    });
+
+    // Слот текста в АДАПТИВНОЙ карточке снимать нельзя: `feedback` здесь — не текст
+    // темы (тот уехал в блок), а обратная связь ДОСТИГНУТОГО УРОВНЯ либо текст провала
+    // темы. В консолидированный блок она не подаётся, и снятие слота стёрло бы её из
+    // продукта совсем.
+    it(`${templateId}: обратная связь уровня остаётся в карточке темы`, () => {
+      const root = render(layout, {
+        course: { title: "Адаптивный тест" },
+        result: {
+          adaptive: true,
+          topicResults: [
+            {
+              topicName: "Сети",
+              levelLabel: "Средний",
+              levelClass: "ou-tag--solid ou-tag--accent",
+              feedback: "Ваш уровень по теме — средний",
+              hasFeedback: true,
+              hasRecommendations: false,
+              recommendedCourses: [],
+              recommendedEvents: [],
+            },
+          ],
+          recommendations,
+        },
+      });
+      expect(root.querySelector(".tb-topic-card .tb-topic-card__fb-text")?.textContent).toBe(
+        "Ваш уровень по теме — средний",
+      );
     });
 
     it(`${templateId}: показывает только непустые группы`, () => {

@@ -251,8 +251,16 @@ export function buildReportContext(input: ReportInput, opts: ReportContextOption
       target.barPercent = topicPercent;
       target.countsLabel = `${src.correct} из ${src.total} (${topicPercent}%)`;
       target.pointsFixedLabel = `${fixed1(src.earnedPoints)}/${fixed1(src.possiblePoints)}`;
-      // Обратную связь отчёт печатает ТОЛЬКО по проваленной теме — как и раньше.
-      target.showFeedback = !topicPassed && String(src.feedback ?? "").trim().length > 0;
+      // Признака `showFeedback` здесь больше нет: текст обратной связи темы печатается
+      // ОДИН раз — в консолидированном блоке, который отчёт берёт из общего сборщика
+      // (`buildResultContext` выше). Слот в карточке темы после консолидации мог только
+      // пустовать либо повторять ту же строку на той же странице, и снят из `report.html`
+      // обоих шаблонов.
+      //
+      // В АДАПТИВНОМ отчёте слот сохранён и признак вычисляется — см.
+      // `buildAdaptiveReportContext` ниже: там `feedback` темы означает другое (обратная
+      // связь достигнутого уровня либо текст провала темы), в блок не подаётся, и снятие
+      // слота стёрло бы её из продукта. Расхождение макетов намеренное.
     });
   }
   return ctx;

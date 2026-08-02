@@ -136,9 +136,14 @@ function toTopicInput(t: TopicResult): TopicInput {
     earnedPoints: t.earnedPoints,
     possiblePoints: t.possiblePoints,
     passed: t.passed,
-    // Per-topic feedback composition (plan 6.1): feedback + courses + events, the
-    // SAME shape adaptive uses — the shared builder renders one feedback block.
-    feedback: (t as { feedback?: string | null }).feedback ?? null,
+    // No `feedback` here on purpose. The field used to be read off the stored result —
+    // where `topicResultSchema` never declared it, so it was `undefined` for every
+    // attempt ever graded — and fed a per-topic slot in the results and report layouts.
+    // A topic's feedback text now travels as `feedbackTexts` below and is rendered ONCE,
+    // in the consolidated «Рекомендации» block; the slot is gone from the standard
+    // layouts. The ADAPTIVE adapter still fills `feedback` (see
+    // `buildAdaptiveResultContext` / `buildAdaptiveReportInput`): there it is the
+    // confirmed LEVEL's wording, which the block is not fed from.
     recommendedCourses: t.recommendedCourses ?? [],
     recommendedEvents: t.recommendedEvents ?? [],
     // PRD-32: attachments of the topic + of this test's section over it, merged and

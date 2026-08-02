@@ -1162,7 +1162,7 @@ Placeholders варианта должны соответствовать мак
 | `scorePercent` | Процент результата |
 | `ringDashoffset` | Готовое смещение для SVG-кольца |
 | `totalQuestions` / `correct` / `earnedPoints` / `possiblePoints` | Сводка баллов |
-| `topicResults[]` | Результаты по темам (`topicId`, `topicName`, `correct`, `total`, `percent`, `passClass`, `statusLabel`; SCORM-доп.: `pointsLabel`, `requiredLabel`, `topicFeedback`) |
+| `topicResults[]` | Результаты по темам (`topicId`, `topicName`, `correct`, `total`, `percent`, `passClass`, `statusLabel`, `recommendedCourses[]`, `recommendedEvents[]`, `hasRecommendations`; SCORM-доп.: `pointsLabel`, `requiredLabel`). Текста обратной связи темы в строке НЕТ — он печатается консолидированным блоком `result.recommendations` |
 | `adaptive` | Признак адаптивного режима; при `true` строки `topicResults[]` имеют форму уровней (`levelLabel`, `levelClass`, `feedback`, `hasFeedback`, `hasLinks`, `links[]`) вместо баллов |
 | `recommendedCourses[]` / `recommendedEvents[]` | Рекомендации по проваленным темам (SCORM; веб опускает) |
 | `backAction` / `backLabel` | Действие и подпись «назад» — устаревшая однокнопочная форма подвала; используется только когда `result.nav` не заполнен |
@@ -1288,9 +1288,12 @@ Placeholders варианта должны соответствовать мак
 
 Строки `result.topicResults[]` в отчёте несут дополнительные готовые подписи, которых на экране
 итогов нет. В обычном отчёте — `verdictLabel` («Пройден» / «Не пройден»), `barPercent`,
-`countsLabel` («3 из 5 (60%)»), `pointsFixedLabel` («3.0/5.0») и `showFeedback`: обратную связь
-отчёт печатает только по проваленной теме. В адаптивном — `hasCounts`, `answeredLabel`,
-`correctLabel` и `achievedClass` (`is-achieved` / `is-below`).
+`countsLabel` («3 из 5 (60%)») и `pointsFixedLabel` («3.0/5.0»). В адаптивном — `hasCounts`,
+`answeredLabel`, `correctLabel` и `achievedClass` (`is-achieved` / `is-below`), а также
+`feedback`/`hasFeedback` — обратная связь достигнутого уровня.
+
+Текста обратной связи темы в строке нет ни на экране, ни в обычном отчёте: он печатается один
+раз, в консолидированном блоке `result.recommendations`.
 
 Ссылка внутри отчёта становится кликабельной в PDF, если элемент несёт класс
 `pdf-link-btn` и атрибут `data-url`: конвейер экспорта превращает его в настоящую ссылку.
