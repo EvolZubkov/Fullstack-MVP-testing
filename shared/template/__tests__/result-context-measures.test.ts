@@ -89,7 +89,7 @@ describe("buildResultContext + measures", () => {
   });
 
   it("приводит вложения к ссылке и отбрасывает незагруженные", () => {
-    // Редактор хранит канонический дескриптор PDF, где адрес лежит в scormHref.
+    // Ранее собранные данные несут адрес PDF в scormHref — блок читает и их.
     const withAssets = {
       ...MEASURES,
       indicators: [

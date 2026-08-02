@@ -139,7 +139,10 @@ export function FeedbackPreview(props: FeedbackPreviewProps) {
         icon={<FileText size={14} />}
         items={props.assets.map((a) => ({
           label: a.title,
-          href: a.scormHref,
+          // Same first-non-empty rule as `normalizeFeedback`: the address belongs in `url`,
+          // `scormHref` is read only for data stored before the media library. Reading only
+          // the legacy field left newly uploaded attachments without a link here.
+          href: a.url || a.scormHref,
           download: true,
         }))}
       />

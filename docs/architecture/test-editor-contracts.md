@@ -276,7 +276,7 @@ Default: `"always_available"`. Редактируется по каждой те
       "title": "Сертификат",
       "fileName": "certificate.pdf",
       "mimeType": "application/pdf",
-      "scormHref": "feedback/certificate.pdf"
+      "url": "/api/media/11111111-1111-1111-1111-111111111111"
     }
   ]
 }
@@ -479,7 +479,10 @@ Backend возвращает 400 с полем `fields` для всех validati
 3. `flow_policy_json` пишется всегда — включая `linear_flat` (`{ mode, router: null }`), иначе смена
    сценария на линейный не сохраняется (см. 3.1).
 4. Скрытые draft-настройки несовместимого режима НЕ попадают в payload (FR-25h, FR-25i).
-5. `feedback.assets[].scormHref` НЕ пишется в payload — заполняется backend при сохранении файла.
+5. Адрес вложения обратной связи живёт в `feedback.assets[].url` со значением `/api/media/<id>` —
+   каноническим адресом медиатеки (PRD-32). Это поле пишется в payload. Легаси-поле
+   `feedback.assets[].scormHref` в payload НЕ пишется: оно читается только у ранее сохранённых
+   данных, где адрес лежал внутри пакета.
 6. `expectedVersion` берётся из `model.version` (snapshot при открытии редактора).
 7. `tests.start_page_content` НЕ пишется — стартовая страница управляется через `content_pages`
    типа `intro` без `topic_id` (FR-44).

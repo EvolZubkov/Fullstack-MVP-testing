@@ -44,6 +44,24 @@ describe("<FeedbackPreview /> (TD-02)", () => {
     expect(doc).toHaveAttribute("download");
   });
 
+  // PRD-32: the address of an attachment belongs in `url`; the preview used to read only
+  // the legacy `scormHref` and so showed newly uploaded files without a link.
+  it("links a document by its canonical `url`", () => {
+    renderPreview({
+      assets: [
+        {
+          title: "Памятка",
+          fileName: "memo.pdf",
+          mimeType: "application/pdf",
+          url: "/api/media/11111111-1111-1111-1111-111111111111",
+        },
+      ],
+    });
+    const doc = screen.getByRole("link", { name: "Памятка" });
+    expect(doc).toHaveAttribute("href", "/api/media/11111111-1111-1111-1111-111111111111");
+    expect(doc).toHaveAttribute("download");
+  });
+
   it("renders an event without a URL as plain text (no link)", () => {
     renderPreview({ text: "", events: [{ title: "Очная встреча" }] });
     expect(screen.getByText("Очная встреча")).toBeInTheDocument();

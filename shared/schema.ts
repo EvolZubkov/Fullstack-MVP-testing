@@ -885,14 +885,16 @@ export const feedbackAssetSchema = z.object({
   fileName: z.string().min(1),
   mimeType: z.literal("application/pdf"),
   /**
-   * Canonical media-library address (`/api/media/<id>`), written by the editor as soon as
-   * the file is uploaded. A plain string on purpose: the media walker recognises addresses
-   * inside any field, so the usage index and the SCORM packer need no special branch here.
+   * Canonical media-library address (`/api/media/<id>`). PRD-32 contract, wired up by the
+   * later tasks of that work: this is the field the editor WRITES on upload and the field
+   * the SCORM packer RESOLVES to an in-package path. A plain string on purpose — the media
+   * walker recognises addresses inside any field, so the usage index and the packer need no
+   * special branch here.
    */
   url: z.string().optional(),
   /**
    * Read-only legacy field: packages exported before the media library existed carry the
-   * in-package address here. Nothing writes it any more — the packer rewrites `url` itself.
+   * in-package address here. New code does not write it — the address belongs in `url`.
    */
   scormHref: z.string().optional(),
 });
