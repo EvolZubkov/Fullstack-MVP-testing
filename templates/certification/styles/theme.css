@@ -382,6 +382,11 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   color: var(--ou-fg-default); text-wrap: pretty;
   font-size: var(--tb-question-fs, 30px);
 }
+/* PRD-34 (FR-16): строка подсказки — ряд, в котором слева подсказка, справа якорь
+   водяного знака. Знак делит строку с уже существующей подсказкой и потому не
+   занимает у фиксированного кадра собственной высоты. Вид знака задаёт ЯДРО. */
+.tb-scene__qmeta { display: flex; align-items: baseline; gap: var(--ou-space-4); min-width: 0; }
+.tb-scene__qmeta > [data-slot="protection-mark"] { margin-inline-start: auto; }
 .tb-scene__qhint { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
 
 /* Media + answers: stacked by default; side-by-side (media 5 / answers 7) when
