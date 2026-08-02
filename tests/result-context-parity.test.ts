@@ -110,6 +110,32 @@ describe("host parity", () => {
     expect(web).toEqual(shared);
     expect(web.result.recommendations?.assets).toEqual(assets);
   });
+
+  // Дефект Д-3. Веб собирает `testFeedback` из своего `MeasuresSource`, пакет — из
+  // `TEST_DATA.testFeedbackJson`, но оба отдают его общему сборщику ОДНОЙ опцией,
+  // не завязанной на измерения. Тест без шкал и показателей — общий случай.
+  it("обратная связь теста без измерений: адаптер веба === общий сборщик", () => {
+    const feedback = {
+      format: "plain",
+      text: "Спасибо за участие.",
+      links: [],
+      events: [],
+      assets: [{ title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "/api/media/cccc" }],
+    };
+    const web = webBuild(attemptResult, "Опрос", {
+      scales: [],
+      variables: [],
+      blockSettings: {},
+      hasPassThreshold: true,
+      testFeedback: feedback,
+    } as never);
+    const shared = sharedBuild(sharedInput, "Опрос", {
+      testFeedback: { text: "Спасибо за участие.", links: [], events: [], assets: [{ title: "Памятка", url: "/api/media/cccc" }] },
+    });
+    expect(web).toEqual(shared);
+    expect(web.result.recommendations?.texts).toEqual(["Спасибо за участие."]);
+    expect(web.result.recommendations?.assets).toEqual([{ title: "Памятка", url: "/api/media/cccc" }]);
+  });
 });
 
 describe("unified per-topic feedback (plan 6.1)", () => {

@@ -52,8 +52,13 @@ const MEASURES = {
       },
     },
   ],
-  testFeedback: { text: "Опросник носит справочный характер." },
 };
+
+/**
+ * The test's OWN feedback block. Passed as its own option, NOT inside `MEASURES`: a
+ * test's feedback is due to the learner whether or not the test measures anything.
+ */
+const TEST_FEEDBACK = { text: "Опросник носит справочный характер." };
 
 describe("buildResultContext + measures", () => {
   it("не добавляет новых полей, когда измерений нет", () => {
@@ -79,7 +84,7 @@ describe("buildResultContext + measures", () => {
   });
 
   it("собирает рекомендации в порядке тест, показатель, шкала", () => {
-    const ctx = buildResultContext(BASE, "Маслач", { measures: MEASURES });
+    const ctx = buildResultContext(BASE, "Маслач", { testFeedback: TEST_FEEDBACK, measures: MEASURES });
     expect(ctx.result.recommendations!.texts).toEqual([
       "Опросник носит справочный характер.",
       "Обсудите нагрузку с руководителем.",
@@ -113,14 +118,13 @@ describe("buildResultContext + measures", () => {
         },
       ],
       scales: [],
-      testFeedback: null,
     };
     const ctx = buildResultContext(BASE, "Маслач", { measures: withAssets });
     expect(ctx.result.recommendations!.assets).toEqual([{ title: "Памятка.pdf", url: "/a/p.pdf" }]);
   });
 
   it("берёт рекомендации только у сработавших интервалов", () => {
-    const low = { ...MEASURES, scales: [{ ...MEASURES.scales[0], value: 5 }], indicators: [], testFeedback: null };
+    const low = { ...MEASURES, scales: [{ ...MEASURES.scales[0], value: 5 }], indicators: [] };
     const ctx = buildResultContext(BASE, "Маслач", { measures: low });
     // Ничего не сработало — блока рекомендаций в контексте нет вовсе.
     expect(ctx.result.recommendations).toBeUndefined();
@@ -128,6 +132,7 @@ describe("buildResultContext + measures", () => {
 
   it("настройка блока перебивает автоматику наличия", () => {
     const ctx = buildResultContext(BASE, "Маслач", {
+      testFeedback: TEST_FEEDBACK,
       measures: { ...MEASURES, blockSettings: { scales: "hide" as const } },
     });
     expect(ctx.result.scales).toBeUndefined();

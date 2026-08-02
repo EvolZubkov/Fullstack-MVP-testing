@@ -134,7 +134,6 @@ export interface MeasuresInput {
   indicatorKind: RenderKind;
   scales: MeasureInput[];
   indicators: MeasureInput[];
-  testFeedback?: FeedbackBlock | null;
   /** Whether the test has a pass threshold — the `auto` answer for the score summary. */
   hasPassThreshold?: boolean;
   blockSettings?: ResultsBlockSettings;
@@ -219,6 +218,18 @@ export interface ResultContextOptions {
   backAction?: string;
   backLabel?: string;
   /**
+   * The test's OWN feedback block (`tests.feedback_json`), normalised by the host —
+   * the most general source of the «Рекомендации» block (PRD-29 §7.1), and the first
+   * one, so a general recommendation outranks its per-measure or per-topic copy.
+   *
+   * Deliberately NOT part of {@link measures}. It lived there while PRD-29 assembled
+   * the whole block inside its own branch, and that made the test's feedback vanish
+   * from the commonest configuration of all — a test with neither scales nor
+   * indicators, where the author's feedback exists precisely to be shown. A test's
+   * feedback is a property of the test, not of its measurements.
+   */
+  testFeedback?: FeedbackBlock | null;
+  /**
    * PRD-29 measurement blocks. Absent (a test with neither scales nor indicators)
    * leaves the context byte-identical to what a control test has always produced.
    */
@@ -281,12 +292,12 @@ export function buildResultContext(
     result.backAction = opts.backAction;
     result.backLabel = opts.backLabel;
   }
-  // Sources of the ONE «Материалы» block, gathered in the order dedup should keep:
+  // Sources of the ONE recommendations block, gathered in the order dedup should keep:
   // the general before the specific. Collected rather than merged on the spot because
-  // the measurement sources are conditional while the per-topic ones are not — a test
-  // with neither scales nor indicators still hands the learner what its topics and
-  // sections attached (PRD-32).
-  const recommendationSources: Array<FeedbackBlock | null | undefined> = [];
+  // the measurement sources are conditional while the other two are not — a test with
+  // neither scales nor indicators still hands the learner its own feedback and what its
+  // topics and sections attached (PRD-32). The test's own block leads: it is the widest.
+  const recommendationSources: Array<FeedbackBlock | null | undefined> = [opts.testFeedback];
   if (opts.measures) {
     const visibleScales = opts.measures.scales.filter((m) => m.visibility !== "hidden");
     const visibleIndicators = opts.measures.indicators.filter((m) => m.visibility !== "hidden");
@@ -348,11 +359,11 @@ export function buildResultContext(
       result.indicators = visibleIndicators.map((m) =>
         buildMeasureView({ ...m, requestedKind: opts.measures!.indicatorKind, ramp: opts.measures!.ramp }));
     }
-    // Order matters: general first, then the profile, then the scales — dedup keeps
-    // the first occurrence, so a general recommendation outranks its specific copy.
-    // A hidden block contributes nothing: the learner never saw what caused it.
+    // Order matters: the test's own block (already first in the list) then the profile,
+    // then the scales — dedup keeps the first occurrence, so a general recommendation
+    // outranks its specific copy. A hidden block contributes nothing: the learner never
+    // saw what caused it.
     recommendationSources.push(
-      opts.measures.testFeedback,
       ...(blocks.indicators ? visibleIndicators.map(firedFeedback) : []),
       ...(blocks.scales ? visibleScales.map(firedFeedback) : []),
     );

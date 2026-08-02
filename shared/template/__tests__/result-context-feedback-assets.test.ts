@@ -7,13 +7,16 @@
  * блок «Материалы» собирался только из обратной связи теста, исходов показателей и
  * диапазонов шкал.
  *
- * Здесь проверяется общий для обоих хостов слой: нормализованное вложение темы
- * доезжает до `result.recommendations.assets`, в том числе у теста БЕЗ измерений,
- * и один файл, приложенный и к тесту, и к теме, не даёт дубля.
+ * Дефект Д-3 — то же место с другой стороны: обратная связь САМОГО теста собиралась
+ * внутри ветки измерений, поэтому у теста без шкал и показателей блока рекомендаций не
+ * было вовсе.
+ *
+ * Здесь проверяется общий для обоих хостов слой: нормализованные вложения темы и
+ * обратная связь теста доезжают до `result.recommendations`, в том числе у теста БЕЗ
+ * измерений, и один файл, приложенный дважды, не даёт дубля.
  */
 import { describe, it, expect } from "vitest";
 import { buildResultContext, feedbackAssets } from "../result-context";
-import { LEVEL_SCHEMES } from "../level-ramp";
 
 const TOPIC_PDF = { title: "Разбор темы", url: "/api/media/aaaa" };
 const SECTION_PDF = { title: "Памятка раздела", url: "/api/media/bbbb" };
@@ -61,28 +64,14 @@ describe("вложения темы и раздела в блоке «Матер
 
   it("не даёт дубля, когда один файл приложен и к тесту, и к теме — остаётся копия теста", () => {
     const ctx = buildResultContext(baseInput([topicRow([TOPIC_PDF])]), "Тест", {
-      measures: {
-        ramp: LEVEL_SCHEMES.traffic,
-        scaleKind: "band_ruler",
-        indicatorKind: "label",
-        scales: [],
-        indicators: [],
-        testFeedback: { links: [], events: [], assets: [TOPIC_PDF] },
-      },
+      testFeedback: { links: [], events: [], assets: [TOPIC_PDF] },
     });
     expect(ctx.result.recommendations?.assets).toEqual([TOPIC_PDF]);
   });
 
   it("общий источник идёт раньше частного: вложение теста впереди вложения темы", () => {
     const ctx = buildResultContext(baseInput([topicRow([TOPIC_PDF])]), "Тест", {
-      measures: {
-        ramp: LEVEL_SCHEMES.traffic,
-        scaleKind: "band_ruler",
-        indicatorKind: "label",
-        scales: [],
-        indicators: [],
-        testFeedback: { links: [], events: [], assets: [SECTION_PDF] },
-      },
+      testFeedback: { links: [], events: [], assets: [SECTION_PDF] },
     });
     expect(ctx.result.recommendations?.assets).toEqual([SECTION_PDF, TOPIC_PDF]);
   });
@@ -103,6 +92,37 @@ describe("вложения темы и раздела в блоке «Матер
 
   it("тема без вложений оставляет контекст прежним", () => {
     const ctx = buildResultContext(baseInput([topicRow([])]), "Тест");
+    expect(ctx.result.recommendations).toBeUndefined();
+  });
+});
+
+describe("обратная связь ТЕСТА в блоке рекомендаций (дефект Д-3)", () => {
+  // Обратная связь теста никогда не была частью измерений: она оказалась внутри их
+  // ветки лишь потому, что PRD-29 собирал там весь блок. Тест без шкал и показателей —
+  // самая массовая конфигурация продукта.
+  const TEST_FEEDBACK = {
+    text: "Спасибо за участие.",
+    links: [],
+    events: [],
+    assets: [{ title: "Памятка", url: "/api/media/cccc" }],
+  };
+
+  it("текст и вложение доезжают у теста БЕЗ шкал и показателей", () => {
+    const ctx = buildResultContext(baseInput([topicRow([])]), "Опрос", { testFeedback: TEST_FEEDBACK });
+    expect(ctx.result.recommendations?.texts).toEqual(["Спасибо за участие."]);
+    expect(ctx.result.recommendations?.assets).toEqual([{ title: "Памятка", url: "/api/media/cccc" }]);
+  });
+
+  it("идёт ПЕРВОЙ — раньше вложений темы и раздела", () => {
+    const ctx = buildResultContext(baseInput([topicRow([TOPIC_PDF])]), "Опрос", { testFeedback: TEST_FEEDBACK });
+    expect(ctx.result.recommendations?.assets).toEqual([
+      { title: "Памятка", url: "/api/media/cccc" },
+      TOPIC_PDF,
+    ]);
+  });
+
+  it("её отсутствие оставляет контекст прежним", () => {
+    const ctx = buildResultContext(baseInput([topicRow([])]), "Опрос", { testFeedback: null });
     expect(ctx.result.recommendations).toBeUndefined();
   });
 });

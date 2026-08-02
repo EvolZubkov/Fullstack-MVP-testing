@@ -57,9 +57,14 @@ export interface MeasuresSource {
    * The test's own feedback block AS STORED (`tests.feedback_json`): text, course
    * links, events and PDF assets whose address lives in `url` — the media-library
    * address; the legacy `scormHref` is read only where `url` is absent. PRD-29 §7.1
-   * counts the test as one of the three equal sources of recommendations, so the
-   * WHOLE block travels — not just its text — and goes through the same
-   * {@link normalizeFeedback} the band and outcome blocks go through.
+   * counts the test as one of the equal sources of recommendations, so the WHOLE block
+   * travels — not just its text — and goes through the same {@link normalizeFeedback}
+   * the band and outcome blocks go through.
+   *
+   * Gathered alongside the measurement rows only because ONE route read assembles both;
+   * it is handed to the shared builder as its own `testFeedback` option, NOT inside
+   * `measures` — a test without scales or indicators owes the learner its feedback all
+   * the same.
    */
   testFeedback?: Partial<FeedbackContent> | null;
 }
@@ -112,11 +117,6 @@ export function buildMeasuresInput(source: MeasuresSource): MeasuresInput {
     indicatorKind: String(params.indicatorRenderKind ?? "label") as RenderKind,
     scales,
     indicators,
-    // The stored block carries PDF assets addressed by `url` (legacy data may still
-    // carry `scormHref`); the shared builder consumes `RecommendationLink`, so the
-    // test's feedback is adapted here — the SAME normaliser the fired band/outcome
-    // blocks pass through.
-    testFeedback: normalizeFeedback(source.testFeedback),
     hasPassThreshold: source.hasPassThreshold,
     blockSettings: source.blockSettings,
     // PRD-35. Lives in the SAME `settings_json` of the results page as the block
@@ -181,6 +181,13 @@ export function buildResultContext(
   const recommendedCourses = dedupRecommendations(failed.flatMap((t) => t.recommendedCourses ?? []));
   const recommendedEvents = dedupRecommendations(failed.flatMap((t) => t.recommendedEvents ?? []));
   const hasMeasures = !!measures && (measures.scales.length > 0 || measures.variables.length > 0);
+  // The test's own feedback block travels OUTSIDE `measures` (see
+  // `ResultContextOptions.testFeedback`): it is due to the learner whether or not the
+  // test measures anything, and a control test — the commonest configuration there is —
+  // never reaches the measures branch. The stored block carries PDF assets addressed by
+  // `url` (legacy data may still carry `scormHref`), so it goes through the SAME
+  // normaliser the fired band/outcome blocks pass through.
+  const testFeedback = normalizeFeedback(measures?.testFeedback);
   return buildSharedResultContext(
     {
       passed: result.overallPassed,
@@ -195,6 +202,7 @@ export function buildResultContext(
     {
       ...(recommendedCourses.length ? { recommendedCourses } : {}),
       ...(recommendedEvents.length ? { recommendedEvents } : {}),
+      ...(testFeedback ? { testFeedback } : {}),
       ...(hasMeasures ? { measures: buildMeasuresInput(measures as MeasuresSource) } : {}),
     },
   );

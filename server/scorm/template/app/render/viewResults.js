@@ -61,6 +61,23 @@ function vrTopicAssets(tr) {
   return (section && section.recommendedAssets) || [];
 }
 
+/**
+ * The test's OWN feedback block (`tests.feedback_json`, baked as `TEST_DATA.testFeedbackJson`),
+ * normalised for the recommendations block — the widest source, and the first one.
+ *
+ * Read OUTSIDE `buildResultsMeasures`, which returns null for a test with neither scales
+ * nor indicators: the feedback of such a test is exactly as due to the learner as any
+ * other, and the commonest test in the product has no measurements at all. The address
+ * rule lives in the shared normaliser — the fired band/outcome blocks pass through the
+ * same one inside the builder.
+ */
+function vrTestFeedback() {
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  var raw = (typeof TEST_DATA !== 'undefined' && TEST_DATA.testFeedbackJson) || null;
+  if (!raw || !TB || typeof TB.normalizeFeedback !== 'function') return null;
+  return TB.normalizeFeedback(raw);
+}
+
 /** Deduped recommended courses/events across failed topics (failed-topic guidance). */
 function vrRecommended(results) {
   var seenC = {}, seenE = {}, courses = [], events = [];
@@ -194,11 +211,6 @@ function buildResultsMeasures(scaleComputation, varComputation) {
     indicatorKind: String(params.indicatorRenderKind || 'label'),
     scales: scales,
     indicators: indicators,
-    // The stored block addresses its PDF assets through `url` (legacy data may still
-    // carry `scormHref`), the builder consumes `{ title, url }`. The TEST-level block is
-    // normalised here — exactly once — while the fired band/outcome blocks are normalised
-    // inside the builder: a second pass would be harmless, but the rule lives in one place.
-    testFeedback: TB.normalizeFeedback(TD.testFeedbackJson || null),
     hasPassThreshold: !!(passRule && passRule.type && passRule.type !== 'none'),
     blockSettings: blockSettings,
     // PRD-35: the radar switch travels in the SAME settings of the «Итоги» variant.
@@ -265,7 +277,10 @@ function renderViewResultsTemplated(app, results) {
   var opts = {
     withTopicPoints: true,
     recommendedCourses: rec.courses,
-    recommendedEvents: rec.events
+    recommendedEvents: rec.events,
+    // PRD-29 §7.1 / PRD-32: обратная связь теста — источник рекомендаций сама по себе,
+    // вне зависимости от того, есть ли у теста шкалы и показатели.
+    testFeedback: vrTestFeedback()
   };
   var measures = buildResultsMeasures(
     { values: results.scaleValues || {} },
@@ -342,7 +357,10 @@ function renderResultsTemplated(app, results) {
   var opts = {
     withTopicPoints: true,
     recommendedCourses: rec.courses,
-    recommendedEvents: rec.events
+    recommendedEvents: rec.events,
+    // PRD-29 §7.1 / PRD-32: обратная связь теста — источник рекомендаций сама по себе,
+    // вне зависимости от того, есть ли у теста шкалы и показатели.
+    testFeedback: vrTestFeedback()
   };
   // PRD-29: scales and indicators of THIS attempt (null for a test that declares none,
   // which leaves the context byte-identical to what it has always been).
