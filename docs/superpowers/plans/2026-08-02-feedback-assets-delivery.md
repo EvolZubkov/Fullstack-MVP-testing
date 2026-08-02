@@ -74,14 +74,24 @@ describe("normalizeFeedback — адрес вложения", () => {
     ]);
   });
 
-  it("предпочитает scormHref, когда он есть (пакет, собранный ранее)", () => {
+  it("при обоих адресах побеждает url", () => {
     const block = normalizeFeedback({
       text: "",
       links: [],
       events: [],
       assets: [
-        { title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "/api/media/2222", scormHref: "assets/media/p.pdf" },
+        { title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "assets/media/p.pdf", scormHref: "feedback/old.pdf" },
       ],
+    });
+    expect(block?.assets).toEqual([{ title: "Памятка", url: "assets/media/p.pdf" }]);
+  });
+
+  it("читает scormHref, когда url не заполнен (ранее собранные данные)", () => {
+    const block = normalizeFeedback({
+      text: "",
+      links: [],
+      events: [],
+      assets: [{ title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", scormHref: "assets/media/p.pdf" }],
     });
     expect(block?.assets).toEqual([{ title: "Памятка", url: "assets/media/p.pdf" }]);
   });
@@ -157,14 +167,28 @@ export type FeedbackAsset = {
 
 ```ts
     assets: assets
-      // `scormHref` wins where it exists: a package built before this work carries the
-      // in-package address there, and inside a package the canonical address is useless.
-      .map((a) => ({ title: String(a.title ?? ""), url: String(a.scormHref ?? a.url ?? "") }))
+      // `url` wins: inside a package it is what the packer rewrote to a working relative
+      // path, while `scormHref` is a legacy field nothing writes any more. `||` and not `??`
+      // on purpose — an empty string is an absent address, not a value.
+      .map((a) => ({ title: String(a.title ?? ""), url: String(a.url || a.scormHref || "") }))
       .filter((a) => !!a.url),
 ```
 
 Обнови в этом же файле блок документации функции: адрес живёт в `url`, `scormHref` читается ради
-ранее собранных данных.
+ранее собранных данных и проигрывает `url`.
+
+- [ ] **Step 4a: Привести в порядок комментарии о неидемпотентности**
+
+С этой правкой `normalizeFeedback` становится идемпотентным по вложениям: выход `{ title, url }`
+переживает второй проход, тогда как раньше нормализованный блок терял `scormHref` и лишался вложений.
+Три места утверждают обратное и становятся ложными — правь ТОЛЬКО комментарии, поведение не трогай:
+
+- `shared/template/runtime-entry.ts:44-46` и `server/scorm/template/app/render/viewResults.js:179-181` —
+  «deliberately NOT idempotent» больше не так. Правило «ровно один проход на хосте» остаётся, но
+  обоснование переписывается: повторный проход теперь безвреден, блок нормализуется в одном месте,
+  чтобы правило жило в одном экземпляре;
+- `server/services/result-context.ts:58,114` — утверждают, что адрес вложения живёт в `scormHref`.
+  Теперь он живёт в `url`, а `scormHref` остаётся легаси-полем чтения.
 
 - [ ] **Step 5: Прогнать тесты**
 
