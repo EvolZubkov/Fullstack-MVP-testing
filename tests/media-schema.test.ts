@@ -21,4 +21,11 @@ describe("media registry schema", () => {
     const names = getTableConfig(mediaUsages).columns.map((c) => c.name).sort();
     expect(names).toEqual(["asset_id", "entity_id", "entity_type", "field"]);
   });
+
+  it("the owner+checksum dedup index stays non-unique (NULL owners are not equal)", () => {
+    const idx = getTableConfig(mediaAssets).indexes.find(
+      (i) => i.config.name === "media_assets_owner_checksum_idx",
+    );
+    expect(idx?.config.unique).toBe(false);
+  });
 });

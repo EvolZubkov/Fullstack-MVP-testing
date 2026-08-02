@@ -1,5 +1,5 @@
 {
-  "id": "0fe4c8bb-bfbb-4b19-b8f7-e47ed7f9a98f",
+  "id": "5cfeb69c-0d18-4577-8e06-391ac34d1dd6",
   "prevId": "3fb73b09-ed27-448b-a24e-e05d63f81c8a",
   "version": "7",
   "dialect": "postgresql",
@@ -823,24 +823,23 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "media_usages_asset_idx": {
-          "name": "media_usages_asset_idx",
-          "columns": [
-            {
-              "expression": "asset_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "media_usages_asset_id_media_assets_id_fk": {
+          "name": "media_usages_asset_id_media_assets_id_fk",
+          "tableFrom": "media_usages",
+          "tableTo": "media_assets",
+          "columnsFrom": [
+            "asset_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {
         "media_usages_asset_id_entity_type_entity_id_field_pk": {
           "name": "media_usages_asset_id_entity_type_entity_id_field_pk",

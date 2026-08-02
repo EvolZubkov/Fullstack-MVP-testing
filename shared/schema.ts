@@ -1822,8 +1822,11 @@ export const insertQuestionMeasurementSchema = createInsertSchema(questionMeasur
     conditionJson: z.unknown().nullish(),
   });
 
+export type InsertQuestionMeasurement = z.infer<typeof insertQuestionMeasurementSchema>;
+export type QuestionMeasurement = typeof questionMeasurements.$inferSelect;
+
 /**
- * PRD медиатеки: the registry row for ONE author file. The `id` IS the address —
+ * Media library: the registry row for ONE author file. The `id` IS the address —
  * content stores the string `/api/media/<id>`, so the column type of every existing
  * media reference stays `text` and no mass JSON migration is needed.
  *
@@ -1857,7 +1860,7 @@ export const mediaAssets = pgTable("media_assets", {
 }));
 
 /**
- * PRD медиатеки: the reverse index "asset -> where it is used". It serves three
+ * Media library: the reverse index "asset -> where it is used". It serves three
  * consumers at once: the delivery rule (may this user receive the file), the
  * «где используется» report, and orphan collection.
  *
@@ -1865,7 +1868,11 @@ export const mediaAssets = pgTable("media_assets", {
  * and a re-sync can replace one entity's rows wholesale.
  */
 export const mediaUsages = pgTable("media_usages", {
-  assetId: varchar("asset_id", { length: 36 }).notNull(),
+  // Not polymorphic like entity_type/entity_id: asset_id always points at ONE table,
+  // so a real FK is warranted. No cascade on purpose — deletion of an asset is blocked
+  // at the application layer (409 when usages exist); the FK is an integrity backstop,
+  // not a cascade mechanism.
+  assetId: varchar("asset_id", { length: 36 }).notNull().references(() => mediaAssets.id),
   entityType: text("entity_type", {
     enum: ["question", "content_page", "test_design", "test_feedback", "topic_feedback", "scale_feedback", "snapshot"],
   }).notNull(),
@@ -1875,13 +1882,9 @@ export const mediaUsages = pgTable("media_usages", {
   pk: primaryKey({ columns: [table.assetId, table.entityType, table.entityId, table.field] }),
   // Re-syncing one entity deletes its rows by this key.
   entityIdx: index("media_usages_entity_idx").on(table.entityType, table.entityId),
-  assetIdx: index("media_usages_asset_idx").on(table.assetId),
 }));
 
 export type MediaAsset = typeof mediaAssets.$inferSelect;
 export type InsertMediaAsset = typeof mediaAssets.$inferInsert;
 export type MediaUsage = typeof mediaUsages.$inferSelect;
 export type MediaEntityType = MediaUsage["entityType"];
-
-export type InsertQuestionMeasurement = z.infer<typeof insertQuestionMeasurementSchema>;
-export type QuestionMeasurement = typeof questionMeasurements.$inferSelect;
