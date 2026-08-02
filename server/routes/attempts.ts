@@ -13,9 +13,19 @@ import { loadScoringConfig } from "../services/scoring-config";
 import { loadTestScoringContext } from "../services/effective-scoring";
 import { computeAttemptResult } from "../services/result-compute";
 import { decideRetake, countAttemptsInAssignment } from "../services/retake-gate";
-import { readResultsRenderPayload, readReportRenderPayload } from "../services/template-render";
+import {
+  readResultsRenderPayload,
+  readReportRenderPayload,
+  completeMeasuresSource,
+} from "../services/template-render";
 import { reportKindForMode } from "@shared/report/report-variants";
-import { buildReportInput, buildAdaptiveReportInput, type MeasuresSource } from "../services/result-context";
+import {
+  buildReportInput,
+  buildAdaptiveReportInput,
+  buildMeasuresInput,
+  type MeasuresSource,
+} from "../services/result-context";
+import type { MeasuresInput } from "@shared/template/result-context";
 import type { ResultsBlockSettings } from "@shared/template/results-blocks";
 import type { ReportInput, AdaptiveReportInput } from "@shared/report/report-html";
 import { pingSection } from "../services/section-timer";
@@ -1345,7 +1355,14 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
     let reportRender: ReturnType<typeof readReportRenderPayload> = null;
     // PRD-35: измерения нужны не только экрану, но и ОТЧЁТУ, который собирается на
     // клиенте. Объявлены здесь, а не внутри ветки экрана, чтобы уехать в ответ.
-    let measures: Awaited<ReturnType<typeof resultsMaterialForAttempt>> | undefined;
+    //
+    // Уезжает НОРМАЛИЗОВАННЫЙ вид (`MeasuresInput`), а не сырьё, из которого экран его
+    // получает: правила разрешения — рампа, виды отображения шкал и показателей — живут
+    // в параметрах шаблона, которые есть только здесь. Клиент отдаёт это поле общему
+    // сборщику отчёта как есть, и раньше сюда клалось сырьё (строки БД `scales` и
+    // `variables`): у сборщика в нём не было `indicators`, и скачивание отчёта у теста
+    // со шкалами или показателями падало.
+    let measures: MeasuresInput | undefined;
     if (resultJson && Array.isArray(resultJson.topicResults)) {
       const templateId = ((test?.designSettingsJson as any)?.templateId as string) || "default";
       // Learner-facing render: never serve a non-active template, and when the
@@ -1365,15 +1382,6 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       // связь ТЕСТА — источник блока рекомендаций, никакого отношения к режиму не
       // имеющий. Из материала адаптивная ветка читает только её (см. `readResultsRenderPayload`).
       const material = await resultsMaterialForAttempt(attempt, test);
-      // В ОТВЕТ едут только настоящие измерения: по ним клиент печатает шкалы и радар
-      // в отчёте, и пустой набор заставил бы его рисовать блок измерений у теста,
-      // который их не объявляет. Адаптивной попытке они не едут и теперь: отчёт по ней
-      // строится по уровням, и блок измерений в нём — отдельная работа, а не побочный
-      // эффект того, что материал стал читаться для обоих режимов.
-      measures =
-        resultJson.mode !== "adaptive" && material && (material.scales.length > 0 || material.variables.length > 0)
-          ? material
-          : undefined;
       render = readResultsRenderPayload(
         dir,
         resultJson,
@@ -1400,6 +1408,21 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
           );
         }
       }
+      // В ОТВЕТ едут только настоящие измерения: по ним клиент печатает шкалы и радар
+      // в отчёте, и пустой набор заставил бы его рисовать блок измерений у теста,
+      // который их не объявляет. Адаптивной попытке они не едут и теперь: отчёт по ней
+      // строится по уровням, и блок измерений в нём — отдельная работа, а не побочный
+      // эффект того, что материал стал читаться для обоих режимов.
+      //
+      // Нормализуется ЗДЕСЬ, после разрешения макета: рампу и виды отображения задают
+      // параметры того самого экрана (`render.params`) — ровно те, с которыми
+      // `readResultsRenderPayload` только что собрал контекст итогов, — поэтому отчёт не
+      // может разойтись с экраном, с которого его скачали. Макета нет вовсе (клиент
+      // рисует свою разметку) — остаются значения по умолчанию из манифеста.
+      measures =
+        resultJson.mode !== "adaptive" && material && (material.scales.length > 0 || material.variables.length > 0)
+          ? buildMeasuresInput(completeMeasuresSource(material, render?.params, resultJson))
+          : undefined;
       // Footer state for the layout-drawn results row (the package fills the same
       // block). «Скачать отчёт» is on now that the web host produces the report from
       // the SHARED generator (shared/report/*) — the same PDF the package hands out.

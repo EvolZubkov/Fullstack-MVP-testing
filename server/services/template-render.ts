@@ -346,8 +346,14 @@ export function readScreenTemplate(
  *
  * A caller that supplies either of them keeps its own — nothing is overwritten
  * silently.
+ *
+ * Exported because the ROUTE completes the very same source a second time: the results
+ * response carries the measurements on to the browser, which builds the PDF report from
+ * them, and that copy has to be the SAME one the screen was painted from. It takes the
+ * payload's own `params` (see {@link ScreenRenderPayload.params}), so the completion
+ * rule stays in one place instead of being re-derived at the route.
  */
-function completeMeasures(
+export function completeMeasuresSource(
   measures: MeasuresSource,
   payloadParams: Record<string, unknown> | undefined,
   result: AttemptResult,
@@ -407,7 +413,7 @@ export function readResultsRenderPayload(
       : buildResultContext(
           result as AttemptResult,
           testTitle,
-          measures ? completeMeasures(measures, base.params, result as AttemptResult) : undefined,
+          measures ? completeMeasuresSource(measures, base.params, result as AttemptResult) : undefined,
         );
     // Header subtitle «Попытка N из M» (Core-prepared by the caller), same as the
     // other learner screens — merged into the server-built course context.

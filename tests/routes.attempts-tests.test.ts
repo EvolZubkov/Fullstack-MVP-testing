@@ -59,6 +59,10 @@ vi.mock("../server/scorm/exporter", () => ({
 
 import attemptsRouter from "../server/routes/attempts";
 import testsRouter from "../server/routes/tests";
+// The REAL report-context builder: the web host's «Скачать отчёт» hands it the
+// `measures` field of this very route's response, so the shape contract between the
+// two is only provable by running the actual consumer over the actual payload.
+import { buildReportContext } from "@shared/report/report-context";
 
 // ─── App factory ──────────────────────────────────────────────────────────────
 const authorUser = {
@@ -1259,6 +1263,137 @@ describe("Attempts routes — result and history", () => {
       const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
       expect(res.status).toBe(200);
       expect(res.body.render.context.result.recommendations).toBeUndefined();
+    });
+  });
+
+  // Измерения, уезжающие клиенту (PRD-35). Экран итогов рисует СЕРВЕР, а отчёт
+  // собирает браузер — поэтому поле обязано приехать в том виде, который общий
+  // сборщик отчёта принимает БЕЗ доработки на клиенте. Проверяется настоящим
+  // `buildReportContext`, а не формой полей: рассинхрон вида ловится только тем,
+  // что потребитель на этих данных работает.
+  describe("GET /attempts/:id/result — измерения для отчёта", () => {
+    /** Шкала с доменом и двумя полосами: радару нужен домен и числовое значение. */
+    function scaleRow(key: string, sortOrder: number, learnerVisibility = "level_and_value") {
+      return {
+        id: `sc-${key}`, testId: "test1", key, label: `Шкала ${key.toUpperCase()}`,
+        sortOrder, learnerVisibility,
+        configJson: {
+          domainMin: 0, domainMax: 10, valence: "higher_is_better",
+          bands: [
+            { min: 0, max: 5, level: "low", label: "Низкий" },
+            { min: 5.01, max: 10, level: "high", label: "Высокий" },
+          ],
+        },
+      };
+    }
+
+    /** Показатель со строковым исходом — вид по умолчанию «Только уровень». */
+    const variableRow = {
+      id: "rv1", testId: "test1", name: "vr1", label: "Готовность", sortOrder: 0,
+      learnerVisibility: "level_and_value",
+      configJson: { outcomes: [{ code: "ok", label: "Норма" }] },
+    };
+
+    /** Завершённая попытка измерительного теста: значения лежат В РЕЗУЛЬТАТЕ. */
+    const measuredAttempt = {
+      ...finishedAttempt,
+      resultJson: {
+        totalCorrect: 1, totalQuestions: 1, totalEarnedPoints: 1, totalPossiblePoints: 1,
+        overallPercent: 100, overallPassed: true, topicResults: [],
+        scaleResults: { a: { raw: 8 }, b: { raw: 3 }, c: { raw: 6 } },
+        resultVariables: { vr1: "ok" },
+      },
+    };
+
+    /**
+     * Оформление теста задаёт виды отображения и схему уровней ЯВНО и не по умолчанию:
+     * иначе потеря параметров шаблона при нормализации была бы неотличима от их
+     * применения — манифест «Стандартного» отдаёт ровно значения по умолчанию.
+     */
+    const measuringTest = {
+      ...dbTest,
+      designSettingsJson: {
+        params: { scaleRenderKind: "ring", indicatorRenderKind: "value", levelScheme: "neutral" },
+      },
+    };
+
+    function mockMeasuringTest() {
+      storageMock.getAttempt.mockResolvedValue(measuredAttempt);
+      storageMock.getTest.mockResolvedValue(measuringTest);
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([measuredAttempt]);
+      storageMock.getScales.mockResolvedValue([scaleRow("a", 0), scaleRow("b", 1), scaleRow("c", 2)]);
+      storageMock.getResultVariables.mockResolvedValue([variableRow]);
+      storageMock.getContentPages.mockResolvedValue([]);
+    }
+
+    it("отдаёт измерения нормализованными: шкалы, показатели, рампа и виды", async () => {
+      mockMeasuringTest();
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      expect(res.status).toBe(200);
+      // Виды и рампа разрешены СЕРВЕРОМ, по параметрам того же шаблона, которым
+      // нарисован экран, — клиент этих правил не знает.
+      expect(res.body.measures).toMatchObject({
+        scaleKind: "ring",
+        indicatorKind: "value",
+        hasPassThreshold: true,
+        // Схема «нейтральная» из оформления теста, а не значение по умолчанию.
+        ramp: { favorable: "215 16% 65%", mid: null, unfavorable: "215 16% 35%" },
+      });
+      // Строки БД в ответ не едут: у сборщика другой контракт.
+      expect(res.body.measures).not.toHaveProperty("variables");
+      expect(res.body.measures.scales.map((s: any) => s.key)).toEqual(["a", "b", "c"]);
+      expect(res.body.measures.scales[0]).toMatchObject({
+        name: "Шкала A", value: 8, visibility: "level_and_value",
+      });
+      expect(res.body.measures.scales[0].interpretation.domainMax).toBe(10);
+      expect(res.body.measures.indicators).toEqual([
+        expect.objectContaining({ key: "vr1", name: "Готовность", value: "ok" }),
+      ]);
+    });
+
+    it("сборщик отчёта строит по ним контекст: шкалы и показатели на странице", async () => {
+      mockMeasuringTest();
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      expect(res.status).toBe(200);
+      // Ровно то, что делает клиент (`features/learner/attempt-report`): отдаёт поле
+      // ответа в общий сборщик как есть.
+      const ctx = buildReportContext(res.body.report, { values: {}, measures: res.body.measures });
+      expect(ctx.result.scales?.map((s: any) => s.name)).toEqual(["Шкала A", "Шкала B", "Шкала C"]);
+      expect(ctx.result.indicators?.map((i: any) => i.name)).toEqual(["Готовность"]);
+      expect(ctx.result.scalesChart).toBeUndefined();
+    });
+
+    it("радар включается переключателем варианта отчёта", async () => {
+      mockMeasuringTest();
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      // PRD-35: у отчёта СВОЙ переключатель — клиент подмешивает его к тем же измерениям.
+      const ctx = buildReportContext(res.body.report, {
+        values: { showCompetencyRadar: true },
+        measures: { ...res.body.measures, showRadar: true },
+      });
+      expect(ctx.result.scalesChart?.axes).toHaveLength(3);
+    });
+
+    it("тест без шкал и показателей измерений не отдаёт", async () => {
+      mockMeasuringTest();
+      storageMock.getScales.mockResolvedValue([]);
+      storageMock.getResultVariables.mockResolvedValue([]);
+      // Экран при этом строится как обычно: пустой набор измерений — не поломка.
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      expect(res.status).toBe(200);
+      expect(res.body).not.toHaveProperty("measures");
+    });
+
+    it("адаптивной попытке измерения не едут", async () => {
+      mockMeasuringTest();
+      storageMock.getAttempt.mockResolvedValue({
+        ...measuredAttempt,
+        resultJson: { ...measuredAttempt.resultJson, mode: "adaptive" },
+      });
+      storageMock.getTest.mockResolvedValue({ ...dbTest, mode: "adaptive" });
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      expect(res.status).toBe(200);
+      expect(res.body).not.toHaveProperty("measures");
     });
   });
 
