@@ -37,7 +37,7 @@ function realisticResolver() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe("extractEmbeddedMediaIntoAssets — base64 data URLs", () => {
-  it("converts a PNG data URL to an asset file", async () => {
+  it("пакует data-URL в файл пакета и переписывает значение на его путь", async () => {
     const testObj = { mediaUrl: PNG_DATA_URL };
     const { assets, missing } = await extractEmbeddedMediaIntoAssets(testObj, {
       resolveRef: emptyResolver(),
@@ -48,36 +48,19 @@ describe("extractEmbeddedMediaIntoAssets — base64 data URLs", () => {
     expect(keys).toHaveLength(1);
     expect(keys[0]).toMatch(/^assets\/media\/.+\.png$/);
     expect(assets[keys[0]]).toBeInstanceOf(Buffer);
+    // Значение указывает ровно на положенный файл — иначе картинка в пакете сирота.
+    expect(testObj.mediaUrl).toBe(keys[0]);
   });
 
-  it("rewrites mediaUrl in-place to the zip path", async () => {
-    const testObj = { mediaUrl: PNG_DATA_URL };
-    await extractEmbeddedMediaIntoAssets(testObj, { resolveRef: emptyResolver() });
-    expect(testObj.mediaUrl).toMatch(/^assets\/media\/.+\.png$/);
-  });
-
-  it("maps image/jpeg mime to .jpg extension", async () => {
-    const testObj = { mediaUrl: `data:image/jpeg;base64,${PNG_B64}` };
+  it.each([
+    ["image/jpeg", /\.jpg$/],
+    ["audio/mpeg", /\.mp3$/],
+    ["application/pdf", /\.pdf$/],
+    ["application/octet-stream", /\.bin$/],
+  ])("даёт расширение по типу %s", async (mime, expected) => {
+    const testObj = { mediaUrl: `data:${mime};base64,${PNG_B64}` };
     const { assets } = await extractEmbeddedMediaIntoAssets(testObj, { resolveRef: emptyResolver() });
-    expect(Object.keys(assets)[0]).toMatch(/\.jpg$/);
-  });
-
-  it("maps audio/mpeg mime to .mp3 extension", async () => {
-    const testObj = { mediaUrl: `data:audio/mpeg;base64,AAAA` };
-    const { assets } = await extractEmbeddedMediaIntoAssets(testObj, { resolveRef: emptyResolver() });
-    expect(Object.keys(assets)[0]).toMatch(/\.mp3$/);
-  });
-
-  it("maps application/pdf mime to .pdf extension", async () => {
-    const testObj = { mediaUrl: `data:application/pdf;base64,JVBERi0=` };
-    const { assets } = await extractEmbeddedMediaIntoAssets(testObj, { resolveRef: emptyResolver() });
-    expect(Object.keys(assets)[0]).toMatch(/\.pdf$/);
-  });
-
-  it("maps unknown mime to .bin extension", async () => {
-    const testObj = { mediaUrl: `data:application/octet-stream;base64,AAAA` };
-    const { assets } = await extractEmbeddedMediaIntoAssets(testObj, { resolveRef: emptyResolver() });
-    expect(Object.keys(assets)[0]).toMatch(/\.bin$/);
+    expect(Object.keys(assets)[0]).toMatch(expected);
   });
 
   it("decodes the base64 payload into the packed bytes", async () => {
@@ -113,12 +96,6 @@ describe("extractEmbeddedMediaIntoAssets — base64 data URLs", () => {
     // regardless of the field name (e.g. a logo/image stored outside mediaUrl).
     expect(testObj.imageUrl).toMatch(/^assets\/media\//);
     expect(testObj.mediaUrl).toMatch(/^assets\/media\//);
-  });
-
-  it("packs a single mediaUrl exactly once", async () => {
-    const testObj = { mediaUrl: PNG_DATA_URL };
-    const { assets } = await extractEmbeddedMediaIntoAssets(testObj, { resolveRef: emptyResolver() });
-    expect(Object.keys(assets)).toHaveLength(1);
   });
 });
 
@@ -183,6 +160,24 @@ describe("extractEmbeddedMediaIntoAssets — канонический адрес
     expect(Object.keys(assets)).toHaveLength(0);
     expect(missing).toHaveLength(1);
     expect(missing[0]).toMatch(new RegExp(`unresolved.*${ID}`, "i"));
+  });
+
+  it("бросок резолвера — потеря файла, а не потеря сборки", async () => {
+    const resolveRef = vi.fn().mockImplementation(async (ref: any) => {
+      if (ref.id === ID) throw new Error("storage is down");
+      return { zipPath: "assets/media/other.png", buffer: Buffer.from("ok") };
+    });
+    const OTHER = "22222222-2222-2222-2222-222222222222";
+    const testObj = { a: { mediaUrl: `/api/media/${ID}` }, b: { mediaUrl: `/api/media/${OTHER}` } };
+
+    const { assets, missing } = await extractEmbeddedMediaIntoAssets(testObj, { resolveRef });
+
+    expect(testObj.a.mediaUrl).toBe("");
+    expect(missing).toHaveLength(1);
+    expect(missing[0]).toMatch(/storage is down/);
+    // Соседний файл всё равно упакован: одна недоступная картинка не стоит всего пакета.
+    expect(testObj.b.mediaUrl).toBe("assets/media/other.png");
+    expect(assets["assets/media/other.png"]).toEqual(Buffer.from("ok"));
   });
 
   it("спрашивает резолвер о нерезолвленном адресе один раз", async () => {
@@ -265,9 +260,9 @@ describe("extractEmbeddedMediaIntoAssets — /uploads/ file paths", () => {
     expect(missing).toHaveLength(1);
   });
 
-  it("не портит непрефиксную замену, когда одно имя — начало другого", async () => {
+  it("заменяет длинный адрес раньше короткого, когда одно имя — начало другого", async () => {
     // Боевой резолвер сохраняет форму имени, поэтому подмена префикса выглядела бы верной
-    // случайно. Здесь пути НЕ префиксные — порядок замены виден.
+    // случайно. Здесь пути в пакете НЕ префиксные — порядок замены виден.
     const resolveRef = vi.fn().mockImplementation(async (ref: any) =>
       ref.storageKey === "media/a.png"
         ? { zipPath: "assets/media/H1.png", buffer: Buffer.from("short") }
@@ -281,6 +276,27 @@ describe("extractEmbeddedMediaIntoAssets — /uploads/ file paths", () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe("extractEmbeddedMediaIntoAssets — граница адреса", () => {
+  // Белый список символов-границ проверяется поимённо: выпади из него один символ — медиа
+  // начнут молча теряться на форме записи, которую никто не считает особенной.
+  it.each([
+    ["начало значения", ""],
+    ["двойная кавычка", '<img src="'],
+    ["одинарная кавычка", "<img src='"],
+    ["пробел", "см. "],
+    ["перевод строки", "строка\n"],
+    ["табуляция", "строка\t"],
+    ["знак равенства", "<img src="],
+    ["открывающая скобка", "url("],
+    ["запятая", "srcset=a.png,"],
+    ["точка с запятой", "background:url;"],
+    ["закрывающая угловая скобка", "<p>"],
+  ])("переписывает адрес после границы: %s", async (_name, prefix) => {
+    const resolveRef = resolverOf(`assets/media/${ID}.png`);
+    const testObj = { value: `${prefix}/api/media/${ID}` };
+    await extractEmbeddedMediaIntoAssets(testObj, { resolveRef });
+    expect(testObj.value).toBe(`${prefix}assets/media/${ID}.png`);
+  });
+
   it("не трогает абсолютный URL на чужой хост", async () => {
     const resolveRef = emptyResolver();
     const testObj = { mediaUrl: "https://cms.example.com/uploads/media/logo.png" };

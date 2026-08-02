@@ -10,7 +10,8 @@ import {
   parseMediaRef,
   collectMediaRefs,
   findMediaRefsInText,
-  findMediaMatchesInText,
+  findMediaAddressesInText,
+  mediaAddressPattern,
 } from "../server/services/media/media-refs";
 
 describe("parseMediaRef", () => {
@@ -128,33 +129,65 @@ describe("findMediaRefsInText", () => {
   });
 });
 
-describe("findMediaMatchesInText", () => {
+describe("findMediaAddressesInText", () => {
   it("reports an accepted address with its reference", () => {
-    expect(findMediaMatchesInText('<img src="/uploads/media/pic.png">')).toEqual([
-      { address: "/uploads/media/pic.png", ref: { kind: "legacy", storageKey: "media/pic.png" } },
+    expect(findMediaAddressesInText('<img src="/uploads/media/pic.png">')).toEqual([
+      {
+        status: "accepted",
+        address: "/uploads/media/pic.png",
+        ref: { kind: "legacy", storageKey: "media/pic.png" },
+      },
     ]);
   });
 
   it("reports a refused address instead of swallowing it", () => {
     // Индексу использования такой адрес не нужен, а упаковщику нужен — он обязан его
     // ВЫЧИСТИТЬ из данных пакета и сказать почему.
-    const matches = findMediaMatchesInText("/uploads/media/../../etc/passwd");
-    expect(matches).toHaveLength(1);
-    expect(matches[0].ref).toBeNull();
-    expect(matches[0].address).toBe("/uploads/media/../../etc/passwd");
-    expect(matches[0].reason).toMatch(/escapes the media directory/i);
+    expect(findMediaAddressesInText("/uploads/media/../../etc/passwd")).toEqual([
+      {
+        status: "refused",
+        address: "/uploads/media/../../etc/passwd",
+        reason: "escapes the media directory",
+      },
+    ]);
   });
 
   it("даёт адрес в той форме, в какой его надо искать в тексте", () => {
     // Пунктуация предложения в адрес не входит — как и в ссылке.
-    expect(findMediaMatchesInText("см. /uploads/media/pic.png, далее")[0].address).toBe(
+    expect(findMediaAddressesInText("см. /uploads/media/pic.png, далее")[0].address).toBe(
       "/uploads/media/pic.png",
     );
   });
 
   it("reports one address once even when it repeats", () => {
     expect(
-      findMediaMatchesInText('<img src="/uploads/media/same.png"><img src="/uploads/media/same.png">'),
+      findMediaAddressesInText('<img src="/uploads/media/same.png"><img src="/uploads/media/same.png">'),
     ).toHaveLength(1);
+  });
+
+  it("finds an address written with backslashes", () => {
+    expect(findMediaAddressesInText("\\uploads\\media\\pic.png")[0]).toEqual({
+      status: "accepted",
+      address: "/uploads/media/pic.png",
+      ref: { kind: "legacy", storageKey: "media/pic.png" },
+    });
+  });
+});
+
+describe("mediaAddressPattern", () => {
+  const ADDRESS = "/uploads/media/pic.png";
+
+  it("matches either separator, because matching normalises them", () => {
+    expect(mediaAddressPattern(ADDRESS).test("\\uploads\\media\\pic.png")).toBe(true);
+  });
+
+  it("refuses an address glued to a host name", () => {
+    expect(mediaAddressPattern(ADDRESS).test("https://cms.example.com/uploads/media/pic.png")).toBe(
+      false,
+    );
+  });
+
+  it("treats the dot as a literal, not as any character", () => {
+    expect(mediaAddressPattern(ADDRESS).test("/uploads/media/picXpng")).toBe(false);
   });
 });

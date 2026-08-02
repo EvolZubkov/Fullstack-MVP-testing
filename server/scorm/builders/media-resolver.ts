@@ -11,6 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { MediaRef } from "../../services/media/media-refs";
+import { extensionForMime } from "../../services/media/media-mime";
 import { mediaStore } from "../../services/media/media-store";
 import { storage } from "../../storage";
 
@@ -20,23 +21,6 @@ export interface ResolvedMedia {
   zipPath: string;
   buffer: Buffer;
 }
-
-/** Extension by MIME for assets whose original name carries none. */
-const EXT_BY_MIME: Record<string, string> = {
-  "image/png": ".png",
-  "image/jpeg": ".jpg",
-  "image/jpg": ".jpg",
-  "image/gif": ".gif",
-  "image/webp": ".webp",
-  "image/svg+xml": ".svg",
-  "audio/mpeg": ".mp3",
-  "audio/mp3": ".mp3",
-  "audio/wav": ".wav",
-  "audio/ogg": ".ogg",
-  "video/mp4": ".mp4",
-  "video/webm": ".webm",
-  "application/pdf": ".pdf",
-};
 
 /** Reads a whole stream into memory: the packer builds the ZIP from buffers. */
 async function readAll(stream: NodeJS.ReadableStream): Promise<Buffer> {
@@ -48,24 +32,23 @@ async function readAll(stream: NodeJS.ReadableStream): Promise<Buffer> {
 /** The legacy root: files indexed in place by the backfill still live under it. */
 const uploadsRoot = path.resolve(process.cwd(), "uploads");
 
-/** Bare media type, without parameters or case, as the table above is keyed. */
-function mimeKey(mimeType: string | null | undefined): string {
-  return (mimeType ?? "").split(";")[0].trim().toLowerCase();
-}
-
 /**
  * Resolves one reference, or `null` when nothing can be delivered.
  *
  * A canonical reference is named by the asset id, so the file inside the package is named by it
- * too — one asset used twice is packed once. A legacy reference keeps its historical path
- * (`assets/media/<file>`), so packages built before and after this work address it identically.
+ * too — the same CANONICAL address used twice yields one file. (An asset addressed both
+ * canonically and by its legacy path is packed twice: the packer decides per address, and the
+ * two spellings are not known here to be the same asset.) A legacy reference keeps its
+ * historical path (`assets/media/<file>`), so packages built before and after this work address
+ * it identically.
  */
 export async function registryMediaResolver(ref: MediaRef): Promise<ResolvedMedia | null> {
   if (ref.kind === "canonical") {
     const asset = await storage.getMediaAsset(ref.id);
     if (!asset) return null;
+    const fromMime = extensionForMime(asset.mimeType);
     const ext =
-      path.extname(asset.originalName ?? "").toLowerCase() || EXT_BY_MIME[mimeKey(asset.mimeType)] || ".bin";
+      path.extname(asset.originalName ?? "").toLowerCase() || (fromMime ? `.${fromMime}` : ".bin");
     const buffer = await readStored(asset.storageKey);
     if (!buffer) return null;
     return { zipPath: `assets/media/${asset.id}${ext}`, buffer };

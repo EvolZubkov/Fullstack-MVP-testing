@@ -56,6 +56,9 @@ function tryReadAsset(paths: string[]): string {
  * layout, so swapping in the standard template's identical generic layout would buy
  * nothing; their real fallback is at the variant level (`variant-binding.ts`).
  */
+/** How many lost media addresses the export log spells out before summarising the rest. */
+const MISSING_MEDIA_LOGGED = 5;
+
 /** Where the ACTIVE template's own files sit inside the package. */
 const PACKAGE_TEMPLATE_DIR = "template";
 /** Where the bundled `default` sits when the active template needs fallbacks (G21). */
@@ -202,11 +205,16 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   const { testObj: patchedTestObj, assets, missing } = await extractEmbeddedMediaIntoAssets(testObj, {
     resolveRef: registryMediaResolver,
   });
-  // Молчаливая потеря медиа — то, из-за чего дефект упаковки прожил незамеченным: адрес
-  // очищен, файла в пакете нет, и без этой записи об этом не узнал бы никто.
+  // Media lost silently is why the packing defect lived unnoticed: the address is blanked, the
+  // file is not in the package, and without this line nobody would learn of it. Only the first
+  // few are spelled out — the count is the signal, and a broken test can hold dozens.
   if (missing.length > 0) {
+    const shown = missing.slice(0, MISSING_MEDIA_LOGGED);
+    const rest = missing.length - shown.length;
     logger.warn(
-      `SCORM package ${data.test.id}: ${missing.length} media reference(s) unresolved: ${missing.join("; ")}`,
+      `SCORM package ${data.test.id}: ${missing.length} media reference(s) lost: ` +
+        shown.join("; ") +
+        (rest > 0 ? `; …and ${rest} more` : ""),
       "scorm-export",
     );
   }

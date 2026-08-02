@@ -12,43 +12,41 @@
  *
  * The address is looked for INSIDE a string, not only when the whole value is one: content
  * pages carry markup with `<img src="…">`, and a picture inside markup is as real as a bare
- * `mediaUrl` column. It must, however, STAND ON A BOUNDARY (see `ADDRESS_BOUNDARY`) — an
- * absolute URL to a foreign host that happens to end in the same path is not ours.
+ * `mediaUrl` column. It must, however, stand on a boundary — the recogniser's own
+ * `mediaAddressPattern` decides that.
+ *
+ * What this module deliberately does NOT touch is an ABSOLUTE URL — including one pointing at
+ * our own host. Such a value is a supported authoring form (see `shared/report/report-assets`),
+ * it is indistinguishable here from a link to a third-party CDN, and reporting every one of
+ * them would bury the real losses in noise. It travels into the package unchanged, and whether
+ * the learner's LMS can reach it is the author's business, not the packer's.
  *
  * Resolving a reference to bytes is NOT this module's job: it takes a `resolveRef` port, so it
  * stays a pure string walk — no database, no filesystem, and its tests need neither.
  *
- * An address that cannot be resolved — or that the recogniser refused, e.g. one walking out of
- * the media directory — is BLANKED rather than left in place. A package that carries an address
- * to the Skill'Ум server is not self-contained: inside an LMS that is a foreign origin with no
- * session, so the learner would meet a broken picture instead of an absent one. Every such loss
- * is reported through `missing`, because a loss nobody hears about is how this defect lived
- * unnoticed in the first place.
+ * A RELATIVE address that cannot be resolved — the resolver returned nothing or threw, or the
+ * recogniser refused the address as walking out of the media directory — is BLANKED rather than
+ * left in place. A package that carries a relative address to the Skill'Ум server is not
+ * self-contained: inside an LMS that is a foreign origin with no session, so the learner would
+ * meet a broken picture instead of an absent one. Every such loss is reported through `missing`,
+ * because a loss nobody hears about is how this defect lived unnoticed in the first place.
  */
 import { nanoid } from "nanoid";
-import { findMediaMatchesInText, type MediaRef } from "../../services/media/media-refs";
+import {
+  findMediaAddressesInText,
+  mediaAddressPattern,
+  type MediaRef,
+} from "../../services/media/media-refs";
+import { extensionForMime } from "../../services/media/media-mime";
 import type { ResolvedMedia } from "./media-resolver";
 
-const EXT_BY_MIME: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/jpg": "jpg",
-  "image/gif": "gif",
-  "image/webp": "webp",
-  "image/svg+xml": "svg",
-
-  "audio/mpeg": "mp3",
-  "audio/mp3": "mp3",
-  "audio/wav": "wav",
-  "audio/ogg": "ogg",
-
-  "video/mp4": "mp4",
-  "video/webm": "webm",
-
-  "application/pdf": "pdf",
-};
-
-/** Resolves a reference to bytes, or `null` when nothing can be delivered. */
+/**
+ * Resolves a reference to bytes, or `null` when nothing can be delivered.
+ *
+ * MAY throw: the packer treats a throw exactly as a `null` — the address is dropped and the
+ * reason reported — so one unreachable file cannot fail a whole export. An implementation is
+ * therefore free to let a storage error out instead of swallowing it.
+ */
 export type MediaRefResolver = (ref: MediaRef) => Promise<ResolvedMedia | null>;
 
 /** What the packer needs from its host. */
@@ -63,44 +61,13 @@ export interface ExtractResult {
   missing: string[];
 }
 
-/** Cheap gate so the `trim()` copy below is not paid for every string in the tree. */
-const LOOKS_LIKE_DATA_URL = /^\s*data:/i;
+/** The whole value must be the `data:` URL; one inside markup already travels with the text. */
 const DATA_URL = /^data:([^;]+);base64,(.+)$/i;
 
 function parseDataUrl(input: string): { mime: string; buffer: Buffer } | null {
-  if (!LOOKS_LIKE_DATA_URL.test(input)) return null;
   const m = DATA_URL.exec(input.trim());
   if (!m) return null;
-  return { mime: m[1].toLowerCase(), buffer: Buffer.from(m[2], "base64") };
-}
-
-/**
- * What may stand immediately before an address for it to BE the address rather than the tail
- * of a longer one: the value's own start, a quote, whitespace, `=`, `(`, `,`, `;` or `>`.
- *
- * The recogniser deliberately errs towards finding too much, because for the usage index a
- * spurious find is harmless — it only keeps a file alive. Here the asymmetry is the OPPOSITE:
- * a spurious find is destructive. `https://cms.example.com/uploads/media/logo.png` is a form
- * the product supports (see `shared/report/report-assets`), and rewriting the path inside it
- * would both mangle the value and, worse, pull whatever local file happens to share that name
- * into the package. So the guard lives here, and the recogniser stays one for the whole system.
- */
-const ADDRESS_BOUNDARY = `(?<![^"'\\s=(,;>])`;
-
-/**
- * The address as it may actually be spelled in the string. The walker normalises `\` to `/`
- * before matching, so it can report an address the literal text does not contain; matching
- * either separator here keeps "found" and "replaced" the same set — otherwise a reference
- * would be reported as packed while the old address stayed in the data.
- *
- * A fresh regex per call on purpose: it is global, and `test()` would leave `lastIndex`
- * behind for the next caller.
- */
-function addressPattern(address: string): RegExp {
-  const escaped = address
-    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    .replace(/\//g, "[\\\\/]");
-  return new RegExp(ADDRESS_BOUNDARY + escaped, "g");
+  return { mime: m[1], buffer: Buffer.from(m[2], "base64") };
 }
 
 /**
@@ -125,7 +92,16 @@ export async function extractEmbeddedMediaIntoAssets(
     const known = decided.get(address);
     if (known !== undefined) return known;
 
-    const resolved = await opts.resolveRef(ref);
+    // A resolver throw is a lost file, not a lost export: one deleted object must not cost the
+    // author the whole package. The address is dropped and named, exactly as a `null` would be.
+    let resolved: ResolvedMedia | null = null;
+    try {
+      resolved = await opts.resolveRef(ref);
+    } catch (e) {
+      missing.push(`failed media reference: ${address} (${(e as Error)?.message ?? e})`);
+      decided.set(address, null);
+      return null;
+    }
     if (!resolved) {
       missing.push(`unresolved media reference: ${address}`);
       decided.set(address, null);
@@ -140,13 +116,12 @@ export async function extractEmbeddedMediaIntoAssets(
   async function packString(input: string): Promise<string> {
     const parsed = parseDataUrl(input);
     if (parsed) {
-      const ext = EXT_BY_MIME[parsed.mime] || "bin";
-      const zipPath = `assets/media/${nanoid(10)}.${ext}`;
+      const zipPath = `assets/media/${nanoid(10)}.${extensionForMime(parsed.mime) ?? "bin"}`;
       assets[zipPath] = parsed.buffer;
       return zipPath;
     }
 
-    const matches = findMediaMatchesInText(input);
+    const matches = findMediaAddressesInText(input);
     if (matches.length === 0) return input;
     // Longest address first: one legacy name can be a prefix of another
     // (`…/a.png` inside `…/a.png.bak`), and replacing the shorter one first would
@@ -157,10 +132,10 @@ export async function extractEmbeddedMediaIntoAssets(
     for (const match of ordered) {
       // Not standing on a boundary means this is somebody else's address (a host name in
       // front of it): it is not ours to touch, and it must not reach the resolver either.
-      if (!addressPattern(match.address).test(out)) continue;
+      if (!mediaAddressPattern(match.address).test(out)) continue;
 
       let replacement = "";
-      if (match.ref) {
+      if (match.status === "accepted") {
         replacement = (await zipPathFor(match.address, match.ref)) ?? "";
       } else if (!decided.has(match.address)) {
         // Refused by the recogniser. The bytes are unreachable, but the address still has to
@@ -170,7 +145,7 @@ export async function extractEmbeddedMediaIntoAssets(
         decided.set(match.address, null);
       }
       // Replacement as a function: a `$` in the path must stay a `$`, not a capture reference.
-      out = out.replace(addressPattern(match.address), () => replacement);
+      out = out.replace(mediaAddressPattern(match.address), () => replacement);
     }
     return out;
   }
