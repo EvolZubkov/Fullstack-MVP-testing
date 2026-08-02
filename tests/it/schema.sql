@@ -44,6 +44,7 @@ CREATE TABLE "attempts" (
 	"test_id" varchar(36) NOT NULL,
 	"test_version" integer DEFAULT 1 NOT NULL,
 	"snapshot_id" varchar(36),
+	"assignment_id" varchar(36),
 	"variant_json" jsonb NOT NULL,
 	"answers_json" jsonb,
 	"result_json" jsonb,
