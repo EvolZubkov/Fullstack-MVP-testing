@@ -192,6 +192,24 @@ async function resultsMaterialForAttempt(
  * slot must not receive an empty paragraph. The same text written in both places is
  * stored ONCE, keeping the first occurrence — the topic, the more general source.
  */
+/**
+ * The topic's feedback block to read its text from: the `feedback_json` the editor
+ * writes today, or the legacy `topics.feedback` column when that text is missing.
+ *
+ * The fallback is not back-compat decoration. The in-service topic editor writes ONLY
+ * `feedback_json`, so the legacy column still holds the whole text of every topic the
+ * editor has never touched; reading just `feedback_json` there would silently drop text
+ * the author did write. The SCORM bake falls back the same way, so a topic left on the
+ * legacy column reads identically on both hosts.
+ */
+function topicFeedbackBlock(topic: { feedbackJson?: unknown; feedback?: string | null } | undefined): unknown {
+  const json = topic?.feedbackJson as { text?: unknown } | null | undefined;
+  // The current source wins whenever it actually carries a text — a topic migrated to
+  // `feedback_json` may still drag an outdated copy in the legacy column.
+  if (json && typeof json.text === "string" && json.text.trim()) return json;
+  return { text: topic?.feedback ?? "" };
+}
+
 function feedbackTexts(...blocks: unknown[]): string[] {
   const out: string[] = [];
   for (const block of blocks) {
@@ -1242,7 +1260,7 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
           // Same two blocks, same source: the text an author wrote for the topic and for
           // this test's section over it travels WITH the attempt, so a snapshot-pinned
           // attempt keeps the wording it was published with.
-          feedbackTexts: feedbackTexts(topic?.feedbackJson, section?.feedbackJson),
+          feedbackTexts: feedbackTexts(topicFeedbackBlock(topic), section?.feedbackJson),
         },
       });
     }

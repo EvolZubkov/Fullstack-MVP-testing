@@ -1009,6 +1009,45 @@ describe("Attempts routes — finish attempt", () => {
     storageMock.getTopic.mockReset();
   });
 
+  // Действующий редактор темы пишет только `feedback_json`, поэтому у тем, которых он не
+  // касался, текст остался в легаси-колонке `topics.feedback`. Пакет её читает — веб
+  // обязан читать так же, иначе хосты разъедутся.
+  it("POST /attempts/:id/finish — у темы читается легаси-колонка, когда feedback_json без текста", async () => {
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", topicPassRuleJson: null }]);
+    storageMock.getTopic.mockResolvedValue({
+      id: "t1",
+      name: "Тема",
+      feedback: "Легаси-текст темы",
+      feedbackJson: null,
+    });
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getTopicCourses.mockResolvedValue([]);
+    storageMock.getTestQuestionScoring.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+
+    expect(res.status).toBe(200);
+    expect(res.body.result.topicResults[0].feedbackTexts).toEqual(["Легаси-текст темы"]);
+
+    // Заполнены обе — побеждает действующий источник, легаси-копия молчит.
+    storageMock.getTopic.mockResolvedValue({
+      id: "t1",
+      name: "Тема",
+      feedback: "Устаревшая копия",
+      feedbackJson: { format: "plain", text: "Текст из feedback_json" },
+    });
+    const both = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+
+    expect(both.status).toBe(200);
+    expect(both.body.result.topicResults[0].feedbackTexts).toEqual(["Текст из feedback_json"]);
+    storageMock.getTopic.mockReset();
+  });
+
   it("POST /attempts/:id/finish — an explicit exact override shadows graded scoring", async () => {
     storageMock.getAttempt.mockResolvedValue(dbAttempt);
     storageMock.getTest.mockResolvedValue(dbTest);

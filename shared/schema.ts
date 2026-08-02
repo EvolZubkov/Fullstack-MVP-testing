@@ -1016,11 +1016,15 @@ export const topicResultSchema = z.object({
   // renders from the saved result, and re-reading live content would hand a past
   // attempt today's materials. `.default([])` keeps attempts graded before PRD-32 valid.
   recommendedAssets: z.array(z.object({ title: z.string(), url: z.string() })).default([]),
-  // Тексты обратной связи темы (`topics.feedback_json.text`) и раздела этого теста над
-  // ней (`test_sections.feedback_json.text`), сохранённые вместе с попыткой — экран
-  // итогов рисуется из сохранённого результата, а перечитывание живого контента отдало
-  // бы прошлой попытке сегодняшний текст. `.default([])` держит валидными попытки,
-  // посчитанные до этой работы.
+  // Feedback texts of the topic (`topics.feedback_json.text`, or the legacy
+  // `topics.feedback` column) and of this test's section over it
+  // (`test_sections.feedback_json.text`). Stored WITH the attempt, like the
+  // recommendations above: the results screen renders from the saved result, and
+  // re-reading live content would hand a past attempt today's wording.
+  // An ARRAY and not one glued string on purpose — the topic and the section are two
+  // INDEPENDENT authoring points; gluing them would lose the boundary the consolidated
+  // recommendations block de-duplicates on. `.default([])` keeps attempts graded before
+  // this work valid.
   feedbackTexts: z.array(z.string()).default([]),
 });
 
