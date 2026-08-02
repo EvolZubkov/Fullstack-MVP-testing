@@ -76,4 +76,54 @@ describe("MediaRepository", () => {
     const orphans = await repo.listOrphanAssets();
     expect(orphans.map((o) => o.id)).toEqual([orphan.id]);
   });
+
+  it("finds a legacy backfilled asset by null owner and checksum", async () => {
+    const created = await repo.createAsset(asset({ ownerId: null }));
+    const found = await repo.findAssetByOwnerChecksum(null, "a".repeat(64));
+    expect(found?.id).toBe(created.id);
+    // A real owner with the same bytes must NOT match the legacy bucket.
+    expect(await repo.findAssetByOwnerChecksum("u1", "a".repeat(64))).toBeUndefined();
+  });
+
+  it("deletes an asset and reports false for an unknown id", async () => {
+    const created = await repo.createAsset(asset());
+    expect(await repo.deleteAsset(created.id)).toBe(true);
+    expect(await repo.getAsset(created.id)).toBeUndefined();
+    expect(await repo.deleteAsset(created.id)).toBe(false);
+  });
+
+  it("clears every usage row regardless of entity", async () => {
+    const a = await repo.createAsset(asset());
+    await repo.replaceUsages("question", "q1", [{ assetId: a.id, field: "mediaUrl" }]);
+    await repo.replaceUsages("content_page", "p1", [{ assetId: a.id, field: "body" }]);
+    await repo.clearAllUsages();
+    expect(await repo.getUsagesByAsset(a.id)).toHaveLength(0);
+  });
+
+  it("lists assets scoped to one owner", async () => {
+    await repo.createAsset(asset({ ownerId: "u1", checksum: "b".repeat(64) }));
+    await repo.createAsset(asset({ ownerId: "u2", checksum: "c".repeat(64) }));
+    const mine = await repo.listAssetsByOwner("u1");
+    expect(mine).toHaveLength(1);
+    expect(mine[0].ownerId).toBe("u1");
+  });
+
+  it("resolves an asset by its storage key", async () => {
+    const created = await repo.createAsset(asset({ storageKey: "media/zz/zz/key.png" }));
+    const found = await repo.getAssetByStorageKey("media/zz/zz/key.png");
+    expect(found?.id).toBe(created.id);
+  });
+
+  it("swallows a duplicate reference inside one replaceUsages call", async () => {
+    const a = await repo.createAsset(asset());
+    // Two identical (assetId, field) refs in the same batch would violate the
+    // composite PK without onConflictDoNothing().
+    await expect(
+      repo.replaceUsages("question", "q1", [
+        { assetId: a.id, field: "mediaUrl" },
+        { assetId: a.id, field: "mediaUrl" },
+      ]),
+    ).resolves.not.toThrow();
+    expect(await repo.getUsagesByAsset(a.id)).toHaveLength(1);
+  });
 });
