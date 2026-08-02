@@ -103,3 +103,29 @@ export function collectMediaRefs(entity: unknown): FoundMediaRef[] {
   visit(entity, "");
   return found;
 }
+
+/**
+ * Returns a copy of `entity` with every recognised media reference replaced by whatever
+ * `mapping` returns for it. A `null` from the mapping leaves the value as it stands —
+ * blanking an address that resolves to nothing would erase a picture the author still
+ * sees, which is worse than carrying a stale string.
+ */
+export function rewriteMediaRefs(
+  entity: unknown,
+  mapping: (ref: MediaRef) => string | null,
+): unknown {
+  if (typeof entity === "string") {
+    const ref = parseMediaRef(entity);
+    if (!ref) return entity;
+    return mapping(ref) ?? entity;
+  }
+  if (Array.isArray(entity)) return entity.map((item) => rewriteMediaRefs(item, mapping));
+  if (entity && typeof entity === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(entity as Record<string, unknown>)) {
+      out[key] = rewriteMediaRefs(value, mapping);
+    }
+    return out;
+  }
+  return entity;
+}

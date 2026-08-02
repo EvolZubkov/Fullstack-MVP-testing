@@ -52,6 +52,9 @@ const { storageMock } = vi.hoisted(() => ({
     getSharedTopicIds: vi.fn().mockResolvedValue([]),
     getTopicIdsByOwner: vi.fn().mockResolvedValue([]),
     getActiveTopicGrantsForGrantees: vi.fn().mockResolvedValue([]),
+    // Медиатека Задача 15: canonicalizeEntityMedia resolves legacy addresses
+    // through this before the entity is written; undefined = unresolved, left as-is.
+    getMediaAssetByStorageKey: vi.fn().mockResolvedValue(undefined),
   },
 }));
 

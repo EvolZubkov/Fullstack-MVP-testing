@@ -12,7 +12,7 @@ import {
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
-import { syncEntityUsages } from "../services/media/usage-index";
+import { syncEntityUsages, canonicalizeEntityMedia } from "../services/media/usage-index";
 import { normalizeTags } from "@shared/tags";
 import { normalizeAuthorText } from "@shared/text";
 import { normalizeOptionalText, normalizeQuestionData } from "../services/question-text";
@@ -191,7 +191,7 @@ router.post(
         return;
       }
 
-      const question = await storage.createQuestion({
+      const questionInput = {
         topicId,
         type,
         prompt: canonicalPrompt,
@@ -210,7 +210,13 @@ router.post(
         // means «не задано» and stores NULL.
         orderIndex: orderIndex ?? null,
         createdBy: req.currentUser?.id ?? null,
-      } as any);
+      };
+
+      // Медиатека §5: пре-реестровый адрес приводится к каноническому в момент правки —
+      // так наследие вымывается редактированием, а не миграцией по чужим JSON.
+      const payload = await canonicalizeEntityMedia(questionInput);
+
+      const question = await storage.createQuestion(payload as any);
 
       // Медиатека: сбой индексации не должен стоить автору его правки. Недостающая
       // строка индекса безопасна (она отказывает в доступе, а не выдаёт лишнее) и
@@ -296,7 +302,7 @@ router.put(
         return respondDryRun(req, res, { blocking: [], warnings: [] });
       }
 
-      const updated = await storage.updateQuestion(req.params.id, {
+      const questionUpdate = {
         topicId,
         type,
         // A field the client did not send stays `undefined` — the storage layer
@@ -318,7 +324,13 @@ router.put(
         // PRD-30 FR-01: `null` CLEARS the index, `undefined` leaves it alone —
         // the storage layer reads undefined as «unchanged».
         orderIndex,
-      } as any);
+      };
+
+      // Медиатека §5: пре-реестровый адрес приводится к каноническому в момент правки —
+      // так наследие вымывается редактированием, а не миграцией по чужим JSON.
+      const payload = await canonicalizeEntityMedia(questionUpdate);
+
+      const updated = await storage.updateQuestion(req.params.id, payload as any);
 
       if (!updated) {
         return res.status(404).json({ error: "Question not found" });

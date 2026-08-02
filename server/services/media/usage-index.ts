@@ -11,7 +11,7 @@
 import { storage } from "../../storage";
 import type { MediaEntityType } from "@shared/schema";
 import type { MediaUsageRef } from "../../storage/media-repository";
-import { collectMediaRefs } from "./media-refs";
+import { collectMediaRefs, rewriteMediaRefs } from "./media-refs";
 import { clearAssetAccessCache } from "./asset-access";
 
 /** Resolves every reference inside `entity` to registry ids. */
@@ -78,4 +78,31 @@ export async function reindexAllUsages(): Promise<ReindexReport> {
 
   clearAssetAccessCache();
   return { entities };
+}
+
+/**
+ * Rewrites pre-registry addresses inside an entity to the canonical `/api/media/<id>`
+ * (spec §5). Called on the SAVE path, before the entity is persisted: this is what drains
+ * the legacy shape out of content gradually, instead of one mass migration across JSON
+ * documents the media library does not own.
+ */
+export async function canonicalizeEntityMedia<T>(entity: T): Promise<T> {
+  const legacyKeys = collectMediaRefs(entity)
+    .map((f) => f.ref)
+    .filter((ref): ref is { kind: "legacy"; storageKey: string } => ref.kind === "legacy")
+    .map((ref) => ref.storageKey);
+  if (legacyKeys.length === 0) return entity;
+
+  const resolved = new Map<string, string>();
+  for (const key of new Set(legacyKeys)) {
+    const asset = await storage.getMediaAssetByStorageKey(key);
+    if (asset) resolved.set(key, asset.id);
+  }
+  if (resolved.size === 0) return entity;
+
+  return rewriteMediaRefs(entity, (ref) => {
+    if (ref.kind !== "legacy") return null;
+    const id = resolved.get(ref.storageKey);
+    return id ? `/api/media/${id}` : null;
+  }) as T;
 }
