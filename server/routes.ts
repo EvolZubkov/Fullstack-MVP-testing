@@ -7,6 +7,7 @@ import path from "node:path";
 import { routerConfig } from "./routes/index";
 import { config } from "./config";
 import { magicScopeGuard } from "./middleware/magic-scope";
+import { legacyUploadsAlias } from "./routes/media";
 
 const MemStore = MemoryStore(session);
 
@@ -45,8 +46,9 @@ export async function registerRoutes(
   // rule table does not name is refused here, before any router sees it.
   app.use(magicScopeGuard);
 
-  // Static files
-  app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
+  // Медиатека: раздача идёт маршрутом с проверкой прав, публичной статики больше нет.
+  // Адреса, сохранённые до реестра, обслуживает совместимостный алиас.
+  app.use("/uploads", legacyUploadsAlias);
   app.use("/docs", express.static(path.resolve(process.cwd(), "docs")));
 
   // ========== Модульные роуты ==========

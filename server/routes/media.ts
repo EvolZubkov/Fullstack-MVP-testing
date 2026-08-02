@@ -20,6 +20,7 @@ import { canDeliverAsset } from "../services/media/asset-access";
 import { requirePermission } from "../middleware/auth";
 import { reindexAllUsages } from "../services/media/usage-index";
 import { isAdminOrSuper } from "../services/test-access";
+import type { MediaAsset } from "@shared/schema";
 
 const router = Router();
 
@@ -192,6 +193,73 @@ function parseRange(
 }
 
 /**
+ * Sends one resolved asset: permission rule, headers, range, body.
+ *
+ * Shared by the canonical `GET /:id` route and the compatibility `legacyUploadsAlias` —
+ * both resolve an asset by a different key, but everything past that point (the
+ * permission check, ETag/range headers, and stream-error handling) must behave
+ * identically, or the legacy shape of an address would become a way to dodge a rule the
+ * canonical route enforces.
+ */
+async function deliverAsset(req: Request, res: Response, asset: MediaAsset): Promise<void> {
+  const user = await storage.getUser(req.session.userId as string);
+  if (!user || user.status === "inactive") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  const roles = await getEffectiveRoles(user);
+  if (!(await canDeliverAsset(asset, user.id, roles))) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const etag = `"${asset.checksum}"`;
+  res.setHeader("ETag", etag);
+  res.setHeader("Cache-Control", "private, max-age=3600");
+  res.setHeader("Content-Type", asset.mimeType);
+  res.setHeader("Accept-Ranges", "bytes");
+  res.setHeader(
+    "Content-Disposition",
+    `inline; filename*=UTF-8''${encodeURIComponent(asset.originalName)}`,
+  );
+  if (req.headers["if-none-match"] === etag) {
+    res.status(304).end();
+    return;
+  }
+
+  const stat = await mediaStore.stat(asset.storageKey);
+  if (!stat) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const range = parseRange(req.headers.range as string | undefined, stat.byteSize);
+  if (range === "unsatisfiable") {
+    // RFC 9110 §15.5.17: the response must say what the real extent is.
+    res.setHeader("Content-Range", `bytes */${stat.byteSize}`);
+    res.status(416).end();
+    return;
+  }
+  if (range) {
+    res.status(206);
+    res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${stat.byteSize}`);
+    res.setHeader("Content-Length", String(range.end - range.start + 1));
+  } else {
+    res.setHeader("Content-Length", String(stat.byteSize));
+  }
+
+  const stream = await mediaStore.openRead(asset.storageKey, range ?? undefined);
+  // The store rejects a missing key up front, but the file can still vanish mid-read.
+  // An unhandled `error` event on a piped stream takes the process down, so the socket
+  // is closed instead: the headers are already sent, there is no status left to send.
+  stream.on("error", (streamError) => {
+    logger.error(`Media stream failed for ${asset.id}: ${(streamError as Error).message}`);
+    res.destroy();
+  });
+  stream.pipe(res);
+}
+
+/**
  * GET /:id — deliver one file.
  *
  * This route is what replaced the public `/uploads` static mount, so everything the mount
@@ -204,51 +272,7 @@ router.get("/:id", requireAuth, async (req: Request, res: Response) => {
   try {
     const asset = await storage.getMediaAsset(req.params.id);
     if (!asset) return res.status(404).json({ error: "Not found" });
-
-    const user = await storage.getUser(req.session.userId as string);
-    if (!user || user.status === "inactive") return res.status(403).json({ error: "Forbidden" });
-    const roles = await getEffectiveRoles(user);
-    if (!(await canDeliverAsset(asset, user.id, roles))) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-
-    const etag = `"${asset.checksum}"`;
-    res.setHeader("ETag", etag);
-    res.setHeader("Cache-Control", "private, max-age=3600");
-    res.setHeader("Content-Type", asset.mimeType);
-    res.setHeader("Accept-Ranges", "bytes");
-    res.setHeader(
-      "Content-Disposition",
-      `inline; filename*=UTF-8''${encodeURIComponent(asset.originalName)}`,
-    );
-    if (req.headers["if-none-match"] === etag) return res.status(304).end();
-
-    const stat = await mediaStore.stat(asset.storageKey);
-    if (!stat) return res.status(404).json({ error: "Not found" });
-
-    const range = parseRange(req.headers.range as string | undefined, stat.byteSize);
-    if (range === "unsatisfiable") {
-      // RFC 9110 §15.5.17: the response must say what the real extent is.
-      res.setHeader("Content-Range", `bytes */${stat.byteSize}`);
-      return res.status(416).end();
-    }
-    if (range) {
-      res.status(206);
-      res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${stat.byteSize}`);
-      res.setHeader("Content-Length", String(range.end - range.start + 1));
-    } else {
-      res.setHeader("Content-Length", String(stat.byteSize));
-    }
-
-    const stream = await mediaStore.openRead(asset.storageKey, range ?? undefined);
-    // The store rejects a missing key up front, but the file can still vanish mid-read.
-    // An unhandled `error` event on a piped stream takes the process down, so the socket
-    // is closed instead: the headers are already sent, there is no status left to send.
-    stream.on("error", (streamError) => {
-      logger.error(`Media stream failed for ${asset.id}: ${(streamError as Error).message}`);
-      res.destroy();
-    });
-    stream.pipe(res);
+    await deliverAsset(req, res, asset);
   } catch (error) {
     logger.error(`Media delivery failed: ${(error as Error).message}`);
     res.status(500).json({ error: "Failed to deliver media" });
@@ -256,3 +280,24 @@ router.get("/:id", requireAuth, async (req: Request, res: Response) => {
 });
 
 export default router;
+
+/**
+ * The compatibility mount for addresses stored before the registry existed. The static
+ * `/uploads` mount is gone, so without this the switch-off breaks silently — a broken
+ * picture in the editor, not an error anyone would notice. Resolution goes through the
+ * storage key the backfill wrote, and the SAME permission rule applies: the legacy shape
+ * of an address must not be a way around it.
+ */
+export const legacyUploadsAlias = Router();
+
+legacyUploadsAlias.get(/^\/media\/.+$/, requireAuth, async (req: Request, res: Response) => {
+  try {
+    const storageKey = `media/${req.path.replace(/^\/media\//, "")}`;
+    const asset = await storage.getMediaAssetByStorageKey(storageKey);
+    if (!asset) return res.status(404).json({ error: "Not found" });
+    await deliverAsset(req, res, asset);
+  } catch (error) {
+    logger.error(`Legacy media delivery failed: ${(error as Error).message}`);
+    res.status(500).json({ error: "Failed to deliver media" });
+  }
+});
