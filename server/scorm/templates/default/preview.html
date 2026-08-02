@@ -7161,7 +7161,7 @@ var TBTemplate = (() => {
     return view;
   }
   function buildResultContext(input, title, opts = {}) {
-    var _a;
+    var _a, _b;
     const passed = !!input.passed;
     const percent = Math.round(input.percent || 0);
     const result = {
@@ -7182,6 +7182,7 @@ var TBTemplate = (() => {
       result.backAction = opts.backAction;
       result.backLabel = opts.backLabel;
     }
+    const recommendationSources = [opts.testFeedback];
     if (opts.measures) {
       const visibleScales = opts.measures.scales.filter((m) => m.visibility !== "hidden");
       const visibleIndicators = opts.measures.indicators.filter((m) => m.visibility !== "hidden");
@@ -7210,13 +7211,17 @@ var TBTemplate = (() => {
       if (blocks.indicators && visibleIndicators.length) {
         result.indicators = visibleIndicators.map((m) => buildMeasureView({ ...m, requestedKind: opts.measures.indicatorKind, ramp: opts.measures.ramp }));
       }
-      const recommendations = collectRecommendations([
-        opts.measures.testFeedback,
+      recommendationSources.push(
         ...blocks.indicators ? visibleIndicators.map(firedFeedback) : [],
         ...blocks.scales ? visibleScales.map(firedFeedback) : []
-      ]);
-      if (recommendations.hasAny) result.recommendations = recommendations;
+      );
     }
+    for (const topic of input.topicResults || []) {
+      const assets = (_b = topic.recommendedAssets) != null ? _b : [];
+      if (assets.length > 0) recommendationSources.push({ links: [], events: [], assets });
+    }
+    const recommendations = collectRecommendations(recommendationSources);
+    if (recommendations.hasAny) result.recommendations = recommendations;
     return { course: { title }, result };
   }
   function buildSectionResultContext(input) {
