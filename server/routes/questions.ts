@@ -442,6 +442,16 @@ router.post(
       if (!result) {
         return res.status(404).json({ error: "Question not found" });
       }
+
+      // Медиатека: дубликат — НОВАЯ сущность со своим id; индексируется под
+      // ним, а не под id оригинала. Сбой индексации не должен стоить автору
+      // его правки — недостающая строка чинится пересборкой.
+      try {
+        await syncEntityUsages("question", result.id, result);
+      } catch (error) {
+        logger.error(`Media usage sync failed for question ${result.id}: ${(error as Error).message}`);
+      }
+
       res.status(201).json(result);
     } catch (error) {
       logger.error("Duplicate question error: " + (error as Error).message);

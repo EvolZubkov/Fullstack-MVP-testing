@@ -17,7 +17,7 @@ import {
   contentPages,
   templates,
 } from "@shared/schema";
-import type { Test, TemplateManifest, DrawBlueprint, FormSet } from "@shared/schema";
+import type { Test, ContentPage, TemplateManifest, DrawBlueprint, FormSet } from "@shared/schema";
 import {
   planSystemPages,
   SYSTEM_KINDS,
@@ -34,6 +34,8 @@ import {
   validateFlowPolicy,
   FlowPolicyValidationError,
 } from "./flow-policy-validator";
+import { syncEntityUsages } from "./media/usage-index";
+import { logger } from "../logger";
 
 const DEFAULT_TEMPLATE_ID = "default";
 
@@ -203,6 +205,17 @@ export interface CreatePayload {
   adaptiveSettings?: AdaptiveTopicPayload[];
 }
 
+/**
+ * What {@link TestSettingsService._reconcileSystemPages} mutated inside its
+ * transaction — carried out so the caller can sync the media usage index
+ * AFTER commit (never inside the transaction: a rollback must not leave a
+ * usage row for a page that was never actually written).
+ */
+interface PageReconcileResult {
+  created: ContentPage[];
+  deletedIds: string[];
+}
+
 export interface SavePayload {
   test: TestPayload;
   sections?: SectionPayload[];
@@ -235,7 +248,8 @@ export class TestSettingsService {
     if (violations.length > 0) {
       throw new FlowPolicyValidationError(violations);
     }
-    return db.transaction(async (tx) => {
+    let pageSync: PageReconcileResult = { created: [], deletedIds: [] };
+    const newTest = await db.transaction(async (tx) => {
       const id = randomUUID();
       const { status, published } = resolveStatus(payload.test);
 
@@ -276,7 +290,7 @@ export class TestSettingsService {
         await this._replaceAdaptiveSettings(tx, id, payload.adaptiveSettings);
       }
 
-      await this._reconcileSystemPages(
+      pageSync = await this._reconcileSystemPages(
         tx,
         id,
         extractFlowMode(payload.test.flowPolicyJson),
@@ -286,6 +300,13 @@ export class TestSettingsService {
 
       return newTest;
     });
+
+    // Медиатека: индексируется ПОСЛЕ commit — строки, которые реконсиляция
+    // реально создала/удалила внутри транзакции. Сбой не должен ронять
+    // сохранение теста; недостающая строка индекса чинится пересборкой.
+    await this._syncPageUsages(pageSync);
+
+    return newTest;
   }
 
   /**
@@ -308,7 +329,8 @@ export class TestSettingsService {
         throw new FlowPolicyValidationError(violations);
       }
     }
-    return db.transaction(async (tx) => {
+    let pageSync: PageReconcileResult = { created: [], deletedIds: [] };
+    const updatedTest = await db.transaction(async (tx) => {
       const { status, published } = resolveStatus(payload.test);
 
       // Read the pre-update row when needed: the optimistic-concurrency check
@@ -373,7 +395,7 @@ export class TestSettingsService {
             .select({ topicId: testSections.topicId })
             .from(testSections)
             .where(eq(testSections.testId, testId)));
-        await this._reconcileSystemPages(
+        pageSync = await this._reconcileSystemPages(
           tx,
           testId,
           extractFlowMode(payload.test.flowPolicyJson ?? updated.flowPolicyJson),
@@ -401,6 +423,11 @@ export class TestSettingsService {
 
       return updated;
     });
+
+    // Медиатека: индексируется ПОСЛЕ commit — см. комментарий в create().
+    await this._syncPageUsages(pageSync);
+
+    return updatedTest;
   }
 
   /**
@@ -415,7 +442,8 @@ export class TestSettingsService {
    * loaded.
    */
   async reconcileExisting(testId: string): Promise<{ deleted: number; created: number }> {
-    return db.transaction(async (tx) => {
+    let pageSync: PageReconcileResult = { created: [], deletedIds: [] };
+    const result = await db.transaction(async (tx) => {
       const [row] = await tx
         .select({
           id: tests.id,
@@ -437,7 +465,7 @@ export class TestSettingsService {
         .where(eq(contentPages.testId, testId));
       const beforeIds = new Set(before.map((r) => r.id));
 
-      await this._reconcileSystemPages(
+      pageSync = await this._reconcileSystemPages(
         tx,
         testId,
         extractFlowMode(row.flowPolicyJson),
@@ -457,6 +485,11 @@ export class TestSettingsService {
       for (const id of afterIds) if (!beforeIds.has(id)) created += 1;
       return { deleted, created };
     });
+
+    // Медиатека: индексируется ПОСЛЕ commit — см. комментарий в create().
+    await this._syncPageUsages(pageSync);
+
+    return result;
   }
 
   // ── private helpers ──────────────────────────────────────────────────────
@@ -479,7 +512,8 @@ export class TestSettingsService {
     flowMode: FlowMode,
     topicIds: string[],
     templateId: string,
-  ): Promise<void> {
+  ): Promise<PageReconcileResult> {
+    const noop: PageReconcileResult = { created: [], deletedIds: [] };
     const wantedIds = templateId === DEFAULT_TEMPLATE_ID
       ? [DEFAULT_TEMPLATE_ID]
       : [templateId, DEFAULT_TEMPLATE_ID];
@@ -492,7 +526,7 @@ export class TestSettingsService {
     const byId = new Map(manifestRows.map((r) => [r.id, r.manifest as TemplateManifest]));
     const template = byId.get(templateId) ?? byId.get(DEFAULT_TEMPLATE_ID);
     const defaultTemplate = byId.get(DEFAULT_TEMPLATE_ID);
-    if (!template || !defaultTemplate) return;
+    if (!template || !defaultTemplate) return noop;
 
     const allRows = await tx
       .select({
@@ -527,8 +561,16 @@ export class TestSettingsService {
       await tx.delete(contentPages).where(eq(contentPages.id, del.id));
     }
 
+    // Медиатека: rows created/deleted here move content (including media
+    // references) between pages (spec — system-page reconciliation transfers
+    // `valuesJson` on flowMode/template changes). Both lists are handed back
+    // to the caller, which syncs `media_usages` AFTER the transaction commits
+    // — a row for a page that got rolled back must never exist, and a deleted
+    // page's row must never linger (it would hold files hostage via a false
+    // 409 on delete).
+    const created: ContentPage[] = [];
     for (const ins of plan.create) {
-      await tx.insert(contentPages).values({
+      const [row] = await tx.insert(contentPages).values({
         id: randomUUID(),
         testId,
         topicId: ins.topicId,
@@ -541,7 +583,34 @@ export class TestSettingsService {
         valuesJson: ins.valuesJson,
         autoAdvance: false,
         autoAdvanceDelayMs: null,
-      });
+      }).returning();
+      created.push(row);
+    }
+
+    return { created, deletedIds: plan.delete.map((d) => d.id) };
+  }
+
+  /**
+   * Applies the media usage sync for a {@link PageReconcileResult}, AFTER the
+   * owning transaction has committed. Errors are logged, never thrown — a
+   * failed sync must not undo (or retroactively fail) a test save that already
+   * committed; the missing/stale row is safe (it only ever narrows access) and
+   * is healed by the full reindex.
+   */
+  private async _syncPageUsages(result: PageReconcileResult): Promise<void> {
+    for (const page of result.created) {
+      try {
+        await syncEntityUsages("content_page", page.id, page);
+      } catch (error) {
+        logger.error(`Media usage sync failed for content page ${page.id}: ${(error as Error).message}`);
+      }
+    }
+    for (const id of result.deletedIds) {
+      try {
+        await syncEntityUsages("content_page", id, null);
+      } catch (error) {
+        logger.error(`Media usage sync failed for content page ${id}: ${(error as Error).message}`);
+      }
     }
   }
 

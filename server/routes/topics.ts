@@ -26,6 +26,7 @@ import {
 } from "../services/topic-access";
 import { normalizeTopicName } from "@shared/topics/naming";
 import { feedbackContentSchema, type FeedbackContent } from "@shared/schema";
+import { syncEntityUsages } from "../services/media/usage-index";
 
 const router = Router();
 
@@ -588,6 +589,21 @@ router.post("/:id/duplicate", requirePermission("topics.manage"), async (req, re
     if (!result) {
       return res.status(404).json({ error: "Topic not found" });
     }
+
+    // Медиатека: каждый продублированный вопрос — НОВАЯ сущность со своим id,
+    // индексируется под ним (не под id вопроса-оригинала). Вопросы уже
+    // зафиксированы (storage.duplicateTopicWithQuestions вернулся), поэтому
+    // синхронизация здесь не меняет то, что реально записано. Последовательно,
+    // как и остальной импорт/дублирование — при большой теме это заметно
+    // медленнее (см. отчёт задачи). Сбой одного вопроса не роняет остальные.
+    for (const q of result.questions ?? []) {
+      try {
+        await syncEntityUsages("question", q.id, q);
+      } catch (error) {
+        logger.error(`Media usage sync failed for question ${q.id}: ${(error as Error).message}`);
+      }
+    }
+
     res.status(201).json(result);
   } catch (error) {
     logger.error("Duplicate topic error: " + (error as Error).message);

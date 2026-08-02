@@ -15,6 +15,7 @@
 import { createHash } from "crypto";
 import { storage } from "../storage";
 import { logger } from "../logger";
+import { syncEntityUsages } from "./media/usage-index";
 import { normalizeTags } from "@shared/tags";
 import { hasOptionList, hasFixedOptionOrder, isMeasurementOnly } from "@shared/questions/question-type";
 import { normalizeIncomingText, normalizeQuestionData } from "./question-text";
@@ -507,7 +508,22 @@ export async function importQuestionRows(
             updatePayload.feedbackMode = "general";
           }
           if (hasCol("Теги")) updatePayload.tags = tags;
-          if (!dryRun) await storage.updateQuestion(rowId, updatePayload as any);
+          if (!dryRun) {
+            const updatedQuestion = await storage.updateQuestion(rowId, updatePayload as any);
+            // Медиатека: индекс за импортом мимо не должен оставаться неактуальным.
+            // Сбой индексации не должен ронять весь импорт — только строку журнала;
+            // недостающая строка индекса безопасна (отказывает в доступе) и чинится
+            // полной пересборкой (reindexAllUsages).
+            if (updatedQuestion) {
+              try {
+                await syncEntityUsages("question", updatedQuestion.id, updatedQuestion);
+              } catch (error) {
+                logger.error(
+                  `Media usage sync failed for question ${updatedQuestion.id}: ${(error as Error).message}`,
+                );
+              }
+            }
+          }
           result.updated++;
           recordAlias(row, { id: rowId, type, unitCount, contentHash, measurementOnly: isMeasurementOnly({ type, correctJson }) });
           continue;
@@ -558,7 +574,16 @@ export async function importQuestionRows(
           contentHash,
           createdBy: actor?.id ?? null,
         } as any);
-        if (created?.id) newId = created.id;
+        if (created?.id) {
+          newId = created.id;
+          // Медиатека: та же логика, что при обновлении (см. выше) — сбой не
+          // должен ронять импорт, недостающая строка чинится пересборкой.
+          try {
+            await syncEntityUsages("question", created.id, created);
+          } catch (error) {
+            logger.error(`Media usage sync failed for question ${created.id}: ${(error as Error).message}`);
+          }
+        }
       }
 
       existingHashes.add(contentHash);
