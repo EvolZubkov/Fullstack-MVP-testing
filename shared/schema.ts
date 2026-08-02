@@ -1016,6 +1016,12 @@ export const topicResultSchema = z.object({
   // renders from the saved result, and re-reading live content would hand a past
   // attempt today's materials. `.default([])` keeps attempts graded before PRD-32 valid.
   recommendedAssets: z.array(z.object({ title: z.string(), url: z.string() })).default([]),
+  // Тексты обратной связи темы (`topics.feedback_json.text`) и раздела этого теста над
+  // ней (`test_sections.feedback_json.text`), сохранённые вместе с попыткой — экран
+  // итогов рисуется из сохранённого результата, а перечитывание живого контента отдало
+  // бы прошлой попытке сегодняшний текст. `.default([])` держит валидными попытки,
+  // посчитанные до этой работы.
+  feedbackTexts: z.array(z.string()).default([]),
 });
 
 export const attemptResultSchema = z.object({

@@ -933,6 +933,82 @@ describe("Attempts routes — finish attempt", () => {
     storageMock.getTopic.mockReset();
   });
 
+  // Консолидация текстов обратной связи: текст ТЕМЫ (`topics.feedback_json.text`) и
+  // РАЗДЕЛА (`test_sections.feedback_json.text`) — два независимых источника, оба
+  // обязаны доехать до сохранённого результата: экран итогов рисуется из него.
+  it("POST /attempts/:id/finish — кладёт тексты обратной связи темы и раздела в результат попытки", async () => {
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getTestSections.mockResolvedValue([{
+      topicId: "t1",
+      topicPassRuleJson: null,
+      feedbackJson: { format: "plain", text: "Текст раздела" },
+    }]);
+    storageMock.getTopic.mockResolvedValue({
+      id: "t1",
+      name: "Тема",
+      feedbackJson: { format: "plain", text: "Текст темы" },
+    });
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getTopicCourses.mockResolvedValue([]);
+    storageMock.getTestQuestionScoring.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+
+    expect(res.status).toBe(200);
+    // Тема впереди раздела: общий источник раньше частного (как у вложений).
+    expect(res.body.result.topicResults[0].feedbackTexts).toEqual([
+      "Текст темы",
+      "Текст раздела",
+    ]);
+    storageMock.getTopic.mockReset();
+  });
+
+  it("POST /attempts/:id/finish — одинаковые тексты схлопываются, пустые отбрасываются", async () => {
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getTestSections.mockResolvedValue([{
+      topicId: "t1",
+      topicPassRuleJson: null,
+      feedbackJson: { format: "plain", text: "Общий текст" },
+    }]);
+    storageMock.getTopic.mockResolvedValue({
+      id: "t1",
+      name: "Тема",
+      feedbackJson: { format: "plain", text: "Общий текст" },
+    });
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getTopicCourses.mockResolvedValue([]);
+    storageMock.getTestQuestionScoring.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+
+    expect(res.status).toBe(200);
+    expect(res.body.result.topicResults[0].feedbackTexts).toEqual(["Общий текст"]);
+
+    // Пробельный текст — тот же пустой: слот не должен получить пустой абзац.
+    storageMock.getTestSections.mockResolvedValue([{
+      topicId: "t1",
+      topicPassRuleJson: null,
+      feedbackJson: { format: "plain", text: " " },
+    }]);
+    storageMock.getTopic.mockResolvedValue({
+      id: "t1",
+      name: "Тема",
+      feedbackJson: { format: "plain", text: "" },
+    });
+    const empty = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+
+    expect(empty.status).toBe(200);
+    expect(empty.body.result.topicResults[0].feedbackTexts).toEqual([]);
+    storageMock.getTopic.mockReset();
+  });
+
   it("POST /attempts/:id/finish — an explicit exact override shadows graded scoring", async () => {
     storageMock.getAttempt.mockResolvedValue(dbAttempt);
     storageMock.getTest.mockResolvedValue(dbTest);

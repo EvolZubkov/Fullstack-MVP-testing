@@ -181,6 +181,30 @@ async function resultsMaterialForAttempt(
   }
 }
 
+/**
+ * Feedback TEXTS of the stored blocks given, in the order given, ready for
+ * `TopicResult.feedbackTexts`.
+ *
+ * The topic and this test's section over it are two INDEPENDENT authoring points of the
+ * same feedback editor, so both are due to the learner and both are kept apart as
+ * separate entries — a glued string would lose the boundary the consolidated block
+ * de-duplicates on. A blank text (empty, or whitespace only) contributes nothing: the
+ * slot must not receive an empty paragraph. The same text written in both places is
+ * stored ONCE, keeping the first occurrence — the topic, the more general source.
+ */
+function feedbackTexts(...blocks: unknown[]): string[] {
+  const out: string[] = [];
+  for (const block of blocks) {
+    if (!block || typeof block !== "object") continue;
+    const text = (block as { text?: unknown }).text;
+    if (typeof text !== "string") continue;
+    const trimmed = text.trim();
+    if (!trimmed || out.includes(trimmed)) continue;
+    out.push(trimmed);
+  }
+  return out;
+}
+
 /** Fisher-Yates in-place shuffle for the server-side variant draw (PRD-11). */
 function shuffleInPlace<T>(arr: T[]): T[] {
   for (let i = arr.length - 1; i > 0; i -= 1) {
@@ -1181,6 +1205,7 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
       recommendedCourses: { title: string; url: string }[];
       recommendedEvents: { title: string }[];
       recommendedAssets: { title: string; url: string }[];
+      feedbackTexts: string[];
     }>[] = [];
     for (const variantSection of variant.sections) {
       const section = sectionMap.get(variantSection.topicId);
@@ -1214,6 +1239,10 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
           recommendedCourses: courses.map((c) => ({ title: c.title, url: c.url })),
           recommendedEvents: events.map((e) => ({ title: e.title })),
           recommendedAssets: feedbackAttachments.map((a) => ({ title: a.title, url: a.url ?? "" })),
+          // Same two blocks, same source: the text an author wrote for the topic and for
+          // this test's section over it travels WITH the attempt, so a snapshot-pinned
+          // attempt keeps the wording it was published with.
+          feedbackTexts: feedbackTexts(topic?.feedbackJson, section?.feedbackJson),
         },
       });
     }
@@ -1238,6 +1267,7 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
       recommendedCourses: t.extra!.recommendedCourses,
       recommendedEvents: t.extra!.recommendedEvents,
       recommendedAssets: t.extra!.recommendedAssets,
+      feedbackTexts: t.extra!.feedbackTexts,
     }));
 
     // PRD-12: graded namespaces (scales PRD-5 + result variables PRD-2) via the
