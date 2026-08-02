@@ -236,7 +236,7 @@ git commit -m "feat(media): таблицы реестра медиа и инде
  * roles hold it because they own the files; a learner never does.
  */
 import { describe, it, expect } from "vitest";
-import { ROLES, hasPermission } from "../shared/access";
+import { ROLES, hasPermission } from "@shared/access";
 
 describe("media.manage", () => {
   it("is held by author, developer and administrator", () => {
