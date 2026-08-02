@@ -107,8 +107,18 @@ function materials(app: HTMLElement): Array<{ title: string; href: string }> {
     .map((a) => ({ title: a.textContent?.trim() ?? "", href: a.getAttribute("href") ?? "" }));
 }
 
+/** Тексты, напечатанные в общем блоке рекомендаций, в порядке показа. */
+function recTexts(app: HTMLElement): string[] {
+  return Array.from(app.querySelectorAll("p.tb-recs-group__text")).map((p) => p.textContent?.trim() ?? "");
+}
+
 const sectionWithAssets = [
   { topicId: "t1", topicName: "Тема 1", recommendedAssets: [TOPIC_PDF, SECTION_PDF] },
+];
+
+/** Раздел, каким его печёт `test-json.ts`: текст темы первым, текст раздела вторым. */
+const sectionWithTexts = [
+  { topicId: "t1", topicName: "Тема 1", feedbackTexts: ["Текст темы", "Текст раздела"] },
 ];
 
 describe("SCORM: вложения темы и раздела на экранах итогов", () => {
@@ -155,6 +165,29 @@ describe("SCORM: вложения темы и раздела на экранах
     const { rt, app } = makeRuntime([], { text: "Спасибо за участие.", links: [], events: [], assets: [] });
     rt.renderResultsTemplated(app, savedAttempt);
     expect(app.querySelector(".tb-recs-group__text")?.textContent).toBe("Спасибо за участие.");
+  });
+
+  it("«Мой результат» показывает тексты темы и раздела", () => {
+    const { rt, app } = makeRuntime(sectionWithTexts);
+    rt.renderViewResultsTemplated(app, savedAttempt);
+    expect(recTexts(app)).toEqual(["Текст темы", "Текст раздела"]);
+  });
+
+  it("финишный экран итогов показывает те же тексты", () => {
+    const { rt, app } = makeRuntime(sectionWithTexts);
+    rt.renderResultsTemplated(app, savedAttempt);
+    expect(recTexts(app)).toEqual(["Текст темы", "Текст раздела"]);
+  });
+
+  it("текст теста идёт впереди текста темы, а повтор показывается один раз", () => {
+    // Тест — самый общий источник, поэтому его экземпляр переживает дедупликацию; тот же
+    // порядок держит веб-хост, иначе экраны двух хостов разошлись бы составом блока.
+    const { rt, app } = makeRuntime(
+      [{ topicId: "t1", topicName: "Тема 1", feedbackTexts: ["Спасибо за участие.", "Текст раздела"] }],
+      { text: "Спасибо за участие.", links: [], events: [], assets: [] },
+    );
+    rt.renderViewResultsTemplated(app, savedAttempt);
+    expect(recTexts(app)).toEqual(["Спасибо за участие.", "Текст раздела"]);
   });
 
   it("раздел без вложений не рождает пустого блока", () => {

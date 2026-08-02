@@ -62,6 +62,25 @@ function vrTopicAssets(tr) {
 }
 
 /**
+ * Feedback TEXTS of a topic row: the text the author wrote on the TOPIC
+ * (`topics.feedback_json.text`, falling back to the legacy `topics.feedback` column) and
+ * on this test's SECTION over it (`test_sections.feedback_json.text`), resolved by the
+ * bake into `section.feedbackTexts` — topic first, then section, which is the order the
+ * consolidated block de-duplicates on.
+ *
+ * Read off TEST_DATA for the same reason `vrTopicAssets` is: the text belongs to the
+ * package's content, not to a saved run, so a run saved by an earlier package gets it too.
+ *
+ * The name matches what the web host stores on the attempt, and it is the ONE name the
+ * shared builder reads — the former `topicFeedback` was a name nothing read, which is
+ * exactly why the topic's text never reached the learner from a package.
+ */
+function vrTopicFeedbackTexts(tr) {
+  var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
+  return (section && section.feedbackTexts) || [];
+}
+
+/**
  * The test's OWN feedback block (`tests.feedback_json`, baked as `TEST_DATA.testFeedbackJson`),
  * normalised for the recommendations block — the widest source, and the first one.
  *
@@ -265,7 +284,9 @@ function renderViewResultsTemplated(app, results) {
         possiblePoints: tr.possiblePoints,
         passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
         requiredLabel: vrRequiredLabel(tr),
-        topicFeedback: tr.topicFeedback,
+        // Тексты обратной связи темы и раздела — в общий блок рекомендаций (общий
+        // сборщик), под тем же именем, каким их кладёт веб-хост.
+        feedbackTexts: vrTopicFeedbackTexts(tr),
         // PRD-32: вложения темы и раздела — в общий блок «Материалы» (общий сборщик).
         recommendedAssets: vrTopicAssets(tr)
       };
@@ -348,7 +369,9 @@ function renderResultsTemplated(app, results) {
         possiblePoints: tr.possiblePoints,
         passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
         requiredLabel: vrRequiredLabel(tr),
-        topicFeedback: tr.topicFeedback,
+        // Тексты обратной связи темы и раздела — в общий блок рекомендаций (общий
+        // сборщик), под тем же именем, каким их кладёт веб-хост.
+        feedbackTexts: vrTopicFeedbackTexts(tr),
         // PRD-32: вложения темы и раздела — в общий блок «Материалы» (общий сборщик).
         recommendedAssets: vrTopicAssets(tr)
       };
