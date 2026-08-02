@@ -251,16 +251,42 @@ describe("normalizeFeedback — адрес вложения", () => {
     ]);
   });
 
-  it("предпочитает scormHref, когда он есть (пакет, собранный ранее)", () => {
+  // Упаковщик переписывает на путь внутри пакета именно `url`, а `scormHref` не трогает:
+  // при обоих заполненных полях легаси-адрес ведёт туда, где файла уже нет.
+  it("предпочитает url, когда заполнены оба поля", () => {
     const block = normalizeFeedback({
       text: "",
       links: [],
       events: [],
       assets: [
-        { title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "/api/media/2222", scormHref: "assets/media/p.pdf" },
+        { title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "assets/media/2222.pdf", scormHref: "feedback/legacy.pdf" },
       ],
     });
-    expect(block?.assets).toEqual([{ title: "Памятка", url: "assets/media/p.pdf" }]);
+    expect(block?.assets).toEqual([{ title: "Памятка", url: "assets/media/2222.pdf" }]);
+  });
+
+  it("пустой url не перебивает scormHref — пустая строка не адрес", () => {
+    const block = normalizeFeedback({
+      text: "",
+      links: [],
+      events: [],
+      assets: [
+        { title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "", scormHref: "feedback/legacy.pdf" },
+      ],
+    });
+    expect(block?.assets).toEqual([{ title: "Памятка", url: "feedback/legacy.pdf" }]);
+  });
+
+  it("читает scormHref, когда url не заполнен (ранее собранные данные)", () => {
+    const block = normalizeFeedback({
+      text: "",
+      links: [],
+      events: [],
+      assets: [
+        { title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", scormHref: "feedback/legacy.pdf" },
+      ],
+    });
+    expect(block?.assets).toEqual([{ title: "Памятка", url: "feedback/legacy.pdf" }]);
   });
 
   it("отбрасывает дескриптор без обоих адресов", () => {

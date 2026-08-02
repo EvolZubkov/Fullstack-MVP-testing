@@ -139,8 +139,10 @@ export interface MeasuresInput {
  *
  * The author's editor stores the canonical `feedbackContentSchema` shape, where an
  * asset is a PDF descriptor — `{ title, fileName, mimeType, url?, scormHref? }` — whose
- * address lives in `url` (the media-library address written on upload). `scormHref` is
- * read only for the sake of data built before the media library existed.
+ * address lives in `url`: the media-library address written on upload, and the field the
+ * SCORM packer rewrites to the in-package path. `scormHref` is read ONLY for the sake of
+ * data built before the media library existed and loses to `url` wherever both are set —
+ * the packer never rewrites it, so with a fresh `url` alongside it it points nowhere.
  * `collectRecommendations` works on `RecommendationLink { title, url? }`, so the host
  * adapts before handing over; without this the «Материалы» block renders links with an
  * empty href.
@@ -163,9 +165,10 @@ export function normalizeFeedback(raw: unknown): FeedbackBlock | null {
     links: links.map((l) => ({ title: String(l.title ?? ""), ...(l.url ? { url: l.url } : {}) })),
     events: events.map((e) => ({ title: String(e.title ?? ""), ...(e.url ? { url: e.url } : {}) })),
     assets: assets
-      // `scormHref` wins where it exists: a package built before this work carries the
-      // in-package address there, and inside a package the canonical address is useless.
-      .map((a) => ({ title: String(a.title ?? ""), url: String(a.scormHref ?? a.url ?? "") }))
+      // `url` wins: inside a package it is what the packer rewrote to a working relative
+      // path, while `scormHref` is a legacy field nothing writes any more. `||` and not `??`
+      // on purpose — an empty string is an absent address, not a value.
+      .map((a) => ({ title: String(a.title ?? ""), url: String(a.url || a.scormHref || "") }))
       .filter((a) => !!a.url),
   };
 }

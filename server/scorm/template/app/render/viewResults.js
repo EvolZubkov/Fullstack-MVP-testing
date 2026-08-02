@@ -176,10 +176,10 @@ function buildResultsMeasures(scaleComputation, varComputation) {
     indicatorKind: String(params.indicatorRenderKind || 'label'),
     scales: scales,
     indicators: indicators,
-    // The stored block addresses its PDF assets through `scormHref`, the builder
-    // consumes `{ title, url }`. Normalising is NOT idempotent (a normalised block has
-    // no `scormHref` left), so the TEST-level block is normalised here — exactly once —
-    // while the fired band/outcome blocks are normalised inside the builder.
+    // The stored block addresses its PDF assets through `url` (legacy data may still
+    // carry `scormHref`), the builder consumes `{ title, url }`. The TEST-level block is
+    // normalised here — exactly once — while the fired band/outcome blocks are normalised
+    // inside the builder: a second pass would be harmless, but the rule lives in one place.
     testFeedback: TB.normalizeFeedback(TD.testFeedbackJson || null),
     hasPassThreshold: !!(passRule && passRule.type && passRule.type !== 'none'),
     blockSettings: blockSettings,

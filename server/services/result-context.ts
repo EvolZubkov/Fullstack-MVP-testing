@@ -55,7 +55,8 @@ export interface MeasuresSource {
   hasPassThreshold: boolean;
   /**
    * The test's own feedback block AS STORED (`tests.feedback_json`): text, course
-   * links, events and PDF assets whose address lives in `scormHref`. PRD-29 §7.1
+   * links, events and PDF assets whose address lives in `url` — the media-library
+   * address; the legacy `scormHref` is read only where `url` is absent. PRD-29 §7.1
    * counts the test as one of the three equal sources of recommendations, so the
    * WHOLE block travels — not just its text — and goes through the same
    * {@link normalizeFeedback} the band and outcome blocks go through.
@@ -111,9 +112,10 @@ export function buildMeasuresInput(source: MeasuresSource): MeasuresInput {
     indicatorKind: String(params.indicatorRenderKind ?? "label") as RenderKind,
     scales,
     indicators,
-    // The stored block carries PDF assets addressed by `scormHref`; the shared
-    // builder consumes `RecommendationLink`, so the test's feedback is adapted here
-    // — the SAME normaliser the fired band/outcome blocks pass through.
+    // The stored block carries PDF assets addressed by `url` (legacy data may still
+    // carry `scormHref`); the shared builder consumes `RecommendationLink`, so the
+    // test's feedback is adapted here — the SAME normaliser the fired band/outcome
+    // blocks pass through.
     testFeedback: normalizeFeedback(source.testFeedback),
     hasPassThreshold: source.hasPassThreshold,
     blockSettings: source.blockSettings,
