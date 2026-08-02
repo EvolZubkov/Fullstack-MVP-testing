@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button, Center, Stack, Text } from "@universityrt/ui-kit";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
+import { buildProtectionSpec } from "@shared/template/protection/spec";
 import { RESULTS_NAV_ACTIONS } from "@shared/template/results-nav";
 import {
   downloadAttemptReport,
@@ -171,6 +172,18 @@ function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
     <div className="tbh-inset-screen tbh-col">
       <TemplateScreen
         className="tbh-fill"
+        // PRD-34 (FR-09, FR-16): экран итогов от копирования НЕ защищается — автор,
+        // включивший показ правильных ответов, уже согласился раскрыть ключи. Водяной
+        // знак он при этом несёт, и на нём знак остаётся единственной мерой.
+        protection={buildProtectionSpec({
+          screen: "results",
+          settings: {
+            copyProtection: false,
+            watermark: (attempt as { protectionWatermark?: boolean }).protectionWatermark ?? false,
+            hideOnBlur: false,
+          },
+          stamp: attempt.id ? { id: String(attempt.id).slice(0, 6), at: new Date() } : null,
+        })}
         layout={render.layout}
         css={render.css}
         cssVars={render.cssVars}

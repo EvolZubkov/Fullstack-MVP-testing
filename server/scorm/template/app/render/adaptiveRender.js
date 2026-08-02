@@ -422,7 +422,11 @@ function renderAdaptiveResultsTemplated(app, result) {
   app.innerHTML = '';
   // Mount directly into #app so .tb-pad > .tb-scene fills the fixed stage —
   // mirrors renderGalleryPage (no wrapper div).
-  window.TBTemplate.renderScreenInto(app, { layout: state.templateLayouts['results.adaptive'], context: ctx });
+  window.TBTemplate.renderScreenInto(app, {
+    layout: state.templateLayouts['results.adaptive'],
+    context: ctx,
+    protection: buildScormProtection('results')
+  });
   // Both spellings are bound: `download-report` (unified) and the legacy `download-pdf`,
   // so an external template on either contract still produces the report.
   var report = app.querySelector('[data-action="download-report"]') || app.querySelector('[data-action="download-pdf"]');

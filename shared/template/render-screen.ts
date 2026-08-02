@@ -20,6 +20,7 @@
 import { renderTemplate } from "./dsl";
 import { renderResultField } from "./renderers";
 import { applyProtection } from "./protection/apply";
+import { applyWatermark } from "./protection/watermark";
 import type { ProtectionSpec } from "./protection/spec";
 
 /** A content template's placeholder definition (subset; spec §8.2.1). */
@@ -164,4 +165,5 @@ export function renderScreenInto(root: HTMLElement, input: ScreenRenderInput): v
   if (input.content) fillContentPlaceholders(root, input.content, input.context);
   // PRD-34 (FR-31): LAST — the slot HTML above would otherwise overwrite the marks.
   applyProtection(root, input.protection?.copy ?? null);
+  applyWatermark(root, input.protection?.watermarkText ?? null);
 }

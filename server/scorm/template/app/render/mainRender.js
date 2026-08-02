@@ -442,7 +442,11 @@ function renderSectionResults(topicId, isLast) {
     app.innerHTML = '';
     // Mount directly into #app so .tb-pad > .tb-scene fills the fixed stage
     // (section-results ring centered) — mirrors renderGalleryPage (no wrapper div).
-    TB.renderScreenInto(app, { layout: layout, context: context });
+    TB.renderScreenInto(app, {
+        layout: layout,
+        context: context,
+        protection: buildScormProtection('section-results')
+    });
     // Section-results is mid-test — reveal + paint the running countdowns.
     if (typeof revealSceneTimers === 'function') revealSceneTimers(app);
     var btn = app.querySelector('[data-action="section-continue"]');

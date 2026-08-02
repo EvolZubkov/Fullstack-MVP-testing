@@ -27,6 +27,7 @@ export { renderScreenInto } from "./render-screen";
 // поэтому пакет получает ровно то же поведение, что и веб-хост (FR-30, FR-31).
 export { buildProtectionSpec, formatWatermarkText, QUESTION_REGIONS } from "./protection/spec";
 export { applyProtection, PROTECTED_ATTR } from "./protection/apply";
+export { applyWatermark, MARK_SLOT } from "./protection/watermark";
 export {
   normalizePool,
   dropOnRight,

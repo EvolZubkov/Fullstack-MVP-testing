@@ -2874,6 +2874,12 @@ export default function TakeTestPage() {
       <div className="tbh-screen tbh-col" style={{ background: sectionResultsTpl.theme?.background }}>
         <TemplateScreen
           className="tbh-fill"
+          // PRD-34 (FR-16): итоги раздела знак несут, от копирования не защищаются.
+          protection={buildProtectionSpec({
+            screen: "section-results",
+            settings: { ...protectionSettings, copyProtection: false },
+            stamp: protectionStamp,
+          })}
           layout={sectionResultsTpl.layout}
           css={sectionResultsTpl.css}
           cssVars={sectionResultsTpl.cssVars}

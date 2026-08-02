@@ -43,7 +43,12 @@
       </div>
       <div class="tb-scene__q">
         <h2 class="tb-scene__qtitle" data-slot="question-text"></h2>
-        {{#if state.questionHint}}<span class="tb-scene__qhint" data-path="state.questionHint"></span>{{/if}}
+        <!-- PRD-34 (FR-16): строка подсказки — она же место водяного знака. Якорь пустой:
+             разметку, кегль и контраст знака даёт ЯДРО, шаблон отвечает только за место. -->
+        <div class="tb-scene__qmeta">
+          {{#if state.questionHint}}<span class="tb-scene__qhint" data-path="state.questionHint"></span>{{/if}}
+          <div data-slot="protection-mark"></div>
+        </div>
       </div>
       <div class="tb-qbody">
         <div class="tb-qbody__media" data-slot="question-media"></div>

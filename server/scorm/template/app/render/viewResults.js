@@ -271,7 +271,11 @@ function renderViewResultsTemplated(app, results) {
   app.innerHTML = '';
   // Mount directly into #app so .tb-pad > .tb-scene fills the fixed stage —
   // mirrors renderGalleryPage (a wrapper div would defeat the child-combinator rule).
-  window.TBTemplate.renderScreenInto(app, { layout: layout, context: ctx });
+  window.TBTemplate.renderScreenInto(app, {
+    layout: layout,
+    context: ctx,
+    protection: buildScormProtection('results')
+  });
   wireFinishResultsFooter(app, {
     // The screen shows the BEST saved attempt, so the report must be that attempt —
     // not whatever `downloadPDF()` would pick for the CURRENT run.
@@ -341,7 +345,11 @@ function renderResultsTemplated(app, results) {
   var layout = (typeof systemLayout === 'function') ? systemLayout('results') : state.templateLayouts['results'];
   if (typeof applySystemScreenStyles === 'function') applySystemScreenStyles('results');
   app.innerHTML = '';
-  window.TBTemplate.renderScreenInto(app, { layout: layout, context: ctx });
+  window.TBTemplate.renderScreenInto(app, {
+    layout: layout,
+    context: ctx,
+    protection: buildScormProtection('results')
+  });
   wireFinishResultsFooter(app);
 }
 
