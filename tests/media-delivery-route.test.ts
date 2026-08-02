@@ -68,6 +68,9 @@ describe("GET /api/media/:id", () => {
     expect(res.headers["content-type"]).toContain("image/png");
     expect(res.headers["cache-control"]).toContain("private");
     expect(res.headers["etag"]).toBe(`"${"c".repeat(64)}"`);
+    // Without this a shared machine serves the previous learner's file from cache:
+    // `private` still allows one per-profile cache, and logging out does not clear it.
+    expect(res.headers["vary"]).toBe("Cookie");
   });
 
   it("refuses when the rule says no", async () => {

@@ -216,6 +216,12 @@ async function deliverAsset(req: Request, res: Response, asset: MediaAsset): Pro
   const etag = `"${asset.checksum}"`;
   res.setHeader("ETag", etag);
   res.setHeader("Cache-Control", "private, max-age=3600");
+  // The answer depends on WHO asked, and `private` alone does not say so: a browser
+  // keeps one cache per profile, and logging out does not clear it. On a shared machine
+  // — a classroom being the obvious case — the next learner would be served the previous
+  // one's file straight from cache, never reaching the permission rule. Keying the entry
+  // on the session cookie makes a different session a different cache entry.
+  res.setHeader("Vary", "Cookie");
   res.setHeader("Content-Type", asset.mimeType);
   res.setHeader("Accept-Ranges", "bytes");
   res.setHeader(
