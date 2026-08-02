@@ -30,8 +30,9 @@ import {
 } from "../services/test-snapshot";
 import type { QuestionType } from "@shared/scales/engine";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
-// PRD-32: ONE address rule for a feedback attachment — the same helper the SCORM bake runs.
-import { feedbackAssets } from "@shared/template/result-context";
+// PRD-32: ONE address rule for a feedback attachment, and ONE source-priority rule for
+// the topic's feedback text — the same helpers the SCORM bake runs.
+import { feedbackAssets, topicFeedbackTexts } from "@shared/template/result-context";
 import type {
   Test,
   TestVariant,
@@ -179,48 +180,6 @@ async function resultsMaterialForAttempt(
     logger.warn("PRD-29: results material unavailable — " + (error as Error).message);
     return undefined;
   }
-}
-
-/**
- * Feedback TEXTS of the stored blocks given, in the order given, ready for
- * `TopicResult.feedbackTexts`.
- *
- * The topic and this test's section over it are two INDEPENDENT authoring points of the
- * same feedback editor, so both are due to the learner and both are kept apart as
- * separate entries — a glued string would lose the boundary the consolidated block
- * de-duplicates on. A blank text (empty, or whitespace only) contributes nothing: the
- * slot must not receive an empty paragraph. The same text written in both places is
- * stored ONCE, keeping the first occurrence — the topic, the more general source.
- */
-/**
- * The topic's feedback block to read its text from: the `feedback_json` the editor
- * writes today, or the legacy `topics.feedback` column when that text is missing.
- *
- * The fallback is not back-compat decoration. The in-service topic editor writes ONLY
- * `feedback_json`, so the legacy column still holds the whole text of every topic the
- * editor has never touched; reading just `feedback_json` there would silently drop text
- * the author did write. The SCORM bake falls back the same way, so a topic left on the
- * legacy column reads identically on both hosts.
- */
-function topicFeedbackBlock(topic: { feedbackJson?: unknown; feedback?: string | null } | undefined): unknown {
-  const json = topic?.feedbackJson as { text?: unknown } | null | undefined;
-  // The current source wins whenever it actually carries a text — a topic migrated to
-  // `feedback_json` may still drag an outdated copy in the legacy column.
-  if (json && typeof json.text === "string" && json.text.trim()) return json;
-  return { text: topic?.feedback ?? "" };
-}
-
-function feedbackTexts(...blocks: unknown[]): string[] {
-  const out: string[] = [];
-  for (const block of blocks) {
-    if (!block || typeof block !== "object") continue;
-    const text = (block as { text?: unknown }).text;
-    if (typeof text !== "string") continue;
-    const trimmed = text.trim();
-    if (!trimmed || out.includes(trimmed)) continue;
-    out.push(trimmed);
-  }
-  return out;
 }
 
 /** Fisher-Yates in-place shuffle for the server-side variant draw (PRD-11). */
@@ -1260,7 +1219,7 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
           // Same two blocks, same source: the text an author wrote for the topic and for
           // this test's section over it travels WITH the attempt, so a snapshot-pinned
           // attempt keeps the wording it was published with.
-          feedbackTexts: feedbackTexts(topicFeedbackBlock(topic), section?.feedbackJson),
+          feedbackTexts: topicFeedbackTexts(topic, section?.feedbackJson),
         },
       });
     }

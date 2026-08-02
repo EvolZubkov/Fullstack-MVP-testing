@@ -4,53 +4,10 @@ import { findEligibilityPlugin, findEligibilityConfig } from "@shared/eligibilit
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 import { buildTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
 import { parseScaleInterpretation } from "@shared/scales/interpretation";
-// PRD-32: ONE address rule for a feedback attachment — the same helper the web grader runs.
-import { feedbackAssets } from "@shared/template/result-context";
+// PRD-32: ONE address rule for a feedback attachment, and ONE source-priority rule for
+// the topic's feedback text — the same helpers the web grader runs.
+import { feedbackAssets, topicFeedbackTexts } from "@shared/template/result-context";
 import type { ReportBake } from "@shared/report/report-variants";
-
-/**
- * The topic's feedback block to read its text from: the `feedback_json` the editor
- * writes today, or the legacy `topics.feedback` column when that text is missing.
- *
- * The fallback is not back-compat decoration. The in-service topic editor writes ONLY
- * `feedback_json`, so the legacy column still holds the whole text of every topic the
- * editor has never touched; reading just `feedback_json` there would silently drop text
- * the author did write. The web grader falls back the same way
- * (`server/routes/attempts.ts`), so a topic left on the legacy column reads identically
- * on both hosts.
- */
-function topicFeedbackBlock(topic: { feedbackJson?: unknown; feedback?: string | null } | undefined): unknown {
-  const json = topic?.feedbackJson as { text?: unknown } | null | undefined;
-  // The current source wins whenever it actually carries a text — a topic migrated to
-  // `feedback_json` may still drag an outdated copy in the legacy column.
-  if (json && typeof json.text === "string" && json.text.trim()) return json;
-  return { text: topic?.feedback ?? "" };
-}
-
-/**
- * Feedback TEXTS of the stored blocks given, in the order given, ready for the
- * section's `feedbackTexts` — the SAME field name the web host stores on the attempt,
- * so the shared results builder reads one contract on both hosts.
- *
- * The topic and this test's section over it are two INDEPENDENT authoring points of the
- * same feedback editor, so both are due to the learner and both are kept apart as
- * separate entries — a glued string would lose the boundary the consolidated block
- * de-duplicates on. A blank text (empty, or whitespace only) contributes nothing: the
- * slot must not receive an empty paragraph. The same text written in both places is
- * stored ONCE, keeping the first occurrence — the topic, the more general source.
- */
-function feedbackTexts(...blocks: unknown[]): string[] {
-  const out: string[] = [];
-  for (const block of blocks) {
-    if (!block || typeof block !== "object") continue;
-    const text = (block as { text?: unknown }).text;
-    if (typeof text !== "string") continue;
-    const trimmed = text.trim();
-    if (!trimmed || out.includes(trimmed)) continue;
-    out.push(trimmed);
-  }
-  return out;
-}
 
 interface AdaptiveLevelWithLinks extends AdaptiveLevel {
   links: AdaptiveLevelLink[];
@@ -253,9 +210,9 @@ export function buildTestJson(data: ExportData): string {
       // PRD-32: attachments of the TOPIC and of THIS test's section over it, resolved
       // once per section (see where they are baked below).
       const sectionFeedbackAssets = feedbackAssets(s.topic.feedbackJson, s.feedbackJson);
-      // Feedback TEXTS of the same two authoring points, resolved by the same rule the
-      // web grader runs — topic first, then this test's section over it.
-      const sectionFeedbackTexts = feedbackTexts(topicFeedbackBlock(s.topic), s.feedbackJson);
+      // Feedback TEXTS of the same two authoring points, through the same shared rule the
+      // web grader runs — source priority and the topic-before-section order included.
+      const sectionFeedbackTexts = topicFeedbackTexts(s.topic, s.feedbackJson);
       return {
         topicId: s.topic.id,
         topicName: s.topic.name,

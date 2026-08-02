@@ -217,6 +217,56 @@ export function feedbackAssets(...blocks: unknown[]): RecommendationLink[] {
   return blocks.flatMap((block) => normalizeFeedback(block)?.assets ?? []);
 }
 
+/** Trimmed `text` of a STORED feedback block; `""` when the block carries none. */
+function blockText(block: unknown): string {
+  if (!block || typeof block !== "object") return "";
+  const text = (block as { text?: unknown }).text;
+  return typeof text === "string" ? text.trim() : "";
+}
+
+/**
+ * Feedback TEXTS due to the learner for ONE topic of ONE test, ready for
+ * {@link TopicFeedbackInput.feedbackTexts}: the topic's own text and that of this test's
+ * section over it, in that order.
+ *
+ * ONE exported rule, like {@link feedbackAssets}, because both hosts must hand the
+ * learner the SAME text: the web grader stores the result of this call with the attempt,
+ * the SCORM bake writes it into the section of `TEST_DATA`. A second copy of the rule
+ * would drift silently and surface as the two players showing different feedback — the
+ * very defect this consolidation repairs.
+ *
+ * WHERE THE TOPIC'S TEXT COMES FROM. The current source is `topics.feedback_json.text`,
+ * with the legacy `topics.feedback` column as the fallback. That fallback is not
+ * back-compat decoration: the in-service topic editor sends ONLY `feedback_json`, so the
+ * legacy column still holds the WHOLE text of every topic the editor has never touched,
+ * and reading `feedback_json` alone would silently drop what the author did write. Where
+ * both carry a text the CURRENT source wins — a topic already migrated to
+ * `feedback_json` may still drag an outdated copy in the column.
+ *
+ * A LIST and not one glued string: the topic and the section are two INDEPENDENT
+ * authoring points, and that boundary is what the consolidated recommendations block
+ * de-duplicates on. The order is load-bearing — the topic, the more general source,
+ * comes first, so its copy is the one dedup keeps. A blank text (empty, or whitespace
+ * only) contributes nothing: an empty paragraph is not a recommendation. The same
+ * sentence written in both places is returned once.
+ *
+ * @param topic The topic row: its `feedbackJson` block and legacy `feedback` column.
+ * @param sectionFeedback `test_sections.feedback_json` of THIS test's section over it.
+ */
+export function topicFeedbackTexts(
+  topic: { feedbackJson?: unknown; feedback?: string | null } | null | undefined,
+  sectionFeedback?: unknown,
+): string[] {
+  const legacy = typeof topic?.feedback === "string" ? topic.feedback.trim() : "";
+  const topicText = blockText(topic?.feedbackJson) || legacy;
+  const out: string[] = [];
+  for (const text of [topicText, blockText(sectionFeedback)]) {
+    if (!text || out.includes(text)) continue;
+    out.push(text);
+  }
+  return out;
+}
+
 /** Feedback of the level that actually fired, for the recommendations block. */
 function firedFeedback(m: MeasureInput): FeedbackBlock | null {
   const { interpretation } = m;

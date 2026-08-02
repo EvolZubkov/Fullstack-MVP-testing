@@ -79,7 +79,6 @@ function pdfStandardInput(results) {
         earnedPoints: tr.earnedPoints,
         possiblePoints: tr.possiblePoints,
         passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
-        feedback: tr.topicFeedback,
         recommendedCourses: rec.courses,
         recommendedEvents: rec.events
       };

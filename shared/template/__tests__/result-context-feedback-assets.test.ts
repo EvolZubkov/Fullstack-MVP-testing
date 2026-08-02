@@ -16,7 +16,7 @@
  * измерений, и один файл, приложенный дважды, не даёт дубля.
  */
 import { describe, it, expect } from "vitest";
-import { buildResultContext, feedbackAssets } from "../result-context";
+import { buildResultContext, feedbackAssets, topicFeedbackTexts } from "../result-context";
 
 const TOPIC_PDF = { title: "Разбор темы", url: "/api/media/aaaa" };
 const SECTION_PDF = { title: "Памятка раздела", url: "/api/media/bbbb" };
@@ -202,5 +202,35 @@ describe("feedbackAssets", () => {
 
   it("выбрасывает вложение без адреса и терпит отсутствующий блок", () => {
     expect(feedbackAssets(null, undefined, { assets: [{ title: "Не загружен" }] })).toEqual([]);
+  });
+});
+
+describe("topicFeedbackTexts", () => {
+  // Правило приоритета источников живёт ЗДЕСЬ в одном экземпляре: и веб-оценка
+  // (`server/routes/attempts.ts`), и сборка пакета (`server/scorm/builders/test-json.ts`)
+  // зовут эту функцию. Вторая копия правила разъехалась бы молча, а проявилась бы
+  // расхождением хостов — тем самым дефектом, который эта работа и чинит.
+  it("отдаёт текст темы, затем текст раздела", () => {
+    expect(topicFeedbackTexts({ feedbackJson: { text: "Текст темы" } }, { text: "  Текст раздела  " }))
+      .toEqual(["Текст темы", "Текст раздела"]);
+  });
+
+  it("читает легаси-колонку, когда feedback_json темы текста не несёт", () => {
+    // Нынешний редактор темы шлёт только `feedback_json`, поэтому у тем, которых он не
+    // касался, весь текст лежит в колонке — молчать по ним значит терять написанное.
+    expect(topicFeedbackTexts({ feedbackJson: null, feedback: "Легаси-текст" })).toEqual(["Легаси-текст"]);
+    expect(topicFeedbackTexts({ feedbackJson: { text: "   " }, feedback: "Легаси-текст" })).toEqual(["Легаси-текст"]);
+  });
+
+  it("при двух заполненных источниках побеждает действующий", () => {
+    expect(topicFeedbackTexts({ feedbackJson: { text: "Новый текст" }, feedback: "Устаревшая копия" }))
+      .toEqual(["Новый текст"]);
+  });
+
+  it("не кладёт пустых строк и не задваивает один и тот же текст", () => {
+    expect(topicFeedbackTexts({ feedbackJson: { text: "Повторим тему" } }, { text: "Повторим тему" }))
+      .toEqual(["Повторим тему"]);
+    expect(topicFeedbackTexts({ feedbackJson: null, feedback: "   " }, { text: "" })).toEqual([]);
+    expect(topicFeedbackTexts(null, null)).toEqual([]);
   });
 });
