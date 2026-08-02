@@ -24,6 +24,9 @@
  *      canonical address the server returned (PRD-32). The local DraftAsset type extends
  *      FeedbackAsset with UI-only fields (`size` for display, `uid` for row identity); both
  *      are stripped before onSave so callers only receive canonical FeedbackAsset fields.
+ *      A descriptor that carries no address at all was saved before PRD-32 — its file was
+ *      never stored anywhere and the learner gets nothing — so the row says «Файл не загружен»
+ *      and offers to upload the file into it, keeping the title the author wrote.
  *
  * Footer: «Отменить» (secondary) + «Сохранить» (primary).
  * The modal owns a draft copy of the values; on Save it emits via `onSave`.
@@ -162,6 +165,12 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
 
   /** Server-side rejections and network failures, shown in the same banner slot. */
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
+  /**
+   * Index of the descriptor being re-uploaded, or `null` for a plain add. Descriptors saved
+   * before PRD-32 have no address at all: the file was never stored, so the author is shown
+   * the truth and offered to upload it now.
+   */
+  const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
   /** Count of uploads still in flight — keeps «Сохранить» busy so a half-uploaded list is not saved. */
   const [uploadsInFlight, setUploadsInFlight] = useState(0);
   /**
@@ -187,6 +196,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
     setUploadErrors([]);
     setOversizedFiles([]);
     setUploadsInFlight(0);
+    setReplaceIndex(null);
     if (newVal.format === "richText") {
       requestAnimationFrame(() => {
         if (rteRef.current) rteRef.current.innerHTML = newVal.text;
@@ -298,8 +308,20 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
     }
   }
 
-  /** Handle file picker change: validate size, upload, then build draft assets. */
+  /**
+   * Handle file picker change: validate size, upload, then build draft assets.
+   *
+   * When the pick was started from a fileless row («Загрузить файл»), the FIRST stored file
+   * takes that row's place — the author is filling in a promise the row already makes, so the
+   * title they wrote there stays and only the file behind it changes. Any further files in the
+   * same selection are plain additions. The row is addressed by its `uid`, not by the index
+   * captured at pick time: it may be deleted or reordered while an upload is in flight, and a
+   * stale index would then overwrite somebody else's row.
+   */
   async function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
+    /** `uid` of the row to fill in, or `null` once it is filled (or was never targeted). */
+    let pendingReplaceUid =
+      replaceIndex === null ? null : draft.assets[replaceIndex]?.uid ?? null;
     const files = Array.from(e.target.files ?? []);
     const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
     const oversized = files.filter((f) => f.size > MAX_BYTES);
@@ -312,6 +334,9 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
     const valid = files.filter((f) => f.size <= MAX_BYTES);
     // Reset before awaiting: the input must be re-selectable even while an upload is running.
     e.target.value = "";
+    // The aim is spent by this pick, whatever it turns out to hold: leaving it set would turn
+    // the next plain «Загрузить PDF» into a replacement of a row nobody pointed at.
+    setReplaceIndex(null);
     if (valid.length === 0) return;
 
     const visit = visitRef.current;
@@ -324,24 +349,32 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
       if (visitRef.current !== visit) return;
       setUploadsInFlight((n) => n - 1);
       if (!result.ok) {
+        // A rejected file leaves the fileless row as it was, so the NEXT file may still fill it.
         setUploadErrors((prev) => [...prev, result.error]);
         continue;
       }
-      setDraft((d) => ({
-        ...d,
-        assets: [
-          ...d.assets,
-          {
-            uid: nextDraftUid(),
-            id: result.id,
-            title: file.name.replace(/\.pdf$/i, ""),
-            fileName: file.name,
-            mimeType: "application/pdf" as const,
-            size: file.size,
-            url: result.url,
-          },
-        ],
-      }));
+      // Captured per iteration: the updater below runs on a later render, so reading the
+      // mutable variable inside it would see whatever the next iteration left there.
+      const replaceUid = pendingReplaceUid;
+      pendingReplaceUid = null;
+      setDraft((d) => {
+        const stored: DraftAsset = {
+          uid: nextDraftUid(),
+          id: result.id,
+          title: file.name.replace(/\.pdf$/i, ""),
+          fileName: file.name,
+          mimeType: "application/pdf" as const,
+          size: file.size,
+          url: result.url,
+        };
+        const at = replaceUid === null ? -1 : d.assets.findIndex((a) => a.uid === replaceUid);
+        // Row gone (deleted mid-upload) → nothing to replace, so it is a plain addition.
+        if (at < 0) return { ...d, assets: [...d.assets, stored] };
+        const assets = [...d.assets];
+        // Same row, same author-written title — only the file behind it is new.
+        assets[at] = { ...stored, uid: d.assets[at].uid, title: d.assets[at].title };
+        return { ...d, assets };
+      });
     }
   }
 
@@ -704,6 +737,31 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
                           {asset.fileName}
                           {asset.size ? ` · ${formatBytes(asset.size)}` : ""}
                         </div>
+                        {/* Saved before PRD-32: the descriptor names a file that was never
+                            stored, so the learner gets nothing. Say so and offer to fix it. */}
+                        {!asset.url && !asset.scormHref && (
+                          <>
+                            <div
+                              className="tb-feedback-editor__asset-missing"
+                              data-testid={`feedback-editor-asset-missing-${i}`}
+                            >
+                              Файл не загружен
+                            </div>
+                            <div>
+                              <Button
+                                variant="secondary"
+                                size="s"
+                                onClick={() => {
+                                  setReplaceIndex(i);
+                                  fileInputRef.current?.click();
+                                }}
+                                data-testid={`feedback-editor-asset-replace-${i}`}
+                              >
+                                Загрузить файл
+                              </Button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                     <IconButton
@@ -729,7 +787,12 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
                 variant="secondary"
                 size="s"
                 leadingIcon={<Plus size={12} aria-hidden="true" />}
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => {
+                  // Clears an aim taken at a fileless row and then abandoned — this button
+                  // adds a file, it never replaces one.
+                  setReplaceIndex(null);
+                  fileInputRef.current?.click();
+                }}
                 data-testid="feedback-editor-asset-upload"
               >
                 Загрузить PDF

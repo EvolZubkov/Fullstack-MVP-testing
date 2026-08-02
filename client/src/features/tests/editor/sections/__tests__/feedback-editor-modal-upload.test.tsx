@@ -40,6 +40,32 @@ function open(onSave: (value: unknown) => void) {
   return render(modal(true, onSave));
 }
 
+/**
+ * A descriptor as it was saved before PRD-32: a title and a file name, but no address —
+ * the file itself was dropped on save and exists nowhere.
+ */
+function legacyAsset() {
+  return {
+    title: "Памятка по ИБ",
+    fileName: "memo.pdf",
+    mimeType: "application/pdf" as const,
+  };
+}
+
+/** Opens the modal over a value that already holds the fileless descriptor above. */
+function openWithLegacyAsset(onSave: (value: unknown) => void) {
+  return render(
+    <FeedbackEditorModal
+      open
+      title="Обратная связь"
+      value={{ format: "plain", text: "", links: [], assets: [legacyAsset()], events: [] }}
+      onCancel={() => {}}
+      onSave={onSave}
+      testId="fb"
+    />,
+  );
+}
+
 /** A PDF of the given name; size stays well under the 5 MB limit. */
 function pdf(name: string): File {
   return new File(["%PDF-1.4"], name, { type: "application/pdf" });
@@ -167,6 +193,110 @@ describe("FeedbackEditorModal — загрузка вложения", () => {
     });
     expect(screen.queryByTestId("feedback-editor-asset-title-0")).toBeNull();
     expect(screen.getByTestId("feedback-editor-save")).not.toBeDisabled();
+  });
+
+  it("дескриптор без адреса помечен и заменяется загруженным файлом, название автора остаётся", async () => {
+    const onSave = vi.fn();
+    openWithLegacyAsset(onSave);
+
+    // The author must see that this row promises a file that does not exist.
+    expect(screen.getByTestId("feedback-editor-asset-missing-0").textContent).toMatch(
+      /файл не загружен/i,
+    );
+
+    fireEvent.click(screen.getByTestId("feedback-editor-asset-replace-0"));
+    pick(pdf("new-memo.pdf"));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("feedback-editor-asset-missing-0")).toBeNull(),
+    );
+    // The row was replaced, not doubled.
+    expect(screen.queryByTestId("feedback-editor-asset-title-1")).toBeNull();
+
+    fireEvent.click(screen.getByText("Сохранить"));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assets: [
+          {
+            id: "asset-1",
+            // The author's own title survives the re-upload: only the file changed.
+            title: "Памятка по ИБ",
+            fileName: "new-memo.pdf",
+            mimeType: "application/pdf",
+            url: "/api/media/asset-1",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("дескриптор, у которого адрес только внутри пакета, не помечается", () => {
+    render(
+      <FeedbackEditorModal
+        open
+        title="Обратная связь"
+        value={{
+          format: "plain",
+          text: "",
+          links: [],
+          // A packaged descriptor has no `url`, only the in-package path — the file exists.
+          assets: [{ ...legacyAsset(), scormHref: "assets/feedback/memo.pdf" }],
+          events: [],
+        }}
+        onCancel={() => {}}
+        onSave={vi.fn()}
+        testId="fb"
+      />,
+    );
+
+    expect(screen.queryByTestId("feedback-editor-asset-missing-0")).toBeNull();
+    expect(screen.queryByTestId("feedback-editor-asset-replace-0")).toBeNull();
+  });
+
+  it("в режиме замены первый файл встаёт на место строки, остальные добавляются в конец", async () => {
+    const onSave = vi.fn();
+    openWithLegacyAsset(onSave);
+
+    fireEvent.click(screen.getByTestId("feedback-editor-asset-replace-0"));
+    pick(pdf("first.pdf"), pdf("second.pdf"));
+
+    await screen.findByTestId("feedback-editor-asset-title-1");
+    expect(screen.queryByTestId("feedback-editor-asset-title-2")).toBeNull();
+
+    fireEvent.click(screen.getByText("Сохранить"));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assets: [
+          expect.objectContaining({ title: "Памятка по ИБ", fileName: "first.pdf" }),
+          expect.objectContaining({ title: "second", fileName: "second.pdf" }),
+        ],
+      }),
+    );
+  });
+
+  it("«Загрузить PDF» после отменённой замены добавляет файл, а не замещает строку", async () => {
+    const onSave = vi.fn();
+    openWithLegacyAsset(onSave);
+
+    // The author aims at the empty row, then changes their mind and picks the plain add.
+    fireEvent.click(screen.getByTestId("feedback-editor-asset-replace-0"));
+    fireEvent.click(screen.getByTestId("feedback-editor-asset-upload"));
+    pick(pdf("extra.pdf"));
+
+    await screen.findByTestId("feedback-editor-asset-title-1");
+    // The fileless row is untouched and still flagged.
+    expect(screen.getByTestId("feedback-editor-asset-missing-0")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Сохранить"));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assets: [
+          // Compared whole: the untouched row must not have picked up an address.
+          { title: "Памятка по ИБ", fileName: "memo.pdf", mimeType: "application/pdf" },
+          expect.objectContaining({ title: "extra", fileName: "extra.pdf", url: "/api/media/asset-1" }),
+        ],
+      }),
+    );
   });
 
   it("переоткрытие убирает баннер отказа от прошлого визита", async () => {
