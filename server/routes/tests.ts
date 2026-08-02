@@ -34,7 +34,7 @@ import {
 import { RequiredFieldsMissingError } from "../services/required-fields-validator";
 import { FlowPolicyValidationError } from "../services/flow-policy-validator";
 import { buildTestScoringContext } from "../services/effective-scoring";
-import { syncEntityUsages } from "../services/media/usage-index";
+import { syncEntityUsages, testFeedbackUsageEntity } from "../services/media/usage-index";
 
 // ─── Validation schemas (PRD-7 §5.4) ─────────────────────────────────────────
 
@@ -683,6 +683,22 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
     // PRD-13: the creator becomes the test owner.
     await storage.setTestOwner(test.id, req.session.userId ?? null);
 
+    // Медиатека: сбой индексации не должен стоить автору его правки (тот же довод, что и на
+    // пути сохранения оформления). Индексируется именно блок обратной связи, а не вся строка
+    // теста: оформление уже учтено под `test_design`, и двойной учёт дал бы две строки на файл.
+    // Разделы индексируются ТЕМ ЖЕ вызовом (см. `testFeedbackUsageEntity`): у них нет своего
+    // ключа в индексе, а раздельные вызовы затёрли бы строки друг друга. Разделы перечитываются
+    // из хранилища — присланные payload'ы ещё не имеют идентификаторов и порядка вставки.
+    try {
+      await syncEntityUsages(
+        "test_feedback",
+        test.id,
+        testFeedbackUsageEntity(feedbackJson ?? null, await storage.getTestSections(test.id)),
+      );
+    } catch (error) {
+      logger.error(`Media usage sync failed for test feedback ${test.id}: ${(error as Error).message}`, "tests");
+    }
+
     const full = await loadFullTest(test.id);
     res.status(201).json(full ?? test);
   } catch (error) {
@@ -1022,6 +1038,26 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       expectedVersion,
     });
 
+    // Медиатека: индексируется СОХРАНЁННОЕ значение (`test.feedbackJson` — строка, которую
+    // вернул апдейт), а не присланное: тело запроса может вовсе не нести `feedbackJson`,
+    // и служба сохранения тогда оставляет прежний блок нетронутым — по присланному
+    // `undefined` индекс обнулился бы, хотя вложение в тесте осталось. Сбой индексации
+    // не должен стоить автору его правки: недостающая строка безопасна (она отказывает
+    // в доступе, а не выдаёт лишнее) и чинится пересборкой.
+    //
+    // Разделы (`test_sections.feedback_json`) едут ТЕМ ЖЕ вызовом и под тем же ключом теста
+    // (см. `testFeedbackUsageEntity`); перечитываются ПОСЛЕ сохранения — служба пересоздаёт
+    // строки разделов, поэтому `existingSections`, прочитанные до save, здесь уже неверны.
+    try {
+      await syncEntityUsages(
+        "test_feedback",
+        test.id,
+        testFeedbackUsageEntity(test.feedbackJson ?? null, await storage.getTestSections(test.id)),
+      );
+    } catch (error) {
+      logger.error(`Media usage sync failed for test feedback ${test.id}: ${(error as Error).message}`, "tests");
+    }
+
     const full = await loadFullTest(test.id);
     res.json(full ?? test);
   } catch (error) {
@@ -1194,11 +1230,17 @@ router.delete("/:id", requirePermission("tests.delete"), requireTestScope("delet
     // exists. content_pages rows are removed by the DB cascade on delete, but
     // their `content_page`-scoped usage rows are equally orphaned — the full
     // re-sync (Задача 11) is what ultimately reconciles those; here we clear
-    // only the entity this route owns directly (`test_design`).
+    // only the entities this route owns directly. Besides `test_design` those are the
+    // three feedback kinds keyed by the TEST id: the test's own feedback block, and the
+    // scale/indicator sets, which are indexed set-wide under the test rather than per row
+    // (spec §6.1) — their rows would outlive the test with no owner left to clear them.
     try {
       await syncEntityUsages("test_design", req.params.id, null);
+      await syncEntityUsages("test_feedback", req.params.id, null);
+      await syncEntityUsages("scale_feedback", req.params.id, null);
+      await syncEntityUsages("variable_feedback", req.params.id, null);
     } catch (error) {
-      logger.error(`Media usage sync failed for test design ${req.params.id}: ${(error as Error).message}`, "tests");
+      logger.error(`Media usage sync failed for test ${req.params.id}: ${(error as Error).message}`, "tests");
     }
 
     res.status(204).end();

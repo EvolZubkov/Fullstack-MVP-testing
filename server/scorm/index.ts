@@ -6,6 +6,7 @@ import { buildMetadataXml } from "./builders/metadata";
 import { escapeXml } from "./utils/escape";
 import { readAsset } from "./assets/read-asset";
 import { extractEmbeddedMediaIntoAssets } from "./builders/media-assets";
+import { registryMediaResolver } from "./builders/media-resolver";
 import { copyDirToFiles, getTemplatesRootDir } from "./builders/template-copy";
 import { getSharedRuntimeBundle } from "./builders/shared-runtime";
 import { readVendorDsCss, readPackageFontFiles, assemblePackageStyles } from "./builders/ds-styles";
@@ -55,6 +56,9 @@ function tryReadAsset(paths: string[]): string {
  * layout, so swapping in the standard template's identical generic layout would buy
  * nothing; their real fallback is at the variant level (`variant-binding.ts`).
  */
+/** How many lost media addresses the export log spells out before summarising the rest. */
+const MISSING_MEDIA_LOGGED = 5;
+
 /** Where the ACTIVE template's own files sit inside the package. */
 const PACKAGE_TEMPLATE_DIR = "template";
 /** Where the bundled `default` sits when the active template needs fallbacks (G21). */
@@ -198,7 +202,22 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   const runtimeJs = readAsset("runtime.js");
 
   const testObj = JSON.parse(testJson);
-  const { testObj: patchedTestObj, assets } = extractEmbeddedMediaIntoAssets(testObj);
+  const { testObj: patchedTestObj, assets, missing } = await extractEmbeddedMediaIntoAssets(testObj, {
+    resolveRef: registryMediaResolver,
+  });
+  // Media lost silently is why the packing defect lived unnoticed: the address is blanked, the
+  // file is not in the package, and without this line nobody would learn of it. Only the first
+  // few are spelled out — the count is the signal, and a broken test can hold dozens.
+  if (missing.length > 0) {
+    const shown = missing.slice(0, MISSING_MEDIA_LOGGED);
+    const rest = missing.length - shown.length;
+    logger.warn(
+      `SCORM package ${data.test.id}: ${missing.length} media reference(s) lost: ` +
+        shown.join("; ") +
+        (rest > 0 ? `; …and ${rest} more` : ""),
+      "scorm-export",
+    );
+  }
 
   const appTpl = readAsset("app.js");
   const testJsonB64 = Buffer.from(JSON.stringify(patchedTestObj), "utf8").toString("base64");

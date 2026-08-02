@@ -30,6 +30,8 @@ import {
 } from "../services/test-snapshot";
 import type { QuestionType } from "@shared/scales/engine";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
+// PRD-32: ONE address rule for a feedback attachment — the same helper the SCORM bake runs.
+import { feedbackAssets } from "@shared/template/result-context";
 import type {
   Test,
   TestVariant,
@@ -127,9 +129,10 @@ async function sourceForStart(
 }
 
 /**
- * PRD-29: the measurement material of the results screen — the test's scale and
- * indicator ROWS, the settings of its «Итоги» variant, whether the test has a pass
- * threshold at all, and the test's own feedback block.
+ * The material the results screen is built from beyond the saved result itself — the
+ * test's scale and indicator ROWS (PRD-29), the settings of its «Итоги» variant,
+ * whether the test has a pass threshold at all, and the test's OWN feedback block
+ * (PRD-32).
  *
  * Rows are read through the SAME source the attempt was graded against (the one
  * `loadScoringConfig` takes): an attempt pinned to a snapshot (PRD-15 block B) reads
@@ -138,10 +141,15 @@ async function sourceForStart(
  * gathered here — they are already in the saved `AttemptResult` and must never be
  * recomputed.
  *
- * `undefined` for a test with neither scales nor indicators: the results context then
- * gains no new field at all.
+ * Gathered for EVERY standard attempt, including a test with neither scales nor
+ * indicators. It used to bail out early in that case, and the test's feedback block —
+ * read further down, in the same function — was lost with it: the commonest
+ * configuration in the product showed no recommendations at all. Whether the screen
+ * gets measurement blocks is decided in ONE place, `buildResultContext`
+ * (`server/services/result-context.ts`), off the emptiness of these two arrays; this
+ * function only reads. `undefined` therefore means «could not be read», nothing else.
  */
-async function measuresForAttempt(
+async function resultsMaterialForAttempt(
   attempt: { testId: string; snapshotId: string | null },
   liveTest: Test | undefined,
 ): Promise<MeasuresSource | undefined> {
@@ -151,7 +159,6 @@ async function measuresForAttempt(
       src.getScales(attempt.testId),
       src.getResultVariables(attempt.testId),
     ]);
-    if (scales.length === 0 && variables.length === 0) return undefined;
     const deliveredTest = (await src.getTest(attempt.testId)) ?? liveTest;
     const pages = await src.getContentPages(attempt.testId);
     // No `results` page, or a page with no settings: all three blocks stay on
@@ -166,10 +173,10 @@ async function measuresForAttempt(
       testFeedback: (deliveredTest?.feedbackJson as Partial<FeedbackContent> | null) ?? null,
     };
   } catch (error) {
-    // The results screen must not fail because the measurement material could not be
-    // read: the score, the per-topic rows and the report do not depend on it. The
-    // learner then sees the screen a test without measurements would produce.
-    logger.warn("PRD-29: measures source unavailable — " + (error as Error).message);
+    // The results screen must not fail because this material could not be read: the
+    // score, the per-topic rows and the report do not depend on it. The learner then
+    // sees the screen a test without measurements and without feedback would produce.
+    logger.warn("PRD-29: results material unavailable — " + (error as Error).message);
     return undefined;
   }
 }
@@ -1173,12 +1180,19 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
     const aggSections: AggregateSection<{
       recommendedCourses: { title: string; url: string }[];
       recommendedEvents: { title: string }[];
+      recommendedAssets: { title: string; url: string }[];
     }>[] = [];
     for (const variantSection of variant.sections) {
       const section = sectionMap.get(variantSection.topicId);
       const questions = await src.getQuestionsByIds(variantSection.questionIds);
       const courses = await src.getTopicCourses(variantSection.topicId);
       const events = await src.getTopicEvents(variantSection.topicId);
+      // PRD-32: PDF attachments of the topic AND of this test's section over it — two
+      // different storage points, both authored through the same feedback editor, both
+      // due to the learner. Read from the SAME source the attempt is graded against, so
+      // a snapshot-pinned attempt hands out the materials that were published with it.
+      const topic = await src.getTopic(variantSection.topicId);
+      const feedbackAttachments = feedbackAssets(topic?.feedbackJson, section?.feedbackJson);
       aggSections.push({
         topicId: variantSection.topicId,
         topicName: variantSection.topicName,
@@ -1199,6 +1213,7 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
         extra: {
           recommendedCourses: courses.map((c) => ({ title: c.title, url: c.url })),
           recommendedEvents: events.map((e) => ({ title: e.title })),
+          recommendedAssets: feedbackAttachments.map((a) => ({ title: a.title, url: a.url ?? "" })),
         },
       });
     }
@@ -1222,6 +1237,7 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
       passRule: t.passRule as PassRule | null,
       recommendedCourses: t.extra!.recommendedCourses,
       recommendedEvents: t.extra!.recommendedEvents,
+      recommendedAssets: t.extra!.recommendedAssets,
     }));
 
     // PRD-12: graded namespaces (scales PRD-5 + result variables PRD-2) via the
@@ -1322,7 +1338,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
     let reportRender: ReturnType<typeof readReportRenderPayload> = null;
     // PRD-35: измерения нужны не только экрану, но и ОТЧЁТУ, который собирается на
     // клиенте. Объявлены здесь, а не внутри ветки экрана, чтобы уехать в ответ.
-    let measures: Awaited<ReturnType<typeof measuresForAttempt>> | undefined;
+    let measures: Awaited<ReturnType<typeof resultsMaterialForAttempt>> | undefined;
     if (resultJson && Array.isArray(resultJson.topicResults)) {
       const templateId = ((test?.designSettingsJson as any)?.templateId as string) || "default";
       // Learner-facing render: never serve a non-active template, and when the
@@ -1332,10 +1348,18 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       // Branding/cssVars resolve against the ACTIVE template manifest even when the
       // results layout falls back to `default` (active template owns no `results`).
       const paramsDir = await resolveTemplateDir(templateId, { activeOnly: true });
-      // PRD-29: the measurement blocks (scales / indicators / recommendations). Only
-      // for a STANDARD result — an adaptive one composes its own levels and takes no
-      // measures — and only for a test that actually defines any.
-      measures = resultJson.mode === "adaptive" ? undefined : await measuresForAttempt(attempt, test);
+      // Материал экрана итогов: шкалы/показатели (PRD-29) И обратная связь теста
+      // (PRD-32). Только для СТАНДАРТНОГО результата — адаптивный собирает свои уровни
+      // и материала не берёт. Собирается для ЛЮБОГО стандартного теста, в том числе без
+      // измерений: обратная связь теста ему положена ровно так же, а решение «есть ли
+      // что показывать из измерений» принимает `buildResultContext` — одно, в одном месте.
+      const material =
+        resultJson.mode === "adaptive" ? undefined : await resultsMaterialForAttempt(attempt, test);
+      // В ОТВЕТ едут только настоящие измерения: по ним клиент печатает шкалы и радар
+      // в отчёте, и пустой набор заставил бы его рисовать блок измерений у теста,
+      // который их не объявляет.
+      measures =
+        material && (material.scales.length > 0 || material.variables.length > 0) ? material : undefined;
       render = readResultsRenderPayload(
         dir,
         resultJson,
@@ -1343,7 +1367,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
         test?.designSettingsJson as any,
         paramsDir,
         undefined,
-        measures,
+        material,
       );
       // File-level fallback (PRD-1 §4.3.2, PRD-3 NFR-06): a template that declares a
       // `results` variant but ships no results layout still renders — from the
@@ -1358,7 +1382,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
             test?.designSettingsJson as any,
             paramsDir,
             undefined,
-            measures,
+            material,
           );
         }
       }

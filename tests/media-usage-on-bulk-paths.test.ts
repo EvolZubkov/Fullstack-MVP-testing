@@ -224,7 +224,11 @@ describe("POST /api/topics/:id/duplicate -> media usage index", () => {
     expect(res.status).toBe(201);
     expect(syncEntityUsagesMock).toHaveBeenCalledWith("question", "q-copy-1", dup1);
     expect(syncEntityUsagesMock).toHaveBeenCalledWith("question", "q-copy-2", dup2);
-    expect(syncEntityUsagesMock).toHaveBeenCalledTimes(2);
+    // The copy is a NEW topic pointing at the same feedback files, so it needs its own
+    // `topic_feedback` row (PRD-32) — here the source carries no feedback, so the row set
+    // is empty, but the call must happen or the copy's attachments would be refused.
+    expect(syncEntityUsagesMock).toHaveBeenCalledWith("topic_feedback", "t-copy", null);
+    expect(syncEntityUsagesMock).toHaveBeenCalledTimes(3);
   });
 
   it("404 when the source topic is gone — nothing to index", async () => {

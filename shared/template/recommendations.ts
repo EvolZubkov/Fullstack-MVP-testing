@@ -2,17 +2,20 @@
  * @module shared/template/recommendations
  *
  * Collects the recommendations that fired into the ONE block at the bottom of the
- * results screen. Three sources feed it — the test's own feedback, the outcome of a
- * result variable, and the band of each scale — and a measurement test easily fires
- * all of them at once. Rendering each in place would scatter four partly-overlapping
- * lists across the screen, so they are merged instead.
+ * results screen. Four sources feed it — the test's own feedback, the outcome of a
+ * result variable, the band of each scale, and the attachments of the topics/sections
+ * the attempt covered (PRD-32) — and a measurement test easily fires all of them at
+ * once. Rendering each in place would scatter partly-overlapping lists across the
+ * screen, so they are merged instead.
  *
  * The block is structured by RESOURCE TYPE, not by cause: which level produced a
  * given recommendation is carried by its own wording, and a "because your exhaustion
- * is high" caption would add noise without information.
+ * is high" caption would add noise without information. A topic's attachment is no
+ * exception — it joins the same «Материалы» list rather than opening a per-topic one.
  *
  * Order inside each list follows the caller's source order (test, then indicator,
- * then scales), so the general precedes the specific and dedup keeps the general copy.
+ * then scales, then topics/sections), so the general precedes the specific and dedup
+ * keeps the general copy.
  *
  * Pure — no DOM, no Node.
  */

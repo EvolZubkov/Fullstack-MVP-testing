@@ -884,7 +884,18 @@ export const feedbackAssetSchema = z.object({
   title: z.string().min(1),
   fileName: z.string().min(1),
   mimeType: z.literal("application/pdf"),
-  /** Filled by backend when the asset is persisted to SCORM (decisions.md §6.5). */
+  /**
+   * Canonical media-library address (`/api/media/<id>`). PRD-32 contract, wired up by the
+   * later tasks of that work: this is the field the editor WRITES on upload and the field
+   * the SCORM packer RESOLVES to an in-package path. A plain string on purpose — the media
+   * walker recognises addresses inside any field, so the usage index and the packer need no
+   * special branch here.
+   */
+  url: z.string().optional(),
+  /**
+   * Read-only legacy field: packages exported before the media library existed carry the
+   * in-package address here. New code does not write it — the address belongs in `url`.
+   */
   scormHref: z.string().optional(),
 });
 
@@ -999,6 +1010,12 @@ export const topicResultSchema = z.object({
   // TD-02: recommended events for a failed topic (url optional). `.default([])`
   // keeps legacy stored results (without the field) valid.
   recommendedEvents: z.array(z.object({ title: z.string(), url: z.string().optional() })).default([]),
+  // PRD-32: PDF attachments of the topic (`topics.feedback_json`) and of this test's
+  // section over it (`test_sections.feedback_json`), addresses already normalised at
+  // grading time. Stored WITH the attempt, like the courses above: the results screen
+  // renders from the saved result, and re-reading live content would hand a past
+  // attempt today's materials. `.default([])` keeps attempts graded before PRD-32 valid.
+  recommendedAssets: z.array(z.object({ title: z.string(), url: z.string() })).default([]),
 });
 
 export const attemptResultSchema = z.object({
@@ -1886,7 +1903,16 @@ export const mediaUsages = pgTable("media_usages", {
   // not a cascade mechanism.
   assetId: varchar("asset_id", { length: 36 }).notNull().references(() => mediaAssets.id),
   entityType: text("entity_type", {
-    enum: ["question", "content_page", "test_design", "test_feedback", "topic_feedback", "scale_feedback", "snapshot"],
+    enum: [
+      "question",
+      "content_page",
+      "test_design",
+      "test_feedback",
+      "topic_feedback",
+      "scale_feedback",
+      "variable_feedback",
+      "snapshot",
+    ],
   }).notNull(),
   entityId: varchar("entity_id", { length: 36 }).notNull(),
   field: text("field").notNull(),

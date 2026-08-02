@@ -10,8 +10,16 @@
  * `server/storage/topics-repository.ts`'s cascades used to leave behind before the route
  * handlers started handing the cascaded ids to `clearCascadedUsages`; a full reindex is the
  * backstop for anything that still slips through.
+ *
+ * Since PRD-32 the walk also covers the feedback blocks — `test_feedback`, `topic_feedback`
+ * and the test-wide `scale_feedback`/`variable_feedback` sets — so this suite exercises them
+ * against real SQL in both directions: an attachment written WITHOUT the indexing route (the
+ * Excel import and friends) gains its rows, and rows whose owning test or topic is gone lose
+ * theirs.
  */
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from "vitest";
+import { randomUUID } from "crypto";
+import { tests } from "@shared/schema";
 import { createHarness, type Harness } from "./db-harness";
 
 const h = vi.hoisted(() => ({ current: null as Harness | null }));
@@ -104,9 +112,63 @@ describe("reindexAllUsages — through the real facade against pglite", () => {
 
     const report = await reindexAllUsages();
 
-    expect(report.entities).toBe(1);
+    // Question + topic: since PRD-32 the walk visits topics too (a topic carries its own
+    // `topic_feedback` media), so the topic this fixture creates is an entity of its own.
+    expect(report.entities).toBe(2);
     const usages = await storage.getMediaUsagesByAsset(asset.id);
     expect(usages).toHaveLength(1);
     expect(usages[0].entityId).toBe(question.id);
+  });
+
+  it("picks up the PRD-32 feedback blocks of a test, a topic, the scale set and the indicator set", async () => {
+    // The whole point of the rebuild for these four types: the attachment was written into
+    // storage WITHOUT the route that indexes it (this fixture stands in for the Excel import
+    // and any other direct write), so nothing but the rebuild can produce the rows.
+    const asset = await storage.createMediaAsset(assetPayload({
+      mimeType: "application/pdf", kind: "document", originalName: "memo.pdf",
+    }));
+    const feedback = {
+      assets: [
+        { title: "Памятка", fileName: "memo.pdf", mimeType: "application/pdf", url: `/api/media/${asset.id}` },
+      ],
+    };
+    // No `createTest` on the facade — the test row goes in directly, the same way the other
+    // integration suites build one.
+    const testId = randomUUID();
+    await h.current!.db.insert(tests).values({
+      id: testId, title: "T", overallPassRuleJson: { type: "percent", value: 80 },
+      feedbackJson: feedback,
+    } as never);
+    const topic = await storage.createTopic({ name: "T", feedbackJson: feedback } as never);
+    await storage.createScale({
+      testId, key: "s", label: "S", type: "number",
+      configJson: { interpretation: { bands: [{ min: 0, max: 10, feedback }] } },
+    } as never);
+    await storage.createResultVariable({
+      testId, name: "v", label: "V", type: "number", formula: "1",
+      configJson: { feedback },
+    } as never);
+
+    await reindexAllUsages();
+
+    const rows = await storage.getMediaUsagesByAsset(asset.id);
+    const byType = new Map(rows.map((u) => [u.entityType, u.entityId]));
+    expect(byType.get("test_feedback")).toBe(testId);
+    expect(byType.get("topic_feedback")).toBe(topic.id);
+    // Keyed by the TEST, not by the scale/indicator row: the indexing unit is the whole set
+    // (spec §6.1).
+    expect(byType.get("scale_feedback")).toBe(testId);
+    expect(byType.get("variable_feedback")).toBe(testId);
+    // Exactly four rows, one per type — the design settings hold nothing, so `test_design`
+    // must NOT also claim this file (no double counting of the same asset under one test).
+    expect(rows).toHaveLength(4);
+    expect(byType.size).toBe(4);
+
+    // And the opposite drift: the owners are gone (again bypassing the write-time cleanup),
+    // so the rebuild must drop every one of those rows.
+    await storage.deleteTest(testId);
+    await storage.deleteTopic(topic.id);
+    await reindexAllUsages();
+    expect(await storage.getMediaUsagesByAsset(asset.id)).toHaveLength(0);
   });
 });

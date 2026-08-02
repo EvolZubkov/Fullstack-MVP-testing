@@ -164,6 +164,13 @@ router.post("/", requirePermission("topics.manage"), async (req, res) => {
       folderId,
       createdBy: ownerId,
     });
+    // Медиатека: сбой индексации не должен стоить автору его правки. Недостающая строка
+    // индекса безопасна (она отказывает в доступе, а не выдаёт лишнее) и чинится пересборкой.
+    try {
+      await syncEntityUsages("topic_feedback", topic.id, fb.value ?? null);
+    } catch (error) {
+      logger.error(`Media usage sync failed for topic feedback ${topic.id}: ${(error as Error).message}`);
+    }
     // FR-27 non-blocking warning: same name visible elsewhere (other owners).
     const duplicates = await visibleSameNameTopics(
       req.effectiveRoles ?? [],
@@ -227,6 +234,14 @@ router.put("/:id", requirePermission("topics.manage"), async (req, res) => {
     if (!updated) {
       return res.status(404).json({ error: "Topic not found" });
     }
+    // Медиатека: индексируется СОХРАНЁННОЕ значение, а не присланное: тело запроса может
+    // вовсе не нести `feedbackJson`, и тогда `fb.value` равен `undefined` — по нему индекс
+    // обнулился бы, хотя вложение в теме осталось.
+    try {
+      await syncEntityUsages("topic_feedback", updated.id, updated.feedbackJson ?? null);
+    } catch (error) {
+      logger.error(`Media usage sync failed for topic feedback ${updated.id}: ${(error as Error).message}`);
+    }
     // PRD-2 §4.2: a rename rewrites `topicByName("…")` references in the live
     // formulas of tests using this topic, so показатели stay intact.
     if (typeof name === "string" && name.length > 0 && name !== topic.name) {
@@ -277,6 +292,7 @@ router.delete("/:id", requirePermission("topics.manage"), async (req, res) => {
     // чистки индекса не должен стоить автору его действия — недостающая строка
     // безопасна и чинится пересборкой.
     await clearCascadedUsages([
+      { entityType: "topic_feedback" as const, entityId: req.params.id },
       ...result.questionIds.map((id) => ({ entityType: "question" as const, entityId: id })),
       ...result.contentPageIds.map((id) => ({ entityType: "content_page" as const, entityId: id })),
     ]);
@@ -358,6 +374,7 @@ router.post("/bulk-delete", requirePermission("topics.manage"), async (req, res)
     const deletableIds = part.deletable.map((t) => t.topicId);
     const result = await storage.deleteTopicsBulk(deletableIds);
     await clearCascadedUsages([
+      ...deletableIds.map((id) => ({ entityType: "topic_feedback" as const, entityId: id })),
       ...result.questionIds.map((id) => ({ entityType: "question" as const, entityId: id })),
       ...result.contentPageIds.map((id) => ({ entityType: "content_page" as const, entityId: id })),
     ]);
@@ -612,6 +629,18 @@ router.post("/:id/duplicate", requirePermission("topics.manage"), async (req, re
         await syncEntityUsages("question", q.id, q);
       } catch (error) {
         logger.error(`Media usage sync failed for question ${q.id}: ${(error as Error).message}`);
+      }
+    }
+
+    // Обратная связь темы едет с копией (TD-02 r.3), значит копия — НОВАЯ сущность,
+    // ссылающаяся на те же файлы: без своей строки индекса правило выдачи откажет
+    // ученику в файле, приложенном к скопированной теме.
+    const copied = result.topic;
+    if (copied) {
+      try {
+        await syncEntityUsages("topic_feedback", copied.id, copied.feedbackJson ?? null);
+      } catch (error) {
+        logger.error(`Media usage sync failed for topic feedback ${copied.id}: ${(error as Error).message}`);
       }
     }
 

@@ -140,6 +140,36 @@ describe("readResultsRenderPayload + измерения", () => {
     expect(recommendations!.events).toEqual([{ title: "Вебинар" }]);
     expect(recommendations!.assets).toEqual([{ title: "Памятка.pdf", url: "/uploads/p.pdf" }]);
   });
+
+  it("обратная связь ТЕСТА доезжает и БЕЗ шкал и показателей (дефект Д-3)", () => {
+    // Самая массовая конфигурация продукта: контрольный тест без измерений. Обратная
+    // связь теста собиралась внутри ветки измерений, поэтому такой тест не получал
+    // блока рекомендаций вовсе — хотя обратная связь в нём существует ровно затем,
+    // чтобы её показали.
+    const plain = {
+      ...MEASURES,
+      scales: [],
+      variables: [],
+      testFeedback: {
+        format: "plain",
+        text: "Спасибо за участие.",
+        links: [],
+        events: [],
+        assets: [
+          { title: "Памятка.pdf", fileName: "p.pdf", mimeType: "application/pdf", url: "/api/media/aaaa" },
+        ],
+      },
+    };
+    const payload = readResultsRenderPayload(DIR, RESULT, "Опрос", null, undefined, undefined, plain as never);
+    const result = payload!.context.result as {
+      scales?: unknown;
+      recommendations?: { texts: string[]; assets: Array<{ title: string; url?: string }> };
+    };
+    // Карточек измерений нет — тест их не объявляет; блок рекомендаций есть.
+    expect(result.scales).toBeUndefined();
+    expect(result.recommendations!.texts).toEqual(["Спасибо за участие."]);
+    expect(result.recommendations!.assets).toEqual([{ title: "Памятка.pdf", url: "/api/media/aaaa" }]);
+  });
 });
 
 // ─── Маршрут: источник строк (PRD-15 block B) ────────────────────────────────
@@ -274,5 +304,37 @@ describe("GET /attempts/:id/result — источник толкований", (
     expect(res.status).toBe(200);
     expect(res.body.render.context.result.scales).toBeUndefined();
     expect(res.body.render.context.result.showScoreSummary).toBeUndefined();
+  });
+
+  it("тест БЕЗ шкал и показателей всё равно отдаёт обратную связь теста (Д-3, веб-путь)", async () => {
+    // Проверка идёт через МАРШРУТ, а не через адаптер: ломалось именно здесь —
+    // материал итогов не собирался вовсе, когда у теста нет измерений, и обратная
+    // связь теста терялась вместе с ним ещё до сборщика контекста.
+    storageMock.getAttempt.mockResolvedValue({ ...attempt, snapshotId: null });
+    storageMock.getScales.mockResolvedValue([]);
+    storageMock.getResultVariables.mockResolvedValue([]);
+    storageMock.getTest.mockResolvedValue({
+      ...liveTest,
+      feedbackJson: {
+        format: "plain",
+        text: "Спасибо за участие.",
+        links: [],
+        events: [],
+        assets: [
+          { title: "Памятка.pdf", fileName: "p.pdf", mimeType: "application/pdf", url: "/api/media/aaaa" },
+        ],
+      },
+    });
+
+    const res = await request(app).get("/api/attempts/atmp1/result");
+
+    expect(res.status).toBe(200);
+    const result = res.body.render.context.result;
+    expect(result.recommendations.texts).toEqual(["Спасибо за участие."]);
+    expect(result.recommendations.assets).toEqual([{ title: "Памятка.pdf", url: "/api/media/aaaa" }]);
+    // Карточек измерений по-прежнему нет, и ответ не несёт `measures` — клиентский
+    // отчёт печатает шкалы только у теста, который их объявляет.
+    expect(result.scales).toBeUndefined();
+    expect(res.body.measures).toBeUndefined();
   });
 });

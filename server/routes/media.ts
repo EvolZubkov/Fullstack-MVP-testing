@@ -38,8 +38,31 @@ function kindOf(mime: string): "image" | "audio" | "video" | "document" {
   return "document";
 }
 
+/**
+ * Feedback attachments are the one upload with a narrow contract (spec §8): the shared
+ * filter admits 200 MB of any image, audio or video, which is right for question media and
+ * far too wide for a PDF handed to a learner. The narrow rule lives here rather than in the
+ * multer filter because only the request knows what the file is FOR.
+ */
+const FEEDBACK_ASSET_MAX_BYTES = 5 * 1024 * 1024;
+
 router.post("/upload", requireAuth, mediaUpload.single("file"), async (req: Request, res: Response) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+  if (req.query.purpose === "feedback-asset") {
+    const wrongType = req.file.mimetype !== "application/pdf";
+    const tooBig = req.file.size > FEEDBACK_ASSET_MAX_BYTES;
+    if (wrongType || tooBig) {
+      fs.rmSync(req.file.path, { force: true });
+      return res.status(400).json({
+        error: "feedback_asset_invalid",
+        message: wrongType
+          ? "Вложением обратной связи может быть только PDF"
+          : "Размер вложения не должен превышать 5 МБ",
+      });
+    }
+  }
+
   const ownerId = req.session.userId as string;
   // Busboy decodes the multipart filename as latin1 by default, so a UTF-8
   // (e.g. Cyrillic) original name arrives mojibake — re-decode it to UTF-8.

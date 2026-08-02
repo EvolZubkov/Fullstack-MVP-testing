@@ -23,6 +23,7 @@ import { requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { logger } from "../logger";
 import { materializeScaleDomains } from "../services/scale-domain";
+import { syncEntityUsages } from "../services/media/usage-index";
 import { insertScaleSchema, insertQuestionMeasurementSchema, type Scale, type QuestionMeasurement } from "@shared/schema";
 import {
   computeScales,
@@ -49,6 +50,22 @@ async function fillDomains(testId: string): Promise<void> {
     await materializeScaleDomains(testId);
   } catch (error) {
     logger.error("Materialize scale domains error: " + (error as Error).message, "scales");
+  }
+}
+
+/**
+ * Re-indexes the test's WHOLE set of scales. The unit of indexing is the set, not one scale
+ * (spec §6.1): there is no `getScale(id)` in the storage contract, and a set-wide rewrite also
+ * makes deletion self-healing — the removed scale's rows simply do not come back.
+ *
+ * Best effort, like {@link fillDomains}: a missing index row refuses a file (it never grants
+ * one) and heals on the next rebuild, while a failed save costs the author the work itself.
+ */
+async function syncScaleFeedbackUsages(testId: string): Promise<void> {
+  try {
+    await syncEntityUsages("scale_feedback", testId, await storage.getScales(testId));
+  } catch (error) {
+    logger.error(`Media usage sync failed for scales of ${testId}: ${(error as Error).message}`, "scales");
   }
 }
 
@@ -142,6 +159,7 @@ router.post("/:id/scales", requirePermission("tests.edit"), requireTestScope("ed
     }
     const created = await storage.createScale(data);
     await fillDomains(testId);
+    await syncScaleFeedbackUsages(testId);
     res.status(201).json(created);
   } catch (error) {
     logger.error("Create scale error: " + (error as Error).message, "scales");
@@ -159,6 +177,12 @@ router.put("/:id/scales/reorder", requirePermission("tests.edit"), requireTestSc
       return res.status(422).json({ error: "Body must be an array of { id, sortOrder }", field: "body" });
     }
     await storage.reorderScales(updates);
+    // Reorder moves no attachment, but the recorded `field` path starts with the scale's
+    // POSITION in the set (`0.configJson…`), so after a reorder the stored paths point at
+    // the wrong band until the set is re-indexed. Access itself never depends on it (the
+    // delivery rule matches on the asset id), yet «где используется» would name the wrong
+    // scale — one cheap read keeps the index literally true.
+    await syncScaleFeedbackUsages(req.params.id);
     res.json({ ok: true });
   } catch (error) {
     logger.error("Reorder scales error: " + (error as Error).message, "scales");
@@ -188,6 +212,7 @@ router.put("/:id/scales/:scaleId", requirePermission("tests.edit"), requireTestS
     }
     const saved = await storage.updateScale(scaleId, updates);
     await fillDomains(testId);
+    await syncScaleFeedbackUsages(testId);
     res.json(saved);
   } catch (error) {
     logger.error("Update scale error: " + (error as Error).message, "scales");
@@ -206,6 +231,7 @@ router.delete("/:id/scales/:scaleId", requirePermission("tests.edit"), requireTe
       return res.status(404).json({ error: "Scale not found" });
     }
     await storage.deleteScale(scaleId);
+    await syncScaleFeedbackUsages(testId);
     res.json({ ok: true });
   } catch (error) {
     logger.error("Delete scale error: " + (error as Error).message, "scales");

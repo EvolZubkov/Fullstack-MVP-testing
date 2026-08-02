@@ -41,9 +41,10 @@ export { buildResultContext, buildAdaptiveResultContext, buildSectionResultConte
 // to the very shape `server/services/result-context` assembles on the web host —
 // so the two players draw the same scale/indicator cards. That needs the level
 // ramp, the interpretation parsers and the feedback normaliser out here.
-// `normalizeFeedback` is deliberately NOT idempotent (a normalised block has lost
-// its `scormHref`), so it is the HOST's single pass over the test-level block; the
-// band/outcome blocks are normalised inside the builder.
+// `normalizeFeedback` is the HOST's single pass over the test-level block; the
+// band/outcome blocks are normalised inside the builder. A second pass would now be
+// harmless (a normalised asset keeps its address in `url`), but the block is still
+// normalised in exactly ONE place so the rule lives in a single copy.
 export { normalizeFeedback } from "./result-context";
 export { LEVEL_SCHEMES } from "./level-ramp";
 export { parseScaleInterpretation, parseIndicatorInterpretation } from "../scales/interpretation";

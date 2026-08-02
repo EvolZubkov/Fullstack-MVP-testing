@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildResultContext } from "../result-context";
+import { buildResultContext, normalizeFeedback } from "../result-context";
 import { LEVEL_SCHEMES } from "../level-ramp";
 
 const BASE = {
@@ -52,8 +52,13 @@ const MEASURES = {
       },
     },
   ],
-  testFeedback: { text: "Опросник носит справочный характер." },
 };
+
+/**
+ * The test's OWN feedback block. Passed as its own option, NOT inside `MEASURES`: a
+ * test's feedback is due to the learner whether or not the test measures anything.
+ */
+const TEST_FEEDBACK = { text: "Опросник носит справочный характер." };
 
 describe("buildResultContext + measures", () => {
   it("не добавляет новых полей, когда измерений нет", () => {
@@ -79,7 +84,7 @@ describe("buildResultContext + measures", () => {
   });
 
   it("собирает рекомендации в порядке тест, показатель, шкала", () => {
-    const ctx = buildResultContext(BASE, "Маслач", { measures: MEASURES });
+    const ctx = buildResultContext(BASE, "Маслач", { testFeedback: TEST_FEEDBACK, measures: MEASURES });
     expect(ctx.result.recommendations!.texts).toEqual([
       "Опросник носит справочный характер.",
       "Обсудите нагрузку с руководителем.",
@@ -89,7 +94,7 @@ describe("buildResultContext + measures", () => {
   });
 
   it("приводит вложения к ссылке и отбрасывает незагруженные", () => {
-    // Редактор хранит канонический дескриптор PDF, где адрес лежит в scormHref.
+    // Ранее собранные данные несут адрес PDF в scormHref — блок читает и их.
     const withAssets = {
       ...MEASURES,
       indicators: [
@@ -113,14 +118,13 @@ describe("buildResultContext + measures", () => {
         },
       ],
       scales: [],
-      testFeedback: null,
     };
     const ctx = buildResultContext(BASE, "Маслач", { measures: withAssets });
     expect(ctx.result.recommendations!.assets).toEqual([{ title: "Памятка.pdf", url: "/a/p.pdf" }]);
   });
 
   it("берёт рекомендации только у сработавших интервалов", () => {
-    const low = { ...MEASURES, scales: [{ ...MEASURES.scales[0], value: 5 }], indicators: [], testFeedback: null };
+    const low = { ...MEASURES, scales: [{ ...MEASURES.scales[0], value: 5 }], indicators: [] };
     const ctx = buildResultContext(BASE, "Маслач", { measures: low });
     // Ничего не сработало — блока рекомендаций в контексте нет вовсе.
     expect(ctx.result.recommendations).toBeUndefined();
@@ -128,6 +132,7 @@ describe("buildResultContext + measures", () => {
 
   it("настройка блока перебивает автоматику наличия", () => {
     const ctx = buildResultContext(BASE, "Маслач", {
+      testFeedback: TEST_FEEDBACK,
       measures: { ...MEASURES, blockSettings: { scales: "hide" as const } },
     });
     expect(ctx.result.scales).toBeUndefined();
@@ -233,5 +238,69 @@ describe("нечего оценивать", () => {
     expect(ctx.result.hideScoreSummary).toBeUndefined();
     // Вердикт следует за парой «порог и есть что оценивать», а не за настройкой блока.
     expect(ctx.result.statusLabel).toBe("");
+  });
+});
+
+describe("normalizeFeedback — адрес вложения", () => {
+  it("берёт url, когда scormHref не заполнен (веб-хост)", () => {
+    const block = normalizeFeedback({
+      text: "",
+      links: [],
+      events: [],
+      assets: [
+        { title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "/api/media/11111111-1111-1111-1111-111111111111" },
+      ],
+    });
+    expect(block?.assets).toEqual([
+      { title: "Памятка", url: "/api/media/11111111-1111-1111-1111-111111111111" },
+    ]);
+  });
+
+  // Упаковщик переписывает на путь внутри пакета именно `url`, а `scormHref` не трогает:
+  // при обоих заполненных полях легаси-адрес ведёт туда, где файла уже нет.
+  it("предпочитает url, когда заполнены оба поля", () => {
+    const block = normalizeFeedback({
+      text: "",
+      links: [],
+      events: [],
+      assets: [
+        { title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "assets/media/2222.pdf", scormHref: "feedback/legacy.pdf" },
+      ],
+    });
+    expect(block?.assets).toEqual([{ title: "Памятка", url: "assets/media/2222.pdf" }]);
+  });
+
+  it("пустой url не перебивает scormHref — пустая строка не адрес", () => {
+    const block = normalizeFeedback({
+      text: "",
+      links: [],
+      events: [],
+      assets: [
+        { title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "", scormHref: "feedback/legacy.pdf" },
+      ],
+    });
+    expect(block?.assets).toEqual([{ title: "Памятка", url: "feedback/legacy.pdf" }]);
+  });
+
+  it("читает scormHref, когда url не заполнен (ранее собранные данные)", () => {
+    const block = normalizeFeedback({
+      text: "",
+      links: [],
+      events: [],
+      assets: [
+        { title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", scormHref: "feedback/legacy.pdf" },
+      ],
+    });
+    expect(block?.assets).toEqual([{ title: "Памятка", url: "feedback/legacy.pdf" }]);
+  });
+
+  it("отбрасывает дескриптор без обоих адресов", () => {
+    const block = normalizeFeedback({
+      text: "",
+      links: [],
+      events: [],
+      assets: [{ title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf" }],
+    });
+    expect(block?.assets).toEqual([]);
   });
 });

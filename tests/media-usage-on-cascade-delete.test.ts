@@ -5,7 +5,9 @@
  * save/delete route handler), and the analogous bulk-delete-questions path that never
  * cleaned up at all:
  *
- *   - `DELETE /api/topics/:id` — the full-cascade topic delete (questions, content pages).
+ *   - `DELETE /api/topics/:id` — the full-cascade topic delete (questions, content pages,
+ *     plus the topic's OWN feedback block: since PRD-32 a topic carries media of its own,
+ *     and no other handler is left to clear those rows once the topic is gone).
  *   - `POST /api/topics/bulk-delete` — same cascade, batched.
  *   - `DELETE /api/folders/:id` (`mode: "folder-and-content"`) — folder cascade, which
  *     itself deletes topics in bulk and inherits the same gap.
@@ -108,13 +110,14 @@ describe("DELETE /api/topics/:id -> cascaded media cleanup", () => {
 
     expect(res.status).toBe(200);
     expect(clearCascadedUsagesMock).toHaveBeenCalledWith([
+      { entityType: "topic_feedback", entityId: "t1" },
       { entityType: "question", entityId: "q1" },
       { entityType: "question", entityId: "q2" },
       { entityType: "content_page", entityId: "p1" },
     ]);
   });
 
-  it("a topic with nothing to cascade still calls the cleanup, with an empty list", async () => {
+  it("a topic with nothing to cascade still clears its own feedback rows", async () => {
     storageMock.getTopic.mockResolvedValue({ id: "t1", name: "T1", ownerId: "admin1" });
     storageMock.deleteTopic.mockResolvedValue({ deleted: true, questionIds: [], contentPageIds: [] });
 
@@ -122,7 +125,9 @@ describe("DELETE /api/topics/:id -> cascaded media cleanup", () => {
     const res = await asAdmin(request(app).delete("/api/topics/t1"));
 
     expect(res.status).toBe(200);
-    expect(clearCascadedUsagesMock).toHaveBeenCalledWith([]);
+    expect(clearCascadedUsagesMock).toHaveBeenCalledWith([
+      { entityType: "topic_feedback", entityId: "t1" },
+    ]);
   });
 
   it("404 (topic already gone) skips the cleanup entirely", async () => {
@@ -151,6 +156,8 @@ describe("POST /api/topics/bulk-delete -> cascaded media cleanup", () => {
 
     expect(res.status).toBe(200);
     expect(clearCascadedUsagesMock).toHaveBeenCalledWith([
+      { entityType: "topic_feedback", entityId: "t1" },
+      { entityType: "topic_feedback", entityId: "t2" },
       { entityType: "question", entityId: "q1" },
       { entityType: "question", entityId: "q2" },
       { entityType: "question", entityId: "q3" },
@@ -178,6 +185,7 @@ describe("DELETE /api/folders/:id (folder-and-content) -> cascaded media cleanup
 
     expect(res.status).toBe(200);
     expect(clearCascadedUsagesMock).toHaveBeenCalledWith([
+      { entityType: "topic_feedback", entityId: "t1" },
       { entityType: "question", entityId: "q1" },
       { entityType: "content_page", entityId: "p1" },
       { entityType: "content_page", entityId: "p2" },

@@ -79,6 +79,39 @@ describe("canDeliverAsset", () => {
     expect(storageMock.isTestAssignedToUser).toHaveBeenCalledWith("t9", "learner-1");
   });
 
+  it("lets a learner through when the file is used by the test's own feedback", async () => {
+    storageMock.getMediaUsagesByAsset.mockResolvedValue([
+      { assetId: "a1", entityType: "test_feedback", entityId: "t5", field: "feedbackJson.assets.0.url" },
+    ]);
+    storageMock.isTestAssignedToUser.mockResolvedValue(true);
+    expect(await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER])).toBe(true);
+    expect(storageMock.isTestAssignedToUser).toHaveBeenCalledWith("t5", "learner-1");
+  });
+
+  it("reaches the tests of a topic's feedback through the sections using that topic", async () => {
+    storageMock.getMediaUsagesByAsset.mockResolvedValue([
+      { assetId: "a1", entityType: "topic_feedback", entityId: "topic-1", field: "feedbackJson.assets.0.url" },
+    ]);
+    storageMock.getTestSectionsByTopic.mockResolvedValue([{ testId: "test-1" }]);
+    storageMock.isTestAssignedToUser.mockResolvedValue(true);
+    expect(await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER])).toBe(true);
+    expect(storageMock.getTestSectionsByTopic).toHaveBeenCalledWith("topic-1");
+    expect(storageMock.isTestAssignedToUser).toHaveBeenCalledWith("test-1", "learner-1");
+  });
+
+  it("keys scale and result-variable feedback by the test itself", async () => {
+    storageMock.getMediaUsagesByAsset.mockResolvedValue([
+      { assetId: "a1", entityType: "scale_feedback", entityId: "test-7", field: "0.interpretation.bands.1.feedback.assets.0.url" },
+      { assetId: "a1", entityType: "variable_feedback", entityId: "test-8", field: "0.interpretation.outcomes.0.feedback.assets.0.url" },
+    ]);
+    // Only the second test is assigned: the first must still be asked about, otherwise
+    // the "set of the test" keying would be silently resolving nothing.
+    storageMock.isTestAssignedToUser.mockImplementation(async (testId: string) => testId === "test-8");
+    expect(await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER])).toBe(true);
+    expect(storageMock.isTestAssignedToUser).toHaveBeenCalledWith("test-7", "learner-1");
+    expect(storageMock.isTestAssignedToUser).toHaveBeenCalledWith("test-8", "learner-1");
+  });
+
   it("refuses a learner whose assignment does not cover the using test", async () => {
     storageMock.getMediaUsagesByAsset.mockResolvedValue([
       { assetId: "a1", entityType: "content_page", entityId: "page-1", field: "image" },

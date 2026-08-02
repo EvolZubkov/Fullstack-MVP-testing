@@ -896,6 +896,43 @@ describe("Attempts routes — finish attempt", () => {
     expect(res.body.result.overallPassed).toBe(true);
   });
 
+  // PRD-32 (приёмочный дефект Д-2): вложения ТЕМЫ (`topics.feedback_json`) и РАЗДЕЛА
+  // (`test_sections.feedback_json`) — два разных места, оба обязаны доехать до итогов.
+  // Сохраняются вместе с попыткой: экран итогов рисуется из сохранённого результата.
+  it("POST /attempts/:id/finish — кладёт вложения темы и раздела в результат попытки", async () => {
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getTestSections.mockResolvedValue([{
+      topicId: "t1",
+      topicPassRuleJson: null,
+      feedbackJson: {
+        assets: [{ title: "Памятка раздела", fileName: "s.pdf", mimeType: "application/pdf", url: "/api/media/bbbb" }],
+      },
+    }]);
+    storageMock.getTopic.mockResolvedValue({
+      id: "t1",
+      name: "Тема",
+      feedbackJson: {
+        assets: [{ title: "Разбор темы", fileName: "t.pdf", mimeType: "application/pdf", url: "/api/media/aaaa" }],
+      },
+    });
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getTopicCourses.mockResolvedValue([]);
+    storageMock.getTestQuestionScoring.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+
+    expect(res.status).toBe(200);
+    // Тема впереди раздела: общий источник раньше частного.
+    expect(res.body.result.topicResults[0].recommendedAssets).toEqual([
+      { title: "Разбор темы", url: "/api/media/aaaa" },
+      { title: "Памятка раздела", url: "/api/media/bbbb" },
+    ]);
+    storageMock.getTopic.mockReset();
+  });
+
   it("POST /attempts/:id/finish — an explicit exact override shadows graded scoring", async () => {
     storageMock.getAttempt.mockResolvedValue(dbAttempt);
     storageMock.getTest.mockResolvedValue(dbTest);

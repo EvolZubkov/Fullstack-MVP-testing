@@ -32,6 +32,7 @@ import type {
   FeedbackBlock,
   IndicatorInterpretation,
   LearnerVisibility,
+  RecommendationLink,
   ScaleInterpretation,
 } from "../scales/interpretation";
 import type { LevelRamp } from "./level-ramp";
@@ -53,6 +54,18 @@ export interface TopicFeedbackInput {
   recommendedCourses?: Array<{ title: string; url?: string }> | null;
   /** Recommended events (`feedback_json.events`). */
   recommendedEvents?: Array<{ title: string; url?: string }> | null;
+  /**
+   * PRD-32 attachments the learner is to receive for this topic — the topic's OWN
+   * feedback (`topics.feedback_json`) and the feedback of this test's section over
+   * that topic (`test_sections.feedback_json`), merged by the host in that order.
+   *
+   * They do NOT render inside the topic row: the results screen carries one
+   * «Материалы» block structured by RESOURCE TYPE, not by cause (see
+   * `./recommendations`), so an attachment reaches the learner through it whatever
+   * level attached it. Addresses come pre-normalised — the host runs
+   * {@link feedbackAssets}, so the `url`-over-`scormHref` rule lives in one place.
+   */
+  recommendedAssets?: Array<{ title: string; url?: string }> | null;
 }
 
 /** Normalized per-topic input (host adapts its own field names into this). */
@@ -121,7 +134,6 @@ export interface MeasuresInput {
   indicatorKind: RenderKind;
   scales: MeasureInput[];
   indicators: MeasureInput[];
-  testFeedback?: FeedbackBlock | null;
   /** Whether the test has a pass threshold — the `auto` answer for the score summary. */
   hasPassThreshold?: boolean;
   blockSettings?: ResultsBlockSettings;
@@ -138,34 +150,51 @@ export interface MeasuresInput {
  * block.
  *
  * The author's editor stores the canonical `feedbackContentSchema` shape, where an
- * asset is a PDF descriptor — `{ title, fileName, mimeType, scormHref? }` — and the
- * address lives in `scormHref`, not `url`. `collectRecommendations` works on
- * `RecommendationLink { title, url? }`, so the host adapts before handing over;
- * without this the «Материалы» block renders links with an empty href.
+ * asset is a PDF descriptor — `{ title, fileName, mimeType, url?, scormHref? }` — whose
+ * address belongs in `url` (PRD-32 contract: the field the editor writes on upload and
+ * the SCORM packer resolves to an in-package path); the legacy `scormHref` is read only
+ * for data built before that. `collectRecommendations` works on
+ * `RecommendationLink { title, url? }`, so the host adapts before handing over; without
+ * this the «Материалы» block renders links with an empty href.
  *
- * An asset with no persisted href is DROPPED rather than rendered dead: the file was
+ * An asset with neither address is DROPPED rather than rendered dead: the file was
  * never uploaded, so there is nothing to open.
  *
  * Exported for the hosts: the TEST-level feedback block (`tests.feedback_json`) is
  * stored in the very same shape and reaches the builder from the host adapter, so it
- * must pass through THIS normaliser and not a second copy of the rule. NOT idempotent
- * by design — an already-normalised block has no `scormHref`, so normalising twice
- * would drop its assets; each block goes through exactly once.
+ * must pass through THIS normaliser and not a second copy of the rule.
  */
 export function normalizeFeedback(raw: unknown): FeedbackBlock | null {
   if (!raw || typeof raw !== "object") return null;
   const f = raw as Record<string, unknown>;
   const links = (f.links as Array<{ title?: string; url?: string }> | undefined) ?? [];
   const events = (f.events as Array<{ title?: string; url?: string }> | undefined) ?? [];
-  const assets = (f.assets as Array<{ title?: string; scormHref?: string }> | undefined) ?? [];
+  const assets = (f.assets as Array<{ title?: string; url?: string; scormHref?: string }> | undefined) ?? [];
   return {
     ...(f.text ? { text: String(f.text) } : {}),
     links: links.map((l) => ({ title: String(l.title ?? ""), ...(l.url ? { url: l.url } : {}) })),
     events: events.map((e) => ({ title: String(e.title ?? ""), ...(e.url ? { url: e.url } : {}) })),
     assets: assets
-      .filter((a) => !!a.scormHref)
-      .map((a) => ({ title: String(a.title ?? ""), url: a.scormHref as string })),
+      // `url` wins: it is the address the packer resolves to a working in-package path,
+      // while `scormHref` is left untouched — where both are set the legacy one points at a
+      // path the package no longer has. `||` and not `??` on purpose — an empty string is an
+      // absent address, not a value.
+      .map((a) => ({ title: String(a.title ?? ""), url: String(a.url || a.scormHref || "") }))
+      .filter((a) => !!a.url),
   };
+}
+
+/**
+ * Attachments of one or more STORED feedback blocks, in the order given, ready for
+ * {@link TopicFeedbackInput.recommendedAssets}.
+ *
+ * Both hosts call it — the web adapter on the topic + section blocks it grades an
+ * attempt against, the SCORM bake on the same two blocks of a section — so the address
+ * rule ({@link normalizeFeedback}: `url` wins, an addressless asset is dropped) is
+ * applied once and identically. A `null`/absent block simply contributes nothing.
+ */
+export function feedbackAssets(...blocks: unknown[]): RecommendationLink[] {
+  return blocks.flatMap((block) => normalizeFeedback(block)?.assets ?? []);
 }
 
 /** Feedback of the level that actually fired, for the recommendations block. */
@@ -188,6 +217,18 @@ export interface ResultContextOptions {
   recommendedEvents?: CtxRecommendation[];
   backAction?: string;
   backLabel?: string;
+  /**
+   * The test's OWN feedback block (`tests.feedback_json`), normalised by the host —
+   * the most general source of the «Рекомендации» block (PRD-29 §7.1), and the first
+   * one, so a general recommendation outranks its per-measure or per-topic copy.
+   *
+   * Deliberately NOT part of {@link measures}. It lived there while PRD-29 assembled
+   * the whole block inside its own branch, and that made the test's feedback vanish
+   * from the commonest configuration of all — a test with neither scales nor
+   * indicators, where the author's feedback exists precisely to be shown. A test's
+   * feedback is a property of the test, not of its measurements.
+   */
+  testFeedback?: FeedbackBlock | null;
   /**
    * PRD-29 measurement blocks. Absent (a test with neither scales nor indicators)
    * leaves the context byte-identical to what a control test has always produced.
@@ -251,6 +292,12 @@ export function buildResultContext(
     result.backAction = opts.backAction;
     result.backLabel = opts.backLabel;
   }
+  // Sources of the ONE recommendations block, gathered in the order dedup should keep:
+  // the general before the specific. Collected rather than merged on the spot because
+  // the measurement sources are conditional while the other two are not — a test with
+  // neither scales nor indicators still hands the learner its own feedback and what its
+  // topics and sections attached (PRD-32). The test's own block leads: it is the widest.
+  const recommendationSources: Array<FeedbackBlock | null | undefined> = [opts.testFeedback];
   if (opts.measures) {
     const visibleScales = opts.measures.scales.filter((m) => m.visibility !== "hidden");
     const visibleIndicators = opts.measures.indicators.filter((m) => m.visibility !== "hidden");
@@ -312,16 +359,26 @@ export function buildResultContext(
       result.indicators = visibleIndicators.map((m) =>
         buildMeasureView({ ...m, requestedKind: opts.measures!.indicatorKind, ramp: opts.measures!.ramp }));
     }
-    // Order matters: general first, then the profile, then the scales — dedup keeps
-    // the first occurrence, so a general recommendation outranks its specific copy.
-    // A hidden block contributes nothing: the learner never saw what caused it.
-    const recommendations = collectRecommendations([
-      opts.measures.testFeedback,
+    // Order matters: the test's own block (already first in the list) then the profile,
+    // then the scales — dedup keeps the first occurrence, so a general recommendation
+    // outranks its specific copy. A hidden block contributes nothing: the learner never
+    // saw what caused it.
+    recommendationSources.push(
       ...(blocks.indicators ? visibleIndicators.map(firedFeedback) : []),
       ...(blocks.scales ? visibleScales.map(firedFeedback) : []),
-    ]);
-    if (recommendations.hasAny) result.recommendations = recommendations;
+    );
   }
+  // PRD-32: the attachments of the topics this attempt covered, LAST — they are the
+  // narrowest source (one topic of the test), and the same file attached to the test
+  // as a whole should keep the test's copy under dedup. Not gated by the topic's
+  // verdict: the author hung the material on the topic's feedback, which is shown for
+  // having taken the topic, not for having failed it.
+  for (const topic of input.topicResults || []) {
+    const assets = topic.recommendedAssets ?? [];
+    if (assets.length > 0) recommendationSources.push({ links: [], events: [], assets });
+  }
+  const recommendations = collectRecommendations(recommendationSources);
+  if (recommendations.hasAny) result.recommendations = recommendations;
   return { course: { title }, result };
 }
 

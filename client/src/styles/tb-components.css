@@ -501,6 +501,11 @@
   font: var(--ou-text-caption);
   color: var(--ou-fg-muted);
 }
+/* PRD-32: descriptor saved without an address — the file it names was never stored. */
+.tb-feedback-editor__asset-missing {
+  font: var(--ou-text-caption);
+  color: var(--ou-warning-default);
+}
 
 /* Upload row below asset list. */
 .tb-feedback-editor__upload {

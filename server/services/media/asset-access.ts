@@ -55,7 +55,12 @@ export function clearAssetAccessCache(): void {
  * would never receive a content page's picture.
  *
  * A `question` reaches tests through its topic's sections, because the same question can
- * live in several tests.
+ * live in several tests; a topic's own feedback reaches them by exactly the same path.
+ *
+ * Scale and result-variable feedback is keyed by the TEST, not by the scale or the
+ * variable: the storage contract has no fetch-one-by-id for either (`getScales(testId)`
+ * and `getResultVariables(testId)` return the whole set), so the unit of indexing is
+ * "the scales of this test" and a write replaces its rows wholesale (spec §6.1).
  */
 async function testIdsForUsages(assetId: string): Promise<string[]> {
   const usages = await storage.getMediaUsagesByAsset(assetId);
@@ -80,15 +85,22 @@ async function testIdsForUsages(assetId: string): Promise<string[]> {
         if (snapshot) ids.add(snapshot.testId);
         break;
       }
+      case "topic_feedback": {
+        // A topic reaches tests exactly as a question does — through the sections that use it.
+        for (const section of await storage.getTestSectionsByTopic(usage.entityId)) {
+          ids.add(section.testId);
+        }
+        break;
+      }
       case "test_design":
       case "test_feedback":
-        // Keyed by the test itself: the entity id IS the test id.
+      case "scale_feedback":
+      case "variable_feedback":
+        // Keyed by the test itself: the entity id IS the test id. Scales and result
+        // variables are indexed as the test's SET of them (spec §6.1), so the same holds.
         ids.add(usage.entityId);
         break;
       default:
-        // `topic_feedback` and `scale_feedback` are declared in the enum for the
-        // feedback-attachment work (PRD-32) but nothing writes them yet. Resolving
-        // them now would be dead code guessing at a shape that work has not chosen.
         break;
     }
   }

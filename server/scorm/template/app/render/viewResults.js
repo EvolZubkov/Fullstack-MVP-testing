@@ -43,6 +43,41 @@ function vrRequiredLabel(tr) {
   return resolved.type === 'percent' ? 'Требуется: ' + resolved.value + '%' : undefined;
 }
 
+/**
+ * PRD-32 attachments of a topic row: the PDFs the author hung on the TOPIC
+ * (`topics.feedback_json`) and on this test's SECTION over it
+ * (`test_sections.feedback_json`), merged and address-normalised at bake time into
+ * `section.recommendedAssets`.
+ *
+ * Read off TEST_DATA rather than off the attempt: the addresses are in-package paths
+ * resolved when the ZIP was built, so they belong to the package, not to a saved run —
+ * and a run saved by a package built before PRD-32 gets them too.
+ *
+ * NOT gated by the topic's verdict (unlike `vrRecommended`, which is failed-topic
+ * guidance): the material is shown for having taken the topic, not for having failed it.
+ */
+function vrTopicAssets(tr) {
+  var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
+  return (section && section.recommendedAssets) || [];
+}
+
+/**
+ * The test's OWN feedback block (`tests.feedback_json`, baked as `TEST_DATA.testFeedbackJson`),
+ * normalised for the recommendations block — the widest source, and the first one.
+ *
+ * Read OUTSIDE `buildResultsMeasures`, which returns null for a test with neither scales
+ * nor indicators: the feedback of such a test is exactly as due to the learner as any
+ * other, and the commonest test in the product has no measurements at all. The address
+ * rule lives in the shared normaliser — the fired band/outcome blocks pass through the
+ * same one inside the builder.
+ */
+function vrTestFeedback() {
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  var raw = (typeof TEST_DATA !== 'undefined' && TEST_DATA.testFeedbackJson) || null;
+  if (!raw || !TB || typeof TB.normalizeFeedback !== 'function') return null;
+  return TB.normalizeFeedback(raw);
+}
+
 /** Deduped recommended courses/events across failed topics (failed-topic guidance). */
 function vrRecommended(results) {
   var seenC = {}, seenE = {}, courses = [], events = [];
@@ -176,11 +211,6 @@ function buildResultsMeasures(scaleComputation, varComputation) {
     indicatorKind: String(params.indicatorRenderKind || 'label'),
     scales: scales,
     indicators: indicators,
-    // The stored block addresses its PDF assets through `scormHref`, the builder
-    // consumes `{ title, url }`. Normalising is NOT idempotent (a normalised block has
-    // no `scormHref` left), so the TEST-level block is normalised here — exactly once —
-    // while the fired band/outcome blocks are normalised inside the builder.
-    testFeedback: TB.normalizeFeedback(TD.testFeedbackJson || null),
     hasPassThreshold: !!(passRule && passRule.type && passRule.type !== 'none'),
     blockSettings: blockSettings,
     // PRD-35: the radar switch travels in the SAME settings of the «Итоги» variant.
@@ -235,7 +265,9 @@ function renderViewResultsTemplated(app, results) {
         possiblePoints: tr.possiblePoints,
         passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
         requiredLabel: vrRequiredLabel(tr),
-        topicFeedback: tr.topicFeedback
+        topicFeedback: tr.topicFeedback,
+        // PRD-32: вложения темы и раздела — в общий блок «Материалы» (общий сборщик).
+        recommendedAssets: vrTopicAssets(tr)
       };
     })
   };
@@ -245,7 +277,10 @@ function renderViewResultsTemplated(app, results) {
   var opts = {
     withTopicPoints: true,
     recommendedCourses: rec.courses,
-    recommendedEvents: rec.events
+    recommendedEvents: rec.events,
+    // PRD-29 §7.1 / PRD-32: обратная связь теста — источник рекомендаций сама по себе,
+    // вне зависимости от того, есть ли у теста шкалы и показатели.
+    testFeedback: vrTestFeedback()
   };
   var measures = buildResultsMeasures(
     { values: results.scaleValues || {} },
@@ -313,14 +348,19 @@ function renderResultsTemplated(app, results) {
         possiblePoints: tr.possiblePoints,
         passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
         requiredLabel: vrRequiredLabel(tr),
-        topicFeedback: tr.topicFeedback
+        topicFeedback: tr.topicFeedback,
+        // PRD-32: вложения темы и раздела — в общий блок «Материалы» (общий сборщик).
+        recommendedAssets: vrTopicAssets(tr)
       };
     })
   };
   var opts = {
     withTopicPoints: true,
     recommendedCourses: rec.courses,
-    recommendedEvents: rec.events
+    recommendedEvents: rec.events,
+    // PRD-29 §7.1 / PRD-32: обратная связь теста — источник рекомендаций сама по себе,
+    // вне зависимости от того, есть ли у теста шкалы и показатели.
+    testFeedback: vrTestFeedback()
   };
   // PRD-29: scales and indicators of THIS attempt (null for a test that declares none,
   // which leaves the context byte-identical to what it has always been).

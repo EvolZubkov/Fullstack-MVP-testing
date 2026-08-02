@@ -951,6 +951,28 @@ describe("editorModelToPayload — scalar fields, normalization and scoring", ()
     expect(payload.feedbackJson.assets[0]).toMatchObject({ id: "a1", fileName: "f.pdf" });
   });
 
+  it("keeps the canonical url on feedback assets", () => {
+    const payload = editorModelToPayload(
+      makeModel({
+        basic: {
+          ...makeModel().basic,
+          feedbackAssets: [
+            {
+              id: "a1",
+              title: "T",
+              fileName: "f.pdf",
+              mimeType: "application/pdf",
+              url: "/api/media/33333333-3333-3333-3333-333333333333",
+              scormHref: "feedback/f.pdf",
+            },
+          ],
+        },
+      }),
+    );
+    expect(payload.feedbackJson.assets[0]).not.toHaveProperty("scormHref");
+    expect(payload.feedbackJson.assets[0].url).toBe("/api/media/33333333-3333-3333-3333-333333333333");
+  });
+
   it("persists retakePolicyJson as null when disabled and the full object when enabled", () => {
     expect(editorModelToPayload(makeModel()).retakePolicyJson).toBeNull();
     const enabled = editorModelToPayload(

@@ -62,6 +62,10 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
     getQuestion: vi.fn(),
     upsertTestQuestionScoring: vi.fn(),
     deleteTestQuestionScoring: vi.fn(),
+    // PRD-32 media index: the save path keeps `media_usages` in step with the
+    // feedback blocks of the test AND of its sections.
+    replaceMediaUsages: vi.fn().mockResolvedValue(undefined),
+    getMediaAssetByStorageKey: vi.fn().mockResolvedValue(undefined),
   },
   serviceMock: {
     create: vi.fn(),
@@ -602,6 +606,34 @@ describe("PUT /api/tests/:id — Zod validation", () => {
     expect(testId).toBe("test1");
     expect(payload.test.status).toBe("archived");
     expect(payload.test.feedbackJson).toMatchObject({ format: "html" });
+  });
+
+  it("200 — индексирует вложение обратной связи РАЗДЕЛА под ключом теста (PRD-32)", async () => {
+    // Дефект приёмки Д-1: вложение раздела не попадало в индекс, и правило выдачи
+    // отвечало ученику 403. Разделы перечитываются ПОСЛЕ сохранения и едут тем же
+    // вызовом, что и обратная связь самого теста.
+    const ASSET = "44444444-4444-4444-4444-444444444444";
+    serviceMock.save.mockResolvedValue(dbTest);
+    storageMock.getTestSections.mockResolvedValue([
+      {
+        ...dbSection,
+        feedbackJson: {
+          format: "plain",
+          text: "",
+          links: [],
+          events: [],
+          assets: [{ title: "Разбор", fileName: "s.pdf", mimeType: "application/pdf", url: `/api/media/${ASSET}` }],
+        },
+      },
+    ]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+
+    await asAuthor(request(app).put("/api/tests/test1").send({ title: "Updated" }));
+
+    expect(storageMock.replaceMediaUsages).toHaveBeenCalledWith("test_feedback", "test1", [
+      { assetId: ASSET, field: "sections.0.assets.0.url" },
+    ]);
   });
 });
 

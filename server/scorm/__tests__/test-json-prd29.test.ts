@@ -127,6 +127,58 @@ describe("buildTestJson (PRD-29)", () => {
     expect(baked.testFeedbackJson).toEqual(feedbackJson);
   });
 
+  it("запекает вложения ТЕМЫ и РАЗДЕЛА в один список раздела (PRD-32)", () => {
+    // Приёмочный дефект Д-2: вложения этих двух мест не доезжали до итогов. Тема идёт
+    // первой (общее раньше частного), адрес выбирается ЕДИНЫМ правилом: `url` бьёт
+    // унаследованный `scormHref`, вложение без адреса выбрасывается.
+    const section = {
+      id: "sec-1",
+      topicId: "tp1",
+      drawCount: 1,
+      required: true,
+      feedbackJson: {
+        assets: [
+          { title: "Памятка раздела", fileName: "s.pdf", mimeType: "application/pdf", url: "/api/media/bbbb" },
+          { title: "Не загружен", fileName: "x.pdf", mimeType: "application/pdf" },
+        ],
+      },
+      topic: {
+        id: "tp1",
+        name: "Тема",
+        feedback: null,
+        feedbackJson: {
+          assets: [
+            {
+              title: "Разбор темы",
+              fileName: "t.pdf",
+              mimeType: "application/pdf",
+              url: "/api/media/aaaa",
+              scormHref: "feedback/old.pdf",
+            },
+          ],
+        },
+      },
+      questions: [],
+      courses: [],
+      events: [],
+    };
+    const baked = bake({ ...(exportData as any), sections: [section] });
+    expect(baked.sections[0].recommendedAssets).toEqual([
+      { title: "Разбор темы", url: "/api/media/aaaa" },
+      { title: "Памятка раздела", url: "/api/media/bbbb" },
+    ]);
+  });
+
+  it("не добавляет поле разделу без вложений — пакет прежних тестов не меняется (FR-02)", () => {
+    const section = {
+      id: "sec-1", topicId: "tp1", drawCount: 1, required: true, feedbackJson: null,
+      topic: { id: "tp1", name: "Тема", feedback: null, feedbackJson: null },
+      questions: [], courses: [], events: [],
+    };
+    const baked = bake({ ...(exportData as any), sections: [section] });
+    expect(baked.sections[0]).not.toHaveProperty("recommendedAssets");
+  });
+
   it("оставляет пакет теста без измерений неизменным (FR-02)", () => {
     const plain = { test: baseTest, sections: [] } as never;
     expect(buildTestJson(plain)).toBe(buildTestJson(plain));

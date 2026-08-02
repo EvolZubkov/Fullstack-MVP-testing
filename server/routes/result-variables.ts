@@ -20,11 +20,26 @@ import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { logger } from "../logger";
+import { syncEntityUsages } from "../services/media/usage-index";
 import { insertResultVariableSchema } from "@shared/schema";
 import type { ValueType } from "@shared/formula";
 
 const router = Router();
 const VALUE_TYPES: readonly string[] = ["boolean", "number", "string"];
+
+/**
+ * Re-indexes the test's WHOLE set of result variables — see the scales counterpart
+ * (spec §6.1): the storage contract has no `getResultVariable(id)`, and rewriting the set
+ * makes deletion self-healing. Best effort: a missing index row refuses a file (it never
+ * grants one) and heals on the next rebuild, while a failed save costs the author the work.
+ */
+async function syncVariableFeedbackUsages(testId: string): Promise<void> {
+  try {
+    await syncEntityUsages("variable_feedback", testId, await storage.getResultVariables(testId));
+  } catch (error) {
+    logger.error(`Media usage sync failed for result variables of ${testId}: ${(error as Error).message}`, "result-variables");
+  }
+}
 
 /** True when another result variable already drives the same success/completion status. */
 async function controlsStatusConflict(
@@ -94,6 +109,7 @@ router.post("/:id/result-variables", requirePermission("tests.edit"), requireTes
     }
 
     const created = await storage.createResultVariable(data);
+    await syncVariableFeedbackUsages(testId);
     res.status(201).json({ ...created, validation });
   } catch (error) {
     logger.error("Create result variable error: " + (error as Error).message, "result-variables");
@@ -111,6 +127,10 @@ router.put("/:id/result-variables/reorder", requirePermission("tests.edit"), req
       return res.status(422).json({ error: "Body must be an array of { id, sortOrder }", field: "body" });
     }
     await storage.reorderResultVariables(updates);
+    // Reorder moves no attachment, but the recorded `field` path starts with the indicator's
+    // POSITION in the set (`0.configJson…`) — see the scales counterpart: access never
+    // depends on it, «где используется» does.
+    await syncVariableFeedbackUsages(req.params.id);
     res.json({ ok: true });
   } catch (error) {
     logger.error("Reorder result variables error: " + (error as Error).message, "result-variables");
@@ -174,6 +194,7 @@ router.put("/:id/result-variables/:varId", requirePermission("tests.edit"), requ
     }
 
     const saved = await storage.updateResultVariable(varId, updates);
+    await syncVariableFeedbackUsages(testId);
     res.json({ ...saved, validation });
   } catch (error) {
     logger.error("Update result variable error: " + (error as Error).message, "result-variables");
@@ -192,6 +213,7 @@ router.delete("/:id/result-variables/:varId", requirePermission("tests.edit"), r
       return res.status(404).json({ error: "Result variable not found" });
     }
     await storage.deleteResultVariable(varId);
+    await syncVariableFeedbackUsages(testId);
     res.json({ ok: true });
   } catch (error) {
     logger.error("Delete result variable error: " + (error as Error).message, "result-variables");

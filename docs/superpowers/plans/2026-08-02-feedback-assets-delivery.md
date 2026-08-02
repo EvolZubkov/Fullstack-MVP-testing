@@ -74,14 +74,24 @@ describe("normalizeFeedback — адрес вложения", () => {
     ]);
   });
 
-  it("предпочитает scormHref, когда он есть (пакет, собранный ранее)", () => {
+  it("при обоих адресах побеждает url", () => {
     const block = normalizeFeedback({
       text: "",
       links: [],
       events: [],
       assets: [
-        { title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "/api/media/2222", scormHref: "assets/media/p.pdf" },
+        { title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "assets/media/p.pdf", scormHref: "feedback/old.pdf" },
       ],
+    });
+    expect(block?.assets).toEqual([{ title: "Памятка", url: "assets/media/p.pdf" }]);
+  });
+
+  it("читает scormHref, когда url не заполнен (ранее собранные данные)", () => {
+    const block = normalizeFeedback({
+      text: "",
+      links: [],
+      events: [],
+      assets: [{ title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", scormHref: "assets/media/p.pdf" }],
     });
     expect(block?.assets).toEqual([{ title: "Памятка", url: "assets/media/p.pdf" }]);
   });
@@ -157,14 +167,28 @@ export type FeedbackAsset = {
 
 ```ts
     assets: assets
-      // `scormHref` wins where it exists: a package built before this work carries the
-      // in-package address there, and inside a package the canonical address is useless.
-      .map((a) => ({ title: String(a.title ?? ""), url: String(a.scormHref ?? a.url ?? "") }))
+      // `url` wins: inside a package it is what the packer rewrote to a working relative
+      // path, while `scormHref` is a legacy field nothing writes any more. `||` and not `??`
+      // on purpose — an empty string is an absent address, not a value.
+      .map((a) => ({ title: String(a.title ?? ""), url: String(a.url || a.scormHref || "") }))
       .filter((a) => !!a.url),
 ```
 
 Обнови в этом же файле блок документации функции: адрес живёт в `url`, `scormHref` читается ради
-ранее собранных данных.
+ранее собранных данных и проигрывает `url`.
+
+- [ ] **Step 4a: Привести в порядок комментарии о неидемпотентности**
+
+С этой правкой `normalizeFeedback` становится идемпотентным по вложениям: выход `{ title, url }`
+переживает второй проход, тогда как раньше нормализованный блок терял `scormHref` и лишался вложений.
+Три места утверждают обратное и становятся ложными — правь ТОЛЬКО комментарии, поведение не трогай:
+
+- `shared/template/runtime-entry.ts:44-46` и `server/scorm/template/app/render/viewResults.js:179-181` —
+  «deliberately NOT idempotent» больше не так. Правило «ровно один проход на хосте» остаётся, но
+  обоснование переписывается: повторный проход теперь безвреден, блок нормализуется в одном месте,
+  чтобы правило жило в одном экземпляре;
+- `server/services/result-context.ts:58,114` — утверждают, что адрес вложения живёт в `scormHref`.
+  Теперь он живёт в `url`, а `scormHref` остаётся легаси-полем чтения.
 
 - [ ] **Step 5: Прогнать тесты**
 
@@ -1874,7 +1898,17 @@ npm test -- tests/feedback-editor-modal-upload.test.tsx \
 
 Expected: PASS.
 
-- [ ] **Step 4: Проверить типы и сборку**
+- [ ] **Step 4: Перегенерировать превью шаблонов**
+
+Собранные `server/scorm/templates/*/preview.html` содержат скомпилированную копию нормализатора и
+после Task 1 держат в себе прежнее правило выбора адреса (фильтр по `scormHref`). Это генерируемый
+артефакт, который коммитится в репозиторий.
+
+Run: `npm run scorm:previews`
+Expected: превью пересобраны; `git diff --stat server/scorm/templates` показывает обновлённые файлы.
+Закоммить их отдельно: `git commit -m "chore(scorm): перегенерация превью после смены правила адреса вложения"`.
+
+- [ ] **Step 5: Проверить типы и сборку**
 
 Run: `npm run check`
 Expected: без ошибок.
@@ -1882,7 +1916,7 @@ Expected: без ошибок.
 Run: `npm run build`
 Expected: сборка проходит.
 
-- [ ] **Step 5: Если что-то падает**
+- [ ] **Step 6: Если что-то падает**
 
 Чини причину, а не тест. Прогон всей сюиты (`npm test` без пути) и `npm run test:cov` в этой рабочей
 копии запускай ТОЛЬКО с явного разрешения владельца: в ней параллельно работают другие сессии.
@@ -1989,3 +2023,5 @@ git commit -m "docs(roadmap): PRD-32 закрыт вместе с этапом �
 | Расширение типов вложения за пределы PDF | Требует правки контракта и рендера на обоих хостах |
 | Импорт медиа книгой Excel | PRD-14, отдельная работа |
 | Вложения в обратной связи адаптивных уровней и тем | Секция скрыта флагом `hideAssets`; эта работа мест приложения не расширяет |
+| Импорт книги Excel перезаписывает `configJson` шкалы значением `{ bands }` | Вскрыто на Task 12: `server/services/workbook-import.ts` пишет шкалы и показатели в обход маршрутов, поэтому, во-первых, не переиндексирует набор (лечится полной пересборкой), а во-вторых — способен снести `interpretation` вместе с вложениями. Второе индексом не лечится и требует своей работы |
+| Сужение зависимостей эффекта сброса модалки до `[props.open]` | Вскрыто на Task 4: вызывающие собирают `value` литералом, поэтому любая перерисовка родителя меняет визит и отбрасывает загрузку в полёте. Правка поведенческая и требует проверки по всем четырём вызывающим (`basic-settings-section.tsx`, `scales-section.tsx`, `outcomes-editor.tsx`) — отдельной задачей |

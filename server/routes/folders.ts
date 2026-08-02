@@ -166,6 +166,7 @@ router.delete("/:id", requirePermission("folders.manage"), async (req, res) => {
       // усилий не должна стоить автору его действия; недостающая строка безопасна и
       // чинится пересборкой.
       await clearCascadedUsages([
+        ...deletableIds.map((id) => ({ entityType: "topic_feedback" as const, entityId: id })),
         ...deletedTopicsResult.questionIds.map((id) => ({ entityType: "question" as const, entityId: id })),
         ...deletedTopicsResult.contentPageIds.map((id) => ({ entityType: "content_page" as const, entityId: id })),
       ]);
