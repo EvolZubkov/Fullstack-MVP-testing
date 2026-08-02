@@ -27,30 +27,39 @@ const resultsLayout = src("server/scorm/templates/default/layouts/results.html")
 const TOPIC_PDF = { title: "Разбор темы", url: "assets/media/aaaa.pdf" };
 const SECTION_PDF = { title: "Памятка раздела", url: "assets/media/bbbb.pdf" };
 
-/** A saved attempt as `suspend_data.attempts[]` stores it. Passed topic on purpose: */
-/** the material is due for having taken the topic, not for having failed it. */
-const savedAttempt = {
-  attemptNumber: 1,
-  percent: 100,
-  correct: 5,
-  totalCorrect: 5,
-  totalQuestions: 5,
-  earnedPoints: 5,
-  possiblePoints: 5,
-  passed: true,
-  topicResults: [
-    {
-      topicId: "t1",
-      topicName: "Тема 1",
-      correct: 5,
-      total: 5,
-      percent: 100,
-      earnedPoints: 5,
-      possiblePoints: 5,
-      passed: true,
-    },
-  ],
-};
+/**
+ * Попытка, как её хранит `suspend_data.attempts[]`. Тема НЕ ПРОЙДЕНА намеренно: по
+ * согласованному решению владельца всё, что автор повесил на тему — текст, курсы,
+ * мероприятия, вложения, — ученик получает только при провале темы. Значит провал и есть
+ * тот случай, в котором проверяется доставка; вердикты `true` и `null` проверяет
+ * отдельный блок про гейт.
+ */
+function attemptWithTopic(topicPassed: boolean | null) {
+  return {
+    attemptNumber: 1,
+    percent: 60,
+    correct: 3,
+    totalCorrect: 3,
+    totalQuestions: 5,
+    earnedPoints: 3,
+    possiblePoints: 5,
+    passed: false,
+    topicResults: [
+      {
+        topicId: "t1",
+        topicName: "Тема 1",
+        correct: 3,
+        total: 5,
+        percent: 60,
+        earnedPoints: 3,
+        possiblePoints: 5,
+        passed: topicPassed,
+      },
+    ],
+  };
+}
+
+const savedAttempt = attemptWithTopic(false);
 
 interface Runtime {
   renderViewResultsTemplated: (app: HTMLElement, results: unknown) => void;
@@ -195,5 +204,43 @@ describe("SCORM: вложения темы и раздела на экранах
     rt.renderViewResultsTemplated(app, savedAttempt);
     expect(materials(app)).toEqual([]);
     expect(app.querySelector(".tb-recs")).toBeNull();
+  });
+});
+
+describe("SCORM: гейт по вердикту темы", () => {
+  // Пакет обязан вести себя ровно как веб: гейт живёт в общем сборщике, через который
+  // ходят оба хоста, и эти проверки караулят, что рантайм не начал докладывать материалы
+  // темы в обход него.
+  const sectionWithBoth = [
+    { topicId: "t1", topicName: "Тема 1", recommendedAssets: [TOPIC_PDF], feedbackTexts: ["Текст темы"] },
+  ];
+
+  it("у ПРОЙДЕННОЙ темы ни текст, ни вложения не показываются", () => {
+    const { rt, app } = makeRuntime(sectionWithBoth);
+    rt.renderViewResultsTemplated(app, attemptWithTopic(true));
+    expect(materials(app)).toEqual([]);
+    expect(recTexts(app)).toEqual([]);
+    expect(app.querySelector(".tb-recs")).toBeNull();
+  });
+
+  it("у НЕпройденной показываются оба", () => {
+    const { rt, app } = makeRuntime(sectionWithBoth);
+    rt.renderViewResultsTemplated(app, attemptWithTopic(false));
+    expect(materials(app)).toEqual([{ title: TOPIC_PDF.title, href: TOPIC_PDF.url }]);
+    expect(recTexts(app)).toEqual(["Текст темы"]);
+  });
+
+  it("тема БЕЗ вердикта (passed: null) молчит — как молчат курсы в vrRecommended", () => {
+    const { rt, app } = makeRuntime(sectionWithBoth);
+    rt.renderViewResultsTemplated(app, attemptWithTopic(null));
+    expect(materials(app)).toEqual([]);
+    expect(recTexts(app)).toEqual([]);
+  });
+
+  it("финишный экран гейтит так же, как «Мой результат»", () => {
+    const { rt, app } = makeRuntime(sectionWithBoth);
+    rt.renderResultsTemplated(app, attemptWithTopic(true));
+    expect(materials(app)).toEqual([]);
+    expect(recTexts(app)).toEqual([]);
   });
 });

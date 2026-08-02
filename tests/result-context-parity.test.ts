@@ -97,14 +97,16 @@ describe("host parity", () => {
   // результате попытки, пакет запекает их в раздел TEST_DATA — но дальше оба хоста
   // отдают их ОДНОМУ общему сборщику под одним именем, поэтому блок «Материалы»
   // на обоих экранах один и тот же.
+  // Тема здесь НЕ пройдена: материалы темы отдаются ученику только при провале
+  // (согласованное решение владельца — одно правило на текст, курсы и вложения темы).
   it("вложения темы/раздела: адаптер веба === общий сборщик на том же входе", () => {
     const assets = [{ title: "Разбор темы", url: "/api/media/aaaa" }];
     const web = webBuild(
-      { ...attemptResult, topicResults: [{ ...attemptResult.topicResults[0], recommendedAssets: assets }] },
+      { ...attemptResult, topicResults: [{ ...attemptResult.topicResults[0], passed: false, recommendedAssets: assets }] },
       "Тест",
     );
     const shared = sharedBuild(
-      { ...sharedInput, topicResults: [{ ...sharedInput.topicResults[0], recommendedAssets: assets }] },
+      { ...sharedInput, topicResults: [{ ...sharedInput.topicResults[0], passed: false, recommendedAssets: assets }] },
       "Тест",
     );
     expect(web).toEqual(shared);
@@ -118,11 +120,11 @@ describe("host parity", () => {
   it("тексты темы/раздела: адаптер веба === общий сборщик на том же входе", () => {
     const feedbackTexts = ["Текст темы", "Текст раздела"];
     const web = webBuild(
-      { ...attemptResult, topicResults: [{ ...attemptResult.topicResults[0], feedbackTexts }] },
+      { ...attemptResult, topicResults: [{ ...attemptResult.topicResults[0], passed: false, feedbackTexts }] },
       "Тест",
     );
     const shared = sharedBuild(
-      { ...sharedInput, topicResults: [{ ...sharedInput.topicResults[0], feedbackTexts }] },
+      { ...sharedInput, topicResults: [{ ...sharedInput.topicResults[0], passed: false, feedbackTexts }] },
       "Тест",
     );
     expect(web).toEqual(shared);

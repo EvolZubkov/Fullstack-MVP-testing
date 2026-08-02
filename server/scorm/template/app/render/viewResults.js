@@ -53,8 +53,14 @@ function vrRequiredLabel(tr) {
  * resolved when the ZIP was built, so they belong to the package, not to a saved run —
  * and a run saved by a package built before PRD-32 gets them too.
  *
- * NOT gated by the topic's verdict (unlike `vrRecommended`, which is failed-topic
- * guidance): the material is shown for having taken the topic, not for having failed it.
+ * A plain reader: it hands over what the package holds for the topic and judges nothing.
+ * The attachments reach the learner ONLY where the topic was not passed, exactly like the
+ * courses and events of `vrRecommended` — but that gate lives in the shared builder
+ * (`shared/template/result-context.ts`), the one place both hosts go through, so the web
+ * and the package cannot hand out different materials. Until the consolidation these
+ * attachments were shown whatever the verdict, on the reading that a material hung on the
+ * topic's feedback is due for having TAKEN the topic; the owner settled the three
+ * resources of a topic on ONE rule — the courses' one — once they landed in one block.
  */
 function vrTopicAssets(tr) {
   var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
@@ -70,6 +76,9 @@ function vrTopicAssets(tr) {
  *
  * Read off TEST_DATA for the same reason `vrTopicAssets` is: the text belongs to the
  * package's content, not to a saved run, so a run saved by an earlier package gets it too.
+ * And gated the same way — not here, but in the shared builder, which drops everything a
+ * topic carries unless the topic was failed. The text is help with a topic the learner did
+ * not take, the same as the topic's courses, events and attachments.
  *
  * The name matches what the web host stores on the attempt, and it is the ONE name the
  * shared builder reads — the former `topicFeedback` was a name nothing read, which is
@@ -284,10 +293,12 @@ function renderViewResultsTemplated(app, results) {
         possiblePoints: tr.possiblePoints,
         passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
         requiredLabel: vrRequiredLabel(tr),
-        // Тексты обратной связи темы и раздела — в общий блок рекомендаций (общий
-        // сборщик), под тем же именем, каким их кладёт веб-хост.
+        // Feedback texts of the topic and of this test's section over it, for the ONE
+        // recommendations block, under the very name the web host fills. Handed over for
+        // every topic — the shared builder is what gates them by the topic's verdict.
         feedbackTexts: vrTopicFeedbackTexts(tr),
-        // PRD-32: вложения темы и раздела — в общий блок «Материалы» (общий сборщик).
+        // PRD-32 attachments of the topic and of the section, for the ONE «Материалы»
+        // block; gated by the same verdict rule inside the shared builder.
         recommendedAssets: vrTopicAssets(tr)
       };
     })
@@ -369,10 +380,12 @@ function renderResultsTemplated(app, results) {
         possiblePoints: tr.possiblePoints,
         passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
         requiredLabel: vrRequiredLabel(tr),
-        // Тексты обратной связи темы и раздела — в общий блок рекомендаций (общий
-        // сборщик), под тем же именем, каким их кладёт веб-хост.
+        // Feedback texts of the topic and of this test's section over it, for the ONE
+        // recommendations block, under the very name the web host fills. Handed over for
+        // every topic — the shared builder is what gates them by the topic's verdict.
         feedbackTexts: vrTopicFeedbackTexts(tr),
-        // PRD-32: вложения темы и раздела — в общий блок «Материалы» (общий сборщик).
+        // PRD-32 attachments of the topic and of the section, for the ONE «Материалы»
+        // block; gated by the same verdict rule inside the shared builder.
         recommendedAssets: vrTopicAssets(tr)
       };
     })

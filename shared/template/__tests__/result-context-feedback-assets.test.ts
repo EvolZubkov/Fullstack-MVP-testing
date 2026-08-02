@@ -21,7 +21,17 @@ import { buildResultContext, feedbackAssets, topicFeedbackTexts } from "../resul
 const TOPIC_PDF = { title: "Разбор темы", url: "/api/media/aaaa" };
 const SECTION_PDF = { title: "Памятка раздела", url: "/api/media/bbbb" };
 
-function topicRow(assets: Array<{ title: string; url?: string }>, feedbackTexts: string[] = []) {
+/**
+ * Строка темы, по умолчанию НЕ ПРОЙДЕННОЙ: всё, что автор повесил на тему — текст,
+ * курсы, мероприятия, вложения, — показывается ученику только при провале темы
+ * (согласованное решение владельца, задача 4 консолидации). Поэтому провал и есть
+ * базовый случай этих проверок; сам гейт проверяется отдельным блоком ниже.
+ */
+function topicRow(
+  assets: Array<{ title: string; url?: string }>,
+  feedbackTexts: string[] = [],
+  passed: boolean | null = false,
+) {
   return {
     topicId: "t1",
     topicName: "Тема",
@@ -30,7 +40,7 @@ function topicRow(assets: Array<{ title: string; url?: string }>, feedbackTexts:
     percent: 75,
     earnedPoints: 3,
     possiblePoints: 4,
-    passed: true,
+    passed,
     recommendedAssets: assets,
     feedbackTexts,
   };
@@ -181,6 +191,48 @@ describe("тексты обратной связи темы и раздела в
     const ctx = buildResultContext(baseInput([legacy]), "Тест");
     expect(ctx.result.recommendations?.texts).toEqual([]);
     expect(ctx.result.recommendations?.assets).toEqual([TOPIC_PDF]);
+  });
+});
+
+describe("гейт по вердикту темы: материалы темы — только при провале", () => {
+  // Согласованное решение владельца: всё, что автор повесил на ТЕМУ (текст, курсы,
+  // мероприятия, вложения), — это помощь по невзятой теме. До консолидации курсы и
+  // мероприятия уже гейтились провалом, а тексты и вложения показывались всем: три
+  // ресурса одной темы жили по двум разным правилам, и после сведения их в один блок
+  // расхождение стало бы видно на экране.
+  it("у ПРОЙДЕННОЙ темы ни текст, ни вложения в блок не попадают", () => {
+    const ctx = buildResultContext(baseInput([topicRow([TOPIC_PDF], ["Текст темы"], true)]), "Тест");
+    expect(ctx.result.recommendations).toBeUndefined();
+  });
+
+  it("у НЕпройденной темы попадают оба", () => {
+    const ctx = buildResultContext(baseInput([topicRow([TOPIC_PDF], ["Текст темы"], false)]), "Тест");
+    expect(ctx.result.recommendations?.texts).toEqual(["Текст темы"]);
+    expect(ctx.result.recommendations?.assets).toEqual([TOPIC_PDF]);
+  });
+
+  it("тема БЕЗ вердикта (passed: null) молчит — как молчат курсы", () => {
+    // У темы не задан порог, поэтому «не сдал» про ученика не сказано. Правило одно на
+    // все три ресурса темы: `vrRecommended` в рантайме пакета пропускает тему по
+    // `tr.passed !== false`, значит и текст с вложением при null не показываются.
+    const ctx = buildResultContext(baseInput([topicRow([TOPIC_PDF], ["Текст темы"], null)]), "Тест");
+    expect(ctx.result.recommendations).toBeUndefined();
+  });
+
+  it("гейт потемный: молчит только пройденная тема, провалившаяся говорит", () => {
+    const passedTopic = topicRow([TOPIC_PDF], ["Текст пройденной"], true);
+    const failedTopic = { ...topicRow([SECTION_PDF], ["Текст проваленной"], false), topicId: "t2", topicName: "Тема 2" };
+    const ctx = buildResultContext(baseInput([passedTopic, failedTopic]), "Тест");
+    expect(ctx.result.recommendations?.texts).toEqual(["Текст проваленной"]);
+    expect(ctx.result.recommendations?.assets).toEqual([SECTION_PDF]);
+  });
+
+  it("обратной связи ТЕСТА гейт темы не касается — она про тест целиком", () => {
+    const ctx = buildResultContext(baseInput([topicRow([TOPIC_PDF], ["Текст темы"], true)]), "Тест", {
+      testFeedback: { text: "Спасибо за участие.", links: [], events: [], assets: [SECTION_PDF] },
+    });
+    expect(ctx.result.recommendations?.texts).toEqual(["Спасибо за участие."]);
+    expect(ctx.result.recommendations?.assets).toEqual([SECTION_PDF]);
   });
 });
 

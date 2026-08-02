@@ -64,6 +64,10 @@ export interface TopicFeedbackInput {
    * `./recommendations`), so an attachment reaches the learner through it whatever
    * level attached it. Addresses come pre-normalised — the host runs
    * {@link feedbackAssets}, so the `url`-over-`scormHref` rule lives in one place.
+   *
+   * The host hands them over for EVERY topic; whether the learner sees them is the
+   * builder's call — it drops the whole topic unless {@link TopicInput.passed} is
+   * `false` (see `buildResultContext`).
    */
   recommendedAssets?: Array<{ title: string; url?: string }> | null;
   /**
@@ -80,7 +84,8 @@ export interface TopicFeedbackInput {
    * results screen carries ONE «Рекомендации» block gathering every level that spoke
    * (see `./recommendations`), so a text reaches the learner through it whatever level
    * wrote it. Blank entries are dropped by the builder — an empty paragraph is not a
-   * recommendation.
+   * recommendation — and so is the whole topic unless {@link TopicInput.passed} is
+   * `false`: what a topic carries is help with a topic the learner did not take.
    *
    * Both hosts fill it: the web adapter from the stored `TopicResult.feedbackTexts`,
    * the SCORM package from the same two blocks baked into `TEST_DATA`.
@@ -440,10 +445,28 @@ export function buildResultContext(
   }
   // What the topics of this attempt said and attached, LAST — they are the narrowest
   // source (one topic of the test), and the same text or file that the test as a whole
-  // also carries should keep the test's copy under dedup. Not gated by the topic's
-  // verdict: the author hung the material on the topic's feedback, which is shown for
-  // having taken the topic, not for having failed it.
+  // also carries should keep the test's copy under dedup.
+  //
+  // GATED BY THE TOPIC'S VERDICT — everything a topic carries reaches the learner only
+  // where the topic was NOT passed. This is the owner's agreed rule for the consolidated
+  // block, and it replaces the two rules that used to coexist: the recommended courses
+  // and events of a topic were already failed-topic guidance (`vrRecommended` in the
+  // package runtime skips a topic on `tr.passed !== false`), while its texts and its
+  // PRD-32 attachments were shown to everyone, on the reading that a material hung on
+  // the topic's feedback is due for having TAKEN the topic. Consolidation put all three
+  // into ONE block, where two rules would be visible on screen as three resources of the
+  // same topic behaving differently; the owner settled it on the courses' rule.
+  //
+  // `passed === false` and not `!passed` on purpose: `null` is the THIRD state — the
+  // topic has no pass threshold, so nothing was judged and «не пройдено» was never said
+  // about this learner. It is not a failure, and it stays silent exactly as the courses
+  // do (the topic rows already read the same three states).
+  //
+  // The gate lives HERE, in the one builder both hosts call, and not in either host's
+  // adapter: a second copy of it would drift silently and surface as the web and the
+  // package handing the learner different materials.
   for (const topic of input.topicResults || []) {
+    if (topic.passed !== false) continue;
     // ONE source per text, because `FeedbackBlock` carries a single `text` while a topic
     // brings up to two independent ones (its own and this test's section over it).
     // Widening the block to a list of texts would fork the shape every other source —
