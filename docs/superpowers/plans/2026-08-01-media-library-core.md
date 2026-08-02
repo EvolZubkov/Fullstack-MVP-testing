@@ -1236,6 +1236,8 @@ const { storageMock } = vi.hoisted(() => ({
     getQuestion: vi.fn(),
     isTestAssignedToUser: vi.fn(),
     getTestSectionsByTopic: vi.fn(),
+    getContentPage: vi.fn(),
+    getSnapshot: vi.fn(),
   },
 }));
 vi.mock("../server/storage", () => ({ storage: storageMock }));
@@ -1283,9 +1285,31 @@ describe("canDeliverAsset", () => {
     storageMock.getMediaUsagesByAsset.mockResolvedValue([
       { assetId: "a1", entityType: "content_page", entityId: "page-1", field: "image" },
     ]);
+    storageMock.getContentPage.mockResolvedValue({ id: "page-1", testId: "t1" });
     storageMock.isTestAssignedToUser.mockResolvedValue(true);
-    const ok = await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER], { pageTestId: "t1" });
+    const ok = await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER]);
     expect(ok).toBe(true);
+    expect(storageMock.isTestAssignedToUser).toHaveBeenCalledWith("t1", "learner-1");
+  });
+
+  it("reaches the test of a question through its topic's sections", async () => {
+    storageMock.getMediaUsagesByAsset.mockResolvedValue([
+      { assetId: "a1", entityType: "question", entityId: "q-1", field: "mediaUrl" },
+    ]);
+    storageMock.getQuestion.mockResolvedValue({ id: "q-1", topicId: "top-1" });
+    storageMock.getTestSectionsByTopic.mockResolvedValue([{ testId: "t9" }]);
+    storageMock.isTestAssignedToUser.mockResolvedValue(true);
+    expect(await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER])).toBe(true);
+    expect(storageMock.isTestAssignedToUser).toHaveBeenCalledWith("t9", "learner-1");
+  });
+
+  it("refuses a learner whose assignment does not cover the using test", async () => {
+    storageMock.getMediaUsagesByAsset.mockResolvedValue([
+      { assetId: "a1", entityType: "content_page", entityId: "page-1", field: "image" },
+    ]);
+    storageMock.getContentPage.mockResolvedValue({ id: "page-1", testId: "t1" });
+    storageMock.isTestAssignedToUser.mockResolvedValue(false);
+    expect(await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER])).toBe(false);
   });
 
   it("caches the decision for the same asset and user", async () => {
@@ -1329,8 +1353,26 @@ import type { MediaAsset } from "@shared/schema";
 import { storage } from "../../storage";
 import { isAdminOrSuper } from "../test-access";
 
+/**
+ * How long a resolved decision may be trusted.
+ *
+ * Staleness cuts both ways, and the two directions differ in cost. A stale refusal hides
+ * a learner's own picture; a stale grant keeps serving a file to someone whose access was
+ * just revoked. Index writes clear the cache, but granting or revoking a test assignment
+ * does not touch `media_usages` at all — so nothing but time bounds those two cases.
+ */
+const DECISION_TTL_MS = 60_000;
+
+/**
+ * Upper bound on remembered decisions. A service that serves many learners and edits no
+ * content would otherwise grow without limit until restart. On overflow the whole map is
+ * dropped rather than evicted one by one: entries are cheap to recompute and an exact LRU
+ * is not worth the code.
+ */
+const DECISION_CACHE_LIMIT = 5000;
+
 /** Resolved decisions, keyed `<assetId>:<userId>`. Cleared on index writes. */
-const cache = new Map<string, boolean>();
+const cache = new Map<string, { allowed: boolean; expiresAt: number }>();
 
 /** Drops every cached decision. Call after any write to `media_usages`. */
 export function clearAssetAccessCache(): void {
@@ -1340,26 +1382,48 @@ export function clearAssetAccessCache(): void {
 /**
  * Test ids the asset's usages belong to.
  *
- * `content_page`, `test_design` and `test_feedback` name their test directly; the caller
- * supplies it because those tables are read by their own services. A `question` usage
- * reaches tests through its topic's sections.
+ * Every kind resolves its own test from the entity itself. An earlier draft let the
+ * caller pass the test id as a hint, which could not work: the delivery route knows the
+ * asset and the user, and nothing else — the hint would always be absent and a learner
+ * would never receive a content page's picture.
+ *
+ * A `question` reaches tests through its topic's sections, because the same question can
+ * live in several tests.
  */
-async function testIdsForUsages(
-  assetId: string,
-  hints: { pageTestId?: string } = {},
-): Promise<string[]> {
+async function testIdsForUsages(assetId: string): Promise<string[]> {
   const usages = await storage.getMediaUsagesByAsset(assetId);
   const ids = new Set<string>();
   for (const usage of usages) {
-    if (usage.entityType === "question") {
-      const question = await storage.getQuestion(usage.entityId);
-      if (!question) continue;
-      const sections = await storage.getTestSectionsByTopic(question.topicId);
-      for (const section of sections) ids.add(section.testId);
-      continue;
+    switch (usage.entityType) {
+      case "question": {
+        const question = await storage.getQuestion(usage.entityId);
+        if (!question) break;
+        for (const section of await storage.getTestSectionsByTopic(question.topicId)) {
+          ids.add(section.testId);
+        }
+        break;
+      }
+      case "content_page": {
+        const page = await storage.getContentPage(usage.entityId);
+        if (page) ids.add(page.testId);
+        break;
+      }
+      case "snapshot": {
+        const snapshot = await storage.getSnapshot(usage.entityId);
+        if (snapshot) ids.add(snapshot.testId);
+        break;
+      }
+      case "test_design":
+      case "test_feedback":
+        // Keyed by the test itself: the entity id IS the test id.
+        ids.add(usage.entityId);
+        break;
+      default:
+        // `topic_feedback` and `scale_feedback` are declared in the enum for the
+        // feedback-attachment work (PRD-32) but nothing writes them yet. Resolving
+        // them now would be dead code guessing at a shape that work has not chosen.
+        break;
     }
-    // Every other entity type is test-scoped; the hint carries its test id.
-    if (hints.pageTestId) ids.add(hints.pageTestId);
   }
   return [...ids];
 }
@@ -1369,7 +1433,6 @@ export async function canDeliverAsset(
   asset: MediaAsset,
   userId: string,
   roles: readonly Role[],
-  hints: { pageTestId?: string } = {},
 ): Promise<boolean> {
   if (asset.ownerId && asset.ownerId === userId) return true;
   if (isAdminOrSuper(roles)) return true;
@@ -1377,16 +1440,17 @@ export async function canDeliverAsset(
 
   const key = `${asset.id}:${userId}`;
   const cached = cache.get(key);
-  if (cached !== undefined) return cached;
+  if (cached && cached.expiresAt > Date.now()) return cached.allowed;
 
   let allowed = false;
-  for (const testId of await testIdsForUsages(asset.id, hints)) {
+  for (const testId of await testIdsForUsages(asset.id)) {
     if (await storage.isTestAssignedToUser(testId, userId)) {
       allowed = true;
       break;
     }
   }
-  cache.set(key, allowed);
+  if (cache.size >= DECISION_CACHE_LIMIT) cache.clear();
+  cache.set(key, { allowed, expiresAt: Date.now() + DECISION_TTL_MS });
   return allowed;
 }
 ```
@@ -1402,7 +1466,9 @@ Expected: без ошибок. Все использованные методы 
 
 Run: `npm test -- tests/media-asset-access.test.ts`
 
-Expected: PASS (7 тестов).
+Expected: PASS (11 тестов — девять основных плюс два на предел времени и на сброс при перезаписи
+индекса, добавленных после того, как ревью вскрыло, что решение переживает и выдачу, и отзыв
+доступа).
 
 - [ ] **Step 6: Сбрасывать кеш при записи индекса**
 
