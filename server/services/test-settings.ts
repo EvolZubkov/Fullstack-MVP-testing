@@ -183,6 +183,10 @@ export interface TestPayload {
   allowReturnToUnanswered?: boolean;
   allowAnswerChange?: boolean;
   showSectionResults?: boolean;
+  // PRD-34 (FR-01): настройки защиты от копирования.
+  copyProtection?: boolean;
+  protectionWatermark?: boolean;
+  protectionHideOnBlur?: boolean;
   startPageContent?: string | null;
   mode?: "standard" | "adaptive";
   showDifficultyLevel?: boolean;
@@ -273,6 +277,10 @@ export class TestSettingsService {
         allowReturnToUnanswered: payload.test.allowReturnToUnanswered ?? true,
         allowAnswerChange: payload.test.allowAnswerChange ?? false,
         showSectionResults: payload.test.showSectionResults ?? true,
+        // PRD-34 (FR-03): новый тест — защита ВКЛ по умолчанию.
+        copyProtection: payload.test.copyProtection ?? true,
+        protectionWatermark: payload.test.protectionWatermark ?? false,
+        protectionHideOnBlur: payload.test.protectionHideOnBlur ?? false,
         timeLimitMinutes: payload.test.timeLimitMinutes ?? null,
         maxAttempts: payload.test.maxAttempts ?? null,
         startPageContent: payload.test.startPageContent ?? null,

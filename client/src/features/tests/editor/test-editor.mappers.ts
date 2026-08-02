@@ -89,6 +89,9 @@ export type ApiTestResponse = {
   allowReturnToUnanswered?: boolean | null;
   allowAnswerChange?: boolean | null;
   showSectionResults?: boolean | null;
+  copyProtection?: boolean | null;
+  protectionWatermark?: boolean | null;
+  protectionHideOnBlur?: boolean | null;
   startPageContent?: string | null;
   folderId?: string | null;
   sections?: unknown[];
@@ -919,6 +922,10 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
       allowReturnToUnanswered: true,
       allowAnswerChange: false,
       showSectionResults: true,
+      // PRD-34 (FR-03): новый тест — защита ВКЛ.
+      copyProtection: true,
+      protectionWatermark: false,
+      protectionHideOnBlur: false,
     },
     passRules: {
       decisionPolicy: "overall_only",
@@ -1013,6 +1020,13 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
         typeof src.allowAnswerChange === "boolean" ? src.allowAnswerChange : false,
       showSectionResults:
         typeof src.showSectionResults === "boolean" ? src.showSectionResults : true,
+      // PRD-34 (FR-05): поля нет (тест до PRD-34) → умолчание, то есть защита ВКЛ.
+      copyProtection:
+        typeof src.copyProtection === "boolean" ? src.copyProtection : true,
+      protectionWatermark:
+        typeof src.protectionWatermark === "boolean" ? src.protectionWatermark : false,
+      protectionHideOnBlur:
+        typeof src.protectionHideOnBlur === "boolean" ? src.protectionHideOnBlur : false,
     },
     passRules: {
       decisionPolicy,
@@ -1075,6 +1089,9 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     allowReturnToUnanswered: model.runtime.allowReturnToUnanswered,
     allowAnswerChange: model.runtime.allowAnswerChange,
     showSectionResults: model.runtime.showSectionResults,
+    copyProtection: model.runtime.copyProtection,
+    protectionWatermark: model.runtime.protectionWatermark,
+    protectionHideOnBlur: model.runtime.protectionHideOnBlur,
     feedbackJson,
     webhookUrl: emptyToNull(model.basic.webhookUrl),
     telemetryEnabled: model.basic.telemetryEnabled,

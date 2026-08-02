@@ -219,6 +219,32 @@ function checkTemplateJs(src: string): SmokeRouteResult {
 }
 
 /**
+ * PRD-34 (FR-16): объявляет ли шаблон место водяного знака. Это НЕ ошибка и загрузку
+ * не блокирует: без якоря знак встанет строкой в начало сцены. Строка нужна, чтобы
+ * «знак уехал наверх» открывалось администратору при загрузке шаблона, а не участнику
+ * на приёмке.
+ */
+function checkWatermarkAnchor(layouts: Record<string, string>): SmokeRouteResult {
+  const declared = Object.keys(layouts).filter((key) =>
+    (layouts[key] ?? "").includes('data-slot="protection-mark"'),
+  );
+  const warnings = declared.length
+    ? []
+    : [
+        "Макеты не объявляют [data-slot=\"protection-mark\"] — при включённом водяном знаке " +
+          "он встанет строкой в начало сцены, а не в место, выбранное шаблоном.",
+      ];
+  return {
+    id: "protection.mark",
+    route: "protection-mark",
+    label: "Место водяного знака",
+    status: rowStatus([], warnings),
+    errors: [],
+    warnings,
+  };
+}
+
+/**
  * Экраны ОТЧЁТА — по одному варианту каждого объявленного вида (PRD-27 FR-26).
  *
  * Отчёт не входит в `preview.routes[]`: это не экран прохождения, а документ. Но
@@ -285,6 +311,7 @@ export function runSmokeChecks(opts: SmokeRunOptions): SmokeReport {
   }
 
   if (opts.templateJs != null) routes.push(checkTemplateJs(opts.templateJs));
+  routes.push(checkWatermarkAnchor(opts.layouts));
 
   const failed = routes.filter((r) => r.status === "fail").length;
   const warned = routes.filter((r) => r.status === "warn").length;

@@ -222,6 +222,12 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "app/utils/shuffle.js",
   ]);
 
+  // PRD-34: сборщик решения о защите. Утилита, а не часть рендера, — её вызывают
+  // несколько render-модулей, поэтому объявлена ДО них и ровно один раз.
+  const protectionJs = readOneOf([
+    "app/utils/protection.js",
+  ]);
+
   const suspendAttemptsJs = readOneOf([
     "app/utils/scorm/suspendAttempts.js",
     "app/utils/suspendAttempts.js",
@@ -403,6 +409,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     // use it rather than sitting with the gate at the tail of the bundle.
     trustedNowJs,
     qTypeJs,
+    protectionJs,
     telemetryJs,
     shuffleJs,
     suspendAttemptsJs,

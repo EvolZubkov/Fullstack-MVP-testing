@@ -427,6 +427,10 @@ export type TestEditorModel = {
     allowReturnToUnanswered: boolean; // FR-01
     allowAnswerChange: boolean; // FR-04a (зависит от возврата; взаимоискл. с showCorrectAnswers)
     showSectionResults: boolean; // FR-05a (секционные)
+    // PRD-34: защита текста задания. Три НЕЗАВИСИМЫХ переключателя (FR-02).
+    copyProtection: boolean; // FR-01, умолчание ВКЛ
+    protectionWatermark: boolean; // FR-16, умолчание ВЫКЛ
+    protectionHideOnBlur: boolean; // FR-21, умолчание ВЫКЛ
   };
   passRules: PassRules;
   sections: EditorSection[];
@@ -503,6 +507,10 @@ export type TestSettingsPayload = {
   allowReturnToUnanswered: boolean;
   allowAnswerChange: boolean;
   showSectionResults: boolean;
+  // PRD-34: настройки защиты текста задания.
+  copyProtection: boolean;
+  protectionWatermark: boolean;
+  protectionHideOnBlur: boolean;
   /**
    * Test-level feedback. Sent under the `feedbackJson` key because the legacy
    * `feedback` server field is `string`-typed (zod-validated). The new structured

@@ -56,6 +56,11 @@ function prd19RuntimeSettings(test: Test) {
     allowReturnToUnanswered: test.allowReturnToUnanswered ?? true,
     allowAnswerChange: test.allowAnswerChange ?? false,
     showSectionResults: test.showSectionResults ?? true,
+    // PRD-34 (FR-01, FR-05): настройки защиты. Отсутствие поля в СТАРОМ снимке
+    // публикации читается как умолчание — тест, опубликованный до PRD-34, получает защиту.
+    copyProtection: test.copyProtection ?? true,
+    protectionWatermark: test.protectionWatermark ?? false,
+    protectionHideOnBlur: test.protectionHideOnBlur ?? false,
     answerCommitScope: resolveAnswerCommitScope({
       mode: test.mode,
       flowMode: (test.flowPolicyJson as { mode?: string } | null)?.mode,
@@ -1442,6 +1447,9 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
     res.json({
       ...attempt,
       testTitle: test?.title || "Unknown Test",
+      // PRD-34 (FR-16): экран итогов несёт водяной знак, хотя от копирования по FR-09
+      // не защищается. Настройка нужна клиенту здесь, а не только на старте попытки.
+      protectionWatermark: test?.protectionWatermark ?? false,
       result: attempt.resultJson as AttemptResult,
       canRetake,
       render,

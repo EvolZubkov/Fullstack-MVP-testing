@@ -38,6 +38,7 @@ import {
 import { questionFont, optionFont } from "@shared/template/fit-font";
 import { buildQuestionNav, QUESTION_NAV_ACTIONS, type QuestionNavState } from "@shared/template/question-nav";
 import type { SceneTimersState } from "@shared/template/scene-timers";
+import type { ProtectionSpec } from "@shared/template/protection/spec";
 import { renderInlineMarkdown } from "@shared/text";
 
 /** Action names the shared nav row emits (plus the layout's own `nav:next`). */
@@ -188,6 +189,8 @@ export interface TemplateQuestionScreenProps {
   questionsProgress?: CtxQuestionsProgress;
   /** PRD-19 Block C: jump to an absolute question index from a pill click. */
   onNavigateToQuestion?: (index: number) => void;
+  /** PRD-34 (FR-30): protection decision for the question screen, from the shared builder. */
+  protection?: ProtectionSpec;
 }
 
 export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
@@ -260,13 +263,15 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
       // paints its own surface. Painting the host with `tpl.theme` used to show a
       // LIGHT band under a dark scene — the value is read as the first
       // `--background` in theme.css, i.e. always the base (light) palette.
-      className="tbh-screen tbh-col tbh-noselect"
-      onCopy={(e) => e.preventDefault()}
-      onCut={(e) => e.preventDefault()}
-      onContextMenu={(e) => e.preventDefault()}
+      // PRD-34: запрет выделения и перехват копирования СНЯТЫ с этой обёртки. Раньше они
+      // стояли безусловно и только на веб-хосте: настройка теста их не выключала, автор
+      // не мог скопировать текст в отладочном прогоне, а пакет вёл себя иначе. Теперь
+      // мерой управляет общий механизм (`protection`), одинаковый на обоих хостах.
+      className="tbh-screen tbh-col"
     >
       <TemplateScreen
         className="tbh-fill"
+        protection={props.protection}
         layout={tpl.layout}
         css={css}
         cssVars={tpl.cssVars}

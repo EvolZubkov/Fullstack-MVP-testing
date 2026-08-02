@@ -115,6 +115,7 @@ function renderAdaptiveQuestionTemplated(app, qData) {
   // Mount directly into #app so .tb-pad > .tb-scene fills the fixed
   // stage and the footer anchors at its bottom — mirrors renderGalleryPage (no wrapper div).
   window.TBTemplate.renderScreenInto(app, {
+    protection: buildScormProtection('question'),
     layout: (typeof systemLayout === 'function') ? systemLayout('question') : state.templateLayouts['question'],
     context: {
       course: { title: TEST_DATA.title },
@@ -421,7 +422,11 @@ function renderAdaptiveResultsTemplated(app, result) {
   app.innerHTML = '';
   // Mount directly into #app so .tb-pad > .tb-scene fills the fixed stage —
   // mirrors renderGalleryPage (no wrapper div).
-  window.TBTemplate.renderScreenInto(app, { layout: state.templateLayouts['results.adaptive'], context: ctx });
+  window.TBTemplate.renderScreenInto(app, {
+    layout: state.templateLayouts['results.adaptive'],
+    context: ctx,
+    protection: buildScormProtection('results')
+  });
   // Both spellings are bound: `download-report` (unified) and the legacy `download-pdf`,
   // so an external template on either contract still produces the report.
   var report = app.querySelector('[data-action="download-report"]') || app.querySelector('[data-action="download-pdf"]');

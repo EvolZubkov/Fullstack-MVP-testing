@@ -184,6 +184,11 @@ const test = {
   timeLimitMinutes: null,
   maxAttempts: null,
   showCorrectAnswers: true,
+  // PRD-34: демо-пакет собирается с ВКЛЮЧЁННЫМ водяным знаком и скрытием при
+  // потере фокуса — иначе локальная приёмка этих мер требует ручной правки бейка.
+  copyProtection: true,
+  protectionWatermark: true,
+  protectionHideOnBlur: true,
   startPageContent: "Добро пожаловать на демонстрационный курс по основам криптографии.",
   published: true,
   status: "published",

@@ -70,6 +70,13 @@ interface ExportData {
    * the exporter falls back to the built-in convention `server/scorm/templates/<id>`.
    */
   templateDir?: string;
+  /**
+   * PRD-34 (FR-26): how this package is being built. `debug` ⇒ the PRD-18 test run,
+   * where copy protection and the focus-loss veil are OFF so the author can select and
+   * copy the text of their own question (FR-25). The watermark is NOT gated by it
+   * (FR-19). Absent ⇒ a normal export, i.e. protection active.
+   */
+  source?: "export" | "debug";
   // Telemetry config
   telemetry?: {
     enabled: boolean;
@@ -176,6 +183,13 @@ export function buildTestJson(data: ExportData): string {
     allowReturnToUnanswered: data.test.allowReturnToUnanswered ?? true,
     allowAnswerChange: data.test.allowAnswerChange ?? false,
     showSectionResults: data.test.showSectionResults ?? true,
+    // PRD-34 (FR-01, FR-26): настройки защиты для рантайма пакета. `protectionActive`
+    // отдельным полем: в отладочном прогоне защита и скрытие выключены, а водяной знак
+    // остаётся (FR-19, FR-25).
+    copyProtection: data.test.copyProtection ?? true,
+    protectionWatermark: data.test.protectionWatermark ?? false,
+    protectionHideOnBlur: data.test.protectionHideOnBlur ?? false,
+    protectionActive: data.source !== "debug",
     // PRD-19 (Блок B): единый резолв гранулярности фиксации ответа — оба хоста
     // читают готовое значение (без повторного вывода из flowMode), что
     // исключает дрейф skip/return/freeze между SCORM и вебом.

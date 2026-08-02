@@ -308,7 +308,13 @@ function renderReviewScreen() {
     app.innerHTML = '';
     // Mount directly into #app so .tb-pad > .review-page fills the fixed stage
     // and the bottom nav anchors — mirrors renderGalleryPage (no wrapper div).
-    TB.renderScreenInto(app, { layout: layout, context: context });
+    // PRD-34 (FR-08): экран обзора защищается СЦЕНОЙ ЦЕЛИКОМ — текст задания там
+    // печатает сам макет, зацепиться за регион ядра не за что.
+    TB.renderScreenInto(app, {
+        layout: layout,
+        context: context,
+        protection: buildScormProtection('review')
+    });
     // Reveal + paint the running countdowns (the обзор is mid-test).
     if (typeof revealSceneTimers === 'function') revealSceneTimers(app);
     var actionEls = app.querySelectorAll('[data-action]');
@@ -436,7 +442,11 @@ function renderSectionResults(topicId, isLast) {
     app.innerHTML = '';
     // Mount directly into #app so .tb-pad > .tb-scene fills the fixed stage
     // (section-results ring centered) — mirrors renderGalleryPage (no wrapper div).
-    TB.renderScreenInto(app, { layout: layout, context: context });
+    TB.renderScreenInto(app, {
+        layout: layout,
+        context: context,
+        protection: buildScormProtection('section-results')
+    });
     // Section-results is mid-test — reveal + paint the running countdowns.
     if (typeof revealSceneTimers === 'function') revealSceneTimers(app);
     var btn = app.querySelector('[data-action="section-continue"]');
@@ -586,7 +596,12 @@ function renderStandardQuestion(qData, current, total, progress) {
         // Mount directly into #app so .tb-pad > .tb-scene fills the
         // fixed stage and the appended nav row anchors at the bottom — mirrors
         // renderGalleryPage (a wrapper div would defeat the child-combinator rule).
-        TB.renderScreenInto(app, { layout: layout, context: context, slots: slots });
+        TB.renderScreenInto(app, {
+            layout: layout,
+            context: context,
+            slots: slots,
+            protection: buildScormProtection('question')
+        });
 
         // PRD-19 Block C: wire pill clicks → goToQuestionIndex (frontier enforced
         // by the `disabled` attribute the builder set on non-reachable pills). The map
