@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, index, check, uuid, real } from "drizzle-orm/pg-core"
+import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, index, check, uuid, real, primaryKey } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -1821,6 +1821,67 @@ export const insertQuestionMeasurementSchema = createInsertSchema(questionMeasur
     sortOrder: z.number().optional(),
     conditionJson: z.unknown().nullish(),
   });
+
+/**
+ * PRD медиатеки: the registry row for ONE author file. The `id` IS the address —
+ * content stores the string `/api/media/<id>`, so the column type of every existing
+ * media reference stays `text` and no mass JSON migration is needed.
+ *
+ * Two layers of dedup, deliberately different: the PHYSICAL file is addressed by
+ * `checksum` (re-uploading identical bytes writes no second file), while a REGISTRY
+ * ROW is per (content, owner). One row per checksum would leak a private file to
+ * anyone who happened to upload the same bytes.
+ *
+ * `owner_id` is nullable: rows created by the backfill of pre-registry files have no
+ * knowable author (the old file name carried none).
+ */
+export const mediaAssets = pgTable("media_assets", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  checksum: varchar("checksum", { length: 64 }).notNull(),
+  storageKey: text("storage_key").notNull(),
+  mimeType: text("mime_type").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  kind: text("kind", { enum: ["image", "audio", "video", "document"] }).notNull(),
+  originalName: text("original_name").notNull(),
+  title: text("title"),
+  ownerId: varchar("owner_id", { length: 36 }),
+  visibility: text("visibility", { enum: ["private", "shared"] }).notNull().default("shared"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  // Dedup lookup on upload: "does THIS owner already have THESE bytes".
+  // Not unique: Postgres treats NULL owners as distinct, so a unique index would
+  // not constrain backfilled rows anyway — the backfill script dedups explicitly.
+  ownerChecksumIdx: index("media_assets_owner_checksum_idx").on(table.ownerId, table.checksum),
+  // Reference counting before physically removing a file.
+  checksumIdx: index("media_assets_checksum_idx").on(table.checksum),
+}));
+
+/**
+ * PRD медиатеки: the reverse index "asset -> where it is used". It serves three
+ * consumers at once: the delivery rule (may this user receive the file), the
+ * «где используется» report, and orphan collection.
+ *
+ * `field` is the dotted path inside the entity, so the report can say WHERE exactly
+ * and a re-sync can replace one entity's rows wholesale.
+ */
+export const mediaUsages = pgTable("media_usages", {
+  assetId: varchar("asset_id", { length: 36 }).notNull(),
+  entityType: text("entity_type", {
+    enum: ["question", "content_page", "test_design", "test_feedback", "topic_feedback", "scale_feedback", "snapshot"],
+  }).notNull(),
+  entityId: varchar("entity_id", { length: 36 }).notNull(),
+  field: text("field").notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.assetId, table.entityType, table.entityId, table.field] }),
+  // Re-syncing one entity deletes its rows by this key.
+  entityIdx: index("media_usages_entity_idx").on(table.entityType, table.entityId),
+  assetIdx: index("media_usages_asset_idx").on(table.assetId),
+}));
+
+export type MediaAsset = typeof mediaAssets.$inferSelect;
+export type InsertMediaAsset = typeof mediaAssets.$inferInsert;
+export type MediaUsage = typeof mediaUsages.$inferSelect;
+export type MediaEntityType = MediaUsage["entityType"];
 
 export type InsertQuestionMeasurement = z.infer<typeof insertQuestionMeasurementSchema>;
 export type QuestionMeasurement = typeof questionMeasurements.$inferSelect;
