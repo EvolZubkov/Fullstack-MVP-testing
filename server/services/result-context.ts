@@ -146,6 +146,12 @@ function toTopicInput(t: TopicResult): TopicInput {
     // the attempt. The shared builder pours them into the ONE «Материалы» block.
     // Absent on attempts graded before PRD-32 — the block then simply lacks them.
     recommendedAssets: t.recommendedAssets ?? [],
+    // Feedback texts of the topic and of this test's section over it, gathered at
+    // grading time (`server/routes/attempts.ts`) and stored WITH the attempt, in that
+    // order. The shared builder pours them into the ONE recommendations block, where
+    // dedup keeps the widest copy — so a sentence the test also carries shows once.
+    // Absent on attempts graded before this work — the block then simply lacks them.
+    feedbackTexts: t.feedbackTexts ?? [],
   };
 }
 

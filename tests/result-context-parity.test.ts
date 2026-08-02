@@ -111,6 +111,24 @@ describe("host parity", () => {
     expect(web.result.recommendations?.assets).toEqual(assets);
   });
 
+  // Тексты обратной связи темы и раздела ходят тем же путём, что вложения: веб хранит
+  // их в результате попытки (`TopicResult.feedbackTexts`), пакет запечёт их в раздел
+  // TEST_DATA — и оба отдадут общему сборщику ОДНО поле `feedbackTexts`, поэтому
+  // консолидированный блок на обоих экранах одинаков.
+  it("тексты темы/раздела: адаптер веба === общий сборщик на том же входе", () => {
+    const feedbackTexts = ["Текст темы", "Текст раздела"];
+    const web = webBuild(
+      { ...attemptResult, topicResults: [{ ...attemptResult.topicResults[0], feedbackTexts }] },
+      "Тест",
+    );
+    const shared = sharedBuild(
+      { ...sharedInput, topicResults: [{ ...sharedInput.topicResults[0], feedbackTexts }] },
+      "Тест",
+    );
+    expect(web).toEqual(shared);
+    expect(web.result.recommendations?.texts).toEqual(feedbackTexts);
+  });
+
   // Дефект Д-3. Веб собирает `testFeedback` из своего `MeasuresSource`, пакет — из
   // `TEST_DATA.testFeedbackJson`, но оба отдают его общему сборщику ОДНОЙ опцией,
   // не завязанной на измерения. Тест без шкал и показателей — общий случай.

@@ -21,7 +21,7 @@ import { buildResultContext, feedbackAssets } from "../result-context";
 const TOPIC_PDF = { title: "Разбор темы", url: "/api/media/aaaa" };
 const SECTION_PDF = { title: "Памятка раздела", url: "/api/media/bbbb" };
 
-function topicRow(assets: Array<{ title: string; url?: string }>) {
+function topicRow(assets: Array<{ title: string; url?: string }>, feedbackTexts: string[] = []) {
   return {
     topicId: "t1",
     topicName: "Тема",
@@ -32,6 +32,7 @@ function topicRow(assets: Array<{ title: string; url?: string }>) {
     possiblePoints: 4,
     passed: true,
     recommendedAssets: assets,
+    feedbackTexts,
   };
 }
 
@@ -124,6 +125,62 @@ describe("обратная связь ТЕСТА в блоке рекоменд�
   it("её отсутствие оставляет контекст прежним", () => {
     const ctx = buildResultContext(baseInput([topicRow([])]), "Опрос", { testFeedback: null });
     expect(ctx.result.recommendations).toBeUndefined();
+  });
+});
+
+describe("тексты обратной связи темы и раздела в консолидированном блоке", () => {
+  // Текст, написанный автором у темы и у раздела теста над ней, — такой же источник
+  // общего блока, как вложения: показывается там, а не в карточке темы. Оба текста
+  // приезжают одним массивом `feedbackTexts` (тема, затем раздел) — это контракт,
+  // который обязаны заполнять ОБА хоста.
+  it("довозит текст темы до result.recommendations.texts", () => {
+    const ctx = buildResultContext(baseInput([topicRow([], ["Текст темы"])]), "Тест");
+    expect(ctx.result.recommendations?.texts).toEqual(["Текст темы"]);
+    expect(ctx.result.recommendations?.hasAny).toBe(true);
+  });
+
+  it("довозит текст раздела — вторым элементом того же массива", () => {
+    const ctx = buildResultContext(baseInput([topicRow([], ["Текст темы", "Текст раздела"])]), "Тест");
+    expect(ctx.result.recommendations?.texts).toEqual(["Текст темы", "Текст раздела"]);
+  });
+
+  it("один и тот же текст у темы и у раздела даёт ОДНУ строку", () => {
+    const ctx = buildResultContext(baseInput([topicRow([], ["Повторим тему", "Повторим тему"])]), "Тест");
+    expect(ctx.result.recommendations?.texts).toEqual(["Повторим тему"]);
+  });
+
+  it("текст, совпадающий с обратной связью теста, не повторяется — остаётся экземпляр теста", () => {
+    // Дедупликация оставляет ПЕРВОЕ вхождение, а тест идёт первым источником: общая
+    // формулировка выигрывает у своей копии на теме. Порядок здесь нагружен: у темы
+    // повтор стоит ПОСЛЕ собственного текста, поэтому позиция «Общей рекомендации»
+    // показывает, чей экземпляр остался — тестовый, а не темы.
+    const ctx = buildResultContext(baseInput([topicRow([], ["Текст темы", "Общая рекомендация"])]), "Тест", {
+      testFeedback: { text: "Общая рекомендация", links: [], events: [], assets: [] },
+    });
+    expect(ctx.result.recommendations?.texts).toEqual(["Общая рекомендация", "Текст темы"]);
+  });
+
+  it("тексты разных тем сливаются в один список без разделения по темам", () => {
+    const second = { ...topicRow([], ["Текст второй темы"]), topicId: "t2", topicName: "Тема 2" };
+    const ctx = buildResultContext(baseInput([topicRow([], ["Текст первой темы"]), second]), "Тест");
+    expect(ctx.result.recommendations?.texts).toEqual(["Текст первой темы", "Текст второй темы"]);
+  });
+
+  it("тема без текстов ничего не добавляет и пустого блока не рождает", () => {
+    const ctx = buildResultContext(baseInput([topicRow([], [])]), "Тест");
+    expect(ctx.result.recommendations).toBeUndefined();
+  });
+
+  it("пустой и пробельный текст не даёт пустой строки в блоке", () => {
+    const ctx = buildResultContext(baseInput([topicRow([], ["", "   ", "Есть текст"])]), "Тест");
+    expect(ctx.result.recommendations?.texts).toEqual(["Есть текст"]);
+  });
+
+  it("отсутствие поля не ломает попытки, посчитанные до этой работы", () => {
+    const legacy = { ...topicRow([TOPIC_PDF]), feedbackTexts: undefined };
+    const ctx = buildResultContext(baseInput([legacy]), "Тест");
+    expect(ctx.result.recommendations?.texts).toEqual([]);
+    expect(ctx.result.recommendations?.assets).toEqual([TOPIC_PDF]);
   });
 });
 

@@ -66,6 +66,26 @@ export interface TopicFeedbackInput {
    * {@link feedbackAssets}, so the `url`-over-`scormHref` rule lives in one place.
    */
   recommendedAssets?: Array<{ title: string; url?: string }> | null;
+  /**
+   * Feedback TEXTS the learner is to receive for this topic — the topic's own
+   * (`topics.feedback_json.text`, or the legacy `topics.feedback` column) and that of
+   * this test's section over it (`test_sections.feedback_json.text`), merged by the
+   * host in that order.
+   *
+   * A LIST and not one string: the topic and the section are two INDEPENDENT authoring
+   * points, and the boundary between them is what the consolidated block de-duplicates
+   * on — an author who wrote the same sentence in both places must see it once.
+   *
+   * Like {@link recommendedAssets} these do NOT render inside the topic row: the
+   * results screen carries ONE «Рекомендации» block gathering every level that spoke
+   * (see `./recommendations`), so a text reaches the learner through it whatever level
+   * wrote it. Blank entries are dropped by the builder — an empty paragraph is not a
+   * recommendation.
+   *
+   * Both hosts fill it: the web adapter from the stored `TopicResult.feedbackTexts`,
+   * the SCORM package from the same two blocks baked into `TEST_DATA`.
+   */
+  feedbackTexts?: string[] | null;
 }
 
 /** Normalized per-topic input (host adapts its own field names into this). */
@@ -368,12 +388,21 @@ export function buildResultContext(
       ...(blocks.scales ? visibleScales.map(firedFeedback) : []),
     );
   }
-  // PRD-32: the attachments of the topics this attempt covered, LAST — they are the
-  // narrowest source (one topic of the test), and the same file attached to the test
-  // as a whole should keep the test's copy under dedup. Not gated by the topic's
+  // What the topics of this attempt said and attached, LAST — they are the narrowest
+  // source (one topic of the test), and the same text or file that the test as a whole
+  // also carries should keep the test's copy under dedup. Not gated by the topic's
   // verdict: the author hung the material on the topic's feedback, which is shown for
   // having taken the topic, not for having failed it.
   for (const topic of input.topicResults || []) {
+    // ONE source per text, because `FeedbackBlock` carries a single `text` while a topic
+    // brings up to two independent ones (its own and this test's section over it).
+    // Widening the block to a list of texts would fork the shape every other source —
+    // the test, the fired band, the fired outcome — already speaks; a source apiece
+    // keeps the collector's contract untouched and lets dedup see the two texts for the
+    // separate entries they are. Blank ones are dropped here so no host has to.
+    for (const text of topic.feedbackTexts ?? []) {
+      if (String(text ?? "").trim()) recommendationSources.push({ text, links: [], events: [], assets: [] });
+    }
     const assets = topic.recommendedAssets ?? [];
     if (assets.length > 0) recommendationSources.push({ links: [], events: [], assets });
   }
