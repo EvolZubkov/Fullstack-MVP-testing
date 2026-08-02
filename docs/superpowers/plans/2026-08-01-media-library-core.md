@@ -660,7 +660,7 @@ Expected: FAIL — модуль `server/storage/media-repository` не найд�
  * routes.
  */
 import { randomUUID } from "crypto";
-import { and, eq, isNull, notInArray, sql } from "drizzle-orm";
+import { and, eq, isNull, notExists, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   mediaAssets, mediaUsages,
@@ -739,12 +739,22 @@ export class MediaRepository {
     return db.select().from(mediaUsages).where(eq(mediaUsages.assetId, assetId));
   }
 
-  /** Assets no entity references. Input to orphan collection. */
+  /**
+   * Assets no entity references. Input to orphan collection.
+   *
+   * An anti-join, NOT "read every used id and pass them as a NOT IN list": the list
+   * would carry one bind parameter per used asset, and PostgreSQL caps a prepared
+   * statement at 65535 of them. A media library grows without an upper bound.
+   */
   async listOrphanAssets(): Promise<MediaAsset[]> {
-    const used = await db.selectDistinct({ assetId: mediaUsages.assetId }).from(mediaUsages);
-    const ids = used.map((u) => u.assetId);
-    if (ids.length === 0) return db.select().from(mediaAssets);
-    return db.select().from(mediaAssets).where(notInArray(mediaAssets.id, ids));
+    return db
+      .select()
+      .from(mediaAssets)
+      .where(
+        notExists(
+          db.select({ one: sql`1` }).from(mediaUsages).where(eq(mediaUsages.assetId, mediaAssets.id)),
+        ),
+      );
   }
 
   /** Drops every usage row. Only the full reindex uses this. */
@@ -819,7 +829,9 @@ export type { MediaUsageRef };
 
 Run: `npm run test:it -- tests/it/media-repository.it.test.ts`
 
-Expected: PASS (4 теста).
+Expected: PASS (10 тестов — четыре основных плюс шесть добавленных по итогам ревью:
+легаси-корзина с нулевым владельцем, удаление, полная очистка индекса, выборка по владельцу,
+резолв по ключу хранения, повторная ссылка в одном вызове).
 
 Run: `npm run check`
 
@@ -2402,6 +2414,12 @@ git commit -m "feat(media): защищённая раздача файла с д
 
 - Modify: `server/routes/media.ts`
 - Create: `tests/media-delete-route.test.ts`
+
+Учти гонку, вскрытую ревью Задачи 4: между проверкой «использований нет» и самим удалением есть
+окно, в котором параллельный запрос успевает записать строку индекса. Тогда `deleteAsset` упрётся в
+внешний ключ и Postgres бросит `23503`, а наружу уйдёт `500` вместо ожидаемого `409`. Оберни
+удаление так, чтобы нарушение внешнего ключа превращалось в тот же ответ `409`, что и штатная
+проверка, — иначе редкий, но воспроизводимый случай будет выглядеть отказом сервера.
 
 - [ ] **Step 1: Написать падающий тест**
 
