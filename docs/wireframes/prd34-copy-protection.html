@@ -18,7 +18,7 @@
     server/scorm/templates/default/layouts/question.html: те же tb-scene,
     tb-scene__q, tb-qbody, ou-radio-card, тот же футер. Сцена итогов — из
     layouts/results.html. Дельта PRD-34 — ровно три элемента, каждый строится
-    ядром: .tb-protection-mark, .tb-protection-veil, .tb-protection-toast.
+    ядром: .tb-protection-mark, .tb-protection-veil и штатный ou-toast ДС.
 
     ЧТО ИМЕННО УТВЕРЖДАЕТСЯ ЭСКИЗОМ. Только два параметра знака: КЕГЛЬ и
     КОНТРАСТ. Место знака эскизом не утверждается — его объявляет макет якорем
@@ -34,8 +34,9 @@
       Классы с префиксом wf- — каркас эскиза, не UI.
 
     ЧТО ПРОВЕРЯЕТ ЭСКИЗ:
-      1. знак НЕ перекрывает ни текст задания, ни варианты ответа: он стоит в
-         объявленном якоре, между заданием и вариантами (FR-16);
+      1. знак НЕ перекрывает ни текст задания, ни варианты ответа и не отнимает у
+         кадра высоты: он делит строку с уже существующей подсказкой «Выберите…»,
+         прижатый к правому краю (FR-16);
       2. кегль знака фиксированный и минимальный — он НЕ участвует в
          автоподборе, которому подчиняются задание и варианты, поэтому на
          длинном задании остаётся тем же (состояние s-long);
@@ -45,7 +46,8 @@
          чужого шаблона, который якоря не объявил (FR-16);
       4. заглушка закрывает ТОЛЬКО регионы задания и вариантов: шапка, карта
          вопросов, таймеры, прогресс и футер видимы — попытка не прервана,
-         таймер идёт (FR-23);
+         таймер идёт (FR-23). Кнопки на ней нет: возврат автоматический, по
+         возврату фокуса или видимости (FR-21);
       5. предупреждение о копировании не перекрывает содержимое и гаснет само
          (FR-13);
       6. с выключенными настройками экран равен согласованному
@@ -90,34 +92,56 @@
     /* Водяной знак (FR-16 — FR-18). Кегль ФИКСИРОВАННЫЙ: он намеренно не
        использует --tb-question-fs/--tb-answer-fs, которые подбирает fit-font,
        поэтому знак не соревнуется с содержимым за место и не меняет размер от
-       экрана к экрану. Отступов нет — знак встраивается в имеющийся просвет. */
+       экрана к экрану. Отступов нет, а прижатие вправо (margin-inline-start и
+       align-self) даёт правый край и в строке-флексе, и в колонке-флексе. */
     .tb-protection-mark {
-      display: block; flex: 0 0 auto; margin: 0; padding: 0;
-      text-align: center; font-size: 11px; line-height: 1.2;
-      letter-spacing: .02em; color: var(--ou-fg-muted); opacity: .6;
+      flex: 0 0 auto; margin: 0; margin-inline-start: auto; align-self: flex-end;
+      padding: 0; white-space: nowrap;
+      font-size: 10px; line-height: 1.2; letter-spacing: .02em;
+      color: var(--ou-fg-muted); opacity: .35;
       pointer-events: none; user-select: none; -webkit-user-select: none;
     }
+
+    /* ДЕЛЬТА ШАБЛОНА — предлагаемое дополнение к theme.css поставляемого
+       шаблона (НЕ к PROTECTION_CSS ядра): строка подсказки становится рядом,
+       в котором слева подсказка, справа якорь знака. Так знак не занимает
+       собственной высоты вовсе — он делит строку с уже существующей подсказкой.
+       Место — решение шаблона, поэтому и правило шаблонное. */
+    .tb-scene__qmeta {
+      display: flex; align-items: baseline; gap: var(--ou-space-4);
+      min-width: 0;
+    }
+    .tb-scene__qmeta > [data-slot="protection-mark"] { margin-inline-start: auto; }
 
     /* Заглушка при потере фокуса (FR-21 — FR-23). Накрывает ТОЛЬКО регионы
        периметра, а не сцену: шапка, таймеры и футер обязаны остаться видимыми,
        потому что попытка продолжается. */
     .tb-protection-veil {
       position: absolute; inset: 0; z-index: 35;
-      display: flex; flex-direction: column; gap: var(--ou-space-4);
-      align-items: center; justify-content: center; text-align: center;
-      padding: var(--ou-space-6);
+      /* Раскладку содержимого задаёт САМ компонент ДС (ou-empty); вуаль только
+         центрирует его и гасит фон, поэтому здесь grid + place-items, а не
+         собственная флекс-колонка со своими отступами. */
+      display: grid; place-items: center;
+      /* Нейтральный тон вместо --tone-info: акцентная иконка была ярче содержимого,
+         которое она закрывает. Цвет задаётся на вуали, чтобы штатная иконка ДС
+         унаследовала приглушённый тон без правки самого компонента. */
+      color: var(--ou-fg-muted);
+      padding: var(--ou-space-4);
       backdrop-filter: blur(8px);
       background: color-mix(in srgb, var(--ou-bg-surface-2) 80%, transparent);
     }
+    /* Пиктограмма выравнивается с текстом по средней линии и уменьшается до размера
+       строки: штатные 56 px рассчитаны на пустую область страницы и рядом с одной
+       строкой заголовка смотрятся как отдельный элемент, а не как её значок. */
+    .tb-protection-veil .ou-empty { align-items: center; --_art-size: 22px; }
+    .tb-protection-veil .ou-empty__art { align-self: center; }
 
-    /* Предупреждение о попытке копирования (FR-13). Не перехватывает указатель
-       и гаснет само; на contextmenu и dragstart не показывается — иначе обычный
-       правый клик превращается в шум. */
-    .tb-protection-toast {
-      position: absolute; left: 50%; bottom: var(--ou-space-6);
-      transform: translateX(-50%); z-index: 40;
-      max-width: min(90%, var(--wf-size-720)); pointer-events: none;
-    }
+    /* Предупреждение о попытке копирования (FR-13) — компонент ДС `ou-toast` в
+       штатной стойке `ou-toast-stack`. Своего класса и своего расположения у
+       него НЕТ: ДС задаёт и вид, и позицию (fixed, снизу справа). Единственное
+       отступление — знак не перехватывает указатель: кнопки закрытия у нашего
+       сообщения нет, оно гаснет само, и перехватывать клики ему незачем. */
+    .ou-toast-stack { pointer-events: none; }
 
     /* Печать: регионы периметра из документа исключаются. Правило пишется по
        служебному атрибуту ядра и никогда по классам разметки — так PDF-отчёт
@@ -188,7 +212,8 @@
   <div class="wf-page">
     <p class="wf-caption">
       Знак стоит в якоре <code>[data-slot="protection-mark"]</code>, который макет вопроса объявляет
-      между блоком задания и блоком ответов. Ни задание, ни варианты не перекрыты.
+      в строке подсказки, справа. Собственной высоты знак не занимает: он делит строку с уже
+      существующей подсказкой, поэтому ни задание, ни варианты не перекрыты и не сдвинуты.
     </p>
     <div class="wf-viewport">
       <div class="tb-scene">
@@ -231,12 +256,13 @@
             </div>
             <div class="tb-scene__q">
               <h2 class="tb-scene__qtitle" data-tb-protected>Какой пароль является наиболее надёжным с точки зрения безопасности?</h2>
-              <span class="tb-scene__qhint" data-tb-protected>Выберите один вариант ответа</span>
-            </div>
-
-            <!-- ДЕЛЬТА PRD-34: якорь, объявленный макетом. Разметку внутри строит ядро. -->
-            <div data-slot="protection-mark">
-              <div class="tb-protection-mark" aria-hidden="true">ID 7f3ac2 · 02.08.2026 14:35</div>
+              <div class="tb-scene__qmeta">
+                <span class="tb-scene__qhint" data-tb-protected>Выберите один вариант ответа</span>
+                <!-- ДЕЛЬТА PRD-34: якорь в строке подсказки, справа. Разметку внутри строит ядро. -->
+                <div data-slot="protection-mark">
+                  <div class="tb-protection-mark" aria-hidden="true">ID 7f3ac2 · 02.08.2026 14:35</div>
+                </div>
+              </div>
             </div>
 
             <div class="tb-qbody">
@@ -286,7 +312,7 @@
   <div class="wf-page">
     <p class="wf-caption">
       Задание и варианты ужаты автоподбором (<code>--tb-question-fs</code> 22px против 30px в
-      предыдущем состоянии). Кегль знака не изменился: он константа и в автоподборе не участвует.
+      предыдущем состоянии). Кегль знака не изменился: он константа и в автоподборе не участвует. Знак по-прежнему в строке подсказки, справа.
     </p>
     <div class="wf-viewport">
       <div class="tb-scene">
@@ -311,11 +337,12 @@
             </div>
             <div class="tb-scene__q">
               <h2 class="tb-scene__qtitle" data-tb-protected>Сотрудник обнаружил, что с его рабочей станции ночью уходил трафик на неизвестный внешний адрес, а утром антивирус сообщил о карантине. Какое действие следует выполнить ПЕРВЫМ согласно порядку реагирования?</h2>
-              <span class="tb-scene__qhint" data-tb-protected>Выберите один вариант ответа</span>
-            </div>
-
-            <div data-slot="protection-mark">
-              <div class="tb-protection-mark" aria-hidden="true">ID 7f3ac2 · 02.08.2026 14:41</div>
+              <div class="tb-scene__qmeta">
+                <span class="tb-scene__qhint" data-tb-protected>Выберите один вариант ответа</span>
+                <div data-slot="protection-mark">
+                  <div class="tb-protection-mark" aria-hidden="true">ID 7f3ac2 · 02.08.2026 14:41</div>
+                </div>
+              </div>
             </div>
 
             <div class="tb-qbody">
@@ -413,7 +440,7 @@
   <div class="wf-page">
     <p class="wf-caption">
       Участник ушёл на другую вкладку. Закрыты ТОЛЬКО задание и варианты; шапка, карта вопросов,
-      таймер, прогресс и футер видимы — попытка не прервана, таймер идёт. Возврат явный, по кнопке.
+      таймер, прогресс и футер видимы — попытка не прервана, таймер идёт. Возврат АВТОМАТИЧЕСКИЙ: вернулся во вкладку — заглушка снялась сама, действий не требуется.
     </p>
     <div class="wf-viewport">
       <div class="tb-scene">
@@ -450,18 +477,26 @@
 
             <div class="tb-scene__q wf-anchored">
               <h2 class="tb-scene__qtitle" data-tb-protected>Какой пароль является наиболее надёжным с точки зрения безопасности?</h2>
-              <span class="tb-scene__qhint" data-tb-protected>Выберите один вариант ответа</span>
-              <!-- ДЕЛЬТА PRD-34: заглушка над регионом задания. -->
-              <div class="tb-protection-veil" role="status">
-                <div class="ou-banner ou-banner--info ou-banner--sm">
-                  <div class="ou-banner__body"><span class="ou-banner__desc">Задание скрыто, пока окно неактивно</span></div>
+              <div class="tb-scene__qmeta">
+                <span class="tb-scene__qhint" data-tb-protected>Выберите один вариант ответа</span>
+                <div data-slot="protection-mark">
+                  <div class="tb-protection-mark" aria-hidden="true">ID 7f3ac2 · 02.08.2026 14:35</div>
                 </div>
-                <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Показать задание</button>
               </div>
-            </div>
-
-            <div data-slot="protection-mark">
-              <div class="tb-protection-mark" aria-hidden="true">ID 7f3ac2 · 02.08.2026 14:35</div>
+              <!-- ДЕЛЬТА PRD-34: заглушка над регионом задания. Знак уходит под неё вместе с
+                   подсказкой — атрибутировать нечего, пока задание скрыто. -->
+              <div class="tb-protection-veil" role="status">
+                <!-- Компактный вид ou-empty: --inline + --horizontal, пиктограмма СЛЕВА от
+                     текста и без описания. Вуаль накрывает регион в две строки, а не пустую
+                     область страницы: в вертикальном варианте иллюстрация вставала НАД текстом,
+                     и блок обрезался по границе региона. -->
+                <div class="ou-empty ou-empty--inline ou-empty--horizontal">
+                  <span class="ou-empty__art" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 6.2A9 9 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-2.5 3"/><path d="M6.3 8.3A17 17 0 0 0 3 12s4 6 9 6a9 9 0 0 0 3.7-.8"/><path d="M3 3l18 18"/></svg></span>
+                  <div class="ou-empty__content">
+                    <p class="ou-empty__title">Задание скрыто, пока окно неактивно</p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="tb-qbody">
@@ -476,7 +511,7 @@
                     </div>
                   </div>
                 </div>
-                <!-- Регион вариантов закрыт той же заглушкой, но сообщение и кнопка — один раз,
+                <!-- Регион вариантов закрыт той же заглушкой, но сообщение — один раз,
                      на регионе задания: два одинаковых блока читались бы как ошибка. -->
                 <div class="tb-protection-veil" aria-hidden="true"></div>
               </div>
@@ -528,11 +563,12 @@
             </div>
             <div class="tb-scene__q">
               <h2 class="tb-scene__qtitle" data-tb-protected>Какой пароль является наиболее надёжным с точки зрения безопасности?</h2>
-              <span class="tb-scene__qhint" data-tb-protected>Выберите один вариант ответа</span>
-            </div>
-
-            <div data-slot="protection-mark">
-              <div class="tb-protection-mark" aria-hidden="true">ID 7f3ac2 · 02.08.2026 14:35</div>
+              <div class="tb-scene__qmeta">
+                <span class="tb-scene__qhint" data-tb-protected>Выберите один вариант ответа</span>
+                <div data-slot="protection-mark">
+                  <div class="tb-protection-mark" aria-hidden="true">ID 7f3ac2 · 02.08.2026 14:35</div>
+                </div>
+              </div>
             </div>
 
             <div class="tb-qbody">
@@ -560,8 +596,14 @@
         </footer>
 
         <!-- ДЕЛЬТА PRD-34: предупреждение. -->
-        <div class="tb-protection-toast ou-banner ou-banner--info ou-banner--sm" role="status">
-          <div class="ou-banner__body"><span class="ou-banner__desc">В этом тесте копирование текста задания отключено</span></div>
+        <div class="ou-toast-stack">
+          <div class="ou-toast ou-toast--info" role="status">
+            <span class="ou-toast__ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/></svg></span>
+            <div class="ou-toast__body">
+              <div class="ou-toast__title">Копирование отключено</div>
+              <div class="ou-toast__desc">В этом тесте текст задания защищён от копирования.</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -635,10 +677,10 @@
   <table class="wf-notes-table">
     <thead><tr><th>Предмет</th><th>Утверждается эскизом</th></tr></thead>
     <tbody>
-      <tr><td>Кегль знака</td><td>ДА. 11 px, фиксированный. Автоподбору <code>fit-font</code>, которому подчиняются задание и варианты, знак не подчиняется — состояния «Знак в якоре» и «Длинное задание» показывают его одинаковым при разном кегле содержимого.</td></tr>
-      <tr><td>Контраст знака</td><td>ДА. <code>--ou-fg-muted</code> при непрозрачности 0.6: читается на снимке и не спорит с содержимым.</td></tr>
+      <tr><td>Кегль знака</td><td>ДА. 10 px, фиксированный. Автоподбору <code>fit-font</code>, которому подчиняются задание и варианты, знак не подчиняется — состояния «Знак в якоре» и «Длинное задание» показывают его одинаковым при разном кегле содержимого.</td></tr>
+      <tr><td>Контраст знака</td><td>ДА. <code>--ou-fg-muted</code> при непрозрачности 0.35: читается на снимке и не спорит с содержимым.</td></tr>
       <tr><td>Место знака</td><td>НЕТ. Место объявляет макет якорем <code>[data-slot="protection-mark"]</code>. Эскиз показывает, куда его ставит ПОСТАВЛЯЕМЫЙ шаблон, и что происходит там, где якоря нет.</td></tr>
-      <tr><td>Заглушка</td><td>ДА. Состав (сообщение + кнопка возврата), периметр закрытия и то, что шапка, таймер и футер остаются видимыми.</td></tr>
+      <tr><td>Заглушка</td><td>ДА. Состав (только пояснение, без кнопки), периметр закрытия и то, что шапка, таймер и футер остаются видимыми.</td></tr>
       <tr><td>Предупреждение</td><td>ДА. Место (низ сцены), вид (<code>ou-banner--info</code>) и то, что оно не перехватывает указатель.</td></tr>
       <tr><td>Поведение защиты</td><td>НЕТ. Выделение, буфер обмена, контекстное меню, перетаскивание и печать — поведение, а не вид; их описывают FR-10 — FR-12 и проверяет приёмка в браузере.</td></tr>
     </tbody>
@@ -665,7 +707,7 @@
       <tr><td><code>s-mark</code></td><td>FR-16, FR-17, FR-20</td><td>Знак в объявленном якоре, между заданием и вариантами; обезличенное содержание «идентификатор + дата и время».</td></tr>
       <tr><td><code>s-long</code></td><td>FR-16</td><td>Кегль знака не меняется при ужатом автоподбором содержимом — знак в подборе не участвует.</td></tr>
       <tr><td><code>s-results</code></td><td>FR-09, FR-16</td><td>Якорь объявлен и на экране итогов: знак экран несёт, но от копирования экран не защищается. Запасное размещение здесь не используется — оно предназначено чужому шаблону.</td></tr>
-      <tr><td><code>s-veil</code></td><td>FR-21, FR-23, FR-24</td><td>Закрыты только задание и варианты; возврат по кнопке; таймер, карта вопросов и футер видимы — попытка не прервана.</td></tr>
+      <tr><td><code>s-veil</code></td><td>FR-21, FR-23, FR-24</td><td>Закрыты только задание и варианты; возврат автоматический, по возврату фокуса или видимости; таймер, карта вопросов и футер видимы — попытка не прервана.</td></tr>
       <tr><td><code>s-toast</code></td><td>FR-13</td><td>Предупреждение на <code>copy</code>/<code>cut</code>, без записи куда-либо (FR-14).</td></tr>
       <tr><td><code>s-off</code></td><td>FR-01, FR-02</td><td>Настройки независимы и выключаемы; выключенные дают экран без единой дельты.</td></tr>
     </tbody>

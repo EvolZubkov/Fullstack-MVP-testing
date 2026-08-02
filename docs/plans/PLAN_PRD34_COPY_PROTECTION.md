@@ -37,8 +37,10 @@ Vitest + jsdom (`npm test -- <путь>`), plain-JS SCORM runtime (`server/scorm
   `feat/prd34-copy-protection`. `npm install` в нём не выполнялся — сделать перед первым прогоном
   тестов.
 - Разметка — только DS-классы (`ou-*`) и `tb-*` слоя проекта; проверенные в этом плане классы
-  `ou-banner`, `ou-banner--info`, `ou-banner--sm`, `ou-banner__body`, `ou-banner__desc`,
-  `ou-btn`, `ou-btn--primary`, `ou-btn--m` существуют в `client/src/styles/vendor/university-rt.css`.
+  `ou-toast`, `ou-toast--info`, `ou-toast-stack`, `ou-toast__ico`, `ou-toast__body`,
+  `ou-toast__title`, `ou-toast__desc`, `ou-empty`, `ou-empty--inline`, `ou-empty--horizontal`,
+  `ou-empty__art`, `ou-empty__content`, `ou-empty__title` есть в `client/src/styles/vendor/university-rt.css`. Баннер ДС
+  объявлен inline-уведомлением и тостом НЕ является — брать его для сообщений нельзя.
 
 ## Roadmap (требования спецификации → задачи плана)
 
@@ -106,13 +108,13 @@ Vitest + jsdom (`npm test -- <путь>`), plain-JS SCORM runtime (`server/scorm
 - экран итогов теста — та же строка в начале сцены: якорь там не объявлен, работает запасное
   размещение.
 
-Кегль знака на эскизе — фиксированный минимальный (в плане заложено 11 px), одинаковый на обоих
-экранах. Он НЕ подчиняется автоподбору, которому подчиняются задание и варианты, и отдельного
+Кегль знака на эскизе — фиксированный минимальный (в плане заложено 10 px при непрозрачности
+0.35), одинаковый на обоих экранах. Он НЕ подчиняется автоподбору, которому подчиняются задание и варианты, и отдельного
 места под себя не требует — встраивается в имеющийся просвет. На эскизе подтверждаются ровно два
 параметра: этот кегль и контраст.
 
 Состояние 2 — заглушка при потере фокуса (FR-21): регионы задания и вариантов закрыты, на их месте
-сообщение «Задание скрыто, пока окно неактивно» и кнопка «Показать задание». Шапка, счётчик
+сообщение «Задание скрыто, пока окно неактивно», БЕЗ кнопки: возврат автоматический. Шапка, счётчик
 вопроса, прогресс и футер остаются видимыми — таймер идёт, попытка не прервана (FR-23).
 
 - [ ] **Step 3: Снять скриншот эскиза**
@@ -428,7 +430,7 @@ describe("applyProtection", () => {
     const ev = new Event("copy", { bubbles: true, cancelable: true });
     title.dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(true);
-    expect(root.querySelector(".tb-protection-toast")).not.toBeNull();
+    expect(root.querySelector(".ou-toast-stack")).not.toBeNull();
   });
 
   it("copy вне периметра не гасится и предупреждения не даёт", () => {
@@ -436,7 +438,7 @@ describe("applyProtection", () => {
     const ev = new Event("copy", { bubbles: true, cancelable: true });
     root.querySelector("footer")!.dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(false);
-    expect(root.querySelector(".tb-protection-toast")).toBeNull();
+    expect(root.querySelector(".ou-toast-stack")).toBeNull();
   });
 
   it("гасит контекстное меню и перетаскивание, но молча", () => {
@@ -447,7 +449,7 @@ describe("applyProtection", () => {
       title.dispatchEvent(ev);
       expect(ev.defaultPrevented).toBe(true);
     }
-    expect(root.querySelector(".tb-protection-toast")).toBeNull();
+    expect(root.querySelector(".ou-toast-stack")).toBeNull();
   });
 
   it("впрыскивает печатное правило один раз", () => {
@@ -500,9 +502,17 @@ export const PROTECTED_ATTR = "data-tb-protected";
 
 const STYLE_ATTR = "data-tb-protection";
 const WIRED_ATTR = "data-tb-protection-wired";
-const TOAST_CLASS = "tb-protection-toast";
-const TOAST_TEXT = "В этом тесте копирование текста задания отключено";
+/** DS toast stack — the design system owns both the look AND the position (fixed, bottom right). */
+const TOAST_CLASS = "ou-toast-stack";
+const TOAST_TITLE = "Копирование отключено";
+const TOAST_DESC = "В этом тесте текст задания защищён от копирования.";
 const TOAST_MS = 2500;
+
+/** Info glyph for the toast; matches the stroke style used across the learner screens. */
+const INFO_ICON =
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+  'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+  '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/></svg>';
 
 /**
  * The PRD-34 stylesheet: the print rule (FR-10.5, FR-12) plus the presentation of the
@@ -512,18 +522,30 @@ const TOAST_MS = 2500;
  */
 const PROTECTION_CSS = `
 @media print { [${PROTECTED_ATTR}] { display: none !important; } }
-.${TOAST_CLASS} { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%);
-  z-index: 40; max-width: min(90%, 480px); pointer-events: none; }
+/* The DS toast stack already positions itself; the only deviation is that our notice has no
+   close button and fades on its own, so it must not intercept clicks. */
+.${TOAST_CLASS} { pointer-events: none; }
 /* FR-16: fixed minimal type — NOT the fitted --tb-question-fs/--tb-answer-fs tokens, so the
-   mark never competes with the content for space and never changes size between screens.
-   No margin and no padding: it slots into the gap the layout already has. */
-.tb-protection-mark { display: block; flex: 0 0 auto; margin: 0; padding: 0;
-  text-align: center; font-size: 11px; line-height: 1.2; letter-spacing: .02em; opacity: .6;
+   mark never competes with the content for space and never changes size between screens. No
+   margin and no padding: it shares the hint row the layout already has, so it costs the fixed
+   stage no height of its own. Pushed to the right edge in both a flex row and a flex column. */
+.tb-protection-mark { flex: 0 0 auto; margin: 0; margin-inline-start: auto;
+  align-self: flex-end; padding: 0; white-space: nowrap;
+  font-size: 10px; line-height: 1.2; letter-spacing: .02em;
+  color: var(--ou-fg-muted); opacity: .35;
   pointer-events: none; user-select: none; -webkit-user-select: none; }
-.tb-protection-veil { position: absolute; inset: 0; z-index: 35; display: flex;
-  flex-direction: column; gap: 16px; align-items: center; justify-content: center;
-  text-align: center; padding: 24px; backdrop-filter: blur(8px);
-  background: color-mix(in srgb, Canvas 80%, transparent); }
+.tb-protection-veil { position: absolute; inset: 0; z-index: 35;
+  /* Раскладку содержимого задаёт сам компонент ДС; вуаль только центрирует его,
+     гасит фон и приглушает цвет, чтобы штатная разметка не спорила яркостью с тем,
+     что она закрывает. */
+  display: grid; place-items: center; padding: var(--ou-space-4);
+  color: var(--ou-fg-muted); backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--ou-bg-surface-2) 80%, transparent); }
+/* The glyph aligns with the text on the middle line and shrinks to line size: the stock 56 px
+   art is meant for an empty PAGE area and next to a single heading line reads as a separate
+   element rather than its icon. */
+.tb-protection-veil .ou-empty { align-items: center; --_art-size: 22px; }
+.tb-protection-veil .ou-empty__art { align-self: center; }
 `;
 
 /** Inject the stylesheet once per root node (document head or shadow root). */
@@ -542,11 +564,17 @@ function ensureStyle(root: HTMLElement): void {
 /** Show the FR-13 notice. Only `copy`/`cut` produce it — a right click must stay quiet. */
 function notify(root: HTMLElement): void {
   if (root.querySelector("." + TOAST_CLASS)) return;
+  // `ou-toast`, not `ou-banner`: the DS calls the banner an INLINE notification and states it
+  // is not a toast. The stack also supplies the position, so no placement of our own is invented.
   const el = root.ownerDocument.createElement("div");
-  el.className = TOAST_CLASS + " ou-banner ou-banner--info ou-banner--sm";
-  el.setAttribute("role", "status");
-  el.innerHTML = '<div class="ou-banner__body"><span class="ou-banner__desc"></span></div>';
-  (el.querySelector(".ou-banner__desc") as HTMLElement).textContent = TOAST_TEXT;
+  el.className = TOAST_CLASS;
+  el.innerHTML =
+    '<div class="ou-toast ou-toast--info" role="status">' +
+    '<span class="ou-toast__ico" aria-hidden="true">' + INFO_ICON + "</span>" +
+    '<div class="ou-toast__body"><div class="ou-toast__title"></div>' +
+    '<div class="ou-toast__desc"></div></div></div>';
+  (el.querySelector(".ou-toast__title") as HTMLElement).textContent = TOAST_TITLE;
+  (el.querySelector(".ou-toast__desc") as HTMLElement).textContent = TOAST_DESC;
   root.appendChild(el);
   root.ownerDocument.defaultView?.setTimeout(() => el.remove(), TOAST_MS);
 }
@@ -1406,7 +1434,7 @@ Expected: PASS, 4 теста.
 края кадра. Запасное размещение существует только для чужого шаблона, который якоря не объявил.
 
 Знак встраивается в поток и позиционирования не требует, поэтому `position: relative` на корне ему
-не нужен. Кегль в `PROTECTION_CSS` фиксированный (11 px) и подбору НЕ подлежит: соревноваться с
+не нужен. Кегль в `PROTECTION_CSS` фиксированный (10 px) и подбору НЕ подлежит: соревноваться с
 содержимым за место знак не должен. Единственное, что он занимает, — высота собственной строки,
 около 13 px с учётом межстрочного; отступов у него нет. После включения проверить экран вопроса с
 длинным заданием и большим числом вариантов: автоподбор (`fitQuestionScene`) обязан по-прежнему
@@ -1506,13 +1534,21 @@ describe("attachBlurGuard", () => {
     expect(root.querySelector(".tb-protection-veil")).not.toBeNull();
   });
 
-  it("возврат выполняется только кнопкой", () => {
+  it("возврат видимости снимает заглушку сам, без действий участника", () => {
     const root = scene();
     attachBlurGuard(root, TARGET);
     setHidden(true);
     setHidden(false);
+    expect(root.querySelector(".tb-protection-veil")).toBeNull();
+  });
+
+  it("возврат фокуса окну тоже снимает заглушку немедленно", () => {
+    const root = scene();
+    attachBlurGuard(root, TARGET);
+    window.dispatchEvent(new Event("blur"));
+    vi.advanceTimersByTime(400);
     expect(root.querySelector(".tb-protection-veil")).not.toBeNull();
-    root.querySelector<HTMLButtonElement>('[data-action="protection-reveal"]')!.click();
+    window.dispatchEvent(new Event("focus"));
     expect(root.querySelector(".tb-protection-veil")).toBeNull();
   });
 
@@ -1563,22 +1599,37 @@ Expected: FAIL — модуля нет.
  *
  * `visibilitychange` is the primary signal. Window `blur` is secondary and DELAYED,
  * because inside an LMS frame it fires on every click on the surrounding page; an
- * immediate return cancels it, so an accidental click never costs the learner anything
- * but the click that reveals the task again.
+ * immediate return cancels it, so an accidental click costs the learner nothing at all.
+ *
+ * The veil lifts BY ITSELF when the window is active again (FR-21): it explains, it does
+ * not charge for the interruption.
  */
 
 import type { RegionTarget } from "./spec";
 
 const VEIL_CLASS = "tb-protection-veil";
-const REVEAL_ACTION = "protection-reveal";
 const BLUR_DELAY_MS = 300;
 
+/* FR-21: explanation only, no action. A button would charge the learner a click for every
+   window switch — including the LMS's own popups — and the track introduces no penalties.
+   The DS component for "this region is intentionally showing nothing, here is why" is
+   `ou-empty` (with tones and an `--inline` size), not the banner, which the DS defines as an
+   inline notification. */
+   The compact form is deliberate: `--inline` + `--horizontal`, icon beside the text and no
+   `__desc`. The veil covers a REGION two lines tall, not an empty page area — stacked
+   vertically the illustration sits ABOVE the text and the block is clipped at the region's
+   edge (verified on the wireframe). */
+const VEIL_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" ' +
+  'stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M10.6 6.2A9 9 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-2.5 3"/>' +
+  '<path d="M6.3 8.3A17 17 0 0 0 3 12s4 6 9 6a9 9 0 0 0 3.7-.8"/><path d="M3 3l18 18"/></svg>';
+
 const VEIL_HTML =
-  '<div class="ou-banner ou-banner--info ou-banner--sm"><div class="ou-banner__body">' +
-  '<span class="ou-banner__desc">Задание скрыто, пока окно неактивно</span></div></div>' +
-  '<button type="button" class="ou-btn ou-btn--primary ou-btn--m" data-action="' +
-  REVEAL_ACTION +
-  '">Показать задание</button>';
+  '<div class="ou-empty ou-empty--inline ou-empty--horizontal">' +
+  '<span class="ou-empty__art" aria-hidden="true">' + VEIL_ICON + "</span>" +
+  '<div class="ou-empty__content">' +
+  '<p class="ou-empty__title">Задание скрыто, пока окно неактивно</p></div></div>';
 
 function hosts(root: HTMLElement, target: RegionTarget): HTMLElement[] {
   if (target.wholeScene) return [root];
@@ -1614,16 +1665,15 @@ export function attachBlurGuard(root: HTMLElement, target: RegionTarget | null):
       veil.className = VEIL_CLASS;
       veil.setAttribute("role", "status");
       veil.innerHTML = VEIL_HTML;
-      veil.addEventListener("click", (ev) => {
-        const el = ev.target instanceof Element ? ev.target : null;
-        if (el?.closest('[data-action="' + REVEAL_ACTION + '"]')) reveal();
-      });
       host.appendChild(veil);
     }
   };
 
+  // Hiding is delayed (FR-22); revealing is not — a delay on the way back would read as
+  // the page hanging.
   const onVisibility = (): void => {
     if (doc.visibilityState === "hidden") hide();
+    else reveal();
   };
   const onBlur = (): void => {
     timer = view?.setTimeout(hide, BLUR_DELAY_MS);
@@ -1631,6 +1681,7 @@ export function attachBlurGuard(root: HTMLElement, target: RegionTarget | null):
   const onFocus = (): void => {
     if (timer !== undefined) view?.clearTimeout(timer);
     timer = undefined;
+    reveal();
   };
 
   doc.addEventListener("visibilitychange", onVisibility);
@@ -1669,7 +1720,8 @@ Expected: PASS, 5 тестов.
 - [ ] **Step 6: Проверить в браузере на обоих хостах**
 
 `PORT=8099 npm run dev`: включить настройку, начать тест, переключиться на другую вкладку и
-вернуться — задание закрыто заглушкой, таймер идёт, ответ не потерян, кнопка возвращает. Кликнуть по
+вернуться — задание закрыто заглушкой, таймер идёт, ответ не потерян, а по возврату во вкладку
+заглушка снимается САМА, без действий участника. Кликнуть по
 элементу вне рамки и сразу вернуться — заглушка НЕ появляется. Затем то же в пакете через
 `npm run scorm:player`. Сверить вид заглушки с эскизом Task 1.
 
