@@ -60,14 +60,16 @@ export type FeedbackContent = {
 };
 
 /**
- * PDF asset attached to feedback. `scormHref` is filled by the backend when
- * the file is persisted, never by the frontend (decisions §6.5).
+ * PDF asset attached to feedback. `url` is the canonical media-library address written by
+ * the editor right after the upload; `scormHref` is the legacy in-package address kept for
+ * reading old data only.
  */
 export type FeedbackAsset = {
   id?: string;
   title: string;
   fileName: string;
   mimeType: "application/pdf";
+  url?: string;
   scormHref?: string;
 };
 

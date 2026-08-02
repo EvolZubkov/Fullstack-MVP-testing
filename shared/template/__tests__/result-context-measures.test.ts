@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildResultContext } from "../result-context";
+import { buildResultContext, normalizeFeedback } from "../result-context";
 import { LEVEL_SCHEMES } from "../level-ramp";
 
 const BASE = {
@@ -233,5 +233,43 @@ describe("нечего оценивать", () => {
     expect(ctx.result.hideScoreSummary).toBeUndefined();
     // Вердикт следует за парой «порог и есть что оценивать», а не за настройкой блока.
     expect(ctx.result.statusLabel).toBe("");
+  });
+});
+
+describe("normalizeFeedback — адрес вложения", () => {
+  it("берёт url, когда scormHref не заполнен (веб-хост)", () => {
+    const block = normalizeFeedback({
+      text: "",
+      links: [],
+      events: [],
+      assets: [
+        { title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "/api/media/11111111-1111-1111-1111-111111111111" },
+      ],
+    });
+    expect(block?.assets).toEqual([
+      { title: "Памятка", url: "/api/media/11111111-1111-1111-1111-111111111111" },
+    ]);
+  });
+
+  it("предпочитает scormHref, когда он есть (пакет, собранный ранее)", () => {
+    const block = normalizeFeedback({
+      text: "",
+      links: [],
+      events: [],
+      assets: [
+        { title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "/api/media/2222", scormHref: "assets/media/p.pdf" },
+      ],
+    });
+    expect(block?.assets).toEqual([{ title: "Памятка", url: "assets/media/p.pdf" }]);
+  });
+
+  it("отбрасывает дескриптор без обоих адресов", () => {
+    const block = normalizeFeedback({
+      text: "",
+      links: [],
+      events: [],
+      assets: [{ title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf" }],
+    });
+    expect(block?.assets).toEqual([]);
   });
 });

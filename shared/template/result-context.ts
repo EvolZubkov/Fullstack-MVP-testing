@@ -138,33 +138,35 @@ export interface MeasuresInput {
  * block.
  *
  * The author's editor stores the canonical `feedbackContentSchema` shape, where an
- * asset is a PDF descriptor — `{ title, fileName, mimeType, scormHref? }` — and the
- * address lives in `scormHref`, not `url`. `collectRecommendations` works on
- * `RecommendationLink { title, url? }`, so the host adapts before handing over;
- * without this the «Материалы» block renders links with an empty href.
+ * asset is a PDF descriptor — `{ title, fileName, mimeType, url?, scormHref? }` — whose
+ * address lives in `url` (the media-library address written on upload). `scormHref` is
+ * read only for the sake of data built before the media library existed.
+ * `collectRecommendations` works on `RecommendationLink { title, url? }`, so the host
+ * adapts before handing over; without this the «Материалы» block renders links with an
+ * empty href.
  *
- * An asset with no persisted href is DROPPED rather than rendered dead: the file was
+ * An asset with neither address is DROPPED rather than rendered dead: the file was
  * never uploaded, so there is nothing to open.
  *
  * Exported for the hosts: the TEST-level feedback block (`tests.feedback_json`) is
  * stored in the very same shape and reaches the builder from the host adapter, so it
- * must pass through THIS normaliser and not a second copy of the rule. NOT idempotent
- * by design — an already-normalised block has no `scormHref`, so normalising twice
- * would drop its assets; each block goes through exactly once.
+ * must pass through THIS normaliser and not a second copy of the rule.
  */
 export function normalizeFeedback(raw: unknown): FeedbackBlock | null {
   if (!raw || typeof raw !== "object") return null;
   const f = raw as Record<string, unknown>;
   const links = (f.links as Array<{ title?: string; url?: string }> | undefined) ?? [];
   const events = (f.events as Array<{ title?: string; url?: string }> | undefined) ?? [];
-  const assets = (f.assets as Array<{ title?: string; scormHref?: string }> | undefined) ?? [];
+  const assets = (f.assets as Array<{ title?: string; url?: string; scormHref?: string }> | undefined) ?? [];
   return {
     ...(f.text ? { text: String(f.text) } : {}),
     links: links.map((l) => ({ title: String(l.title ?? ""), ...(l.url ? { url: l.url } : {}) })),
     events: events.map((e) => ({ title: String(e.title ?? ""), ...(e.url ? { url: e.url } : {}) })),
     assets: assets
-      .filter((a) => !!a.scormHref)
-      .map((a) => ({ title: String(a.title ?? ""), url: a.scormHref as string })),
+      // `scormHref` wins where it exists: a package built before this work carries the
+      // in-package address there, and inside a package the canonical address is useless.
+      .map((a) => ({ title: String(a.title ?? ""), url: String(a.scormHref ?? a.url ?? "") }))
+      .filter((a) => !!a.url),
   };
 }
 
