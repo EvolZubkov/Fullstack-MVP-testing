@@ -355,15 +355,25 @@ describe("createFsMediaStore", () => {
     expect(fs.existsSync(path.join(root, stored.storageKey))).toBe(true);
   });
 
-  it("stores identical bytes once and consumes the source both times", async () => {
+  // Equal keys alone would be tautological — the key is a pure function of the checksum
+  // and would match even if the second write clobbered the file. What can actually break
+  // is the content and the file count, so those are what this asserts.
+  it("preserves file content across a duplicate write and keeps exactly one file on disk", async () => {
     const store = createFsMediaStore(root);
-    const first = sourceFile("one.png", "same");
-    const second = sourceFile("two.png", "same");
+    const first = sourceFile("one.png", "same-bytes");
+    const second = sourceFile("two.png", "same-bytes");
     const a = await store.putFile(first, ".png");
     const b = await store.putFile(second, ".png");
     expect(b.storageKey).toBe(a.storageKey);
     expect(fs.existsSync(first)).toBe(false);
     expect(fs.existsSync(second)).toBe(false);
+    expect(fs.readFileSync(path.join(root, a.storageKey), "utf8")).toBe("same-bytes");
+    expect(fs.readdirSync(path.dirname(path.join(root, a.storageKey)))).toHaveLength(1);
+  });
+
+  it("propagates ENOENT when the source file is gone", async () => {
+    const store = createFsMediaStore(root);
+    await expect(store.putFile(path.join(tmp, "ghost.png"), ".png")).rejects.toThrow(/ENOENT/);
   });
 
   it("reads a byte range", async () => {
@@ -384,6 +394,16 @@ describe("createFsMediaStore", () => {
   it("refuses a key that escapes the root", async () => {
     const store = createFsMediaStore(root);
     await expect(store.stat("../../etc/passwd")).rejects.toThrow(/outside/i);
+  });
+
+  // The guard holds because `path.resolve` returns an absolute path that fails the
+  // `startsWith` check — not because anything tests for absoluteness. A later
+  // "harmless" tweak (normalising case, stripping a leading slash) could quietly
+  // reopen the hole, so the Windows shapes are pinned here.
+  it("refuses a Windows absolute or UNC path used as a key", async () => {
+    const store = createFsMediaStore(root);
+    await expect(store.stat("C:\\Windows\\System32\\drivers\\etc\\hosts")).rejects.toThrow(/outside/i);
+    await expect(store.stat("\\\\localhost\\c$\\Windows")).rejects.toThrow(/outside/i);
   });
 });
 ```
@@ -433,8 +453,11 @@ export interface ByteRange {
 export interface MediaStore {
   /** Moves `sourcePath` into the store. The source is consumed either way. */
   putFile(sourcePath: string, ext: string): Promise<StoredObject>;
+  /** Opens the object for reading, optionally a byte range. Rejects if the key does not exist. */
   openRead(storageKey: string, range?: ByteRange): Promise<NodeJS.ReadableStream>;
+  /** Object size, or `null` if the key does not exist. */
   stat(storageKey: string): Promise<{ byteSize: number } | null>;
+  /** Deletes the object; no error if it is already gone. */
   remove(storageKey: string): Promise<void>;
 }
 
@@ -486,6 +509,12 @@ export function createFsMediaStore(root: string): MediaStore {
 
     async openRead(storageKey, range) {
       const abs = resolveKey(storageKey);
+      // Reject a missing key HERE. `createReadStream` would resolve happily and deliver
+      // ENOENT asynchronously as an `error` event on the returned stream — and an
+      // unhandled `error` on a piped stream takes the process down.
+      if (!fs.existsSync(abs)) {
+        throw Object.assign(new Error(`no such media object: ${storageKey}`), { code: "ENOENT" });
+      }
       return range
         ? fs.createReadStream(abs, { start: range.start, end: range.end })
         : fs.createReadStream(abs);
@@ -493,8 +522,14 @@ export function createFsMediaStore(root: string): MediaStore {
 
     async stat(storageKey) {
       const abs = resolveKey(storageKey);
-      if (!fs.existsSync(abs)) return null;
-      return { byteSize: fs.statSync(abs).size };
+      // `existsSync` + `statSync` would race: a file vanishing between the two calls
+      // throws a raw ENOENT where every caller expects `null`.
+      try {
+        return { byteSize: fs.statSync(abs).size };
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw e;
+      }
     },
 
     async remove(storageKey) {
@@ -511,7 +546,7 @@ export const mediaStore: MediaStore = createFsMediaStore(path.resolve(process.cw
 
 Run: `npm test -- tests/media-store.test.ts`
 
-Expected: PASS (5 тестов).
+Expected: PASS (7 тестов).
 
 - [ ] **Step 5: Коммит**
 
@@ -2331,6 +2366,13 @@ router.get("/:id", requireAuth, async (req: Request, res: Response) => {
     }
 
     const stream = await mediaStore.openRead(asset.storageKey, range ?? undefined);
+    // The store rejects a missing key up front, but the file can still vanish mid-read.
+    // An unhandled `error` event on a piped stream takes the process down, so the socket
+    // is closed instead: the headers are already sent, there is no status left to send.
+    stream.on("error", (streamError) => {
+      logger.error(`Media stream failed for ${asset.id}: ${(streamError as Error).message}`);
+      res.destroy();
+    });
     stream.pipe(res);
   } catch (error) {
     logger.error(`Media delivery failed: ${(error as Error).message}`);
@@ -2682,6 +2724,13 @@ async function deliverAsset(req: Request, res: Response, asset: MediaAsset): Pro
   }
 
   const stream = await mediaStore.openRead(asset.storageKey, range ?? undefined);
+  // The store rejects a missing key up front, but the file can still vanish mid-read.
+  // An unhandled `error` event on a piped stream takes the process down, so the socket
+  // is closed instead: the headers are already sent, there is no status left to send.
+  stream.on("error", (streamError) => {
+    logger.error(`Media stream failed for ${asset.id}: ${(streamError as Error).message}`);
+    res.destroy();
+  });
   stream.pipe(res);
 }
 ```
@@ -3011,7 +3060,7 @@ git commit -m "feat(media): канонизация легаси-адресов �
 npm test -- tests/media-schema.test.ts tests/media-permissions.test.ts tests/media-store.test.ts tests/media-refs.test.ts tests/media-usage-index.test.ts tests/media-asset-access.test.ts tests/media-upload-route.test.ts tests/media-backfill.test.ts tests/media-usage-on-question-save.test.ts tests/media-reindex.test.ts tests/media-delivery-route.test.ts tests/media-delete-route.test.ts tests/media-legacy-alias.test.ts tests/media-canonicalize.test.ts
 ```
 
-Expected: PASS, 54 теста.
+Expected: PASS, 57 тестов (в задачах 1 и 3 добавлены кейсы по итогам ревью).
 
 Плюс интеграционный тест репозитория отдельной конфигурацией:
 
