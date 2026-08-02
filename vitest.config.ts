@@ -5,11 +5,18 @@ import os from "os";
 
 // Cap fork concurrency on memory-constrained hosts. The pglite (WASM Postgres)
 // DAL tests under tests/storage/** plus v8 coverage instrumentation are memory
-// heavy; the default of one fork per core can exhaust RAM and crash workers
-// ("Worker exited unexpectedly"). Budget roughly one fork per 0.5 GB of free
-// memory, floored at 2 and capped at the core count — so well-provisioned CI
-// boxes still run at full parallelism while a loaded laptop stays reliable.
-const maxForks = Math.max(2, Math.min(os.cpus().length, Math.floor(os.freemem() / (0.5 * 1024 ** 3))));
+// heavy; one fork per core can exhaust RAM and crash workers ("Worker exited
+// unexpectedly"). The budget is DELIBERATELY a fixed number rather than a share
+// of os.freemem(): several agent sessions share this working copy, and each
+// process measuring "free" memory independently believes it owns all of it, so
+// the adaptive figure oversubscribes exactly when the machine is busiest.
+// Override with TEST_MAX_WORKERS on a box that can take more.
+const DEFAULT_MAX_WORKERS = 4;
+const envWorkers = Number.parseInt(process.env.TEST_MAX_WORKERS ?? "", 10);
+const maxForks = Math.max(
+  1,
+  Math.min(os.cpus().length, Number.isFinite(envWorkers) && envWorkers > 0 ? envWorkers : DEFAULT_MAX_WORKERS),
+);
 
 export default defineConfig({
   plugins: [react()],
@@ -37,9 +44,15 @@ export default defineConfig({
     exclude: ["node_modules", "dist", "tests/it/**"],
     coverage: {
       provider: "v8",
-      enabled: true,
+      // OFF by default: `clean: true` on a shared reportsDirectory means a second
+      // concurrent run wipes the first run's per-fork JSON out of coverage/.tmp
+      // ("Something removed the coverage directory") or silently deflates the
+      // percentage into a false threshold failure. Several sessions work in this
+      // one working copy, so coverage is opt-in and runs alone: `npm run test:cov`.
+      // VITEST_COVERAGE_DIR gives a run its own directory when that is not enough.
+      enabled: false,
       reporter: ["text", "text-summary", "json", "html", "lcov"],
-      reportsDirectory: "./coverage",
+      reportsDirectory: process.env.VITEST_COVERAGE_DIR ?? "./coverage",
       include: ["client/src/**/*.{ts,tsx}", "server/**/*.ts", "shared/**/*.ts"],
       exclude: [
         "node_modules",
