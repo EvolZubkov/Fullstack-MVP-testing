@@ -960,7 +960,39 @@ export interface FoundMediaRef {
   ref: MediaRef;
 }
 
-/** Recognises one value. Returns `null` for anything that is not a stored file. */
+/**
+ * Both address shapes, ANYWHERE inside a string — an `<img src="…">` in a rich-text
+ * field is as real a usage as a bare `mediaUrl` column, and content pages have an
+ * `html` mode. One alternation, so matches come back in the order they appear.
+ *
+ * The errors here are asymmetric: a missed reference loses the file (orphan collection
+ * would delete it and delivery would refuse it), while a spurious one only keeps a file
+ * alive. So this errs towards finding too much, and does not try to parse markup.
+ */
+const MEDIA_IN_TEXT = /\/api\/media\/([0-9a-fA-F-]{36})|\/uploads\/(media\/[^\s"'<>?#\\]+)/g;
+
+/** Every distinct reference inside one string, in order of appearance. */
+export function findMediaRefsInText(value: string): MediaRef[] {
+  const out: MediaRef[] = [];
+  const seen = new Set<string>();
+  for (const m of value.replace(/\\/g, "/").matchAll(MEDIA_IN_TEXT)) {
+    const ref: MediaRef = m[1]
+      ? { kind: "canonical", id: m[1] }
+      : { kind: "legacy", storageKey: m[2] };
+    const key = ref.kind === "canonical" ? `c:${ref.id}` : `l:${ref.storageKey}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(ref);
+  }
+  return out;
+}
+
+/**
+ * Recognises one value as a WHOLE address. Returns `null` for anything else — including
+ * a string that merely contains an address inside markup; use {@link findMediaRefsInText}
+ * for that. The distinction matters to canonicalisation, which may replace a field whose
+ * entire value is an address but must not rewrite markup.
+ */
 export function parseMediaRef(value: unknown): MediaRef | null {
   if (typeof value !== "string") return null;
   const raw = value.trim();
@@ -978,8 +1010,9 @@ export function collectMediaRefs(entity: unknown): FoundMediaRef[] {
 
   function visit(node: unknown, path: string): void {
     if (typeof node === "string") {
-      const ref = parseMediaRef(node);
-      if (ref) found.push({ field: path, ref });
+      // Search INSIDE the string, not "is the string an address": content pages have an
+      // html mode, and a picture in an `<img src>` is a usage like any other.
+      for (const ref of findMediaRefsInText(node)) found.push({ field: path, ref });
       return;
     }
     if (Array.isArray(node)) {
@@ -1002,7 +1035,8 @@ export function collectMediaRefs(entity: unknown): FoundMediaRef[] {
 
 Run: `npm test -- tests/media-refs.test.ts`
 
-Expected: PASS (6 тестов).
+Expected: PASS (12 тестов — шесть основных плюс шесть на поиск внутри разметки, добавленных
+после того, как ревью вскрыло режим `html` у контентных страниц).
 
 - [ ] **Step 5: Коммит**
 
@@ -2884,6 +2918,12 @@ git commit -m "feat(media): выключение публичной статик
 редактирования контента, а не одной рискованной миграцией по чужим структурам.
 
 Задача независима от Задачи 14 и может выполняться сразу после Задачи 9.
+
+Оговорка про разметку. Канонизация работает по `parseMediaRef`, то есть только там, где ВСЁ значение
+поля есть адрес. Пре-реестровые адреса внутри HTML-полей она намеренно не переписывает: замена
+подстроки в разметке — отдельный риск, несоразмерный выгоде. Такие адреса продолжает обслуживать
+совместимостный алиас Задачи 14, а индекс их видит, потому что обходчик ищет ссылки внутри строк.
+То есть наследие в разметке остаётся рабочим, просто вымывается не автоматически.
 
 - [ ] **Step 1: Написать падающий тест**
 
