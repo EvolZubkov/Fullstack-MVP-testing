@@ -15,6 +15,10 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
     patchTestStatus: vi.fn(),
     getAttempt: vi.fn(), createAttempt: vi.fn(), updateAttempt: vi.fn(),
     getAttemptsByUser: vi.fn(), getAttemptsByUserAndTest: vi.fn(),
+    // PRD-31: the attempt counter and the retake gate are scoped to the CURRENT
+    // assignment, so every attempt route resolves it. `null` = the legacy bucket
+    // these fixtures live in (see `dbAttempt.assignmentId`).
+    getCurrentAssignmentId: vi.fn().mockResolvedValue(null),
     getUser: vi.fn(), getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getUsers: vi.fn().mockResolvedValue([]),
     setTestOwner: vi.fn().mockResolvedValue(undefined),
@@ -99,6 +103,11 @@ const dbQuestion = {
 };
 const dbAttempt = {
   id: "atmp1", userId: "learner1", testId: "test1",
+  // PRD-31: a real row always carries the column; `null` is the implicit legacy
+  // bucket — the same value `getCurrentAssignmentId` returns here. Leaving it
+  // undefined would put the attempt in a DIFFERENT bucket than the current
+  // assignment and silently zero the per-assignment attempt counter.
+  assignmentId: null,
   variantJson: { sections: [{ topicId: "t1", topicName: "JS", questionIds: ["q1"] }] },
   answersJson: {}, resultJson: null,
   startedAt: new Date(), finishedAt: null, testVersion: 1,

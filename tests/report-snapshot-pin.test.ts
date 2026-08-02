@@ -19,6 +19,9 @@ const { storageMock, renderMock } = vi.hoisted(() => ({
     getAttempt: vi.fn(),
     getTest: vi.fn(),
     getAttemptsByUserAndTest: vi.fn().mockResolvedValue([]),
+    // PRD-31: the result route scopes the attempt counter to the CURRENT
+    // assignment; `null` = the legacy bucket.
+    getCurrentAssignmentId: vi.fn().mockResolvedValue(null),
     getSnapshot: vi.fn(),
     getLatestSnapshot: vi.fn().mockResolvedValue(undefined),
     getUser: vi.fn(),

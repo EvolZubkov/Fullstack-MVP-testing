@@ -24,6 +24,9 @@ const { storageMock } = vi.hoisted(() => ({
   storageMock: {
     getTest: vi.fn(), getTestSections: vi.fn(),
     getAttemptsByUserAndTest: vi.fn().mockResolvedValue([]),
+    // PRD-31: the start routes pin the attempt to the CURRENT assignment;
+    // `null` = the legacy bucket.
+    getCurrentAssignmentId: vi.fn().mockResolvedValue(null),
     createAttempt: vi.fn(),
     getUser: vi.fn(), getUserRoles: vi.fn().mockResolvedValue(["learner"]),
     getTopics: vi.fn(), getQuestionsByTopic: vi.fn(), getQuestionsByIds: vi.fn(),
