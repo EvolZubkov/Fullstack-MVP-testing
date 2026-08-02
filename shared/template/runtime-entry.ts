@@ -23,6 +23,10 @@ export {
 } from "../text";
 export { renderResultField, CORE_RENDERER_IDS } from "./renderers";
 export { renderScreenInto } from "./render-screen";
+// PRD-34: защита текста задания. Периметр решает ОДИН построитель, применение — ядро,
+// поэтому пакет получает ровно то же поведение, что и веб-хост (FR-30, FR-31).
+export { buildProtectionSpec, formatWatermarkText, QUESTION_REGIONS } from "./protection/spec";
+export { applyProtection, PROTECTED_ATTR } from "./protection/apply";
 export {
   normalizePool,
   dropOnRight,
