@@ -62,9 +62,12 @@
     Правила и соответствие требованиям PRD-34 — в таблицах под холстом.
   -->
   <title>PRD-34 — Защита текста задания от копирования</title>
-  <link rel="stylesheet" href="/client/src/styles/vendor/university-rt.css">
-  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css">
-  <link rel="stylesheet" href="/server/scorm/templates/default/styles/theme.css">
+  <!-- Пути ОТНОСИТЕЛЬНЫЕ, а не от корня репозитория: так эскиз открывается и двойным
+       щелчком (file://), и с локального сервера. Абсолютные пути соседних эскизов
+       требуют http.server из корня и по file:// дают страницу без стилей. -->
+  <link rel="stylesheet" href="../../client/src/styles/vendor/university-rt.css">
+  <link rel="stylesheet" href="ds/wf-utils.css">
+  <link rel="stylesheet" href="../../server/scorm/templates/default/styles/theme.css">
   <style>
     :root {
       /* gate-skip-start */
