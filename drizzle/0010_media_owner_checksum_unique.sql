@@ -1,0 +1,2 @@
+DROP INDEX "media_assets_owner_checksum_idx";--> statement-breakpoint
+CREATE UNIQUE INDEX "media_assets_owner_checksum_idx" ON "media_assets" USING btree ("owner_id","checksum") WHERE "media_assets"."owner_id" is not null;

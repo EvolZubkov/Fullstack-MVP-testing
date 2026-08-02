@@ -1851,10 +1851,13 @@ export const mediaAssets = pgTable("media_assets", {
   visibility: text("visibility", { enum: ["private", "shared"] }).notNull().default("shared"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
-  // Dedup lookup on upload: "does THIS owner already have THESE bytes".
-  // Not unique: Postgres treats NULL owners as distinct, so a unique index would
-  // not constrain backfilled rows anyway — the backfill script dedups explicitly.
-  ownerChecksumIdx: index("media_assets_owner_checksum_idx").on(table.ownerId, table.checksum),
+  // Dedup barrier, not just a lookup: without uniqueness two concurrent uploads of the
+  // same bytes by the same author both miss the SELECT and both insert. Partial because
+  // backfilled rows have no owner, and Postgres treats NULLs as distinct — uniqueness
+  // could not constrain them anyway.
+  ownerChecksumIdx: uniqueIndex("media_assets_owner_checksum_idx")
+    .on(table.ownerId, table.checksum)
+    .where(sql`${table.ownerId} is not null`),
   // Reference counting before physically removing a file.
   checksumIdx: index("media_assets_checksum_idx").on(table.checksum),
 }));

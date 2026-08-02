@@ -438,7 +438,7 @@ CREATE INDEX "attempts_snapshot_id_idx" ON "attempts" USING btree ("snapshot_id"
 CREATE INDEX "content_pages_test_topic_position_sort_idx" ON "content_pages" USING btree ("test_id","topic_id","position","sort_order");
 CREATE INDEX "content_pages_test_kind_idx" ON "content_pages" USING btree ("test_id","kind");
 CREATE INDEX "content_pages_topic_id_idx" ON "content_pages" USING btree ("topic_id");
-CREATE INDEX "media_assets_owner_checksum_idx" ON "media_assets" USING btree ("owner_id","checksum");
+CREATE UNIQUE INDEX "media_assets_owner_checksum_idx" ON "media_assets" USING btree ("owner_id","checksum") WHERE "media_assets"."owner_id" is not null;
 CREATE INDEX "media_assets_checksum_idx" ON "media_assets" USING btree ("checksum");
 CREATE INDEX "media_usages_entity_idx" ON "media_usages" USING btree ("entity_type","entity_id");
 CREATE INDEX "password_reset_tokens_token_hash_idx" ON "password_reset_tokens" USING btree ("token_hash");

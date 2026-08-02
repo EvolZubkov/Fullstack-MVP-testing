@@ -46,19 +46,29 @@ router.post("/upload", requireAuth, mediaUpload.single("file"), async (req: Requ
     // Dedup is per OWNER: identical bytes from another author get their own row.
     let asset = await storage.findMediaAssetByOwnerChecksum(ownerId, stored.checksum);
     if (!asset) {
-      asset = await storage.createMediaAsset({
-        checksum: stored.checksum,
-        storageKey: stored.storageKey,
-        mimeType: req.file.mimetype,
-        byteSize: stored.byteSize,
-        kind: kindOf(req.file.mimetype),
-        originalName,
-        title: originalName.replace(/\.[^.]+$/, "") || originalName,
-        ownerId,
-        // Shared by default: a picture used by a question of a SHARED topic must stay
-        // reachable when another author picks that topic up. Privacy is an explicit act.
-        visibility: "shared",
-      });
+      try {
+        asset = await storage.createMediaAsset({
+          checksum: stored.checksum,
+          storageKey: stored.storageKey,
+          mimeType: req.file.mimetype,
+          byteSize: stored.byteSize,
+          kind: kindOf(req.file.mimetype),
+          originalName,
+          title: originalName.replace(/\.[^.]+$/, "") || originalName,
+          ownerId,
+          // Shared by default: a picture used by a question of a SHARED topic must stay
+          // reachable when another author picks that topic up. Privacy is an explicit act.
+          visibility: "shared",
+        });
+      } catch (error) {
+        // Lost the race: a concurrent upload of the same bytes by the same author got
+        // there first. The partial unique index (owner_id, checksum) turned that into a
+        // conflict; re-read and use the row that won, which is exactly what dedup would
+        // have returned anyway.
+        if ((error as { code?: string }).code !== "23505") throw error;
+        asset = await storage.findMediaAssetByOwnerChecksum(ownerId, stored.checksum);
+        if (!asset) throw error;
+      }
     }
 
     res.json({

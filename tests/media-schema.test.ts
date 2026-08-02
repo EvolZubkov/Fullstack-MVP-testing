@@ -22,10 +22,15 @@ describe("media registry schema", () => {
     expect(names).toEqual(["asset_id", "entity_id", "entity_type", "field"]);
   });
 
-  it("the owner+checksum dedup index stays non-unique (NULL owners are not equal)", () => {
+  it("the owner+checksum dedup index is a unique barrier, partial so NULL owners are exempt", () => {
     const idx = getTableConfig(mediaAssets).indexes.find(
       (i) => i.config.name === "media_assets_owner_checksum_idx",
     );
-    expect(idx?.config.unique).toBe(false);
+    // Uniqueness is what stops two concurrent uploads of the same bytes by the same
+    // author from both missing the dedup SELECT and both inserting. It is partial
+    // (WHERE owner_id IS NOT NULL) because Postgres treats NULLs as distinct, so a
+    // plain unique index could never constrain backfilled (ownerless) rows anyway.
+    expect(idx?.config.unique).toBe(true);
+    expect(idx?.config.where).toBeDefined();
   });
 });

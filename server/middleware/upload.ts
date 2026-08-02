@@ -52,7 +52,7 @@ export function rejectBase64MediaUrl(mediaUrl: unknown, res: Response): boolean 
   if (v.startsWith("data:")) {
     res.status(413).json({
       error:
-        "Base64 (data:...) запрещён. Загрузи файл через /api/media/upload и сохрани url вида /uploads/media/...",
+        "Base64 (data:...) запрещён. Загрузи файл через /api/media/upload и сохрани url вида /api/media/...",
     });
     return true;
   }

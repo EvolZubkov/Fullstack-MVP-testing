@@ -95,4 +95,18 @@ describe("POST /api/media/upload", () => {
       .attach("file", Buffer.from("hello"), { filename: "pic.png", contentType: "image/png" });
     expect(res.status).toBe(401);
   });
+
+  it("returns the winning asset when a concurrent upload got there first", async () => {
+    storageMock.findMediaAssetByOwnerChecksum
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ id: "asset-race", mimeType: "image/png", byteSize: 5 });
+    storageMock.createMediaAsset.mockRejectedValue(Object.assign(new Error("duplicate key"), { code: "23505" }));
+
+    const res = await request(makeApp("author-1"))
+      .post("/api/media/upload")
+      .attach("file", Buffer.from("hello"), { filename: "pic.png", contentType: "image/png" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.url).toBe("/api/media/asset-race");
+  });
 });

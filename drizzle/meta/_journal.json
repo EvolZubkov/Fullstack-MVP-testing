@@ -71,6 +71,13 @@
       "when": 1785631381202,
       "tag": "0009_prd_media_library",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785639423628,
+      "tag": "0010_media_owner_checksum_unique",
+      "breakpoints": true
     }
   ]
 }
