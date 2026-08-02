@@ -19,6 +19,7 @@ import { getEffectiveRoles } from "../services/access";
 import { canDeliverAsset } from "../services/media/asset-access";
 import { requirePermission } from "../middleware/auth";
 import { reindexAllUsages } from "../services/media/usage-index";
+import { isAdminOrSuper } from "../services/test-access";
 
 const router = Router();
 
@@ -102,6 +103,64 @@ router.post("/reindex", requirePermission("media.manage"), async (_req: Request,
   } catch (error) {
     logger.error(`Media reindex failed: ${(error as Error).message}`);
     res.status(500).json({ error: "Failed to reindex media usages" });
+  }
+});
+
+/**
+ * DELETE /:id — remove an asset.
+ *
+ * Refused with `409` while anything uses it, listing where, exactly as the PRD-15
+ * content-guard refuses to delete content a test depends on. A published snapshot counts
+ * as a usage: an issued version must not lose its picture after the fact.
+ *
+ * The PHYSICAL file goes only when no other registry row holds the same checksum — dedup
+ * means another author may own a row over the same bytes.
+ */
+router.delete("/:id", requirePermission("media.manage"), async (req: Request, res: Response) => {
+  try {
+    const asset = await storage.getMediaAsset(req.params.id);
+    if (!asset) return res.status(404).json({ error: "Not found" });
+
+    const roles = req.effectiveRoles ?? [];
+    const isOwner = !!asset.ownerId && asset.ownerId === req.session.userId;
+    if (!isOwner && !isAdminOrSuper(roles)) return res.status(403).json({ error: "Forbidden" });
+
+    const usages = await storage.getMediaUsagesByAsset(asset.id);
+    if (usages.length > 0) {
+      return res.status(409).json({
+        error: "media_in_use",
+        message: "Файл используется и не может быть удалён",
+        usages: usages.map((u) => ({ entityType: u.entityType, entityId: u.entityId, field: u.field })),
+      });
+    }
+
+    if (req.query.dryRun === "true") return res.json({ wouldDelete: true, usages: [] });
+
+    try {
+      await storage.deleteMediaAsset(asset.id);
+    } catch (error) {
+      // Race window between the usage check above and this delete: a concurrent request
+      // may have written a `media_usages` row in between. The FK (deliberately without
+      // cascade) then rejects the delete with `23503` — turn that into the same 409 the
+      // up-front check would have given, instead of letting it surface as a 500.
+      if ((error as { code?: string }).code === "23503") {
+        const lateUsages = await storage.getMediaUsagesByAsset(asset.id);
+        return res.status(409).json({
+          error: "media_in_use",
+          message: "Файл используется и не может быть удалён",
+          usages: lateUsages.map((u) => ({ entityType: u.entityType, entityId: u.entityId, field: u.field })),
+        });
+      }
+      throw error;
+    }
+    // Reference counting on the physical layer: the bytes are shared across owners.
+    if ((await storage.countMediaAssetsByChecksum(asset.checksum)) === 0) {
+      await mediaStore.remove(asset.storageKey);
+    }
+    res.json({ deleted: true });
+  } catch (error) {
+    logger.error(`Media delete failed: ${(error as Error).message}`);
+    res.status(500).json({ error: "Failed to delete media" });
   }
 });
 
