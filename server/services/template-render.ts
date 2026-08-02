@@ -366,10 +366,12 @@ function completeMeasures(
  * Returns null when the layout is missing or the result is not a standard result
  * (e.g. adaptive), so the caller can fall back to legacy rendering.
  *
- * PRD-29: `measures` carries the test's scales and indicators (rows, block settings,
- * test feedback). Absent — the context builder is called with two arguments and the
- * screen of a test without measurements stays exactly what it has always been. The
- * ADAPTIVE branch never takes them: an adaptive result composes its own levels.
+ * `measures` carries the material of the results screen: the test's scales and
+ * indicators with their block settings (PRD-29) AND the test's own feedback block
+ * (PRD-32). It is NOT a statement that the test measures anything — the caller hands it
+ * over for every standard attempt, and `buildResultContext` decides what the emptiness
+ * of the scale/indicator arrays means. The ADAPTIVE branch never takes it: an adaptive
+ * result composes its own levels.
  */
 export function readResultsRenderPayload(
   dir: string,
@@ -389,15 +391,17 @@ export function readResultsRenderPayload(
       paramsDir,
     );
     if (!base) return null;
+    // ONE call, not a fork on `measures`. The fork used to hand the builder two
+    // arguments whenever the material was absent, which quietly dropped everything
+    // the material carries besides measurements — the test's own feedback block above
+    // all. The builder already treats an absent third argument as «nothing to add».
     const context = isAdaptive
       ? buildAdaptiveResultContext(result, testTitle)
-      : measures
-        ? buildResultContext(
-            result as AttemptResult,
-            testTitle,
-            completeMeasures(measures, base.params, result as AttemptResult),
-          )
-        : buildResultContext(result as AttemptResult, testTitle);
+      : buildResultContext(
+          result as AttemptResult,
+          testTitle,
+          measures ? completeMeasures(measures, base.params, result as AttemptResult) : undefined,
+        );
     // Header subtitle «Попытка N из M» (Core-prepared by the caller), same as the
     // other learner screens — merged into the server-built course context.
     if (subtitle) (context as { course: { subtitle?: string } }).course.subtitle = subtitle;
