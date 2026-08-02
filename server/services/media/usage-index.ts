@@ -12,6 +12,7 @@ import { storage } from "../../storage";
 import type { MediaEntityType } from "@shared/schema";
 import type { MediaUsageRef } from "../../storage/media-repository";
 import { collectMediaRefs } from "./media-refs";
+import { clearAssetAccessCache } from "./asset-access";
 
 /** Resolves every reference inside `entity` to registry ids. */
 export async function resolveEntityUsages(entity: unknown): Promise<MediaUsageRef[]> {
@@ -36,4 +37,5 @@ export async function syncEntityUsages(
 ): Promise<void> {
   const refs = await resolveEntityUsages(entity);
   await storage.replaceMediaUsages(entityType, entityId, refs);
+  clearAssetAccessCache();
 }

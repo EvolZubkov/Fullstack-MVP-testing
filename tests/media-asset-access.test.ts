@@ -1,0 +1,97 @@
+/**
+ * @module tests/media-asset-access
+ * @description The delivery rule (§6.1 of the spec). Three independent grounds: owner or
+ * admin, a shared file to an authoring role, and — the only one that lets a LEARNER
+ * through — the asset being used in content that learner may reach.
+ */
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const { storageMock } = vi.hoisted(() => ({
+  storageMock: {
+    getMediaUsagesByAsset: vi.fn(),
+    getQuestion: vi.fn(),
+    isTestAssignedToUser: vi.fn(),
+    getTestSectionsByTopic: vi.fn(),
+    getContentPage: vi.fn(),
+    getSnapshot: vi.fn(),
+  },
+}));
+vi.mock("../server/storage", () => ({ storage: storageMock }));
+
+import { ROLES } from "../shared/access";
+import { canDeliverAsset, clearAssetAccessCache } from "../server/services/media/asset-access";
+
+const asset = (over: Record<string, unknown> = {}) => ({
+  id: "a1", ownerId: "author-1", visibility: "shared", ...over,
+} as never);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  clearAssetAccessCache();
+  storageMock.getMediaUsagesByAsset.mockResolvedValue([]);
+});
+
+describe("canDeliverAsset", () => {
+  it("lets the owner through", async () => {
+    const ok = await canDeliverAsset(asset({ visibility: "private" }), "author-1", [ROLES.AUTHOR]);
+    expect(ok).toBe(true);
+  });
+
+  it("lets an administrator through", async () => {
+    const ok = await canDeliverAsset(asset({ visibility: "private" }), "someone", [ROLES.ADMINISTRATOR]);
+    expect(ok).toBe(true);
+  });
+
+  it("lets an authoring role read a shared file", async () => {
+    const ok = await canDeliverAsset(asset(), "author-2", [ROLES.AUTHOR]);
+    expect(ok).toBe(true);
+  });
+
+  it("refuses another author a private file", async () => {
+    const ok = await canDeliverAsset(asset({ visibility: "private" }), "author-2", [ROLES.AUTHOR]);
+    expect(ok).toBe(false);
+  });
+
+  it("refuses a learner a file used nowhere", async () => {
+    const ok = await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER]);
+    expect(ok).toBe(false);
+  });
+
+  it("lets a learner through when the file is used by an assigned test", async () => {
+    storageMock.getMediaUsagesByAsset.mockResolvedValue([
+      { assetId: "a1", entityType: "content_page", entityId: "page-1", field: "image" },
+    ]);
+    storageMock.getContentPage.mockResolvedValue({ id: "page-1", testId: "t1" });
+    storageMock.isTestAssignedToUser.mockResolvedValue(true);
+    const ok = await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER]);
+    expect(ok).toBe(true);
+    expect(storageMock.isTestAssignedToUser).toHaveBeenCalledWith("t1", "learner-1");
+  });
+
+  it("reaches the test of a question through its topic's sections", async () => {
+    storageMock.getMediaUsagesByAsset.mockResolvedValue([
+      { assetId: "a1", entityType: "question", entityId: "q-1", field: "mediaUrl" },
+    ]);
+    storageMock.getQuestion.mockResolvedValue({ id: "q-1", topicId: "top-1" });
+    storageMock.getTestSectionsByTopic.mockResolvedValue([{ testId: "t9" }]);
+    storageMock.isTestAssignedToUser.mockResolvedValue(true);
+    expect(await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER])).toBe(true);
+    expect(storageMock.isTestAssignedToUser).toHaveBeenCalledWith("t9", "learner-1");
+  });
+
+  it("refuses a learner whose assignment does not cover the using test", async () => {
+    storageMock.getMediaUsagesByAsset.mockResolvedValue([
+      { assetId: "a1", entityType: "content_page", entityId: "page-1", field: "image" },
+    ]);
+    storageMock.getContentPage.mockResolvedValue({ id: "page-1", testId: "t1" });
+    storageMock.isTestAssignedToUser.mockResolvedValue(false);
+    expect(await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER])).toBe(false);
+  });
+
+  it("caches the decision for the same asset and user", async () => {
+    storageMock.getMediaUsagesByAsset.mockResolvedValue([]);
+    await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER]);
+    await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER]);
+    expect(storageMock.getMediaUsagesByAsset).toHaveBeenCalledTimes(1);
+  });
+});
