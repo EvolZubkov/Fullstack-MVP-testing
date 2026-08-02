@@ -299,9 +299,23 @@ export function buildAdaptiveReportInput(
 /**
  * Build the adaptive results-screen context (level-based). No SCORM action flags —
  * the web adaptive results screen shows the base "Пройти снова" action.
+ *
+ * @param measures The material of the results screen, as the route reads it for BOTH
+ *   modes. Only its `testFeedback` is used here — the widest source of the consolidated
+ *   recommendations block, and a property of the TEST rather than of its flow mode. The
+ *   measurement rows it also carries belong to the standard screen: an adaptive result
+ *   composes levels and measures nothing. Absent (material unreadable) simply leaves the
+ *   test's own feedback out, exactly as it does on the standard screen.
  */
-export function buildAdaptiveResultContext(result: any, testTitle: string): ResultRenderContext {
+export function buildAdaptiveResultContext(
+  result: any,
+  testTitle: string,
+  measures?: MeasuresSource,
+): ResultRenderContext {
   const topics = Array.isArray(result?.topicResults) ? result.topicResults : [];
+  // The stored block goes through the SAME normaliser the standard screen uses, so the
+  // `url`-over-`scormHref` rule for its PDF assets lives in one place.
+  const testFeedback = normalizeFeedback(measures?.testFeedback);
   return buildSharedAdaptiveResultContext(
     {
       passed: !!result?.overallPassed,
@@ -321,9 +335,18 @@ export function buildAdaptiveResultContext(result: any, testTitle: string): Resu
           recommendedEvents: Array.isArray(t?.recommendedEvents)
             ? t.recommendedEvents.map((l: any) => ({ title: l?.title ?? "" }))
             : [],
+          // Texts and attachments of the topic and of this test's section over it, stored
+          // WITH the attempt at grading time (`server/routes/attempts.ts`) — the same two
+          // fields the standard topic result carries, read here by the same names. Absent
+          // on adaptive attempts finished before this work; the block then lacks them.
+          feedbackTexts: Array.isArray(t?.feedbackTexts) ? t.feedbackTexts : [],
+          recommendedAssets: Array.isArray(t?.recommendedAssets)
+            ? t.recommendedAssets.map((a: any) => ({ title: a?.title ?? "", url: a?.url }))
+            : [],
         }),
       ),
     },
     testTitle,
+    { ...(testFeedback ? { testFeedback } : {}) },
   );
 }

@@ -615,6 +615,80 @@ describe("Attempts routes — answer-adaptive", () => {
     });
   });
 
+  // Консолидация обратной связи: адаптивная попытка обязана сохранить тексты и вложения
+  // тем ровно так же, как стандартная. Экран итогов рисуется из СОХРАНЁННОГО результата,
+  // и адаптивный результат до сих пор не нёс ни того, ни другого — блок рекомендаций в
+  // адаптивном режиме оставался пустым, хотя автор материалы повесил.
+  it("finishing adaptive stores the topic's feedback texts and attachments", async () => {
+    const variant = twoLevelVariant();
+    variant.topics[0].levelsState.splice(1); // single level, no way down → failure
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, answersJson: {}, variantJson: variant });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getTestSections.mockResolvedValue([{
+      topicId: "t1",
+      feedbackJson: {
+        text: "Текст раздела",
+        assets: [{ title: "Памятка раздела", fileName: "s.pdf", mimeType: "application/pdf", url: "/api/media/bbbb" }],
+      },
+    }]);
+    storageMock.getTopic.mockResolvedValue({
+      id: "t1",
+      name: "JS",
+      feedbackJson: {
+        text: "Текст темы",
+        assets: [{ title: "Разбор темы", fileName: "t.pdf", mimeType: "application/pdf", url: "/api/media/aaaa" }],
+      },
+    });
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([{ topicId: "t1", failureFeedback: null }]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([
+      { id: "lvl-0", topicId: "t1", levelIndex: 0, levelName: "База", feedback: null },
+    ]);
+    storageMock.getAdaptiveLevelLinks.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue({});
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive")
+      .send({ questionId: "q1", answer: 1 })); // wrong
+
+    expect(res.status).toBe(200);
+    expect(res.body.isFinished).toBe(true);
+    // Тема впереди раздела: общий источник раньше частного — тот же порядок, что у
+    // стандартного режима и у запечённого пакета.
+    expect(res.body.result.topicResults[0].feedbackTexts).toEqual(["Текст темы", "Текст раздела"]);
+    expect(res.body.result.topicResults[0].recommendedAssets).toEqual([
+      { title: "Разбор темы", url: "/api/media/aaaa" },
+      { title: "Памятка раздела", url: "/api/media/bbbb" },
+    ]);
+    // Сохраняются ВМЕСТЕ с попыткой, а не пересчитываются при показе.
+    expect(storageMock.updateAttempt.mock.calls[0][1].resultJson.topicResults[0].feedbackTexts)
+      .toEqual(["Текст темы", "Текст раздела"]);
+    storageMock.getTopic.mockReset();
+  });
+
+  it("finishing adaptive keeps the lists empty when nothing is authored", async () => {
+    const variant = twoLevelVariant();
+    variant.topics[0].levelsState.splice(1);
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, answersJson: {}, variantJson: variant });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1" }]);
+    storageMock.getTopic.mockResolvedValue({ id: "t1", name: "JS", feedbackJson: null, feedback: null });
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([{ topicId: "t1", failureFeedback: null }]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([
+      { id: "lvl-0", topicId: "t1", levelIndex: 0, levelName: "База", feedback: null },
+    ]);
+    storageMock.getAdaptiveLevelLinks.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue({});
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive")
+      .send({ questionId: "q1", answer: 1 }));
+
+    expect(res.status).toBe(200);
+    expect(res.body.result.topicResults[0].feedbackTexts).toEqual([]);
+    expect(res.body.result.topicResults[0].recommendedAssets).toEqual([]);
+    storageMock.getTopic.mockReset();
+  });
+
   it("rejects an unexpected questionId (400) and a foreign attempt (403)", async () => {
     storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, answersJson: {}, variantJson: twoLevelVariant() });
     storageMock.getTest.mockResolvedValue(adaptiveTest);
@@ -1107,6 +1181,85 @@ describe("Attempts routes — result and history", () => {
     storageMock.getAttempt.mockResolvedValue({ ...finishedAttempt, userId: "other" });
     const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
     expect(res.status).toBe(403);
+  });
+
+  // Консолидированный блок рекомендаций в АДАПТИВНОМ режиме. Разметка блока в
+  // `results.adaptive.html` уже есть, но до этой работы ни один источник в него не
+  // подавался: экран рисуется из `render.context`, который собирает роут.
+  describe("GET /attempts/:id/result — адаптивный экран и консолидированный блок", () => {
+    const TOPIC_PDF = { title: "Разбор темы", url: "/api/media/aaaa" };
+
+    /** Завершённая адаптивная попытка: тема без подтверждённого уровня = провал. */
+    function adaptiveAttempt(achievedLevelIndex: number | null, overallPassed = false) {
+      return {
+        ...finishedAttempt,
+        resultJson: {
+          mode: "adaptive",
+          overallPassed,
+          topicResults: [{
+            topicId: "t1",
+            topicName: "Сети",
+            achievedLevelIndex,
+            achievedLevelName: achievedLevelIndex === null ? null : "Средний",
+            feedback: null,
+            recommendedLinks: [],
+            feedbackTexts: ["Текст темы", "Текст раздела"],
+            recommendedAssets: [TOPIC_PDF],
+          }],
+        },
+      };
+    }
+
+    /** Тексты консолидированного блока в порядке показа. */
+    function texts(res: request.Response): string[] {
+      return (res.body.render?.context?.result?.recommendations?.texts ?? []) as string[];
+    }
+
+    it("показывает тексты и вложения непройденной темы и обратную связь теста", async () => {
+      storageMock.getAttempt.mockResolvedValue(adaptiveAttempt(null));
+      storageMock.getTest.mockResolvedValue({ ...dbTest, mode: "adaptive", feedbackJson: { text: "Разберите ошибки." } });
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([finishedAttempt]);
+
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      expect(res.status).toBe(200);
+      // Обратная связь теста — самый общий источник, поэтому впереди материалов темы.
+      expect(texts(res)).toEqual(["Разберите ошибки.", "Текст темы", "Текст раздела"]);
+      expect(res.body.render.context.result.recommendations.assets).toEqual([TOPIC_PDF]);
+    });
+
+    it("тема с подтверждённым уровнем молчит, обратная связь теста остаётся", async () => {
+      storageMock.getAttempt.mockResolvedValue(adaptiveAttempt(1));
+      storageMock.getTest.mockResolvedValue({ ...dbTest, mode: "adaptive", feedbackJson: { text: "Разберите ошибки." } });
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([finishedAttempt]);
+
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      expect(res.status).toBe(200);
+      expect(texts(res)).toEqual(["Разберите ошибки."]);
+      expect(res.body.render.context.result.recommendations.assets ?? []).toEqual([]);
+    });
+
+    it("явно пройденный тест не показывает и своей обратной связи", async () => {
+      storageMock.getAttempt.mockResolvedValue(adaptiveAttempt(1, true));
+      storageMock.getTest.mockResolvedValue({ ...dbTest, mode: "adaptive", feedbackJson: { text: "Разберите ошибки." } });
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([finishedAttempt]);
+
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      expect(res.status).toBe(200);
+      expect(res.body.render.context.result.recommendations).toBeUndefined();
+    });
+
+    it("без материалов блока не возникает вовсе", async () => {
+      const bare = adaptiveAttempt(null);
+      bare.resultJson.topicResults[0].feedbackTexts = [];
+      bare.resultJson.topicResults[0].recommendedAssets = [];
+      storageMock.getAttempt.mockResolvedValue(bare);
+      storageMock.getTest.mockResolvedValue({ ...dbTest, mode: "adaptive", feedbackJson: null });
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([finishedAttempt]);
+
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      expect(res.status).toBe(200);
+      expect(res.body.render.context.result.recommendations).toBeUndefined();
+    });
   });
 
   it("GET /learner/attempts — returns attempt history grouped by test", async () => {

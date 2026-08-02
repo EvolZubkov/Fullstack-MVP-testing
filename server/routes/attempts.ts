@@ -1356,17 +1356,24 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       // results layout falls back to `default` (active template owns no `results`).
       const paramsDir = await resolveTemplateDir(templateId, { activeOnly: true });
       // Материал экрана итогов: шкалы/показатели (PRD-29) И обратная связь теста
-      // (PRD-32). Только для СТАНДАРТНОГО результата — адаптивный собирает свои уровни
-      // и материала не берёт. Собирается для ЛЮБОГО стандартного теста, в том числе без
-      // измерений: обратная связь теста ему положена ровно так же, а решение «есть ли
-      // что показывать из измерений» принимает `buildResultContext` — одно, в одном месте.
-      const material =
-        resultJson.mode === "adaptive" ? undefined : await resultsMaterialForAttempt(attempt, test);
+      // (PRD-32). Собирается для ЛЮБОГО теста, в том числе без измерений: обратная связь
+      // теста ему положена ровно так же, а решение «есть ли что показывать из измерений»
+      // принимает `buildResultContext` — одно, в одном месте.
+      //
+      // АДАПТИВНЫЙ результат материал тоже берёт: раньше эта ветка получала `undefined`,
+      // и вместе с измерениями (которых у адаптивного теста и нет) терялась обратная
+      // связь ТЕСТА — источник блока рекомендаций, никакого отношения к режиму не
+      // имеющий. Из материала адаптивная ветка читает только её (см. `readResultsRenderPayload`).
+      const material = await resultsMaterialForAttempt(attempt, test);
       // В ОТВЕТ едут только настоящие измерения: по ним клиент печатает шкалы и радар
       // в отчёте, и пустой набор заставил бы его рисовать блок измерений у теста,
-      // который их не объявляет.
+      // который их не объявляет. Адаптивной попытке они не едут и теперь: отчёт по ней
+      // строится по уровням, и блок измерений в нём — отдельная работа, а не побочный
+      // эффект того, что материал стал читаться для обоих режимов.
       measures =
-        material && (material.scales.length > 0 || material.variables.length > 0) ? material : undefined;
+        resultJson.mode !== "adaptive" && material && (material.scales.length > 0 || material.variables.length > 0)
+          ? material
+          : undefined;
       render = readResultsRenderPayload(
         dir,
         resultJson,
@@ -1667,10 +1674,20 @@ async function moveToNextTopicOrFinish(variant: any, currentTopic: any, currentL
 async function buildAdaptiveResult(variant: any, testId: string, storage: any) {
   const adaptiveSettings = await storage.getAdaptiveTopicSettingsByTest(testId);
   const adaptiveLevels = await storage.getAdaptiveLevelsByTest(testId);
+  // Sections of THIS test: the section over a topic is the second authoring point of
+  // the topic's feedback, exactly as in the standard mode (`/finish`). An adaptive test
+  // has sections too — the start route already reads them for the per-topic timer and
+  // the delivery order.
+  const sections = (await storage.getTestSections(testId)) ?? [];
 
   const topics = await Promise.all(
     variant.topics.map(async (topic: any) => {
       const topicSettings = adaptiveSettings.find((s: any) => s.topicId === topic.topicId);
+      const section = sections.find((s: any) => s.topicId === topic.topicId);
+      // The topic row itself — read through the SAME source the attempt is delivered
+      // from, so an attempt pinned to a snapshot (PRD-15 block B) hands out the texts
+      // and files that were published with it.
+      const topicRow = await storage.getTopic(topic.topicId);
       const topicLevels = adaptiveLevels
         .filter((l: any) => l.topicId === topic.topicId)
         .sort((a: any, b: any) => a.levelIndex - b.levelIndex);
@@ -1699,11 +1716,35 @@ async function buildAdaptiveResult(variant: any, testId: string, storage: any) {
         levels,
         failureFeedback: topicSettings?.failureFeedback || null,
         failureLinks: levels[0]?.links ?? [],
+        // What the author wrote and attached for this topic, gathered through the SAME
+        // two shared rules the standard `/finish` runs — source priority, the
+        // topic-before-section order and the address rule included. The engine echoes
+        // `extra` verbatim, so it lands on the stored topic result below.
+        extra: {
+          feedbackTexts: topicFeedbackTexts(topicRow, section?.feedbackJson),
+          recommendedAssets: feedbackAssets(topicRow?.feedbackJson, section?.feedbackJson).map(
+            (a) => ({ title: a.title, url: a.url ?? "" }),
+          ),
+        },
       };
     }),
   );
 
-  return aggregateAdaptiveResult({ topics });
+  const aggregated = aggregateAdaptiveResult<{
+    feedbackTexts: string[];
+    recommendedAssets: { title: string; url: string }[];
+  }>({ topics });
+  // Hoist the passthrough onto the topic result itself: `adaptiveTopicResultSchema`
+  // spells these two out (and the shared results builder reads them by those names), so
+  // an `extra` envelope would only be a second spelling of the same fact.
+  return {
+    ...aggregated,
+    topicResults: aggregated.topicResults.map(({ extra, ...t }) => ({
+      ...t,
+      feedbackTexts: extra?.feedbackTexts ?? [],
+      recommendedAssets: extra?.recommendedAssets ?? [],
+    })),
+  };
 }
 
 export default router;

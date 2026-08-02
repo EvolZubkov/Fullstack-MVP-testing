@@ -370,8 +370,9 @@ function completeMeasures(
  * indicators with their block settings (PRD-29) AND the test's own feedback block
  * (PRD-32). It is NOT a statement that the test measures anything — the caller hands it
  * over for every standard attempt, and `buildResultContext` decides what the emptiness
- * of the scale/indicator arrays means. The ADAPTIVE branch never takes it: an adaptive
- * result composes its own levels.
+ * of the scale/indicator arrays means. The ADAPTIVE branch takes it as well, but reads
+ * ONLY the test's own feedback block out of it — an adaptive result composes its own
+ * levels and measures nothing.
  */
 export function readResultsRenderPayload(
   dir: string,
@@ -396,7 +397,13 @@ export function readResultsRenderPayload(
     // the material carries besides measurements — the test's own feedback block above
     // all. The builder already treats an absent third argument as «nothing to add».
     const context = isAdaptive
-      ? buildAdaptiveResultContext(result, testTitle)
+      // The adaptive branch takes the material too — but only the TEST's own feedback
+      // block out of it: the rest of the material describes measurements, which an
+      // adaptive result does not carry. It used to take nothing at all, and the test's
+      // feedback — a property of the test, not of its flow mode — was lost with the
+      // measurements it was bundled with, leaving the adaptive recommendations block
+      // without its widest source.
+      ? buildAdaptiveResultContext(result, testTitle, measures)
       : buildResultContext(
           result as AttemptResult,
           testTitle,

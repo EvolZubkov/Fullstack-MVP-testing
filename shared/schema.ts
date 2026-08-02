@@ -1106,6 +1106,19 @@ export const adaptiveTopicResultSchema = z.object({
   })),
   feedback: z.string().nullable(),
   recommendedLinks: z.array(z.object({ title: z.string(), url: z.string() })),
+  // The SAME two fields the standard `topicResultSchema` carries, and for the same
+  // reason: the results screen renders from the SAVED result, so what the author wrote
+  // for the topic (`topics.feedback_json`) and for this test's section over it
+  // (`test_sections.feedback_json`) travels WITH the attempt — re-reading live content
+  // would hand a past attempt today's wording and today's files.
+  //
+  // They live here and not only on the standard result because the consolidated
+  // recommendations block is a property of the TEST, not of its flow mode: an author who
+  // hung a leaflet on a topic owes it to the learner of an adaptive test just the same.
+  // `.default([])` keeps adaptive attempts finished before this work valid — they simply
+  // carry nothing.
+  recommendedAssets: z.array(z.object({ title: z.string(), url: z.string() })).default([]),
+  feedbackTexts: z.array(z.string()).default([]),
 });
 
 export const adaptiveAttemptResultSchema = z.object({
