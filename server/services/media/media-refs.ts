@@ -63,19 +63,59 @@ const MEDIA_IN_TEXT = /\/api\/media\/([0-9a-fA-F-]{36})|\/uploads\/(media\/[^\s"
 /** Trailing punctuation that belongs to the sentence, not to the file name. */
 const TRAILING_PUNCTUATION = /[.,;:!)\]]+$/;
 
-/** Every distinct reference inside one string, in order of appearance. */
-export function findMediaRefsInText(value: string): MediaRef[] {
-  const out: MediaRef[] = [];
+/**
+ * One address the walker matched, accepted or refused.
+ *
+ * The refused ones are reported rather than swallowed because the two consumers need
+ * opposite things from them: the usage index may ignore an address it will never serve,
+ * while the SCORM packer must still WIPE it — an address that leaves the package pointing
+ * at the Skill'Ум server is exactly the failure the packer exists to prevent, and a refusal
+ * nobody hears about is a silent one.
+ */
+export interface MediaTextMatch {
+  /** The address as it denotes the file, separators normalised to `/`. */
+  address: string;
+  /** The reference, or `null` when the address was refused. */
+  ref: MediaRef | null;
+  /** Human-readable ground for the refusal; absent on an accepted match. */
+  reason?: string;
+}
+
+/** The address that names a reference — the inverse of matching. */
+function addressOf(ref: MediaRef): string {
+  return ref.kind === "canonical" ? `/api/media/${ref.id}` : `/uploads/${ref.storageKey}`;
+}
+
+/**
+ * Every distinct address inside one string, in order of appearance, refusals included.
+ *
+ * Deduplication is by address: the same file mentioned five times is one entry, which is
+ * what both consumers want (one usage row, one file in the package).
+ */
+export function findMediaMatchesInText(value: string): MediaTextMatch[] {
+  const out: MediaTextMatch[] = [];
   const seen = new Set<string>();
   for (const m of value.replace(/\\/g, "/").matchAll(MEDIA_IN_TEXT)) {
     const ref: MediaRef = m[1]
       ? { kind: "canonical", id: m[1] }
       : { kind: "legacy", storageKey: m[2].replace(TRAILING_PUNCTUATION, "") };
-    if (ref.kind === "legacy" && ref.storageKey.split("/").some((seg) => seg === "..")) continue;
-    const key = ref.kind === "canonical" ? `c:${ref.id}` : `l:${ref.storageKey}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(ref);
+    const address = addressOf(ref);
+    if (seen.has(address)) continue;
+    seen.add(address);
+    if (ref.kind === "legacy" && ref.storageKey.split("/").some((seg) => seg === "..")) {
+      out.push({ address, ref: null, reason: "escapes the media directory" });
+      continue;
+    }
+    out.push({ address, ref });
+  }
+  return out;
+}
+
+/** Every distinct reference inside one string, in order of appearance. */
+export function findMediaRefsInText(value: string): MediaRef[] {
+  const out: MediaRef[] = [];
+  for (const match of findMediaMatchesInText(value)) {
+    if (match.ref) out.push(match.ref);
   }
   return out;
 }

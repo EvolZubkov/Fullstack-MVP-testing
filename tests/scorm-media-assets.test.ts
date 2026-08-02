@@ -241,13 +241,87 @@ describe("extractEmbeddedMediaIntoAssets — /uploads/ file paths", () => {
     expect(testObj.mediaUrl).toBe("assets/media/track.mp3");
   });
 
-  it("не трогает адрес с выходом за каталог", async () => {
+  it("вычищает адрес с выходом за каталог и называет причину", async () => {
     const resolveRef = emptyResolver();
     const testObj = { mediaUrl: "/uploads/media/../../../etc/passwd" };
-    await extractEmbeddedMediaIntoAssets(testObj, { resolveRef });
+    const { assets, missing } = await extractEmbeddedMediaIntoAssets(testObj, { resolveRef });
+
     // Обходчик отбрасывает сегмент `..` сам — до резолвера такой адрес не доходит.
     expect(resolveRef).not.toHaveBeenCalled();
-    expect(testObj.mediaUrl).toBe("/uploads/media/../../../etc/passwd");
+    expect(Object.keys(assets)).toHaveLength(0);
+    // Но в данных пакета он остаться не может: адрес наружу не уезжает ни при каких причинах.
+    expect(testObj.mediaUrl).toBe("");
+    expect(missing).toHaveLength(1);
+    expect(missing[0]).toMatch(/refused/i);
+    expect(missing[0]).toMatch(/escapes the media directory/i);
+  });
+
+  it("сообщает об отвергнутом адресе один раз на две ссылки", async () => {
+    const testObj = {
+      a: { mediaUrl: "/uploads/media/../secret.png" },
+      b: { mediaUrl: "/uploads/media/../secret.png" },
+    };
+    const { missing } = await extractEmbeddedMediaIntoAssets(testObj, { resolveRef: emptyResolver() });
+    expect(missing).toHaveLength(1);
+  });
+
+  it("не портит непрефиксную замену, когда одно имя — начало другого", async () => {
+    // Боевой резолвер сохраняет форму имени, поэтому подмена префикса выглядела бы верной
+    // случайно. Здесь пути НЕ префиксные — порядок замены виден.
+    const resolveRef = vi.fn().mockImplementation(async (ref: any) =>
+      ref.storageKey === "media/a.png"
+        ? { zipPath: "assets/media/H1.png", buffer: Buffer.from("short") }
+        : { zipPath: "assets/media/H2.bak", buffer: Buffer.from("long") },
+    );
+    const testObj = { html: "/uploads/media/a.png and /uploads/media/a.png.bak" };
+    await extractEmbeddedMediaIntoAssets(testObj, { resolveRef });
+    expect(testObj.html).toBe("assets/media/H1.png and assets/media/H2.bak");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe("extractEmbeddedMediaIntoAssets — граница адреса", () => {
+  it("не трогает абсолютный URL на чужой хост", async () => {
+    const resolveRef = emptyResolver();
+    const testObj = { mediaUrl: "https://cms.example.com/uploads/media/logo.png" };
+    const { assets, missing } = await extractEmbeddedMediaIntoAssets(testObj, { resolveRef });
+
+    // Адрес чужого хоста — не ссылка на наше хранилище: ни резолва, ни подмены, ни потери.
+    expect(testObj.mediaUrl).toBe("https://cms.example.com/uploads/media/logo.png");
+    expect(resolveRef).not.toHaveBeenCalled();
+    expect(Object.keys(assets)).toHaveLength(0);
+    expect(missing).toHaveLength(0);
+  });
+
+  it("не трогает абсолютный URL с каноническим путём", async () => {
+    const resolveRef = emptyResolver();
+    const testObj = { mediaUrl: `https://lms.example.com/api/media/${ID}` };
+    await extractEmbeddedMediaIntoAssets(testObj, { resolveRef });
+    expect(testObj.mediaUrl).toBe(`https://lms.example.com/api/media/${ID}`);
+    expect(resolveRef).not.toHaveBeenCalled();
+  });
+
+  it("переписывает относительный адрес в атрибуте разметки", async () => {
+    const resolveRef = resolverOf("assets/media/x.png");
+    const testObj = { html: `<img src="/uploads/media/x.png">` };
+    await extractEmbeddedMediaIntoAssets(testObj, { resolveRef });
+    expect(testObj.html).toBe(`<img src="assets/media/x.png">`);
+  });
+
+  it("переписывает относительный адрес внутри url(...) в стиле", async () => {
+    const resolveRef = resolverOf("assets/media/bg.png");
+    const testObj = { style: "background: url(/uploads/media/bg.png) no-repeat;" };
+    await extractEmbeddedMediaIntoAssets(testObj, { resolveRef });
+    expect(testObj.style).toBe("background: url(assets/media/bg.png) no-repeat;");
+  });
+
+  it("переписывает голое значение, но не приклеенное к хосту в той же строке", async () => {
+    const resolveRef = resolverOf("assets/media/x.png");
+    const testObj = { html: `<img src="/uploads/media/x.png"><a href="https://cms.example.com/uploads/media/x.png">` };
+    await extractEmbeddedMediaIntoAssets(testObj, { resolveRef });
+    expect(testObj.html).toBe(
+      `<img src="assets/media/x.png"><a href="https://cms.example.com/uploads/media/x.png">`,
+    );
   });
 });
 

@@ -12,18 +12,21 @@
  *
  * The address is looked for INSIDE a string, not only when the whole value is one: content
  * pages carry markup with `<img src="…">`, and a picture inside markup is as real as a bare
- * `mediaUrl` column.
+ * `mediaUrl` column. It must, however, STAND ON A BOUNDARY (see `ADDRESS_BOUNDARY`) — an
+ * absolute URL to a foreign host that happens to end in the same path is not ours.
  *
  * Resolving a reference to bytes is NOT this module's job: it takes a `resolveRef` port, so it
  * stays a pure string walk — no database, no filesystem, and its tests need neither.
  *
- * An address that cannot be resolved is BLANKED rather than left in place. A package that
- * carries an absolute address to the Skill'Ум server is not self-contained: inside an LMS that
- * is a foreign origin with no session, so the learner would meet a broken picture instead of an
- * absent one. The reason is reported through `missing`.
+ * An address that cannot be resolved — or that the recogniser refused, e.g. one walking out of
+ * the media directory — is BLANKED rather than left in place. A package that carries an address
+ * to the Skill'Ум server is not self-contained: inside an LMS that is a foreign origin with no
+ * session, so the learner would meet a broken picture instead of an absent one. Every such loss
+ * is reported through `missing`, because a loss nobody hears about is how this defect lived
+ * unnoticed in the first place.
  */
 import { nanoid } from "nanoid";
-import { findMediaRefsInText, type MediaRef } from "../../services/media/media-refs";
+import { findMediaMatchesInText, type MediaRef } from "../../services/media/media-refs";
 import type { ResolvedMedia } from "./media-resolver";
 
 const EXT_BY_MIME: Record<string, string> = {
@@ -71,22 +74,33 @@ function parseDataUrl(input: string): { mime: string; buffer: Buffer } | null {
   return { mime: m[1].toLowerCase(), buffer: Buffer.from(m[2], "base64") };
 }
 
-/** The textual form of a reference — what has to be replaced inside the string. */
-function addressOf(ref: MediaRef): string {
-  return ref.kind === "canonical" ? `/api/media/${ref.id}` : `/uploads/${ref.storageKey}`;
-}
+/**
+ * What may stand immediately before an address for it to BE the address rather than the tail
+ * of a longer one: the value's own start, a quote, whitespace, `=`, `(`, `,`, `;` or `>`.
+ *
+ * The recogniser deliberately errs towards finding too much, because for the usage index a
+ * spurious find is harmless — it only keeps a file alive. Here the asymmetry is the OPPOSITE:
+ * a spurious find is destructive. `https://cms.example.com/uploads/media/logo.png` is a form
+ * the product supports (see `shared/report/report-assets`), and rewriting the path inside it
+ * would both mangle the value and, worse, pull whatever local file happens to share that name
+ * into the package. So the guard lives here, and the recogniser stays one for the whole system.
+ */
+const ADDRESS_BOUNDARY = `(?<![^"'\\s=(,;>])`;
 
 /**
  * The address as it may actually be spelled in the string. The walker normalises `\` to `/`
  * before matching, so it can report an address the literal text does not contain; matching
  * either separator here keeps "found" and "replaced" the same set — otherwise a reference
  * would be reported as packed while the old address stayed in the data.
+ *
+ * A fresh regex per call on purpose: it is global, and `test()` would leave `lastIndex`
+ * behind for the next caller.
  */
-function addressPattern(ref: MediaRef): RegExp {
-  const escaped = addressOf(ref)
+function addressPattern(address: string): RegExp {
+  const escaped = address
     .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
     .replace(/\//g, "[\\\\/]");
-  return new RegExp(escaped, "g");
+  return new RegExp(ADDRESS_BOUNDARY + escaped, "g");
 }
 
 /**
@@ -107,8 +121,7 @@ export async function extractEmbeddedMediaIntoAssets(
   /** Decisions already taken, so one asset referenced ten times is resolved once. */
   const decided = new Map<string, string | null>();
 
-  async function zipPathFor(ref: MediaRef): Promise<string | null> {
-    const address = addressOf(ref);
+  async function zipPathFor(address: string, ref: MediaRef): Promise<string | null> {
     const known = decided.get(address);
     if (known !== undefined) return known;
 
@@ -133,18 +146,31 @@ export async function extractEmbeddedMediaIntoAssets(
       return zipPath;
     }
 
-    const refs = findMediaRefsInText(input);
-    if (refs.length === 0) return input;
+    const matches = findMediaMatchesInText(input);
+    if (matches.length === 0) return input;
     // Longest address first: one legacy name can be a prefix of another
     // (`…/a.png` inside `…/a.png.bak`), and replacing the shorter one first would
     // corrupt the longer.
-    refs.sort((a, b) => addressOf(b).length - addressOf(a).length);
+    const ordered = [...matches].sort((a, b) => b.address.length - a.address.length);
 
     let out = input;
-    for (const ref of refs) {
-      const zipPath = await zipPathFor(ref);
+    for (const match of ordered) {
+      // Not standing on a boundary means this is somebody else's address (a host name in
+      // front of it): it is not ours to touch, and it must not reach the resolver either.
+      if (!addressPattern(match.address).test(out)) continue;
+
+      let replacement = "";
+      if (match.ref) {
+        replacement = (await zipPathFor(match.address, match.ref)) ?? "";
+      } else if (!decided.has(match.address)) {
+        // Refused by the recogniser. The bytes are unreachable, but the address still has to
+        // go: a package must carry no address back to the server. Reported once, like any
+        // other decision about this address.
+        missing.push(`refused media reference: ${match.address} (${match.reason})`);
+        decided.set(match.address, null);
+      }
       // Replacement as a function: a `$` in the path must stay a `$`, not a capture reference.
-      out = out.replace(addressPattern(ref), () => zipPath ?? "");
+      out = out.replace(addressPattern(match.address), () => replacement);
     }
     return out;
   }

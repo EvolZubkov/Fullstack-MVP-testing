@@ -6,7 +6,12 @@
  * «где используется» report can say where exactly.
  */
 import { describe, it, expect } from "vitest";
-import { parseMediaRef, collectMediaRefs, findMediaRefsInText } from "../server/services/media/media-refs";
+import {
+  parseMediaRef,
+  collectMediaRefs,
+  findMediaRefsInText,
+  findMediaMatchesInText,
+} from "../server/services/media/media-refs";
 
 describe("parseMediaRef", () => {
   it("recognises the canonical address", () => {
@@ -120,5 +125,36 @@ describe("findMediaRefsInText", () => {
 
   it("drops a key that walks out of the media directory", () => {
     expect(findMediaRefsInText("/uploads/media/../../etc/passwd")).toEqual([]);
+  });
+});
+
+describe("findMediaMatchesInText", () => {
+  it("reports an accepted address with its reference", () => {
+    expect(findMediaMatchesInText('<img src="/uploads/media/pic.png">')).toEqual([
+      { address: "/uploads/media/pic.png", ref: { kind: "legacy", storageKey: "media/pic.png" } },
+    ]);
+  });
+
+  it("reports a refused address instead of swallowing it", () => {
+    // Индексу использования такой адрес не нужен, а упаковщику нужен — он обязан его
+    // ВЫЧИСТИТЬ из данных пакета и сказать почему.
+    const matches = findMediaMatchesInText("/uploads/media/../../etc/passwd");
+    expect(matches).toHaveLength(1);
+    expect(matches[0].ref).toBeNull();
+    expect(matches[0].address).toBe("/uploads/media/../../etc/passwd");
+    expect(matches[0].reason).toMatch(/escapes the media directory/i);
+  });
+
+  it("даёт адрес в той форме, в какой его надо искать в тексте", () => {
+    // Пунктуация предложения в адрес не входит — как и в ссылке.
+    expect(findMediaMatchesInText("см. /uploads/media/pic.png, далее")[0].address).toBe(
+      "/uploads/media/pic.png",
+    );
+  });
+
+  it("reports one address once even when it repeats", () => {
+    expect(
+      findMediaMatchesInText('<img src="/uploads/media/same.png"><img src="/uploads/media/same.png">'),
+    ).toHaveLength(1);
   });
 });
