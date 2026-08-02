@@ -61,4 +61,16 @@ describe("syncEntityUsages", () => {
       { assetId: "22222222-2222-2222-2222-222222222222", field: "b" },
     ]);
   });
+
+  it("keeps every distinct asset found inside one HTML field", async () => {
+    await syncEntityUsages("content_page", "p1", {
+      html:
+        '<p><img src="/api/media/11111111-1111-1111-1111-111111111111"></p>' +
+        '<p><img src="/api/media/22222222-2222-2222-2222-222222222222"></p>',
+    });
+    expect(storageMock.replaceMediaUsages).toHaveBeenCalledWith("content_page", "p1", [
+      { assetId: "11111111-1111-1111-1111-111111111111", field: "html" },
+      { assetId: "22222222-2222-2222-2222-222222222222", field: "html" },
+    ]);
+  });
 });
