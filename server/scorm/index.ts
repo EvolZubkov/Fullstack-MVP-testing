@@ -6,6 +6,7 @@ import { buildMetadataXml } from "./builders/metadata";
 import { escapeXml } from "./utils/escape";
 import { readAsset } from "./assets/read-asset";
 import { extractEmbeddedMediaIntoAssets } from "./builders/media-assets";
+import { registryMediaResolver } from "./builders/media-resolver";
 import { copyDirToFiles, getTemplatesRootDir } from "./builders/template-copy";
 import { getSharedRuntimeBundle } from "./builders/shared-runtime";
 import { readVendorDsCss, readPackageFontFiles, assemblePackageStyles } from "./builders/ds-styles";
@@ -198,7 +199,17 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   const runtimeJs = readAsset("runtime.js");
 
   const testObj = JSON.parse(testJson);
-  const { testObj: patchedTestObj, assets } = extractEmbeddedMediaIntoAssets(testObj);
+  const { testObj: patchedTestObj, assets, missing } = await extractEmbeddedMediaIntoAssets(testObj, {
+    resolveRef: registryMediaResolver,
+  });
+  // Молчаливая потеря медиа — то, из-за чего дефект упаковки прожил незамеченным: адрес
+  // очищен, файла в пакете нет, и без этой записи об этом не узнал бы никто.
+  if (missing.length > 0) {
+    logger.warn(
+      `SCORM package ${data.test.id}: ${missing.length} media reference(s) unresolved: ${missing.join("; ")}`,
+      "scorm-export",
+    );
+  }
 
   const appTpl = readAsset("app.js");
   const testJsonB64 = Buffer.from(JSON.stringify(patchedTestObj), "utf8").toString("base64");
