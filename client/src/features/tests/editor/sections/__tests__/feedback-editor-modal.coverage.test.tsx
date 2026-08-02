@@ -172,11 +172,17 @@ describe("<FeedbackEditorModal /> — asset sizes", () => {
   // PRD-32: a picked file now goes to the media library at once, so the upload path needs a
   // server answer before any asset row can appear.
   beforeEach(() => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ id: "a", url: "/api/media/a", mime: "application/pdf", size: 1 }),
-    }) as unknown as typeof fetch;
+    // Distinct files get distinct registry rows, so the stub hands out a fresh id per call.
+    let n = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async () => {
+        const id = `a${++n}`;
+        return { ok: true, json: async () => ({ id, url: `/api/media/${id}`, mime: "application/pdf", size: 1 }) };
+      }),
+    );
   });
+  afterEach(() => vi.unstubAllGlobals());
 
   function fileOfSize(name: string, size: number): File {
     const f = new File(["x"], name, { type: "application/pdf" });

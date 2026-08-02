@@ -231,11 +231,15 @@ describe("<FeedbackEditorModal /> — PDF assets", () => {
   // PRD-32: a picked file now goes to the media library at once, so the upload path needs a
   // server answer before any asset row can appear.
   beforeEach(() => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ id: "a", url: "/api/media/a", mime: "application/pdf", size: 1 }),
-    }) as unknown as typeof fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ id: "a", url: "/api/media/a", mime: "application/pdf", size: 1 }),
+      }),
+    );
   });
+  afterEach(() => vi.unstubAllGlobals());
 
   it("renders upload button and hint; no list when assets is empty", () => {
     renderModal();

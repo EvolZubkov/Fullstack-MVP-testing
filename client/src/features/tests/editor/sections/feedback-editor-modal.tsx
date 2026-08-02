@@ -89,6 +89,11 @@ export type FeedbackEditorModalProps = {
  */
 type DraftAsset = FeedbackAsset & { size?: number };
 
+/** Outcome of one upload: the stored asset, or a message to show the author. */
+type UploadResult =
+  | { ok: true; id?: string; url: string }
+  | { ok: false; error: string };
+
 type DraftValue = Omit<FeedbackEditorValue, "assets" | "events"> & {
   assets: DraftAsset[];
   /** Always a concrete array in the draft (normalized from the optional prop). */
@@ -135,8 +140,8 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
 
   /** Server-side rejections and network failures, shown in the same banner slot. */
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
-  /** Number of uploads in flight — disables «Сохранить» so a half-uploaded list is not saved. */
-  const [uploading, setUploading] = useState(0);
+  /** Count of uploads still in flight — keeps «Сохранить» busy so a half-uploaded list is not saved. */
+  const [uploadsInFlight, setUploadsInFlight] = useState(0);
 
   // Reset draft when the modal re-opens or receives a new value.
   // For richText format: initialize the RTE innerHTML via requestAnimationFrame
@@ -145,6 +150,13 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
     if (!props.open) return;
     const newVal = props.value;
     setDraft({ ...newVal, events: newVal.events ?? [] });
+    // The upload state belongs to the previous visit and must go with it. Callers render this
+    // modal unconditionally and merely flip `open`, so nothing unmounts: without this a stale
+    // rejection banner hangs over a fresh form, and closing mid-upload then reopening leaves
+    // the counter above zero — «Сохранить» would stay busy until the abandoned answer lands.
+    setUploadErrors([]);
+    setOversizedFiles([]);
+    setUploadsInFlight(0);
     if (newVal.format === "richText") {
       requestAnimationFrame(() => {
         if (rteRef.current) rteRef.current.innerHTML = newVal.text;
@@ -232,8 +244,8 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
     setLinkInsert(null);
   }
 
-  /** Sends one file to the media library and returns its canonical address. */
-  async function uploadFeedbackAsset(file: File): Promise<string | { error: string }> {
+  /** Sends one file to the media library and returns what it was stored as. */
+  async function uploadFeedbackAsset(file: File): Promise<UploadResult> {
     const body = new FormData();
     body.append("file", file);
     try {
@@ -242,13 +254,17 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
         body,
         credentials: "include",
       });
-      const payload = (await res.json().catch(() => ({}))) as { url?: string; message?: string };
+      const payload = (await res.json().catch(() => ({}))) as {
+        id?: string;
+        url?: string;
+        message?: string;
+      };
       if (!res.ok || !payload.url) {
-        return { error: `${file.name}: ${payload.message ?? "не удалось загрузить файл"}` };
+        return { ok: false, error: `${file.name}: ${payload.message ?? "не удалось загрузить файл"}` };
       }
-      return payload.url;
+      return { ok: true, id: payload.id, url: payload.url };
     } catch {
-      return { error: `${file.name}: не удалось загрузить файл` };
+      return { ok: false, error: `${file.name}: не удалось загрузить файл` };
     }
   }
 
@@ -259,17 +275,20 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
     const oversized = files.filter((f) => f.size > MAX_BYTES);
     // S13.1-G40: surface as an in-modal Banner instead of window.alert.
     setOversizedFiles(oversized.map((f) => f.name));
-    setUploadErrors([]);
+    // Rejections from an earlier pick are deliberately NOT cleared here: the author may not
+    // have read them yet, and the banner's own close button is the way to dismiss them.
     const valid = files.filter((f) => f.size <= MAX_BYTES);
     // Reset before awaiting: the input must be re-selectable even while an upload is running.
     e.target.value = "";
     if (valid.length === 0) return;
 
-    setUploading((n) => n + valid.length);
+    setUploadsInFlight((n) => n + valid.length);
     for (const file of valid) {
       const result = await uploadFeedbackAsset(file);
-      setUploading((n) => n - 1);
-      if (typeof result !== "string") {
+      // Clamped at zero: reopening the modal zeroes the counter, so an answer that lands
+      // afterwards must not drive it negative and leave the next upload looking idle.
+      setUploadsInFlight((n) => Math.max(0, n - 1));
+      if (!result.ok) {
         setUploadErrors((prev) => [...prev, result.error]);
         continue;
       }
@@ -278,11 +297,12 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
         assets: [
           ...d.assets,
           {
+            id: result.id,
             title: file.name.replace(/\.pdf$/i, ""),
             fileName: file.name,
             mimeType: "application/pdf" as const,
             size: file.size,
-            url: result,
+            url: result.url,
           },
         ],
       }));
@@ -321,10 +341,10 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
             variant="primary"
             size="m"
             onClick={handleSave}
-            disabled={uploading > 0}
+            loading={uploadsInFlight > 0}
             data-testid="feedback-editor-save"
           >
-            {uploading > 0 ? "Загрузка…" : "Сохранить"}
+            Сохранить
           </Button>
         </>
       }
@@ -687,7 +707,11 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
                 accept="application/pdf,.pdf"
                 style={{ display: "none" }}
                 multiple
-                onChange={handleFilePick}
+                // `void`: the handler is async and reports every failure through the banner,
+                // so there is no rejection for the DOM event to carry anywhere.
+                onChange={(e) => {
+                  void handleFilePick(e);
+                }}
                 data-testid="feedback-editor-asset-input"
               />
             </div>
