@@ -32,8 +32,11 @@ export interface ByteRange {
 export interface MediaStore {
   /** Moves `sourcePath` into the store. The source is consumed either way. */
   putFile(sourcePath: string, ext: string): Promise<StoredObject>;
+  /** Opens the object for reading, optionally a byte range. Rejects if the key does not exist. */
   openRead(storageKey: string, range?: ByteRange): Promise<NodeJS.ReadableStream>;
+  /** Object size, or `null` if the key does not exist. */
   stat(storageKey: string): Promise<{ byteSize: number } | null>;
+  /** Deletes the object; no error if it is already gone. */
   remove(storageKey: string): Promise<void>;
 }
 
@@ -85,6 +88,9 @@ export function createFsMediaStore(root: string): MediaStore {
 
     async openRead(storageKey, range) {
       const abs = resolveKey(storageKey);
+      if (!fs.existsSync(abs)) {
+        throw Object.assign(new Error(`no such media object: ${storageKey}`), { code: "ENOENT" });
+      }
       return range
         ? fs.createReadStream(abs, { start: range.start, end: range.end })
         : fs.createReadStream(abs);
@@ -92,8 +98,12 @@ export function createFsMediaStore(root: string): MediaStore {
 
     async stat(storageKey) {
       const abs = resolveKey(storageKey);
-      if (!fs.existsSync(abs)) return null;
-      return { byteSize: fs.statSync(abs).size };
+      try {
+        return { byteSize: fs.statSync(abs).size };
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw e;
+      }
     },
 
     async remove(storageKey) {

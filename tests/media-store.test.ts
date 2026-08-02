@@ -48,15 +48,29 @@ describe("createFsMediaStore", () => {
     expect(fs.existsSync(path.join(root, stored.storageKey))).toBe(true);
   });
 
-  it("stores identical bytes once and consumes the source both times", async () => {
+  it("preserves file content across a duplicate write and keeps exactly one file on disk", async () => {
     const store = createFsMediaStore(root);
-    const first = sourceFile("one.png", "same");
-    const second = sourceFile("two.png", "same");
+    const first = sourceFile("one.png", "same-bytes");
+    const second = sourceFile("two.png", "same-bytes");
     const a = await store.putFile(first, ".png");
     const b = await store.putFile(second, ".png");
     expect(b.storageKey).toBe(a.storageKey);
     expect(fs.existsSync(first)).toBe(false);
     expect(fs.existsSync(second)).toBe(false);
+    expect(fs.readFileSync(path.join(root, a.storageKey), "utf8")).toBe("same-bytes");
+    const shardDir = path.dirname(path.join(root, a.storageKey));
+    expect(fs.readdirSync(shardDir)).toHaveLength(1);
+  });
+
+  it("propagates ENOENT when the source file is gone", async () => {
+    const store = createFsMediaStore(root);
+    await expect(store.putFile(path.join(tmp, "ghost.png"), ".png")).rejects.toThrow(/ENOENT/);
+  });
+
+  it("refuses a Windows absolute or UNC path used as a key", async () => {
+    const store = createFsMediaStore(root);
+    await expect(store.stat("C:\\Windows\\System32\\drivers\\etc\\hosts")).rejects.toThrow(/outside/i);
+    await expect(store.stat("\\\\localhost\\c$\\Windows")).rejects.toThrow(/outside/i);
   });
 
   it("reads a byte range", async () => {
