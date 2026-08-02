@@ -523,7 +523,10 @@ function buildFlowSettingsFromApi(flowMode: FlowMode, api: ApiTestResponse): Flo
 
 // ─── Shared payload helpers ───────────────────────────────────────────────────
 
-/** Strip `scormHref` from assets — decisions §6.5. */
+/**
+ * Strip `scormHref` from assets — decisions §6.5. The canonical `url` is deliberately kept:
+ * it is what the backend indexes and what the packer rewrites (PRD-32).
+ */
 function stripScormHref(assets: FeedbackAsset[]): FeedbackAsset[] {
   return assets.map(({ scormHref: _scormHref, ...rest }) => rest);
 }
