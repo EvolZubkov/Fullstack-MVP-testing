@@ -66,7 +66,8 @@ Vitest + jsdom (`npm test -- <путь>`), plain-JS SCORM runtime (`server/scorm
 | `ProtectionSettings` | там же | `{ copyProtection, watermark, hideOnBlur }` — три поля теста |
 | `WatermarkStamp` | там же | `{ id: string; at: Date }` |
 | `RegionTarget` | там же | `{ selectors: string[]; wholeScene: boolean }` |
-| `ProtectionSpec` | там же | `{ copy: RegionTarget \| null; hide: RegionTarget \| null; watermarkText: string \| null }` |
+| `WatermarkView` | там же | `{ text: string; anchor: "question-gap" \| "scene-top" }` — что печатать и куда встроить (FR-16) |
+| `ProtectionSpec` | там же | `{ copy: RegionTarget \| null; hide: RegionTarget \| null; watermark: WatermarkView \| null }` |
 | `QUESTION_REGIONS` | там же | перечень селекторов экрана вопроса (FR-06) |
 | `buildProtectionSpec` | там же | построитель, принимает один объект-вход |
 | `formatWatermarkText` | там же | `WatermarkStamp` → строка знака |
@@ -96,9 +97,17 @@ Vitest + jsdom (`npm test -- <путь>`), plain-JS SCORM runtime (`server/scorm
 
 - [ ] **Step 2: Нарисовать два состояния экрана вопроса**
 
-Состояние 1 — водяной знак (FR-16, FR-17): экран вопроса как есть, поверх сцены диагональный
-повторяющийся текст низкой контрастности вида `ID 7f3ac2 · 02.08.2026 14:35`. Показать, что знак
-не перекрывает читаемость задания и вариантов.
+Состояние 1 — водяной знак (FR-16, FR-17). Эскиз обязан показать ОБА размещения, иначе согласовано
+будет только одно:
+
+- экран вопроса — читаемая горизонтальная строка вида `ID 7f3ac2 · 02.08.2026 14:35` в просвете
+  МЕЖДУ текстом задания и вариантами ответа. Диагональной плитки поверх содержимого нет: знак
+  ничего не перекрывает;
+- экран итогов теста — та же строка зарезервированной полосой в начале сцены (просвета между
+  заданием и вариантами там не существует).
+
+Показать оба в состоянии «длинное задание, много вариантов»: сцена — фиксированный кадр с
+автоподбором кегля, и полоса отнимает у него высоту.
 
 Состояние 2 — заглушка при потере фокуса (FR-21): регионы задания и вариантов закрыты, на их месте
 сообщение «Задание скрыто, пока окно неактивно» и кнопка «Показать задание». Шапка, счётчик
@@ -170,7 +179,7 @@ describe("buildProtectionSpec", () => {
     const spec = buildProtectionSpec({ screen: "start", settings: ON, stamp: null });
     expect(spec.copy).toBeNull();
     expect(spec.hide).toBeNull();
-    expect(spec.watermarkText).toBeNull();
+    expect(spec.watermark).toBeNull();
   });
 
   it("выключенная настройка снимает защиту", () => {
@@ -183,7 +192,7 @@ describe("buildProtectionSpec", () => {
     const spec = buildProtectionSpec({ screen: "question", settings, stamp: STAMP, active: false });
     expect(spec.copy).toBeNull();
     expect(spec.hide).toBeNull();
-    expect(spec.watermarkText).toBe("ID 7f3ac2 · 02.08.2026 14:35");
+    expect(spec.watermark).toEqual({ text: "ID 7f3ac2 · 02.08.2026 14:35", anchor: "question-gap" });
   });
 
   it("скрытие при потере фокуса не зависит от защиты от копирования", () => {
@@ -196,8 +205,18 @@ describe("buildProtectionSpec", () => {
   it("знак показывается на четырёх экранах, включая итоги теста", () => {
     const settings = { copyProtection: false, watermark: true, hideOnBlur: false };
     for (const screen of ["question", "review", "section-results", "results"] as const) {
-      expect(buildProtectionSpec({ screen, settings, stamp: STAMP }).watermarkText).not.toBeNull();
+      expect(buildProtectionSpec({ screen, settings, stamp: STAMP }).watermark).not.toBeNull();
     }
+  });
+
+  it("в просвете только на экране вопроса, на остальных — полоса в начале сцены", () => {
+    const settings = { copyProtection: false, watermark: true, hideOnBlur: false };
+    const anchorOf = (screen: string) =>
+      buildProtectionSpec({ screen, settings, stamp: STAMP }).watermark?.anchor;
+    expect(anchorOf("question")).toBe("question-gap");
+    expect(anchorOf("review")).toBe("scene-top");
+    expect(anchorOf("section-results")).toBe("scene-top");
+    expect(anchorOf("results")).toBe("scene-top");
   });
 
   it("знак без идентификатора печатает только дату и время", () => {
@@ -253,11 +272,24 @@ export interface RegionTarget {
   wholeScene: boolean;
 }
 
+/**
+ * Where the readable mark is built into the scene (FR-16). `question-gap` is the space
+ * RESERVED between the prompt and the options; `scene-top` is a reserved strip at the
+ * start of the scene, used where no such gap and no core anchor exist.
+ */
+export type WatermarkAnchor = "question-gap" | "scene-top";
+
+/** The prepared mark: what to print and where to build it in. */
+export interface WatermarkView {
+  text: string;
+  anchor: WatermarkAnchor;
+}
+
 /** The render-time decision for one screen. `null` means "this measure does not apply here". */
 export interface ProtectionSpec {
   copy: RegionTarget | null;
   hide: RegionTarget | null;
-  watermarkText: string | null;
+  watermark: WatermarkView | null;
 }
 
 export interface BuildProtectionInput {
@@ -283,8 +315,18 @@ export const QUESTION_REGIONS: readonly string[] = [
   '[data-path="state.questionHint"]',
 ];
 
-/** Screens carrying the watermark (FR-16) — NOT the copy perimeter. */
-const WATERMARK_SCREENS: readonly string[] = ["question", "review", "section-results", "results"];
+/**
+ * Screens carrying the watermark and where it sits there (FR-16) — deliberately NOT
+ * derived from the copy perimeter: the results screen wears the mark and is not protected.
+ * Only the question screen has core anchors on both sides of a gap; everywhere else the
+ * prompt is printed by the layout, so the mark becomes a strip at the top of the scene.
+ */
+const WATERMARK_ANCHORS: Record<string, WatermarkAnchor> = {
+  question: "question-gap",
+  review: "scene-top",
+  "section-results": "scene-top",
+  results: "scene-top",
+};
 
 function pad(n: number): string {
   return n < 10 ? "0" + n : String(n);
@@ -317,14 +359,14 @@ export function buildProtectionSpec(input: BuildProtectionInput): ProtectionSpec
   const target = targetFor(input.screen);
   // FR-19: the mark is NOT gated by `active` — the debug run shows it on purpose, so the
   // author sees what the learner will see.
-  const showMark =
-    input.settings.watermark &&
-    input.stamp !== null &&
-    WATERMARK_SCREENS.indexOf(input.screen) >= 0;
+  const anchor = WATERMARK_ANCHORS[input.screen];
+  const showMark = input.settings.watermark && input.stamp !== null && anchor !== undefined;
   return {
     copy: active && input.settings.copyProtection ? target : null,
     hide: active && input.settings.hideOnBlur ? target : null,
-    watermarkText: showMark ? formatWatermarkText(input.stamp as WatermarkStamp) : null,
+    watermark: showMark
+      ? { text: formatWatermarkText(input.stamp as WatermarkStamp), anchor }
+      : null,
   };
 }
 ```
@@ -496,11 +538,9 @@ const PROTECTION_CSS = `
 @media print { [${PROTECTED_ATTR}] { display: none !important; } }
 .${TOAST_CLASS} { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%);
   z-index: 40; max-width: min(90%, 480px); pointer-events: none; }
-.tb-protection-mark { position: absolute; inset: 0; z-index: 30; overflow: hidden;
-  pointer-events: none; user-select: none; display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); align-content: space-around; }
-.tb-protection-mark span { transform: rotate(-24deg); text-align: center; font-size: 14px;
-  line-height: 1.4; opacity: .12; white-space: nowrap; }
+.tb-protection-mark { display: block; flex: 0 0 auto; margin: 8px 0; padding: 4px 0;
+  text-align: center; font-size: 13px; line-height: 1.35; letter-spacing: .02em; opacity: .6;
+  pointer-events: none; user-select: none; -webkit-user-select: none; }
 .tb-protection-veil { position: absolute; inset: 0; z-index: 35; display: flex;
   flex-direction: column; gap: 16px; align-items: center; justify-content: center;
   text-align: center; padding: 24px; backdrop-filter: blur(8px);
@@ -1233,28 +1273,62 @@ git commit -m "feat(prd-34): защита в пакете и её отключе
 import { describe, it, expect } from "vitest";
 import { applyWatermark } from "../protection/watermark";
 
+const TEXT = "ID 7f3ac2 · 02.08.2026 14:35";
+
+/** Скелет экрана вопроса: заголовок и варианты — в РАЗНЫХ ветках одного родителя. */
+function questionScene(): HTMLElement {
+  const root = document.createElement("div");
+  root.innerHTML =
+    '<div class="scene"><header>шапка</header><div class="col">' +
+    '<div class="q"><h2 data-slot="question-text">Задание</h2></div>' +
+    '<div class="body"><div class="answers"><div data-slot="question-interaction">варианты</div></div></div>' +
+    "</div></div>";
+  return root;
+}
+
+/** Скелет экрана итогов: слотов ядра нет вовсе. */
+function resultsScene(): HTMLElement {
+  const root = document.createElement("div");
+  root.innerHTML = '<div class="scene"><header>шапка</header><main>итоги</main></div>';
+  return root;
+}
+
 describe("applyWatermark", () => {
-  it("рисует слой с повторяющимся текстом, не перехватывающий указатель", () => {
-    const root = document.createElement("div");
-    applyWatermark(root, "ID 7f3ac2 · 02.08.2026 14:35");
+  it("на экране вопроса встаёт МЕЖДУ заданием и вариантами", () => {
+    const root = questionScene();
+    applyWatermark(root, { text: TEXT, anchor: "question-gap" });
     const mark = root.querySelector<HTMLElement>(".tb-protection-mark")!;
-    expect(mark).not.toBeNull();
+    expect(mark.textContent).toBe(TEXT);
     expect(mark.getAttribute("aria-hidden")).toBe("true");
-    expect(mark.querySelectorAll("span").length).toBeGreaterThan(1);
-    expect(mark.querySelector("span")!.textContent).toBe("ID 7f3ac2 · 02.08.2026 14:35");
+    // Соседи: слева ветка с заданием, справа ветка с вариантами.
+    expect(mark.previousElementSibling!.contains(root.querySelector('[data-slot="question-text"]'))).toBe(true);
+    expect(mark.nextElementSibling!.contains(root.querySelector('[data-slot="question-interaction"]'))).toBe(true);
   });
 
-  it("повторный вызов не задваивает слой", () => {
-    const root = document.createElement("div");
-    applyWatermark(root, "A");
-    applyWatermark(root, "B");
+  it("на экране без слотов встаёт полосой в начале сцены", () => {
+    const root = resultsScene();
+    applyWatermark(root, { text: TEXT, anchor: "scene-top" });
+    const scene = root.firstElementChild!;
+    expect(scene.firstElementChild!.className).toContain("tb-protection-mark");
+  });
+
+  it("question-gap без слотов деградирует до полосы в начале сцены", () => {
+    const root = resultsScene();
+    applyWatermark(root, { text: TEXT, anchor: "question-gap" });
+    expect(root.firstElementChild!.firstElementChild!.className).toContain("tb-protection-mark");
+  });
+
+  it("повторный вызов не задваивает знак", () => {
+    const root = questionScene();
+    applyWatermark(root, { text: "A", anchor: "question-gap" });
+    applyWatermark(root, { text: "B", anchor: "question-gap" });
     expect(root.querySelectorAll(".tb-protection-mark").length).toBe(1);
-    expect(root.querySelector(".tb-protection-mark span")!.textContent).toBe("B");
+    expect(root.querySelector(".tb-protection-mark")!.textContent).toBe("B");
   });
 
-  it("null снимает слой", () => {
-    const root = document.createElement("div");
-    applyWatermark(root, "A");
+  it("null снимает знак", () => {
+    const root = questionScene();
+    applyWatermark(root, { text: "A", anchor: "question-gap" });
     applyWatermark(root, null);
     expect(root.querySelector(".tb-protection-mark")).toBeNull();
   });
@@ -1274,48 +1348,70 @@ Expected: FAIL — модуля нет.
 /**
  * @module shared/template/protection/watermark
  *
- * PRD-34 (FR-16 — FR-19): the anonymised mark drawn over the scene. A screenshot stays
+ * PRD-34 (FR-16 — FR-19): the anonymised mark BUILT INTO the scene. A screenshot stays
  * possible — the browser gives no way to forbid it (spec §2.2) — but it becomes
  * attributable, and attribution is the working deterrent.
  *
- * The layer is built by the CORE, not by the template, so an externally loaded template
- * (PRD-3) carries the mark without declaring anything. Its presentation lives in the
- * stylesheet injected by `protection/apply`.
+ * The mark is a readable horizontal line, not a diagonal tile over the content: reading
+ * the prompt is the learner's actual work and must not be obstructed. It therefore
+ * RESERVES space rather than overlaying — on the question screen between the prompt and
+ * the options, elsewhere as a strip at the start of the scene.
+ *
+ * Both anchors are resolved from CORE-owned slots and the scene root only, never from
+ * template classes, so an externally loaded template (PRD-3) carries the mark without
+ * declaring anything (FR-34). Presentation lives in the stylesheet injected by
+ * `protection/apply`.
  */
+
+import type { WatermarkView } from "./spec";
 
 const MARK_CLASS = "tb-protection-mark";
-/** Enough repetitions to cover a scene at any reasonable size; the grid wraps them. */
-const REPEATS = 12;
 
 /**
- * Draw (or lift) the watermark on a rendered scene.
- *
- * @param root Scene container.
- * @param text Prepared mark text; `null` removes the layer.
+ * The gap anchor: the branch holding the options, inside the nearest ancestor that also
+ * holds the prompt. Inserting BEFORE that branch lands exactly between the two — without
+ * knowing a single class of the template.
  */
-export function applyWatermark(root: HTMLElement, text: string | null): void {
-  const existing = root.querySelector("." + MARK_CLASS);
-  if (!text) {
-    existing?.remove();
-    return;
-  }
-  const layer = (existing as HTMLElement | null) ?? root.ownerDocument.createElement("div");
-  layer.className = MARK_CLASS;
-  layer.setAttribute("aria-hidden", "true");
-  layer.textContent = "";
-  for (let i = 0; i < REPEATS; i++) {
-    const span = root.ownerDocument.createElement("span");
-    span.textContent = text;
-    layer.appendChild(span);
-  }
-  if (!existing) root.appendChild(layer);
+function gapAnchor(root: HTMLElement): { parent: Element; before: Element } | null {
+  const title = root.querySelector('[data-slot="question-text"]');
+  const answers = root.querySelector('[data-slot="question-interaction"]');
+  if (!title || !answers) return null;
+  let branch: Element = answers;
+  while (branch.parentElement && !branch.parentElement.contains(title)) branch = branch.parentElement;
+  const parent = branch.parentElement;
+  return parent ? { parent, before: branch } : null;
+}
+
+/** The fallback anchor: first child of the scene (the layout's own root element). */
+function topAnchor(root: HTMLElement): { parent: Element; before: Element | null } {
+  const scene = root.firstElementChild ?? root;
+  return { parent: scene, before: scene.firstElementChild };
+}
+
+/**
+ * Build (or lift) the watermark on a rendered scene.
+ *
+ * @param root Scene container the host rendered into.
+ * @param view Prepared text and anchor; `null` removes the mark.
+ */
+export function applyWatermark(root: HTMLElement, view: WatermarkView | null): void {
+  root.querySelectorAll("." + MARK_CLASS).forEach((el) => el.remove());
+  if (!view) return;
+  // A `question-gap` request on a screen without the slots degrades to the strip rather
+  // than silently dropping the mark — a missing mark would be a silent loss of attribution.
+  const at = (view.anchor === "question-gap" ? gapAnchor(root) : null) ?? topAnchor(root);
+  const mark = root.ownerDocument.createElement("div");
+  mark.className = MARK_CLASS;
+  mark.setAttribute("aria-hidden", "true");
+  mark.textContent = view.text;
+  at.parent.insertBefore(mark, at.before ?? null);
 }
 ```
 
 - [ ] **Step 4: Прогнать тест и убедиться, что он проходит**
 
 Run: `npm test -- shared/template/__tests__/protection-watermark.test.ts`
-Expected: PASS, 3 теста.
+Expected: PASS, 5 тестов.
 
 - [ ] **Step 5: Подключить в рендерер**
 
@@ -1323,14 +1419,16 @@ Expected: PASS, 3 теста.
 и строку после `applyProtection`:
 
 ```ts
-  applyWatermark(root, input.protection?.watermarkText ?? null);
+  applyWatermark(root, input.protection?.watermark ?? null);
 ```
 
 В `shared/template/runtime-entry.ts` добавить `export { applyWatermark } from "./protection/watermark";`.
 
-Позиционирование слоя требует, чтобы корень сцены был `position: relative`. Проверить это в
-браузере на реальном шаблоне; если нет — выставлять `position` инлайном там же, в `applyWatermark`,
-а не править `theme.css` (правка шаблона нарушила бы FR-34).
+Знак встраивается в поток и позиционирования не требует, поэтому `position: relative` на корне ему
+не нужен. Зато он ОТНИМАЕТ высоту у фиксированного кадра: после включения проверить экран вопроса с
+длинным заданием и большим числом вариантов — автоподбор кегля (`fitQuestionScene`) должен по-прежнему
+укладывать сцену без обрезки. Если не укладывает, уменьшать кегль и отступы знака в
+`PROTECTION_CSS`, а не править `theme.css` шаблона (это нарушило бы FR-34).
 
 - [ ] **Step 6: Передать spec на экраны итогов**
 
@@ -1341,10 +1439,11 @@ Expected: PASS, 3 теста.
 
 - [ ] **Step 7: Проверить визуально на обоих хостах**
 
-`PORT=8099 npm run dev` — экран итогов в вебе; `npm run scorm:sample` + `npm run scorm:player` —
-экран итогов в пакете. Сверить каждую деталь с принятым эскизом из Task 1: знак читается, задание
-читается, знак не перекрывает управляющие элементы. Проверить, что скачанный PDF-отчёт знака НЕ
-содержит.
+`PORT=8099 npm run dev` — веб; `npm run scorm:sample` + `npm run scorm:player` — пакет. Сверить
+каждую деталь с принятым эскизом из Task 1, по обоим размещениям: на экране вопроса знак стоит
+между заданием и вариантами и НИЧЕГО не перекрывает; на экране итогов — полосой в начале сцены.
+Отдельно — сцена с длинным заданием и большим числом вариантов: содержимое не обрезано. Проверить,
+что скачанный PDF-отчёт знака НЕ содержит.
 
 - [ ] **Step 8: Commit**
 
@@ -1654,10 +1753,12 @@ git commit -m "docs(prd-34): отчёт о приёмке защиты от ко
 
 Перечислены здесь, чтобы исполнитель не принимал их молча.
 
-- **Позиционирование слоёв.** Знак и заглушка позиционируются абсолютно и требуют
-  `position: relative` на своём контейнере. Правкой `theme.css` это решать НЕЛЬЗЯ (FR-34) —
-  только инлайном из ядра, как сделано в `blur-guard`. Для знака проверить на реальном шаблоне и
-  при необходимости добавить тот же приём в `watermark.ts`.
+- **Позиционирование заглушки.** Заглушка позиционируется абсолютно и требует
+  `position: relative` на своём контейнере; решать это правкой `theme.css` НЕЛЬЗЯ (FR-34) — только
+  инлайном из ядра, как сделано в `blur-guard`. Знака это не касается: он встроен в поток.
+- **Высота фиксированного кадра.** Знак отнимает высоту у сцены, а сцена — фиксированный кадр с
+  автоподбором кегля. Проверять надо худший случай (длинное задание, много вариантов, узкое окно),
+  а не типичный: именно там знак и вытолкнет содержимое.
 - **Экран обзора в вебе.** Если он рисуется не через `TemplateScreen`, а иначе, защиту всё равно
   ставит ядро — но проброс потребует отдельного места; найти его до Task 7, шага 2.
 - **Плоская склейка рантайма пакета.** Файлы `server/scorm/template/app/**` склеиваются плоско, и
