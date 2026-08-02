@@ -99,6 +99,41 @@
     </div>
   </section>
   {{/if}}
+  {{#if result.recommendations.hasAny}}
+  <section class="tb-report__card">
+    <div class="tb-report__title tb-report__title--tight">Рекомендации</div>
+    {{#each result.recommendations.texts}}
+    <div class="tb-report__rec tb-report__rec--plain">
+      <div class="tb-report__event">{{this}}</div>
+    </div>
+    {{/each}}
+    {{#if result.recommendations.links}}
+    <div class="tb-report__lead">Пройти обучение</div>
+    {{#each result.recommendations.links}}
+    <div class="tb-report__rec">
+      <div class="pdf-link-btn tb-report__rec-chip" data-url="{{ url }}">{{ title }}</div>
+    </div>
+    {{/each}}
+    {{/if}}
+    {{#if result.recommendations.events}}
+    <div class="tb-report__lead">Мероприятия</div>
+    {{#each result.recommendations.events}}
+    <div class="tb-report__rec tb-report__rec--plain">
+      <div class="tb-report__event">{{ title }}</div>
+    </div>
+    {{/each}}
+    {{/if}}
+    {{#if result.recommendations.assets}}
+    <div class="tb-report__lead">Материалы</div>
+    {{#each result.recommendations.assets}}
+    <div class="tb-report__rec">
+      <div class="pdf-link-btn tb-report__rec-chip" data-url="{{ url }}">{{ title }}</div>
+    </div>
+    {{/each}}
+    {{/if}}
+  </section>
+  {{/if}}
+
   {{#if report.hasCourses}}
   <section class="tb-report__card">
     <div class="tb-report__title tb-report__title--tight">Рекомендации по курсам</div>

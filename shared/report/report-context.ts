@@ -11,7 +11,12 @@
  * 1. `result.*` строится ТЕМ ЖЕ построителем, что экран результатов
  *    ({@link module:shared/template/result-context}). Отчёт не вправе показать иной
  *    вердикт, чем экран, с которого его скачали (§5.2) — а два независимых расчёта
- *    одного вердикта всегда расходятся.
+ *    одного вердикта всегда расходятся. Это относится и к КОНСОЛИДИРОВАННОМУ блоку
+ *    обратной связи (`result.recommendations`): тексты теста, тем и разделов, курсы,
+ *    мероприятия и вложения собирает и дедуплицирует общий сборщик, а отчёт лишь
+ *    докладывает ему то, чего нет в результате попытки, — обратную связь самого теста и
+ *    признак «у теста объявлен порог» (см. `ReportMeta.feedback` / `hasPassThreshold`).
+ *    Своей копии правила видимости у отчёта нет.
  * 2. DSL ничего не считает (spec §9). Проценты, смещение дуги, число колонок сетки,
  *    склонения и даты приходят ГОТОВЫМИ (§5.3).
  *
@@ -158,6 +163,13 @@ function reportBlock(meta: ReportMeta, topicCount: number, opts: ReportContextOp
  * итогов (`shared/template/result-context`, `vrRecommended` в пакете). Раньше здесь
  * стояло `!== false`, то есть тема без вердикта молчала; потемные пороги задают редко,
  * так что отчёт терял курсы там, где экран их показывал.
+ *
+ * Это НЕ вторая копия консолидации: список другой. Курсы и мероприятия ТЕМЫ экран
+ * показывает в карточке темы, а не в общем блоке (`topicRecommendationSources` их туда не
+ * кладёт), и отчёт печатает их сводкой, потому что в его карточках тем их нет. Общий блок
+ * приходит отдельно, из общего сборщика, и содержит источники уровня теста и измерений.
+ * Свести курсы тем в тот же блок — открытый вопрос плана: это меняет состав курсов на уже
+ * работающих тестах и решается владельцем отдельно.
  */
 function unmasteredRecommendations(topics: ReportInput["result"]["topicResults"]): {
   courses: Array<{ title: string; url: string }>;
@@ -194,6 +206,14 @@ export function buildReportContext(input: ReportInput, opts: ReportContextOption
   // а не экран, и досчитать её потом читателю нечем.
   const base = buildResultContext(input.result, input.testName || "", {
     withTopicPoints: true,
+    // Источники консолидированного блока обратной связи, которых нет в результате
+    // попытки: обратная связь самого теста и признак «тест выносит вердикт». Уходят в
+    // ТОТ ЖЕ построитель, что собирает блок для экрана, — второго правила консолидации
+    // здесь нет и быть не должно. Пока они сюда не доезжали, отчёт печатал курсы и
+    // мероприятия своей функцией, а текстов не печатал вовсе (см. §5.2: отчёт не вправе
+    // показать иное, чем экран, с которого его скачали).
+    ...(input.feedback ? { testFeedback: input.feedback } : {}),
+    ...(input.hasPassThreshold !== undefined ? { hasPassThreshold: input.hasPassThreshold } : {}),
     ...(opts.measures ? { measures: opts.measures } : {}),
   });
   const topics = input.result.topicResults ?? [];
@@ -248,7 +268,13 @@ export function buildAdaptiveReportContext(
   input: AdaptiveReportInput,
   opts: ReportContextOptions = {},
 ): ReportRenderContext {
-  const base = buildAdaptiveResultContext(input.result, input.testName || "");
+  // Обратная связь теста — свойство ТЕСТА, а не режима выдачи, поэтому уходит в
+  // адаптивный построитель ровно так же, как в обычный. Порога здесь нет: адаптивный
+  // вердикт выносится по подтверждённым уровням, и `hasPassThreshold` этому режиму
+  // нечего сказать.
+  const base = buildAdaptiveResultContext(input.result, input.testName || "", {
+    ...(input.feedback ? { testFeedback: input.feedback } : {}),
+  });
   const topics = input.result.topicResults ?? [];
   const report = reportBlock(input, topics.length, opts);
   // Адаптивные материалы перечисляются по КАЖДОЙ теме, у которой они есть, с названием

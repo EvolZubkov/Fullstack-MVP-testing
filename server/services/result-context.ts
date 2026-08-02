@@ -231,6 +231,27 @@ export function buildResultContext(
 }
 
 /**
+ * The two facts of the consolidated feedback block that do NOT live in the attempt
+ * result: the test's OWN feedback and whether the test declares a pass threshold.
+ *
+ * They travel with the report INPUT rather than as options of the context builder,
+ * because the browser assembles the report context and knows neither — it only forwards
+ * what the results endpoint sent it. Read off the very same {@link MeasuresSource} the
+ * screen is built from, and normalised by the very same {@link normalizeFeedback}, so
+ * the report cannot end up with a different block than the screen it was downloaded from.
+ *
+ * No material (it could not be read) leaves both absent: the block then holds only what
+ * the topics of the attempt carry, exactly as before this work.
+ */
+function reportFeedbackMeta(measures?: MeasuresSource): Partial<ReportMeta> {
+  const feedback = normalizeFeedback(measures?.testFeedback);
+  return {
+    ...(feedback ? { feedback } : {}),
+    ...(measures ? { hasPassThreshold: measures.hasPassThreshold } : {}),
+  };
+}
+
+/**
  * Build the input for the shared PDF report (`shared/report/report-html`) from a
  * computed attempt result.
  *
@@ -242,14 +263,18 @@ export function buildResultContext(
  * @param result Computed attempt result.
  * @param testTitle Test title (the report headline + the file name).
  * @param meta Who took it and when, plus the attempt count for the «Лучший результат» line.
+ * @param measures The material of the results screen. Only the two facts the consolidated
+ *   feedback block needs are read off it — see {@link reportFeedbackMeta}.
  */
 export function buildReportInput(
   result: AttemptResult,
   testTitle: string,
   meta: Omit<ReportMeta, "testName"> = {},
+  measures?: MeasuresSource,
 ): ReportInput {
   return {
     ...meta,
+    ...reportFeedbackMeta(measures),
     testName: testTitle,
     result: {
       passed: result.overallPassed,
@@ -268,10 +293,12 @@ export function buildAdaptiveReportInput(
   result: any,
   testTitle: string,
   meta: Omit<ReportMeta, "testName"> = {},
+  measures?: MeasuresSource,
 ): AdaptiveReportInput {
   const topics = Array.isArray(result?.topicResults) ? result.topicResults : [];
   return {
     ...meta,
+    ...reportFeedbackMeta(measures),
     adaptive: true,
     testName: testTitle,
     result: {
@@ -290,6 +317,14 @@ export function buildAdaptiveReportInput(
             : [],
         recommendedEvents: Array.isArray(t?.recommendedEvents)
           ? t.recommendedEvents.map((l: any) => ({ title: l?.title ?? "" }))
+          : [],
+        // The sources of the consolidated block the topic carries, read by the same
+        // names the adaptive SCREEN reads them by (`buildAdaptiveResultContext` below).
+        // Without them the report of an adaptive attempt printed no feedback at all
+        // while the screen it was downloaded from printed the whole block.
+        feedbackTexts: Array.isArray(t?.feedbackTexts) ? t.feedbackTexts : [],
+        recommendedAssets: Array.isArray(t?.recommendedAssets)
+          ? t.recommendedAssets.map((a: any) => ({ title: a?.title ?? "", url: a?.url }))
           : [],
       })),
     },

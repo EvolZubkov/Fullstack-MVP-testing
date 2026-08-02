@@ -14,7 +14,13 @@ import {
   buildResultContext as sharedBuild,
   buildAdaptiveResultContext as sharedAdaptive,
 } from "../shared/template/result-context";
-import { buildResultContext as webBuild } from "../server/services/result-context";
+import {
+  buildResultContext as webBuild,
+  buildAdaptiveResultContext as webAdaptiveBuild,
+  buildReportInput,
+  buildAdaptiveReportInput,
+} from "../server/services/result-context";
+import { buildReportContext, buildAdaptiveReportContext } from "../shared/report/report-context";
 
 const normalized = {
   passed: true,
@@ -198,6 +204,74 @@ describe("host parity", () => {
     });
     expect(web).toEqual(shared);
     expect(web.result.recommendations?.texts).toEqual(["Ваш профиль."]);
+  });
+});
+
+/**
+ * Отчёт веб-хоста собирается КЛИЕНТОМ из входа, который готовит этот же адаптер, и
+ * обязан нести тот же консолидированный блок, что экран той же попытки: тексты теста,
+ * тем и разделов, курсы, мероприятия и вложения — в одном составе и порядке.
+ */
+describe("вход отчёта питает блок экрана", () => {
+  const material = {
+    scales: [],
+    variables: [],
+    blockSettings: {},
+    hasPassThreshold: true,
+    testFeedback: {
+      format: "plain",
+      text: "Разберите ошибки.",
+      links: [],
+      events: [],
+      assets: [{ title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "/api/media/cccc" }],
+    },
+  } as never;
+
+  const failedTopic = {
+    ...attemptResult.topicResults[0],
+    passed: false,
+    feedbackTexts: ["Текст темы", "Текст раздела"],
+    recommendedAssets: [{ title: "Разбор темы", url: "/api/media/aaaa" }],
+  };
+
+  it("стандартный: контекст отчёта === блок экрана на той же попытке", () => {
+    const result = { ...attemptResult, overallPassed: false, topicResults: [failedTopic] };
+    const screen = webBuild(result, "Тест", material);
+    const report = buildReportContext(buildReportInput(result, "Тест", {}, material));
+    expect(report.result.recommendations).toEqual(screen.result.recommendations);
+    expect(report.result.recommendations?.texts).toEqual([
+      "Разберите ошибки.",
+      "Текст темы",
+      "Текст раздела",
+    ]);
+  });
+
+  it("адаптивный: контекст отчёта === блок адаптивного экрана", () => {
+    const result = {
+      overallPassed: false,
+      topicResults: [
+        {
+          topicName: "БД",
+          achievedLevelIndex: null,
+          achievedLevelName: null,
+          feedbackTexts: ["Текст темы"],
+          recommendedAssets: [{ title: "Разбор темы", url: "/api/media/aaaa" }],
+        },
+      ],
+    } as never;
+    const screen = webAdaptiveBuild(result, "Адаптивный", material);
+    const report = buildAdaptiveReportContext(buildAdaptiveReportInput(result, "Адаптивный", {}, material));
+    expect(report.result.recommendations).toEqual(screen.result.recommendations);
+    expect(report.result.recommendations?.texts).toEqual(["Разберите ошибки.", "Текст темы"]);
+    expect(report.result.recommendations?.assets).toEqual([
+      { title: "Памятка", url: "/api/media/cccc" },
+      { title: "Разбор темы", url: "/api/media/aaaa" },
+    ]);
+  });
+
+  it("без материала экрана отчёт остаётся прежним — блока нет", () => {
+    const result = { ...attemptResult, overallPassed: false };
+    expect(buildReportContext(buildReportInput(result, "Тест")).result.recommendations).toBeUndefined();
   });
 });
 

@@ -377,6 +377,104 @@ describe("содержательные правила отчёта, перене
   });
 });
 
+/**
+ * Консолидированный блок обратной связи — тот же, что на экране итогов. Отчёт печатал
+ * только курсы и мероприятия тем, а текстов не печатал вовсе: ни теста, ни темы.
+ */
+describe("макет печатает консолидированный блок обратной связи", () => {
+  const TEST_FEEDBACK = {
+    text: "Разберите ошибки.",
+    links: [{ title: "Курс по сетям", url: "https://e/net" }],
+    events: [{ title: "Разбор кейсов" }],
+    assets: [{ title: "Памятка теста", url: "assets/media/test.pdf" }],
+  };
+  const TOPIC_ASSET = { title: "Разбор темы", url: "assets/media/topic.pdf" };
+
+  const WITH_FEEDBACK: ReportInput = {
+    ...STANDARD,
+    feedback: TEST_FEEDBACK,
+    hasPassThreshold: true,
+    result: {
+      ...STANDARD.result,
+      topicResults: STANDARD.result.topicResults.map((t, i) =>
+        i === 1 ? { ...t, feedbackTexts: ["Текст темы", "Текст раздела"], recommendedAssets: [TOPIC_ASSET] } : t,
+      ),
+    },
+  };
+
+  /** Карточка блока: у неё СВОЙ заголовок, класс карточки общий с соседними. */
+  const recsCard = (root: HTMLElement): HTMLElement | null => {
+    const title = [...root.querySelectorAll(".tb-report__title")].find(
+      (n) => (n.textContent ?? "").trim() === "Рекомендации",
+    );
+    return (title?.parentElement as HTMLElement) ?? null;
+  };
+
+  it("печатает тексты теста, темы и раздела в порядке блока", () => {
+    const card = recsCard(renderToRoot(REPORT, buildReportContext(WITH_FEEDBACK)));
+    expect(card).not.toBeNull();
+    expect(visibleText(card as HTMLElement)).toContain("Разберите ошибки. Текст темы Текст раздела");
+  });
+
+  it("печатает вложения кликабельными чипами, как курсы", () => {
+    const root = renderToRoot(REPORT, buildReportContext(WITH_FEEDBACK));
+    const card = recsCard(root) as HTMLElement;
+    expect(linkUrls(card)).toEqual(["https://e/net", "assets/media/test.pdf", "assets/media/topic.pdf"]);
+    expect(visibleText(card)).toContain("Памятка теста");
+    expect(visibleText(card)).toContain("Разбор темы");
+  });
+
+  it("текст, написанный и у теста, и у темы, печатается один раз", () => {
+    const dup: ReportInput = {
+      ...WITH_FEEDBACK,
+      result: {
+        ...WITH_FEEDBACK.result,
+        topicResults: WITH_FEEDBACK.result.topicResults.map((t, i) =>
+          i === 1 ? { ...t, feedbackTexts: ["Разберите ошибки."] } : t,
+        ),
+      },
+    };
+    const text = visibleText(recsCard(renderToRoot(REPORT, buildReportContext(dup))) as HTMLElement);
+    expect(text.match(/Разберите ошибки\./g)).toHaveLength(1);
+  });
+
+  it("пройденная тема и явно пройденный тест молчат", () => {
+    const passed: ReportInput = {
+      ...WITH_FEEDBACK,
+      result: {
+        ...WITH_FEEDBACK.result,
+        passed: true,
+        topicResults: WITH_FEEDBACK.result.topicResults.map((t) => ({ ...t, passed: true })),
+      },
+    };
+    expect(recsCard(renderToRoot(REPORT, buildReportContext(passed)))).toBeNull();
+  });
+
+  it("отчёт без обратной связи блока не рисует", () => {
+    expect(recsCard(renderToRoot(REPORT, buildReportContext(STANDARD)))).toBeNull();
+  });
+
+  it("адаптивный отчёт печатает тот же блок", () => {
+    const adaptive: AdaptiveReportInput = {
+      ...ADAPTIVE,
+      feedback: TEST_FEEDBACK,
+      result: {
+        topicResults: ADAPTIVE.result.topicResults.map((t, i) =>
+          i === 0 ? { ...t, feedbackTexts: ["Текст темы"], recommendedAssets: [TOPIC_ASSET] } : t,
+        ),
+      },
+    };
+    const card = recsCard(renderToRoot(REPORT_ADAPTIVE, buildAdaptiveReportContext(adaptive))) as HTMLElement;
+    expect(card).not.toBeNull();
+    expect(visibleText(card)).toContain("Разберите ошибки. Текст темы");
+    expect(linkUrls(card)).toEqual(["https://e/net", "assets/media/test.pdf", "assets/media/topic.pdf"]);
+  });
+
+  it("адаптивный отчёт без обратной связи блока не рисует", () => {
+    expect(recsCard(renderToRoot(REPORT_ADAPTIVE, buildAdaptiveReportContext(ADAPTIVE)))).toBeNull();
+  });
+});
+
 describe("макеты отчёта соблюдают контракт среды стилей (§6.3)", () => {
   it("корневой класс tb-report и ни одного класса слоя сцены", () => {
     for (const [name, html] of [["report.html", REPORT], ["report.adaptive.html", REPORT_ADAPTIVE]] as const) {

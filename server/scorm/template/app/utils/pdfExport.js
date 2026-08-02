@@ -59,6 +59,46 @@ function pdfTopicRecommendations(topicResult) {
   return { courses: courses, events: events };
 }
 
+/**
+ * The sources of the CONSOLIDATED feedback block one topic carries: the texts written on
+ * the topic and on this test's section over it, and the PDFs hung on either.
+ *
+ * Read through the very readers the results SCREEN uses (`viewResults.js` — the whole
+ * runtime is concatenated into one script, so they are in scope), not through a copy of
+ * them: the report prints the block the learner has just read, and a second reader would
+ * drift the moment the bake changes shape. A package built before those readers existed
+ * degrades to empty lists instead of failing.
+ *
+ * @param {Object} topicResult One runtime topicResults[] row.
+ * @returns {{feedbackTexts: string[], recommendedAssets: Array}}
+ */
+function pdfTopicFeedback(topicResult) {
+  return {
+    feedbackTexts: (typeof vrTopicFeedbackTexts === 'function') ? vrTopicFeedbackTexts(topicResult) : [],
+    recommendedAssets: (typeof vrTopicAssets === 'function') ? vrTopicAssets(topicResult) : []
+  };
+}
+
+/**
+ * The test-level part of the same block: the test's OWN feedback and whether the test
+ * declares a pass threshold at all — the fact that tells an explicit «Пройден» from the
+ * default verdict of a test that judges nothing (a measurement method keeps its feedback).
+ *
+ * Both come from the same readers the results screen goes through, for the same reason
+ * {@link pdfTopicFeedback} does.
+ *
+ * @returns {{feedback?: Object, hasPassThreshold?: boolean}} Report-input fields.
+ */
+function pdfReportMeta() {
+  var meta = {};
+  if (typeof vrTestFeedback === 'function') {
+    var feedback = vrTestFeedback();
+    if (feedback) meta.feedback = feedback;
+  }
+  if (typeof vrHasPassThreshold === 'function') meta.hasPassThreshold = vrHasPassThreshold();
+  return meta;
+}
+
 /** Map the runtime's standard result onto the shared report input. */
 function pdfStandardInput(results) {
   return {
@@ -70,6 +110,7 @@ function pdfStandardInput(results) {
     possiblePoints: results.possiblePoints,
     topicResults: (results.topicResults || []).map(function (tr) {
       var rec = pdfTopicRecommendations(tr);
+      var fb = pdfTopicFeedback(tr);
       return {
         topicId: tr.topicId,
         topicName: tr.topicName,
@@ -80,7 +121,9 @@ function pdfStandardInput(results) {
         possiblePoints: tr.possiblePoints,
         passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
         recommendedCourses: rec.courses,
-        recommendedEvents: rec.events
+        recommendedEvents: rec.events,
+        feedbackTexts: fb.feedbackTexts,
+        recommendedAssets: fb.recommendedAssets
       };
     })
   };
@@ -91,6 +134,7 @@ function pdfAdaptiveInput(results) {
   return {
     topicResults: (results.topicResults || []).map(function (tr) {
       var rec = pdfTopicRecommendations(tr);
+      var fb = pdfTopicFeedback(tr);
       return {
         topicName: tr.topicName,
         achievedLevelIndex: (tr.achievedLevelIndex === undefined ? null : tr.achievedLevelIndex),
@@ -99,7 +143,9 @@ function pdfAdaptiveInput(results) {
         totalCorrect: tr.totalCorrect,
         feedback: tr.feedback,
         recommendedCourses: rec.courses,
-        recommendedEvents: rec.events
+        recommendedEvents: rec.events,
+        feedbackTexts: fb.feedbackTexts,
+        recommendedAssets: fb.recommendedAssets
       };
     })
   };
@@ -171,12 +217,12 @@ async function exportResultsToPDF(results, testName, learnerName, timestamp) {
       );
     }
 
-    var meta = {
+    var meta = Object.assign({
       testName: testName,
       learnerName: learnerName,
       timestamp: timestamp,
       attemptsCount: (typeof getAllAttempts === 'function') ? getAllAttempts().length : 1
-    };
+    }, pdfReportMeta());
     var opts = {
       design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {},
       // Значения полей варианта — те, что автор задал в блоке обратной связи (FR-16).

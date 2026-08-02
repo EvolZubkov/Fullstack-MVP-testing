@@ -1427,10 +1427,14 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
         timestamp: (attempt.finishedAt ?? attempt.startedAt)?.toISOString() ?? null,
         attemptsCount: completedAttempts || 1,
       };
+      // `material` уходит и сюда: консолидированный блок обратной связи отчёта собирает
+      // ТОТ ЖЕ сборщик, что рисует экран, и ему нужны те же два факта, которых нет в
+      // результате попытки, — обратная связь теста и наличие порога. Отчёт строит
+      // браузер, поэтому они едут с ВХОДОМ отчёта, а не параметром сборки.
       report =
         resultJson.mode === "adaptive"
-          ? buildAdaptiveReportInput(resultJson, test?.title || "", reportMeta)
-          : buildReportInput(resultJson, test?.title || "", reportMeta);
+          ? buildAdaptiveReportInput(resultJson, test?.title || "", reportMeta, material)
+          : buildReportInput(resultJson, test?.title || "", reportMeta, material);
 
       // PRD-27 Фаза 2: страницу отчёта рисует МАКЕТ шаблона. Активный шаблон, не
       // объявивший нужного вида, отчёта не лишает: макет берётся из «Стандартного», а
