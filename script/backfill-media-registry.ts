@@ -48,6 +48,17 @@ function mimeOf(ext: string): string {
   return map[ext] ?? "application/octet-stream";
 }
 
+/** Hashes a file without holding it in memory — same approach as the storage port. */
+function checksumOf(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash("sha256");
+    const stream = fs.createReadStream(filePath);
+    stream.on("error", reject);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => resolve(hash.digest("hex")));
+  });
+}
+
 /** Indexes every file directly under `<uploadsRoot>/media`. */
 export async function backfillMediaRegistry(uploadsRoot: string): Promise<BackfillReport> {
   const mediaDir = path.join(uploadsRoot, "media");
@@ -62,7 +73,7 @@ export async function backfillMediaRegistry(uploadsRoot: string): Promise<Backfi
     const abs = path.join(mediaDir, name);
     if (!fs.statSync(abs).isFile()) continue;
 
-    const checksum = crypto.createHash("sha256").update(fs.readFileSync(abs)).digest("hex");
+    const checksum = await checksumOf(abs);
     if (seen.has(checksum) || (await storage.findMediaAssetByOwnerChecksum(null, checksum))) {
       report.skipped += 1;
       continue;
