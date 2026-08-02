@@ -22,6 +22,7 @@ import workbookRouter from "./workbook";
 import debugPlayerRouter from "./debug-player";
 import homeRouter from "./home";
 import reportRouter from "./report";
+import mediaRouter from "./media";
 
 export {
   foldersRouter,
@@ -48,6 +49,7 @@ export {
   debugPlayerRouter,
   homeRouter,
   reportRouter,
+  mediaRouter,
 };
 
 // Конфигурация монтирования роутеров
@@ -71,6 +73,8 @@ export const routerConfig = [
   // Ingredients of the web-side attempt report (vendored PDF libs + report assets);
   // prefix-mounted before the generic "/api" routers so they cannot swallow it.
   { path: "/api/report", router: reportRouter },
+  // Медиатека: префиксное монтирование до общих "/api", чтобы путь не перехватывался.
+  { path: "/api/media", router: mediaRouter },
   { path: "/api/users", router: usersRouter },
   { path: "/api/groups", router: groupsRouter },
   { path: "/api/questions", router: questionsRouter },

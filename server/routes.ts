@@ -1,46 +1,14 @@
-import express, { type Express, Request, Response, NextFunction } from "express";
+import express, { type Express } from "express";
 import { type Server } from "http";
 import session from "express-session";
 import MemoryStore from "memorystore";
-import multer from "multer";
 import path from "node:path";
-import fs from "node:fs";
-import crypto from "node:crypto";
 
 import { routerConfig } from "./routes/index";
 import { config } from "./config";
 import { magicScopeGuard } from "./middleware/magic-scope";
 
-// Media upload configuration
-const mediaDir = path.resolve(process.cwd(), "uploads", "media");
-fs.mkdirSync(mediaDir, { recursive: true });
-
-const mediaUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, mediaDir),
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname || "").toLowerCase();
-      cb(null, `${Date.now()}_${crypto.randomUUID()}${ext}`);
-    },
-  }),
-  limits: { fileSize: 200 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const ok =
-      file.mimetype.startsWith("image/") ||
-      file.mimetype.startsWith("audio/") ||
-      file.mimetype.startsWith("video/");
-    cb(ok ? null : new Error("Unsupported media type") as any, ok);
-  },
-});
-
 const MemStore = MemoryStore(session);
-
-function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.userId) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  next();
-}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -85,27 +53,6 @@ export async function registerRoutes(
   for (const { path, router } of routerConfig) {
     app.use(path, router);
   }
-
-  // ========== Media Upload ==========
-  app.post(
-    "/api/media/upload",
-    requireAuth,
-    mediaUpload.single("file"),
-    (req: Request, res: Response) => {
-      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-
-      const url = `/uploads/media/${req.file.filename}`;
-      // Busboy decodes the multipart filename as latin1 by default, so a UTF-8
-      // (e.g. Cyrillic) original name arrives mojibake — re-decode it to UTF-8.
-      const originalName = Buffer.from(req.file.originalname, "latin1").toString("utf8");
-      res.json({
-        url,
-        mime: req.file.mimetype,
-        originalName,
-        size: req.file.size,
-      });
-    }
-  );
 
   return httpServer;
 }
