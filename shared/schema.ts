@@ -436,6 +436,15 @@ export const tests = pgTable("tests", {
   // PRD-19 (FR-05a): show the section-results screen (optional system node, sectioned tests).
   // Default true; not applicable to linear_flat (no sections) — ignored by the runtime there.
   showSectionResults: boolean("show_section_results").notNull().default(true),
+  // PRD-34 (FR-01): protection of the question text from casual copying. Default TRUE —
+  // existing tests DO change behaviour, which is the accepted decision (FR-03), not a
+  // side effect. A training test whose text is meant to be taken away turns it off.
+  copyProtection: boolean("copy_protection").notNull().default(true),
+  // PRD-34 (FR-16): anonymised watermark over the scene. Independent of copyProtection
+  // (FR-02) — attribution is useful on its own. Default false.
+  protectionWatermark: boolean("protection_watermark").notNull().default(false),
+  // PRD-34 (FR-21): hide the task while the window is not active. Independent too.
+  protectionHideOnBlur: boolean("protection_hide_on_blur").notNull().default(false),
   // PRD-27 (D-4): выбранный вариант ОТЧЁТА и значения его полей, по режиму теста.
   // Отдельно от `design_settings_json`, хотя выбор и принадлежит шаблону: тот коммитится
   // черновиком вкладки «Оформление», а поля отчёта живут в блоке обратной связи вкладки

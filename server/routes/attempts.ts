@@ -56,6 +56,11 @@ function prd19RuntimeSettings(test: Test) {
     allowReturnToUnanswered: test.allowReturnToUnanswered ?? true,
     allowAnswerChange: test.allowAnswerChange ?? false,
     showSectionResults: test.showSectionResults ?? true,
+    // PRD-34 (FR-01, FR-05): настройки защиты. Отсутствие поля в СТАРОМ снимке
+    // публикации читается как умолчание — тест, опубликованный до PRD-34, получает защиту.
+    copyProtection: test.copyProtection ?? true,
+    protectionWatermark: test.protectionWatermark ?? false,
+    protectionHideOnBlur: test.protectionHideOnBlur ?? false,
     answerCommitScope: resolveAnswerCommitScope({
       mode: test.mode,
       flowMode: (test.flowPolicyJson as { mode?: string } | null)?.mode,
