@@ -39,3 +39,43 @@ export async function syncEntityUsages(
   await storage.replaceMediaUsages(entityType, entityId, refs);
   clearAssetAccessCache();
 }
+
+/** What a full rebuild processed. */
+export interface ReindexReport {
+  entities: number;
+}
+
+/**
+ * Rebuilds the whole index with the SAME walker the write path uses. The safety net under
+ * a write-time index: any drift (a direct SQL write, e.g. the Excel question import, question
+ * duplication or topic duplication that bypass the route handlers; a storage point added
+ * without wiring the walker in) shows up here rather than as an access refusal nobody can
+ * explain.
+ *
+ * Covers every entity type the write path indexes: questions, content pages (including the
+ * system pages `test-settings.ts` rewrites when the flow mode changes), and test design
+ * settings (`test_design`, PRD media-library Task 10b). Test design is indexed on the
+ * SETTINGS OBJECT (`test.designSettingsJson`), not the whole test row — the same choice
+ * `PUT /:id/design` makes in `server/routes/tests.ts`, so a rebuild and a save land on the
+ * same rows.
+ */
+export async function reindexAllUsages(): Promise<ReindexReport> {
+  await storage.clearAllMediaUsages();
+  let entities = 0;
+
+  for (const question of await storage.getQuestions()) {
+    await syncEntityUsages("question", question.id, question);
+    entities += 1;
+  }
+  for (const page of await storage.getAllContentPages()) {
+    await syncEntityUsages("content_page", page.id, page);
+    entities += 1;
+  }
+  for (const test of await storage.getTests()) {
+    await syncEntityUsages("test_design", test.id, test.designSettingsJson);
+    entities += 1;
+  }
+
+  clearAssetAccessCache();
+  return { entities };
+}

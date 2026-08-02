@@ -17,6 +17,8 @@ import { mediaStore } from "../services/media/media-store";
 import { logger } from "../logger";
 import { getEffectiveRoles } from "../services/access";
 import { canDeliverAsset } from "../services/media/asset-access";
+import { requirePermission } from "../middleware/auth";
+import { reindexAllUsages } from "../services/media/usage-index";
 
 const router = Router();
 
@@ -85,6 +87,21 @@ router.post("/upload", requireAuth, mediaUpload.single("file"), async (req: Requ
     if (req.file?.path) fs.rmSync(req.file.path, { force: true });
     logger.error(`Media upload failed: ${(error as Error).message}`);
     res.status(500).json({ error: "Failed to store media" });
+  }
+});
+
+/**
+ * POST /reindex — rebuild the usage index from scratch and report orphans. An
+ * administrative operation: it reads every content entity, so it is not on any hot path.
+ */
+router.post("/reindex", requirePermission("media.manage"), async (_req: Request, res: Response) => {
+  try {
+    const report = await reindexAllUsages();
+    const orphans = await storage.listOrphanMediaAssets();
+    res.json({ ...report, orphans });
+  } catch (error) {
+    logger.error(`Media reindex failed: ${(error as Error).message}`);
+    res.status(500).json({ error: "Failed to reindex media usages" });
   }
 });
 

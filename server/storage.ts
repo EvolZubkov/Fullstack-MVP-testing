@@ -293,6 +293,8 @@ export interface IStorage {
   /** PRD-22: variant bindings of many tests in ONE query (tests-list audit). */
   getContentPageBindings(testIds: string[]): Promise<ContentPageBinding[]>;
   getContentPages(testId: string): Promise<ContentPage[]>;
+  /** Every content page across every test — the media re-sync's full-table read. */
+  getAllContentPages(): Promise<ContentPage[]>;
   getContentPage(id: string): Promise<ContentPage | undefined>;
   createContentPage(page: InsertContentPage): Promise<ContentPage>;
   updateContentPage(id: string, updates: Partial<InsertContentPage>): Promise<ContentPage | undefined>;
@@ -1054,6 +1056,10 @@ export class DatabaseStorage implements IStorage {
 
   getContentPages(testId: string): Promise<ContentPage[]> {
     return this.contentPagesRepo.getContentPages(testId);
+  }
+
+  getAllContentPages(): Promise<ContentPage[]> {
+    return this.contentPagesRepo.getAllContentPages();
   }
 
   getContentPage(id: string): Promise<ContentPage | undefined> {
