@@ -19,8 +19,27 @@ import type { MediaAsset } from "@shared/schema";
 import { storage } from "../../storage";
 import { isAdminOrSuper } from "../test-access";
 
-/** Resolved decisions, keyed `<assetId>:<userId>`. Cleared on index writes. */
-const cache = new Map<string, boolean>();
+/**
+ * How long a resolved decision may be trusted.
+ *
+ * Both directions of staleness matter, and they are not symmetric in cost. A stale
+ * refusal hides a learner's own picture; a stale grant keeps serving a file to someone
+ * whose access was just revoked. Index writes clear the cache, but granting or revoking
+ * a test assignment does not touch `media_usages` at all — so nothing but time bounds
+ * those two cases. A minute keeps the hot path cheap while making both windows short.
+ */
+const DECISION_TTL_MS = 60_000;
+
+/**
+ * Upper bound on remembered decisions. The cache is cleared on index writes, but a
+ * service that serves many learners and edits no content would otherwise grow without
+ * limit until restart. On overflow the whole map is dropped rather than evicted one by
+ * one: the entries are cheap to recompute and an exact LRU is not worth the code here.
+ */
+const DECISION_CACHE_LIMIT = 5000;
+
+/** Resolved decisions, keyed `<assetId>:<userId>`. */
+const cache = new Map<string, { allowed: boolean; expiresAt: number }>();
 
 /** Drops every cached decision. Call after any write to `media_usages`. */
 export function clearAssetAccessCache(): void {
@@ -88,7 +107,7 @@ export async function canDeliverAsset(
 
   const key = `${asset.id}:${userId}`;
   const cached = cache.get(key);
-  if (cached !== undefined) return cached;
+  if (cached && cached.expiresAt > Date.now()) return cached.allowed;
 
   let allowed = false;
   for (const testId of await testIdsForUsages(asset.id)) {
@@ -97,6 +116,7 @@ export async function canDeliverAsset(
       break;
     }
   }
-  cache.set(key, allowed);
+  if (cache.size >= DECISION_CACHE_LIMIT) cache.clear();
+  cache.set(key, { allowed, expiresAt: Date.now() + DECISION_TTL_MS });
   return allowed;
 }

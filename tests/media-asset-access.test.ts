@@ -94,4 +94,27 @@ describe("canDeliverAsset", () => {
     await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER]);
     expect(storageMock.getMediaUsagesByAsset).toHaveBeenCalledTimes(1);
   });
+
+  it("stops trusting a decision once it expires", async () => {
+    vi.useFakeTimers();
+    try {
+      storageMock.getMediaUsagesByAsset.mockResolvedValue([]);
+      await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER]);
+      vi.advanceTimersByTime(61_000);
+      await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER]);
+      // A revoked assignment does not touch the usage index, so only expiry can
+      // stop a stale decision from being served.
+      expect(storageMock.getMediaUsagesByAsset).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("forgets decisions when the usage index is rewritten", async () => {
+    storageMock.getMediaUsagesByAsset.mockResolvedValue([]);
+    await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER]);
+    clearAssetAccessCache();
+    await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER]);
+    expect(storageMock.getMediaUsagesByAsset).toHaveBeenCalledTimes(2);
+  });
 });
