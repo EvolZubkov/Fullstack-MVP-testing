@@ -50,4 +50,28 @@ describe("feedback save -> usage index", () => {
       { assetId: ID, field: "assets.0.url" },
     ]);
   });
+
+  it("индексирует набор шкал теста целиком", async () => {
+    await syncEntityUsages("scale_feedback", "test-1", [
+      {
+        key: "burnout",
+        configJson: {
+          interpretation: {
+            bands: [
+              {
+                min: 0,
+                max: 10,
+                feedback: {
+                  assets: [{ title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: `/api/media/${ID}` }],
+                },
+              },
+            ],
+          },
+        },
+      },
+    ]);
+    expect(storage.replaceMediaUsages).toHaveBeenCalledWith("scale_feedback", "test-1", [
+      { assetId: ID, field: "0.configJson.interpretation.bands.0.feedback.assets.0.url" },
+    ]);
+  });
 });
