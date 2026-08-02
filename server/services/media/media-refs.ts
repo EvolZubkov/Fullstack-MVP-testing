@@ -60,6 +60,9 @@ export function parseMediaRef(value: unknown): MediaRef | null {
  */
 const MEDIA_IN_TEXT = /\/api\/media\/([0-9a-fA-F-]{36})|\/uploads\/(media\/[^\s"'<>?#\\]+)/g;
 
+/** Trailing punctuation that belongs to the sentence, not to the file name. */
+const TRAILING_PUNCTUATION = /[.,;:!)\]]+$/;
+
 /** Every distinct reference inside one string, in order of appearance. */
 export function findMediaRefsInText(value: string): MediaRef[] {
   const out: MediaRef[] = [];
@@ -67,7 +70,8 @@ export function findMediaRefsInText(value: string): MediaRef[] {
   for (const m of value.replace(/\\/g, "/").matchAll(MEDIA_IN_TEXT)) {
     const ref: MediaRef = m[1]
       ? { kind: "canonical", id: m[1] }
-      : { kind: "legacy", storageKey: m[2] };
+      : { kind: "legacy", storageKey: m[2].replace(TRAILING_PUNCTUATION, "") };
+    if (ref.kind === "legacy" && ref.storageKey.split("/").some((seg) => seg === "..")) continue;
     const key = ref.kind === "canonical" ? `c:${ref.id}` : `l:${ref.storageKey}`;
     if (seen.has(key)) continue;
     seen.add(key);

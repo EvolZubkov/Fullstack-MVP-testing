@@ -99,4 +99,26 @@ describe("findMediaRefsInText", () => {
       { kind: "legacy", storageKey: "media/a.png" },
     ]);
   });
+
+  it("trims sentence punctuation stuck to a bare address", () => {
+    expect(findMediaRefsInText("смотри /uploads/media/pic.png, потом далее")).toEqual([
+      { kind: "legacy", storageKey: "media/pic.png" },
+    ]);
+    expect(findMediaRefsInText("(см. /uploads/media/pic.png)")).toEqual([
+      { kind: "legacy", storageKey: "media/pic.png" },
+    ]);
+    expect(findMediaRefsInText("Файл тут: /uploads/media/pic.png.")).toEqual([
+      { kind: "legacy", storageKey: "media/pic.png" },
+    ]);
+  });
+
+  it("keeps dots inside the file name", () => {
+    expect(findMediaRefsInText('<img src="/uploads/media/archive.tar.gz">')).toEqual([
+      { kind: "legacy", storageKey: "media/archive.tar.gz" },
+    ]);
+  });
+
+  it("drops a key that walks out of the media directory", () => {
+    expect(findMediaRefsInText("/uploads/media/../../etc/passwd")).toEqual([]);
+  });
 });
