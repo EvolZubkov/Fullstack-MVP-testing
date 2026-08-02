@@ -19,10 +19,11 @@
  *        re-bound on each setDraft to avoid cursor disruption.
  *   3. Links list — array of {title, url} editable rows + «Добавить ссылку» button.
  *      The button is wrapped in a <div> to prevent flex-column stretching.
- *   4. PDF assets list — client-side only. Server upload integration ships separately
- *      (FR-37 next PR). The local DraftAsset type extends FeedbackAsset with optional
- *      `size` / `file` fields for UI display; those fields are stripped before onSave
- *      so callers only receive canonical FeedbackAsset fields.
+ *   4. PDF assets list — a picked file is uploaded to the media library immediately
+ *      (`POST /api/media/upload?purpose=feedback-asset`) and the descriptor carries the
+ *      canonical address the server returned (PRD-32). The local DraftAsset type extends
+ *      FeedbackAsset with an optional `size` field for UI display; it is stripped before
+ *      onSave so callers only receive canonical FeedbackAsset fields.
  *
  * Footer: «Отменить» (secondary) + «Сохранить» (primary).
  * The modal owns a draft copy of the values; on Save it emits via `onSave`.
@@ -81,12 +82,12 @@ export type FeedbackEditorModalProps = {
 // ─── Local draft type ─────────────────────────────────────────────────────────
 
 /**
- * Draft-only asset. Extends canonical FeedbackAsset with UI-only fields:
- *   `size`  — bytes shown as «245 KB» next to the file name.
- *   `file`  — original File blob kept until server upload ships.
- * Both are stripped before emitting via onSave.
+ * Draft-only asset. Extends the canonical descriptor with UI-only fields:
+ *   `size` — bytes shown as «245 KB» next to the file name.
+ * The file itself is no longer kept: it goes to the server the moment it is picked, and the
+ * descriptor carries the address it came back with (PRD-32).
  */
-type DraftAsset = FeedbackAsset & { size?: number; file?: File };
+type DraftAsset = FeedbackAsset & { size?: number };
 
 type DraftValue = Omit<FeedbackEditorValue, "assets" | "events"> & {
   assets: DraftAsset[];
@@ -131,6 +132,11 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
   // S13.1-G40: list of files rejected for exceeding the 5 MB limit. Rendered
   // as an in-modal warning banner instead of window.alert. Dismissible.
   const [oversizedFiles, setOversizedFiles] = useState<string[]>([]);
+
+  /** Server-side rejections and network failures, shown in the same banner slot. */
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
+  /** Number of uploads in flight — disables «Сохранить» so a half-uploaded list is not saved. */
+  const [uploading, setUploading] = useState(0);
 
   // Reset draft when the modal re-opens or receives a new value.
   // For richText format: initialize the RTE innerHTML via requestAnimationFrame
@@ -226,42 +232,69 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
     setLinkInsert(null);
   }
 
-  /** Handle file picker change: validate size, build draft assets. */
-  function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
+  /** Sends one file to the media library and returns its canonical address. */
+  async function uploadFeedbackAsset(file: File): Promise<string | { error: string }> {
+    const body = new FormData();
+    body.append("file", file);
+    try {
+      const res = await fetch("/api/media/upload?purpose=feedback-asset", {
+        method: "POST",
+        body,
+        credentials: "include",
+      });
+      const payload = (await res.json().catch(() => ({}))) as { url?: string; message?: string };
+      if (!res.ok || !payload.url) {
+        return { error: `${file.name}: ${payload.message ?? "не удалось загрузить файл"}` };
+      }
+      return payload.url;
+    } catch {
+      return { error: `${file.name}: не удалось загрузить файл` };
+    }
+  }
+
+  /** Handle file picker change: validate size, upload, then build draft assets. */
+  async function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
     const oversized = files.filter((f) => f.size > MAX_BYTES);
-    if (oversized.length > 0) {
-      // S13.1-G40: surface as an in-modal Banner instead of window.alert.
-      setOversizedFiles(oversized.map((f) => f.name));
-    } else {
-      setOversizedFiles([]);
-    }
+    // S13.1-G40: surface as an in-modal Banner instead of window.alert.
+    setOversizedFiles(oversized.map((f) => f.name));
+    setUploadErrors([]);
     const valid = files.filter((f) => f.size <= MAX_BYTES);
-    if (valid.length === 0) {
-      e.target.value = "";
-      return;
-    }
-    const newAssets: DraftAsset[] = valid.map((file) => ({
-      title: file.name.replace(/\.pdf$/i, ""),
-      fileName: file.name,
-      mimeType: "application/pdf" as const,
-      size: file.size,
-      file,
-    }));
-    setDraft((d) => ({ ...d, assets: [...d.assets, ...newAssets] }));
-    // Reset so the same file can be re-selected after removal.
+    // Reset before awaiting: the input must be re-selectable even while an upload is running.
     e.target.value = "";
+    if (valid.length === 0) return;
+
+    setUploading((n) => n + valid.length);
+    for (const file of valid) {
+      const result = await uploadFeedbackAsset(file);
+      setUploading((n) => n - 1);
+      if (typeof result !== "string") {
+        setUploadErrors((prev) => [...prev, result.error]);
+        continue;
+      }
+      setDraft((d) => ({
+        ...d,
+        assets: [
+          ...d.assets,
+          {
+            title: file.name.replace(/\.pdf$/i, ""),
+            fileName: file.name,
+            mimeType: "application/pdf" as const,
+            size: file.size,
+            url: result,
+          },
+        ],
+      }));
+    }
   }
 
-  /** Strip UI-only fields (size, file) before emitting to the caller. */
+  /** Strip the UI-only `size` before emitting to the caller. */
   function handleSave() {
     const canonical: FeedbackEditorValue = {
       ...draft,
-      assets: draft.assets.map(
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        ({ size: _s, file: _f, ...rest }) => rest,
-      ),
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      assets: draft.assets.map(({ size: _s, ...rest }) => rest),
     };
     props.onSave(canonical);
   }
@@ -288,9 +321,10 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
             variant="primary"
             size="m"
             onClick={handleSave}
+            disabled={uploading > 0}
             data-testid="feedback-editor-save"
           >
-            Сохранить
+            {uploading > 0 ? "Загрузка…" : "Сохранить"}
           </Button>
         </>
       }
@@ -305,6 +339,17 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
             description={oversizedFiles.join(", ")}
             onClose={() => setOversizedFiles([])}
             data-testid="feedback-editor-oversize-banner"
+          />
+        )}
+
+        {/* ── PRD-32: server-side rejection / network failure ─────────── */}
+        {uploadErrors.length > 0 && (
+          <Banner
+            tone="error"
+            title="Файл не загружен"
+            description={uploadErrors.join(", ")}
+            onClose={() => setUploadErrors([])}
+            data-testid="feedback-editor-upload-error-banner"
           />
         )}
 

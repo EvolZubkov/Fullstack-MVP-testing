@@ -8,7 +8,7 @@
  *   - Empty-state for links: list absent, only button shown.
  *   - «Добавить ссылку» appends a link row; button is not full-width.
  *   - createLink: mock window.prompt + document.execCommand, verify call.
- *   - PDF upload via hidden input: asset appears in draft; onSave strips size/file.
+ *   - PDF upload via hidden input: asset appears in draft; onSave strips the UI-only size.
  *   - «Отменить» calls onCancel; «Сохранить» calls onSave with canonical value.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
@@ -228,6 +228,15 @@ describe("<FeedbackEditorModal /> — RTE link-insert modal", () => {
 // ─── Tests: PDF assets section ────────────────────────────────────────────────
 
 describe("<FeedbackEditorModal /> — PDF assets", () => {
+  // PRD-32: a picked file now goes to the media library at once, so the upload path needs a
+  // server answer before any asset row can appear.
+  beforeEach(() => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "a", url: "/api/media/a", mime: "application/pdf", size: 1 }),
+    }) as unknown as typeof fetch;
+  });
+
   it("renders upload button and hint; no list when assets is empty", () => {
     renderModal();
     expect(screen.getByTestId("feedback-editor-asset-upload")).toBeInTheDocument();
@@ -255,7 +264,7 @@ describe("<FeedbackEditorModal /> — PDF assets", () => {
     expect(screen.getByText(/policy\.pdf/)).toBeInTheDocument();
   });
 
-  it("onSave strips size/file from assets before emitting", async () => {
+  it("onSave strips the UI-only size from assets before emitting", async () => {
     const onSave = vi.fn();
     render(
       <FeedbackEditorModal
@@ -269,6 +278,8 @@ describe("<FeedbackEditorModal /> — PDF assets", () => {
     const input = screen.getByTestId("feedback-editor-asset-input") as HTMLInputElement;
     const file = new File(["pdf"], "doc.pdf", { type: "application/pdf" });
     await userEvent.upload(input, file);
+    // The row appears only after the upload resolves.
+    await screen.findByTestId("feedback-editor-asset-title-0");
 
     fireEvent.click(screen.getByTestId("feedback-editor-save"));
     await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
@@ -279,6 +290,8 @@ describe("<FeedbackEditorModal /> — PDF assets", () => {
       title: "doc",
       fileName: "doc.pdf",
       mimeType: "application/pdf",
+      // PRD-32: the descriptor carries the canonical address the server answered with.
+      url: "/api/media/a",
     });
     // UI-only fields must NOT leak out.
     expect("size" in emitted.assets[0]).toBe(false);
