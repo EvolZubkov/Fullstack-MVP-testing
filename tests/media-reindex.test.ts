@@ -31,6 +31,7 @@ const { storageMock } = vi.hoisted(() => ({
     getTopics: vi.fn(),
     getScales: vi.fn(),
     getResultVariables: vi.fn(),
+    getTestSections: vi.fn(),
   },
 }));
 vi.mock("../server/storage", () => ({ storage: storageMock }));
@@ -64,6 +65,7 @@ beforeEach(() => {
   storageMock.getTopics.mockResolvedValue([]);
   storageMock.getScales.mockResolvedValue([]);
   storageMock.getResultVariables.mockResolvedValue([]);
+  storageMock.getTestSections.mockResolvedValue([]);
 });
 
 describe("POST /api/media/reindex", () => {
@@ -266,7 +268,7 @@ describe("POST /api/media/reindex", () => {
     // empty here: one file used in both must not be counted twice under one type.
     expect(storageMock.replaceMediaUsages).toHaveBeenCalledWith("test_design", "t1", []);
     expect(storageMock.replaceMediaUsages).toHaveBeenCalledWith("test_feedback", "t1", [
-      { assetId: TEST_ASSET, field: "assets.0.url" },
+      { assetId: TEST_ASSET, field: "test.assets.0.url" },
     ]);
     expect(storageMock.replaceMediaUsages).toHaveBeenCalledWith("topic_feedback", "topic-1", [
       { assetId: TOPIC_ASSET, field: "assets.0.url" },
@@ -288,6 +290,67 @@ describe("POST /api/media/reindex", () => {
     expect(storageMock.deleteMediaUsagesExcept).toHaveBeenCalledWith("scale_feedback", ["t1"]);
     expect(storageMock.deleteMediaUsagesExcept).toHaveBeenCalledWith("variable_feedback", ["t1"]);
     expect(storageMock.deleteMediaUsagesExcept).toHaveBeenCalledWith("topic_feedback", ["topic-1"]);
+  });
+
+  it("пересобирает вложения РАЗДЕЛОВ под ключом теста, не затирая вложение самого теста", async () => {
+    // Разделы не имеют своего ключа в индексе: они едут одним объектом вместе с
+    // обратной связью теста. Отдельный вызов на разделы стёр бы строку теста (и наоборот) —
+    // пересборка сама стала бы источником отказов в доступе.
+    const TEST_ASSET = "88888888-8888-8888-8888-888888888888";
+    const SECTION_ASSET = "99999999-9999-9999-9999-999999999999";
+    storageMock.getTests.mockResolvedValue([
+      {
+        id: "t1",
+        designSettingsJson: {},
+        feedbackJson: {
+          assets: [
+            { title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: `/api/media/${TEST_ASSET}` },
+          ],
+        },
+      },
+    ]);
+    storageMock.getTestSections.mockResolvedValue([
+      { id: "sec-1", testId: "t1", feedbackJson: null },
+      {
+        id: "sec-2",
+        testId: "t1",
+        feedbackJson: {
+          assets: [
+            { title: "Разбор темы", fileName: "s.pdf", mimeType: "application/pdf", url: `/api/media/${SECTION_ASSET}` },
+          ],
+        },
+      },
+    ]);
+
+    await reindexAllUsages();
+
+    expect(storageMock.getTestSections).toHaveBeenCalledWith("t1");
+    expect(storageMock.replaceMediaUsages).toHaveBeenCalledWith("test_feedback", "t1", [
+      { assetId: TEST_ASSET, field: "test.assets.0.url" },
+      { assetId: SECTION_ASSET, field: "sections.1.assets.0.url" },
+    ]);
+  });
+
+  it("пересобирает вложение раздела и тогда, когда у самого теста вложения нет", async () => {
+    const SECTION_ASSET = "99999999-9999-9999-9999-999999999999";
+    storageMock.getTests.mockResolvedValue([{ id: "t1", designSettingsJson: {}, feedbackJson: null }]);
+    storageMock.getTestSections.mockResolvedValue([
+      {
+        id: "sec-1",
+        testId: "t1",
+        feedbackJson: {
+          assets: [
+            { title: "Разбор темы", fileName: "s.pdf", mimeType: "application/pdf", url: `/api/media/${SECTION_ASSET}` },
+          ],
+        },
+      },
+    ]);
+
+    await reindexAllUsages();
+
+    expect(storageMock.replaceMediaUsages).toHaveBeenCalledWith("test_feedback", "t1", [
+      { assetId: SECTION_ASSET, field: "sections.0.assets.0.url" },
+    ]);
   });
 
   it("reports orphans", async () => {

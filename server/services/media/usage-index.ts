@@ -42,6 +42,37 @@ export async function syncEntityUsages(
 }
 
 /**
+ * The ONE indexing unit of `test_feedback`: the test's own feedback block PLUS the
+ * feedback blocks of its SECTIONS (`test_sections.feedback_json`, the editor's
+ * «Обратная связь по теме» on the «Состав» tab).
+ *
+ * A section has no key of its own in `media_usages`, and it needs none: it belongs to
+ * exactly one test, and the delivery rule already reads `test_feedback` as "the entity
+ * id IS the test id" (`asset-access.ts`). So a section's attachment is indexed under
+ * its TEST and reaches the learner by the same grant as the test's own.
+ *
+ * The two parts MUST travel in one object. `syncEntityUsages` REPLACES every row of a
+ * (type, id) pair, so two calls — one for the test, one for the sections — would erase
+ * each other's rows and leave whichever ran last as the whole truth.
+ *
+ * The shape is `{ test, sections }` rather than a flat merge so the `field` path stays
+ * readable in the "where is this file used" report: `test.assets.0.url` for the test's
+ * own attachment, `sections.<i>.assets.0.url` for a section's.
+ *
+ * @param testFeedback The test's stored feedback block (`tests.feedback_json`).
+ * @param sections The test's saved sections, in storage order.
+ */
+export function testFeedbackUsageEntity(
+  testFeedback: unknown,
+  sections: ReadonlyArray<{ feedbackJson?: unknown }>,
+): { test: unknown; sections: unknown[] } {
+  return {
+    test: testFeedback ?? null,
+    sections: sections.map((s) => s.feedbackJson ?? null),
+  };
+}
+
+/**
  * Best-effort media-index cleanup for entities removed by a CASCADE delete that does not
  * go through their own save/delete route handler — the topic and folder cascades over
  * questions/content pages (`server/storage/topics-repository.ts`), plus the deleted topics
@@ -128,8 +159,14 @@ export async function reindexAllUsages(): Promise<ReindexReport> {
   for (const test of await storage.getTests()) {
     await syncEntityUsages("test_design", test.id, test.designSettingsJson);
     // The feedback block is indexed apart from the design settings: one file used in both would
-    // otherwise be counted twice, and the two are edited through different routes.
-    await syncEntityUsages("test_feedback", test.id, test.feedbackJson);
+    // otherwise be counted twice, and the two are edited through different routes. The test's
+    // own block and its SECTIONS' blocks, on the other hand, go in ONE call — see
+    // `testFeedbackUsageEntity`: split into two, the rebuild would erase the sections' rows.
+    await syncEntityUsages(
+      "test_feedback",
+      test.id,
+      testFeedbackUsageEntity(test.feedbackJson, await storage.getTestSections(test.id)),
+    );
     await syncEntityUsages("scale_feedback", test.id, await storage.getScales(test.id));
     await syncEntityUsages("variable_feedback", test.id, await storage.getResultVariables(test.id));
     entities += 1;

@@ -34,7 +34,7 @@ import {
 import { RequiredFieldsMissingError } from "../services/required-fields-validator";
 import { FlowPolicyValidationError } from "../services/flow-policy-validator";
 import { buildTestScoringContext } from "../services/effective-scoring";
-import { syncEntityUsages } from "../services/media/usage-index";
+import { syncEntityUsages, testFeedbackUsageEntity } from "../services/media/usage-index";
 
 // ─── Validation schemas (PRD-7 §5.4) ─────────────────────────────────────────
 
@@ -686,8 +686,15 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
     // Медиатека: сбой индексации не должен стоить автору его правки (тот же довод, что и на
     // пути сохранения оформления). Индексируется именно блок обратной связи, а не вся строка
     // теста: оформление уже учтено под `test_design`, и двойной учёт дал бы две строки на файл.
+    // Разделы индексируются ТЕМ ЖЕ вызовом (см. `testFeedbackUsageEntity`): у них нет своего
+    // ключа в индексе, а раздельные вызовы затёрли бы строки друг друга. Разделы перечитываются
+    // из хранилища — присланные payload'ы ещё не имеют идентификаторов и порядка вставки.
     try {
-      await syncEntityUsages("test_feedback", test.id, feedbackJson ?? null);
+      await syncEntityUsages(
+        "test_feedback",
+        test.id,
+        testFeedbackUsageEntity(feedbackJson ?? null, await storage.getTestSections(test.id)),
+      );
     } catch (error) {
       logger.error(`Media usage sync failed for test feedback ${test.id}: ${(error as Error).message}`, "tests");
     }
@@ -1037,8 +1044,16 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
     // `undefined` индекс обнулился бы, хотя вложение в тесте осталось. Сбой индексации
     // не должен стоить автору его правки: недостающая строка безопасна (она отказывает
     // в доступе, а не выдаёт лишнее) и чинится пересборкой.
+    //
+    // Разделы (`test_sections.feedback_json`) едут ТЕМ ЖЕ вызовом и под тем же ключом теста
+    // (см. `testFeedbackUsageEntity`); перечитываются ПОСЛЕ сохранения — служба пересоздаёт
+    // строки разделов, поэтому `existingSections`, прочитанные до save, здесь уже неверны.
     try {
-      await syncEntityUsages("test_feedback", test.id, test.feedbackJson ?? null);
+      await syncEntityUsages(
+        "test_feedback",
+        test.id,
+        testFeedbackUsageEntity(test.feedbackJson ?? null, await storage.getTestSections(test.id)),
+      );
     } catch (error) {
       logger.error(`Media usage sync failed for test feedback ${test.id}: ${(error as Error).message}`, "tests");
     }
