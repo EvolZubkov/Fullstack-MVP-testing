@@ -363,7 +363,10 @@ CREATE TABLE "tests" (
 	"allow_return_to_unanswered" boolean DEFAULT true NOT NULL,
 	"allow_answer_change" boolean DEFAULT false NOT NULL,
 	"show_section_results" boolean DEFAULT true NOT NULL,
-	"report_settings_json" jsonb
+	"report_settings_json" jsonb,
+	"copy_protection" boolean DEFAULT true NOT NULL,
+	"protection_watermark" boolean DEFAULT false NOT NULL,
+	"protection_hide_on_blur" boolean DEFAULT false NOT NULL
 );
 
 CREATE TABLE "topic_access_grants" (
