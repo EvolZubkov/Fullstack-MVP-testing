@@ -66,8 +66,8 @@ export interface TopicFeedbackInput {
    * {@link feedbackAssets}, so the `url`-over-`scormHref` rule lives in one place.
    *
    * The host hands them over for EVERY topic; whether the learner sees them is the
-   * builder's call — it drops the whole topic unless {@link TopicInput.passed} is
-   * `false` (see `buildResultContext`).
+   * builder's call — it drops the whole topic once {@link TopicInput.passed} is `true`
+   * (see `topicRecommendationSources`).
    */
   recommendedAssets?: Array<{ title: string; url?: string }> | null;
   /**
@@ -84,8 +84,8 @@ export interface TopicFeedbackInput {
    * results screen carries ONE «Рекомендации» block gathering every level that spoke
    * (see `./recommendations`), so a text reaches the learner through it whatever level
    * wrote it. Blank entries are dropped by the builder — an empty paragraph is not a
-   * recommendation — and so is the whole topic unless {@link TopicInput.passed} is
-   * `false`: what a topic carries is help with a topic the learner did not take.
+   * recommendation — and so is the whole topic once {@link TopicInput.passed} is `true`:
+   * what a topic carries is help with a topic the learner has not mastered.
    *
    * Both hosts fill it: the web adapter from the stored `TopicResult.feedbackTexts`,
    * the SCORM package from the same two blocks baked into `TEST_DATA`.
@@ -276,32 +276,37 @@ export function topicFeedbackTexts(
  * The sources ONE topic contributes to the consolidated recommendations block: its
  * feedback texts and its PRD-32 attachments, in that order.
  *
- * GATED BY THE TOPIC'S VERDICT — everything a topic carries reaches the learner only
- * where the topic was NOT taken. This is the owner's agreed rule for the consolidated
- * block, and it replaces the two rules that used to coexist: the recommended courses
- * and events of a topic were already failed-topic guidance (`vrRecommended` in the
- * package runtime skips a topic on `tr.passed !== false`), while its texts and its
- * attachments were shown to everyone, on the reading that a material hung on the
- * topic's feedback is due for having TAKEN the topic. Consolidation put all three into
- * ONE block, where two rules would be visible on screen as three resources of the same
- * topic behaving differently; the owner settled it on the courses' rule.
+ * GATED BY THE TOPIC'S VERDICT, and the gate is «anything except an explicit pass» —
+ * the owner's agreed rule for the consolidated block. It replaces the two rules that
+ * used to coexist here: the recommended courses and events of a topic were failed-topic
+ * guidance (`vrRecommended` in the package runtime skipped a topic on
+ * `tr.passed !== false`), while its texts and its attachments were shown to everyone, on
+ * the reading that a material hung on the topic's feedback is due for having TAKEN the
+ * topic. Consolidation put all four into ONE block, where two rules read as the same
+ * topic's resources behaving differently, and the owner settled them on one — now applied
+ * to the courses and events as well, at both hosts' call sites.
  *
- * WHAT «not taken» MEANS is the MODE's answer, and only that answer differs — hence
- * `failed` as a parameter rather than a second copy of this function per mode. The
- * standard mode reads the topic's pass verdict (`passed === false`, and NOT `!passed`:
- * `null` is the third state — the topic has no pass threshold, so nothing was judged
- * and «не пройдено» was never said about this learner). The adaptive mode has no such
- * third state; there the failure is «no level confirmed at all»
- * ({@link hasAchievedLevel}), the branch `aggregateAdaptiveResult` itself treats as the
- * failure one — it is where the topic's `failureFeedback` fires and where
- * `overallPassed` is dropped.
+ * WE ARE SILENT ONLY WHERE WE ARE SURE OF SUCCESS. The rule is deliberately NOT «show on
+ * failure»: per-topic thresholds are the exception in a standard test, so most topics
+ * carry no verdict at all (`passed === null`) — treating «nothing was judged» as success
+ * would swallow the author's material in every test that never set them. Any state other
+ * than a pronounced pass is resolved in favour of showing: losing a leaflet the author
+ * hung is worse than showing it once too often.
+ *
+ * WHAT «not passed» MEANS is the MODE's answer, and only that answer differs — hence
+ * `notPassed` as a parameter rather than a second copy of this function per mode. The
+ * standard mode reads the topic's pass verdict (`passed !== true`, so both an explicit
+ * failure and an absent verdict speak). The adaptive mode has no third state: there the
+ * non-success is «no level confirmed at all» ({@link hasAchievedLevel}), the branch
+ * `aggregateAdaptiveResult` itself treats as the failure one — it is where the topic's
+ * `failureFeedback` fires and where `overallPassed` is dropped.
  *
  * The gate lives HERE, in the one builder both hosts call, and not in either host's
  * adapter: a second copy of it would drift silently and surface as the web and the
  * package handing the learner different materials.
  */
-function topicRecommendationSources(topic: TopicFeedbackInput, failed: boolean): FeedbackBlock[] {
-  if (!failed) return [];
+function topicRecommendationSources(topic: TopicFeedbackInput, notPassed: boolean): FeedbackBlock[] {
+  if (!notPassed) return [];
   const sources: FeedbackBlock[] = [];
   // ONE source per text, because `FeedbackBlock` carries a single `text` while a topic
   // brings up to two independent ones (its own and this test's section over it).
@@ -349,6 +354,26 @@ export interface ResultContextOptions {
    * feedback is a property of the test, not of its measurements.
    */
   testFeedback?: FeedbackBlock | null;
+  /**
+   * Whether the TEST declares a pass threshold at all (`tests.overall_pass_rule_json`
+   * with a `type` other than `none`). It answers ONE question the builder cannot answer
+   * from {@link ResultInput.passed}, which is a plain `boolean`: was a verdict actually
+   * PRONOUNCED, or is `passed: false` merely the default of a test that judges nothing?
+   *
+   * It exists SEPARATELY from {@link MeasuresInput.hasPassThreshold}, which carries the
+   * same fact, because that one only travels for a test with scales or indicators — a
+   * control test never reaches the measures branch, and the commonest test in the product
+   * is exactly that. Both hosts fill this one for EVERY test: the web from the
+   * `MeasuresSource` its route already assembles, the package from the baked
+   * `TEST_DATA.overallPassRule`. Where both are present they agree — they are read off
+   * the same rule.
+   *
+   * ABSENT MEANS «UNKNOWN», and unknown is resolved in favour of SHOWING the feedback.
+   * The flag only ever silences, so a host that has not been taught to send it keeps
+   * handing the learner everything the author wrote — losing a leaflet is worse than
+   * showing it once too often.
+   */
+  hasPassThreshold?: boolean;
   /**
    * PRD-29 measurement blocks. Absent (a test with neither scales nor indicators)
    * leaves the context byte-identical to what a control test has always produced.
@@ -412,31 +437,52 @@ export function buildResultContext(
     result.backAction = opts.backAction;
     result.backLabel = opts.backLabel;
   }
+  // ONE source of truth for «is there a graded score to speak about» — it answers the
+  // score summary (`auto`), the verdict tag, and the feedback gate below. TWO conditions,
+  // not one: a threshold IS declared AND there is something to grade. Every new test
+  // carries the default 70% threshold, so the threshold alone would call a measurement
+  // questionnaire graded and paint «0 %», «0 из 0 верно» and a green «Пройден» on its
+  // results screen — the exact nonsense PRD-29 removes. The author of a burnout inventory
+  // never opens that setting, and should not have to: such a method has no threshold by
+  // nature, not by configuration.
+  //
+  // «Nothing to grade» is read off `possiblePoints`, which both hosts already pass in: a
+  // measurement question has no correct grading, so it brings no points and never can.
+  // Deriving it from the builder's own input also makes it true for attempts finished
+  // before this rule existed — no migration, no new stored field.
+  //
+  // The threshold flag is read from the TOP-LEVEL option first and from `measures` only
+  // as a fallback: the top-level one travels for every test, the measures copy only for a
+  // test that measures something. `=== true` on purpose — an absent flag means «unknown»,
+  // and unknown must not silence anything.
+  const thresholdDeclared = opts.hasPassThreshold ?? opts.measures?.hasPassThreshold;
+  const hasGradedScore = thresholdDeclared === true && round1(input.possiblePoints) > 0;
+  // EXPLICIT SUCCESS — the only state in which the author's feedback is withheld. Both
+  // halves are load-bearing: the test must actually grade (otherwise no verdict was
+  // pronounced and `passed` is a default, not a judgement), and the verdict must be a
+  // PASS. A measurement test without a threshold therefore keeps its feedback whatever
+  // `passed` holds — that feedback IS its result, the whole point of PRD-29.
+  const explicitPass = hasGradedScore && passed;
   // Sources of the ONE recommendations block, gathered in the order dedup should keep:
   // the general before the specific. Collected rather than merged on the spot because
   // the measurement sources are conditional while the other two are not — a test with
   // neither scales nor indicators still hands the learner its own feedback and what its
   // topics and sections attached (PRD-32). The test's own block leads: it is the widest.
-  const recommendationSources: Array<FeedbackBlock | null | undefined> = [opts.testFeedback];
+  //
+  // Unless the learner PASSED: a test the learner is through with owes no work on the
+  // mistakes, so its own block is dropped at the source (owner's agreed rule). The
+  // per-measure blocks below are NOT dropped with it — a scale's band or an indicator's
+  // outcome is the interpretation of a measurement, not guidance on a failure, and a
+  // learner who passed still gets to read what was measured.
+  const recommendationSources: Array<FeedbackBlock | null | undefined> = explicitPass ? [] : [opts.testFeedback];
   if (opts.measures) {
     const visibleScales = opts.measures.scales.filter((m) => m.visibility !== "hidden");
     const visibleIndicators = opts.measures.indicators.filter((m) => m.visibility !== "hidden");
-    // ONE source of truth for «is there a graded score to speak about»: it answers
-    // both the score summary (`auto`) and the verdict below. TWO conditions, not one
-    // — a threshold IS set AND there is something to grade. Every new test carries the
-    // default 70% threshold, so the threshold alone would call a measurement
-    // questionnaire graded and paint «0 %», «0 из 0 верно» and a green «Пройден» on
-    // its results screen: the exact nonsense PRD-29 removes. The author of a burnout
-    // inventory never opens that setting, and should not have to — such a method has
-    // no threshold by nature, not by configuration.
-    //
-    // «Nothing to grade» is read off `possiblePoints`, which both hosts already pass
-    // in: a measurement question has no correct grading, so it brings no points and
-    // never can. Deriving it from the builder's own input also makes it true for
-    // attempts finished before this rule existed — no migration, no new stored field.
-    // (`scoredQuestions` in `shared/scoring/aggregate.ts` describes this very contract
-    // but is absent from the stored result schema, so it cannot answer for them.)
-    const hasGradedScore = opts.measures.hasPassThreshold === true && round1(input.possiblePoints) > 0;
+    // `hasGradedScore` is computed ONCE, above — the score summary, the verdict tag and
+    // the feedback gate must not be able to disagree about whether this test grades.
+    // (`scoredQuestions` in `shared/scoring/aggregate.ts` describes the very same
+    // contract but is absent from the stored result schema, so it cannot answer for
+    // attempts finished earlier.)
     const blocks = resolveResultsBlocks(opts.measures.blockSettings ?? {}, {
       hasPassThreshold: hasGradedScore,
       hasVisibleScales: visibleScales.length > 0,
@@ -494,7 +540,7 @@ export function buildResultContext(
   // shape of those sources live in `topicRecommendationSources`, shared with the
   // adaptive builder.
   for (const topic of input.topicResults || []) {
-    recommendationSources.push(...topicRecommendationSources(topic, topic.passed === false));
+    recommendationSources.push(...topicRecommendationSources(topic, topic.passed !== true));
   }
   const recommendations = collectRecommendations(recommendationSources);
   if (recommendations.hasAny) result.recommendations = recommendations;
@@ -749,7 +795,15 @@ export function buildAdaptiveResultContext(
   //
   // What differs between the modes is ONE thing — how a topic's failure is spelled — and
   // it enters as the gate's argument (see `topicRecommendationSources`).
-  const recommendationSources: Array<FeedbackBlock | null | undefined> = [opts.testFeedback];
+  //
+  // The test's own block obeys the same rule as on the standard screen: withheld on an
+  // EXPLICIT pass, because a learner who is through with the test owes no work on the
+  // mistakes. Here the verdict needs no threshold check — the adaptive mode has no
+  // pass-percentage setting to be absent, `overallPassed` is pronounced by
+  // `aggregateAdaptiveResult` from the levels actually confirmed. An absent flag is
+  // therefore not «unknown» but a plain non-success, and it shows.
+  const recommendationSources: Array<FeedbackBlock | null | undefined> =
+    input.passed === true ? [] : [opts.testFeedback];
   for (const topic of input.topicResults || []) {
     recommendationSources.push(...topicRecommendationSources(topic, !hasAchievedLevel(topic)));
   }

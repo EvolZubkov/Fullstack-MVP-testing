@@ -64,13 +64,14 @@ export interface ReportBlock {
   /** Смещение дуги отчёта. */
   ringDashoffset: number;
   /**
-   * Рекомендованные материалы. В обычном режиме — курсы по ПРОВАЛЕННЫМ темам без дублей;
-   * в адаптивном — материалы всех тем, у которых они есть, с названием темы: там нет
-   * «провала», уровень либо подтверждён, либо нет.
+   * Рекомендованные материалы. В обычном режиме — курсы по темам, которые ученик НЕ
+   * взял (всё, кроме явно пройденных), без дублей; в адаптивном — материалы всех тем, у
+   * которых они есть, с названием темы: там нет «провала», уровень либо подтверждён,
+   * либо нет.
    */
   courses: Array<{ title: string; url: string; topicName?: string }>;
   hasCourses: boolean;
-  /** Рекомендованные мероприятия по проваленным темам, без дублей. */
+  /** Рекомендованные мероприятия по тем же темам, без дублей. */
   events: Array<{ title: string }>;
   hasEvents: boolean;
 }
@@ -151,8 +152,14 @@ function reportBlock(meta: ReportMeta, topicCount: number, opts: ReportContextOp
   };
 }
 
-/** Дедуп рекомендаций по ПРОВАЛЕННЫМ темам: помощь адресуется провалу, а не строке. */
-function failedRecommendations(topics: ReportInput["result"]["topicResults"]): {
+/**
+ * Дедуп рекомендаций по темам, которые ученик НЕ взял: помощь адресуется пробелу, а не
+ * строке отчёта. Пропускается только ЯВНО пройденная тема — то же правило, что на экране
+ * итогов (`shared/template/result-context`, `vrRecommended` в пакете). Раньше здесь
+ * стояло `!== false`, то есть тема без вердикта молчала; потемные пороги задают редко,
+ * так что отчёт терял курсы там, где экран их показывал.
+ */
+function unmasteredRecommendations(topics: ReportInput["result"]["topicResults"]): {
   courses: Array<{ title: string; url: string }>;
   events: Array<{ title: string }>;
 } {
@@ -161,7 +168,7 @@ function failedRecommendations(topics: ReportInput["result"]["topicResults"]): {
   const courses: Array<{ title: string; url: string }> = [];
   const events: Array<{ title: string }> = [];
   for (const t of topics ?? []) {
-    if (t.passed !== false) continue;
+    if (t.passed === true) continue;
     for (const c of t.recommendedCourses ?? []) {
       if (!c || seenC.has(c.title)) continue;
       seenC.add(c.title);
@@ -193,7 +200,7 @@ export function buildReportContext(input: ReportInput, opts: ReportContextOption
   const passed = !!input.result.passed;
   const percent = base.result.scorePercent ?? 0;
   const circumference = 2 * Math.PI * REPORT_RING_RADIUS;
-  const rec = failedRecommendations(topics);
+  const rec = unmasteredRecommendations(topics);
 
   const report = reportBlock(input, topics.length, opts);
   report.verdictHeadline = passed ? "Тест пройден" : "Тест не пройден";

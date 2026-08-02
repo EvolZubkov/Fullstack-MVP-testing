@@ -22,20 +22,23 @@ import {
   feedbackAssets,
   topicFeedbackTexts,
 } from "../result-context";
+import { LEVEL_SCHEMES } from "../level-ramp";
 
 const TOPIC_PDF = { title: "Разбор темы", url: "/api/media/aaaa" };
 const SECTION_PDF = { title: "Памятка раздела", url: "/api/media/bbbb" };
 
 /**
- * Строка темы, по умолчанию НЕ ПРОЙДЕННОЙ: всё, что автор повесил на тему — текст,
- * курсы, мероприятия, вложения, — показывается ученику только при провале темы
- * (согласованное решение владельца, задача 4 консолидации). Поэтому провал и есть
- * базовый случай этих проверок; сам гейт проверяется отдельным блоком ниже.
+ * Строка темы, по умолчанию БЕЗ ВЕРДИКТА (`passed: null`) — так выглядит подавляющее
+ * большинство тем реального теста: потемные пороги задают редко. Всё, что автор повесил
+ * на тему (текст, курсы, мероприятия, вложения), молчит только при ЯВНОМ прохождении
+ * темы — согласованное решение владельца; отсутствие вердикта успехом не считается.
+ * Поэтому базовый случай этих проверок — тема, которая показывает материалы; сам гейт
+ * проверяется отдельным блоком ниже.
  */
 function topicRow(
   assets: Array<{ title: string; url?: string }>,
   feedbackTexts: string[] = [],
-  passed: boolean | null = false,
+  passed: boolean | null = null,
 ) {
   return {
     topicId: "t1",
@@ -51,7 +54,7 @@ function topicRow(
   };
 }
 
-function baseInput(topicResults: ReturnType<typeof topicRow>[]) {
+function baseInput(topicResults: ReturnType<typeof topicRow>[], overrides: { passed?: boolean; possiblePoints?: number } = {}) {
   return {
     passed: true,
     percent: 75,
@@ -60,6 +63,7 @@ function baseInput(topicResults: ReturnType<typeof topicRow>[]) {
     earnedPoints: 3,
     possiblePoints: 4,
     topicResults,
+    ...overrides,
   };
 }
 
@@ -199,12 +203,11 @@ describe("тексты обратной связи темы и раздела в
   });
 });
 
-describe("гейт по вердикту темы: материалы темы — только при провале", () => {
-  // Согласованное решение владельца: всё, что автор повесил на ТЕМУ (текст, курсы,
-  // мероприятия, вложения), — это помощь по невзятой теме. До консолидации курсы и
-  // мероприятия уже гейтились провалом, а тексты и вложения показывались всем: три
-  // ресурса одной темы жили по двум разным правилам, и после сведения их в один блок
-  // расхождение стало бы видно на экране.
+describe("гейт по вердикту ТЕМЫ: молчим только при явном прохождении", () => {
+  // Согласованное решение владельца: материалы и тексты темы показываются ВСЕГДА, кроме
+  // случая явного успеха. До консолидации правил было два: курсы и мероприятия темы
+  // гейтились провалом, а тексты и вложения показывались всем — после сведения трёх
+  // ресурсов в один блок расхождение стало бы видно на экране.
   it("у ПРОЙДЕННОЙ темы ни текст, ни вложения в блок не попадают", () => {
     const ctx = buildResultContext(baseInput([topicRow([TOPIC_PDF], ["Текст темы"], true)]), "Тест");
     expect(ctx.result.recommendations).toBeUndefined();
@@ -216,15 +219,16 @@ describe("гейт по вердикту темы: материалы темы �
     expect(ctx.result.recommendations?.assets).toEqual([TOPIC_PDF]);
   });
 
-  it("тема БЕЗ вердикта (passed: null) молчит — как молчат курсы", () => {
-    // У темы не задан порог, поэтому «не сдал» про ученика не сказано. Правило одно на
-    // все три ресурса темы: `vrRecommended` в рантайме пакета пропускает тему по
-    // `tr.passed !== false`, значит и текст с вложением при null не показываются.
+  it("тема БЕЗ вердикта (passed: null) показывает материалы наравне с проваленной", () => {
+    // Край, ради которого правило и переписано: потемные пороги в стандартном тесте
+    // задают редко, у такой темы вердикта нет вовсе. Считать «не судили» успехом значит
+    // молча потерять всё, что автор повесил на темы в тестах без потемных порогов.
     const ctx = buildResultContext(baseInput([topicRow([TOPIC_PDF], ["Текст темы"], null)]), "Тест");
-    expect(ctx.result.recommendations).toBeUndefined();
+    expect(ctx.result.recommendations?.texts).toEqual(["Текст темы"]);
+    expect(ctx.result.recommendations?.assets).toEqual([TOPIC_PDF]);
   });
 
-  it("гейт потемный: молчит только пройденная тема, провалившаяся говорит", () => {
+  it("гейт потемный: молчит только пройденная тема, остальные говорят", () => {
     const passedTopic = topicRow([TOPIC_PDF], ["Текст пройденной"], true);
     const failedTopic = { ...topicRow([SECTION_PDF], ["Текст проваленной"], false), topicId: "t2", topicName: "Тема 2" };
     const ctx = buildResultContext(baseInput([passedTopic, failedTopic]), "Тест");
@@ -232,12 +236,77 @@ describe("гейт по вердикту темы: материалы темы �
     expect(ctx.result.recommendations?.assets).toEqual([SECTION_PDF]);
   });
 
-  it("обратной связи ТЕСТА гейт темы не касается — она про тест целиком", () => {
+  it("обратной связи ТЕСТА гейт темы не касается — у неё свой вердикт", () => {
     const ctx = buildResultContext(baseInput([topicRow([TOPIC_PDF], ["Текст темы"], true)]), "Тест", {
       testFeedback: { text: "Спасибо за участие.", links: [], events: [], assets: [SECTION_PDF] },
     });
     expect(ctx.result.recommendations?.texts).toEqual(["Спасибо за участие."]);
     expect(ctx.result.recommendations?.assets).toEqual([SECTION_PDF]);
+  });
+});
+
+describe("гейт по вердикту ТЕСТА: своя обратная связь молчит при явном успехе", () => {
+  // Пройденный тест не показывает ученику работу над ошибками. «Явный успех» — это ДВА
+  // условия: тест вообще оценивает (порог задан И есть что оценивать) и вердикт —
+  // «пройден». Всё остальное трактуется в пользу показа.
+  const TEST_FEEDBACK = { text: "Разберите ошибки.", links: [], events: [], assets: [SECTION_PDF] };
+  const withFeedback = (opts: Record<string, unknown>) => ({ testFeedback: TEST_FEEDBACK, ...opts });
+
+  it("явно пройденный тест свою обратную связь не показывает", () => {
+    const ctx = buildResultContext(baseInput([topicRow([])]), "Контрольный", withFeedback({ hasPassThreshold: true }));
+    expect(ctx.result.recommendations).toBeUndefined();
+  });
+
+  it("провалённый — показывает", () => {
+    const ctx = buildResultContext(
+      baseInput([topicRow([])], { passed: false }),
+      "Контрольный",
+      withFeedback({ hasPassThreshold: true }),
+    );
+    expect(ctx.result.recommendations?.texts).toEqual(["Разберите ошибки."]);
+    expect(ctx.result.recommendations?.assets).toEqual([SECTION_PDF]);
+  });
+
+  it("измерительный БЕЗ порога показывает свою обратную связь при любом passed", () => {
+    // Край PRD-29: вердикт у такого теста не «провал», а «не выносился» — обратная связь
+    // и есть его результат, ради которого метод и проходят.
+    const ctx = buildResultContext(baseInput([topicRow([])]), "Маслач", withFeedback({ hasPassThreshold: false }));
+    expect(ctx.result.recommendations?.texts).toEqual(["Разберите ошибки."]);
+  });
+
+  it("порог по умолчанию, но оценивать нечего — тоже показывает", () => {
+    // Каждый новый тест несёт порог 70% по умолчанию, поэтому одного признака порога
+    // мало: у измерительного теста возможных баллов ноль, и вердикт не выносился.
+    const ctx = buildResultContext(
+      baseInput([topicRow([])], { possiblePoints: 0 }),
+      "Маслач",
+      withFeedback({ hasPassThreshold: true }),
+    );
+    expect(ctx.result.recommendations?.texts).toEqual(["Разберите ошибки."]);
+  });
+
+  it("признак порога не передан вовсе — неизвестность трактуется в пользу показа", () => {
+    const ctx = buildResultContext(baseInput([topicRow([])]), "Тест", withFeedback({}));
+    expect(ctx.result.recommendations?.texts).toEqual(["Разберите ошибки."]);
+  });
+
+  it("читает признак и из measures, когда хост прислал его только там", () => {
+    const ctx = buildResultContext(baseInput([topicRow([])]), "Тест", withFeedback({
+      measures: { ramp: LEVEL_SCHEMES.traffic, scaleKind: "band_ruler", indicatorKind: "label", scales: [], indicators: [], hasPassThreshold: true },
+    }));
+    expect(ctx.result.recommendations).toBeUndefined();
+  });
+
+  it("гейт теста не глушит материалы непройденных тем", () => {
+    // Два уровня независимы: ученик сдал тест в целом, но конкретную тему не взял —
+    // помощь по теме ему по-прежнему нужна.
+    const ctx = buildResultContext(
+      baseInput([topicRow([TOPIC_PDF], ["Текст темы"], false)]),
+      "Контрольный",
+      withFeedback({ hasPassThreshold: true }),
+    );
+    expect(ctx.result.recommendations?.texts).toEqual(["Текст темы"]);
+    expect(ctx.result.recommendations?.assets).toEqual([TOPIC_PDF]);
   });
 });
 
@@ -341,6 +410,26 @@ describe("адаптивный экран итогов: тот же блок, т
       { testFeedback },
     );
     expect(adaptive.result.recommendations).toEqual(standard.result.recommendations);
+  });
+
+  it("обратная связь ТЕСТА молчит и здесь, когда адаптивный тест пройден", () => {
+    // Тот же уровень гейта, что на стандартном экране: пройденный тест не показывает
+    // работу над ошибками. Порога-процента у адаптивного режима нет — вердикт выносит
+    // `aggregateAdaptiveResult` по подтверждённым уровням, поэтому проверять признак
+    // порога здесь нечего.
+    const testFeedback = { text: "Спасибо за участие.", links: [], events: [], assets: [SECTION_PDF] };
+    const passedRun = buildAdaptiveResultContext(
+      { passed: true, topicResults: [adaptiveTopic(1)] },
+      "Адаптивный тест",
+      { testFeedback },
+    );
+    expect(passedRun.result.recommendations).toBeUndefined();
+    const failedRun = buildAdaptiveResultContext(
+      { passed: false, topicResults: [adaptiveTopic(1)] },
+      "Адаптивный тест",
+      { testFeedback },
+    );
+    expect(failedRun.result.recommendations?.texts).toEqual(["Спасибо за участие."]);
   });
 });
 

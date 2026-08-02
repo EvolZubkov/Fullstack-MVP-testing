@@ -183,9 +183,16 @@ export function buildResultContext(
   testTitle: string,
   measures?: MeasuresSource,
 ): ResultRenderContext {
-  const failed = (result.topicResults || []).filter((t) => t.passed === false);
-  const recommendedCourses = dedupRecommendations(failed.flatMap((t) => t.recommendedCourses ?? []));
-  const recommendedEvents = dedupRecommendations(failed.flatMap((t) => t.recommendedEvents ?? []));
+  // Everything a topic carries — courses, events, texts, attachments — is due unless the
+  // topic was explicitly PASSED (the owner's one rule for all four; the shared builder
+  // applies the same `!== true` to the texts and the attachments, and `vrRecommended` in
+  // the package runtime to these two). `!== true` and not `=== false`: per-topic
+  // thresholds are the exception, so most topics carry no verdict at all, and reading
+  // «nothing was judged» as success would swallow the author's courses in every test that
+  // never set them.
+  const notPassed = (result.topicResults || []).filter((t) => t.passed !== true);
+  const recommendedCourses = dedupRecommendations(notPassed.flatMap((t) => t.recommendedCourses ?? []));
+  const recommendedEvents = dedupRecommendations(notPassed.flatMap((t) => t.recommendedEvents ?? []));
   const hasMeasures = !!measures && (measures.scales.length > 0 || measures.variables.length > 0);
   // The test's own feedback block travels OUTSIDE `measures` (see
   // `ResultContextOptions.testFeedback`): it is due to the learner whether or not the
@@ -209,6 +216,15 @@ export function buildResultContext(
       ...(recommendedCourses.length ? { recommendedCourses } : {}),
       ...(recommendedEvents.length ? { recommendedEvents } : {}),
       ...(testFeedback ? { testFeedback } : {}),
+      // Whether the test declares a pass threshold at all — the ONE fact that tells an
+      // explicit «Пройден» from a test that pronounces no verdict, and the builder
+      // withholds the test's own feedback only on the former. It travels OUTSIDE
+      // `measures` on purpose: the route reads it for every attempt, while `measures`
+      // reaches the builder only for a test with scales or indicators, and a control
+      // test — the commonest one — would otherwise never say whether it grades.
+      // `undefined` when the material could not be read at all; the builder then treats
+      // it as unknown and shows the feedback.
+      ...(measures ? { hasPassThreshold: measures.hasPassThreshold } : {}),
       ...(hasMeasures ? { measures: buildMeasuresInput(measures as MeasuresSource) } : {}),
     },
   );

@@ -142,19 +142,62 @@ describe("host parity", () => {
       events: [],
       assets: [{ title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "/api/media/cccc" }],
     };
-    const web = webBuild(attemptResult, "Опрос", {
+    // Попытка ПРОВАЛЕНА: обратную связь теста ученик получает во всех состояниях, кроме
+    // явного успеха, поэтому именно провал показывает, что она доезжает целиком.
+    const web = webBuild({ ...attemptResult, overallPassed: false }, "Опрос", {
       scales: [],
       variables: [],
       blockSettings: {},
       hasPassThreshold: true,
       testFeedback: feedback,
     } as never);
-    const shared = sharedBuild(sharedInput, "Опрос", {
+    const shared = sharedBuild({ ...sharedInput, passed: false }, "Опрос", {
+      hasPassThreshold: true,
       testFeedback: { text: "Спасибо за участие.", links: [], events: [], assets: [{ title: "Памятка", url: "/api/media/cccc" }] },
     });
     expect(web).toEqual(shared);
     expect(web.result.recommendations?.texts).toEqual(["Спасибо за участие."]);
     expect(web.result.recommendations?.assets).toEqual([{ title: "Памятка", url: "/api/media/cccc" }]);
+  });
+
+  // Гейт по вердикту ТЕСТА: пройденный тест не показывает работу над ошибками. Веб
+  // достаёт признак порога из `MeasuresSource`, который его маршрут читает для КАЖДОЙ
+  // попытки, пакет — из `TEST_DATA.overallPassRule`; общему сборщику оба отдают одну
+  // опцию, поэтому молчать или говорить они обязаны одинаково.
+  it("явно пройденный тест: оба хоста молчат об обратной связи теста", () => {
+    const feedback = { format: "plain", text: "Разберите ошибки.", links: [], events: [], assets: [] };
+    const web = webBuild(attemptResult, "Контрольный", {
+      scales: [],
+      variables: [],
+      blockSettings: {},
+      hasPassThreshold: true,
+      testFeedback: feedback,
+    } as never);
+    const shared = sharedBuild(sharedInput, "Контрольный", {
+      hasPassThreshold: true,
+      testFeedback: { text: "Разберите ошибки.", links: [], events: [], assets: [] },
+    });
+    expect(web).toEqual(shared);
+    expect(web.result.recommendations).toBeUndefined();
+  });
+
+  it("тест без порога: оба хоста показывают его обратную связь и при passed", () => {
+    // Край PRD-29 на обоих хостах сразу: вердикт не выносился, и обратная связь — это
+    // и есть результат измерительного метода.
+    const feedback = { format: "plain", text: "Ваш профиль.", links: [], events: [], assets: [] };
+    const web = webBuild(attemptResult, "Маслач", {
+      scales: [],
+      variables: [],
+      blockSettings: {},
+      hasPassThreshold: false,
+      testFeedback: feedback,
+    } as never);
+    const shared = sharedBuild(sharedInput, "Маслач", {
+      hasPassThreshold: false,
+      testFeedback: { text: "Ваш профиль.", links: [], events: [], assets: [] },
+    });
+    expect(web).toEqual(shared);
+    expect(web.result.recommendations?.texts).toEqual(["Ваш профиль."]);
   });
 });
 

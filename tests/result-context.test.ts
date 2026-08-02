@@ -79,8 +79,11 @@ describe("buildResultContext → render real results.html (e2e)", () => {
   });
 });
 
-// TD-02: recommended courses (links) and events from FAILED topics must surface
-// on the web template results screen, deduped, mirroring the SCORM runtime.
+// TD-02: recommended courses (links) and events of the topics the learner has NOT
+// mastered must surface on the web template results screen, deduped, mirroring the SCORM
+// runtime (`vrRecommended`). «Not mastered» is everything except an explicit pass — the
+// owner's one rule for all four things a topic carries; a topic with no verdict at all is
+// the commonest case, since per-topic thresholds are rarely set.
 describe("buildResultContext recommendations (TD-02 web parity)", () => {
   const withRecs: AttemptResult = {
     ...attemptResult,
@@ -106,15 +109,23 @@ describe("buildResultContext recommendations (TD-02 web parity)", () => {
         recommendedCourses: [{ title: "Курс по ИБ", url: "https://e.test/sec" }],
         recommendedEvents: [{ title: "Митап" }],
       },
+      // Topic with NO verdict (no per-topic threshold) — nothing was judged, so it is not
+      // a success and its recommendations surface too.
+      {
+        topicId: "t4", topicName: "Тема D", correct: 3, total: 5, percent: 60,
+        earnedPoints: 3, possiblePoints: 5, passed: null, passRule: null,
+        recommendedCourses: [{ title: "Курс по охране труда", url: "https://e.test/ot" }],
+        recommendedEvents: [{ title: "Инструктаж" }],
+      },
     ],
   } as AttemptResult;
   const ctx = buildResultContext(withRecs, "Демо-тест");
 
-  it("aggregates + dedups courses/events from FAILED topics only", () => {
+  it("aggregates + dedups courses/events of every topic except the PASSED one", () => {
     const courses = (ctx.result.recommendedCourses ?? []) as Array<{ title: string; url?: string }>;
     const events = (ctx.result.recommendedEvents ?? []) as Array<{ title: string; url?: string }>;
-    expect(courses.map((c) => c.title)).toEqual(["Курс по ИБ"]);
-    expect(events.map((e) => e.title)).toEqual(["Конференция по ИБ", "Митап"]);
+    expect(courses.map((c) => c.title)).toEqual(["Курс по ИБ", "Курс по охране труда"]);
+    expect(events.map((e) => e.title)).toEqual(["Конференция по ИБ", "Митап", "Инструктаж"]);
   });
 
   it("renders the events into the real results.html", () => {
