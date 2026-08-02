@@ -20,6 +20,7 @@ const { storageMock } = vi.hoisted(() => ({
     getQuestions: vi.fn(),
     getAllContentPages: vi.fn(),
     getTests: vi.fn(),
+    getAllSnapshots: vi.fn(),
   },
 }));
 vi.mock("../server/storage", () => ({ storage: storageMock }));
@@ -48,10 +49,11 @@ beforeEach(() => {
   storageMock.getQuestions.mockResolvedValue([]);
   storageMock.getAllContentPages.mockResolvedValue([]);
   storageMock.getTests.mockResolvedValue([]);
+  storageMock.getAllSnapshots.mockResolvedValue([]);
 });
 
 describe("POST /api/media/reindex", () => {
-  it("rebuilds the index from every question, page and test design", async () => {
+  it("rebuilds the index from every question, page, test design and snapshot", async () => {
     storageMock.getQuestions.mockResolvedValue([
       { id: "q1", mediaUrl: "/api/media/11111111-1111-1111-1111-111111111111" },
     ]);
@@ -64,12 +66,18 @@ describe("POST /api/media/reindex", () => {
         designSettingsJson: { startImageUrl: "/api/media/33333333-3333-3333-3333-333333333333" },
       },
     ]);
+    storageMock.getAllSnapshots.mockResolvedValue([
+      {
+        id: "snap-1",
+        contentJson: { cover: "/api/media/44444444-4444-4444-4444-444444444444" },
+      },
+    ]);
 
     const res = await request(makeApp()).post("/api/media/reindex");
 
     expect(res.status).toBe(200);
     expect(storageMock.clearAllMediaUsages).toHaveBeenCalled();
-    expect(res.body.entities).toBe(3);
+    expect(res.body.entities).toBe(4);
     expect(storageMock.replaceMediaUsages).toHaveBeenCalledWith("question", "q1", [
       { assetId: "11111111-1111-1111-1111-111111111111", field: "mediaUrl" },
     ]);
@@ -78,6 +86,9 @@ describe("POST /api/media/reindex", () => {
     ]);
     expect(storageMock.replaceMediaUsages).toHaveBeenCalledWith("test_design", "t1", [
       { assetId: "33333333-3333-3333-3333-333333333333", field: "startImageUrl" },
+    ]);
+    expect(storageMock.replaceMediaUsages).toHaveBeenCalledWith("snapshot", "snap-1", [
+      { assetId: "44444444-4444-4444-4444-444444444444", field: "cover" },
     ]);
   });
 

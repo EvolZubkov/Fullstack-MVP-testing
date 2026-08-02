@@ -26,6 +26,8 @@
 
 import { storage } from "../storage";
 import { materializeScaleDomains } from "./scale-domain";
+import { syncEntityUsages } from "./media/usage-index";
+import { logger } from "../logger";
 import type {
   Test,
   TestSection,
@@ -179,6 +181,19 @@ export async function createTestSnapshot(
   const latest = await storage.getLatestSnapshot(testId);
   const version = (latest?.version ?? 0) + 1;
   const row = await storage.createTestSnapshot({ testId, version, contentJson: content, publishedBy });
+
+  // Медиатека: index the frozen deliverable NOW that it is fixed in the DB. Without
+  // this, an asset that only survives inside the published snapshot (replaced or
+  // removed from live content since) reads as an orphan and can be deleted out from
+  // under an in-flight/delivered attempt (spec §8.2/§4.3). Best-effort like every
+  // other save-path sync — a failed index write must not fail publication, since the
+  // full re-sync (`reindexAllUsages`) is the safety net.
+  try {
+    await syncEntityUsages("snapshot", row.id, content);
+  } catch (error) {
+    logger.error(`Media usage sync failed for snapshot ${row.id}: ${(error as Error).message}`, "test-snapshot");
+  }
+
   await pruneSnapshots(testId, row.id);
   return row.id;
 }
@@ -195,7 +210,16 @@ export async function pruneSnapshots(testId: string, keepId: string): Promise<vo
   ]);
   const keep = new Set<string>([keepId, ...referenced]);
   for (const snap of all) {
-    if (!keep.has(snap.id)) await storage.deleteSnapshotById(snap.id);
+    if (keep.has(snap.id)) continue;
+    await storage.deleteSnapshotById(snap.id);
+    // Медиатека: the deleted snapshot's own usage rows have no FK cascade onto
+    // `media_usages` (deliberate — see shared/schema.ts), so clear them here or
+    // they dangle, pointing at a snapshot id that no longer exists.
+    try {
+      await syncEntityUsages("snapshot", snap.id, null);
+    } catch (error) {
+      logger.error(`Media usage sync failed for snapshot ${snap.id}: ${(error as Error).message}`, "test-snapshot");
+    }
   }
 }
 

@@ -53,11 +53,14 @@ export interface ReindexReport {
  * explain.
  *
  * Covers every entity type the write path indexes: questions, content pages (including the
- * system pages `test-settings.ts` rewrites when the flow mode changes), and test design
- * settings (`test_design`, PRD media-library Task 10b). Test design is indexed on the
- * SETTINGS OBJECT (`test.designSettingsJson`), not the whole test row — the same choice
- * `PUT /:id/design` makes in `server/routes/tests.ts`, so a rebuild and a save land on the
- * same rows.
+ * system pages `test-settings.ts` rewrites when the flow mode changes), test design
+ * settings (`test_design`, PRD media-library Task 10b), and publication snapshots
+ * (`snapshot`, PRD-15 block B — see `server/services/test-snapshot.ts`). Test design is
+ * indexed on the SETTINGS OBJECT (`test.designSettingsJson`), not the whole test row — the
+ * same choice `PUT /:id/design` makes in `server/routes/tests.ts`, so a rebuild and a save
+ * land on the same rows. A snapshot is indexed on its FROZEN `contentJson`, not on live
+ * storage — that is the whole point: an asset that only survives inside a published
+ * snapshot must not read as an orphan (spec §8.2/§4.3).
  */
 export async function reindexAllUsages(): Promise<ReindexReport> {
   await storage.clearAllMediaUsages();
@@ -73,6 +76,10 @@ export async function reindexAllUsages(): Promise<ReindexReport> {
   }
   for (const test of await storage.getTests()) {
     await syncEntityUsages("test_design", test.id, test.designSettingsJson);
+    entities += 1;
+  }
+  for (const snapshot of await storage.getAllSnapshots()) {
+    await syncEntityUsages("snapshot", snapshot.id, snapshot.contentJson);
     entities += 1;
   }
 

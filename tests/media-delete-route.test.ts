@@ -68,6 +68,22 @@ describe("DELETE /api/media/:id", () => {
     expect(storageMock.deleteMediaAsset).not.toHaveBeenCalled();
   });
 
+  it("refuses to delete an asset that survives ONLY inside a published snapshot (409)", async () => {
+    // The frozen deliverable of a published test (PRD-15 block B) is as real a usage
+    // as live content — otherwise deleting this asset would drop a picture from a
+    // version people are already taking, silently (spec §8.2/§4.3).
+    storageMock.getMediaUsagesByAsset.mockResolvedValue([
+      { assetId: "a1", entityType: "snapshot", entityId: "snap-1", field: "questionsByTopic.tp1.0.dataJson.imageUrl" },
+    ]);
+    const res = await request(makeApp()).delete("/api/media/a1");
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("media_in_use");
+    expect(res.body.usages).toEqual([
+      { entityType: "snapshot", entityId: "snap-1", field: "questionsByTopic.tp1.0.dataJson.imageUrl" },
+    ]);
+    expect(storageMock.deleteMediaAsset).not.toHaveBeenCalled();
+  });
+
   it("reports without deleting on a dry run", async () => {
     const res = await request(makeApp()).delete("/api/media/a1?dryRun=true");
     expect(res.status).toBe(200);

@@ -118,6 +118,8 @@ export interface IStorage {
   getLatestSnapshot(testId: string): Promise<TestSnapshot | undefined>;
   getSnapshot(id: string): Promise<TestSnapshot | undefined>;
   getSnapshotsForTest(testId: string): Promise<TestSnapshot[]>;
+  /** Every snapshot in the database, for the media re-sync (Медиатека). */
+  getAllSnapshots(): Promise<TestSnapshot[]>;
   deleteSnapshotsForTest(testId: string): Promise<void>;
   /** Distinct snapshot ids still referenced by any attempt of the test (FR-17). */
   getReferencedSnapshotIds(testId: string): Promise<string[]>;
@@ -518,6 +520,10 @@ export class DatabaseStorage implements IStorage {
 
   getSnapshotsForTest(testId: string): Promise<TestSnapshot[]> {
     return this.testsRepo.getSnapshotsForTest(testId);
+  }
+
+  getAllSnapshots(): Promise<TestSnapshot[]> {
+    return this.testsRepo.getAllSnapshots();
   }
 
   deleteSnapshotsForTest(testId: string): Promise<void> {
