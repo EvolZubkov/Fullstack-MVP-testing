@@ -88,14 +88,30 @@ router.post("/upload", requireAuth, mediaUpload.single("file"), async (req: Requ
   }
 });
 
-/** Parses `bytes=<start>-<end>`; an open end runs to the last byte. */
-function parseRange(header: string | undefined, size: number): { start: number; end: number } | null {
+/**
+ * Parses `bytes=<start>-<end>`; an open end runs to the last byte.
+ *
+ * Three outcomes, deliberately distinct: `null` when there is no usable Range header at
+ * all (serve the whole file), `"unsatisfiable"` when the header parsed but asks for bytes
+ * past the end (RFC 9110 §15.5.17 — answer 416, or a client resuming a download silently
+ * receives the whole file again instead of an error), and a range otherwise.
+ */
+function parseRange(
+  header: string | undefined,
+  size: number,
+): { start: number; end: number } | "unsatisfiable" | null {
   if (!header) return null;
   const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
   if (!m) return null;
+  if (!m[1] && !m[2]) return null;
   const start = m[1] ? Number(m[1]) : 0;
   const end = m[2] ? Number(m[2]) : size - 1;
-  if (Number.isNaN(start) || Number.isNaN(end) || start > end || start >= size) return null;
+  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  // Checked BEFORE `start > end`: for an open end (`bytes=999999-`) `end` defaults to
+  // `size - 1`, which would make an out-of-range start look like a mere `start > end`
+  // parse failure (silently served in full) instead of the 416 the caller must see.
+  if (start >= size) return "unsatisfiable";
+  if (start > end) return null;
   return { start, end: Math.min(end, size - 1) };
 }
 
@@ -135,6 +151,11 @@ router.get("/:id", requireAuth, async (req: Request, res: Response) => {
     if (!stat) return res.status(404).json({ error: "Not found" });
 
     const range = parseRange(req.headers.range as string | undefined, stat.byteSize);
+    if (range === "unsatisfiable") {
+      // RFC 9110 §15.5.17: the response must say what the real extent is.
+      res.setHeader("Content-Range", `bytes */${stat.byteSize}`);
+      return res.status(416).end();
+    }
     if (range) {
       res.status(206);
       res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${stat.byteSize}`);

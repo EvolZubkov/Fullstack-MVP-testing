@@ -104,4 +104,10 @@ describe("GET /api/media/:id", () => {
     expect(res.headers["content-range"]).toBe("bytes 2-4/10");
     expect(storeMock.openRead).toHaveBeenCalledWith("media/aa/bb/x.png", { start: 2, end: 4 });
   });
+
+  it("answers 416 when the requested range starts past the end", async () => {
+    const res = await request(makeApp()).get("/api/media/a1").set("Range", "bytes=999999-");
+    expect(res.status).toBe(416);
+    expect(res.headers["content-range"]).toBe("bytes */10");
+  });
 });
