@@ -24,6 +24,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, cleanup, fireEvent } from "@testing-library/react";
 import { TemplateQuestionScreen } from "../template-question-screen";
+import { buildProtectionSpec } from "@shared/template/protection/spec";
 import type { Question } from "@shared/schema";
 
 // The layout keeps the standard chrome + interaction/feedback slots AND a fixed
@@ -453,14 +454,39 @@ describe("TemplateQuestionScreen — media + guards + pills", () => {
     }
   });
 
-  it("prevents copy / cut / context-menu on the screen (anti-cheat guards)", () => {
+  // PRD-34: защита больше НЕ безусловна. Раньше обёртка гасила copy/cut/contextmenu
+  // всегда и только на веб-хосте: настройка теста её не выключала, автор не мог
+  // скопировать текст в отладочном прогоне, а пакет вёл себя иначе. Теперь мерой
+  // управляет общий механизм, и без `protection` экран ничего не гасит.
+  it("без protection копирование и контекстное меню не гасятся", () => {
     const { container } = render(
       <TemplateQuestionScreen {...base} question={single()} answer={undefined} onAnswer={() => {}} />,
     );
     const root = container.querySelector(".tbh-screen") as HTMLElement;
     for (const type of ["copy", "cut", "contextMenu"] as const) {
-      const ev = fireEvent[type](root);
-      expect(ev).toBe(false); // preventDefault() was called → dispatchEvent returns false
+      expect(fireEvent[type](root)).toBe(true);
+    }
+  });
+
+  it("с protection гасит copy/cut/contextmenu ВНУТРИ периметра", () => {
+    const protection = buildProtectionSpec({
+      screen: "question",
+      settings: { copyProtection: true, watermark: false, hideOnBlur: false },
+      stamp: null,
+    });
+    const { container } = render(
+      <TemplateQuestionScreen
+        {...base}
+        protection={protection}
+        question={single()}
+        answer={undefined}
+        onAnswer={() => {}}
+      />,
+    );
+    const title = shadowOf(container).querySelector('[data-slot="question-text"]') as HTMLElement;
+    expect(title).toBeTruthy();
+    for (const type of ["copy", "cut", "contextMenu"] as const) {
+      expect(fireEvent[type](title)).toBe(false);
     }
   });
 

@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { renderScreenInto, type ContentPageData } from "@shared/template/render-screen";
+import type { ProtectionSpec } from "@shared/template/protection/spec";
 import { fitQuestionScene } from "@shared/template/fit-question";
 import { attachPointerDnd } from "@shared/template/dnd/pointer-dnd";
 import { nextScaleIndex } from "@shared/template/scale-keyboard";
@@ -40,6 +41,12 @@ export interface TemplateScreenProps {
   slots?: Record<string, string>;
   /** Content-page placeholder data, when rendering a content screen. */
   content?: ContentPageData;
+  /**
+   * PRD-34 (FR-30): what this screen protects, hides and stamps — built by the SHARED
+   * builder in `protection/spec`. Absent ⇒ nothing is protected, which is the correct
+   * answer for previews and for screens outside the perimeter (FR-09, FR-25).
+   */
+  protection?: ProtectionSpec;
   /**
    * Design-param overrides as CSS custom properties (e.g. `{ "--background": "0 0% 100%" }`,
    * built via {@link module:shared/template/params-css buildTemplateCssVars}). Applied on
@@ -110,7 +117,7 @@ export interface TemplateScreenProps {
   fill?: boolean;
 }
 
-export function TemplateScreen({ layout, context, css, slots, content, cssVars, themeCss, dataTheme, themed, afterHtml, timers, onAction, className, shell, fill = true }: TemplateScreenProps) {
+export function TemplateScreen({ layout, context, css, slots, content, protection, cssVars, themeCss, dataTheme, themed, afterHtml, timers, onAction, className, shell, fill = true }: TemplateScreenProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const shadowRef = useRef<ShadowRoot | null>(null);
   const screenRef = useRef<HTMLElement | null>(null);
@@ -164,8 +171,8 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
   // and wipe/rebuild the whole shadow tree, which is what made hover flicker and a
   // click land on an already-replaced button.
   const renderKey = useMemo(
-    () => JSON.stringify([layout, css, context, slots, content, cssVars, themeCss, dataTheme, themed, afterHtml, shell]),
-    [layout, css, context, slots, content, cssVars, themeCss, dataTheme, themed, afterHtml, shell],
+    () => JSON.stringify([layout, css, context, slots, content, protection, cssVars, themeCss, dataTheme, themed, afterHtml, shell]),
+    [layout, css, context, slots, content, protection, cssVars, themeCss, dataTheme, themed, afterHtml, shell],
   );
 
   useEffect(() => {
@@ -271,7 +278,7 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
       shadow.appendChild(fit);
       screen.innerHTML = shell;
       const app = screen.querySelector<HTMLElement>("#app");
-      renderScreenInto(app ?? screen, { layout, context, slots, content });
+      renderScreenInto(app ?? screen, { layout, context, slots, content, protection });
       fitQuestion();
     } else {
       // Fill chain (mirrors the SCORM package's `#app` foundation): the shadow host
@@ -289,7 +296,7 @@ export function TemplateScreen({ layout, context, css, slots, content, cssVars, 
         screen.style.display = "flex";
         screen.style.flexDirection = "column";
       }
-      renderScreenInto(screen, { layout, context, slots, content });
+      renderScreenInto(screen, { layout, context, slots, content, protection });
       const sceneEl = screen.firstElementChild as HTMLElement | null;
       if (fill && sceneEl) {
         sceneEl.style.flex = "1 1 auto";

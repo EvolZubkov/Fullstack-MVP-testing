@@ -16,6 +16,10 @@ import { buildReviewContext } from "@shared/template/review-context";
 import { QUESTION_NAV_ACTIONS, type QuestionNavState } from "@shared/template/question-nav";
 import { buildSectionResultContext, buildSectionIntroContext } from "@shared/template/result-context";
 import { buildTransitionContext } from "@shared/template/transition-context";
+import {
+  buildProtectionSpec,
+  type ProtectionSettings,
+} from "@shared/template/protection/spec";
 // PRD-12 FR-6: content pages render on the web from the SAME structure rules and
 // the SAME assembler as the SCORM package — no web-only copy of either.
 import { TemplateContentScreen, type ContentScreenTemplate } from "./template-content-screen";
@@ -586,6 +590,14 @@ export default function TakeTestPage() {
     showSectionResults: true,
     answerCommitScope: "test",
   });
+  // PRD-34 (FR-01): настройки защиты текста задания. Как и navSettings, приходят с
+  // ответом старта/возобновления попытки — это веб-аналог TEST_DATA пакета. Умолчания
+  // повторяют умолчания колонок: отсутствие поля читается как «защита включена» (FR-05).
+  const [protectionSettings, setProtectionSettings] = useState<ProtectionSettings>({
+    copyProtection: true,
+    watermark: false,
+    hideOnBlur: false,
+  });
   const [questionStatus, setQuestionStatus] = useState<
     Record<string, "unanswered" | "answered" | "skipped">
   >({});
@@ -608,6 +620,33 @@ export default function TakeTestPage() {
 
   // Adaptive mode state
   const [adaptiveState, setAdaptiveState] = useState<AdaptiveState | null>(null);
+
+  // PRD-34 (FR-30): решение о защите принимает ОДИН общий построитель — тот же, что и в
+  // пакете, поэтому веб и SCORM не могут разойтись. Отметка знака обезличена (FR-17):
+  // идентификатор попытки, укороченный до шести знаков, чтобы читался на снимке.
+  const attemptId = attempt?.id ?? adaptiveState?.attemptId ?? null;
+  const protectionStamp = useMemo(
+    () => (attemptId ? { id: attemptId.slice(0, 6), at: new Date() } : null),
+    [attemptId],
+  );
+  const questionProtection = useMemo(
+    () =>
+      buildProtectionSpec({
+        screen: "question",
+        settings: protectionSettings,
+        stamp: protectionStamp,
+      }),
+    [protectionSettings, protectionStamp],
+  );
+  const reviewProtection = useMemo(
+    () =>
+      buildProtectionSpec({
+        screen: "review",
+        settings: protectionSettings,
+        stamp: protectionStamp,
+      }),
+    [protectionSettings, protectionStamp],
+  );
   const [isAnswering, setIsAnswering] = useState(false);
   const [showTransition, setShowTransition] = useState(false);
   const [feedbackShown, setFeedbackShown] = useState(false);
@@ -978,6 +1017,11 @@ export default function TakeTestPage() {
         showSectionResults: data.attempt.showSectionResults ?? true,
         answerCommitScope: data.attempt.answerCommitScope ?? "test",
       });
+      setProtectionSettings({
+        copyProtection: data.attempt.copyProtection ?? true,
+        watermark: data.attempt.protectionWatermark ?? false,
+        hideOnBlur: data.attempt.protectionHideOnBlur ?? false,
+      });
       setQuestionStatus(data.questionStatus || {});
       // Where the learner stopped inside each section — a re-entry from the hub
       // continues from that question instead of restarting the section.
@@ -1125,6 +1169,11 @@ export default function TakeTestPage() {
       allowAnswerChange: data.allowAnswerChange ?? false,
       showSectionResults: data.showSectionResults ?? true,
       answerCommitScope: data.answerCommitScope ?? "test",
+    });
+    setProtectionSettings({
+      copyProtection: data.copyProtection ?? true,
+      watermark: data.protectionWatermark ?? false,
+      hideOnBlur: data.protectionHideOnBlur ?? false,
     });
     setQuestionStatus({});
 
@@ -2528,11 +2577,11 @@ export default function TakeTestPage() {
     });
     return (
       <div
-        className="tbh-screen tbh-col tbh-noselect"
+        // PRD-34 (FR-09): стартовый экран ВНЕ периметра защиты. Безусловный запрет
+        // выделения и копирования снят: он стоял только на веб-хосте, настройкой не
+        // управлялся и расходился с пакетом, где его нет.
+        className="tbh-screen tbh-col"
         style={{ background: startTpl.theme?.background }}
-        onCopy={(e) => e.preventDefault()}
-        onCut={(e) => e.preventDefault()}
-        onContextMenu={(e) => e.preventDefault()}
       >
         <TemplateScreen
           className="tbh-fill"
@@ -2649,6 +2698,7 @@ export default function TakeTestPage() {
       return (
         <TemplateQuestionScreen
           tpl={questionTpl}
+          protection={questionProtection}
           testTitle={testTitle}
           counterLabel={counter}
           progressPercent={(currentQuestion.questionNumber / currentQuestion.totalInLevel) * 100}
@@ -2719,6 +2769,7 @@ export default function TakeTestPage() {
       <div className="tbh-screen tbh-col" style={{ background: reviewTpl.theme?.background }}>
         <TemplateScreen
           className="tbh-fill"
+          protection={reviewProtection}
           layout={reviewTpl.layout}
           css={reviewTpl.css}
           cssVars={reviewTpl.cssVars}
@@ -2954,6 +3005,7 @@ export default function TakeTestPage() {
     return (
       <TemplateQuestionScreen
         tpl={questionTpl}
+        protection={questionProtection}
         testTitle={attempt.testTitle}
         // Bare counter + the section as its own context field: the layout prints the
         // section as a tag, exactly as it does in the package (PRD-12 parity). The
