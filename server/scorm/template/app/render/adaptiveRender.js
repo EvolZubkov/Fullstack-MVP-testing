@@ -115,6 +115,7 @@ function renderAdaptiveQuestionTemplated(app, qData) {
   // Mount directly into #app so .tb-pad > .tb-scene fills the fixed
   // stage and the footer anchors at its bottom — mirrors renderGalleryPage (no wrapper div).
   window.TBTemplate.renderScreenInto(app, {
+    protection: buildScormProtection('question'),
     layout: (typeof systemLayout === 'function') ? systemLayout('question') : state.templateLayouts['question'],
     context: {
       course: { title: TEST_DATA.title },

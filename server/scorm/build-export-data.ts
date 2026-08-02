@@ -137,5 +137,8 @@ export async function buildScormExportData(
     measurements,
     designSettings,
     templateDir,
+    // PRD-34 (FR-26): признак сборки едет в бейк — отладочный пакет запекается с
+    // выключенной защитой. Отдельного канала для этого не заводится.
+    source: opts.source,
   };
 }
