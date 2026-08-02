@@ -12,6 +12,7 @@ import {
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
+import { syncEntityUsages } from "../services/media/usage-index";
 import { normalizeTags } from "@shared/tags";
 import { normalizeAuthorText } from "@shared/text";
 import { normalizeOptionalText, normalizeQuestionData } from "../services/question-text";
@@ -211,6 +212,15 @@ router.post(
         createdBy: req.currentUser?.id ?? null,
       } as any);
 
+      // Медиатека: сбой индексации не должен стоить автору его правки. Недостающая
+      // строка индекса безопасна (она отказывает в доступе, а не выдаёт лишнее) и
+      // чинится пересборкой; потерянное сохранение вопроса не чинится ничем.
+      try {
+        await syncEntityUsages("question", question.id, question);
+      } catch (error) {
+        logger.error(`Media usage sync failed for question ${question.id}: ${(error as Error).message}`);
+      }
+
       res.status(201).json(question);
     } catch (error) {
       logger.error("Create question error: " + (error as Error).message);
@@ -314,6 +324,15 @@ router.put(
         return res.status(404).json({ error: "Question not found" });
       }
 
+      // Медиатека: сбой индексации не должен стоить автору его правки. Недостающая
+      // строка индекса безопасна (она отказывает в доступе, а не выдаёт лишнее) и
+      // чинится пересборкой; потерянное сохранение вопроса не чинится ничем.
+      try {
+        await syncEntityUsages("question", updated.id, updated);
+      } catch (error) {
+        logger.error(`Media usage sync failed for question ${updated.id}: ${(error as Error).message}`);
+      }
+
       res.json(
         feasibilityWarnings.length > 0 ? { ...updated, warnings: feasibilityWarnings } : updated,
       );
@@ -349,6 +368,16 @@ router.delete(
       if (!success) {
         return res.status(404).json({ error: "Question not found" });
       }
+
+      // Медиатека: сбой индексации не должен стоить автору его правки. Недостающая
+      // строка индекса безопасна (она отказывает в доступе, а не выдаёт лишнее) и
+      // чинится пересборкой; потерянное сохранение вопроса не чинится ничем.
+      try {
+        await syncEntityUsages("question", req.params.id, null);
+      } catch (error) {
+        logger.error(`Media usage sync failed for question ${req.params.id}: ${(error as Error).message}`);
+      }
+
       res.json({ success: true, warnings: assessment.warnings });
     } catch (error) {
       logger.error("Delete question error: " + (error as Error).message);
