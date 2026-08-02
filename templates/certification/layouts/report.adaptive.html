@@ -34,6 +34,44 @@
   </section>
   {{/if}}
 
+  {{#if result.scales}}
+  <section class="tb-report__card">
+    <div class="tb-report__title tb-report__title--tight">По шкалам</div>
+    <div class="tb-report__scales">
+      {{#if result.scalesChart}}
+      <div class="tb-radar">
+        <svg class="tb-radar__svg" viewBox="0 0 {{result.scalesChart.width}} {{result.scalesChart.height}}" role="img" aria-label="{{result.scalesChart.ariaLabel}}">
+          {{#each result.scalesChart.rings}}
+          <circle class="tb-radar__ring" cx="{{cx}}" cy="{{cy}}" r="{{radius}}"></circle>
+          {{/each}}
+          {{#each result.scalesChart.axes}}
+          <line class="tb-radar__axis" x1="{{cx}}" y1="{{cy}}" x2="{{axisX}}" y2="{{axisY}}"></line>
+          {{/each}}
+          <polygon class="tb-radar__shape" points="{{result.scalesChart.polygonPoints}}"></polygon>
+          {{#each result.scalesChart.axes}}
+          <circle class="tb-radar__dot {{quantizedClass}}" cx="{{x}}" cy="{{y}}" r="6" style="--tb-zone:{{color}}"></circle>
+          {{/each}}
+          {{#each result.scalesChart.labels}}
+          <text class="{{className}}" x="{{x}}" y="{{y}}" text-anchor="{{anchor}}">{{text}}</text>
+          {{/each}}
+        </svg>
+      </div>
+      {{/if}}
+      <div class="tb-report__scale-list">
+        {{#each result.scales}}
+        <div class="tb-report__scale">
+          <div class="tb-report__scale-name">{{name}}</div>
+          <div class="tb-report__scale-meta">
+            {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
+            <span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>
+          </div>
+          {{#if text}}<div class="tb-report__scale-text">{{text}}</div>{{/if}}
+        </div>
+        {{/each}}
+      </div>
+    </div>
+  </section>
+  {{/if}}
   {{#if report.hasCourses}}
   <section class="tb-report__card">
     <div class="tb-report__title tb-report__title--tight">Рекомендуемые материалы</div>

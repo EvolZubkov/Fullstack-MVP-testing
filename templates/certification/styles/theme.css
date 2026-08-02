@@ -684,6 +684,51 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   border-end-end-radius: var(--ou-radius-pill);
 }
 
+/* ── PRD-35: competency radar ──────────────────────────────────────────────────
+   Structural mirror of the standard template. The diagram is the first CROSS-SCALE
+   view, so it sits BESIDE the cards rather than inside one; the cards keep the level
+   tag and the interpretation text. The two-column layout is switched by a class the
+   CORE prepares (`result.scalesBlockClass`), not by `:has(.tb-radar)` — the package
+   renders inside whatever engine the LMS embeds. Every colour is a DS token, so the
+   RTK palette flows in by itself and no brand delta is needed here. */
+.tb-measures--chart {
+  display: grid;
+  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  gap: var(--ou-space-6);
+  align-items: start;
+}
+/* The list of scales is longer than the diagram, so the diagram follows the reading
+   down instead of leaving a column of air beside it. */
+.tb-radar { position: sticky; top: 0; }
+.tb-radar__svg { width: 100%; height: auto; display: block; }
+/* Rings and rays are the auxiliary grid, not data — border tone, not text tone. They
+   carry NO labels: three scales have three different band boundaries. */
+.tb-radar__ring,
+.tb-radar__axis { fill: none; stroke: var(--ou-border-soft); stroke-width: 1; }
+/* The figure itself is neutral — each axis has its own tone, so there is nothing to
+   paint the whole polygon with. */
+.tb-radar__shape {
+  fill: var(--ou-accent-default); fill-opacity: 0.16;
+  stroke: var(--ou-accent-default); stroke-width: 2;
+}
+/* The vertex takes the tone of ITS OWN scale, as an HSL triple from the core — the
+   same carriage as `--tb-zone` on the rail above, so a value never reads one colour
+   on the ruler and another on the diagram. */
+.tb-radar__dot { fill: hsl(var(--tb-zone)); stroke: var(--ou-bg-surface-2); stroke-width: 2; }
+/* A quantized ray (visibility «level»): the hollow vertex says the exact position is
+   not disclosed. */
+.tb-radar__dot--quantized { fill: var(--ou-bg-surface-2); stroke: hsl(var(--tb-zone)); }
+.tb-radar__label { fill: var(--ou-fg-default); font: var(--ou-text-body-s); }
+.tb-radar__level { fill: var(--ou-fg-muted); font: var(--ou-text-body-xs); }
+
+/* Narrow scene: the diagram moves ABOVE the cards. The step is 900, not the 700 used
+   by the measure row — two columns need the width of the diagram plus a readable card
+   column, and that runs out earlier than the row itself collapses. */
+@container tbscene (max-width: 900px) {
+  .tb-measures--chart { grid-template-columns: 1fr; }
+  .tb-radar { position: static; max-width: 360px; margin-inline: auto; }
+}
+
 /* PRD-29: the single recommendations block, structured by resource type. The chip row
    (`tb-recs`) and the chip itself (`tb-rec`) already exist above and are reused as they
    are; an empty group is not printed at all. */
