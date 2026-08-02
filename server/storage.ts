@@ -22,8 +22,10 @@ import { TestsRepository, type TestUsageRef } from "./storage/tests-repository";
 import { ContentPagesRepository, type ContentPageBinding } from "./storage/content-pages-repository";
 import { AssignmentsRepository } from "./storage/assignments-repository";
 import { FoldersRepository } from "./storage/folders-repository";
+import { MediaRepository, type MediaUsageRef } from "./storage/media-repository";
 
 export type { TestUsageRef };
+export type { MediaUsageRef };
 // Type-only imports: the facade names these in `IStorage` and its delegating
 // method signatures. Table objects and query helpers live in the repositories.
 import type {
@@ -56,6 +58,7 @@ import type {
   Scale, InsertScale,
   QuestionMeasurement, InsertQuestionMeasurement,
   TestQuestionScoring, InsertTestQuestionScoring,
+  MediaAsset, InsertMediaAsset, MediaUsage, MediaEntityType,
 } from "@shared/schema";
 import type { StoredRole } from "@shared/access";
 import { type ValidationResult, type ValueType } from "@shared/formula";
@@ -333,6 +336,19 @@ export interface IStorage {
     testId: string,
     rows: Omit<InsertTestQuestionScoring, "testId">[],
   ): Promise<TestQuestionScoring[]>;
+
+  // Media library: asset registry (media_assets) and reverse usage index (media_usages).
+  createMediaAsset(asset: Omit<InsertMediaAsset, "id">): Promise<MediaAsset>;
+  getMediaAsset(id: string): Promise<MediaAsset | undefined>;
+  getMediaAssetByStorageKey(storageKey: string): Promise<MediaAsset | undefined>;
+  findMediaAssetByOwnerChecksum(ownerId: string | null, checksum: string): Promise<MediaAsset | undefined>;
+  countMediaAssetsByChecksum(checksum: string): Promise<number>;
+  listMediaAssetsByOwner(ownerId: string): Promise<MediaAsset[]>;
+  deleteMediaAsset(id: string): Promise<boolean>;
+  replaceMediaUsages(entityType: MediaEntityType, entityId: string, refs: MediaUsageRef[]): Promise<void>;
+  getMediaUsagesByAsset(assetId: string): Promise<MediaUsage[]>;
+  listOrphanMediaAssets(): Promise<MediaAsset[]>;
+  clearAllMediaUsages(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -351,6 +367,7 @@ export class DatabaseStorage implements IStorage {
   private readonly contentPagesRepo = new ContentPagesRepository();
   private readonly assignmentsRepo = new AssignmentsRepository();
   private readonly foldersRepo = new FoldersRepository();
+  private readonly mediaRepo = new MediaRepository();
 
   // ============================================
   // Users (delegated to UsersRepository)
@@ -1149,6 +1166,54 @@ export class DatabaseStorage implements IStorage {
     rows: Omit<InsertTestQuestionScoring, "testId">[],
   ): Promise<TestQuestionScoring[]> {
     return this.scalesVariablesRepo.replaceTestQuestionScoring(testId, rows);
+  }
+
+  // ============================================
+  // Media library (delegated to MediaRepository)
+  // ============================================
+
+  createMediaAsset(asset: Omit<InsertMediaAsset, "id">): Promise<MediaAsset> {
+    return this.mediaRepo.createAsset(asset);
+  }
+
+  getMediaAsset(id: string): Promise<MediaAsset | undefined> {
+    return this.mediaRepo.getAsset(id);
+  }
+
+  getMediaAssetByStorageKey(storageKey: string): Promise<MediaAsset | undefined> {
+    return this.mediaRepo.getAssetByStorageKey(storageKey);
+  }
+
+  findMediaAssetByOwnerChecksum(ownerId: string | null, checksum: string): Promise<MediaAsset | undefined> {
+    return this.mediaRepo.findAssetByOwnerChecksum(ownerId, checksum);
+  }
+
+  countMediaAssetsByChecksum(checksum: string): Promise<number> {
+    return this.mediaRepo.countAssetsByChecksum(checksum);
+  }
+
+  listMediaAssetsByOwner(ownerId: string): Promise<MediaAsset[]> {
+    return this.mediaRepo.listAssetsByOwner(ownerId);
+  }
+
+  deleteMediaAsset(id: string): Promise<boolean> {
+    return this.mediaRepo.deleteAsset(id);
+  }
+
+  replaceMediaUsages(entityType: MediaEntityType, entityId: string, refs: MediaUsageRef[]): Promise<void> {
+    return this.mediaRepo.replaceUsages(entityType, entityId, refs);
+  }
+
+  getMediaUsagesByAsset(assetId: string): Promise<MediaUsage[]> {
+    return this.mediaRepo.getUsagesByAsset(assetId);
+  }
+
+  listOrphanMediaAssets(): Promise<MediaAsset[]> {
+    return this.mediaRepo.listOrphanAssets();
+  }
+
+  clearAllMediaUsages(): Promise<void> {
+    return this.mediaRepo.clearAllUsages();
   }
 }
 

@@ -85,6 +85,28 @@ CREATE TABLE "groups" (
 	"created_by" varchar(36)
 );
 
+CREATE TABLE "media_assets" (
+	"id" varchar(36) PRIMARY KEY NOT NULL,
+	"checksum" varchar(64) NOT NULL,
+	"storage_key" text NOT NULL,
+	"mime_type" text NOT NULL,
+	"byte_size" integer NOT NULL,
+	"kind" text NOT NULL,
+	"original_name" text NOT NULL,
+	"title" text,
+	"owner_id" varchar(36),
+	"visibility" text DEFAULT 'shared' NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL
+);
+
+CREATE TABLE "media_usages" (
+	"asset_id" varchar(36) NOT NULL,
+	"entity_type" text NOT NULL,
+	"entity_id" varchar(36) NOT NULL,
+	"field" text NOT NULL,
+	CONSTRAINT "media_usages_asset_id_entity_type_entity_id_field_pk" PRIMARY KEY("asset_id","entity_type","entity_id","field")
+);
+
 CREATE TABLE "password_reset_tokens" (
 	"id" varchar(36) PRIMARY KEY NOT NULL,
 	"user_id" varchar(36) NOT NULL,
@@ -402,6 +424,7 @@ CREATE TABLE "users" (
 
 ALTER TABLE "content_pages" ADD CONSTRAINT "content_pages_test_id_tests_id_fk" FOREIGN KEY ("test_id") REFERENCES "public"."tests"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "content_pages" ADD CONSTRAINT "content_pages_topic_id_topics_id_fk" FOREIGN KEY ("topic_id") REFERENCES "public"."topics"("id") ON DELETE no action ON UPDATE no action;
+ALTER TABLE "media_usages" ADD CONSTRAINT "media_usages_asset_id_media_assets_id_fk" FOREIGN KEY ("asset_id") REFERENCES "public"."media_assets"("id") ON DELETE no action ON UPDATE no action;
 ALTER TABLE "question_measurements" ADD CONSTRAINT "question_measurements_test_id_tests_id_fk" FOREIGN KEY ("test_id") REFERENCES "public"."tests"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "question_measurements" ADD CONSTRAINT "question_measurements_question_id_questions_id_fk" FOREIGN KEY ("question_id") REFERENCES "public"."questions"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "question_measurements" ADD CONSTRAINT "question_measurements_scale_id_scales_id_fk" FOREIGN KEY ("scale_id") REFERENCES "public"."scales"("id") ON DELETE cascade ON UPDATE no action;
@@ -415,6 +438,9 @@ CREATE INDEX "attempts_snapshot_id_idx" ON "attempts" USING btree ("snapshot_id"
 CREATE INDEX "content_pages_test_topic_position_sort_idx" ON "content_pages" USING btree ("test_id","topic_id","position","sort_order");
 CREATE INDEX "content_pages_test_kind_idx" ON "content_pages" USING btree ("test_id","kind");
 CREATE INDEX "content_pages_topic_id_idx" ON "content_pages" USING btree ("topic_id");
+CREATE INDEX "media_assets_owner_checksum_idx" ON "media_assets" USING btree ("owner_id","checksum");
+CREATE INDEX "media_assets_checksum_idx" ON "media_assets" USING btree ("checksum");
+CREATE INDEX "media_usages_entity_idx" ON "media_usages" USING btree ("entity_type","entity_id");
 CREATE INDEX "password_reset_tokens_token_hash_idx" ON "password_reset_tokens" USING btree ("token_hash");
 CREATE INDEX "password_reset_tokens_user_id_idx" ON "password_reset_tokens" USING btree ("user_id");
 CREATE INDEX "question_measurements_test_id_idx" ON "question_measurements" USING btree ("test_id");
