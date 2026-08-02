@@ -971,6 +971,16 @@ export interface FoundMediaRef {
  */
 const MEDIA_IN_TEXT = /\/api\/media\/([0-9a-fA-F-]{36})|\/uploads\/(media\/[^\s"'<>?#\\]+)/g;
 
+/**
+ * Trailing punctuation that belongs to the sentence, not to the file name.
+ *
+ * In markup the quote stops the match, but an address written bare in prose
+ * («см. /uploads/media/pic.png.») would otherwise yield a key with the full stop glued
+ * on. That key matches no asset, the usage goes unrecorded, and the file becomes a
+ * deletable orphan — the failure direction this walker exists to avoid.
+ */
+const TRAILING_PUNCTUATION = /[.,;:!)\]]+$/;
+
 /** Every distinct reference inside one string, in order of appearance. */
 export function findMediaRefsInText(value: string): MediaRef[] {
   const out: MediaRef[] = [];
@@ -978,7 +988,10 @@ export function findMediaRefsInText(value: string): MediaRef[] {
   for (const m of value.replace(/\\/g, "/").matchAll(MEDIA_IN_TEXT)) {
     const ref: MediaRef = m[1]
       ? { kind: "canonical", id: m[1] }
-      : { kind: "legacy", storageKey: m[2] };
+      : { kind: "legacy", storageKey: m[2].replace(TRAILING_PUNCTUATION, "") };
+    // A key that walks out of the media directory can never match a registry row; the
+    // store would refuse it anyway. Keeping it would only litter the orphan report.
+    if (ref.kind === "legacy" && ref.storageKey.split("/").some((seg) => seg === "..")) continue;
     const key = ref.kind === "canonical" ? `c:${ref.id}` : `l:${ref.storageKey}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -1035,8 +1048,13 @@ export function collectMediaRefs(entity: unknown): FoundMediaRef[] {
 
 Run: `npm test -- tests/media-refs.test.ts`
 
-Expected: PASS (12 тестов — шесть основных плюс шесть на поиск внутри разметки, добавленных
-после того, как ревью вскрыло режим `html` у контентных страниц).
+Expected: PASS (15 тестов — шесть основных, шесть на поиск внутри разметки после того, как ревью
+вскрыло режим `html` у контентных страниц, и три на срез пунктуации и отброс ключей с `..`).
+
+Замечание на будущее: выражение канонического адреса принимает любые 36 символов из `[0-9a-fA-F-]`
+и структуру идентификатора не проверяет. Это безопасно именно здесь, потому что `media_assets.id`
+объявлен как `varchar(36)`, а не `uuid` — мусорный идентификатор просто не найдётся в реестре и не
+уронит запрос приведением типа.
 
 - [ ] **Step 5: Коммит**
 
