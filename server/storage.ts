@@ -12,7 +12,7 @@
 import { UsersRepository } from "./storage/users-repository";
 import { GroupsRepository } from "./storage/groups-repository";
 import { AccessRepository } from "./storage/access-repository";
-import { TopicsRepository } from "./storage/topics-repository";
+import { TopicsRepository, type TopicDeletionResult, type TopicsBulkDeletionResult } from "./storage/topics-repository";
 import { QuestionsRepository } from "./storage/questions-repository";
 import { ScormRepository } from "./storage/scorm-repository";
 import { AdaptiveRepository } from "./storage/adaptive-repository";
@@ -26,6 +26,7 @@ import { MediaRepository, type MediaUsageRef } from "./storage/media-repository"
 
 export type { TestUsageRef };
 export type { MediaUsageRef };
+export type { TopicDeletionResult, TopicsBulkDeletionResult };
 // Type-only imports: the facade names these in `IStorage` and its delegating
 // method signatures. Table objects and query helpers live in the repositories.
 import type {
@@ -193,8 +194,8 @@ export interface IStorage {
   createTopic(topic: InsertTopic): Promise<Topic>;
   updateTopic(id: string, topic: Partial<InsertTopic>): Promise<Topic | undefined>;
   renameTopicInFormulas(topicId: string, oldName: string, newName: string): Promise<void>;
-  deleteTopic(id: string): Promise<boolean>;
-  deleteTopicsBulk(ids: string[]): Promise<number>;
+  deleteTopic(id: string): Promise<TopicDeletionResult>;
+  deleteTopicsBulk(ids: string[]): Promise<TopicsBulkDeletionResult>;
   /** Bulk-moves topics into a folder (or to root when `null`). Organizational. */
   moveTopicsToFolder(ids: string[], folderId: string | null): Promise<number>;
 
@@ -352,7 +353,7 @@ export interface IStorage {
   replaceMediaUsages(entityType: MediaEntityType, entityId: string, refs: MediaUsageRef[]): Promise<void>;
   getMediaUsagesByAsset(assetId: string): Promise<MediaUsage[]>;
   listOrphanMediaAssets(): Promise<MediaAsset[]>;
-  clearAllMediaUsages(): Promise<void>;
+  deleteMediaUsagesExcept(entityType: MediaEntityType, keepIds: string[]): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -775,11 +776,11 @@ export class DatabaseStorage implements IStorage {
     return this.accessRepo.removeTopicGrant(id);
   }
 
-  deleteTopic(id: string): Promise<boolean> {
+  deleteTopic(id: string): Promise<TopicDeletionResult> {
     return this.topicsRepo.deleteTopic(id);
   }
 
-  deleteTopicsBulk(ids: string[]): Promise<number> {
+  deleteTopicsBulk(ids: string[]): Promise<TopicsBulkDeletionResult> {
     return this.topicsRepo.deleteTopicsBulk(ids);
   }
 
@@ -1224,8 +1225,8 @@ export class DatabaseStorage implements IStorage {
     return this.mediaRepo.listOrphanAssets();
   }
 
-  clearAllMediaUsages(): Promise<void> {
-    return this.mediaRepo.clearAllUsages();
+  deleteMediaUsagesExcept(entityType: MediaEntityType, keepIds: string[]): Promise<void> {
+    return this.mediaRepo.deleteUsagesExcept(entityType, keepIds);
   }
 }
 

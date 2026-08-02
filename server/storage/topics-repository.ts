@@ -22,6 +22,23 @@ import { normalizeTopicName } from "@shared/topics/naming";
 import { topicCoursesFromFeedback, topicEventsFromFeedback } from "@shared/topics/recommendations";
 import { renameTopicByNameInFormula } from "@shared/formula";
 
+/** Outcome of {@link TopicsRepository.deleteTopic}: whether the topic itself was
+ * found, plus the ids of the questions and content pages the cascade removed
+ * with it (so a caller can clean up their media-usage index rows). */
+export interface TopicDeletionResult {
+  deleted: boolean;
+  questionIds: string[];
+  contentPageIds: string[];
+}
+
+/** Outcome of {@link TopicsRepository.deleteTopicsBulk}: same shape as
+ * {@link TopicDeletionResult}, but `count` in place of `deleted`. */
+export interface TopicsBulkDeletionResult {
+  count: number;
+  questionIds: string[];
+  contentPageIds: string[];
+}
+
 /** Repository for the `topics` table and topic-rooted cascades. */
 export class TopicsRepository {
   async getTopics(): Promise<Topic[]> {
@@ -126,31 +143,52 @@ export class TopicsRepository {
     });
   }
 
-  async deleteTopic(id: string): Promise<boolean> {
+  async deleteTopic(id: string): Promise<TopicDeletionResult> {
     // Full cascade (PRD-15 FR-07, audit F-8/F-4): questions, dangling test
     // sections and topic-scoped content pages all go with the topic.
     // Recommended courses/events live in topics.feedback_json (deleted with the
     // row). Deletion while published tests depend on it is gated upstream by the
     // draw-feasibility check (FR-05), so reaching this point means the caller
     // accepted the consequences.
+    //
+    // RETURNING on the two cascaded deletes carries the ids of the questions and
+    // content pages out of the rows being removed, so the caller can clean up
+    // their media-usage index rows too (server/services/media/usage-index.ts) —
+    // this repository does not import that service itself (it lives in
+    // server/storage/, the service imports the `storage` facade, so a dependency
+    // the other way round would be circular; the same layering questionsRepo and
+    // the route handlers already follow for a single delete).
     return db.transaction(async (tx) => {
-      await tx.delete(questions).where(eq(questions.topicId, id));
+      const deletedQuestions = await tx.delete(questions).where(eq(questions.topicId, id))
+        .returning({ id: questions.id });
       await tx.delete(testSections).where(eq(testSections.topicId, id));
-      await tx.delete(contentPages).where(eq(contentPages.topicId, id));
+      const deletedPages = await tx.delete(contentPages).where(eq(contentPages.topicId, id))
+        .returning({ id: contentPages.id });
       const result = await tx.delete(topics).where(eq(topics.id, id)).returning();
-      return result.length > 0;
+      return {
+        deleted: result.length > 0,
+        questionIds: deletedQuestions.map((q) => q.id),
+        contentPageIds: deletedPages.map((p) => p.id),
+      };
     });
   }
 
-  async deleteTopicsBulk(ids: string[]): Promise<number> {
-    if (ids.length === 0) return 0;
-    // Same full cascade as deleteTopic (PRD-15 FR-07) — as one unit.
+  async deleteTopicsBulk(ids: string[]): Promise<TopicsBulkDeletionResult> {
+    if (ids.length === 0) return { count: 0, questionIds: [], contentPageIds: [] };
+    // Same full cascade as deleteTopic (PRD-15 FR-07) — as one unit, and the same
+    // RETURNING reasoning: the caller needs the cascaded ids for media cleanup.
     return db.transaction(async (tx) => {
-      await tx.delete(questions).where(inArray(questions.topicId, ids));
+      const deletedQuestions = await tx.delete(questions).where(inArray(questions.topicId, ids))
+        .returning({ id: questions.id });
       await tx.delete(testSections).where(inArray(testSections.topicId, ids));
-      await tx.delete(contentPages).where(inArray(contentPages.topicId, ids));
+      const deletedPages = await tx.delete(contentPages).where(inArray(contentPages.topicId, ids))
+        .returning({ id: contentPages.id });
       const result = await tx.delete(topics).where(inArray(topics.id, ids)).returning();
-      return result.length;
+      return {
+        count: result.length,
+        questionIds: deletedQuestions.map((q) => q.id),
+        contentPageIds: deletedPages.map((p) => p.id),
+      };
     });
   }
 

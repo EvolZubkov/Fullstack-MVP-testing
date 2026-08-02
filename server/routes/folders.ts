@@ -5,6 +5,7 @@ import { requirePermission } from "../middleware/auth";
 import { assessTopicDeletion } from "../services/draw-feasibility";
 import { isDryRun, isForcedByAdmin } from "../services/content-guard";
 import { canDeleteTopic } from "../services/topic-access";
+import { clearCascadedUsages } from "../services/media/usage-index";
 
 const router = Router();
 
@@ -160,7 +161,14 @@ router.delete("/:id", requirePermission("folders.manage"), async (req, res) => {
         });
       }
       const deletableIds = deletable.map((d) => d.topicId);
-      const deletedTopics = await storage.deleteTopicsBulk(deletableIds);
+      const deletedTopicsResult = await storage.deleteTopicsBulk(deletableIds);
+      // Медиатека: темы уже удалены (транзакция закоммичена) — чистка индекса лучших
+      // усилий не должна стоить автору его действия; недостающая строка безопасна и
+      // чинится пересборкой.
+      await clearCascadedUsages([
+        ...deletedTopicsResult.questionIds.map((id) => ({ entityType: "question" as const, entityId: id })),
+        ...deletedTopicsResult.contentPageIds.map((id) => ({ entityType: "content_page" as const, entityId: id })),
+      ]);
       // Survivors (blocked / forbidden) go to root so no folderId dangles.
       const survivorIds = [...blocked.map((b) => b.topicId), ...forbidden.map((f) => f.topicId)];
       await storage.moveTopicsToFolder(survivorIds, null);
@@ -168,7 +176,7 @@ router.delete("/:id", requirePermission("folders.manage"), async (req, res) => {
       return res.json({
         success: true,
         mode: "folder-and-content",
-        deletedTopics,
+        deletedTopics: deletedTopicsResult.count,
         deletedFolders,
         skipped: [
           ...blocked.map((b) => ({ topicId: b.topicId, name: b.name, reason: "in_use", blocking: b.blocking })),

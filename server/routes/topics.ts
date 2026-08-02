@@ -26,7 +26,7 @@ import {
 } from "../services/topic-access";
 import { normalizeTopicName } from "@shared/topics/naming";
 import { feedbackContentSchema, type FeedbackContent } from "@shared/schema";
-import { syncEntityUsages } from "../services/media/usage-index";
+import { syncEntityUsages, clearCascadedUsages } from "../services/media/usage-index";
 
 const router = Router();
 
@@ -269,10 +269,17 @@ router.delete("/:id", requirePermission("topics.manage"), async (req, res) => {
     const assessment = await assessTopicDeletion(req.params.id);
     if (isDryRun(req)) return respondDryRun(req, res, assessment);
     if (respondIfBlocked(req, res, assessment)) return;
-    const success = await storage.deleteTopic(req.params.id);
-    if (!success) {
+    const result = await storage.deleteTopic(req.params.id);
+    if (!result.deleted) {
       return res.status(404).json({ error: "Topic not found" });
     }
+    // Медиатека: сама тема удалена (транзакция уже закоммичена), поэтому сбой
+    // чистки индекса не должен стоить автору его действия — недостающая строка
+    // безопасна и чинится пересборкой.
+    await clearCascadedUsages([
+      ...result.questionIds.map((id) => ({ entityType: "question" as const, entityId: id })),
+      ...result.contentPageIds.map((id) => ({ entityType: "content_page" as const, entityId: id })),
+    ]);
     res.json({ success: true, warnings: assessment.warnings });
   } catch (error) {
     logger.error("Delete topic error: " + (error as Error).message);
@@ -349,10 +356,14 @@ router.post("/bulk-delete", requirePermission("topics.manage"), async (req, res)
       });
     }
     const deletableIds = part.deletable.map((t) => t.topicId);
-    const deletedCount = await storage.deleteTopicsBulk(deletableIds);
+    const result = await storage.deleteTopicsBulk(deletableIds);
+    await clearCascadedUsages([
+      ...result.questionIds.map((id) => ({ entityType: "question" as const, entityId: id })),
+      ...result.contentPageIds.map((id) => ({ entityType: "content_page" as const, entityId: id })),
+    ]);
     res.json({
       success: true,
-      deletedCount,
+      deletedCount: result.count,
       deletedIds: deletableIds,
       skipped: [
         ...part.blocked.map((b) => ({ topicId: b.topicId, name: b.name, reason: "in_use", blocking: b.blocking })),

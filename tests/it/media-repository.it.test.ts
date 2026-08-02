@@ -92,12 +92,53 @@ describe("MediaRepository", () => {
     expect(await repo.deleteAsset(created.id)).toBe(false);
   });
 
-  it("clears every usage row regardless of entity", async () => {
+  it("deleteUsagesExcept drops one type's stale rows and leaves everything else alone", async () => {
+    const a = await repo.createAsset(asset());
+    await repo.replaceUsages("question", "q-gone", [{ assetId: a.id, field: "mediaUrl" }]);
+    await repo.replaceUsages("question", "q-live", [{ assetId: a.id, field: "mediaUrl" }]);
+    await repo.replaceUsages("content_page", "p1", [{ assetId: a.id, field: "body" }]);
+
+    await repo.deleteUsagesExcept("question", ["q-live"]);
+
+    const remaining = await repo.getUsagesByAsset(a.id);
+    // The stale question row is gone, the live question's row survives, and the
+    // content-page row (a different entity type, untouched by this call) is
+    // unaffected — the cleanup is scoped to ONE type per call.
+    expect(remaining).toHaveLength(2);
+    expect(remaining.map((u) => `${u.entityType}:${u.entityId}`).sort()).toEqual([
+      "content_page:p1",
+      "question:q-live",
+    ]);
+  });
+
+  it("deleteUsagesExcept with an empty keep list drops every row of that type", async () => {
     const a = await repo.createAsset(asset());
     await repo.replaceUsages("question", "q1", [{ assetId: a.id, field: "mediaUrl" }]);
     await repo.replaceUsages("content_page", "p1", [{ assetId: a.id, field: "body" }]);
-    await repo.clearAllUsages();
-    expect(await repo.getUsagesByAsset(a.id)).toHaveLength(0);
+
+    await repo.deleteUsagesExcept("question", []);
+
+    const remaining = await repo.getUsagesByAsset(a.id);
+    expect(remaining.map((u) => u.entityType)).toEqual(["content_page"]);
+  });
+
+  it("deleteUsagesExcept scales past a small keep list (single array-typed bind parameter)", async () => {
+    // Guards against the shape that hits Postgres's 65535-parameter cap on a prepared
+    // statement (server/storage/media-repository.ts JSDoc) — `keepIds` must travel as
+    // ONE bind parameter (`<> ALL($1)`), not one per id like `inArray` would build.
+    // A few thousand ids is enough to prove the query shape scales without needing a
+    // slow test that actually approaches the real cap.
+    const a = await repo.createAsset(asset());
+    const keepIds = Array.from({ length: 5000 }, (_, i) => `q-${i}`);
+    for (const id of keepIds.slice(0, 3)) {
+      await repo.replaceUsages("question", id, [{ assetId: a.id, field: "mediaUrl" }]);
+    }
+    await repo.replaceUsages("question", "q-gone", [{ assetId: a.id, field: "mediaUrl" }]);
+
+    await repo.deleteUsagesExcept("question", keepIds);
+
+    const remaining = await repo.getUsagesByAsset(a.id);
+    expect(remaining.map((u) => u.entityId).sort()).toEqual(["q-0", "q-1", "q-2"]);
   });
 
   it("lists assets scoped to one owner", async () => {

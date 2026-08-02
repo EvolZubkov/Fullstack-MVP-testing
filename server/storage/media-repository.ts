@@ -21,6 +21,21 @@ export interface MediaUsageRef {
   field: string;
 }
 
+/**
+ * Formats a Postgres `text[]` array literal (`{"a","b"}`) by hand, instead of handing the
+ * JS array to the driver as a bind value and relying on it to serialize the array itself.
+ * That reliance is NOT safe across drivers: `pg` (production) special-cases `Array.isArray`
+ * bind values, but `@electric-sql/pglite` (the integration-test harness,
+ * `tests/it/db-harness.ts`) does not — a bare JS array arrives as its default
+ * `Array.prototype.toString()` (no braces, and a single-element array loses even the
+ * separator), which Postgres then rejects as a malformed array literal. Building the literal
+ * ourselves and binding it as one plain STRING parameter sidesteps driver-specific behaviour
+ * entirely; `::text[]` in the SQL casts it on the server side.
+ */
+function pgTextArrayLiteral(values: readonly string[]): string {
+  return `{${values.map((v) => `"${v.replace(/[\\"]/g, "\\$&")}"`).join(",")}}`;
+}
+
 /** Repository for `media_assets` and `media_usages`. */
 export class MediaRepository {
   async createAsset(asset: Omit<InsertMediaAsset, "id">): Promise<MediaAsset> {
@@ -103,8 +118,33 @@ export class MediaRepository {
       );
   }
 
-  /** Drops every usage row. Only the full reindex uses this. */
-  async clearAllUsages(): Promise<void> {
-    await db.delete(mediaUsages);
+  /**
+   * Drops the usage rows of ONE entity type whose entity id is NOT in `keepIds` —
+   * the cleanup step of a full reindex (`reindexAllUsages`), applied AFTER every
+   * live entity of that type has already been re-synced. What is left afterwards
+   * is exactly the rows of entities that vanished without going through the
+   * write-time index (a direct SQL cascade that bypassed the walker, e.g. the
+   * topic/folder delete cascade or a bulk delete) — a reindex is the only place
+   * that can notice this, since it is the only pass that enumerates every entity.
+   *
+   * `keepIds` travels as ONE array-typed bind parameter (`<> ALL($1)`), not one
+   * bind parameter per id the way `inArray`/`notInArray` would build it: at tens
+   * of thousands of entities that hits Postgres's 65535-parameter cap on a
+   * prepared statement — the exact failure `listOrphanAssets` above already
+   * avoids with an anti-join instead of `NOT IN (ids...)`. An empty `keepIds`
+   * means no entity of this type currently exists, so every row of the type is
+   * dropped.
+   */
+  async deleteUsagesExcept(entityType: MediaEntityType, keepIds: string[]): Promise<void> {
+    if (keepIds.length === 0) {
+      await db.delete(mediaUsages).where(eq(mediaUsages.entityType, entityType));
+      return;
+    }
+    await db.delete(mediaUsages).where(
+      and(
+        eq(mediaUsages.entityType, entityType),
+        sql`${mediaUsages.entityId} <> ALL(${pgTextArrayLiteral(keepIds)}::text[])`,
+      ),
+    );
   }
 }

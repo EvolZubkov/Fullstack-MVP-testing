@@ -72,8 +72,8 @@ describe("pglite harness smoke — real SQL through DatabaseStorage", () => {
       correctJson: { correctIndex: 0 },
     } as never);
 
-    const ok = await storage.deleteTopic(topic.id);
-    expect(ok).toBe(true);
+    const result = await storage.deleteTopic(topic.id);
+    expect(result.deleted).toBe(true);
     expect(await storage.getQuestionsByTopic(topic.id)).toHaveLength(0);
     expect(await storage.getTopic(topic.id)).toBeUndefined();
   });

@@ -403,16 +403,16 @@ describe("DatabaseStorage — topics", () => {
     expect(await storage.updateTopic("x", { name: "X" })).toBeUndefined();
   });
 
-  it("deleteTopic — returns true on success", async () => {
+  it("deleteTopic — reports deleted:true on success", async () => {
     setupDeleteReturning(1);
     const result = await storage.deleteTopic("t1");
-    expect(result).toBe(true);
+    expect(result.deleted).toBe(true);
   });
 
-  it("deleteTopic — returns false when not found", async () => {
+  it("deleteTopic — reports deleted:false when not found", async () => {
     setupDeleteReturning(0);
     const result = await storage.deleteTopic("missing");
-    expect(result).toBe(false);
+    expect(result.deleted).toBe(false);
   });
 });
 

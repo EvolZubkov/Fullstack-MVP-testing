@@ -13,6 +13,7 @@ import type { MediaEntityType } from "@shared/schema";
 import type { MediaUsageRef } from "../../storage/media-repository";
 import { collectMediaRefs, rewriteMediaRefs } from "./media-refs";
 import { clearAssetAccessCache } from "./asset-access";
+import { logger } from "../../logger";
 
 /** Resolves every reference inside `entity` to registry ids. */
 export async function resolveEntityUsages(entity: unknown): Promise<MediaUsageRef[]> {
@@ -40,6 +41,27 @@ export async function syncEntityUsages(
   clearAssetAccessCache();
 }
 
+/**
+ * Best-effort media-index cleanup for entities removed by a CASCADE delete that does not
+ * go through their own save/delete route handler — the topic and folder cascades over
+ * questions/content pages (`server/storage/topics-repository.ts`). Mirrors the pattern the
+ * single-entity delete routes already use (`syncEntityUsages(type, id, null)` to clear an
+ * entity's rows): a failure is logged and swallowed per entry, not thrown — the cascade
+ * delete already committed, so one bad index write must not fail the whole request, and
+ * anything missed here is caught by the next `POST /api/media/reindex`.
+ */
+export async function clearCascadedUsages(
+  entries: ReadonlyArray<{ entityType: MediaEntityType; entityId: string }>,
+): Promise<void> {
+  for (const { entityType, entityId } of entries) {
+    try {
+      await syncEntityUsages(entityType, entityId, null);
+    } catch (error) {
+      logger.error(`Media usage cleanup failed for ${entityType} ${entityId}: ${(error as Error).message}`);
+    }
+  }
+}
+
 /** What a full rebuild processed. */
 export interface ReindexReport {
   entities: number;
@@ -50,7 +72,10 @@ export interface ReindexReport {
  * a write-time index: any drift (a direct SQL write, e.g. the Excel question import, question
  * duplication or topic duplication that bypass the route handlers; a storage point added
  * without wiring the walker in) shows up here rather than as an access refusal nobody can
- * explain.
+ * explain. It is also the only place that notices the OPPOSITE drift: an entity deleted
+ * through a path that bypassed the write-time cleanup (a direct SQL cascade, e.g. the topic/
+ * folder delete cascade) leaves its usage rows behind forever, holding a file no dependents
+ * page will ever mention again.
  *
  * Covers every entity type the write path indexes: questions, content pages (including the
  * system pages `test-settings.ts` rewrites when the flow mode changes), test design
@@ -61,9 +86,25 @@ export interface ReindexReport {
  * land on the same rows. A snapshot is indexed on its FROZEN `contentJson`, not on live
  * storage — that is the whole point: an asset that only survives inside a published
  * snapshot must not read as an orphan (spec §8.2/§4.3).
+ *
+ * Deliberately NOT a clear-then-repopulate: the old shape wiped `media_usages` up front and
+ * refilled it entity by entity, so a crash or a dropped connection midway left the delivery
+ * rule refusing access to pictures whose questions/pages were never touched — every learner's
+ * media on the whole test, gone until someone reran the rebuild. Instead every live entity is
+ * re-synced FIRST (each `syncEntityUsages` call already replaces that one entity's rows
+ * wholesale, so this alone brings every live entity's rows up to date), and only THEN are the
+ * rows of entities that turned out to be gone dropped, per entity type
+ * (`storage.deleteMediaUsagesExcept`). At every point during the walk the index is either the
+ * OLD complete picture or the NEW one — never emptied in between.
+ *
+ * The id list each `deleteMediaUsagesExcept` call keeps is re-read right before that call,
+ * not reused from the walk above: the walk can take a while over a large bank, and reusing
+ * its (by-then-stale) snapshot would let a question saved WHILE the reindex was running — a
+ * live entity synced under its own fresh id — get read as "not in the keep list" and have its
+ * just-written rows deleted a moment later. Re-reading narrows that race to the gap between
+ * the fresh id read and the delete statement, not the whole reindex duration.
  */
 export async function reindexAllUsages(): Promise<ReindexReport> {
-  await storage.clearAllMediaUsages();
   let entities = 0;
 
   for (const question of await storage.getQuestions()) {
@@ -82,6 +123,15 @@ export async function reindexAllUsages(): Promise<ReindexReport> {
     await syncEntityUsages("snapshot", snapshot.id, snapshot.contentJson);
     entities += 1;
   }
+
+  // Cleanup pass: drop the rows of entities that no longer exist. Scoped per
+  // entity type the walk above actually covers — a type it never visits (the
+  // reserved `test_feedback`/`topic_feedback`/`scale_feedback` kinds, not yet
+  // wired to any writer) is left untouched rather than wiped.
+  await storage.deleteMediaUsagesExcept("question", (await storage.getQuestions()).map((q) => q.id));
+  await storage.deleteMediaUsagesExcept("content_page", (await storage.getAllContentPages()).map((p) => p.id));
+  await storage.deleteMediaUsagesExcept("test_design", (await storage.getTests()).map((t) => t.id));
+  await storage.deleteMediaUsagesExcept("snapshot", (await storage.getAllSnapshots()).map((s) => s.id));
 
   clearAssetAccessCache();
   return { entities };

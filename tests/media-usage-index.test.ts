@@ -14,7 +14,12 @@ const { storageMock } = vi.hoisted(() => ({
 }));
 vi.mock("../server/storage", () => ({ storage: storageMock }));
 
-import { syncEntityUsages } from "../server/services/media/usage-index";
+const { loggerMock } = vi.hoisted(() => ({
+  loggerMock: { error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn(), trace: vi.fn(), isLevelEnabled: vi.fn(() => false) },
+}));
+vi.mock("../server/logger", () => ({ logger: loggerMock }));
+
+import { syncEntityUsages, clearCascadedUsages } from "../server/services/media/usage-index";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -72,5 +77,38 @@ describe("syncEntityUsages", () => {
       { assetId: "11111111-1111-1111-1111-111111111111", field: "html" },
       { assetId: "22222222-2222-2222-2222-222222222222", field: "html" },
     ]);
+  });
+});
+
+describe("clearCascadedUsages", () => {
+  it("clears every entry's index rows (each is an entity that lost its media)", async () => {
+    await clearCascadedUsages([
+      { entityType: "question", entityId: "q1" },
+      { entityType: "content_page", entityId: "p1" },
+    ]);
+    expect(storageMock.replaceMediaUsages).toHaveBeenCalledWith("question", "q1", []);
+    expect(storageMock.replaceMediaUsages).toHaveBeenCalledWith("content_page", "p1", []);
+  });
+
+  it("is a no-op for an empty list — no storage call at all", async () => {
+    await clearCascadedUsages([]);
+    expect(storageMock.replaceMediaUsages).not.toHaveBeenCalled();
+  });
+
+  it("logs and swallows a failure on one entry, and still clears the rest", async () => {
+    storageMock.replaceMediaUsages
+      .mockRejectedValueOnce(new Error("index write failed"))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(
+      clearCascadedUsages([
+        { entityType: "question", entityId: "q-bad" },
+        { entityType: "question", entityId: "q-ok" },
+      ]),
+    ).resolves.toBeUndefined();
+
+    expect(storageMock.replaceMediaUsages).toHaveBeenCalledWith("question", "q-bad", []);
+    expect(storageMock.replaceMediaUsages).toHaveBeenCalledWith("question", "q-ok", []);
+    expect(loggerMock.error).toHaveBeenCalledWith(expect.stringContaining("q-bad"));
   });
 });

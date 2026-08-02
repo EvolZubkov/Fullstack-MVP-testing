@@ -218,19 +218,26 @@ describe("TopicsRepository — renameTopicInFormulas", () => {
 });
 
 describe("TopicsRepository — deleteTopic (full cascade)", () => {
-  it("deletes the topic, its questions, sections and content pages; returns true", async () => {
+  it("deletes the topic, its questions, sections and content pages; reports what it cascaded", async () => {
     const topic = await seedTopicWithQuestions(2, "ToDelete");
+    const questionIds = (await storage.getQuestionsByTopic(topic.id)).map((q) => q.id);
     const testId = await insertTest();
     await insertSection(testId, topic.id);
-    await h.current!.db.insert(contentPages).values({
+    const [page] = await h.current!.db.insert(contentPages).values({
       testId,
       topicId: topic.id,
       position: "before_topic",
       type: "info",
       kind: "info",
-    } as never);
+    } as never).returning();
 
-    expect(await storage.deleteTopic(topic.id)).toBe(true);
+    const result = await storage.deleteTopic(topic.id);
+    expect(result.deleted).toBe(true);
+    // Cascaded ids travel back so the caller can clean up their media-usage rows
+    // (server/services/media/usage-index.ts) — the repository itself must not
+    // depend on that service (see module JSDoc).
+    expect(result.questionIds.sort()).toEqual([...questionIds].sort());
+    expect(result.contentPageIds).toEqual([page.id]);
 
     expect(await storage.getTopic(topic.id)).toBeUndefined();
     expect(await storage.getQuestionsByTopic(topic.id)).toEqual([]);
@@ -240,22 +247,28 @@ describe("TopicsRepository — deleteTopic (full cascade)", () => {
     expect(pages).toEqual([]);
   });
 
-  it("returns false for a topic that does not exist", async () => {
-    expect(await storage.deleteTopic(randomUUID())).toBe(false);
+  it("reports not-deleted with empty cascades for a topic that does not exist", async () => {
+    const result = await storage.deleteTopic(randomUUID());
+    expect(result).toEqual({ deleted: false, questionIds: [], contentPageIds: [] });
   });
 });
 
 describe("TopicsRepository — deleteTopicsBulk", () => {
-  it("returns 0 for an empty id list (guard branch)", async () => {
-    expect(await storage.deleteTopicsBulk([])).toBe(0);
+  it("returns an empty result for an empty id list (guard branch)", async () => {
+    expect(await storage.deleteTopicsBulk([])).toEqual({ count: 0, questionIds: [], contentPageIds: [] });
   });
 
-  it("deletes many topics with their questions and returns the count", async () => {
+  it("deletes many topics with their questions and reports the cascaded ids", async () => {
     const a = await seedTopicWithQuestions(1, "Bulk A");
     const b = await seedTopicWithQuestions(2, "Bulk B");
     const survivor = await storage.createTopic({ name: "Survivor" } as never);
+    const aQuestionIds = (await storage.getQuestionsByTopic(a.id)).map((q) => q.id);
+    const bQuestionIds = (await storage.getQuestionsByTopic(b.id)).map((q) => q.id);
 
-    expect(await storage.deleteTopicsBulk([a.id, b.id])).toBe(2);
+    const result = await storage.deleteTopicsBulk([a.id, b.id]);
+    expect(result.count).toBe(2);
+    expect(result.questionIds.sort()).toEqual([...aQuestionIds, ...bQuestionIds].sort());
+    expect(result.contentPageIds).toEqual([]);
 
     expect(await storage.getTopic(a.id)).toBeUndefined();
     expect(await storage.getTopic(b.id)).toBeUndefined();

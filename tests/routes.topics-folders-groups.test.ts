@@ -212,20 +212,20 @@ describe("Topics routes", () => {
   });
 
   it("DELETE /:id — deletes topic", async () => {
-    storageMock.deleteTopic.mockResolvedValue(true);
+    storageMock.deleteTopic.mockResolvedValue({ deleted: true, questionIds: [], contentPageIds: [] });
     const res = await asAuthor(request(app).delete("/api/topics/t1"));
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
   });
 
   it("DELETE /:id — returns 404 when topic not found", async () => {
-    storageMock.deleteTopic.mockResolvedValue(false);
+    storageMock.deleteTopic.mockResolvedValue({ deleted: false, questionIds: [], contentPageIds: [] });
     const res = await asAuthor(request(app).delete("/api/topics/x"));
     expect(res.status).toBe(404);
   });
 
   it("POST /bulk-delete — deletes multiple topics", async () => {
-    storageMock.deleteTopicsBulk.mockResolvedValue(2);
+    storageMock.deleteTopicsBulk.mockResolvedValue({ count: 2, questionIds: [], contentPageIds: [] });
     const res = await asAuthor(request(app).post("/api/topics/bulk-delete").send({ ids: ["t1", "t2"] }));
     expect(res.status).toBe(200);
     expect(res.body.deletedCount).toBe(2);

@@ -177,7 +177,7 @@ beforeEach(() => {
   storageMock.getSnapshotsForTest.mockResolvedValue([]);
   storageMock.getReferencedSnapshotIds.mockResolvedValue([]);
   storageMock.getTopics.mockResolvedValue([{ id: "tp1", name: "Финансы" }]);
-  storageMock.deleteTopic.mockResolvedValue(true);
+  storageMock.deleteTopic.mockResolvedValue({ deleted: true, questionIds: [], contentPageIds: [] });
   storageMock.deleteQuestion.mockResolvedValue(true);
   storageMock.deleteQuestionsBulk.mockResolvedValue(1);
   storageMock.updateQuestion.mockResolvedValue(q1);

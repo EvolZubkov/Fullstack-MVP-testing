@@ -12,7 +12,7 @@ import {
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
-import { syncEntityUsages, canonicalizeEntityMedia } from "../services/media/usage-index";
+import { syncEntityUsages, canonicalizeEntityMedia, clearCascadedUsages } from "../services/media/usage-index";
 import { normalizeTags } from "@shared/tags";
 import { normalizeAuthorText } from "@shared/text";
 import { normalizeOptionalText, normalizeQuestionData } from "../services/question-text";
@@ -422,6 +422,10 @@ router.post(
       if (isDryRun(req)) return respondDryRun(req, res, assessment);
       if (respondIfBlocked(req, res, assessment)) return;
       const deletedCount = await storage.deleteQuestionsBulk(ids);
+      // Медиатека: сбой чистки индекса не должен стоить автору его удаления (см.
+      // тот же выбор в одиночном DELETE /:id выше). `ids` — запрошенные к удалению,
+      // не только реально удалённые: очистка несуществующей записи индекса — no-op.
+      await clearCascadedUsages(ids.map((id) => ({ entityType: "question" as const, entityId: id })));
       res.json({ success: true, deletedCount, warnings: assessment.warnings });
     } catch (error) {
       logger.error("Bulk delete questions error: " + (error as Error).message);
