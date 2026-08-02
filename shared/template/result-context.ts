@@ -272,6 +272,51 @@ export function topicFeedbackTexts(
   return out;
 }
 
+/**
+ * The sources ONE topic contributes to the consolidated recommendations block: its
+ * feedback texts and its PRD-32 attachments, in that order.
+ *
+ * GATED BY THE TOPIC'S VERDICT — everything a topic carries reaches the learner only
+ * where the topic was NOT taken. This is the owner's agreed rule for the consolidated
+ * block, and it replaces the two rules that used to coexist: the recommended courses
+ * and events of a topic were already failed-topic guidance (`vrRecommended` in the
+ * package runtime skips a topic on `tr.passed !== false`), while its texts and its
+ * attachments were shown to everyone, on the reading that a material hung on the
+ * topic's feedback is due for having TAKEN the topic. Consolidation put all three into
+ * ONE block, where two rules would be visible on screen as three resources of the same
+ * topic behaving differently; the owner settled it on the courses' rule.
+ *
+ * WHAT «not taken» MEANS is the MODE's answer, and only that answer differs — hence
+ * `failed` as a parameter rather than a second copy of this function per mode. The
+ * standard mode reads the topic's pass verdict (`passed === false`, and NOT `!passed`:
+ * `null` is the third state — the topic has no pass threshold, so nothing was judged
+ * and «не пройдено» was never said about this learner). The adaptive mode has no such
+ * third state; there the failure is «no level confirmed at all»
+ * ({@link hasAchievedLevel}), the branch `aggregateAdaptiveResult` itself treats as the
+ * failure one — it is where the topic's `failureFeedback` fires and where
+ * `overallPassed` is dropped.
+ *
+ * The gate lives HERE, in the one builder both hosts call, and not in either host's
+ * adapter: a second copy of it would drift silently and surface as the web and the
+ * package handing the learner different materials.
+ */
+function topicRecommendationSources(topic: TopicFeedbackInput, failed: boolean): FeedbackBlock[] {
+  if (!failed) return [];
+  const sources: FeedbackBlock[] = [];
+  // ONE source per text, because `FeedbackBlock` carries a single `text` while a topic
+  // brings up to two independent ones (its own and this test's section over it).
+  // Widening the block to a list of texts would fork the shape every other source — the
+  // test, the fired band, the fired outcome — already speaks; a source apiece keeps the
+  // collector's contract untouched and lets dedup see the two texts for the separate
+  // entries they are. Blank ones are dropped here so no host has to.
+  for (const text of topic.feedbackTexts ?? []) {
+    if (String(text ?? "").trim()) sources.push({ text, links: [], events: [], assets: [] });
+  }
+  const assets = topic.recommendedAssets ?? [];
+  if (assets.length > 0) sources.push({ links: [], events: [], assets });
+  return sources;
+}
+
 /** Feedback of the level that actually fired, for the recommendations block. */
 function firedFeedback(m: MeasureInput): FeedbackBlock | null {
   const { interpretation } = m;
@@ -445,39 +490,11 @@ export function buildResultContext(
   }
   // What the topics of this attempt said and attached, LAST — they are the narrowest
   // source (one topic of the test), and the same text or file that the test as a whole
-  // also carries should keep the test's copy under dedup.
-  //
-  // GATED BY THE TOPIC'S VERDICT — everything a topic carries reaches the learner only
-  // where the topic was NOT passed. This is the owner's agreed rule for the consolidated
-  // block, and it replaces the two rules that used to coexist: the recommended courses
-  // and events of a topic were already failed-topic guidance (`vrRecommended` in the
-  // package runtime skips a topic on `tr.passed !== false`), while its texts and its
-  // PRD-32 attachments were shown to everyone, on the reading that a material hung on
-  // the topic's feedback is due for having TAKEN the topic. Consolidation put all three
-  // into ONE block, where two rules would be visible on screen as three resources of the
-  // same topic behaving differently; the owner settled it on the courses' rule.
-  //
-  // `passed === false` and not `!passed` on purpose: `null` is the THIRD state — the
-  // topic has no pass threshold, so nothing was judged and «не пройдено» was never said
-  // about this learner. It is not a failure, and it stays silent exactly as the courses
-  // do (the topic rows already read the same three states).
-  //
-  // The gate lives HERE, in the one builder both hosts call, and not in either host's
-  // adapter: a second copy of it would drift silently and surface as the web and the
-  // package handing the learner different materials.
+  // also carries should keep the test's copy under dedup. The verdict gate and the
+  // shape of those sources live in `topicRecommendationSources`, shared with the
+  // adaptive builder.
   for (const topic of input.topicResults || []) {
-    if (topic.passed !== false) continue;
-    // ONE source per text, because `FeedbackBlock` carries a single `text` while a topic
-    // brings up to two independent ones (its own and this test's section over it).
-    // Widening the block to a list of texts would fork the shape every other source —
-    // the test, the fired band, the fired outcome — already speaks; a source apiece
-    // keeps the collector's contract untouched and lets dedup see the two texts for the
-    // separate entries they are. Blank ones are dropped here so no host has to.
-    for (const text of topic.feedbackTexts ?? []) {
-      if (String(text ?? "").trim()) recommendationSources.push({ text, links: [], events: [], assets: [] });
-    }
-    const assets = topic.recommendedAssets ?? [];
-    if (assets.length > 0) recommendationSources.push({ links: [], events: [], assets });
+    recommendationSources.push(...topicRecommendationSources(topic, topic.passed === false));
   }
   const recommendations = collectRecommendations(recommendationSources);
   if (recommendations.hasAny) result.recommendations = recommendations;
@@ -640,6 +657,16 @@ export interface AdaptiveResultContextOptions {
   showPdf?: boolean;
   canRetry?: boolean;
   showFinish?: boolean;
+  /**
+   * The test's OWN feedback block (`tests.feedback_json`), normalised by the host —
+   * the widest source of the «Рекомендации» block and therefore its first one, exactly
+   * as in {@link ResultContextOptions.testFeedback}.
+   *
+   * It is a property of the TEST, not of the flow mode: an author who wrote a closing
+   * word for an adaptive test owes it to the learner as much as in a standard one, so
+   * the option exists on both builders and is read by the same collector.
+   */
+  testFeedback?: FeedbackBlock | null;
 }
 
 /**
@@ -663,9 +690,27 @@ const TONE_BELOW_MINIMUM = "ou-tag--solid ou-tag--error";
  */
 export const NO_LEVEL_CONFIRMED_LABEL = "Минимально требуемый уровень не подтверждён";
 
+/**
+ * Whether the learner confirmed ANY level of this adaptive topic — the mode's own
+ * verdict, and the counterpart of `passed` in the standard mode.
+ *
+ * `false` is the FAILURE state and there is no third one: an adaptive topic is a ladder
+ * of levels, each with its own threshold, so «nothing was judged» cannot happen the way
+ * a standard topic without a pass rule leaves `passed === null`. The engine agrees —
+ * `aggregateAdaptiveResult` fires the topic's `failureFeedback` and drops
+ * `overallPassed` in exactly this branch — and so does the package, which maps the
+ * adaptive topic onto the standard shape as `passed: achievedLevelIndex !== null`.
+ *
+ * Read in ONE place, so the level tag on the card and the visibility of the topic's
+ * materials cannot come to disagree about what this topic's outcome was.
+ */
+function hasAchievedLevel(t: AdaptiveTopicInput): boolean {
+  return t.achievedLevelIndex !== null && t.achievedLevelIndex !== undefined;
+}
+
 /** Map a normalized adaptive topic to its level-based view (unified feedback). */
 function adaptiveTopicView(t: AdaptiveTopicInput): CtxAdaptiveTopicView {
-  const achieved = t.achievedLevelIndex !== null && t.achievedLevelIndex !== undefined;
+  const achieved = hasAchievedLevel(t);
   return {
     topicName: t.topicName || "",
     levelLabel: achieved ? (t.achievedLevelName as string) : NO_LEVEL_CONFIRMED_LABEL,
@@ -695,5 +740,20 @@ export function buildAdaptiveResultContext(
     result.canRetry = !!opts.canRetry;
     result.showFinish = !!opts.showFinish;
   }
+  // The SAME consolidated block the standard results screen carries, from the SAME
+  // collector and the same sources in the same order — the test's own feedback first,
+  // then what the topics of this attempt wrote and attached. Feedback is a property of
+  // the TEST, not of its flow mode, so a second assembly rule for the adaptive screen
+  // would only mean two screens disagreeing about what the learner is owed; the adaptive
+  // screen used to carry no block at all, which is that disagreement at its widest.
+  //
+  // What differs between the modes is ONE thing — how a topic's failure is spelled — and
+  // it enters as the gate's argument (see `topicRecommendationSources`).
+  const recommendationSources: Array<FeedbackBlock | null | undefined> = [opts.testFeedback];
+  for (const topic of input.topicResults || []) {
+    recommendationSources.push(...topicRecommendationSources(topic, !hasAchievedLevel(topic)));
+  }
+  const recommendations = collectRecommendations(recommendationSources);
+  if (recommendations.hasAny) result.recommendations = recommendations;
   return { course: { title }, result };
 }

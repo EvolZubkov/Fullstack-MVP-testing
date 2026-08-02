@@ -16,7 +16,12 @@
  * измерений, и один файл, приложенный дважды, не даёт дубля.
  */
 import { describe, it, expect } from "vitest";
-import { buildResultContext, feedbackAssets, topicFeedbackTexts } from "../result-context";
+import {
+  buildAdaptiveResultContext,
+  buildResultContext,
+  feedbackAssets,
+  topicFeedbackTexts,
+} from "../result-context";
 
 const TOPIC_PDF = { title: "Разбор темы", url: "/api/media/aaaa" };
 const SECTION_PDF = { title: "Памятка раздела", url: "/api/media/bbbb" };
@@ -233,6 +238,109 @@ describe("гейт по вердикту темы: материалы темы �
     });
     expect(ctx.result.recommendations?.texts).toEqual(["Спасибо за участие."]);
     expect(ctx.result.recommendations?.assets).toEqual([SECTION_PDF]);
+  });
+});
+
+describe("адаптивный экран итогов: тот же блок, тот же сборщик", () => {
+  // Требование «тексты обратной связи показываются на итогах» относится ко ВСЕМ тестам,
+  // а не к части: адаптивный контекст собирает блок ТОЙ ЖЕ функцией и из тех же
+  // источников (обратная связь теста, затем материалы тем), второй копии правила нет.
+  //
+  // Вердикт темы в адаптиве устроен иначе: не «пройдена/не пройдена», а достигнутый
+  // уровень. Провал темы здесь — «не подтверждён ни один уровень»
+  // (`achievedLevelIndex === null`): именно эту ветку движок
+  // (`shared/scoring/aggregate.ts`) считает провальной — там он берёт `failureFeedback`
+  // и гасит `overallPassed`, — и именно так пакет отображает адаптивную тему на
+  // стандартную (`passed: tr.achievedLevelIndex !== null`, getAdaptiveResultForScorm).
+  function adaptiveTopic(
+    achievedLevelIndex: number | null,
+    feedbackTexts: string[] = [],
+    assets: Array<{ title: string; url?: string }> = [],
+  ) {
+    return {
+      topicName: "Тема",
+      achievedLevelIndex,
+      achievedLevelName: achievedLevelIndex === null ? null : "Средний",
+      feedbackTexts,
+      recommendedAssets: assets,
+    };
+  }
+
+  it("довозит текст и вложение темы, где НЕ подтверждён ни один уровень", () => {
+    const ctx = buildAdaptiveResultContext(
+      { topicResults: [adaptiveTopic(null, ["Текст темы"], [TOPIC_PDF])] },
+      "Адаптивный тест",
+    );
+    expect(ctx.result.recommendations?.texts).toEqual(["Текст темы"]);
+    expect(ctx.result.recommendations?.assets).toEqual([TOPIC_PDF]);
+    expect(ctx.result.recommendations?.hasAny).toBe(true);
+  });
+
+  it("у темы с ПОДТВЕРЖДЁННЫМ уровнем материалы темы молчат", () => {
+    const ctx = buildAdaptiveResultContext(
+      { topicResults: [adaptiveTopic(1, ["Текст темы"], [TOPIC_PDF])] },
+      "Адаптивный тест",
+    );
+    expect(ctx.result.recommendations).toBeUndefined();
+  });
+
+  it("гейт потемный: молчит тема с уровнем, говорит тема без уровня", () => {
+    const ctx = buildAdaptiveResultContext(
+      {
+        topicResults: [
+          adaptiveTopic(2, ["Текст подтверждённой"], [TOPIC_PDF]),
+          { ...adaptiveTopic(null, ["Текст неподтверждённой"], [SECTION_PDF]), topicName: "Тема 2" },
+        ],
+      },
+      "Адаптивный тест",
+    );
+    expect(ctx.result.recommendations?.texts).toEqual(["Текст неподтверждённой"]);
+    expect(ctx.result.recommendations?.assets).toEqual([SECTION_PDF]);
+  });
+
+  it("обратная связь ТЕСТА идёт первой и гейта темы не касается", () => {
+    const ctx = buildAdaptiveResultContext(
+      { topicResults: [adaptiveTopic(null, ["Текст темы"], [TOPIC_PDF])] },
+      "Адаптивный тест",
+      { testFeedback: { text: "Спасибо за участие.", links: [], events: [], assets: [SECTION_PDF] } },
+    );
+    expect(ctx.result.recommendations?.texts).toEqual(["Спасибо за участие.", "Текст темы"]);
+    expect(ctx.result.recommendations?.assets).toEqual([SECTION_PDF, TOPIC_PDF]);
+  });
+
+  it("текст, совпадающий с обратной связью теста, не повторяется", () => {
+    const ctx = buildAdaptiveResultContext(
+      { topicResults: [adaptiveTopic(null, ["Общая рекомендация"])] },
+      "Адаптивный тест",
+      { testFeedback: { text: "Общая рекомендация", links: [], events: [], assets: [] } },
+    );
+    expect(ctx.result.recommendations?.texts).toEqual(["Общая рекомендация"]);
+  });
+
+  it("пустого блока не рождается: нет материалов — нет и `recommendations`", () => {
+    const ctx = buildAdaptiveResultContext(
+      { topicResults: [adaptiveTopic(null, ["", "   "], [])] },
+      "Адаптивный тест",
+    );
+    expect(ctx.result.recommendations).toBeUndefined();
+  });
+
+  it("состав блока совпадает со стандартным на равном входе", () => {
+    // Главная проверка «одна функция, а не копия»: на одинаковых материалах и
+    // одинаковом вердикте темы оба режима обязаны отдать один и тот же блок.
+    const material = { feedbackTexts: ["Текст темы"], recommendedAssets: [TOPIC_PDF] };
+    const testFeedback = { text: "Спасибо за участие.", links: [], events: [], assets: [SECTION_PDF] };
+    const standard = buildResultContext(
+      baseInput([{ ...topicRow([TOPIC_PDF], ["Текст темы"], false), ...material }]),
+      "Тест",
+      { testFeedback },
+    );
+    const adaptive = buildAdaptiveResultContext(
+      { topicResults: [{ topicName: "Тема", achievedLevelIndex: null, achievedLevelName: null, ...material }] },
+      "Тест",
+      { testFeedback },
+    );
+    expect(adaptive.result.recommendations).toEqual(standard.result.recommendations);
   });
 });
 

@@ -21,6 +21,22 @@ import { buildResultsNav } from "../shared/template/results-nav";
 const layoutsDir = path.join(process.cwd(), "server", "scorm", "templates", "default", "layouts");
 const resultsLayout = fs.readFileSync(path.join(layoutsDir, "results.html"), "utf8");
 const adaptiveLayout = fs.readFileSync(path.join(layoutsDir, "results.adaptive.html"), "utf8");
+/**
+ * The adaptive results layout of EVERY shipped design template. Parity between the
+ * two is kept by hand, so the recommendations block is asserted on both: a template
+ * that never got the block renders an adaptive results screen with no feedback at
+ * all, and nothing in the render tests would notice if only `default` were checked.
+ */
+const adaptiveLayouts: Array<[string, string]> = [
+  ["default", adaptiveLayout],
+  [
+    "certification",
+    fs.readFileSync(
+      path.join(process.cwd(), "templates", "certification", "layouts", "results.adaptive.html"),
+      "utf8",
+    ),
+  ],
+];
 
 function render(layout: string, context: unknown): HTMLElement {
   const root = document.createElement("div");
@@ -225,6 +241,60 @@ describe("results.adaptive.html — superset gating", () => {
     expect(cards[1].querySelector(".tb-topic-card__fb-text")).toBeNull();
     expect(cards[1].querySelector(".ou-tag")?.textContent).toContain("Минимально требуемый уровень не подтверждён");
   });
+});
+
+describe("results.adaptive.html — консолидированный блок рекомендаций", () => {
+  // Блок «Рекомендации» существовал только в стандартных итогах, поэтому адаптивный
+  // экран не показывал ученику НИЧЕГО: ни текстов обратной связи, ни курсов, ни
+  // мероприятий, ни вложений — ни у одной темы. Разметка перенесена из `results.html`
+  // дословно: это паритет режимов, а не новая вёрстка.
+  const recommendations = {
+    texts: ["Повторите тему «Сети»."],
+    links: [{ title: "Курс TCP/IP", url: "https://e/course" }],
+    events: [{ title: "Семинар по сетям" }],
+    assets: [{ title: "Разбор темы", url: "/api/media/aaaa" }],
+    hasAny: true,
+  };
+
+  for (const [templateId, layout] of adaptiveLayouts) {
+    it(`${templateId}: рисует тексты, курсы, мероприятия и материалы`, () => {
+      const root = render(layout, {
+        course: { title: "Адаптивный тест" },
+        result: { ...webAdaptive.result, recommendations },
+      });
+      const block = root.querySelector(".tb-recs-block");
+      expect(block).not.toBeNull();
+      expect(root.textContent).toContain("Рекомендации");
+      expect(block?.querySelector(".tb-recs-group__text")?.textContent).toBe("Повторите тему «Сети».");
+      const hrefs = [...block!.querySelectorAll("a.tb-rec")].map((a) => a.getAttribute("href"));
+      expect(hrefs).toEqual(["https://e/course", "/api/media/aaaa"]);
+      expect(block?.textContent).toContain("Семинар по сетям");
+      expect([...block!.querySelectorAll(".tb-eyebrow")].map((e) => e.textContent)).toEqual([
+        "Пройти обучение",
+        "Мероприятия",
+        "Материалы",
+      ]);
+    });
+
+    it(`${templateId}: без рекомендаций пустого блока не рисует`, () => {
+      const root = render(layout, webAdaptive);
+      expect(root.querySelector(".tb-recs-block")).toBeNull();
+      expect(root.textContent).not.toContain("Рекомендации");
+    });
+
+    it(`${templateId}: показывает только непустые группы`, () => {
+      const root = render(layout, {
+        course: { title: "Адаптивный тест" },
+        result: {
+          ...webAdaptive.result,
+          recommendations: { texts: ["Только текст"], links: [], events: [], assets: [], hasAny: true },
+        },
+      });
+      expect(root.querySelector(".tb-recs-block")).not.toBeNull();
+      expect(root.querySelectorAll(".tb-recs-group")).toHaveLength(1);
+      expect(root.querySelector(".tb-eyebrow")).toBeNull();
+    });
+  }
 });
 
 describe("buildResultsNav — the two retake facts", () => {
