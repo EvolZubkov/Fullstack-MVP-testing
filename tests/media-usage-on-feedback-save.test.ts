@@ -37,4 +37,17 @@ describe("feedback save -> usage index", () => {
     await syncEntityUsages("test_feedback", "test-1", null);
     expect(storage.replaceMediaUsages).toHaveBeenCalledWith("test_feedback", "test-1", []);
   });
+
+  it("индексирует вложение обратной связи темы", async () => {
+    await syncEntityUsages("topic_feedback", "topic-1", {
+      format: "plain",
+      text: "",
+      links: [],
+      events: [],
+      assets: [{ title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: `/api/media/${ID}` }],
+    });
+    expect(storage.replaceMediaUsages).toHaveBeenCalledWith("topic_feedback", "topic-1", [
+      { assetId: ID, field: "assets.0.url" },
+    ]);
+  });
 });

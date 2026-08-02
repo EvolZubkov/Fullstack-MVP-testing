@@ -44,7 +44,10 @@ export async function syncEntityUsages(
 /**
  * Best-effort media-index cleanup for entities removed by a CASCADE delete that does not
  * go through their own save/delete route handler — the topic and folder cascades over
- * questions/content pages (`server/storage/topics-repository.ts`). Mirrors the pattern the
+ * questions/content pages (`server/storage/topics-repository.ts`), plus the deleted topics
+ * THEMSELVES: since PRD-32 a topic carries its own media under `topic_feedback`, so the
+ * cascade clears not only the topic's content but the topic's own feedback block, which no
+ * other handler is left to clear. Mirrors the pattern the
  * single-entity delete routes already use (`syncEntityUsages(type, id, null)` to clear an
  * entity's rows): a failure is logged and swallowed per entry, not thrown — the cascade
  * delete already committed, so one bad index write must not fail the whole request, and
