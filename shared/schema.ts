@@ -1897,7 +1897,16 @@ export const mediaUsages = pgTable("media_usages", {
   // not a cascade mechanism.
   assetId: varchar("asset_id", { length: 36 }).notNull().references(() => mediaAssets.id),
   entityType: text("entity_type", {
-    enum: ["question", "content_page", "test_design", "test_feedback", "topic_feedback", "scale_feedback", "snapshot"],
+    enum: [
+      "question",
+      "content_page",
+      "test_design",
+      "test_feedback",
+      "topic_feedback",
+      "scale_feedback",
+      "variable_feedback",
+      "snapshot",
+    ],
   }).notNull(),
   entityId: varchar("entity_id", { length: 36 }).notNull(),
   field: text("field").notNull(),
