@@ -14,6 +14,7 @@ import { renderScreenInto, type ContentPageData } from "@shared/template/render-
 import type { ProtectionSpec } from "@shared/template/protection/spec";
 import { fitQuestionScene } from "@shared/template/fit-question";
 import { attachPointerDnd } from "@shared/template/dnd/pointer-dnd";
+import { attachQuestionMediaFullscreen } from "@shared/template/question-media";
 import { nextScaleIndex } from "@shared/template/scale-keyboard";
 import { resolveSceneTheme } from "@shared/template/themes";
 import { paintSceneTimers, type SceneTimersState } from "@shared/template/scene-timers";
@@ -438,6 +439,15 @@ export function TemplateScreen({ layout, context, css, slots, content, protectio
     return attachPointerDnd(shadow, {
       onDrop: ({ dropId, dragId }) => onActionRef.current?.(`drop:${dropId}:${dragId}`),
     });
+  }, []);
+
+  // PRD-38: полноэкранный просмотр медиа вопроса — тот же общий обработчик, который
+  // SCORM-хост цепляет на `document`. Отдельный эффект, а не довесок к dnd: у привязок
+  // разные причины существовать, и складывать их в один эффект незачем.
+  useEffect(() => {
+    const shadow = shadowRef.current;
+    if (!shadow) return;
+    return attachQuestionMediaFullscreen(shadow);
   }, []);
 
   return <div ref={hostRef} data-template-screen className={className} />;

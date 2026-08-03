@@ -40,17 +40,10 @@ import { buildQuestionNav, QUESTION_NAV_ACTIONS, type QuestionNavState } from "@
 import type { SceneTimersState } from "@shared/template/scene-timers";
 import type { ProtectionSpec } from "@shared/template/protection/spec";
 import { renderInlineMarkdown } from "@shared/text";
+import { renderQuestionMedia } from "@shared/template/question-media";
 
 /** Action names the shared nav row emits (plus the layout's own `nav:next`). */
 const NAV_ACTIONS: readonly string[] = Object.values(QUESTION_NAV_ACTIONS);
-
-function esc(s: unknown): string {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 /** Compute the next answer when option `oi` is toggled, by question type. */
 function nextAnswer(question: Question, answer: unknown, oi: number): unknown {
@@ -118,18 +111,6 @@ function interactionHtml(
   // presentation (see `hasFixedOptionOrder` in shared/questions/question-type).
   if (question.type === "scale") return renderScale(question, answer, review);
   return renderSingleChoice(question, answer, arr, review);
-}
-
-function mediaHtml(question: Question): string {
-  const url = question.mediaUrl;
-  const type = question.mediaType;
-  if (!url || !type) return "";
-  if (type === "image")
-    return `<img src="${esc(url)}" alt="" style="max-height:260px;object-fit:contain;margin:8px auto;display:block;border-radius:8px;">`;
-  if (type === "audio") return `<audio controls style="width:100%"><source src="${esc(url)}"></audio>`;
-  if (type === "video")
-    return `<video controls style="max-height:260px;width:100%;border-radius:8px"><source src="${esc(url)}"></video>`;
-  return "";
 }
 
 export interface TemplateQuestionScreenProps {
@@ -214,7 +195,7 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
     // paragraph inside it would be invalid. The SCORM twin fills the same slot
     // through the same renderer, so the two hosts show identical markup.
     "question-text": renderInlineMarkdown(question.prompt),
-    "question-media": mediaHtml(question),
+    "question-media": renderQuestionMedia(question),
     "question-interaction": interactionHtml(
       question,
       answer,
