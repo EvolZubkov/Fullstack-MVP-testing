@@ -29,6 +29,7 @@ import { buildTransitionContext } from "./transition-context";
 import { buildReviewContext } from "./review-context";
 import { renderSingleChoice, renderMultiple, renderRanking, renderMatching, renderScale } from "./question-interaction";
 import { renderInlineMarkdown } from "../text/markdown";
+import { renderQuestionMedia } from "./question-media";
 import {
   buildSequencePlacements,
   buildPageContext,
@@ -577,7 +578,7 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
           // the SAME author-text pipeline as the two runtime hosts — otherwise the
           // author would approve a screen the players do not produce.
           "question-text": renderInlineMarkdown(String(q.prompt ?? "")),
-          "question-media": "",
+          "question-media": renderQuestionMedia(q as { mediaUrl?: string | null; mediaType?: string | null }),
           "question-interaction": buildInteraction(q),
         }
       : { "question-text": "", "question-media": "", "question-interaction": "" };

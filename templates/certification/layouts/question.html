@@ -42,6 +42,7 @@
         {{#if state.sectionName}}<span class="ou-tag ou-tag--neutral" data-path="state.sectionName"></span>{{/if}}
       </div>
       <div class="tb-scene__q">
+        <div data-slot="question-media"></div>
         <h2 class="tb-scene__qtitle" data-slot="question-text"></h2>
         <!-- PRD-34 (FR-16): строка подсказки — она же место водяного знака. Якорь пустой:
              разметку, кегль и контраст знака даёт ЯДРО, шаблон отвечает только за место. -->
@@ -51,7 +52,6 @@
         </div>
       </div>
       <div class="tb-qbody">
-        <div class="tb-qbody__media" data-slot="question-media"></div>
         <div class="tb-qbody__answers">
           <div data-slot="question-feedback"></div>
           <div data-slot="question-interaction"></div>

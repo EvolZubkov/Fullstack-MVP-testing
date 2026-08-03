@@ -41,7 +41,7 @@ function render(): HTMLElement {
     },
     slots: {
       "question-text": "Какой пароль надёжнее?",
-      "question-media": "",
+      "question-media": '<div class="question-media" data-media-type="image"><img src="/a.png" alt=""></div>',
       "question-interaction": '<div class="ou-radio-group"></div>',
       "question-feedback": "",
     },
@@ -74,5 +74,22 @@ describe("question.html — scene chrome", () => {
     expect(root.querySelector(".tb-scene__qtitle")?.textContent).toContain("Какой пароль");
     expect(root.querySelector(".tb-scene__qhint")?.textContent).toContain("Выберите один вариант");
     expect(root.innerHTML).not.toContain("{{");
+  });
+});
+
+describe("question.html — media belongs to the question block (PRD-38)", () => {
+  it("puts the media slot inside .tb-scene__q, ahead of the prompt", () => {
+    const root = render();
+    const q = root.querySelector(".tb-scene__q")!;
+    const slot = q.querySelector('[data-slot="question-media"]');
+    expect(slot).toBeTruthy();
+    expect(q.firstElementChild).toBe(slot);
+  });
+
+  it("leaves no media column in the answers body", () => {
+    const root = render();
+    expect(root.querySelector(".tb-qbody__media")).toBeNull();
+    expect(root.querySelector('.tb-qbody [data-slot="question-media"]')).toBeNull();
+    expect(root.querySelector('.tb-qbody [data-slot="question-interaction"]')).toBeTruthy();
   });
 });
