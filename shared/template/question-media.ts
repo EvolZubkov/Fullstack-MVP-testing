@@ -28,8 +28,8 @@
  * `element.ownerDocument.body` would silently escape the shadow root: the overlay would
  * render in the light DOM, past the reach of `theme.css`, as an unstyled image at the
  * bottom of the page. Passing the actual root through — and searching it with
- * `querySelector` rather than `Document#getElementById`, which `ShadowRoot` and `Element`
- * do not have — keeps the overlay inside whichever tree carries the stylesheet.
+ * `querySelector` rather than `Document#getElementById`, which `ShadowRoot` does not have —
+ * keeps the overlay inside whichever tree carries the stylesheet.
  */
 import { escapeHtml } from "../text/escape";
 
@@ -46,7 +46,7 @@ export interface QuestionMediaInput {
 const FULLSCREEN_ATTR = "data-media-fullscreen";
 
 /** Fullscreen is offered for what has a picture; audio has none. */
-function isZoomable(type: string): type is "image" | "video" {
+function isZoomable(type: string): type is Extract<QuestionMediaType, "image" | "video"> {
   return type === "image" || type === "video";
 }
 
@@ -72,7 +72,11 @@ export function renderQuestionMedia(media: QuestionMediaInput | null | undefined
     : "";
 
   if (type === "image") {
-    return open + zoom + `<img class="qm-preview" src="${src}" alt=""></div>`;
+    // The image IS the content the question asks about ("what is depicted"), so it needs a
+    // real description, not an empty (= decorative, screen-reader-skipped) alt. There is no
+    // author-supplied alt field on the question yet (a separate future task); this generic
+    // label is strictly better than silence.
+    return open + zoom + `<img class="qm-preview" src="${src}" alt="Изображение к вопросу"></div>`;
   }
   if (type === "video") {
     return (
@@ -96,28 +100,30 @@ const OVERLAY_ID = "qm-overlay";
 
 /**
  * The node an overlay can be mounted into and searched within: the whole document (package
- * host), a shadow root (web host — the tree carrying the template's injected `theme.css`),
- * or a plain element (tests, and any future host that mounts the renderer elsewhere).
+ * host) or a shadow root (web host — the tree carrying the template's injected `theme.css`).
+ * Nothing wider: the overlay's identity relies on `id` uniqueness WITHIN the searched tree,
+ * which an arbitrary `Element` cannot guarantee — attaching to some element `B` and later to
+ * a descendant `A` of `B` would produce a second `#qm-overlay` node in the very same tree.
+ * The two real hosts never do that: the package always passes `document`, the web host
+ * always passes the one shadow root the scene lives in.
  */
-export type QuestionMediaRoot = Document | ShadowRoot | Element;
+export type QuestionMediaRoot = Document | ShadowRoot;
 
 /**
  * The document that owns `root`, for `createElement`. A `Document` node's own
  * `ownerDocument` is `null` (a document does not own itself), so it is returned as-is;
- * a `ShadowRoot` or `Element` yields the document it is attached to.
+ * a `ShadowRoot` yields the document it is attached to.
  */
 function documentOf(root: QuestionMediaRoot): Document {
   return root.nodeType === 9 ? (root as Document) : (root.ownerDocument as Document);
 }
 
 /**
- * Where the overlay element itself gets appended. For a `Document` that is `document.body`
- * (an overlay cannot be a document's own child); for a shadow root or a plain element it is
- * `root` itself, so the overlay lands in the SAME tree the caller passed in — see the
- * module doc for why that tree must not be derived from `ownerDocument`.
+ * Where the overlay element itself gets appended: `document.body` for a `Document` root, the
+ * root itself for a `ShadowRoot` (see the module doc for why it must be the actual root).
  */
 function mountPointOf(root: QuestionMediaRoot): Element | ShadowRoot {
-  return root.nodeType === 9 ? (root as Document).body : (root as ShadowRoot | Element);
+  return root.nodeType === 9 ? (root as Document).body : (root as ShadowRoot);
 }
 
 /** Builds the overlay lazily inside `root`; a screen without media never pays for it. */
@@ -148,16 +154,22 @@ function closeOverlay(root: QuestionMediaRoot): void {
   const overlay = root.querySelector<HTMLElement>(`#${OVERLAY_ID}`);
   if (!overlay) return;
   const stage = overlay.querySelector(".qm-overlay__stage");
-  if (stage) stage.innerHTML = "";
+  if (stage) {
+    // Removing a <video> from the document pauses it per spec, so the innerHTML wipe below
+    // is enough in a browser. The target runtime is a WebTutor SCORM player we have no way
+    // to load and verify locally (PRD-38 acceptance note) — an explicit pause costs one
+    // line and removes the dependency on that spec guarantee holding there too.
+    stage.querySelector("video")?.pause();
+    stage.innerHTML = "";
+  }
   overlay.hidden = true;
 }
 
 /**
  * Shows one asset full screen, inside `root`.
  *
- * @param root Same node passed to {@link attachQuestionMediaFullscreen} — a shadow root on
- *             the web host, `document` in the package. The overlay is created (and
- *             searched for) inside it, never derived from an element's `ownerDocument`.
+ * @param root Same node passed to {@link attachQuestionMediaFullscreen} — see the module doc
+ *             for why it must be the actual root, not something derived from it.
  * @param url  Asset address, already resolved by the host.
  * @param type Media kind; anything but image and video is ignored.
  */
@@ -168,23 +180,32 @@ export function openQuestionMediaOverlay(root: QuestionMediaRoot, url: string, t
   stage.innerHTML =
     type === "image"
       ? `<img src="${escapeHtml(url)}" alt="">`
-      : `<video controls autoplay><source src="${escapeHtml(url)}"></video>`;
+      : // No `autoplay`: LMS/browser autoplay policies block it more often than not, and
+        // `muted` would be needed to make it reliable — which defeats the point of playing a
+        // video question. The legacy runtime made the same call on purpose (see the removed
+        // `server/scorm/template/app/render/questionMedia.js`); this keeps it, not reopens it.
+        `<video controls><source src="${escapeHtml(url)}"></video>`;
   overlay.hidden = false;
 }
 
 /**
  * Wires the fullscreen affordance by delegation, so it survives the re-render both hosts do
- * on every question. Idempotent: attaching twice adds one listener per call but still yields
- * a single overlay (`ensureOverlay` finds the existing one by `querySelector`).
+ * on every question. Safe to attach more than once — one overlay per root: a second
+ * attachment adds a second click listener (each one fires on the same click, but
+ * `ensureOverlay` still finds the single existing node by `querySelector`, so the overlay
+ * itself is never duplicated).
  *
  * Escape is bound on `root`'s OWNER DOCUMENT, not on `root` itself: a shadow root never
  * receives a `keydown` fired outside it directly, but the DOM spec has such events RETARGET
  * and bubble up through the shadow boundary to `document` regardless of which shadow tree
  * (if any) the focused element sits in, so binding on the document alone covers every host.
  *
- * @param root Shadow root (web) or document (package) — the SAME node `theme.css` was
- *             injected into, so the overlay it mounts stays reachable by that stylesheet.
- * @returns Detach function; removes both the click and the keydown listener.
+ * @param root Shadow root (web) or document (package) — see the module doc for why.
+ * @returns Detach function: removes the click and keydown listeners, and also closes AND
+ *          removes the overlay node itself. Without that a screen that unmounts while the
+ *          overlay is open would leave a `position: fixed` layer (and a still-playing
+ *          `<video>`) sitting on top of whatever renders next; a later re-attach rebuilds
+ *          the overlay lazily via `ensureOverlay`, so removing it here is not wasteful.
  */
 export function attachQuestionMediaFullscreen(root: QuestionMediaRoot): () => void {
   const onClick = (e: Event) => {
@@ -204,5 +225,7 @@ export function attachQuestionMediaFullscreen(root: QuestionMediaRoot): () => vo
   return () => {
     root.removeEventListener("click", onClick);
     doc.removeEventListener("keydown", onKeydown);
+    closeOverlay(root);
+    root.querySelector<HTMLElement>(`#${OVERLAY_ID}`)?.remove();
   };
 }
