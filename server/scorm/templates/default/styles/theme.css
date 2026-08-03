@@ -373,7 +373,54 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 
 /* ── Question body ──────────────────────────────────────────────── */
 .tb-scene__meta { display: flex; align-items: center; gap: var(--ou-space-3); font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
-.tb-scene__q { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+/* PRD-38: медиа принадлежит блоку вопроса, а не блоку ответов. Одна колонка, пока медиа
+   нет; при непустом слоте — медиа 5 модулей слева, текст с подсказкой 7 справа: та же
+   пропорция, что и раньше, но справа теперь стоит ТЕКСТ ЗАДАНИЯ, а не блок ответов.
+   Ветвление по ТИПУ медиа возможно только здесь: макеты обязаны совпадать побайтово у всех
+   шаблонов (tests/template-layout-parity), а DSL не имеет выражений.
+
+   Ряды объявлены явно, потому что без grid-template-rows строка `-1` равна строке `1`:
+   правило grid-row:1/-1 у медиа схлопнулось бы в одну ячейку, а подсказка уехала бы под
+   медиа в ЛЕВУЮ колонку. Второй ряд — `1fr`, а не `auto`: когда медиа выше пары «заголовок +
+   подсказка», лишнюю высоту забирает нижний ряд целиком, и подсказка остаётся прижатой к
+   заголовку, а не повисает посреди пустоты. */
+.tb-scene__q { display: grid; grid-template-columns: 1fr; gap: var(--ou-space-2); }
+.tb-scene__q:has([data-slot="question-media"]:not(:empty)) {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  grid-template-rows: auto 1fr;
+  column-gap: var(--ou-space-5);
+  align-items: start;
+}
+.tb-scene__q:has([data-slot="question-media"]:not(:empty)) > [data-slot="question-media"] {
+  grid-column: 1; grid-row: 1 / -1;
+}
+.tb-scene__q:has([data-slot="question-media"]:not(:empty)) > .tb-scene__qtitle,
+.tb-scene__q:has([data-slot="question-media"]:not(:empty)) > .tb-scene__qmeta {
+  grid-column: 2;
+}
+/* Аудио визуальной площади не имеет: плеер идёт строкой над текстом во всю ширину колонки.
+
+   Аргумент `:has()` намеренно длиннее, чем нужно для попадания: специфичность `:has()` равна
+   специфичности САМОГО СПЕЦИФИЧНОГО аргумента, поэтому короткое
+   `:has([data-media-type="audio"])` (0,2,0) ПРОИГРЫВАЕТ правилу выше (0,3,0 из-за
+   `:not(:empty)`) и аудио молча остаётся в колонке 5 из 12. Проверено в браузере: до правки
+   плашка плеера была шириной 376px. */
+.tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto;
+}
+.tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) > [data-slot="question-media"],
+.tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) > .tb-scene__qtitle,
+.tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) > .tb-scene__qmeta {
+  grid-column: 1; grid-row: auto;
+}
+/* Порядок в DOM выбран так, что во всех одноколоночных случаях медиа само оказывается над
+   текстом — отдельного правила порядка не требуется. */
+.tb-scene__q > [data-slot="question-media"]:empty { display: none; }
+/* Медиа и текст задания разделяет тот же интервал, что и остальные блоки колонки. */
+.tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) > [data-slot="question-media"] {
+  margin-bottom: var(--ou-space-3);
+}
 .tb-scene__qtitle {
   margin: 0; font-weight: 600; line-height: 1.25; letter-spacing: -0.015em;
   color: var(--ou-fg-default); text-wrap: pretty;
@@ -386,22 +433,30 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-scene__qmeta > [data-slot="protection-mark"] { margin-inline-start: auto; }
 .tb-scene__qhint { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
 
-/* Media + answers: stacked by default; side-by-side (media 5 / answers 7) when
-   the media slot actually has content. */
-/* Media + answers: fill the column when content is short (flex-grow), but keep the
-   content's natural height when long (flex-basis:auto, no shrink) so it grows the
-   column and the body scrolls rather than clipping the last options. */
+/* Ответы: занимают колонку, когда содержимое короткое (flex-grow), и держат natural height,
+   когда длинное, — тело сцены тогда прокручивается, а не обрезает последние варианты.
+   PRD-38: колонки здесь больше нет — медиа ушло в блок вопроса, ответы всегда во всю ширину. */
 .tb-qbody { flex: 1 0 auto; display: grid; grid-template-columns: 1fr; gap: var(--ou-space-5); }
-.tb-qbody:has([data-slot="question-media"]:not(:empty)) {
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  align-items: start;
+
+/* Размер медиа задаёт ШАБЛОН, а не инлайн рантайма: в этом и смысл общего рендерера —
+   инлайновый стиль иначе перебивает theme.css.
+   max-height держит кадр вопроса: высокая вертикальная картинка иначе растянула бы левую
+   колонку и утопила варианты ответа под сгиб.
+   Обёртка изображения и видео хватает по содержимому (width: fit-content), поэтому кнопка
+   «во весь экран» стоит в углу САМОЙ картинки, а не у края пустой колонки, и вокруг картинки
+   не остаётся полей от `object-fit`.
+   Картинка не растягивается сверх натурального размера: апскейл даёт мыло. */
+.question-media[data-media-type="image"],
+.question-media[data-media-type="video"] {
+  width: fit-content; max-width: 100%; margin-inline: auto;
 }
-.tb-qbody__media:empty { display: none; }
-/* `max-width` matters as much as `width`: the web host prints question media with an
-   inline `max-height` but no width cap (template-question-screen), so a wide asset
-   would push the answer column past the scene on a phone. */
-.tb-qbody__media img,
-.tb-qbody__media video { width: 100%; max-width: 100%; height: auto; border-radius: var(--ou-radius-m); }
+.question-media img,
+.question-media video {
+  display: block; width: auto; height: auto;
+  max-width: 100%; max-height: 320px;
+  border-radius: var(--ou-radius-m);
+}
+.question-media img { cursor: zoom-in; }
 /* Result-variable rings are printed with `width`/`height` ATTRIBUTES from the author's
    `size` option (renderers.ts ringChart, default 120 and up), which a narrow field
    cannot override — cap them here so an indicator cannot overflow the scene. */
@@ -984,11 +1039,28 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 
 /* ── S2 · scene <= 700px — tablet portrait and narrow embeds ────────
    The two-column grids fold. The step sits BELOW 768 deliberately: on a tablet
-   "media left / answers right" is still a good composition (media ~291px, text
+   "media left / prompt right" is still a good composition (media ~291px, text
    ~385px), and folding it there would only add scrolling. */
 @container tbscene (max-width: 700px) {
-  /* Media + answers, and the content page's image + text: one column. */
-  .tb-qbody:has([data-slot="question-media"]:not(:empty)) { grid-template-columns: 1fr; }
+  /* PRD-38: складывается БЛОК ВОПРОСА, а у блока ответов складывать нечего — колонок у него
+     нет ни при какой ширине. Медиа оказывается над текстом само собой: в разметке оно идёт
+     первым. Потолок высоты ниже, чем на широкой сцене: на телефоне картинка в 320px съедает
+     экран и утапливает варианты под сгиб. */
+  .tb-scene__q:has([data-slot="question-media"]:not(:empty)) {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+  .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > [data-slot="question-media"],
+  .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > .tb-scene__qtitle,
+  .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > .tb-scene__qmeta {
+    grid-column: 1; grid-row: auto;
+  }
+  .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > [data-slot="question-media"] {
+    margin-bottom: var(--ou-space-3);
+  }
+  .question-media img,
+  .question-media video { max-height: 220px; }
+  /* The content page's image + text: one column. */
   .tb-content--image,
   .tb-content--image-right { grid-template-columns: 1fr; gap: var(--ou-space-5); }
 
