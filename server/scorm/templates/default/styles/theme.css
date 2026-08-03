@@ -899,7 +899,7 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 .q-timer { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
 .q-timer--hidden { display: none; }
 
-/* Question media + fullscreen affordance (renderQuestionMedia). */
+/* Question media + fullscreen affordance (renderQuestionMedia, PRD-38). */
 .question-media { position: relative; }
 .qm-fs-btn {
   position: absolute; top: 10px; right: 10px;
@@ -908,6 +908,42 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   cursor: pointer; font-size: 16px; line-height: 1; opacity: 0.9;
 }
 .qm-fs-btn:hover { opacity: 1; }
+
+/* PRD-38: аудио — не картинка, а полоса управления. Плашка даёт ей поверхность сцены.
+   Своего плеера у DS пока нет — осознанный техдолг PRD-38 (раздел 9 спеки).
+
+   ПРО color-scheme: своего объявления здесь НЕ НУЖНО, и объявлять его прямо вредно.
+   `color-scheme` НАСЛЕДУЕТСЯ, а ДС уже ставит его на корне темы (`.ou, .ou--light` — light,
+   `.ou--dark` — dark, см. university-rt.css); корень сцены и есть `.ou` на обоих хостах.
+   Правило вида `color-scheme: light dark` это наследование ПЕРЕБИВАЕТ и возвращает плеер к
+   СИСТЕМНОЙ теме: проверено в браузере — на тёмной сцене плеер становился белым. */
+.question-media[data-media-type="audio"] {
+  padding: var(--ou-space-3);
+  border: 1px solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-surface-2);
+}
+.qm-audio { display: block; width: 100%; }
+
+/* Полноэкранный просмотр (attachQuestionMediaFullscreen). Разметку строит ЯДРО, поэтому
+   здесь только вид: до PRD-38 те же значения писались инлайном из рантайма.
+   Правило `[hidden]` обязательно: собственный `display: flex` перебивает браузерное
+   `display: none` от атрибута, и без него оверлей виден всегда. */
+.qm-overlay {
+  position: fixed; inset: 0; z-index: 99999;
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--ou-space-6); background: rgb(0 0 0 / 0.85);
+}
+.qm-overlay[hidden] { display: none; }
+.qm-overlay__stage { display: flex; align-items: center; justify-content: center; max-width: 95vw; max-height: 90vh; }
+.qm-overlay__stage img,
+.qm-overlay__stage video { max-width: 95vw; max-height: 90vh; object-fit: contain; border-radius: var(--ou-radius-m); }
+.qm-overlay__close {
+  position: absolute; top: var(--ou-space-4); right: var(--ou-space-4);
+  border: 0; border-radius: var(--ou-radius-s); padding: 10px 12px;
+  background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+  cursor: pointer; font-size: 22px; line-height: 1;
+}
 
 /* Adaptive / content-page nav row + its progress bar. */
 .navigation { display: flex; justify-content: space-between; margin-top: 32px; }
