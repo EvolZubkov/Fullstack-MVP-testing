@@ -21,6 +21,31 @@ import { buildResultsNav } from "../shared/template/results-nav";
 const layoutsDir = path.join(process.cwd(), "server", "scorm", "templates", "default", "layouts");
 const resultsLayout = fs.readFileSync(path.join(layoutsDir, "results.html"), "utf8");
 const adaptiveLayout = fs.readFileSync(path.join(layoutsDir, "results.adaptive.html"), "utf8");
+/**
+ * The adaptive results layout of EVERY shipped design template. Parity between the
+ * two is kept by hand, so the recommendations block is asserted on both: a template
+ * that never got the block renders an adaptive results screen with no feedback at
+ * all, and nothing in the render tests would notice if only `default` were checked.
+ */
+const adaptiveLayouts: Array<[string, string]> = [
+  ["default", adaptiveLayout],
+  [
+    "certification",
+    fs.readFileSync(
+      path.join(process.cwd(), "templates", "certification", "layouts", "results.adaptive.html"),
+      "utf8",
+    ),
+  ],
+];
+
+/** The STANDARD results layout of every shipped design template — parity kept by hand. */
+const standardLayouts: Array<[string, string]> = [
+  ["default", resultsLayout],
+  [
+    "certification",
+    fs.readFileSync(path.join(process.cwd(), "templates", "certification", "layouts", "results.html"), "utf8"),
+  ],
+];
 
 function render(layout: string, context: unknown): HTMLElement {
   const root = document.createElement("div");
@@ -62,7 +87,7 @@ describe("results.html — superset gating", () => {
     expect(root.querySelectorAll(".tb-topic-card .ou-stat-row").length).toBe(1); // "Правильно" only
   });
 
-  it("SCORM context: points row + threshold + per-topic feedback + recommendations + back action", () => {
+  it("SCORM context: points row + threshold + recommendations + back action", () => {
     const scorm = {
       course: { title: "Тест" },
       result: {
@@ -72,9 +97,6 @@ describe("results.html — superset gating", () => {
             ...webResult.result.topicResults[0],
             pointsLabel: "4.0 / 5.0",
             requiredLabel: "Требуется: 70%",
-            // Unified per-topic feedback (plan 6.1): feedback + courses + events.
-            feedback: "Отличный результат",
-            hasFeedback: true,
             recommendedCourses: [{ title: "Курс A", url: "https://e/a" }],
             recommendedEvents: [{ title: "Семинар B" }],
             hasRecommendations: true,
@@ -91,12 +113,72 @@ describe("results.html — superset gating", () => {
     expect(root.querySelector(".tb-topic-card")?.textContent).toContain("Баллов");
     expect(root.textContent).toContain("4.0 / 5.0");
     // Recommendations are per-topic chips now (not a result-level section).
-    expect(root.querySelector(".tb-topic-card__fb-text")?.textContent).toContain("Отличный результат");
     const recs = [...root.querySelectorAll(".tb-topic-card .tb-rec")].map((r) => r.textContent);
     expect(recs).toContain("Курс A");
     expect(recs).toContain("Семинар B");
     expect(root.querySelector('[data-action="back-to-start"]')?.textContent).toBe("Вернуться к тесту");
   });
+});
+
+/**
+ * Текст обратной связи живёт ТОЛЬКО в консолидированном блоке. Раньше карточка темы
+ * несла собственный слот текста, и после консолидации он либо пустовал, либо печатал
+ * ту же строку второй раз — на одном экране, в двух местах.
+ *
+ * Проверяется именно МАКЕТ, а не построитель: контекст здесь нарочно несёт и
+ * `feedback`/`hasFeedback` (как их несла бы попытка, посчитанная старым построителем),
+ * и тот же текст в блоке. Слот снят — значит текст печатается один раз, откуда бы поле
+ * в контексте ни взялось.
+ */
+describe("results.html — текст обратной связи только в консолидированном блоке", () => {
+  const TEXT = "Повторите тему «Сети».";
+  const contextWithBoth = {
+    course: { title: "Тест" },
+    result: {
+      ...webResult.result,
+      topicResults: [
+        {
+          ...webResult.result.topicResults[0],
+          feedback: TEXT,
+          hasFeedback: true,
+          recommendedCourses: [{ title: "Курс A", url: "https://e/a" }],
+          recommendedEvents: [],
+          hasRecommendations: true,
+        },
+      ],
+      recommendations: { texts: [TEXT], links: [], events: [], assets: [], hasAny: true },
+    },
+  };
+
+  for (const [templateId, layout] of standardLayouts) {
+    it(`${templateId}: карточка темы текста не печатает, а блок печатает`, () => {
+      const root = render(layout, contextWithBoth);
+      const card = root.querySelector(".tb-topic-card") as HTMLElement;
+      expect(card.querySelector(".tb-topic-card__fb-text")).toBeNull();
+      expect(card.textContent).not.toContain(TEXT);
+      // Текст не потерян — он переехал в блок, и ровно один раз на весь экран.
+      expect(root.querySelector(".tb-recs-block .tb-recs-group__text")?.textContent).toBe(TEXT);
+      expect((root.textContent ?? "").match(new RegExp(TEXT, "g"))).toHaveLength(1);
+    });
+
+    it(`${templateId}: курсы и мероприятия темы в карточке остаются`, () => {
+      const root = render(layout, contextWithBoth);
+      const card = root.querySelector(".tb-topic-card") as HTMLElement;
+      expect(card.querySelector("a.tb-rec")?.getAttribute("href")).toBe("https://e/a");
+      expect(card.querySelectorAll(".tb-topic-card__fb")).toHaveLength(1);
+    });
+
+    it(`${templateId}: тема без курсов не оставляет пустой блок в карточке`, () => {
+      const root = render(layout, {
+        ...contextWithBoth,
+        result: {
+          ...contextWithBoth.result,
+          topicResults: [{ ...contextWithBoth.result.topicResults[0], recommendedCourses: [], hasRecommendations: false }],
+        },
+      });
+      expect(root.querySelector(".tb-topic-card__fb")).toBeNull();
+    });
+  }
 });
 
 describe("results.html — пустая плашка не рисуется", () => {
@@ -225,6 +307,89 @@ describe("results.adaptive.html — superset gating", () => {
     expect(cards[1].querySelector(".tb-topic-card__fb-text")).toBeNull();
     expect(cards[1].querySelector(".ou-tag")?.textContent).toContain("Минимально требуемый уровень не подтверждён");
   });
+});
+
+describe("results.adaptive.html — консолидированный блок рекомендаций", () => {
+  // Блок «Рекомендации» существовал только в стандартных итогах, поэтому адаптивный
+  // экран не показывал ученику НИЧЕГО: ни текстов обратной связи, ни курсов, ни
+  // мероприятий, ни вложений — ни у одной темы. Разметка перенесена из `results.html`
+  // дословно: это паритет режимов, а не новая вёрстка.
+  const recommendations = {
+    texts: ["Повторите тему «Сети»."],
+    links: [{ title: "Курс TCP/IP", url: "https://e/course" }],
+    events: [{ title: "Семинар по сетям" }],
+    assets: [{ title: "Разбор темы", url: "/api/media/aaaa" }],
+    hasAny: true,
+  };
+
+  for (const [templateId, layout] of adaptiveLayouts) {
+    it(`${templateId}: рисует тексты, курсы, мероприятия и материалы`, () => {
+      const root = render(layout, {
+        course: { title: "Адаптивный тест" },
+        result: { ...webAdaptive.result, recommendations },
+      });
+      const block = root.querySelector(".tb-recs-block");
+      expect(block).not.toBeNull();
+      expect(root.textContent).toContain("Рекомендации");
+      expect(block?.querySelector(".tb-recs-group__text")?.textContent).toBe("Повторите тему «Сети».");
+      const hrefs = [...block!.querySelectorAll("a.tb-rec")].map((a) => a.getAttribute("href"));
+      expect(hrefs).toEqual(["https://e/course", "/api/media/aaaa"]);
+      expect(block?.textContent).toContain("Семинар по сетям");
+      expect([...block!.querySelectorAll(".tb-eyebrow")].map((e) => e.textContent)).toEqual([
+        "Пройти обучение",
+        "Мероприятия",
+        "Материалы",
+      ]);
+    });
+
+    it(`${templateId}: без рекомендаций пустого блока не рисует`, () => {
+      const root = render(layout, webAdaptive);
+      expect(root.querySelector(".tb-recs-block")).toBeNull();
+      expect(root.textContent).not.toContain("Рекомендации");
+    });
+
+    // Слот текста в АДАПТИВНОЙ карточке снимать нельзя: `feedback` здесь — не текст
+    // темы (тот уехал в блок), а обратная связь ДОСТИГНУТОГО УРОВНЯ либо текст провала
+    // темы. В консолидированный блок она не подаётся, и снятие слота стёрло бы её из
+    // продукта совсем.
+    it(`${templateId}: обратная связь уровня остаётся в карточке темы`, () => {
+      const root = render(layout, {
+        course: { title: "Адаптивный тест" },
+        result: {
+          adaptive: true,
+          topicResults: [
+            {
+              topicName: "Сети",
+              levelLabel: "Средний",
+              levelClass: "ou-tag--solid ou-tag--accent",
+              feedback: "Ваш уровень по теме — средний",
+              hasFeedback: true,
+              hasRecommendations: false,
+              recommendedCourses: [],
+              recommendedEvents: [],
+            },
+          ],
+          recommendations,
+        },
+      });
+      expect(root.querySelector(".tb-topic-card .tb-topic-card__fb-text")?.textContent).toBe(
+        "Ваш уровень по теме — средний",
+      );
+    });
+
+    it(`${templateId}: показывает только непустые группы`, () => {
+      const root = render(layout, {
+        course: { title: "Адаптивный тест" },
+        result: {
+          ...webAdaptive.result,
+          recommendations: { texts: ["Только текст"], links: [], events: [], assets: [], hasAny: true },
+        },
+      });
+      expect(root.querySelector(".tb-recs-block")).not.toBeNull();
+      expect(root.querySelectorAll(".tb-recs-group")).toHaveLength(1);
+      expect(root.querySelector(".tb-eyebrow")).toBeNull();
+    });
+  }
 });
 
 describe("buildResultsNav — the two retake facts", () => {

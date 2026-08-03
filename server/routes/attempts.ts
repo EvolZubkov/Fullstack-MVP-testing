@@ -13,9 +13,19 @@ import { loadScoringConfig } from "../services/scoring-config";
 import { loadTestScoringContext } from "../services/effective-scoring";
 import { computeAttemptResult } from "../services/result-compute";
 import { decideRetake, countAttemptsInAssignment } from "../services/retake-gate";
-import { readResultsRenderPayload, readReportRenderPayload } from "../services/template-render";
+import {
+  readResultsRenderPayload,
+  readReportRenderPayload,
+  completeMeasuresSource,
+} from "../services/template-render";
 import { reportKindForMode } from "@shared/report/report-variants";
-import { buildReportInput, buildAdaptiveReportInput, type MeasuresSource } from "../services/result-context";
+import {
+  buildReportInput,
+  buildAdaptiveReportInput,
+  buildMeasuresInput,
+  type MeasuresSource,
+} from "../services/result-context";
+import type { MeasuresInput } from "@shared/template/result-context";
 import type { ResultsBlockSettings } from "@shared/template/results-blocks";
 import type { ReportInput, AdaptiveReportInput } from "@shared/report/report-html";
 import { pingSection } from "../services/section-timer";
@@ -30,8 +40,9 @@ import {
 } from "../services/test-snapshot";
 import type { QuestionType } from "@shared/scales/engine";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
-// PRD-32: ONE address rule for a feedback attachment — the same helper the SCORM bake runs.
-import { feedbackAssets } from "@shared/template/result-context";
+// PRD-32: ONE address rule for a feedback attachment, and ONE source-priority rule for
+// the topic's feedback text — the same helpers the SCORM bake runs.
+import { feedbackAssets, topicFeedbackTexts } from "@shared/template/result-context";
 import type {
   Test,
   TestVariant,
@@ -1181,6 +1192,7 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
       recommendedCourses: { title: string; url: string }[];
       recommendedEvents: { title: string }[];
       recommendedAssets: { title: string; url: string }[];
+      feedbackTexts: string[];
     }>[] = [];
     for (const variantSection of variant.sections) {
       const section = sectionMap.get(variantSection.topicId);
@@ -1214,6 +1226,10 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
           recommendedCourses: courses.map((c) => ({ title: c.title, url: c.url })),
           recommendedEvents: events.map((e) => ({ title: e.title })),
           recommendedAssets: feedbackAttachments.map((a) => ({ title: a.title, url: a.url ?? "" })),
+          // Same two blocks, same source: the text an author wrote for the topic and for
+          // this test's section over it travels WITH the attempt, so a snapshot-pinned
+          // attempt keeps the wording it was published with.
+          feedbackTexts: topicFeedbackTexts(topic, section?.feedbackJson),
         },
       });
     }
@@ -1238,6 +1254,7 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
       recommendedCourses: t.extra!.recommendedCourses,
       recommendedEvents: t.extra!.recommendedEvents,
       recommendedAssets: t.extra!.recommendedAssets,
+      feedbackTexts: t.extra!.feedbackTexts,
     }));
 
     // PRD-12: graded namespaces (scales PRD-5 + result variables PRD-2) via the
@@ -1338,7 +1355,14 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
     let reportRender: ReturnType<typeof readReportRenderPayload> = null;
     // PRD-35: измерения нужны не только экрану, но и ОТЧЁТУ, который собирается на
     // клиенте. Объявлены здесь, а не внутри ветки экрана, чтобы уехать в ответ.
-    let measures: Awaited<ReturnType<typeof resultsMaterialForAttempt>> | undefined;
+    //
+    // Уезжает НОРМАЛИЗОВАННЫЙ вид (`MeasuresInput`), а не сырьё, из которого экран его
+    // получает: правила разрешения — рампа, виды отображения шкал и показателей — живут
+    // в параметрах шаблона, которые есть только здесь. Клиент отдаёт это поле общему
+    // сборщику отчёта как есть, и раньше сюда клалось сырьё (строки БД `scales` и
+    // `variables`): у сборщика в нём не было `indicators`, и скачивание отчёта у теста
+    // со шкалами или показателями падало.
+    let measures: MeasuresInput | undefined;
     if (resultJson && Array.isArray(resultJson.topicResults)) {
       const templateId = ((test?.designSettingsJson as any)?.templateId as string) || "default";
       // Learner-facing render: never serve a non-active template, and when the
@@ -1349,17 +1373,15 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       // results layout falls back to `default` (active template owns no `results`).
       const paramsDir = await resolveTemplateDir(templateId, { activeOnly: true });
       // Материал экрана итогов: шкалы/показатели (PRD-29) И обратная связь теста
-      // (PRD-32). Только для СТАНДАРТНОГО результата — адаптивный собирает свои уровни
-      // и материала не берёт. Собирается для ЛЮБОГО стандартного теста, в том числе без
-      // измерений: обратная связь теста ему положена ровно так же, а решение «есть ли
-      // что показывать из измерений» принимает `buildResultContext` — одно, в одном месте.
-      const material =
-        resultJson.mode === "adaptive" ? undefined : await resultsMaterialForAttempt(attempt, test);
-      // В ОТВЕТ едут только настоящие измерения: по ним клиент печатает шкалы и радар
-      // в отчёте, и пустой набор заставил бы его рисовать блок измерений у теста,
-      // который их не объявляет.
-      measures =
-        material && (material.scales.length > 0 || material.variables.length > 0) ? material : undefined;
+      // (PRD-32). Собирается для ЛЮБОГО теста, в том числе без измерений: обратная связь
+      // теста ему положена ровно так же, а решение «есть ли что показывать из измерений»
+      // принимает `buildResultContext` — одно, в одном месте.
+      //
+      // АДАПТИВНЫЙ результат материал тоже берёт: раньше эта ветка получала `undefined`,
+      // и вместе с измерениями (которых у адаптивного теста и нет) терялась обратная
+      // связь ТЕСТА — источник блока рекомендаций, никакого отношения к режиму не
+      // имеющий. Из материала адаптивная ветка читает только её (см. `readResultsRenderPayload`).
+      const material = await resultsMaterialForAttempt(attempt, test);
       render = readResultsRenderPayload(
         dir,
         resultJson,
@@ -1386,6 +1408,21 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
           );
         }
       }
+      // В ОТВЕТ едут только настоящие измерения: по ним клиент печатает шкалы и радар
+      // в отчёте, и пустой набор заставил бы его рисовать блок измерений у теста,
+      // который их не объявляет. Адаптивной попытке они не едут и теперь: отчёт по ней
+      // строится по уровням, и блок измерений в нём — отдельная работа, а не побочный
+      // эффект того, что материал стал читаться для обоих режимов.
+      //
+      // Нормализуется ЗДЕСЬ, после разрешения макета: рампу и виды отображения задают
+      // параметры того самого экрана (`render.params`) — ровно те, с которыми
+      // `readResultsRenderPayload` только что собрал контекст итогов, — поэтому отчёт не
+      // может разойтись с экраном, с которого его скачали. Макета нет вовсе (клиент
+      // рисует свою разметку) — остаются значения по умолчанию из манифеста.
+      measures =
+        resultJson.mode !== "adaptive" && material && (material.scales.length > 0 || material.variables.length > 0)
+          ? buildMeasuresInput(completeMeasuresSource(material, render?.params, resultJson))
+          : undefined;
       // Footer state for the layout-drawn results row (the package fills the same
       // block). «Скачать отчёт» is on now that the web host produces the report from
       // the SHARED generator (shared/report/*) — the same PDF the package hands out.
@@ -1413,10 +1450,14 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
         timestamp: (attempt.finishedAt ?? attempt.startedAt)?.toISOString() ?? null,
         attemptsCount: completedAttempts || 1,
       };
+      // `material` уходит и сюда: консолидированный блок обратной связи отчёта собирает
+      // ТОТ ЖЕ сборщик, что рисует экран, и ему нужны те же два факта, которых нет в
+      // результате попытки, — обратная связь теста и наличие порога. Отчёт строит
+      // браузер, поэтому они едут с ВХОДОМ отчёта, а не параметром сборки.
       report =
         resultJson.mode === "adaptive"
-          ? buildAdaptiveReportInput(resultJson, test?.title || "", reportMeta)
-          : buildReportInput(resultJson, test?.title || "", reportMeta);
+          ? buildAdaptiveReportInput(resultJson, test?.title || "", reportMeta, material)
+          : buildReportInput(resultJson, test?.title || "", reportMeta, material);
 
       // PRD-27 Фаза 2: страницу отчёта рисует МАКЕТ шаблона. Активный шаблон, не
       // объявивший нужного вида, отчёта не лишает: макет берётся из «Стандартного», а
@@ -1660,10 +1701,20 @@ async function moveToNextTopicOrFinish(variant: any, currentTopic: any, currentL
 async function buildAdaptiveResult(variant: any, testId: string, storage: any) {
   const adaptiveSettings = await storage.getAdaptiveTopicSettingsByTest(testId);
   const adaptiveLevels = await storage.getAdaptiveLevelsByTest(testId);
+  // Sections of THIS test: the section over a topic is the second authoring point of
+  // the topic's feedback, exactly as in the standard mode (`/finish`). An adaptive test
+  // has sections too — the start route already reads them for the per-topic timer and
+  // the delivery order.
+  const sections = (await storage.getTestSections(testId)) ?? [];
 
   const topics = await Promise.all(
     variant.topics.map(async (topic: any) => {
       const topicSettings = adaptiveSettings.find((s: any) => s.topicId === topic.topicId);
+      const section = sections.find((s: any) => s.topicId === topic.topicId);
+      // The topic row itself — read through the SAME source the attempt is delivered
+      // from, so an attempt pinned to a snapshot (PRD-15 block B) hands out the texts
+      // and files that were published with it.
+      const topicRow = await storage.getTopic(topic.topicId);
       const topicLevels = adaptiveLevels
         .filter((l: any) => l.topicId === topic.topicId)
         .sort((a: any, b: any) => a.levelIndex - b.levelIndex);
@@ -1692,11 +1743,35 @@ async function buildAdaptiveResult(variant: any, testId: string, storage: any) {
         levels,
         failureFeedback: topicSettings?.failureFeedback || null,
         failureLinks: levels[0]?.links ?? [],
+        // What the author wrote and attached for this topic, gathered through the SAME
+        // two shared rules the standard `/finish` runs — source priority, the
+        // topic-before-section order and the address rule included. The engine echoes
+        // `extra` verbatim, so it lands on the stored topic result below.
+        extra: {
+          feedbackTexts: topicFeedbackTexts(topicRow, section?.feedbackJson),
+          recommendedAssets: feedbackAssets(topicRow?.feedbackJson, section?.feedbackJson).map(
+            (a) => ({ title: a.title, url: a.url ?? "" }),
+          ),
+        },
       };
     }),
   );
 
-  return aggregateAdaptiveResult({ topics });
+  const aggregated = aggregateAdaptiveResult<{
+    feedbackTexts: string[];
+    recommendedAssets: { title: string; url: string }[];
+  }>({ topics });
+  // Hoist the passthrough onto the topic result itself: `adaptiveTopicResultSchema`
+  // spells these two out (and the shared results builder reads them by those names), so
+  // an `extra` envelope would only be a second spelling of the same fact.
+  return {
+    ...aggregated,
+    topicResults: aggregated.topicResults.map(({ extra, ...t }) => ({
+      ...t,
+      feedbackTexts: extra?.feedbackTexts ?? [],
+      recommendedAssets: extra?.recommendedAssets ?? [],
+    })),
+  };
 }
 
 export default router;

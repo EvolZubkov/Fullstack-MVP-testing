@@ -53,12 +53,41 @@ function vrRequiredLabel(tr) {
  * resolved when the ZIP was built, so they belong to the package, not to a saved run —
  * and a run saved by a package built before PRD-32 gets them too.
  *
- * NOT gated by the topic's verdict (unlike `vrRecommended`, which is failed-topic
- * guidance): the material is shown for having taken the topic, not for having failed it.
+ * A plain reader: it hands over what the package holds for the topic and judges nothing.
+ * The attachments are withheld from the learner only where the topic was EXPLICITLY
+ * passed, exactly like the courses and events of `vrRecommended` — but that gate lives in
+ * the shared builder (`shared/template/result-context.ts`), the one place both hosts go
+ * through, so the web and the package cannot hand out different materials. Until the
+ * consolidation these attachments were shown whatever the verdict, on the reading that a
+ * material hung on the topic's feedback is due for having TAKEN the topic; the owner
+ * settled every resource of a topic on ONE rule once they landed in one block — silent on
+ * a pass, shown on a failure AND on the absent verdict most topics carry.
  */
 function vrTopicAssets(tr) {
   var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
   return (section && section.recommendedAssets) || [];
+}
+
+/**
+ * Feedback TEXTS of a topic row: the text the author wrote on the TOPIC
+ * (`topics.feedback_json.text`, falling back to the legacy `topics.feedback` column) and
+ * on this test's SECTION over it (`test_sections.feedback_json.text`), resolved by the
+ * bake into `section.feedbackTexts` — topic first, then section, which is the order the
+ * consolidated block de-duplicates on.
+ *
+ * Read off TEST_DATA for the same reason `vrTopicAssets` is: the text belongs to the
+ * package's content, not to a saved run, so a run saved by an earlier package gets it too.
+ * And gated the same way — not here, but in the shared builder, which drops everything a
+ * topic carries once the topic is explicitly passed. The text is help with a topic the
+ * learner has not mastered, the same as the topic's courses, events and attachments.
+ *
+ * The name matches what the web host stores on the attempt, and it is the ONE name the
+ * shared builder reads — the former `topicFeedback` was a name nothing read, which is
+ * exactly why the topic's text never reached the learner from a package.
+ */
+function vrTopicFeedbackTexts(tr) {
+  var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
+  return (section && section.feedbackTexts) || [];
 }
 
 /**
@@ -78,11 +107,36 @@ function vrTestFeedback() {
   return TB.normalizeFeedback(raw);
 }
 
-/** Deduped recommended courses/events across failed topics (failed-topic guidance). */
+/**
+ * Whether the TEST declares a pass threshold at all (`tests.overall_pass_rule_json`,
+ * baked as `TEST_DATA.overallPassRule`). It is the one fact that tells an explicit
+ * «Пройден» from a test that pronounces no verdict — the shared builder withholds the
+ * test's own feedback only on the former, and a measurement method without a threshold
+ * (PRD-29) must keep showing its feedback, since that feedback IS its result.
+ *
+ * Read OUTSIDE `buildResultsMeasures` for the same reason `vrTestFeedback` is: that one
+ * returns null for a test with neither scales nor indicators, and the commonest test in
+ * the product is exactly that — it must still be able to say that it grades.
+ */
+function vrHasPassThreshold() {
+  var rule = (typeof TEST_DATA !== 'undefined' && TEST_DATA.overallPassRule) || null;
+  return !!(rule && rule.type && rule.type !== 'none');
+}
+
+/**
+ * Deduped recommended courses/events of the topics of this attempt.
+ *
+ * Skips a topic ONLY on an explicit pass — the owner's one rule for everything a topic
+ * carries (its texts and attachments are gated the same way inside the shared builder).
+ * It used to skip on `tr.passed !== false`, i.e. show only on an explicit failure; but
+ * per-topic thresholds are the exception in a standard test, so most topics carry no
+ * verdict at all, and «nothing was judged» was silencing the author's courses across
+ * every test that never set them.
+ */
 function vrRecommended(results) {
   var seenC = {}, seenE = {}, courses = [], events = [];
   results.topicResults.forEach(function (tr) {
-    if (tr.passed !== false) return;
+    if (tr.passed === true) return;
     var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
     var cs = (section && section.recommendedCourses && section.recommendedCourses.length > 0) ? section.recommendedCourses : (tr.recommendedCourses || []);
     var es = (section && section.recommendedEvents) ? section.recommendedEvents : [];
@@ -203,7 +257,6 @@ function buildResultsMeasures(scaleComputation, varComputation) {
     };
   });
 
-  var passRule = TD.overallPassRule;
   var blockSettings = resultsBlockSettings();
   return {
     ramp: resultsLevelRamp(params),
@@ -211,7 +264,9 @@ function buildResultsMeasures(scaleComputation, varComputation) {
     indicatorKind: String(params.indicatorRenderKind || 'label'),
     scales: scales,
     indicators: indicators,
-    hasPassThreshold: !!(passRule && passRule.type && passRule.type !== 'none'),
+    // ONE reading of the pass rule, shared with the top-level option the builder gates
+    // the test's feedback on — two copies could disagree about the very same test.
+    hasPassThreshold: vrHasPassThreshold(),
     blockSettings: blockSettings,
     // PRD-35: the radar switch travels in the SAME settings of the «Итоги» variant.
     // Explicitly `=== true`, so a package built before PRD-35 (no key at all) keeps
@@ -265,8 +320,12 @@ function renderViewResultsTemplated(app, results) {
         possiblePoints: tr.possiblePoints,
         passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
         requiredLabel: vrRequiredLabel(tr),
-        topicFeedback: tr.topicFeedback,
-        // PRD-32: вложения темы и раздела — в общий блок «Материалы» (общий сборщик).
+        // Feedback texts of the topic and of this test's section over it, for the ONE
+        // recommendations block, under the very name the web host fills. Handed over for
+        // every topic — the shared builder is what gates them by the topic's verdict.
+        feedbackTexts: vrTopicFeedbackTexts(tr),
+        // PRD-32 attachments of the topic and of the section, for the ONE «Материалы»
+        // block; gated by the same verdict rule inside the shared builder.
         recommendedAssets: vrTopicAssets(tr)
       };
     })
@@ -278,9 +337,13 @@ function renderViewResultsTemplated(app, results) {
     withTopicPoints: true,
     recommendedCourses: rec.courses,
     recommendedEvents: rec.events,
-    // PRD-29 §7.1 / PRD-32: обратная связь теста — источник рекомендаций сама по себе,
-    // вне зависимости от того, есть ли у теста шкалы и показатели.
-    testFeedback: vrTestFeedback()
+    // PRD-29 §7.1 / PRD-32: the test's own feedback is a source of recommendations in
+    // its own right, whether or not the test has scales and indicators.
+    testFeedback: vrTestFeedback(),
+    // …and the builder withholds it on an EXPLICIT pass only, so it needs to know
+    // whether this test pronounces a verdict at all. Travels for every test, unlike the
+    // copy inside `measures`, which a test without measurements never sends.
+    hasPassThreshold: vrHasPassThreshold()
   };
   var measures = buildResultsMeasures(
     { values: results.scaleValues || {} },
@@ -348,8 +411,12 @@ function renderResultsTemplated(app, results) {
         possiblePoints: tr.possiblePoints,
         passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
         requiredLabel: vrRequiredLabel(tr),
-        topicFeedback: tr.topicFeedback,
-        // PRD-32: вложения темы и раздела — в общий блок «Материалы» (общий сборщик).
+        // Feedback texts of the topic and of this test's section over it, for the ONE
+        // recommendations block, under the very name the web host fills. Handed over for
+        // every topic — the shared builder is what gates them by the topic's verdict.
+        feedbackTexts: vrTopicFeedbackTexts(tr),
+        // PRD-32 attachments of the topic and of the section, for the ONE «Материалы»
+        // block; gated by the same verdict rule inside the shared builder.
         recommendedAssets: vrTopicAssets(tr)
       };
     })
@@ -358,9 +425,13 @@ function renderResultsTemplated(app, results) {
     withTopicPoints: true,
     recommendedCourses: rec.courses,
     recommendedEvents: rec.events,
-    // PRD-29 §7.1 / PRD-32: обратная связь теста — источник рекомендаций сама по себе,
-    // вне зависимости от того, есть ли у теста шкалы и показатели.
-    testFeedback: vrTestFeedback()
+    // PRD-29 §7.1 / PRD-32: the test's own feedback is a source of recommendations in
+    // its own right, whether or not the test has scales and indicators.
+    testFeedback: vrTestFeedback(),
+    // …and the builder withholds it on an EXPLICIT pass only, so it needs to know
+    // whether this test pronounces a verdict at all. Travels for every test, unlike the
+    // copy inside `measures`, which a test without measurements never sends.
+    hasPassThreshold: vrHasPassThreshold()
   };
   // PRD-29: scales and indicators of THIS attempt (null for a test that declares none,
   // which leaves the context byte-identical to what it has always been).

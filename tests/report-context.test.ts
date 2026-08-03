@@ -17,7 +17,11 @@ import {
   reportGridColumns,
   attemptsCountLabel,
 } from "../shared/report/report-context";
-import { buildResultContext, NO_LEVEL_CONFIRMED_LABEL } from "../shared/template/result-context";
+import {
+  buildResultContext,
+  buildAdaptiveResultContext,
+  NO_LEVEL_CONFIRMED_LABEL,
+} from "../shared/template/result-context";
 import type { ReportInput, AdaptiveReportInput } from "../shared/report/report-html";
 
 const topic = (over: Record<string, unknown> = {}) => ({
@@ -139,6 +143,106 @@ describe("контекст обычного отчёта", () => {
   });
 });
 
+/**
+ * Обратная связь ТЕСТА, какой её нормализует хост (`normalizeFeedback`) перед сборкой
+ * контекста: самый общий источник консолидированного блока, и первый в нём.
+ */
+const TEST_FEEDBACK = {
+  text: "Разберите ошибки.",
+  links: [{ title: "Курс по сетям", url: "https://e/net" }],
+  events: [{ title: "Семинар по инфраструктуре" }],
+  assets: [{ title: "Памятка теста", url: "assets/media/test.pdf" }],
+};
+
+/** Вложение темы, как его кладёт в результат попытки хост (адрес уже нормализован). */
+const TOPIC_ASSET = { title: "Разбор темы", url: "assets/media/topic.pdf" };
+
+/** Отчёт по попытке, в которой сработали все уровни обратной связи. */
+const feedbackInput = (over: Partial<ReportInput> = {}): ReportInput => ({
+  ...input(),
+  feedback: TEST_FEEDBACK,
+  hasPassThreshold: true,
+  result: {
+    ...input().result,
+    topicResults: [topic({ feedbackTexts: ["Текст темы", "Текст раздела"], recommendedAssets: [TOPIC_ASSET] })],
+  },
+  ...over,
+});
+
+/** Контекст ЭКРАНА на том же входе — эталон, с которым сверяется отчёт. */
+const screenOf = (i: ReportInput) =>
+  buildResultContext(i.result, i.testName || "", {
+    withTopicPoints: true,
+    ...(i.feedback ? { testFeedback: i.feedback } : {}),
+    ...(i.hasPassThreshold !== undefined ? { hasPassThreshold: i.hasPassThreshold } : {}),
+  });
+
+describe("консолидированный блок обратной связи в отчёте", () => {
+  it("совпадает с блоком ЭКРАНА на одном входе — состав, порядок, дедуп", () => {
+    const ctx = buildReportContext(feedbackInput());
+    expect(ctx.result.recommendations).toEqual(screenOf(feedbackInput()).result.recommendations);
+    // Порядок пиннится явно: общее раньше частного, тест раньше темы.
+    expect(ctx.result.recommendations?.texts).toEqual([
+      "Разберите ошибки.",
+      "Текст темы",
+      "Текст раздела",
+    ]);
+    expect(ctx.result.recommendations?.assets).toEqual([
+      { title: "Памятка теста", url: "assets/media/test.pdf" },
+      TOPIC_ASSET,
+    ]);
+    expect(ctx.result.recommendations?.links).toEqual(TEST_FEEDBACK.links);
+    expect(ctx.result.recommendations?.events).toEqual(TEST_FEEDBACK.events);
+  });
+
+  it("текст, написанный и у теста, и у темы, печатается один раз", () => {
+    const ctx = buildReportContext(
+      feedbackInput({
+        result: {
+          ...input().result,
+          topicResults: [topic({ feedbackTexts: ["Разберите ошибки.", "Текст раздела"] })],
+        },
+      }),
+    );
+    expect(ctx.result.recommendations?.texts).toEqual(["Разберите ошибки.", "Текст раздела"]);
+  });
+
+  it("у ПРОЙДЕННОЙ темы ни текст, ни вложение в отчёт не идут", () => {
+    const ctx = buildReportContext(
+      feedbackInput({
+        result: {
+          ...input().result,
+          topicResults: [
+            topic({ passed: true, feedbackTexts: ["Текст темы"], recommendedAssets: [TOPIC_ASSET] }),
+          ],
+        },
+      }),
+    );
+    // Обратная связь ТЕСТА при этом остаётся: тест-то не пройден.
+    expect(ctx.result.recommendations?.texts).toEqual(["Разберите ошибки."]);
+    expect(ctx.result.recommendations?.assets).toEqual([
+      { title: "Памятка теста", url: "assets/media/test.pdf" },
+    ]);
+  });
+
+  it("явно пройденный тест молчит и в отчёте", () => {
+    const ctx = buildReportContext(
+      feedbackInput({
+        result: {
+          ...input().result,
+          passed: true,
+          topicResults: [topic({ passed: true, feedbackTexts: ["Текст темы"] })],
+        },
+      }),
+    );
+    expect(ctx.result.recommendations).toBeUndefined();
+  });
+
+  it("отчёт без обратной связи блока не несёт", () => {
+    expect(buildReportContext(input()).result.recommendations).toBeUndefined();
+  });
+});
+
 const adaptiveInput = (over: Partial<AdaptiveReportInput> = {}): AdaptiveReportInput => ({
   testName: "Адаптивный тест",
   learnerName: "Ольга Швецова",
@@ -178,5 +282,57 @@ describe("контекст адаптивного отчёта", () => {
     const ctx = buildAdaptiveReportContext(adaptiveInput());
     expect(ctx.result.scorePercent).toBeUndefined();
     expect(ctx.result.earnedPoints).toBeUndefined();
+  });
+
+  it("несёт тот же консолидированный блок, что адаптивный ЭКРАН", () => {
+    // Обратная связь — свойство ТЕСТА, а не режима выдачи: у адаптивного отчёта блок
+    // собирается тем же сборщиком и из тех же источников.
+    const withFeedback = adaptiveInput({
+      feedback: TEST_FEEDBACK,
+      result: {
+        topicResults: [
+          {
+            topicName: "БД",
+            achievedLevelIndex: null,
+            achievedLevelName: null,
+            feedbackTexts: ["Текст темы"],
+            recommendedAssets: [TOPIC_ASSET],
+          },
+        ],
+      },
+    });
+    const ctx = buildAdaptiveReportContext(withFeedback);
+    const screen = buildAdaptiveResultContext(withFeedback.result, withFeedback.testName, {
+      testFeedback: TEST_FEEDBACK,
+    });
+    expect(ctx.result.recommendations).toEqual(screen.result.recommendations);
+    expect(ctx.result.recommendations?.texts).toEqual(["Разберите ошибки.", "Текст темы"]);
+    expect(ctx.result.recommendations?.assets).toEqual([
+      { title: "Памятка теста", url: "assets/media/test.pdf" },
+      TOPIC_ASSET,
+    ]);
+  });
+
+  it("тема с ПОДТВЕРЖДЁННЫМ уровнем своих материалов в отчёт не отдаёт", () => {
+    const ctx = buildAdaptiveReportContext(
+      adaptiveInput({
+        result: {
+          topicResults: [
+            {
+              topicName: "Сети",
+              achievedLevelIndex: 1,
+              achievedLevelName: "Базовый",
+              feedbackTexts: ["Текст темы"],
+              recommendedAssets: [TOPIC_ASSET],
+            },
+          ],
+        },
+      }),
+    );
+    expect(ctx.result.recommendations).toBeUndefined();
+  });
+
+  it("адаптивный отчёт без обратной связи блока не несёт", () => {
+    expect(buildAdaptiveReportContext(adaptiveInput()).result.recommendations).toBeUndefined();
   });
 });

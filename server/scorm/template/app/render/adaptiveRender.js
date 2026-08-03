@@ -390,12 +390,25 @@ function renderAdaptiveResultsTemplated(app, result) {
         // Unified per-topic feedback (plan 6.1): courses (was recommendedLinks) + events.
         feedback: tr.feedback,
         recommendedCourses: tr.recommendedCourses || tr.recommendedLinks || [],
-        recommendedEvents: tr.recommendedEvents || []
+        recommendedEvents: tr.recommendedEvents || [],
+        // Feedback texts and PRD-32 attachments of the topic and of this test's section
+        // over it, for the ONE recommendations block. The very readers the standard
+        // results screens use (viewResults.js) — the package bundles both files flat, so
+        // reusing them is what keeps the two modes reading the same baked section. Handed
+        // over for EVERY topic; the shared builder is what gates them by the topic's
+        // verdict (in this mode: whether any level was confirmed).
+        feedbackTexts: vrTopicFeedbackTexts(tr),
+        recommendedAssets: vrTopicAssets(tr)
       };
     })
   };
   var ctx = window.TBTemplate.buildAdaptiveResultContext(input, TEST_DATA.title || '', {
     hasScormActions: true,
+    // The test's OWN feedback (`TEST_DATA.testFeedbackJson`) — the widest source of the
+    // block and its first one. A property of the TEST, not of the flow mode: an author
+    // who wrote a closing word for an adaptive test owes it to the learner just the same,
+    // and the web host hands over the very same block on this screen.
+    testFeedback: vrTestFeedback(),
     // `showPdf` is the LEGACY report flag, kept for external templates whose adaptive
     // layout predates the unified contract; the shipped layouts read `result.nav`.
     showPdf: true,

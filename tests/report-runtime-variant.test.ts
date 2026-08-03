@@ -94,6 +94,70 @@ describe("выбор макета отчёта в пакете", () => {
   });
 });
 
+/**
+ * Источники консолидированного блока на стороне ПАКЕТА. Экран итогов берёт их из
+ * `TEST_DATA` через `vr*`-читатели рантайма; отчёт обязан брать ровно те же, иначе
+ * ученик читает на экране одно, а уносит в PDF другое.
+ */
+describe("вход отчёта пакета несёт источники блока", () => {
+  const SECTION_TEXTS = ["Текст темы", "Текст раздела"];
+  const SECTION_ASSETS = [{ title: "Разбор темы", url: "assets/media/topic.pdf" }];
+  const TEST_FEEDBACK = { text: "Разберите ошибки.", links: [], events: [], assets: [] };
+
+  /** Поднять сборщики входа с подставленными читателями `viewResults.js`. */
+  function inputs() {
+    const factory = new Function(
+      "TEST_DATA",
+      "vrTopicFeedbackTexts",
+      "vrTopicAssets",
+      "vrTestFeedback",
+      "vrHasPassThreshold",
+      `${SRC}\nreturn { std: pdfStandardInput, adaptive: pdfAdaptiveInput, meta: pdfReportMeta };`,
+    );
+    return factory(
+      { mode: "standard", sections: [{ topicId: "t1", topicName: "Тема 1" }] },
+      () => SECTION_TEXTS,
+      () => SECTION_ASSETS,
+      () => TEST_FEEDBACK,
+      () => true,
+    ) as {
+      std: (r: unknown) => { topicResults: Array<Record<string, unknown>> };
+      adaptive: (r: unknown) => { topicResults: Array<Record<string, unknown>> };
+      meta: () => Record<string, unknown>;
+    };
+  }
+
+  const runtimeResult = {
+    passed: false,
+    percent: 60,
+    totalQuestions: 5,
+    totalCorrect: 3,
+    earnedPoints: 3,
+    possiblePoints: 5,
+    topicResults: [
+      { topicId: "t1", topicName: "Тема 1", correct: 3, total: 5, percent: 60, earnedPoints: 3, possiblePoints: 5, passed: false },
+    ],
+  };
+
+  it("стандартный вход несёт тексты и вложения темы под именами общего сборщика", () => {
+    const topic = inputs().std(runtimeResult).topicResults[0];
+    expect(topic.feedbackTexts).toEqual(SECTION_TEXTS);
+    expect(topic.recommendedAssets).toEqual(SECTION_ASSETS);
+  });
+
+  it("адаптивный вход несёт их же", () => {
+    const topic = inputs().adaptive({
+      topicResults: [{ topicId: "t1", topicName: "Тема 1", achievedLevelIndex: null }],
+    }).topicResults[0];
+    expect(topic.feedbackTexts).toEqual(SECTION_TEXTS);
+    expect(topic.recommendedAssets).toEqual(SECTION_ASSETS);
+  });
+
+  it("обратная связь теста и признак порога уходят вместе с входом", () => {
+    expect(inputs().meta()).toEqual({ feedback: TEST_FEEDBACK, hasPassThreshold: true });
+  });
+});
+
 describe("исходник экспорта", () => {
   it("значения полей варианта уходят в построитель контекста", () => {
     // Иначе автор задаёт параметры вида, а в PDF они не приезжают — и понять это
@@ -108,6 +172,12 @@ describe("исходник экспорта", () => {
     expect(SRC).toMatch(/bake && bake\.imageKeys \? bake\.imageKeys : \[\]/);
     expect(SRC).not.toContain("assets/media/");
     expect(SRC).not.toContain("loadReportAssets");
+  });
+
+  it("источники блока обратной связи прицеплены к мета-части входа", () => {
+    // Сами поля проверены выше на выходе `pdfReportMeta`; здесь караулится, что они
+    // действительно уезжают в построитель, а не остаются в неиспользуемой функции.
+    expect(SRC).toContain("}, pdfReportMeta());");
   });
 
   it("сначала пробуется макет варианта, потом канонический вид", () => {

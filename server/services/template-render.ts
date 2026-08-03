@@ -346,8 +346,14 @@ export function readScreenTemplate(
  *
  * A caller that supplies either of them keeps its own — nothing is overwritten
  * silently.
+ *
+ * Exported because the ROUTE completes the very same source a second time: the results
+ * response carries the measurements on to the browser, which builds the PDF report from
+ * them, and that copy has to be the SAME one the screen was painted from. It takes the
+ * payload's own `params` (see {@link ScreenRenderPayload.params}), so the completion
+ * rule stays in one place instead of being re-derived at the route.
  */
-function completeMeasures(
+export function completeMeasuresSource(
   measures: MeasuresSource,
   payloadParams: Record<string, unknown> | undefined,
   result: AttemptResult,
@@ -370,8 +376,9 @@ function completeMeasures(
  * indicators with their block settings (PRD-29) AND the test's own feedback block
  * (PRD-32). It is NOT a statement that the test measures anything — the caller hands it
  * over for every standard attempt, and `buildResultContext` decides what the emptiness
- * of the scale/indicator arrays means. The ADAPTIVE branch never takes it: an adaptive
- * result composes its own levels.
+ * of the scale/indicator arrays means. The ADAPTIVE branch takes it as well, but reads
+ * ONLY the test's own feedback block out of it — an adaptive result composes its own
+ * levels and measures nothing.
  */
 export function readResultsRenderPayload(
   dir: string,
@@ -396,11 +403,17 @@ export function readResultsRenderPayload(
     // the material carries besides measurements — the test's own feedback block above
     // all. The builder already treats an absent third argument as «nothing to add».
     const context = isAdaptive
-      ? buildAdaptiveResultContext(result, testTitle)
+      // The adaptive branch takes the material too — but only the TEST's own feedback
+      // block out of it: the rest of the material describes measurements, which an
+      // adaptive result does not carry. It used to take nothing at all, and the test's
+      // feedback — a property of the test, not of its flow mode — was lost with the
+      // measurements it was bundled with, leaving the adaptive recommendations block
+      // without its widest source.
+      ? buildAdaptiveResultContext(result, testTitle, measures)
       : buildResultContext(
           result as AttemptResult,
           testTitle,
-          measures ? completeMeasures(measures, base.params, result as AttemptResult) : undefined,
+          measures ? completeMeasuresSource(measures, base.params, result as AttemptResult) : undefined,
         );
     // Header subtitle «Попытка N из M» (Core-prepared by the caller), same as the
     // other learner screens — merged into the server-built course context.

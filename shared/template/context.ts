@@ -47,14 +47,18 @@ export interface CtxRecommendation {
 }
 
 /**
- * The unified per-topic feedback composition (spec §3.2 / plan 6.1): feedback text +
- * recommended courses + recommended events, with presence flags. The SAME shape in
- * standard and adaptive results, so the feedback block is composed identically in both
- * modes — feedback is a property of the test's settings, not the flow mode.
+ * The per-topic recommendation composition (spec §3.2 / plan 6.1): recommended courses +
+ * recommended events, with a presence flag. The SAME shape in standard and adaptive
+ * results, so the topic card is composed identically in both modes — recommendations are
+ * a property of the test's settings, not the flow mode.
+ *
+ * It carries NO feedback text: the text of a topic reaches the learner through the ONE
+ * consolidated «Рекомендации» block (`result.recommendations`), and a per-topic slot
+ * beside it would print the same sentence twice on one screen. The exception is the
+ * adaptive mode — see {@link CtxAdaptiveTopicView.feedback}, which is a different text
+ * altogether.
  */
 export interface CtxTopicFeedback {
-  feedback?: string;
-  hasFeedback: boolean;
   recommendedCourses: CtxRecommendation[];
   recommendedEvents: CtxRecommendation[];
   hasRecommendations: boolean;
@@ -93,6 +97,20 @@ export interface CtxAdaptiveTopicView extends CtxTopicFeedback {
    * the author's and differs from test to test.
    */
   levelClass: string;
+  /**
+   * Feedback of the CONFIRMED LEVEL (`adaptive_levels.feedback`), or the topic's
+   * failure text when no level was confirmed — NOT the topic's feedback text, which the
+   * standard mode prints and which travels to the consolidated block instead.
+   *
+   * This one has no other route to the learner: the consolidated block is fed from the
+   * topic's and the section's `feedback_json`, and a level's own wording is not among
+   * its sources. Dropping the slot from the adaptive card would therefore erase the
+   * text from the product, not move it — which is why the adaptive layout keeps a slot
+   * the standard one no longer has.
+   */
+  feedback?: string;
+  /** Whether {@link feedback} carries anything — the adaptive card's slot gate. */
+  hasFeedback: boolean;
 }
 
 /**

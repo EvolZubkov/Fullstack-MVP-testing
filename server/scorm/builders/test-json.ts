@@ -4,8 +4,9 @@ import { findEligibilityPlugin, findEligibilityConfig } from "@shared/eligibilit
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 import { buildTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
 import { parseScaleInterpretation } from "@shared/scales/interpretation";
-// PRD-32: ONE address rule for a feedback attachment — the same helper the web grader runs.
-import { feedbackAssets } from "@shared/template/result-context";
+// PRD-32: ONE address rule for a feedback attachment, and ONE source-priority rule for
+// the topic's feedback text — the same helpers the web grader runs.
+import { feedbackAssets, topicFeedbackTexts } from "@shared/template/result-context";
 import type { ReportBake } from "@shared/report/report-variants";
 
 interface AdaptiveLevelWithLinks extends AdaptiveLevel {
@@ -209,6 +210,9 @@ export function buildTestJson(data: ExportData): string {
       // PRD-32: attachments of the TOPIC and of THIS test's section over it, resolved
       // once per section (see where they are baked below).
       const sectionFeedbackAssets = feedbackAssets(s.topic.feedbackJson, s.feedbackJson);
+      // Feedback TEXTS of the same two authoring points, through the same shared rule the
+      // web grader runs — source priority and the topic-before-section order included.
+      const sectionFeedbackTexts = topicFeedbackTexts(s.topic, s.feedbackJson);
       return {
         topicId: s.topic.id,
         topicName: s.topic.name,
@@ -244,7 +248,20 @@ export function buildTestJson(data: ExportData): string {
         // touched the setting stay byte-identical; the runtime reads
         // section.questionOrder and falls back to `random` when absent.
         ...(s.questionOrder === "fixed" ? { questionOrder: "fixed" as const } : {}),
-        topicFeedback: s.topic.feedback || null,
+        // Feedback TEXTS of the TOPIC (`topics.feedback_json.text`, falling back to the
+        // legacy `topics.feedback` column) and of THIS test's section over it
+        // (`test_sections.feedback_json.text`) — the general before the specific, which
+        // is the order the consolidated recommendations block de-duplicates on. ONE name
+        // with the web host, which stores the very same list on the attempt
+        // (`TopicResult.feedbackTexts`): the shared results builder reads it and nothing
+        // else, so neither host can drift into showing a different text.
+        //
+        // Replaces the former `topicFeedback`, which baked the legacy column ALONE — a
+        // column today's topic editor never writes, under a name the shared builder never
+        // read. Baked only when something is actually written, so packages of tests
+        // without feedback stay byte-identical (FR-02); the runtime falls back to an
+        // empty list.
+        ...(sectionFeedbackTexts.length > 0 ? { feedbackTexts: sectionFeedbackTexts } : {}),
         recommendedCourses: s.courses.map((c) => ({ title: c.title, url: c.url })),
         recommendedEvents: s.events.map((e) => ({ title: e.title })),
         // PRD-32: PDF attachments of the TOPIC (`topics.feedback_json`) and of THIS test's

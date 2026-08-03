@@ -14,7 +14,13 @@ import {
   buildResultContext as sharedBuild,
   buildAdaptiveResultContext as sharedAdaptive,
 } from "../shared/template/result-context";
-import { buildResultContext as webBuild } from "../server/services/result-context";
+import {
+  buildResultContext as webBuild,
+  buildAdaptiveResultContext as webAdaptiveBuild,
+  buildReportInput,
+  buildAdaptiveReportInput,
+} from "../server/services/result-context";
+import { buildReportContext, buildAdaptiveReportContext } from "../shared/report/report-context";
 
 const normalized = {
   passed: true,
@@ -80,7 +86,9 @@ describe("shared buildResultContext", () => {
     const t0 = (result.topicResults as any[])[0];
     expect(t0.pointsLabel).toBe("4 / 5");
     expect(t0.requiredLabel).toBe("Требуется: 70%");
-    expect(t0.feedback).toBe("ок");
+    // Текст обратной связи в строку темы не попадает и в стандартном режиме не
+    // печатается — он живёт в консолидированном блоке.
+    expect(t0.feedback).toBeUndefined();
     expect(result.recommendedCourses?.length).toBe(1);
     expect(result.backAction).toBe("back-to-start");
   });
@@ -97,18 +105,38 @@ describe("host parity", () => {
   // результате попытки, пакет запекает их в раздел TEST_DATA — но дальше оба хоста
   // отдают их ОДНОМУ общему сборщику под одним именем, поэтому блок «Материалы»
   // на обоих экранах один и тот же.
+  // Тема здесь НЕ пройдена: материалы темы отдаются ученику только при провале
+  // (согласованное решение владельца — одно правило на текст, курсы и вложения темы).
   it("вложения темы/раздела: адаптер веба === общий сборщик на том же входе", () => {
     const assets = [{ title: "Разбор темы", url: "/api/media/aaaa" }];
     const web = webBuild(
-      { ...attemptResult, topicResults: [{ ...attemptResult.topicResults[0], recommendedAssets: assets }] },
+      { ...attemptResult, topicResults: [{ ...attemptResult.topicResults[0], passed: false, recommendedAssets: assets }] },
       "Тест",
     );
     const shared = sharedBuild(
-      { ...sharedInput, topicResults: [{ ...sharedInput.topicResults[0], recommendedAssets: assets }] },
+      { ...sharedInput, topicResults: [{ ...sharedInput.topicResults[0], passed: false, recommendedAssets: assets }] },
       "Тест",
     );
     expect(web).toEqual(shared);
     expect(web.result.recommendations?.assets).toEqual(assets);
+  });
+
+  // Тексты обратной связи темы и раздела ходят тем же путём, что вложения: веб хранит
+  // их в результате попытки (`TopicResult.feedbackTexts`), пакет запечёт их в раздел
+  // TEST_DATA — и оба отдадут общему сборщику ОДНО поле `feedbackTexts`, поэтому
+  // консолидированный блок на обоих экранах одинаков.
+  it("тексты темы/раздела: адаптер веба === общий сборщик на том же входе", () => {
+    const feedbackTexts = ["Текст темы", "Текст раздела"];
+    const web = webBuild(
+      { ...attemptResult, topicResults: [{ ...attemptResult.topicResults[0], passed: false, feedbackTexts }] },
+      "Тест",
+    );
+    const shared = sharedBuild(
+      { ...sharedInput, topicResults: [{ ...sharedInput.topicResults[0], passed: false, feedbackTexts }] },
+      "Тест",
+    );
+    expect(web).toEqual(shared);
+    expect(web.result.recommendations?.texts).toEqual(feedbackTexts);
   });
 
   // Дефект Д-3. Веб собирает `testFeedback` из своего `MeasuresSource`, пакет — из
@@ -122,48 +150,170 @@ describe("host parity", () => {
       events: [],
       assets: [{ title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "/api/media/cccc" }],
     };
-    const web = webBuild(attemptResult, "Опрос", {
+    // Попытка ПРОВАЛЕНА: обратную связь теста ученик получает во всех состояниях, кроме
+    // явного успеха, поэтому именно провал показывает, что она доезжает целиком.
+    const web = webBuild({ ...attemptResult, overallPassed: false }, "Опрос", {
       scales: [],
       variables: [],
       blockSettings: {},
       hasPassThreshold: true,
       testFeedback: feedback,
     } as never);
-    const shared = sharedBuild(sharedInput, "Опрос", {
+    const shared = sharedBuild({ ...sharedInput, passed: false }, "Опрос", {
+      hasPassThreshold: true,
       testFeedback: { text: "Спасибо за участие.", links: [], events: [], assets: [{ title: "Памятка", url: "/api/media/cccc" }] },
     });
     expect(web).toEqual(shared);
     expect(web.result.recommendations?.texts).toEqual(["Спасибо за участие."]);
     expect(web.result.recommendations?.assets).toEqual([{ title: "Памятка", url: "/api/media/cccc" }]);
   });
+
+  // Гейт по вердикту ТЕСТА: пройденный тест не показывает работу над ошибками. Веб
+  // достаёт признак порога из `MeasuresSource`, который его маршрут читает для КАЖДОЙ
+  // попытки, пакет — из `TEST_DATA.overallPassRule`; общему сборщику оба отдают одну
+  // опцию, поэтому молчать или говорить они обязаны одинаково.
+  it("явно пройденный тест: оба хоста молчат об обратной связи теста", () => {
+    const feedback = { format: "plain", text: "Разберите ошибки.", links: [], events: [], assets: [] };
+    const web = webBuild(attemptResult, "Контрольный", {
+      scales: [],
+      variables: [],
+      blockSettings: {},
+      hasPassThreshold: true,
+      testFeedback: feedback,
+    } as never);
+    const shared = sharedBuild(sharedInput, "Контрольный", {
+      hasPassThreshold: true,
+      testFeedback: { text: "Разберите ошибки.", links: [], events: [], assets: [] },
+    });
+    expect(web).toEqual(shared);
+    expect(web.result.recommendations).toBeUndefined();
+  });
+
+  it("тест без порога: оба хоста показывают его обратную связь и при passed", () => {
+    // Край PRD-29 на обоих хостах сразу: вердикт не выносился, и обратная связь — это
+    // и есть результат измерительного метода.
+    const feedback = { format: "plain", text: "Ваш профиль.", links: [], events: [], assets: [] };
+    const web = webBuild(attemptResult, "Маслач", {
+      scales: [],
+      variables: [],
+      blockSettings: {},
+      hasPassThreshold: false,
+      testFeedback: feedback,
+    } as never);
+    const shared = sharedBuild(sharedInput, "Маслач", {
+      hasPassThreshold: false,
+      testFeedback: { text: "Ваш профиль.", links: [], events: [], assets: [] },
+    });
+    expect(web).toEqual(shared);
+    expect(web.result.recommendations?.texts).toEqual(["Ваш профиль."]);
+  });
+});
+
+/**
+ * Отчёт веб-хоста собирается КЛИЕНТОМ из входа, который готовит этот же адаптер, и
+ * обязан нести тот же консолидированный блок, что экран той же попытки: тексты теста,
+ * тем и разделов, курсы, мероприятия и вложения — в одном составе и порядке.
+ */
+describe("вход отчёта питает блок экрана", () => {
+  const material = {
+    scales: [],
+    variables: [],
+    blockSettings: {},
+    hasPassThreshold: true,
+    testFeedback: {
+      format: "plain",
+      text: "Разберите ошибки.",
+      links: [],
+      events: [],
+      assets: [{ title: "Памятка", fileName: "p.pdf", mimeType: "application/pdf", url: "/api/media/cccc" }],
+    },
+  } as never;
+
+  const failedTopic = {
+    ...attemptResult.topicResults[0],
+    passed: false,
+    feedbackTexts: ["Текст темы", "Текст раздела"],
+    recommendedAssets: [{ title: "Разбор темы", url: "/api/media/aaaa" }],
+  };
+
+  it("стандартный: контекст отчёта === блок экрана на той же попытке", () => {
+    const result = { ...attemptResult, overallPassed: false, topicResults: [failedTopic] };
+    const screen = webBuild(result, "Тест", material);
+    const report = buildReportContext(buildReportInput(result, "Тест", {}, material));
+    expect(report.result.recommendations).toEqual(screen.result.recommendations);
+    expect(report.result.recommendations?.texts).toEqual([
+      "Разберите ошибки.",
+      "Текст темы",
+      "Текст раздела",
+    ]);
+  });
+
+  it("адаптивный: контекст отчёта === блок адаптивного экрана", () => {
+    const result = {
+      overallPassed: false,
+      topicResults: [
+        {
+          topicName: "БД",
+          achievedLevelIndex: null,
+          achievedLevelName: null,
+          feedbackTexts: ["Текст темы"],
+          recommendedAssets: [{ title: "Разбор темы", url: "/api/media/aaaa" }],
+        },
+      ],
+    } as never;
+    const screen = webAdaptiveBuild(result, "Адаптивный", material);
+    const report = buildAdaptiveReportContext(buildAdaptiveReportInput(result, "Адаптивный", {}, material));
+    expect(report.result.recommendations).toEqual(screen.result.recommendations);
+    expect(report.result.recommendations?.texts).toEqual(["Разберите ошибки.", "Текст темы"]);
+    expect(report.result.recommendations?.assets).toEqual([
+      { title: "Памятка", url: "/api/media/cccc" },
+      { title: "Разбор темы", url: "/api/media/aaaa" },
+    ]);
+  });
+
+  it("без материала экрана отчёт остаётся прежним — блока нет", () => {
+    const result = { ...attemptResult, overallPassed: false };
+    expect(buildReportContext(buildReportInput(result, "Тест")).result.recommendations).toBeUndefined();
+  });
 });
 
 describe("unified per-topic feedback (plan 6.1)", () => {
-  // Feedback is a property of the test's settings, not the flow mode: both modes must
-  // expose the SAME per-topic composition (feedback + courses + events).
+  // Курсы и мероприятия темы — общее для обоих режимов, и составляются одинаково.
+  // ТЕКСТ обратной связи — уже нет: в стандартном режиме он живёт только в
+  // консолидированном блоке, а в адаптивном `feedback` темы означает другое (обратную
+  // связь достигнутого уровня либо текст провала темы) и в блок не подаётся.
   const fb = {
     feedback: "Повторите тему",
     recommendedCourses: [{ title: "Курс", url: "https://e.test/c" }],
     recommendedEvents: [{ title: "Вебинар" }],
   };
-  const shape = (t: any) => ({
-    hasFeedback: t.hasFeedback,
+  const links = (t: any) => ({
     courses: t.recommendedCourses.length,
     events: t.recommendedEvents.length,
     hasRec: t.hasRecommendations,
   });
-
-  it("standard and adaptive expose feedback + courses + events per topic", () => {
-    const std = sharedBuild(
-      { ...sharedInput, topicResults: [{ ...sharedInput.topicResults[0], ...fb }] },
-      "Тест",
-    );
-    const ad = sharedAdaptive(
+  const std = () =>
+    (sharedBuild({ ...sharedInput, topicResults: [{ ...sharedInput.topicResults[0], ...fb }] }, "Тест").result
+      .topicResults as any[])[0];
+  const ad = () =>
+    (sharedAdaptive(
       { passed: false, topicResults: [{ topicName: "T", achievedLevelIndex: 1, achievedLevelName: "Базовый", ...fb }] },
       "Тест",
-    );
-    expect(shape((std.result.topicResults as any[])[0])).toEqual(shape((ad.result.topicResults as any[])[0]));
-    expect(shape((std.result.topicResults as any[])[0])).toEqual({ hasFeedback: true, courses: 1, events: 1, hasRec: true });
+    ).result.topicResults as any[])[0];
+
+  it("standard and adaptive expose the same courses + events per topic", () => {
+    expect(links(std())).toEqual(links(ad()));
+    expect(links(std())).toEqual({ courses: 1, events: 1, hasRec: true });
+  });
+
+  it("стандартная строка темы текста обратной связи не несёт", () => {
+    expect(std().hasFeedback).toBeUndefined();
+    expect(std().feedback).toBeUndefined();
+  });
+
+  it("адаптивная строка темы несёт обратную связь уровня", () => {
+    expect(ad().hasFeedback).toBe(true);
+    expect(ad().feedback).toBe("Повторите тему");
   });
 });
 

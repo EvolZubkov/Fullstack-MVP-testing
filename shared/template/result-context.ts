@@ -48,7 +48,15 @@ function round1(n: number): number {
 
 /** Per-topic feedback composition — the SAME shape for standard and adaptive. */
 export interface TopicFeedbackInput {
-  /** Per-topic feedback text (`feedback_json.text`). */
+  /**
+   * ADAPTIVE MODE ONLY: the wording of the level the learner confirmed
+   * (`adaptive_levels.feedback`), or the topic's failure text when none was. Rendered in
+   * the topic card of `results.adaptive.html` (see `adaptiveLevelFeedback`).
+   *
+   * The STANDARD mode leaves it empty on purpose. A topic's own feedback text is
+   * {@link feedbackTexts}, and it reaches the learner through the consolidated
+   * «Рекомендации» block rather than through the card.
+   */
   feedback?: string | null;
   /** Recommended courses/links (`feedback_json.links`). */
   recommendedCourses?: Array<{ title: string; url?: string }> | null;
@@ -64,8 +72,33 @@ export interface TopicFeedbackInput {
    * `./recommendations`), so an attachment reaches the learner through it whatever
    * level attached it. Addresses come pre-normalised — the host runs
    * {@link feedbackAssets}, so the `url`-over-`scormHref` rule lives in one place.
+   *
+   * The host hands them over for EVERY topic; whether the learner sees them is the
+   * builder's call — it drops the whole topic once {@link TopicInput.passed} is `true`
+   * (see `topicRecommendationSources`).
    */
   recommendedAssets?: Array<{ title: string; url?: string }> | null;
+  /**
+   * Feedback TEXTS the learner is to receive for this topic — the topic's own
+   * (`topics.feedback_json.text`, or the legacy `topics.feedback` column) and that of
+   * this test's section over it (`test_sections.feedback_json.text`), merged by the
+   * host in that order.
+   *
+   * A LIST and not one string: the topic and the section are two INDEPENDENT authoring
+   * points, and the boundary between them is what the consolidated block de-duplicates
+   * on — an author who wrote the same sentence in both places must see it once.
+   *
+   * Like {@link recommendedAssets} these do NOT render inside the topic row: the
+   * results screen carries ONE «Рекомендации» block gathering every level that spoke
+   * (see `./recommendations`), so a text reaches the learner through it whatever level
+   * wrote it. Blank entries are dropped by the builder — an empty paragraph is not a
+   * recommendation — and so is the whole topic once {@link TopicInput.passed} is `true`:
+   * what a topic carries is help with a topic the learner has not mastered.
+   *
+   * Both hosts fill it: the web adapter from the stored `TopicResult.feedbackTexts`,
+   * the SCORM package from the same two blocks baked into `TEST_DATA`.
+   */
+  feedbackTexts?: string[] | null;
 }
 
 /** Normalized per-topic input (host adapts its own field names into this). */
@@ -83,24 +116,30 @@ export interface TopicInput extends TopicFeedbackInput {
 }
 
 /**
- * The unified per-topic feedback view — `feedback` text + recommended courses/events
- * with presence flags. Shared by standard and adaptive results so the feedback block
- * is composed identically in both modes (spec §3.2 / plan 6.1). Feedback is a property
- * of the test's settings, not the flow mode.
+ * The unified per-topic recommendation view — courses/events with a presence flag.
+ * Shared by standard and adaptive results so the topic card is composed identically in
+ * both modes (spec §3.2 / plan 6.1). Recommendations are a property of the test's
+ * settings, not the flow mode.
+ *
+ * It deliberately builds NO feedback text. It used to, and both results layouts carried
+ * a per-topic slot for it; once the consolidation put every text into the ONE
+ * «Рекомендации» block, that slot could only stand empty or print the same sentence a
+ * second time on the same screen. The topic's text now travels as
+ * {@link TopicFeedbackInput.feedbackTexts} into the block, and the slot is gone from the
+ * standard layouts.
+ *
+ * The ADAPTIVE card is the exception and keeps its slot — see
+ * {@link adaptiveLevelFeedback}: what `feedback` means there is a different text, with no
+ * other route to the learner.
  */
-export function buildTopicFeedbackView(t: TopicFeedbackInput): {
-  feedback?: string;
-  hasFeedback: boolean;
+export function buildTopicRecommendationsView(t: TopicFeedbackInput): {
   recommendedCourses: CtxRecommendation[];
   recommendedEvents: CtxRecommendation[];
   hasRecommendations: boolean;
 } {
-  const fb = String(t.feedback ?? "").trim();
   const courses = (t.recommendedCourses ?? []).map((l) => ({ title: l.title, ...(l.url ? { url: l.url } : {}) }));
   const events = (t.recommendedEvents ?? []).map((l) => ({ title: l.title, ...(l.url ? { url: l.url } : {}) }));
   return {
-    ...(fb ? { feedback: fb } : {}),
-    hasFeedback: fb.length > 0,
     recommendedCourses: courses,
     recommendedEvents: events,
     hasRecommendations: courses.length > 0 || events.length > 0,
@@ -197,6 +236,106 @@ export function feedbackAssets(...blocks: unknown[]): RecommendationLink[] {
   return blocks.flatMap((block) => normalizeFeedback(block)?.assets ?? []);
 }
 
+/** Trimmed `text` of a STORED feedback block; `""` when the block carries none. */
+function blockText(block: unknown): string {
+  if (!block || typeof block !== "object") return "";
+  const text = (block as { text?: unknown }).text;
+  return typeof text === "string" ? text.trim() : "";
+}
+
+/**
+ * Feedback TEXTS due to the learner for ONE topic of ONE test, ready for
+ * {@link TopicFeedbackInput.feedbackTexts}: the topic's own text and that of this test's
+ * section over it, in that order.
+ *
+ * ONE exported rule, like {@link feedbackAssets}, because both hosts must hand the
+ * learner the SAME text: the web grader stores the result of this call with the attempt,
+ * the SCORM bake writes it into the section of `TEST_DATA`. A second copy of the rule
+ * would drift silently and surface as the two players showing different feedback — the
+ * very defect this consolidation repairs.
+ *
+ * WHERE THE TOPIC'S TEXT COMES FROM. The current source is `topics.feedback_json.text`,
+ * with the legacy `topics.feedback` column as the fallback. That fallback is not
+ * back-compat decoration: the in-service topic editor sends ONLY `feedback_json`, so the
+ * legacy column still holds the WHOLE text of every topic the editor has never touched,
+ * and reading `feedback_json` alone would silently drop what the author did write. Where
+ * both carry a text the CURRENT source wins — a topic already migrated to
+ * `feedback_json` may still drag an outdated copy in the column.
+ *
+ * A LIST and not one glued string: the topic and the section are two INDEPENDENT
+ * authoring points, and that boundary is what the consolidated recommendations block
+ * de-duplicates on. The order is load-bearing — the topic, the more general source,
+ * comes first, so its copy is the one dedup keeps. A blank text (empty, or whitespace
+ * only) contributes nothing: an empty paragraph is not a recommendation. The same
+ * sentence written in both places is returned once.
+ *
+ * @param topic The topic row: its `feedbackJson` block and legacy `feedback` column.
+ * @param sectionFeedback `test_sections.feedback_json` of THIS test's section over it.
+ */
+export function topicFeedbackTexts(
+  topic: { feedbackJson?: unknown; feedback?: string | null } | null | undefined,
+  sectionFeedback?: unknown,
+): string[] {
+  const legacy = typeof topic?.feedback === "string" ? topic.feedback.trim() : "";
+  const topicText = blockText(topic?.feedbackJson) || legacy;
+  const out: string[] = [];
+  for (const text of [topicText, blockText(sectionFeedback)]) {
+    if (!text || out.includes(text)) continue;
+    out.push(text);
+  }
+  return out;
+}
+
+/**
+ * The sources ONE topic contributes to the consolidated recommendations block: its
+ * feedback texts and its PRD-32 attachments, in that order.
+ *
+ * GATED BY THE TOPIC'S VERDICT, and the gate is «anything except an explicit pass» —
+ * the owner's agreed rule for the consolidated block. It replaces the two rules that
+ * used to coexist here: the recommended courses and events of a topic were failed-topic
+ * guidance (`vrRecommended` in the package runtime skipped a topic on
+ * `tr.passed !== false`), while its texts and its attachments were shown to everyone, on
+ * the reading that a material hung on the topic's feedback is due for having TAKEN the
+ * topic. Consolidation put all four into ONE block, where two rules read as the same
+ * topic's resources behaving differently, and the owner settled them on one — now applied
+ * to the courses and events as well, at both hosts' call sites.
+ *
+ * WE ARE SILENT ONLY WHERE WE ARE SURE OF SUCCESS. The rule is deliberately NOT «show on
+ * failure»: per-topic thresholds are the exception in a standard test, so most topics
+ * carry no verdict at all (`passed === null`) — treating «nothing was judged» as success
+ * would swallow the author's material in every test that never set them. Any state other
+ * than a pronounced pass is resolved in favour of showing: losing a leaflet the author
+ * hung is worse than showing it once too often.
+ *
+ * WHAT «not passed» MEANS is the MODE's answer, and only that answer differs — hence
+ * `notPassed` as a parameter rather than a second copy of this function per mode. The
+ * standard mode reads the topic's pass verdict (`passed !== true`, so both an explicit
+ * failure and an absent verdict speak). The adaptive mode has no third state: there the
+ * non-success is «no level confirmed at all» ({@link hasAchievedLevel}), the branch
+ * `aggregateAdaptiveResult` itself treats as the failure one — it is where the topic's
+ * `failureFeedback` fires and where `overallPassed` is dropped.
+ *
+ * The gate lives HERE, in the one builder both hosts call, and not in either host's
+ * adapter: a second copy of it would drift silently and surface as the web and the
+ * package handing the learner different materials.
+ */
+function topicRecommendationSources(topic: TopicFeedbackInput, notPassed: boolean): FeedbackBlock[] {
+  if (!notPassed) return [];
+  const sources: FeedbackBlock[] = [];
+  // ONE source per text, because `FeedbackBlock` carries a single `text` while a topic
+  // brings up to two independent ones (its own and this test's section over it).
+  // Widening the block to a list of texts would fork the shape every other source — the
+  // test, the fired band, the fired outcome — already speaks; a source apiece keeps the
+  // collector's contract untouched and lets dedup see the two texts for the separate
+  // entries they are. Blank ones are dropped here so no host has to.
+  for (const text of topic.feedbackTexts ?? []) {
+    if (String(text ?? "").trim()) sources.push({ text, links: [], events: [], assets: [] });
+  }
+  const assets = topic.recommendedAssets ?? [];
+  if (assets.length > 0) sources.push({ links: [], events: [], assets });
+  return sources;
+}
+
 /** Feedback of the level that actually fired, for the recommendations block. */
 function firedFeedback(m: MeasureInput): FeedbackBlock | null {
   const { interpretation } = m;
@@ -230,6 +369,26 @@ export interface ResultContextOptions {
    */
   testFeedback?: FeedbackBlock | null;
   /**
+   * Whether the TEST declares a pass threshold at all (`tests.overall_pass_rule_json`
+   * with a `type` other than `none`). It answers ONE question the builder cannot answer
+   * from {@link ResultInput.passed}, which is a plain `boolean`: was a verdict actually
+   * PRONOUNCED, or is `passed: false` merely the default of a test that judges nothing?
+   *
+   * It exists SEPARATELY from {@link MeasuresInput.hasPassThreshold}, which carries the
+   * same fact, because that one only travels for a test with scales or indicators — a
+   * control test never reaches the measures branch, and the commonest test in the product
+   * is exactly that. Both hosts fill this one for EVERY test: the web from the
+   * `MeasuresSource` its route already assembles, the package from the baked
+   * `TEST_DATA.overallPassRule`. Where both are present they agree — they are read off
+   * the same rule.
+   *
+   * ABSENT MEANS «UNKNOWN», and unknown is resolved in favour of SHOWING the feedback.
+   * The flag only ever silences, so a host that has not been taught to send it keeps
+   * handing the learner everything the author wrote — losing a leaflet is worse than
+   * showing it once too often.
+   */
+  hasPassThreshold?: boolean;
+  /**
    * PRD-29 measurement blocks. Absent (a test with neither scales nor indicators)
    * leaves the context byte-identical to what a control test has always produced.
    */
@@ -253,8 +412,13 @@ function topicView(t: TopicInput, withPoints: boolean): CtxTopicResultView {
     percent: Math.round(t.percent || 0),
     passClass: passed === true ? "is-pass" : passed === false ? "is-fail" : "",
     statusLabel: passed === true ? "Пройдено" : passed === false ? "Не пройдено" : "",
-    // Unified feedback composition (feedback + courses + events) — same as adaptive.
-    ...buildTopicFeedbackView(t),
+    // Courses and events only. The topic's feedback TEXT is deliberately absent: it
+    // reaches the learner through the consolidated «Рекомендации» block (fed by
+    // `feedbackTexts` above), and the standard layouts no longer carry a per-topic slot
+    // for it. The adaptive row DOES carry one — that `feedback` is the confirmed LEVEL's
+    // wording, not the topic's, and the block is not fed from it (see
+    // `adaptiveLevelFeedback`). The asymmetry is intentional, not an unfinished edit.
+    ...buildTopicRecommendationsView(t),
   };
   if (withPoints) view.pointsLabel = round1(t.earnedPoints) + " / " + round1(t.possiblePoints);
   if (t.requiredLabel) view.requiredLabel = t.requiredLabel;
@@ -292,31 +456,52 @@ export function buildResultContext(
     result.backAction = opts.backAction;
     result.backLabel = opts.backLabel;
   }
+  // ONE source of truth for «is there a graded score to speak about» — it answers the
+  // score summary (`auto`), the verdict tag, and the feedback gate below. TWO conditions,
+  // not one: a threshold IS declared AND there is something to grade. Every new test
+  // carries the default 70% threshold, so the threshold alone would call a measurement
+  // questionnaire graded and paint «0 %», «0 из 0 верно» and a green «Пройден» on its
+  // results screen — the exact nonsense PRD-29 removes. The author of a burnout inventory
+  // never opens that setting, and should not have to: such a method has no threshold by
+  // nature, not by configuration.
+  //
+  // «Nothing to grade» is read off `possiblePoints`, which both hosts already pass in: a
+  // measurement question has no correct grading, so it brings no points and never can.
+  // Deriving it from the builder's own input also makes it true for attempts finished
+  // before this rule existed — no migration, no new stored field.
+  //
+  // The threshold flag is read from the TOP-LEVEL option first and from `measures` only
+  // as a fallback: the top-level one travels for every test, the measures copy only for a
+  // test that measures something. `=== true` on purpose — an absent flag means «unknown»,
+  // and unknown must not silence anything.
+  const thresholdDeclared = opts.hasPassThreshold ?? opts.measures?.hasPassThreshold;
+  const hasGradedScore = thresholdDeclared === true && round1(input.possiblePoints) > 0;
+  // EXPLICIT SUCCESS — the only state in which the author's feedback is withheld. Both
+  // halves are load-bearing: the test must actually grade (otherwise no verdict was
+  // pronounced and `passed` is a default, not a judgement), and the verdict must be a
+  // PASS. A measurement test without a threshold therefore keeps its feedback whatever
+  // `passed` holds — that feedback IS its result, the whole point of PRD-29.
+  const explicitPass = hasGradedScore && passed;
   // Sources of the ONE recommendations block, gathered in the order dedup should keep:
   // the general before the specific. Collected rather than merged on the spot because
   // the measurement sources are conditional while the other two are not — a test with
   // neither scales nor indicators still hands the learner its own feedback and what its
   // topics and sections attached (PRD-32). The test's own block leads: it is the widest.
-  const recommendationSources: Array<FeedbackBlock | null | undefined> = [opts.testFeedback];
+  //
+  // Unless the learner PASSED: a test the learner is through with owes no work on the
+  // mistakes, so its own block is dropped at the source (owner's agreed rule). The
+  // per-measure blocks below are NOT dropped with it — a scale's band or an indicator's
+  // outcome is the interpretation of a measurement, not guidance on a failure, and a
+  // learner who passed still gets to read what was measured.
+  const recommendationSources: Array<FeedbackBlock | null | undefined> = explicitPass ? [] : [opts.testFeedback];
   if (opts.measures) {
     const visibleScales = opts.measures.scales.filter((m) => m.visibility !== "hidden");
     const visibleIndicators = opts.measures.indicators.filter((m) => m.visibility !== "hidden");
-    // ONE source of truth for «is there a graded score to speak about»: it answers
-    // both the score summary (`auto`) and the verdict below. TWO conditions, not one
-    // — a threshold IS set AND there is something to grade. Every new test carries the
-    // default 70% threshold, so the threshold alone would call a measurement
-    // questionnaire graded and paint «0 %», «0 из 0 верно» and a green «Пройден» on
-    // its results screen: the exact nonsense PRD-29 removes. The author of a burnout
-    // inventory never opens that setting, and should not have to — such a method has
-    // no threshold by nature, not by configuration.
-    //
-    // «Nothing to grade» is read off `possiblePoints`, which both hosts already pass
-    // in: a measurement question has no correct grading, so it brings no points and
-    // never can. Deriving it from the builder's own input also makes it true for
-    // attempts finished before this rule existed — no migration, no new stored field.
-    // (`scoredQuestions` in `shared/scoring/aggregate.ts` describes this very contract
-    // but is absent from the stored result schema, so it cannot answer for them.)
-    const hasGradedScore = opts.measures.hasPassThreshold === true && round1(input.possiblePoints) > 0;
+    // `hasGradedScore` is computed ONCE, above — the score summary, the verdict tag and
+    // the feedback gate must not be able to disagree about whether this test grades.
+    // (`scoredQuestions` in `shared/scoring/aggregate.ts` describes the very same
+    // contract but is absent from the stored result schema, so it cannot answer for
+    // attempts finished earlier.)
     const blocks = resolveResultsBlocks(opts.measures.blockSettings ?? {}, {
       hasPassThreshold: hasGradedScore,
       hasVisibleScales: visibleScales.length > 0,
@@ -368,14 +553,13 @@ export function buildResultContext(
       ...(blocks.scales ? visibleScales.map(firedFeedback) : []),
     );
   }
-  // PRD-32: the attachments of the topics this attempt covered, LAST — they are the
-  // narrowest source (one topic of the test), and the same file attached to the test
-  // as a whole should keep the test's copy under dedup. Not gated by the topic's
-  // verdict: the author hung the material on the topic's feedback, which is shown for
-  // having taken the topic, not for having failed it.
+  // What the topics of this attempt said and attached, LAST — they are the narrowest
+  // source (one topic of the test), and the same text or file that the test as a whole
+  // also carries should keep the test's copy under dedup. The verdict gate and the
+  // shape of those sources live in `topicRecommendationSources`, shared with the
+  // adaptive builder.
   for (const topic of input.topicResults || []) {
-    const assets = topic.recommendedAssets ?? [];
-    if (assets.length > 0) recommendationSources.push({ links: [], events: [], assets });
+    recommendationSources.push(...topicRecommendationSources(topic, topic.passed !== true));
   }
   const recommendations = collectRecommendations(recommendationSources);
   if (recommendations.hasAny) result.recommendations = recommendations;
@@ -538,6 +722,16 @@ export interface AdaptiveResultContextOptions {
   showPdf?: boolean;
   canRetry?: boolean;
   showFinish?: boolean;
+  /**
+   * The test's OWN feedback block (`tests.feedback_json`), normalised by the host —
+   * the widest source of the «Рекомендации» block and therefore its first one, exactly
+   * as in {@link ResultContextOptions.testFeedback}.
+   *
+   * It is a property of the TEST, not of the flow mode: an author who wrote a closing
+   * word for an adaptive test owes it to the learner as much as in a standard one, so
+   * the option exists on both builders and is read by the same collector.
+   */
+  testFeedback?: FeedbackBlock | null;
 }
 
 /**
@@ -561,14 +755,53 @@ const TONE_BELOW_MINIMUM = "ou-tag--solid ou-tag--error";
  */
 export const NO_LEVEL_CONFIRMED_LABEL = "Минимально требуемый уровень не подтверждён";
 
+/**
+ * Whether the learner confirmed ANY level of this adaptive topic — the mode's own
+ * verdict, and the counterpart of `passed` in the standard mode.
+ *
+ * `false` is the FAILURE state and there is no third one: an adaptive topic is a ladder
+ * of levels, each with its own threshold, so «nothing was judged» cannot happen the way
+ * a standard topic without a pass rule leaves `passed === null`. The engine agrees —
+ * `aggregateAdaptiveResult` fires the topic's `failureFeedback` and drops
+ * `overallPassed` in exactly this branch — and so does the package, which maps the
+ * adaptive topic onto the standard shape as `passed: achievedLevelIndex !== null`.
+ *
+ * Read in ONE place, so the level tag on the card and the visibility of the topic's
+ * materials cannot come to disagree about what this topic's outcome was.
+ */
+function hasAchievedLevel(t: AdaptiveTopicInput): boolean {
+  return t.achievedLevelIndex !== null && t.achievedLevelIndex !== undefined;
+}
+
+/**
+ * The adaptive card's own feedback slot — the ONLY per-topic feedback text either mode
+ * still renders inside a topic card.
+ *
+ * WHY IT SURVIVED THE CONSOLIDATION. In the adaptive mode `feedback` is not the topic's
+ * feedback text at all: `aggregateAdaptiveResult` fills it with the wording of the LEVEL
+ * the learner confirmed (`adaptive_levels.feedback`), or with the topic's failure text
+ * when no level was reached. Neither is a source of the consolidated «Рекомендации»
+ * block — that one is fed from the topic's and the section's `feedback_json` — so
+ * removing the slot here would not move the text into the block, it would delete it from
+ * the product. The standard card's slot was removed precisely because its text DID move.
+ *
+ * So the two layouts differing on this point is the intended state, not an edit left
+ * half-done: `results.html` has no slot, `results.adaptive.html` has one.
+ */
+function adaptiveLevelFeedback(t: AdaptiveTopicInput): { feedback?: string; hasFeedback: boolean } {
+  const fb = String(t.feedback ?? "").trim();
+  return { ...(fb ? { feedback: fb } : {}), hasFeedback: fb.length > 0 };
+}
+
 /** Map a normalized adaptive topic to its level-based view (unified feedback). */
 function adaptiveTopicView(t: AdaptiveTopicInput): CtxAdaptiveTopicView {
-  const achieved = t.achievedLevelIndex !== null && t.achievedLevelIndex !== undefined;
+  const achieved = hasAchievedLevel(t);
   return {
     topicName: t.topicName || "",
     levelLabel: achieved ? (t.achievedLevelName as string) : NO_LEVEL_CONFIRMED_LABEL,
     levelClass: achieved ? TONE_CONFIRMED : TONE_BELOW_MINIMUM,
-    ...buildTopicFeedbackView(t),
+    ...buildTopicRecommendationsView(t),
+    ...adaptiveLevelFeedback(t),
   };
 }
 
@@ -593,5 +826,28 @@ export function buildAdaptiveResultContext(
     result.canRetry = !!opts.canRetry;
     result.showFinish = !!opts.showFinish;
   }
+  // The SAME consolidated block the standard results screen carries, from the SAME
+  // collector and the same sources in the same order — the test's own feedback first,
+  // then what the topics of this attempt wrote and attached. Feedback is a property of
+  // the TEST, not of its flow mode, so a second assembly rule for the adaptive screen
+  // would only mean two screens disagreeing about what the learner is owed; the adaptive
+  // screen used to carry no block at all, which is that disagreement at its widest.
+  //
+  // What differs between the modes is ONE thing — how a topic's failure is spelled — and
+  // it enters as the gate's argument (see `topicRecommendationSources`).
+  //
+  // The test's own block obeys the same rule as on the standard screen: withheld on an
+  // EXPLICIT pass, because a learner who is through with the test owes no work on the
+  // mistakes. Here the verdict needs no threshold check — the adaptive mode has no
+  // pass-percentage setting to be absent, `overallPassed` is pronounced by
+  // `aggregateAdaptiveResult` from the levels actually confirmed. An absent flag is
+  // therefore not «unknown» but a plain non-success, and it shows.
+  const recommendationSources: Array<FeedbackBlock | null | undefined> =
+    input.passed === true ? [] : [opts.testFeedback];
+  for (const topic of input.topicResults || []) {
+    recommendationSources.push(...topicRecommendationSources(topic, !hasAchievedLevel(topic)));
+  }
+  const recommendations = collectRecommendations(recommendationSources);
+  if (recommendations.hasAny) result.recommendations = recommendations;
   return { course: { title }, result };
 }

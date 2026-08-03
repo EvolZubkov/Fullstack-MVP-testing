@@ -488,7 +488,6 @@ function computeSectionResult(topicId) {
     // PRD-24: same as in calculateResults — the section screen must be able to show
     // the threshold that actually applied to the delivered variant.
     resolvedPassRule: resolvedRule,
-    topicFeedback: section ? (section.topicFeedback || null) : null,
     recommendedCourses: section ? (section.recommendedCourses || []) : [],
     recommendedEvents: section ? (section.recommendedEvents || []) : [],
   };
@@ -518,7 +517,6 @@ function calculateResults() {
         formId: deliveredFormId(fq.topicId),
         questions: [],
         extra: {
-          topicFeedback: (section && section.topicFeedback) || null,
           recommendedCourses: (section && section.recommendedCourses) || [],
           recommendedEvents: (section && section.recommendedEvents) || []
         }
@@ -564,7 +562,6 @@ function calculateResults() {
         // it is persisted with the attempt, so dropping it here would silently blank
         // the label — including for past attempts.
         resolvedPassRule: t.resolvedPassRule,
-        topicFeedback: t.extra.topicFeedback,
         recommendedCourses: t.extra.recommendedCourses,
         recommendedEvents: t.extra.recommendedEvents
       };

@@ -255,9 +255,12 @@
 Тот же блок, что на экране результатов (PRD-12 §10): `passed`, `passClass`, `statusLabel`,
 `scorePercent`, `ringDashoffset`, `totalQuestions`, `correct`, `earnedPoints`,
 `possiblePoints`, `topicResults[]` с `percent`, `passClass`, `statusLabel`, `pointsLabel`,
-`requiredLabel`, `feedback`, `hasFeedback`, `recommendedCourses[]`, `recommendedEvents[]`,
-`hasRecommendations`. Для адаптивного вида — `adaptive: true` и уровневая форма строк
-(`levelLabel`, `levelClass`).
+`requiredLabel`, `recommendedCourses[]`, `recommendedEvents[]`, `hasRecommendations`. Для
+адаптивного вида — `adaptive: true` и уровневая форма строк (`levelLabel`, `levelClass`,
+`feedback`, `hasFeedback` — обратная связь достигнутого уровня).
+
+Текст обратной связи темы в строку не входит: он печатается один раз, консолидированным блоком
+`result.recommendations`.
 
 **Требование:** отчёт и экран результатов получают эти значения из ОДНОГО построителя. Отчёт
 не вправе показать иной вердикт, чем экран, с которого его скачали.

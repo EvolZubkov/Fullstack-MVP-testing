@@ -169,6 +169,67 @@ describe("buildTestJson (PRD-29)", () => {
     ]);
   });
 
+  it("запекает тексты обратной связи ТЕМЫ и РАЗДЕЛА в один список раздела", () => {
+    // Порядок «тема, затем раздел» повторяет веб (`server/routes/attempts.ts`): он решает,
+    // чей экземпляр переживёт дедупликацию в общем блоке рекомендаций. Пробелы по краям
+    // снимаются, пустые записи не кладутся — пустой абзац рекомендацией не является.
+    const section = {
+      id: "sec-1",
+      topicId: "tp1",
+      drawCount: 1,
+      required: true,
+      feedbackJson: { text: "  Текст раздела  " },
+      topic: { id: "tp1", name: "Тема", feedback: null, feedbackJson: { text: "Текст темы" } },
+      questions: [],
+      courses: [],
+      events: [],
+    };
+    const baked = bake({ ...(exportData as any), sections: [section] });
+    expect(baked.sections[0].feedbackTexts).toEqual(["Текст темы", "Текст раздела"]);
+  });
+
+  it("тема, у которой заполнена только легаси-колонка, свой текст отдаёт", () => {
+    // Нынешний редактор темы шлёт на сервер только `feedback_json`, поэтому у тем, которых
+    // он ни разу не касался, весь текст лежит в легаси-колонке `topics.feedback`. Без
+    // отката такая тема в пакете молчит — ровно тот дефект, из-за которого текста не было.
+    const section = {
+      id: "sec-1",
+      topicId: "tp1",
+      drawCount: 1,
+      required: true,
+      feedbackJson: null,
+      topic: { id: "tp1", name: "Тема", feedback: "Легаси-текст темы", feedbackJson: null },
+      questions: [],
+      courses: [],
+      events: [],
+    };
+    const baked = bake({ ...(exportData as any), sections: [section] });
+    expect(baked.sections[0].feedbackTexts).toEqual(["Легаси-текст темы"]);
+  });
+
+  it("при двух заполненных источниках побеждает feedback_json темы", () => {
+    // Тема, переведённая на `feedback_json`, может тащить в легаси-колонке устаревшую
+    // копию: действующий источник читается первым, запасной — только когда текста нет.
+    const section = {
+      id: "sec-1",
+      topicId: "tp1",
+      drawCount: 1,
+      required: true,
+      feedbackJson: null,
+      topic: {
+        id: "tp1",
+        name: "Тема",
+        feedback: "Устаревшая копия",
+        feedbackJson: { text: "Текст из feedback_json" },
+      },
+      questions: [],
+      courses: [],
+      events: [],
+    };
+    const baked = bake({ ...(exportData as any), sections: [section] });
+    expect(baked.sections[0].feedbackTexts).toEqual(["Текст из feedback_json"]);
+  });
+
   it("не добавляет поле разделу без вложений — пакет прежних тестов не меняется (FR-02)", () => {
     const section = {
       id: "sec-1", topicId: "tp1", drawCount: 1, required: true, feedbackJson: null,
@@ -177,6 +238,11 @@ describe("buildTestJson (PRD-29)", () => {
     };
     const baked = bake({ ...(exportData as any), sections: [section] });
     expect(baked.sections[0]).not.toHaveProperty("recommendedAssets");
+    expect(baked.sections[0]).not.toHaveProperty("feedbackTexts");
+    // Прежнего `topicFeedback` (легаси-колонка отдельным полем) в пакете больше нет:
+    // второй дороги к тому же тексту, которая читала бы его по другому правилу, не
+    // остаётся ни у одного экрана.
+    expect(baked.sections[0]).not.toHaveProperty("topicFeedback");
   });
 
   it("оставляет пакет теста без измерений неизменным (FR-02)", () => {

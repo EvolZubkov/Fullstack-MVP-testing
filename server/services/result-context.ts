@@ -136,9 +136,14 @@ function toTopicInput(t: TopicResult): TopicInput {
     earnedPoints: t.earnedPoints,
     possiblePoints: t.possiblePoints,
     passed: t.passed,
-    // Per-topic feedback composition (plan 6.1): feedback + courses + events, the
-    // SAME shape adaptive uses — the shared builder renders one feedback block.
-    feedback: (t as { feedback?: string | null }).feedback ?? null,
+    // No `feedback` here on purpose. The field used to be read off the stored result —
+    // where `topicResultSchema` never declared it, so it was `undefined` for every
+    // attempt ever graded — and fed a per-topic slot in the results and report layouts.
+    // A topic's feedback text now travels as `feedbackTexts` below and is rendered ONCE,
+    // in the consolidated «Рекомендации» block; the slot is gone from the standard
+    // layouts. The ADAPTIVE adapter still fills `feedback` (see
+    // `buildAdaptiveResultContext` / `buildAdaptiveReportInput`): there it is the
+    // confirmed LEVEL's wording, which the block is not fed from.
     recommendedCourses: t.recommendedCourses ?? [],
     recommendedEvents: t.recommendedEvents ?? [],
     // PRD-32: attachments of the topic + of this test's section over it, merged and
@@ -146,6 +151,12 @@ function toTopicInput(t: TopicResult): TopicInput {
     // the attempt. The shared builder pours them into the ONE «Материалы» block.
     // Absent on attempts graded before PRD-32 — the block then simply lacks them.
     recommendedAssets: t.recommendedAssets ?? [],
+    // Feedback texts of the topic and of this test's section over it, gathered at
+    // grading time (`server/routes/attempts.ts`) and stored WITH the attempt, in that
+    // order. The shared builder pours them into the ONE recommendations block, where
+    // dedup keeps the widest copy — so a sentence the test also carries shows once.
+    // Absent on attempts graded before this work — the block then simply lacks them.
+    feedbackTexts: t.feedbackTexts ?? [],
   };
 }
 
@@ -177,9 +188,16 @@ export function buildResultContext(
   testTitle: string,
   measures?: MeasuresSource,
 ): ResultRenderContext {
-  const failed = (result.topicResults || []).filter((t) => t.passed === false);
-  const recommendedCourses = dedupRecommendations(failed.flatMap((t) => t.recommendedCourses ?? []));
-  const recommendedEvents = dedupRecommendations(failed.flatMap((t) => t.recommendedEvents ?? []));
+  // Everything a topic carries — courses, events, texts, attachments — is due unless the
+  // topic was explicitly PASSED (the owner's one rule for all four; the shared builder
+  // applies the same `!== true` to the texts and the attachments, and `vrRecommended` in
+  // the package runtime to these two). `!== true` and not `=== false`: per-topic
+  // thresholds are the exception, so most topics carry no verdict at all, and reading
+  // «nothing was judged» as success would swallow the author's courses in every test that
+  // never set them.
+  const notPassed = (result.topicResults || []).filter((t) => t.passed !== true);
+  const recommendedCourses = dedupRecommendations(notPassed.flatMap((t) => t.recommendedCourses ?? []));
+  const recommendedEvents = dedupRecommendations(notPassed.flatMap((t) => t.recommendedEvents ?? []));
   const hasMeasures = !!measures && (measures.scales.length > 0 || measures.variables.length > 0);
   // The test's own feedback block travels OUTSIDE `measures` (see
   // `ResultContextOptions.testFeedback`): it is due to the learner whether or not the
@@ -203,9 +221,39 @@ export function buildResultContext(
       ...(recommendedCourses.length ? { recommendedCourses } : {}),
       ...(recommendedEvents.length ? { recommendedEvents } : {}),
       ...(testFeedback ? { testFeedback } : {}),
+      // Whether the test declares a pass threshold at all — the ONE fact that tells an
+      // explicit «Пройден» from a test that pronounces no verdict, and the builder
+      // withholds the test's own feedback only on the former. It travels OUTSIDE
+      // `measures` on purpose: the route reads it for every attempt, while `measures`
+      // reaches the builder only for a test with scales or indicators, and a control
+      // test — the commonest one — would otherwise never say whether it grades.
+      // `undefined` when the material could not be read at all; the builder then treats
+      // it as unknown and shows the feedback.
+      ...(measures ? { hasPassThreshold: measures.hasPassThreshold } : {}),
       ...(hasMeasures ? { measures: buildMeasuresInput(measures as MeasuresSource) } : {}),
     },
   );
+}
+
+/**
+ * The two facts of the consolidated feedback block that do NOT live in the attempt
+ * result: the test's OWN feedback and whether the test declares a pass threshold.
+ *
+ * They travel with the report INPUT rather than as options of the context builder,
+ * because the browser assembles the report context and knows neither — it only forwards
+ * what the results endpoint sent it. Read off the very same {@link MeasuresSource} the
+ * screen is built from, and normalised by the very same {@link normalizeFeedback}, so
+ * the report cannot end up with a different block than the screen it was downloaded from.
+ *
+ * No material (it could not be read) leaves both absent: the block then holds only what
+ * the topics of the attempt carry, exactly as before this work.
+ */
+function reportFeedbackMeta(measures?: MeasuresSource): Partial<ReportMeta> {
+  const feedback = normalizeFeedback(measures?.testFeedback);
+  return {
+    ...(feedback ? { feedback } : {}),
+    ...(measures ? { hasPassThreshold: measures.hasPassThreshold } : {}),
+  };
 }
 
 /**
@@ -220,14 +268,18 @@ export function buildResultContext(
  * @param result Computed attempt result.
  * @param testTitle Test title (the report headline + the file name).
  * @param meta Who took it and when, plus the attempt count for the «Лучший результат» line.
+ * @param measures The material of the results screen. Only the two facts the consolidated
+ *   feedback block needs are read off it — see {@link reportFeedbackMeta}.
  */
 export function buildReportInput(
   result: AttemptResult,
   testTitle: string,
   meta: Omit<ReportMeta, "testName"> = {},
+  measures?: MeasuresSource,
 ): ReportInput {
   return {
     ...meta,
+    ...reportFeedbackMeta(measures),
     testName: testTitle,
     result: {
       passed: result.overallPassed,
@@ -246,10 +298,12 @@ export function buildAdaptiveReportInput(
   result: any,
   testTitle: string,
   meta: Omit<ReportMeta, "testName"> = {},
+  measures?: MeasuresSource,
 ): AdaptiveReportInput {
   const topics = Array.isArray(result?.topicResults) ? result.topicResults : [];
   return {
     ...meta,
+    ...reportFeedbackMeta(measures),
     adaptive: true,
     testName: testTitle,
     result: {
@@ -269,6 +323,14 @@ export function buildAdaptiveReportInput(
         recommendedEvents: Array.isArray(t?.recommendedEvents)
           ? t.recommendedEvents.map((l: any) => ({ title: l?.title ?? "" }))
           : [],
+        // The sources of the consolidated block the topic carries, read by the same
+        // names the adaptive SCREEN reads them by (`buildAdaptiveResultContext` below).
+        // Without them the report of an adaptive attempt printed no feedback at all
+        // while the screen it was downloaded from printed the whole block.
+        feedbackTexts: Array.isArray(t?.feedbackTexts) ? t.feedbackTexts : [],
+        recommendedAssets: Array.isArray(t?.recommendedAssets)
+          ? t.recommendedAssets.map((a: any) => ({ title: a?.title ?? "", url: a?.url }))
+          : [],
       })),
     },
   };
@@ -277,9 +339,23 @@ export function buildAdaptiveReportInput(
 /**
  * Build the adaptive results-screen context (level-based). No SCORM action flags —
  * the web adaptive results screen shows the base "Пройти снова" action.
+ *
+ * @param measures The material of the results screen, as the route reads it for BOTH
+ *   modes. Only its `testFeedback` is used here — the widest source of the consolidated
+ *   recommendations block, and a property of the TEST rather than of its flow mode. The
+ *   measurement rows it also carries belong to the standard screen: an adaptive result
+ *   composes levels and measures nothing. Absent (material unreadable) simply leaves the
+ *   test's own feedback out, exactly as it does on the standard screen.
  */
-export function buildAdaptiveResultContext(result: any, testTitle: string): ResultRenderContext {
+export function buildAdaptiveResultContext(
+  result: any,
+  testTitle: string,
+  measures?: MeasuresSource,
+): ResultRenderContext {
   const topics = Array.isArray(result?.topicResults) ? result.topicResults : [];
+  // The stored block goes through the SAME normaliser the standard screen uses, so the
+  // `url`-over-`scormHref` rule for its PDF assets lives in one place.
+  const testFeedback = normalizeFeedback(measures?.testFeedback);
   return buildSharedAdaptiveResultContext(
     {
       passed: !!result?.overallPassed,
@@ -299,9 +375,18 @@ export function buildAdaptiveResultContext(result: any, testTitle: string): Resu
           recommendedEvents: Array.isArray(t?.recommendedEvents)
             ? t.recommendedEvents.map((l: any) => ({ title: l?.title ?? "" }))
             : [],
+          // Texts and attachments of the topic and of this test's section over it, stored
+          // WITH the attempt at grading time (`server/routes/attempts.ts`) — the same two
+          // fields the standard topic result carries, read here by the same names. Absent
+          // on adaptive attempts finished before this work; the block then lacks them.
+          feedbackTexts: Array.isArray(t?.feedbackTexts) ? t.feedbackTexts : [],
+          recommendedAssets: Array.isArray(t?.recommendedAssets)
+            ? t.recommendedAssets.map((a: any) => ({ title: a?.title ?? "", url: a?.url }))
+            : [],
         }),
       ),
     },
     testTitle,
+    { ...(testFeedback ? { testFeedback } : {}) },
   );
 }
