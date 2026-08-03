@@ -694,24 +694,66 @@ git commit -m "feat(prd-38): слот медиа переехал в блок в
 В `server/scorm/templates/default/styles/theme.css` строку 376
 (`.tb-scene__q { display: flex; flex-direction: column; gap: var(--ou-space-2); }`) заменить на:
 
+Правила ниже проверены в браузере на эскизе задачи 1 — брать ДОСЛОВНО, включая комментарии.
+Три вещи в них неочевидны и каждая уже ломала раскладку при проверке:
+
+- **ряды объявлены явно.** Без `grid-template-rows` линия `-1` совпадает с линией `1`, спан
+  `grid-row: 1 / -1` схлопывается в одну ячейку, и подсказка уезжает под медиа в левую колонку;
+- **аргумент `:has()` для аудио длиннее, чем нужно для попадания.** Специфичность `:has()`
+  равна специфичности самого специфичного аргумента: короткое `:has([data-media-type="audio"])`
+  даёт (0,2,0) и проигрывает правилу двух колонок (0,3,0 из-за `:not(:empty)`) — аудио молча
+  остаётся в колонке 5 из 12;
+- **колонки детей заданы явно**, иначе авторазмещение расставляет их иначе.
+
 ```css
 /* PRD-38: медиа принадлежит блоку вопроса, а не блоку ответов. Одна колонка, пока медиа
-   нет; при непустом слоте — медиа 5 модулей слева, текст с подсказкой 7 справа. Ветвление
-   по ТИПУ медиа возможно только здесь: макеты обязаны совпадать побайтово у всех шаблонов
-   (tests/template-layout-parity), а DSL не имеет выражений. */
+   нет; при непустом слоте — медиа 5 модулей слева, текст с подсказкой 7 справа: та же
+   пропорция, что и раньше, но справа теперь стоит ТЕКСТ ЗАДАНИЯ, а не блок ответов.
+   Ветвление по ТИПУ медиа возможно только здесь: макеты обязаны совпадать побайтово у всех
+   шаблонов (tests/template-layout-parity), а DSL не имеет выражений.
+
+   Ряды объявлены явно, потому что без grid-template-rows строка `-1` равна строке `1`:
+   правило grid-row:1/-1 у медиа схлопнулось бы в одну ячейку, а подсказка уехала бы под
+   медиа в ЛЕВУЮ колонку. Второй ряд — `1fr`, а не `auto`: когда медиа выше пары «заголовок +
+   подсказка», лишнюю высоту забирает нижний ряд целиком, и подсказка остаётся прижатой к
+   заголовку, а не повисает посреди пустоты. */
 .tb-scene__q { display: grid; grid-template-columns: 1fr; gap: var(--ou-space-2); }
 .tb-scene__q:has([data-slot="question-media"]:not(:empty)) {
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  grid-template-rows: auto 1fr;
   column-gap: var(--ou-space-5);
   align-items: start;
 }
-/* Медиа занимает обе строки правой пары «заголовок + подсказка». */
 .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > [data-slot="question-media"] {
-  grid-row: 1 / -1;
+  grid-column: 1; grid-row: 1 / -1;
 }
-/* Аудио визуальной площади не имеет: плеер идёт строкой над текстом во всю ширину. */
-.tb-scene__q:has([data-media-type="audio"]) { grid-template-columns: 1fr; }
+.tb-scene__q:has([data-slot="question-media"]:not(:empty)) > .tb-scene__qtitle,
+.tb-scene__q:has([data-slot="question-media"]:not(:empty)) > .tb-scene__qmeta {
+  grid-column: 2;
+}
+/* Аудио визуальной площади не имеет: плеер идёт строкой над текстом во всю ширину колонки.
+
+   Аргумент `:has()` намеренно длиннее, чем нужно для попадания: специфичность `:has()` равна
+   специфичности САМОГО СПЕЦИФИЧНОГО аргумента, поэтому короткое
+   `:has([data-media-type="audio"])` (0,2,0) ПРОИГРЫВАЕТ правилу выше (0,3,0 из-за
+   `:not(:empty)`) и аудио молча остаётся в колонке 5 из 12. Проверено в браузере: до правки
+   плашка плеера была шириной 376px. */
+.tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto;
+}
+.tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) > [data-slot="question-media"],
+.tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) > .tb-scene__qtitle,
+.tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) > .tb-scene__qmeta {
+  grid-column: 1; grid-row: auto;
+}
+/* Порядок в DOM выбран так, что во всех одноколоночных случаях медиа само оказывается над
+   текстом — отдельного правила порядка не требуется. */
 .tb-scene__q > [data-slot="question-media"]:empty { display: none; }
+/* Медиа и текст задания разделяет тот же интервал, что и остальные блоки колонки. */
+.tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) > [data-slot="question-media"] {
+  margin-bottom: var(--ou-space-3);
+}
 ```
 
 - [ ] **Шаг 2: заменить правило блока ответов в стандартном шаблоне**
@@ -725,11 +767,23 @@ video`) на:
    когда длинное, — тело сцены тогда прокручивается, а не обрезает последние варианты.
    PRD-38: колонки здесь больше нет — медиа ушло в блок вопроса, ответы всегда во всю ширину. */
 .tb-qbody { flex: 1 0 auto; display: grid; grid-template-columns: 1fr; gap: var(--ou-space-5); }
-/* `max-width` важен не меньше `width`: медиа приходит из общего рендерера без инлайновых
-   размеров, поэтому широкий файл иначе вытолкнул бы колонку за пределы сцены. */
+
+/* Размер медиа задаёт ШАБЛОН, а не инлайн рантайма: в этом и смысл общего рендерера —
+   инлайновый стиль иначе перебивает theme.css.
+   max-height держит кадр вопроса: высокая вертикальная картинка иначе растянула бы левую
+   колонку и утопила варианты ответа под сгиб.
+   Обёртка изображения и видео хватает по содержимому (width: fit-content), поэтому кнопка
+   «во весь экран» стоит в углу САМОЙ картинки, а не у края пустой колонки, и вокруг картинки
+   не остаётся полей от `object-fit`.
+   Картинка не растягивается сверх натурального размера: апскейл даёт мыло. */
+.question-media[data-media-type="image"],
+.question-media[data-media-type="video"] {
+  width: fit-content; max-width: 100%; margin-inline: auto;
+}
 .question-media img,
 .question-media video {
-  width: 100%; max-width: 100%; height: auto;
+  display: block; width: auto; height: auto;
+  max-width: 100%; max-height: 320px;
   border-radius: var(--ou-radius-m);
 }
 .question-media img { cursor: zoom-in; }
@@ -741,8 +795,24 @@ video`) на:
 (`.tb-qbody:has([data-slot="question-media"]:not(:empty)) { grid-template-columns: 1fr; }`) на:
 
 ```css
-  /* PRD-38: медиа над текстом; блок ответов колонок не имеет и складывать его нечего. */
-  .tb-scene__q:has([data-slot="question-media"]:not(:empty)) { grid-template-columns: 1fr; }
+  /* PRD-38: складывается БЛОК ВОПРОСА, а у блока ответов складывать нечего — колонок у него
+     нет ни при какой ширине. Медиа оказывается над текстом само собой: в разметке оно идёт
+     первым. Потолок высоты ниже, чем на широкой сцене: на телефоне картинка в 320px съедает
+     экран и утапливает варианты под сгиб. */
+  .tb-scene__q:has([data-slot="question-media"]:not(:empty)) {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+  .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > [data-slot="question-media"],
+  .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > .tb-scene__qtitle,
+  .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > .tb-scene__qmeta {
+    grid-column: 1; grid-row: auto;
+  }
+  .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > [data-slot="question-media"] {
+    margin-bottom: var(--ou-space-3);
+  }
+  .question-media img,
+  .question-media video { max-height: 220px; }
 ```
 
 Комментарий над блоком (строки 985-988) отредактировать: фраза «media left / answers right»
@@ -798,16 +868,21 @@ git commit -m "feat(prd-38): медиа встроено в блок вопро�
 }
 .qm-fs-btn:hover { opacity: 1; }
 
-/* PRD-38: аудио — не картинка, а полоса управления. Плашка даёт ей поверхность сцены, а
-   `color-scheme` — палитру: без него Chrome и Firefox рисуют СВЕТЛЫЙ нативный плеер поверх
-   тёмной сцены. Своего плеера у DS пока нет, это осознанный техдолг PRD-38. */
+/* PRD-38: аудио — не картинка, а полоса управления. Плашка даёт ей поверхность сцены.
+   Своего плеера у DS пока нет — осознанный техдолг PRD-38 (раздел 9 спеки).
+
+   ПРО color-scheme: своего объявления здесь НЕ НУЖНО, и объявлять его прямо вредно.
+   `color-scheme` НАСЛЕДУЕТСЯ, а ДС уже ставит его на корне темы (`.ou, .ou--light` — light,
+   `.ou--dark` — dark, см. university-rt.css); корень сцены и есть `.ou` на обоих хостах.
+   Правило вида `color-scheme: light dark` это наследование ПЕРЕБИВАЕТ и возвращает плеер к
+   СИСТЕМНОЙ теме: проверено в браузере — на тёмной сцене плеер становился белым. */
 .question-media[data-media-type="audio"] {
   padding: var(--ou-space-3);
-  border: 1px solid var(--ou-border-subtle);
+  border: 1px solid var(--ou-border-soft);
   border-radius: var(--ou-radius-m);
   background: var(--ou-bg-surface-2);
 }
-.qm-audio { display: block; width: 100%; color-scheme: light dark; }
+.qm-audio { display: block; width: 100%; }
 
 /* Полноэкранный просмотр (attachQuestionMediaFullscreen). Разметку строит ЯДРО, поэтому
    здесь только вид: до PRD-38 те же значения писались инлайном из рантайма. */
@@ -828,10 +903,10 @@ git commit -m "feat(prd-38): медиа встроено в блок вопро�
 }
 ```
 
-Проверить имена токенов по `vendor/ui-kit/css/university-rt.css` до вставки: контролёр не
-ловит несуществующий `--ou-*`, и опечатка молча даёт прозрачный фон. Если `--ou-border-subtle`
-или `--ou-bg-surface-2` в файле отсутствуют, взять ближайшие существующие и упомянуть замену в
-сообщении коммита.
+Имена токенов сверены по `vendor/ui-kit/css/university-rt.css` при сборке эскиза: токена
+`--ou-border-subtle` в ДС НЕТ, поэтому рамка объявлена через `--ou-border-soft`. Любой другой
+добавляемый токен проверять так же — контролёр не ловит несуществующий `--ou-*`, и опечатка
+молча даёт прозрачный фон.
 
 - [ ] **Шаг 2: повторить в шаблоне «Сертификация»**
 
