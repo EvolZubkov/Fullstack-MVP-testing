@@ -36,6 +36,8 @@ export {
   returnToPool,
 } from "./dnd/matching-model";
 export { attachPointerDnd } from "./dnd/pointer-dnd";
+// PRD-38: single question-media renderer + fullscreen overlay, shared by both hosts.
+export { renderQuestionMedia, attachQuestionMediaFullscreen, openQuestionMediaOverlay } from "./question-media";
 export { buildResultContext, buildAdaptiveResultContext, buildSectionResultContext, buildSectionIntroContext } from "./result-context";
 // PRD-29: the package assembles the measures input for the results screen ITSELF,
 // to the very shape `server/services/result-context` assembles on the web host —

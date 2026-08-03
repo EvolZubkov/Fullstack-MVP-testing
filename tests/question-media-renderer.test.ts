@@ -7,7 +7,7 @@
  * rather than left to the hosts.
  */
 import { describe, expect, it } from "vitest";
-import { renderQuestionMedia } from "../shared/template/question-media";
+import { attachQuestionMediaFullscreen, renderQuestionMedia } from "../shared/template/question-media";
 
 describe("renderQuestionMedia", () => {
   it("returns an empty string when the url or the type is missing", () => {
@@ -49,5 +49,41 @@ describe("renderQuestionMedia", () => {
     const html = renderQuestionMedia({ mediaUrl: '/a.png" onerror="alert(1)', mediaType: "image" });
     expect(html).not.toContain('onerror="alert(1)"');
     expect(html).toContain("&quot;");
+  });
+});
+
+describe("attachQuestionMediaFullscreen", () => {
+  function mount(): { root: HTMLElement; detach: () => void } {
+    const root = document.createElement("div");
+    root.innerHTML = renderQuestionMedia({ mediaUrl: "/a.png", mediaType: "image" });
+    document.body.appendChild(root);
+    return { root, detach: attachQuestionMediaFullscreen(root) };
+  }
+
+  it("opens the overlay with the clicked asset and closes it on Escape", () => {
+    const { root, detach } = mount();
+    root.querySelector<HTMLElement>("[data-media-fullscreen]")!.click();
+
+    const overlay = document.getElementById("qm-overlay")!;
+    expect(overlay.hidden).toBe(false);
+    expect(overlay.querySelector("img")?.getAttribute("src")).toBe("/a.png");
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(overlay.hidden).toBe(true);
+    expect(overlay.querySelector("img")).toBeNull();
+    detach();
+  });
+
+  it("is idempotent: two attachments open one overlay, and detaching stops the handler", () => {
+    const { root, detach } = mount();
+    const second = attachQuestionMediaFullscreen(root);
+    root.querySelector<HTMLElement>("[data-media-fullscreen]")!.click();
+    expect(document.querySelectorAll("#qm-overlay").length).toBe(1);
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    detach();
+    second();
+    root.querySelector<HTMLElement>("[data-media-fullscreen]")!.click();
+    expect(document.getElementById("qm-overlay")!.hidden).toBe(true);
   });
 });
