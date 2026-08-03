@@ -18,6 +18,18 @@
  * too, and the button carries a plain `data-media-fullscreen` marker: {@link
  * attachQuestionMediaFullscreen} wires it up by event delegation, so no inline handler is
  * ever printed (FR-15, FR-16).
+ *
+ * The overlay is mounted into the SAME node the host passes in, not derived from
+ * `ownerDocument`. On the web host the question scene lives in a Shadow DOM, and the
+ * template's `theme.css` is injected as a `<style>` INSIDE that same shadow root
+ * (`client/src/components/template-screen.tsx`) — a shadow tree's stylesheet only paints
+ * nodes that live in that same tree. An element's `ownerDocument` is always the top
+ * document regardless of how deep inside a shadow tree it sits, so mounting the overlay via
+ * `element.ownerDocument.body` would silently escape the shadow root: the overlay would
+ * render in the light DOM, past the reach of `theme.css`, as an unstyled image at the
+ * bottom of the page. Passing the actual root through — and searching it with
+ * `querySelector` rather than `Document#getElementById`, which `ShadowRoot` and `Element`
+ * do not have — keeps the overlay inside whichever tree carries the stylesheet.
  */
 import { escapeHtml } from "../text/escape";
 
@@ -79,14 +91,41 @@ export function renderQuestionMedia(media: QuestionMediaInput | null | undefined
   return "";
 }
 
-/** Single overlay per document, reused by every screen and both hosts. */
+/** Single overlay per mounted root, reused by every screen inside that root. */
 const OVERLAY_ID = "qm-overlay";
 
-/** Builds the overlay lazily; a package screen without media never pays for it. */
-function ensureOverlay(doc: Document): HTMLElement {
-  const existing = doc.getElementById(OVERLAY_ID);
+/**
+ * The node an overlay can be mounted into and searched within: the whole document (package
+ * host), a shadow root (web host — the tree carrying the template's injected `theme.css`),
+ * or a plain element (tests, and any future host that mounts the renderer elsewhere).
+ */
+export type QuestionMediaRoot = Document | ShadowRoot | Element;
+
+/**
+ * The document that owns `root`, for `createElement`. A `Document` node's own
+ * `ownerDocument` is `null` (a document does not own itself), so it is returned as-is;
+ * a `ShadowRoot` or `Element` yields the document it is attached to.
+ */
+function documentOf(root: QuestionMediaRoot): Document {
+  return root.nodeType === 9 ? (root as Document) : (root.ownerDocument as Document);
+}
+
+/**
+ * Where the overlay element itself gets appended. For a `Document` that is `document.body`
+ * (an overlay cannot be a document's own child); for a shadow root or a plain element it is
+ * `root` itself, so the overlay lands in the SAME tree the caller passed in — see the
+ * module doc for why that tree must not be derived from `ownerDocument`.
+ */
+function mountPointOf(root: QuestionMediaRoot): Element | ShadowRoot {
+  return root.nodeType === 9 ? (root as Document).body : (root as ShadowRoot | Element);
+}
+
+/** Builds the overlay lazily inside `root`; a screen without media never pays for it. */
+function ensureOverlay(root: QuestionMediaRoot): HTMLElement {
+  const existing = root.querySelector<HTMLElement>(`#${OVERLAY_ID}`);
   if (existing) return existing;
 
+  const doc = documentOf(root);
   const overlay = doc.createElement("div");
   overlay.id = OVERLAY_ID;
   overlay.className = "qm-overlay";
@@ -94,22 +133,19 @@ function ensureOverlay(doc: Document): HTMLElement {
   overlay.innerHTML =
     '<button type="button" class="qm-overlay__close" aria-label="Закрыть">✕</button>' +
     '<div class="qm-overlay__stage"></div>';
-  doc.body.appendChild(overlay);
+  mountPointOf(root).appendChild(overlay);
 
   overlay.addEventListener("click", (e) => {
     // Background and the close button dismiss; a click on the asset itself does not.
     const target = e.target as HTMLElement;
-    if (target === overlay || target.closest(".qm-overlay__close")) closeOverlay(doc);
-  });
-  doc.addEventListener("keydown", (e) => {
-    if ((e as KeyboardEvent).key === "Escape") closeOverlay(doc);
+    if (target === overlay || target.closest(".qm-overlay__close")) closeOverlay(root);
   });
   return overlay;
 }
 
 /** Empties the stage — that also stops a playing video — and hides the overlay. */
-function closeOverlay(doc: Document): void {
-  const overlay = doc.getElementById(OVERLAY_ID);
+function closeOverlay(root: QuestionMediaRoot): void {
+  const overlay = root.querySelector<HTMLElement>(`#${OVERLAY_ID}`);
   if (!overlay) return;
   const stage = overlay.querySelector(".qm-overlay__stage");
   if (stage) stage.innerHTML = "";
@@ -117,15 +153,17 @@ function closeOverlay(doc: Document): void {
 }
 
 /**
- * Shows one asset full screen.
+ * Shows one asset full screen, inside `root`.
  *
- * @param doc  Owner document (the web host lives in a shadow root, whose document this is).
+ * @param root Same node passed to {@link attachQuestionMediaFullscreen} — a shadow root on
+ *             the web host, `document` in the package. The overlay is created (and
+ *             searched for) inside it, never derived from an element's `ownerDocument`.
  * @param url  Asset address, already resolved by the host.
  * @param type Media kind; anything but image and video is ignored.
  */
-export function openQuestionMediaOverlay(doc: Document, url: string, type: string): void {
+export function openQuestionMediaOverlay(root: QuestionMediaRoot, url: string, type: string): void {
   if (!isZoomable(type)) return;
-  const overlay = ensureOverlay(doc);
+  const overlay = ensureOverlay(root);
   const stage = overlay.querySelector(".qm-overlay__stage")!;
   stage.innerHTML =
     type === "image"
@@ -137,20 +175,34 @@ export function openQuestionMediaOverlay(doc: Document, url: string, type: strin
 /**
  * Wires the fullscreen affordance by delegation, so it survives the re-render both hosts do
  * on every question. Idempotent: attaching twice adds one listener per call but still yields
- * a single overlay.
+ * a single overlay (`ensureOverlay` finds the existing one by `querySelector`).
  *
- * @param root Shadow root (web) or document (package).
- * @returns Detach function.
+ * Escape is bound on `root`'s OWNER DOCUMENT, not on `root` itself: a shadow root never
+ * receives a `keydown` fired outside it directly, but the DOM spec has such events RETARGET
+ * and bubble up through the shadow boundary to `document` regardless of which shadow tree
+ * (if any) the focused element sits in, so binding on the document alone covers every host.
+ *
+ * @param root Shadow root (web) or document (package) — the SAME node `theme.css` was
+ *             injected into, so the overlay it mounts stays reachable by that stylesheet.
+ * @returns Detach function; removes both the click and the keydown listener.
  */
-export function attachQuestionMediaFullscreen(root: Document | ShadowRoot | Element): () => void {
+export function attachQuestionMediaFullscreen(root: QuestionMediaRoot): () => void {
   const onClick = (e: Event) => {
     const el = (e.target as HTMLElement | null)?.closest?.(`[${FULLSCREEN_ATTR}]`);
     if (!el) return;
     const url = el.getAttribute("data-media-url");
     const type = el.getAttribute("data-media-type");
     if (!url || !type) return;
-    openQuestionMediaOverlay(el.ownerDocument, url, type);
+    openQuestionMediaOverlay(root, url, type);
   };
+  const onKeydown = (e: Event) => {
+    if ((e as KeyboardEvent).key === "Escape") closeOverlay(root);
+  };
+  const doc = documentOf(root);
   root.addEventListener("click", onClick);
-  return () => root.removeEventListener("click", onClick);
+  doc.addEventListener("keydown", onKeydown);
+  return () => {
+    root.removeEventListener("click", onClick);
+    doc.removeEventListener("keydown", onKeydown);
+  };
 }

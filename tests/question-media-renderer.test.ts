@@ -6,7 +6,7 @@
  * on (audio stacks above the prompt, image and video sit beside it), so it is asserted here
  * rather than left to the hosts.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { attachQuestionMediaFullscreen, renderQuestionMedia } from "../shared/template/question-media";
 
 describe("renderQuestionMedia", () => {
@@ -53,6 +53,18 @@ describe("renderQuestionMedia", () => {
 });
 
 describe("attachQuestionMediaFullscreen", () => {
+  // Every test mounts its own overlay under the (module-level, singleton-per-root) id
+  // "qm-overlay". Without a wipe, a PREVIOUS test's root — never removed, only detached —
+  // stays in `document.body` and collides with the next test's `#qm-overlay` lookup: jsdom's
+  // ID-selector fast path resolves `#id` against the whole document's first match rather
+  // than genuinely scoping to the queried root's subtree, so a leftover element with the
+  // same id shadows the new root's own overlay. Real hosts never hit this — the package has
+  // exactly one document, and each web shadow root is a separate ID scope — so this is a
+  // test-hygiene fix, not a product one.
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
   function mount(): { root: HTMLElement; detach: () => void } {
     const root = document.createElement("div");
     root.innerHTML = renderQuestionMedia({ mediaUrl: "/a.png", mediaType: "image" });
@@ -85,5 +97,30 @@ describe("attachQuestionMediaFullscreen", () => {
     second();
     root.querySelector<HTMLElement>("[data-media-fullscreen]")!.click();
     expect(document.getElementById("qm-overlay")!.hidden).toBe(true);
+  });
+
+  it("mounts the overlay in a shadow root, not in the light DOM, so the template's theme.css can reach it", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const shadow = host.attachShadow({ mode: "open" });
+    shadow.innerHTML = renderQuestionMedia({ mediaUrl: "/a.png", mediaType: "image" });
+    const detach = attachQuestionMediaFullscreen(shadow);
+
+    shadow.querySelector<HTMLElement>("[data-media-fullscreen]")!.click();
+
+    const overlayInShadow = shadow.querySelector<HTMLElement>("#qm-overlay");
+    expect(overlayInShadow).not.toBeNull();
+    expect(overlayInShadow!.hidden).toBe(false);
+    // The light DOM must stay clean: an overlay mounted via `ownerDocument.body` would
+    // show up here instead, unreachable by the shadow root's injected stylesheet.
+    expect(document.body.querySelector("#qm-overlay")).toBeNull();
+    expect(document.getElementById("qm-overlay")).toBeNull();
+
+    // Escape still reaches it: keydown is a composed event that bubbles past the shadow
+    // boundary up to the document, which is where the listener is bound.
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(overlayInShadow!.hidden).toBe(true);
+
+    detach();
   });
 });
