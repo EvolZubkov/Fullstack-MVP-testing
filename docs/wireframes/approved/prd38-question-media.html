@@ -74,9 +74,12 @@
   <title>PRD-38 — медиа вопроса как часть вопроса</title>
   <!-- Пути ОТНОСИТЕЛЬНЫЕ, а не от корня репозитория: так эскиз открывается и
        двойным щелчком (file://), и с локального сервера. -->
-  <link rel="stylesheet" href="../../client/src/styles/vendor/university-rt.css">
-  <link rel="stylesheet" href="ds/wf-utils.css">
-  <link rel="stylesheet" href="../../server/scorm/templates/default/styles/theme.css">
+  <!-- Absolute-from-root paths, like the other approved wireframes: the review recipe
+       serves the REPOSITORY ROOT over http, and this file moved into `approved/` after
+       it was drawn, which broke the relative ones. -->
+  <link rel="stylesheet" href="/client/src/styles/vendor/university-rt.css">
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css">
+  <link rel="stylesheet" href="/server/scorm/templates/default/styles/theme.css">
   <style>
     :root {
       /* gate-skip-start */
