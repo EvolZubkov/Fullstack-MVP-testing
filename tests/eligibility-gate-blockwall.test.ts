@@ -281,4 +281,74 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
       vi.useRealTimers();
     }
   });
+
+  it("PRD-40: resolves the FAILED period through the real gate.js when cooldownByOutcome is on", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-04T10:00:00Z"));
+    try {
+      const SCORM = {
+        getValue: () => "",
+        setValue: () => true,
+        commit: () => true,
+        init: () => true,
+        terminate: () => true,
+      };
+      const state: Record<string, unknown> = { templateLayouts: { "system.blocked": blockedLayout } };
+      const gate = makeGate({ state, SCORM, escapeHtml });
+
+      // Last matching WebTutor record is "Не пройден" (failed), dated 01.06.2026 -- only
+      // 3 calendar days before "today" (04.06.2026). Only the FAILED period (7 days) keeps
+      // this blocked: if buildContext failed to pass cooldownByOutcome/the split fields
+      // through to the plugin, resolveCooldownDays would fall back to policy.cooldownPeriodDays
+      // (unset here) -> null -> 0, which would ALLOW immediately (3 >= 0) instead of blocking --
+      // a silent flip that manual tracing alone would not have caught.
+      stubWebtutorFetch([{ state: "Не пройден", progress: "60%", last_usage_date: "01.06.2026" }]);
+
+      let started = false;
+      gate.run(
+        gatedTestData({
+          retakePolicy: {
+            enabled: true,
+            cooldownByOutcome: true,
+            cooldownPeriodDaysPassed: 90,
+            cooldownPeriodDaysFailed: 7,
+            eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" },
+          },
+          // passedStateIn must be configured for recordPassed() to resolve an outcome at
+          // all (see shared/eligibility/plugins.ts / the plain-JS twin) -- the base fixture
+          // in gatedTestData() does not set it, so it is repeated here in full since `over`
+          // REPLACES retakePlugin wholesale rather than merging into the base.
+          retakePlugin: {
+            runtimeEntry: "webtutorCooldown",
+            config: {
+              collectionEndpoint: "/pp/Ext5/extjs_json_collection_data.html",
+              secidSource: { endpoint: "/", pattern: "[A-F0-9]{32}" },
+              attemptFilter: {
+                stateField: "state",
+                stateIn: ["Пройден", "Не пройден"],
+                passedStateIn: ["Пройден"],
+                dateField: "last_usage_date",
+                dateFormat: "dd.MM.yyyy",
+              },
+            },
+          },
+        }),
+        () => { started = true; },
+      );
+      await flush();
+
+      expect(started).toBe(false);
+      expect((state.retake as any)?.allowed).toBe(false);
+      // 01.06.2026 + 7 days (the FAILED period) = 08.06.2026 -- proves the resolved period
+      // reached the plugin, not the PASSED period (90, which would give 30.08.2026) and not
+      // a silently-dropped split config (which would allow immediately, per the comment above).
+      expect((state.retake as any)?.availableDate).toBe("2026-06-08");
+      expect((state.retake as any)?.cooldownPeriodDays).toBe(7);
+
+      const app = document.getElementById("app")!;
+      expect(app.querySelector('[data-path="retake.cooldownPeriodDays"]')!.textContent).toBe("7");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
