@@ -4301,12 +4301,19 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
  *
  * Tint scoped away from review rows so semantic colors win below.
  */
-.ou-match--gap-narrow .ou-match__row.is-connected:not(.ou-match__row--correct):not(.ou-match__row--incorrect) .ou-match__card {
+/* A consumer may mark a reviewed row with this component's own BEM modifiers
+ * (`ou-match__row--correct`/`--incorrect`, set by `Matching.tsx`'s `rowMod`) OR with
+ * the generic `correct-answer`/`incorrect-answer` classes the rest of this DS's
+ * question components use. Either convention must exclude the "just connected"
+ * accent tint from a reviewed row, or accent purple silently outranks the verdict
+ * color by specificity.
+ */
+.ou-match--gap-narrow .ou-match__row.is-connected:not(.ou-match__row--correct):not(.ou-match__row--incorrect):not(.correct-answer):not(.incorrect-answer) .ou-match__card {
   background: var(--ou-accent-soft);
   border-color: var(--ou-accent-default);
   color: var(--ou-accent-on-soft);
 }
-.ou-match--gap-narrow .ou-match__row.is-connected:not(.ou-match__row--correct):not(.ou-match__row--incorrect) .ou-match__gap {
+.ou-match--gap-narrow .ou-match__row.is-connected:not(.ou-match__row--correct):not(.ou-match__row--incorrect):not(.correct-answer):not(.incorrect-answer) .ou-match__gap {
   background: var(--ou-accent-soft);
   border-top: 1px solid var(--ou-accent-default);
   border-bottom: 1px solid var(--ou-accent-default);
