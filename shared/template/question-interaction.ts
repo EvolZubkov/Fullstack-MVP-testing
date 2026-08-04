@@ -459,7 +459,7 @@ export function renderMatching(
   // auto-placed into the wrong ones, overlapping on a phone. The DS base rule reads this
   // variable (`.ou-match`), so the ratio still applies while a rule can still override
   // the whole track list.
-  let html = `<div class="ou-match ou-match--gap-wide ou-match--side-r ou-match--icon-dots" style="--ou-match-cols:${columns}">`;
+  let html = `<div class="ou-match ou-match--gap-narrow ou-match--side-r ou-match--icon-dots" style="--ou-match-cols:${columns}">`;
   for (const ri of rightMapping) {
     const matchedLeft = rightToLeft[ri];
     const isJoined = matchedLeft !== undefined;
@@ -476,14 +476,14 @@ export function renderMatching(
       `<div class="ou-match__card ou-match__card--fixed" data-drop="r${ri}">` +
       `<span class="ou-match__card-text"><span class="ou-match__card-title" ` +
       `style="font-size:var(--tb-answer-fs,1.125rem)">${answerHtml(right[ri])}</span></span></div>`;
-    // Connection indicator in the gap: a chevron-left «‹» pointing from the answer
-    // toward its prompt. Dashed grey hint by default, solid + accent once the row is
-    // connected (the DS `ou-match__gap-arrow` styling). The path is drawn pointing
-    // right; the DS's `.ou-match--side-r` `scaleX(-1)` flips it to a left chevron.
+    // Connection indicator in the gap: a wavy seam, invisible until the row connects.
+    // Narrow-mode DS CSS (`ou-match--gap-narrow`) then fuses both cards and this cell
+    // into one panel and reveals the seam over the join — no arrow is ever drawn.
     html +=
       '<div class="ou-match__gap" aria-hidden="true">' +
-      '<svg class="ou-match__gap-arrow" viewBox="0 0 28 12"><path d="M10 2 L18 6 L10 10"></path></svg>' +
-      '</div>';
+      '<svg class="ou-match__seam" viewBox="0 0 6 48" preserveAspectRatio="none">' +
+      '<path d="M3 0 Q0 4 3 8 Q6 12 3 16 Q0 20 3 24 Q6 28 3 32 Q0 36 3 40 Q6 44 3 48"></path>' +
+      '</svg></div>';
     if (isJoined) {
       html += dragCard(matchedLeft, `r${ri}`);
     } else {
