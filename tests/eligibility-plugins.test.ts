@@ -9,7 +9,6 @@ import {
   parseFlexibleDate,
   selectLastAttemptDate,
   webtutorCooldownDecide,
-  suspendDataCooldownDecide,
   extractCourseCompletionDate,
   extractSecid,
   type WebtutorAttemptFilter,
@@ -152,19 +151,5 @@ describe("ClientBridge parse (PRD-6 webtutor source — confirmed on live RT por
       "90B9DA0B3BFE7DFB94CC23DACDEA27CD",
     );
     expect(extractSecid("no token here")).toBeNull();
-  });
-});
-
-describe("suspendDataCooldownDecide", () => {
-  it("allows after the cooldown elapses", () => {
-    const r = suspendDataCooldownDecide("2026-04-01", ctx); // 49 days >= 30
-    expect(r.source).toBe("suspend_data_cooldown");
-    expect(r.allowed).toBe(true);
-    expect(r.reason).toBe("cooldown_passed");
-  });
-  it("blocks within the cooldown window", () => {
-    const r = suspendDataCooldownDecide("2026-05-10", ctx); // 10 < 30
-    expect(r.allowed).toBe(false);
-    expect(r.availableDate).toBe("2026-06-09");
   });
 });

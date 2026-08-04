@@ -260,25 +260,6 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
     ).toBe(90);
   });
 
-  it("suspendDataCooldownDecide matches", () => {
-    // The last entry is an attempt AFTER the reported "today" — an untrusted (rolled
-    // back) clock — so `data.effectiveToday` differs from `data.todayDate` and the
-    // parity check covers the clamp, not just the pass-through case.
-    for (const d of ["2026-04-01", "2026-05-15", null, "2026-06-01"]) {
-      expect(port.EligibilityPlugins.suspendDataCooldownDecide(d, ctx())).toEqual(
-        tsPlugins.suspendDataCooldownDecide(d, ctx()),
-      );
-    }
-    // The clamped value is the one the plugin reports (both twins, same assertion).
-    for (const impl of [tsPlugins, port.EligibilityPlugins as typeof tsPlugins]) {
-      expect(impl.suspendDataCooldownDecide("2026-06-01", ctx()).data).toMatchObject({
-        todayDate: "2026-05-20",
-        effectiveToday: "2026-06-01",
-      });
-      expect(impl.suspendDataCooldownDecide(null, ctx()).data).toMatchObject({ effectiveToday: null });
-    }
-  });
-
   it("ClientBridge parse (extractCourseCompletionDate / extractSecid / unescapeXml) matches", () => {
     const soap =
       '<result>&lt;Label Class="XAML-block-best_learn_step_success"&gt;Курс был пройден&lt;/Label&gt;' +

@@ -1,14 +1,12 @@
 /**
  * @module shared/eligibility/plugins
  *
- * Pure logic of the two PRD-6 MVP eligibility plugins. Side effects (the WebTutor
- * `fetch`, reading SCORM `suspend_data`) live in the runtime; these functions
- * take already-fetched inputs so they are deterministic and testable:
- *
- * - `webtutor_cooldown` — filter the course records to "full attempts", pick the
- *   latest date, decide by calendar cooldown (PRD-6 §3.6/§4.2).
- * - `suspend_data_cooldown` — best-effort: decide from a date carried in
- *   `suspend_data` (within the same SCORM registration only, PRD-6 §4.6).
+ * Pure logic of the PRD-6 `webtutor_cooldown` eligibility plugin. Side effects
+ * (the WebTutor `fetch`) live in the runtime; these functions take already-fetched
+ * inputs so they are deterministic and testable: filter the course records to
+ * "full attempts", pick the latest date, decide by calendar cooldown
+ * (PRD-6 §3.6/§4.2; PRD-40 splits the cooldown period by the winning record's
+ * outcome).
  *
  * A plain-JS twin runs in the package (server/scorm/template/app/eligibility/);
  * kept in parity by tests/eligibility-engine-port.test.ts.
@@ -204,17 +202,6 @@ export function webtutorCooldownDecide(
   const rec = selectLastAttemptRecord(records, filter, courseName);
   const date = rec ? parseFlexibleDate(String(rec[filter.dateField] ?? ""), filter.dateFormat || "dd.MM.yyyy") : null;
   return cooldownResult(date, recordPassed(rec, filter), context, "webtutor_cooldown");
-}
-
-/**
- * `suspend_data_cooldown` decision from a date carried in `suspend_data`
- * (best-effort, same-registration only, PRD-6 §4.6).
- */
-export function suspendDataCooldownDecide(
-  lastCompletedDate: string | null,
-  context: EligibilityContext,
-): EligibilityResult {
-  return cooldownResult(lastCompletedDate, null, context, "suspend_data_cooldown");
 }
 
 /** Cooldown decision from an already-resolved last-attempt date, any source. */

@@ -78,7 +78,12 @@ var RetakeGate = (function () {
     return resolveToday(config).then(function (todayDate) {
       return {
         test: { id: td.id || '', title: td.title || '' },
-        retakePolicy: { cooldownPeriodDays: td.retakePolicy.cooldownPeriodDays },
+        retakePolicy: {
+          cooldownPeriodDays: td.retakePolicy.cooldownPeriodDays,
+          cooldownByOutcome: td.retakePolicy.cooldownByOutcome,
+          cooldownPeriodDaysPassed: td.retakePolicy.cooldownPeriodDaysPassed,
+          cooldownPeriodDaysFailed: td.retakePolicy.cooldownPeriodDaysFailed
+        },
         runtime: {
           todayDate: todayDate,
           timezone: tz,
@@ -201,26 +206,9 @@ var RetakeGate = (function () {
     });
   }
 
-  // suspend_data_cooldown adapter — best-effort read of a date carried in
-  // suspend_data (PRD-6 §4.6). Pre-Initialize reads are unreliable; tolerate failure.
-  function suspendEvaluate(ctx) {
-    var date = null;
-    try {
-      if (typeof SCORM !== 'undefined' && SCORM.getValue) {
-        var raw = SCORM.getValue('cmi.suspend_data');
-        if (raw) {
-          var obj = JSON.parse(raw);
-          date = (obj && obj.retake && obj.retake.lastCompletedDate) || null;
-        }
-      }
-    } catch (e) { date = null; }
-    return Promise.resolve(EligibilityPlugins.suspendDataCooldownDecide(date, ctx));
-  }
-
   function runPlugin(td, ctx) {
     var entry = td.retakePlugin.runtimeEntry;
     if (entry === 'webtutorCooldown') return webtutorEvaluate(ctx, td.retakePlugin.config || {});
-    if (entry === 'suspendDataCooldown') return suspendEvaluate(ctx);
     return Promise.resolve(true); // unknown adapter => allow (core default spirit)
   }
 

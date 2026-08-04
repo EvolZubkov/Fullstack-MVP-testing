@@ -101,10 +101,6 @@ var EligibilityPlugins = (function () {
     return cooldownResult(date, recordPassed(rec, filter), context, 'webtutor_cooldown');
   }
 
-  function suspendDataCooldownDecide(lastCompletedDate, context) {
-    return cooldownResult(lastCompletedDate, null, context, 'suspend_data_cooldown');
-  }
-
   function cooldownDecideFromDate(lastAttemptDate, context, source) {
     return cooldownResult(lastAttemptDate, null, context, source);
   }
@@ -136,7 +132,6 @@ var EligibilityPlugins = (function () {
     selectLastAttemptRecord: selectLastAttemptRecord,
     recordPassed: recordPassed,
     webtutorCooldownDecide: webtutorCooldownDecide,
-    suspendDataCooldownDecide: suspendDataCooldownDecide,
     cooldownDecideFromDate: cooldownDecideFromDate,
     unescapeXml: unescapeXml,
     extractSecid: extractSecid,

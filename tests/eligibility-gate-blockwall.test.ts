@@ -54,14 +54,38 @@ const escapeHtml = (s: unknown) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
+/** Stub a successful portal chrome (SECID) + collection response with one record. */
+function stubWebtutorFetch(records: Array<Record<string, unknown>>) {
+  vi.stubGlobal("fetch", (url: string) => {
+    if (String(url).indexOf("extjs_json_collection_data") !== -1) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: () => Promise.resolve({ success: true, total: records.length, results: records }),
+        text: () => Promise.resolve(""),
+      });
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      text: () => Promise.resolve("ABCDEF0123456789ABCDEF0123456789"),
+    });
+  });
+}
+
 /**
  * Flush the microtask chain the gate schedules (no real timers involved). The
  * cooldown path may chain two ensureTemplate() loads (cooldown-start → block-wall
  * fallback) when a stub loadDesignTemplate never populates the layouts, so drain
- * generously.
+ * generously. PRD-40: `webtutor_cooldown` adds its own SECID/collection fetch
+ * chain ahead of that render chain (vs. the removed `suspend_data_cooldown`,
+ * which decided synchronously off `suspend_data`), so the loop needs more ticks
+ * to reach a settled DOM.
  */
 async function flush() {
-  for (let i = 0; i < 24; i++) await Promise.resolve();
+  for (let i = 0; i < 64; i++) await Promise.resolve();
 }
 
 function gatedTestData(over: Record<string, unknown> = {}) {
@@ -71,9 +95,21 @@ function gatedTestData(over: Record<string, unknown> = {}) {
     retakePolicy: {
       enabled: true,
       cooldownPeriodDays: 30,
-      eligibilityPlugin: { key: "k", failPolicy: "failOpen" },
+      eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" },
     },
-    retakePlugin: { runtimeEntry: "suspendDataCooldown", config: {} },
+    retakePlugin: {
+      runtimeEntry: "webtutorCooldown",
+      config: {
+        collectionEndpoint: "/pp/Ext5/extjs_json_collection_data.html",
+        secidSource: { endpoint: "/", pattern: "[A-F0-9]{32}" },
+        attemptFilter: {
+          stateField: "state",
+          stateIn: ["Пройден", "Не пройден"],
+          dateField: "last_usage_date",
+          dateFormat: "dd.MM.yyyy",
+        },
+      },
+    },
     ...over,
   };
 }
@@ -97,12 +133,10 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-04T10:00:00Z"));
     try {
+      stubWebtutorFetch([{ state: "Пройден", progress: "100%", last_usage_date: "20.05.2026" }]);
       const calls: string[] = [];
       const SCORM = {
-        getValue: (k: string) =>
-          k === "cmi.suspend_data"
-            ? JSON.stringify({ retake: { lastCompletedDate: "2026-05-20" } })
-            : "",
+        getValue: () => "",
         setValue: (k: string) => { calls.push("setValue:" + k); return true; },
         commit: () => { calls.push("commit"); return true; },
         init: () => { calls.push("initialize"); return true; },
@@ -227,11 +261,9 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-04T10:00:00Z"));
     try {
+      stubWebtutorFetch([{ state: "Пройден", progress: "100%", last_usage_date: "20.05.2026" }]);
       const SCORM = {
-        getValue: (k: string) =>
-          k === "cmi.suspend_data"
-            ? JSON.stringify({ retake: { lastCompletedDate: "2026-05-20" } })
-            : "",
+        getValue: () => "",
         init: () => {},
       };
       const state: Record<string, unknown> = { templateLayouts: {} }; // no system.blocked
