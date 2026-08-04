@@ -208,7 +208,10 @@ PRD-12 «оба хоста рендерят из общего кода» и пр
 - обновление набора слотов в
   [`shared/template/preview-context.ts:580`](../../../shared/template/preview-context.ts);
 - `tests/template-layout-parity.test.ts` остаётся зелёным без правки;
-- `tests/protection-apply.test.ts` подтверждает, что область медиа по-прежнему защищается.
+- `shared/template/__tests__/protection-apply.test.ts` и `tests/content-protection.test.ts`
+  подтверждают, что область медиа по-прежнему защищается: сам селектор перечислен в
+  `QUESTION_REGIONS` (`shared/template/protection/spec.ts`), а оба набора проходят по этому
+  перечню.
 
 Приёмка в реальном браузере (Playwright), на обоих хостах:
 
@@ -226,6 +229,13 @@ PRD-12 «оба хоста рендерят из общего кода» и пр
 Порядок работ: эскиз в `docs/wireframes` на согласование, затем код.
 
 ## 9. Техдолг
+
+**Пример SCORM не содержит медиа.** `scripts/generate-sample-scorm.ts:66-67` жёстко проставляет
+`mediaUrl: null` и `mediaType: null`, поэтому документированный путь приёмки (`npm run scorm:sample`
+плюс `npm run scorm:player`) композицию медиа не проверяет вообще — в собранном пакете нет ни
+одного непустого `mediaType`. Приёмка PRD-38 обошла это, собрав пакет экспортом живого теста, но
+следующей работе с медиа придётся повторять обход. Добавить в пример по одному вопросу с
+изображением и с аудио.
 
 **Собственный аудио-плеер `ou-audio` в ui-kit.** Компонент DS (кнопка воспроизведения, полоса
 перемотки, время) плюс framework-free разметка и поведение в `shared/template`. DS-CSS уже
