@@ -8,7 +8,8 @@
  *   - Empty-state for links: list absent, only button shown.
  *   - «Добавить ссылку» appends a link row; button is not full-width.
  *   - createLink: mock window.prompt + document.execCommand, verify call.
- *   - PDF upload via hidden input: asset appears in draft; onSave strips the UI-only size.
+ *   - Materials list (assets): add/edit/remove a {title, url} row; a legacy upload
+ *     descriptor (PRD-32) renders as a plain editable row; onSave strips the UI-only uid.
  *   - «Отменить» calls onCancel; «Сохранить» calls onSave with canonical value.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
@@ -225,50 +226,89 @@ describe("<FeedbackEditorModal /> — RTE link-insert modal", () => {
   });
 });
 
-// ─── Tests: PDF assets section ────────────────────────────────────────────────
+// ─── Tests: materials section (PRD-42 — link only, no upload) ───────────────
 
-describe("<FeedbackEditorModal /> — PDF assets", () => {
-  // PRD-32: a picked file now goes to the media library at once, so the upload path needs a
-  // server answer before any asset row can appear.
-  beforeEach(() => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ id: "a", url: "/api/media/a", mime: "application/pdf", size: 1 }),
+describe("<FeedbackEditorModal /> — материалы", () => {
+  it("shows no list when assets is empty, only the add button", () => {
+    renderModal();
+    expect(screen.queryByRole("list", { name: /Материалы/i })).not.toBeInTheDocument();
+    expect(screen.getByTestId("feedback-editor-asset-add")).toBeInTheDocument();
+  });
+
+  it("hides the materials section when hideAssets=true", () => {
+    renderModal({ hideAssets: true });
+    expect(screen.queryByTestId("feedback-editor-asset-add")).not.toBeInTheDocument();
+  });
+
+  it("«Добавить материал» appends an editable {title, url} row", () => {
+    renderModal();
+    fireEvent.click(screen.getByTestId("feedback-editor-asset-add"));
+    expect(screen.getByRole("list", { name: /Материалы/i })).toBeInTheDocument();
+    expect(screen.getByTestId("feedback-editor-asset-title-0")).toBeInTheDocument();
+    expect(screen.getByTestId("feedback-editor-asset-url-0")).toBeInTheDocument();
+  });
+
+  it("renders a legacy upload-descriptor as a plain editable row, no special banner", () => {
+    renderModal({
+      value: baseValue({
+        assets: [
+          {
+            title: "Памятка по ИБ",
+            fileName: "memo.pdf",
+            mimeType: "application/pdf",
+            url: "/api/media/asset-1",
+          },
+        ],
+      }),
+    });
+    const titleInput = screen.getByTestId("feedback-editor-asset-title-0") as HTMLInputElement;
+    const urlInput = screen.getByTestId("feedback-editor-asset-url-0") as HTMLInputElement;
+    expect(titleInput.value).toBe("Памятка по ИБ");
+    expect(urlInput.value).toBe("/api/media/asset-1");
+    expect(screen.queryByTestId("feedback-editor-asset-missing-0")).not.toBeInTheDocument();
+  });
+
+  it("editing the url of a legacy row keeps its other fields on save", () => {
+    const { onSave } = renderModal({
+      value: baseValue({
+        assets: [
+          {
+            title: "Памятка по ИБ",
+            fileName: "memo.pdf",
+            mimeType: "application/pdf",
+            url: "/api/media/asset-1",
+          },
+        ],
+      }),
+    });
+    fireEvent.change(screen.getByTestId("feedback-editor-asset-url-0"), {
+      target: { value: "https://example.com/memo.pdf" },
+    });
+    fireEvent.click(screen.getByTestId("feedback-editor-save"));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assets: [
+          expect.objectContaining({
+            title: "Памятка по ИБ",
+            fileName: "memo.pdf",
+            mimeType: "application/pdf",
+            url: "https://example.com/memo.pdf",
+          }),
+        ],
       }),
     );
   });
-  afterEach(() => vi.unstubAllGlobals());
 
-  it("renders upload button and hint; no list when assets is empty", () => {
-    renderModal();
-    expect(screen.getByTestId("feedback-editor-asset-upload")).toBeInTheDocument();
-    expect(screen.queryByRole("list", { name: /Прикреплённые файлы/i })).not.toBeInTheDocument();
+  it("removes an asset row on trash click", () => {
+    renderModal({
+      value: baseValue({ assets: [{ title: "Doc", url: "https://example.com/doc" }] }),
+    });
+    expect(screen.getByRole("list", { name: /Материалы/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("feedback-editor-asset-remove-0"));
+    expect(screen.queryByRole("list", { name: /Материалы/i })).not.toBeInTheDocument();
   });
 
-  it("hides PDF section when hideAssets=true", () => {
-    renderModal({ hideAssets: true });
-    expect(screen.queryByTestId("feedback-editor-asset-upload")).not.toBeInTheDocument();
-  });
-
-  it("file upload appends asset to draft and shows it in the list", async () => {
-    renderModal();
-    const input = screen.getByTestId("feedback-editor-asset-input") as HTMLInputElement;
-    const file = new File(["content"], "policy.pdf", { type: "application/pdf" });
-    Object.defineProperty(file, "size", { value: 250 * 1024, configurable: true });
-    await userEvent.upload(input, file);
-
-    await waitFor(() =>
-      expect(screen.getByRole("list", { name: /Прикреплённые файлы/i })).toBeInTheDocument(),
-    );
-    const titleInput = screen.getByTestId("feedback-editor-asset-title-0") as HTMLInputElement;
-    expect(titleInput.value).toBe("policy");
-    // File name shown in the asset-file element.
-    expect(screen.getByText(/policy\.pdf/)).toBeInTheDocument();
-  });
-
-  it("onSave strips the UI-only size from assets before emitting", async () => {
+  it("onSave strips the UI-only uid from a newly added material", () => {
     const onSave = vi.fn();
     render(
       <FeedbackEditorModal
@@ -279,60 +319,19 @@ describe("<FeedbackEditorModal /> — PDF assets", () => {
         onSave={onSave}
       />,
     );
-    const input = screen.getByTestId("feedback-editor-asset-input") as HTMLInputElement;
-    const file = new File(["pdf"], "doc.pdf", { type: "application/pdf" });
-    await userEvent.upload(input, file);
-    // The row appears only after the upload resolves.
-    await screen.findByTestId("feedback-editor-asset-title-0");
-
-    fireEvent.click(screen.getByTestId("feedback-editor-save"));
-    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
-
-    const emitted = onSave.mock.calls[0][0] as FeedbackEditorValue;
-    expect(emitted.assets).toHaveLength(1);
-    expect(emitted.assets[0]).toMatchObject({
-      title: "doc",
-      fileName: "doc.pdf",
-      mimeType: "application/pdf",
-      // PRD-32: the descriptor carries the canonical address the server answered with.
-      url: "/api/media/a",
+    fireEvent.click(screen.getByTestId("feedback-editor-asset-add"));
+    fireEvent.change(screen.getByTestId("feedback-editor-asset-title-0"), {
+      target: { value: "Чек-лист" },
     });
-    // UI-only fields must NOT leak out.
-    expect("size" in emitted.assets[0]).toBe(false);
-    expect("file" in emitted.assets[0]).toBe(false);
-  });
-
-  it("rejects files over 5 MB with an in-modal Banner (S13.1-G40, no window.alert)", async () => {
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
-    renderModal();
-    const input = screen.getByTestId("feedback-editor-asset-input") as HTMLInputElement;
-    const bigFile = new File(["x"], "big.pdf", { type: "application/pdf" });
-    Object.defineProperty(bigFile, "size", { value: 6 * 1024 * 1024, configurable: true });
-    await userEvent.upload(input, bigFile);
-
-    expect(alertSpy).not.toHaveBeenCalled();
-    const banner = await screen.findByTestId("feedback-editor-oversize-banner");
-    expect(banner).toBeInTheDocument();
-    expect(banner.textContent).toContain("big.pdf");
-    expect(screen.queryByRole("list", { name: /Прикреплённые файлы/i })).not.toBeInTheDocument();
-    alertSpy.mockRestore();
-  });
-
-  it("removes an asset on trash click", () => {
-    render(
-      <FeedbackEditorModal
-        open
-        title="Test"
-        value={baseValue({
-          assets: [{ title: "Doc", fileName: "doc.pdf", mimeType: "application/pdf" }],
-        })}
-        onCancel={vi.fn()}
-        onSave={vi.fn()}
-      />,
+    fireEvent.change(screen.getByTestId("feedback-editor-asset-url-0"), {
+      target: { value: "https://example.com/checklist" },
+    });
+    fireEvent.click(screen.getByTestId("feedback-editor-save"));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assets: [{ title: "Чек-лист", url: "https://example.com/checklist" }],
+      }),
     );
-    expect(screen.getByRole("list", { name: /Прикреплённые файлы/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("feedback-editor-asset-remove-0"));
-    expect(screen.queryByRole("list", { name: /Прикреплённые файлы/i })).not.toBeInTheDocument();
   });
 });
 

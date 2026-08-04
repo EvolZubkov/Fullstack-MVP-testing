@@ -8,12 +8,10 @@
  *     selection via `createLink`, insert `<a>` at a collapsed caret, append when
  *     the editor was never focused);
  *   - editing link / event / asset fields and asserting the emitted value;
- *   - human-readable file sizes (B / KB / MB) and the mixed oversize + valid case;
  *   - the description subtitle, the richText open-init effect and the value reset.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { FeedbackEditorModal } from "../feedback-editor-modal";
 import type { FeedbackEditorValue } from "../feedback-editor-modal";
 
@@ -163,55 +161,6 @@ describe("<FeedbackEditorModal /> — field editing", () => {
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({ assets: [expect.objectContaining({ title: "New", fileName: "d.pdf" })] }),
     );
-  });
-});
-
-// ─── File-size rendering + mixed oversize ──────────────────────────────────────
-
-describe("<FeedbackEditorModal /> — asset sizes", () => {
-  // PRD-32: a picked file now goes to the media library at once, so the upload path needs a
-  // server answer before any asset row can appear.
-  beforeEach(() => {
-    // Distinct files get distinct registry rows, so the stub hands out a fresh id per call.
-    let n = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockImplementation(async () => {
-        const id = `a${++n}`;
-        return { ok: true, json: async () => ({ id, url: `/api/media/${id}`, mime: "application/pdf", size: 1 }) };
-      }),
-    );
-  });
-  afterEach(() => vi.unstubAllGlobals());
-
-  function fileOfSize(name: string, size: number): File {
-    const f = new File(["x"], name, { type: "application/pdf" });
-    Object.defineProperty(f, "size", { value: size, configurable: true });
-    return f;
-  }
-
-  it("renders human-readable sizes (B / KB / MB)", async () => {
-    renderModal();
-    const input = screen.getByTestId("feedback-editor-asset-input") as HTMLInputElement;
-    await userEvent.upload(input, [
-      fileOfSize("s.pdf", 500),
-      fileOfSize("k.pdf", 250 * 1024),
-      fileOfSize("m.pdf", 2 * 1024 * 1024),
-    ]);
-    await waitFor(() => expect(screen.getByText(/500 B/)).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText(/250\.0 KB/)).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText(/2\.0 MB/)).toBeInTheDocument());
-  });
-
-  it("adds valid files and warns only about the oversize ones (mixed pick)", async () => {
-    renderModal();
-    const input = screen.getByTestId("feedback-editor-asset-input") as HTMLInputElement;
-    await userEvent.upload(input, [fileOfSize("ok.pdf", 1024), fileOfSize("big.pdf", 6 * 1024 * 1024)]);
-
-    const banner = await screen.findByTestId("feedback-editor-oversize-banner");
-    expect(banner.textContent).toContain("big.pdf");
-    expect(banner.textContent).not.toContain("ok.pdf");
-    expect(await screen.findByTestId("feedback-editor-asset-title-0")).toBeInTheDocument();
   });
 });
 

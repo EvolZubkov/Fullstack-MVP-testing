@@ -19,22 +19,19 @@
  *        re-bound on each setDraft to avoid cursor disruption.
  *   3. Links list — array of {title, url} editable rows + «Добавить ссылку» button.
  *      The button is wrapped in a <div> to prevent flex-column stretching.
- *   4. PDF assets list — a picked file is uploaded to the media library immediately
- *      (`POST /api/media/upload?purpose=feedback-asset`) and the descriptor carries the
- *      canonical address the server returned (PRD-32). The local DraftAsset type extends
- *      FeedbackAsset with UI-only fields (`size` for display, `uid` for row identity); both
- *      are stripped before onSave so callers only receive canonical FeedbackAsset fields.
- *      A descriptor that carries no address at all was saved before PRD-32 — its file was
- *      never stored anywhere and the learner gets nothing — so the row says «Файл не загружен»
- *      and offers to upload the file into it, keeping the title the author wrote.
+ *   4. Materials list — array of {title, url} editable rows + «Добавить материал»
+ *      button, identical shape to the links list above (PRD-42). Not a file picker:
+ *      the author types a real external URL. A descriptor saved before PRD-42
+ *      through the retired upload flow (`url: /api/media/<id>`, or a legacy
+ *      `scormHref`) is shown and edited the same way as any other row — its
+ *      address is left as is unless the author types over it.
  *
  * Footer: «Отменить» (secondary) + «Сохранить» (primary).
  * The modal owns a draft copy of the values; on Save it emits via `onSave`.
  */
 import { useEffect, useRef, useState } from "react";
-import { CalendarDays, Link as LinkIcon, Paperclip, Plus, Trash2 } from "lucide-react";
+import { CalendarDays, Link as LinkIcon, Plus, Trash2 } from "lucide-react";
 import {
-  Banner,
   Button,
   IconButton,
   Input,
@@ -72,7 +69,7 @@ export type FeedbackEditorModalProps = {
   /** Subtitle / description rendered under the title. */
   description?: string;
   value: FeedbackEditorValue;
-  /** When true, the «PDF» section is hidden entirely (e.g. for level feedback). */
+  /** When true, the «Материалы» section is hidden entirely (e.g. for level feedback). */
   hideAssets?: boolean;
   /** When true, the «Мероприятия» section is hidden (contexts that do not persist events). */
   hideEvents?: boolean;
@@ -85,19 +82,10 @@ export type FeedbackEditorModalProps = {
 // ─── Local draft type ─────────────────────────────────────────────────────────
 
 /**
- * Draft-only asset. Extends the canonical descriptor with UI-only fields:
- *   `size` — bytes shown as «245 KB» next to the file name.
- *   `uid`  — row identity for React; see {@link nextDraftUid}.
- * The file itself is no longer kept: it goes to the server the moment it is picked, and the
- * descriptor carries the address it came back with (PRD-32). Both UI-only fields are
- * stripped before the value is emitted.
+ * Draft-only asset. Extends the canonical descriptor with a UI-only `uid` — row identity
+ * for React, see {@link nextDraftUid}. Stripped before the value is emitted.
  */
-type DraftAsset = FeedbackAsset & { size?: number; uid: string };
-
-/** Outcome of one upload: the stored asset, or a message to show the author. */
-type UploadResult =
-  | { ok: true; id?: string; url: string }
-  | { ok: false; error: string };
+type DraftAsset = FeedbackAsset & { uid: string };
 
 type DraftValue = Omit<FeedbackEditorValue, "assets" | "events"> & {
   assets: DraftAsset[];
@@ -112,10 +100,10 @@ let draftUidSeq = 0;
 /**
  * Issues a row identity for the assets list.
  *
- * The asset id from the registry cannot serve as the React key: uploads are deduplicated by
- * checksum per owner, so attaching the same PDF twice yields TWO rows carrying ONE id —
- * duplicate keys on a list with editable fields and a delete button. The draft uid is unique
- * per row by construction and never leaves the modal.
+ * The asset id from a legacy upload cannot serve as the React key: two rows saved from the
+ * same upload (before PRD-42 retired it) can carry the SAME registry id — duplicate keys on
+ * a list with editable fields and a delete button. The draft uid is unique per row by
+ * construction and never leaves the modal.
  */
 function nextDraftUid(): string {
   return `draft-asset-${++draftUidSeq}`;
@@ -124,16 +112,6 @@ function nextDraftUid(): string {
 /** Gives every incoming descriptor a row identity (they arrive without one). */
 function toDraftAssets(assets: FeedbackAsset[]): DraftAsset[] {
   return assets.map((asset) => ({ ...asset, uid: nextDraftUid() }));
-}
-
-/**
- * Format byte count as human-readable KB / MB string (1 decimal place).
- * @param n - size in bytes
- */
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -147,8 +125,6 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
   }));
   /** Ref to the contenteditable RTE area (richText mode only). */
   const rteRef = useRef<HTMLDivElement>(null);
-  /** Hidden file input for PDF upload. */
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // S13.1-G39: link-insert modal state. `savedRange` captures the user's
   // selection inside the RTE before the modal steals focus, so submitting
@@ -159,28 +135,6 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
     savedRange: Range | null;
   } | null>(null);
 
-  // S13.1-G40: list of files rejected for exceeding the 5 MB limit. Rendered
-  // as an in-modal warning banner instead of window.alert. Dismissible.
-  const [oversizedFiles, setOversizedFiles] = useState<string[]>([]);
-
-  /** Server-side rejections and network failures, shown in the same banner slot. */
-  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
-  /**
-   * Index of the descriptor being re-uploaded, or `null` for a plain add. Descriptors saved
-   * before PRD-32 have no address at all: the file was never stored, so the author is shown
-   * the truth and offered to upload it now.
-   */
-  const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
-  /** Count of uploads still in flight — keeps «Сохранить» busy so a half-uploaded list is not saved. */
-  const [uploadsInFlight, setUploadsInFlight] = useState(0);
-  /**
-   * Which visit of the modal is current. Bumped on every reset below and captured by the
-   * upload handler, which applies nothing once the two differ: the modal does not unmount
-   * between visits, so an answer that arrives after a close/reopen would otherwise land in
-   * somebody else's form — an attachment (or a rejection) the author never asked for here.
-   */
-  const visitRef = useRef(0);
-
   // Reset draft when the modal re-opens or receives a new value.
   // For richText format: initialize the RTE innerHTML via requestAnimationFrame
   // so the div is guaranteed to be mounted after the re-render triggered by setDraft.
@@ -188,15 +142,6 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
     if (!props.open) return;
     const newVal = props.value;
     setDraft({ ...newVal, assets: toDraftAssets(newVal.assets), events: newVal.events ?? [] });
-    // The upload state belongs to the previous visit and must go with it. Callers render this
-    // modal unconditionally and merely flip `open`, so nothing unmounts: without this a stale
-    // rejection banner hangs over a fresh form, and closing mid-upload then reopening leaves
-    // the counter above zero — «Сохранить» would stay busy until the abandoned answer lands.
-    visitRef.current += 1;
-    setUploadErrors([]);
-    setOversizedFiles([]);
-    setUploadsInFlight(0);
-    setReplaceIndex(null);
     if (newVal.format === "richText") {
       requestAnimationFrame(() => {
         if (rteRef.current) rteRef.current.innerHTML = newVal.text;
@@ -284,106 +229,12 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
     setLinkInsert(null);
   }
 
-  /** Sends one file to the media library and returns what it was stored as. */
-  async function uploadFeedbackAsset(file: File): Promise<UploadResult> {
-    const body = new FormData();
-    body.append("file", file);
-    try {
-      const res = await fetch("/api/media/upload?purpose=feedback-asset", {
-        method: "POST",
-        body,
-        credentials: "include",
-      });
-      const payload = (await res.json().catch(() => ({}))) as {
-        id?: string;
-        url?: string;
-        message?: string;
-      };
-      if (!res.ok || !payload.url) {
-        return { ok: false, error: `${file.name}: ${payload.message ?? "не удалось загрузить файл"}` };
-      }
-      return { ok: true, id: payload.id, url: payload.url };
-    } catch {
-      return { ok: false, error: `${file.name}: не удалось загрузить файл` };
-    }
-  }
-
-  /**
-   * Handle file picker change: validate size, upload, then build draft assets.
-   *
-   * When the pick was started from a fileless row («Загрузить файл»), the FIRST stored file
-   * takes that row's place — the author is filling in a promise the row already makes, so the
-   * title they wrote there stays and only the file behind it changes. Any further files in the
-   * same selection are plain additions. The row is addressed by its `uid`, not by the index
-   * captured at pick time: it may be deleted or reordered while an upload is in flight, and a
-   * stale index would then overwrite somebody else's row.
-   */
-  async function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
-    /** `uid` of the row to fill in, or `null` once it is filled (or was never targeted). */
-    let pendingReplaceUid =
-      replaceIndex === null ? null : draft.assets[replaceIndex]?.uid ?? null;
-    const files = Array.from(e.target.files ?? []);
-    const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
-    const oversized = files.filter((f) => f.size > MAX_BYTES);
-    // S13.1-G40: surface as an in-modal Banner instead of window.alert. Overwritten by each
-    // pick on purpose — a size complaint describes the CURRENT selection and expires with it,
-    // unlike a server rejection below, which is the verdict on one file and must be readable.
-    setOversizedFiles(oversized.map((f) => f.name));
-    // Rejections from an earlier pick are deliberately NOT cleared here: the author may not
-    // have read them yet, and the banner's own close button is the way to dismiss them.
-    const valid = files.filter((f) => f.size <= MAX_BYTES);
-    // Reset before awaiting: the input must be re-selectable even while an upload is running.
-    e.target.value = "";
-    // The aim is spent by this pick, whatever it turns out to hold: leaving it set would turn
-    // the next plain «Загрузить PDF» into a replacement of a row nobody pointed at.
-    setReplaceIndex(null);
-    if (valid.length === 0) return;
-
-    const visit = visitRef.current;
-    setUploadsInFlight((n) => n + valid.length);
-    for (const file of valid) {
-      const result = await uploadFeedbackAsset(file);
-      // The visit ended while this file was in flight (the modal was closed and reopened, or
-      // the caller supplied a new value): its outcome belongs to a form that no longer exists.
-      // The reset already zeroed the counter, so there is nothing to decrement either.
-      if (visitRef.current !== visit) return;
-      setUploadsInFlight((n) => n - 1);
-      if (!result.ok) {
-        // A rejected file leaves the fileless row as it was, so the NEXT file may still fill it.
-        setUploadErrors((prev) => [...prev, result.error]);
-        continue;
-      }
-      // Captured per iteration: the updater below runs on a later render, so reading the
-      // mutable variable inside it would see whatever the next iteration left there.
-      const replaceUid = pendingReplaceUid;
-      pendingReplaceUid = null;
-      setDraft((d) => {
-        const stored: DraftAsset = {
-          uid: nextDraftUid(),
-          id: result.id,
-          title: file.name.replace(/\.pdf$/i, ""),
-          fileName: file.name,
-          mimeType: "application/pdf" as const,
-          size: file.size,
-          url: result.url,
-        };
-        const at = replaceUid === null ? -1 : d.assets.findIndex((a) => a.uid === replaceUid);
-        // Row gone (deleted mid-upload) → nothing to replace, so it is a plain addition.
-        if (at < 0) return { ...d, assets: [...d.assets, stored] };
-        const assets = [...d.assets];
-        // Same row, same author-written title — only the file behind it is new.
-        assets[at] = { ...stored, uid: d.assets[at].uid, title: d.assets[at].title };
-        return { ...d, assets };
-      });
-    }
-  }
-
-  /** Strip the UI-only fields (`size`, `uid`) before emitting to the caller. */
+  /** Strip the UI-only `uid` before emitting to the caller. */
   function handleSave() {
     const canonical: FeedbackEditorValue = {
       ...draft,
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      assets: draft.assets.map(({ size: _s, uid: _u, ...rest }) => rest),
+      assets: draft.assets.map(({ uid: _u, ...rest }) => rest),
     };
     props.onSave(canonical);
   }
@@ -410,7 +261,6 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
             variant="primary"
             size="m"
             onClick={handleSave}
-            loading={uploadsInFlight > 0}
             data-testid="feedback-editor-save"
           >
             Сохранить
@@ -420,30 +270,6 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
       data-testid={props.testId ?? "feedback-editor"}
     >
       <div className="tb-feedback-editor">
-        {/* ── S13.1-G40: oversize-file warning banner ─────────────────── */}
-        {oversizedFiles.length > 0 && (
-          <Banner
-            tone="warning"
-            title="Файл(ы) превышают 5 MB и не были добавлены"
-            description={oversizedFiles.join(", ")}
-            onClose={() => setOversizedFiles([])}
-            data-testid="feedback-editor-oversize-banner"
-          />
-        )}
-
-        {/* ── PRD-32: server-side rejection / network failure ─────────── */}
-        {uploadErrors.length > 0 && (
-          <Banner
-            tone="error"
-            // Deliberately NOT «Файл не загружен»: that wording belongs to the fileless row
-            // below, which states a fact about stored data. This one reports a failed attempt.
-            title="Не удалось загрузить файл"
-            description={uploadErrors.join(", ")}
-            onClose={() => setUploadErrors([])}
-            data-testid="feedback-editor-upload-error-banner"
-          />
-        )}
-
         {/* ── Format selector ──────────────────────────────────────────── */}
         <div className="tb-feedback-editor__section tb-feedback-editor__section--inline">
           <span className="tb-feedback-editor__sec-title">Формат</span>
@@ -700,75 +526,58 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
         </div>
         )}
 
-        {/* ── PDF assets section ───────────────────────────────────────── */}
+        {/* ── Materials section (data field `assets`; UI label «Материалы»,
+            PRD-42) ─────────────────────────────────────────────────────── */}
         {!props.hideAssets && (
           <div className="tb-feedback-editor__section">
             <div className="tb-feedback-editor__sec-title">
-              <Paperclip size={14} aria-hidden="true" />
-              Прикреплённые файлы (PDF)
+              <LinkIcon size={14} aria-hidden="true" />
+              Материалы
             </div>
             {draft.assets.length > 0 && (
-              <ul className="tb-feedback-editor__list" aria-label="Прикреплённые файлы">
-                {/* Keyed by the draft uid, not the asset id: dedup can hand two rows one id. */}
+              <ul className="tb-feedback-editor__list" aria-label="Материалы">
+                {/* Keyed by the draft uid, not the asset id: a legacy upload can hand two
+                    rows one id. */}
                 {draft.assets.map((asset, i) => (
-                  <li className="tb-feedback-editor__item" key={asset.uid}>
-                    <div className="tb-feedback-editor__asset">
-                      <Paperclip
-                        className="tb-feedback-editor__asset-ico"
-                        width={20}
-                        height={20}
-                        aria-hidden="true"
+                  <li key={asset.uid} className="tb-feedback-editor__item">
+                    <div className="tb-feedback-editor__item-fields">
+                      <Input
+                        size="s"
+                        fullWidth
+                        aria-label="Название материала"
+                        value={asset.title}
+                        placeholder="Название"
+                        onChange={(e) => {
+                          const title = e.target.value;
+                          setDraft((d) => {
+                            const assets = [...d.assets];
+                            assets[i] = { ...assets[i], title };
+                            return { ...d, assets };
+                          });
+                        }}
+                        data-testid={`feedback-editor-asset-title-${i}`}
                       />
-                      <div className="tb-feedback-editor__asset-meta">
-                        <Input
-                          size="s"
-                          fullWidth
-                          aria-label="Название файла"
-                          value={asset.title}
-                          onChange={(e) => {
-                            const title = e.target.value;
-                            setDraft((d) => {
-                              const assets = [...d.assets];
-                              assets[i] = { ...assets[i], title };
-                              return { ...d, assets };
-                            });
-                          }}
-                          data-testid={`feedback-editor-asset-title-${i}`}
-                        />
-                        <div className="tb-feedback-editor__asset-file">
-                          {asset.fileName}
-                          {asset.size ? ` · ${formatBytes(asset.size)}` : ""}
-                        </div>
-                        {/* Saved before PRD-32: the descriptor names a file that was never
-                            stored, so the learner gets nothing. Say so and offer to fix it. */}
-                        {!asset.url && !asset.scormHref && (
-                          <>
-                            <div
-                              className="tb-feedback-editor__asset-missing"
-                              data-testid={`feedback-editor-asset-missing-${i}`}
-                            >
-                              Файл не загружен
-                            </div>
-                            <div>
-                              <Button
-                                variant="secondary"
-                                size="s"
-                                onClick={() => {
-                                  setReplaceIndex(i);
-                                  fileInputRef.current?.click();
-                                }}
-                                data-testid={`feedback-editor-asset-replace-${i}`}
-                              >
-                                Загрузить файл
-                              </Button>
-                            </div>
-                          </>
-                        )}
-                      </div>
+                      <Input
+                        size="s"
+                        fullWidth
+                        type="url"
+                        aria-label="URL материала"
+                        value={asset.url ?? ""}
+                        placeholder="https://…"
+                        onChange={(e) => {
+                          const url = e.target.value;
+                          setDraft((d) => {
+                            const assets = [...d.assets];
+                            assets[i] = { ...assets[i], url };
+                            return { ...d, assets };
+                          });
+                        }}
+                        data-testid={`feedback-editor-asset-url-${i}`}
+                      />
                     </div>
                     <IconButton
                       icon={<Trash2 size={14} aria-hidden="true" />}
-                      aria-label={`Удалить файл ${i + 1}`}
+                      aria-label={`Удалить материал ${i + 1}`}
                       variant="ghost"
                       size="s"
                       onClick={() => {
@@ -784,38 +593,21 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
                 ))}
               </ul>
             )}
-            <div className="tb-feedback-editor__upload">
+            <div>
               <Button
                 variant="secondary"
                 size="s"
                 leadingIcon={<Plus size={12} aria-hidden="true" />}
-                onClick={() => {
-                  // Clears an aim taken at a fileless row and then abandoned — this button
-                  // adds a file, it never replaces one.
-                  setReplaceIndex(null);
-                  fileInputRef.current?.click();
-                }}
-                data-testid="feedback-editor-asset-upload"
+                onClick={() =>
+                  setDraft((d) => ({
+                    ...d,
+                    assets: [...d.assets, { uid: nextDraftUid(), title: "", url: "" }],
+                  }))
+                }
+                data-testid="feedback-editor-asset-add"
               >
-                Загрузить PDF
+                Добавить материал
               </Button>
-              <span className="tb-feedback-editor__upload-hint">
-                PDF до 5 MB; попадёт в SCORM-пакет и доступен по download-link
-              </span>
-              {/* Hidden file input; triggered programmatically by the button above. */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="application/pdf,.pdf"
-                style={{ display: "none" }}
-                multiple
-                // `void`: the handler is async and reports every failure through the banner,
-                // so there is no rejection for the DOM event to carry anywhere.
-                onChange={(e) => {
-                  void handleFilePick(e);
-                }}
-                data-testid="feedback-editor-asset-input"
-              />
             </div>
           </div>
         )}
