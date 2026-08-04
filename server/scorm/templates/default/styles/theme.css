@@ -568,8 +568,9 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 }
 
 /* ── Matching scene ─────────────────────────────────────────────── */
-/* Column gap between the two matching sides — 24px (DS default is 56px wide). */
-.tb-scene .ou-match { width: 100%; row-gap: var(--ou-space-2); --ou-match-gap-w: var(--ou-space-6); }
+/* Merge-panel gap (PRD-39): no override — the DS's own narrow-mode default (8px) is
+   exactly the flush, seam-between look the merge is designed for. */
+.tb-scene .ou-match { width: 100%; row-gap: var(--ou-space-2); }
 /* The draggable answer chips no longer carry the native `draggable` flag (it broke
    real-mouse dragging), so restore the grab affordance explicitly. */
 .tb-scene .ou-match__card--drag:not(.ou-match__card--empty),
@@ -579,13 +580,35 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 /* Drop-target feedback comes from the DS itself: the pointer engine adds
    `.ou-match__row.is-target`, which lights the LEFT prompt (`.ou-match__row.is-target
    .ou-match__card--fixed` in university-rt.css). No extra rule needed here. */
-/* After a pair connects, the DS tints only the RIGHT card + the arrow. Tint the LEFT
-   prompt too so the whole matched row reads as connected (review states keep their own
-   green/red tint, so exclude them). */
-.tb-scene .ou-match__row.is-connected:not(.correct-answer):not(.incorrect-answer) .ou-match__card--fixed {
-  border-color: var(--ou-accent-default);
-  background: var(--ou-accent-soft);
-  color: var(--ou-accent-on-soft);
+/* "Just connected" tint needs no scene rule any more: in merge mode the DS already
+   tints BOTH cards + the gap together (`ou-match--gap-narrow` in university-rt.css),
+   unlike the old arrow mode which only tinted the answer card. */
+/* Review verdict (PRD-39): this app marks a matched row `correct-answer`/
+   `incorrect-answer` (the choice/ranking convention), not the DS component's own BEM
+   modifiers — so the DS ships no color for the fixed prompt or the gap/seam under
+   those classes. Paint them here so the WHOLE merged panel reads as one verdict, not
+   just the draggable half. */
+.tb-scene .ou-match__row.correct-answer .ou-match__card--fixed {
+  border-color: var(--ou-success-default);
+  background: var(--ou-success-soft);
+  color: var(--ou-success-on-soft);
+}
+.tb-scene .ou-match__row.correct-answer .ou-match__gap {
+  background: var(--ou-success-soft);
+  border-top: 1px solid var(--ou-success-default);
+  border-bottom: 1px solid var(--ou-success-default);
+  color: var(--ou-success-default);
+}
+.tb-scene .ou-match__row.incorrect-answer .ou-match__card--fixed {
+  border-color: var(--ou-error-default);
+  background: var(--ou-error-soft);
+  color: var(--ou-error-on-soft);
+}
+.tb-scene .ou-match__row.incorrect-answer .ou-match__gap {
+  background: var(--ou-error-soft);
+  border-top: 1px solid var(--ou-error-default);
+  border-bottom: 1px solid var(--ou-error-default);
+  color: var(--ou-error-default);
 }
 .ou-match__placeholder { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 
