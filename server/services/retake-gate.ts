@@ -25,6 +25,7 @@ import {
   cooldownDecision,
   daysUntilDate,
   formatIsoInstant,
+  resolveCooldownDays,
 } from "@shared/eligibility/engine";
 import type { RetakePolicy } from "@shared/schema";
 
@@ -32,6 +33,8 @@ import type { RetakePolicy } from "@shared/schema";
 export interface AttemptFact {
   assignmentId: string | null;
   finishedAt: Date | string | null;
+  /** PRD-40: outcome of this attempt, when known. Absent/null = outcome undetermined. */
+  passed?: boolean | null;
 }
 
 /** Everything the decision needs; a route loads it once and reuses it. */
@@ -79,6 +82,22 @@ export function lastCompletedAttemptDate(
   return max > 0 ? toIsoDateUTC(new Date(max)) : null;
 }
 
+/** Most recent completed attempt (date + outcome), or null when none. */
+function lastCompletedAttempt(
+  attempts: AttemptFact[],
+): { finishedAt: Date; passed: boolean | null } | null {
+  let best: { finishedAt: Date; passed: boolean | null } | null = null;
+  for (const a of attempts) {
+    if (!a.finishedAt) continue;
+    const t = new Date(a.finishedAt);
+    if (!Number.isFinite(t.getTime())) continue;
+    if (!best || t.getTime() > best.finishedAt.getTime()) {
+      best = { finishedAt: t, passed: a.passed ?? null };
+    }
+  }
+  return best;
+}
+
 /** Latest finish instant among the given attempts, as an ISO string; null when none. */
 function lastFinishedInstant(attempts: AttemptFact[]): string | null {
   let max = 0;
@@ -112,9 +131,11 @@ export function decideRetake(
   facts: RetakeFacts,
 ): RetakeGateResult {
   const cooldownDays = retakePolicy?.enabled === true ? retakePolicy.cooldownPeriodDays : undefined;
+  const cooldownConfigured =
+    retakePolicy?.enabled === true && (cooldownDays != null || retakePolicy.cooldownByOutcome === true);
   const intervalHours =
     retakePolicy?.attemptInterval?.enabled === true ? retakePolicy.attemptInterval.hours : undefined;
-  if (cooldownDays == null && intervalHours == null) return { allowed: true };
+  if (!cooldownConfigured && intervalHours == null) return { allowed: true };
 
   const finished = facts.attempts.filter((a) => a.finishedAt != null);
   const inside = finished.filter((a) => a.assignmentId === facts.currentAssignmentId);
@@ -142,16 +163,22 @@ export function decideRetake(
 
   // The FIRST attempt of this assignment: barrier A only, measured against attempts
   // of every OTHER assignment (the legacy NULL bucket counts as one of them).
-  if (cooldownDays == null) return { allowed: true };
+  if (!cooldownConfigured) return { allowed: true };
   const outside = finished.filter((a) => a.assignmentId !== facts.currentAssignmentId);
-  const lastAttemptDate = lastCompletedAttemptDate(outside.map((a) => a.finishedAt));
-  const decision = cooldownDecision(lastAttemptDate, toIsoDateUTC(facts.now), cooldownDays);
+  const lastOutside = lastCompletedAttempt(outside);
+  const lastAttemptDate = lastOutside ? toIsoDateUTC(lastOutside.finishedAt) : null;
+  const resolvedDays = resolveCooldownDays(
+    { cooldownPeriodDays: cooldownDays, ...(retakePolicy ?? {}) },
+    lastOutside?.passed ?? null,
+  );
+  if (resolvedDays == null) return { allowed: true };
+  const decision = cooldownDecision(lastAttemptDate, toIsoDateUTC(facts.now), resolvedDays);
   if (decision.allowed) return { allowed: true };
   return {
     allowed: false,
     blockedBy: "cooldown",
     reason: "cooldown_active",
-    cooldownPeriodDays: cooldownDays,
+    cooldownPeriodDays: resolvedDays,
     lastAttemptDate,
     availableDate: decision.availableDate,
     availableAt: null,

@@ -173,6 +173,39 @@ export function attemptIntervalDecision(
   };
 }
 
+/** The subset of `RetakePolicy` the resolver needs. */
+export interface CooldownDaysPolicy {
+  cooldownPeriodDays?: number;
+  cooldownByOutcome?: boolean;
+  cooldownPeriodDaysPassed?: number;
+  cooldownPeriodDaysFailed?: number;
+}
+
+/**
+ * PRD-40: which barrier-A period applies, given the outcome of the last attempt of
+ * the OTHER assignment that anchors the cooldown decision. `!cooldownByOutcome`
+ * (the default, and every pre-PRD-40 test) always returns `cooldownPeriodDays` —
+ * byte-identical to the single-period behaviour. `passed === null` (outcome not
+ * determined) is deliberately conservative: it resolves to the LARGER of the two
+ * configured values, so an unrecognized LMS status can never shorten the wait
+ * below what the author configured for either outcome.
+ */
+export function resolveCooldownDays(
+  policy: CooldownDaysPolicy,
+  passed: boolean | null,
+): number | null {
+  if (!policy.cooldownByOutcome) {
+    return policy.cooldownPeriodDays ?? null;
+  }
+  const p = policy.cooldownPeriodDaysPassed;
+  const f = policy.cooldownPeriodDaysFailed;
+  if (passed === true) return p ?? f ?? null;
+  if (passed === false) return f ?? p ?? null;
+  if (p == null) return f ?? null;
+  if (f == null) return p;
+  return Math.max(p, f);
+}
+
 /** Default result when no plugin is configured for the test (PRD-6 §3.4). */
 export const CORE_DEFAULT_RESULT: EligibilityResult = {
   allowed: true,
@@ -229,7 +262,10 @@ export function buildRetakeState(
     effectiveToday,
     availableDate: result.availableDate ?? null,
     nextAllowedDate: result.availableDate ?? null,
-    cooldownPeriodDays: ctx.cooldownPeriodDays,
+    cooldownPeriodDays:
+      result.data && typeof result.data.cooldownPeriodDays === "number"
+        ? result.data.cooldownPeriodDays
+        : ctx.cooldownPeriodDays,
     source: result.source ?? null,
     reason: result.reason ?? null,
   };

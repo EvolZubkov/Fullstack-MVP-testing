@@ -85,6 +85,10 @@ export const ELIGIBILITY_PLUGINS: EligibilityPluginEntry[] = [
             // is not a percent), so no progressCompletePattern.
             stateField: "state",
             stateIn: ["Пройден", "Не пройден"],
+            // PRD-40: the subset of stateIn counted as a PASSED attempt — same text
+            // the RT portal already reports for `state` above (line 82-83), so no
+            // separate confirmation was needed.
+            passedStateIn: ["Пройден"],
             dateField: "last_usage_date",
             dateFormat: "dd.MM.yyyy",
             // Assignments of one course share `name`; match all of them (one course).
@@ -94,19 +98,6 @@ export const ELIGIBILITY_PLUGINS: EligibilityPluginEntry[] = [
           },
         },
       },
-    ],
-  },
-  {
-    key: "suspend_data_cooldown",
-    name: "SCORM suspend_data (best-effort)",
-    version: "1.0.0",
-    description:
-      "Считает cooldown по дате, сохранённой в suspend_data. Надёжно только внутри той же SCORM registration; для строгого cooldown между попытками нужен внешний/LMS-источник.",
-    isActive: true,
-    runtimeEntry: "suspendDataCooldown",
-    bestEffort: true,
-    configs: [
-      { id: "suspend_default", name: "По умолчанию", version: "1.0.0", isActive: true, config: {} },
     ],
   },
 ];

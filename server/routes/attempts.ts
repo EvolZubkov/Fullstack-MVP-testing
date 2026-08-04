@@ -233,6 +233,8 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
         const attemptFacts = userAttempts.map((a) => ({
           assignmentId: a.assignmentId,
           finishedAt: a.finishedAt,
+          // PRD-40: outcome of THIS attempt, for barrier A's outcome-split cooldown.
+          passed: (a.resultJson as AttemptResult | null)?.overallPassed ?? null,
         }));
         const completedAttempts = countAttemptsInAssignment(attemptFacts, currentAssignmentId);
 
@@ -342,6 +344,8 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
       const attemptFacts = userAttempts.map((a) => ({
         assignmentId: a.assignmentId,
         finishedAt: a.finishedAt,
+        // PRD-40: outcome of THIS attempt, for barrier A's outcome-split cooldown.
+        passed: (a.resultJson as AttemptResult | null)?.overallPassed ?? null,
       }));
 
       const gate = decideRetake(retakePolicy, {
@@ -499,6 +503,8 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
       const attemptFacts = userAttempts.map((a) => ({
         assignmentId: a.assignmentId,
         finishedAt: a.finishedAt,
+        // PRD-40: outcome of THIS attempt, for barrier A's outcome-split cooldown.
+        passed: (a.resultJson as AttemptResult | null)?.overallPassed ?? null,
       }));
 
       const gate = decideRetake(retakePolicy, {

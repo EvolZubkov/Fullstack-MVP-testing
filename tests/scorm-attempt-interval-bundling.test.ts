@@ -134,4 +134,21 @@ describe("SCORM bake — access barriers", () => {
     expect(baked.retakePolicy?.attemptInterval).toEqual({ enabled: true, hours: 12 });
     expect(baked.retakePlugin).toMatchObject({ runtimeEntry: "webtutorCooldown" });
   });
+
+  it("bakes cooldownByOutcome + the split periods (PRD-40)", () => {
+    const baked = bake({
+      enabled: true,
+      cooldownByOutcome: true,
+      cooldownPeriodDaysPassed: 90,
+      cooldownPeriodDaysFailed: 7,
+      gateMode: "before_internal_start",
+      eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" },
+    } as unknown as RetakePolicy);
+    expect(baked.retakePolicy).toMatchObject({
+      cooldownByOutcome: true,
+      cooldownPeriodDaysPassed: 90,
+      cooldownPeriodDaysFailed: 7,
+    });
+    expect(baked.retakePolicy?.cooldownPeriodDays).toBeUndefined();
+  });
 });

@@ -52,9 +52,16 @@ function makeGate(state: Record<string, unknown>, SCORM: unknown) {
  * answers 200), so a caller can model "the portal errored but still stamped a Date".
  * Both default to a healthy 200, which is what every pre-existing caller relies on.
  */
-function stubFetch(opts: { dateHeader?: string | null; chrome?: string; ok?: boolean; status?: number }) {
+function stubFetch(opts: {
+  dateHeader?: string | null;
+  chrome?: string;
+  ok?: boolean;
+  status?: number;
+  records?: Array<Record<string, unknown>>;
+}) {
   const calls: string[] = [];
   const bodies: Array<{ url: string; body: unknown }> = [];
+  const records = opts.records ?? [{ state: "Пройден", progress: "100%", last_usage_date: "20.05.2026" }];
   vi.stubGlobal("fetch", (url: string, init?: { body?: unknown }) => {
     calls.push(String(url));
     bodies.push({ url: String(url), body: init?.body });
@@ -64,7 +71,7 @@ function stubFetch(opts: { dateHeader?: string | null; chrome?: string; ok?: boo
         ok: true,
         status: 200,
         headers,
-        json: () => Promise.resolve({ success: true, total: 0, results: [] }),
+        json: () => Promise.resolve({ success: true, total: records.length, results: records }),
         text: () => Promise.resolve(""),
       });
     }
@@ -72,7 +79,7 @@ function stubFetch(opts: { dateHeader?: string | null; chrome?: string; ok?: boo
       ok: opts.ok ?? true,
       status: opts.status ?? 200,
       headers,
-      text: () => Promise.resolve(opts.chrome ?? ""),
+      text: () => Promise.resolve(opts.chrome ?? "ABCDEF0123456789ABCDEF0123456789"),
     });
   });
   return { calls, bodies };
@@ -91,27 +98,36 @@ async function flush() {
   for (let i = 0; i < 32; i++) await Promise.resolve();
 }
 
-const SCORM_WITH_ATTEMPT = {
-  getValue: (k: string) =>
-    k === "cmi.suspend_data" ? JSON.stringify({ retake: { lastCompletedDate: "2026-05-20" } }) : "",
-  init: () => {},
-};
+const SCORM_NO_SESSION = { getValue: () => "", init: () => {} };
 
 /**
- * Gated test data driven by `suspendDataCooldown`: it reads the last-attempt date
- * from `cmi.suspend_data` (SCORM_WITH_ATTEMPT reports 2026-05-20), so the verdict
- * depends on ONE remaining input — "today". 30-day cooldown => available 2026-06-19.
+ * Gated test data driven by `webtutor_cooldown`: the collection stub below always
+ * answers with ONE matching record dated 20.05.2026, so — like the removed
+ * `suspend_data_cooldown` fixture it replaces — the verdict depends on ONE
+ * remaining input: "today". 30-day cooldown => available 2026-06-19.
  */
-function suspendGate() {
+function webtutorGate() {
   return {
     id: "t1",
     title: "Курс",
     retakePolicy: {
       enabled: true,
       cooldownPeriodDays: 30,
-      eligibilityPlugin: { key: "suspend_data_cooldown", failPolicy: "failOpen" },
+      eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" },
     },
-    retakePlugin: { runtimeEntry: "suspendDataCooldown", config: {} },
+    retakePlugin: {
+      runtimeEntry: "webtutorCooldown",
+      config: {
+        collectionEndpoint: "/pp/Ext5/extjs_json_collection_data.html",
+        secidSource: { endpoint: "/", pattern: "[A-F0-9]{32}" },
+        attemptFilter: {
+          stateField: "state",
+          stateIn: ["Пройден", "Не пройден"],
+          dateField: "last_usage_date",
+          dateFormat: "dd.MM.yyyy",
+        },
+      },
+    },
   };
 }
 
@@ -131,7 +147,7 @@ describe("PRD-6 gate — trusted date", () => {
       chrome: "secid=ABCDEF0123456789ABCDEF0123456789 cur_person_id=42",
     });
     const state: Record<string, unknown> = { templateLayouts: {} };
-    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+    const gate = makeGate(state, SCORM_NO_SESSION);
 
     gate.run(
       {
@@ -172,10 +188,10 @@ describe("PRD-6 gate — trusted date", () => {
     vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));
     stubFetch({ dateHeader: "Sat, 30 May 2026 09:00:00 GMT" });
     const state: Record<string, unknown> = { templateLayouts: {} };
-    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+    const gate = makeGate(state, SCORM_NO_SESSION);
 
     let started = false;
-    gate.run(suspendGate(), () => { started = true; });
+    gate.run(webtutorGate(), () => { started = true; });
     await flush();
 
     expect((state.retake as any)?.todayDate).toBe("2026-05-30");
@@ -188,10 +204,10 @@ describe("PRD-6 gate — trusted date", () => {
     vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));
     stubFetch({ dateHeader: null });
     const state: Record<string, unknown> = { templateLayouts: {} };
-    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+    const gate = makeGate(state, SCORM_NO_SESSION);
 
     let started = false;
-    gate.run(suspendGate(), () => { started = true; });
+    gate.run(webtutorGate(), () => { started = true; });
     await flush();
 
     expect((state.retake as any)?.todayDate).toBe("2026-06-30");
@@ -214,9 +230,9 @@ describe("PRD-6 gate — trusted date", () => {
       vi.setSystemTime(new Date("2026-05-30T23:35:00Z"));
       stubFetch({ dateHeader: "Sat, 30 May 2026 23:30:00 GMT" });
       const state: Record<string, unknown> = { templateLayouts: {} };
-      const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+      const gate = makeGate(state, SCORM_NO_SESSION);
 
-      gate.run(suspendGate(), () => {});
+      gate.run(webtutorGate(), () => {});
       await flush();
 
       expect((state.retake as any)?.todayDate).toBe("2026-05-30");
@@ -232,10 +248,10 @@ describe("PRD-6 gate — trusted date", () => {
     vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));
     stubFetch({ dateHeader: "not-a-date" });
     const state: Record<string, unknown> = { templateLayouts: {} };
-    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+    const gate = makeGate(state, SCORM_NO_SESSION);
 
     let started = false;
-    expect(() => gate.run(suspendGate(), () => { started = true; })).not.toThrow();
+    expect(() => gate.run(webtutorGate(), () => { started = true; })).not.toThrow();
     await flush();
 
     // A verdict was still reached, on the machine clock (legacy behaviour).
@@ -255,10 +271,10 @@ describe("PRD-6 gate — trusted date", () => {
     vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));
     vi.stubGlobal("fetch", () => { throw new TypeError("fetch is not a function"); });
     const state: Record<string, unknown> = { templateLayouts: {} };
-    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+    const gate = makeGate(state, SCORM_NO_SESSION);
 
     let started = false;
-    expect(() => gate.run(suspendGate(), () => { started = true; })).not.toThrow();
+    expect(() => gate.run(webtutorGate(), () => { started = true; })).not.toThrow();
     await flush();
 
     expect((state.retake as any)?.checked).toBe(true);
@@ -272,9 +288,9 @@ describe("PRD-6 gate — trusted date", () => {
     vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));
     vi.stubGlobal("fetch", () => Promise.reject(new Error("offline")));
     const state: Record<string, unknown> = { templateLayouts: {} };
-    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+    const gate = makeGate(state, SCORM_NO_SESSION);
 
-    gate.run(suspendGate(), () => {});
+    gate.run(webtutorGate(), () => {});
     await flush();
 
     expect((state.retake as any)?.todayDate).toBe("2026-06-30");
@@ -289,10 +305,10 @@ describe("PRD-6 gate — trusted date", () => {
     vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));
     stubFetch({ dateHeader: "Sat, 30 May 2026 09:00:00 GMT", ok: false, status: 500 });
     const state: Record<string, unknown> = { templateLayouts: {} };
-    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+    const gate = makeGate(state, SCORM_NO_SESSION);
 
     let started = false;
-    gate.run(suspendGate(), () => { started = true; });
+    gate.run(webtutorGate(), () => { started = true; });
     await flush();
 
     // The server day, not the machine's 30.06 — so the cooldown still holds.
@@ -307,11 +323,11 @@ describe("PRD-6 gate — trusted date", () => {
     stubFetch({ dateHeader: null, ok: false, status: 500 });
     const log = captureLog();
     const state: Record<string, unknown> = { templateLayouts: {} };
-    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+    const gate = makeGate(state, SCORM_NO_SESSION);
 
     let started = false;
     try {
-      gate.run(suspendGate(), () => { started = true; });
+      gate.run(webtutorGate(), () => { started = true; });
       await flush();
     } finally {
       log.restore();
@@ -337,7 +353,7 @@ describe("PRD-6 gate — trusted date", () => {
       const log = captureLog();
       try {
         const state: Record<string, unknown> = { templateLayouts: {} };
-        makeGate(state, SCORM_WITH_ATTEMPT).run(suspendGate(), () => {});
+        makeGate(state, SCORM_NO_SESSION).run(webtutorGate(), () => {});
         await flush();
         // Let the date sub-budget elapse — only the "never answers" branch needs it,
         // the others have long since settled and simply ignore the extra time.
@@ -379,7 +395,10 @@ describe("PRD-6 gate — trusted date", () => {
     // or a portal whose date is behind the learning record). Cooldown 30 дн. =>
     // available 01.07: 30 days from the clamped day, but 42 from the raw one.
     vi.setSystemTime(new Date("2026-05-20T10:00:00Z"));
-    stubFetch({ dateHeader: "Wed, 20 May 2026 10:00:00 GMT" });
+    stubFetch({
+      dateHeader: "Wed, 20 May 2026 10:00:00 GMT",
+      records: [{ state: "Пройден", progress: "100%", last_usage_date: "01.06.2026" }],
+    });
 
     const startInputs: any[] = [];
     vi.stubGlobal("TBTemplate", {
@@ -387,16 +406,11 @@ describe("PRD-6 gate — trusted date", () => {
       renderScreenInto: (el: HTMLElement) => { el.innerHTML = '<div data-testid="cooldown-start"></div>'; },
     });
 
-    const SCORM = {
-      getValue: (k: string) =>
-        k === "cmi.suspend_data" ? JSON.stringify({ retake: { lastCompletedDate: "2026-06-01" } }) : "",
-      init: () => {},
-    };
     const state: Record<string, unknown> = { templateLayouts: { start: "<div></div>" } };
-    const gate = makeGate(state, SCORM);
+    const gate = makeGate(state, SCORM_NO_SESSION);
 
     let started = false;
-    gate.run(suspendGate(), () => { started = true; });
+    gate.run(webtutorGate(), () => { started = true; });
     await flush();
 
     expect(started).toBe(false);
@@ -422,7 +436,7 @@ describe("PRD-6 gate — trusted date", () => {
     vi.setSystemTime(new Date("2026-06-30T10:00:00Z"));
     vi.stubGlobal("fetch", () => new Promise(() => {})); // connects, never settles
     const state: Record<string, unknown> = { templateLayouts: {} };
-    const gate = makeGate(state, SCORM_WITH_ATTEMPT);
+    const gate = makeGate(state, SCORM_NO_SESSION);
 
     let started = false;
     gate.run(

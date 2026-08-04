@@ -333,6 +333,12 @@ export function buildTestJson(data: ExportData): string {
       // interval-only test must not look gated to the pre-Initialize gate.
       enabled: rp.enabled === true && !!gatePlugin,
       cooldownPeriodDays: rp.cooldownPeriodDays,
+      // PRD-40: outcome-split cooldown. Baked unconditionally like cooldownPeriodDays
+      // above — JSON.stringify drops the `undefined` ones for a non-split policy, so
+      // this does not affect the byte-identical-export guarantee (FR-02/FR-14).
+      cooldownByOutcome: rp.cooldownByOutcome,
+      cooldownPeriodDaysPassed: rp.cooldownPeriodDaysPassed,
+      cooldownPeriodDaysFailed: rp.cooldownPeriodDaysFailed,
       gateMode: rp.gateMode,
       eligibilityPlugin: gatePlugin ? rp.eligibilityPlugin : null,
       blockedPageId: rp.blockedPageId ?? null,
