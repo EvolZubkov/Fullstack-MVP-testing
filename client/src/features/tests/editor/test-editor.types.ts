@@ -277,6 +277,21 @@ export type ResultVariableModel = {
   bands: ScaleBandModel[];
   /** PRD-29: interpretation of a string/boolean indicator, matched by exact code. */
   outcomes: OutcomeModel[];
+  /**
+   * The NUMERIC indicator's explicit domain, persisted alongside `bands` in the
+   * indicator's own `config_json` — same meaning and round trip as
+   * {@link ScaleModel.domainMin}/`domainMax`. BOTH `null` = not set; the domain
+   * is then derived from the span of `bands` (mirrors `parseIndicatorInterpretation`).
+   */
+  domainMin: number | null;
+  domainMax: number | null;
+  /**
+   * Which end of a NUMERIC indicator's range is favourable — same enum and
+   * meaning as {@link ScaleModel.valence}. Unused by a string/boolean indicator
+   * (its cards are toned per-outcome instead), but always round-tripped so a
+   * type flip during editing does not lose it.
+   */
+  valence: Valence;
   sortOrder: number;
 };
 

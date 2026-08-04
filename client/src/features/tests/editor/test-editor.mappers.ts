@@ -600,6 +600,8 @@ function buildResultVariablesFromApi(src: ApiTestResponse): ResultVariableModel[
       // the author edits, and dropping the other form here would lose their work.
       bands: buildScaleBands(r.configJson),
       outcomes: buildOutcomes(r.configJson),
+      ...buildScaleDomain(r.configJson),
+      valence: buildScaleValence(r.configJson),
       sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : index,
     });
   });

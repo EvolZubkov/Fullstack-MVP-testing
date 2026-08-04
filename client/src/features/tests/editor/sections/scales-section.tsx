@@ -114,7 +114,8 @@ const TARGET_OPTIONS: Array<{ value: ScaleScormTarget; label: string }> = [
  * reading downwards and a third reading upwards). Unrelated to `direction`, which
  * only inverts the value during aggregation.
  */
-const VALENCE_OPTIONS: Array<{ value: Valence; label: string }> = [
+/** Shared with the «Показатели» tab (result-variables-section): same wording for both. */
+export const VALENCE_OPTIONS: Array<{ value: Valence; label: string }> = [
   { value: "higher_is_better", label: "Чем больше, тем лучше" },
   { value: "lower_is_better", label: "Чем больше, тем хуже" },
   { value: "none", label: "Без оценки" },
@@ -188,8 +189,14 @@ function emptyScale(sortOrder: number): ScaleModel {
   };
 }
 
-/** The numeric span the scale's interpretation bands cover, or null when unusable. */
-function bandSpan(s: ScaleModel): { min: number; max: number } | null {
+/**
+ * The numeric span a set of interpretation bands covers, or null when unusable.
+ * Takes just `{ bands }` (not the full `ScaleModel`) so the «Показатели» tab's
+ * numeric indicator — which has no other scale fields — can reuse it too.
+ *
+ * @public
+ */
+export function bandSpan(s: { bands: ScaleBandModel[] }): { min: number; max: number } | null {
   const mins: number[] = [];
   const maxes: number[] = [];
   for (const b of s.bands) {
@@ -733,50 +740,22 @@ function ScaleForm({
       <hr className="wf-sep" />
       <div className="tb-section-label">Границы шкалы и показ результата</div>
 
-      <div className="ou-formfield">
-        <Switch
-          label="Задать границы шкалы вручную"
-          description="Выключено — границы берутся из охвата диапазонов. Ноль — законная граница, а не признак «не задано»."
-          checked={manualDomain}
-          disabled={readOnly}
-          onChange={(e) => {
-            if (!e.target.checked) {
-              onChange({ domainMin: null, domainMax: null });
-              return;
-            }
-            const seed = effectiveDomain(s, suggestedDomain);
-            onChange({ domainMin: seed.min, domainMax: seed.max });
-          }}
-          data-testid={`scales-domain-manual-${index}`}
-        />
-      </div>
+      <DomainFields
+        domainMin={s.domainMin}
+        domainMax={s.domainMax}
+        readOnly={readOnly}
+        testIdPrefix="scales"
+        index={index}
+        seed={effectiveDomain(s, suggestedDomain)}
+        switchLabel="Задать границы шкалы вручную"
+        switchDescription="Выключено — границы берутся из охвата диапазонов. Ноль — законная граница, а не признак «не задано»."
+        minLabel="Минимум шкалы"
+        maxLabel="Максимум шкалы"
+        onChange={onChange}
+      />
 
       {manualDomain && (
         <>
-          <div className="ou-formgroup ou-formgroup--two">
-            <div className="ou-formfield">
-              <NumberInput
-                size="m"
-                fullWidth
-                label="Минимум шкалы"
-                value={s.domainMin as number}
-                disabled={readOnly}
-                onChange={(next) => onChange({ domainMin: next })}
-                data-testid={`scales-domain-min-${index}`}
-              />
-            </div>
-            <div className="ou-formfield">
-              <NumberInput
-                size="m"
-                fullWidth
-                label="Максимум шкалы"
-                value={s.domainMax as number}
-                disabled={readOnly}
-                onChange={(next) => onChange({ domainMax: next })}
-                data-testid={`scales-domain-max-${index}`}
-              />
-            </div>
-          </div>
           <Button
             size="s"
             variant="secondary"
@@ -836,6 +815,100 @@ function ScaleForm({
           />
         </div>
       </div>
+    </>
+  );
+}
+
+// ─── Domain fields ──────────────────────────────────────────────────────────────
+
+/**
+ * Manual-bounds toggle + min/max inputs — the domain half of a numeric
+ * interpretation. Shared with the «Показатели» tab's NUMERIC indicator
+ * (PRD-29+): both a scale and a numeric indicator degrade the same way without
+ * an explicit domain (span of the bands), so a second copy would drift the
+ * moment either side changed. The scale's OWN extra layer — the «Рассчитать по
+ * вкладам» suggestion sourced from question contributions, which an indicator
+ * has no equivalent of — stays in {@link ScaleForm}, rendered around this
+ * component rather than inside it.
+ *
+ * Copy is passed in, not hard-coded, so the already-approved scale wording
+ * («шкалы») stays byte-identical while the indicator gets its own.
+ *
+ * @public
+ */
+export function DomainFields({
+  domainMin,
+  domainMax,
+  readOnly,
+  testIdPrefix,
+  index,
+  seed,
+  switchLabel,
+  switchDescription,
+  minLabel,
+  maxLabel,
+  onChange,
+}: {
+  domainMin: number | null;
+  domainMax: number | null;
+  readOnly: boolean;
+  testIdPrefix: string;
+  index: number;
+  /** Bounds to seed the fields with the moment manual entry is switched on. */
+  seed: { min: number; max: number };
+  switchLabel: string;
+  switchDescription: string;
+  minLabel: string;
+  maxLabel: string;
+  onChange: (patch: { domainMin?: number | null; domainMax?: number | null }) => void;
+}) {
+  // Manual bounds are an explicit opt-in: 0 is a legal bound (every domain of the
+  // reference methodology starts at zero), so «not set» can never be a value.
+  const manualDomain = domainMin !== null && domainMax !== null;
+  return (
+    <>
+      <div className="ou-formfield">
+        <Switch
+          label={switchLabel}
+          description={switchDescription}
+          checked={manualDomain}
+          disabled={readOnly}
+          onChange={(e) => {
+            if (!e.target.checked) {
+              onChange({ domainMin: null, domainMax: null });
+              return;
+            }
+            onChange({ domainMin: seed.min, domainMax: seed.max });
+          }}
+          data-testid={`${testIdPrefix}-domain-manual-${index}`}
+        />
+      </div>
+      {manualDomain && (
+        <div className="ou-formgroup ou-formgroup--two">
+          <div className="ou-formfield">
+            <NumberInput
+              size="m"
+              fullWidth
+              label={minLabel}
+              value={domainMin as number}
+              disabled={readOnly}
+              onChange={(next) => onChange({ domainMin: next })}
+              data-testid={`${testIdPrefix}-domain-min-${index}`}
+            />
+          </div>
+          <div className="ou-formfield">
+            <NumberInput
+              size="m"
+              fullWidth
+              label={maxLabel}
+              value={domainMax as number}
+              disabled={readOnly}
+              onChange={(next) => onChange({ domainMax: next })}
+              data-testid={`${testIdPrefix}-domain-max-${index}`}
+            />
+          </div>
+        </div>
+      )}
     </>
   );
 }

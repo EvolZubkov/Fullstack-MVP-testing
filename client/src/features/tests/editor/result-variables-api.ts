@@ -53,13 +53,19 @@ function outcomesToPayload(outcomes: OutcomeModel[]): OutcomePayload[] {
 }
 
 /**
- * PRD-29: the indicator's `config_json` — its interpretation. Bands for a numeric
- * indicator, the outcome list for a string/boolean one; both are written when both
- * are filled, because the type is derived from the formula and may flip back.
- * Empty collections are omitted entirely rather than stored as `[]`.
+ * PRD-29(+): the indicator's `config_json` — its interpretation. Bands (plus
+ * domain/valence) for a numeric indicator, the outcome list for a string/boolean
+ * one; all are written when filled, because the type is derived from the formula
+ * and may flip back. Empty collections are omitted entirely rather than stored
+ * as `[]`. `valence` mirrors `scales-api.ts::toConfigJson`: always written so
+ * clearing it back to «Без оценки» actually erases the stored value.
  */
 function toConfigJson(v: ResultVariableModel): Record<string, unknown> {
-  const config: Record<string, unknown> = {};
+  const config: Record<string, unknown> = { valence: v.valence };
+  if (v.domainMin !== null && v.domainMax !== null) {
+    config.domainMin = v.domainMin;
+    config.domainMax = v.domainMax;
+  }
   const bands = bandsToPayload(v.bands);
   if (bands.length > 0) config.bands = bands;
   const outcomes = outcomesToPayload(v.outcomes);

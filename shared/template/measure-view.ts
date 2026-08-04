@@ -246,7 +246,10 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
   if (!isNumeric) {
     const outcomes = outcomesOf(interpretation);
     const outcome = findOutcome(outcomes, input.value as string | boolean);
-    if (!outcome) return base;
+    // No dictionary entry for this code (or none configured at all): the tone stays
+    // neutral, but the raw value still prints — an empty title is indistinguishable
+    // from a broken render, while the value itself is always known.
+    if (!outcome) return { ...base, levelLabel: String(input.value ?? "") };
     const tone = outcome.tone ?? "neutral";
     return {
       ...base,

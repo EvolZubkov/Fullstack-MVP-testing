@@ -21,6 +21,9 @@ function rv(overrides: Partial<ResultVariableModel> = {}): ResultVariableModel {
     controlsStatus: "none",
     bands: [],
     outcomes: [],
+    domainMin: null,
+    domainMax: null,
+    valence: "none",
     sortOrder: 0,
     ...overrides,
   };
@@ -65,6 +68,31 @@ describe("apiToEditorModel — result variables", () => {
   it("yields an empty array when the response omits result variables", () => {
     const model = apiToEditorModel({ id: "t1", title: "T" });
     expect(model.resultVariables).toEqual([]);
+  });
+});
+
+describe("apiToEditorModel — домен и направление числового показателя (PRD-29+)", () => {
+  const readVar = (configJson: unknown) =>
+    apiToEditorModel({
+      id: "t1",
+      title: "T",
+      resultVariables: [
+        { id: "a", name: "score", label: "Балл", type: "number", formula: "percent", configJson, sortOrder: 0 },
+      ],
+    }).resultVariables[0];
+
+  it("читает заданные границы и направление", () => {
+    const v = readVar({ bands: [], domainMin: 0, domainMax: 45, valence: "lower_is_better" });
+    expect(v.domainMin).toBe(0);
+    expect(v.domainMax).toBe(45);
+    expect(v.valence).toBe("lower_is_better");
+  });
+
+  it("границ нет → null, направления нет → «без оценки»", () => {
+    const v = readVar({ bands: [{ min: 0, max: 45, level: "low" }] });
+    expect(v.domainMin).toBeNull();
+    expect(v.domainMax).toBeNull();
+    expect(v.valence).toBe("none");
   });
 });
 
@@ -146,6 +174,37 @@ describe("saveResultVariables — diff on save", () => {
     const row = rv({ id: "a", name: "a", sortOrder: 0 });
     await saveResultVariables("t1", [{ ...row }], [{ ...row }]);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("кладёт границы и направление числового показателя в config_json (PRD-29+)", async () => {
+    await saveResultVariables(
+      "t1",
+      [rv({ name: "score", domainMin: 0, domainMax: 45, valence: "lower_is_better" })],
+      [],
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.configJson).toMatchObject({ domainMin: 0, domainMax: 45, valence: "lower_is_better" });
+  });
+
+  it("не задан домен → в config_json его нет, но направление пишется всегда", async () => {
+    await saveResultVariables("t1", [rv({ name: "score" })], []);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.configJson).not.toHaveProperty("domainMin");
+    expect(body.configJson.valence).toBe("none");
+  });
+
+  it("PUTs when only the domain changed", async () => {
+    const snap = [rv({ id: "a", name: "a" })];
+    const draft = [rv({ id: "a", name: "a", domainMin: 0, domainMax: 45 })];
+    await saveResultVariables("t1", draft, snap);
+    expect(calls()).toEqual([["PUT", `${base}/a`]]);
+  });
+
+  it("PUTs when only the valence changed", async () => {
+    const snap = [rv({ id: "a", name: "a" })];
+    const draft = [rv({ id: "a", name: "a", valence: "higher_is_better" })];
+    await saveResultVariables("t1", draft, snap);
+    expect(calls()).toEqual([["PUT", `${base}/a`]]);
   });
 
   it("normalizes sortOrder to the draft index", async () => {
