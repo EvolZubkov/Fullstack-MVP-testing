@@ -41,10 +41,10 @@ describe("debug-player shared assets — single source of shim + inspector", () 
 });
 
 describe("CLI player consumes the shared assets (no drift — FR-13/R-1)", () => {
-  const cli = fs.readFileSync(path.resolve("scripts/scorm-player.mjs"), "utf8");
+  const cli = fs.readFileSync(path.resolve("scripts/scorm/scorm-player.mjs"), "utf8");
 
   it("imports the shared module and inlines the shim + compute + render in order", () => {
-    expect(cli).toContain('from "../server/scorm/debug-player/player-assets.mjs"');
+    expect(cli).toContain('from "../../server/scorm/debug-player/player-assets.mjs"');
     expect(cli).toContain("readDebugPlayerAssets()");
     expect(cli).toContain("${shimJs}");
     expect(cli).toContain("${computeJs}");

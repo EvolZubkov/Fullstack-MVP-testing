@@ -96,7 +96,7 @@ export function readPackageFontFiles(): Record<string, Buffer> {
 /**
  * Copy the DS stylesheet and the packaged brand-font weights into a build output dir
  * (`dist`), so the deployed server — which carries neither `vendor/` nor `client/` —
- * can still assemble the package stylesheet. Called by `script/build.ts`.
+ * can still assemble the package stylesheet. Called by `scripts/build/build.ts`.
  *
  * @param distDir Build output directory (the repo's `dist`, or a temp dir in tests).
  */

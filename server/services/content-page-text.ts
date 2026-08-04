@@ -3,7 +3,7 @@
  *
  * The ONE rule for the stored form of a content page's values, shared by the
  * write path (`POST`/`PUT /api/tests/:id/content-pages`) and the deploy backfill
- * (`script/backfill-page-text.ts`).
+ * (`scripts/db/backfill-page-text.ts`).
  *
  * Two copies of this rule would drift, and the drift would be invisible: a page
  * saved by an author and the same page rewritten by the migration would differ by

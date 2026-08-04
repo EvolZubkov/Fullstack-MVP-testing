@@ -4,7 +4,7 @@
  * RTE shim (`assets/shim.js`), the inspector COMPUTE layer
  * (`assets/inspector-compute.js`, exposed as `window.TBInspector`) and the CLI
  * inspector RENDER (`assets/inspector.js`). Both the CLI player
- * (`scripts/scorm-player.mjs`) and the in-service debug player (PRD-18) draw from
+ * (`scripts/scorm/scorm-player.mjs`) and the in-service debug player (PRD-18) draw from
  * these SAME bytes so the RTE behaviour and the inspector's correctness-critical
  * compute never drift between hosts (FR-13, R-1). The in-service player renders the
  * compute data as DS components instead of the CLI's HTML; the page chrome

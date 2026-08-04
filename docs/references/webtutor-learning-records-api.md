@@ -106,17 +106,17 @@ eligibility/gate.js` (`webtutorEvaluate`). Чистая логика фильт�
 
 Запускать в консоли работающего SCORM-модуля (та же сессия, same-origin).
 
-- `scripts/wt-attempts-probe.js` — ОСНОВНОЙ. Самораскрывающийся: сам добывает
+- `scripts/webtutor-probes/wt-attempts-probe.js` — ОСНОВНОЙ. Самораскрывающийся: сам добывает
   `secid` и (при необходимости) `cur_person_id`, `object_id` не нужен. Дёргает
   коллекцию и печатает «курс -> статус -> дата последней попытки» по всем курсам.
   Подтверждает весь тракт, которым пользуется гейт.
-- `scripts/webtutor-probe.js` — диагностика КАРТОЧКИ курса (`get_metadata`).
+- `scripts/webtutor-probes/webtutor-probe.js` — диагностика КАРТОЧКИ курса (`get_metadata`).
   Исторический/вспомогательный: карточка как источник отвергнута (pass-only),
   но зонд полезен, если понадобится разобрать её XAML.
-- `scripts/wt-object-probe.js` — исследование контекста ЗАПУСКА (вариант B).
+- `scripts/webtutor-probes/wt-object-probe.js` — исследование контекста ЗАПУСКА (вариант B).
   Запускать в консоли фрейма `cplayer2`; снимает `session_id`/`part_code`/`pathId`
   и проверяет, джойнятся ли они с `object_id` грида (не джойнятся — см. выше).
-- `scripts/wt-assignment-boundary-probe.js` — граница НАЗНАЧЕНИЯ против границы
+- `scripts/webtutor-probes/wt-assignment-boundary-probe.js` — граница НАЗНАЧЕНИЯ против границы
   ПОПЫТКИ (PRD-31). Двухпроходный: первый прогон снимает состояние записей в
   `localStorage`, второй (после пройденной попытки) показывает разницу и отвечает,
   переходит ли запись в завершённое состояние уже после ПЕРВОЙ попытки
@@ -125,4 +125,4 @@ eligibility/gate.js` (`webtutorEvaluate`). Чистая логика фильт�
   доверенной даты).
 
 Локальная приёмка без портала: `npm run scorm:player` + фикстура
-`scripts/_build-cooldown-scorm.ts` (мок коллекции отвечает как боевой endpoint).
+`scripts/build/_build-cooldown-scorm.ts` (мок коллекции отвечает как боевой endpoint).

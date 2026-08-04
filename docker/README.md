@@ -56,19 +56,19 @@ implicitly.
 
 ```batch
 rem production
-docker\scripts\deploy-prod.bat vvlad1973@192.168.1.200
+scripts\deploy\deploy-prod.bat vvlad1973@192.168.1.200
 
 rem test instance (clones the production DB when the test one is missing)
-docker\scripts\deploy-test.bat vvlad1973@192.168.1.200
+scripts\deploy\deploy-test.bat vvlad1973@192.168.1.200
 
 rem test instance with a fresh clone of the production DB
-docker\scripts\deploy-test.bat vvlad1973@192.168.1.200 --reset-db
+scripts\deploy\deploy-test.bat vvlad1973@192.168.1.200 --reset-db
 
 rem redeploy without rebuilding (reuse dist/ and the saved image)
-docker\scripts\deploy-prod.bat vvlad1973@192.168.1.200 --no-build
+scripts\deploy\deploy-prod.bat vvlad1973@192.168.1.200 --no-build
 ```
 
-Both wrappers call `docker\scripts\deploy.bat <user@server> <prod|test>`, which
+Both wrappers call `scripts\deploy\deploy.bat <user@server> <prod|test>`, which
 does the whole run:
 
 1. `npm run build` — backend + frontend
@@ -134,7 +134,7 @@ Which file the app loads is set explicitly by compose (`CONFIG_FILE`):
 the test instance, both falling back to `config/config.jsonc`.
 
 `NODE_ENV` alone cannot select it: the server bundle is built with `NODE_ENV`
-folded to `"production"` (`script/build.ts`), which is what keeps the built app
+folded to `"production"` (`scripts/build/build.ts`), which is what keeps the built app
 in production mode wherever it runs. `CONFIG_FILE` is read at runtime, so it
 always wins.
 
@@ -223,16 +223,17 @@ docker/
   templates/
     docker-compose.yml        - THE compose file, identical for every instance
     .env.example              - application secrets template
-  scripts/
-    deploy.bat                - build + upload + deploy (Windows), any instance
-    deploy-prod.bat           - wrapper: production
-    deploy-test.bat           - wrapper: test instance (DB cloned when missing)
-    deploy.sh                 - server-side deploy, any instance
-    run-deploy.sh             - CRLF fix + sudo wrapper (entry point on server)
-    rollback.sh               - full cleanup
-    create-admin.bat/.mjs     - create an administrator in a running container
-    set-password.bat/.mjs     - reset a password in a running container
-    backup/                   - superseded scripts, kept for reference only
+
+scripts/deploy/                 - deploy tooling (moved out of docker/, see below)
+  deploy.bat                - build + upload + deploy (Windows), any instance
+  deploy-prod.bat           - wrapper: production
+  deploy-test.bat           - wrapper: test instance (DB cloned when missing)
+  deploy.sh                 - server-side deploy, any instance
+  run-deploy.sh             - CRLF fix + sudo wrapper (entry point on server)
+  rollback.sh               - full cleanup
+  create-admin.bat/.mjs     - create an administrator in a running container
+  set-password.bat/.mjs     - reset a password in a running container
+  backup/                   - superseded scripts, kept for reference only
 ```
 
 ## Environment variables
