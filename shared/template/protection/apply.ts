@@ -148,10 +148,15 @@ function unmark(el: HTMLElement): void {
  * @param target What to protect; `null` lifts every mark this module placed.
  */
 export function applyProtection(root: HTMLElement, target: RegionTarget | null): void {
+  // Injected unconditionally: the sheet also carries the watermark and blur-veil
+  // presentation, and those can be the ONLY measure active on a screen (e.g. the
+  // PRD-18 debug run always shows the mark while `copy` is forced to `null` — FR-25).
+  // Gating this on `target` left the mark and veil unstyled whenever copy protection
+  // itself was off.
+  ensureStyle(root);
   root.querySelectorAll<HTMLElement>("[" + PROTECTED_ATTR + "]").forEach(unmark);
   if (root.hasAttribute(PROTECTED_ATTR)) unmark(root);
   if (!target) return;
-  ensureStyle(root);
   for (const el of elementsOf(root, target)) mark(el);
   ensureListeners(root);
 }

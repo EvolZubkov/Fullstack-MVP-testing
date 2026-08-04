@@ -25,4 +25,22 @@ describe("renderScreenInto + protection", () => {
     renderScreenInto(root, { layout: LAYOUT, context: {}, slots: { "question-text": "т" } });
     expect(root.querySelector("[" + PROTECTED_ATTR + "]")).toBeNull();
   });
+
+  it("подключает стиль знака даже когда copyProtection выключен (отладочный прогон, FR-25)", () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    renderScreenInto(root, {
+      layout: LAYOUT,
+      context: {},
+      slots: { "question-text": "т" },
+      protection: buildProtectionSpec({
+        screen: "question",
+        settings: { copyProtection: false, watermark: true, hideOnBlur: false },
+        stamp: { id: "preview-learner", at: new Date(2026, 7, 5, 1, 7) },
+        active: false,
+      }),
+    });
+    expect(document.head.querySelector("style[data-tb-protection]")).not.toBeNull();
+    root.remove();
+  });
 });
