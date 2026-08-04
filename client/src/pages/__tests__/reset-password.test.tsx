@@ -75,6 +75,21 @@ describe("<ResetPasswordPage />", () => {
     expect(await screen.findByRole("heading", { name: "Пароль успешно изменён" })).toBeInTheDocument();
   });
 
+  it("shows an inline error instead of submitting when the password has disallowed characters", async () => {
+    setUrl("?token=good");
+    fetchMock.mockResolvedValueOnce(jsonRes(200, { valid: true }) as unknown as Response);
+    render(<ResetPasswordPage />);
+    await screen.findByLabelText("Новый пароль");
+    fetchMock.mockClear();
+    fireEvent.change(screen.getByLabelText("Новый пароль"), { target: { value: "пароль123" } });
+    fireEvent.change(screen.getByLabelText("Подтвердите новый пароль"), { target: { value: "пароль123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сброс пароля" }));
+    expect(
+      await screen.findByText("Пароль может содержать только латинские буквы, цифры и спецсимволы"),
+    ).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("toasts an error when the reset request fails", async () => {
     setUrl("?token=good");
     fetchMock.mockResolvedValueOnce(jsonRes(200, { valid: true }) as unknown as Response);
