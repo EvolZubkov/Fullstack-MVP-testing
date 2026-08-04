@@ -175,3 +175,69 @@ describe("countAttemptsInAssignment", () => {
     expect(countAttemptsInAssignment(attempts, null)).toBe(1);
   });
 });
+
+describe("decideRetake — PRD-40 cooldownByOutcome", () => {
+  const outcomePolicy = (passedDays: number, failedDays: number): RetakePolicy =>
+    ({
+      enabled: true,
+      cooldownByOutcome: true,
+      cooldownPeriodDaysPassed: passedDays,
+      cooldownPeriodDaysFailed: failedDays,
+      gateMode: "before_internal_start",
+      eligibilityPlugin: null,
+    }) as RetakePolicy;
+
+  it("applies the PASSED period when the last attempt of the other assignment passed", () => {
+    const r = decideRetake(outcomePolicy(90, 7), {
+      currentAssignmentId: "a2",
+      attempts: [{ assignmentId: "a1", finishedAt: new Date("2026-07-31T12:00:00.000Z"), passed: true }],
+      now: NOW,
+    });
+    expect(r.allowed).toBe(false);
+    expect(r.cooldownPeriodDays).toBe(90);
+    expect(r.availableDate).toBe("2026-10-29");
+  });
+
+  it("applies the FAILED period when the last attempt of the other assignment failed", () => {
+    const r = decideRetake(outcomePolicy(90, 7), {
+      currentAssignmentId: "a2",
+      attempts: [{ assignmentId: "a1", finishedAt: new Date("2026-07-31T12:00:00.000Z"), passed: false }],
+      now: NOW,
+    });
+    expect(r.allowed).toBe(false);
+    expect(r.cooldownPeriodDays).toBe(7);
+    expect(r.availableDate).toBe("2026-08-07");
+  });
+
+  it("applies the LARGER period when the outcome is not recorded (passed omitted)", () => {
+    const r = decideRetake(outcomePolicy(7, 90), {
+      currentAssignmentId: "a2",
+      attempts: [{ assignmentId: "a1", finishedAt: new Date("2026-07-31T12:00:00.000Z") }],
+      now: NOW,
+    });
+    expect(r.allowed).toBe(false);
+    expect(r.cooldownPeriodDays).toBe(90);
+  });
+
+  it("picks the outcome of the LATEST outside attempt, not an earlier one", () => {
+    const r = decideRetake(outcomePolicy(90, 7), {
+      currentAssignmentId: "a3",
+      attempts: [
+        { assignmentId: "a1", finishedAt: new Date("2026-06-01T00:00:00.000Z"), passed: true },
+        { assignmentId: "a2", finishedAt: new Date("2026-07-31T12:00:00.000Z"), passed: false },
+      ],
+      now: NOW,
+    });
+    expect(r.cooldownPeriodDays).toBe(7);
+  });
+
+  it("cooldownByOutcome off ignores passed and uses cooldownPeriodDays (unchanged behaviour)", () => {
+    const r = decideRetake(policy(), {
+      currentAssignmentId: "a2",
+      attempts: [{ assignmentId: "a1", finishedAt: new Date("2026-07-31T12:00:00.000Z"), passed: false }],
+      now: NOW,
+    });
+    expect(r.allowed).toBe(false);
+    expect(r.cooldownPeriodDays).toBe(30);
+  });
+});
