@@ -58,6 +58,8 @@ export async function buildAssigned(
       const attemptFacts = attempts.map((a) => ({
         assignmentId: a.assignmentId,
         finishedAt: a.finishedAt,
+        // PRD-40: outcome of THIS attempt, for barrier A's outcome-split cooldown.
+        passed: (a.resultJson as AttemptResult | null)?.overallPassed ?? null,
       }));
 
       const gate = decideRetake(test.retakePolicyJson as RetakePolicy | null, {
