@@ -111,35 +111,19 @@ describe("POST /api/media/upload", () => {
   });
 });
 
-describe("POST /upload?purpose=feedback-asset", () => {
-  it("отклоняет не-PDF", async () => {
-    const res = await request(makeApp("author-1"))
-      .post("/api/media/upload?purpose=feedback-asset")
-      .attach("file", Buffer.from("not a pdf"), { filename: "pic.png", contentType: "image/png" });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("feedback_asset_invalid");
-    expect(storageMock.createMediaAsset).not.toHaveBeenCalled();
-  });
-
-  it("отклоняет файл больше 5 МБ", async () => {
-    const big = Buffer.alloc(5 * 1024 * 1024 + 1, 0x20);
-    const res = await request(makeApp("author-1"))
-      .post("/api/media/upload?purpose=feedback-asset")
-      .attach("file", big, { filename: "big.pdf", contentType: "application/pdf" });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("feedback_asset_invalid");
-  });
-
-  it("пропускает PDF в пределах лимита", async () => {
+describe("POST /upload?purpose=feedback-asset (retired, PRD-42)", () => {
+  it("больше не применяет строгую проверку — ведёт себя как обычная загрузка", async () => {
     storageMock.findMediaAssetByOwnerChecksum.mockResolvedValue(undefined);
     storageMock.createMediaAsset.mockResolvedValue({
       id: "asset-1",
-      mimeType: "application/pdf",
+      mimeType: "image/png",
       byteSize: 5,
     });
     const res = await request(makeApp("author-1"))
       .post("/api/media/upload?purpose=feedback-asset")
-      .attach("file", Buffer.from("%PDF-1.4"), { filename: "memo.pdf", contentType: "application/pdf" });
+      .attach("file", Buffer.from("hello"), { filename: "pic.png", contentType: "image/png" });
+    // The `purpose` query param is no longer recognised: a non-PDF that used to be
+    // rejected by the narrow feedback-asset rule now succeeds like any other upload.
     expect(res.status).toBe(200);
     expect(res.body.url).toBe("/api/media/asset-1");
   });
