@@ -619,13 +619,17 @@ type EligibilityPluginInfo = {
  * «Повторное прохождение» pane (PRD-6, wireframe `prd6-retake-policy.html`).
  * Binds `model.retakePolicy`:
  *   - Switch        → `enabled` (off = legacy behaviour, FR-02)
- *   - NumberInput   → `cooldownPeriodDays` (1–3650 calendar days)
+ *   - NumberInput   → `cooldownPeriodDays` (1–3650 calendar days), OR — when the
+ *     PRD-40 `cooldownByOutcome` switch is on — two NumberInputs bound to
+ *     `cooldownPeriodDaysPassed` / `cooldownPeriodDaysFailed` instead
  *   - Select        → `eligibilityPlugin.key` (active registry; one config per
  *                     plugin auto-resolved server-side in Phase 1)
  *   - SegmentedControl → `eligibilityPlugin.failPolicy` (failOpen / failClosed)
  *
  * The plugin list is global; we query it by `model.id` (the test scope is only
- * for auth). A best-effort plugin (suspend_data) shows the reliability warning.
+ * for auth). PRD-40 removed the second (best-effort) plugin, so the registry now
+ * has exactly one entry — the select is kept for forward compatibility rather than
+ * simplified away.
  */
 function RetakePane({ model, updateModel }: SettingsSectionProps) {
   const testId = model.id;
@@ -640,12 +644,13 @@ function RetakePane({ model, updateModel }: SettingsSectionProps) {
   const plugin = policy.eligibilityPlugin ?? null;
   const currentKey = plugin?.key ?? "";
   const defaultPluginKey = plugins[0]?.key ?? "webtutor_cooldown";
-  const selectedPlugin = plugins.find((p) => p.key === currentKey);
-  const isBestEffort =
-    selectedPlugin?.bestEffort ?? currentKey === "suspend_data_cooldown";
 
   const setPolicy = (patch: Partial<RetakePolicy>) =>
     updateModel((m) => ({ ...m, retakePolicy: { ...m.retakePolicy, ...patch } }));
+
+  // PRD-40: outcome-split cooldown. Independent toggle inside the SAME cooldown
+  // group (unlike attemptInterval, this does not stand on its own without `enabled`).
+  const cooldownByOutcome = policy.cooldownByOutcome === true;
 
   // PRD-31 barrier B. Independent of the switch above: a test may carry only the
   // hour interval, which is why `cooldownPeriodDays` became optional in the schema.
@@ -710,25 +715,80 @@ function RetakePane({ model, updateModel }: SettingsSectionProps) {
 
       {enabled && (
         <>
-          <div className="ou-formfield">
-            <NumberInput
-              id="settings-retake-cooldown"
+          {!cooldownByOutcome && (
+            <div className="ou-formfield">
+              <NumberInput
+                id="settings-retake-cooldown"
+                size="m"
+                label="Период охлаждения, календарных дней"
+                hint="От 1 до 3650 дней."
+                // PRD-31: the field is optional in the schema (a policy may carry the
+                // hour interval alone), so the editor shows the default when barrier A
+                // has never been configured. The value is only persisted once the
+                // switch above is on, which is exactly when the schema requires it.
+                value={policy.cooldownPeriodDays ?? 30}
+                min={1}
+                max={3650}
+                data-testid="settings-retake-cooldown-input"
+                onChange={(next) =>
+                  setPolicy({ cooldownPeriodDays: Math.min(3650, Math.max(1, next || 1)) })
+                }
+              />
+            </div>
+          )}
+
+          <label className="ou-switch-field">
+            <Switch
               size="m"
-              label="Период охлаждения, календарных дней"
-              hint="От 1 до 3650 дней."
-              // PRD-31: the field is optional in the schema (a policy may carry the
-              // hour interval alone), so the editor shows the default when barrier A
-              // has never been configured. The value is only persisted once the
-              // switch above is on, which is exactly when the schema requires it.
-              value={policy.cooldownPeriodDays ?? 30}
-              min={1}
-              max={3650}
-              data-testid="settings-retake-cooldown-input"
-              onChange={(next) =>
-                setPolicy({ cooldownPeriodDays: Math.min(3650, Math.max(1, next || 1)) })
-              }
+              checked={cooldownByOutcome}
+              aria-label="Разделять период по результату попытки"
+              onChange={(e) => setPolicy({ cooldownByOutcome: e.target.checked })}
+              data-testid="settings-retake-outcome-switch"
             />
-          </div>
+            <span className="ou-switch-field__text">
+              <span className="ou-switch-field__label">Разделять период по результату попытки</span>
+              <span className="ou-switch-field__desc">
+                {cooldownByOutcome
+                  ? "Разный период охлаждения в зависимости от того, пройден тест или нет."
+                  : "Выключено — один период охлаждения для любого исхода."}
+              </span>
+            </span>
+          </label>
+
+          {cooldownByOutcome && (
+            <>
+              <div className="ou-formfield">
+                <NumberInput
+                  id="settings-retake-cooldown-passed"
+                  size="m"
+                  label="При успешном прохождении, дней"
+                  hint="От 1 до 3650 дней."
+                  value={policy.cooldownPeriodDaysPassed ?? 30}
+                  min={1}
+                  max={3650}
+                  data-testid="settings-retake-cooldown-passed-input"
+                  onChange={(next) =>
+                    setPolicy({ cooldownPeriodDaysPassed: Math.min(3650, Math.max(1, next || 1)) })
+                  }
+                />
+              </div>
+              <div className="ou-formfield">
+                <NumberInput
+                  id="settings-retake-cooldown-failed"
+                  size="m"
+                  label="При неуспешном прохождении, дней"
+                  hint="От 1 до 3650 дней."
+                  value={policy.cooldownPeriodDaysFailed ?? 30}
+                  min={1}
+                  max={3650}
+                  data-testid="settings-retake-cooldown-failed-input"
+                  onChange={(next) =>
+                    setPolicy({ cooldownPeriodDaysFailed: Math.min(3650, Math.max(1, next || 1)) })
+                  }
+                />
+              </div>
+            </>
+          )}
 
           <div className="ou-formfield">
             <Select<string>
@@ -742,15 +802,6 @@ function RetakePane({ model, updateModel }: SettingsSectionProps) {
               data-testid="settings-retake-plugin"
             />
           </div>
-
-          {isBestEffort && (
-            <Banner
-              tone="warning"
-              size="sm"
-              description="Надёжно работает только в пределах одной регистрации курса в LMS. Для строгого ограничения между новыми попытками используйте проверку через WebTutor."
-              data-testid="settings-retake-besteffort-warning"
-            />
-          )}
 
           {currentKey === "webtutor_cooldown" && (
             <Banner

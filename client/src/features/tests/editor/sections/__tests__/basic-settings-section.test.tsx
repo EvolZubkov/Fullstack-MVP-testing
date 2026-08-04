@@ -850,6 +850,7 @@ describe("<SettingsSection /> — Повторное прохождение pane
     retakePolicy: {
       enabled: true,
       cooldownPeriodDays: 30,
+      cooldownByOutcome: false,
       gateMode: "before_internal_start" as const,
       eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" as const },
       ...over,
@@ -882,11 +883,46 @@ describe("<SettingsSection /> — Повторное прохождение pane
     expect(screen.queryByTestId("settings-retake-besteffort-warning")).toBeNull();
   });
 
-  it("shows the best-effort warning for the suspend_data plugin", () => {
+  it("shows the outcome-split switch off by default, only the single field visible", () => {
+    renderRetake(enabledPolicy());
+    expect(screen.getByTestId("settings-retake-outcome-switch")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-retake-cooldown-input")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-retake-cooldown-passed-input")).toBeNull();
+    expect(screen.queryByTestId("settings-retake-cooldown-failed-input")).toBeNull();
+  });
+
+  it("turning the outcome-split switch on swaps the single field for two", () => {
+    const updateModel = vi.fn();
+    const model = enabledPolicy();
+    renderRetake(model, updateModel);
+    fireEvent.click(screen.getByTestId("settings-retake-outcome-switch"));
+    const next = runUpdater(updateModel, model);
+    expect(next.retakePolicy.cooldownByOutcome).toBe(true);
+  });
+
+  it("renders both split fields once the switch is on, seeded from defaults", () => {
     renderRetake(
-      enabledPolicy({ eligibilityPlugin: { key: "suspend_data_cooldown", failPolicy: "failOpen" } }),
+      enabledPolicy({ cooldownByOutcome: true, cooldownPeriodDaysPassed: 90, cooldownPeriodDaysFailed: 7 }),
     );
-    expect(screen.getByTestId("settings-retake-besteffort-warning")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-retake-cooldown-input")).toBeNull();
+    const passedInput = screen.getByTestId("settings-retake-cooldown-passed-input") as HTMLInputElement;
+    const failedInput = screen.getByTestId("settings-retake-cooldown-failed-input") as HTMLInputElement;
+    expect(passedInput.value).toBe("90");
+    expect(failedInput.value).toBe("7");
+  });
+
+  it("edits the passed/failed periods independently and clamps into [1, 3650]", () => {
+    const updateModel = vi.fn();
+    const model = enabledPolicy({
+      cooldownByOutcome: true,
+      cooldownPeriodDaysPassed: 90,
+      cooldownPeriodDaysFailed: 7,
+    });
+    renderRetake(model, updateModel);
+    fireEvent.change(screen.getByTestId("settings-retake-cooldown-passed-input"), { target: { value: "5000" } });
+    expect(runUpdater(updateModel, model).retakePolicy.cooldownPeriodDaysPassed).toBe(3650);
+    fireEvent.change(screen.getByTestId("settings-retake-cooldown-failed-input"), { target: { value: "0" } });
+    expect(runUpdater(updateModel, model, 1).retakePolicy.cooldownPeriodDaysFailed).toBe(1);
   });
 
   it("toggles failPolicy to failClosed via the segmented control", () => {

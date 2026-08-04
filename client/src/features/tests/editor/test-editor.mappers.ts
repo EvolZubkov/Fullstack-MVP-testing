@@ -821,6 +821,7 @@ export function defaultRetakePolicy(): RetakePolicy {
   return {
     enabled: false,
     cooldownPeriodDays: 30,
+    cooldownByOutcome: false,
     gateMode: "before_internal_start",
     eligibilityPlugin: null,
     attemptInterval: null,
@@ -889,9 +890,16 @@ function readRetakePolicyFromApi(api: ApiTestResponse): RetakePolicy {
     };
   }
 
+  const cooldownByOutcome = r.cooldownByOutcome === true;
+  const cooldownPassedRaw = typeof r.cooldownPeriodDaysPassed === "number" ? r.cooldownPeriodDaysPassed : 30;
+  const cooldownFailedRaw = typeof r.cooldownPeriodDaysFailed === "number" ? r.cooldownPeriodDaysFailed : 30;
+
   return {
     enabled: r.enabled === true,
     cooldownPeriodDays: clampCooldown(cooldownRaw),
+    cooldownByOutcome,
+    cooldownPeriodDaysPassed: clampCooldown(cooldownPassedRaw),
+    cooldownPeriodDaysFailed: clampCooldown(cooldownFailedRaw),
     gateMode: "before_internal_start",
     eligibilityPlugin,
     attemptInterval,
