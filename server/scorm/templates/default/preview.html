@@ -608,8 +608,9 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 }
 
 /* ── Matching scene ─────────────────────────────────────────────── */
-/* Column gap between the two matching sides — 24px (DS default is 56px wide). */
-.tb-scene .ou-match { width: 100%; row-gap: var(--ou-space-2); --ou-match-gap-w: var(--ou-space-6); }
+/* Merge-panel gap (PRD-39): no override — the DS's own narrow-mode default (8px) is
+   exactly the flush, seam-between look the merge is designed for. */
+.tb-scene .ou-match { width: 100%; row-gap: var(--ou-space-2); }
 /* The draggable answer chips no longer carry the native `draggable` flag (it broke
    real-mouse dragging), so restore the grab affordance explicitly. */
 .tb-scene .ou-match__card--drag:not(.ou-match__card--empty),
@@ -619,13 +620,35 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 /* Drop-target feedback comes from the DS itself: the pointer engine adds
    `.ou-match__row.is-target`, which lights the LEFT prompt (`.ou-match__row.is-target
    .ou-match__card--fixed` in university-rt.css). No extra rule needed here. */
-/* After a pair connects, the DS tints only the RIGHT card + the arrow. Tint the LEFT
-   prompt too so the whole matched row reads as connected (review states keep their own
-   green/red tint, so exclude them). */
-.tb-scene .ou-match__row.is-connected:not(.correct-answer):not(.incorrect-answer) .ou-match__card--fixed {
-  border-color: var(--ou-accent-default);
-  background: var(--ou-accent-soft);
-  color: var(--ou-accent-on-soft);
+/* "Just connected" tint needs no scene rule any more: in merge mode the DS already
+   tints BOTH cards + the gap together (`ou-match--gap-narrow` in university-rt.css),
+   unlike the old arrow mode which only tinted the answer card. */
+/* Review verdict (PRD-39): this app marks a matched row `correct-answer`/
+   `incorrect-answer` (the choice/ranking convention), not the DS component's own BEM
+   modifiers — so the DS ships no color for the fixed prompt or the gap/seam under
+   those classes. Paint them here so the WHOLE merged panel reads as one verdict, not
+   just the draggable half. */
+.tb-scene .ou-match__row.correct-answer .ou-match__card--fixed {
+  border-color: var(--ou-success-default);
+  background: var(--ou-success-soft);
+  color: var(--ou-success-on-soft);
+}
+.tb-scene .ou-match__row.correct-answer .ou-match__gap {
+  background: var(--ou-success-soft);
+  border-top: 1px solid var(--ou-success-default);
+  border-bottom: 1px solid var(--ou-success-default);
+  color: var(--ou-success-default);
+}
+.tb-scene .ou-match__row.incorrect-answer .ou-match__card--fixed {
+  border-color: var(--ou-error-default);
+  background: var(--ou-error-soft);
+  color: var(--ou-error-on-soft);
+}
+.tb-scene .ou-match__row.incorrect-answer .ou-match__gap {
+  background: var(--ou-error-soft);
+  border-top: 1px solid var(--ou-error-default);
+  border-bottom: 1px solid var(--ou-error-default);
+  color: var(--ou-error-default);
 }
 .ou-match__placeholder { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 
@@ -1702,7 +1725,7 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
       </div>
 
       <div class="pv-dialog-foot">
-        <span>12 экранов · 23 шаблонов контента · шаблон «Стандартный» v1.4.0</span>
+        <span>12 экранов · 23 шаблонов контента · шаблон «Стандартный» v1.5.0</span>
         <button type="button" class="pv-btn">Закрыть</button>
       </div>
     </div>
@@ -1714,7 +1737,7 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   window.PRD1_PREVIEW_MANIFEST  = {
   "id": "default",
   "name": "Стандартный",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "templateApiVersion": "1.0",
   "description": "Базовый одноколоночный плеер. Используется по умолчанию для обратной совместимости.",
   "themes": [
@@ -8198,7 +8221,7 @@ var TBTemplate = (() => {
     const gapCol = "var(--ou-match-gap-w)";
     const columns = !skew ? `minmax(0, 1fr) ${gapCol} minmax(0, 1fr)` : leftTextLen > rightTextLen ? `minmax(0, 2fr) ${gapCol} minmax(0, 1fr)` : `minmax(0, 1fr) ${gapCol} minmax(0, 2fr)`;
     let poolSlot = 0;
-    let html = `<div class="ou-match ou-match--gap-wide ou-match--side-r ou-match--icon-dots" style="--ou-match-cols:${columns}">`;
+    let html = `<div class="ou-match ou-match--gap-narrow ou-match--side-r ou-match--icon-dots" style="--ou-match-cols:${columns}">`;
     for (const ri of rightMapping) {
       const matchedLeft = rightToLeft[ri];
       const isJoined = matchedLeft !== void 0;
@@ -8208,7 +8231,7 @@ var TBTemplate = (() => {
       }
       html += `<div class="${rowCls}">`;
       html += `<div class="ou-match__card ou-match__card--fixed" data-drop="r${ri}"><span class="ou-match__card-text"><span class="ou-match__card-title" style="font-size:var(--tb-answer-fs,1.125rem)">${answerHtml(right[ri])}</span></span></div>`;
-      html += '<div class="ou-match__gap" aria-hidden="true"><svg class="ou-match__gap-arrow" viewBox="0 0 28 12"><path d="M10 2 L18 6 L10 10"></path></svg></div>';
+      html += '<div class="ou-match__gap" aria-hidden="true"><svg class="ou-match__seam" viewBox="0 0 6 48" preserveAspectRatio="none"><path d="M3 0 Q0 4 3 8 Q6 12 3 16 Q0 20 3 24 Q6 28 3 32 Q0 36 3 40 Q6 44 3 48"></path></svg></div>';
       if (isJoined) {
         html += dragCard(matchedLeft, `r${ri}`);
       } else {
