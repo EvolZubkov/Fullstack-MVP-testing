@@ -150,16 +150,30 @@ committed (в т.ч. учащийся вернулся к уже отвечен�
 quickAdvance: boolean("quick_advance").notNull().default(false),
 ```
 
-Миграция (следующий номер после `038_prd34_copy_protection.sql`):
+Миграция генерируется штатным трактом (`drizzle/README.md`), НЕ через легаси `migrations/`
+(тот каталог с 2026-07-18 — история, деплой его не катит):
+
+```bash
+node_modules/.bin/drizzle-kit generate --name=prd43_quick_advance
+```
+
+даёт `ALTER TABLE tests ADD COLUMN quick_advance boolean DEFAULT false NOT NULL;`. Бэкфилл —
+отдельная data-миграция (`drizzle/README.md`, «Data-миграция»):
+
+```bash
+node_modules/.bin/drizzle-kit generate --custom --name=prd43_quick_advance_backfill
+```
+
+пустой файл заполняется вручную:
 
 ```sql
-ALTER TABLE tests ADD COLUMN quick_advance boolean NOT NULL DEFAULT false;
 UPDATE tests SET quick_advance = NOT allow_return_to_unanswered;
 ```
 
-Колонка не зависит от `allow_return_to_unanswered` на уровне ограничений БД (как и
-`allow_answer_change` сегодня не имеет CHECK на мьютекс с `show_correct_answers` — мьютекс FR-03
-проверяется только в UI редактора).
+`shared/schema.ts` и оба файла из `drizzle/` (+ `drizzle/meta/`) коммитятся вместе. Колонка не
+зависит от `allow_return_to_unanswered` на уровне ограничений БД (как и `allow_answer_change`
+сегодня не имеет CHECK на мьютекс с `show_correct_answers` — мьютекс FR-03 проверяется только в
+UI редактора).
 
 ### 5.2 `QuestionNavState` (`shared/template/question-nav.ts`)
 
@@ -202,9 +216,9 @@ UPDATE tests SET quick_advance = NOT allow_return_to_unanswered;
 
 ## 7. Совместимость и миграция
 
-- Миграция БД обязательна (новая NOT NULL колонка) — `quick_advance = NOT allow_return_to_unanswered`
-  для всех существующих строк, см. §5.1. После миграции поведение и SCORM-экспорт существующих
-  тестов не меняются.
+- Миграция БД обязательна (новая NOT NULL колонка + отдельная data-миграция с бэкфиллом
+  `quick_advance = NOT allow_return_to_unanswered`, см. §5.1). После миграции поведение и
+  SCORM-экспорт существующих тестов не меняются.
 - Тест, экспортированный в SCORM ДО выкатки, не содержит поля `quickAdvance` в своём
   `TEST_DATA` — не в охвате (SCORM-пакеты не обновляются ретроактивно, как и для прошлых полей
   PRD-19).
