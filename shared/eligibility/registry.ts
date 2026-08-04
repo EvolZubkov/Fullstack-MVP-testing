@@ -86,7 +86,8 @@ export const ELIGIBILITY_PLUGINS: EligibilityPluginEntry[] = [
             stateField: "state",
             stateIn: ["Пройден", "Не пройден"],
             // PRD-40: the subset of stateIn counted as a PASSED attempt — same text
-            // the RT portal already reports, confirmed live (PRD-6 §3.6 header note).
+            // the RT portal already reports for `state` above (line 82-83), so no
+            // separate confirmation was needed.
             passedStateIn: ["Пройден"],
             dateField: "last_usage_date",
             dateFormat: "dd.MM.yyyy",
