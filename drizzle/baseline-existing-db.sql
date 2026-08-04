@@ -18,7 +18,7 @@
 -- Apply (same connection the deploy uses — DATABASE_URL from /app/.env):
 --   docker compose run --rm --no-deps \
 --     -v /tmp/baseline-existing-db.sql:/tmp/baseline.sql:ro \
---     --entrypoint sh <project> -c "node script/run-sql.cjs /tmp/baseline.sql"
+--     --entrypoint sh <project> -c "node scripts/db/run-sql.cjs /tmp/baseline.sql"
 -- (the file also ships in the image at /app/drizzle/baseline-existing-db.sql).
 
 CREATE SCHEMA IF NOT EXISTS drizzle;

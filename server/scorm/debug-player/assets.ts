@@ -19,7 +19,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
  * `assets/<name>` is the source. In production the server is bundled into
  * `dist/index.cjs`, so `import.meta.url` collapses to `dist/` and that sibling path
  * does not exist — fall back to the build-copied `dist/scorm/debug-player/assets/`
- * (script/build.ts copies it), and finally to the source tree if the deploy ships it.
+ * (scripts/build/build.ts copies it), and finally to the source tree if the deploy ships it.
  * Mirrors the multi-path resolution of {@link module:scorm/assets/read-asset} so the
  * in-service player works wherever SCORM export already does.
  */

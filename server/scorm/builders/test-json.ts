@@ -2,6 +2,7 @@ import type { Test, TestSection, Topic, Question, TopicCourse, TopicEvent, PassR
 import { sanitizeHtml, placeholderScope } from "../../utils/html-sanitizer";
 import { findEligibilityPlugin, findEligibilityConfig } from "@shared/eligibility/registry";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
+import { effectiveSectionOrder } from "@shared/draw/assemble-delivery";
 import { buildTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
 import { parseScaleInterpretation } from "@shared/scales/interpretation";
 // PRD-32: ONE address rule for a feedback attachment, and ONE source-priority rule for
@@ -169,6 +170,13 @@ export function buildTestJson(data: ExportData): string {
     description: data.test.description,
     mode: data.test.mode || "standard",
     flowPolicy: exportedFlowPolicy,
+    // PRD-30 FR-16/FR-23: the test-wide delivery order, and the default every
+    // topic inherits. Baked only when it is not the default `random`, so packages
+    // of tests that never touched the setting stay byte-identical; the runtime
+    // reads TEST_DATA.questionOrder and falls back to `random` when absent.
+    ...(data.test.questionOrder && data.test.questionOrder !== "random"
+      ? { questionOrder: data.test.questionOrder }
+      : {}),
     showDifficultyLevel: data.test.showDifficultyLevel ?? true,
     overallPassRule: overallPassRule,
     webhookUrl: data.test.webhookUrl,
@@ -243,11 +251,14 @@ export function buildTestJson(data: ExportData): string {
         // degrades to a random pick (R-6). The whole bank ships (every variant's
         // questions+keys, R-7) — selection happens client-side.
         ...(s.formSetJson ? { formSet: s.formSetJson } : {}),
-        // PRD-30 FR-02/FR-14: delivery order of the topic's questions. Baked only
-        // when `fixed` (the default is `random`) so packages of tests that never
-        // touched the setting stay byte-identical; the runtime reads
-        // section.questionOrder and falls back to `random` when absent.
-        ...(s.questionOrder === "fixed" ? { questionOrder: "fixed" as const } : {}),
+        // PRD-30 FR-02/FR-18/FR-23: the topic's OVERRIDE of the test-wide order.
+        // Baked only when the topic actually overrides (a null column = «как в
+        // тесте»), so packages of tests that never touched the setting stay
+        // byte-identical; the runtime resolves an absent value against
+        // TEST_DATA.questionOrder.
+        ...(s.questionOrder === "fixed" || s.questionOrder === "random"
+          ? { questionOrder: s.questionOrder }
+          : {}),
         // Feedback TEXTS of the TOPIC (`topics.feedback_json.text`, falling back to the
         // legacy `topics.feedback` column) and of THIS test's section over it
         // (`test_sections.feedback_json.text`) — the general before the specific, which
@@ -305,10 +316,12 @@ export function buildTestJson(data: ExportData): string {
             // byte-identical (FR-02).
             ...(q.shuffleAnswers === false ? { shuffleAnswers: false } : {}),
             // PRD-30 FR-01: the author's index inside the topic. Baked only when
-            // the section actually orders by it AND the question has one, so
-            // packages of untouched tests stay byte-identical (FR-14); the
-            // runtime treats an absent value as «not set» (delivered last).
-            ...(s.questionOrder === "fixed" && typeof q.orderIndex === "number"
+            // the topic EFFECTIVELY orders by it (its own value, or the test's
+            // when it inherits) AND the question has one, so packages of
+            // untouched tests stay byte-identical (FR-14/FR-23); the runtime
+            // treats an absent value as «not set» (delivered last).
+            ...(effectiveSectionOrder(data.test.questionOrder, s.questionOrder) === "fixed" &&
+            typeof q.orderIndex === "number"
               ? { orderIndex: q.orderIndex }
               : {}),
           };

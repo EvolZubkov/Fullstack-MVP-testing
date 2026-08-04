@@ -717,10 +717,33 @@
 .tb-question-order-row {
   display: flex; align-items: center; gap: var(--ou-space-2);
   margin-bottom: var(--ou-space-2);
-  cursor: pointer;
 }
-.tb-question-order-row__lbl { font: var(--ou-text-body-s); }
+/* PRD-30 раздел 14 (эскиз approved/prd30-test-level-order.html): the row is no
+   longer a switch but a «label + control» pair, like «Вопросов в тест» right
+   above it — the label takes the same width, otherwise the left edges of two
+   neighbouring controls drift apart. */
+.tb-question-order-row__lbl {
+  font: var(--ou-text-body-s);
+  width: var(--wf-size-150); flex-shrink: 0;
+}
 .tb-question-order-row__hint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* PRD-30 FR-16: the test-wide delivery rule, above the topic list. Same anatomy
+   as .tb-draw-count-row — label of a fixed width, control, muted tail. */
+.tb-test-order-row {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  margin-bottom: var(--ou-space-2);
+}
+.tb-test-order-row__label {
+  font: var(--ou-text-body-s);
+  width: var(--wf-size-150); flex-shrink: 0;
+}
+.tb-test-order-row__hint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+/* The option labels do not fit the DS default 180px trigger: in the test row they
+   wrapped out of the fixed-height control, in the topic row they hit the chevron.
+   One width for both also lines the test rule up with the topics' rules. */
+.tb-test-order-row .ou-select__trigger,
+.tb-question-order-row .ou-select__trigger { min-width: var(--tb-input-w-md); }
 
 /* Draw-count row: «Вопросов в тест [ N ] из M» — standard mode. */
 .tb-draw-count-row {

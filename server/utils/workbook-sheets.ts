@@ -454,6 +454,73 @@ export const STRUCTURE_WIDTHS = [28, 10, 20, 16, 10, 14, 26];
 export const QUOTA_HEADERS = ["Раздел", "Тег", "Количество", "Режим"];
 export const QUOTA_WIDTHS = [28, 24, 14, 14];
 
+/**
+ * Canonical «Настройки» headers (PRD-30 FR-22). The sheet is a key/value list,
+ * not a table of columns: it carries settings OF THE TEST, of which there is one
+ * of each, and a new setting must not widen a row every author already has.
+ */
+export const SETTINGS_HEADERS = ["Параметр", "Значение"];
+export const SETTINGS_WIDTHS = [34, 30];
+
+/** Test-level settings the workbook transfers. */
+export interface ParsedTestSettings {
+  /** PRD-30 FR-16: test-wide delivery order; absent = `random` (the default). */
+  questionOrder?: "fixed" | "random" | "shuffle_all";
+}
+
+/** «Порядок выдачи вопросов» — the parameter name on the sheet. */
+const SETTING_QUESTION_ORDER = "Порядок выдачи вопросов";
+
+/** Cell ↔ stored value. Labels match the editor's Select verbatim (FR-16). */
+const TEST_ORDER_FROM: Record<string, "fixed" | "random" | "shuffle_all"> = {
+  "фиксированный порядок": "fixed",
+  "перемешивание": "random",
+  "полное перемешивание": "shuffle_all",
+};
+const TEST_ORDER_TO: Record<"fixed" | "random" | "shuffle_all", string> = {
+  fixed: "Фиксированный порядок",
+  random: "Перемешивание",
+  shuffle_all: "Полное перемешивание",
+};
+
+/**
+ * Parse one «Настройки» row. An empty value means «оставить как есть» — the
+ * import must not silently reset a setting the author cleared out of the cell.
+ */
+export function parseSettingsRow(row: Record<string, unknown>): ParseResult<ParsedTestSettings> {
+  const name = String(row["Параметр"] ?? "").replace(/[\s ​﻿]+/g, " ").trim();
+  if (!name) return { ok: false, error: "не указан «Параметр»" };
+  const raw = String(row["Значение"] ?? "").trim();
+
+  if (name.toLowerCase() === SETTING_QUESTION_ORDER.toLowerCase()) {
+    if (raw === "") return { ok: true, value: {} };
+    const order = TEST_ORDER_FROM[raw.toLowerCase()];
+    if (!order) return { ok: false, error: `неизвестное значение «${SETTING_QUESTION_ORDER}»: "${raw}"` };
+    return { ok: true, value: { questionOrder: order } };
+  }
+
+  return { ok: false, error: `неизвестный параметр: "${name}"` };
+}
+
+/** Values offered for «Порядок выдачи вопросов» (template dropdown). */
+export const TEST_ORDER_CHOICES = [
+  TEST_ORDER_TO.fixed,
+  TEST_ORDER_TO.random,
+  TEST_ORDER_TO.shuffle_all,
+];
+
+/** Serialize the test's settings to «Настройки» rows (export). */
+export function serializeSettingsRows(test: {
+  questionOrder?: "fixed" | "random" | "shuffle_all" | null;
+}): Record<string, unknown>[] {
+  return [
+    {
+      "Параметр": SETTING_QUESTION_ORDER,
+      "Значение": TEST_ORDER_TO[test.questionOrder ?? "random"],
+    },
+  ];
+}
+
 /** «Тип порога» cell → the editor's `topicPassRuleJson` shape (PRD-7). */
 const PASS_TYPE_FROM: Record<string, "percent" | "absolute"> = {
   "процент": "percent",
@@ -512,8 +579,8 @@ export interface ParsedSection {
   /** Editor-shape `topicPassRuleJson` (PRD-7): `{source, type?, value?}`. */
   passRule: Record<string, unknown>;
   required: boolean;
-  /** PRD-30 FR-02: delivery order of the topic's questions. */
-  questionOrder: "random" | "fixed";
+  /** PRD-30 FR-02/FR-18: the topic's override; `null` = «как в тесте». */
+  questionOrder: "random" | "fixed" | null;
 }
 
 /** Parse a «Структура» row. `rowIndex` (0-based) is the «Порядок» fallback. */
@@ -560,10 +627,12 @@ export function parseStructureRow(
   const requiredRaw = String(row["Обязательный"] ?? "").trim();
   const required = requiredRaw === "" ? true : parseBool(requiredRaw);
 
-  // PRD-30 FR-02: an empty cell — and a workbook without the column at all —
-  // means «да», today's random delivery. Only an explicit «нет» fixes the order.
+  // PRD-30 FR-18: an empty cell — and a workbook without the column at all —
+  // means «как в тесте»: the topic follows the test-wide rule, which is what a
+  // book that never touched the column has to keep meaning. «нет» fixes the
+  // order, «да» is an explicit override back to shuffling.
   const randomRaw = String(row["Случайный порядок вопросов"] ?? "").trim();
-  const questionOrder = randomRaw !== "" && !parseBool(randomRaw) ? "fixed" : "random";
+  const questionOrder = randomRaw === "" ? null : parseBool(randomRaw) ? "random" : "fixed";
 
   return {
     ok: true,
@@ -578,8 +647,8 @@ export function serializeStructureRow(s: {
   drawCount: number;
   topicPassRuleJson: unknown;
   required: boolean;
-  /** PRD-30 FR-02: absent = `random`, the legacy behaviour. */
-  questionOrder?: "random" | "fixed";
+  /** PRD-30 FR-02/FR-18: null or absent = «как в тесте» (the topic inherits). */
+  questionOrder?: "random" | "fixed" | null;
 }): Record<string, unknown> {
   const rule = (s.topicPassRuleJson ?? {}) as { source?: string; type?: string; value?: number };
   let passType = "Как у теста";
@@ -599,7 +668,8 @@ export function serializeStructureRow(s: {
     "Тип порога": passType,
     "Порог": passValue,
     "Обязательный": serBool(s.required),
-    "Случайный порядок вопросов": serBool(s.questionOrder !== "fixed"),
+    // FR-18: пустая ячейка = «как в тесте», иначе явное переопределение темы.
+    "Случайный порядок вопросов": s.questionOrder == null ? "" : serBool(s.questionOrder !== "fixed"),
   };
 }
 

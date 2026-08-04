@@ -1,5 +1,18 @@
 var scormFinished = false;
 
+// PRD-31 barrier B: Commit()/Terminate() return as soon as the LMS API accepts
+// the call, not once the LMS has actually written cmi.suspend_data to its own
+// backend — that write can still be in flight. Closing the SCO window right
+// after races it: a fast relaunch (observed live on testuniver.rt.ru — the
+// portal re-created the course session immediately after «Завершить и
+// закрыть») can read suspend_data BEFORE the just-finished attempt's
+// completedAt landed, so attemptIntervalState() sees no qualifying attempt and
+// the interval barrier silently opens onto the router/start flow instead of
+// blocking. A short grace delay before close costs nothing visible (the
+// results screen just stays up a moment longer) and gives that write time to
+// land.
+var RESULTS_CLOSE_DELAY_MS = 500;
+
 // ─── PRD-5 (B5): scales ───────────────────────────────────────────────────────
 // Build the scale-engine input from TEST_DATA + the current attempt's answers.
 // `questionTypes` is taken from the full question set (standard sections and
@@ -136,9 +149,23 @@ function pushAll(target, items) {
   for (var i = 0; i < items.length; i++) target.push(items[i]);
 }
 
+// Disables every rendered finish-action control (whichever screen produced it —
+// standard/adaptive/post-results) the instant the learner triggers finishAndClose.
+// Without this the button stays fully clickable until SCORM.terminate()/window.close()
+// land, which can take a moment (RESULTS_CLOSE_DELAY_MS) or never happen at all on a
+// host that embeds the SCO instead of opening a script-closable popup (e.g. Moodle) —
+// a still-enabled button reads as "nothing happened" and invites a re-click.
+function disableFinishButtons() {
+  var els = document.querySelectorAll(
+    '[data-action="test-finish"],[data-action="results-finish"],[data-action="finish"]'
+  );
+  for (var i = 0; i < els.length; i++) els[i].disabled = true;
+}
+
 function finishAndClose() {
   if (scormFinished) return;
   scormFinished = true;
+  try { disableFinishButtons(); } catch (e) { }
 
   // Определяем режим и получаем результаты
   var isAdaptive = TEST_DATA.mode === 'adaptive' && state.adaptiveState;
@@ -283,7 +310,9 @@ function finishAndClose() {
 
   try { SCORM.commit(); } catch (e) { }
   try { SCORM.terminate(); } catch (e) { }
-  try { window.close(); } catch (e) { }
+  setTimeout(function () {
+    try { window.close(); } catch (e) { }
+  }, RESULTS_CLOSE_DELAY_MS);
 }
 
 /**

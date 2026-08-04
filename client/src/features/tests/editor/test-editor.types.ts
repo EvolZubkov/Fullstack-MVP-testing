@@ -10,6 +10,7 @@
 import type { DrawBlueprint, FormSet, RetakePolicy } from "@shared/schema";
 import type { ReportSettings } from "@shared/schema";
 import type { LearnerVisibility, LevelTone, Valence } from "@shared/scales/interpretation";
+import type { TestQuestionOrder } from "@shared/draw/assemble-delivery";
 import type { QuestionScoringOverride } from "./scoring-api";
 import type { FeedbackEditorValue } from "./sections/feedback-editor-modal";
 
@@ -210,14 +211,12 @@ export type EditorSection = {
    */
   formSet?: FormSet | null;
   /**
-   * PRD-30 FR-02: delivery order of this topic's questions. `random` (the
-   * default) = today's shuffle; `fixed` = by the author's «Индекс в теме», or
-   * by the variant's own list when the section runs in variants mode (FR-07).
-   * Optional like the other delivery extras (`drawBlueprint`, `formSet`): a
-   * section built locally before the API round-trip simply has no value yet,
-   * and every read defaults it to `random`.
+   * PRD-30 FR-02/FR-18: this topic's OVERRIDE of the test-wide delivery order.
+   * `null`/absent = «как в тесте» (the default), `random` = today's shuffle,
+   * `fixed` = by the author's «Индекс в теме», or by the variant's own list
+   * when the section runs in variants mode (FR-07).
    */
-  questionOrder?: "random" | "fixed";
+  questionOrder?: "random" | "fixed" | null;
   /**
    * PRD-15 block D (FR-31): per-section default price of a question. `null` =
    * inherit the test default. Edited in the «Оценка» tab, persisted with the
@@ -278,6 +277,21 @@ export type ResultVariableModel = {
   bands: ScaleBandModel[];
   /** PRD-29: interpretation of a string/boolean indicator, matched by exact code. */
   outcomes: OutcomeModel[];
+  /**
+   * The NUMERIC indicator's explicit domain, persisted alongside `bands` in the
+   * indicator's own `config_json` — same meaning and round trip as
+   * {@link ScaleModel.domainMin}/`domainMax`. BOTH `null` = not set; the domain
+   * is then derived from the span of `bands` (mirrors `parseIndicatorInterpretation`).
+   */
+  domainMin: number | null;
+  domainMax: number | null;
+  /**
+   * Which end of a NUMERIC indicator's range is favourable — same enum and
+   * meaning as {@link ScaleModel.valence}. Unused by a string/boolean indicator
+   * (its cards are toned per-outcome instead), but always round-tripped so a
+   * type flip during editing does not lose it.
+   */
+  valence: Valence;
   sortOrder: number;
 };
 
@@ -407,6 +421,16 @@ export type TestEditorModel = {
   version: number;
   mode: TestMode;
   flowMode: FlowMode;
+  /**
+   * PRD-30 FR-16: the test-wide delivery order and the default every topic
+   * inherits. `shuffle_all` («полное перемешивание») is only offered in the flat
+   * flow — a sectional flow rewrites it to `random` on save (FR-17).
+   *
+   * Optional like the other delivery extras: a draft assembled locally, or one
+   * loaded from an API response older than the column, simply has no value, and
+   * every read defaults it to `random` — today's behaviour.
+   */
+  questionOrder?: TestQuestionOrder;
   flowSettings: FlowSettings;
   /** Parent folder; `null` means root (no folder). */
   folderId: string | null;
@@ -499,6 +523,8 @@ export type TestSettingsPayload = {
   status: TestStatus;
   mode: TestMode;
   flowMode: FlowMode;
+  /** PRD-30 FR-16: the test-wide delivery order. */
+  questionOrder: TestQuestionOrder;
   flowPolicyJson?: FlowPolicyPayload;
   overallPassRuleJson: OverallPassRule;
   passDecisionPolicy: PassDecisionPolicy;
@@ -548,8 +574,8 @@ export type TestSectionPayload = {
   formSetJson: FormSet | null;
   /** PRD-15 block D (FR-31): per-section default price; `null` = inherit test. */
   defaultPoints: number | null;
-  /** PRD-30 FR-02: delivery order of the topic's questions. */
-  questionOrder: "random" | "fixed";
+  /** PRD-30 FR-02/FR-18: the topic's override; `null` = «как в тесте». */
+  questionOrder: "random" | "fixed" | null;
 };
 
 export type AdaptiveSettingsPayload = {

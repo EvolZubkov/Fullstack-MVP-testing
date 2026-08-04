@@ -450,6 +450,19 @@ export const tests = pgTable("tests", {
   // PRD-15 block D (FR-31): test-wide default price of a question. Null = no
   // default — the effective chain falls through to the system default (1 point).
   defaultQuestionPoints: integer("default_question_points"),
+  /**
+   * PRD-30 FR-16: the test-wide delivery order, and the default every topic
+   * inherits unless it overrides it (`test_sections.question_order`).
+   *
+   * `random` (default, today's behaviour) shuffles inside each topic and keeps
+   * topics as blocks; `fixed` delivers topics and questions in the author's
+   * order; `shuffle_all` merges the questions of ALL topics into one shuffled
+   * stream and is offered only in the flat flow (FR-17) — a topic that stays
+   * `fixed` is then delivered as one unbroken block (FR-20).
+   */
+  questionOrder: text("question_order", { enum: ["fixed", "random", "shuffle_all"] })
+    .notNull()
+    .default("random"),
   // PRD-19 (FR-01): allow skipping a question and returning to unanswered ones within an
   // attempt. Default true (new tests); migration 031 backfills EXISTING tests to false to
   // preserve their strict-linear navigation.
@@ -582,15 +595,18 @@ export const testSections = pgTable("test_sections", {
   // draw (uniform / quotas), backward-compatible.
   formSetJson: jsonb("form_set_json").$type<FormSet>(),
   /**
-   * PRD-30 FR-02: how this topic's questions are ordered on delivery. `random`
-   * (default) is today's behaviour — the drawn set is shuffled; `fixed` orders
-   * it by `questions.order_index` (FR-03), or, in variants mode, by the
-   * variant's own list (FR-07). An enum rather than a boolean so the next
-   * position («by ascending difficulty») needs no second migration.
+   * PRD-30 FR-02/FR-18: how this topic's questions are ordered on delivery.
+   * `random` shuffles the drawn set (today's behaviour), `fixed` orders it by
+   * `questions.order_index` (FR-03) or, in variants mode, by the variant's own
+   * list (FR-07).
+   *
+   * NULL is the default and means «как в тесте» — the topic inherits
+   * `tests.question_order`. A value here is an OVERRIDE, and the editor shows a
+   * reset control next to it precisely because a value is present. An enum
+   * rather than a boolean so the next position («by ascending difficulty»)
+   * needs no second migration.
    */
-  questionOrder: text("question_order", { enum: ["random", "fixed"] })
-    .notNull()
-    .default("random"),
+  questionOrder: text("question_order", { enum: ["random", "fixed"] }),
   // PRD-15 block D (FR-31): per-section default price of a question. Null = no
   // default — the chain falls through to the test default, then the system 1.
   defaultPoints: integer("default_points"),
@@ -1014,6 +1030,17 @@ export const testVariantSchema = z.object({
      */
     timeLimitMinutes: z.number().int().positive().nullable().optional(),
   })),
+  /**
+   * PRD-30 FR-19: the delivery stream as question ids, when it does NOT follow
+   * from concatenating the sections — that is, under the test-wide «полное
+   * перемешивание», where the questions of all topics travel interleaved. The
+   * per-section lists keep the composition (grading, section screens read them),
+   * this keeps the order.
+   *
+   * Absent for every other test and for pre-PRD-30 attempts: the client then
+   * walks the sections in order, exactly as it always has.
+   */
+  deliveryOrder: z.array(z.string()).optional(),
 });
 
 export type TestVariant = z.infer<typeof testVariantSchema>;

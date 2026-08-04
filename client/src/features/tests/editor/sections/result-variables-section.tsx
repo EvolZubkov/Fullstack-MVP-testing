@@ -47,7 +47,7 @@ import { CSS } from "@dnd-kit/utilities";
 
 import { collectStringLiterals, findUnknownOutcomes } from "@shared/formula/outcome-literals";
 
-import type { LearnerVisibility } from "@shared/scales/interpretation";
+import type { LearnerVisibility, Valence } from "@shared/scales/interpretation";
 
 import type {
   ResultVariableControlsStatus,
@@ -82,7 +82,7 @@ import {
   type ScaleRef,
   type TopicRef,
 } from "../result-variables-builder";
-import { BandsEditor, VISIBILITY_OPTIONS } from "./scales-section";
+import { bandSpan, BandsEditor, DomainFields, VALENCE_OPTIONS, VISIBILITY_OPTIONS } from "./scales-section";
 import { OutcomesEditor } from "./outcomes-editor";
 
 const STATUS_OPTIONS: Array<{ value: ResultVariableControlsStatus; label: string }> = [
@@ -128,6 +128,9 @@ function emptyVariable(sortOrder: number): ResultVariableModel {
     controlsStatus: "none",
     bands: [],
     outcomes: [],
+    domainMin: null,
+    domainMax: null,
+    valence: "none",
     sortOrder,
   };
 }
@@ -574,13 +577,46 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
           no intervals — the formula returns a CODE, so the author enumerates them. */}
       <div className="tb-section-label">Толкование результата</div>
       {v.type === "number" ? (
-        <BandsEditor
-          bands={v.bands}
-          index={index}
-          readOnly={readOnly}
-          testIdPrefix="metrics"
-          onChange={(bands) => onChange({ bands })}
-        />
+        <>
+          <BandsEditor
+            bands={v.bands}
+            index={index}
+            readOnly={readOnly}
+            testIdPrefix="metrics"
+            onChange={(bands) => onChange({ bands })}
+          />
+          {/* PRD-29+: same domain+valence mechanics as the «Шкалы» tab — a numeric
+              indicator degrades exactly the same way without an explicit domain
+              (span of its bands), so it reuses the shared component rather than a
+              second copy. No «Рассчитать по вкладам»: an indicator's value comes
+              from a formula, not enumerated question contributions, so there is
+              nothing to suggest a range from. */}
+          <DomainFields
+            domainMin={v.domainMin}
+            domainMax={v.domainMax}
+            readOnly={readOnly}
+            testIdPrefix="metrics"
+            index={index}
+            seed={bandSpan(v) ?? { min: 0, max: 0 }}
+            switchLabel="Задать границы вручную"
+            switchDescription="Выключено — границы берутся из охвата диапазонов. Ноль — законная граница, а не признак «не задано»."
+            minLabel="Минимум"
+            maxLabel="Максимум"
+            onChange={onChange}
+          />
+          <div className="ou-formfield">
+            <Select<Valence>
+              size="m"
+              fullWidth
+              label="Благоприятное направление"
+              value={v.valence}
+              disabled={readOnly}
+              options={VALENCE_OPTIONS}
+              onChange={(value) => onChange({ valence: value })}
+              data-testid={`metrics-valence-${index}`}
+            />
+          </div>
+        </>
       ) : (
         <OutcomesEditor
           outcomes={v.outcomes}

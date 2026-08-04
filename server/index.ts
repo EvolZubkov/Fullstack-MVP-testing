@@ -116,7 +116,7 @@ app.use((req, res, next) => {
 
   // Wait for database to be available before starting
   await waitForDatabase();
-  // Demo data is seeded manually in dev via `npm run seed` (script/seed-db.ts) —
+  // Demo data is seeded manually in dev via `npm run seed` (scripts/db/seed-db.ts) —
   // never on startup, so a fresh production DB never gets default demo accounts.
 
   // PRD-13: ensure configured superadmins exist (best-effort, no stored roles).

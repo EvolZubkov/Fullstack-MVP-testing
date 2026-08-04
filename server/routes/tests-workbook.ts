@@ -34,6 +34,9 @@ import {
   RESULT_VAR_WIDTHS,
   MEASUREMENT_HEADERS,
   MEASUREMENT_WIDTHS,
+  SETTINGS_HEADERS,
+  SETTINGS_WIDTHS,
+  serializeSettingsRows,
   STRUCTURE_HEADERS,
   STRUCTURE_WIDTHS,
   QUOTA_HEADERS,
@@ -208,6 +211,9 @@ router.get(
         .map((o) => serializeScoringOverrideRow(o, aliasByQuestionId.get(o.questionId)!));
 
       const wb = new ExcelJS.Workbook();
+      // PRD-30 FR-22: настройки САМОГО теста идут первым листом: они
+      // описывают всю книгу, а остальные листы — её содержимое.
+      addSheet(wb, "Настройки", serializeSettingsRows(test), SETTINGS_HEADERS, SETTINGS_WIDTHS);
       addSheet(wb, "Вопросы", questionRows, ["Ключ строки", ...QUESTION_HEADERS, VARIANTS_COLUMN], [12, ...QUESTION_WIDTHS, 25]);
       addSheet(wb, "Структура", structureRows, STRUCTURE_HEADERS, STRUCTURE_WIDTHS);
       addSheet(wb, "Квоты", quotaRows, QUOTA_HEADERS, QUOTA_WIDTHS);

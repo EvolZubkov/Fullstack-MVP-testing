@@ -135,11 +135,11 @@ export interface SectionPayload {
   /** PRD-15 block D (FR-31): per-section default price; null = inherit test. */
   defaultPoints?: number | null;
   /**
-   * PRD-30 FR-02: delivery order of the topic's questions. `random` (the
-   * default) shuffles as before; `fixed` orders by `questions.order_index`,
+   * PRD-30 FR-02/FR-18: the topic's OVERRIDE of the test-wide order. `null`/absent
+   * = «как в тесте»; `random` shuffles, `fixed` orders by `questions.order_index`
    * or by the variant's own list in variants mode (FR-07).
    */
-  questionOrder?: "random" | "fixed";
+  questionOrder?: "random" | "fixed" | null;
 }
 
 export interface AdaptiveLevelPayload {
@@ -187,6 +187,8 @@ export interface TestPayload {
   copyProtection?: boolean;
   protectionWatermark?: boolean;
   protectionHideOnBlur?: boolean;
+  /** PRD-30 FR-16: test-wide delivery order; absent = `random` (today's behaviour). */
+  questionOrder?: "fixed" | "random" | "shuffle_all";
   startPageContent?: string | null;
   mode?: "standard" | "adaptive";
   showDifficultyLevel?: boolean;
@@ -279,6 +281,8 @@ export class TestSettingsService {
         showSectionResults: payload.test.showSectionResults ?? true,
         // PRD-34 (FR-03): новый тест — защита ВКЛ по умолчанию.
         copyProtection: payload.test.copyProtection ?? true,
+        // PRD-30 FR-16: новый тест — «перемешивание», сегодняшнее поведение.
+        questionOrder: payload.test.questionOrder ?? "random",
         protectionWatermark: payload.test.protectionWatermark ?? false,
         protectionHideOnBlur: payload.test.protectionHideOnBlur ?? false,
         timeLimitMinutes: payload.test.timeLimitMinutes ?? null,
@@ -709,7 +713,8 @@ export class TestSettingsService {
         drawBlueprintJson: s.drawBlueprintJson ?? null,
         formSetJson: s.formSetJson ?? null,
         defaultPoints: s.defaultPoints ?? null,
-        questionOrder: s.questionOrder ?? "random",
+        // FR-18: `null` = тема наследует правило теста.
+        questionOrder: s.questionOrder ?? null,
         sortOrder: i,
       });
     }

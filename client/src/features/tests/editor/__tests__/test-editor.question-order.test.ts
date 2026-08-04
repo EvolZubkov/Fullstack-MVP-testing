@@ -71,14 +71,14 @@ describe("mapApiSectionsToEditor — reading the delivery order (FR-02)", () => 
     expect(readOrder("random")).toBe("random");
   });
 
-  it("a legacy section without the column reads as random — today's behaviour", () => {
-    expect(readOrder(undefined)).toBe("random");
+  it("a legacy section without the column inherits the test (FR-18)", () => {
+    expect(readOrder(undefined)).toBeNull();
   });
 
-  it("a malformed value degrades to random rather than freezing the order", () => {
-    expect(readOrder("whatever")).toBe("random");
-    expect(readOrder(null)).toBe("random");
-    expect(readOrder(42)).toBe("random");
+  it("a malformed value degrades to «inherit» rather than freezing the order", () => {
+    expect(readOrder("whatever")).toBeNull();
+    expect(readOrder(null)).toBeNull();
+    expect(readOrder(42)).toBeNull();
   });
 });
 
@@ -89,8 +89,14 @@ describe("mapEditorSectionsToPayload — writing the delivery order (FR-02)", ()
     expect(payload[0].questionOrder).toBe("fixed");
   });
 
-  it("sends an explicit random for a section that never had the setting", () => {
+  it("sends null for a topic that follows the test — «как в тесте» (FR-18)", () => {
     const payload = mapEditorSectionsToPayload(makeModel([makeSection()]));
+
+    expect(payload[0].questionOrder).toBeNull();
+  });
+
+  it("sends an explicit random when the topic OVERRIDES an ordering test", () => {
+    const payload = mapEditorSectionsToPayload(makeModel([makeSection({ questionOrder: "random" })]));
 
     expect(payload[0].questionOrder).toBe("random");
   });

@@ -9,6 +9,11 @@ import type { CorrectData, Answer } from "@shared/scoring/engine";
 import { drawSection } from "@shared/draw/blueprint";
 import { selectForm } from "@shared/draw/forms";
 import { orderQuestions } from "@shared/draw/order-questions";
+import {
+  assembleDelivery,
+  effectiveSectionOrder,
+  type DeliverySection,
+} from "@shared/draw/assemble-delivery";
 import { loadScoringConfig } from "../services/scoring-config";
 import { loadTestScoringContext } from "../services/effective-scoring";
 import { computeAttemptResult } from "../services/result-compute";
@@ -45,6 +50,7 @@ import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 import { feedbackAssets, topicFeedbackTexts } from "@shared/template/result-context";
 import type {
   Test,
+  Question,
   TestVariant,
   AttemptResult,
   TopicResult,
@@ -398,9 +404,13 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
 
     const variant: TestVariant = { sections: [] };
     const allQuestionIds: string[] = [];
+    // PRD-30 раздел 14: selection happens per topic (below), the delivery ORDER
+    // of the whole test is decided once, by `assembleDelivery`, after the loop.
+    const drawnSections: DeliverySection<Question>[] = [];
 
     for (const section of sections) {
       const questions = await src.getQuestionsByTopic(section.topicId);
+      const byId = new Map(questions.map((q) => [q.id, q]));
       let qIds: string[];
       let formId: string | undefined;
 
@@ -410,20 +420,27 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
         // completed attempts. draw_count/draw_all/quotas are not applied here.
         const picked = selectForm(section.formSetJson.forms, {
           // PRD-30 FR-07: in `fixed` the variant's own list is the order.
-          order: section.questionOrder,
+          order: effectiveSectionOrder(test.questionOrder, section.questionOrder),
           previousFormIds: previousFormIdsForTopic(section.topicId),
           availableIds: new Set(questions.map((q) => q.id)),
           shuffle: shuffleInPlace,
         });
         qIds = picked.questionIds;
         formId = picked.formId;
+        // The variant's list IS the order — `assembleDelivery` must not re-sort it.
+        drawnSections.push({
+          questions: qIds.map((id) => byId.get(id)!).filter(Boolean),
+          questionOrder: section.questionOrder,
+          preordered: true,
+        });
       } else {
         // PRD-11: stratified draw by tag quotas when a blueprint is set; otherwise
         // a uniform draw (FR-02). Shared with the SCORM runtime via shared/draw.
         const { selected } = drawSection(questions, section.drawCount, section.drawBlueprintJson, shuffleInPlace);
-        // PRD-30 (FR-03/04/06): selection stays as it was — quotas and the random
-        // pick are untouched — and the ORDER is applied on top of the result.
-        qIds = orderQuestions(selected, section.questionOrder ?? "random", shuffleInPlace).map((q) => q.id);
+        // PRD-30 (FR-06): selection stays as it was — quotas and the random pick
+        // are untouched; the ORDER is decided for the whole test below.
+        qIds = selected.map((q) => q.id);
+        drawnSections.push({ questions: selected, questionOrder: section.questionOrder });
       }
 
       variant.sections.push({
@@ -440,6 +457,25 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
 
       allQuestionIds.push(...qIds);
     }
+
+    // PRD-30 раздел 14: ONE place decides the order. Topics stay blocks unless
+    // the test asks for «полное перемешивание» in the flat flow, and then a topic
+    // left on `fixed` travels as an unbroken block (FR-19/FR-20). The per-section
+    // lists keep the composition; `deliveryOrder` carries the stream when it no
+    // longer follows from concatenating them.
+    const assembled = assembleDelivery(
+      drawnSections,
+      test.questionOrder,
+      (test.flowPolicyJson as { mode?: string } | null)?.mode,
+      shuffleInPlace,
+    );
+    assembled.sections.forEach((questions, i) => {
+      variant.sections[i].questionIds = questions.map((q) => q.id);
+    });
+    // Written whenever the test MIXES across topics — a property of the settings,
+    // not of the draw: a shuffle can land on the section order by chance, and a
+    // field that appeared only then would make the attempt shape random.
+    if (assembled.mixed) variant.deliveryOrder = assembled.flat.map((q) => q.id);
 
     const allQuestions = await src.getQuestionsByIds(allQuestionIds);
 
@@ -545,8 +581,10 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
     );
     // PRD-30 §6.3: the ordering setting lives on the section; adaptive delivery
     // joins it by topicId exactly like the per-topic time budget above.
+    // The topic's own value is an override, so the effective mode is resolved
+    // against the test's default here as everywhere else (FR-18).
     const sectionOrderMap = new Map(
-      adaptiveSections.map((s) => [s.topicId, s.questionOrder ?? "random"]),
+      adaptiveSections.map((s) => [s.topicId, effectiveSectionOrder(test.questionOrder, s.questionOrder)]),
     );
 
     if (adaptiveSettings.length === 0) {

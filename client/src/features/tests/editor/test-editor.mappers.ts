@@ -81,6 +81,8 @@ export type ApiTestResponse = {
   feedback?: string | null;
   feedbackJson?: unknown;
   flowPolicyJson?: unknown;
+  /** PRD-30 FR-16: test-wide delivery order (`fixed`/`random`/`shuffle_all`). */
+  questionOrder?: string | null;
   telemetryEnabled?: boolean | null;
   timeLimitMinutes?: number | null;
   maxAttempts?: number | null;
@@ -395,9 +397,10 @@ function buildSectionsFromApi(src: ApiTestResponse): {
       formSet: readFormSetFromApi(raw.formSetJson),
       // PRD-15 block D (FR-31): per-section default price (null = inherit test).
       defaultPoints: typeof raw.defaultPoints === "number" ? raw.defaultPoints : null,
-      // PRD-30 FR-02: anything but an explicit "fixed" is today's random order —
-      // a legacy section without the column must keep behaving as before.
-      questionOrder: raw.questionOrder === "fixed" ? "fixed" : "random",
+      // PRD-30 FR-18: only an explicit value is an override; anything else —
+      // including a legacy section without the column — inherits the test.
+      questionOrder:
+        raw.questionOrder === "fixed" || raw.questionOrder === "random" ? raw.questionOrder : null,
     });
   }
 
@@ -597,6 +600,8 @@ function buildResultVariablesFromApi(src: ApiTestResponse): ResultVariableModel[
       // the author edits, and dropping the other form here would lose their work.
       bands: buildScaleBands(r.configJson),
       outcomes: buildOutcomes(r.configJson),
+      ...buildScaleDomain(r.configJson),
+      valence: buildScaleValence(r.configJson),
       sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : index,
     });
   });
@@ -912,6 +917,8 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
     version: 0,
     mode: "standard",
     flowMode: "linear_flat",
+    // PRD-30 FR-16: «перемешивание» — сегодняшнее поведение всех тестов.
+    questionOrder: "random",
     flowSettings: {},
     folderId: args.folderId,
     basic: {
@@ -1003,6 +1010,12 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
     version: typeof src.version === "number" ? src.version : 1,
     mode,
     flowMode,
+    // PRD-30 FR-16: only the three known values; anything else (including a test
+    // saved before the column existed) is the default «перемешивание».
+    questionOrder:
+      src.questionOrder === "fixed" || src.questionOrder === "shuffle_all"
+        ? src.questionOrder
+        : "random",
     flowSettings,
     folderId: typeof src.folderId === "string" ? src.folderId : null,
     basic: {
@@ -1091,6 +1104,12 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     status: model.basic.status,
     mode: model.mode,
     flowMode: model.flowMode,
+    // PRD-30 FR-17: «полное перемешивание» живёт только в сплошном режиме — тест,
+    // переведённый в режим с разбивкой по темам, сохраняется как «перемешивание».
+    questionOrder:
+      model.questionOrder && !(model.questionOrder === "shuffle_all" && model.flowMode !== "linear_flat")
+        ? model.questionOrder
+        : "random",
     flowPolicyJson: buildFlowPolicyForPayload(model),
     overallPassRuleJson: model.passRules.overall,
     passDecisionPolicy: model.passRules.decisionPolicy,
@@ -1218,8 +1237,8 @@ export function mapEditorSectionsToPayload(model: TestEditorModel): TestSectionP
       formSetJson: section.formSet ?? null,
       // PRD-15 block D (FR-31): per-section default price.
       defaultPoints: section.defaultPoints ?? null,
-      // PRD-30 FR-02: delivery order of the topic's questions.
-      questionOrder: section.questionOrder ?? "random",
+      // PRD-30 FR-18: the topic's override; `null` = «как в тесте».
+      questionOrder: section.questionOrder ?? null,
     };
   });
 }

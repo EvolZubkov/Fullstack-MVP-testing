@@ -252,3 +252,121 @@ describe("start adaptive — ordering inside a level (PRD-30 §6.3)", () => {
     expect(levelIds(1).slice().sort()).toEqual(["hard1", "hard2"]);
   });
 });
+
+/**
+ * PRD-30 раздел 14: the order is now a property of the TEST, and the topic's
+ * value is an override. The web builder resolves the pair and, when the test
+ * mixes across topics, persists the stream separately from the composition —
+ * `variantJson.deliveryOrder`, because no concatenation of the sections can
+ * express an interleaved delivery.
+ */
+describe("start attempt — правило теста и наследование (FR-16/FR-18)", () => {
+  /** A bank question of an arbitrary topic (the shared `q` pins topic t1). */
+  const qt = (topicId: string, id: string, orderIndex: number | null) => ({
+    ...q(id, orderIndex),
+    topicId,
+  });
+
+  const twoTopics = (t1Order?: "random" | "fixed" | null, t2Order?: "random" | "fixed" | null) => {
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }, { id: "t2", name: "CSS" }]);
+    storageMock.getTestSections.mockResolvedValue([
+      { topicId: "t1", drawCount: 3, questionOrder: t1Order ?? null },
+      { topicId: "t2", drawCount: 2, questionOrder: t2Order ?? null },
+    ]);
+    storageMock.getQuestionsByTopic.mockImplementation(async (topicId: string) =>
+      topicId === "t1"
+        ? [qt("t1", "a1", 10), qt("t1", "a2", 20), qt("t1", "a3", 30)]
+        : [qt("t2", "b1", 10), qt("t2", "b2", 20)],
+    );
+  };
+
+  const persistedVariant = () => storageMock.createAttempt.mock.calls[0][0].variantJson;
+
+  it("тема без своего значения идёт по правилу теста", async () => {
+    storageMock.getTest.mockResolvedValue({ ...dbTest, questionOrder: "fixed" });
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 3, questionOrder: null }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([q("first", 10), q("second", 20), q("noIndex", null)]);
+
+    await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+
+    expect(deliveredIds()).toEqual(["first", "second", "noIndex"]);
+  });
+
+  it("тема переопределяет правило теста", async () => {
+    storageMock.getTest.mockResolvedValue({ ...dbTest, questionOrder: "fixed" });
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 3, questionOrder: "random" }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([q("first", 10), q("second", 20), q("noIndex", null)]);
+
+    await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+
+    // Порядок случайный — проверяется состав и то, что маршрут не упал.
+    expect(deliveredIds().slice().sort()).toEqual(["first", "noIndex", "second"]);
+  });
+
+  it("тест без значения (легаси-строка) ведёт себя как раньше", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    twoTopics();
+
+    await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+
+    expect(persistedVariant().deliveryOrder).toBeUndefined();
+  });
+});
+
+describe("start attempt — полное перемешивание (FR-19/FR-20)", () => {
+  const qt = (topicId: string, id: string, orderIndex: number | null) => ({
+    ...q(id, orderIndex),
+    topicId,
+  });
+
+  const setup = (flowMode: string | null, t1Order: "random" | "fixed" | null) => {
+    storageMock.getTest.mockResolvedValue({
+      ...dbTest,
+      questionOrder: "shuffle_all",
+      ...(flowMode ? { flowPolicyJson: { mode: flowMode } } : {}),
+    });
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }, { id: "t2", name: "CSS" }]);
+    storageMock.getTestSections.mockResolvedValue([
+      { topicId: "t1", drawCount: 3, questionOrder: t1Order },
+      { topicId: "t2", drawCount: 3, questionOrder: null },
+    ]);
+    storageMock.getQuestionsByTopic.mockImplementation(async (topicId: string) =>
+      topicId === "t1"
+        ? [qt("t1", "a1", 10), qt("t1", "a2", 20), qt("t1", "a3", 30)]
+        : [qt("t2", "b1", 10), qt("t2", "b2", 20), qt("t2", "b3", 30)],
+    );
+  };
+
+  const persistedVariant = () => storageMock.createAttempt.mock.calls[0][0].variantJson;
+
+  it("поток несёт все вопросы теста и хранится отдельно от состава", async () => {
+    setup(null, null);
+
+    await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+
+    const variant = persistedVariant();
+    expect(variant.deliveryOrder.slice().sort()).toEqual(["a1", "a2", "a3", "b1", "b2", "b3"]);
+    expect(variant.sections.flatMap((s: any) => s.questionIds).slice().sort()).toEqual([
+      "a1", "a2", "a3", "b1", "b2", "b3",
+    ]);
+  });
+
+  it("тема с фиксированным порядком идёт неразрывным блоком по индексу", async () => {
+    setup(null, "fixed");
+
+    await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+
+    // Инвариант не зависит от случайности: вопросы темы стоят подряд и по индексу.
+    const order: string[] = persistedVariant().deliveryOrder;
+    const positions = ["a1", "a2", "a3"].map((id) => order.indexOf(id));
+    expect(positions).toEqual([positions[0], positions[0] + 1, positions[0] + 2]);
+  });
+
+  it("в режиме с разбивкой по темам поток не собирается — темы остаются блоками", async () => {
+    setup("linear_by_topics", null);
+
+    await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+
+    expect(persistedVariant().deliveryOrder).toBeUndefined();
+  });
+});

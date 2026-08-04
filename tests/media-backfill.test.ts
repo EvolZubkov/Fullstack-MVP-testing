@@ -18,7 +18,7 @@ const { storageMock } = vi.hoisted(() => ({
 }));
 vi.mock("../server/storage", () => ({ storage: storageMock }));
 
-import { backfillMediaRegistry } from "../script/backfill-media-registry";
+import { backfillMediaRegistry } from "../scripts/db/backfill-media-registry";
 
 let root: string;
 

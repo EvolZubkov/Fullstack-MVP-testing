@@ -76,7 +76,7 @@ describe.each(THEMES)("мобильный слой: %s", (rel) => {
       expect(declarations).toMatch(/\.tb-scene__map\s+\.ou-quiz__dots[\s\S]{0,80}display:\s*none/);
       // Счётчики живут ВНУТРИ .tb-scene__map — скрывать сам блок нельзя.
       expect(declarations).not.toMatch(/\.tb-scene__map\s*\{[^}]*display:\s*none/);
-      expect(declarations).toContain(".tb-scene__mapcount--answered");
+      expect(declarations).toContain(".tb-scene__mapcounts");
     });
 
     it("шапка перестраивается в строки: оба внутренних контейнера растворяются", () => {

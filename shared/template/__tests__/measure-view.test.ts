@@ -169,6 +169,24 @@ describe("buildMeasureView", () => {
     expect(v.zones).toEqual([]);
   });
 
+  it("строковое значение без совпадающего исхода показывает сырое значение нейтральным тоном", () => {
+    // Пустой словарь исходов (или код, которого в нём нет) — не повод молчать:
+    // тон уже нейтральный (base), но заголовок карточки должен нести хоть что-то,
+    // а не оставаться пустым — иначе неотличимо от сломанного рендера.
+    const v = buildMeasureView({
+      key: "burnout_level",
+      name: "Состояние",
+      value: "growing",
+      visibility: "level_and_value",
+      interpretation: { domainMin: null, domainMax: null, valence: "none", bands: [], outcomes: [] },
+      requestedKind: "band_ruler",
+      ramp: LEVEL_SCHEMES.traffic,
+    });
+    expect(v.levelLabel).toBe("growing");
+    expect(v.tone).toBe("neutral");
+    expect(v.bannerVariant).toBe("info");
+  });
+
   it("считает смещение кольца для вида ring", () => {
     const v = ee({ requestedKind: "ring" });
     expect(v.renderKind).toBe("ring");

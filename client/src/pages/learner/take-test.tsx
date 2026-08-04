@@ -9,6 +9,7 @@ import { TemplateQuestionScreen } from "./template-question-screen";
 import { fmtIsoDateHuman, fmtIsoInstantHuman } from "./cooldown-format";
 import { deliversShuffledOrder, hasAnswer, rankingDeliveryOrder } from "./answer-gate";
 import { isSingleIndexChoice, isMeasurementOnly } from "@shared/questions/question-type";
+import { applyDeliveryOrder } from "@shared/draw/assemble-delivery";
 import { buildStartState } from "@shared/template/start-state";
 import { feedbackBanner, feedbackDesc } from "@shared/template/feedback-banner";
 import { buildQuestionProgress } from "@shared/template/question-progress-context";
@@ -130,6 +131,21 @@ interface FlatQuestion {
   /** Per-topic time budget in minutes, or null when the topic has no limit. */
   sectionTimeLimitMinutes: number | null;
   index: number;
+}
+
+/**
+ * PRD-30 FR-19: put the built list into the attempt's delivery stream. The
+ * variant stores composition per topic and the stream separately, because under
+ * the test-wide «полное перемешивание» the questions of different topics travel
+ * interleaved and no concatenation of the sections can express that. Absent
+ * stream = section order, which is every other test. `index` is renumbered
+ * because navigation keys off it.
+ */
+function orderedForDelivery(questions: FlatQuestion[], deliveryOrder?: string[] | null): FlatQuestion[] {
+  return applyDeliveryOrder(questions, deliveryOrder, (fq) => fq.question.id).map((fq, i) => ({
+    ...fq,
+    index: i,
+  }));
 }
 
 interface AdaptiveState {
@@ -1051,6 +1067,8 @@ export default function TakeTestPage() {
 
       // Восстанавливаем вопросы
       const variant = data.attempt.variantJson as any;
+      // PRD-30 FR-19: обычно поток — это разделы подряд; при «полном
+      // перемешивании» вариант несёт собственный порядок выдачи.
       const questions: FlatQuestion[] = [];
       const mappings: Record<string, any> = {};
       let idx = 0;
@@ -1098,7 +1116,9 @@ export default function TakeTestPage() {
         }
       }
 
-      setFlatQuestions(questions);
+      // PRD-30 FR-19: тот же поток, что на старте попытки, восстанавливается из
+      // сохранённого варианта — иначе возобновление переставило бы вопросы.
+      setFlatQuestions(orderedForDelivery(questions, variant.deliveryOrder));
       setShuffleMappings(mappings);
 
       // PRD-12 FR-6: restore the STRUCTURE on resume too. Without it the resumed
@@ -1228,7 +1248,11 @@ export default function TakeTestPage() {
       }
     }
 
-    setFlatQuestions(questions);
+    // PRD-30 FR-19: the sections carry the composition, the variant carries the
+    // stream. They differ only under the test-wide «полное перемешивание»; for
+    // every other test (and every pre-PRD-30 attempt) this is the section order.
+    const delivered = orderedForDelivery(questions, variant.deliveryOrder);
+    setFlatQuestions(delivered);
     setShuffleMappings(mappings);
 
     // PRD-12 FR-6: the author's structure arrives with the attempt. Build the run
@@ -1247,9 +1271,9 @@ export default function TakeTestPage() {
       testMode: "standard",
       sections: variantSections,
       contentPages: structure.contentPages,
-      flatQuestions: questions,
+      flatQuestions: delivered,
     });
-    const leadPages = contentPagesBetween(built.sequence, null, questions.length ? 0 : null);
+    const leadPages = contentPagesBetween(built.sequence, null, delivered.length ? 0 : null);
     setPageQueue(leadPages);
 
     // Сохраняем shuffle mappings в варианте для восстановления

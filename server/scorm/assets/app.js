@@ -79,6 +79,53 @@ function orderQuestions(questions, mode, shuffleFn) {
   return ordered.concat(shuffleFn(unindexed.slice()));
 }
 
+// PRD-30 раздел 14 — plain-JS port of shared/draw/assemble-delivery.ts. The test
+// owns the delivery order and a topic may override it; `shuffle_all` merges the
+// questions of all topics into one stream (flat flow only), where a topic that
+// stays `fixed` travels as ONE unbroken block. Kept in golden parity with the TS
+// source by tests/assemble-delivery-port.test.ts.
+function effectiveSectionOrder(testOrder, sectionOrder) {
+  if (sectionOrder === 'fixed' || sectionOrder === 'random') return sectionOrder;
+  return testOrder === 'fixed' ? 'fixed' : 'random';
+}
+
+// The variant's own list IS the order (FR-07), so a preordered topic is taken as it is.
+function orderDeliverySection(section, testOrder, shuffleFn) {
+  if (section.preordered) return section.questions.slice();
+  return orderQuestions(section.questions, effectiveSectionOrder(testOrder, section.questionOrder), shuffleFn);
+}
+
+function assembleDelivery(sections, testOrder, flowMode, shuffleFn) {
+  var mixAcrossTopics =
+    testOrder === 'shuffle_all' && flowMode !== 'linear_by_topics' && flowMode !== 'router_by_topics';
+  var flat = [];
+  if (!mixAcrossTopics) {
+    var ordered = sections.map(function (section) {
+      return orderDeliverySection(section, testOrder, shuffleFn);
+    });
+    ordered.forEach(function (list) { flat = flat.concat(list); });
+    return { sections: ordered, flat: flat, mixed: false };
+  }
+  // Units of the shuffle: a single question of every topic that delivers at
+  // random, ONE block per topic that delivers fixed (FR-20). Shuffled once.
+  var units = [];
+  sections.forEach(function (section) {
+    if (effectiveSectionOrder(testOrder, section.questionOrder) === 'fixed') {
+      units.push(orderDeliverySection(section, testOrder, shuffleFn));
+    } else {
+      section.questions.forEach(function (question) { units.push([question]); });
+    }
+  });
+  shuffleFn(units).forEach(function (unit) { flat = flat.concat(unit); });
+  // Per-topic composition read back OUT of the stream, so the two views agree.
+  var projected = sections.map(function (section) {
+    var own = {};
+    section.questions.forEach(function (question) { own[question.id] = true; });
+    return flat.filter(function (question) { return own[question.id]; });
+  });
+  return { sections: projected, flat: flat, mixed: true };
+}
+
 function selectForm(forms, previousFormIds, availableIds, shuffleFn, order) {
   var used = {};
   (previousFormIds || []).forEach(function (id) { used[id] = true; });
@@ -120,16 +167,28 @@ function generateVariant() {
   // PRD-18 debug: per-topic pinned variants (null in production — inert).
   var tbForcedForms = tbDebugForcedForms();
 
+  // PRD-30 раздел 14: selection happens per topic here, the delivery ORDER of the
+  // whole test is decided ONCE by assembleDelivery below — never by a second pass
+  // over the flat list, which is what used to throw the order away in the flat
+  // flow and made the package play a different order than the web (FR-13).
+  var drawnSections = [];
+  var testOrder = TEST_DATA.questionOrder || 'random';
+  var flowMode =
+    TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode ? TEST_DATA.flowPolicy.mode : 'linear_flat';
+
   TEST_DATA.sections.forEach(function(section) {
     var available = section.questions.filter(function(q) { return !usedIds[q.id]; });
     var questions;
+    // The variant's list is already the delivery order — assembleDelivery must
+    // not re-sort it by index (FR-07).
+    var preordered = false;
     // PRD-24: stable id of the variant delivered for this topic. Pinned into the
     // attempt state so grading can gate the topic by ITS variant's threshold
     // (`by_variant` rule). Stays null for non-variant topics.
     var deliveredFormId = null;
     if (section.formSet && section.formSet.forms && section.formSet.forms.length) {
       // PRD-17 variants mode (BR-12): deliver ONE curated variant whole, in random
-      // order. No cross-attempt store in SCORM (NFR-17) → previousFormIds empty, so
+      // order. No cross-attempt store in SCORM (NFR-17) -> previousFormIds empty, so
       // the pick is effectively random. Map the chosen variant's ids back to the
       // live bank objects; a removed question is dropped (soft shortfall, FR-17).
       var availIds = {};
@@ -142,9 +201,10 @@ function generateVariant() {
         ? section.formSet.forms.filter(function (f) { return f.id === forcedId; })[0]
         : null;
       var picked;
-      // PRD-30 FR-07: in `fixed` the variant's own list is the delivery order —
-      // for the pinned debug form too, so debugging shows what ships.
-      var questionOrder = section.questionOrder || 'random';
+      // PRD-30 FR-07/FR-18: in `fixed` the variant's own list is the delivery order
+      // — for the pinned debug form too, so debugging shows what ships. The topic's
+      // own value is an override of the test's, resolved by one rule.
+      var questionOrder = effectiveSectionOrder(testOrder, section.questionOrder);
       if (forcedForm) {
         var present = forcedForm.questionIds.filter(function (id) { return availIds[id]; });
         picked = {
@@ -156,11 +216,12 @@ function generateVariant() {
       }
       questions = picked.questionIds.map(function (id) { return byId[id]; }).filter(Boolean);
       deliveredFormId = picked.formId;
+      preordered = true;
     } else {
       var drawn = drawSection(available, section.drawCount, section.drawBlueprint, shuffle);
-      // PRD-30: selection is untouched (quotas + random pick); the ORDER is
-      // applied on top of what the draw returned (FR-03/04/06).
-      questions = orderQuestions(drawn.selected, section.questionOrder || 'random', shuffle);
+      // PRD-30 FR-06: selection is untouched (quotas + random pick); the ORDER is
+      // decided for the whole test below.
+      questions = drawn.selected;
       if (drawn.warnings.length && typeof console !== 'undefined' && console.warn) {
         drawn.warnings.forEach(function (w) {
           console.warn('PRD-11 quota shortfall: tag "' + w.tag + '" requested ' + w.requested + ', available ' + w.available);
@@ -168,6 +229,11 @@ function generateVariant() {
       }
     }
     questions.forEach(function(q) { usedIds[q.id] = true; });
+    drawnSections.push({
+      questions: questions,
+      questionOrder: section.questionOrder,
+      preordered: preordered
+    });
     state.variant.sections.push({
       topicId: section.topicId,
       topicName: section.topicName,
@@ -176,43 +242,42 @@ function generateVariant() {
       // and the debug inspector all read the SAME variant this run actually got.
       formId: deliveredFormId
     });
-    questions.forEach(function(q) {
-      // PRD-16 FR-41/FR-42: the delivery order of the options comes from the
-      // question's own switch. No mapping = the authored order (the renderers
-      // fall back to identity), which is what «Случайный порядок вариантов» off
-      // must produce.
-      var mapping = shuffleMappingFor(q);
-      if (mapping) {
-        state.shuffleMappings[q.id] = mapping;
-        // Initialize ranking with the (non-correct) delivered order
-        if (q.type === 'ranking' && !state.answers[q.id]) {
-          state.answers[q.id] = mapping.slice();
-        }
-      }
+  });
 
-      state.flatQuestions.push({
-        question: q,
-        topicId: section.topicId,
-        topicName: section.topicName
-      });
+  // ONE place decides the order: topics stay blocks unless the test asks for
+  // «полное перемешивание» in the flat flow, and a topic left on `fixed` travels
+  // as an unbroken block (FR-19/FR-20).
+  var assembled = assembleDelivery(drawnSections, testOrder, flowMode, shuffle);
+  assembled.sections.forEach(function (questions, i) {
+    state.variant.sections[i].questionIds = questions.map(function (q) { return q.id; });
+  });
+  var sectionOf = {};
+  TEST_DATA.sections.forEach(function (section, i) {
+    (assembled.sections[i] || []).forEach(function (q) { sectionOf[q.id] = section; });
+  });
+  assembled.flat.forEach(function (q) {
+    var section = sectionOf[q.id] || {};
+    // PRD-16 FR-41/FR-42: the delivery order of the options comes from the
+    // question's own switch. No mapping = the authored order (the renderers
+    // fall back to identity), which is what «Случайный порядок вариантов» off
+    // must produce.
+    var mapping = shuffleMappingFor(q);
+    if (mapping) {
+      state.shuffleMappings[q.id] = mapping;
+      // Initialize ranking with the (non-correct) delivered order
+      if (q.type === 'ranking' && !state.answers[q.id]) {
+        state.answers[q.id] = mapping.slice();
+      }
+    }
+    state.flatQuestions.push({
+      question: q,
+      topicId: section.topicId,
+      topicName: section.topicName
     });
   });
-  // PRD-4 v1.1: global shuffle only applies to legacy_flat mode. For sectional
-  // modes (linear_by_topics / router_by_topics) the section boundary must be
-  // preserved — questions stay grouped by topic in the order sections were
-  // listed by the author. Questions within a section are still shuffled at
-  // selection time (see `shuffle(available)` above), but no cross-section
-  // mixing.
-  var flowMode =
-    TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode
-      ? TEST_DATA.flowPolicy.mode
-      : 'linear_flat';
-  if (flowMode === 'linear_flat') {
-    state.flatQuestions = shuffle(state.flatQuestions);
-  }
   // PRD-19 (Block B): seed per-question status for the freshly built variant.
   // Every delivered question starts 'unanswered'; confirmAnswer / skipQuestion
-  // transition it. Done here (post-shuffle) so the keys match flatQuestions.
+  // transition it. Done here (post-draw) so the keys match flatQuestions.
   state.questionStatuses = {};
   state.sectionCommitted = {};
   state.flatQuestions.forEach(function (fq) {

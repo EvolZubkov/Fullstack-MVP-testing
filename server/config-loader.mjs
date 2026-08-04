@@ -16,7 +16,7 @@
  * Authored as ESM (`.mjs`) because `@vvlad1973/utils` is an ES module. It is
  * bundled into the server for the app, imported directly by ESM tools, and
  * dynamically imported (`await import`) by the CommonJS deploy runner
- * (script/run-sql.cjs runs on Node 20, which cannot `require` ESM). It lives next
+ * (scripts/db/run-sql.cjs runs on Node 20, which cannot `require` ESM). It lives next
  * to server/config.ts (its typed wrapper); `config/` holds only config DATA — in
  * a container that directory is a read-only VOLUME, not part of the image, so the
  * files this loader reads are the host's (see docker/README.md).
@@ -34,7 +34,7 @@ import path from "node:path";
  * The environment name used to select a config file.
  *
  * CAUTION — in the BUILT server this is always `"production"`, whatever the
- * container's NODE_ENV says: script/build.ts bundles with
+ * container's NODE_ENV says: scripts/build/build.ts bundles with
  * `define: { "process.env.NODE_ENV": '"production"' }` so the compiled app always
  * behaves like production (static serving, strict crypto), and esbuild folds the
  * read into a literal (bracket access is folded too — there is no way to read the

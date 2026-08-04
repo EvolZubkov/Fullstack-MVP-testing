@@ -48,7 +48,7 @@ services:
       TZ: ${TZ:-Europe/Moscow}
       NODE_ENV: ${TB_NODE_ENV}
       # Which config file the app loads. Set explicitly because the built server
-      # has NODE_ENV folded to "production" (script/build.ts) — NODE_ENV alone
+      # has NODE_ENV folded to "production" (scripts/build/build.ts) — NODE_ENV alone
       # cannot select a non-production file. Read at runtime, so it always wins.
       CONFIG_FILE: ${TB_CONFIG_FILE}
 

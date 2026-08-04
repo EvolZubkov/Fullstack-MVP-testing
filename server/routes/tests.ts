@@ -59,9 +59,10 @@ const sectionBodySchema = z
     formSetJson: formSetSchema.nullish(),
     // PRD-15 block D (FR-31): per-section default price; null = inherit test.
     defaultPoints: z.number().int().min(0).nullable().optional(),
-    // PRD-30 FR-02: delivery order. MUST be listed here for the same reason as
-    // formSetJson above — an unlisted key is stripped and silently lost.
-    questionOrder: z.enum(["random", "fixed"]).optional(),
+    // PRD-30 FR-02/FR-18: the topic's OVERRIDE of the test-wide order; null =
+    // «как в тесте». MUST be listed here for the same reason as formSetJson
+    // above — an unlisted key is stripped and silently lost.
+    questionOrder: z.enum(["random", "fixed"]).nullish(),
   })
   .superRefine((s, ctx) => {
     // PRD-11 FR-05: the quotas are minimums inside the topic's sample, so their
@@ -93,6 +94,8 @@ const testBodyBaseSchema = z.object({
   showSectionResults: z.boolean().optional(),
   // PRD-34 (FR-01): настройки защиты от копирования.
   copyProtection: z.boolean().optional(),
+  // PRD-30 FR-16: the test-wide delivery order (the topics' default).
+  questionOrder: z.enum(["fixed", "random", "shuffle_all"]).optional(),
   protectionWatermark: z.boolean().optional(),
   protectionHideOnBlur: z.boolean().optional(),
   timeLimitMinutes: z.number().int().positive().nullable().optional(),
@@ -601,6 +604,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       copyProtection,
       protectionWatermark,
       protectionHideOnBlur,
+      questionOrder,
       timeLimitMinutes,
       maxAttempts,
       startPageContent,
@@ -657,6 +661,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         copyProtection,
         protectionWatermark,
         protectionHideOnBlur,
+        questionOrder,
         timeLimitMinutes,
         maxAttempts,
         startPageContent,
@@ -957,6 +962,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       copyProtection,
       protectionWatermark,
       protectionHideOnBlur,
+      questionOrder,
       timeLimitMinutes,
       maxAttempts,
       startPageContent,
@@ -1016,6 +1022,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
         copyProtection,
         protectionWatermark,
         protectionHideOnBlur,
+        questionOrder,
         timeLimitMinutes,
         maxAttempts,
         startPageContent,

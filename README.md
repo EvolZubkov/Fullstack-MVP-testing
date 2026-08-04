@@ -470,10 +470,14 @@ test-builder/
 |   +-- template/                   # Единый рендерер (PRD-12): dsl, render-screen,
 |                                    #   renderers, context, *-context builders, dnd/
 |
-|-- script/                          # Build + админ-утилиты (build.ts, create-admin.ts,
-|                                    #   migrate-emails.ts, reencrypt-emails.ts, test-crypto.ts)
-|-- scripts/                         # SCORM-тулинг + dev (scorm-player.mjs,
-|                                    #   generate-sample/template-scorm.ts, превью, check-wireframes-ds)
+|-- scripts/                         # Весь непроектный тулинг, по назначению
+|   |-- build/                      # build.ts (esbuild-сборка) + разовые _build-*-scorm.ts демо-пакеты
+|   |-- db/                         # create-admin.ts, seed-db.ts, reencrypt-emails.ts, bcrypt-residual.ts,
+|   |   |                          #   run-sql.cjs, backfill-*.ts, verify-prd15-pre-push.sql
+|   |-- scorm/                      # generate-sample/template-scorm.ts, scorm-player.mjs
+|   |-- webtutor-probes/            # wt-*-probe.js, webtutor-probe.js (ручные пробники LMS)
+|   |-- docs/                       # build-docs-pdf.mjs, check-wireframes-ds.mjs, генератор превью шаблонов
+|   +-- deploy/                     # Деплой на сервер (docker\config + docker\templates)
 |
 |-- docs/                            # Документация
 |   |-- specs/                       # BRD + PRD-1..32 + сквозные спецификации (scoring-model, ...)
@@ -652,7 +656,7 @@ PostgreSQL + Drizzle ORM, **29 таблиц**. Схема и Zod-типы -- в 
 терять данные. Сгенерированные миграции лежат в [drizzle/](drizzle/) (точка отсчёта --
 `0000_baseline.sql`, для уже существующих баз -- `baseline-existing-db.sql`, журнал -- `drizzle/meta/`).
 Каталог `migrations/` (001..036) -- ЛЕГАСИ рукописных шагов эпохи `push`: деплой их больше не запускает,
-они сохранены как история и для разовых прогонов через `node script/run-sql.cjs <file>`.
+они сохранены как история и для разовых прогонов через `node scripts/db/run-sql.cjs <file>`.
 `npm run db:push` остаётся быстрым путём только для локальной разработки. Регламент -- в
 [drizzle/README.md](drizzle/README.md).
 

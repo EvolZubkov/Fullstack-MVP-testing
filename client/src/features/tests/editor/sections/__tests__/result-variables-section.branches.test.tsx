@@ -66,6 +66,9 @@ function makeVar(over: Partial<ResultVariableModel> = {}): ResultVariableModel {
     controlsStatus: "none",
     bands: [],
     outcomes: [],
+    domainMin: null,
+    domainMax: null,
+    valence: "none",
     sortOrder: 0,
     ...over,
   };

@@ -9,7 +9,7 @@
 #   /srv/app/<project>/config   -> /app/config   (ro)
 # =============================================================================
 
-# ---- Application environment (deployed via docker\scripts\deploy.bat) ------
+# ---- Application environment (deployed via scripts\deploy\deploy.bat) ------
 .env
 .env.*
 

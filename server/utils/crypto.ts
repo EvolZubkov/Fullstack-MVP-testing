@@ -4,7 +4,7 @@ import { config } from "../config";
 
 /**
  * Lazy loader for the ESM-only `@vvlad1973/crypto` package. The package is kept
- * external to the production CJS bundle (`script/build.ts` forceExternal), so it
+ * external to the production CJS bundle (`scripts/build/build.ts` forceExternal), so it
  * must be reached through dynamic `import()` — a static import would compile to
  * `require()`, which cannot load an ES module. The promise is memoized so the
  * module is evaluated once.
