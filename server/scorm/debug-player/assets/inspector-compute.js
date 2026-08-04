@@ -1011,7 +1011,9 @@
     var doc = iframeWin && iframeWin.document;
     if (!doc) return;
     var found = [];
-    var tagged = doc.querySelectorAll('[data-action="test-finish"], [data-action="router-finish"]');
+    var tagged = doc.querySelectorAll(
+      '[data-action="test-finish"], [data-action="router-finish"], [data-action="results-finish"], [data-action="finish"]'
+    );
     for (var i = 0; i < tagged.length; i++) found.push(tagged[i]);
     var all = doc.getElementsByTagName("button");
     for (var j = 0; j < all.length; j++) {
