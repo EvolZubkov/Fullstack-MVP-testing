@@ -96,6 +96,49 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
     }
   });
 
+  it("resolveCooldownDays matches", () => {
+    const cases: Array<[Record<string, unknown>, boolean | null]> = [
+      [{ cooldownPeriodDays: 30 }, true],
+      [{ cooldownPeriodDays: 30 }, false],
+      [{ cooldownPeriodDays: 30 }, null],
+      [{ cooldownByOutcome: true, cooldownPeriodDaysPassed: 90, cooldownPeriodDaysFailed: 7 }, true],
+      [{ cooldownByOutcome: true, cooldownPeriodDaysPassed: 90, cooldownPeriodDaysFailed: 7 }, false],
+      // Unknown outcome -> the LARGER of the two (conservative default).
+      [{ cooldownByOutcome: true, cooldownPeriodDaysPassed: 90, cooldownPeriodDaysFailed: 7 }, null],
+      [{ cooldownByOutcome: true, cooldownPeriodDaysPassed: 7, cooldownPeriodDaysFailed: 90 }, null],
+      // Only one split value configured (should not happen past schema validation,
+      // but the resolver must not throw): falls back to the one present.
+      [{ cooldownByOutcome: true, cooldownPeriodDaysPassed: 90 }, null],
+      [{ cooldownByOutcome: true, cooldownPeriodDaysFailed: 7 }, null],
+      [{ cooldownByOutcome: true }, null],
+    ];
+    for (const [policy, passed] of cases) {
+      expect(port.EligibilityEngine.resolveCooldownDays(policy, passed)).toEqual(
+        tsEngine.resolveCooldownDays(policy as any, passed),
+      );
+    }
+    // Concrete values, not just "both sides agree" (a both-undefined match proves nothing).
+    expect(tsEngine.resolveCooldownDays({ cooldownPeriodDays: 30 }, true)).toBe(30);
+    expect(
+      tsEngine.resolveCooldownDays(
+        { cooldownByOutcome: true, cooldownPeriodDaysPassed: 90, cooldownPeriodDaysFailed: 7 },
+        true,
+      ),
+    ).toBe(90);
+    expect(
+      tsEngine.resolveCooldownDays(
+        { cooldownByOutcome: true, cooldownPeriodDaysPassed: 90, cooldownPeriodDaysFailed: 7 },
+        false,
+      ),
+    ).toBe(7);
+    expect(
+      tsEngine.resolveCooldownDays(
+        { cooldownByOutcome: true, cooldownPeriodDaysPassed: 90, cooldownPeriodDaysFailed: 7 },
+        null,
+      ),
+    ).toBe(90);
+  });
+
   it("normalizeVerdict matches", () => {
     const verdicts: any[] = [
       true,

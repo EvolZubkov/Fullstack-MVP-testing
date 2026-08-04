@@ -95,6 +95,24 @@ var EligibilityEngine = (function () {
     };
   }
 
+  // PRD-40: which barrier-A period applies, given the outcome of the last attempt
+  // of the OTHER assignment. !cooldownByOutcome always returns cooldownPeriodDays
+  // (byte-identical to the single-period behaviour). passed === null (outcome not
+  // determined) resolves to the LARGER of the two configured values -- see the TS
+  // twin (shared/eligibility/engine.ts resolveCooldownDays) for the full rationale.
+  function resolveCooldownDays(policy, passed) {
+    if (!policy.cooldownByOutcome) {
+      return policy.cooldownPeriodDays != null ? policy.cooldownPeriodDays : null;
+    }
+    var p = policy.cooldownPeriodDaysPassed;
+    var f = policy.cooldownPeriodDaysFailed;
+    if (passed === true) return p != null ? p : (f != null ? f : null);
+    if (passed === false) return f != null ? f : (p != null ? p : null);
+    if (p == null) return f != null ? f : null;
+    if (f == null) return p;
+    return Math.max(p, f);
+  }
+
   var CORE_DEFAULT_RESULT = {
     allowed: true,
     reason: 'plugin_not_defined',
@@ -141,7 +159,8 @@ var EligibilityEngine = (function () {
       effectiveToday: effectiveToday,
       availableDate: result.availableDate != null ? result.availableDate : null,
       nextAllowedDate: result.availableDate != null ? result.availableDate : null,
-      cooldownPeriodDays: ctx.cooldownPeriodDays,
+      cooldownPeriodDays: (result.data && typeof result.data.cooldownPeriodDays === 'number')
+        ? result.data.cooldownPeriodDays : ctx.cooldownPeriodDays,
       source: result.source != null ? result.source : null,
       reason: result.reason != null ? result.reason : null
     };
@@ -155,6 +174,7 @@ var EligibilityEngine = (function () {
     parseIsoInstant: parseIsoInstant,
     formatIsoInstant: formatIsoInstant,
     attemptIntervalDecision: attemptIntervalDecision,
+    resolveCooldownDays: resolveCooldownDays,
     CORE_DEFAULT_RESULT: CORE_DEFAULT_RESULT,
     normalizeVerdict: normalizeVerdict,
     applyFailPolicy: applyFailPolicy,
