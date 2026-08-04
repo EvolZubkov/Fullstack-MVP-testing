@@ -222,17 +222,17 @@ Plugin registry - общий список доступных eligibility plugins
     ]
   },
   {
-    "key": "suspend_data_cooldown",
-    "version": "1.0.0",
-    "name": "SCORM suspend_data best-effort"
-  },
-  {
     "key": "custom",
     "version": "1.0.0",
     "name": "Пользовательский plugin"
   }
 ]
 ```
+
+> Начиная с [PRD-40](../prd-40/cooldown-by-outcome.md) (2026-08-04) `suspend_data_cooldown` удалён
+> из реестра: в проде им не пользовался ни один тест, и добавлять ему разделение кулдауна по
+> исходу означало бы поддерживать код, которым никто не пользуется. `webtutor_cooldown` — теперь
+> единственный сидированный плагин.
 
 Если для теста plugin не выбран, registry не вызывается и Core возвращает `allowed = true`.
 
@@ -271,7 +271,7 @@ Plugin registry - общий список доступных eligibility plugins
 | --- | --- |
 | `enabled` | Включает/выключает retake gate |
 | `cooldownPeriodDays` | Целое число 1-3650 |
-| `eligibilityPlugin.key` | `webtutor_cooldown`, `suspend_data_cooldown`, `custom` или пусто |
+| `eligibilityPlugin.key` | `webtutor_cooldown`, `custom` или пусто |
 | `eligibilityPlugin.configId` | ID администрируемой конфигурации выбранного plugin |
 | `eligibilityPlugin.failPolicy` | `failOpen` или `failClosed` |
 | `gateMode` | MVP: `before_internal_start` |
@@ -282,7 +282,7 @@ Plugin registry - общий список доступных eligibility plugins
 
 UI выбора plugin должен показывать только активные plugins из registry. После выбора plugin автор
 или администратор выбирает одну из активных конфигураций этого plugin. Один тест может использовать
-`webtutor_cooldown`, другой - `suspend_data_cooldown`, третий - не использовать plugin вообще.
+`webtutor_cooldown`, другой - не использовать plugin вообще.
 
 WebTutor plugin получает дату последней попытки без времени. Поэтому Core не измеряет часы и не
 пытается восстановить время прохождения. Решение принимается по календарным датам:
@@ -416,16 +416,12 @@ retake.source
 
 Ошибка plugin не должна приводить к белому экрану.
 
-### 4.6 `suspend_data` как источник
+### 4.6 `suspend_data` как источник (удалено)
 
-Plugin `suspend_data_cooldown` допускается только как best-effort:
-
-- для восстановления или ограничения внутри той же SCORM registration;
-- для локальных/тестовых сценариев;
-- не как строгий источник последней попытки между retake-запусками.
-
-UI должен предупреждать администратора, что строгий cooldown между новыми попытками требует
-WebTutor/LMS-specific или внешнего источника.
+Плагин `suspend_data_cooldown`, ранее описанный здесь как best-effort источник даты внутри одной
+SCORM registration, удалён [PRD-40](../prd-40/cooldown-by-outcome.md) (2026-08-04) — в проде им не
+пользовался ни один тест. Best-effort различение внутри одной регистрации по-прежнему покрыто
+`alreadyPlayedThisRegistration` (§9.1) — оно не зависело от этого плагина.
 
 ### 4.7 Тестовая проверка plugin
 
@@ -567,7 +563,6 @@ WebTutor-сессию и same-origin cookies. Серверный test endpoint �
 - выбор eligibility plugin из активного registry;
 - выбор конфигурации выбранного plugin;
 - выбор страницы блокировки;
-- предупреждение, если выбран `suspend_data_cooldown`;
 - readonly-информация о выбранном plugin и версии его конфигурации.
 
 ### 7.2 UI администратора
@@ -680,3 +675,4 @@ Phase 1 (реализовано):
 | Можно ли получить статус "Завершен" прямой записью в SCORM? | Нет. Core пишет стандартные SCORM-статусы, WebTutor сам мапит их в UI-статус |
 | Почему WebTutor-логику нельзя зашивать в Core? | Endpoint'ы и формат данных хрупкие и могут меняться без изменения продукта |
 | Что считать полноценной попыткой? | Запись LMS, прошедшую конфигурируемый фильтр статуса/прогресса/даты |
+| Остаётся ли `suspend_data_cooldown` после PRD-40? | Нет, удалён целиком (реестр, рантайм, панель автора) — не использовался ни одним тестом в проде |
