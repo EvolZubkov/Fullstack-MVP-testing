@@ -79,10 +79,14 @@ describe("buildTestJson — the section's order setting (FR-02/FR-14)", () => {
     expect(section.questionOrder).toBe("fixed");
   });
 
-  it("omits the field for the default (random) so untouched packages stay byte-identical", () => {
+  it("bakes an explicit random too — it OVERRIDES a test that orders by index (FR-18)", () => {
     const section = bake({ questionOrder: "random" }, [dbQuestion({})]);
 
-    expect("questionOrder" in section).toBe(false);
+    expect(section.questionOrder).toBe("random");
+  });
+
+  it("omits the field for a topic that inherits the test (NULL = «как в тесте»)", () => {
+    expect("questionOrder" in bake({ questionOrder: null }, [dbQuestion({})])).toBe(false);
   });
 
   it("omits the field for a legacy section that has no setting at all", () => {
@@ -131,5 +135,49 @@ describe("buildTestJson — a whole ordered topic", () => {
       ["b", 20],
       ["c", null],
     ]);
+  });
+});
+
+/**
+ * PRD-30 раздел 14: the test owns the default and the topic overrides it, so the
+ * package must carry BOTH — and neither when the test never touched the setting
+ * (FR-23: such a package stays byte-identical to the pre-PRD-30 one).
+ */
+describe("buildTestJson — правило теста (FR-16/FR-23)", () => {
+  const bakeTest = (testValues: Record<string, unknown>, section: Record<string, unknown>, questions: any[]) =>
+    JSON.parse(buildTestJson({ ...exportData(section, questions), test: { ...baseTest, ...testValues } }));
+
+  it("bakes the test-wide order when the author moved it off the default", () => {
+    expect(bakeTest({ questionOrder: "fixed" }, {}, [dbQuestion({})]).questionOrder).toBe("fixed");
+    expect(bakeTest({ questionOrder: "shuffle_all" }, {}, [dbQuestion({})]).questionOrder).toBe("shuffle_all");
+  });
+
+  it("omits it for the default and for a test saved before the column existed", () => {
+    expect("questionOrder" in bakeTest({ questionOrder: "random" }, {}, [dbQuestion({})])).toBe(false);
+    expect("questionOrder" in bakeTest({}, {}, [dbQuestion({})])).toBe(false);
+  });
+
+  it("bakes indices for a topic that INHERITS an ordering test", () => {
+    const td = bakeTest({ questionOrder: "fixed" }, { questionOrder: null }, [dbQuestion({ orderIndex: 20 })]);
+
+    expect(td.sections[0].questions[0].orderIndex).toBe(20);
+  });
+
+  it("omits indices when the topic overrides an ordering test back to random", () => {
+    const td = bakeTest({ questionOrder: "fixed" }, { questionOrder: "random" }, [dbQuestion({ orderIndex: 20 })]);
+
+    expect("orderIndex" in td.sections[0].questions[0]).toBe(false);
+  });
+
+  it("«полное перемешивание» само по себе индексы не печёт — темы в нём случайные", () => {
+    const td = bakeTest({ questionOrder: "shuffle_all" }, { questionOrder: null }, [dbQuestion({ orderIndex: 20 })]);
+
+    expect("orderIndex" in td.sections[0].questions[0]).toBe(false);
+  });
+
+  it("...но печёт их для темы, которая в нём осталась фиксированной (FR-20)", () => {
+    const td = bakeTest({ questionOrder: "shuffle_all" }, { questionOrder: "fixed" }, [dbQuestion({ orderIndex: 20 })]);
+
+    expect(td.sections[0].questions[0].orderIndex).toBe(20);
   });
 });
