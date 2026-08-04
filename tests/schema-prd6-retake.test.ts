@@ -90,3 +90,64 @@ describe("retakePolicySchema — PRD-31 attemptInterval", () => {
     expect(parsed.attemptInterval).toEqual({ enabled: true, hours: 24 });
   });
 });
+
+describe("retakePolicySchema — PRD-40 cooldownByOutcome", () => {
+  it("defaults cooldownByOutcome to false and does not require the split fields", () => {
+    const p = retakePolicySchema.parse({ enabled: true, cooldownPeriodDays: 30 });
+    expect(p.cooldownByOutcome).toBe(false);
+    expect(p.cooldownPeriodDaysPassed).toBeUndefined();
+    expect(p.cooldownPeriodDaysFailed).toBeUndefined();
+  });
+
+  it("requires both split fields when cooldownByOutcome is on", () => {
+    expect(() =>
+      retakePolicySchema.parse({ enabled: true, cooldownByOutcome: true, cooldownPeriodDaysPassed: 90 }),
+    ).toThrow();
+    expect(() =>
+      retakePolicySchema.parse({ enabled: true, cooldownByOutcome: true, cooldownPeriodDaysFailed: 7 }),
+    ).toThrow();
+  });
+
+  it("accepts both split fields and does not require cooldownPeriodDays", () => {
+    const p = retakePolicySchema.parse({
+      enabled: true,
+      cooldownByOutcome: true,
+      cooldownPeriodDaysPassed: 90,
+      cooldownPeriodDaysFailed: 7,
+    });
+    expect(p.cooldownPeriodDaysPassed).toBe(90);
+    expect(p.cooldownPeriodDaysFailed).toBe(7);
+    expect(p.cooldownPeriodDays).toBeUndefined();
+  });
+
+  it("rejects split fields out of [1, 3650]", () => {
+    expect(() =>
+      retakePolicySchema.parse({
+        enabled: true,
+        cooldownByOutcome: true,
+        cooldownPeriodDaysPassed: 0,
+        cooldownPeriodDaysFailed: 7,
+      }),
+    ).toThrow();
+    expect(() =>
+      retakePolicySchema.parse({
+        enabled: true,
+        cooldownByOutcome: true,
+        cooldownPeriodDaysPassed: 90,
+        cooldownPeriodDaysFailed: 4000,
+      }),
+    ).toThrow();
+  });
+
+  it("cooldownByOutcome off does not require the split fields even when true previously", () => {
+    const p = retakePolicySchema.parse({
+      enabled: true,
+      cooldownByOutcome: false,
+      cooldownPeriodDays: 30,
+      cooldownPeriodDaysPassed: 90,
+      cooldownPeriodDaysFailed: 7,
+    });
+    expect(p.enabled).toBe(true);
+    expect(p.cooldownPeriodDays).toBe(30);
+  });
+});

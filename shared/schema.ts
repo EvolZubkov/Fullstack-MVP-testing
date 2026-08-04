@@ -329,6 +329,13 @@ export const attemptIntervalSchema = z.object({
  * `cooldownPeriodDays` is optional at the type level and required only when barrier
  * A is on, so a test can carry barrier B alone without inventing a cooldown value
  * for a switch that is off. Legacy `cooldownDays` is accepted and normalized.
+ *
+ * PRD-40: `cooldownByOutcome` (default off) splits barrier A's single period into
+ * two — `cooldownPeriodDaysPassed` / `cooldownPeriodDaysFailed` — chosen at runtime
+ * by the outcome of the last attempt of the OTHER assignment that anchors the
+ * decision (see `shared/eligibility/engine.ts` `resolveCooldownDays`). Off (the
+ * default, and every existing test) keeps `cooldownPeriodDays` as the only period,
+ * byte-identical to pre-PRD-40 behaviour.
  */
 export const retakePolicySchema = z.preprocess(
   (val) => {
@@ -344,13 +351,31 @@ export const retakePolicySchema = z.preprocess(
     .object({
       enabled: z.boolean().default(false),
       cooldownPeriodDays: z.number().int().min(1).max(3650).optional(),
+      cooldownByOutcome: z.boolean().default(false),
+      cooldownPeriodDaysPassed: z.number().int().min(1).max(3650).optional(),
+      cooldownPeriodDaysFailed: z.number().int().min(1).max(3650).optional(),
       gateMode: z.literal("before_internal_start").default("before_internal_start"),
       eligibilityPlugin: eligibilityPluginRefSchema.nullish(),
       blockedPageId: z.string().optional(),
       attemptInterval: attemptIntervalSchema.nullish(),
     })
     .superRefine((v, ctx) => {
-      if (v.enabled && v.cooldownPeriodDays == null) {
+      if (v.enabled && v.cooldownByOutcome) {
+        if (v.cooldownPeriodDaysPassed == null) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["cooldownPeriodDaysPassed"],
+            message: "cooldownPeriodDaysPassed обязателен при разделении кулдауна по исходу",
+          });
+        }
+        if (v.cooldownPeriodDaysFailed == null) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["cooldownPeriodDaysFailed"],
+            message: "cooldownPeriodDaysFailed обязателен при разделении кулдауна по исходу",
+          });
+        }
+      } else if (v.enabled && v.cooldownPeriodDays == null) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["cooldownPeriodDays"],
