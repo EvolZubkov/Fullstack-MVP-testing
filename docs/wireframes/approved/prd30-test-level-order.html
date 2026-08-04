@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-30 (расширение) — порядок выдачи на уровне теста.
+    Спека: docs/specs/prd-30/question-order.md, раздел 14 (этап Э8).
+    План: docs/plans/PLAN_PRD30_TEST_LEVEL_ORDER.md (Task 1).
+    Файл: docs/wireframes/approved/prd30-test-level-order.html
+
+    ЧТО ЭТО. Сегодня порядок выдачи задаётся только у темы, и повторять его
+    приходится в каждой теме; перемешивания вопросов ПОПЕРЁК тем в интерфейсе нет
+    вовсе. Эскиз показывает два места: правило теста над списком тем и
+    переопределение в теме, которое теперь имеет состояние «как в тесте».
+
+    ОСНОВА — РЕАЛЬНАЯ РАЗМЕТКА, взятая дословно:
+      - строка темы (tb-topic-row / tb-draw-all-row / tb-draw-count-row /
+        tb-question-order-row / tb-quota-toggle / tb-feedback-preview) — из
+        утверждённого prd30-question-order.html;
+      - Select (ou-select + ou-select__trigger + data-ou-options) — из
+        утверждённого prd15-test-scoring.html;
+      - пиктограмма сброса (ou-iconbtn ghost/s + i-rotate-ccw) — из утверждённого
+        prd15-test-scoring.html; в коде это тот же IconButton + RotateCcw, что в
+        design-section.tsx (сброс цвета к шаблону) и scoring-section.tsx.
+    Компонентный CSS подключён РЕАЛЬНЫЙ (client/src/styles/tb-components.css).
+    Классы с префиксом wf- — каркас эскиза, не UI.
+
+    ДЕЛЬТА (всё новое перечислено здесь и в таблице «Дельта»):
+      1. строка правила теста над списком тем (tb-test-order-row — правила
+         скопированы с существующего tb-draw-count-row);
+      2. в теме свитч «Случайный порядок вопросов» заменяется на Select с тремя
+         позициями: «Как в тесте» (умолчание), «Фиксированный порядок»,
+         «Перемешивание». Замена предусмотрена утверждённым эскизом PRD-30:
+         «появление третьей позиции заменит свитч на Select без миграции»;
+      3. пиктограмма сброса «как в тесте» рядом с Select — появляется ТОЛЬКО когда
+         тема переопределяет тест, и сама служит признаком переопределения
+         (тот же приём, что в «Оформлении»: наличие сброса = значение изменено,
+         отдельного бейджа «изменено» не заводится).
+    Своих цветов, шрифтов и отступов дельта не заводит: только токены ДС.
+
+    СОСТОЯНИЯ:
+      mix        сплошной режим, тест = «Полное перемешивание»
+      shuffle    сплошной режим, тест = «Перемешивание» (темы блоками)
+      fixed      сплошной режим, тест = «Фиксированный порядок»
+      sectional  режим с разбивкой по темам: третьей позиции нет
+      docs       пояснения + DS Mapping
+
+    ПОЧЕМУ «ПЕРЕМЕШИВАНИЕ», А НЕ «ПЕРЕМЕШИВАНИЕ ВНУТРИ ТЕМЫ». Уточнение «внутри
+    темы» в режимах с разбивкой избыточно — границу темы там задаёт сам режим, — а
+    нужно только в сплошном, где значение надо отличить от «Полного перемешивания».
+    Свойство состояния, а не подписи: уточнение живёт в хвосте строки (состояния
+    shuffle и mix), подпись остаётся одна во всех режимах.
+
+    СОГЛАСОВАН 2026-08-03 — вместе с подписями значений и подписью строки темы
+    («Порядок вопросов» вместо «Случайный порядок вопросов»: контрол больше не
+    двухпозиционный).
+    -->
+    <title>PRD-30 — порядок выдачи на уровне теста</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <!-- РЕАЛЬНЫЙ компонентный CSS приложения. -->
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+
+    <style>
+      .wf-sprite { display: none; }
+      /* Override legacy .ou-select fallback из wf-utils.css (двойная рамка).
+         Взято дословно из утверждённого approved/prd11-draw-quotas.html. */
+      .ou-select {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        line-height: inherit;
+        cursor: default;
+        border-radius: 0;
+      }
+      /* Faux-drawer: показываем drawer редактора в потоке страницы (канон prd17). */
+      .wf-drawer {
+        max-width: var(--wf-size-860); margin: 0 auto;
+        background: var(--ou-bg-elevated);
+        border: var(--wf-border-w) solid var(--ou-border-soft);
+        border-radius: var(--ou-radius-l); box-shadow: var(--ou-shadow-m);
+        overflow: hidden; display: flex; flex-direction: column;
+      }
+      .wf-drawer__tabs { border-bottom: var(--wf-border-w) solid var(--ou-border-soft); padding: 0 var(--ou-space-5); }
+      .wf-drawer-body { padding: var(--ou-space-5) var(--ou-space-6); display: flex; flex-direction: column; gap: var(--ou-space-4); }
+      .wf-variants-block { margin-top: var(--ou-space-2); padding-left: var(--ou-space-5); border-left: var(--wf-border-w) solid var(--ou-border-soft); display: flex; flex-direction: column; gap: var(--ou-space-3); }
+
+      /* Аннотационные бейджи (канон prd11). */
+      .wf-annot { display: none; }
+      body.wf-annots-on .wf-annot {
+        display: inline-block;
+        margin: var(--ou-space-1) 0 0;
+        padding: 0 var(--ou-space-2);
+        border-radius: var(--ou-radius-xs);
+        background: var(--ou-accent-soft);
+        color: var(--ou-accent-default);
+        font: var(--ou-text-caption);
+        font-weight: 600;
+      }
+    </style>
+
+    <style data-wf-delta>
+      /* ══════════════════════════════════════════════════════════════════════
+         ДЕЛЬТА — предлагаемое дополнение к client/src/styles/tb-components.css.
+         Один класс: строка правила теста над списком тем. Правила скопированы с
+         существующего .tb-draw-count-row («Вопросов в тест [N] из M») — та же
+         анатомия «подпись фиксированной ширины + контрол + приглушённый хвост»,
+         иначе в редакторе появится второй вид строки с подписью и контролом.
+         Контрол темы своего класса не заводит: .tb-question-order-row уже есть в
+         реальном CSS, в нём меняется только начинка (свитч → Select + сброс).
+         ══════════════════════════════════════════════════════════════════════ */
+      .tb-test-order-row {
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        margin-bottom: var(--ou-space-2);
+      }
+      .tb-test-order-row__label {
+        font: var(--ou-text-body-s);
+        width: var(--wf-size-150); flex-shrink: 0;
+      }
+      .tb-test-order-row__hint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+      /* Подписи значений длиннее, чем помещается в базовые 180px триггера ДС:
+         в строке теста они переносились на вторую строку и выходили за рамку
+         контрола фиксированной высоты, в строке темы упирались в шеврон. Обоим
+         контролам задан один существующий токен полей редактора — заодно правило
+         теста и правила тем встают в одну колонку. */
+      .tb-test-order-row .ou-select__trigger,
+      .tb-question-order-row .ou-select__trigger { min-width: var(--tb-input-w-md); }
+      /* Строка порядка в теме перестала быть свитчем и стала парой «подпись +
+         контрол», как «Вопросов в тест» прямо над ней. Подпись получает ту же
+         ширину, иначе левые края двух соседних контролов разъезжаются. */
+      .tb-question-order-row__lbl { width: var(--wf-size-150); flex-shrink: 0; }
+    </style>
+
+    <style data-wf-template-overrides>
+      /* gate-skip-start */
+      /* WIREFRAME-ONLY: навбар эскиза занимает ДВЕ строки, поэтому отступ под ним
+         больше базового --wf-nav-offset из wf-utils.css. Величина каркаса. */
+      :root { --wf-nav-offset: 92px; }
+      /* gate-skip-end */
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap;
+      }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s); background: transparent;
+        color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer;
+      }
+      .wf-nav button:hover { background: var(--ou-bg-hover); }
+      .wf-nav button.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+      .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+      .wf-stage { padding: var(--wf-nav-offset) var(--ou-space-6) var(--ou-space-10); }
+      .wf-state { display: none; }
+      .wf-state.active { display: block; }
+      .wf-doc { padding: 0 var(--ou-space-6) var(--ou-space-10); max-width: var(--wf-size-960); margin: 0 auto; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" /><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" /><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" /></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></symbol>
+      <symbol id="i-rotate-ccw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Правило теста:</span>
+      <button type="button" class="active" onclick="showState(this, 'mix')">сплошной: полное перемешивание</button>
+      <button type="button" onclick="showState(this, 'shuffle')">сплошной: перемешивание</button>
+      <button type="button" onclick="showState(this, 'fixed')">сплошной: фиксированный</button>
+      <button type="button" onclick="showState(this, 'sectional')">с разбивкой по темам</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <button type="button" onclick="toggleAnnots(this)">Аннотации</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd30-question-order.html">&harr; Порядок в теме</a>
+    </nav>
+
+    <div class="wf-stage">
+      <!-- ════════════ mix: сплошной режим, тест = полное перемешивание ════════════ -->
+      <div class="wf-state active" id="wf-mix">
+        <div class="wf-drawer">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Сертификационный тест для руководителей</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline" aria-label="Статус: черновик">Черновик</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v5</span>
+            <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s ou-drawer__close" aria-label="Закрыть редактор"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-x" /></svg></span></button>
+          </header>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m wf-drawer__tabs">
+            <div class="ou-tabs__list" role="tablist">
+              <button type="button" role="tab" aria-selected="true" class="ou-tabs__tab is-active"><span class="ou-tabs__label">Состав</span></button>
+              <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Настройки</span></button>
+              <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Оформление</span></button>
+              <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Структура</span></button>
+              <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Оценка</span></button>
+            </div>
+          </div>
+          <div class="wf-drawer-body">
+            <div class="tb-section-label">Темы и выборка вопросов</div>
+
+            <!-- ДЕЛЬТА 1: правило теста стоит НАД списком тем — сначала общее
+                 правило, под ним темы, которые его наследуют. -->
+            <div class="tb-test-order-row">
+              <span class="tb-test-order-row__label">Порядок выдачи вопросов</span>
+              <div class="ou-select ou-field--s" data-ou-options="Фиксированный порядок|Перемешивание|Полное перемешивание"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Полное перемешивание</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+              <span class="tb-test-order-row__hint">вопросы всех тем идут одним перемешанным потоком</span>
+            </div>
+            <span class="wf-annot">tests.question_order = shuffle_all</span>
+
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name">Охрана труда</span>
+                <span class="tb-topic-row__count">24 вопроса</span>
+                <label class="tb-topic-row__required">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-topic-row__required-lbl">Обязательная</span>
+                </label>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «Охрана труда»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
+              </div>
+              <div class="tb-topic-row__body">
+                <label class="tb-draw-all-row">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Все вопросы темы: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-draw-all-row__lbl">Все вопросы темы</span>
+                </label>
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="8" aria-label="Количество вопросов из темы Охрана труда" /><button type="button" class="ou-number__btn" aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 24</span>
+                </div>
+
+                <!-- ДЕЛЬТА 2: тема НАСЛЕДУЕТ тест — умолчание. Пиктограммы сброса
+                     нет: сбрасывать нечего. -->
+                <div class="tb-question-order-row">
+                  <span class="tb-question-order-row__lbl">Порядок вопросов</span>
+                  <div class="ou-select ou-field--s" data-ou-options="Как в тесте|Фиксированный порядок|Перемешивание"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Как в тесте</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                  <span class="tb-question-order-row__hint">вопросы темы уходят в общий поток</span>
+                </div>
+                <span class="wf-annot">question_order = NULL (наследует)</span>
+
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Квоты по подтемам: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</span>
+                </label>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Варианты теста: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-list" /></svg>Варианты теста</span>
+                </label>
+                <div class="tb-card-desc">Обратная связь по теме</div>
+                <div role="button" tabindex="0" class="tb-feedback-preview is-empty" aria-label="Редактировать обратную связь по теме">Не задано — нажмите для редактирования</div>
+              </div>
+            </div>
+
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name">Пожарная безопасность</span>
+                <span class="tb-topic-row__count">12 вопросов</span>
+                <label class="tb-topic-row__required">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная: Пожарная безопасность" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-topic-row__required-lbl">Обязательная</span>
+                </label>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «Пожарная безопасность»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
+              </div>
+              <div class="tb-topic-row__body">
+                <label class="tb-draw-all-row">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Все вопросы темы: Пожарная безопасность" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-draw-all-row__lbl">Все вопросы темы</span>
+                </label>
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split is-disabled"><div class="ou-number__box"><button type="button" class="ou-number__btn" disabled aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="12" disabled aria-label="Количество вопросов из темы Пожарная безопасность" /><button type="button" class="ou-number__btn" disabled aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 12</span>
+                </div>
+
+                <!-- ДЕЛЬТА 2 + 3: тема ПЕРЕОПРЕДЕЛЯЕТ тест — рядом с Select
+                     появляется сброс «как в тесте». Его наличие и есть признак
+                     переопределения, отдельного бейджа «изменено» нет. -->
+                <div class="tb-question-order-row">
+                  <span class="tb-question-order-row__lbl">Порядок вопросов</span>
+                  <div class="ou-select ou-field--s" data-ou-options="Как в тесте|Фиксированный порядок|Перемешивание"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Фиксированный порядок</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                  <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Вернуть порядок как в тесте: Пожарная безопасность" title="Как в тесте"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-rotate-ccw" /></svg></span></button>
+                  <span class="tb-question-order-row__hint">по индексу, заданному в теме; тема идёт неразрывным блоком</span>
+                </div>
+                <span class="wf-annot">question_order = fixed (переопределение)</span>
+
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Квоты по подтемам: Пожарная безопасность" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</span>
+                </label>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Варианты теста: Пожарная безопасность" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-list" /></svg>Варианты теста</span>
+                </label>
+                <div class="tb-card-desc">Обратная связь по теме</div>
+                <div role="button" tabindex="0" class="tb-feedback-preview is-empty" aria-label="Редактировать обратную связь по теме">Не задано — нажмите для редактирования</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════ shuffle: сплошной режим, тест = перемешивание ════════════ -->
+      <div class="wf-state" id="wf-shuffle">
+        <div class="wf-drawer">
+          <div class="wf-drawer-body">
+            <div class="tb-section-label">Темы и выборка вопросов</div>
+
+            <!-- Значение то же, что в режимах с разбивкой; отличие от «Полного
+                 перемешивания» несёт хвост строки, а не подпись в списке. -->
+            <div class="tb-test-order-row">
+              <span class="tb-test-order-row__label">Порядок выдачи вопросов</span>
+              <div class="ou-select ou-field--s" data-ou-options="Фиксированный порядок|Перемешивание|Полное перемешивание"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Перемешивание</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+              <span class="tb-test-order-row__hint">вопросы перемешиваются внутри темы, темы идут в порядке списка</span>
+            </div>
+            <span class="wf-annot">tests.question_order = random (умолчание)</span>
+
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name">Охрана труда</span>
+                <span class="tb-topic-row__count">24 вопроса</span>
+                <label class="tb-topic-row__required">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-topic-row__required-lbl">Обязательная</span>
+                </label>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «Охрана труда»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
+              </div>
+              <div class="tb-topic-row__body">
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="8" aria-label="Количество вопросов из темы Охрана труда" /><button type="button" class="ou-number__btn" aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 24</span>
+                </div>
+                <div class="tb-question-order-row">
+                  <span class="tb-question-order-row__lbl">Порядок вопросов</span>
+                  <div class="ou-select ou-field--s" data-ou-options="Как в тесте|Фиксированный порядок|Перемешивание"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Как в тесте</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                  <span class="tb-question-order-row__hint">вопросы темы перемешиваются при каждой попытке</span>
+                </div>
+                <span class="wf-annot">question_order = NULL (наследует random)</span>
+                <div class="tb-card-desc">Обратная связь по теме</div>
+                <div role="button" tabindex="0" class="tb-feedback-preview is-empty" aria-label="Редактировать обратную связь по теме">Не задано — нажмите для редактирования</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════ fixed: сплошной режим, тест = фиксированный порядок ════════════ -->
+      <div class="wf-state" id="wf-fixed">
+        <div class="wf-drawer">
+          <div class="wf-drawer-body">
+            <div class="tb-section-label">Темы и выборка вопросов</div>
+
+            <div class="tb-test-order-row">
+              <span class="tb-test-order-row__label">Порядок выдачи вопросов</span>
+              <div class="ou-select ou-field--s" data-ou-options="Фиксированный порядок|Перемешивание|Полное перемешивание"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Фиксированный порядок</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+              <span class="tb-test-order-row__hint">темы идут в порядке списка, вопросы — по индексу, заданному в теме</span>
+            </div>
+            <span class="wf-annot">tests.question_order = fixed</span>
+
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name">Охрана труда</span>
+                <span class="tb-topic-row__count">24 вопроса</span>
+                <label class="tb-topic-row__required">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-topic-row__required-lbl">Обязательная</span>
+                </label>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «Охрана труда»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
+              </div>
+              <div class="tb-topic-row__body">
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="8" aria-label="Количество вопросов из темы Охрана труда" /><button type="button" class="ou-number__btn" aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 24</span>
+                </div>
+                <!-- Наследование ЧИТАЕТСЯ: хвост строки показывает, ЧТО именно
+                     тема унаследовала, иначе «Как в тесте» ничего не сообщает. -->
+                <div class="tb-question-order-row">
+                  <span class="tb-question-order-row__lbl">Порядок вопросов</span>
+                  <div class="ou-select ou-field--s" data-ou-options="Как в тесте|Фиксированный порядок|Перемешивание"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Как в тесте</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                  <span class="tb-question-order-row__hint">по индексу, заданному в теме</span>
+                </div>
+                <span class="wf-annot">question_order = NULL (наследует fixed)</span>
+                <div class="tb-card-desc">Обратная связь по теме</div>
+                <div role="button" tabindex="0" class="tb-feedback-preview is-empty" aria-label="Редактировать обратную связь по теме">Не задано — нажмите для редактирования</div>
+              </div>
+            </div>
+
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name">Пожарная безопасность</span>
+                <span class="tb-topic-row__count">12 вопросов</span>
+                <label class="tb-topic-row__required">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная: Пожарная безопасность" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-topic-row__required-lbl">Обязательная</span>
+                </label>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «Пожарная безопасность»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
+              </div>
+              <div class="tb-topic-row__body">
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="6" aria-label="Количество вопросов из темы Пожарная безопасность" /><button type="button" class="ou-number__btn" aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 12</span>
+                </div>
+                <!-- Обратное переопределение: тест фиксирует порядок, а ЭТА тема
+                     перемешивается. -->
+                <div class="tb-question-order-row">
+                  <span class="tb-question-order-row__lbl">Порядок вопросов</span>
+                  <div class="ou-select ou-field--s" data-ou-options="Как в тесте|Фиксированный порядок|Перемешивание"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Перемешивание</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                  <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Вернуть порядок как в тесте: Пожарная безопасность" title="Как в тесте"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-rotate-ccw" /></svg></span></button>
+                  <span class="tb-question-order-row__hint">вопросы темы перемешиваются при каждой попытке</span>
+                </div>
+                <span class="wf-annot">question_order = random (переопределение)</span>
+                <div class="tb-card-desc">Обратная связь по теме</div>
+                <div role="button" tabindex="0" class="tb-feedback-preview is-empty" aria-label="Редактировать обратную связь по теме">Не задано — нажмите для редактирования</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════ sectional: режим с разбивкой по темам ════════════ -->
+      <div class="wf-state" id="wf-sectional">
+        <div class="wf-drawer">
+          <div class="wf-drawer-body">
+            <div class="tb-section-label">Темы и выборка вопросов</div>
+
+            <!-- Третьей позиции в списке НЕТ: границу темы держат экраны раздела
+                 и его итоги, перемешивать поперёк неё нечем. -->
+            <div class="tb-test-order-row">
+              <span class="tb-test-order-row__label">Порядок выдачи вопросов</span>
+              <div class="ou-select ou-field--s" data-ou-options="Фиксированный порядок|Перемешивание"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Перемешивание</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+              <span class="tb-test-order-row__hint">тест идёт с разбивкой по темам — полное перемешивание доступно только в сплошном режиме</span>
+            </div>
+            <span class="wf-annot">flowPolicy.mode = linear_by_topics</span>
+
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name">О компании</span>
+                <span class="tb-topic-row__count">41 вопрос</span>
+                <label class="tb-topic-row__required">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-topic-row__required-lbl">Обязательная</span>
+                </label>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «О компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
+              </div>
+              <div class="tb-topic-row__body">
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split is-disabled"><div class="ou-number__box"><button type="button" class="ou-number__btn" disabled aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="16" disabled aria-label="Количество вопросов из темы О компании" /><button type="button" class="ou-number__btn" disabled aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 41</span>
+                </div>
+                <!-- Режим вариантов: переопределение действует, но источник
+                     порядка — список варианта (PRD-30 FR-07). -->
+                <div class="tb-question-order-row">
+                  <span class="tb-question-order-row__lbl">Порядок вопросов</span>
+                  <div class="ou-select ou-field--s" data-ou-options="Как в тесте|Фиксированный порядок|Перемешивание"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Фиксированный порядок</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                  <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Вернуть порядок как в тесте: О компании" title="Как в тесте"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-rotate-ccw" /></svg></span></button>
+                  <span class="tb-question-order-row__hint">в порядке списка варианта</span>
+                </div>
+                <span class="wf-annot">источник порядка = form.questionIds</span>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Варианты теста: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-list" /></svg>Варианты теста</span>
+                </label>
+                <div class="wf-variants-block">
+                  <table class="tb-table">
+                    <thead><tr><th>Вариант</th><th>Вопросов в варианте</th></tr></thead>
+                    <tbody>
+                      <tr><td>Вариант 1</td><td>16</td></tr>
+                      <tr><td>Вариант 2</td><td>16</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="tb-card-desc">Обратная связь по теме</div>
+                <div role="button" tabindex="0" class="tb-feedback-preview is-empty" aria-label="Редактировать обратную связь по теме">Не задано — нажмите для редактирования</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════ docs: пояснения + DS Mapping ════════════ -->
+      <div class="wf-state" id="wf-docs">
+        <div class="wf-doc">
+          <div class="wf-notes">
+            <h2 class="wf-notes-title">Правила</h2>
+            <table class="tb-table">
+              <thead><tr><th>Элемент</th><th>Данные</th><th>Поведение</th></tr></thead>
+              <tbody>
+                <tr><td>Правило теста</td><td><code>tests.question_order</code></td><td>«Фиксированный порядок» / «Перемешивание» (умолчание) / «Полное перемешивание» (FR-16)</td></tr>
+                <tr><td>Место правила</td><td>—</td><td>Вкладка «Состав», НАД списком тем: сначала общее правило, под ним темы, которые его наследуют</td></tr>
+                <tr><td>Режим с разбивкой по темам</td><td><code>flowPolicy.mode</code></td><td>«Полное перемешивание» в списке отсутствует; при переходе теста в такой режим сохранённое значение переписывается в «Перемешивание» (FR-17)</td></tr>
+                <tr><td>Правило темы</td><td><code>test_sections.question_order</code> (nullable)</td><td>Умолчание — «Как в тесте» (NULL). Явное значение = переопределение (FR-18)</td></tr>
+                <tr><td>Хвост строки темы</td><td>—</td><td>Показывает ДЕЙСТВУЮЩИЙ порядок, иначе «Как в тесте» само по себе ничего не сообщает</td></tr>
+                <tr><td>Сброс «как в тесте»</td><td>—</td><td>Пиктограмма появляется только при переопределении и сама служит признаком переопределения — отдельного бейджа «изменено» нет</td></tr>
+                <tr><td>Полное перемешивание</td><td>—</td><td>Вопросы всех тем идут одним потоком (FR-19); тема с фиксированным порядком выдаётся неразрывным блоком в случайном месте (FR-20)</td></tr>
+                <tr><td>Режим вариантов</td><td><code>form_set_json</code></td><td>Переопределение действует, но источник порядка — список варианта (FR-07)</td></tr>
+                <tr><td>Отбор</td><td><code>draw_count</code>, квоты PRD-11</td><td>Не меняется: правило сортирует уже отобранное (FR-06)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="wf-notes">
+            <h2 class="wf-notes-title">Дельта к существующему UI</h2>
+            <table class="tb-table">
+              <thead><tr><th>Что</th><th>Где</th><th>Почему так</th></tr></thead>
+              <tbody>
+                <tr><td>Строка <code>tb-test-order-row</code></td><td>вкладка «Состав», <code>topics-structure-section.tsx</code></td><td>Правила скопированы с <code>tb-draw-count-row</code>: та же анатомия «подпись + контрол + приглушённый хвост»</td></tr>
+                <tr><td>Свитч темы становится Select</td><td>тело темы, <code>tb-question-order-row</code></td><td>Позиций стало три. Замена предусмотрена утверждённым эскизом PRD-30: «появление третьей позиции заменит свитч на Select без миграции». Класс строки не меняется, меняется начинка</td></tr>
+                <tr><td>Подпись строки темы</td><td>—</td><td>«Случайный порядок вопросов» описывала двухпозиционный свитч; у списка из трёх значений подпись — «Порядок вопросов». НА СОГЛАСОВАНИЕ</td></tr>
+                <tr><td>«Перемешивание», а не «Перемешивание внутри темы»</td><td>—</td><td>В режимах с разбивкой уточнение избыточно — границу темы задаёт сам режим; нужно оно только в сплошном, где значение отличается от «Полного перемешивания». Уточнение — свойство состояния, поэтому живёт в хвосте строки, а подпись значения одна во всех режимах</td></tr>
+                <tr><td>Пиктограмма сброса</td><td>рядом с Select темы</td><td>Тот же <code>IconButton</code> + <code>RotateCcw</code>, что в «Оформлении» (сброс цвета к шаблону) и в «Оценке» (сброс настройки вопроса) — приём в проекте уже принят</td></tr>
+                <tr><td>Своих цветов и размеров нет</td><td>—</td><td>Дельта состоит из одного класса раскладки на токенах ДС</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="wf-mapping">
+            <h2 class="wf-mapping-title">DS Mapping</h2>
+            <table class="tb-table">
+              <thead><tr><th>Элемент эскиза</th><th>DS-компонент</th><th>Примечание</th></tr></thead>
+              <tbody>
+                <tr><td>Правило теста</td><td><code>Select</code> (<code>ou-select</code>)</td><td>Размер <code>s</code> — как селекты в теле темы и в «Оценке»</td></tr>
+                <tr><td>Правило темы</td><td><code>Select</code> (<code>ou-select</code>)</td><td>Тот же компонент; три позиции</td></tr>
+                <tr><td>Сброс «как в тесте»</td><td><code>IconButton</code> ghost/s + <code>RotateCcw</code></td><td>Разметка и размер иконки (14) взяты из <code>design-section.tsx</code></td></tr>
+                <tr><td>Хвост строки</td><td><code>Text</code> tone=muted</td><td>Существующие <code>__hint</code>-классы строк темы</td></tr>
+                <tr><td>custom</td><td>нет</td><td>Собственных компонентов эскиз не вводит</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      var STATE_IDS = ['mix', 'shuffle', 'fixed', 'sectional', 'docs'];
+      window.showState = function showState(btn, id) {
+        STATE_IDS.forEach(function (s) {
+          document.getElementById('wf-' + s).classList.toggle('active', s === id);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+      window.toggleAnnots = function toggleAnnots(btn) {
+        var on = document.body.classList.toggle('wf-annots-on');
+        btn.classList.toggle('active', on);
+      };
+    </script>
+  </body>
+</html>
