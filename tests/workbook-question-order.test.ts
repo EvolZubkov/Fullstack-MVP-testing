@@ -12,7 +12,12 @@
  * section — never 0 and never `fixed`, which would silently freeze delivery.
  */
 import { describe, it, expect } from "vitest";
-import { parseStructureRow, serializeStructureRow } from "../server/utils/workbook-sheets";
+import {
+  parseSettingsRow,
+  parseStructureRow,
+  serializeSettingsRows,
+  serializeStructureRow,
+} from "../server/utils/workbook-sheets";
 import { QUESTION_HEADERS, serializeQuestionRow } from "../server/services/questions-export";
 
 const section = {
@@ -90,16 +95,16 @@ describe("«Структура» → колонка «Случайный пор�
     expect(r).toMatchObject({ ok: true, value: { questionOrder: "random" } });
   });
 
-  it("пустая ячейка = random: сегодняшнее поведение", () => {
+  it("пустая ячейка = «как в тесте»: тема следует правилу теста (FR-18)", () => {
     const r = parseStructureRow({ ...base, "Случайный порядок вопросов": "" }, 0);
 
-    expect(r).toMatchObject({ ok: true, value: { questionOrder: "random" } });
+    expect(r).toMatchObject({ ok: true, value: { questionOrder: null } });
   });
 
-  it("книга БЕЗ колонки импортируется как раньше", () => {
+  it("книга БЕЗ колонки импортируется как раньше — тема наследует тест", () => {
     const r = parseStructureRow(base, 0);
 
-    expect(r).toMatchObject({ ok: true, value: { questionOrder: "random" } });
+    expect(r).toMatchObject({ ok: true, value: { questionOrder: null } });
   });
 
   it("экспорт выводит «нет» для темы с заданным порядком", () => {
@@ -114,10 +119,20 @@ describe("«Структура» → колонка «Случайный пор�
     expect(row["Случайный порядок вопросов"]).toBe("да");
   });
 
-  it("секция без настройки экспортируется как «да»", () => {
+  it("секция без переопределения экспортируется пустой ячейкой (FR-18)", () => {
     const row = serializeStructureRow(section);
 
-    expect(row["Случайный порядок вопросов"]).toBe("да");
+    expect(row["Случайный порядок вопросов"]).toBe("");
+  });
+
+  it("round trip «как в тесте»: пустая ячейка возвращается пустой", () => {
+    const exported = serializeStructureRow({ ...section, questionOrder: null });
+    const parsed = parseStructureRow(
+      { "Раздел": "Тема", "Порядок": 1, "Вопросов в выборке": 5, ...exported },
+      0,
+    );
+
+    expect(parsed).toMatchObject({ ok: true, value: { questionOrder: null } });
   });
 });
 
@@ -128,5 +143,68 @@ describe("round trip «Структура»", () => {
     const parsed = parseStructureRow(exported as Record<string, unknown>, 0);
 
     expect(parsed).toMatchObject({ ok: true, value: { questionOrder: "fixed" } });
+  });
+});
+
+/**
+ * PRD-30 FR-22: правило ТЕСТА живёт на листе «Настройки» — список
+ * «параметр/значение», а не таблица колонок: настроек теста по одной штуке, и
+ * новая не должна расширять строку, которая уже есть у каждого автора.
+ */
+describe("лист «Настройки» — правило теста", () => {
+  const row = (value: unknown) => ({ "Параметр": "Порядок выдачи вопросов", "Значение": value });
+
+  it("читает все три значения", () => {
+    expect(parseSettingsRow(row("Фиксированный порядок"))).toMatchObject({
+      ok: true,
+      value: { questionOrder: "fixed" },
+    });
+    expect(parseSettingsRow(row("Перемешивание"))).toMatchObject({
+      ok: true,
+      value: { questionOrder: "random" },
+    });
+    expect(parseSettingsRow(row("Полное перемешивание"))).toMatchObject({
+      ok: true,
+      value: { questionOrder: "shuffle_all" },
+    });
+  });
+
+  it("не различает регистр и лишние пробелы", () => {
+    expect(parseSettingsRow(row("  полное ПЕРЕМЕШИВАНИЕ "))).toMatchObject({
+      ok: true,
+      value: { questionOrder: "shuffle_all" },
+    });
+  });
+
+  it("пустое значение = «не трогать настройку»", () => {
+    expect(parseSettingsRow(row(""))).toEqual({ ok: true, value: {} });
+  });
+
+  it("непонятное значение — ошибка, а не молчаливое умолчание", () => {
+    const r = parseSettingsRow(row("как-нибудь"));
+
+    expect(r.ok).toBe(false);
+  });
+
+  it("неизвестный параметр — ошибка с его именем", () => {
+    const r = parseSettingsRow({ "Параметр": "Цвет фона", "Значение": "синий" });
+
+    expect(r).toMatchObject({ ok: false });
+    expect(r.ok === false && r.error).toMatch(/Цвет фона/);
+  });
+
+  it("строка без параметра — ошибка", () => {
+    expect(parseSettingsRow({ "Параметр": "", "Значение": "Перемешивание" })).toMatchObject({ ok: false });
+  });
+
+  it("экспорт пишет подпись значения, умолчание — «Перемешивание»", () => {
+    expect(serializeSettingsRows({ questionOrder: "shuffle_all" })[0]["Значение"]).toBe("Полное перемешивание");
+    expect(serializeSettingsRows({ questionOrder: null })[0]["Значение"]).toBe("Перемешивание");
+  });
+
+  it("round trip: экспорт → импорт сохраняет значение", () => {
+    const exported = serializeSettingsRows({ questionOrder: "fixed" })[0];
+
+    expect(parseSettingsRow(exported)).toMatchObject({ ok: true, value: { questionOrder: "fixed" } });
   });
 });

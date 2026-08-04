@@ -148,7 +148,7 @@ describe("import «Структура» → «Случайный порядок 
     expect(savedSection()).toMatchObject({ questionOrder: "random" });
   });
 
-  it("книга без колонки импортируется как раньше — random", async () => {
+  it("книга без колонки импортируется как раньше — тема наследует тест", async () => {
     const buf = await makeWorkbook({
       "Вопросы": [questionRow],
       "Структура": [structureRow()],
@@ -157,7 +157,7 @@ describe("import «Структура» → «Случайный порядок 
     const res = await postWorkbook(buf);
 
     expect(res.body.errors).toEqual([]);
-    expect(savedSection()).toMatchObject({ questionOrder: "random" });
+    expect(savedSection()).toMatchObject({ questionOrder: null });
   });
 });
 
@@ -208,5 +208,94 @@ describe("import «Вопросы» → «Индекс в теме» (PRD-30 FR-
 
     expect(res.body.errors.join(" ")).toContain("Индекс в теме");
     expect(storageMock.createQuestion).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * PRD-30 FR-22: the test-wide rule travels on its OWN sheet — «Настройки», a
+ * key/value list. The book had no place for settings of the test itself, so the
+ * sheet is new; a book exported before it must keep importing unchanged.
+ */
+describe("import «Настройки» → правило теста (PRD-30 FR-22)", () => {
+  const structureRow = {
+    "Раздел": "JavaScript",
+    "Порядок": "1",
+    "Вопросов в выборке": "3",
+    "Тип порога": "",
+    "Порог": "",
+    "Обязательный": "да",
+    "Случайный порядок вопросов": "",
+  };
+  /** The test-level payload the import handed to the storage layer. */
+  const savedTest = () => testSettingsMock.save.mock.calls[0][1].test;
+
+  it("«Полное перемешивание» доезжает до теста", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [{ "Параметр": "Порядок выдачи вопросов", "Значение": "Полное перемешивание" }],
+      "Вопросы": [questionRow],
+      "Структура": [structureRow],
+    });
+
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    expect(savedTest()).toMatchObject({ questionOrder: "shuffle_all" });
+  });
+
+  it("«Фиксированный порядок» доезжает до теста", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [{ "Параметр": "Порядок выдачи вопросов", "Значение": "Фиксированный порядок" }],
+      "Вопросы": [questionRow],
+      "Структура": [structureRow],
+    });
+
+    await postWorkbook(buf);
+
+    expect(savedTest()).toMatchObject({ questionOrder: "fixed" });
+  });
+
+  it("книга без листа «Настройки» ничего не меняет в тесте", async () => {
+    const buf = await makeWorkbook({ "Вопросы": [questionRow], "Структура": [structureRow] });
+
+    await postWorkbook(buf);
+
+    expect(savedTest()).not.toHaveProperty("questionOrder");
+  });
+
+  it("пустое значение не сбрасывает настройку теста", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [{ "Параметр": "Порядок выдачи вопросов", "Значение": "" }],
+      "Вопросы": [questionRow],
+      "Структура": [structureRow],
+    });
+
+    await postWorkbook(buf);
+
+    expect(savedTest()).not.toHaveProperty("questionOrder");
+  });
+
+  it("непонятное значение — ошибка импорта с адресом строки", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [{ "Параметр": "Порядок выдачи вопросов", "Значение": "как-нибудь" }],
+      "Вопросы": [questionRow],
+      "Структура": [structureRow],
+    });
+
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors.join(" ")).toMatch(/Лист «Настройки», строка 2/);
+  });
+
+  it("книга ТОЛЬКО с настройками сохраняет их без разделов", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [{ "Параметр": "Порядок выдачи вопросов", "Значение": "Перемешивание" }],
+    });
+
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    expect(testSettingsMock.save).toHaveBeenCalledTimes(1);
+    expect(testSettingsMock.save.mock.calls[0][1].sections).toBeUndefined();
+    expect(savedTest()).toMatchObject({ questionOrder: "random" });
   });
 });

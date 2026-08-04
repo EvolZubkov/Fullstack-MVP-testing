@@ -48,12 +48,14 @@ import {
   parseResultVariableRow,
   parseMeasurementRow,
   validateSourceKey,
+  parseSettingsRow,
   parseStructureRow,
   parseQuotaRow,
   parseVariantThresholdRow,
   parseScoringOverrideRow,
   variantsColumnOf,
   type ParsedQuota,
+  type ParsedTestSettings,
 } from "../utils/workbook-sheets";
 
 export interface WorkbookImportResult {
@@ -123,6 +125,24 @@ export async function importWorkbook(
   // PRD-17 (FR-13): per-topic variant memberships from the «Варианты» column —
   // each topic's distinct labels become its section's variants (built in Pass 6).
   const membershipByTopic = new Map<string, VariantMembership[]>();
+  // ── «Настройки» (PRD-30 FR-22): settings OF THE TEST, read before anything
+  // else so the structure pass can save them together with the sections. A book
+  // without the sheet changes nothing about the test — that is what a workbook
+  // exported before the sheet existed has to keep meaning.
+  const testSettings: ParsedTestSettings = {};
+  const settingsSheet = findSheet(workbook, "Настройки");
+  if (settingsSheet) {
+    const rows = sheetToObjects(settingsSheet);
+    for (let i = 0; i < rows.length; i++) {
+      const parsed = parseSettingsRow(rows[i]);
+      if (!parsed.ok) {
+        result.errors.push(`Лист «Настройки», строка ${i + 2}: ${parsed.error}`);
+        continue;
+      }
+      Object.assign(testSettings, parsed.value);
+    }
+  }
+
   const questionsSheet = findSheet(workbook, "Вопросы");
   // Hoisted so the «Оценка» pass can fall back to the «Вопросы» sheet's legacy
   // «Балл»/«Цена ответа» columns when no «Оценка» sheet is present (see Pass 5).
@@ -683,10 +703,26 @@ export async function importWorkbook(
         test: {
           flowPolicyJson: { mode: "router_by_topics" },
           status: (current?.status as "draft" | "published" | "archived") ?? "draft",
+          // PRD-30 FR-22: settings from «Настройки»; a key the sheet did not
+          // carry stays absent, and the service leaves that column alone.
+          ...testSettings,
         },
         sections,
       });
     }
+  }
+
+  // A book may carry «Настройки» WITHOUT «Структура» — settings of an existing
+  // test, edited on their own. Saving them must not require re-sending sections
+  // (the service rewrites sections only when the payload names them).
+  if (!dryRun && !structureSheet && Object.keys(testSettings).length > 0) {
+    const current = await storage.getTest(testId);
+    await testSettingsService.save(testId, {
+      test: {
+        ...testSettings,
+        status: (current?.status as "draft" | "published" | "archived") ?? "draft",
+      },
+    });
   }
 
   return result;
