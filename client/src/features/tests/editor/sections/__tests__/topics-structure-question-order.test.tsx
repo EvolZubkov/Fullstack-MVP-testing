@@ -1,7 +1,7 @@
 /**
  * @module features/tests/editor/sections/__tests__/topics-structure-question-order.test
  * @description PRD-30 Э5: the topic card's delivery-order switch («Случайный
- * порядок вопросов»), its hints and the `linear_flat` warning.
+ * порядок вопросов») and its hints.
  *
  * Wireframe: docs/wireframes/approved/prd30-question-order.html (states fixed /
  * random / variants / flat). The switch reads «Случайный порядок вопросов», so
@@ -10,7 +10,7 @@
  */
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CompositionSection } from "../topics-structure-section";
 import type { TestEditorModel, EditorSection } from "../../test-editor.types";
@@ -84,36 +84,126 @@ function renderWithClient(ui: React.JSX.Element) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
-const SWITCH = "topic-question-order-top-1";
-const WARNING = "topic-question-order-flat-warning-top-1";
+const ORDER = "topic-question-order-top-1";
+const RESET = "topic-question-order-reset-top-1";
+const TEST_ORDER = "test-question-order";
 
-describe("delivery-order switch — state (PRD-30 FR-02)", () => {
-  it("is ON for a legacy section that has no setting at all", () => {
+/** Текущее значение контрола: DS Select держит его в подписи триггера. */
+const valueOf = (testId: string) => screen.getByTestId(testId).textContent;
+
+/**
+ * Открыть список: DS Select вешает testid на обёртку, а кликать надо по
+ * внутренней кнопке-триггеру.
+ */
+function open(testId: string) {
+  fireEvent.click(within(screen.getByTestId(testId)).getByRole("button"));
+}
+
+/** Открыть список и выбрать значение по подписи. */
+function pick(testId: string, label: string) {
+  open(testId);
+  fireEvent.click(screen.getByRole("option", { name: label }));
+}
+
+describe("правило теста (PRD-30 FR-16/FR-17)", () => {
+  it("по умолчанию — «Перемешивание»: сегодняшнее поведение всех тестов", () => {
+    renderWithClient(<CompositionSection model={baseModel()} updateModel={() => {}} />);
+
+    expect(valueOf(TEST_ORDER)).toContain("Перемешивание");
+    expect(screen.getByText(/вопросы перемешиваются внутри темы/)).toBeInTheDocument();
+  });
+
+  it("в сплошном режиме предлагает «Полное перемешивание»", () => {
+    renderWithClient(
+      <CompositionSection model={baseModel({ flowMode: "linear_flat" })} updateModel={() => {}} />,
+    );
+    open(TEST_ORDER);
+
+    expect(screen.getByRole("option", { name: "Полное перемешивание" })).toBeInTheDocument();
+  });
+
+  it.each(["linear_by_topics", "router_by_topics"] as const)(
+    "в режиме %s третьей позиции нет — границу темы держит сам режим",
+    (flowMode) => {
+      renderWithClient(<CompositionSection model={baseModel({ flowMode })} updateModel={() => {}} />);
+      open(TEST_ORDER);
+
+      expect(screen.queryByRole("option", { name: "Полное перемешивание" })).not.toBeInTheDocument();
+    },
+  );
+
+  it("выбор значения кладётся в модель", () => {
+    const updateModel = vi.fn();
+    const model = baseModel({ flowMode: "linear_flat" });
+
+    renderWithClient(<CompositionSection model={model} updateModel={updateModel} />);
+    pick(TEST_ORDER, "Полное перемешивание");
+
+    const patched = updateModel.mock.calls[0][0](model) as TestEditorModel;
+    expect(patched.questionOrder).toBe("shuffle_all");
+  });
+
+  it("хвост строки объясняет «полное перемешивание»", () => {
+    renderWithClient(
+      <CompositionSection
+        model={baseModel({ flowMode: "linear_flat", questionOrder: "shuffle_all" })}
+        updateModel={() => {}}
+      />,
+    );
+
+    expect(screen.getByText(/вопросы всех тем идут одним перемешанным потоком/)).toBeInTheDocument();
+  });
+});
+
+describe("порядок в теме — наследование (PRD-30 FR-18)", () => {
+  it("по умолчанию тема стоит на «Как в тесте», и сбрасывать нечего", () => {
     const model = baseModel({ sections: [buildSection()] });
 
     renderWithClient(<CompositionSection model={model} updateModel={() => {}} />);
 
-    expect(screen.getByTestId(SWITCH)).toBeChecked();
+    expect(valueOf(ORDER)).toContain("Как в тесте");
+    expect(screen.queryByTestId(RESET)).not.toBeInTheDocument();
   });
 
-  it("is ON for an explicit random section", () => {
-    const model = baseModel({ sections: [buildSection({ questionOrder: "random" })] });
+  it("хвост показывает, ЧТО именно тема унаследовала", () => {
+    const fixed = baseModel({ questionOrder: "fixed", sections: [buildSection()] });
+    const { unmount } = renderWithClient(<CompositionSection model={fixed} updateModel={() => {}} />);
+    // Ищем внутри карточки темы: тот же текст стоит и в хвосте правила теста.
+    expect(
+      within(screen.getByTestId("topic-row-top-1")).getByText(/по индексу, заданному в теме/),
+    ).toBeInTheDocument();
+    unmount();
 
-    renderWithClient(<CompositionSection model={model} updateModel={() => {}} />);
-
-    expect(screen.getByTestId(SWITCH)).toBeChecked();
+    const mixed = baseModel({
+      flowMode: "linear_flat",
+      questionOrder: "shuffle_all",
+      sections: [buildSection()],
+    });
+    renderWithClient(<CompositionSection model={mixed} updateModel={() => {}} />);
+    expect(screen.getByText(/вопросы темы уходят в общий поток/)).toBeInTheDocument();
   });
 
-  it("is OFF for a fixed section, and explains what the order comes from", () => {
+  it("переопределение показывает пиктограмму сброса — она и есть признак", () => {
     const model = baseModel({ sections: [buildSection({ questionOrder: "fixed" })] });
 
     renderWithClient(<CompositionSection model={model} updateModel={() => {}} />);
 
-    expect(screen.getByTestId(SWITCH)).not.toBeChecked();
-    expect(screen.getByText(/по индексу, заданному в теме/)).toBeInTheDocument();
+    expect(valueOf(ORDER)).toContain("Фиксированный порядок");
+    expect(screen.getByTestId(RESET)).toBeInTheDocument();
   });
 
-  it("in variants mode the hint points at the variant's list, not the index (FR-07)", () => {
+  it("сброс возвращает тему к значению теста", () => {
+    const updateModel = vi.fn();
+    const model = baseModel({ sections: [buildSection({ questionOrder: "fixed" })] });
+
+    renderWithClient(<CompositionSection model={model} updateModel={updateModel} />);
+    fireEvent.click(screen.getByTestId(RESET));
+
+    const patched = updateModel.mock.calls[0][0](model) as TestEditorModel;
+    expect(patched.sections[0].questionOrder).toBeNull();
+  });
+
+  it("в режиме вариантов фиксированный порядок ссылается на список варианта (FR-07)", () => {
     const model = baseModel({
       sections: [buildSection({
         questionOrder: "fixed",
@@ -128,68 +218,46 @@ describe("delivery-order switch — state (PRD-30 FR-02)", () => {
 
     expect(screen.getByText(/в порядке списка варианта/)).toBeInTheDocument();
   });
-
-  it("shows no hint while the order is random — the card stays as it is today", () => {
-    const model = baseModel({ sections: [buildSection()] });
-
-    renderWithClient(<CompositionSection model={model} updateModel={() => {}} />);
-
-    expect(screen.queryByText(/по индексу, заданному в теме/)).not.toBeInTheDocument();
-  });
 });
 
-describe("delivery-order switch — editing", () => {
-  it("turning it OFF stores fixed", () => {
+describe("порядок в теме — редактирование", () => {
+  it("выбор «Фиксированный порядок» кладёт переопределение", () => {
     const updateModel = vi.fn();
-    const model = baseModel({ sections: [buildSection({ questionOrder: "random" })] });
+    const model = baseModel({ sections: [buildSection()] });
 
     renderWithClient(<CompositionSection model={model} updateModel={updateModel} />);
-    fireEvent.click(screen.getByTestId(SWITCH));
+    pick(ORDER, "Фиксированный порядок");
 
     const patched = updateModel.mock.calls[0][0](model) as TestEditorModel;
     expect(patched.sections[0].questionOrder).toBe("fixed");
   });
 
-  it("turning it ON stores random", () => {
+  it("выбор «Как в тесте» снимает переопределение", () => {
     const updateModel = vi.fn();
     const model = baseModel({ sections: [buildSection({ questionOrder: "fixed" })] });
 
     renderWithClient(<CompositionSection model={model} updateModel={updateModel} />);
-    fireEvent.click(screen.getByTestId(SWITCH));
+    pick(ORDER, "Как в тесте");
 
     const patched = updateModel.mock.calls[0][0](model) as TestEditorModel;
-    expect(patched.sections[0].questionOrder).toBe("random");
+    expect(patched.sections[0].questionOrder).toBeNull();
   });
 });
 
-describe("flat-stream warning (PRD-30 FR-12)", () => {
-  it("warns when a fixed topic sits in a linear_flat test", () => {
-    const model = baseModel({
-      flowMode: "linear_flat",
-      sections: [buildSection({ questionOrder: "fixed" })],
-    });
+describe("настройка работает во всех режимах прохождения (PRD-30 FR-12)", () => {
+  // У строки был баннер «порядок не сохранится» в сплошном режиме. Он был верен
+  // только для пакета и по неверной причине: рантайм перемешивал собранный поток
+  // вторым проходом поверх уже выстроенного порядка. Перемешивание живёт в одном
+  // месте, настройка действует везде, предупреждения нет.
+  it.each(["linear_flat", "linear_by_topics", "router_by_topics"] as const)(
+    "в режиме %s предупреждения под контролом нет",
+    (flowMode) => {
+      const model = baseModel({ flowMode, sections: [buildSection({ questionOrder: "fixed" })] });
 
-    renderWithClient(<CompositionSection model={model} updateModel={() => {}} />);
+      renderWithClient(<CompositionSection model={model} updateModel={() => {}} />);
 
-    expect(screen.getByTestId(WARNING)).toHaveTextContent(/не сохранится/);
-  });
-
-  it("stays silent while the topic delivers at random — nothing is lost there", () => {
-    const model = baseModel({ flowMode: "linear_flat", sections: [buildSection()] });
-
-    renderWithClient(<CompositionSection model={model} updateModel={() => {}} />);
-
-    expect(screen.queryByTestId(WARNING)).not.toBeInTheDocument();
-  });
-
-  it("stays silent in a sectional flow, where the order does survive", () => {
-    const model = baseModel({
-      flowMode: "linear_by_topics",
-      sections: [buildSection({ questionOrder: "fixed" })],
-    });
-
-    renderWithClient(<CompositionSection model={model} updateModel={() => {}} />);
-
-    expect(screen.queryByTestId(WARNING)).not.toBeInTheDocument();
-  });
+      expect(screen.queryByTestId("topic-question-order-flat-warning-top-1")).not.toBeInTheDocument();
+      expect(screen.queryByText(/не сохранится/)).not.toBeInTheDocument();
+    },
+  );
 });
