@@ -20,7 +20,7 @@ var EligibilityPlugins = (function () {
     return String(s || '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '').toLowerCase();
   }
 
-  function selectLastAttemptDate(records, filter, courseName) {
+  function selectLastAttemptRecord(records, filter, courseName) {
     var stateField = filter.stateField || 'state';
     var progressField = filter.progressField || 'progress';
     var fmt = filter.dateFormat || 'dd.MM.yyyy';
@@ -29,12 +29,11 @@ var EligibilityPlugins = (function () {
     var wantName = (filter.nameField && courseName) ? normalizeName(courseName) : null;
     var sentinels = filter.excludeDateValues || [];
     var bestEpoch = null;
-    var bestStr = null;
+    var bestRec = null;
     var list = records || [];
     for (var i = 0; i < list.length; i++) {
       var rec = list[i];
       if (!rec) continue;
-      // Same-course match across assignments.
       if (wantName) {
         var nm = normalizeName(rec[filter.nameField] != null ? String(rec[filter.nameField]) : '');
         if (nm !== wantName) continue;
@@ -47,7 +46,6 @@ var EligibilityPlugins = (function () {
         if (!progRe.test(prog)) continue;
       }
       var raw = rec[filter.dateField] != null ? String(rec[filter.dateField]) : '';
-      // Skip open-ended / sentinel dates (e.g. «31.12.9999» = assigned, never taken).
       var skip = false;
       for (var s = 0; s < sentinels.length; s++) { if (raw.indexOf(sentinels[s]) !== -1) { skip = true; break; } }
       if (skip) continue;
@@ -55,15 +53,31 @@ var EligibilityPlugins = (function () {
       if (!iso) continue;
       var epoch = EligibilityEngine.parseIsoDate(iso);
       if (epoch == null) continue;
-      if (bestEpoch == null || epoch > bestEpoch) { bestEpoch = epoch; bestStr = iso; }
+      if (bestEpoch == null || epoch > bestEpoch) { bestEpoch = epoch; bestRec = rec; }
     }
-    return bestStr;
+    return bestRec;
   }
 
-  function cooldownResult(lastAttemptDate, context, source) {
-    var days = context.retakePolicy.cooldownPeriodDays;
+  function selectLastAttemptDate(records, filter, courseName) {
+    var rec = selectLastAttemptRecord(records, filter, courseName);
+    if (!rec) return null;
+    var raw = rec[filter.dateField] != null ? String(rec[filter.dateField]) : '';
+    return parseFlexibleDate(raw, filter.dateFormat || 'dd.MM.yyyy');
+  }
+
+  // PRD-40: was the given record a PASSED attempt? null when passedStateIn is not
+  // configured or rec is null (outcome not determinable).
+  function recordPassed(rec, filter) {
+    if (!rec || !filter.passedStateIn) return null;
+    var stateField = filter.stateField || 'state';
+    var state = rec[stateField] != null ? String(rec[stateField]) : '';
+    return filter.passedStateIn.indexOf(state) !== -1;
+  }
+
+  function cooldownResult(lastAttemptDate, passed, context, source) {
+    var days = EligibilityEngine.resolveCooldownDays(context.retakePolicy, passed);
     var today = context.runtime.todayDate;
-    var dec = EligibilityEngine.cooldownDecision(lastAttemptDate, today, days);
+    var dec = EligibilityEngine.cooldownDecision(lastAttemptDate, today, days != null ? days : 0);
     return {
       allowed: dec.allowed,
       reason: dec.allowed ? (lastAttemptDate ? 'cooldown_passed' : 'no_prior_attempt') : 'cooldown_active',
@@ -82,15 +96,17 @@ var EligibilityPlugins = (function () {
   }
 
   function webtutorCooldownDecide(records, filter, context, courseName) {
-    return cooldownResult(selectLastAttemptDate(records, filter, courseName), context, 'webtutor_cooldown');
+    var rec = selectLastAttemptRecord(records, filter, courseName);
+    var date = rec ? parseFlexibleDate(String(rec[filter.dateField] != null ? rec[filter.dateField] : ''), filter.dateFormat || 'dd.MM.yyyy') : null;
+    return cooldownResult(date, recordPassed(rec, filter), context, 'webtutor_cooldown');
   }
 
   function suspendDataCooldownDecide(lastCompletedDate, context) {
-    return cooldownResult(lastCompletedDate, context, 'suspend_data_cooldown');
+    return cooldownResult(lastCompletedDate, null, context, 'suspend_data_cooldown');
   }
 
   function cooldownDecideFromDate(lastAttemptDate, context, source) {
-    return cooldownResult(lastAttemptDate, context, source);
+    return cooldownResult(lastAttemptDate, null, context, source);
   }
 
   function unescapeXml(s) {
@@ -117,6 +133,8 @@ var EligibilityPlugins = (function () {
   return {
     parseFlexibleDate: parseFlexibleDate,
     selectLastAttemptDate: selectLastAttemptDate,
+    selectLastAttemptRecord: selectLastAttemptRecord,
+    recordPassed: recordPassed,
     webtutorCooldownDecide: webtutorCooldownDecide,
     suspendDataCooldownDecide: suspendDataCooldownDecide,
     cooldownDecideFromDate: cooldownDecideFromDate,

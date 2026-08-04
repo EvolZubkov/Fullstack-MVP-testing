@@ -27,6 +27,16 @@ const ctx = (days = 30, today = "2026-05-20"): EligibilityContext => ({
   runtime: { todayDate: today },
 });
 
+const outcomeCtx = (
+  passedDays: number,
+  failedDays: number,
+  today = "2026-05-20",
+): EligibilityContext => ({
+  test: { id: "t", title: "T" },
+  retakePolicy: { cooldownByOutcome: true, cooldownPeriodDaysPassed: passedDays, cooldownPeriodDaysFailed: failedDays },
+  runtime: { todayDate: today },
+});
+
 const filter = {
   stateField: "state",
   stateIn: ["Завершен", "Пройден"],
@@ -204,6 +214,50 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
     expect(port.EligibilityPlugins.webtutorCooldownDecide(records, filter, ctx())).toEqual(
       tsPlugins.webtutorCooldownDecide(records, filter, ctx()),
     );
+  });
+
+  it("webtutorCooldownDecide resolves the period by outcome (passedStateIn)", () => {
+    // progressCompletePattern is unset here: with both outcomes in stateIn, completion
+    // is decided by state (per the filter's own doc comment), not by progress — leaving
+    // the inherited "^100\b" pattern would silently drop non-100%-progress "Не пройден"
+    // records from consideration, defeating the outcome-selection this test targets.
+    const outcomeFilter = {
+      ...filter,
+      progressCompletePattern: undefined,
+      passedStateIn: ["Пройден"],
+      stateIn: ["Пройден", "Не пройден"],
+    };
+    // Last (latest-dated) matching record is "Пройден" -> the PASSED period (90) applies.
+    const passedRecords = [
+      { state: "Не пройден", progress: "60%", last_usage_date: "01.04.2026" },
+      { state: "Пройден", progress: "100%", last_usage_date: "08.05.2026" },
+    ];
+    expect(port.EligibilityPlugins.webtutorCooldownDecide(passedRecords, outcomeFilter, outcomeCtx(90, 7))).toEqual(
+      tsPlugins.webtutorCooldownDecide(passedRecords, outcomeFilter, outcomeCtx(90, 7)),
+    );
+    expect(
+      tsPlugins.webtutorCooldownDecide(passedRecords, outcomeFilter, outcomeCtx(90, 7)).data?.cooldownPeriodDays,
+    ).toBe(90);
+
+    // Last matching record is "Не пройден" -> the FAILED period (7) applies.
+    const failedRecords = [
+      { state: "Пройден", progress: "100%", last_usage_date: "01.04.2026" },
+      { state: "Не пройден", progress: "60%", last_usage_date: "08.05.2026" },
+    ];
+    expect(port.EligibilityPlugins.webtutorCooldownDecide(failedRecords, outcomeFilter, outcomeCtx(90, 7))).toEqual(
+      tsPlugins.webtutorCooldownDecide(failedRecords, outcomeFilter, outcomeCtx(90, 7)),
+    );
+    expect(
+      tsPlugins.webtutorCooldownDecide(failedRecords, outcomeFilter, outcomeCtx(90, 7)).data?.cooldownPeriodDays,
+    ).toBe(7);
+
+    // No passedStateIn configured -> outcome unknown -> the LARGER of the two.
+    expect(
+      tsPlugins.webtutorCooldownDecide(passedRecords, filter, outcomeCtx(90, 7)).data?.cooldownPeriodDays,
+    ).toBe(90);
+    expect(
+      tsPlugins.webtutorCooldownDecide(failedRecords, filter, outcomeCtx(7, 90)).data?.cooldownPeriodDays,
+    ).toBe(90);
   });
 
   it("suspendDataCooldownDecide matches", () => {

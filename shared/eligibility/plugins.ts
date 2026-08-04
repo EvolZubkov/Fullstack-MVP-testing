@@ -14,7 +14,7 @@
  * kept in parity by tests/eligibility-engine-port.test.ts.
  */
 
-import { cooldownDecision, parseIsoDate } from "./engine";
+import { cooldownDecision, parseIsoDate, resolveCooldownDays } from "./engine";
 import type { EligibilityContext, EligibilityResult } from "./types";
 
 /** Filter that selects a "full attempt" record from WebTutor output (PRD-6 §3.3). */
@@ -41,6 +41,12 @@ export interface WebtutorAttemptFilter {
   dateField: string;
   /** Date format of `dateField`; default "dd.MM.yyyy". */
   dateFormat?: string;
+  /**
+   * PRD-40: subset of `stateIn` whose records count as a PASSED attempt (vs. a
+   * finished-but-failed one). Absent -> the outcome of any selected record is
+   * unknown (`passed: null`), which `resolveCooldownDays` treats conservatively.
+   */
+  passedStateIn?: string[];
   /**
    * Field holding the course NAME. When set together with a `courseName` argument,
    * only records whose name matches (normalized) are considered — so all ASSIGNMENTS
@@ -79,19 +85,16 @@ export function parseFlexibleDate(value: string, format: string): string | null 
 }
 
 /**
- * Select the latest FINISHED-attempt date from WebTutor records by applying the
- * configurable filter (state/name/date). Returns ISO `YYYY-MM-DD` or null.
- *
- * When `filter.nameField` and `courseName` are both given, only records for that
- * course (by normalized name) are considered — every ASSIGNMENT of the course is a
- * separate record with its own object_id but the same name, and they are one course
- * (per requirement), so the latest date across all of them wins.
+ * Select the latest FINISHED-attempt RECORD from WebTutor records by applying the
+ * configurable filter (state/name/date). Returns the raw record or null — callers
+ * derive whatever field they need (date via `selectLastAttemptDate`, outcome via
+ * `recordPassed`).
  */
-export function selectLastAttemptDate(
+export function selectLastAttemptRecord(
   records: WebtutorRecord[] | null | undefined,
   filter: WebtutorAttemptFilter,
   courseName?: string,
-): string | null {
+): WebtutorRecord | null {
   const stateField = filter.stateField || "state";
   const progressField = filter.progressField || "progress";
   const fmt = filter.dateFormat || "dd.MM.yyyy";
@@ -100,10 +103,9 @@ export function selectLastAttemptDate(
   const wantName = filter.nameField && courseName ? normalizeName(courseName) : null;
   const sentinels = filter.excludeDateValues || [];
   let bestEpoch: number | null = null;
-  let bestStr: string | null = null;
+  let bestRec: WebtutorRecord | null = null;
   for (const rec of records || []) {
     if (!rec) continue;
-    // Same-course match across assignments: keep only records for this course.
     if (wantName) {
       const name = normalizeName(rec[filter.nameField as string] != null ? String(rec[filter.nameField as string]) : "");
       if (name !== wantName) continue;
@@ -116,7 +118,6 @@ export function selectLastAttemptDate(
       if (!progRe.test(prog)) continue;
     }
     const raw = rec[filter.dateField] != null ? String(rec[filter.dateField]) : "";
-    // Skip open-ended / sentinel dates (e.g. «31.12.9999» = assigned, never taken).
     if (sentinels.some((s) => raw.indexOf(s) !== -1)) continue;
     const iso = parseFlexibleDate(raw, fmt);
     if (!iso) continue;
@@ -124,21 +125,52 @@ export function selectLastAttemptDate(
     if (epoch == null) continue;
     if (bestEpoch == null || epoch > bestEpoch) {
       bestEpoch = epoch;
-      bestStr = iso;
+      bestRec = rec;
     }
   }
-  return bestStr;
+  return bestRec;
 }
 
-/** Build a normalized cooldown result from a resolved last-attempt date. */
+/**
+ * Select the latest FINISHED-attempt DATE from WebTutor records (PRD-6 §3.3).
+ * Thin wrapper over `selectLastAttemptRecord` kept for backward compatibility with
+ * existing callers/tests.
+ */
+export function selectLastAttemptDate(
+  records: WebtutorRecord[] | null | undefined,
+  filter: WebtutorAttemptFilter,
+  courseName?: string,
+): string | null {
+  const rec = selectLastAttemptRecord(records, filter, courseName);
+  if (!rec) return null;
+  const raw = rec[filter.dateField] != null ? String(rec[filter.dateField]) : "";
+  return parseFlexibleDate(raw, filter.dateFormat || "dd.MM.yyyy");
+}
+
+/**
+ * PRD-40: was the given record a PASSED attempt? `null` when `passedStateIn` is
+ * not configured (outcome not determinable from this filter) or `rec` is null.
+ */
+export function recordPassed(
+  rec: WebtutorRecord | null,
+  filter: WebtutorAttemptFilter,
+): boolean | null {
+  if (!rec || !filter.passedStateIn) return null;
+  const stateField = filter.stateField || "state";
+  const state = rec[stateField] != null ? String(rec[stateField]) : "";
+  return filter.passedStateIn.indexOf(state) !== -1;
+}
+
+/** Build a normalized cooldown result from a resolved last-attempt date + outcome. */
 function cooldownResult(
   lastAttemptDate: string | null,
+  passed: boolean | null,
   context: EligibilityContext,
   source: string,
 ): EligibilityResult {
-  const days = context.retakePolicy.cooldownPeriodDays;
+  const days = resolveCooldownDays(context.retakePolicy, passed);
   const today = context.runtime.todayDate;
-  const dec = cooldownDecision(lastAttemptDate, today, days);
+  const dec = cooldownDecision(lastAttemptDate, today, days ?? 0);
   return {
     allowed: dec.allowed,
     reason: dec.allowed ? (lastAttemptDate ? "cooldown_passed" : "no_prior_attempt") : "cooldown_active",
@@ -160,7 +192,8 @@ function cooldownResult(
  * `webtutor_cooldown` decision from already-fetched records (PRD-6 §3.6).
  * The runtime fetches `records` from WebTutor endpoints, then calls this.
  * `courseName` (the test title) scopes the selection to one course across all its
- * assignments when the filter declares a `nameField`.
+ * assignments when the filter declares a `nameField`. PRD-40: the outcome of the
+ * SAME winning record (`recordPassed`) resolves which configured period applies.
  */
 export function webtutorCooldownDecide(
   records: WebtutorRecord[] | null | undefined,
@@ -168,7 +201,9 @@ export function webtutorCooldownDecide(
   context: EligibilityContext,
   courseName?: string,
 ): EligibilityResult {
-  return cooldownResult(selectLastAttemptDate(records, filter, courseName), context, "webtutor_cooldown");
+  const rec = selectLastAttemptRecord(records, filter, courseName);
+  const date = rec ? parseFlexibleDate(String(rec[filter.dateField] ?? ""), filter.dateFormat || "dd.MM.yyyy") : null;
+  return cooldownResult(date, recordPassed(rec, filter), context, "webtutor_cooldown");
 }
 
 /**
@@ -179,7 +214,7 @@ export function suspendDataCooldownDecide(
   lastCompletedDate: string | null,
   context: EligibilityContext,
 ): EligibilityResult {
-  return cooldownResult(lastCompletedDate, context, "suspend_data_cooldown");
+  return cooldownResult(lastCompletedDate, null, context, "suspend_data_cooldown");
 }
 
 /** Cooldown decision from an already-resolved last-attempt date, any source. */
@@ -188,7 +223,7 @@ export function cooldownDecideFromDate(
   context: EligibilityContext,
   source: string,
 ): EligibilityResult {
-  return cooldownResult(lastAttemptDate, context, source);
+  return cooldownResult(lastAttemptDate, null, context, source);
 }
 
 /** Unescape the HTML/XML entities WebTutor uses inside its SOAP `<result>` XAML. */
