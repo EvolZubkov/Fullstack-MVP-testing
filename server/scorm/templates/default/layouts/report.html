@@ -47,7 +47,7 @@
         <div class="tb-report__topic-stripe"></div>
         <div class="tb-report__topic-head">
           <div class="tb-report__topic-name">{{ topicName }}</div>
-          <div class="tb-report__topic-verdict">{{ verdictLabel }}</div>
+          {{#if verdictLabel}}<div class="tb-report__topic-verdict">{{ verdictLabel }}</div>{{/if}}
         </div>
         <div class="tb-report__topic-stats">
           <span>{{ countsLabel }}</span>

@@ -107,14 +107,19 @@
 }
 .tb-report__topic--level { padding: 12px; }
 
+/* База НЕЙТРАЛЬНАЯ: карточка без класса — это тема без вердикта (нет порога или
+   нечего оценивать), и красная полоса утверждала бы о ней провал, которого экран
+   не утверждает. Провал красит `is-fail`, он приходит тем же `passClass`, что и
+   `is-pass`. */
 .tb-report__topic-stripe {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   height: 3px;
-  background: #ef4444;
+  background: #6b7280;
 }
+.tb-report__topic.is-fail .tb-report__topic-stripe { background: #ef4444; }
 .tb-report__topic.is-pass .tb-report__topic-stripe { background: #22c55e; }
 .tb-report__topic.is-achieved .tb-report__topic-stripe { background: #3b82f6; }
 .tb-report__topic.is-below .tb-report__topic-stripe { background: #6b7280; }
@@ -178,7 +183,10 @@
   overflow: hidden;
   margin-bottom: 6px;
 }
-.tb-report__topic-bar-fill { height: 100%; border-radius: 2px; background: #ef4444; }
+/* Заливка — по тому же трёхпозиционному правилу, что полоса карточки: без вердикта
+   нейтральная, провал красит `is-fail`. */
+.tb-report__topic-bar-fill { height: 100%; border-radius: 2px; background: #6b7280; }
+.tb-report__topic.is-fail .tb-report__topic-bar-fill { background: #ef4444; }
 .tb-report__topic.is-pass .tb-report__topic-bar-fill { background: #22c55e; }
 
 .tb-report__topic-fb {

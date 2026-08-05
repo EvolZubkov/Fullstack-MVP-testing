@@ -104,6 +104,22 @@ describe("контекст обычного отчёта", () => {
     expect(buildReportContext(input({ learnerName: "   " })).report.hasLearnerName).toBe(false);
   });
 
+  it("вердикт темы трёхпозиционный: неопределённый НЕ печатается как «Не пройден»", () => {
+    // Экран у темы без вердикта не показывает метку вовсе (`topicView`: passed ===
+    // true / false / иначе пусто). Отчёт печатал ту же тему как «Не пройден», то есть
+    // утверждал о ней то, чего экран не утверждает, — и делал это красной плашкой.
+    const rows = (over: Record<string, unknown>) =>
+      (buildReportContext(input({ result: { ...input().result, topicResults: [topic(over)] } }))
+        .result.topicResults as any[])[0];
+    expect(rows({ passed: true }).verdictLabel).toBe("Пройден");
+    expect(rows({ passed: false }).verdictLabel).toBe("Не пройден");
+    expect(rows({ passed: null }).verdictLabel).toBe("");
+    expect(rows({ passed: undefined }).verdictLabel).toBe("");
+    // Класс полосы и плашки идёт из общего построителя и уже трёхпозиционный —
+    // пиннится здесь, чтобы пустая метка не осталась с красным классом.
+    expect(rows({ passed: null }).passClass).toBe("");
+  });
+
   it("в отчёте всегда есть строка баллов по теме", () => {
     // Отчёт — документ: досчитать баллы по теме читателю потом нечем.
     expect((buildReportContext(input()).result.topicResults as any[])?.[0].pointsLabel).toBe("3 / 5");

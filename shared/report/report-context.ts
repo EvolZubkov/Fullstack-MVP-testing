@@ -247,10 +247,15 @@ export function buildReportContext(input: ReportInput, opts: ReportContextOption
     rows.forEach((row, i) => {
       const src = topics[i];
       if (!src) return;
-      const topicPassed = src.passed === true;
       const target = row as unknown as Record<string, unknown>;
       const topicPercent = Math.round(Number(src.percent) || 0);
-      target.verdictLabel = topicPassed ? "Пройден" : "Не пройден";
+      // Вердикт темы ТРЁХПОЗИЦИОННЫЙ, как на экране (`topicView`: true / false / нет
+      // вердикта). Отчёт печатал его булевым и объявлял «Не пройден» тему, о которой
+      // экран не утверждает ничего: у неё нет ни порога, ни оцениваемых вопросов.
+      // Пустая метка гасится макетом — плашка несёт фон и отступы, поэтому пустой
+      // строки мало, нужен именно пропуск узла.
+      target.verdictLabel =
+        src.passed === true ? "Пройден" : src.passed === false ? "Не пройден" : "";
       target.barPercent = topicPercent;
       target.countsLabel = `${src.correct} из ${src.total} (${topicPercent}%)`;
       target.pointsFixedLabel = `${fixed1(src.earnedPoints)}/${fixed1(src.possiblePoints)}`;
