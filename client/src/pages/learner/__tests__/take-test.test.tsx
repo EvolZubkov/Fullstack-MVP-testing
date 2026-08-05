@@ -596,6 +596,63 @@ describe("<TakeTestPage /> flexible flow", () => {
     await screen.findByTestId("ts-finish-review");
     expect(ctx().review.unansweredCount).toBeGreaterThan(0);
   });
+
+  it("PRD-43: flexible + quickAdvance — one click fixes the answer and advances, Назад/Пропустить still show", async () => {
+    await renderToStart({
+      startAttempt: jsonRes(
+        standardAttempt({ allowReturnToUnanswered: true, allowAnswerChange: true, quickAdvance: true, answerCommitScope: "test" }),
+      ),
+    });
+    fireEvent.click(screen.getByTestId("ts-start-test"));
+    await screen.findByTestId("question-screen");
+
+    // Skip/Back still available even though the primary click is single-step now.
+    expect(screen.getByText("Пропустить")).toBeInTheDocument();
+
+    // Q1: one click on «Далее» both fixes the answer and advances — no
+    // intermediate «Отправить ответ» step.
+    fireEvent.click(screen.getByTestId("qs-answer-0"));
+    expect(screen.queryByText("Отправить ответ")).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByText("Далее"));
+    await waitFor(() =>
+      expect(screen.getByTestId("qs-counter").textContent).toContain("Вопрос 2 из 2"),
+    );
+
+    // Q2 (last): same one click reaches the обзор (flexible mode never finishes
+    // straight from a committed question, FR-16).
+    fireEvent.click(screen.getByTestId("qs-answer-0"));
+    fireEvent.click(await screen.findByText("Далее"));
+    await screen.findByTestId("ts-finish-review");
+  });
+});
+
+describe("<TakeTestPage /> strict flow without quick advance (PRD-43)", () => {
+  it("two-step footer with NO Назад/Пропустить: «Отправить ответ» then «Далее»", async () => {
+    await renderToStart({
+      startAttempt: jsonRes(
+        standardAttempt({ allowReturnToUnanswered: false, quickAdvance: false, answerCommitScope: "test" }),
+      ),
+    });
+    fireEvent.click(screen.getByTestId("ts-start-test"));
+    await screen.findByTestId("question-screen");
+
+    expect(screen.queryByText("Пропустить")).not.toBeInTheDocument();
+    expect(screen.queryByText("← Назад")).not.toBeInTheDocument();
+
+    // Q1: two clicks — «Отправить ответ» fixes, «Далее» (separate) advances.
+    fireEvent.click(screen.getByTestId("qs-answer-0"));
+    fireEvent.click(await screen.findByText("Отправить ответ"));
+    fireEvent.click(await screen.findByText("Далее"));
+    await waitFor(() =>
+      expect(screen.getByTestId("qs-counter").textContent).toContain("Вопрос 2 из 2"),
+    );
+
+    // Q2 (last): same two-click shape, ending in «Завершить тест».
+    fireEvent.click(screen.getByTestId("qs-answer-0"));
+    fireEvent.click(await screen.findByText("Отправить ответ"));
+    fireEvent.click(await screen.findByText("Завершить тест"));
+    await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith("/learner/result/attempt-1"));
+  });
 });
 
 // ─── shuffle mappings + per-answer feedback ────────────────────────────────────
