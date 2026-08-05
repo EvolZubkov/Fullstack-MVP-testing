@@ -45,6 +45,7 @@ const props = {
   // The nav row is part of the scene (`state.nav`) — a strict-linear row here.
   nav: {
     flexible: false,
+    quickAdvance: true,
     committed: false,
     canPrev: false,
     answerReady: true,

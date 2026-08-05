@@ -52,6 +52,7 @@ function shadowOf(container: HTMLElement): ShadowRoot {
 /** Strict-linear row with a usable answer (the adaptive shape too). */
 const NAV = {
   flexible: false,
+  quickAdvance: true,
   committed: false,
   canPrev: false,
   answerReady: true,
