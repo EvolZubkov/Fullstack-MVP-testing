@@ -1209,7 +1209,7 @@
             <td><code>s-feedback-edit</code></td>
             <td>Клик по `tb-feedback-preview` (любой состав) или CTA «Добавить обратную связь»</td>
             <td>Отменить | Сохранить (modal footer)</td>
-            <td>Модал `ou-modal--l` поверх Drawer (Состав). Селектор формата (plain/richText/html), richtext-editor, секция ссылок (FR-37), секция PDF-assets (FR-37). Drawer footer disabled, body `aria-hidden`. FR-36.</td>
+            <td>Модал `ou-modal--l` поверх Drawer (Состав). Селектор формата (plain/richText/html), richtext-editor, секция ссылок (FR-37), секция материалов (PRD-42). Drawer footer disabled, body `aria-hidden`. FR-36.</td>
           </tr>
         </tbody>
       </table>
@@ -1254,7 +1254,7 @@
           </tr>
           <tr>
             <td>Редактирование обратной связи по теме (FR-36/37)</td>
-            <td>Клик по `tb-feedback-preview` (read-only / empty) открывает модал поверх Drawer; richtext + ссылки + PDF-assets. Сохранить → возврат к Состав, drawer переходит в s-dirty.</td>
+            <td>Клик по `tb-feedback-preview` (read-only / empty) открывает модал поверх Drawer; richtext + ссылки + материалы. Сохранить → возврат к Состав, drawer переходит в s-dirty.</td>
             <td>s-feedback-edit</td>
           </tr>
         </tbody>
@@ -1561,7 +1561,7 @@
     if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
     if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
     if (hasIn(state, '.skel, .skeleton, .ou-skeleton')) addMappingRow(rows, 'skeleton', 'Загрузка', '<code>Skeleton</code>', ['--ou-bg-surface-3', '--ou-bg-hover'], 'Повторяет структуру default-состояния.');
-    if (hasIn(state, '.tb-feedback-editor')) addMappingRow(rows, 'feedback-editor', 'Feedback edit modal', '<code>FeedbackEditor</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-accent-soft'], 'Модал richtext + ссылки + PDF-assets (FR-36/FR-37).');
+    if (hasIn(state, '.tb-feedback-editor')) addMappingRow(rows, 'feedback-editor', 'Feedback edit modal', '<code>FeedbackEditor</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-accent-soft'], 'Модал richtext + ссылки + материалы (FR-36/FR-37, PRD-42).');
     if (hasIn(state, '.tb-rte')) addMappingRow(rows, 'rich-text', 'Rich-text editor', '<code>RichTextEditor</code>', ['--ou-bg-elevated', '--ou-border-soft', '--ou-bg-surface-2'], 'Toolbar + contenteditable area; формат plain/richText/html.');
     return rows;
   }
