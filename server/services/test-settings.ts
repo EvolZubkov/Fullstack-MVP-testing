@@ -182,6 +182,8 @@ export interface TestPayload {
   // PRD-19 (Блок A): правила навигации/завершения.
   allowReturnToUnanswered?: boolean;
   allowAnswerChange?: boolean;
+  // PRD-43: independent of allowReturnToUnanswered.
+  quickAdvance?: boolean;
   showSectionResults?: boolean;
   // PRD-34 (FR-01): настройки защиты от копирования.
   copyProtection?: boolean;
@@ -278,6 +280,9 @@ export class TestSettingsService {
         // PRD-19 (Блок A): новый тест — возврат ВКЛ по умолчанию (FR-01).
         allowReturnToUnanswered: payload.test.allowReturnToUnanswered ?? true,
         allowAnswerChange: payload.test.allowAnswerChange ?? false,
+        // PRD-43: new test — matches today's two-step default (consistent with
+        // allowReturnToUnanswered defaulting to true, i.e. flexible-two-step).
+        quickAdvance: payload.test.quickAdvance ?? false,
         showSectionResults: payload.test.showSectionResults ?? true,
         // PRD-34 (FR-03): новый тест — защита ВКЛ по умолчанию.
         copyProtection: payload.test.copyProtection ?? true,

@@ -91,6 +91,8 @@ const testBodyBaseSchema = z.object({
   // PRD-19 (Блок A): правила навигации/завершения.
   allowReturnToUnanswered: z.boolean().optional(),
   allowAnswerChange: z.boolean().optional(),
+  // PRD-43: independent of allowReturnToUnanswered.
+  quickAdvance: z.boolean().optional(),
   showSectionResults: z.boolean().optional(),
   // PRD-34 (FR-01): настройки защиты от копирования.
   copyProtection: z.boolean().optional(),
@@ -600,6 +602,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       showCorrectAnswers,
       allowReturnToUnanswered,
       allowAnswerChange,
+      quickAdvance,
       showSectionResults,
       copyProtection,
       protectionWatermark,
@@ -657,6 +660,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         showCorrectAnswers,
         allowReturnToUnanswered,
         allowAnswerChange,
+        quickAdvance,
         showSectionResults,
         copyProtection,
         protectionWatermark,
@@ -958,6 +962,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       showCorrectAnswers,
       allowReturnToUnanswered,
       allowAnswerChange,
+      quickAdvance,
       showSectionResults,
       copyProtection,
       protectionWatermark,
@@ -1018,6 +1023,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
         showCorrectAnswers,
         allowReturnToUnanswered,
         allowAnswerChange,
+        quickAdvance,
         showSectionResults,
         copyProtection,
         protectionWatermark,
