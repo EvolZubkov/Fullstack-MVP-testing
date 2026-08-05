@@ -8361,7 +8361,7 @@ var TBTemplate = (() => {
     const options = fields(question).options;
     const chosen = typeof answer === "number" ? answer : null;
     const correct = review && typeof review.correctIndex === "number" ? review.correctIndex : null;
-    const rootCls = "ou-stepper ou-stepper--choice" + (options.length > SCALE_HORIZONTAL_MAX ? " ou-stepper--vertical" : "") + (correct !== null ? " ou-stepper--review" : "");
+    const rootCls = "ou-stepper ou-stepper--choice" + (options.length > SCALE_HORIZONTAL_MAX ? " ou-stepper--vertical" : " ou-stepper--s") + (correct !== null ? " ou-stepper--review" : "");
     const steps = options.map((label, i) => {
       const status = scaleStatus(i, chosen, correct);
       return `<button type="button" class="ou-stepper__step ou-stepper__step--btn${status}" role="radio" aria-checked="${chosen === i ? "true" : "false"}" data-action="select:${i}" data-index="${i}"><span class="ou-stepper__bullet"></span><span class="ou-stepper__label"><span class="ou-stepper__title">${answerHtml(label)}</span></span></button>`;
@@ -8480,23 +8480,36 @@ var TBTemplate = (() => {
   };
   function buildQuestionNav(state) {
     const A = QUESTION_NAV_ACTIONS;
-    if (!state.flexible) {
-      const primary2 = state.showAccept ? { primaryAction: A.submit, primaryLabel: "\u041F\u0440\u0438\u043D\u044F\u0442\u044C" } : state.hasNext ? { primaryAction: A.next, primaryLabel: "\u0414\u0430\u043B\u0435\u0435" } : { primaryAction: A.finish, primaryLabel: "\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C \u0442\u0435\u0441\u0442" };
+    const twoStep = state.showAccept || !state.quickAdvance;
+    if (state.committed) {
+      const primary2 = !state.flexible && !state.hasNext ? { primaryAction: A.finish, primaryLabel: "\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C \u0442\u0435\u0441\u0442" } : { primaryAction: A.next, primaryLabel: "\u0414\u0430\u043B\u0435\u0435" };
       return {
-        showBack: false,
-        canPrev: false,
+        showBack: state.flexible,
+        canPrev: state.flexible && state.canPrev,
         showSkip: false,
-        showReview: false,
+        showReview: state.flexible && state.showReview,
+        primaryEnabled: true,
+        ...primary2
+      };
+    }
+    if (twoStep) {
+      const primary2 = state.showAccept ? { primaryAction: A.submit, primaryLabel: "\u041F\u0440\u0438\u043D\u044F\u0442\u044C" } : { primaryAction: A.submit, primaryLabel: "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u043E\u0442\u0432\u0435\u0442" };
+      return {
+        showBack: state.flexible,
+        canPrev: state.flexible && state.canPrev,
+        showSkip: state.flexible,
+        showReview: state.flexible && state.showReview,
         primaryEnabled: state.answerReady,
         ...primary2
       };
     }
-    const primary = state.committed ? { primaryAction: A.next, primaryLabel: "\u0414\u0430\u043B\u0435\u0435", primaryEnabled: true } : { primaryAction: A.submit, primaryLabel: "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u043E\u0442\u0432\u0435\u0442", primaryEnabled: state.answerReady };
+    const primary = !state.flexible && !state.hasNext ? { primaryAction: A.finish, primaryLabel: "\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C \u0442\u0435\u0441\u0442" } : { primaryAction: A.next, primaryLabel: "\u0414\u0430\u043B\u0435\u0435" };
     return {
-      showBack: true,
-      canPrev: state.canPrev,
-      showSkip: !state.committed,
-      showReview: state.showReview,
+      showBack: state.flexible,
+      canPrev: state.flexible && state.canPrev,
+      showSkip: state.flexible,
+      showReview: state.flexible && state.showReview,
+      primaryEnabled: state.answerReady,
       ...primary
     };
   }
