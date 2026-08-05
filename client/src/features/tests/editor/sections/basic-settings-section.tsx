@@ -963,6 +963,10 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
   // правильных ответов (раздел «Ограничения»). showSectionResults — только для секционных.
   const changeDisabled =
     !model.runtime.allowReturnToUnanswered || model.runtime.showCorrectAnswers;
+  // PRD-43: НЕ зависит от allowReturnToUnanswered (все 4 комбинации допустимы) —
+  // блокируется только показом правильного ответа, который всегда требует
+  // отдельного шага перед переходом дальше.
+  const quickAdvanceDisabled = model.runtime.showCorrectAnswers;
   const showSectionResultsApplicable =
     model.flowMode !== "linear_flat" && model.sections.length > 0;
   return (
@@ -1011,6 +1015,29 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
                 ? "Доступно только при включённом возврате к неотвеченным."
                 : "Недоступно при включённом показе правильных ответов (раздел «Ограничения»): иначе ученик увидит правильный ответ и переправит свой."
             }
+          />
+        )}
+      </div>
+      <div className="ou-formfield">
+        <Switch
+          label="Переходить к следующему вопросу сразу после ответа"
+          description="Без отдельного нажатия «Далее»: ответ фиксируется и сразу открывается следующий вопрос."
+          checked={model.runtime.quickAdvance && !quickAdvanceDisabled}
+          disabled={quickAdvanceDisabled}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, quickAdvance: checked },
+            }));
+          }}
+          data-testid="settings-quick-advance-checkbox"
+        />
+        {quickAdvanceDisabled && (
+          <Banner
+            tone="warning"
+            size="sm"
+            description="Недоступно при показе правильности ответа: нужно увидеть фидбек перед переходом."
           />
         )}
       </div>
