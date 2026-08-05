@@ -923,14 +923,19 @@ export const feedbackLinkSchema = z.object({
 export const feedbackAssetSchema = z.object({
   id: z.string().optional(),
   title: z.string().min(1),
-  fileName: z.string().min(1),
-  mimeType: z.literal("application/pdf"),
   /**
-   * Canonical media-library address (`/api/media/<id>`). PRD-32 contract, wired up by the
-   * later tasks of that work: this is the field the editor WRITES on upload and the field
-   * the SCORM packer RESOLVES to an in-package path. A plain string on purpose — the media
-   * walker recognises addresses inside any field, so the usage index and the packer need no
-   * special branch here.
+   * Legacy-only: descriptors saved through the retired upload flow (PRD-32) carry the
+   * original file name. New rows (PRD-42, title + URL only) do not write it.
+   */
+  fileName: z.string().optional(),
+  /** Legacy-only, see `fileName` above. */
+  mimeType: z.literal("application/pdf").optional(),
+  /**
+   * The material's address. A plain, unvalidated string ON PURPOSE (PRD-42 §7 technical
+   * debt): a descriptor saved through the retired upload flow still carries the relative
+   * media-library address `/api/media/<id>` here, and tightening this to `.url()` (as
+   * `feedbackLinkSchema` does) would make saving ANY test with such a legacy row fail
+   * validation. New rows are expected to carry a real external URL, but nothing enforces it.
    */
   url: z.string().optional(),
   /**

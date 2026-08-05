@@ -3,12 +3,13 @@
  * @description Tests for PRD-7 feedback Zod schemas: feedbackFormatSchema,
  * feedbackLinkSchema, feedbackAssetSchema, feedbackContentSchema.
  *
- * Covers (decisions.md §3.4, §3.5, §4.3):
+ * Covers (decisions.md §3.4, §3.5, §4.3; PRD-42 §4):
  *   - All required fields are enforced.
  *   - `format` enum is restricted to plain | richText | html.
  *   - `links` and `assets` arrays default to `[]` when missing.
- *   - `feedbackAsset.mimeType` is fixed to "application/pdf".
- *   - `feedbackAsset.scormHref` and `feedbackAsset.id` are optional.
+ *   - `feedbackAsset.mimeType`, when present, is fixed to "application/pdf".
+ *   - `feedbackAsset.id`, `fileName`, `mimeType` and `scormHref` are all optional
+ *     (PRD-42: a material is title + URL; the rest is legacy-only).
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -68,12 +69,19 @@ describe("feedbackAssetSchema", () => {
     expect(() => feedbackAssetSchema.parse(rest)).not.toThrow();
   });
 
-  it("rejects non-pdf mimeType (FR-37: PDF only)", () => {
+  it("rejects non-pdf mimeType when mimeType is present (FR-37: PDF only)", () => {
     expect(() => feedbackAssetSchema.parse({ ...valid, mimeType: "image/png" })).toThrow();
   });
 
-  it("rejects empty fileName", () => {
-    expect(() => feedbackAssetSchema.parse({ ...valid, fileName: "" })).toThrow();
+  it("accepts a material with only title and url — no file at all (PRD-42)", () => {
+    expect(() =>
+      feedbackAssetSchema.parse({ title: "Чек-лист", url: "https://example.com/checklist" }),
+    ).not.toThrow();
+  });
+
+  it("accepts a legacy descriptor whose url is the relative media-library address (PRD-42 §7)", () => {
+    const legacy = feedbackAssetSchema.parse({ title: "Памятка", url: "/api/media/asset-1" });
+    expect(legacy.url).toBe("/api/media/asset-1");
   });
 });
 

@@ -61,15 +61,15 @@ export type FeedbackContent = {
 };
 
 /**
- * PDF asset attached to feedback. `url` is the canonical media-library address written by
- * the editor right after the upload; `scormHref` is the legacy in-package address kept for
- * reading old data only.
+ * Material attached to feedback — title + external URL (PRD-42). `fileName`/`mimeType` are
+ * legacy-only: descriptors saved through the retired upload flow (PRD-32) carry them, new
+ * rows do not. `scormHref` is a legacy in-package address kept for reading old data only.
  */
 export type FeedbackAsset = {
   id?: string;
   title: string;
-  fileName: string;
-  mimeType: "application/pdf";
+  fileName?: string;
+  mimeType?: "application/pdf";
   url?: string;
   scormHref?: string;
 };

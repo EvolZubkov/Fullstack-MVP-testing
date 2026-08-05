@@ -2028,7 +2028,7 @@ function TestFeedbackTrigger(props: {
   return (
     <>
       <label className="ou-formfield__lbl">Обратная связь после прохождения</label>
-      {/* TD-02: grouped-list preview (Документы / Курсы / Мероприятия) + pencil. */}
+      {/* TD-02: grouped-list preview (Материалы / Курсы / Мероприятия) + pencil. */}
       <FeedbackPreview
         format={props.feedback.format}
         text={props.feedback.text}

@@ -1,7 +1,7 @@
 /**
  * @module features/tests/editor/sections/feedback-preview
  * @description Shared feedback preview (TD-02). Renders the configured feedback
- * as grouped lists — Документы (PDF assets, download links), Курсы (course
+ * as grouped lists — Материалы (title+URL links, PRD-42), Курсы (course
  * links) and Мероприятия (event links, URL optional) — instead of bare counts.
  *
  * The whole card is NO LONGER the edit trigger (that conflicted with the now
@@ -18,7 +18,7 @@ export type FeedbackPreviewProps = {
   text: string;
   /** Recommended courses (label «Курсы»). */
   links: FeedbackLink[];
-  /** PDF documents (label «Документы»). */
+  /** Materials — title+URL links (label «Материалы», PRD-42). */
   assets: FeedbackAsset[];
   /** Recommended events (label «Мероприятия»). */
   events: FeedbackEvent[];
@@ -32,7 +32,7 @@ export type FeedbackPreviewProps = {
   testId?: string;
 };
 
-/** A single named link group (Документы / Курсы / Мероприятия). */
+/** A single named link group (Материалы / Курсы / Мероприятия). */
 function PreviewGroup(props: {
   title: string;
   icon: React.ReactNode;
@@ -135,13 +135,13 @@ export function FeedbackPreview(props: FeedbackPreviewProps) {
       </div>
 
       <PreviewGroup
-        title="Документы"
+        title="Материалы"
         icon={<FileText size={14} />}
         items={props.assets.map((a) => ({
           label: a.title,
-          // Same first-non-empty rule as `normalizeFeedback`: the address belongs in `url`,
-          // `scormHref` is read only for data stored before the media library. Reading only
-          // the legacy field left newly uploaded attachments without a link here.
+          // Same first-non-empty rule as `normalizeFeedback`: the address belongs in `url`;
+          // `scormHref` is a read-only legacy field for descriptors saved through the
+          // retired upload flow (PRD-32/PRD-42) that never wrote `url`.
           href: a.url || a.scormHref,
           download: true,
         }))}
