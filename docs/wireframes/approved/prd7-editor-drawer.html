@@ -1108,34 +1108,28 @@
           </button>
         </div>
 
-        <!-- PDF assets section (FR-37) -->
+        <!-- Materials section (PRD-42 — link only, no upload) -->
         <span class="wf-annot-wrap--block">
         <div class="tb-feedback-editor__section">
           <div class="tb-feedback-editor__sec-title">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-paperclip"/></svg>
-            Прикреплённые файлы (PDF)
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-link"/></svg>
+            Материалы
           </div>
-          <ul class="tb-feedback-editor__list" aria-label="Прикреплённые файлы">
+          <ul class="tb-feedback-editor__list" aria-label="Материалы">
             <li class="tb-feedback-editor__item">
-              <div class="tb-feedback-editor__asset">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tb-feedback-editor__asset-ico" aria-hidden="true"><use href="#i-paperclip"/></svg>
-                <div class="tb-feedback-editor__asset-meta">
-                  <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Памятка по информационной безопасности" aria-label="Название файла"></div></div>
-                  <div class="tb-feedback-editor__asset-file">security-basics.pdf · 245 KB</div>
-                </div>
+              <div class="tb-feedback-editor__item-fields">
+                <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Памятка по информационной безопасности" aria-label="Название материала"></div></div>
+                <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="url" value="https://wiki.internal/security-basics.pdf" aria-label="URL материала"></div></div>
               </div>
-              <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить файл"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-trash"/></svg></button>
+              <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить материал"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-trash"/></svg></button>
             </li>
           </ul>
-          <div class="tb-feedback-editor__upload">
-            <button type="button" class="ou-btn ou-btn--secondary ou-btn--s">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-plus"/></svg>
-              Загрузить PDF
-            </button>
-            <span class="tb-feedback-editor__upload-hint">PDF до 5 MB; попадёт в SCORM-пакет и доступен по download-link</span>
-          </div>
+          <button type="button" class="ou-btn ou-btn--secondary ou-btn--s">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-plus"/></svg>
+            Добавить материал
+          </button>
         </div>
-        <span class="wf-annot">FR-37</span>
+        <span class="wf-annot">PRD-42</span>
         </span>
 
       </div>
