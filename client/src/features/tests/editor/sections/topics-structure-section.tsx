@@ -787,7 +787,7 @@ function FeedbackPreview({
   section: EditorSection;
   onEdit?: () => void;
 }) {
-  // TD-02: delegate to the shared grouped-list preview (Документы / Курсы /
+  // TD-02: delegate to the shared grouped-list preview (Материалы / Курсы /
   // Мероприятия) with a pencil edit trigger.
   return (
     <SharedFeedbackPreview
