@@ -1037,7 +1037,7 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
           <Banner
             tone="warning"
             size="sm"
-            description="Недоступно при показе правильности ответа: нужно увидеть фидбек перед переходом."
+            description="Недоступно при включённом показе правильных ответов (раздел «Ограничения»): нужно увидеть правильный ответ, прежде чем переходить дальше."
           />
         )}
       </div>

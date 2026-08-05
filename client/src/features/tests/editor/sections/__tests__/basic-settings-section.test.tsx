@@ -592,7 +592,7 @@ describe("<SettingsSection /> — Правила прохождения pane", (
 
   // ─── PRD-43: quick-advance toggle ─────────────────────────────────────────
 
-  it("быстрый переход независим от возврата к неотвеченным и не блокируется им", () => {
+  it("quickAdvance is independent of allowReturnToUnanswered", () => {
     const updateModel = vi.fn();
     const model = baseModel({
       runtime: { ...baseModel().runtime, allowReturnToUnanswered: false, quickAdvance: false },
@@ -608,7 +608,7 @@ describe("<SettingsSection /> — Правила прохождения pane", (
     expect(updated.runtime.allowReturnToUnanswered).toBe(false);
   });
 
-  it("быстрый переход заблокирован при включённом показе правильного ответа", () => {
+  it("quickAdvance is disabled when showCorrectAnswers is on", () => {
     const model = baseModel({
       runtime: { ...baseModel().runtime, showCorrectAnswers: true, quickAdvance: true },
     });
