@@ -1010,6 +1010,12 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
   // Scales must be mapped before measurements: the latter resolve scaleId→key.
   const scalesModel = buildScalesFromApi(src);
 
+  // PRD-19 (Блок A): загрузка существующего теста. Отсутствие поля (до A3) →
+  // консервативно: возврат ВЫКЛ (как у существующих после миграции). Also
+  // feeds the PRD-43 quickAdvance fallback below (drizzle/0013_prd43_quick_advance_backfill.sql).
+  const resolvedAllowReturnToUnanswered =
+    typeof src.allowReturnToUnanswered === "boolean" ? src.allowReturnToUnanswered : false;
+
   return {
     id: typeof src.id === "string" ? src.id : undefined,
     version: typeof src.version === "number" ? src.version : 1,
@@ -1041,19 +1047,15 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
       maxAttempts: typeof src.maxAttempts === "number" ? src.maxAttempts : null,
       showCorrectAnswers:
         typeof src.showCorrectAnswers === "boolean" ? src.showCorrectAnswers : false,
-      // PRD-19 (Блок A): загрузка существующего теста. Отсутствие поля (до A3) → консервативно:
-      // возврат ВЫКЛ (как у существующих после миграции), итоги раздела ВКЛ.
-      allowReturnToUnanswered:
-        typeof src.allowReturnToUnanswered === "boolean" ? src.allowReturnToUnanswered : false,
+      // PRD-19 (Блок A): итоги раздела ВКЛ по умолчанию (см. resolvedAllowReturnToUnanswered
+      // для возврата к неотвеченным).
+      allowReturnToUnanswered: resolvedAllowReturnToUnanswered,
       allowAnswerChange:
         typeof src.allowAnswerChange === "boolean" ? src.allowAnswerChange : false,
-      // PRD-43: поля нет в ответе (тест до PRD-43) → как сегодняшнее поведение
-      // ДЛЯ ЭТОГО КОНКРЕТНОГО allowReturnToUnanswered — то же правило, что и у
+      // PRD-43: поля нет в ответе (тест до PRD-43) → то же правило, что и у
       // backfill-миграции (drizzle/0013_prd43_quick_advance_backfill.sql).
       quickAdvance:
-        typeof src.quickAdvance === "boolean"
-          ? src.quickAdvance
-          : !(typeof src.allowReturnToUnanswered === "boolean" ? src.allowReturnToUnanswered : false),
+        typeof src.quickAdvance === "boolean" ? src.quickAdvance : !resolvedAllowReturnToUnanswered,
       showSectionResults:
         typeof src.showSectionResults === "boolean" ? src.showSectionResults : true,
       // PRD-34 (FR-05): поля нет (тест до PRD-34) → умолчание, то есть защита ВКЛ.

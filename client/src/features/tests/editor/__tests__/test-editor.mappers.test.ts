@@ -953,6 +953,7 @@ describe("quickAdvance (PRD-43)", () => {
   it("apiToEditorModel falls back to NOT allowReturnToUnanswered when quickAdvance is absent", () => {
     expect(apiToEditorModel({ allowReturnToUnanswered: true }).runtime.quickAdvance).toBe(false);
     expect(apiToEditorModel({ allowReturnToUnanswered: false }).runtime.quickAdvance).toBe(true);
+    // allowReturnToUnanswered itself also absent here → its own fallback (false), then negated.
     expect(apiToEditorModel({}).runtime.quickAdvance).toBe(true);
   });
 
