@@ -138,8 +138,16 @@ describe("exportReportPdf", () => {
     );
     expect(sawStyle).toBe(true);
     expect(sawVar).toBe("270 100% 50%");
-    // После экспорта ни стилей, ни контейнера в документе нет.
-    expect(document.querySelectorAll("style").length).toBe(0);
+    // После экспорта в документе не остаётся ни контейнера, ни СВОЕГО стиля варианта.
+    // Единственный `<style>`, который вправе пережить экспорт, — глобальный
+    // `[data-tb-protection]` (PRD-34): `renderScreenInto` инжектит его в `document.head`
+    // безусловно при КАЖДОМ рендере сцены (см. `applyProtection` в
+    // `shared/template/protection/apply.ts`) и он идемпотентен — не течёт при повторных
+    // экспортах, просто живёт в head как обычная страница. Это не утечка страницы отчёта.
+    const leftoverPageStyles = Array.from(document.querySelectorAll("style")).filter(
+      (el) => !el.hasAttribute("data-tb-protection"),
+    );
+    expect(leftoverPageStyles).toHaveLength(0);
     expect(document.body.children.length).toBe(0);
   });
 });
