@@ -6283,10 +6283,10 @@ var TBTemplate = (() => {
     el.style.removeProperty("-webkit-touch-callout");
   }
   function applyProtection(root, target) {
+    ensureStyle(root);
     root.querySelectorAll("[" + PROTECTED_ATTR + "]").forEach(unmark);
     if (root.hasAttribute(PROTECTED_ATTR)) unmark(root);
     if (!target) return;
-    ensureStyle(root);
     for (const el of elementsOf(root, target)) mark(el);
     ensureListeners(root);
   }
