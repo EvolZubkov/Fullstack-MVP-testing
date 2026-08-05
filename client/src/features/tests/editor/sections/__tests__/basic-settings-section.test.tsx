@@ -296,7 +296,7 @@ describe("<SettingsSection /> — Ограничения pane", () => {
 
   it("sets timeLimitMinutes back to null when input is cleared", () => {
     const updateModel = vi.fn();
-    const model = baseModel({ runtime: { timeLimitMinutes: 30, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false } });
+    const model = baseModel({ runtime: { timeLimitMinutes: 30, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false } });
     render(<SettingsSection model={model} updateModel={updateModel} />);
     fireEvent.click(screen.getByTestId("settings-rail-limits"));
     fireEvent.change(screen.getByTestId("settings-time-limit-input"), {
