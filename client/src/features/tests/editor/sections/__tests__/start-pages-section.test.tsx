@@ -106,7 +106,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       webhookUrl: "",
       telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
@@ -390,7 +390,7 @@ describe("<StructureSection /> — kind-aware layout", () => {
     renderSection(baseModel({
       flowMode: "linear_by_topics",
       sections: [buildSection({ topicId: "t1", topicName: "Тема А" })],
-      runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+      runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: false, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
     }));
     await waitFor(() => expect(screen.getByTestId("structure-zone-topic-t1")).toBeInTheDocument());
     // The section-results node is gated out (FR-05a), but «Обзор раздела» stays.

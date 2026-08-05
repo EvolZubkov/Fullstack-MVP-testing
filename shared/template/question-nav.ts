@@ -29,8 +29,18 @@ export interface QuestionNavState {
   /**
    * PRD-19 Block B: flexible mode (`allowReturnToUnanswered`) offers «Назад» +
    * «Пропустить» + «Отправить ответ»; strict-linear keeps one forward button.
+   * Independent of {@link quickAdvance} (PRD-43) — flexible only decides whether
+   * these three controls exist, not how many clicks fixing an answer takes.
    */
   flexible: boolean;
+  /**
+   * PRD-43: whether fixing the current answer and moving to the next question
+   * happen in the SAME click (`true`) or need a separate «Далее» click after
+   * (`false`). Independent of {@link flexible} — all 4 combinations are valid.
+   * Has no effect when {@link showAccept} is set: showing the correctness
+   * feedback always needs its own step before the learner moves on.
+   */
+  quickAdvance: boolean;
   /** The answer is fixed (committed, or its feedback is on screen). */
   committed: boolean;
   /** An accessible previous question exists (bounded by the section in sectional flows). */
@@ -71,33 +81,56 @@ export interface CtxQuestionNav {
  */
 export function buildQuestionNav(state: QuestionNavState): CtxQuestionNav {
   const A = QUESTION_NAV_ACTIONS;
-  if (!state.flexible) {
-    // Strict-linear: one forward button, right-aligned.
+
+  // PRD-43: showing the correctness feedback always needs its own step before
+  // advancing, regardless of quickAdvance — the learner has to be able to SEE it.
+  const twoStep = state.showAccept || !state.quickAdvance;
+
+  if (state.committed) {
+    // Already fixed (either just now, or the learner navigated back to an
+    // answered question) — the only thing left to do is move on. Flexible mode
+    // never finishes the test straight from here (FR-16): «Далее» walks on and
+    // завершение happens on the обзор. Strict mode finishes directly.
+    const primary = !state.flexible && !state.hasNext
+      ? { primaryAction: A.finish, primaryLabel: "Завершить тест" }
+      : { primaryAction: A.next, primaryLabel: "Далее" };
+    return {
+      showBack: state.flexible,
+      canPrev: state.flexible && state.canPrev,
+      showSkip: false,
+      showReview: state.flexible && state.showReview,
+      primaryEnabled: true,
+      ...primary,
+    };
+  }
+
+  if (twoStep) {
+    // Not yet committed, and fixing needs its own step: «Отправить ответ» / «Принять».
     const primary = state.showAccept
       ? { primaryAction: A.submit, primaryLabel: "Принять" }
-      : state.hasNext
-        ? { primaryAction: A.next, primaryLabel: "Далее" }
-        : { primaryAction: A.finish, primaryLabel: "Завершить тест" };
+      : { primaryAction: A.submit, primaryLabel: "Отправить ответ" };
     return {
-      showBack: false,
-      canPrev: false,
-      showSkip: false,
-      showReview: false,
+      showBack: state.flexible,
+      canPrev: state.flexible && state.canPrev,
+      showSkip: state.flexible,
+      showReview: state.flexible && state.showReview,
       primaryEnabled: state.answerReady,
       ...primary,
     };
   }
 
-  // Flexible. PRD-19 Block D / FR-16: a committed question never finishes the test —
-  // «Далее» walks on and завершение happens on the обзор.
-  const primary = state.committed
-    ? { primaryAction: A.next, primaryLabel: "Далее", primaryEnabled: true }
-    : { primaryAction: A.submit, primaryLabel: "Отправить ответ", primaryEnabled: state.answerReady };
+  // Not committed, quickAdvance ON, no feedback to show: one click fixes AND
+  // advances. In flexible mode this is still «Далее» (обзор owns finishing,
+  // FR-16); in strict mode it finishes directly when there's no next question.
+  const primary = !state.flexible && !state.hasNext
+    ? { primaryAction: A.finish, primaryLabel: "Завершить тест" }
+    : { primaryAction: A.next, primaryLabel: "Далее" };
   return {
-    showBack: true,
-    canPrev: state.canPrev,
-    showSkip: !state.committed,
-    showReview: state.showReview,
+    showBack: state.flexible,
+    canPrev: state.flexible && state.canPrev,
+    showSkip: state.flexible,
+    showReview: state.flexible && state.showReview,
+    primaryEnabled: state.answerReady,
     ...primary,
   };
 }

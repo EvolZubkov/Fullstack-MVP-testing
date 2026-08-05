@@ -74,6 +74,8 @@ function prd19RuntimeSettings(test: Test) {
   return {
     allowReturnToUnanswered: test.allowReturnToUnanswered ?? true,
     allowAnswerChange: test.allowAnswerChange ?? false,
+    // PRD-43: independent of allowReturnToUnanswered.
+    quickAdvance: test.quickAdvance ?? false,
     showSectionResults: test.showSectionResults ?? true,
     // PRD-34 (FR-01, FR-05): настройки защиты. Отсутствие поля в СТАРОМ снимке
     // публикации читается как умолчание — тест, опубликованный до PRD-34, получает защиту.

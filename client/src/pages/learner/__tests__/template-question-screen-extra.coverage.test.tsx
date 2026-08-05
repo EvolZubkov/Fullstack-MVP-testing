@@ -123,6 +123,7 @@ const scale = (over: Partial<Question> = {}) =>
 // state — a strict-linear row with a usable answer here.
 const NAV = {
   flexible: false,
+  quickAdvance: true,
   committed: false,
   canPrev: false,
   answerReady: true,

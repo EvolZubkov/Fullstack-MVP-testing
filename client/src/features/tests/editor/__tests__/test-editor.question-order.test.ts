@@ -28,7 +28,7 @@ function makeModel(sections: EditorSection[]): TestEditorModel {
     },
     runtime: {
       timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false,
-      allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true,
+      allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, quickAdvance: false,
     },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections,

@@ -452,6 +452,8 @@ export type TestEditorModel = {
     // PRD-19 (Блок A): правила навигации/завершения.
     allowReturnToUnanswered: boolean; // FR-01
     allowAnswerChange: boolean; // FR-04a (зависит от возврата; взаимоискл. с showCorrectAnswers)
+    // PRD-43: НЕЗАВИСИМ от allowReturnToUnanswered; взаимоискл. с showCorrectAnswers (гасится в UI).
+    quickAdvance: boolean;
     showSectionResults: boolean; // FR-05a (секционные)
     // PRD-34: защита текста задания. Три НЕЗАВИСИМЫХ переключателя (FR-02).
     copyProtection: boolean; // FR-01, умолчание ВКЛ
@@ -534,6 +536,8 @@ export type TestSettingsPayload = {
   // PRD-19 (Блок A): правила навигации/завершения теста.
   allowReturnToUnanswered: boolean;
   allowAnswerChange: boolean;
+  // PRD-43: независим от allowReturnToUnanswered.
+  quickAdvance: boolean;
   showSectionResults: boolean;
   // PRD-34: настройки защиты текста задания.
   copyProtection: boolean;

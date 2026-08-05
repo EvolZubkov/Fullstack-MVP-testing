@@ -193,6 +193,8 @@ export function buildTestJson(data: ExportData): string {
     // PRD-19 (Блок A): правила навигации/завершения для рантайма (применение — Блок B/C/D).
     allowReturnToUnanswered: data.test.allowReturnToUnanswered ?? true,
     allowAnswerChange: data.test.allowAnswerChange ?? false,
+    // PRD-43: independent of allowReturnToUnanswered.
+    quickAdvance: data.test.quickAdvance ?? false,
     showSectionResults: data.test.showSectionResults ?? true,
     // PRD-34 (FR-01, FR-26): настройки защиты для рантайма пакета. `protectionActive`
     // отдельным полем: в отладочном прогоне защита и скрытие выключены, а водяной знак

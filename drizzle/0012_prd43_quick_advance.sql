@@ -1,0 +1,1 @@
+ALTER TABLE "tests" ADD COLUMN "quick_advance" boolean DEFAULT false NOT NULL;

@@ -27,7 +27,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     id: "test-1", version: 1, mode: "standard", flowMode: "linear_flat", flowSettings: {}, folderId: null,
     basic: { title: "Sample", description: "", status: "draft", feedback: { format: "plain", text: "" },
       feedbackLinks: [], feedbackAssets: [], feedbackEvents: [], webhookUrl: "", telemetryEnabled: false },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [], adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
     resultVariables: [], scales: [], measurements: [], retakePolicy: defaultRetakePolicy(),

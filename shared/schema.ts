@@ -471,6 +471,12 @@ export const tests = pgTable("tests", {
   // Default false. Depends on allowReturnToUnanswered=true and is mutually exclusive with
   // showCorrectAnswers (FR-04b) — enforced in the editor/service layer, not as a DB CHECK.
   allowAnswerChange: boolean("allow_answer_change").notNull().default(false),
+  // PRD-43: independent of allowReturnToUnanswered — whether submitting an answer
+  // also advances to the next question in one click, or needs a separate «Далее»
+  // click. Default false (today's two-step behaviour for a brand-new test); the
+  // backfill migration sets EXISTING rows to `NOT allow_return_to_unanswered` so
+  // no existing test's navigation changes after this ships.
+  quickAdvance: boolean("quick_advance").notNull().default(false),
   // PRD-19 (FR-05a): show the section-results screen (optional system node, sectioned tests).
   // Default true; not applicable to linear_flat (no sections) — ignored by the runtime there.
   showSectionResults: boolean("show_section_results").notNull().default(true),

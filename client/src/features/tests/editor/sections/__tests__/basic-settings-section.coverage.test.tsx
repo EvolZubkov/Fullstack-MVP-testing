@@ -39,7 +39,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       webhookUrl: "",
       telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
@@ -183,7 +183,7 @@ describe("<SettingsSection /> — навигация прохождения (PRD
     renderSettings(model);
     fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
     expect(screen.getByTestId("settings-allow-change-checkbox")).toBeDisabled();
-    expect(screen.getByText(/показе правильных ответов/i)).toBeInTheDocument();
+    expect(screen.getByText(/иначе ученик увидит правильный ответ/i)).toBeInTheDocument();
   });
 
   it("shows and toggles «итоги раздела» for a sectioned (non-flat) test", () => {

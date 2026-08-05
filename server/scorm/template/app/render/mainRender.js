@@ -480,6 +480,8 @@ function buildQuestionNavState(current, total) {
 
     return window.TBTemplate.buildQuestionNav({
         flexible: !!TEST_DATA.allowReturnToUnanswered,
+        // PRD-43: independent of `flexible` — see shared/template/question-nav.ts.
+        quickAdvance: !!TEST_DATA.quickAdvance,
         committed: committed,
         canPrev: prevIdx >= 0,
         answerReady: submitReady,

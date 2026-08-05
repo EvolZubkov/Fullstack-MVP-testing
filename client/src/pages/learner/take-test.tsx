@@ -598,11 +598,14 @@ export default function TakeTestPage() {
   const [navSettings, setNavSettings] = useState<{
     allowReturnToUnanswered: boolean;
     allowAnswerChange: boolean;
+    // PRD-43: independent of allowReturnToUnanswered.
+    quickAdvance: boolean;
     showSectionResults: boolean;
     answerCommitScope: "test" | "section";
   }>({
     allowReturnToUnanswered: false,
     allowAnswerChange: false,
+    quickAdvance: true,
     showSectionResults: true,
     answerCommitScope: "test",
   });
@@ -1030,6 +1033,12 @@ export default function TakeTestPage() {
       setNavSettings({
         allowReturnToUnanswered: data.attempt.allowReturnToUnanswered ?? false,
         allowAnswerChange: data.attempt.allowAnswerChange ?? false,
+        // PRD-43: same fallback rule as the DB backfill migration — derive from
+        // allowReturnToUnanswered when the server response omits the field.
+        quickAdvance:
+          typeof data.attempt.quickAdvance === "boolean"
+            ? data.attempt.quickAdvance
+            : !(data.attempt.allowReturnToUnanswered ?? false),
         showSectionResults: data.attempt.showSectionResults ?? true,
         answerCommitScope: data.attempt.answerCommitScope ?? "test",
       });
@@ -1187,6 +1196,12 @@ export default function TakeTestPage() {
     setNavSettings({
       allowReturnToUnanswered: data.allowReturnToUnanswered ?? false,
       allowAnswerChange: data.allowAnswerChange ?? false,
+      // PRD-43: same fallback rule as the DB backfill migration — derive from
+      // allowReturnToUnanswered when the server response omits the field.
+      quickAdvance:
+        typeof data.quickAdvance === "boolean"
+          ? data.quickAdvance
+          : !(data.allowReturnToUnanswered ?? false),
       showSectionResults: data.showSectionResults ?? true,
       answerCommitScope: data.answerCommitScope ?? "test",
     });
@@ -2701,6 +2716,10 @@ export default function TakeTestPage() {
       // server knows when the session ends, so the row never says «Завершить тест».
       const adaptiveNav: QuestionNavState = {
         flexible: false,
+        // PRD-43: adaptive isn't author-configurable here — `onAdaptiveNavAction`
+        // already fixes-and-advances in one click whenever no feedback is shown,
+        // so `true` just makes that existing behaviour explicit on the type.
+        quickAdvance: true,
         committed: feedbackShown,
         canPrev: false,
         // Once the feedback is on screen the answer is fixed — «Далее» always works.
@@ -3011,6 +3030,8 @@ export default function TakeTestPage() {
     // This only resolves the run state it is built from.
     const questionNav: QuestionNavState = {
       flexible: navSettings.allowReturnToUnanswered,
+      // PRD-43: independent of `flexible`.
+      quickAdvance: navSettings.quickAdvance,
       committed: standardFeedbackShown || committedCurrent,
       canPrev: prevIdx !== null,
       answerReady: !isSubmitting && (!submitModeCurrent || answerReady),
@@ -3029,8 +3050,21 @@ export default function TakeTestPage() {
       }
       if (action === QUESTION_NAV_ACTIONS.submit) return handleStandardConfirm();
       if (action === QUESTION_NAV_ACTIONS.finish) return void handleSubmit();
-      // «Далее» — walk on past a committed answer (the layout's primary action).
-      if (action === QUESTION_NAV_ACTIONS.next) return handleStandardContinue();
+      // «Далее»: already committed (fixed earlier, or the learner navigated back to
+      // an answered question) → just walk on (handleStandardContinue). Not yet
+      // committed (PRD-43 quickAdvance) → fix AND walk on in the same click
+      // (handleNext) — mirrors the SCORM runtime's next(), which does both
+      // unconditionally every time.
+      //
+      // These two are NOT interchangeable: handleNext does not reset
+      // standardFeedbackShown/standardAnswerResult (it never runs while feedback
+      // is showing, since committedCurrent is guaranteed true whenever feedback is
+      // on screen). Routing an already-committed/feedback-shown question through
+      // handleNext instead of handleStandardContinue would leak the previous
+      // question's feedback banner onto the next question.
+      if (action === QUESTION_NAV_ACTIONS.next) {
+        return committedCurrent ? handleStandardContinue() : handleNext();
+      }
     };
     return (
       <TemplateQuestionScreen

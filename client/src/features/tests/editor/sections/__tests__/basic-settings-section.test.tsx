@@ -54,7 +54,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       webhookUrl: "",
       telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, quickAdvance: false, showSectionResults: true, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
     passRules: {
       decisionPolicy: "overall_only",
       overall: { type: "percent", value: 70 },
@@ -297,7 +297,7 @@ describe("<SettingsSection /> — Ограничения pane", () => {
 
   it("sets timeLimitMinutes back to null when input is cleared", () => {
     const updateModel = vi.fn();
-    const model = baseModel({ runtime: { timeLimitMinutes: 30, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false } });
+    const model = baseModel({ runtime: { timeLimitMinutes: 30, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false } });
     render(<SettingsSection model={model} updateModel={updateModel} />);
     fireEvent.click(screen.getByTestId("settings-rail-limits"));
     fireEvent.change(screen.getByTestId("settings-time-limit-input"), {
@@ -618,6 +618,34 @@ describe("<SettingsSection /> — Правила прохождения pane", (
     selectOption("pass-topic-source-top-1", "Индивидуальное правило");
     const rule = runUpdater(updateModel, model).passRules.byTopic["top-1"];
     expect(rule).toEqual({ source: "custom", type: "percent", value: 70 });
+  });
+
+  // ─── PRD-43: quick-advance toggle ─────────────────────────────────────────
+
+  it("quickAdvance is independent of allowReturnToUnanswered", () => {
+    const updateModel = vi.fn();
+    const model = baseModel({
+      runtime: { ...baseModel().runtime, allowReturnToUnanswered: false, quickAdvance: false },
+    });
+    render(<SettingsSection model={model} updateModel={updateModel} />);
+    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+    const toggle = screen.getByTestId("settings-quick-advance-checkbox");
+    expect(toggle).not.toBeDisabled();
+    fireEvent.click(toggle);
+    const updated = runUpdater(updateModel, model);
+    expect(updated.runtime.quickAdvance).toBe(true);
+    // allowReturnToUnanswered must be untouched by toggling quickAdvance.
+    expect(updated.runtime.allowReturnToUnanswered).toBe(false);
+  });
+
+  it("quickAdvance is disabled when showCorrectAnswers is on", () => {
+    const model = baseModel({
+      runtime: { ...baseModel().runtime, showCorrectAnswers: true, quickAdvance: true },
+    });
+    render(<SettingsSection model={model} updateModel={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+    const toggle = screen.getByTestId("settings-quick-advance-checkbox");
+    expect(toggle).toBeDisabled();
   });
 });
 
