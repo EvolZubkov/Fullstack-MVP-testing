@@ -119,6 +119,20 @@ describe("buildQuestionNav", () => {
     });
   });
 
+  it("строгий + БЕЗ быстрого перехода, уже зафиксированный последний вопрос: «Завершить тест», не «Далее»", () => {
+    const nav = buildQuestionNav({
+      ...flexible,
+      flexible: false,
+      quickAdvance: false,
+      committed: true,
+      hasNext: false,
+    });
+    expect(nav).toMatchObject({
+      primaryAction: QUESTION_NAV_ACTIONS.finish,
+      primaryLabel: "Завершить тест",
+    });
+  });
+
   it("гибкий + быстрый переход (новая комбинация): Назад/Пропустить остаются, но один клик «Далее» фиксирует и переходит", () => {
     const nav = buildQuestionNav({ ...flexible, flexible: true, quickAdvance: true });
     expect(nav).toMatchObject({
