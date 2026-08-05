@@ -1294,6 +1294,7 @@ function TestRow(props: {
   const canEdit = can("tests.edit");
   const canAssign = can("assignments.manage");
   const canAnalytics = can("analytics.read");
+  const canDebugPlay = can("tests.debug.play");
   const canAnyMenu =
     canEdit ||
     can("tests.export.scorm") ||
@@ -1374,6 +1375,27 @@ function TestRow(props: {
             data-testid={`test-edit-${e.id}`}
           >
             <Pencil width={14} height={14} />
+          </button>
+        )}
+        {canDebugPlay && (
+          <button
+            type="button"
+            className="action-btn"
+            title="Выполнить отладку"
+            aria-label="Выполнить отладку"
+            onClick={(ev) => {
+              ev.stopPropagation();
+              // PRD-18: open the in-service debug player in a chromeless popup window
+              // (no address bar), sized to the screen, named per test so it's reused.
+              window.open(
+                `/author/tests/${e.id}/debug`,
+                `tb-debug-${e.id}`,
+                `popup=yes,width=${window.screen.availWidth},height=${window.screen.availHeight},left=0,top=0`,
+              );
+            }}
+            data-testid={`test-debug-${e.id}`}
+          >
+            <FlaskConical width={14} height={14} />
           </button>
         )}
         {canAssign && (
