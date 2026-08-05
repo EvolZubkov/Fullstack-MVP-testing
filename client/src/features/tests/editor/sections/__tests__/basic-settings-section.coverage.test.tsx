@@ -183,7 +183,7 @@ describe("<SettingsSection /> — навигация прохождения (PRD
     renderSettings(model);
     fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
     expect(screen.getByTestId("settings-allow-change-checkbox")).toBeDisabled();
-    expect(screen.getByText(/показе правильных ответов/i)).toBeInTheDocument();
+    expect(screen.getByText(/иначе ученик увидит правильный ответ/i)).toBeInTheDocument();
   });
 
   it("shows and toggles «итоги раздела» for a sectioned (non-flat) test", () => {
