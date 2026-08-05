@@ -6315,6 +6315,15 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-stepper--choice .ou-stepper__step.is-error .ou-stepper__title { color: var(--ou-error-on-soft); font-weight: 600; }
 /* Verdict shown: mute the «where I am» fill so only success/error carry colour. */
 .ou-stepper--choice.ou-stepper--review .ou-stepper__step.is-done::after { background: var(--ou-border-default); }
+/* Small: horizontal choice mode at the DS control-size scale (32px) instead of the
+   default 44px — connector recomputed the same way as the default/44px blocks
+   (inset = radius + 4, top = radius - half the connector weight). */
+.ou-stepper--choice.ou-stepper--s .ou-stepper__bullet {
+  width: var(--ou-size-control-s); height: var(--ou-size-control-s);
+}
+.ou-stepper--choice.ou-stepper--s .ou-stepper__step:not(:last-child)::after {
+  top: 14px; left: calc(50% + 20px); right: calc(-50% + 20px); height: 4px; border-radius: 999px;
+}
 /* Vertical: the base 28px bullet, connector at the same weight as horizontal. */
 .ou-stepper--choice.ou-stepper--vertical .ou-stepper__bullet { width: 28px; height: 28px; }
 .ou-stepper--choice.ou-stepper--vertical .ou-stepper__step:not(:last-child)::after {

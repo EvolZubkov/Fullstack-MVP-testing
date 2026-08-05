@@ -302,7 +302,7 @@ export function renderScale(
 
   const rootCls =
     "ou-stepper ou-stepper--choice" +
-    (options.length > SCALE_HORIZONTAL_MAX ? " ou-stepper--vertical" : "") +
+    (options.length > SCALE_HORIZONTAL_MAX ? " ou-stepper--vertical" : " ou-stepper--s") +
     (correct !== null ? " ou-stepper--review" : "");
 
   const steps = options
