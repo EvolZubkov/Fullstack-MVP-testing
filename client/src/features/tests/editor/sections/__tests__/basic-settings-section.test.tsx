@@ -20,6 +20,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SettingsSection } from "../basic-settings-section";
 import type { TestEditorModel } from "../../test-editor.types";
 import { defaultRetakePolicy } from "../../test-editor.mappers";
+import { buildFieldErrorIndex } from "../../field-errors";
 
 /**
  * Секция ходит в API за каталогом видов отчёта (PRD-27), поэтому провайдер запросов
@@ -576,6 +577,35 @@ describe("<SettingsSection /> — Правила прохождения pane", (
     expect(screen.getByTestId("pass-topic-detail-top-1")).toBeInTheDocument();
     const valInput = screen.getByTestId("pass-topic-custom-value-top-1") as HTMLInputElement;
     expect(valInput.value).toBe("80");
+  });
+
+  it("FR-20c: highlights and anchors a custom absolute threshold that exceeds the topic's max points", () => {
+    const model = baseModel({
+      sections: [buildSection({ topicId: "top-1", topicName: "Topic 1" })],
+      passRules: {
+        decisionPolicy: "overall_only",
+        overall: { type: "percent", value: 70 },
+        byTopic: {
+          "top-1": { source: "custom", type: "absolute", value: 100 },
+        },
+      },
+    });
+    const fieldErrors = buildFieldErrorIndex([
+      {
+        field: "passRules.byTopic[top-1].value",
+        code: "range",
+        message: "Topic absolute pass threshold (100) cannot exceed topic max points (10).",
+        severity: "error",
+      },
+    ]);
+    render(<SettingsSection model={model} updateModel={() => {}} fieldErrors={fieldErrors} />);
+    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+    const valInput = screen.getByTestId("pass-topic-custom-value-top-1") as HTMLInputElement;
+    expect(valInput).toHaveAttribute("aria-invalid", "true");
+    // FR-20c: the drawer's «Перейти к ошибкам» anchors on `[data-field="<exact field path>"]`.
+    expect(
+      valInput.closest('[data-field="passRules.byTopic[top-1].value"]'),
+    ).not.toBeNull();
   });
 
   it("switching source to custom builds default percent/70 rule", () => {

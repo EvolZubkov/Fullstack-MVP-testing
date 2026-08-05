@@ -1351,7 +1351,10 @@ function PassTopicRow(props: {
                         data-testid={`pass-variant-type-${props.topicId}-${form.id}`}
                       />
                     </div>
-                    <div className="ou-formfield">
+                    <div
+                      className="ou-formfield"
+                      data-field={`passRules.byTopic[${props.topicId}].byForm[${form.id}].value`}
+                    >
                       <NumberInput
                         size="s"
                         value={entry?.value ?? 0}
@@ -1401,7 +1404,10 @@ function PassTopicRow(props: {
                   data-testid={`pass-topic-custom-type-${props.topicId}`}
                 />
               </div>
-              <div className="ou-formfield">
+              <div
+                className="ou-formfield"
+                data-field={`passRules.byTopic[${props.topicId}].value`}
+              >
                 <NumberInput
                   size="s"
                   label="Порог"
@@ -1409,6 +1415,7 @@ function PassTopicRow(props: {
                   min={0}
                   max={props.rule.type === "percent" ? 100 : undefined}
                   suffix={props.rule.type === "percent" ? "%" : undefined}
+                  error={props.fieldErrors?.get(`passRules.byTopic[${props.topicId}].value`)}
                   aria-label={`Значение порога темы ${props.topicName}`}
                   data-testid={`pass-topic-custom-value-${props.topicId}`}
                   onChange={(next) => props.onCustomValueChange(next)}
