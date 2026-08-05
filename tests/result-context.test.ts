@@ -136,6 +136,64 @@ describe("buildResultContext recommendations (TD-02 web parity)", () => {
   });
 });
 
+// PRD-29 §6.7 on the WEB adapter. A test with neither scales nor indicators — the
+// commonest configuration there is — never hands the shared builder a `measures` block,
+// and the verdict gate used to live inside that branch. The result was a screen
+// contradicting itself: a green «Пройден» in the header while the feedback block, gated
+// by the same «does this test grade» question, printed underneath.
+describe("вердикт контрольного теста (PRD-29 §6.7)", () => {
+  const nothingGraded: AttemptResult = {
+    ...attemptResult,
+    overallPassed: true,
+    totalCorrect: 0,
+    totalQuestions: 0,
+    overallPercent: 0,
+    totalEarnedPoints: 0,
+    totalPossiblePoints: 0,
+    topicResults: [],
+  };
+  // What `resultsMaterialForAttempt` returns for a test without measurements: no scales,
+  // no indicators, but the pass rule and the test's own feedback are read all the same.
+  const controlMaterial = {
+    scales: [],
+    variables: [],
+    blockSettings: {},
+    hasPassThreshold: true,
+    testFeedback: { text: "Повторите материал курса." },
+  };
+
+  it("порог есть, оценивать нечего — шапки нет, обратная связь на месте", () => {
+    const ctx = buildResultContext(nothingGraded, "Опросник", controlMaterial);
+    expect(ctx.result.statusLabel).toBe("");
+    expect(ctx.result.passClass).toBe("");
+    expect(ctx.result.recommendations?.texts).toEqual(["Повторите материал курса."]);
+  });
+
+  it("порога у теста нет — вердикта тоже нет", () => {
+    const graded: AttemptResult = { ...nothingGraded, totalPossiblePoints: 10, totalEarnedPoints: 10, overallPercent: 100 };
+    const ctx = buildResultContext(graded, "Без порога", { ...controlMaterial, hasPassThreshold: false });
+    expect(ctx.result.statusLabel).toBe("");
+  });
+
+  it("порог и баллы на месте — вердикт остаётся, обратная связь молчит", () => {
+    const graded: AttemptResult = { ...nothingGraded, totalPossiblePoints: 10, totalEarnedPoints: 10, overallPercent: 100 };
+    const ctx = buildResultContext(graded, "Контрольный", controlMaterial);
+    expect(ctx.result.statusLabel).toBe("Пройден");
+    expect(ctx.result.recommendations).toBeUndefined();
+  });
+
+  it("в реальном макете плашка не рисуется вовсе", () => {
+    const root = document.createElement("div");
+    renderScreenInto(root, {
+      layout: resultsLayout,
+      context: buildResultContext(nothingGraded, "Опросник", controlMaterial),
+    });
+    expect(root.querySelector(".tb-scene__headtag .ou-tag")).toBeNull();
+    expect(root.textContent).not.toContain("Пройден");
+    expect(root.textContent).toContain("Повторите материал курса.");
+  });
+});
+
 const adaptiveLayout = fs.readFileSync(
   path.join(process.cwd(), "server", "scorm", "templates", "default", "layouts", "results.adaptive.html"),
   "utf8",

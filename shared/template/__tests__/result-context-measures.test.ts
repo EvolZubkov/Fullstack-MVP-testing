@@ -152,7 +152,44 @@ describe("вердикт теста", () => {
   });
 
   it("контрольный тест вердикт сохраняет", () => {
-    const ctx = buildResultContext({ ...BASE, passed: true }, "Контрольный");
+    // Points on purpose: a control test earns its verdict from the SAME pair as any
+    // other — a threshold and something to grade. `BASE` is the measurement fixture
+    // (`possiblePoints: 0`), and asserting «Пройден» on it asserted the defect below.
+    const ctx = buildResultContext({ ...BASE, passed: true, earnedPoints: 8, possiblePoints: 10 }, "Контрольный");
+    expect(ctx.result.statusLabel).toBe("Пройден");
+    expect(ctx.result.passClass).toBe("is-pass");
+  });
+
+  // The gate used to live INSIDE the measures branch, so a test with neither scales nor
+  // indicators never reached it: the header asserted «Пройден» while the feedback block
+  // — gated by the very same «does this test grade» question — printed at the same time.
+  // Both halves are checked together in each case: the screen must not contradict itself.
+  it("контрольный тест без оцениваемых вопросов вердикта не выносит", () => {
+    const ctx = buildResultContext({ ...BASE, passed: true }, "Опросник", {
+      hasPassThreshold: true,
+      testFeedback: TEST_FEEDBACK,
+    });
+    expect(ctx.result.statusLabel).toBe("");
+    expect(ctx.result.passClass).toBe("");
+    expect(ctx.result.recommendations!.texts).toEqual([TEST_FEEDBACK.text]);
+  });
+
+  it("контрольный тест без порога вердикта не выносит", () => {
+    const ctx = buildResultContext(
+      { ...BASE, passed: true, earnedPoints: 8, possiblePoints: 10 },
+      "Без порога",
+      { hasPassThreshold: false, testFeedback: TEST_FEEDBACK },
+    );
+    expect(ctx.result.statusLabel).toBe("");
+    expect(ctx.result.passClass).toBe("");
+    expect(ctx.result.recommendations!.texts).toEqual([TEST_FEEDBACK.text]);
+  });
+
+  // ABSENT MEANS «UNKNOWN», and unknown only ever resolves in favour of showing — the
+  // same asymmetry the feedback gate has. A host that has not been taught to send the
+  // flag must not lose the verdict of every graded test it renders.
+  it("неизвестный признак порога вердикта не гасит", () => {
+    const ctx = buildResultContext({ ...BASE, passed: true, earnedPoints: 8, possiblePoints: 10 }, "Легаси-хост");
     expect(ctx.result.statusLabel).toBe("Пройден");
     expect(ctx.result.passClass).toBe("is-pass");
   });

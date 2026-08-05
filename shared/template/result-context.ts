@@ -392,10 +392,16 @@ export interface ResultContextOptions {
    * `TEST_DATA.overallPassRule`. Where both are present they agree — they are read off
    * the same rule.
    *
-   * ABSENT MEANS «UNKNOWN», and unknown is resolved in favour of SHOWING the feedback.
-   * The flag only ever silences, so a host that has not been taught to send it keeps
-   * handing the learner everything the author wrote — losing a leaflet is worse than
-   * showing it once too often.
+   * TWO consumers read it, and both resolve ABSENT as «UNKNOWN» in favour of SHOWING:
+   * the feedback gate (unknown keeps handing the learner everything the author wrote —
+   * losing a leaflet is worse than showing it once too often) and the verdict tag
+   * (unknown keeps the «Пройден»/«Не пройден» headline, so a host that has not been
+   * taught to send the flag does not lose the verdict of every graded test it renders).
+   * The flag therefore only ever silences; it never invents a verdict or a leaflet.
+   *
+   * `false` is NOT the same as absent: it is the author's own «this test has no
+   * threshold», and it silences both — the screen must not headline a success nobody
+   * pronounced (PRD-29 §6.7).
    */
   hasPassThreshold?: boolean;
   /**
@@ -454,8 +460,9 @@ export function buildResultContext(
   const passed = !!input.passed;
   const percent = Math.round(input.percent || 0);
   // ONE source of truth for «is there a graded score to speak about» — it answers the
-  // score summary (`auto`), the verdict tag, and the feedback gate below. TWO conditions,
-  // not one: a threshold IS declared AND there is something to grade. Every new test
+  // score summary (`auto`) and the feedback gate below, and it is the strict half of the
+  // verdict rule right after it. TWO conditions, not one: a threshold IS declared AND
+  // there is something to grade. Every new test
   // carries the default 70% threshold, so the threshold alone would call a measurement
   // questionnaire graded and paint «0 %», «0 из 0 верно» and a green «Пройден» on its
   // results screen — the exact nonsense PRD-29 removes. The author of a burnout inventory
@@ -475,7 +482,25 @@ export function buildResultContext(
   // Computed BEFORE `result` so the block-visibility flags below can gate the per-topic
   // «Баллов» row the same way they gate the summary itself (issue #30).
   const thresholdDeclared = opts.hasPassThreshold ?? opts.measures?.hasPassThreshold;
-  const hasGradedScore = thresholdDeclared === true && round1(input.possiblePoints) > 0;
+  // «Nothing to grade» stands on its own because the verdict rule below needs it WITHOUT
+  // the threshold flag: it is read off the run itself, so it holds for every host — taught
+  // to send the flag or not — and for attempts finished before any of this existed.
+  const nothingToGrade = round1(input.possiblePoints) <= 0;
+  const hasGradedScore = thresholdDeclared === true && !nothingToGrade;
+  // THE VERDICT TAG, for every test — measurement or control alike. Same question as
+  // `hasGradedScore` («does this test grade at all»), with ONE deliberate difference: an
+  // ABSENT threshold flag does not silence it. `hasGradedScore` may read unknown as «no»
+  // because it only ever hides a summary; the tag is the screen's headline, and a host
+  // that has not been taught to send the flag must not lose the verdict of every graded
+  // test it renders. So the tag falls only on what is KNOWN: nothing was graded, or the
+  // author declared no threshold at all (PRD-29 §6.7 — «порог задан И есть что оценивать»).
+  //
+  // Until 2026-08-06 this gate lived INSIDE the `measures` branch below, so it reached
+  // only a test with scales or indicators. A control test — the commonest configuration
+  // in the product — kept printing a green «Пройден» while the feedback block, gated by
+  // the very same question a few lines down, printed underneath it: the header claimed a
+  // success and the block below handed out work on the mistakes.
+  const noVerdict = nothingToGrade || thresholdDeclared === false;
   // Visible scales/indicators and the resolved block visibility, gathered ONCE so the
   // scales/indicators sections further below reuse the SAME values instead of refiltering.
   const visibleScales = opts.measures ? opts.measures.scales.filter((m) => m.visibility !== "hidden") : [];
@@ -513,6 +538,17 @@ export function buildResultContext(
     result.backAction = opts.backAction;
     result.backLabel = opts.backLabel;
   }
+  // No judgement — no tag. A method that checks nothing makes both «Пройден» and «Не
+  // пройден» false statements about the learner, not a cosmetic default. The third state
+  // is the one the topic rows already use (`passed === true / false / ""`), and every
+  // results layout drops the tag entirely on an empty label. It follows the
+  // THRESHOLD-and-points pair and NOT the score-summary block: an author who force-shows
+  // the summary of an ungraded test still gets no verdict, and hiding the summary of a
+  // control test does not erase its verdict.
+  if (noVerdict) {
+    result.passClass = "";
+    result.statusLabel = "";
+  }
   // EXPLICIT SUCCESS — the only state in which the author's feedback is withheld. Both
   // halves are load-bearing: the test must actually grade (otherwise no verdict was
   // pronounced and `passed` is a default, not a judgement), and the verdict must be a
@@ -537,18 +573,9 @@ export function buildResultContext(
     // feedback gate must not be able to disagree about whether this test grades.
     // (`scoredQuestions` in `shared/scoring/aggregate.ts` describes the very same
     // contract but is absent from the stored result schema, so it cannot answer for
-    // attempts finished earlier.)
-    // No graded score — no verdict. A measurement method checks nothing, so both
-    // «Пройден» and «Не пройден» would be false statements about the learner, not a
-    // cosmetic default. The third state is the one the topic rows already use
-    // (passed === true / false / ""), and the layout drops the tag entirely on an
-    // empty label. It follows the THRESHOLD-and-points pair, not the score-summary
-    // block: an author who force-shows the summary of an ungraded test still gets no
-    // verdict, and hiding the summary of a control test does not erase its verdict.
-    if (!hasGradedScore) {
-      result.passClass = "";
-      result.statusLabel = "";
-    }
+    // attempts finished earlier.) The verdict tag is NOT gated here: it belongs to every
+    // test, so it is resolved above `result` for the measurement and the control screen
+    // alike — this branch only ever adds what measurements bring.
     // INVERTED on purpose. A control test never passes `measures`, so a positive
     // flag would be absent — and `{{#if result.showScoreSummary}}` would erase the
     // score ring from every control test in every package and in the preview. The

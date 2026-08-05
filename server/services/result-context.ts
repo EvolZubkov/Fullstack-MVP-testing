@@ -222,8 +222,11 @@ export function buildResultContext(
       ...(recommendedEvents.length ? { recommendedEvents } : {}),
       ...(testFeedback ? { testFeedback } : {}),
       // Whether the test declares a pass threshold at all — the ONE fact that tells an
-      // explicit «Пройден» from a test that pronounces no verdict, and the builder
-      // withholds the test's own feedback only on the former. It travels OUTSIDE
+      // explicit «Пройден» from a test that pronounces no verdict. The builder reads it
+      // twice, and the two readings must agree: it withholds the test's own feedback only
+      // on an explicit pass, and it drops the verdict tag when nothing was judged (PRD-29
+      // §6.7 — a control test with a threshold but nothing to grade used to keep the tag
+      // and print the feedback at the same time). It travels OUTSIDE
       // `measures` on purpose: the route reads it for every attempt, while `measures`
       // reaches the builder only for a test with scales or indicators, and a control
       // test — the commonest one — would otherwise never say whether it grades.

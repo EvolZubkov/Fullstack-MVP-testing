@@ -110,9 +110,11 @@ function vrTestFeedback() {
 /**
  * Whether the TEST declares a pass threshold at all (`tests.overall_pass_rule_json`,
  * baked as `TEST_DATA.overallPassRule`). It is the one fact that tells an explicit
- * «Пройден» from a test that pronounces no verdict — the shared builder withholds the
- * test's own feedback only on the former, and a measurement method without a threshold
- * (PRD-29) must keep showing its feedback, since that feedback IS its result.
+ * «Пройден» from a test that pronounces no verdict. The shared builder reads it twice:
+ * it withholds the test's own feedback only on an explicit pass — a measurement method
+ * without a threshold (PRD-29) must keep showing its feedback, since that feedback IS its
+ * result — and it drops the verdict tag itself when nothing was judged, so the header and
+ * the feedback block cannot claim opposite things about the same run (PRD-29 §6.7).
  *
  * Read OUTSIDE `buildResultsMeasures` for the same reason `vrTestFeedback` is: that one
  * returns null for a test with neither scales nor indicators, and the commonest test in
