@@ -3055,6 +3055,13 @@ export default function TakeTestPage() {
       // committed (PRD-43 quickAdvance) → fix AND walk on in the same click
       // (handleNext) — mirrors the SCORM runtime's next(), which does both
       // unconditionally every time.
+      //
+      // These two are NOT interchangeable: handleNext does not reset
+      // standardFeedbackShown/standardAnswerResult (it never runs while feedback
+      // is showing, since committedCurrent is guaranteed true whenever feedback is
+      // on screen). Routing an already-committed/feedback-shown question through
+      // handleNext instead of handleStandardContinue would leak the previous
+      // question's feedback banner onto the next question.
       if (action === QUESTION_NAV_ACTIONS.next) {
         return committedCurrent ? handleStandardContinue() : handleNext();
       }
