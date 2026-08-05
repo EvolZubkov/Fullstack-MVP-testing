@@ -90,6 +90,8 @@ export type ApiTestResponse = {
   // PRD-19 (Блок A)
   allowReturnToUnanswered?: boolean | null;
   allowAnswerChange?: boolean | null;
+  // PRD-43: независим от allowReturnToUnanswered.
+  quickAdvance?: boolean | null;
   showSectionResults?: boolean | null;
   copyProtection?: boolean | null;
   protectionWatermark?: boolean | null;
@@ -939,6 +941,9 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
       // PRD-19 (Блок A): новый тест — возврат ВКЛ по умолчанию (FR-01).
       allowReturnToUnanswered: true,
       allowAnswerChange: false,
+      // PRD-43: новый тест — как сегодняшнее двухшаговое поведение (ВКЛ возврата
+      // + ВЫКЛ быстрого перехода).
+      quickAdvance: false,
       showSectionResults: true,
       // PRD-34 (FR-03): новый тест — защита ВКЛ.
       copyProtection: true,
@@ -1042,6 +1047,13 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
         typeof src.allowReturnToUnanswered === "boolean" ? src.allowReturnToUnanswered : false,
       allowAnswerChange:
         typeof src.allowAnswerChange === "boolean" ? src.allowAnswerChange : false,
+      // PRD-43: поля нет в ответе (тест до PRD-43) → как сегодняшнее поведение
+      // ДЛЯ ЭТОГО КОНКРЕТНОГО allowReturnToUnanswered — то же правило, что и у
+      // backfill-миграции (drizzle/0013_prd43_quick_advance_backfill.sql).
+      quickAdvance:
+        typeof src.quickAdvance === "boolean"
+          ? src.quickAdvance
+          : !(typeof src.allowReturnToUnanswered === "boolean" ? src.allowReturnToUnanswered : false),
       showSectionResults:
         typeof src.showSectionResults === "boolean" ? src.showSectionResults : true,
       // PRD-34 (FR-05): поля нет (тест до PRD-34) → умолчание, то есть защита ВКЛ.
@@ -1118,6 +1130,7 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     showCorrectAnswers: model.runtime.showCorrectAnswers,
     allowReturnToUnanswered: model.runtime.allowReturnToUnanswered,
     allowAnswerChange: model.runtime.allowAnswerChange,
+    quickAdvance: model.runtime.quickAdvance,
     showSectionResults: model.runtime.showSectionResults,
     copyProtection: model.runtime.copyProtection,
     protectionWatermark: model.runtime.protectionWatermark,

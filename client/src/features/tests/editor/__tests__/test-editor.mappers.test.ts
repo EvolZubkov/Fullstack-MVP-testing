@@ -19,6 +19,7 @@ import {
   apiToEditorModel,
   defaultRetakePolicy,
   editorModelToPayload,
+  emptyEditorModel,
   mapEditorAdaptiveToPayload,
   mapEditorSectionsToPayload,
   applyFormSetChange,
@@ -933,5 +934,31 @@ describe("applyFormSetChange", () => {
     const before = model({ t: { source: "custom", type: "percent", value: 55 } }, { forms: forms("v1") });
     const after = applyFormSetChange(before, "t", { forms: forms("v1", "v2") });
     expect(after.passRules.byTopic["t"]).toEqual({ source: "custom", type: "percent", value: 55 });
+  });
+});
+
+// ─── quickAdvance (PRD-43) ─────────────────────────────────────────────────────
+
+describe("quickAdvance (PRD-43)", () => {
+  it("emptyEditorModel defaults quickAdvance to false", () => {
+    const model = emptyEditorModel({ folderId: null });
+    expect(model.runtime.quickAdvance).toBe(false);
+  });
+
+  it("apiToEditorModel reads an explicit quickAdvance verbatim", () => {
+    const model = apiToEditorModel({ quickAdvance: true, allowReturnToUnanswered: true });
+    expect(model.runtime.quickAdvance).toBe(true);
+  });
+
+  it("apiToEditorModel falls back to NOT allowReturnToUnanswered when quickAdvance is absent", () => {
+    expect(apiToEditorModel({ allowReturnToUnanswered: true }).runtime.quickAdvance).toBe(false);
+    expect(apiToEditorModel({ allowReturnToUnanswered: false }).runtime.quickAdvance).toBe(true);
+    expect(apiToEditorModel({}).runtime.quickAdvance).toBe(true);
+  });
+
+  it("editorModelToPayload round-trips quickAdvance", () => {
+    const model = emptyEditorModel({ folderId: null });
+    model.runtime.quickAdvance = true;
+    expect(editorModelToPayload(model).quickAdvance).toBe(true);
   });
 });
