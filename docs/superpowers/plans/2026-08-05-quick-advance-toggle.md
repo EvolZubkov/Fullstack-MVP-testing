@@ -194,8 +194,8 @@ describe("buildQuestionNav", () => {
     expect(buildQuestionNav({ ...flexible, showReview: true }).showReview).toBe(true);
   });
 
-  it("строгий режим без быстрого перехода: только основная кнопка, без «Назад» и «Пропустить»", () => {
-    expect(buildQuestionNav({ ...flexible, flexible: false })).toMatchObject({
+  it("строгий режим (сегодняшнее поведение — быстрый переход ВКЛ по умолчанию): только основная кнопка, без «Назад» и «Пропустить»", () => {
+    expect(buildQuestionNav({ ...flexible, flexible: false, quickAdvance: true })).toMatchObject({
       showBack: false,
       showSkip: false,
       showReview: false,
@@ -205,11 +205,11 @@ describe("buildQuestionNav", () => {
   });
 
   it("строгий режим: «Принять» при показе верного ответа, «Завершить тест» на последнем шаге", () => {
-    expect(buildQuestionNav({ ...flexible, flexible: false, showAccept: true })).toMatchObject({
+    expect(buildQuestionNav({ ...flexible, flexible: false, quickAdvance: true, showAccept: true })).toMatchObject({
       primaryAction: QUESTION_NAV_ACTIONS.submit,
       primaryLabel: "Принять",
     });
-    expect(buildQuestionNav({ ...flexible, flexible: false, hasNext: false })).toMatchObject({
+    expect(buildQuestionNav({ ...flexible, flexible: false, quickAdvance: true, hasNext: false })).toMatchObject({
       primaryAction: QUESTION_NAV_ACTIONS.finish,
       primaryLabel: "Завершить тест",
     });
