@@ -1047,8 +1047,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
       maxAttempts: typeof src.maxAttempts === "number" ? src.maxAttempts : null,
       showCorrectAnswers:
         typeof src.showCorrectAnswers === "boolean" ? src.showCorrectAnswers : false,
-      // PRD-19 (Блок A): итоги раздела ВКЛ по умолчанию (см. resolvedAllowReturnToUnanswered
-      // для возврата к неотвеченным).
+      // PRD-19 (Блок A): consolidated in `resolvedAllowReturnToUnanswered` above.
       allowReturnToUnanswered: resolvedAllowReturnToUnanswered,
       allowAnswerChange:
         typeof src.allowAnswerChange === "boolean" ? src.allowAnswerChange : false,
@@ -1056,6 +1055,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
       // backfill-миграции (drizzle/0013_prd43_quick_advance_backfill.sql).
       quickAdvance:
         typeof src.quickAdvance === "boolean" ? src.quickAdvance : !resolvedAllowReturnToUnanswered,
+      // PRD-19 (Блок A): итоги раздела ВКЛ по умолчанию.
       showSectionResults:
         typeof src.showSectionResults === "boolean" ? src.showSectionResults : true,
       // PRD-34 (FR-05): поля нет (тест до PRD-34) → умолчание, то есть защита ВКЛ.
