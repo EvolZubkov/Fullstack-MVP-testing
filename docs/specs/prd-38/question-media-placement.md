@@ -2,7 +2,8 @@
 
 **Версия:** 1.0
 
-**Статус:** требования согласованы 2026-08-03, реализация не начата
+**Статус:** реализовано и влито в main 2026-08-04 (ветка `prd-38-question-media`); приёмка
+принята с замечаниями — см. [отчёт приёмки](../../reports/prd38-question-media-acceptance.md)
 
 **Связанные документы:** [PRD-12](../prd-12/web-runtime-parity.md),
 [PRD-26](../prd-26/scale-question-type.md), [PRD-34](../prd-34/copy-protection.md),
