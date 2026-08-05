@@ -352,6 +352,16 @@ function firedFeedback(m: MeasureInput): FeedbackBlock | null {
 export interface ResultContextOptions {
   /** Add the per-topic "Баллов" row (`pointsLabel`) — SCORM shows it, web omits. */
   withTopicPoints?: boolean;
+  /**
+   * Keep the per-topic "Баллов" row even when the test's score-summary block is
+   * switched off (`blockSettings.scoreSummary: "hide"`). Set by the PDF report ONLY:
+   * a downloaded document has no live toggle for the reader to flip, so it always
+   * prints the number when {@link withTopicPoints} is on. Every other caller
+   * (SCORM/web results screen) leaves this unset, so the toggle governs the
+   * per-topic row exactly as it governs the summary itself (issue #30) — a hidden
+   * summary is «the block with points is off», not «the test-level ring is off».
+   */
+  topicPointsIgnoreScoreSummary?: boolean;
   recommendedCourses?: CtxRecommendation[];
   recommendedEvents?: CtxRecommendation[];
   backAction?: string;
@@ -420,7 +430,12 @@ function topicView(t: TopicInput, withPoints: boolean): CtxTopicResultView {
     // `adaptiveLevelFeedback`). The asymmetry is intentional, not an unfinished edit.
     ...buildTopicRecommendationsView(t),
   };
-  if (withPoints) view.pointsLabel = round1(t.earnedPoints) + " / " + round1(t.possiblePoints);
+  // `total` is the topic's COUNT OF GRADED questions (`aggregateStandardResult` never
+  // counts a measurement-only one toward it), so zero means the topic has nothing with
+  // a correct answer to speak of — a burnout-inventory topic, say. "Баллов 0.0 / 0.0"
+  // there is the same nonsense PRD-29 removed from the test-level summary, one level
+  // down; the layout drops the sibling «Правильно» row on the same `total` check.
+  if (withPoints && t.total > 0) view.pointsLabel = round1(t.earnedPoints) + " / " + round1(t.possiblePoints);
   if (t.requiredLabel) view.requiredLabel = t.requiredLabel;
   return view;
 }
@@ -438,24 +453,6 @@ export function buildResultContext(
 ): ResultRenderContext {
   const passed = !!input.passed;
   const percent = Math.round(input.percent || 0);
-  const result: CtxResult = {
-    passed,
-    passClass: passed ? "is-pass" : "is-fail",
-    statusLabel: passed ? "Пройден" : "Не пройден",
-    scorePercent: percent,
-    ringDashoffset: Math.round(RING_CIRCUMFERENCE * (1 - percent / 100)),
-    totalQuestions: input.totalQuestions,
-    correct: input.correct,
-    earnedPoints: round1(input.earnedPoints),
-    possiblePoints: round1(input.possiblePoints),
-    topicResults: (input.topicResults || []).map((t) => topicView(t, !!opts.withTopicPoints)),
-  };
-  if (opts.recommendedCourses && opts.recommendedCourses.length) result.recommendedCourses = opts.recommendedCourses;
-  if (opts.recommendedEvents && opts.recommendedEvents.length) result.recommendedEvents = opts.recommendedEvents;
-  if (opts.backAction) {
-    result.backAction = opts.backAction;
-    result.backLabel = opts.backLabel;
-  }
   // ONE source of truth for «is there a graded score to speak about» — it answers the
   // score summary (`auto`), the verdict tag, and the feedback gate below. TWO conditions,
   // not one: a threshold IS declared AND there is something to grade. Every new test
@@ -474,8 +471,48 @@ export function buildResultContext(
   // as a fallback: the top-level one travels for every test, the measures copy only for a
   // test that measures something. `=== true` on purpose — an absent flag means «unknown»,
   // and unknown must not silence anything.
+  //
+  // Computed BEFORE `result` so the block-visibility flags below can gate the per-topic
+  // «Баллов» row the same way they gate the summary itself (issue #30).
   const thresholdDeclared = opts.hasPassThreshold ?? opts.measures?.hasPassThreshold;
   const hasGradedScore = thresholdDeclared === true && round1(input.possiblePoints) > 0;
+  // Visible scales/indicators and the resolved block visibility, gathered ONCE so the
+  // scales/indicators sections further below reuse the SAME values instead of refiltering.
+  const visibleScales = opts.measures ? opts.measures.scales.filter((m) => m.visibility !== "hidden") : [];
+  const visibleIndicators = opts.measures ? opts.measures.indicators.filter((m) => m.visibility !== "hidden") : [];
+  const blocks = opts.measures
+    ? resolveResultsBlocks(opts.measures.blockSettings ?? {}, {
+        hasPassThreshold: hasGradedScore,
+        hasVisibleScales: visibleScales.length > 0,
+        hasVisibleIndicators: visibleIndicators.length > 0,
+      })
+    : undefined;
+  // The score-summary toggle governs «the block with points» as a whole, not only the
+  // test-level ring: a hidden summary must hide the SAME points at topic granularity too
+  // (issue #30 — the SCORM package kept printing «Баллов» per topic while the summary
+  // was switched off). No `measures` (a control test) leaves `withTopicPoints` exactly as
+  // the caller set it — the toggle only exists for a measurement test. The report opts
+  // out via {@link ResultContextOptions.topicPointsIgnoreScoreSummary}.
+  const withTopicPoints =
+    !!opts.withTopicPoints && (opts.topicPointsIgnoreScoreSummary || !blocks || blocks.scoreSummary);
+  const result: CtxResult = {
+    passed,
+    passClass: passed ? "is-pass" : "is-fail",
+    statusLabel: passed ? "Пройден" : "Не пройден",
+    scorePercent: percent,
+    ringDashoffset: Math.round(RING_CIRCUMFERENCE * (1 - percent / 100)),
+    totalQuestions: input.totalQuestions,
+    correct: input.correct,
+    earnedPoints: round1(input.earnedPoints),
+    possiblePoints: round1(input.possiblePoints),
+    topicResults: (input.topicResults || []).map((t) => topicView(t, withTopicPoints)),
+  };
+  if (opts.recommendedCourses && opts.recommendedCourses.length) result.recommendedCourses = opts.recommendedCourses;
+  if (opts.recommendedEvents && opts.recommendedEvents.length) result.recommendedEvents = opts.recommendedEvents;
+  if (opts.backAction) {
+    result.backAction = opts.backAction;
+    result.backLabel = opts.backLabel;
+  }
   // EXPLICIT SUCCESS — the only state in which the author's feedback is withheld. Both
   // halves are load-bearing: the test must actually grade (otherwise no verdict was
   // pronounced and `passed` is a default, not a judgement), and the verdict must be a
@@ -494,19 +531,13 @@ export function buildResultContext(
   // outcome is the interpretation of a measurement, not guidance on a failure, and a
   // learner who passed still gets to read what was measured.
   const recommendationSources: Array<FeedbackBlock | null | undefined> = explicitPass ? [] : [opts.testFeedback];
-  if (opts.measures) {
-    const visibleScales = opts.measures.scales.filter((m) => m.visibility !== "hidden");
-    const visibleIndicators = opts.measures.indicators.filter((m) => m.visibility !== "hidden");
-    // `hasGradedScore` is computed ONCE, above — the score summary, the verdict tag and
-    // the feedback gate must not be able to disagree about whether this test grades.
+  if (opts.measures && blocks) {
+    // `hasGradedScore`, `visibleScales`/`visibleIndicators` and `blocks` are computed
+    // ONCE, above — the score summary, the verdict tag, the topic points row and the
+    // feedback gate must not be able to disagree about whether this test grades.
     // (`scoredQuestions` in `shared/scoring/aggregate.ts` describes the very same
     // contract but is absent from the stored result schema, so it cannot answer for
     // attempts finished earlier.)
-    const blocks = resolveResultsBlocks(opts.measures.blockSettings ?? {}, {
-      hasPassThreshold: hasGradedScore,
-      hasVisibleScales: visibleScales.length > 0,
-      hasVisibleIndicators: visibleIndicators.length > 0,
-    });
     // No graded score — no verdict. A measurement method checks nothing, so both
     // «Пройден» and «Не пройден» would be false statements about the learner, not a
     // cosmetic default. The third state is the one the topic rows already use

@@ -118,6 +118,28 @@ describe("results.html — superset gating", () => {
     expect(recs).toContain("Семинар B");
     expect(root.querySelector('[data-action="back-to-start"]')?.textContent).toBe("Вернуться к тесту");
   });
+
+  // A topic made entirely of measurement questions (no correct-answer grading) has
+  // `total: 0` — aggregateStandardResult never counts measurement-only questions
+  // toward it. Printing "Правильно 0 / 0" there is the exact nonsense PRD-29 removed
+  // from the test-level summary, just one level down (see acceptance.md "Наблюдения
+  // вне объёма PRD-29"). The row must not render at all, in EITHER template.
+  for (const [templateId, layout] of standardLayouts) {
+    it(`${templateId}: тема без оцениваемых вопросов не печатает «Правильно»`, () => {
+      const root = render(layout, {
+        course: { title: "Тест" },
+        result: {
+          ...webResult.result,
+          topicResults: [
+            { topicName: "Опросник", correct: 0, total: 0, percent: 0, passClass: "", statusLabel: "" },
+          ],
+        },
+      });
+      const card = root.querySelector(".tb-topic-card") as HTMLElement;
+      expect(card.textContent).not.toContain("Правильно");
+      expect(card.querySelectorAll(".ou-stat-row").length).toBe(0);
+    });
+  }
 });
 
 /**

@@ -202,6 +202,58 @@ describe("сводка баллов", () => {
   });
 });
 
+describe("строка «Баллов» темы следует за настройкой сводки (issue #30)", () => {
+  const withTopic = { ...BASE, topicResults: [{ topicId: "t1", topicName: "Тема 1", correct: 3, total: 4, percent: 75, earnedPoints: 3, possiblePoints: 4, passed: null }] };
+
+  it("скрытая сводка гасит и строку «Баллов» у темы в пакете", () => {
+    const ctx = buildResultContext(withTopic, "Маслач", {
+      withTopicPoints: true,
+      measures: { ...MEASURES, hasPassThreshold: true, blockSettings: { scoreSummary: "hide" as const } },
+    });
+    expect(ctx.result.hideScoreSummary).toBe(true);
+    expect((ctx.result.topicResults as any[])[0].pointsLabel).toBeUndefined();
+  });
+
+  it("видимая сводка сохраняет строку «Баллов» у темы в пакете", () => {
+    const ctx = buildResultContext(withTopic, "Маслач", {
+      withTopicPoints: true,
+      measures: { ...MEASURES, hasPassThreshold: true, blockSettings: { scoreSummary: "show" as const } },
+    });
+    expect(ctx.result.hideScoreSummary).toBeUndefined();
+    expect((ctx.result.topicResults as any[])[0].pointsLabel).toBe("3 / 4");
+  });
+
+  it("без измерений withTopicPoints работает как раньше", () => {
+    const ctx = buildResultContext(withTopic, "Контрольный", { withTopicPoints: true });
+    expect((ctx.result.topicResults as any[])[0].pointsLabel).toBe("3 / 4");
+  });
+});
+
+describe("тема без оцениваемых вопросов не печатает «Баллов»", () => {
+  // aggregateStandardResult никогда не засчитывает измерительные вопросы в `total`
+  // темы — у чисто измерительной темы `total: 0` и `possiblePoints: 0`. Строка
+  // «Баллов 0.0 / 0.0» в такой теме — та же бессмыслица, ради которой существует
+  // `hideScoreSummary`, только уровнем ниже; макет гасит соседнюю строку «Правильно»
+  // по тому же признаку (`{{#if total}}`), так что обе строки должны молчать вместе.
+  const measurementOnlyTopic = {
+    ...BASE,
+    topicResults: [{ topicId: "t1", topicName: "Тема 1", correct: 0, total: 0, percent: 0, earnedPoints: 0, possiblePoints: 0, passed: null }],
+  };
+
+  it("сводка показана, но у темы нет оцениваемых вопросов — «Баллов» не появляется", () => {
+    const ctx = buildResultContext(measurementOnlyTopic, "Маслач", {
+      withTopicPoints: true,
+      measures: { ...MEASURES, hasPassThreshold: true, blockSettings: { scoreSummary: "show" as const } },
+    });
+    expect((ctx.result.topicResults as any[])[0].pointsLabel).toBeUndefined();
+  });
+
+  it("без измерений тоже не появляется", () => {
+    const ctx = buildResultContext(measurementOnlyTopic, "Контрольный", { withTopicPoints: true });
+    expect((ctx.result.topicResults as any[])[0].pointsLabel).toBeUndefined();
+  });
+});
+
 describe("нечего оценивать", () => {
   // Любой новый тест несёт порог 70% по умолчанию, поэтому у измерительного теста
   // признак порога стоит, а оценивать при этом нечего: возможных баллов ноль.

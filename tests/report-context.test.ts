@@ -22,6 +22,7 @@ import {
   buildAdaptiveResultContext,
   NO_LEVEL_CONFIRMED_LABEL,
 } from "../shared/template/result-context";
+import { LEVEL_SCHEMES } from "../shared/template/level-ramp";
 import type { ReportInput, AdaptiveReportInput } from "../shared/report/report-html";
 
 const topic = (over: Record<string, unknown> = {}) => ({
@@ -105,7 +106,40 @@ describe("контекст обычного отчёта", () => {
 
   it("в отчёте всегда есть строка баллов по теме", () => {
     // Отчёт — документ: досчитать баллы по теме читателю потом нечем.
-    expect(buildReportContext(input()).result.topicResults?.[0].pointsLabel).toBe("3 / 5");
+    expect((buildReportContext(input()).result.topicResults as any[])?.[0].pointsLabel).toBe("3 / 5");
+  });
+
+  it("строка баллов по теме остаётся в отчёте даже при выключенной сводке (issue #30)", () => {
+    // На ЭКРАНЕ выключенная сводка баллов гасит и построчный «Баллов» темы...
+    const screen = buildResultContext(input().result, "Демо-тест", {
+      withTopicPoints: true,
+      hasPassThreshold: true,
+      measures: {
+        ramp: LEVEL_SCHEMES.traffic,
+        scaleKind: "band_ruler",
+        indicatorKind: "label",
+        scales: [],
+        indicators: [],
+        hasPassThreshold: true,
+        blockSettings: { scoreSummary: "hide" },
+      },
+    });
+    expect(screen.result.hideScoreSummary).toBe(true);
+    expect((screen.result.topicResults as any[])[0].pointsLabel).toBeUndefined();
+
+    // ...но у отчёта — скачанного документа — своей настройки нет, строка остаётся.
+    const ctx = buildReportContext(input(), {
+      measures: {
+        ramp: LEVEL_SCHEMES.traffic,
+        scaleKind: "band_ruler",
+        indicatorKind: "label",
+        scales: [],
+        indicators: [],
+        hasPassThreshold: true,
+        blockSettings: { scoreSummary: "hide" },
+      },
+    });
+    expect((ctx.result.topicResults as any[])?.[0].pointsLabel).toBe("3 / 5");
   });
 
   it("картинки приходят значениями полей ВАРИАНТА, а не отдельным блоком (FR-05)", () => {

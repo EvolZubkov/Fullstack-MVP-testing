@@ -203,9 +203,12 @@ function unmasteredRecommendations(topics: ReportInput["result"]["topicResults"]
  */
 export function buildReportContext(input: ReportInput, opts: ReportContextOptions = {}): ReportRenderContext {
   // `withTopicPoints` — в отчёте строка «Баллов» по теме нужна всегда: это документ,
-  // а не экран, и досчитать её потом читателю нечем.
+  // а не экран, и досчитать её потом читателю нечем. `topicPointsIgnoreScoreSummary`
+  // держит её и тогда, когда автор выключил сводку по баллам (issue #30 гасит эту
+  // строку только на ЭКРАНЕ — там у ученика есть настройка, у скачанного PDF её нет).
   const base = buildResultContext(input.result, input.testName || "", {
     withTopicPoints: true,
+    topicPointsIgnoreScoreSummary: true,
     // Источники консолидированного блока обратной связи, которых нет в результате
     // попытки: обратная связь самого теста и признак «тест выносит вердикт». Уходят в
     // ТОТ ЖЕ построитель, что собирает блок для экрана, — второго правила консолидации
