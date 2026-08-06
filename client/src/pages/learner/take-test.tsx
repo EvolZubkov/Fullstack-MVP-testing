@@ -9,6 +9,13 @@ import { TemplateQuestionScreen } from "./template-question-screen";
 import { fmtIsoDateHuman, fmtIsoInstantHuman } from "./cooldown-format";
 import { deliversShuffledOrder, hasAnswer, rankingDeliveryOrder } from "./answer-gate";
 import { isSingleIndexChoice, isMeasurementOnly } from "@shared/questions/question-type";
+// PRD-10 (FR-12): мгновенный вердикт по ответу считает тот же движок, что и итоги
+// попытки и рантайм SCORM-пакета — второй копии правил оценивания на вебе нет.
+import {
+  scoreAnswer,
+  type CorrectData,
+  type QuestionType as ScoredQuestionType,
+} from "@shared/scoring/engine";
 import { applyDeliveryOrder } from "@shared/draw/assemble-delivery";
 import { buildStartState } from "@shared/template/start-state";
 import { feedbackBanner, feedbackDesc } from "@shared/template/feedback-banner";
@@ -42,10 +49,18 @@ import {
 import { t } from "@/lib/i18n";
 import { reportClientError } from "@/lib/report-error";
 import { useAuth } from "@/lib/auth";
-import type { Question, Attempt, Test } from "@shared/schema";
+import type { Question, QuestionScoring, Attempt, Test } from "@shared/schema";
+
+/**
+ * Вопрос попытки: строка банка плюс ЭФФЕКТИВНАЯ цена ответа этого теста
+ * (PRD-10 FR-12, PRD-15 блок D). `scoring` присылает сервер вместе с ключом
+ * ответа — то же поле и то же умолчание, что печёт SCORM-пакет: отсутствие =
+ * системное «точное совпадение», 0/1 без частичного балла.
+ */
+type GradedQuestion = Question & { scoring?: QuestionScoring | null };
 
 interface AttemptWithQuestions extends Attempt {
-  questions: Question[];
+  questions: GradedQuestion[];
   testTitle: string;
 }
 
@@ -124,7 +139,7 @@ export function contentPagesBetween(
 }
 
 interface FlatQuestion {
-  question: Question;
+  question: GradedQuestion;
   topicName: string;
   /** Owning topic id — drives the per-topic section timer (PRD-4 v1.1 §3.2). */
   topicId: string;
@@ -215,14 +230,22 @@ function escSlot(s: unknown): string {
 }
 
 /**
- * After-answer feedback HTML for the adaptive question's question-feedback slot:
- * status + (single/multiple) correct-answer text + the question's feedback.
- * Mirrors the SCORM adaptive feedback block (binary correctness, no partial).
+ * After-answer feedback HTML for the question-feedback slot: status + (single/
+ * multiple) correct-answer text + the question's feedback. Serves BOTH delivery
+ * modes, so the verdict chrome cannot drift between them.
+ *
+ * PRD-10 (FR-12): the verdict is three-position whenever the caller supplies a
+ * `scoreRatio` — right / PARTLY right / wrong, the same tones and the same wording
+ * the SCORM package emits from the same ratio (`app/feedback/feedback.js`). The
+ * adaptive path deliberately supplies none: its per-answer verdict is binary
+ * because a level advance is a yes/no decision, and its server route returns
+ * `isCorrect` only.
  */
 function adaptiveFeedbackHtml(question: any, result: any): string {
   const ok = !!result.isCorrect;
+  const partial = !ok && typeof result.scoreRatio === "number" && result.scoreRatio > 0;
   // Revision «Стандартный»: the verdict is the shared DS `.ou-banner` — the SAME
-  // component and semantic success/error tokens the SCORM adaptive block now emits,
+  // component and semantic success/warning/error tokens the SCORM block emits,
   // so the web and package answer-check feedback cannot drift.
   let body = "";
   const opts = (question.dataJson as any)?.options as unknown[] | undefined;
@@ -235,7 +258,11 @@ function adaptiveFeedbackHtml(question: any, result: any): string {
     }
   }
   if (result.feedback) body += feedbackDesc(result.feedback);
-  return feedbackBanner(ok ? "success" : "error", ok ? "Правильно!" : "Неверно", body);
+  return feedbackBanner(
+    ok ? "success" : partial ? "warning" : "error",
+    ok ? "Правильно!" : partial ? "Частично правильно" : "Неверно",
+    body,
+  );
 }
 
 /**
@@ -575,6 +602,11 @@ export default function TakeTestPage() {
   const [standardFeedbackShown, setStandardFeedbackShown] = useState(false);
   const [standardAnswerResult, setStandardAnswerResult] = useState<{
     isCorrect: boolean;
+    /**
+     * PRD-10 (FR-12): доля от максимума за этот ответ. Есть только у стандартного
+     * режима — по ней вердикт становится трёхпозиционным (частичный балл).
+     */
+    scoreRatio?: number;
     correctAnswer?: any;
     feedback?: string;
   } | null>(null);
@@ -1411,47 +1443,29 @@ export default function TakeTestPage() {
     saveProgress(newAnswers, currentIndex, nextStatus);
   };
 
-  // Локальная проверка ответа для стандартного теста
-  const checkAnswerLocally = (question: Question, answer: any): boolean => {
-    const correct = question.correctJson as any;
-    if (!correct) return false;
-
-    // A scale with a correct graduation is checked exactly like single choice; a
-    // measurement-only scale never reaches here (the server marks it unscored).
-    if (isSingleIndexChoice(question.type)) {
-      return answer === correct.correctIndex;
-    }
-
-    if (question.type === "multiple") {
-      const correctSet = new Set(correct.correctIndices || []);
-      const answerSet = new Set(answer || []);
-      if (correctSet.size !== answerSet.size) return false;
-      for (const idx of correctSet) {
-        if (!answerSet.has(idx)) return false;
-      }
-      return true;
-    }
-
-    if (question.type === "matching") {
-      const pairs = correct.pairs || [];
-      const userPairs = answer || {};
-      for (const p of pairs) {
-        if (userPairs[p.left] !== p.right) return false;
-      }
-      return true;
-    }
-
-    if (question.type === "ranking") {
-      const correctOrder = correct.correctOrder || [];
-      const userOrder = answer || [];
-      if (correctOrder.length !== userOrder.length) return false;
-      for (let i = 0; i < correctOrder.length; i++) {
-        if (correctOrder[i] !== userOrder[i]) return false;
-      }
-      return true;
-    }
-
-    return false;
+  /**
+   * Вердикт по одному ответу для мгновенного фидбека стандартного теста —
+   * доля от максимума (`s / sMax`), 1 = полностью верно, 0 < r < 1 = частично.
+   *
+   * PRD-10 (FR-12): считает ОБЩИЙ движок оценивания по эффективному конфигу теста
+   * (`question.scoring`, то же поле, что печёт SCORM-пакет), а не собственная
+   * логика точного совпадения. До этого веб-хост в стандартном режиме не мог
+   * показать частичный балл: ступенчатая/весовая цена ответа доходила до итогов
+   * (`shared/scoring/aggregate`), но не до баннера сразу после ответа.
+   * Отсутствие конфига = `exact` = прежние 0/1.
+   *
+   * Ключ ответа приходит только у теста с «показывать правильность ответа» —
+   * без него `correctJson` вырезан на сервере и оценивать нечего.
+   */
+  const scoreAnswerLocally = (question: GradedQuestion, answer: any): number => {
+    const correct = question.correctJson as CorrectData | null;
+    if (!correct) return 0;
+    return scoreAnswer({
+      type: question.type as ScoredQuestionType,
+      correct,
+      answer,
+      scoring: question.scoring ?? null,
+    }).ratio;
   };
 
   // Подтвердить ответ (показать фидбек) для стандартного теста
@@ -1477,12 +1491,13 @@ export default function TakeTestPage() {
       return;
     }
 
-    const isCorrect = checkAnswerLocally(currentQ.question, currentAnswer);
+    const scoreRatio = scoreAnswerLocally(currentQ.question, currentAnswer);
     const correctAnswer = currentQ.question.correctJson;
     const feedback = currentQ.question.feedback;
 
     setStandardAnswerResult({
-      isCorrect,
+      isCorrect: scoreRatio === 1,
+      scoreRatio,
       correctAnswer,
       feedback: feedback || undefined,
     });

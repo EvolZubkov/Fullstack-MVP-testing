@@ -58,6 +58,7 @@ import type {
   RetakePolicy,
   ReportSettings,
   FeedbackContent,
+  QuestionScoring,
 } from "@shared/schema";
 // Brings the `SessionData.magic` augmentation (PRD magic-link scope) into scope.
 import "../middleware/magic-scope";
@@ -87,6 +88,40 @@ function prd19RuntimeSettings(test: Test) {
       flowMode: (test.flowPolicyJson as { mode?: string } | null)?.mode,
     }),
   };
+}
+
+/**
+ * The questions of a standard run as the web learner host receives them.
+ *
+ * The answer key ships ONLY for a test that shows correctness («показывать
+ * правильность ответа»); otherwise `correctJson` is stripped and the run carries
+ * no key at all.
+ *
+ * PRD-10 (FR-12): the EFFECTIVE graded config rides on exactly the same gate. The
+ * instant per-answer verdict is computed in the browser (no round trip, like the
+ * package's), so without this field every question resolved to the system default
+ * `exact` and a weighted/tiered question could never report partial credit live —
+ * even though the results screen scored it correctly through
+ * `shared/scoring/aggregate`. The field is named `scoring` and the system default
+ * is omitted, mirroring the SCORM bake (`builders/test-json.ts`), so both hosts
+ * read one shape.
+ *
+ * Resolved through `src` (live storage or a publication snapshot, PRD-15 block B),
+ * so a pinned attempt is graded live by the config it was published with.
+ */
+async function questionsForClient(
+  src: TestDataSource,
+  test: Test,
+  questions: Question[],
+): Promise<Array<Question & { scoring?: QuestionScoring }>> {
+  if (!test.showCorrectAnswers) {
+    return questions.map((q) => ({ ...q, correctJson: undefined })) as Question[];
+  }
+  const scoring = await loadTestScoringContext(test.id, src);
+  return questions.map((q) => {
+    const effective = scoring.resolve(q);
+    return effective.source.scoring === "system" ? q : { ...q, scoring: effective.scoring };
+  });
 }
 
 /**
@@ -496,10 +531,6 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
       finishedAt: null,
     });
 
-    const questionsForClient = test.showCorrectAnswers
-      ? allQuestions
-      : allQuestions.map((q) => ({ ...q, correctJson: undefined }));
-
     res.status(201).json({
       ...attempt,
       testTitle: test.title,
@@ -510,7 +541,7 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
       // PRD-12 (FR-6): the author's content pages + flow mode, so the web run
       // follows the same structure as the SCORM package.
       ...(await flowPayload(src, test)),
-      questions: questionsForClient,
+      questions: await questionsForClient(src, test, allQuestions),
     });
   } catch (error) {
     logger.error("Start attempt error: " + (error as Error).message);
@@ -1104,10 +1135,6 @@ router.get("/tests/:testId/resume", requirePermission("attempts.take"), async (r
     const allQuestionIds = variant.sections.flatMap((s: any) => s.questionIds);
     const allQuestions = await src.getQuestionsByIds(allQuestionIds);
 
-    const questionsForClient = test.showCorrectAnswers
-      ? allQuestions
-      : allQuestions.map((q) => ({ ...q, correctJson: undefined }));
-
     res.json({
       hasInProgress: true,
       attempt: {
@@ -1119,7 +1146,7 @@ router.get("/tests/:testId/resume", requirePermission("attempts.take"), async (r
         ...prd19RuntimeSettings(test),
         // PRD-12 (FR-6): structure (content pages + flow mode) for the resumed run.
         ...(await flowPayload(src, test)),
-        questions: questionsForClient,
+        questions: await questionsForClient(src, test, allQuestions),
       },
       savedAnswers: inProgressAttempt.answersJson || {},
       currentIndex: variant.currentIndex || 0,

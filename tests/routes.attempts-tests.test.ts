@@ -292,6 +292,56 @@ describe("Attempts routes — start attempt", () => {
     expect(res.body.questions[0].correctJson).toBeDefined();
   });
 
+  // PRD-10 (FR-12): the instant web feedback can only report PARTIAL credit if the
+  // run carries the test-effective graded config. It rides with correctJson — same
+  // gate, same field name the SCORM bake uses (`q.scoring`).
+  describe("POST /tests/:testId/attempts/start — effective graded scoring in the payload", () => {
+    const tiered = {
+      kind: "tiered",
+      tiers: [
+        { when: { all: [{ lhs: "c", op: "==", rhs: "T" }] }, score: 2 },
+        { when: { all: [{ lhs: "c", op: ">=", rhs: 1 }] }, score: 1 },
+      ],
+      sMax: 2,
+    };
+    const arrange = (over: Record<string, unknown> = {}) => {
+      storageMock.getTest.mockResolvedValue({ ...dbTest, showCorrectAnswers: true, ...over });
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+      storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 1 }]);
+      storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+      storageMock.getQuestionsByTopic.mockResolvedValue([dbQuestion]);
+      storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+      storageMock.createAttempt.mockResolvedValue(dbAttempt);
+    };
+
+    it("ships the per-test override so a graded question can score partially", async () => {
+      arrange();
+      storageMock.getTestQuestionScoring.mockResolvedValue([
+        { questionId: "q1", points: 2, scoringJson: tiered, difficulty: null, pinnedContentHash: null },
+      ]);
+      const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+      expect(res.status).toBe(201);
+      expect(res.body.questions[0].scoring).toEqual(tiered);
+    });
+
+    it("omits `scoring` for a question on the system default (exact), like the SCORM bake", async () => {
+      arrange();
+      storageMock.getTestQuestionScoring.mockResolvedValue([]);
+      const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+      expect(res.body.questions[0].scoring).toBeUndefined();
+    });
+
+    it("withholds `scoring` together with correctJson when correctness is not shown", async () => {
+      arrange({ showCorrectAnswers: false });
+      storageMock.getTestQuestionScoring.mockResolvedValue([
+        { questionId: "q1", points: 2, scoringJson: tiered, difficulty: null, pinnedContentHash: null },
+      ]);
+      const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+      expect(res.body.questions[0].correctJson).toBeUndefined();
+      expect(res.body.questions[0].scoring).toBeUndefined();
+    });
+  });
+
   it("POST /tests/:testId/attempts/start — returns 404 when test not found", async () => {
     storageMock.getTest.mockResolvedValue(undefined);
     const res = await asLearner(request(app).post("/api/tests/x/attempts/start"));
