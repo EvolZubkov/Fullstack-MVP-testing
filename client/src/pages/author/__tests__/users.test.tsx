@@ -108,6 +108,17 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+/**
+ * The `POST /api/users` call, if it happened. Not simply the last `fetch` call:
+ * a successful create invalidates the list, so a `GET` lands after it.
+ */
+function createCall(): [string, RequestInit] | undefined {
+  return fetchMock.mock.calls.find(
+    ([url, options]) =>
+      String(url) === "/api/users" && (options?.method ?? "GET").toUpperCase() === "POST",
+  ) as [string, RequestInit] | undefined;
+}
+
 function renderPage() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, queryFn: getQueryFn({ on401: "throw" }) } },
@@ -154,6 +165,41 @@ describe("<UsersPage />", () => {
         expect.objectContaining({ method: "POST" }),
       ),
     );
+  });
+
+  it("asks for an invitation letter by default when creating a user", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Создать пользователя" }));
+    fireEvent.change(await screen.findByPlaceholderText("user@example.com"), {
+      target: { value: "new@test.dev" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Минимум 8 символов"), {
+      target: { value: "Passw0rd!42" },
+    });
+    expect(screen.getByLabelText("Отправить приглашение")).toBeChecked();
+
+    fireEvent.click(screen.getByRole("button", { name: "Создать" }));
+
+    await waitFor(() => expect(createCall()).toBeDefined());
+    const body = JSON.parse(createCall()![1].body as string);
+    expect(body.sendInvite).toBe(true);
+  });
+
+  it("omits the invitation when the box is unticked", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Создать пользователя" }));
+    fireEvent.change(await screen.findByPlaceholderText("user@example.com"), {
+      target: { value: "new@test.dev" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Минимум 8 символов"), {
+      target: { value: "Passw0rd!42" },
+    });
+    fireEvent.click(screen.getByLabelText("Отправить приглашение"));
+    fireEvent.click(screen.getByRole("button", { name: "Создать" }));
+
+    await waitFor(() => expect(createCall()).toBeDefined());
+    const body = JSON.parse(createCall()![1].body as string);
+    expect(body.sendInvite).toBe(false);
   });
 
   it("opens the edit drawer prefilled from the selected row", async () => {

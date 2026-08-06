@@ -77,7 +77,7 @@ router.get("/:id", requirePermission("users.read"), async (req, res) => {
 // POST /api/users - Создать пользователя
 router.post("/", requirePermission("users.create"), async (req, res) => {
   try {
-    const { email, password, name, role, roles, groupIds } = req.body;
+    const { email, password, name, role, roles, groupIds, sendInvite } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: "Email and password required" });
@@ -125,7 +125,33 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
 
     const groups = await storage.getUserGroups(user.id);
     audit.userCreate(user.email, requestedRoles.join("+"));
-    res.status(201).json({ ...user, roles: requestedRoles, groups });
+
+    // The invitation letter, when the create form asked for one. The account is
+    // already stored by now, so a mail failure must not fail the request: it is
+    // reported as `inviteSent: false` and the operator can re-send from the row
+    // menu (POST /:id/invite), which mints exactly the same kind of token.
+    let inviteSent = false;
+    if (sendInvite) {
+      try {
+        const rawToken = randomBytes(32).toString("hex");
+        const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+        await storage.createPasswordResetToken(user.id, tokenHash, "invite", INVITE_TTL_MS);
+
+        const inviter = req.session.userId ? await storage.getUser(req.session.userId) : undefined;
+        inviteSent = await sendInviteEmail({
+          to: user.email,
+          userName: user.name || undefined,
+          inviteLink: `${appBaseUrl()}/reset-password?token=${rawToken}`,
+          inviterName: inviter?.name || undefined,
+        });
+        audit.userInvite(user.id);
+      } catch (e) {
+        logger.error(`Invite on create failed for user ${user.id}: ${(e as Error).message}`, "users");
+      }
+      logger.info(`Invite e-mail on create for user ${user.id} (delivered=${inviteSent})`, "users");
+    }
+
+    res.status(201).json({ ...user, roles: requestedRoles, groups, inviteSent });
   } catch (error) {
     logger.error("Create user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to create user" });

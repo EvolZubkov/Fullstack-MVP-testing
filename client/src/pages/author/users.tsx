@@ -105,6 +105,12 @@ export default function UsersPage() {
     roles: ["learner"] as string[],
     mustChangePassword: true,
     expiresAt: "",
+    /**
+     * Ask the server for an invitation letter (password-setup link) once the
+     * account is created. On by default, as in the bulk-import wizard: a person
+     * being added normally has to be told they now have an account.
+     */
+    sendInvite: true,
   });
   const [newPassword, setNewPassword] = useState("");
 
@@ -147,13 +153,23 @@ export default function UsersPage() {
         const error = await res.json();
         throw new Error(error.error || "Failed to create user");
       }
-      return res.json();
+      return res.json() as Promise<{ inviteSent?: boolean }>;
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setIsCreateOpen(false);
       resetForm();
       toast({ title: t.users.userCreated, description: t.users.userCreatedDescription });
+      // The account exists either way, so this is a second, weaker signal: the
+      // letter that WAS asked for never left (SMTP off — the link is in the
+      // server log, and the row menu can re-send it).
+      if (variables.sendInvite && !data.inviteSent) {
+        toast({
+          variant: "warning",
+          title: t.users.inviteNotSent,
+          description: t.users.inviteNotSentDescription,
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -377,6 +393,7 @@ export default function UsersPage() {
       roles: ["learner"],
       mustChangePassword: true,
       expiresAt: "",
+      sendInvite: true,
     });
   };
 
@@ -398,6 +415,9 @@ export default function UsersPage() {
       roles: user.roles ?? [],
       mustChangePassword: user.mustChangePassword,
       expiresAt: user.expiresAt ? user.expiresAt.split("T")[0] : "",
+      // Editing never mails anything: the invitation is a create-time choice,
+      // and an existing pending account is re-invited from the row menu.
+      sendInvite: false,
     });
     setIsEditOpen(true);
   };
@@ -733,6 +753,13 @@ export default function UsersPage() {
             label={t.users.mustChangePassword}
             checked={formData.mustChangePassword}
             onChange={(e) => setFormData({ ...formData, mustChangePassword: e.target.checked })}
+          />
+          {/* Invitation letter with a password-setup link (valid 7 days), sent
+              by the server right after the account is created. */}
+          <Checkbox
+            label={t.users.sendInvite}
+            checked={formData.sendInvite}
+            onChange={(e) => setFormData({ ...formData, sendInvite: e.target.checked })}
           />
           <Input
             label={t.users.expiresAt}

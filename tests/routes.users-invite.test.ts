@@ -1,12 +1,14 @@
 /**
- * Tests for POST /api/users/:id/invite — re-sending the invitation e-mail
- * (password-setup link) to an account that has never signed in.
+ * Tests for the two invitation paths of the users API:
  *
- * The endpoint exists because the invite letter used to be reachable ONLY from
- * the bulk-import flow, and only for rows that created a NEW account: an
- * account left in `pending` (created one at a time, or imported with the
- * checkbox off, or whose letter was lost) had no supported way to receive it
- * again.
+ * - `POST /api/users/:id/invite` — re-sending the invitation e-mail
+ *   (password-setup link) to an account that has never signed in. The endpoint
+ *   exists because the invite letter used to be reachable ONLY from the
+ *   bulk-import flow, and only for rows that created a NEW account: an account
+ *   left in `pending` (created one at a time, or imported with the checkbox
+ *   off, or whose letter was lost) had no supported way to receive it again.
+ * - `POST /api/users` with `sendInvite` — the letter that goes out for an
+ *   account created one at a time, driven by the create form's checkbox.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
@@ -190,5 +192,83 @@ describe("POST /api/users/:id/invite", () => {
     sendInviteMock.mockRejectedValue(new Error("smtp down"));
     const res = await asAdmin(request(makeApp()).post("/api/users/pending1/invite"));
     expect(res.status).toBe(500);
+  });
+});
+
+describe("POST /api/users — invitation on creation", () => {
+  /** The account the handler creates; `createUser` returns a decrypted e-mail. */
+  const createdUser = { ...pendingUser, id: "created1", email: "created@test.com", name: "Созданный" };
+
+  beforeEach(() => {
+    storageMock.getUserByEmail.mockResolvedValue(undefined);
+    storageMock.createUser.mockResolvedValue(createdUser);
+    storageMock.getUserGroups.mockResolvedValue([]);
+    storageMock.setUserRoles.mockResolvedValue(undefined);
+  });
+
+  function createBody(extra: Record<string, unknown> = {}) {
+    return { email: "created@test.com", password: "Passw0rd!42", roles: ["learner"], ...extra };
+  }
+
+  it("sends the invitation when the box is ticked", async () => {
+    const res = await asAdmin(
+      request(makeApp()).post("/api/users").send(createBody({ sendInvite: true })),
+    );
+
+    expect(res.status).toBe(201);
+    expect(res.body.inviteSent).toBe(true);
+    expect(sendInviteMock).toHaveBeenCalledOnce();
+    expect(sendInviteMock).toHaveBeenCalledWith(expect.objectContaining({
+      to: "created@test.com",
+      userName: "Созданный",
+      inviterName: "Админ",
+      inviteLink: expect.stringContaining("/reset-password?token="),
+    }));
+  });
+
+  it("mints the same 7-day password-setup token as the re-send path", async () => {
+    await asAdmin(request(makeApp()).post("/api/users").send(createBody({ sendInvite: true })));
+
+    expect(storageMock.createPasswordResetToken).toHaveBeenCalledOnce();
+    const [userId, tokenHash, purpose, ttlMs] = storageMock.createPasswordResetToken.mock.calls[0];
+    expect(userId).toBe("created1");
+    expect(tokenHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(purpose).toBe("invite");
+    expect(ttlMs).toBe(7 * 24 * 60 * 60 * 1000);
+    // The raw token travels only in the letter, never into storage.
+    const rawToken = sendInviteMock.mock.calls[0][0].inviteLink.split("token=")[1];
+    expect(tokenHash).not.toBe(rawToken);
+  });
+
+  it("stays silent when the box is not ticked", async () => {
+    const res = await asAdmin(request(makeApp()).post("/api/users").send(createBody()));
+
+    expect(res.status).toBe(201);
+    expect(res.body.inviteSent).toBe(false);
+    expect(sendInviteMock).not.toHaveBeenCalled();
+    expect(storageMock.createPasswordResetToken).not.toHaveBeenCalled();
+  });
+
+  it("reports inviteSent=false when the letter could not be delivered", async () => {
+    sendInviteMock.mockResolvedValue(false); // SMTP off — the link goes to the log
+    const res = await asAdmin(
+      request(makeApp()).post("/api/users").send(createBody({ sendInvite: true })),
+    );
+
+    expect(res.status).toBe(201);
+    expect(res.body.inviteSent).toBe(false);
+  });
+
+  it("keeps the created account when the mailer throws", async () => {
+    // The account already exists at that point: failing the request would leave
+    // the operator staring at an error next to a user that WAS created.
+    sendInviteMock.mockRejectedValue(new Error("smtp down"));
+    const res = await asAdmin(
+      request(makeApp()).post("/api/users").send(createBody({ sendInvite: true })),
+    );
+
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBe("created1");
+    expect(res.body.inviteSent).toBe(false);
   });
 });
