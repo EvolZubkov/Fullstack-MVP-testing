@@ -52,6 +52,7 @@ export const TYPE_OPTS: { value: QuestionType; label: string }[] = [
   { value: "matching", label: t.questions.matching },
   { value: "ranking", label: t.questions.ranking },
   { value: "scale", label: t.questions.scaleChoice },
+  { value: "allocation", label: t.questions.allocation },
 ];
 export const MEDIA_OPTS: { value: MediaBucket; label: string }[] = [
   { value: "image", label: "С изображением" },

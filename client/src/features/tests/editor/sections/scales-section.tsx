@@ -62,8 +62,9 @@ import {
 import type { FieldErrorIndex } from "../field-errors";
 import { formatAuthorNumber, parseAuthorNumber, sanitizeAuthorNumberInput } from "../numeric-input";
 import { FoldAllButtons, useSectionFold } from "./section-fold";
-import { isSingleIndexChoice, type QuestionType } from "@shared/questions/question-type";
+import { isSingleIndexChoice, distributesBudget, type QuestionType } from "@shared/questions/question-type";
 import { achievableRange } from "@shared/scales/engine";
+import type { AllocationSpec } from "@shared/questions/allocation";
 import type { LearnerVisibility, LevelTone, Valence } from "@shared/scales/interpretation";
 import { FeedbackEditorModal } from "./feedback-editor-modal";
 import { TONE_OPTIONS, emptyFeedbackValue } from "./outcomes-editor";
@@ -343,6 +344,10 @@ function ScalesListPane({
   // The editor model carries the contributions but not the types, so they are read
   // from the SAME source the contributions matrix uses.
   const [questionTypes, setQuestionTypes] = useState<Record<string, QuestionType> | null>(null);
+  // PRD-44: домен шкалы у вопроса-распределения ограничен БЮДЖЕТОМ, поэтому одних
+  // типов мало — без спецификаций домен такого вопроса схлопнулся бы в ноль, и
+  // «Рассчитать по вкладам» предложило бы автору заниженную границу.
+  const [budgets, setBudgets] = useState<Record<string, AllocationSpec>>({});
   const topicIds = useMemo(() => model.sections.map((s) => s.topicId), [model.sections]);
 
   useEffect(() => {
@@ -351,8 +356,13 @@ function ScalesListPane({
       .then((questions) => {
         if (!alive) return;
         const types: Record<string, QuestionType> = {};
-        for (const q of questions) types[q.id] = q.type;
+        const specs: Record<string, AllocationSpec> = {};
+        for (const q of questions) {
+          types[q.id] = q.type;
+          if (q.allocation) specs[q.id] = q.allocation;
+        }
         setQuestionTypes(types);
+        setBudgets(specs);
       })
       .catch(() => {
         // Types unknown → the «Рассчитать по вкладам» button stays disabled rather
@@ -372,9 +382,10 @@ function ScalesListPane({
         model.measurements.filter((m) => m.scaleKey === s.key),
         s.aggregation,
         questionTypes,
+        budgets,
       );
     },
-    [questionTypes, model.measurements],
+    [questionTypes, budgets, model.measurements],
   );
 
   const setScales = useCallback(
@@ -1587,6 +1598,20 @@ function QuestionContribCard({
 
       {expanded && (
         <div className="ou-card__body tb-level-card__body">
+          {/* PRD-44 FR-48: шкалы, питаемые ОДНИМ распределением, не независимы — сумма
+              их вкладов постоянна и равна бюджету. Прибавка одной означает убыль
+              другой, поэтому полосы интерпретации и направление шкалы надо задавать с
+              оглядкой на это, а сравнивать имеет смысл профиль внутри одного
+              учащегося, а не величины между учащимися. Предупреждение стоит здесь, а
+              не в списке шкал: связанность создаёт именно этот вопрос. */}
+          {distributesBudget(q.type) && scales.length > 0 && q.units.length > 0 && (
+            <Banner
+              tone="info"
+              variant="subtle"
+              title="Шкалы этого вопроса связаны"
+              description="Учащийся делит один бюджет, поэтому сумма вкладов постоянна: прибавка одной шкале означает убыль другой. Полосы интерпретации и направление задавайте с учётом этого, а сравнивайте профиль внутри одного учащегося, а не значения между учащимися."
+            />
+          )}
           {scales.length === 0 ? (
             <p className="tb-card-desc">Добавьте шкалы, чтобы задать вклады.</p>
           ) : q.units.length === 0 ? (

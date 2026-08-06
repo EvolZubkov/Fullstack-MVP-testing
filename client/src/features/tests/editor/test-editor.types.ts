@@ -387,7 +387,13 @@ export type ScaleModel = {
 };
 
 /** The answer-unit kind a measurement is bound to (PRD-5 §9.2). */
-export type MeasurementSourceType = "question" | "option" | "matching_pair" | "ranking_position";
+export type MeasurementSourceType =
+  | "question"
+  | "option"
+  | "matching_pair"
+  | "ranking_position"
+  // PRD-44: вклад распределения — величину задаёт учащийся, ключ это индекс утверждения.
+  | "option_allocation";
 
 /**
  * One contribution cell of the «Вклады вопросов» matrix: an explicit numeric

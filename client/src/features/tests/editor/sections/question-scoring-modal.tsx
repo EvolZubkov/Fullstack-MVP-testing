@@ -19,8 +19,9 @@
 
 import { useState } from "react";
 import { RotateCcw } from "lucide-react";
-import { Banner, Button, Input, ModalDialog } from "@universityrt/ui-kit";
+import { Banner, Box, Button, Input, ModalDialog } from "@universityrt/ui-kit";
 
+import { distributesBudget } from "@shared/questions/question-type";
 import type { Question, QuestionScoring } from "@shared/schema";
 import type { QuestionScoringOverride, QuestionScoringPatch } from "../scoring-api";
 import {
@@ -190,6 +191,16 @@ export function QuestionScoringModal(props: QuestionScoringModalProps) {
         />
       </div>
 
+      {/* PRD-44 FR-10: распределение баллов не проверяется вовсе, поэтому
+          градуированной цены у него нет — конструктор заменяется объяснением.
+          Показать его отключённым значило бы намекнуть, что настройка существует,
+          но чем-то заблокирована. */}
+      {distributesBudget(type) ? (
+        <Box border="dashed" radius="m" pad={4} style={{ color: "var(--ou-fg-muted)" }} data-testid="qscoring-allocation-note">
+          Распределение баллов не проверяется и баллов не приносит: его результат — вклад в шкалы,
+          который задаётся на вкладке «Вклады вопросов». Цена ответа к типу неприменима.
+        </Box>
+      ) : (
       <ScoringBuilder
         type={type}
         options={options}
@@ -200,6 +211,7 @@ export function QuestionScoringModal(props: QuestionScoringModalProps) {
         tiers={tiers}
         setTiers={setTiers}
       />
+      )}
     </ModalDialog>
   );
 }

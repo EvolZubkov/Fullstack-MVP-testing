@@ -274,7 +274,8 @@ export async function previewScales(
 
 // ─── Preview demo-answer context ──────────────────────────────────────────────────
 
-import { QUESTION_TYPES, hasOptionList, type QuestionType } from "@shared/questions/question-type";
+import { QUESTION_TYPES, hasOptionList, distributesBudget, type QuestionType } from "@shared/questions/question-type";
+import { allocationSpec, type AllocationSpec } from "@shared/questions/allocation";
 
 /** One selectable answer unit of a measured question, derived from its measurements. */
 export type PreviewUnit = {
@@ -367,7 +368,7 @@ export async function loadScalePreviewContext(testId: string): Promise<PreviewQu
 
 /** One editable row of the contributions matrix: an answer unit of a question. */
 export type ContributionUnit = {
-  sourceType: "option" | "matching_pair" | "ranking_position";
+  sourceType: "option" | "matching_pair" | "ranking_position" | "option_allocation";
   sourceKey: string;
   label: string;
   /** True when this unit is (part of) the correct answer — surfaced as a marker. */
@@ -381,6 +382,12 @@ export type ContributionQuestion = {
   prompt: string;
   type: QuestionType;
   units: ContributionUnit[];
+  /**
+   * PRD-44: бюджет и домен варианта у вопроса-распределения. Нужны редактору, чтобы
+   * посчитать домен шкалы: у этого типа верх ограничен бюджетом, а не суммой
+   * максимумов вариантов, и без спецификации домен схлопывается в ноль.
+   */
+  allocation?: AllocationSpec;
 };
 
 type RawQuestion = {
@@ -406,6 +413,18 @@ function asStringArray(v: unknown): string[] {
 function buildContributionUnits(q: RawQuestion, type: QuestionType): ContributionUnit[] {
   const data = (q.dataJson ?? {}) as Record<string, unknown>;
   const correct = (q.correctJson ?? {}) as Record<string, unknown>;
+
+  // PRD-44: утверждения распределения перечисляются как варианты — они лежат в том же
+  // списке, — но источник ДРУГОЙ: вклад равен присвоенному баллу, а не фиксированной
+  // величине. Верных единиц у типа нет вовсе, поэтому `correct` всегда `false`.
+  if (distributesBudget(type)) {
+    return asStringArray(data.options).map((label, i) => ({
+      sourceType: "option_allocation" as const,
+      sourceKey: String(i),
+      label: `${String.fromCharCode(65 + i)}. ${label}`,
+      correct: false,
+    }));
+  }
 
   if (hasOptionList(type)) {
     const options = asStringArray(data.options);
@@ -477,6 +496,13 @@ export async function loadContributionQuestions(topicIds: string[]): Promise<Con
     .filter((q) => topicSet.has(q.topicId))
     .map((q) => {
       const type = (QUESTION_TYPES.includes(q.type as QuestionType) ? q.type : "single") as QuestionType;
-      return { id: q.id, topicId: q.topicId, prompt: q.prompt ?? q.id, type, units: buildContributionUnits(q, type) };
+      return {
+        id: q.id,
+        topicId: q.topicId,
+        prompt: q.prompt ?? q.id,
+        type,
+        units: buildContributionUnits(q, type),
+        allocation: distributesBudget(type) ? allocationSpec(q.dataJson) : undefined,
+      };
     });
 }

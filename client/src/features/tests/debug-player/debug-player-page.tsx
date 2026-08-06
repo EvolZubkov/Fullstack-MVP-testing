@@ -15,7 +15,7 @@ import {
 } from "@universityrt/ui-kit";
 import {
   BugPlay, Info, RefreshCw, RotateCcw, X, ChevronLeft, ChevronRight, Download, Search,
-  CircleDot, CheckSquare, Unplug, ListOrdered, ThermometerSun, List, Layers, ChevronDown, ChevronUp,
+  CircleDot, CheckSquare, Unplug, ListOrdered, ThermometerSun, SlidersHorizontal, List, Layers, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useDebugSession } from "./use-debug-session";
 import {
@@ -480,6 +480,9 @@ function qTypeIcon(type: string) {
   if (type === "multiple") return <CheckSquare {...p} />;
   if (type === "matching") return <Unplug {...p} />;
   if (type === "scale") return <ThermometerSun {...p} />;
+  // PRD-44: у распределения своя пиктограмма — без неё тип получал бы иконку
+  // ранжирования по остаточному принципу, и в списке вопросов они бы слились.
+  if (type === "allocation") return <SlidersHorizontal {...p} />;
   return <ListOrdered {...p} />;
 }
 
