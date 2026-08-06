@@ -33,6 +33,16 @@ export type NullaryFn = "countPassed" | "countTopics" | "avgPercent";
 /** `fn(["k1","k2"], "level")` counting sources. */
 export type CountFn = "countVars" | "countScales";
 
+/** `fn(["k1","k2"], place).prop` scale-ranking sources (PRD-44 §5). */
+export type ScaleRankFn = "topScale" | "bottomScale";
+
+/**
+ * Allowed properties of a ranked scale. `key` and `label` are strings, the rest numbers;
+ * `tiedCount` is at least 1, so a report can branch on «два равно выраженных стиля»
+ * instead of silently crowning one of them (FR-22).
+ */
+export const SCALE_RANK_PROPS: readonly string[] = ["key", "label", "value", "margin", "tiedCount"];
+
 /** Allowed properties per accessor source. */
 export const ACCESSOR_PROPS: Record<AccessorFn, readonly string[]> = {
   topicById: ["percent", "passed", "score"],
@@ -53,6 +63,7 @@ export type Ast =
   | { type: "var"; name: string }
   | { type: "nullary"; fn: NullaryFn }
   | { type: "count"; fn: CountFn; keys: string[]; level: string }
+  | { type: "scaleRank"; fn: ScaleRankFn; keys: string[]; place: number; prop: string }
   | { type: "if"; cond: Ast; then: Ast; otherwise: Ast }
   | { type: "unary"; op: "NOT" | "neg"; operand: Ast }
   | { type: "binary"; op: BinaryOp; left: Ast; right: Ast };
@@ -106,6 +117,14 @@ export interface EvalContext {
   topicsByName?: Record<string, TopicResult>;
   tags: Record<string, TagResult>;
   scales: Record<string, ScaleResult>;
+  /**
+   * The test's scale keys in AUTHORED order (`scales.sort_order`) — the tie-break for
+   * `topScale`/`bottomScale` (PRD-44 FR-21). Optional: absent, the ranking falls back to
+   * the key order of {@link scales}, which `computeScales` fills by iterating the scales
+   * in `sort_order` anyway. Passing it explicitly keeps the rule from depending on object
+   * key order surviving every host's serialisation.
+   */
+  scaleOrder?: string[];
   sections: Record<string, SectionResult>;
   vars: Record<string, FormulaValue>;
 }

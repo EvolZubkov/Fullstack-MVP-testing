@@ -38,6 +38,9 @@ function inferType(node: Ast): ValueType | "unknown" {
       if (node.prop === "level" || node.prop === "label") return "string";
       return "number";
     }
+    case "scaleRank":
+      // `key`/`label` are strings, the rest numbers — the same split the accessor uses.
+      return node.prop === "key" || node.prop === "label" ? "string" : "number";
     case "var":
       return "unknown";
     case "unary":
@@ -129,6 +132,36 @@ export function validate(
         code: "var-order",
         message: `«var("${n.name}")» должен ссылаться на показатель выше по порядку (sort_order)`,
       });
+    }
+    if (n.type === "scaleRank") {
+      if (n.keys.length === 0) {
+        errors.push({
+          code: "scale-rank-empty",
+          message: `«${n.fn}» нужен непустой список ключей шкал`,
+        });
+      }
+      if (n.place < 1) {
+        errors.push({
+          code: "scale-rank-place",
+          message: `Место в рейтинге считается с единицы, получено ${n.place}`,
+        });
+      }
+      if (refs.scaleKeys && refs.scaleKeys.size > 0) {
+        for (const key of n.keys) {
+          if (!refs.scaleKeys.has(key)) {
+            errors.push({ code: "unknown-scale", message: `Неизвестная шкала «${key}»` });
+          }
+        }
+      }
+      if (n.prop === "key") {
+        // Проверка «строковый показатель возвращает только объявленные коды исходов»
+        // на этом свойстве не работает: код приходит из ДАННЫХ, а не литералом. Поэтому
+        // предупреждение с подсказкой, а не ошибка (FR-24).
+        warnings.push({
+          code: "scale-rank-key",
+          message: "Ключи шкал должны совпадать с кодами исходов показателя",
+        });
+      }
     }
     if (n.type === "count" && n.fn === "countScales" && refs.scaleBandLevels) {
       for (const key of n.keys) {

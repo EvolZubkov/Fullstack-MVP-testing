@@ -145,8 +145,18 @@ describe("type-trait parity: the ES5 mirror matches the shared module", () => {
     }
   });
 
-  it("never treats another type as measurement-only", () => {
-    for (const type of QUESTION_TYPES.filter((t) => t !== "scale")) {
+  it("оба хоста считают распределение измерительным БЕЗУСЛОВНО (PRD-44 FR-09)", () => {
+    // У метода нет эталонного распределения ни в каком виде, поэтому случайный
+    // `correctIndex`, оставшийся от смены типа в редакторе, не должен делать вопрос
+    // проверяемым — в отличие от шкалы, где ключ и есть переключатель автора.
+    for (const correct of [{}, null, undefined, { correctIndex: 1 }]) {
+      expect(isMeasurementOnly({ type: "allocation", correctJson: correct })).toBe(true);
+      expect(mirror.isMeasurementOnly({ type: "allocation", correct })).toBe(true);
+    }
+  });
+
+  it("прочие типы измерительными не становятся", () => {
+    for (const type of QUESTION_TYPES.filter((t) => t !== "scale" && t !== "allocation")) {
       expect(isMeasurementOnly({ type, correctJson: {} })).toBe(false);
       expect(mirror.isMeasurementOnly({ type, correct: {} })).toBe(false);
     }

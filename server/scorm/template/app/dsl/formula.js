@@ -25,6 +25,9 @@ var FormulaDSL = (function () {
   var ACCESSOR_FNS = { topicById: 1, topicByName: 1, tag: 1, scaleById: 1, sectionById: 1 };
   var NULLARY_FNS = { countPassed: 1, countTopics: 1, avgPercent: 1 };
   var COUNT_FNS = { countVars: 1, countScales: 1 };
+  // PRD-44 §5: ранг шкалы в группе. Форма повторяет countScales плюс доступ к свойству.
+  var SCALE_RANK_FNS = { topScale: 1, bottomScale: 1 };
+  var SCALE_RANK_PROPS = ["key", "label", "value", "margin", "tiedCount"];
   var COMPARISONS = { "=": 1, "!=": 1, ">": 1, ">=": 1, "<": 1, "<=": 1 };
   var OPERATORS = ["!=", ">=", "<=", "=", ">", "<", "+", "-", "*", "/"];
   var PUNCT = { "(": 1, ")": 1, ",": 1, "[": 1, "]": 1, ".": 1 };
@@ -152,6 +155,22 @@ var FormulaDSL = (function () {
       }
       if (name === "var") { nextTok(); expectPunct("("); var vn = parseStr(); expectPunct(")"); return { type: "var", name: vn }; }
       if (NULLARY_FNS[name]) { nextTok(); expectPunct("("); expectPunct(")"); return { type: "nullary", fn: name }; }
+      if (SCALE_RANK_FNS[name]) {
+        nextTok(); expectPunct("("); expectPunct("[");
+        var rkeys = [];
+        if (!(peek().type === "punct" && peek().value === "]")) {
+          rkeys.push(parseStr());
+          while (peek().type === "punct" && peek().value === ",") { nextTok(); rkeys.push(parseStr()); }
+        }
+        expectPunct("]"); expectPunct(",");
+        var placeTok = nextTok();
+        if (placeTok.type !== "number") throw new Error("Ожидалось место в рейтинге числом");
+        expectPunct(")"); expectPunct(".");
+        var rp = nextTok();
+        if (rp.type !== "ident") throw new Error("Ожидалось свойство");
+        if (SCALE_RANK_PROPS.indexOf(rp.value) < 0) throw new Error("У «" + name + "» нет свойства «" + rp.value + "»");
+        return { type: "scaleRank", fn: name, keys: rkeys, place: Number(placeTok.value), prop: rp.value };
+      }
       if (COUNT_FNS[name]) {
         nextTok(); expectPunct("("); expectPunct("[");
         var keys = [];
@@ -190,8 +209,66 @@ var FormulaDSL = (function () {
     return false;
   }
   function looseEquals(a, b) {
+    // `null` — «нет значения», и равен только себе. Иначе сравнение уходило в числа,
+    // где `toNum(null)` и нечисловая строка оба дают 0, и `topScale(...).key = "cel"`
+    // отвечал ИСТИНА на пустом рейтинге (PRD-44 FR-23).
+    if (a === null || b === null) return a === b;
     if (typeof a === typeof b) return a === b;
     return toNum(a) === toNum(b);
+  }
+
+  /**
+   * Рейтинг группы шкал по НОРМАЛИЗОВАННОМУ значению — двойник
+   * shared/formula/scale-rank.ts. Ничья решается авторским порядком шкал теста, а
+   * не порядком ключей в формуле: иначе один и тот же ответ при пересчёте в вебе и
+   * в пакете дал бы разного лидера (PRD-44 FR-21).
+   */
+  function rankScales(keys, values, authorOrder) {
+    var order = {};
+    for (var i = 0; i < authorOrder.length; i++) order[authorOrder[i]] = i;
+
+    var present = [];
+    for (var k = 0; k < keys.length; k++) {
+      var key = keys[k];
+      if (!values[key] || values[key].hasValue !== true) continue;
+      if (present.indexOf(key) === -1) present.push(key);
+    }
+
+    present.sort(function (a, b) {
+      var byValue = values[b].normalized - values[a].normalized;
+      if (byValue !== 0) return byValue;
+      var ia = order[a] === undefined ? Number.MAX_SAFE_INTEGER : order[a];
+      var ib = order[b] === undefined ? Number.MAX_SAFE_INTEGER : order[b];
+      return ia - ib;
+    });
+
+    var out = [];
+    for (var j = 0; j < present.length; j++) {
+      var value = values[present[j]].normalized;
+      // Отрыв — до следующего ОТЛИЧАЮЩЕГОСЯ значения, а не до соседа по списку:
+      // при ничьей сосед — это сама делящая место шкала.
+      var nextDifferent = null;
+      for (var m = j + 1; m < present.length; m++) {
+        if (values[present[m]].normalized !== value) { nextDifferent = present[m]; break; }
+      }
+      var tied = 0;
+      for (var t = 0; t < present.length; t++) if (values[present[t]].normalized === value) tied++;
+      out.push({
+        key: present[j],
+        label: values[present[j]].label || "",
+        value: value,
+        margin: nextDifferent === null ? 0 : value - values[nextDifferent].normalized,
+        tiedCount: tied
+      });
+    }
+    return out;
+  }
+
+  function scaleAtRank(keys, values, authorOrder, place, fromBottom) {
+    if (typeof place !== "number" || place % 1 !== 0 || place < 1) return null;
+    var ranked = rankScales(keys, values, authorOrder);
+    if (place > ranked.length) return null;
+    return fromBottom ? ranked[ranked.length - place] : ranked[place - 1];
   }
 
   function evaluateAst(node, ctx) {
@@ -217,6 +294,13 @@ var FormulaDSL = (function () {
         if (!topics.length) return 0;
         var sum = 0; for (var m = 0; m < topics.length; m++) sum += topics[m].percent; return sum / topics.length;
       }
+      case "scaleRank": {
+        var scaleOrder = ctx.scaleOrder || Object.keys(ctx.scales || {});
+        var entry = scaleAtRank(node.keys, ctx.scales || {}, scaleOrder, node.place, node.fn === "bottomScale");
+        if (!entry) return null;
+        return entry[node.prop] === undefined ? null : entry[node.prop];
+      }
+
       case "count": {
         var n = 0, kk;
         if (node.fn === "countVars") {

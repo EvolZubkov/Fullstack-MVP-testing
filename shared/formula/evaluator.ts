@@ -9,6 +9,7 @@
  * completion (NFR).
  */
 
+import { scaleAtRank } from "./scale-rank";
 import {
   type Ast,
   type EvalContext,
@@ -49,6 +50,11 @@ function toBool(v: FormulaValue): boolean {
 }
 
 function looseEquals(a: FormulaValue, b: FormulaValue): boolean {
+  // `null` means «нет значения» and equals only itself. Without this it fell through to
+  // the numeric comparison, where `toNum(null)` is 0 and a non-numeric string is also 0 —
+  // so `topScale(...).key = "cel"` answered TRUE for an empty ranking, i.e. a report
+  // named a leading scale that does not exist (PRD-44 FR-23).
+  if (a === null || b === null) return a === b;
   if (typeof a === typeof b) return a === b;
   // Mixed types compare numerically (e.g. score = 3).
   return toNum(a) === toNum(b);
@@ -116,6 +122,18 @@ export function evaluate(node: Ast, ctx: EvalContext): FormulaValue {
       }
       // countScales
       return node.keys.filter((k) => (ctx.scales[k]?.level ?? "") === node.level).length;
+    }
+
+    case "scaleRank": {
+      // PRD-44 §5. The tie-break is the AUTHORED order of the test's scales; without an
+      // explicit `scaleOrder` the key order of the namespace stands in for it, since
+      // `computeScales` fills it by iterating the scales in `sort_order`.
+      const order = ctx.scaleOrder ?? Object.keys(ctx.scales);
+      const entry = scaleAtRank(node.keys, ctx.scales, order, node.place, node.fn === "bottomScale");
+      // An empty ranking or a place past its end is undefined, not zero — the formula
+      // then behaves as with any other absent value instead of naming a phantom scale.
+      if (!entry) return null;
+      return (entry as unknown as Record<string, FormulaValue>)[node.prop] ?? null;
     }
 
     case "if":
