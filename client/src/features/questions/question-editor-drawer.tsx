@@ -17,6 +17,7 @@
  * locally; creates go straight through the create mutation.
  */
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { isAllocationFeasible } from "@shared/questions/allocation";
 import { useMutation } from "@tanstack/react-query";
 import { Plus, Trash2, GripVertical } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
@@ -34,6 +35,7 @@ import {
   IconButton,
   Input,
   Label,
+  NumberInput,
   Radio,
   SegmentedControl,
   Select,
@@ -58,6 +60,7 @@ const questionTypes = [
   { value: "matching", label: t.questions.matching },
   { value: "ranking", label: t.questions.ranking },
   { value: "scale", label: t.questions.scaleChoice },
+  { value: "allocation", label: t.questions.allocation },
 ] as const;
 
 type QuestionType = typeof questionTypes[number]["value"];
@@ -66,7 +69,7 @@ type QuestionType = typeof questionTypes[number]["value"];
 // and the graded config are configured per test («Оценка» tab of the editor).
 const baseQuestionSchema = z.object({
   topicId: z.string().min(1, t.questions.topicRequired),
-  type: z.enum(["single", "multiple", "matching", "ranking", "scale"]),
+  type: z.enum(["single", "multiple", "matching", "ranking", "scale", "allocation"]),
   prompt: z.string().min(1, t.questions.textRequired),
 });
 
@@ -112,6 +115,11 @@ export function QuestionEditorDrawer({
   // идентичен), поэтому смена типа single <-> scale сохраняет и подписи, и отметку.
   // Своё у шкалы только одно — есть ли вообще правильная градация (FR-03).
   const [scaleHasCorrect, setScaleHasCorrect] = useState<boolean>(false);
+  // PRD-44: бюджет и домен варианта. Пустая строка означает «не задано» и на
+  // сохранении превращается в умолчание (минимум 0, максимум — весь бюджет).
+  const [allocBudget, setAllocBudget] = useState<string>("7");
+  const [allocMin, setAllocMin] = useState<string>("");
+  const [allocMax, setAllocMax] = useState<string>("");
 
   const [multipleOptions, setMultipleOptions] = useState<string[]>(["", "", "", ""]);
   const [multipleCorrect, setMultipleCorrect] = useState<number[]>([]);
@@ -213,6 +221,11 @@ export function QuestionEditorDrawer({
         setMatchingPairs(correct.pairs || []);
       } else if (question.type === "ranking") {
         setRankingItems(data.items || ["", "", "", ""]);
+      } else if (question.type === "allocation") {
+        setSingleOptions(data.options || ["", "", "", ""]);
+        setAllocBudget(String(data.budget ?? 7));
+        setAllocMin(data.minPerOption === undefined || data.minPerOption === null ? "" : String(data.minPerOption));
+        setAllocMax(data.maxPerOption === undefined || data.maxPerOption === null ? "" : String(data.maxPerOption));
       } else if (question.type === "scale") {
         setSingleOptions(data.options || ["", "", "", ""]);
         // Наличие correctIndex И ЕСТЬ положение переключателя (FR-03).
@@ -307,6 +320,20 @@ export function QuestionEditorDrawer({
         dataJson = { items: rankingItems.filter((i) => i.trim()) };
         correctJson = { correctOrder: rankingItems.map((_, i) => i) };
         break;
+      case "allocation": {
+        // Правильного распределения не существует, поэтому correctJson ПУСТОЙ объект,
+        // а не null: колонка correct_json объявлена NOT NULL (FR-03).
+        const options = singleOptions.filter((o) => o.trim());
+        const budget = Number(allocBudget) || 0;
+        dataJson = {
+          options,
+          budget,
+          minPerOption: allocMin.trim() === "" ? 0 : Number(allocMin),
+          maxPerOption: allocMax.trim() === "" ? budget : Number(allocMax),
+        };
+        correctJson = {};
+        break;
+      }
       case "scale":
         dataJson = { options: singleOptions.filter((o) => o.trim()) };
         // Переключатель выключен — измерительный режим: ПУСТОЙ объект, а не null
@@ -405,6 +432,35 @@ export function QuestionEditorDrawer({
       else if (matchingPairs.length < left) errs.push("Сопоставьте все пары");
     } else if (selectedType === "ranking") {
       if (rankingItems.filter((i) => i.trim()).length < 2) errs.push("Добавьте не менее двух элементов");
+    } else if (selectedType === "allocation") {
+      const options = singleOptions.filter((o) => o.trim());
+      const budget = Number(allocBudget);
+      if (options.length < 2) errs.push("Добавьте не менее двух утверждений");
+      else if (options.length > 10) errs.push("Утверждений должно быть не больше десяти");
+      if (!Number.isInteger(budget) || budget < 1 || budget > 1000) {
+        errs.push("Бюджет — целое число от 1 до 1000");
+      } else {
+        const min = allocMin.trim() === "" ? 0 : Number(allocMin);
+        const max = allocMax.trim() === "" ? budget : Number(allocMax);
+        if (!Number.isInteger(min) || min < 0 || !Number.isInteger(max) || max < 0) {
+          errs.push("Минимум и максимум на вариант — целые неотрицательные числа");
+        } else if (min > max) {
+          errs.push("Минимум на вариант не может превышать максимум");
+        } else if (max > budget) {
+          errs.push("Максимум на вариант не может превышать бюджет");
+        } else if (options.length >= 2) {
+          // Сообщение называет ЧИСЛА: «невыполнимо» само по себе оставляет автора
+          // гадать, какое из трёх полей менять (FR-05).
+          const feasibility = isAllocationFeasible({ options, budget, minPerOption: min, maxPerOption: max });
+          if (!feasibility.ok) {
+            errs.push(
+              feasibility.kind === "min"
+                ? `Распределение невыполнимо: минимумы требуют ${feasibility.required} баллов, а бюджет — ${feasibility.available}`
+                : `Распределение невыполнимо: нужно распределить ${feasibility.required} баллов, а максимумы дают только ${feasibility.available}`,
+            );
+          }
+        }
+      }
     } else if (selectedType === "scale") {
       // Правильная градация обязательна ТОЛЬКО когда включён переключатель:
       // измерительный опросник валиден и без неё.
@@ -412,7 +468,7 @@ export function QuestionEditorDrawer({
       else if (scaleHasCorrect && !singleOptions[singleCorrect]?.trim()) errs.push(t.questions.scaleErrorNoCorrect);
     }
     return errs;
-  }, [watchedTopicId, watchedPrompt, selectedType, singleOptions, singleCorrect, scaleHasCorrect, multipleOptions, multipleCorrect, matchingLeft, matchingRight, matchingPairs, rankingItems]);
+  }, [watchedTopicId, watchedPrompt, selectedType, singleOptions, singleCorrect, scaleHasCorrect, allocBudget, allocMin, allocMax, multipleOptions, multipleCorrect, matchingLeft, matchingRight, matchingPairs, rankingItems]);
 
   /** Option/item texts of the active type — the list carried across type changes. */
   const currentOptionTexts = (): string[] => {
@@ -420,6 +476,8 @@ export function QuestionEditorDrawer({
       case "single": return singleOptions;
       // Шкала делит состояние с одиночным выбором — тот же список подписей.
       case "scale": return singleOptions;
+      // Распределение делит список подписей с одиночным выбором — как и шкала.
+      case "allocation": return singleOptions;
       case "multiple": return multipleOptions;
       case "ranking": return rankingItems;
       case "matching": return matchingLeft;
@@ -457,6 +515,13 @@ export function QuestionEditorDrawer({
       // FR-30: переход НА шкалу сам по себе переключатель правильного ответа не
       // включает — опросник без верных ответов должен быть умолчанием.
       setScaleHasCorrect(false);
+    } else if (next === "allocation") {
+      // FR-49: подписи переезжают, бюджет и домен при уходе с типа забываются —
+      // поэтому вход на тип всегда начинается с умолчаний, а не с чужих чисел.
+      setSingleOptions(padTexts(texts, 2));
+      setAllocBudget("7");
+      setAllocMin("");
+      setAllocMax("");
     } else if (next === "matching") {
       const left = padTexts(texts, 2);
       setMatchingLeft(left);
@@ -605,6 +670,54 @@ export function QuestionEditorDrawer({
                 itemPlaceholder={t.questions.scaleGraduationPlaceholder}
                 showCorrect={scaleHasCorrect}
               />
+            </Stack>
+          )}
+
+          {/* PRD-44: распределение баллов. Список утверждений — тот же редактор, что у
+             одиночного выбора, но БЕЗ отметки верного варианта: правильного
+             распределения не существует, поэтому блока верного ответа здесь нет.
+             Привязка утверждений к шкалам живёт во вкладке «Вклады вопросов»
+             редактора теста, а не тут: вопрос несёт только утверждения. */}
+          {selectedType === "allocation" && (
+            <Stack gap={4}>
+              <SingleChoiceBuilder
+                options={singleOptions}
+                setOptions={setSingleOptions}
+                correctIndex={0}
+                setCorrectIndex={() => {}}
+                label={t.questions.allocationStatements}
+                itemPlaceholder={t.questions.allocationStatementPlaceholder}
+                showCorrect={false}
+              />
+              <Cluster gap={4} align="start">
+                <NumberInput
+                  label={t.questions.allocationBudget}
+                  hint={t.questions.allocationBudgetHint}
+                  value={Number(allocBudget) || 0}
+                  min={1}
+                  max={1000}
+                  onChange={(v) => setAllocBudget(String(v))}
+                  data-testid="input-alloc-budget"
+                />
+                <NumberInput
+                  label={t.questions.allocationMin}
+                  hint={t.questions.allocationMinHint}
+                  value={allocMin.trim() === "" ? 0 : Number(allocMin)}
+                  min={0}
+                  max={Number(allocBudget) || 0}
+                  onChange={(v) => setAllocMin(String(v))}
+                  data-testid="input-alloc-min"
+                />
+                <NumberInput
+                  label={t.questions.allocationMax}
+                  hint={t.questions.allocationMaxHint}
+                  value={allocMax.trim() === "" ? (Number(allocBudget) || 0) : Number(allocMax)}
+                  min={0}
+                  max={Number(allocBudget) || 0}
+                  onChange={(v) => setAllocMax(String(v))}
+                  data-testid="input-alloc-max"
+                />
+              </Cluster>
             </Stack>
           )}
 

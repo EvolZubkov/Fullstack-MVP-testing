@@ -31,7 +31,26 @@ import {
   canManageTopicContent,
   isAdminOrSuper,
 } from "../services/topic-access";
+import { allocationDataSchema } from "@shared/schema";
+import { distributesBudget } from "@shared/questions/question-type";
 import type { Question } from "@shared/schema";
+
+/**
+ * PRD-44 FR-46: границы полей и ВЫПОЛНИМОСТЬ распределения проверяются на сервере,
+ * а не только в редакторе. Без этого сохраняется вопрос, который нельзя заполнить ни
+ * одним способом, — и узнает об этом первым учащийся, а не автор. Возвращает текст
+ * ошибки или `null`.
+ *
+ * Остальные типы здесь не трогаются намеренно: их конфигурация не может стать
+ * невыполнимой, и вводить общую проверку «на всякий случай» значит менять поведение,
+ * о котором PRD-44 не просил.
+ */
+function allocationConfigError(type: string | undefined, dataJson: unknown): string | null {
+  if (!distributesBudget(type ?? "")) return null;
+  const parsed = allocationDataSchema.safeParse(dataJson);
+  if (parsed.success) return null;
+  return parsed.error.issues.map((i) => i.message).join("; ");
+}
 
 // PRD-15 FR-02: fields whose change affects delivery or grading of dependent
 // tests; such edits are restricted to the creator/administrator and, for
@@ -191,6 +210,11 @@ router.post(
         return;
       }
 
+      const allocationError = allocationConfigError(type, dataJson);
+      if (allocationError) {
+        return res.status(422).json({ error: allocationError, field: "dataJson" });
+      }
+
       const questionInput = {
         topicId,
         type,
@@ -279,6 +303,16 @@ router.put(
       if (movesTopic && !(await canManageQuestion(req, topicId))) {
         respondForbiddenContent(res);
         return;
+      }
+
+      // Правка может СДЕЛАТЬ конфигурацию невыполнимой (поднять минимум, урезать
+      // бюджет), поэтому проверка нужна и здесь, а не только на создании. Тип берётся
+      // из тела, а при его отсутствии — из сохранённого вопроса.
+      if (dataJson !== undefined) {
+        const allocationError = allocationConfigError(type ?? existing.type, dataJson);
+        if (allocationError) {
+          return res.status(422).json({ error: allocationError, field: "dataJson" });
+        }
       }
       let feasibilityWarnings: unknown[] = [];
       const affectsDelivery = gradingOrDrawFieldsChanged(existing, req.body as UpdateQuestionBody);
