@@ -41,6 +41,103 @@
       </div>
       {{/if}}
 
+      {{#if result.indicators}}
+      <hr class="ou-separator ou-separator--horizontal">
+      <div class="tb-scene__q"><h3 class="tb-scene__subhead">Ваш результат</h3></div>
+      <div class="tb-measures">
+        {{#each result.indicators}}
+        <div class="ou-formsection tb-measure">
+          <div class="ou-formsection__intro">
+            <h4 class="ou-formsection__title">{{name}}</h4>
+          </div>
+          <div class="ou-formsection__body">
+            <div class="ou-banner ou-banner--subtle ou-banner--{{bannerVariant}}">
+              <div class="ou-banner__body">
+                <div class="ou-banner__title">{{levelLabel}}</div>
+                {{#if text}}<div class="ou-banner__desc">{{text}}</div>{{/if}}
+              </div>
+            </div>
+          </div>
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      {{#if result.scales}}
+      <hr class="ou-separator ou-separator--horizontal">
+      <div class="tb-scene__q"><h3 class="tb-scene__subhead">По шкалам</h3></div>
+      <div class="{{result.scalesBlockClass}}">
+        {{#if result.scalesChart}}
+        <div class="tb-radar">
+          <svg class="tb-radar__svg" viewBox="0 0 {{result.scalesChart.width}} {{result.scalesChart.height}}" role="img" aria-label="{{result.scalesChart.ariaLabel}}">
+            {{#each result.scalesChart.rings}}
+            <circle class="tb-radar__ring" cx="{{cx}}" cy="{{cy}}" r="{{radius}}"></circle>
+            {{/each}}
+            {{#each result.scalesChart.axes}}
+            <line class="tb-radar__axis" x1="{{cx}}" y1="{{cy}}" x2="{{axisX}}" y2="{{axisY}}"></line>
+            {{/each}}
+            <polygon class="tb-radar__shape" points="{{result.scalesChart.polygonPoints}}"></polygon>
+            {{#each result.scalesChart.axes}}
+            <circle class="tb-radar__dot {{quantizedClass}}" cx="{{x}}" cy="{{y}}" r="6" style="--tb-zone:{{color}}"></circle>
+            {{/each}}
+            {{#each result.scalesChart.labels}}
+            <text class="{{className}}" x="{{x}}" y="{{y}}" text-anchor="{{anchor}}">{{text}}</text>
+            {{/each}}
+          </svg>
+        </div>
+        {{/if}}
+        <div class="tb-measures__list">
+        {{#each result.scales}}
+        <div class="ou-formsection tb-measure" data-render="{{renderKind}}">
+          <div class="ou-formsection__intro">
+            <h4 class="ou-formsection__title">{{name}}</h4>
+            {{#if levelLabel}}<span class="ou-tag ou-tag--l tb-measure__level {{toneClass}}">{{levelLabel}}</span>{{/if}}
+          </div>
+          <div class="ou-formsection__body">
+            {{#if zones}}
+            <div class="ou-slider ou-slider--h tb-measure__slider">
+              <div class="ou-slider__header">
+                {{#if showValue}}<span class="ou-slider__val"><strong>{{valueText}}</strong> из {{maxText}}</span>{{/if}}
+              </div>
+              <div class="ou-slider__rail" role="img" aria-label="{{ariaLabel}}">
+                {{#each zones}}
+                <span class="ou-slider__fill tb-zone{{#if current}} is-current{{/if}}"
+                      style="left:{{leftPercent}}%;width:{{widthPercent}}%;--tb-zone:{{color}}"></span>
+                {{/each}}
+                <span class="ou-slider__thumb tb-measure__marker" style="left:{{markerPercent}}%"></span>
+                <div class="ou-slider__marks">
+                  {{#each marks}}
+                  <span class="ou-slider__mark" style="left:{{percent}}%"></span>
+                  <span class="ou-slider__mark-lbl" style="left:{{percent}}%">{{label}}</span>
+                  {{/each}}
+                </div>
+              </div>
+            </div>
+            {{/if}}
+            {{#if isRing}}
+            <div class="ou-ring tb-ring" role="img" aria-label="{{ariaLabel}}">
+              <svg class="ou-ring__svg" width="140" height="140" viewBox="0 0 140 140">
+                <circle class="ou-ring__track" cx="70" cy="70" r="63" stroke-width="12"></circle>
+                <circle class="ou-ring__fill {{toneClass}}" cx="70" cy="70" r="63" stroke-width="12" stroke-linecap="round"
+                        stroke-dasharray="395.84" stroke-dashoffset="{{ringDashoffset}}"></circle>
+              </svg>
+              <div class="ou-ring__center">
+                <div class="ou-ring__value">{{valueText}}</div>
+                <div class="ou-ring__label">{{levelLabel}}</div>
+              </div>
+            </div>
+            {{/if}}
+            {{#unless zones}}{{#unless isRing}}
+            {{#if showValue}}<span class="ou-slider__val"><strong>{{valueLabel}}</strong></span>{{/if}}
+            {{/unless}}{{/unless}}
+            {{#if text}}<p class="ou-formsection__sub">{{text}}</p>{{/if}}
+          </div>
+        </div>
+        {{/each}}
+        </div>
+      </div>
+      {{/if}}
+
       {{#if result.recommendations.hasAny}}
       <hr class="ou-separator ou-separator--horizontal">
       <div class="tb-scene__q"><h3 class="tb-scene__subhead">Рекомендации</h3></div>

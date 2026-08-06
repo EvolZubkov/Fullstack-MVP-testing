@@ -403,6 +403,17 @@ function renderAdaptiveResultsTemplated(app, result) {
       };
     })
   };
+  // PRD-29 / issue #33: scales and indicators of THIS run, through the SAME assembler the
+  // standard results screen goes through (`currentAttemptMeasures`, viewResults.js — the
+  // runtime is concatenated flat, so it is in scope). It wants the result in the STANDARD
+  // shape, which is what `getAdaptiveResultForScorm` restates the level ladder into; the
+  // computation is deterministic, so the values it produces here are the ones
+  // `finishAndClose` later persists and ships to the LMS. Null for a test that declares
+  // no scales and no indicators — the context then stays exactly as it was.
+  var flatResult = (typeof getAdaptiveResultForScorm === 'function') ? getAdaptiveResultForScorm() : null;
+  var measures = (flatResult && typeof currentAttemptMeasures === 'function')
+    ? currentAttemptMeasures(flatResult)
+    : null;
   var ctx = window.TBTemplate.buildAdaptiveResultContext(input, TEST_DATA.title || '', {
     hasScormActions: true,
     // The test's OWN feedback (`TEST_DATA.testFeedbackJson`) — the widest source of the
@@ -410,6 +421,9 @@ function renderAdaptiveResultsTemplated(app, result) {
     // who wrote a closing word for an adaptive test owes it to the learner just the same,
     // and the web host hands over the very same block on this screen.
     testFeedback: vrTestFeedback(),
+    // Absent for a test without measurements — `undefined` and not `null`, so the shared
+    // builder's `if (opts.measures)` reads it the same way the web host's spread does.
+    measures: measures || undefined,
     // `showPdf` is the LEGACY report flag, kept for external templates whose adaptive
     // layout predates the unified contract; the shipped layouts read `result.nav`.
     showPdf: true,

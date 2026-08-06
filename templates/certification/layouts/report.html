@@ -60,6 +60,26 @@
   </section>
   {{/if}}
 
+  {{#if result.indicators}}
+  <section class="tb-report__card">
+    <div class="tb-report__title tb-report__title--tight">Ваш результат</div>
+    <div class="tb-report__scales">
+      <div class="tb-report__scale-list">
+        {{#each result.indicators}}
+        <div class="tb-report__scale">
+          <div class="tb-report__scale-name">{{name}}</div>
+          <div class="tb-report__scale-meta">
+            {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
+            {{#if levelLabel}}<span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>{{/if}}
+          </div>
+          {{#if text}}<div class="tb-report__scale-text">{{text}}</div>{{/if}}
+        </div>
+        {{/each}}
+      </div>
+    </div>
+  </section>
+  {{/if}}
+
   {{#if result.scales}}
   <section class="tb-report__card">
     <div class="tb-report__title tb-report__title--tight">По шкалам</div>

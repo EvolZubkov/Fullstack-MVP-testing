@@ -27,7 +27,7 @@ import type {
 import { buildMeasureView, type RenderKind } from "./measure-view";
 import { buildRadarChart } from "./radar-view";
 import { collectRecommendations } from "./recommendations";
-import { resolveResultsBlocks, type ResultsBlockSettings } from "./results-blocks";
+import { resolveResultsBlocks, type ResultsBlocks, type ResultsBlockSettings } from "./results-blocks";
 import type {
   FeedbackBlock,
   IndicatorInterpretation,
@@ -348,6 +348,86 @@ function firedFeedback(m: MeasureInput): FeedbackBlock | null {
   return normalizeFeedback(outcome?.feedback);
 }
 
+/**
+ * What the measurement blocks resolve to for ONE attempt: the measures the learner may
+ * see at all (`visibility !== "hidden"`) and the author's effective show/hide answer for
+ * each block.
+ *
+ * Split out of the standard builder because the ADAPTIVE screen resolves the very same
+ * two facts (issue #33). Two copies of this would be two answers to «does this test show
+ * its scales», and the product has exactly one — it is a property of the TEST and its
+ * «Итоги» settings, not of the flow mode.
+ */
+interface ResolvedMeasures {
+  visibleScales: MeasureInput[];
+  visibleIndicators: MeasureInput[];
+  blocks: ResultsBlocks;
+}
+
+/**
+ * Visible measures + effective block visibility.
+ *
+ * @param measures The test's measurement material for this attempt.
+ * @param hasGradedScore Whether the test grades at all — the `auto` answer for the SCORE
+ *   SUMMARY block only. The adaptive screen has no summary and passes `false`; the two
+ *   measurement blocks answer `auto` from their own emptiness, in both modes alike.
+ */
+function resolveMeasures(measures: MeasuresInput, hasGradedScore: boolean): ResolvedMeasures {
+  const visibleScales = measures.scales.filter((m) => m.visibility !== "hidden");
+  const visibleIndicators = measures.indicators.filter((m) => m.visibility !== "hidden");
+  return {
+    visibleScales,
+    visibleIndicators,
+    blocks: resolveResultsBlocks(measures.blockSettings ?? {}, {
+      hasPassThreshold: hasGradedScore,
+      hasVisibleScales: visibleScales.length > 0,
+      hasVisibleIndicators: visibleIndicators.length > 0,
+    }),
+  };
+}
+
+/**
+ * Fill the measurement blocks of a results context and return what they contribute to the
+ * consolidated «Рекомендации» block — the feedback of the band / outcome that actually
+ * fired, indicators before scales, which is the order dedup should keep.
+ *
+ * ONE routine for both modes (issue #33): the standard screen and the adaptive one draw
+ * the SAME cards from the SAME rows, and the only thing that ever differed between them
+ * was that the adaptive screen was never handed the rows. A hidden block contributes
+ * nothing to the recommendations either — the learner never saw what caused it.
+ */
+function fillMeasureBlocks(
+  result: CtxResult,
+  measures: MeasuresInput,
+  resolved: ResolvedMeasures,
+): Array<FeedbackBlock | null> {
+  const { visibleScales, visibleIndicators, blocks } = resolved;
+  if (blocks.scales && visibleScales.length) {
+    result.scales = visibleScales.map((m) =>
+      buildMeasureView({ ...m, requestedKind: measures.scaleKind, ramp: measures.ramp }));
+    // PRD-35. The radar is built INSIDE the scales branch: a hidden block must not
+    // leave a dangling chart on the screen. `buildRadarChart` returns null on its
+    // own refusals (fewer than three axes, a scale without a domain), and that
+    // refusal is silent for the learner — the author is told why in the editor.
+    result.scalesBlockClass = "tb-measures";
+    if (measures.showRadar) {
+      const chart = buildRadarChart({ axes: visibleScales, ramp: measures.ramp });
+      if (chart) {
+        result.scalesChart = chart;
+        result.scalesBlockClass = "tb-measures tb-measures--chart";
+      }
+    }
+  }
+  if (blocks.indicators && visibleIndicators.length) {
+    result.indicators = visibleIndicators.map((m) =>
+      buildMeasureView({ ...m, requestedKind: measures.indicatorKind, ramp: measures.ramp }));
+  }
+  return [
+    ...(blocks.indicators ? visibleIndicators.map(firedFeedback) : []),
+    ...(blocks.scales ? visibleScales.map(firedFeedback) : []),
+  ];
+}
+
 /** Optional SCORM-richer additions to the standard results context. */
 export interface ResultContextOptions {
   /** Add the per-topic "Баллов" row (`pointsLabel`) — SCORM shows it, web omits. */
@@ -542,15 +622,9 @@ export function buildResultContext(
   const noVerdict = nothingToGrade || thresholdDeclared === false;
   // Visible scales/indicators and the resolved block visibility, gathered ONCE so the
   // scales/indicators sections further below reuse the SAME values instead of refiltering.
-  const visibleScales = opts.measures ? opts.measures.scales.filter((m) => m.visibility !== "hidden") : [];
-  const visibleIndicators = opts.measures ? opts.measures.indicators.filter((m) => m.visibility !== "hidden") : [];
-  const blocks = opts.measures
-    ? resolveResultsBlocks(opts.measures.blockSettings ?? {}, {
-        hasPassThreshold: hasGradedScore,
-        hasVisibleScales: visibleScales.length > 0,
-        hasVisibleIndicators: visibleIndicators.length > 0,
-      })
-    : undefined;
+  // The SAME resolver the adaptive builder runs (issue #33).
+  const resolvedMeasures = opts.measures ? resolveMeasures(opts.measures, hasGradedScore) : undefined;
+  const blocks = resolvedMeasures?.blocks;
   // The score-summary toggle governs «the block with points» as a whole, not only the
   // test-level ring: a hidden summary must hide the SAME points at topic granularity too
   // (issue #30 — the SCORM package kept printing «Баллов» per topic while the summary
@@ -609,10 +683,10 @@ export function buildResultContext(
   // outcome is the interpretation of a measurement, not guidance on a failure, and a
   // learner who passed still gets to read what was measured.
   const recommendationSources: Array<FeedbackBlock | null | undefined> = explicitPass ? [] : [opts.testFeedback];
-  if (opts.measures && blocks) {
-    // `hasGradedScore`, `visibleScales`/`visibleIndicators` and `blocks` are computed
-    // ONCE, above — the score summary, the verdict tag, the topic points row and the
-    // feedback gate must not be able to disagree about whether this test grades.
+  if (opts.measures && resolvedMeasures && blocks) {
+    // `hasGradedScore`, the visible measures and `blocks` are resolved ONCE, above — the
+    // score summary, the verdict tag, the topic points row and the feedback gate must not
+    // be able to disagree about whether this test grades.
     // (`scoredQuestions` in `shared/scoring/aggregate.ts` describes the very same
     // contract but is absent from the stored result schema, so it cannot answer for
     // attempts finished earlier.) The verdict tag is NOT gated here: it belongs to every
@@ -624,34 +698,11 @@ export function buildResultContext(
     // absent state has to mean «show», so only the suppression is recorded.
     if (!blocks.scoreSummary) result.hideScoreSummary = true;
 
-    if (blocks.scales && visibleScales.length) {
-      result.scales = visibleScales.map((m) =>
-        buildMeasureView({ ...m, requestedKind: opts.measures!.scaleKind, ramp: opts.measures!.ramp }));
-      // PRD-35. The radar is built INSIDE the scales branch: a hidden block must not
-      // leave a dangling chart on the screen. `buildRadarChart` returns null on its
-      // own refusals (fewer than three axes, a scale without a domain), and that
-      // refusal is silent for the learner — the author is told why in the editor.
-      result.scalesBlockClass = "tb-measures";
-      if (opts.measures.showRadar) {
-        const chart = buildRadarChart({ axes: visibleScales, ramp: opts.measures.ramp });
-        if (chart) {
-          result.scalesChart = chart;
-          result.scalesBlockClass = "tb-measures tb-measures--chart";
-        }
-      }
-    }
-    if (blocks.indicators && visibleIndicators.length) {
-      result.indicators = visibleIndicators.map((m) =>
-        buildMeasureView({ ...m, requestedKind: opts.measures!.indicatorKind, ramp: opts.measures!.ramp }));
-    }
     // Order matters: the test's own block (already first in the list) then the profile,
     // then the scales — dedup keeps the first occurrence, so a general recommendation
-    // outranks its specific copy. A hidden block contributes nothing: the learner never
-    // saw what caused it.
-    recommendationSources.push(
-      ...(blocks.indicators ? visibleIndicators.map(firedFeedback) : []),
-      ...(blocks.scales ? visibleScales.map(firedFeedback) : []),
-    );
+    // outranks its specific copy. The cards and that order come from the shared
+    // `fillMeasureBlocks`, which the adaptive screen runs too.
+    recommendationSources.push(...fillMeasureBlocks(result, opts.measures, resolvedMeasures));
   }
   // What the topics of this attempt said and attached, LAST — they are the narrowest
   // source (one topic of the test), and the same text or file that the test as a whole
@@ -832,6 +883,24 @@ export interface AdaptiveResultContextOptions {
    * the option exists on both builders and is read by the same collector.
    */
   testFeedback?: FeedbackBlock | null;
+  /**
+   * PRD-29 measurement blocks — scales and indicators of THIS attempt, in the very shape
+   * the standard screen takes them (issue #33).
+   *
+   * A scale is fed by the MEASUREMENTS an author hung on questions, and an adaptive test
+   * asks questions like any other: the values were computed for an adaptive run all
+   * along and even travelled to the LMS as `scale_*` / `var_*` interactions, while the
+   * screen that run ends on showed none of it. Whether a block appears is decided by the
+   * same two facts as in the standard mode — the measure's own `learnerVisibility` and
+   * the show/hide/auto switch of the «Итоги» variant — because that is a property of the
+   * TEST, not of its flow mode.
+   *
+   * The SCORE SUMMARY switch inside {@link MeasuresInput.blockSettings} is not read here:
+   * the adaptive screen has no summary to hide. Absent (a test with neither scales nor
+   * indicators, or a host that does not gather them) leaves the context byte-identical
+   * to what the adaptive screen produced before.
+   */
+  measures?: MeasuresInput;
 }
 
 /**
@@ -908,7 +977,13 @@ function adaptiveTopicView(t: AdaptiveTopicInput): CtxAdaptiveTopicView {
 /**
  * Build the ADAPTIVE results context (level-based, no score ring). With no opts the
  * output matches the web adaptive results screen; the `opts` enable the SCORM
- * actions (Скачать PDF / Пройти заново / Завершить).
+ * actions (Скачать PDF / Пройти заново / Завершить) and the PRD-29 measurement blocks
+ * ({@link AdaptiveResultContextOptions.measures}).
+ *
+ * Block order on the screen is the LAYOUT's decision, not this builder's: it fills
+ * `topicResults`, `indicators`, `scales` and `recommendations`, and
+ * `results.adaptive.html` renders them as confirmed levels first (the headline of an
+ * adaptive run), then the measurements, then the recommendations.
  */
 export function buildAdaptiveResultContext(
   input: AdaptiveResultInput,
@@ -944,6 +1019,15 @@ export function buildAdaptiveResultContext(
   // therefore not «unknown» but a plain non-success, and it shows.
   const recommendationSources: Array<FeedbackBlock | null | undefined> =
     input.passed === true ? [] : [opts.testFeedback];
+  // The measurement blocks and what their fired bands / outcomes say — the SAME routine
+  // the standard screen runs, so the two screens cannot draw the same scale differently
+  // (issue #33). `false` for the score summary: this screen has none, and only that
+  // block's `auto` reads the flag.
+  if (opts.measures) {
+    recommendationSources.push(
+      ...fillMeasureBlocks(result, opts.measures, resolveMeasures(opts.measures, false)),
+    );
+  }
   for (const topic of input.topicResults || []) {
     recommendationSources.push(...topicRecommendationSources(topic, !hasAchievedLevel(topic)));
   }

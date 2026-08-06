@@ -344,11 +344,13 @@ export function buildAdaptiveReportInput(
  * the web adaptive results screen shows the base "Пройти снова" action.
  *
  * @param measures The material of the results screen, as the route reads it for BOTH
- *   modes. Only its `testFeedback` is used here — the widest source of the consolidated
- *   recommendations block, and a property of the TEST rather than of its flow mode. The
- *   measurement rows it also carries belong to the standard screen: an adaptive result
- *   composes levels and measures nothing. Absent (material unreadable) simply leaves the
- *   test's own feedback out, exactly as it does on the standard screen.
+ *   modes — the test's own feedback block AND its measurement rows. Both are properties
+ *   of the TEST rather than of its flow mode, so both reach this screen (issue #33): the
+ *   feedback as the widest source of the consolidated recommendations block, the rows as
+ *   the «Ваш результат» / «По шкалам» blocks. The measured VALUES come from the SAVED
+ *   adaptive result (`scaleResults` / `resultVariables`, filled in by
+ *   `completeMeasuresSource`) and are never recomputed here. Absent (material unreadable)
+ *   simply leaves both out, exactly as it does on the standard screen.
  */
 export function buildAdaptiveResultContext(
   result: any,
@@ -359,6 +361,10 @@ export function buildAdaptiveResultContext(
   // The stored block goes through the SAME normaliser the standard screen uses, so the
   // `url`-over-`scormHref` rule for its PDF assets lives in one place.
   const testFeedback = normalizeFeedback(measures?.testFeedback);
+  // …and the SAME rule decides whether the screen gets measurement blocks at all: the
+  // test must actually declare scales or indicators. An adaptive test that declares
+  // none keeps exactly the context it had before this work.
+  const hasMeasures = !!measures && (measures.scales.length > 0 || measures.variables.length > 0);
   return buildSharedAdaptiveResultContext(
     {
       passed: !!result?.overallPassed,
@@ -390,6 +396,9 @@ export function buildAdaptiveResultContext(
       ),
     },
     testTitle,
-    { ...(testFeedback ? { testFeedback } : {}) },
+    {
+      ...(testFeedback ? { testFeedback } : {}),
+      ...(hasMeasures ? { measures: buildMeasuresInput(measures as MeasuresSource) } : {}),
+    },
   );
 }

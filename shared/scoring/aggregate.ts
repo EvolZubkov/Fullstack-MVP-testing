@@ -314,3 +314,81 @@ export function aggregateAdaptiveResult<E = unknown>(input: AdaptiveInput<E>): A
 
   return { mode: "adaptive", overallPassed, topicResults };
 }
+
+/** One topic of {@link adaptiveResultAsStandard}: the level ladder read as a score. */
+export interface AdaptiveAsStandardTopic {
+  topicId: string;
+  topicName: string;
+  correct: number;
+  total: number;
+  percent: number;
+  earnedPoints: number;
+  possiblePoints: number;
+  passed: boolean;
+  achievedLevelName: string | null;
+  recommendedCourses: Array<{ title: string; url: string }>;
+}
+
+/** {@link adaptiveResultAsStandard}: an adaptive result told in standard-result words. */
+export interface AdaptiveAsStandard {
+  correct: number;
+  totalQuestions: number;
+  earnedPoints: number;
+  possiblePoints: number;
+  percent: number;
+  passed: boolean;
+  topicResults: AdaptiveAsStandardTopic[];
+}
+
+/**
+ * An adaptive result restated in the STANDARD result's words — counts, percent and a
+ * per-topic verdict.
+ *
+ * It exists because two consumers can only speak that language. The result-variable
+ * formulas of PRD-2 read `percent`, `score` and `topicById(...).passed` (see
+ * `EvalContext`), and the LMS report of PRD-4 wants a score and per-topic objectives;
+ * neither has a notion of a confirmed level. So the ladder is read as: one answered
+ * question is worth one point, a topic's percent is the percent WITHIN its confirmed
+ * level (`levelPercent`), and a topic «passed» when any level was confirmed at all —
+ * the same non-success the results screen paints red (`hasAchievedLevel`).
+ *
+ * ONE implementation, shared, because both hosts must feed the formulas identically:
+ * the package runs it through `getAdaptiveResultForScorm` (telemetry + `finishScormAdaptive`),
+ * the web server through the adaptive `/answer-adaptive` finish (issue #33 — before it,
+ * the web computed no scales or indicators for an adaptive attempt at all). A second
+ * copy would surface as the same formula returning different values in the browser and
+ * in the LMS.
+ *
+ * NOT a substitute for the adaptive result itself: nothing here is stored or shown.
+ * The learner's screen renders confirmed LEVELS, and this shape never reaches it.
+ */
+export function adaptiveResultAsStandard<E = unknown>(result: AdaptiveResult<E>): AdaptiveAsStandard {
+  let totalQuestions = 0;
+  let correct = 0;
+  for (const tr of result.topicResults) {
+    totalQuestions += tr.totalQuestionsAnswered;
+    correct += tr.totalCorrect;
+  }
+  return {
+    correct,
+    totalQuestions,
+    // Each answered question is worth one point in the adaptive mode: the ladder has no
+    // per-question price (`test_question_scoring` gates the standard delivery only).
+    earnedPoints: correct,
+    possiblePoints: totalQuestions,
+    percent: totalQuestions > 0 ? (correct / totalQuestions) * 100 : 0,
+    passed: result.overallPassed,
+    topicResults: result.topicResults.map((tr) => ({
+      topicId: tr.topicId,
+      topicName: tr.topicName,
+      correct: tr.totalCorrect,
+      total: tr.totalQuestionsAnswered,
+      percent: tr.levelPercent,
+      earnedPoints: tr.totalCorrect,
+      possiblePoints: tr.totalQuestionsAnswered,
+      passed: tr.achievedLevelIndex !== null,
+      achievedLevelName: tr.achievedLevelName,
+      recommendedCourses: tr.recommendedLinks,
+    })),
+  };
+}

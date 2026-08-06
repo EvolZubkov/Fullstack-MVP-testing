@@ -1188,6 +1188,18 @@ export const adaptiveAttemptResultSchema = z.object({
   mode: z.literal("adaptive"),
   overallPassed: z.boolean(),
   topicResults: z.array(adaptiveTopicResultSchema),
+  // issue #33: the graded namespaces of THIS attempt — scales (PRD-5) and indicators
+  // (PRD-2) — computed once at finish and never recomputed on read, exactly as on the
+  // standard result. They live here because a scale is fed by the measurements hung on
+  // questions, and an adaptive test asks questions like any other; the values used to
+  // reach the LMS from the package while no host showed them on the results screen.
+  //
+  // Optional, like their standard counterparts: a test with neither scales nor
+  // indicators stores nothing, and adaptive attempts finished before this work stay
+  // valid. No `status` twin, though: `controls_status` does not override an adaptive
+  // verdict — that one is pronounced by the confirmed levels (see `buildAdaptiveResult`).
+  scaleResults: z.record(z.string(), z.unknown()).optional(),
+  resultVariables: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type AdaptiveTopicResult = z.infer<typeof adaptiveTopicResultSchema>;

@@ -152,6 +152,33 @@ function pdfAdaptiveInput(results) {
 }
 
 /**
+ * Измерения (PRD-29) для отчёта — шкалы и показатели той попытки, которую печатаем.
+ *
+ * Собираются ТЕМИ ЖЕ функциями, что питают экран итогов (`viewResults.js`), по тому же
+ * правилу, каким экран выбирает источник значений:
+ * - у СОХРАНЁННОЙ попытки (есть `completedAt`) берутся значения, записанные ВМЕСТЕ с ней:
+ *   пересчёт по сегодняшнему толкованию изменил бы то, что ученик уже получил;
+ * - у текущей попытки значения считаются детерминированно (`currentAttemptMeasures`);
+ * - АДАПТИВНАЯ попытка всегда текущая (её `downloadPDF` берёт из `state`), а сборщику
+ *   нужен результат в стандартной форме — её даёт `getAdaptiveResultForScorm`.
+ *
+ * @param {Object} results Результат, который печатается (стандартной или адаптивной формы).
+ * @param {boolean} isAdaptive Режим теста.
+ * @returns {Object|null} MeasuresInput либо null, если тест не объявил ни шкал, ни показателей.
+ */
+function pdfReportMeasures(results, isAdaptive) {
+  if (typeof buildResultsMeasures !== 'function' || typeof currentAttemptMeasures !== 'function') return null;
+  if (isAdaptive) {
+    var flat = (typeof getAdaptiveResultForScorm === 'function') ? getAdaptiveResultForScorm() : null;
+    return flat ? currentAttemptMeasures(flat) : null;
+  }
+  if (results && results.completedAt) {
+    return buildResultsMeasures({ values: results.scaleValues || {} }, { values: results.resultValues || {} });
+  }
+  return currentAttemptMeasures(results);
+}
+
+/**
  * Запечённый сборщиком выбор варианта отчёта (PRD-27 FR-22): макет, значения полей и
  * ключи полей-картинок (FR-05). Отсутствует у пакетов, собранных до этого PRD, — тогда
  * работает деградация по виду, а картинок у отчёта нет.
@@ -228,6 +255,17 @@ async function exportResultsToPDF(results, testName, learnerName, timestamp) {
       // Значения полей варианта — те, что автор задал в блоке обратной связи (FR-16).
       values: pdfImageValues
     };
+    // Измерения попытки (PRD-29) — тем же сборщиком, что питает экран итогов. Пакет их
+    // не передавал ВОВСЕ, поэтому блоки «Ваш результат» и «По шкалам» в его PDF молчали
+    // в обоих режимах, хотя макеты отчёта их несут, а веб-хост их печатает (issue #33).
+    // PRD-35: у отчёта СВОЙ переключатель радара — поле варианта отчёта, а не настройка
+    // экрана итогов; читается ровно так же, как на вебе (attempt-report.ts).
+    var measures = pdfReportMeasures(results, isAdaptive);
+    if (measures) {
+      opts.measures = Object.assign({}, measures, {
+        showRadar: !!(pdfImageValues && pdfImageValues.showCompetencyRadar === true)
+      });
+    }
     var context = isAdaptive
       ? TB.buildAdaptiveReportContext(Object.assign({}, meta, { result: pdfAdaptiveInput(results) }), opts)
       : TB.buildReportContext(Object.assign({}, meta, { result: pdfStandardInput(results) }), opts);

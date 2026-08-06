@@ -433,6 +433,72 @@ describe("POST .../answer-adaptive — branches", () => {
     expect(res.status).toBe(500);
     expect(res.body.error).toBe("Failed to process answer");
   });
+
+  // issue #33: у адаптивной попытки шкалы и показатели раньше не считались ВОВСЕ, поэтому
+  // экран итогов и отчёт нечего было показывать. Считаются при завершении и ложатся В
+  // РЕЗУЛЬТАТ — пересчёт по сегодняшней конфигурации изменил бы то, что ученик получил.
+  it("считает шкалы и показатели при завершении и кладёт их в результат", async () => {
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, answersJson: {}, variantJson: minimalAdaptiveVariant() });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getTestSections.mockResolvedValue([]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([{ topicId: "t1" }]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([
+      { id: "lvl1", topicId: "t1", levelIndex: 0, levelName: "L1" },
+    ]);
+    storageMock.getAdaptiveLevelLinks.mockResolvedValue([]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS", code: "js" }]);
+    storageMock.getScales.mockResolvedValue([
+      { id: "sc1", testId: "test1", key: "s", label: "Шкала", aggregation: "sum",
+        normalization: "none", direction: "positive", sortOrder: 0, learnerVisibility: "level",
+        configJson: { domainMin: 0, domainMax: 5, bands: [{ min: 0, max: 5, level: "any", label: "Любой" }] } },
+    ]);
+    storageMock.getQuestionMeasurements.mockResolvedValue([
+      { id: "m1", testId: "test1", questionId: "q1", scaleId: "sc1", sourceType: "option", sourceKey: "0", valueJson: 3, weight: 1 },
+    ]);
+    storageMock.getResultVariables.mockResolvedValue([
+      { id: "rv1", testId: "test1", name: "score", type: "number", formula: "percent", sortOrder: 0, controlsStatus: null },
+    ]);
+    storageMock.updateAttempt.mockResolvedValue({});
+
+    const res = await asLearner(
+      request(app).post("/api/attempts/atmp1/answer-adaptive").send({ questionId: "q1", answer: 0 }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.isFinished).toBe(true);
+    const saved = storageMock.updateAttempt.mock.calls.at(-1)![1].resultJson;
+    // Вклад сработал на выбранном варианте ответа.
+    expect(saved.scaleResults.s.raw).toBe(3);
+    // Формула получила процент попытки в словах обычного результата (один вопрос, верно).
+    expect(saved.resultVariables.score).toBe(100);
+    // Уровни на месте: измерения ДОБАВЛЯЮТСЯ к адаптивному результату, а не заменяют его.
+    expect(saved.mode).toBe("adaptive");
+    expect(saved.topicResults).toHaveLength(1);
+  });
+
+  it("тест без шкал и показателей хранит прежний адаптивный результат", async () => {
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, answersJson: {}, variantJson: minimalAdaptiveVariant() });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getTestSections.mockResolvedValue([]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([{ topicId: "t1" }]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([
+      { id: "lvl1", topicId: "t1", levelIndex: 0, levelName: "L1" },
+    ]);
+    storageMock.getAdaptiveLevelLinks.mockResolvedValue([]);
+    storageMock.getScales.mockResolvedValue([]);
+    storageMock.getQuestionMeasurements.mockResolvedValue([]);
+    storageMock.getResultVariables.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue({});
+
+    const res = await asLearner(
+      request(app).post("/api/attempts/atmp1/answer-adaptive").send({ questionId: "q1", answer: 0 }),
+    );
+    expect(res.status).toBe(200);
+    const saved = storageMock.updateAttempt.mock.calls.at(-1)![1].resultJson;
+    expect(saved).not.toHaveProperty("scaleResults");
+    expect(saved).not.toHaveProperty("resultVariables");
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

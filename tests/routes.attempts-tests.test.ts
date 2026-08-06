@@ -1479,16 +1479,24 @@ describe("Attempts routes — result and history", () => {
       expect(res.body).not.toHaveProperty("measures");
     });
 
-    it("адаптивной попытке измерения не едут", async () => {
+    // issue #33: адаптивной попытке измерения ЕДУТ — теми же значениями и в том же виде.
+    // Шкалу питают вклады, навешенные на вопросы, а адаптивный тест задаёт вопросы, как
+    // любой другой; значения по нему считались и уезжали в LMS и раньше, не доходя только
+    // до экрана итогов и до отчёта.
+    it("адаптивной попытке измерения едут так же, как обычной", async () => {
       mockMeasuringTest();
       storageMock.getAttempt.mockResolvedValue({
         ...measuredAttempt,
         resultJson: { ...measuredAttempt.resultJson, mode: "adaptive" },
       });
-      storageMock.getTest.mockResolvedValue({ ...dbTest, mode: "adaptive" });
+      storageMock.getTest.mockResolvedValue({ ...measuringTest, mode: "adaptive" });
       const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
       expect(res.status).toBe(200);
-      expect(res.body).not.toHaveProperty("measures");
+      expect(res.body.measures.scales.map((s: any) => s.key)).toEqual(["a", "b", "c"]);
+      expect(res.body.measures.scales[0].value).toBe(8);
+      expect(res.body.measures.indicators.map((i: any) => i.key)).toEqual(["vr1"]);
+      // Виды отображения — из оформления ТОГО ЖЕ теста, а не значения по умолчанию.
+      expect(res.body.measures).toMatchObject({ scaleKind: "ring", indicatorKind: "value" });
     });
   });
 

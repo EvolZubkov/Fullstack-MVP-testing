@@ -356,7 +356,9 @@ export function readScreenTemplate(
 export function completeMeasuresSource(
   measures: MeasuresSource,
   payloadParams: Record<string, unknown> | undefined,
-  result: AttemptResult,
+  // The stored result, of EITHER mode: only the two computed namespaces are read off it,
+  // and since issue #33 an adaptive result carries them too (`adaptiveAttemptResultSchema`).
+  result: Pick<AttemptResult, "scaleResults" | "resultVariables">,
 ): MeasuresSource {
   return {
     ...measures,
@@ -402,19 +404,16 @@ export function readResultsRenderPayload(
     // arguments whenever the material was absent, which quietly dropped everything
     // the material carries besides measurements — the test's own feedback block above
     // all. The builder already treats an absent third argument as «nothing to add».
+    // BOTH branches complete the material the same way — with the design params of THIS
+    // screen and the values stored WITH the attempt. Until issue #33 the adaptive branch
+    // took the material raw and read only the test's own feedback out of it, on the
+    // reading that «an adaptive result measures nothing»; it measures exactly what the
+    // author hung on its questions, and the values were being computed and shipped to the
+    // LMS while the screen showed none of them.
+    const completed = measures ? completeMeasuresSource(measures, base.params, result as AttemptResult) : undefined;
     const context = isAdaptive
-      // The adaptive branch takes the material too — but only the TEST's own feedback
-      // block out of it: the rest of the material describes measurements, which an
-      // adaptive result does not carry. It used to take nothing at all, and the test's
-      // feedback — a property of the test, not of its flow mode — was lost with the
-      // measurements it was bundled with, leaving the adaptive recommendations block
-      // without its widest source.
-      ? buildAdaptiveResultContext(result, testTitle, measures)
-      : buildResultContext(
-          result as AttemptResult,
-          testTitle,
-          measures ? completeMeasuresSource(measures, base.params, result as AttemptResult) : undefined,
-        );
+      ? buildAdaptiveResultContext(result, testTitle, completed)
+      : buildResultContext(result as AttemptResult, testTitle, completed);
     // Header subtitle «Попытка N из M» (Core-prepared by the caller), same as the
     // other learner screens — merged into the server-built course context.
     if (subtitle) (context as { course: { subtitle?: string } }).course.subtitle = subtitle;

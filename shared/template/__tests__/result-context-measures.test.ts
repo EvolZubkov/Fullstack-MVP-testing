@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildResultContext, normalizeFeedback } from "../result-context";
+import { buildAdaptiveResultContext, buildResultContext, normalizeFeedback } from "../result-context";
 import { LEVEL_SCHEMES } from "../level-ramp";
 
 const BASE = {
@@ -141,6 +141,95 @@ describe("buildResultContext + measures", () => {
       "Опросник носит справочный характер.",
       "Обсудите нагрузку с руководителем.",
     ]);
+  });
+});
+
+/**
+ * issue #33. Шкалы и показатели — свойство ТЕСТА, а не режима выдачи: адаптивный тест
+ * задаёт вопросы, на которых висят вклады, и считает по ним ровно те же значения. Разница
+ * с обычным экраном ровно одна — сводки баллов у адаптивного нет, поэтому её настройка
+ * здесь не читается.
+ */
+const ADAPTIVE_BASE = {
+  passed: false,
+  topicResults: [
+    { topicName: "Тема A", achievedLevelIndex: 1, achievedLevelName: "Средний" },
+  ],
+};
+
+describe("buildAdaptiveResultContext + measures", () => {
+  it("без измерений контекст прежний", () => {
+    const ctx = buildAdaptiveResultContext(ADAPTIVE_BASE, "Адаптивный");
+    expect(ctx.result.scales).toBeUndefined();
+    expect(ctx.result.indicators).toBeUndefined();
+    expect(ctx.result.adaptive).toBe(true);
+  });
+
+  it("кладёт те же карточки, что и обычный экран", () => {
+    const ctx = buildAdaptiveResultContext(ADAPTIVE_BASE, "Адаптивный", { measures: MEASURES });
+    const standard = buildResultContext(BASE, "Обычный", { measures: MEASURES });
+    expect(ctx.result.scales).toEqual(standard.result.scales);
+    expect(ctx.result.indicators).toEqual(standard.result.indicators);
+    // Уровни тем на месте: измерения добавляются к результату, а не вместо него.
+    expect(ctx.result.topicResults).toHaveLength(1);
+  });
+
+  it("не включает скрытые шкалы и слушается настройки блока", () => {
+    const hidden = { ...MEASURES, scales: [{ ...MEASURES.scales[0], visibility: "hidden" as const }] };
+    expect(buildAdaptiveResultContext(ADAPTIVE_BASE, "Адаптивный", { measures: hidden }).result.scales)
+      .toBeUndefined();
+    const off = { ...MEASURES, blockSettings: { indicators: "hide" as const } };
+    expect(buildAdaptiveResultContext(ADAPTIVE_BASE, "Адаптивный", { measures: off }).result.indicators)
+      .toBeUndefined();
+  });
+
+  it("настройка сводки баллов на адаптивный экран не влияет", () => {
+    // Сводки у этого экрана нет вовсе — гасить нечего, и признак не выставляется.
+    const ctx = buildAdaptiveResultContext(ADAPTIVE_BASE, "Адаптивный", {
+      measures: { ...MEASURES, blockSettings: { scoreSummary: "hide" as const } },
+    });
+    expect(ctx.result.hideScoreSummary).toBeUndefined();
+    expect(ctx.result.scales).toHaveLength(1);
+  });
+
+  it("рекомендации собираются в порядке тест, показатель, шкала, тема", () => {
+    const input = {
+      passed: false,
+      topicResults: [
+        {
+          topicName: "Тема A",
+          achievedLevelIndex: null,
+          achievedLevelName: null,
+          feedbackTexts: ["Повторите модуль."],
+        },
+      ],
+    };
+    const ctx = buildAdaptiveResultContext(input, "Адаптивный", {
+      testFeedback: TEST_FEEDBACK,
+      measures: MEASURES,
+    });
+    expect(ctx.result.recommendations!.texts).toEqual([
+      "Опросник носит справочный характер.",
+      "Обсудите нагрузку с руководителем.",
+      "Восстановите режим отдыха.",
+      "Повторите модуль.",
+    ]);
+  });
+
+  it("радар строится по тому же переключателю", () => {
+    const threeScales = {
+      ...MEASURES,
+      showRadar: true,
+      scales: ["a", "b", "c"].map((key, i) => ({
+        ...MEASURES.scales[0],
+        key,
+        name: `Шкала ${key}`,
+        value: 10 + i * 10,
+      })),
+    };
+    const ctx = buildAdaptiveResultContext(ADAPTIVE_BASE, "Адаптивный", { measures: threeScales });
+    expect(ctx.result.scalesChart!.axes).toHaveLength(3);
+    expect(ctx.result.scalesBlockClass).toBe("tb-measures tb-measures--chart");
   });
 });
 

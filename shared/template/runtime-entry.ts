@@ -52,7 +52,7 @@ export { LEVEL_SCHEMES } from "./level-ramp";
 export { parseScaleInterpretation, parseIndicatorInterpretation } from "../scales/interpretation";
 // PRD-18: the SINGLE standard result-aggregation + pass-rule engine shared by the
 // SCORM runtime (resultsPage.js) and the web grader (attempts.ts).
-export { aggregateStandardResult, aggregateAdaptiveResult } from "../scoring/aggregate";
+export { aggregateStandardResult, aggregateAdaptiveResult, adaptiveResultAsStandard } from "../scoring/aggregate";
 export { resolveOverallRule, resolveTopicRule, checkPassRule } from "../scoring/pass-rule";
 export { buildStartState } from "./start-state";
 // PRD-22: the start illustration is a property of the START PAGE, with the branding

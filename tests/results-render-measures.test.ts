@@ -109,10 +109,16 @@ describe("readResultsRenderPayload + измерения", () => {
     expect(scales![0].renderKind).toBe("value_of_max");
   });
 
-  it("адаптивный результат измерений не получает", () => {
+  // issue #33: адаптивный результат получает те же измерения — из того же материала и
+  // с теми же значениями, сохранёнными вместе с попыткой. Раньше ветка брала из материала
+  // только обратную связь теста, и экран, на котором тест заканчивается, молчал о том, что
+  // уже уехало в LMS.
+  it("адаптивный результат получает те же измерения", () => {
     const adaptive = { ...(RESULT as object), mode: "adaptive", topicResults: [] } as never;
     const payload = readResultsRenderPayload(DIR, adaptive, "Маслач", null, undefined, undefined, MEASURES);
-    expect((payload!.context.result as Record<string, unknown>).scales).toBeUndefined();
+    const scales = (payload!.context.result as { scales?: Array<{ levelLabel: string }> }).scales;
+    expect(scales).toHaveLength(1);
+    expect(scales![0].levelLabel).toBe("Высокий");
   });
 
   it("материал обратной связи ТЕСТА доезжает до блока рекомендаций и получает адрес", () => {
