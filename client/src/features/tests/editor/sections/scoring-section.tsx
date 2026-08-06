@@ -26,7 +26,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  CheckSquare, ChevronDown, ChevronRight, CircleDot, ListOrdered, Pencil, RotateCcw, ThermometerSun, Unplug,
+  CheckSquare, ChevronDown, ChevronRight, CircleDot, ListOrdered, Pencil, RotateCcw, SlidersHorizontal, ThermometerSun, Unplug,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -64,6 +64,7 @@ const TYPE_ICON: Record<QuestionType, LucideIcon> = {
   matching: Unplug,
   ranking: ListOrdered,
   scale: ThermometerSun,
+  allocation: SlidersHorizontal,
 };
 const TYPE_LABEL: Record<QuestionType, string> = {
   single: t.questions.singleChoice,
@@ -71,6 +72,7 @@ const TYPE_LABEL: Record<QuestionType, string> = {
   matching: t.questions.matching,
   ranking: t.questions.ranking,
   scale: t.questions.scaleChoice,
+  allocation: t.questions.allocation,
 };
 
 /** Human label of a graded-config kind (PRD-10). */

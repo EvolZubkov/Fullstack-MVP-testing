@@ -515,6 +515,7 @@ export const t = {
     matching: "Соответствие",
     ranking: "Ранжирование",
     scaleChoice: "Шкала",
+    allocation: "Распределение баллов",
     optionPlaceholder: "Вариант ответа",
     addOption: "Добавить вариант",
     removeOption: "Удалить вариант",

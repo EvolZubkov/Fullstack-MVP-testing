@@ -44,6 +44,7 @@ import {
   KeyRound,
   ListOrdered,
   ThermometerSun,
+  SlidersHorizontal,
   MoreHorizontal,
   Move,
   Pencil,
@@ -138,13 +139,14 @@ function MenuItem({ icon, danger, onClick, children, testId }: {
 
 import type { QuestionType } from "@shared/questions/question-type";
 
-const TYPE_ICON: Record<QuestionType, LucideIcon> = { single: CircleDot, multiple: CheckSquare, matching: Unplug, ranking: ListOrdered, scale: ThermometerSun };
+const TYPE_ICON: Record<QuestionType, LucideIcon> = { single: CircleDot, multiple: CheckSquare, matching: Unplug, ranking: ListOrdered, scale: ThermometerSun, allocation: SlidersHorizontal };
 const TYPE_LABEL: Record<QuestionType, string> = {
   single: t.questions.singleChoice,
   multiple: t.questions.multipleChoice,
   matching: t.questions.matching,
   ranking: t.questions.ranking,
   scale: t.questions.scaleChoice,
+  allocation: t.questions.allocation,
 };
 
 const depthClass = (depth: number): string => `ct-d${Math.min(depth, 6)}`;

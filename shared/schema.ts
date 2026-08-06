@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { normalizeTag, normalizeTags, TAG_MAX_LENGTH } from "./tags";
+import { isAllocationFeasible } from "./questions/allocation";
 import { STORED_ROLES } from "./access/roles";
 import { PLACEHOLDER_TYPES, SETTING_TYPES } from "./template/field-types";
 
@@ -249,7 +250,7 @@ export type QuestionScoring = z.infer<typeof questionScoringSchema>;
 export const questions = pgTable("questions", {
   id: varchar("id", { length: 36 }).primaryKey(),
   topicId: varchar("topic_id", { length: 36 }).notNull(),
-  type: text("type", { enum: ["single", "multiple", "matching", "ranking", "scale"] }).notNull(),
+  type: text("type", { enum: ["single", "multiple", "matching", "ranking", "scale", "allocation"] }).notNull(),
   prompt: text("prompt").notNull(),
   dataJson: jsonb("data_json").notNull(),
   correctJson: jsonb("correct_json").notNull(),
@@ -994,6 +995,64 @@ export const rankingDataSchema = z.object({
   items: z.array(z.string()),
 });
 
+/**
+ * Budget-allocation question (PRD-44 FR-02 - FR-05). The statements live in `options`,
+ * the SAME field single/multiple/scale use, so every existing reader of `dataJson.options`
+ * — the option editor, the workbook column, the font-fitting pass, the preview — keeps
+ * working with no change of its own.
+ *
+ * `maxPerOption` defaults to the whole budget and cannot be defaulted with `.default()`:
+ * it depends on a sibling field, so the fallback is applied in the transform. The
+ * feasibility rule (`count * min <= budget <= count * max`) is checked HERE rather than
+ * only in the editor, because without it an author can save a configuration no learner can
+ * complete — the reference discussion asked for a floor of 2 across four statements on a
+ * budget of 7, i.e. 8 points out of 7 available. The message names both numbers.
+ */
+export const allocationDataSchema = z
+  .object({
+    options: z
+      .array(z.string().trim().min(1, "Подпись утверждения не может быть пустой"))
+      .min(2, "Утверждений должно быть не меньше двух")
+      .max(10, "Утверждений должно быть не больше десяти"),
+    budget: z.number().int().min(1).max(1000),
+    minPerOption: z.number().int().min(0).optional(),
+    maxPerOption: z.number().int().min(0).optional(),
+  })
+  .transform((d) => ({
+    options: d.options,
+    budget: d.budget,
+    minPerOption: d.minPerOption ?? 0,
+    maxPerOption: d.maxPerOption ?? d.budget,
+  }))
+  .superRefine((d, ctx) => {
+    if (d.minPerOption > d.maxPerOption) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["minPerOption"],
+        message: "Минимум на вариант не может превышать максимум",
+      });
+      return;
+    }
+    if (d.maxPerOption > d.budget) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["maxPerOption"],
+        message: "Максимум на вариант не может превышать бюджет",
+      });
+      return;
+    }
+    const feasibility = isAllocationFeasible(d);
+    if (feasibility.ok) return;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [feasibility.kind === "min" ? "minPerOption" : "maxPerOption"],
+      message:
+        feasibility.kind === "min"
+          ? `Распределение невыполнимо: минимумы требуют ${feasibility.required} баллов, а бюджет — ${feasibility.available}`
+          : `Распределение невыполнимо: нужно распределить ${feasibility.required} баллов, а максимумы дают только ${feasibility.available}`,
+    });
+  });
+
 export const singleChoiceCorrectSchema = z.object({
   correctIndex: z.number(),
 });
@@ -1231,7 +1290,7 @@ export type AdaptiveAnswerResponse = z.infer<typeof adaptiveAnswerResponseSchema
 export const detailedAnswerSchema = z.object({
   questionId: z.string(),
   questionPrompt: z.string(),
-  questionType: z.enum(["single", "multiple", "matching", "ranking", "scale"]),
+  questionType: z.enum(["single", "multiple", "matching", "ranking", "scale", "allocation"]),
   topicId: z.string(),
   topicName: z.string(),
   userAnswer: z.unknown(),
@@ -1303,7 +1362,7 @@ export type AdaptiveLevelStats = z.infer<typeof adaptiveLevelStatsSchema>;
 export const questionStatsSchema = z.object({
   questionId: z.string(),
   questionPrompt: z.string(),
-  questionType: z.enum(["single", "multiple", "matching", "ranking", "scale"]),
+  questionType: z.enum(["single", "multiple", "matching", "ranking", "scale", "allocation"]),
   topicId: z.string(),
   topicName: z.string(),
   difficulty: z.number(),
@@ -1488,7 +1547,7 @@ export const scormAnswers = pgTable("scorm_answers", {
   // Данные вопроса
   questionId: varchar("question_id", { length: 36 }).notNull(),
   questionPrompt: text("question_prompt").notNull(),
-  questionType: text("question_type", { enum: ["single", "multiple", "matching", "ranking", "scale"] }).notNull(),
+  questionType: text("question_type", { enum: ["single", "multiple", "matching", "ranking", "scale", "allocation"] }).notNull(),
   topicId: varchar("topic_id", { length: 36 }),
   topicName: text("topic_name"),
   difficulty: integer("difficulty"),
@@ -1907,7 +1966,12 @@ export const questionMeasurements = pgTable("question_measurements", {
   testId: varchar("test_id", { length: 36 }).notNull().references(() => tests.id, { onDelete: "cascade" }),
   questionId: varchar("question_id", { length: 36 }).notNull().references(() => questions.id, { onDelete: "cascade" }),
   scaleId: uuid("scale_id").notNull().references(() => scales.id, { onDelete: "cascade" }),
-  sourceType: text("source_type", { enum: ["question", "option", "matching_pair", "ranking_position"] }).notNull(),
+  // PRD-44: `option_allocation` is the first source whose contribution the LEARNER sets —
+  // the unit fires on a non-zero assignment and contributes `assigned * value * weight`.
+  // No migration needed: the column is plain `text NOT NULL` with no CHECK.
+  sourceType: text("source_type", {
+    enum: ["question", "option", "matching_pair", "ranking_position", "option_allocation"],
+  }).notNull(),
   sourceKey: text("source_key"),
   valueJson: jsonb("value_json").$type<number>().notNull(),
   weight: real("weight").notNull().default(1),

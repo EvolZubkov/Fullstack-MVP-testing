@@ -50,7 +50,12 @@ export interface ScaleSpec {
 export interface MeasurementSpec {
   questionId: string;
   scaleKey: string;
-  sourceType: "question" | "option" | "matching_pair" | "ranking_position";
+  /**
+   * `option_allocation` (PRD-44) is the odd one out: every other source contributes a
+   * value the AUTHOR fixed, while an allocation contributes the amount the LEARNER
+   * assigned to that statement. See {@link unitContribution}.
+   */
+  sourceType: "question" | "option" | "matching_pair" | "ranking_position" | "option_allocation";
   sourceKey: string | null;
   value: number;
   weight: number;

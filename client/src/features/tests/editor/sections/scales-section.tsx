@@ -1274,6 +1274,7 @@ const UNIT_HEADER: Record<ContributionQuestion["type"], string> = {
   matching: "Пара ответа (левый → правый)",
   ranking: "Размещение (элемент @ позиция)",
   scale: "Градация шкалы",
+  allocation: "Утверждение",
 };
 
 const QTYPE_LABEL: Record<ContributionQuestion["type"], string> = {
@@ -1282,6 +1283,7 @@ const QTYPE_LABEL: Record<ContributionQuestion["type"], string> = {
   matching: "сопоставление",
   ranking: "ранжирование",
   scale: "шкала",
+  allocation: "распределение баллов",
 };
 
 const UNIT_HINT: Partial<Record<ContributionQuestion["type"], string>> = {
