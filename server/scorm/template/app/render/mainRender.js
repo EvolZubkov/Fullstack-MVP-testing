@@ -576,7 +576,7 @@ function renderStandardQuestion(qData, current, total, progress) {
                 questionCounterLabel: counterLabel,
                 sectionName: (qData.topicName || ''),
                 nav: buildQuestionNavState(current, total),
-                questionHint: (TB && TB.questionHint) ? TB.questionHint(q.type) : '',
+                questionHint: (TB && TB.questionHint) ? TB.questionHint(q.type, { type: q.type, dataJson: q.data }) : '',
                 questionFont: (TB && TB.questionFont) ? TB.questionFont(q.prompt) : '',
                 optionFont: (TB && TB.optionFont && TB.answerTexts) ? TB.optionFont(TB.answerTexts({ type: q.type, dataJson: q.data })) : ''
             },

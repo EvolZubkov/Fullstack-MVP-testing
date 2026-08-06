@@ -94,6 +94,13 @@ export interface TemplateScreenProps {
   timers?: SceneTimersState;
   /** Called with the `data-action` value when a button inside the screen is clicked. */
   onAction?: (action: string) => void;
+  /**
+   * Called once the shadow root exists; may return a cleanup. The seam for interactions
+   * a HOST owns rather than the renderer — PRD-44 allocation drives a pointer GESTURE,
+   * and a gesture cannot go through `data-action` delegation: the answer must not reach
+   * React until the finger lifts, or the re-render replaces the node being held.
+   */
+  onShadowReady?: (shadow: ShadowRoot) => void | (() => void);
   className?: string;
   /**
    * Optional design-template shell HTML (the `shell` layout, containing an `#app`
@@ -118,13 +125,15 @@ export interface TemplateScreenProps {
   fill?: boolean;
 }
 
-export function TemplateScreen({ layout, context, css, slots, content, protection, cssVars, themeCss, dataTheme, themed, afterHtml, timers, onAction, className, shell, fill = true }: TemplateScreenProps) {
+export function TemplateScreen({ layout, context, css, slots, content, protection, cssVars, themeCss, dataTheme, themed, afterHtml, timers, onAction, onShadowReady, className, shell, fill = true }: TemplateScreenProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const shadowRef = useRef<ShadowRoot | null>(null);
   const screenRef = useRef<HTMLElement | null>(null);
   const appliedVarsRef = useRef<string[]>([]);
   const onActionRef = useRef(onAction);
   onActionRef.current = onAction;
+  const onShadowReadyRef = useRef(onShadowReady);
+  onShadowReadyRef.current = onShadowReady;
 
   // Fit-to-width: some templates render a FIXED-size canvas (e.g. a 1280×720
   // Storyline-style layout). Scale it down so it fits the host width — no
@@ -439,6 +448,14 @@ export function TemplateScreen({ layout, context, css, slots, content, protectio
     return attachPointerDnd(shadow, {
       onDrop: ({ dropId, dragId }) => onActionRef.current?.(`drop:${dropId}:${dragId}`),
     });
+  }, []);
+
+  // Host-owned interactions (see `onShadowReady`). Bound once on the shadow root, which
+  // survives every re-render — a per-row binding would leak one set per repaint.
+  useEffect(() => {
+    const shadow = shadowRef.current;
+    if (!shadow) return;
+    return onShadowReadyRef.current?.(shadow) ?? undefined;
   }, []);
 
   // PRD-38: полноэкранный просмотр медиа вопроса — тот же общий обработчик, который

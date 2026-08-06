@@ -14,7 +14,7 @@
  * the same engine the SCORM host runs — so both hosts compute drops identically.
  */
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TemplateScreen } from "@/components/template-screen";
 import type { Question } from "@shared/schema";
 import type { CtxQuestionsProgress } from "@shared/template/context";
@@ -31,10 +31,14 @@ import {
   renderRanking,
   renderMatching,
   renderScale,
+  renderAllocation,
   questionHint,
   answerTexts,
   type ReviewCorrect,
 } from "@shared/template/question-interaction";
+import { attachAllocation } from "@shared/template/allocation-dom";
+import { allocationSpec, seedAllocation } from "@shared/questions/allocation";
+import { distributesBudget } from "@shared/questions/question-type";
 import { questionFont, optionFont } from "@shared/template/fit-font";
 import { buildQuestionNav, QUESTION_NAV_ACTIONS, type QuestionNavState } from "@shared/template/question-nav";
 import type { SceneTimersState } from "@shared/template/scene-timers";
@@ -110,6 +114,9 @@ function interactionHtml(
   // The scale takes no shuffle mapping: the order of graduations is content, not
   // presentation (see `hasFixedOptionOrder` in shared/questions/question-type).
   if (question.type === "scale") return renderScale(question, answer, review);
+  // PRD-44: у распределения нет разметки верности — `review` здесь означает «только
+  // чтение», а не «показать правильный ответ», которого у типа не существует.
+  if (distributesBudget(question.type)) return renderAllocation(question, answer, review !== undefined);
   return renderSingleChoice(question, answer, arr, review);
 }
 
@@ -189,6 +196,42 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
   // answer is `undefined` until the first drag). The board still displays the
   // shuffled order via rankingOrder's fallback to shuffleMapping.
 
+  // PRD-44: жест ползунка живёт вне React — обработчик читает вопрос и ответ через
+  // ссылки, чтобы не пересоздаваться на каждый рендер и не терять привязку.
+  const questionRef = useRef(question);
+  questionRef.current = question;
+  const answerRef = useRef(answer);
+  answerRef.current = answer;
+  const lockedRef = useRef(props.locked);
+  lockedRef.current = props.locked;
+  const onAnswerRef = useRef(onAnswer);
+  onAnswerRef.current = onAnswer;
+
+  const attachHostInputs = useCallback(
+    (shadow: ShadowRoot) =>
+      attachAllocation(shadow as never, {
+        getSpec: () =>
+          distributesBudget(questionRef.current.type)
+            ? allocationSpec(questionRef.current.dataJson)
+            : null,
+        getAnswer: () => answerRef.current,
+        onCommit: (next) => onAnswerRef.current(next),
+        isLocked: () => lockedRef.current === true,
+      }),
+    [],
+  );
+
+  // Предзаполнение минимумом (FR-30): вопрос с ненулевым минимумом стартует со
+  // значениями, а не с нулями, иначе учащийся распределит весь бюджет и застрянет с
+  // утверждением, которое уже нечем поднять. Ставится ОДИН раз на нетронутый вопрос.
+  useEffect(() => {
+    if (!distributesBudget(question.type)) return;
+    if (answer !== undefined && answer !== null) return;
+    const seed = seedAllocation(allocationSpec(question.dataJson));
+    if (Object.keys(seed).length > 0) onAnswer(seed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [question.id]);
+
   const css = `${tpl.css}\n#q-progress-fill{width:${Math.round(progressPercent)}%}`;
   const slots = {
     // Inline, not block: the prompt renders into the scene's `<h2>` heading, and a
@@ -259,9 +302,10 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
         themeCss={tpl.themeCss}
         dataTheme={tpl.dataTheme}
         themed={tpl.themed}
-        context={{ course: { title: testTitle, subtitle: props.subtitle }, state: { questionCounterLabel: counterLabel, sectionName: props.sectionName, questionHint: questionHint(question.type), questionFont: questionFont(question.prompt), optionFont: optionFont(answerTexts(question)), questionsProgress: props.questionsProgress, nav: buildQuestionNav(props.nav) }, design: tpl.design }}
+        context={{ course: { title: testTitle, subtitle: props.subtitle }, state: { questionCounterLabel: counterLabel, sectionName: props.sectionName, questionHint: questionHint(question.type, question), questionFont: questionFont(question.prompt), optionFont: optionFont(answerTexts(question)), questionsProgress: props.questionsProgress, nav: buildQuestionNav(props.nav) }, design: tpl.design }}
         slots={slots}
         timers={props.timers}
+        onShadowReady={attachHostInputs}
         onAction={(action) => {
           // Nav row: reported verbatim, so the caller reads the emitter's own action
           // names. Not gated by `locked` — navigating away is always allowed.

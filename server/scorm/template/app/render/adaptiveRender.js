@@ -126,7 +126,7 @@ function renderAdaptiveQuestionTemplated(app, qData) {
         // mode's — the runtime no longer appends a footer of its own next to the
         // scene, where neither the scene surface nor the DS palette reach it.
         nav: buildAdaptiveNavState(),
-        questionHint: (window.TBTemplate && window.TBTemplate.questionHint) ? window.TBTemplate.questionHint(q.type) : '',
+        questionHint: (window.TBTemplate && window.TBTemplate.questionHint) ? window.TBTemplate.questionHint(q.type, { type: q.type, dataJson: q.data }) : '',
         questionFont: (window.TBTemplate && window.TBTemplate.questionFont) ? window.TBTemplate.questionFont(q.prompt) : '',
         optionFont: (window.TBTemplate && window.TBTemplate.optionFont && window.TBTemplate.answerTexts) ? window.TBTemplate.optionFont(window.TBTemplate.answerTexts({ type: q.type, dataJson: q.data })) : ''
       },

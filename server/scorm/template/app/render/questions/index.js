@@ -20,5 +20,20 @@ function renderQuestionInput(q) {
   if (q.type === 'multiple') return renderMultipleQuestionInput(q, answer, showReview, correct, shuffleMapping);
   if (q.type === 'matching') return renderMatchingQuestionInput(q, answer, showReview, correct, shuffleMapping);
   if (q.type === 'ranking')  return renderRankingQuestionInput(q, answer, showReview, correct, shuffleMapping);
+  // PRD-44: у распределения нет эталона, поэтому showReview означает «только чтение».
+  if (typeof TBQType !== 'undefined' && TBQType.distributesBudget(q.type)) {
+    // Предзаполнение минимумом (FR-30) — зеркало веб-хоста. Без него учащийся с
+    // ненулевым минимумом распределит бюджет и застрянет с утверждением, которое
+    // уже нечем поднять.
+    var TBa = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    if (TBa && TBa.seedAllocation && (answer === undefined || answer === null)) {
+      var seed = TBa.seedAllocation(TBa.allocationSpec(q.data));
+      if (Object.keys(seed).length > 0) {
+        state.answers[q.id] = seed;
+        answer = seed;
+      }
+    }
+    return renderAllocationQuestionInput(q, answer, showReview);
+  }
   return '<div>Неизвестный тип вопроса</div>';
 }

@@ -237,6 +237,8 @@ var __qInputClicksBound = false;
 function bindQuestionInputClicksOnce() {
   if (__qInputClicksBound) return;
   __qInputClicksBound = true;
+  // Распределение цепляется той же точкой входа: у хоста один момент «интерактив готов».
+  bindAllocationInputOnce();
   if (typeof document === 'undefined') return;
   document.addEventListener('click', function (e) {
     var el = (e.target && e.target.closest) ? e.target.closest('[data-action]') : null;
@@ -286,6 +288,44 @@ function bindQuestionInputClicksOnce() {
       var again = document.querySelectorAll('.ou-stepper--choice .ou-stepper__step');
       if (again[next] && again[next].focus) again[next].focus();
     }, 0);
+  });
+}
+
+var __allocBound = false;
+/**
+ * PRD-44: живой ввод распределения. Привязывается ОДИН раз к документу — как и
+ * остальные делегации, потому что строки заменяются на каждой перерисовке.
+ *
+ * Ответ приходит уже готовым и УЖЕ отражённым в DOM (модуль правит узлы на месте во
+ * время жеста), поэтому здесь только запись в состояние и обновление кнопки: полная
+ * перерисовка заменила бы узлы, за которые держится палец, и порвала бы жест.
+ */
+function bindAllocationInputOnce() {
+  if (__allocBound) return;
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (!TB || !TB.attachAllocation || typeof document === 'undefined') return;
+  __allocBound = true;
+
+  TB.attachAllocation(document, {
+    getSpec: function () {
+      var q = __currentQuestionForInput();
+      if (!q || typeof TBQType === 'undefined' || !TBQType.distributesBudget(q.type)) return null;
+      return TB.allocationSpec(q.data);
+    },
+    getAnswer: function () {
+      var q = __currentQuestionForInput();
+      return q ? state.answers[q.id] : null;
+    },
+    isLocked: function () {
+      return isAnswerLocked(state.flatQuestions[state.currentIndex]);
+    },
+    onCommit: function (next) {
+      var q = __currentQuestionForInput();
+      if (!q) return;
+      reopenIfCommitted(state.flatQuestions[state.currentIndex]);
+      state.answers[q.id] = next;
+      refreshSubmitEnabled();
+    }
   });
 }
 
