@@ -750,6 +750,16 @@ function finishScorm(results, passedForLms, resultComputation, scaleComputation)
         .map(k => to1(+k) + '-' + to1(ans[k]))
         .join(',');
     }
+    // PRD-44 FR-54: ответ ВЕКТОРНЫЙ — «индекс[.]балл» через запятую. Тип `numeric` не
+    // подходит (ответ не одно число), `matching` семантически ложен (пар нет), поэтому
+    // взаимодействие пишется как `other`, а строка остаётся разбираемой отчётом LMS.
+    if (TBQType.distributesBudget(q.type)) {
+      return Object.keys(ans)
+        .map(Number)
+        .sort(function (a, b) { return a - b; })
+        .map(function (i) { return i + '[.]' + ans[i]; })
+        .join(',');
+    }
     return '';
   }
 

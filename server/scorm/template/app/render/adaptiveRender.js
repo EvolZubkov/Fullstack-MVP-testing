@@ -277,6 +277,17 @@ function validateAdaptiveAnswer(question, answer) {
     }
   }
 
+  // PRD-44 FR-31: распределение готово, только когда сумма ровно равна бюджету.
+  // Адаптивный поток идёт своей проверкой, поэтому без этой ветки он пускал бы
+  // дальше с недобором — там, где обычный поток не пускает.
+  if (typeof TBQType !== 'undefined' && TBQType.distributesBudget(question.type)) {
+    var TBv = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    if (TBv && TBv.isAllocationComplete && !TBv.isAllocationComplete(TBv.allocationSpec(question.data), answer)) {
+      showToast('Распределите все баллы', 'warn');
+      return false;
+    }
+  }
+
   return true;
 }
 
