@@ -105,7 +105,9 @@ export { fitFont, questionFont, optionFont } from "./fit-font";
 // question card fits without scrolling (both hosts call it after render).
 export { fitQuestionScene } from "./fit-question";
 // Ревизия «Стандартный»: единый DS-баннер проверки ответа (оба хоста, оба режима).
-export { feedbackBanner, feedbackDesc } from "./feedback-banner";
+// issue #34: сюда же выбор текста по режиму (общий/условный) — рантайм пакета зовёт
+// его вместо трёх собственных копий правила, веб-хост — того же самого.
+export { feedbackBanner, feedbackDesc, feedbackTextFor } from "./feedback-banner";
 // PRD-23: themed templates — the printer of per-theme colour overrides and the
 // pinned-palette resolver, shared with the web host so both paint the same.
 export { buildTemplateThemeCss, sceneThemeAttribute, baseParams, paramsOfTheme } from "./theme-css";

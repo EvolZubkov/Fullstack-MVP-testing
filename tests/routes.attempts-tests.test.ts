@@ -595,6 +595,51 @@ describe("Attempts routes — answer-adaptive", () => {
     expect(res.body.isFinished).toBe(false);
   });
 
+  // issue #34: у вопроса с условной обратной связью общий `feedback` пуст (редактор
+  // его обнуляет), поэтому маршрут обязан отдать ветку по вердикту — иначе ученик
+  // на вебе видит вердикт без пояснения, а в пакете тот же вопрос его показывает.
+  describe("условная обратная связь", () => {
+    const conditionalQuestion = {
+      ...dbQuestion,
+      feedback: null,
+      feedbackMode: "conditional",
+      feedbackCorrect: "Верно: это база",
+      feedbackIncorrect: "Неверно: перечитайте раздел",
+    };
+    const arrange = (question: unknown) => {
+      storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, answersJson: {}, variantJson: twoLevelVariant() });
+      storageMock.getTest.mockResolvedValue({ ...adaptiveTest, showCorrectAnswers: true });
+      storageMock.getTestSections.mockResolvedValue([]);
+      storageMock.getQuestionsByIds
+        .mockResolvedValueOnce([question])
+        .mockResolvedValue([{ ...dbQuestion, id: "q1b" }]);
+      storageMock.updateAttempt.mockResolvedValue({});
+    };
+
+    it("отдаёт ветку верного ответа", async () => {
+      arrange(conditionalQuestion);
+      const res = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive")
+        .send({ questionId: "q1", answer: 0 })); // correctIndex = 0
+      expect(res.body.isCorrect).toBe(true);
+      expect(res.body.feedback).toBe("Верно: это база");
+    });
+
+    it("отдаёт ветку неверного ответа", async () => {
+      arrange(conditionalQuestion);
+      const res = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive")
+        .send({ questionId: "q1", answer: 1 }));
+      expect(res.body.isCorrect).toBe(false);
+      expect(res.body.feedback).toBe("Неверно: перечитайте раздел");
+    });
+
+    it("в общем режиме по-прежнему отдаёт общий текст", async () => {
+      arrange({ ...dbQuestion, feedback: "Общее пояснение" });
+      const res = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive")
+        .send({ questionId: "q1", answer: 1 }));
+      expect(res.body.feedback).toBe("Общее пояснение");
+    });
+  });
+
   it("wrong answer on a started upper level moves DOWN to the pending lower one", async () => {
     const variant = twoLevelVariant();
     variant.currentTopicIndex = 0;

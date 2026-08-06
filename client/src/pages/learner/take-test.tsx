@@ -18,7 +18,7 @@ import {
 } from "@shared/scoring/engine";
 import { applyDeliveryOrder } from "@shared/draw/assemble-delivery";
 import { buildStartState } from "@shared/template/start-state";
-import { feedbackBanner, feedbackDesc } from "@shared/template/feedback-banner";
+import { feedbackBanner, feedbackDesc, feedbackTextFor } from "@shared/template/feedback-banner";
 import { buildQuestionProgress } from "@shared/template/question-progress-context";
 import { buildReviewContext } from "@shared/template/review-context";
 import { QUESTION_NAV_ACTIONS, type QuestionNavState } from "@shared/template/question-nav";
@@ -1493,7 +1493,10 @@ export default function TakeTestPage() {
 
     const scoreRatio = scoreAnswerLocally(currentQ.question, currentAnswer);
     const correctAnswer = currentQ.question.correctJson;
-    const feedback = currentQ.question.feedback;
+    // issue #34: текст пояснения выбирает ОБЩЕЕ правило по режиму вопроса, то же,
+    // что и рантайм пакета. Читать один `feedback` было нельзя: у вопроса с условной
+    // обратной связью редактор обнуляет это поле, и баннер выходил без пояснения.
+    const feedback = feedbackTextFor(currentQ.question, scoreRatio === 1);
 
     setStandardAnswerResult({
       isCorrect: scoreRatio === 1,

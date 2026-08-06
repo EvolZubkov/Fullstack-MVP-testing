@@ -48,6 +48,8 @@ import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 // PRD-32: ONE address rule for a feedback attachment, and ONE source-priority rule for
 // the topic's feedback text — the same helpers the SCORM bake runs.
 import { feedbackAssets, topicFeedbackTexts } from "@shared/template/result-context";
+// issue #34: общий/условный режим обратной связи вопроса — одно правило на оба хоста.
+import { feedbackTextFor } from "@shared/template/feedback-banner";
 import type {
   Test,
   Question,
@@ -935,7 +937,11 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
 
     if (test.showCorrectAnswers) {
       response.correctAnswer = question.correctJson;
-      response.feedback = question.feedback;
+      // issue #34: ветку общего/условного режима выбирает ОБЩЕЕ правило — то же, что
+      // у стандартного режима и у рантайма пакета. Отдавать один `feedback` было
+      // нельзя: у вопроса с условной обратной связью редактор обнуляет это поле, и
+      // ученик на вебе получал вердикт без пояснения.
+      response.feedback = feedbackTextFor(question, isCorrect);
     }
 
     res.json(response);

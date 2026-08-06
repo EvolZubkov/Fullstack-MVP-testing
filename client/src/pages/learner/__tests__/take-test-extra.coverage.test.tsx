@@ -419,6 +419,40 @@ describe("<TakeTestPage /> showCorrectAnswers per type", () => {
     });
   });
 
+  // issue #34: у вопроса с условной обратной связью общий `feedback` пуст — веб-хост
+  // обязан выбрать ветку по вердикту тем же правилом, что и пакет, иначе баннер
+  // выходит вообще без пояснения.
+  describe("условная обратная связь", () => {
+    const qConditional = () => ({
+      ...qSingle("q1", "В1"),
+      feedback: null,
+      feedbackMode: "conditional",
+      feedbackCorrect: "Верно: это база",
+      feedbackIncorrect: "Неверно: перечитайте раздел",
+    });
+
+    async function verdictAfter(answerTestId: string, question: unknown) {
+      await renderToQuestion({ startAttempt: feedbackAttempt(question, "q1") });
+      fireEvent.click(screen.getByTestId(answerTestId));
+      fireEvent.click(await screen.findByText("Принять"));
+      return screen.getByTestId("qs-feedback").textContent ?? "";
+    }
+
+    it("показывает ветку верного ответа", async () => {
+      expect(await verdictAfter("qs-ans-0", qConditional())).toContain("Верно: это база");
+    });
+
+    it("показывает ветку неверного ответа", async () => {
+      const verdict = await verdictAfter("qs-ans-1", qConditional());
+      expect(verdict).toContain("Неверно: перечитайте раздел");
+      expect(verdict).not.toContain("Верно: это база");
+    });
+
+    it("в общем режиме по-прежнему показывает общий текст", async () => {
+      expect(await verdictAfter("qs-ans-1", qSingle("q1", "В1"))).toContain("Пояснение");
+    });
+  });
+
   it("«Принять» is disabled until the question is answered", async () => {
     await renderToQuestion({ startAttempt: feedbackAttempt(qSingle("q1", "В1"), "q1") });
     // Unified gate: the submit button is disabled (not a toast) while empty.

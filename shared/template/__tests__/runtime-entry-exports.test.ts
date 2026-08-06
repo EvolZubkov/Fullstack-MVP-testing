@@ -31,6 +31,9 @@ const REQUIRED = [
   "fitQuestionScene",
   "feedbackBanner",
   "feedbackDesc",
+  // issue #34: выбор текста обратной связи по режиму — рантайм пакета зовёт его
+  // через TBTemplate вместо трёх собственных копий правила.
+  "feedbackTextFor",
 ] as const;
 
 describe("runtime-entry public surface", () => {

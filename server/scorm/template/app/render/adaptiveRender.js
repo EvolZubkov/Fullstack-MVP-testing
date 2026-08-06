@@ -39,9 +39,10 @@ function ensureAdaptiveShuffleMapping(q) {
 function buildAdaptiveFeedbackHtml(q) {
   var isCorrect = state.lastAdaptiveResult.isCorrect;
   var statusText = isCorrect ? 'Правильно!' : 'Неверно';
-  var feedbackText = (q.feedbackMode === 'conditional') ? (isCorrect ? q.feedbackCorrect : q.feedbackIncorrect) : q.feedback;
   var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
   if (!TB || !TB.feedbackBanner) return '';
+  // issue #34: общий/условный режим разбирает ОБЩЕЕ правило (см. feedback.js).
+  var feedbackText = TB.feedbackTextFor(q, isCorrect);
   return TB.feedbackBanner(isCorrect ? 'success' : 'error', statusText, feedbackText ? TB.feedbackDesc(feedbackText) : '');
 }
 

@@ -120,15 +120,10 @@ function buildQuestionFeedbackHtml(q) {
     var tone = isCorrect ? 'success' : (scoreRatio > 0 ? 'warning' : 'error');
     var statusText = isCorrect ? 'Правильно!' : (scoreRatio > 0 ? 'Частично правильно' : 'Неверно');
 
-    var feedbackText = null;
-    if (q.feedbackMode === 'conditional') {
-        feedbackText = isCorrect ? q.feedbackCorrect : q.feedbackIncorrect;
-    } else {
-        feedbackText = q.feedback;
-    }
-
     var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
     if (!TB || !TB.feedbackBanner) return '';
+    // issue #34: общий/условный режим разбирает ОБЩЕЕ правило (см. feedback.js).
+    var feedbackText = TB.feedbackTextFor(q, isCorrect);
     return TB.feedbackBanner(tone, statusText, feedbackText ? TB.feedbackDesc(feedbackText) : '');
 }
 
