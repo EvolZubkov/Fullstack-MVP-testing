@@ -25,6 +25,13 @@
  */
 import { normalizePool } from "./dnd/matching-model";
 import { renderInlineMarkdown } from "../text/markdown";
+import {
+  allocationRemaining,
+  allocationSpec,
+  normalizeAllocation,
+  optionCeiling,
+  type AllocationSpec,
+} from "../questions/allocation";
 
 /**
  * Question shape this module reads. `dataJson` is untyped (a jsonb column reaches the
@@ -77,10 +84,23 @@ const QUESTION_HINTS: Readonly<Record<string, string>> = {
   ranking: "Расставьте элементы в правильном порядке — перетащите или кнопками ↑/↓",
   matching: "Перетащите карточку на нужную строку",
   scale: "Выберите ответ на шкале",
+  // PRD-44 FR-32: подставляется бюджет вопроса, когда он известен (см. ниже).
+  allocation: "Распределите баллы между вариантами",
 };
 
-/** Guidance subtitle for a question type (empty when the type has none). */
-export function questionHint(type: string): string {
+/**
+ * Guidance subtitle for a question type (empty when the type has none).
+ *
+ * The allocation hint names the BUDGET, so the copy depends on the question and not on
+ * the type alone — «распределите 7 баллов» is the one number the learner needs before
+ * touching anything. The question argument is optional: callers that only know the type
+ * (and every other type, whose copy is constant) keep working unchanged.
+ */
+export function questionHint(type: string, question?: InteractionQuestion): string {
+  if (type === "allocation" && question) {
+    const spec = allocationSpec(question.dataJson);
+    if (spec.budget > 0) return `Распределите ${spec.budget} баллов между вариантами`;
+  }
   return QUESTION_HINTS[type] ?? "";
 }
 
@@ -93,6 +113,8 @@ export function answerTexts(question: InteractionQuestion): unknown[] {
   const f = fields(question);
   if (question.type === "ranking") return f.items;
   if (question.type === "matching") return [...f.left, ...f.right];
+  // Allocation statements ride the same `options` list (PRD-44 FR-02), so they reach the
+  // font-fitting pass through this branch — see the guard test.
   return f.options;
 }
 
@@ -505,4 +527,126 @@ export function renderMatching(
   }
   html += "</div>";
   return html;
+}
+
+// ─── Allocation (budget distribution) ────────────────────────────────────────
+
+/** Author text as a safe attribute value: every character HTML can act on is escaped. */
+function attrText(text: unknown): string {
+  return String(text ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Percent position of `value` on a track whose scale is the whole budget. */
+function allocPercent(value: number, budget: number): string {
+  const pct = budget > 0 ? Math.min(100, Math.max(0, (value / budget) * 100)) : 0;
+  return `${Math.round(pct * 10) / 10}%`;
+}
+
+/** One statement row: label, slider (fixed budget scale) and the number field. */
+function allocationRow(
+  spec: AllocationSpec,
+  answer: Record<string, number>,
+  index: number,
+  review: boolean,
+): string {
+  const label = answerHtml(spec.options[index]);
+  // The screen-reader name comes from the PLAIN text: the rendered label may carry
+  // markdown tags, and «<b>Разбор</b> задачи» read aloud is not a statement. Escaping is
+  // FULL, not just quotes — an author's «<img onerror=…>» must not reach the DOM as
+  // markup through an attribute either.
+  const name = attrText(spec.options[index]);
+  const value = answer[index] ?? spec.minPerOption;
+  const ceiling = optionCeiling(spec, answer, index);
+  // The visual scale is the BUDGET, always: tie it to the ceiling and a row would move
+  // on screen when a NEIGHBOUR changes, though the row itself did not (PRD-44 §6).
+  const left = allocPercent(value, spec.budget);
+  const capLeft = allocPercent(ceiling, spec.budget);
+  // «Above the floor», not «non-zero»: with a floor the fields are pre-filled, and
+  // marking those would claim the learner chose what the system did.
+  const weighted = value > spec.minPerOption;
+
+  const slider =
+    `<div class="ou-alloc__slider">` +
+    `<div class="ou-slider ou-slider--h"><div class="ou-slider__rail">` +
+    `<div class="ou-slider__fill" style="left:0;right:${allocPercent(spec.budget - value, spec.budget)}"></div>` +
+    (review
+      ? `<div class="ou-slider__thumb" aria-hidden="true" style="left:${left}"></div>`
+      : `<div class="ou-slider__thumb" role="slider" tabindex="0" data-alloc="${index}" ` +
+        `aria-valuemin="${spec.minPerOption}" aria-valuemax="${ceiling}" aria-valuenow="${value}" ` +
+        `aria-label="${name}" style="left:${left}"></div>`) +
+    (ceiling < spec.budget ? `<div class="ou-alloc__cap" style="left:${capLeft}"></div>` : "") +
+    `</div></div></div>`;
+
+  const control = review
+    ? `<span class="ou-alloc__value">${value}</span>`
+    : `<div class="ou-alloc__field"><div class="ou-number ou-number--m ou-number--split">` +
+      `<div class="ou-number__box">` +
+      `<button type="button" class="ou-number__btn" aria-label="Меньше" data-alloc-step="${index}:-1"` +
+      `${value <= spec.minPerOption ? " disabled" : ""}>&minus;</button>` +
+      `<input class="ou-number__input" type="text" inputmode="numeric" value="${value}" ` +
+      `data-alloc="${index}" aria-label="Баллы: ${name}">` +
+      `<button type="button" class="ou-number__btn" aria-label="Больше" data-alloc-step="${index}:1"` +
+      `${value >= ceiling ? " disabled" : ""}>+</button>` +
+      `</div></div></div>`;
+
+  return (
+    `<div class="ou-alloc__row${weighted ? " is-weighted" : ""}" data-index="${index}">` +
+    `<span class="ou-alloc__label" style="font-size:var(--tb-answer-fs,1.25rem);line-height:1.35;` +
+    `text-wrap:pretty">${label}</span>${slider}${control}</div>`
+  );
+}
+
+/**
+ * A budget-allocation question as the DS `BudgetAllocation` group (PRD-44 FR-27).
+ *
+ * The learner splits a fixed budget across the statements, and the sum must land on it
+ * exactly. Two properties of this markup are load-bearing:
+ *
+ *  - **Overshoot is impossible by construction.** Every control publishes the CURRENT
+ *    ceiling of its row (`min(maxPerOption, value + remaining)`), so there is no «too
+ *    much» state to detect and no error message for one — only «not distributed yet»,
+ *    which the counter states.
+ *  - **The slider's visual scale is the budget, its `aria-valuemax` is the ceiling.**
+ *    A track that stretched to the ceiling would make a row jump when a NEIGHBOUR
+ *    changed; a `valuemax` of the budget would promise a keyboard user room that is not
+ *    there. The unreachable tail is drawn instead, so the stop is visible rather than
+ *    felt as an invisible wall.
+ *
+ * Input is delegated like every other type, but by ATTRIBUTE rather than by action:
+ * `data-alloc="<index>"` on the slider thumb and the number input, `data-alloc-step`
+ * on the stepper buttons. The hosts wire those to the shared model.
+ *
+ * `review` renders the same rows read-only and WITHOUT any verdict class: the type has
+ * no correct distribution, so there is nothing to mark (FR-33).
+ */
+export function renderAllocation(
+  question: InteractionQuestion,
+  answer: unknown,
+  review?: boolean,
+): string {
+  const spec = allocationSpec(question.dataJson);
+  if (spec.options.length === 0) return `<div class="ou-alloc"></div>`;
+  const normalized = normalizeAllocation(spec, answer);
+  const remaining = allocationRemaining(spec, normalized);
+  const complete = remaining === 0 && spec.budget > 0;
+
+  const counter = review
+    ? `Распределено ${spec.budget - remaining} из ${spec.budget}`
+    : complete
+      ? "Вы использовали все баллы"
+      : `Осталось: <strong>${remaining}</strong> из ${spec.budget}`;
+
+  const rows = spec.options
+    .map((_, i) => allocationRow(spec, normalized, i, review === true))
+    .join("");
+
+  return (
+    `<div class="ou-alloc${review ? " ou-alloc--readonly" : ""}">` +
+    `<div class="ou-alloc__counter${complete ? " is-complete" : ""}" role="status" aria-live="polite">` +
+    `${counter}</div><div class="ou-alloc__rows">${rows}</div></div>`
+  );
 }
