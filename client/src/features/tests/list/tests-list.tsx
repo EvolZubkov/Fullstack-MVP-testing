@@ -30,6 +30,7 @@ import {
   AlertCircle,
   Archive,
   BarChart3,
+  BugPlay,
   ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
@@ -37,7 +38,6 @@ import {
   Download,
   Filter,
   FileSpreadsheet,
-  FlaskConical,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -919,7 +919,7 @@ export function TestsListPage(): React.JSX.Element {
             }}
             data-testid={`menu-debug-${test.id}`}
           >
-            <FlaskConical size={14} />
+            <BugPlay size={14} />
             Выполнить отладку
           </button>
         )}
@@ -1395,7 +1395,7 @@ function TestRow(props: {
             }}
             data-testid={`test-debug-${e.id}`}
           >
-            <FlaskConical width={14} height={14} />
+            <BugPlay width={14} height={14} />
           </button>
         )}
         {canAssign && (

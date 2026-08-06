@@ -8,7 +8,7 @@
  */
 import { Fragment } from "react";
 import { useLocation } from "wouter";
-import { Download, FilePlus, FlaskConical, Pencil } from "lucide-react";
+import { BugPlay, Download, FilePlus, Pencil } from "lucide-react";
 import {
   Button,
   Card,
@@ -111,7 +111,7 @@ export function MyTestsSection({ items, total }: { items: MyTestItem[]; total: n
                         size="s"
                         aria-label="Тестовый прогон"
                         title="Тестовый прогон"
-                        icon={<FlaskConical size={15} />}
+                        icon={<BugPlay size={15} />}
                         // PRD-18: the debug player lives in its own chromeless
                         // window, exactly as the test list opens it.
                         onClick={() =>

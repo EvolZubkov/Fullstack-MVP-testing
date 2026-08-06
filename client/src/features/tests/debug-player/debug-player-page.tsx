@@ -14,7 +14,7 @@ import {
   type TableColumn, type TreeNodeData,
 } from "@universityrt/ui-kit";
 import {
-  FlaskConical, Info, RefreshCw, RotateCcw, X, ChevronLeft, ChevronRight, Download, Search,
+  BugPlay, Info, RefreshCw, RotateCcw, X, ChevronLeft, ChevronRight, Download, Search,
   CircleDot, CheckSquare, Unplug, ListOrdered, ThermometerSun, List, Layers, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useDebugSession } from "./use-debug-session";
@@ -127,7 +127,7 @@ export default function DebugPlayerPage() {
     return (
       <div className="dbg__center">
         <EmptyState
-          art={<FlaskConical size={48} color="var(--ou-fg-muted)" />}
+          art={<BugPlay size={48} color="var(--ou-fg-muted)" />}
           title="Нет доступа к отладке теста"
           description="Прогон отладки доступен только при праве на редактирование теста (как и экспорт SCORM)."
         />
@@ -149,7 +149,7 @@ export default function DebugPlayerPage() {
     <div className={collapsed ? "dbg is-collapsed" : "dbg"}>
       <header className="dbg__bar">
         <span className="dbg__title">
-          <FlaskConical size={18} />
+          <BugPlay size={18} />
           <Text weight="bold">{state.title || "Отладка теста"}</Text>
           <span className="dbg__sub">черновик</span>
           <IconButton variant="ghost" size="s" aria-label="О прогоне отладки" title={DISCLAIMER + (state.template ? ` Шаблон оформления: ${state.template}.` : "")} icon={<Info size={14} />} />
