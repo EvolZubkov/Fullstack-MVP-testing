@@ -100,6 +100,8 @@ export {
   setAllocationValue,
 } from "../questions/allocation";
 export { renderAllocation } from "./question-interaction";
+// Живой ввод группы: жест правит DOM на месте, ответ уходит хосту по завершении.
+export { attachAllocation, syncAllocationDom, allocIndexOf } from "./allocation-dom";
 export {
   isSingleIndexChoice,
   hasOptionList,

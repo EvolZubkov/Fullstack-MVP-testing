@@ -31,6 +31,8 @@ const REQUIRED = [
   "isAllocationComplete",
   "optionCeiling",
   "setAllocationValue",
+  "attachAllocation",
+  "syncAllocationDom",
   "questionHint",
   "answerTexts",
   "fitFont",
