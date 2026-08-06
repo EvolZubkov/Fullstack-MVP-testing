@@ -25,6 +25,12 @@ export class AttemptsRepository {
       testId: attempt.testId,
       testVersion: attempt.testVersion || 1,
       snapshotId: attempt.snapshotId ?? null,
+      // PRD-31 (FR-12): the assignment the attempt was taken under. Omitting it here
+      // left every row NULL while `getCurrentAssignmentId` returned a real id, so the
+      // whole assignment scope silently collapsed: `inside` was always empty, which
+      // means barrier B never fired, barrier A fired between EVERY attempt, and
+      // `maxAttempts` — counted inside the assignment — never reached its limit.
+      assignmentId: attempt.assignmentId ?? null,
       variantJson: attempt.variantJson,
       answersJson: attempt.answersJson || null,
       resultJson: attempt.resultJson || null,
@@ -68,13 +74,22 @@ export class AttemptsRepository {
     );
   }
 
-  async annulInProgressAttempts(testId: string): Promise<number> {
+  async annulInProgressAttempts(testId: string, userId?: string): Promise<number> {
     // In-progress = finishedAt IS NULL. These were never completed, so they do
     // not count toward the retake limit (PRD-6 counts completed only) — deleting
     // them annuls without consuming an attempt (PRD-15 FR-14).
+    //
+    // `userId` narrows the annulment to ONE learner: the start route drops the
+    // learner's own abandoned run before opening the next one, so a test cannot
+    // accumulate several unfinished attempts of the same person (the resume lookup
+    // picks one of them arbitrarily). Omitted = the whole test, as republish does.
     const result = await db
       .delete(attempts)
-      .where(and(eq(attempts.testId, testId), isNull(attempts.finishedAt)));
+      .where(and(
+        eq(attempts.testId, testId),
+        isNull(attempts.finishedAt),
+        ...(userId ? [eq(attempts.userId, userId)] : []),
+      ));
     return result.rowCount ?? 0;
   }
 

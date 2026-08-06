@@ -7,6 +7,7 @@ import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
 import { TemplateQuestionScreen } from "./template-question-screen";
 import { fmtIsoDateHuman, fmtIsoInstantHuman } from "./cooldown-format";
+import { downloadAttemptReport } from "@/features/learner/attempt-report";
 import { deliversShuffledOrder, hasAnswer, rankingDeliveryOrder } from "./answer-gate";
 import { isSingleIndexChoice, isMeasurementOnly } from "@shared/questions/question-type";
 // PRD-10 (FR-12): мгновенный вердикт по ответу считает тот же движок, что и итоги
@@ -410,6 +411,9 @@ export default function TakeTestPage() {
   // the guard in ProtectedRoute would just bounce a "/learner" navigation back to
   // /login. Every "back to the list" control in this page is scoped by this flag.
   const magicScoped = !!user?.magicScope;
+  // Rasterizing the report takes a few seconds; a second click must not start a
+  // second export (same guard as the results screen).
+  const reportBusy = useRef(false);
 
   // Common state
   const [isStarting, setIsStarting] = useState(true);
@@ -1191,6 +1195,39 @@ export default function TakeTestPage() {
       });
     } finally {
       setIsStarting(false);
+    }
+  };
+
+  /**
+   * PRD-19 FR-20: «Скачать отчёт» по ПРОШЛОЙ попытке прямо со стартового экрана —
+   * тот же документ и тот же конвейер, что на экране итогов, и то же действие, что
+   * в пакете (`startPage.js` отдаёт `canDownloadReport` по лучшей сохранённой
+   * попытке). Данные отчёта тянутся по клику, а не на каждую загрузку старта:
+   * собирать их заранее — это лишний рендер макета отчёта на каждый вход в тест.
+   */
+  const handleStartReport = async () => {
+    const attemptId = testMetadata?.lastCompletedAttemptId;
+    if (!attemptId || reportBusy.current) return;
+    reportBusy.current = true;
+    toast({ variant: "info", title: "Готовим отчёт", description: "Файл скачается автоматически." });
+    try {
+      const res = await fetch(`/api/attempts/${attemptId}/result`, { credentials: "include" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data.report || !data.reportRender) {
+        throw new Error(
+          data.report ? "Шаблон не предоставил макет отчёта." : "Нет данных для отчёта по этой попытке.",
+        );
+      }
+      await downloadAttemptReport(data.report, data.reportRender, data.measures ?? undefined);
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Не удалось сформировать отчёт",
+        description: (e as Error).message,
+      });
+    } finally {
+      reportBusy.current = false;
     }
   };
 
@@ -2583,9 +2620,7 @@ export default function TakeTestPage() {
       testMetadata.maxAttempts !== null && testMetadata.completedAttempts >= testMetadata.maxAttempts;
     // PRD-19 Block F (FR-19/20): cooldown facts render the cooldown card + disabled
     // start button ON this start page (no separate block-wall). Prior summary shows
-    // for both eligible «повтор: можно» and cooldown. The web has no client-side PDF
-    // report, so «Скачать отчёт» is omitted (canDownloadReport stays off) — only
-    // «Мой результат» links the prior attempt.
+    // for both eligible «повтор: можно» and cooldown.
     const gate = testMetadata.retakeGate;
     const startContext = buildStartState({
       info: {
@@ -2627,6 +2662,10 @@ export default function TakeTestPage() {
           }
         : null,
       priorResult: testMetadata.priorResult,
+      // PRD-19 FR-20: «Скачать отчёт» по прошлой попытке — тот же документ, что на
+      // экране итогов. Признак тот же, что у пакета: отчёт предлагается там, где есть
+      // сохранённый результат прошлой попытки (`priorResult` строится ровно из него).
+      canDownloadReport: !!testMetadata.priorResult,
       // A magic-link session has no test list to fall back to (it would just
       // bounce to /login), so the ghost «К списку тестов» button is not offered
       // at all in that case.
@@ -2654,6 +2693,7 @@ export default function TakeTestPage() {
             else if (action === "resume") handleResumeTest();
             else if (action === "view-results" && testMetadata.lastCompletedAttemptId)
               navigate(`/learner/result/${testMetadata.lastCompletedAttemptId}`);
+            else if (action === "download-report") void handleStartReport();
             else if (action === "back") {
               // The button is hidden via `showBack` above in a restricted session,
               // but stay robust regardless of how the action was reached: a

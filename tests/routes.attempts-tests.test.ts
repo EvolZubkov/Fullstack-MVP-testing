@@ -15,6 +15,7 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
     patchTestStatus: vi.fn(),
     getAttempt: vi.fn(), createAttempt: vi.fn(), updateAttempt: vi.fn(),
     getAttemptsByUser: vi.fn(), getAttemptsByUserAndTest: vi.fn(),
+    annulInProgressAttempts: vi.fn().mockResolvedValue(0),
     // PRD-31: the attempt counter and the retake gate are scoped to the CURRENT
     // assignment, so every attempt route resolves it. `null` = the legacy bucket
     // these fixtures live in (see `dbAttempt.assignmentId`).
@@ -257,6 +258,80 @@ describe("Attempts routes — start attempt", () => {
     expect(res.body.questions).toHaveLength(1);
     // correctJson hidden when showCorrectAnswers is false
     expect(res.body.questions[0].correctJson).toBeUndefined();
+  });
+
+  // An abandoned run costs nothing: both barriers and the attempt counter read
+  // FINISHED attempts only. Handing out a FRESH draw on every restart therefore let
+  // a learner leaf through the whole pool — start, look, walk away, start again —
+  // without ever spending an attempt or arming a barrier. The delivered set is
+  // carried over instead, so a restart shows the SAME questions.
+  describe("POST /tests/:testId/attempts/start — an abandoned run is not a free re-draw", () => {
+    const openAttempt = {
+      ...dbAttempt,
+      id: "open-1",
+      snapshotId: null,
+      finishedAt: null,
+      variantJson: {
+        sections: [{ topicId: "t1", topicName: "JS", questionIds: ["q7", "q9"], timeLimitMinutes: null }],
+        deliveryOrder: ["q9", "q7"],
+      },
+    };
+
+    beforeEach(() => {
+      storageMock.getTest.mockResolvedValue(dbTest);
+      storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 1 }]);
+      storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+      // The live pool holds a DIFFERENT question than the open run was given, so a
+      // fresh draw is unmistakable in the assertions below.
+      storageMock.getQuestionsByTopic.mockResolvedValue([dbQuestion]);
+      storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+      storageMock.createAttempt.mockResolvedValue(dbAttempt);
+      storageMock.getContentPages.mockResolvedValue([]);
+      storageMock.annulInProgressAttempts.mockResolvedValue(1);
+    });
+
+    it("carries the open run's questions instead of drawing anew", async () => {
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([openAttempt]);
+      const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+      expect(res.status).toBe(201);
+      const variant = storageMock.createAttempt.mock.calls[0][0].variantJson;
+      expect(variant.sections[0].questionIds).toEqual(["q7", "q9"]);
+      // PRD-30: the delivery stream travels with the set it orders.
+      expect(variant.deliveryOrder).toEqual(["q9", "q7"]);
+    });
+
+    it("drops the learner's own abandoned row, not the whole test's", async () => {
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([openAttempt]);
+      await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+      expect(storageMock.annulInProgressAttempts).toHaveBeenCalledWith("test1", "learner1");
+    });
+
+    it("carries no progress over: the restart begins from a clean variant", async () => {
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([
+        { ...openAttempt, variantJson: { ...openAttempt.variantJson, currentIndex: 5, questionStatus: { q7: "answered" } } },
+      ]);
+      await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+      const variant = storageMock.createAttempt.mock.calls[0][0].variantJson;
+      expect(variant.currentIndex).toBeUndefined();
+      expect(variant.questionStatus).toBeUndefined();
+    });
+
+    // A republished test has a NEW snapshot over a new pool: carrying ids across it
+    // could deliver questions the test no longer contains.
+    it("draws anew when the open run came from a different snapshot", async () => {
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([{ ...openAttempt, snapshotId: "snap-old" }]);
+      await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+      const variant = storageMock.createAttempt.mock.calls[0][0].variantJson;
+      expect(variant.sections[0].questionIds).toEqual(["q1"]);
+    });
+
+    it("draws anew when there is no abandoned run, and annuls nothing", async () => {
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+      await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+      const variant = storageMock.createAttempt.mock.calls[0][0].variantJson;
+      expect(variant.sections[0].questionIds).toEqual(["q1"]);
+      expect(storageMock.annulInProgressAttempts).not.toHaveBeenCalled();
+    });
   });
 
   it("POST /tests/:testId/attempts/start — carries section timeLimitMinutes into the variant (PRD-4 v1.1 §3.2)", async () => {
@@ -1268,6 +1343,38 @@ describe("Attempts routes — result and history", () => {
     expect(res.status).toBe(200);
     expect(res.body.canRetake).toBe(false);
     expect(res.body.attemptsInfo).toEqual({ completed: 1, max: 1 });
+  });
+
+  // PRD-31 FR-10: a closed barrier withdraws «Пройти ещё раз» on the results screen
+  // too — the package already does this (`viewResults.js` consults
+  // `attemptIntervalState()`), while the web offered a retry the start route would
+  // then refuse with 403.
+  it("GET /attempts/:id/result — canRetake is false while the hour interval is closed", async () => {
+    const justFinished = { ...finishedAttempt, finishedAt: new Date(Date.now() - 60 * 60 * 1000) };
+    storageMock.getAttempt.mockResolvedValue(justFinished);
+    storageMock.getTest.mockResolvedValue({
+      ...dbTest,
+      retakePolicyJson: { enabled: false, attemptInterval: { enabled: true, hours: 24 } },
+    });
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([justFinished]);
+    const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+    expect(res.status).toBe(200);
+    // Attempts are NOT exhausted — the test has no limit at all (`attemptsInfo` is
+    // reported only for a limited test), so only the barrier can be closing this.
+    expect(res.body.attemptsInfo).toBeNull();
+    expect(res.body.canRetake).toBe(false);
+  });
+
+  it("GET /attempts/:id/result — canRetake returns once the interval has elapsed", async () => {
+    const oldAttempt = { ...finishedAttempt, finishedAt: new Date(Date.now() - 48 * 60 * 60 * 1000) };
+    storageMock.getAttempt.mockResolvedValue(oldAttempt);
+    storageMock.getTest.mockResolvedValue({
+      ...dbTest,
+      retakePolicyJson: { enabled: false, attemptInterval: { enabled: true, hours: 24 } },
+    });
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([oldAttempt]);
+    const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+    expect(res.body.canRetake).toBe(true);
   });
 
   it("GET /attempts/:id/result — returns 404 when not found", async () => {

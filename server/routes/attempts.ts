@@ -365,6 +365,30 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
   }
 });
 
+/**
+ * The delivered set of an abandoned run, stripped of its progress. `sections`
+ * (composition, PRD-17 variant pins, PRD-4 per-topic budgets) and `deliveryOrder`
+ * (the PRD-30 stream) are exactly what was handed out; `currentIndex`,
+ * `questionStatus` and `sectionPositions` are progress the runtime wrote on top,
+ * and a restart drops them. Returns null when the stored variant holds no
+ * questions — there is then nothing to carry and the caller draws anew.
+ */
+function carryOverVariant(v: TestVariant | null): TestVariant | null {
+  const sections = v?.sections;
+  if (!Array.isArray(sections) || sections.length === 0) return null;
+  if (!sections.some((s) => (s.questionIds?.length ?? 0) > 0)) return null;
+  return {
+    sections: sections.map((s) => ({
+      topicId: s.topicId,
+      topicName: s.topicName,
+      questionIds: [...s.questionIds],
+      ...(s.formId ? { formId: s.formId } : {}),
+      timeLimitMinutes: s.timeLimitMinutes ?? null,
+    })),
+    ...(v?.deliveryOrder ? { deliveryOrder: [...v.deliveryOrder] } : {}),
+  };
+}
+
 // POST /api/tests/:testId/attempts/start - Начать обычный тест
 router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"), async (req, res) => {
   try {
@@ -382,10 +406,12 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
     // it even when no barrier is configured.
     const retakePolicy = test.retakePolicyJson as RetakePolicy | null;
     const currentAssignmentId = await storage.getCurrentAssignmentId(req.session.userId!, test.id);
+    // Loaded ONCE: the barriers, the PRD-17 rotation history and the abandoned-run
+    // lookup below all read the learner's attempts of this test.
+    const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
     const barriersOn =
       retakePolicy?.enabled === true || retakePolicy?.attemptInterval?.enabled === true;
     if (barriersOn || test.maxAttempts !== null) {
-      const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
       const attemptFacts = userAttempts.map((a) => ({
         assignmentId: a.assignmentId,
         finishedAt: a.finishedAt,
@@ -422,14 +448,8 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
     const topicMap = new Map(topics.map((t) => [t.id, t.name]));
 
     // PRD-17 (FR-07): variants rotation needs the variant ids the learner already
-    // saw per topic, in prior COMPLETED attempts. Load once, only when a section
-    // uses variants (cheap second query, gated on variant tests).
-    const usesVariants = sections.some((s) => s.formSetJson);
-    const completedAttempts = usesVariants
-      ? (await storage.getAttemptsByUserAndTest(req.session.userId!, test.id)).filter(
-          (a) => a.finishedAt !== null,
-        )
-      : [];
+    // saw per topic, in prior COMPLETED attempts.
+    const completedAttempts = userAttempts.filter((a) => a.finishedAt !== null);
     const previousFormIdsForTopic = (topicId: string): string[] => {
       const out: string[] = [];
       for (const a of completedAttempts) {
@@ -441,8 +461,30 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
       return out;
     };
 
-    const variant: TestVariant = { sections: [] };
-    const allQuestionIds: string[] = [];
+    // The learner's own abandoned run, newest first. A restart must NOT hand out a
+    // fresh draw: both barriers and the attempt counter read FINISHED attempts only,
+    // so starting and abandoning costs nothing — and a new draw each time turns that
+    // into a way to leaf through the whole question pool. The delivered set is carried
+    // over instead, and only the progress is dropped.
+    const openAttempt = userAttempts
+      .filter((a) => a.finishedAt === null)
+      .sort((a, b) => new Date(b.startedAt as Date).getTime() - new Date(a.startedAt as Date).getTime())[0];
+    // Only from the SAME content: a republished test has a new snapshot and a new
+    // pool, where carried ids could deliver questions the test no longer contains.
+    const carried =
+      openAttempt && (openAttempt.snapshotId ?? null) === (snapshotId ?? null)
+        ? carryOverVariant(openAttempt.variantJson as TestVariant | null)
+        : null;
+
+    let variant: TestVariant;
+    let allQuestionIds: string[];
+
+    if (carried) {
+      variant = carried;
+      allQuestionIds = carried.sections.flatMap((s) => s.questionIds);
+    } else {
+    variant = { sections: [] };
+    allQuestionIds = [];
     // PRD-30 раздел 14: selection happens per topic (below), the delivery ORDER
     // of the whole test is decided once, by `assembleDelivery`, after the loop.
     const drawnSections: DeliverySection<Question>[] = [];
@@ -515,8 +557,15 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
     // not of the draw: a shuffle can land on the section order by chance, and a
     // field that appeared only then would make the attempt shape random.
     if (assembled.mixed) variant.deliveryOrder = assembled.flat.map((q) => q.id);
+    }
 
     const allQuestions = await src.getQuestionsByIds(allQuestionIds);
+
+    // The carried-over run is now superseded, and an abandoned row left behind would
+    // both pile up orphans and give the resume lookup (`find(finishedAt === null)`) an
+    // arbitrary one to return. Unfinished attempts never counted toward the limit, so
+    // dropping them consumes nothing (PRD-15 FR-14).
+    if (openAttempt) await storage.annulInProgressAttempts(test.id, req.session.userId!);
 
     const attempt = await storage.createAttempt({
       userId: req.session.userId!,
@@ -567,10 +616,12 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
     // PRD-31 fixes, so they must stay word-for-word the same.
     const retakePolicy = test.retakePolicyJson as RetakePolicy | null;
     const currentAssignmentId = await storage.getCurrentAssignmentId(req.session.userId!, test.id);
+    // Loaded ONCE: the barriers and the abandoned-run cleanup below both read the
+    // learner's attempts of this test.
+    const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
     const barriersOn =
       retakePolicy?.enabled === true || retakePolicy?.attemptInterval?.enabled === true;
     if (barriersOn || test.maxAttempts !== null) {
-      const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
       const attemptFacts = userAttempts.map((a) => ({
         assignmentId: a.assignmentId,
         finishedAt: a.finishedAt,
@@ -706,6 +757,16 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
       currentTopicIndex: 0,
       currentQuestionId: firstQuestionId,
     };
+
+    // An abandoned adaptive run is superseded by this one; leaving it behind would
+    // pile up orphan rows and give the resume lookup an arbitrary one to return.
+    // Its questions are NOT carried over the way the standard start carries them:
+    // the adaptive variant is a level state machine drawn as the run progresses, so
+    // there is no fixed delivered set to hand back. Unfinished attempts never counted
+    // toward the limit, so dropping them consumes nothing (PRD-15 FR-14).
+    if (userAttempts.some((a) => a.finishedAt === null)) {
+      await storage.annulInProgressAttempts(test.id, req.session.userId!);
+    }
 
     const attempt = await storage.createAttempt({
       userId: req.session.userId!,
@@ -1414,12 +1475,27 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
     // assignment — the same scope the start route enforces, so the results screen
     // cannot offer a retry the server would refuse (or hide one it would allow).
     const currentAssignmentId = await storage.getCurrentAssignmentId(req.session.userId!, attempt.testId);
-    const completedAttempts = countAttemptsInAssignment(
-      userAttempts.map((a) => ({ assignmentId: a.assignmentId, finishedAt: a.finishedAt })),
-      currentAssignmentId,
-    );
+    const attemptFacts = userAttempts.map((a) => ({
+      assignmentId: a.assignmentId,
+      finishedAt: a.finishedAt,
+      // PRD-40: outcome of THIS attempt, for barrier A's outcome-split cooldown.
+      passed: (a.resultJson as AttemptResult | null)?.overallPassed ?? null,
+    }));
+    const completedAttempts = countAttemptsInAssignment(attemptFacts, currentAssignmentId);
     const maxAttempts = test?.maxAttempts || null;
-    const canRetake = maxAttempts === null || completedAttempts < maxAttempts;
+    // PRD-31 (FR-10): a CLOSED barrier withdraws «Пройти ещё раз» here as well — the
+    // start route would refuse the click anyway, and an offered button that bounces
+    // reads as a broken screen. This is the same rule the package applies on its own
+    // results screen (`viewResults.js` / `adaptiveRender.js` consult
+    // `attemptIntervalState()`), and without it the web offered a retry the barriers
+    // had already closed. Deliberately NOT folded into an "exhausted" state: a wait of
+    // a few hours is not a terminal one.
+    const retakeGate = decideRetake(test?.retakePolicyJson as RetakePolicy | null, {
+      currentAssignmentId,
+      attempts: attemptFacts,
+      now: new Date(),
+    });
+    const canRetake = (maxAttempts === null || completedAttempts < maxAttempts) && retakeGate.allowed;
     // NB: the attempt counter is deliberately NOT put in the header subtitle any
     // more — the scene header carries the test's identity, not run parameters.
 

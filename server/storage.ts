@@ -253,8 +253,11 @@ export interface IStorage {
   getAttemptsByUser(userId: string): Promise<Attempt[]>;
   getAttemptsByUserAndTest(userId: string, testId: string): Promise<Attempt[]>;
   deleteAttemptsByUserAndTest(userId: string, testId: string): Promise<void>;
-  /** PRD-15 FR-14: annul (delete) all in-progress attempts of a test; returns the count. */
-  annulInProgressAttempts(testId: string): Promise<number>;
+  /**
+   * PRD-15 FR-14: annul (delete) in-progress attempts of a test; returns the count.
+   * `userId` narrows it to one learner (the start route drops its own abandoned run).
+   */
+  annulInProgressAttempts(testId: string, userId?: string): Promise<number>;
   getAllAttempts(): Promise<Attempt[]>;
 
   // Adaptive testing
@@ -921,8 +924,8 @@ export class DatabaseStorage implements IStorage {
     return this.attemptsRepo.deleteAttemptsByUserAndTest(userId, testId);
   }
 
-  annulInProgressAttempts(testId: string): Promise<number> {
-    return this.attemptsRepo.annulInProgressAttempts(testId);
+  annulInProgressAttempts(testId: string, userId?: string): Promise<number> {
+    return this.attemptsRepo.annulInProgressAttempts(testId, userId);
   }
 
   getAllAttempts(): Promise<Attempt[]> {

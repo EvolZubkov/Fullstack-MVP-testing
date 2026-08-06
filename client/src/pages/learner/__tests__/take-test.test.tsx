@@ -15,9 +15,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { buildQuestionNav } from "@shared/template/question-nav";
 
 // Shared spies created before the hoisted vi.mock factories run.
-const { navigateSpy, toastSpy, authState } = vi.hoisted(() => ({
+const { navigateSpy, toastSpy, authState, downloadReportSpy } = vi.hoisted(() => ({
   navigateSpy: vi.fn(),
   toastSpy: vi.fn(),
+  // PRD-19 FR-20: the start screen's «Скачать отчёт» hands the prior attempt's
+  // payload to the SHARED PDF generator; the generator itself is out of scope here.
+  downloadReportSpy: vi.fn(async () => "report.pdf"),
   // Plain (non-restricted) session by default; individual tests opt into a
   // magic-link session by setting `magicScope`.
   authState: { user: { id: "u1", magicScope: null } as Record<string, unknown> | null },
@@ -34,6 +37,10 @@ vi.mock("@/hooks/use-toast", () => ({
 
 vi.mock("@/lib/auth", () => ({ useAuth: () => authState }));
 
+vi.mock("@/features/learner/attempt-report", () => ({
+  downloadAttemptReport: downloadReportSpy,
+}));
+
 // The template hosts render into a Shadow DOM via the shared renderer; replace
 // them with doubles that expose the render context (JSON) and the relevant
 // action/answer callbacks as buttons, so flows can be driven without the real
@@ -42,7 +49,7 @@ vi.mock("@/components/template-screen", () => ({
   TemplateScreen: (props: any) => (
     <div data-testid="template-screen">
       <pre data-testid="ts-context">{JSON.stringify(props.context)}</pre>
-      {["start-test", "restart", "resume", "view-results", "back", "finish-review", "section-continue"].map(
+      {["start-test", "restart", "resume", "view-results", "download-report", "back", "finish-review", "section-continue"].map(
         (a) => (
           <button key={a} data-testid={`ts-${a}`} onClick={() => props.onAction && props.onAction(a)}>
             {a}
@@ -189,6 +196,8 @@ interface FetchCfg {
   resume?: ReturnType<typeof jsonRes>;
   finish?: ReturnType<typeof jsonRes>;
   sectionResult?: ReturnType<typeof jsonRes>;
+  /** `/api/attempts/:id/result` — the prior attempt's payload behind «Скачать отчёт». */
+  result?: ReturnType<typeof jsonRes>;
 }
 
 /** Install a per-URL `fetch` stub for one test. */
@@ -215,6 +224,8 @@ function installFetch(cfg: FetchCfg) {
     if (u.includes("/save-progress")) return jsonRes({});
     if (u.includes("/section-result")) return cfg.sectionResult ?? jsonRes({});
     if (u.includes("/finish")) return cfg.finish ?? jsonRes({ id: "attempt-1" });
+    if (/\/api\/attempts\/[^/]+\/result$/.test(u))
+      return cfg.result ?? jsonRes({ report: { title: "T" }, reportRender: { layout: "<div></div>" } });
     return jsonRes({});
   });
   vi.stubGlobal("fetch", fn);
@@ -224,6 +235,7 @@ function installFetch(cfg: FetchCfg) {
 beforeEach(() => {
   navigateSpy.mockClear();
   toastSpy.mockClear();
+  downloadReportSpy.mockClear();
   localStorage.clear();
   authState.user = { id: "u1", magicScope: null };
 });
@@ -236,6 +248,23 @@ async function renderToStart(cfg: FetchCfg = {}) {
   installFetch(cfg);
   render(<TakeTestPage />);
   await screen.findByTestId("template-screen");
+}
+
+/** Render to a start screen that HAS a prior completed attempt («Скачать отчёт»). */
+async function renderReportStart(cfg: FetchCfg = {}) {
+  const fn = installFetch({
+    tests: [
+      standardTest({
+        completedAttempts: 1,
+        lastCompletedAttemptId: "prev-att",
+        priorResult: { percent: 80, passed: true, attemptNumber: 1, maxAttempts: 3 },
+      }),
+    ],
+    ...cfg,
+  });
+  render(<TakeTestPage />);
+  await screen.findByTestId("template-screen");
+  return fn;
 }
 
 /** Render, start the standard attempt, and wait for the first question. */
@@ -466,6 +495,48 @@ describe("<TakeTestPage /> start gates", () => {
     });
     expect(ctx().state.cooldown.daysUntil).toBe(99);
     expect(ctx().state.canStart).toBe(false);
+  });
+
+  // PRD-19 FR-20: the package's start screen offers «Скачать отчёт» by the prior
+  // attempt (`startPage.js` → `canDownloadReport: !!best`); the web omitted it, so a
+  // blocked learner could see the verdict but not take the document with them.
+  it("offers «Скачать отчёт» once a prior attempt has a saved result", async () => {
+    await renderToStart({
+      tests: [
+        standardTest({
+          completedAttempts: 1,
+          lastCompletedAttemptId: "prev-att",
+          priorResult: { percent: 80, passed: true, attemptNumber: 1, maxAttempts: 3 },
+        }),
+      ],
+    });
+    expect(ctx().state.canDownloadReport).toBe(true);
+  });
+
+  it("does not offer «Скачать отчёт» on a first entry (no prior attempt)", async () => {
+    await renderToStart();
+    expect(ctx().state.canDownloadReport).toBeUndefined();
+  });
+
+  it("builds the report from the PRIOR attempt's payload, not the running one", async () => {
+    const fn = await renderReportStart();
+    fireEvent.click(screen.getByTestId("ts-download-report"));
+    await waitFor(() => expect(downloadReportSpy).toHaveBeenCalled());
+    // The payload is fetched on the CLICK — the start screen must not pay for a
+    // report render on every entry into the test.
+    expect(fn).toHaveBeenCalledWith("/api/attempts/prev-att/result", expect.anything());
+    const [report, render] = downloadReportSpy.mock.calls[0] as unknown as unknown[];
+    expect(report).toEqual({ title: "T" });
+    expect(render).toEqual({ layout: "<div></div>" });
+  });
+
+  it("reports an unavailable report instead of failing silently", async () => {
+    await renderReportStart({ result: jsonRes({ report: null, reportRender: null }) });
+    fireEvent.click(screen.getByTestId("ts-download-report"));
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })),
+    );
+    expect(downloadReportSpy).not.toHaveBeenCalled();
   });
 
   it("navigates to the prior result from the start «view-results» action", async () => {
