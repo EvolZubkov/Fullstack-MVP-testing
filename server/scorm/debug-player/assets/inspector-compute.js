@@ -925,7 +925,6 @@
     // option, so the reference targets the CURRENT question from the live state.
     var curQ = currentScreenQuestion(iframeWin, st);
     if (!curQ) return;
-    var data = curQ.data || {};
     var c = curQ.correct || {};
 
     // single / multiple — ✓ on the correct option(s). Options are `.ou-radio-card`
@@ -958,47 +957,48 @@
       }
     }
 
-    // ranking — the correct 1-based position of each item. Rows carry the DISPLAY
-    // position (`data-drag`), not the item index, so rows are matched to items by
-    // their rendered title text.
+    // ranking — the correct 1-based position of each item. A row carries BOTH its
+    // display position (`data-drag`, which the drag reorders) and the index of the
+    // item in it (`data-item`); the answer key is in item indices, so the row is
+    // keyed by `data-item`. Not by text — see the matching note below: the rendered
+    // text has been through markdown + typography and no longer equals the raw
+    // TEST_DATA string, so text matching left ordinary Russian wording unmarked.
     if (curQ.type === "ranking") {
-      var items = Array.isArray(data.items) ? data.items : [];
       var co = Array.isArray(c.correctOrder) ? c.correctOrder : [];
-      var textPos = {};
-      co.forEach(function (itemIdx, pos) { textPos[String(items[itemIdx])] = pos + 1; });
-      var rows = doc.querySelectorAll(".ou-rank__item");
+      var itemPos = {};
+      co.forEach(function (itemIdx, pos) { itemPos[String(itemIdx)] = pos + 1; });
+      var rows = doc.querySelectorAll(".ou-rank__item[data-item]");
       for (var r = 0; r < rows.length; r++) {
-        var t = rows[r].querySelector(".ou-rank__title");
-        var p = t ? textPos[t.textContent] : undefined;
+        var p = itemPos[rows[r].getAttribute("data-item")];
         if (p) { rows[r].style.position = "relative"; rows[r].appendChild(tbRefBadge(doc, String(p), "num")); }
       }
     }
 
     // matching — paired letters A/B/C on the fixed prompt (right item) and the
-    // draggable chip (left item), matched by text since the DOM keys chips by the
-    // left INDEX only. One letter per correct pair.
+    // draggable chip (left item). Both sides are found by their INDEX, which the
+    // render puts straight into the markup: `data-drop="r<rightIdx>"` on the fixed
+    // prompt, `data-drag="<leftIdx>"` on the chip. One letter per correct pair.
+    //
+    // NEVER by text: the render pipes every answer through renderInlineMarkdown
+    // (markdown + the Russian typography pass), so what the DOM carries is not the
+    // raw TEST_DATA string — «в сеть» comes back with U+00A0, quotes as guillemets,
+    // a spaced hyphen as an em dash, a newline as <br>. Comparing against the raw
+    // string therefore silently skipped exactly the long prompts (the wording that
+    // has short prepositions in it) while short latin terms still matched: the
+    // author saw letters on the chips and none on the prompts.
     if (curQ.type === "matching") {
-      var left = Array.isArray(data.left) ? data.left : [];
-      var right = Array.isArray(data.right) ? data.right : [];
       var pairs = Array.isArray(c.pairs) ? c.pairs : [];
-      var mrows = doc.querySelectorAll(".ou-match__row");
-      var chips = doc.querySelectorAll(".ou-match__card--drag:not(.ou-match__card--empty)");
       pairs.forEach(function (pair, idx) {
         var letter = String.fromCharCode(65 + idx);
-        var rightText = String(right[pair.right]);
-        var leftText = String(left[pair.left]);
-        for (var mr = 0; mr < mrows.length; mr++) {
-          var fixedT = mrows[mr].querySelector(".ou-match__card--fixed .ou-match__card-title");
-          if (fixedT && fixedT.textContent === rightText) {
-            var fc = mrows[mr].querySelector(".ou-match__card--fixed");
-            reserveKeyGutter(fc); fc.appendChild(tbRefBadge(doc, letter, "key"));
-          }
+        var ri = Number(pair && pair.right);
+        var li = Number(pair && pair.left);
+        if (isFinite(ri)) {
+          var fc = doc.querySelector('.ou-match__card--fixed[data-drop="r' + ri + '"]');
+          if (fc) { reserveKeyGutter(fc); fc.appendChild(tbRefBadge(doc, letter, "key")); }
         }
-        for (var ci = 0; ci < chips.length; ci++) {
-          var ct = chips[ci].querySelector(".ou-match__card-title");
-          if (ct && ct.textContent === leftText) {
-            reserveKeyGutter(chips[ci]); chips[ci].appendChild(tbRefBadge(doc, letter, "key"));
-          }
+        if (isFinite(li)) {
+          var chip = doc.querySelector('.ou-match__card--drag[data-drag="' + li + '"]');
+          if (chip) { reserveKeyGutter(chip); chip.appendChild(tbRefBadge(doc, letter, "key")); }
         }
       });
     }

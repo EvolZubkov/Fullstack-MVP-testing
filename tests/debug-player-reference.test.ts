@@ -3,15 +3,22 @@
  * @description PRD-18 Phase 4 — the «Эталон» overlay (§5.4). Loads the REAL shared
  * compute IIFE (`inspector-compute.js`) into jsdom so `window.TBInspector` is the
  * production object, builds the revised «Стандартный» question DOM (the SAME markup
- * the SCORM render emits — `.ou-radio-card[data-index]`, `.ou-rank__item`,
- * `.ou-match__row`) for the CURRENT question (state.currentIndex) and asserts the
+ * the SCORM render emits — `.ou-radio-card[data-index]`, `.ou-rank__item[data-item]`,
+ * `.ou-match__card--fixed[data-drop]` / `--drag[data-drag]`) for the CURRENT question
+ * (state.currentIndex) and asserts the
  * correct-answer markers land on the right elements: ✓ on correct options, the
  * correct ordinal on ranking items, paired letters on matching.
+ *
+ * Ranking and matching are also asserted against the REAL renderer output (imported
+ * from `@shared/template/question-interaction`) with wording the typography pass
+ * rewrites: hand-written fixtures of clean ASCII text are exactly what hid the
+ * text-matching defect these two markers used to have.
  */
 // @vitest-environment jsdom
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { renderMatching, renderRanking } from "@shared/template/question-interaction";
 
 interface ProtocolStatusRow { idx: number; status: string; answered: boolean }
 interface ScoreSection { topicName: string; percent: number; passed: boolean | null; completed: boolean }
@@ -69,13 +76,13 @@ describe("Эталон overlay — applyReference", () => {
     expect(marks()).toHaveLength(2);
   });
 
-  it("marks ranking items with their correct 1-based position (matched by title text)", () => {
+  it("marks ranking items with their correct 1-based position (by data-item)", () => {
     // Rows displayed A,B,C; correct order is items [2,0,1] → A(0)→pos2, B(1)→pos3, C(2)→pos1.
     document.body.innerHTML =
       '<div class="ou-rank">' +
-      '<div class="ou-rank__item" data-drag="0"><span class="ou-rank__title">A</span></div>' +
-      '<div class="ou-rank__item" data-drag="1"><span class="ou-rank__title">B</span></div>' +
-      '<div class="ou-rank__item" data-drag="2"><span class="ou-rank__title">C</span></div>' +
+      '<div class="ou-rank__item" data-drag="0" data-item="0"><span class="ou-rank__title">A</span></div>' +
+      '<div class="ou-rank__item" data-drag="1" data-item="1"><span class="ou-rank__title">B</span></div>' +
+      '<div class="ou-rank__item" data-drag="2" data-item="2"><span class="ou-rank__title">C</span></div>' +
       "</div>";
     ref().applyReference(fakeWin({
       currentIndex: 0,
@@ -85,13 +92,35 @@ describe("Эталон overlay — applyReference", () => {
     expect(m).toEqual([["A", "2"], ["B", "3"], ["C", "1"]]);
   });
 
+  it("marks ranking items on the REAL render, whose text went through the typography pass", () => {
+    const items = [
+      "Подключение абонента к сети",
+      "Проверка качества связи на линии",
+      "Передача заявки в отдел монтажа",
+    ];
+    document.body.innerHTML = renderRanking({ type: "ranking", dataJson: { items } }, null);
+    ref().applyReference(fakeWin({
+      currentIndex: 0,
+      flatQuestions: [{ question: { id: "q6", type: "ranking", data: { items }, correct: { correctOrder: [2, 0, 1] } } }],
+    }));
+    expect(marks()).toHaveLength(3);
+    // correctOrder [2,0,1] → item 0 goes 2nd, item 1 goes 3rd, item 2 goes 1st.
+    const ordinals = Array.from(document.querySelectorAll<HTMLElement>(".ou-rank__item"))
+      .map((row) => [row.getAttribute("data-item"), row.querySelector("[data-tb-ref]")?.textContent]);
+    expect(ordinals).toEqual([["0", "2"], ["1", "3"], ["2", "1"]]);
+  });
+
   it("marks matching pairs with the same letter on the fixed prompt and the chip", () => {
+    // Both sides carry their index the way the render emits it: `data-drop="r<right>"`
+    // on the prompt, `data-drag="<left>"` on the chip. The chips sit in a shuffled
+    // order (1, 0), so a row-position match would pass by accident — the letters must
+    // follow the indices.
     document.body.innerHTML =
       '<div class="ou-match">' +
-      '<div class="ou-match__row"><div class="ou-match__card ou-match__card--fixed"><span class="ou-match__card-title">R0</span></div>' +
-      '<div class="ou-match__card ou-match__card--drag" data-drag="1"><span class="ou-match__card-title">L1</span></div></div>' +
-      '<div class="ou-match__row"><div class="ou-match__card ou-match__card--fixed"><span class="ou-match__card-title">R1</span></div>' +
-      '<div class="ou-match__card ou-match__card--drag" data-drag="0"><span class="ou-match__card-title">L0</span></div></div>' +
+      '<div class="ou-match__row"><div class="ou-match__card ou-match__card--fixed" data-drop="r0"><span class="ou-match__card-title">R0</span></div>' +
+      '<div class="ou-match__card ou-match__card--drag" data-drag="1" data-drop="r0"><span class="ou-match__card-title">L1</span></div></div>' +
+      '<div class="ou-match__row"><div class="ou-match__card ou-match__card--fixed" data-drop="r1"><span class="ou-match__card-title">R1</span></div>' +
+      '<div class="ou-match__card ou-match__card--drag" data-drag="0" data-drop="r1"><span class="ou-match__card-title">L0</span></div></div>' +
       "</div>";
     // Correct: left 0 ↔ right 0 (letter A), left 1 ↔ right 1 (letter B).
     ref().applyReference(fakeWin({
@@ -105,6 +134,37 @@ describe("Эталон overlay — applyReference", () => {
       .find((el) => el.querySelector(".ou-match__card-title")?.textContent === "L0");
     expect(fixedR0?.querySelector("[data-tb-ref]")?.textContent).toBe("A");
     expect(chipL0?.querySelector("[data-tb-ref]")?.textContent).toBe("A");
+  });
+
+  it("marks matching pairs on the REAL render, whose text went through the typography pass", () => {
+    // The render pipes every answer text through renderInlineMarkdown (markdown +
+    // Russian typography): «в сеть» comes out with U+00A0, quotes become guillemets,
+    // a newline becomes <br>. Matching the overlay by raw TEST_DATA text therefore
+    // missed exactly the long prompts — the wording that carries short prepositions.
+    const left = ["xDSL (Digital Subscriber Line)", "БШПД (Беспроводной широкополосный доступ)"];
+    const right = [
+      "Доступ в сеть Интернет через медную телефонную абонентскую линию связи",
+      "Предоставление пользователям доступа в сеть без использования проводов",
+    ];
+    document.body.innerHTML = renderMatching({ type: "matching", dataJson: { left, right } }, {});
+    ref().applyReference(fakeWin({
+      currentIndex: 0,
+      flatQuestions: [{
+        question: {
+          id: "q5",
+          type: "matching",
+          data: { left, right },
+          correct: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }] },
+        },
+      }],
+    }));
+    expect(marks()).toHaveLength(4); // 2 pairs × (fixed prompt + chip)
+    const letterOf = (sel: string) =>
+      document.querySelector<HTMLElement>(sel)?.querySelector("[data-tb-ref]")?.textContent;
+    expect(letterOf('.ou-match__card--fixed[data-drop="r0"]')).toBe("A");
+    expect(letterOf('.ou-match__card--drag[data-drag="0"]')).toBe("A");
+    expect(letterOf('.ou-match__card--fixed[data-drop="r1"]')).toBe("B");
+    expect(letterOf('.ou-match__card--drag[data-drag="1"]')).toBe("B");
   });
 
   it("is idempotent — re-applying does not stack markers", () => {

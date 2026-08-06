@@ -367,7 +367,11 @@ export function renderRanking(
       return (
         // No `draggable="true"` — the shared pointer engine drives the drag; the native
         // flag would start a browser drag that cancels the pointer gesture (see dragCard).
-        `<div class="${cls}" data-drag="${pos}" data-drop="${pos}">` +
+        // `data-item` is the ITEM index (`data-drag`/`data-drop` are display POSITIONS,
+        // which the drag reorders): it is what lets a tool key a row back to its source
+        // item — the debug player's «Эталон» overlay does exactly that. Matching text is
+        // not an option, the rendered text has been through markdown + typography.
+        `<div class="${cls}" data-drag="${pos}" data-drop="${pos}" data-item="${oi}">` +
         `<span class="ou-rank__grip" aria-hidden="true">${RANK_GRIP}</span>` +
         `<span class="ou-rank__index ou-rank__index--round ou-rank__index--accent">${pos + 1}</span>` +
         `<span class="ou-rank__text"><span class="ou-rank__title" ` +
