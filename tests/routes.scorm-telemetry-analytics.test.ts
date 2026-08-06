@@ -26,6 +26,12 @@ const { storageMock } = vi.hoisted(() => ({
     getTestQuestionScoring: vi.fn().mockResolvedValue([]),
     // PRD-15 T-20: publication-version resolution in analytics.
     getSnapshotsForTest: vi.fn().mockResolvedValue([]),
+    // PRD-2/PRD-5: analytics recomputes scale contributions and indicators from
+    // the test's CURRENT config, so `loadScoringConfig` reads these three. Absent
+    // stubs made every detail route answer 500 (`source.getScales is not a function`).
+    getScales: vi.fn().mockResolvedValue([]),
+    getQuestionMeasurements: vi.fn().mockResolvedValue([]),
+    getResultVariables: vi.fn().mockResolvedValue([]),
     getSnapshot: vi.fn().mockResolvedValue(undefined),
   }
 }));

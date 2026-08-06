@@ -12,14 +12,16 @@ describe("assignableRoles", () => {
   it("superadmin can assign every stored role, including administrator", () => {
     expect(assignableRoles([ROLES.SUPERADMIN])).toEqual([
       ROLES.ADMINISTRATOR,
+      ROLES.DEVELOPER,
       ROLES.AUTHOR,
       ROLES.MANAGER,
       ROLES.LEARNER,
     ]);
   });
 
-  it("administrator can assign up to author/manager, not administrator", () => {
+  it("administrator can assign up to developer/author/manager, not administrator", () => {
     expect(assignableRoles([ROLES.ADMINISTRATOR])).toEqual([
+      ROLES.DEVELOPER,
       ROLES.AUTHOR,
       ROLES.MANAGER,
       ROLES.LEARNER,
@@ -31,7 +33,8 @@ describe("assignableRoles", () => {
     expect(assignableRoles([ROLES.MANAGER])).toEqual([]);
   });
 
-  it("author and learner can assign nothing", () => {
+  it("developer, author and learner can assign nothing", () => {
+    expect(assignableRoles([ROLES.DEVELOPER])).toEqual([]);
     expect(assignableRoles([ROLES.AUTHOR])).toEqual([]);
     expect(assignableRoles([ROLES.LEARNER])).toEqual([]);
     expect(assignableRoles([])).toEqual([]);
@@ -39,6 +42,7 @@ describe("assignableRoles", () => {
 
   it("combined roles take the union (administrator dominates manager)", () => {
     expect(assignableRoles([ROLES.ADMINISTRATOR, ROLES.MANAGER])).toEqual([
+      ROLES.DEVELOPER,
       ROLES.AUTHOR,
       ROLES.MANAGER,
       ROLES.LEARNER,

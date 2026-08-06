@@ -27,6 +27,13 @@ export interface TableColumn<T> {
   sortable?: boolean;
   /** Делает столбец «numeric» (моноширинные цифры). */
   numeric?: boolean;
+  /**
+   * Столбец — заголовок СТРОКИ: ячейки рендерятся как `<th scope="row">`.
+   * Нужен матричным таблицам («параметр × значение»), где первая колонка
+   * называет строку, а не содержит данные: без этого скринридер читает
+   * ячейку без имени строки.
+   */
+  rowHeader?: boolean;
 }
 
 export interface TableProps<T> extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onSelect'> {
@@ -169,19 +176,23 @@ export function Table<T>({
                       />
                     </td>
                   )}
-                  {columns.map(c => (
-                    <td
-                      key={c.key}
-                      className={cn(
-                        c.numeric && 'is-numeric',
-                        cssStyleClass({ textAlign: c.align ?? 'left' }, 'ou-tbl-cell'),
-                      )}
-                    >
-                      {c.render
-                        ? c.render(row, idx)
-                        : ((row as unknown as Record<string, React.ReactNode>)[c.key] ?? null)}
-                    </td>
-                  ))}
+                  {columns.map(c => {
+                    const Cell = c.rowHeader ? 'th' : 'td';
+                    return (
+                      <Cell
+                        key={c.key}
+                        scope={c.rowHeader ? 'row' : undefined}
+                        className={cn(
+                          c.numeric && 'is-numeric',
+                          cssStyleClass({ textAlign: c.align ?? 'left' }, 'ou-tbl-cell'),
+                        )}
+                      >
+                        {c.render
+                          ? c.render(row, idx)
+                          : ((row as unknown as Record<string, React.ReactNode>)[c.key] ?? null)}
+                      </Cell>
+                    );
+                  })}
                 </tr>
                 {isExpanded && (
                   <tr className="ou-tbl__expanded">

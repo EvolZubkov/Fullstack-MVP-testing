@@ -21,6 +21,7 @@ import {
   editorModelToPayload,
   mapEditorAdaptiveToPayload,
   mapEditorSectionsToPayload,
+  applyFormSetChange,
 } from "../test-editor.mappers";
 import type { TestEditorModel } from "../test-editor.types";
 
@@ -146,6 +147,45 @@ describe("1. apiToEditorModel — standard test with sections", () => {
 
     // §2.4: at least one "none" → overall_and_required_topics
     expect(model.passRules.decisionPolicy).toBe("overall_and_required_topics");
+  });
+
+  // PRD-24: a per-variant rule must survive the API round-trip intact — its byForm
+  // map is what the runtime resolves against the delivered variant.
+  it("reads and writes a by_variant topic rule", () => {
+    const byForm = { f1: { type: "percent" as const, value: 65 }, f2: { type: "absolute" as const, value: 7 } };
+    const model = apiToEditorModel({
+      id: "t",
+      title: "T",
+      mode: "standard",
+      status: "draft",
+      overallPassRuleJson: { type: "percent", value: 70 },
+      sections: [apiSection({ topicId: "topic-math", topicPassRuleJson: { source: "by_variant", byForm } })],
+    });
+    expect(model.passRules.byTopic["topic-math"]).toEqual({ source: "by_variant", byForm });
+
+    const payloads = mapEditorSectionsToPayload(model);
+    expect(payloads[0].topicPassRuleJson).toEqual({ source: "by_variant", byForm });
+  });
+
+  it("drops malformed by_variant entries instead of trusting them", () => {
+    const model = apiToEditorModel({
+      id: "t",
+      title: "T",
+      mode: "standard",
+      status: "draft",
+      overallPassRuleJson: { type: "percent", value: 70 },
+      sections: [apiSection({
+        topicId: "topic-math",
+        topicPassRuleJson: {
+          source: "by_variant",
+          byForm: { ok: { type: "percent", value: 50 }, bad: { type: "weird", value: 1 }, worse: 42 },
+        },
+      })],
+    });
+    expect(model.passRules.byTopic["topic-math"]).toEqual({
+      source: "by_variant",
+      byForm: { ok: { type: "percent", value: 50 } },
+    });
   });
 });
 
@@ -512,7 +552,9 @@ describe("7. editorModelToPayload — create standard", () => {
     expect(payload).not.toHaveProperty("published");
     expect(payload.mode).toBe("standard");
     expect(payload.flowMode).toBe("linear_flat");
-    expect(payload).not.toHaveProperty("flowPolicyJson"); // §3.1: omitted for linear_flat
+    // §3.1: linear_flat is written EXPLICITLY — an omitted key means "keep the
+    // stored policy" on PUT, which used to strand tests on their old flow mode.
+    expect(payload.flowPolicyJson).toEqual({ mode: "linear_flat", router: null });
     expect(payload.overallPassRuleJson).toEqual({ type: "percent", value: 80 });
     expect(payload.passDecisionPolicy).toBe("overall_only");
     expect(payload.timeLimitMinutes).toBe(60);
@@ -826,5 +868,70 @@ describe("PRD-6 — retakePolicy mapping", () => {
       cooldownPeriodDays: 30,
       eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" },
     });
+  });
+});
+
+// ─── PRD-24: keeping the per-variant rule in step with the variant set ────────
+
+describe("applyFormSetChange", () => {
+  const forms = (...ids: string[]) =>
+    ids.map((id, i) => ({ id, label: `Вариант ${i + 1}`, questionIds: [`q${i}`] }));
+  const model = (byTopic: Record<string, unknown>, formSet: unknown) =>
+    ({
+      passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 65 }, byTopic },
+      sections: [{ topicId: "t", topicName: "T", maxQuestions: 4, drawCount: 2, formSet }],
+    }) as never;
+
+  it("seeds a threshold for a newly added variant, keeping the existing ones", () => {
+    const before = model(
+      { t: { source: "by_variant", byForm: { v1: { type: "absolute", value: 3 } } } },
+      { forms: forms("v1") },
+    );
+    const after = applyFormSetChange(before, "t", { forms: forms("v1", "v2") });
+    expect(after.passRules.byTopic["t"]).toEqual({
+      source: "by_variant",
+      byForm: {
+        v1: { type: "absolute", value: 3 }, // untouched
+        v2: { type: "absolute", value: 3 }, // seeded from the existing entry
+      },
+    });
+    expect(after.sections[0].formSet?.forms).toHaveLength(2);
+  });
+
+  it("drops the threshold of a removed variant so no orphan blocks the save", () => {
+    const before = model(
+      { t: { source: "by_variant", byForm: { v1: { type: "percent", value: 50 }, v2: { type: "percent", value: 80 } } } },
+      { forms: forms("v1", "v2") },
+    );
+    const after = applyFormSetChange(before, "t", { forms: forms("v1") });
+    expect(after.passRules.byTopic["t"]).toEqual({
+      source: "by_variant",
+      byForm: { v1: { type: "percent", value: 50 } },
+    });
+  });
+
+  it("normalises the rule when variants mode is switched off", () => {
+    const before = model(
+      { t: { source: "by_variant", byForm: { v1: { type: "percent", value: 50 } } } },
+      { forms: forms("v1", "v2") },
+    );
+    const after = applyFormSetChange(before, "t", null);
+    expect(after.passRules.byTopic["t"]).toEqual({ source: "inherit_overall" });
+    expect(after.sections[0].formSet).toBeNull();
+  });
+
+  it("seeds from the overall rule when the topic had no per-variant thresholds yet", () => {
+    const before = model({ t: { source: "by_variant", byForm: {} } }, { forms: forms("v1") });
+    const after = applyFormSetChange(before, "t", { forms: forms("v1", "v2") });
+    expect(after.passRules.byTopic["t"]).toEqual({
+      source: "by_variant",
+      byForm: { v1: { type: "percent", value: 65 }, v2: { type: "percent", value: 65 } },
+    });
+  });
+
+  it("leaves other rule sources alone", () => {
+    const before = model({ t: { source: "custom", type: "percent", value: 55 } }, { forms: forms("v1") });
+    const after = applyFormSetChange(before, "t", { forms: forms("v1", "v2") });
+    expect(after.passRules.byTopic["t"]).toEqual({ source: "custom", type: "percent", value: 55 });
   });
 });

@@ -50,10 +50,12 @@ const workbookInspect = {
 };
 
 let inspectResult: unknown = questionsOnlyInspect;
+let importWarnings: string[] = [];
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   inspectResult = questionsOnlyInspect;
+  importWarnings = [];
   fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = (init?.method || "GET").toUpperCase();
@@ -70,6 +72,7 @@ beforeEach(() => {
           resultVariables: { created: 1, updated: 0 },
           structure: { sections: 0, quotas: 0 },
           errors: [],
+          warnings: importWarnings,
           test: { id: "test1", title: "Стресс-опросник" },
         });
       }
@@ -111,6 +114,25 @@ describe("<ImportPage /> — empty", () => {
     expect(await screen.findByText("Импорт из Excel")).toBeInTheDocument();
     expect(screen.getByText("Перетащите файл .xlsx или выберите")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Скачать шаблон" })).toBeInTheDocument();
+  });
+
+  it("скачивает руководство по заполнению шаблона с /api/workbook/docs/guide", async () => {
+    renderPage();
+    await screen.findByText("Импорт из Excel");
+
+    // The handler builds a detached <a> and clicks it; capture the click target.
+    const clicked: string[] = [];
+    const realClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+      clicked.push(this.getAttribute("href") ?? "");
+    };
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Руководство по заполнению (PDF)" }));
+    } finally {
+      HTMLAnchorElement.prototype.click = realClick;
+    }
+
+    expect(clicked).toEqual(["/api/workbook/docs/guide"]);
   });
 });
 
@@ -206,5 +228,58 @@ describe("<ImportPage /> — workbook path (requires test)", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Импортировать" })).not.toBeDisabled(),
     );
+  });
+});
+
+describe("<ImportPage /> — предупреждения импорта", () => {
+  it("показывает предупреждение о конфликте источников оценки в предпросмотре", async () => {
+    inspectResult = workbookInspect;
+    importWarnings = [
+      "Оценка взята с листа «Оценка» (строк: 0); колонки «Балл»/«Цена ответа» листа «Вопросы» не читались.",
+    ];
+    const { container } = renderPage();
+    await screen.findByText("Импорт из Excel");
+
+    fireEvent.change(fileInput(container), { target: { files: [xlsx("workbook.xlsx")] } });
+    await waitFor(() =>
+      expect(
+        screen.getByText("В файле есть шкалы/показатели/вклады — укажите целевой тест."),
+      ).toBeInTheDocument(),
+    );
+
+    const combo = screen.getByRole("combobox");
+    fireEvent.focus(combo);
+    fireEvent.click(await screen.findByText("Аттестация"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Проверить" })).not.toBeDisabled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Проверить" }));
+
+    // The warning is surfaced verbatim, alongside the "no errors" verdict — it
+    // does not block the import, it explains a silent precedence.
+    await waitFor(() => expect(screen.getByText(/не читались/)).toBeInTheDocument());
+    expect(screen.getByText("Ошибок не найдено — можно импортировать.")).toBeInTheDocument();
+  });
+
+  it("без предупреждений блок не рендерится", async () => {
+    inspectResult = workbookInspect;
+    const { container } = renderPage();
+    await screen.findByText("Импорт из Excel");
+
+    fireEvent.change(fileInput(container), { target: { files: [xlsx("workbook.xlsx")] } });
+    await waitFor(() =>
+      expect(
+        screen.getByText("В файле есть шкалы/показатели/вклады — укажите целевой тест."),
+      ).toBeInTheDocument(),
+    );
+    const combo = screen.getByRole("combobox");
+    fireEvent.focus(combo);
+    fireEvent.click(await screen.findByText("Аттестация"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Проверить" })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "Проверить" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Ошибок не найдено — можно импортировать.")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/не читались/)).not.toBeInTheDocument();
   });
 });

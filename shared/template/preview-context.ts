@@ -24,8 +24,19 @@ import {
   buildSectionIntroContext,
   type ResultInput,
 } from "./result-context";
+import { buildResultsNav } from "./results-nav";
 import { buildTransitionContext } from "./transition-context";
 import { buildReviewContext } from "./review-context";
+import { renderSingleChoice, renderMultiple, renderRanking, renderMatching, renderScale } from "./question-interaction";
+import { renderInlineMarkdown } from "../text/markdown";
+import {
+  buildSequencePlacements,
+  buildPageContext,
+  nextLabelOf,
+  type PageContext,
+  type SequenceContentPage,
+  type SequencePlacement,
+} from "./page-sequences";
 import type { ScreenRenderInput, PlaceholderDef } from "./render-screen";
 
 /** One preview route, normalized (`manifest.preview.routes[]` may be a string or object). */
@@ -117,6 +128,17 @@ export interface ScreenSpec {
   id: string;
   route: string;
   label?: string;
+  /**
+   * `manifest.contentTemplates[].key` of the variant this screen renders through,
+   * when one backs it. It is the variant — not the route — that the author picks
+   * in «Структура», so the preview rail groups by this and names the group from
+   * the manifest; several demo screens bound to ONE variant are its demonstrations,
+   * not separate variants (PRD-22 / plan Д1). Absent for screens no variant backs
+   * (start, question.*, results, system.*), which stay grouped by route.
+   */
+  variantKey?: string;
+  /** `manifest.contentTemplates[].label` of {@link ScreenSpec.variantKey}. */
+  variantLabel?: string;
   /** Layout key to look up in the layouts map (resolved with fallback, §5.3). */
   layoutKey: string;
   /**
@@ -166,9 +188,8 @@ function resolveLayoutKey(route: string, manifest: PreviewManifest, variant?: Pr
   // runtime does — not by the intro variant's layoutFile.
   if (isSectionIntroScreen(route, variant?.kind, manifest)) return "section-intro";
   if (variant?.layoutFile) return variant.layoutFile;
-  // The runtime also resolves a variant's layout by its KEY (`contentPage.js →
-  // renderGalleryPage` reads `layouts[contentTemplate.key]`), so honour that too —
-  // otherwise a gallery declared that way previews through the generic layout.
+  // A variant may also be declared under its own KEY in `layouts[]`; honour that
+  // so such a screen previews from its own layout rather than the generic one.
   if (variant && layouts[variant.key]) return variant.key;
   if (route === "results.adaptive") return layouts["results.adaptive"] ? "results.adaptive" : "results";
   if (route === "results") return "results";
@@ -179,6 +200,24 @@ function resolveLayoutKey(route: string, manifest: PreviewManifest, variant?: Pr
   if (layouts[route]) return route;
   if (route.startsWith("system.")) return "content";
   return route;
+}
+
+/**
+ * Slots a content screen is EXPECTED to expose, given the layout it resolved to.
+ *
+ * Only the generic wrapper (`layouts.content`) carries the author's content in a
+ * `page-content` slot: the host fills that slot with the placeholder skeleton. A
+ * variant that ships its OWN layout puts the fields where it wants them, marked
+ * `data-placeholder`, and needs no slot at all — demanding one there produced a
+ * warning for a screen that renders perfectly (PRD-22: the gallery layout is
+ * exactly such a case). What such a layout owes is checked separately, against
+ * the rendered DOM: at least one declared placeholder must actually be there
+ * (see {@link module:shared/template/smoke-runner}).
+ * @param layoutKey  Key the screen's layout resolved to
+ * @returns slot names to expect, empty for variant-owned layouts
+ */
+function expectedContentSlots(layoutKey: string): string[] {
+  return layoutKey === "content" ? ["page-content"] : [];
 }
 
 /** Pick a variant list's default (`isDefault`, else first) — PRD-1 §4.3.2. */
@@ -305,72 +344,34 @@ function buildRouterCards(topics: RouterTopic[]): string {
 function isRouterScreen(route: string, kind?: string): boolean {
   return route === "content.router" || route === "router" || kind === "router";
 }
-
-// Drag-handle glyphs mirror the web host (client/pages/learner/template-question-screen)
-// so the preview interaction is visually identical to the runtime.
-const RANK_GRIP =
-  '<svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">' +
-  '<path d="M2.5 4.99524H17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>' +
-  '<path d="M14.1667 9.9952H2.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>' +
-  '<path d="M2.5 14.9951H10.8333" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
-const MATCH_GRIP =
-  '<svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">' +
-  '<circle cx="7" cy="5" r="1.4"></circle><circle cx="13" cy="5" r="1.4"></circle>' +
-  '<circle cx="7" cy="10" r="1.4"></circle><circle cx="13" cy="10" r="1.4"></circle>' +
-  '<circle cx="7" cy="15" r="1.4"></circle><circle cx="13" cy="15" r="1.4"></circle></svg>';
-
 /**
- * Build interaction HTML for the `question-interaction` slot. The markup/classes
- * mirror the runtime web host (`template-question-screen.tsx`: `.option` /
- * `.ranking-board`/`.rank-item` / `.matching-board`/`.match-*`) so the preview
- * renders the real, template-styled interaction rather than a bare list. Demo
- * state only: nothing is pre-selected, and matching chips are offset by one row so
- * the preview does not reveal the correct pairing.
+ * Build interaction HTML for the `question-interaction` slot by delegating to the
+ * SHARED scene emission ({@link module:shared/template/question-interaction}) — the
+ * SAME `.ou-*` markup the runtime and web host render, so the preview matches the
+ * real screen instead of a legacy `.option`/`.matching-board` list. Demo state only:
+ * nothing is pre-selected (single = no choice, multiple = none, ranking = shuffled
+ * order, matching = every chip still in the pool), so the preview never reveals the
+ * answer key.
  */
 function buildInteraction(q: PreviewQuestion): string {
-  const opts = q.options ?? [];
+  const texts = (q.options ?? []).map((o) => o.text);
   switch (q.type) {
     case "single":
-    case "multiple": {
-      const input = q.type === "single" ? "radio" : "checkbox";
-      return opts
-        .map(
-          (o) =>
-            `<div class="option" role="button" tabindex="0">` +
-            `<input type="${input}" tabindex="-1" aria-hidden="true"><span>${esc(o.text)}</span></div>`,
-        )
-        .join("");
-    }
-    case "ranking": {
-      const items = opts
-        .map(
-          (o, pos) =>
-            `<div class="rank-item rank-draggable" data-drag="${pos}" data-drop="${pos}">` +
-            `<span class="rank-grip">${RANK_GRIP}</span>` +
-            `<span class="rank-text">${esc(o.text)}</span></div>`,
-        )
-        .join("");
-      return `<div class="ranking-board">${items}</div>`;
-    }
+      return renderSingleChoice({ type: "single", dataJson: { options: texts } }, undefined);
+    case "multiple":
+      return renderMultiple({ type: "multiple", dataJson: { options: texts } }, []);
+    case "ranking":
+      return renderRanking({ type: "ranking", dataJson: { items: texts } }, undefined);
+    case "scale":
+      // PRD-26: nothing is picked in the preview either, so the scale shows its
+      // graduations with no fill — the administrator sees the control, not an answer.
+      return renderScale({ type: "scale", dataJson: { options: texts } }, undefined);
     case "matching": {
       const pairs = q.pairs ?? [];
-      const n = pairs.length;
-      const rows = pairs
-        .map((p, i) => {
-          // Offset left chips by one row → an unsolved task, not the answer key.
-          const left = n > 1 ? pairs[(i + 1) % n].left : p.left;
-          return (
-            `<div class="matching-line">` +
-            `<div class="match-tile match-left-slot"><div class="match-chip">` +
-            `<span class="match-grip" aria-hidden="true">${MATCH_GRIP}</span>` +
-            `<span class="match-chip-text">${esc(left)}</span></div></div>` +
-            `<div class="matching-gap"></div>` +
-            `<div class="match-tile match-right-tile">${esc(p.right)}</div>` +
-            `</div>`
-          );
-        })
-        .join("");
-      return `<div class="matching-board">${rows}</div>`;
+      return renderMatching(
+        { type: "matching", dataJson: { left: pairs.map((p) => p.left), right: pairs.map((p) => p.right) } },
+        {},
+      );
     }
     default:
       return "";
@@ -496,60 +497,24 @@ function buildSectionIntroParts(values: Record<string, unknown>, facts: SectionI
   };
 }
 
-/**
- * True when this screen renders through the gallery pipeline: a gallery slide whose
- * variant has a DEDICATED layout (by `layoutFile` or by the variant KEY, both of which
- * the runtime honours). Without one, `renderGalleryPage` bails out and the page falls
- * through to the generic content render — so the preview must do the same.
- */
-function isGalleryScreen(
-  route: string,
-  kind: string | undefined,
-  variant: PreviewContentTemplate | undefined,
-  manifest: PreviewManifest,
-): boolean {
-  const isGallery = route === "content.gallery" || route.startsWith("content.gallery.") || kind === "gallery";
-  if (!isGallery || !variant) return false;
-  return !!variant.layoutFile || !!(manifest.layouts ?? {})[variant.key];
-}
-
-/** Unwrap a media value stored either as a bare URL or as a `{ url, … }` envelope. */
-function mediaUrl(v: unknown): string {
-  if (v && typeof v === "object") return String((v as { url?: unknown }).url ?? "");
-  return String(v ?? "");
-}
 
 /**
- * Build a gallery slide the way the RUNTIME builds it (`contentPage.js →
- * renderGalleryPage`): a `gallery` context (header/subheader/image/pills/nav) plus the
- * author card text as a slot — NOT the generic `page-content` skeleton. Without this
- * the slide renders as an empty card: its layout declares `data-slot="cardText"` and
- * binds `gallery.*`, so a page-content skeleton fills nothing.
+ * PRD-22: `page.*` for a previewed content page — the navigation dots of its
+ * sequence, computed by the SAME core the runtime uses, over the demo dataset's
+ * pages. A demo that declares no sequence simply yields no dots, exactly as a
+ * real test would. `canGoBack` is true whenever the page is not the first of its
+ * sequence: the preview has no run state to consult.
  */
-function buildGalleryParts(values: Record<string, unknown>, courseTitle: string): ScreenParts {
-  const total = Math.max(1, parseInt(String(values.pillsTotal ?? ""), 10) || 1);
-  const current = parseInt(String(values.pillCurrent ?? ""), 10) || 1;
-  const pills = Array.from({ length: total }, (_, i) => ({
-    statusClass: i + 1 === current ? "is-current" : "",
-  }));
-  const cardText = values.cardText != null ? String(values.cardText) : "";
-  return {
-    expectedSlots: cardText.trim() ? ["cardText"] : [],
-    input: {
-      context: {
-        course: { title: courseTitle },
-        gallery: {
-          header: values.header != null ? String(values.header) : "",
-          subheader: values.subheader != null ? String(values.subheader) : "",
-          imageUrl: mediaUrl(values.image),
-          pills,
-          showBack: values.showBack === true || values.showBack === "true",
-          nextLabel: values.nextLabel != null && values.nextLabel !== "" ? String(values.nextLabel) : "Далее",
-        },
-      },
-      slots: { cardText },
-    },
-  };
+function buildPagePreviewContext(
+  dataset: PreviewDemoDataset,
+  pageId: string | undefined,
+): PageContext {
+  const pages = (dataset.course.contentPages ?? []) as SequenceContentPage[];
+  const placement = pageId ? buildSequencePlacements(pages).get(pageId) : undefined;
+  return buildPageContext(placement, {
+    canGoBack: !!placement && placement.index > 1,
+    nextLabel: nextLabelOf(pages.find((p) => p.id === pageId)),
+  });
 }
 
 /** Build the {@link ScreenSpec} for one route target. */
@@ -561,7 +526,9 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
   const layoutKey = resolveLayoutKey(route, manifest, variant);
   const base = { id: route, route, label: target.label, layoutKey };
 
-  if (route === "start") {
+  // The start screen and its layout VARIANTS (e.g. `start.image-right`) all take the
+  // same start context — matched by route prefix or the variant's `start` kind.
+  if (route === "start" || route.startsWith("start.") || variant?.kind === "start") {
     const { course, state } = buildStartState({
       info: {
         title: c.title,
@@ -587,6 +554,13 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
             c.title,
           )
         : buildResultContext(resultInputFromRuntime(dataset), c.title);
+    // Both runtime hosts fill `result.nav`, so a preview WITHOUT it falls into the
+    // layout's legacy single-button branch — a footer neither host renders any more.
+    // Every flag is on so the preview proves the layout draws the whole row: without
+    // it a template can ship with no «Скачать отчёт» and the preview looks fine.
+    if (route === "results") {
+      context.result.nav = buildResultsNav({ canReport: true, canRetry: true, hasPostPages: false });
+    }
     return { ...base, expectedSlots: [], input: { context } };
   }
 
@@ -598,7 +572,14 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
       state: { questionCounterLabel: "Вопрос 1 из " + total },
     };
     const slots = q
-      ? { "question-text": esc(q.prompt), "question-media": "", "question-interaction": buildInteraction(q) }
+      ? {
+          // The preview renders what the learner will see, so the prompt goes through
+          // the SAME author-text pipeline as the two runtime hosts — otherwise the
+          // author would approve a screen the players do not produce.
+          "question-text": renderInlineMarkdown(String(q.prompt ?? "")),
+          "question-media": "",
+          "question-interaction": buildInteraction(q),
+        }
       : { "question-text": "", "question-media": "", "question-interaction": "" };
     return { ...base, expectedSlots: ["question-text", "question-interaction"], input: { context, slots } };
   }
@@ -615,11 +596,9 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
     // key still serves when a route binds no page — it keeps two render variants of the
     // same kind (both route `content.intro`) distinguishable.
     const screenId = target.pageId ?? variantKey ?? route;
-
-    // Gallery slides render through their own pipeline (see buildGalleryParts).
-    if (isGalleryScreen(route, tpl?.kind ?? page?.type, tpl, manifest)) {
-      return { ...base, id: screenId, ...buildGalleryParts(page?.values ?? {}, c.title) };
-    }
+    // Grouping identity for the rail: the VARIANT this screen renders through
+    // (see ScreenSpec.variantKey). Several demo pages may share one variant.
+    const variantRef = tpl ? { variantKey: tpl.key, variantLabel: tpl.label } : {};
 
     // «Введение раздела» renders through the section-intro pipeline, not the
     // generic content one (see buildSectionIntroParts).
@@ -628,6 +607,7 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
       return {
         ...base,
         id: screenId,
+        ...variantRef,
         ...buildSectionIntroParts(page?.values ?? {}, {
           sectionNumber: 1,
           topicName: topic?.title ?? "Раздел",
@@ -644,7 +624,11 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
     // result; other content pages keep the test-level result namespace (§8.2).
     const isSummary = route === "content.summary" || (tpl?.kind ?? page?.type) === "summary";
     const result = isSummary ? sectionResultContextFromRuntime(dataset) : resultContextFromRuntime(dataset);
-    const context = { course: { title: c.title }, result };
+    const context = {
+      course: { title: c.title },
+      result,
+      page: buildPagePreviewContext(dataset, page?.id),
+    };
     // Router screens append the runtime topic-menu (`.router-topic-cards`) built
     // from the demo topics, so the preview shows the real menu, not a bare skeleton.
     const pageContent = isRouterScreen(route, tpl?.kind ?? page?.type)
@@ -653,7 +637,8 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
     return {
       ...base,
       id: screenId,
-      expectedSlots: ["page-content"],
+      ...variantRef,
+      expectedSlots: expectedContentSlots(layoutKey),
       input: {
         context,
         slots: { "page-content": pageContent },
@@ -705,8 +690,8 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
 
   if (route === "system.transition") {
     const context = buildTransitionContext({
-      isCorrect: true,
-      levelTransition: { type: "up", message: "Уровень повышен" },
+      topicName: "Базовые угрозы",
+      levelTransition: { type: "up", message: "Следующие вопросы будут сложнее" },
       showContinue: true,
     });
     return { ...base, expectedSlots: [], input: { context } };
@@ -722,8 +707,13 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
   return { ...base, expectedSlots: [], input: { context: { course: { title: c.title } } } };
 }
 
-/** Content-page kinds the preview enumerates per variant (вводные/учебные/итог/маршрутизатор). */
-const CONTENT_VARIANT_KINDS = new Set(["intro", "info", "summary", "router"]);
+/**
+ * Content-page kinds the preview enumerates per variant (вводные/учебные/маршрутизатор).
+ * `summary` is intentionally excluded: it is the LEGACY per-topic «Итог раздела» kind
+ * whose role is now the computed `section-results` node (PRD-19) — the flow renders it
+ * only as an invisible boundary marker, so it must not appear as a preview screen.
+ */
+const CONTENT_VARIANT_KINDS = new Set(["intro", "info", "router"]);
 
 /** Derive a variant kind from a `pageKind` like `content.info` → `info`. */
 function kindFromPageKind(pageKind?: string): string | undefined {
@@ -760,6 +750,8 @@ function buildContentVariant(
       id: ct.key,
       route,
       label: ct.label,
+      variantKey: ct.key,
+      variantLabel: ct.label,
       layoutKey,
       ...buildSectionIntroParts(page?.values ?? {}, {
         sectionNumber: 1,
@@ -781,10 +773,16 @@ function buildContentVariant(
     id: ct.key,
     route,
     label: ct.label,
+    variantKey: ct.key,
+    variantLabel: ct.label,
     layoutKey,
-    expectedSlots: ["page-content"],
+    expectedSlots: expectedContentSlots(layoutKey),
     input: {
-      context: { course: { title: dataset.course.title }, result },
+      context: {
+        course: { title: dataset.course.title },
+        result,
+        page: buildPagePreviewContext(dataset, page?.id),
+      },
       slots: { "page-content": pageContent },
       content: { template: { placeholders }, values: page?.values ?? {} },
     },
@@ -837,6 +835,12 @@ export interface ContentPageScreenInput {
   templateKey?: string;
   /** Saved placeholder values for the page. */
   values: Record<string, unknown>;
+  /**
+   * PRD-22: saved page SETTINGS (`content_pages.settings_json`) — the properties
+   * the layout binds through `page.*`, e.g. the `nextLabel` caption. Absent ⇒ the
+   * declared defaults apply, exactly as on a page the author has not touched.
+   */
+  settings?: Record<string, unknown> | null;
   /** Course/test title for the `course` namespace. */
   courseTitle: string;
   /** `result` namespace (for `summary`/`resultField` placeholders); zeroed when absent. */
@@ -848,6 +852,12 @@ export interface ContentPageScreenInput {
    * actual topic menu instead of an empty placeholder. Ignored for other kinds.
    */
   routerTopics?: RouterTopic[];
+  /**
+   * PRD-22: the page's placement in its sequence, when the caller knows it (the
+   * editor computes placements over the whole test). Absent ⇒ the preview shows
+   * no navigation indicator, since a single page cannot imply a sequence.
+   */
+  sequencePlacement?: SequencePlacement | null;
 }
 
 /**
@@ -864,23 +874,41 @@ export interface ContentPageScreenInput {
 export function buildContentPageScreen(inp: ContentPageScreenInput): ScreenSpec {
   const variant = findVariantForRoute(inp.manifest, inp.route, inp.templateKey);
   const layoutKey = resolveLayoutKey(inp.route, inp.manifest, variant);
-  const tpl = findContentTemplate(inp.manifest, inp.templateKey);
+  // Plan Э5: an unavailable variant previews through the kind's default (which
+  // `findVariantForRoute` already resolved) rather than as an empty page — the
+  // same substitution both learner hosts make.
+  const tpl = findContentTemplate(inp.manifest, inp.templateKey) ?? variant;
   const placeholders = tpl?.placeholders ?? [];
   const skeleton = buildSkeleton(placeholders);
   // Router pages append the runtime topic-menu (`.router-topic-cards`) built from
   // the REAL test topics (same markup as buildOne / the SCORM runtime), so the
   // маршрутизатор preview shows the actual menu rather than an empty placeholder.
-  const pageContent = isRouterScreen(inp.route, tpl?.kind)
+  const isRouter = isRouterScreen(inp.route, tpl?.kind);
+  const pageContent = isRouter
     ? skeleton + buildRouterCards(inp.routerTopics ?? [])
     : skeleton;
   const result = inp.result ?? { scorePercent: 0, status: "", passed: false };
   return {
     id: inp.templateKey ?? inp.route,
     route: inp.route,
+    variantKey: variant?.key,
+    variantLabel: variant?.label,
     layoutKey,
-    expectedSlots: ["page-content"],
+    expectedSlots: expectedContentSlots(layoutKey),
     input: {
-      context: { course: { title: inp.courseTitle }, result },
+      context: {
+        course: { title: inp.courseTitle },
+        result,
+        // Single-page preview has no neighbours to derive a sequence from, so the
+        // indicator is shown only when the caller supplies the page's placement.
+        page: buildPageContext(inp.sequencePlacement, {
+          canGoBack: !!inp.sequencePlacement && inp.sequencePlacement.index > 1,
+          // The hub's «Завершить» lives in the standard footer, inert until sections
+          // are completed — the preview shows nothing done, so it renders disabled.
+          nextLabel: isRouter ? "Завершить" : nextLabelOf({ settingsJson: inp.settings ?? null } as SequenceContentPage),
+          nextDisabled: isRouter,
+        }),
+      },
       slots: { "page-content": pageContent },
       content: { template: { placeholders }, values: inp.values },
     },

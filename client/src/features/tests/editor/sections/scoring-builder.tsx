@@ -47,7 +47,7 @@ export interface TierDraft {
   score: string;
 }
 
-type QuestionType = "single" | "multiple" | "matching" | "ranking";
+import { isSingleIndexChoice, type QuestionType } from "@shared/questions/question-type";
 
 const OPS: { value: CondOp; label: string }[] = [
   { value: "==", label: "=" },
@@ -102,7 +102,7 @@ export function ScoringBuilder({
   const token = totalToken(type);
   const modes: { value: ScoringMode; label: string }[] = [
     { value: "exact", label: "Точное совпадение" },
-    ...(type === "single"
+    ...(isSingleIndexChoice(type)
       ? ([{ value: "weighted", label: "Веса опций" }] as const)
       : ([{ value: "tiered", label: "Ступенчато" }] as const)),
   ];
@@ -160,12 +160,12 @@ export function ScoringBuilder({
       {mode === "exact" && (
         <Box border="dashed" radius="m" pad={4} style={{ color: "var(--ou-fg-muted)" }} data-testid="scoring-exact-hint">
           Вопрос оценивается точным совпадением (0/1) — как все существующие тесты. Чтобы дать
-          частичный балл, переключите способ{type === "single" ? " на «Веса опций»" : " на «Ступенчато»"}.
+          частичный балл, переключите способ{isSingleIndexChoice(type) ? " на «Веса опций»" : " на «Ступенчато»"}.
         </Box>
       )}
 
       {/* weighted (single) — option weights. */}
-      {mode === "weighted" && type === "single" && (
+      {mode === "weighted" && isSingleIndexChoice(type) && (
         <Stack gap={2} data-testid="scoring-weights">
           <Grid template="label-control" gap={2} style={{ fontSize: "12px", fontWeight: 500, color: "var(--ou-fg-muted)" }}>
             <div>Вариант ответа</div>
@@ -190,7 +190,7 @@ export function ScoringBuilder({
       )}
 
       {/* tiered (multiple/matching/ranking) — step-table constructor. */}
-      {mode === "tiered" && type !== "single" && (
+      {mode === "tiered" && !isSingleIndexChoice(type) && (
         <Stack gap={3} data-testid="scoring-tiers">
           <Text as="p" variant="body-s" tone="muted">
             Ступени проверяются сверху вниз, засчитывается первая подходящая. Счётчики: <b>c</b> — верных
@@ -339,10 +339,10 @@ export function buildScoringJson(
   weights: string[],
   tiers: TierDraft[],
 ): unknown {
-  if (mode === "weighted" && type === "single") {
+  if (mode === "weighted" && isSingleIndexChoice(type)) {
     return { kind: "weighted", weights: options.map((_, i) => num(weights[i] ?? "0")) };
   }
-  if (mode === "tiered" && type !== "single") {
+  if (mode === "tiered" && !isSingleIndexChoice(type)) {
     const parseRhs = (s: string): number | string => {
       const t = s.trim().toUpperCase();
       if (t === "T" || t === "P" || t === "N") return t;

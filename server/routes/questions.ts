@@ -13,8 +13,10 @@ import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
 import { normalizeTags } from "@shared/tags";
+import { normalizeAuthorText } from "@shared/text";
+import { normalizeOptionalText, normalizeQuestionData } from "../services/question-text";
 import { importQuestionRows } from "../services/questions-import";
-import { serializeQuestionRow, QUESTION_WIDTHS } from "../services/questions-export";
+import { serializeQuestionRow, QUESTION_HEADERS, QUESTION_WIDTHS } from "../services/questions-export";
 import { assessQuestionsRemoval, assessQuestionChange } from "../services/draw-feasibility";
 import {
   respondForbiddenContent,
@@ -167,7 +169,11 @@ router.post(
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
 
-      if (!topicId || !type || !prompt) {
+      // Canonical form BEFORE the required-field check: a prompt of nothing but
+      // spaces is an empty prompt, not a filled one.
+      const canonicalPrompt = normalizeAuthorText(prompt);
+
+      if (!topicId || !type || !canonicalPrompt) {
         return res.status(400).json({ error: "TopicId, type and prompt required" });
       }
 
@@ -180,17 +186,17 @@ router.post(
       const question = await storage.createQuestion({
         topicId,
         type,
-        prompt,
-        dataJson,
+        prompt: canonicalPrompt,
+        dataJson: normalizeQuestionData(dataJson),
         correctJson,
         difficulty: difficulty || 50,
         mediaUrl: mediaUrl || null,
         mediaType: mediaType || null,
         shuffleAnswers: shuffleAnswers ?? true,
-        feedback: feedback || null,
+        feedback: normalizeAuthorText(feedback) || null,
         feedbackMode: feedbackMode || "general",
-        feedbackCorrect: feedbackCorrect || null,
-        feedbackIncorrect: feedbackIncorrect || null,
+        feedbackCorrect: normalizeAuthorText(feedbackCorrect) || null,
+        feedbackIncorrect: normalizeAuthorText(feedbackIncorrect) || null,
         tags: normalizeTags(Array.isArray(tags) ? tags : []),
         createdBy: req.currentUser?.id ?? null,
       } as any);
@@ -272,17 +278,20 @@ router.put(
       const updated = await storage.updateQuestion(req.params.id, {
         topicId,
         type,
-        prompt,
-        dataJson,
+        // A field the client did not send stays `undefined` — the storage layer
+        // reads that as «leave unchanged», so normalisation must not turn it
+        // into an empty string.
+        prompt: normalizeOptionalText(prompt),
+        dataJson: normalizeQuestionData(dataJson),
         correctJson,
         difficulty,
         mediaUrl,
         mediaType,
         shuffleAnswers,
-        feedback,
+        feedback: normalizeOptionalText(feedback),
         feedbackMode,
-        feedbackCorrect,
-        feedbackIncorrect,
+        feedbackCorrect: normalizeOptionalText(feedbackCorrect),
+        feedbackIncorrect: normalizeOptionalText(feedbackIncorrect),
         // Only touch tags when the client sent them; otherwise leave unchanged.
         tags: Array.isArray(tags) ? normalizeTags(tags) : undefined,
       } as any);
@@ -473,21 +482,9 @@ router.get(
 // Canonical column order (must match the export — see спецификация формата §3).
 // T-40: «Балл» / «Цена ответа» left the bank sheet — scoring is a property of
 // the test (the test-scoped «Оценка» sheet of the workbook), not the question.
-const TEMPLATE_HEADERS = [
-  "ID",
-  "Тема",
-  "Тип вопроса",
-  "Текст вопроса",
-  "Сложность",
-  "Тексты вариантов ответа",
-  "Номера правильных ответов",
-  "Следование вариантов ответов",
-  "Обратная связь",
-  "Теги",
-  "Режим ОС",
-  "ОС при верном",
-  "ОС при неверном",
-];
+// The template's columns ARE the export's columns — a hand-kept copy of the list
+// is how a template silently lags behind the format it is supposed to seed.
+const TEMPLATE_HEADERS = QUESTION_HEADERS;
 
 router.get(
   "/template",
@@ -504,22 +501,24 @@ router.get(
         ["Колонка", "Описание / формат"],
         ["ID", "Пусто — создать вопрос; заполнен и найден — обновить (см. экспорт)"],
         ["Тема", "Обязательно. Имя темы; если её нет — будет создана"],
-        ["Тип вопроса", "Обязательно. multiple_choice | multiple_response | matching | ranking"],
+        ["Тип вопроса", "Обязательно. multiple_choice | multiple_response | matching | ranking | scale"],
         ["Текст вопроса", "Обязательно. Формулировка"],
         ["Сложность", "Целое 0..100; по умолчанию 50"],
-        ["Тексты вариантов ответа", "Разделитель вариантов — #. Для matching: «лево # ... || право # ...»"],
-        ["Номера правильных ответов", "1-based. multiple_choice: «2». multiple_response: «1,3». matching: «1-1, 2-2». ranking: порядок «3,1,2»"],
-        ["Следование вариантов ответов", "Random (по умолчанию) | Fixed"],
+        ["Тексты вариантов ответа", "Разделитель вариантов — #. Для matching: «лево # ... || право # ...». Для scale — градации по порядку, от полюса к полюсу"],
+        ["Номера правильных ответов", "1-based. multiple_choice: «2». multiple_response: «1,3». matching: «1-1, 2-2». ranking: порядок «3,1,2». scale: один номер ЛИБО пусто — пустая ячейка означает вопрос без правильного ответа"],
+        ["Следование вариантов ответов", "Random (по умолчанию) | Fixed. К типу scale не применяется: градации не перемешиваются"],
         ["Обратная связь", "Общая обратная связь (режим «общая»)"],
         ["Теги", "Список; разделители «;» и «,». Напр.: финансы; учёт"],
         ["Режим ОС", "общая (по умолчанию) | условная"],
         ["ОС при верном", "Текст; только при режиме «условная»"],
         ["ОС при неверном", "Текст; только при режиме «условная»"],
         ["", ""],
-        ["Цена ответа", "Задаётся в листе «Оценка» книги теста (не свойство вопроса — T-40)"],
+        ["Балл и «Цена ответа»", "Здесь их нет: сколько стоит вопрос — свойство ТЕСТА, а не вопроса (один вопрос может стоить по-разному в разных тестах). Задаются на листе «Оценка» книги теста: раздел «Импорт» → «Скачать шаблон»"],
         ["Пример (multiple_choice)", "Варианты «A # B # C», правильный «2»"],
-        ["Пример (matching)", "«Кошка # Собака || Мяу # Гав # Буль», пары «1-1, 2-2»"],
-        ["Пример (ranking)", "Элементы «Шаг А # Шаг Б # Шаг В», порядок «3,1,2»"],
+        ["Пример (multiple_response)", "Варианты «A # B # C», правильные «1,3»"],
+        ["Пример (matching)", "«Кошка # Собака || Мяу # Гав # Буль», пары «1-1, 2-2» (третий вариант справа — ловушка)"],
+        ["Пример (ranking)", "Элементы «Шаг А # Шаг Б # Шаг В», порядок «3,1,2» — сначала 3-й элемент, затем 1-й, затем 2-й"],
+        ["Пример (scale)", "Градации «Никогда # Редко # Иногда # Часто # Постоянно», правильный ответ ПУСТО — опросник без верных и неверных ответов"],
       ];
       addAoaSheet(wb, "Справка", help, [32, 90]);
 

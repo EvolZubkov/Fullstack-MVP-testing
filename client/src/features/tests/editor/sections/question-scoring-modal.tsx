@@ -46,7 +46,7 @@ export type QuestionScoringModalProps = {
   onClose: () => void;
 };
 
-type BuilderQuestionType = "single" | "multiple" | "matching" | "ranking";
+import type { QuestionType as BuilderQuestionType } from "@shared/questions/question-type";
 
 /** Answer options of the question (weight labels for the constructor). */
 function questionOptions(question: Question): string[] {

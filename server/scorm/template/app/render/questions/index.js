@@ -1,30 +1,24 @@
-var QUESTION_HINTS = {
-  single:   'Выберите только один правильный ответ.',
-  multiple: 'Выберите один или несколько правильных ответов.',
-  ranking:  'Расставьте элементы в правильной последовательности. Для этого зажмите нужный элемент и передвиньте.',
-  matching: 'Расставьте элементы в правильной последовательности. Для этого зажмите нужный элемент и передвиньте.'
-};
-
 function renderQuestionInput(q) {
   var answer = state.answers[q.id];
-  // PRD-19 (Block B): render inputs read-only when feedback is shown OR the
-  // question is committed/frozen (isAnswerLocked keys off the PERSISTED status,
-  // so a returned-to committed answer renders disabled — FR-04 / web parity).
+  // Answer-review highlighting (correct/wrong/partial) is shown ONLY when the test
+  // enables «показывать правильность ответа» (showCorrectAnswers) — NEVER on the mere
+  // fact that an answer is committed/frozen, which would leak the key with the setting
+  // off (web parity: take-test gates reviewMode on showCorrectAnswers). Interaction is
+  // guarded separately by the delegated handlers (isAnswerLocked), so read-only after
+  // commit still holds without this flag.
   var fqCur = (state.flatQuestions || [])[state.currentIndex];
-  var locked = (TEST_DATA.showCorrectAnswers && state.feedbackShown) ||
-    (typeof isAnswerLocked === 'function' && isAnswerLocked(fqCur));
+  var showReview = TEST_DATA.showCorrectAnswers &&
+    (state.feedbackShown || (typeof isAnswerLocked === 'function' && isAnswerLocked(fqCur)));
   var correct = q.correct || {};
   var shuffleMapping = state.shuffleMappings[q.id];
 
-  var hint = QUESTION_HINTS[q.type] || '';
-  var hintHtml = hint ? '<p class="question-hint">' + escapeHtml(hint) + '</p>' : '';
-
-  var inputHtml = '';
-  if (q.type === 'single')   inputHtml = renderSingleQuestionInput(q, answer, locked, correct, shuffleMapping);
-  else if (q.type === 'multiple') inputHtml = renderMultipleQuestionInput(q, answer, locked, correct, shuffleMapping);
-  else if (q.type === 'matching') inputHtml = renderMatchingQuestionInput(q, answer, locked, correct, shuffleMapping);
-  else if (q.type === 'ranking')  inputHtml = renderRankingQuestionInput(q, answer, locked, correct, shuffleMapping);
-  else return '<div>Неизвестный тип вопроса</div>';
-
-  return hintHtml + inputHtml;
+  // The type hint is the question subtitle (state.questionHint in the layout, both
+  // hosts) — not prepended here, so the package matches the web exactly.
+  if (q.type === 'single')   return renderSingleQuestionInput(q, answer, showReview, correct, shuffleMapping);
+  // The scale takes no shuffle mapping: its graduation order is content (PRD-26 FR-04).
+  if (q.type === 'scale')    return renderScaleQuestionInput(q, answer, showReview, correct);
+  if (q.type === 'multiple') return renderMultipleQuestionInput(q, answer, showReview, correct, shuffleMapping);
+  if (q.type === 'matching') return renderMatchingQuestionInput(q, answer, showReview, correct, shuffleMapping);
+  if (q.type === 'ranking')  return renderRankingQuestionInput(q, answer, showReview, correct, shuffleMapping);
+  return '<div>Неизвестный тип вопроса</div>';
 }

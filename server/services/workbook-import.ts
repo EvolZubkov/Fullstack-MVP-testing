@@ -41,6 +41,8 @@ import type { Role } from "@shared/access";
 import { importQuestionRows, type ResolvedQuestion } from "./questions-import";
 import { testSettingsService, type SectionPayload } from "./test-settings";
 import { parseScoringCell } from "../utils/scoring-excel";
+import { hasOptionList, isMeasurementOnly } from "@shared/questions/question-type";
+
 import {
   parseScaleRow,
   parseResultVariableRow,
@@ -48,7 +50,9 @@ import {
   validateSourceKey,
   parseStructureRow,
   parseQuotaRow,
+  parseVariantThresholdRow,
   parseScoringOverrideRow,
+  variantsColumnOf,
   type ParsedQuota,
 } from "../utils/workbook-sheets";
 
@@ -62,6 +66,11 @@ export interface WorkbookImportResult {
   /** PRD-14 FR-16: sections + quotas written from «Структура»/«Квоты». */
   structure: { sections: number; quotas: number };
   errors: string[];
+  /**
+   * Non-blocking notices: the book imports, but something in it is likely not
+   * what the author meant (e.g. two competing sources of the same setting).
+   */
+  warnings: string[];
   dryRun: boolean;
 }
 
@@ -70,7 +79,7 @@ function normalizeName(s: string): string {
   return s.replace(/[\s ​﻿]+/g, " ").trim().toLowerCase();
 }
 
-type QuestionType = "single" | "multiple" | "matching" | "ranking";
+type QuestionType = "single" | "multiple" | "matching" | "ranking" | "scale";
 
 /** Find a worksheet by role name (case-insensitive, trimmed). */
 function findSheet(wb: ExcelJS.Workbook, name: string): ExcelJS.Worksheet | undefined {
@@ -81,7 +90,9 @@ function findSheet(wb: ExcelJS.Workbook, name: string): ExcelJS.Worksheet | unde
 /** Option/pair/item count of a stored question (for source-key validation). */
 function unitCountOfQuestion(q: { type: string; dataJson: unknown }): number {
   const d = (q.dataJson ?? {}) as any;
-  if (q.type === "single" || q.type === "multiple") return d.options?.length ?? 0;
+  // A scale keeps its graduations in the same `options` list, so its source keys are
+  // graduation indices validated against that count (PRD-26 FR-12).
+  if (hasOptionList(q.type)) return d.options?.length ?? 0;
   if (q.type === "matching") return d.left?.length ?? 0;
   return d.items?.length ?? 0;
 }
@@ -100,6 +111,7 @@ export async function importWorkbook(
     scoring: { rows: 0 },
     structure: { sections: 0, quotas: 0 },
     errors: [],
+    warnings: [],
     dryRun,
   };
 
@@ -128,12 +140,15 @@ export async function importWorkbook(
     const qres = await importQuestionRows(qrows, sheetHeaders(questionsSheet), { dryRun, actor });
     result.questions = { created: qres.created, updated: qres.updated, skipped: qres.skipped };
     for (const e of qres.errors) result.errors.push(`Лист «Вопросы», ${e}`);
+    for (const w of qres.warnings) result.warnings.push(`Лист «Вопросы», ${w}`);
     for (const [alias, q] of qres.aliasToQuestion) aliasToQuestion.set(alias, q);
 
     // Variant memberships: resolve each row's question (row key alias, else ID)
-    // and group its labels under the question's topic.
+    // and group its labels under the question's topic. The column is «Варианты
+    // теста»; the old bare «Варианты» is still honoured on legacy books.
+    const variantsCol = variantsColumnOf(sheetHeaders(questionsSheet));
     for (const r of qrows) {
-      const numbers = parseVariantNumbers(r["Варианты"]);
+      const numbers = variantsCol ? parseVariantNumbers(r[variantsCol]) : [];
       if (numbers.length === 0) continue;
       const topicKey = normalizeName(String(r["Тема"] ?? ""));
       if (!topicKey) continue;
@@ -267,6 +282,7 @@ export async function importWorkbook(
           type: q.type as QuestionType,
           unitCount: unitCountOfQuestion(q),
           contentHash: q.contentHash ?? null,
+          measurementOnly: isMeasurementOnly(q),
         }
       : null;
     questionCache.set(ref, resolved);
@@ -363,6 +379,26 @@ export async function importWorkbook(
 
     if (scoringSheet) {
       const rows = sheetToObjects(scoringSheet);
+
+      // Both sources carry DATA: «Оценка» wins and the «Вопросы» columns are not
+      // read at all. Say so — silently ignoring half the book is a surprise, and
+      // an untouched (header-only) «Оценка» sheet from the template additionally
+      // CLEARS the test's overrides, dropping scoring the author did fill in.
+      //
+      // Keyed on values, not on column presence: the template ships both the
+      // «Оценка» sheet and the «Вопросы» scoring columns, so a presence check
+      // would fire on every book built from it and stop being read.
+      const questionsCarryScoringValues = questionRows.some(
+        (r) =>
+          String(r["Балл"] ?? "").trim() !== "" || String(r["Цена ответа"] ?? "").trim() !== "",
+      );
+      if (questionsCarryScoringValues) {
+        result.warnings.push(
+          `Оценка взята с листа «Оценка» (строк: ${rows.length}); колонки «Балл»/«Цена ответа» ` +
+            `листа «Вопросы» не читались. Чтобы оценка бралась с листа «Вопросы», удалите лист «Оценка».`,
+        );
+      }
+
       for (let i = 0; i < rows.length; i++) {
         const where = `Лист «Оценка», строка ${i + 2}`;
         const parsed = parseScoringOverrideRow(rows[i]);
@@ -414,17 +450,34 @@ export async function importWorkbook(
         continue;
       }
 
+      // PRD-26 FR-25: a measurement-only scale is never graded, so a price on it will
+      // not reach the result. The values are still WRITTEN (they become live the moment
+      // the author sets a correct graduation), but the author is told the row has no
+      // effect right now — silently storing dead numbers is how «почему не считается»
+      // tickets are born.
+      if (q.measurementOnly && (input.points != null || input.scoringRaw !== "")) {
+        result.warnings.push(
+          `${input.where}: вопрос "${input.ref}" — измерительная шкала без правильной ` +
+            `градации, поэтому «Балл»/«Цена ответа» на результат не влияют (значения сохранены)`,
+        );
+      }
+
       // «Цена ответа» needs the question type/option count; "точное" becomes an
       // EXPLICIT exact override (parseScoringCell returns null for it).
+      //
+      // A cell that fails to parse is reported and DROPPED ON ITS OWN: the three
+      // columns are independent links of the effective chain, so voiding the whole
+      // row would silently take a valid «Балл»/«Сложность» down with it and let the
+      // question fall through to the system default (1 point, exact).
       let scoringJson: QuestionScoring | null = null;
       if (input.scoringRaw !== "") {
         const sp = parseScoringCell(input.scoringRaw, q.type, q.unitCount);
-        if (!sp.ok) {
-          result.errors.push(`${input.where}: ${sp.error}`);
-          continue;
-        }
-        scoringJson = sp.value ?? { kind: "exact" };
+        if (sp.ok) scoringJson = sp.value ?? { kind: "exact" };
+        else result.errors.push(`${input.where}: ${sp.error}`);
       }
+
+      // Nothing left to override once the bad cell is dropped — no row to write.
+      if (input.points == null && scoringJson == null && input.difficulty == null) continue;
 
       seenQuestionIds.add(q.id);
       overrideRows.push({
@@ -540,6 +593,80 @@ export async function importWorkbook(
     for (const key of quotasByTopic.keys()) {
       if (!usedTopicKeys.has(key)) {
         result.errors.push(`Лист «Квоты»: раздел "${key}" не найден на листе «Структура»`);
+      }
+    }
+
+    // ── «Пороги вариантов» (PRD-24, FR-14) ──────────────────────────────────
+    // Read AFTER the variant sets exist: the sheet keys variants by 1-based NUMBER
+    // (they are positional in the workbook), and only now can a number be mapped to
+    // the freshly minted, stable formId the rule is keyed by.
+    const thresholdsSheet = findSheet(workbook, "Пороги вариантов");
+    if (thresholdsSheet) {
+      const payloadByTopicKey = new Map<string, SectionPayload>();
+      for (const p of pending) {
+        const name = [...topicIdByName.entries()].find(([, id]) => id === p.payload.topicId)?.[0];
+        // dryRun synthetic ids carry the key inline («__newtopic__:<key>»)
+        const key = name ?? p.payload.topicId.replace(/^__newtopic__:/, "");
+        payloadByTopicKey.set(key, p.payload);
+      }
+
+      const trows = sheetToObjects(thresholdsSheet);
+      for (let i = 0; i < trows.length; i++) {
+        const where = `Лист «Пороги вариантов», строка ${i + 2}`;
+        const parsed = parseVariantThresholdRow(trows[i]);
+        if (!parsed.ok) {
+          result.errors.push(`${where}: ${parsed.error}`);
+          continue;
+        }
+        const key = normalizeName(parsed.value.topicName);
+        const payload = payloadByTopicKey.get(key);
+        if (!payload) {
+          result.errors.push(`${where}: раздел "${parsed.value.topicName}" не найден на листе «Структура»`);
+          continue;
+        }
+        const forms = (payload.formSetJson as FormSet | null)?.forms;
+        if (!forms?.length) {
+          result.errors.push(`${where}: раздел "${parsed.value.topicName}" не в режиме вариантов`);
+          continue;
+        }
+        const form = forms[parsed.value.variantNumber - 1];
+        if (!form) {
+          result.errors.push(
+            `${where}: вариант ${parsed.value.variantNumber} не объявлен у темы "${parsed.value.topicName}"`,
+          );
+          continue;
+        }
+        const rule = payload.topicPassRuleJson as {
+          source?: string;
+          byForm?: Record<string, { type: "percent" | "absolute"; value: number }>;
+        };
+        if (rule?.source !== "by_variant") {
+          result.errors.push(
+            `${where}: у раздела "${parsed.value.topicName}" тип порога не «По вариантам»`,
+          );
+          continue;
+        }
+        rule.byForm = rule.byForm ?? {};
+        rule.byForm[form.id] = { type: parsed.value.type, value: parsed.value.value };
+      }
+    }
+
+    // A `by_variant` section must end up with a threshold for EVERY variant —
+    // otherwise the uncovered one would silently fall back to the overall rule
+    // at delivery time (the editor blocks this too, FR-13).
+    for (const p of pending) {
+      const rule = p.payload.topicPassRuleJson as { source?: string; byForm?: Record<string, unknown> };
+      if (rule?.source !== "by_variant") continue;
+      const forms = (p.payload.formSetJson as FormSet | null)?.forms ?? [];
+      const covered = Object.keys(rule.byForm ?? {}).length;
+      if (!forms.length) {
+        result.errors.push(
+          `Тип порога «По вариантам» задан разделу без вариантов (тема "${p.payload.topicId}")`,
+        );
+      } else if (covered < forms.length) {
+        result.errors.push(
+          `Раздел с типом порога «По вариантам»: задано ${covered} из ${forms.length} порогов — нужен порог на каждый вариант`,
+        );
       }
     }
 

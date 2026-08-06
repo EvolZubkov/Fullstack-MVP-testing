@@ -1,28 +1,24 @@
 /**
  * @module client/pages/learner/use-section-timer
  *
- * Per-topic (section) time-limit timer for the web learner runtime — the web
- * counterpart of the SCORM package's `startSectionTimer` (PRD-4 v1.1 §3.2).
+ * Per-topic (section) time-limit timer for the web learner runtime.
  *
- * Agreed behaviour:
- *   - Each topic carrying a positive `sectionTimeLimitMinutes` gets a wall-clock
- *     deadline the FIRST time the learner enters it:
- *     `deadline = Date.now() + budgetMinutes * 60_000`.
- *   - The deadline is fixed and runs in real time. Navigation (back/forward)
- *     never pauses, resets or extends it — going back keeps the timer ticking.
- *   - When `Date.now() >= deadline` the topic is "locked": its questions become
- *     inaccessible (navigation skips it) and, if it is the topic currently being
- *     viewed, the caller force-advances to the next non-locked topic.
- *   - Because the deadline never pauses, a topic the learner leaves forward keeps
- *     counting down; by the time they navigate back it has usually expired and is
- *     locked. The budget is a fixed real-time window from first entry (anti-gaming).
+ * The remaining time is NOT owned here: the server keeps it on the attempt row and
+ * this hook only reports where the learner is (`POST /attempts/:id/section-timer`)
+ * and paints what comes back. That is deliberate — the remainder decides whether an
+ * answer still counts, so a value the learner could edit (it used to live in
+ * `localStorage`) was not a limit but a suggestion.
  *
- * Network resilience: deadlines are persisted to `localStorage` (keyed by attempt
- * id), so ticking and expiry are fully client-side and survive reloads and
- * disconnects with no server round-trip. The test-level timer remains the
- * server-anchored bound on total time. Trade-off: clearing localStorage resets an
- * unexpired topic's window (lenient — never shortens it); a server-anchored
- * first-entry timestamp would close that gap at the cost of a network call.
+ * The agreed rules are enforced server-side by the shared
+ * {@link module:shared/flow/section-budget} model:
+ *   - the countdown runs only while the learner is inside the section;
+ *   - leaving it — hub, обзор, results, closed tab — freezes the remainder;
+ *   - «Продолжить с места остановки» resumes from that remainder, so reading the
+ *     questions and coming back later buys no fresh limit;
+ *   - at zero the section is spent and locks.
+ *
+ * Between pings the countdown is interpolated locally so the display ticks every
+ * second; the server's answer always wins.
  */
 import { useEffect, useRef, useState } from "react";
 
@@ -33,57 +29,36 @@ export interface SectionTimerQuestion {
   sectionTimeLimitMinutes: number | null;
 }
 
-/** Map of topicId -> wall-clock deadline (epoch ms). */
-export type DeadlineMap = Record<string, number>;
+/** How often the host tells the server it is still inside the section. */
+export const PING_INTERVAL_MS = 10_000;
 
-const STORAGE_PREFIX = "tb:section-deadlines:";
-
-/** localStorage key holding the deadline map for a given attempt. */
-export function storageKey(attemptId: string): string {
-  return STORAGE_PREFIX + attemptId;
+/** One server answer. */
+interface SectionTimerView {
+  remainingSeconds: number | null;
+  lockedTopics: string[];
 }
 
-/** Read the persisted deadline map for an attempt; `{}` when absent/unreadable. */
-export function loadDeadlines(attemptId: string): DeadlineMap {
-  try {
-    const raw = localStorage.getItem(storageKey(attemptId));
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as unknown;
-    if (parsed && typeof parsed === "object") return parsed as DeadlineMap;
-  } catch {
-    // Malformed JSON or storage unavailable (private mode / SSR) — start fresh.
-  }
-  return {};
-}
-
-/** Persist the deadline map; silently ignores storage errors (quota/private). */
-export function saveDeadlines(attemptId: string, deadlines: DeadlineMap): void {
-  try {
-    localStorage.setItem(storageKey(attemptId), JSON.stringify(deadlines));
-  } catch {
-    // Storage unavailable — ticking still works from the in-memory map.
-  }
-}
-
-/** Topic ids whose deadline is at or before `nowMs`. */
-export function expiredTopics(deadlines: DeadlineMap, nowMs: number): Set<string> {
-  const out = new Set<string>();
-  for (const [topicId, deadline] of Object.entries(deadlines)) {
-    if (nowMs >= deadline) out.add(topicId);
-  }
-  return out;
-}
-
-/** Remaining whole seconds for `topicId`, or null when it has no deadline. */
-export function remainingSecondsFor(
+/**
+ * Report the learner's position to the server and read back the section state.
+ * Network failures resolve to null — the display then keeps interpolating, and the
+ * next successful ping re-syncs it.
+ */
+export async function pingSectionTimer(
+  attemptId: string,
   topicId: string | null,
-  deadlines: DeadlineMap,
-  nowMs: number,
-): number | null {
-  if (!topicId) return null;
-  const deadline = deadlines[topicId];
-  if (typeof deadline !== "number") return null;
-  return Math.max(0, Math.ceil((deadline - nowMs) / 1000));
+): Promise<SectionTimerView | null> {
+  try {
+    const res = await fetch(`/api/attempts/${attemptId}/section-timer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ topicId }),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as SectionTimerView;
+  } catch {
+    return null;
+  }
 }
 
 /** First index `>= from` whose topic is not locked, or null if none. */
@@ -173,7 +148,6 @@ export function useSectionTimer({
   enabled,
   onExpire,
 }: UseSectionTimerArgs): UseSectionTimerResult {
-  const deadlinesRef = useRef<DeadlineMap>({});
   const [sectionRemainingSeconds, setSectionRemainingSeconds] = useState<number | null>(null);
   const [lockedTopics, setLockedTopics] = useState<Set<string>>(new Set());
   // Topics whose expiry was already signalled, so onExpire fires at most once each.
@@ -181,55 +155,67 @@ export function useSectionTimer({
   // Always call the freshest onExpire closure (parent reads live state/answers).
   const onExpireRef = useRef(onExpire);
   onExpireRef.current = onExpire;
+  // Local interpolation between pings: the server's number and when we got it.
+  const syncedRef = useRef<{ seconds: number | null; at: number }>({ seconds: null, at: 0 });
 
-  // Hydrate persisted deadlines when the attempt becomes known (handles resume).
+  const topicId = enabled ? (questions[currentIndex]?.topicId ?? null) : null;
+
+  /** Absorb a server answer: it wins over whatever we were interpolating. */
+  const absorb = (view: { remainingSeconds: number | null; lockedTopics: string[] } | null) => {
+    if (!view) return;
+    syncedRef.current = { seconds: view.remainingSeconds, at: Date.now() };
+    setSectionRemainingSeconds(view.remainingSeconds);
+    setLockedTopics((prev) => {
+      const locked = new Set(view.lockedTopics);
+      return sameSet(prev, locked) ? prev : locked;
+    });
+    if (
+      topicId &&
+      view.remainingSeconds !== null &&
+      view.remainingSeconds <= 0 &&
+      !signaledRef.current.has(topicId)
+    ) {
+      signaledRef.current.add(topicId);
+      onExpireRef.current(topicId);
+    }
+  };
+
+  // Tell the server where the learner is: on entering/leaving a section and every
+  // PING_INTERVAL_MS while inside. Leaving (topicId null) is what freezes the
+  // remainder, so it is reported too — including on unmount.
   useEffect(() => {
     if (!attemptId) return;
-    deadlinesRef.current = loadDeadlines(attemptId);
-    setLockedTopics(expiredTopics(deadlinesRef.current, Date.now()));
-  }, [attemptId]);
-
-  // Set the current topic's deadline on first entry (any direction).
-  useEffect(() => {
-    if (!enabled || !attemptId) return;
-    const q = questions[currentIndex];
-    if (!q || !q.sectionTimeLimitMinutes || q.sectionTimeLimitMinutes <= 0) return;
-    if (deadlinesRef.current[q.topicId] != null) return;
-    deadlinesRef.current = {
-      ...deadlinesRef.current,
-      [q.topicId]: Date.now() + q.sectionTimeLimitMinutes * 60_000,
+    let alive = true;
+    const ping = async () => {
+      const view = await pingSectionTimer(attemptId, topicId);
+      if (alive) absorb(view);
     };
-    saveDeadlines(attemptId, deadlinesRef.current);
-  }, [enabled, attemptId, questions, currentIndex]);
+    void ping();
+    const id = topicId ? setInterval(ping, PING_INTERVAL_MS) : null;
+    return () => {
+      alive = false;
+      if (id) clearInterval(id);
+      // Report the exit so the section stops being charged. Fire-and-forget: the
+      // server also caps a silent client by its grace window.
+      if (topicId) void pingSectionTimer(attemptId, null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attemptId, topicId]);
 
-  // Wall-clock tick: refresh remaining/locked and fire expiry for the viewed topic.
+  // Smooth display between pings — interpolated, never authoritative.
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !topicId) {
       setSectionRemainingSeconds(null);
       return;
     }
-    const tick = () => {
-      const now = Date.now();
-      const deadlines = deadlinesRef.current;
-      const locked = expiredTopics(deadlines, now);
-      setLockedTopics((prev) => (sameSet(prev, locked) ? prev : locked));
-
-      const currentTopicId = questions[currentIndex]?.topicId ?? null;
-      setSectionRemainingSeconds(remainingSecondsFor(currentTopicId, deadlines, now));
-
-      if (
-        currentTopicId &&
-        locked.has(currentTopicId) &&
-        !signaledRef.current.has(currentTopicId)
-      ) {
-        signaledRef.current.add(currentTopicId);
-        onExpireRef.current(currentTopicId);
-      }
-    };
-    tick(); // run immediately so resume/expiry reflects without a 1s delay
-    const id = setInterval(tick, 1000);
+    const id = setInterval(() => {
+      const synced = syncedRef.current;
+      if (synced.seconds === null) return;
+      const elapsed = Math.floor((Date.now() - synced.at) / 1000);
+      setSectionRemainingSeconds(Math.max(0, synced.seconds - elapsed));
+    }, 1000);
     return () => clearInterval(id);
-  }, [enabled, questions, currentIndex]);
+  }, [enabled, topicId]);
 
   return { sectionRemainingSeconds, lockedTopics };
 }
@@ -260,47 +246,58 @@ export function useAdaptiveSectionTimer({
   enabled,
   onExpire,
 }: UseAdaptiveSectionTimerArgs): { sectionRemainingSeconds: number | null } {
-  const deadlinesRef = useRef<DeadlineMap>({});
   const [sectionRemainingSeconds, setSectionRemainingSeconds] = useState<number | null>(null);
   const signaledRef = useRef<Set<string>>(new Set());
   const onExpireRef = useRef(onExpire);
   onExpireRef.current = onExpire;
+  const syncedRef = useRef<{ seconds: number | null; at: number }>({ seconds: null, at: 0 });
 
+  const active = enabled ? topicId : null;
+
+  // Same server-owned model as the standard flow (`limitMinutes` is resolved from
+  // the test server-side, so it is not sent from here).
   useEffect(() => {
     if (!attemptId) return;
-    deadlinesRef.current = loadDeadlines(attemptId);
-  }, [attemptId]);
-
-  // Set the active topic's deadline on first entry.
-  useEffect(() => {
-    if (!enabled || !attemptId || !topicId || !limitMinutes || limitMinutes <= 0) return;
-    if (deadlinesRef.current[topicId] != null) return;
-    deadlinesRef.current = {
-      ...deadlinesRef.current,
-      [topicId]: Date.now() + limitMinutes * 60_000,
+    let alive = true;
+    const ping = async () => {
+      const view = await pingSectionTimer(attemptId, active);
+      if (!alive || !view) return;
+      syncedRef.current = { seconds: view.remainingSeconds, at: Date.now() };
+      setSectionRemainingSeconds(view.remainingSeconds);
+      if (
+        active &&
+        view.remainingSeconds !== null &&
+        view.remainingSeconds <= 0 &&
+        !signaledRef.current.has(active)
+      ) {
+        signaledRef.current.add(active);
+        onExpireRef.current(active);
+      }
     };
-    saveDeadlines(attemptId, deadlinesRef.current);
-  }, [enabled, attemptId, topicId, limitMinutes]);
+    void ping();
+    const id = active ? setInterval(ping, PING_INTERVAL_MS) : null;
+    return () => {
+      alive = false;
+      if (id) clearInterval(id);
+      if (active) void pingSectionTimer(attemptId, null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attemptId, active]);
 
-  // Wall-clock tick for the active topic.
+  // Smooth display between pings.
   useEffect(() => {
-    if (!enabled || !topicId) {
+    if (!active) {
       setSectionRemainingSeconds(null);
       return;
     }
-    const tick = () => {
-      const now = Date.now();
-      setSectionRemainingSeconds(remainingSecondsFor(topicId, deadlinesRef.current, now));
-      const deadline = deadlinesRef.current[topicId];
-      if (typeof deadline === "number" && now >= deadline && !signaledRef.current.has(topicId)) {
-        signaledRef.current.add(topicId);
-        onExpireRef.current(topicId);
-      }
-    };
-    tick();
-    const id = setInterval(tick, 1000);
+    const id = setInterval(() => {
+      const synced = syncedRef.current;
+      if (synced.seconds === null) return;
+      const elapsed = Math.floor((Date.now() - synced.at) / 1000);
+      setSectionRemainingSeconds(Math.max(0, synced.seconds - elapsed));
+    }, 1000);
     return () => clearInterval(id);
-  }, [enabled, topicId]);
+  }, [active]);
 
   return { sectionRemainingSeconds };
 }

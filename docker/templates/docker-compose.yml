@@ -1,6 +1,12 @@
-# Docker Compose for test-builder.
-# Placed at /srv/app/<project>/docker-compose.yml by deploy.sh.
-# PROJECT_NAME_PLACEHOLDER and SERVICE_PORT_PLACEHOLDER are substituted by deploy.sh.
+# Docker Compose for test-builder — ONE file for every instance (production and
+# test). Copied verbatim to /srv/app/<project>/docker-compose.yml by deploy.sh;
+# nothing in it is substituted at deploy time.
+#
+# Per-instance values come from the `.env` file deploy.sh writes NEXT TO this file
+# (compose reads ./.env automatically): TB_PROJECT, TB_IMAGE, TB_PORT,
+# TB_NODE_ENV, TB_CONFIG_FILE, TB_LOG_DIR, TB_DATA_DIR. That file configures
+# COMPOSE only — the application's secrets are the separate env/.env mounted into
+# the container below.
 #
 # Usage (on server):
 #   cd /srv/app/<project>
@@ -9,36 +15,48 @@
 #   docker compose down
 
 services:
-  PROJECT_NAME_PLACEHOLDER:
-    image: PROJECT_NAME_PLACEHOLDER:latest
-    container_name: PROJECT_NAME_PLACEHOLDER
-    hostname: PROJECT_NAME_PLACEHOLDER
+  app:
+    image: ${TB_IMAGE}
+    container_name: ${TB_PROJECT}
+    hostname: ${TB_PROJECT}
     restart: unless-stopped
+    # The entrypoint needs root to prepare the volume mount points; it drops to the
+    # unprivileged app user (gosu) before starting the application.
     user: root
 
     ports:
-      - "${BIND_IP:-0.0.0.0}:SERVICE_PORT_PLACEHOLDER:SERVICE_PORT_PLACEHOLDER"
+      - "${TB_BIND_IP:-0.0.0.0}:${TB_PORT}:${TB_PORT}"
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
     volumes:
       # Application logs
-      - /srv/logs/PROJECT_NAME_PLACEHOLDER:/app/logs
+      - ${TB_LOG_DIR}:/app/logs
       # Media and SCORM uploads
-      - /srv/data/PROJECT_NAME_PLACEHOLDER/uploads:/app/uploads
+      - ${TB_DATA_DIR}/uploads:/app/uploads
       # Env file — SECRETS only (read-only). loadEnv falls back to /app/.env when
-      # /app/.env.production is absent; non-secret config is baked into the image
-      # (config/production.config.jsonc, selected by NODE_ENV=production).
+      # /app/.env.<NODE_ENV> is absent.
       - ./env/.env:/app/.env:ro
+      # Non-secret configuration — host-side, read-only. The image carries NO
+      # config, so this mount is required. Edit the files here and
+      # `docker compose restart` — no rebuild.
+      - ./config:/app/config:ro
 
     environment:
-      PORT: SERVICE_PORT_PLACEHOLDER
+      PORT: ${TB_PORT}
       TZ: ${TZ:-Europe/Moscow}
-      NODE_ENV: production
+      NODE_ENV: ${TB_NODE_ENV}
+      # Which config file the app loads. Set explicitly because the built server
+      # has NODE_ENV folded to "production" (script/build.ts) — NODE_ENV alone
+      # cannot select a non-production file. Read at runtime, so it always wins.
+      CONFIG_FILE: ${TB_CONFIG_FILE}
 
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:SERVICE_PORT_PLACEHOLDER/api/me || exit 1"]
+      # curl is installed by docker/Dockerfile. Do NOT switch this to wget: the
+      # base image (node:20-slim) ships neither, and a healthcheck calling a
+      # missing binary leaves the container permanently "unhealthy".
+      test: ["CMD-SHELL", "curl -f http://localhost:${TB_PORT}/api/me || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

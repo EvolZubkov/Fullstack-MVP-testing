@@ -16,6 +16,12 @@
  *   npm run scorm:template -- corporate    # built-in id
  *   npm run scorm:template -- ./path/to/template-folder
  *   npm run scorm:template -- ./path/to/manifest.json
+ *   npm run scorm:template -- ./templates/certification --theme dark --theme-colors
+ *
+ * PRD-23 options:
+ *   --theme <light|dark|auto>  pin the palette the package opens in
+ *   --theme-colors             seed a foreign colour per palette, so the acceptance
+ *                              shows whether per-theme overrides reach the screen
  *
  * External templates (outside server/scorm/templates) are staged into the
  * registry under a temporary id for the duration of the export, then removed.
@@ -153,6 +159,8 @@ function makeContentPage(args: {
   templateKey: string;
   sortOrder: number;
   values: Record<string, unknown>;
+  /** PRD-22 page settings (sequence identifier, caption, background). */
+  settings?: Record<string, unknown>;
 }) {
   cpSeq += 1;
   return {
@@ -166,6 +174,7 @@ function makeContentPage(args: {
     templateKey: args.templateKey,
     sortOrder: args.sortOrder,
     valuesJson: { values: args.values, placeholderStyles: {} },
+    settingsJson: args.settings ?? {},
     autoAdvance: false,
     autoAdvanceDelayMs: null,
     createdAt: new Date(),
@@ -238,9 +247,29 @@ function buildContentPages(manifest: any) {
   // intro variants → test-scope «До теста»
   intro.forEach((v, i) =>
     pages.push(makeContentPage({ topicId: null, position: "before", kind: "intro", type: "intro", templateKey: v.key, sortOrder: i, values: mockValuesFor(v) })));
-  // info variants → before_topic AND after_topic (so both topic zones render)
-  info.forEach((v, i) =>
-    pages.push(makeContentPage({ topicId: TOPIC_ID, position: "before_topic", kind: "info", type: "info", templateKey: v.key, sortOrder: i, values: mockValuesFor(v) })));
+  // info variants → before_topic AND after_topic (so both topic zones render).
+  // PRD-22: a variant that declares a `sequence` setting gets THREE adjacent pages
+  // sharing one identifier — otherwise the navigation indicator has nothing to
+  // count and the acceptance package could not show it at all.
+  info.forEach((v, i) => {
+    const seqKey = (v.settings ?? []).find((s: any) => s?.type === "sequence")?.key;
+    if (!seqKey) {
+      pages.push(makeContentPage({ topicId: TOPIC_ID, position: "before_topic", kind: "info", type: "info", templateKey: v.key, sortOrder: i * 10, values: mockValuesFor(v) }));
+      return;
+    }
+    for (let n = 0; n < 3; n++) {
+      pages.push(makeContentPage({
+        topicId: TOPIC_ID,
+        position: "before_topic",
+        kind: "info",
+        type: "info",
+        templateKey: v.key,
+        sortOrder: i * 10 + n,
+        values: mockValuesFor(v),
+        settings: { [seqKey]: `seq-${v.key}` },
+      }));
+    }
+  });
   info.forEach((v, i) =>
     pages.push(makeContentPage({ topicId: TOPIC_ID, position: "after_topic", kind: "info", type: "info", templateKey: v.key, sortOrder: i, values: mockValuesFor(v) })));
   // summary variants → test-scope «После теста»
@@ -258,6 +287,36 @@ function buildParams(manifest: any): Record<string, unknown> {
   return params;
 }
 
+/** CLI flag with a value: `--theme dark`. */
+function flagValue(name: string): string | undefined {
+  const i = process.argv.indexOf(`--${name}`);
+  if (i === -1) return undefined;
+  const v = process.argv[i + 1];
+  return v && !v.startsWith("--") ? v : undefined;
+}
+
+/**
+ * PRD-23 acceptance seed. A themed template ships its own palettes, so an export
+ * with no overrides proves nothing about the printer — both palettes would simply
+ * be the template's own. `--theme-colors` therefore seeds an obviously foreign
+ * colour per palette: if the package paints THOSE, the per-theme block reached the
+ * screen; if the two differ when the palette changes, scoping works.
+ */
+function buildParamsByTheme(
+  manifest: any,
+): Record<string, Record<string, unknown>> | undefined {
+  if (process.argv.indexOf("--theme-colors") === -1) return undefined;
+  const themes: string[] = (manifest.themes || []).map((t: any) => t && t.id).filter(Boolean);
+  if (themes.length < 2) return undefined;
+  const colourKey = (manifest.params || []).find((p: any) => p.type === "color")?.key;
+  if (!colourKey) return undefined;
+  const seeded: Record<string, Record<string, unknown>> = {};
+  // Deep green vs bright cyan — neither occurs in the shipped templates.
+  const byTheme: Record<string, string> = { light: "150 80% 28%", dark: "185 100% 60%" };
+  for (const id of themes) if (byTheme[id]) seeded[id] = { [colourKey]: byTheme[id] };
+  return Object.keys(seeded).length > 0 ? seeded : undefined;
+}
+
 async function main() {
   const arg = process.argv[2] || "default";
   const resolved = resolveTemplate(arg);
@@ -268,6 +327,14 @@ async function main() {
       (manifest.capabilities && manifest.capabilities.questionTypes) || ["single", "multiple", "matching", "ranking"];
     const questions = buildQuestions(supportedTypes);
     const { pages, counts } = buildContentPages(manifest);
+
+    // PRD-23: what the package should paint with. Absent flags keep the previous
+    // behaviour exactly — a themeless export is byte-identical to before.
+    const paramsByTheme = buildParamsByTheme(manifest);
+    const themeSettings = {
+      ...(flagValue("theme") ? { theme: flagValue("theme") } : {}),
+      ...(paramsByTheme ? { paramsByTheme } : {}),
+    };
 
     const topic = { id: TOPIC_ID, name: "Демо-тема", description: "Моковая тема для приёмки шаблона", feedback: null, createdAt: new Date(), updatedAt: new Date() };
     const test = {
@@ -286,12 +353,38 @@ async function main() {
       published: true,
       status: "published",
       folderId: null,
-      designSettingsJson: { templateId: resolved.templateId, params: buildParams(manifest) },
+      designSettingsJson: { templateId: resolved.templateId, params: buildParams(manifest), ...themeSettings },
       createdAt: new Date(),
       updatedAt: new Date(),
     };
+    // PRD-24 acceptance (opt-in via TB_BY_VARIANT=1): put the topic into PRD-17
+    // variants mode and gate it with a PER-VARIANT threshold, so the package can be
+    // played to check that the verdict follows the variant that actually dropped.
+    // Variant 1 demands everything (100%), variant 2 only 40% — so the results screen
+    // shows a different «Требуется» depending on which variant actually dropped, and
+    // the manifest advertises the LOWEST of the two (0.40).
+    const byVariant = process.env.TB_BY_VARIANT === "1" && questions.length >= 2;
+    const half = Math.ceil(questions.length / 2);
+    const formSetJson = byVariant
+      ? {
+          forms: [
+            { id: "form-1", label: "Вариант 1", questionIds: questions.slice(0, half).map((q) => q.id) },
+            { id: "form-2", label: "Вариант 2", questionIds: questions.slice(half).map((q) => q.id) },
+          ],
+        }
+      : null;
+    const topicPassRuleJson = byVariant
+      ? {
+          source: "by_variant",
+          byForm: {
+            "form-1": { type: "percent", value: 100 },
+            "form-2": { type: "percent", value: 40 },
+          },
+        }
+      : null;
+
     const sections = [
-      { id: "section-1", testId: test.id, topicId: TOPIC_ID, drawCount: questions.length, sortOrder: 0, required: true, topicPassRuleJson: null, timeLimitMinutes: null, feedbackJson: null, topic, questions, courses: [], events: [] },
+      { id: "section-1", testId: test.id, topicId: TOPIC_ID, drawCount: questions.length, sortOrder: 0, required: true, topicPassRuleJson, formSetJson, timeLimitMinutes: null, feedbackJson: null, topic, questions, courses: [], events: [] },
     ];
 
     const data = {
@@ -299,7 +392,7 @@ async function main() {
       sections,
       adaptiveSettings: null,
       contentPages: pages,
-      designSettings: { templateId: resolved.templateId, params: buildParams(manifest) },
+      designSettings: { templateId: resolved.templateId, params: buildParams(manifest), ...themeSettings },
       telemetry: null,
     };
 

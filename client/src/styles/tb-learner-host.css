@@ -7,37 +7,40 @@
  * Part of the Tailwind-removal track (stage 5).
  */
 
-.tbh-minh-screen { min-height: 100vh; }
-.tbh-minh-full { min-height: 100%; }
+/* Scene root: the learner screen is exactly the window (spec «Стандартный» §3.3 —
+   pinned header/footer, the template's `.tb-scene__body` is the only scrolling
+   area). A `min-height` here would let a long question grow the PAGE instead: the
+   header (question map, progress) and the footer scroll away, and the runtime fit
+   (`fitQuestionScene`) — which shrinks the option font only when `.tb-scene__body`
+   overflows — never sees an overflow, so the options stay at the maximum size.
+   `dvh` after `vh` so mobile browsers measure the visible viewport. */
+.tbh-screen { height: 100vh; height: 100dvh; overflow: hidden; }
+/* Same scene, but INSIDE the app shell (the result page keeps the learner navbar):
+   it fills what the shell left over, not the whole window — `100dvh` here adds up to
+   the navbar and pushes the scene's footer past the bottom edge, while a `min-height`
+   leaves a dead band under a short scene. It STRETCHES instead of resolving a
+   percentage: the shell's `<main>` (LearnerLayout: `<Box as="main" grow>` inside a
+   column Stack of `min-height: 100vh`) has no definite height of its own, so `height:
+   100%` in here would collapse to the content. The `:has()` rule below turns that
+   main into a column flex container for these screens only — the list/history pages
+   keep the plain block flow they lay out in. */
+main:has(> .tbh-inset-screen) { display: flex; flex-direction: column; min-height: 0; }
+.tbh-inset-screen { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .tbh-col { display: flex; flex-direction: column; }
 .tbh-noselect { user-select: none; }
-.tbh-fill { flex: 1 1 0%; width: 100%; }
+/* `min-height: 0` lets the template host shrink below its content, which is what
+   leaves the host-rendered footer its row inside the window — a flex item at the
+   default `min-height: auto` never goes below its content and pushes the footer
+   past the bottom edge, where the scene root clips it. */
+.tbh-fill { flex: 1 1 0%; width: 100%; min-height: 0; }
 .tbh-wfull { width: 100%; }
-.tbh-dim { opacity: 0.7; }
 
-/* Question/blocked-screen footer: edges with back + forward, centered, capped. */
-.tbh-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 24px 40px;
-  margin-inline: auto;
-  width: 100%;
-  max-width: 48rem;
-}
-
-/* Result-screen footer: centered wrapping meta row. */
-.tbh-result-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  column-gap: 24px;
-  row-gap: 8px;
-  padding: 0 24px 40px;
-  font-size: 14px;
-}
+/* NB: neither the question screen nor the results screen has a footer class here any
+   more. Their nav rows are part of the TEMPLATE's scene (`.tb-scene__foot`, built from
+   `state.nav` / `result.nav` + `result.showBack`) on both hosts — chrome rendered next
+   to the shadow root is a second footer on the screen and gets neither the scene
+   surface nor the DS palette, which is what made the adaptive footer a light band with
+   a colourless primary button. */
 
 /* Blocked-screen footer: single centered action. */
 .tbh-center-foot {
@@ -47,44 +50,3 @@
   padding-bottom: 40px;
 }
 
-/* Subtle back/nav button (transparent, dims when idle/disabled). */
-.tbh-navbtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  opacity: 0.8;
-  transition: opacity 0.15s;
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  color: inherit;
-}
-.tbh-navbtn:hover:not(:disabled) { opacity: 1; }
-.tbh-navbtn:disabled { opacity: 0.3; cursor: default; }
-
-/* Result back-link (anchor styled like a subtle nav link). */
-.tbh-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  opacity: 0.8;
-  transition: opacity 0.15s;
-}
-.tbh-link:hover { opacity: 1; }
-
-/* Primary forward button (background set inline per theme). */
-.tbh-primarybtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border-radius: 0.5625rem;
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #fff;
-  border: 0;
-  cursor: pointer;
-}
-.tbh-primarybtn:disabled { opacity: 0.5; cursor: default; }

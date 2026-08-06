@@ -179,6 +179,41 @@ describe("lifecycle guards", () => {
     expect(res.body.status).toBe("active");
   });
 
+  // PRD-23 FR-04: a package installed before the closed theme registry carries a
+  // passing report from its own era, so the declaration is re-checked HERE.
+  it("activate is blocked when the manifest declares a theme outside the registry", async () => {
+    dbMock.__state.selectResult = [
+      {
+        id: "acme",
+        isBuiltin: false,
+        status: "draft",
+        validationJson: { ok: true },
+        smokeTestJson: { ok: true, routes: [] },
+        manifest: { themes: [{ id: "sepia", label: "Сепия" }] },
+      },
+    ];
+    const res = await asAuthor(request(makeApp()).put("/api/admin/templates/acme/activate"));
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain("тем");
+    expect(res.body.issues[0].message).toContain("sepia");
+  });
+
+  it("activate is not blocked by the advisory single-theme warning", async () => {
+    dbMock.__state.selectResult = [
+      {
+        id: "acme",
+        isBuiltin: false,
+        status: "draft",
+        validationJson: { ok: true },
+        smokeTestJson: { ok: true, routes: [] },
+        manifest: { themes: [{ id: "light", label: "Светлая" }] },
+      },
+    ];
+    dbMock.__state.returningResult = [{ id: "acme", status: "active", isActive: true }];
+    const res = await asAuthor(request(makeApp()).put("/api/admin/templates/acme/activate"));
+    expect(res.status).toBe(200);
+  });
+
   it("delete is refused for a built-in template", async () => {
     dbMock.__state.selectResult = [{ id: "default", isBuiltin: true, sourceType: "builtin", isActive: true, status: "active" }];
     const res = await asAuthor(request(makeApp()).delete("/api/admin/templates/default"));

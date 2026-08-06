@@ -21,8 +21,14 @@ const portSrc = readFileSync(
   resolve(process.cwd(), "server/scorm/template/app/scales/engine.js"),
   "utf8",
 );
+// The question-type traits (`TBQType`, PRD-26) are prepended the way the package build
+// concatenates them, so the port reads the same trait table the shipped runtime does.
+const qTypeSrc = readFileSync(
+  resolve(process.cwd(), "server/scorm/template/app/utils/qtype.js"),
+  "utf8",
+);
 // eslint-disable-next-line @typescript-eslint/no-implied-eval
-const ScaleEnginePort = new Function(`${portSrc}\n;return ScaleEngine;`)() as {
+const ScaleEnginePort = new Function(`${qTypeSrc}\n${portSrc}\n;return ScaleEngine;`)() as {
   computeScales: (s: unknown, m: unknown, a: unknown, q: unknown) => unknown;
 };
 
@@ -52,6 +58,41 @@ const scenarios: Scenario[] = [
     measurements: [...likert("q1", "s"), ...likert("q2", "s")],
     answers: { q1: 5, q2: 3 },
     questionTypes: { q1: "single", q2: "single" },
+  },
+  {
+    // PRD-26: the same Likert contributions, now on the `scale` type — the shape the
+    // burnout inventory actually imports as. A scale must behave like single choice
+    // here (one graduation active, range = extremum), not fall into the sum branch.
+    name: "scale type — Likert contributions",
+    scales: [{ key: "ee", aggregation: "sum", normalization: "none", direction: "positive" }],
+    measurements: [...likert("q1", "ee"), ...likert("q2", "ee")],
+    answers: { q1: 5, q2: 3 },
+    questionTypes: { q1: "scale", q2: "scale" },
+  },
+  {
+    name: "scale type — percent + bands, unanswered item",
+    scales: [
+      {
+        key: "d",
+        aggregation: "sum",
+        normalization: "percent",
+        direction: "positive",
+        bands: [
+          { min: 0, max: 40, label: "Низкий", level: "low" },
+          { min: 41, max: 100, label: "Высокий", level: "high" },
+        ],
+      },
+    ],
+    measurements: [...likert("q1", "d"), ...likert("q2", "d"), ...likert("q3", "d")],
+    answers: { q1: 5, q2: 0 },
+    questionTypes: { q1: "scale", q2: "scale", q3: "scale" },
+  },
+  {
+    name: "mixed single + scale in one scale",
+    scales: [{ key: "m", aggregation: "avg", normalization: "none", direction: "positive" }],
+    measurements: [...likert("q1", "m"), ...likert("q2", "m")],
+    answers: { q1: 2, q2: 4 },
+    questionTypes: { q1: "single", q2: "scale" },
   },
   {
     name: "percent positive",

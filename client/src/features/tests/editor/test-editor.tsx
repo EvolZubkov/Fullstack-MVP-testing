@@ -76,6 +76,12 @@ export type TestEditorProps = {
   open: boolean;
   /** Invoked when the user closes the Drawer (or the close confirmation). */
   onClose: () => void;
+  /**
+   * Tab to open on. Lets a caller send the author straight to the work that
+   * prompted the opening — the tests list points at «Структура» for a test whose
+   * pages need mapping (PRD-22, plan Э6). Defaults to «Состав».
+   */
+  initialTab?: EditorTabKey;
 };
 
 export type TestEditorViewProps = {
@@ -85,6 +91,8 @@ export type TestEditorViewProps = {
   onClose: () => void;
   /** Editor state (typically the result of {@link useTestEditor}). */
   editor: UseTestEditorResult;
+  /** Tab to open on; defaults to «Состав». See {@link TestEditorProps.initialTab}. */
+  initialTab?: EditorTabKey;
 };
 
 const TAB_ORDER: EditorTabKey[] = [
@@ -146,7 +154,7 @@ export function TestEditor(props: TestEditorProps): React.JSX.Element | null {
     }
   }, [editor.createdId, editor, onClose]);
 
-  return <TestEditorView open={open} onClose={onClose} editor={editor} />;
+  return <TestEditorView open={open} onClose={onClose} editor={editor} initialTab={props.initialTab} />;
 }
 
 /**
@@ -156,7 +164,7 @@ export function TestEditor(props: TestEditorProps): React.JSX.Element | null {
  */
 export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | null {
   const { open, onClose, editor } = props;
-  const [activeTab, setActiveTab] = useState<EditorTabKey>("composition");
+  const [activeTab, setActiveTab] = useState<EditorTabKey>(props.initialTab ?? "composition");
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
 
@@ -190,6 +198,12 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
   const drawerRef = useRef<HTMLElement | null>(null);
 
   // NFR-19: focus the first interactive element (the first tab) on open.
+  // The Drawer stays mounted between openings, so the initial tab has to be
+  // re-applied on each open — otherwise only the very first opening honours it.
+  useEffect(() => {
+    if (open) setActiveTab(props.initialTab ?? "composition");
+  }, [open, props.initialTab]);
+
   useEffect(() => {
     if (!open) return;
     const handle = window.setTimeout(() => {
@@ -328,9 +342,13 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
     }
     if (wasDirty) {
       toast({ title: "Изменения сохранены" });
+      // Refresh the tests list so its server-computed columns re-run — notably the
+      // PRD-22 «недоступный вариант» mark (`unmappedPageCount`), which otherwise
+      // kept its stale count after the author remapped the pages here.
+      queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
     }
     return true;
-  }, [design, editor, contentPages, toast]);
+  }, [design, editor, contentPages, toast, queryClient]);
 
   const handleSave = useCallback(async () => {
     if (saveDisabled) return;
@@ -542,6 +560,8 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
               model={editor.model}
               updateModel={editor.updateModel}
               fieldErrors={fieldErrors}
+              draftTemplateId={design.draft.templateId}
+              draftDesignParams={design.draft.params}
             />
           )}
           {editor.model && activeTab === "design" && (

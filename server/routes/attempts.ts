@@ -12,7 +12,12 @@ import { loadScoringConfig } from "../services/scoring-config";
 import { loadTestScoringContext } from "../services/effective-scoring";
 import { computeAttemptResult } from "../services/result-compute";
 import { decideRetake, lastCompletedAttemptDate, toIsoDateUTC } from "../services/retake-gate";
-import { readResultsRenderPayload } from "../services/template-render";
+import { readResultsRenderPayload, readReportRenderPayload } from "../services/template-render";
+import { reportKindForMode } from "@shared/report/report-variants";
+import { buildReportInput, buildAdaptiveReportInput } from "../services/result-context";
+import type { ReportInput, AdaptiveReportInput } from "@shared/report/report-html";
+import { pingSection } from "../services/section-timer";
+import { buildResultsNav, RESULTS_NAV_ACTIONS } from "@shared/template/results-nav";
 import { resolveSystemScreenDir, resolveTemplateDir } from "../services/template-dir";
 import {
   liveDataSource,
@@ -23,7 +28,9 @@ import {
 } from "../services/test-snapshot";
 import type { QuestionType } from "@shared/scales/engine";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
-import type { Test, TestVariant, AttemptResult, TopicResult, PassRule, RetakePolicy } from "@shared/schema";
+import type { Test, TestVariant, AttemptResult, TopicResult, PassRule, RetakePolicy, ReportSettings } from "@shared/schema";
+// Brings the `SessionData.magic` augmentation (PRD magic-link scope) into scope.
+import "../middleware/magic-scope";
 
 const router = Router();
 
@@ -70,6 +77,10 @@ async function flowPayload(src: TestDataSource, test: Test) {
       mode: p.mode,
       templateKey: p.templateKey,
       valuesJson: p.valuesJson,
+      // PRD-22: page PROPERTIES (sequence identifier, «Далее» caption, background).
+      // The SCORM package has shipped them since FR-20; without them here the web
+      // run computed no sequence at all, so a gallery lost its indicator.
+      settingsJson: p.settingsJson,
       autoAdvance: p.autoAdvance,
       autoAdvanceDelayMs: p.autoAdvanceDelayMs,
     })),
@@ -113,7 +124,11 @@ function shuffleInPlace<T>(arr: T[]): T[] {
 // GET /api/learner/tests - Тесты для ученика
 router.get("/learner/tests", requirePermission("attempts.self.read"), async (req, res) => {
   try {
-    const assignedTests = await storage.getAssignedTestsForUser(req.session.userId!);
+    const allAssigned = await storage.getAssignedTestsForUser(req.session.userId!);
+    // A magic-link session sees ONE test: the list is the start screen's data
+    // source, and it must not enumerate the learner's other assignments.
+    const magic = req.session.magic;
+    const assignedTests = magic ? allAssigned.filter((t) => t.id === magic.testId) : allAssigned;
 
     const topics = await storage.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t.name]));
@@ -162,7 +177,11 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
         const retakeGate =
           gate.allowed
             ? null
-            : { cooldownPeriodDays: gate.cooldownPeriodDays ?? null, availableDate: gate.availableDate ?? null };
+            : {
+                cooldownPeriodDays: gate.cooldownPeriodDays ?? null,
+                availableDate: gate.availableDate ?? null,
+                daysUntil: gate.daysUntil ?? null,
+              };
 
         // PRD-19 Block F (FR-19/20): prior-attempt summary for the start screen.
         // The web uses the MOST RECENT completed attempt — the same one
@@ -783,6 +802,38 @@ router.post("/attempts/:attemptId/expire-topic-adaptive", requirePermission("att
   }
 });
 
+// POST /api/attempts/:attemptId/section-timer — пинг «я в этом разделе».
+//
+// The SERVER owns the remaining time of a section (see services/section-timer):
+// the host reports where the learner is, the server credits the elapsed active
+// time (capped by the grace window) and answers with what is left and what is
+// locked. Keeping this off the browser is what makes «закрыл вкладку — вернулся с
+// полным лимитом» impossible.
+router.post("/attempts/:attemptId/section-timer", requirePermission("attempts.take"), async (req, res) => {
+  try {
+    const attempt = await storage.getAttempt(req.params.attemptId);
+    if (!attempt) return res.status(404).json({ error: "Attempt not found" });
+    if (attempt.userId !== req.session.userId) return res.status(403).json({ error: "Forbidden" });
+    if (attempt.finishedAt) return res.status(400).json({ error: "Attempt already finished" });
+
+    const topicId = typeof req.body?.topicId === "string" ? req.body.topicId : null;
+    // The limit comes from the TEST, never from the client: a forged body must not
+    // be able to widen a section's budget.
+    let limitMinutes: number | null = null;
+    if (topicId) {
+      const sections = await storage.getTestSections(attempt.testId);
+      limitMinutes = sections.find((s) => s.topicId === topicId)?.timeLimitMinutes ?? null;
+    }
+
+    const view = await pingSection(attempt.id, topicId, limitMinutes);
+    if (!view) return res.status(400).json({ error: "Attempt already finished" });
+    res.json(view);
+  } catch (error) {
+    logger.error("Section timer ping error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to update section timer" });
+  }
+});
+
 // POST /api/attempts/:attemptId/save-progress - Сохранить прогресс
 router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.take"), async (req, res) => {
   try {
@@ -799,7 +850,7 @@ router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.ta
       return res.status(400).json({ error: "Attempt already finished" });
     }
 
-    const { answers, currentIndex, shuffleMappings, questionStatus } = req.body;
+    const { answers, currentIndex, shuffleMappings, questionStatus, sectionPositions } = req.body;
 
     const updatedVariant: any = {
       ...(attempt.variantJson as any),
@@ -815,6 +866,13 @@ router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.ta
     // legacy progress (treated as all-'unanswered' on resume).
     if (questionStatus) {
       updatedVariant.questionStatus = questionStatus;
+    }
+
+    // Per-section resume position: re-entering a section continues from the question
+    // the learner stopped on (the web twin of the package's currentRouterTopic +
+    // currentPageIndex checkpoint), instead of restarting the section.
+    if (sectionPositions && typeof sectionPositions === "object") {
+      updatedVariant.sectionPositions = sectionPositions;
     }
 
     await storage.updateAttempt(attempt.id, {
@@ -872,6 +930,7 @@ router.get("/tests/:testId/resume", requirePermission("attempts.take"), async (r
       currentIndex: variant.currentIndex || 0,
       // PRD-19 (Block B): restore per-question statuses; absent = all-'unanswered'.
       questionStatus: variant.questionStatus || {},
+      sectionPositions: variant.sectionPositions || {},
     });
   } catch (error) {
     logger.error("Resume attempt error: " + (error as Error).message);
@@ -911,6 +970,8 @@ router.post("/attempts/:attemptId/section-result", requirePermission("attempts.t
       topicId: variantSection.topicId,
       topicName: variantSection.topicName,
       topicPassRule: section?.topicPassRuleJson ?? null,
+      // PRD-24: the variant delivered for this topic decides which threshold gates it.
+      formId: variantSection.formId ?? null,
       questions: questions.map((q) => {
         const effective = scoring.resolve(q);
         return {
@@ -991,6 +1052,8 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
         topicId: variantSection.topicId,
         topicName: variantSection.topicName,
         topicPassRule: section?.topicPassRuleJson ?? null,
+        // PRD-24: the variant delivered for this topic decides which threshold gates it.
+        formId: variantSection.formId ?? null,
         questions: questions.map((q) => {
           questionTypes[q.id] = q.type as QuestionType;
           const effective = scoring.resolve(q);
@@ -1107,6 +1170,8 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
     const completedAttempts = userAttempts.filter((a) => a.finishedAt !== null).length;
     const maxAttempts = test?.maxAttempts || null;
     const canRetake = maxAttempts === null || completedAttempts < maxAttempts;
+    // NB: the attempt counter is deliberately NOT put in the header subtitle any
+    // more — the scene header carries the test's identity, not run parameters.
 
     // PRD-12 web-host: render payload (template layout + css + context) for the
     // results screen. Covers BOTH standard (results.html) and adaptive
@@ -1115,6 +1180,8 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
     // case the client falls back to its React markup.
     const resultJson = attempt.resultJson as (AttemptResult & { mode?: string }) | null;
     let render = null;
+    let report: ReportInput | AdaptiveReportInput | null = null;
+    let reportRender: ReturnType<typeof readReportRenderPayload> = null;
     if (resultJson && Array.isArray(resultJson.topicResults)) {
       const templateId = ((test?.designSettingsJson as any)?.templateId as string) || "default";
       // Learner-facing render: never serve a non-active template, and when the
@@ -1124,7 +1191,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       // Branding/cssVars resolve against the ACTIVE template manifest even when the
       // results layout falls back to `default` (active template owns no `results`).
       const paramsDir = await resolveTemplateDir(templateId, { activeOnly: true });
-      render = readResultsRenderPayload(dir, resultJson, test?.title || "", (test?.designSettingsJson as any)?.params, paramsDir);
+      render = readResultsRenderPayload(dir, resultJson, test?.title || "", test?.designSettingsJson as any, paramsDir);
       // File-level fallback (PRD-1 §4.3.2, PRD-3 NFR-06): a template that declares a
       // `results` variant but ships no results layout still renders — from the
       // standard template — instead of dropping to the legacy React markup.
@@ -1135,9 +1202,71 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
             fallbackDir,
             resultJson,
             test?.title || "",
-            (test?.designSettingsJson as any)?.params,
+            test?.designSettingsJson as any,
             paramsDir,
           );
+        }
+      }
+      // Footer state for the layout-drawn results row (the package fills the same
+      // block). «Скачать отчёт» is on now that the web host produces the report from
+      // the SHARED generator (shared/report/*) — the same PDF the package hands out.
+      if (render?.context && typeof render.context === "object") {
+        const ctx = render.context as { result?: Record<string, unknown> };
+        if (ctx.result) {
+          ctx.result.nav = buildResultsNav({
+            canReport: true,
+            canRetry: !resultJson?.overallPassed && canRetake,
+            hasPostPages: false,
+            finishLabel: "К списку тестов",
+          });
+        }
+      }
+
+      // Input for the shared PDF report the browser builds on demand. Assembled here
+      // because the report needs the RAW per-topic numbers and the learner's name,
+      // neither of which the presentational render context carries.
+      const learner = await storage.getUser(req.session.userId!);
+      const reportMeta = {
+        learnerName: learner?.name || null,
+        timestamp: (attempt.finishedAt ?? attempt.startedAt)?.toISOString() ?? null,
+        attemptsCount: completedAttempts || 1,
+      };
+      report =
+        resultJson.mode === "adaptive"
+          ? buildAdaptiveReportInput(resultJson, test?.title || "", reportMeta)
+          : buildReportInput(resultJson, test?.title || "", reportMeta);
+
+      // PRD-27 Фаза 2: страницу отчёта рисует МАКЕТ шаблона. Активный шаблон, не
+      // объявивший нужного вида, отчёта не лишает: макет берётся из «Стандартного», а
+      // брендинг остаётся этого теста (FR-10) — то же правило, что у системных экранов.
+      const reportKind = reportKindForMode(resultJson.mode);
+      const activeDir = await resolveTemplateDir(templateId, { activeOnly: true });
+      // PRD-27 FR-24: вариант и значения полей берутся из теста, КОТОРЫЙ ВЫДАВАЛСЯ.
+      // Попытка, приколотая к снапшоту (PRD-15), обязана собрать отчёт тем макетом и
+      // теми параметрами, что действовали на момент выдачи: иначе автор меняет вид
+      // отчёта — и документы по старым попыткам задним числом становятся другими.
+      // Живой тест остаётся источником всего остального (название, счётчик попыток).
+      // Читается ОДНА строка снапшота, а не собирается целый источник данных: попытке
+      // здесь нужен только выбор варианта, а сборка источника тянет весь замороженный
+      // пул вопросов.
+      const deliveredTest = attempt.snapshotId
+        ? ((await storage.getSnapshot(attempt.snapshotId))?.contentJson as
+            | { test?: Test }
+            | undefined)?.test ?? test
+        : test;
+      // Выбор автора хранится по РЕЖИМУ теста (PRD-27 §4.1); его отсутствие означает
+      // вариант с `isDefault`.
+      const authoredReport =
+        (deliveredTest?.reportSettingsJson as ReportSettings | null)?.[
+          resultJson.mode === "adaptive" ? "adaptive" : "standard"
+        ] ?? null;
+      reportRender = readReportRenderPayload(activeDir, reportKind, authoredReport, test?.designSettingsJson as any, activeDir);
+      if (!reportRender) {
+        const fallbackDir = await resolveTemplateDir("default", { activeOnly: false });
+        if (path.resolve(fallbackDir) !== path.resolve(activeDir)) {
+          // Деградация на «Стандартный»: выбранного варианта там нет, поэтому берётся
+          // его `isDefault`, а значения полей чужого варианта не переносятся.
+          reportRender = readReportRenderPayload(fallbackDir, reportKind, null, test?.designSettingsJson as any, activeDir);
         }
       }
     }
@@ -1148,6 +1277,8 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       result: attempt.resultJson as AttemptResult,
       canRetake,
       render,
+      report,
+      reportRender,
       attemptsInfo:
         maxAttempts !== null
           ? {

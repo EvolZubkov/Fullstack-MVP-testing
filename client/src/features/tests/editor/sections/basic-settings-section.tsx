@@ -17,7 +17,7 @@
  * Drawer is responsible for save / validation / dirty tracking — this
  * section just renders inputs and reports changes.
  */
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Trash2 } from "lucide-react";
 import {
@@ -36,16 +36,19 @@ import {
   Switch,
   Textarea,
 } from "@universityrt/ui-kit";
-import type { EligibilityPluginRef, RetakePolicy } from "@shared/schema";
+import type { EligibilityPluginRef, Form, RetakePolicy } from "@shared/schema";
+import { resolveEffectiveScoring } from "@shared/scoring/effective-scoring";
 import {
   FeedbackEditorModal,
   type FeedbackEditorValue,
 } from "./feedback-editor-modal";
 import { FeedbackPreview } from "./feedback-preview";
+import { ReportSettingsCard } from "./report-settings-card";
 import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
   AdaptiveTopicConfig,
+  EditorSection,
   FeedbackAsset,
   FeedbackContent,
   FeedbackEvent,
@@ -66,6 +69,10 @@ export type SettingsSectionProps = {
   updateModel: (updater: (m: TestEditorModel) => TestEditorModel) => void;
   /** FR-20c: per-field validation errors for inline highlighting. */
   fieldErrors?: FieldErrorIndex;
+  /** PRD-27: черновой шаблон вкладки «Оформление» — каталог видов отчёта считается на нём (§4.2). */
+  draftTemplateId?: string;
+  /** PRD-27: черновой брендинг вкладки «Оформление» — им красится предпросмотр отчёта. */
+  draftDesignParams?: Record<string, unknown>;
 };
 
 /** Backwards-compatible alias: original skeleton lived under this name. */
@@ -100,7 +107,13 @@ const RAIL_ERROR_PREFIXES: Record<RailKey, string[]> = {
   adaptive: ["adaptive"],
 };
 
-export function SettingsSection({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: SettingsSectionProps) {
+export function SettingsSection({
+  model,
+  updateModel,
+  fieldErrors = EMPTY_FIELD_ERRORS,
+  draftTemplateId,
+  draftDesignParams,
+}: SettingsSectionProps) {
   const [active, setActive] = useState<RailKey>("basic");
   // Per requirements: «Адаптивный режим» sub-section is only relevant when
   // the test itself runs in adaptive mode. Hide the rail item in standard
@@ -171,7 +184,13 @@ export function SettingsSection({ model, updateModel, fieldErrors = EMPTY_FIELD_
         data-testid={`settings-pane-${effectiveActive}`}
       >
         {effectiveActive === "basic" && (
-          <BasicPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
+          <BasicPane
+            model={model}
+            updateModel={updateModel}
+            fieldErrors={fieldErrors}
+            draftTemplateId={draftTemplateId}
+            draftDesignParams={draftDesignParams}
+          />
         )}
         {effectiveActive === "pass-rules" && (
           <PassRulesPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
@@ -198,7 +217,13 @@ export const BasicSettingsSection = SettingsSection;
 
 // ─── Sub-pane: Основное ───────────────────────────────────────────────────────
 
-function BasicPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: SettingsSectionProps) {
+function BasicPane({
+  model,
+  updateModel,
+  fieldErrors = EMPTY_FIELD_ERRORS,
+  draftTemplateId,
+  draftDesignParams,
+}: SettingsSectionProps) {
   // PRD-7 S13.2-G7: «Общая обратная связь теста» card. The model already
   // carries the underlying fields (basic.feedback / feedbackLinks /
   // feedbackAssets), populated by the API on load (PRD-7 S2). This UI block
@@ -323,6 +348,30 @@ function BasicPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: Set
           />
         )}
       </div>
+
+      <hr className="wf-sep" />
+
+      <ReportSettingsCard
+        mode={model.mode}
+        draftTemplateId={draftTemplateId}
+        designParams={draftDesignParams}
+        value={model.report ?? {}}
+        readOnly={model.basic.status === "published"}
+        onChange={(next) => updateModel((m) => ({ ...m, report: next }))}
+        // FR-18: предпросмотр строится на РЕАЛЬНОЙ структуре редактируемого теста —
+        // его названии и разделах; демонстрационные только числа и вердикты.
+        testName={model.basic.title}
+        sections={model.sections.map((s) => ({
+          topicId: s.topicId,
+          topicName: s.topicName,
+          questionCount: s.drawCount,
+        }))}
+        levelNames={
+          model.mode === "adaptive"
+            ? (model.adaptive.topics.find((t) => t.enabled)?.levels ?? []).map((l) => l.levelName)
+            : undefined
+        }
+      />
 
       <hr className="wf-sep" />
 
@@ -950,6 +999,9 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
                     topicId={section.topicId}
                     topicName={section.topicName}
                     rule={rule}
+                    forms={section.formSet?.forms}
+                    variantMaxPoints={variantMaxPointsFor(model, section)}
+                    fieldErrors={fieldErrors}
                     onSourceChange={(source) =>
                       updateModel((m) => ({
                         ...m,
@@ -957,10 +1009,16 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
                           ...m.passRules,
                           byTopic: {
                             ...m.passRules.byTopic,
-                            [section.topicId]: buildTopicRuleBySource(source, rule),
+                            [section.topicId]: buildTopicRuleBySource(source, rule, section, m),
                           },
                         },
                       }))
+                    }
+                    onVariantTypeChange={(formId, type) =>
+                      updateModel((m) => updateVariantEntry(m, section.topicId, formId, (e) => ({ ...e, type })))
+                    }
+                    onVariantValueChange={(formId, value) =>
+                      updateModel((m) => updateVariantEntry(m, section.topicId, formId, (e) => ({ ...e, value })))
                     }
                     onCustomTypeChange={(customType) =>
                       updateModel((m) => {
@@ -1027,11 +1085,21 @@ function PassTopicRow(props: {
   topicId: string;
   topicName: string;
   rule: TopicPassRule;
+  /** PRD-24: the topic's variants (PRD-17). Empty = «По вариантам» is not offered. */
+  forms?: Form[];
+  /** PRD-24: Σ attainable points per variant id — shown as a hint for absolute thresholds. */
+  variantMaxPoints?: Record<string, number>;
+  fieldErrors?: FieldErrorIndex;
   onSourceChange: (source: TopicPassRule["source"]) => void;
   onCustomTypeChange: (type: "percent" | "absolute") => void;
   onCustomValueChange: (value: number) => void;
+  onVariantTypeChange: (formId: string, type: "percent" | "absolute") => void;
+  onVariantValueChange: (formId: string, value: number) => void;
 }) {
   const isCustom = props.rule.source === "custom";
+  const forms = props.forms ?? [];
+  // FR-02: the per-variant rule only exists for a topic delivered as variants.
+  const hasVariants = forms.length >= 2;
   return (
     <>
       <tr data-testid={`pass-topic-row-${props.topicId}`}>
@@ -1046,12 +1114,81 @@ function PassTopicRow(props: {
               { value: "inherit_overall", label: "Как у теста" },
               { value: "custom", label: "Индивидуальное правило" },
               { value: "none", label: "Не проверять отдельно" },
+              ...(hasVariants
+                ? [{ value: "by_variant" as const, label: "По вариантам" }]
+                : []),
             ]}
             onChange={(value) => props.onSourceChange(value)}
             data-testid={`pass-topic-source-${props.topicId}`}
           />
         </td>
       </tr>
+      {props.rule.source === "by_variant" && hasVariants && (
+        <tr
+          className="tb-pass-table__detail"
+          data-testid={`pass-topic-variants-${props.topicId}`}
+        >
+          <td />
+          <td>
+            <div className="tb-pass-table__variants">
+              {forms.map((form, index) => {
+                const entry = props.rule.source === "by_variant" ? props.rule.byForm[form.id] : undefined;
+                const type = entry?.type ?? "percent";
+                const label = form.label || `Вариант ${index + 1}`;
+                const error = props.fieldErrors?.get(
+                  `passRules.byTopic[${props.topicId}].byForm[${form.id}].value`,
+                );
+                // The ceiling an absolute threshold is capped by, printed under THAT
+                // variant's threshold. A single line under the whole block read as
+                // belonging to the last row — and said nothing about which variant it
+                // measured. A percent threshold has no ceiling to state.
+                const maxPoints = props.variantMaxPoints?.[form.id];
+                const showMax = type === "absolute" && maxPoints != null;
+                return (
+                  <Fragment key={form.id}>
+                    <span className="tb-pass-table__variant-label">{label}</span>
+                    <div className="ou-formfield">
+                      <Select<"percent" | "absolute">
+                        size="s"
+                        label="Тип"
+                        value={type}
+                        aria-label={`Тип порога варианта «${label}» темы ${props.topicName}`}
+                        options={[
+                          { value: "percent", label: "Процент" },
+                          { value: "absolute", label: "Сумма баллов" },
+                        ]}
+                        onChange={(value) => props.onVariantTypeChange(form.id, value)}
+                        data-testid={`pass-variant-type-${props.topicId}-${form.id}`}
+                      />
+                    </div>
+                    <div className="ou-formfield">
+                      <NumberInput
+                        size="s"
+                        value={entry?.value ?? 0}
+                        min={0}
+                        max={type === "percent" ? 100 : undefined}
+                        suffix={type === "percent" ? "%" : undefined}
+                        error={error}
+                        aria-label={`Порог варианта «${label}» темы ${props.topicName}`}
+                        data-testid={`pass-variant-value-${props.topicId}-${form.id}`}
+                        onChange={(next) => props.onVariantValueChange(form.id, next)}
+                      />
+                    </div>
+                    {showMax && (
+                      <span
+                        className="tb-pass-table__variant-hint"
+                        data-testid={`pass-variant-max-${props.topicId}-${form.id}`}
+                      >
+                        макс. {maxPoints} баллов
+                      </span>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </div>
+          </td>
+        </tr>
+      )}
       {isCustom && props.rule.source === "custom" && (
         <tr
           className="tb-pass-table__detail"
@@ -1114,11 +1251,92 @@ function buildOverallByType(
 function buildTopicRuleBySource(
   source: TopicPassRule["source"],
   prev: TopicPassRule,
+  section?: EditorSection,
+  model?: TestEditorModel,
 ): TopicPassRule {
   if (source === "inherit_overall") return { source: "inherit_overall" };
   if (source === "none") return { source: "none" };
+  if (source === "by_variant") {
+    // PRD-24: seed every variant so the rule is valid the moment it is picked —
+    // an uncovered variant is a blocking error. Carry over the previous custom
+    // threshold when there was one, else the test's overall percent.
+    const seed =
+      prev.source === "custom"
+        ? { type: prev.type, value: prev.value }
+        : {
+            type: "percent" as const,
+            value: model?.passRules.overall.type === "percent" ? model.passRules.overall.value : 70,
+          };
+    const byForm: Record<string, { type: "percent" | "absolute"; value: number }> = {};
+    for (const form of section?.formSet?.forms ?? []) {
+      byForm[form.id] = prev.source === "by_variant" ? (prev.byForm[form.id] ?? seed) : seed;
+    }
+    return { source: "by_variant", byForm };
+  }
   if (prev.source === "custom") return prev;
   return { source: "custom", type: "percent", value: 70 };
+}
+
+/** PRD-24: patch ONE variant's threshold, leaving the rest of the rule intact. */
+function updateVariantEntry(
+  model: TestEditorModel,
+  topicId: string,
+  formId: string,
+  patch: (entry: { type: "percent" | "absolute"; value: number }) => {
+    type: "percent" | "absolute";
+    value: number;
+  },
+): TestEditorModel {
+  const rule = model.passRules.byTopic[topicId];
+  if (rule?.source !== "by_variant") return model;
+  const current = rule.byForm[formId] ?? { type: "percent" as const, value: 0 };
+  return {
+    ...model,
+    passRules: {
+      ...model.passRules,
+      byTopic: {
+        ...model.passRules.byTopic,
+        [topicId]: { source: "by_variant", byForm: { ...rule.byForm, [formId]: patch(current) } },
+      },
+    },
+  };
+}
+
+/**
+ * PRD-24: Σ attainable points per variant, for the «макс. N баллов» hint next to an
+ * absolute threshold. Same effective-price chain as the «Оценка» tab and validation
+ * (override → section default → test default → system), so the hint and the
+ * validation cap can never disagree.
+ */
+function variantMaxPointsFor(
+  model: TestEditorModel,
+  section: EditorSection,
+): Record<string, number> {
+  const forms = section.formSet?.forms ?? [];
+  if (forms.length === 0) return {};
+  const overrideByQuestion = new Map(model.scoring.questionOverrides.map((o) => [o.questionId, o]));
+  const out: Record<string, number> = {};
+  for (const form of forms) {
+    out[form.id] = form.questionIds.reduce((sum, questionId) => {
+      const override = overrideByQuestion.get(questionId);
+      const effective = resolveEffectiveScoring({
+        override: override
+          ? {
+              points: override.points,
+              scoring: override.scoringJson,
+              difficulty: override.difficulty,
+              pinnedContentHash: override.pinnedContentHash,
+            }
+          : null,
+        defaults: {
+          sectionDefaultPoints: section.defaultPoints,
+          testDefaultPoints: model.scoring.defaultQuestionPoints,
+        },
+      });
+      return sum + effective.points;
+    }, 0);
+  }
+  return out;
 }
 
 // ─── Sub-pane: Адаптивный режим ───────────────────────────────────────────────

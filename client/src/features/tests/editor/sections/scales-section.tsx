@@ -59,6 +59,7 @@ import {
 import type { FieldErrorIndex } from "../field-errors";
 import { formatAuthorNumber, parseAuthorNumber, sanitizeAuthorNumberInput } from "../numeric-input";
 import { FoldAllButtons, useSectionFold } from "./section-fold";
+import { isSingleIndexChoice } from "@shared/questions/question-type";
 
 // Вывод шкал ученику — отдельный PRD (дальняя перспектива). До него тогл
 // «Показывать результат обучающемуся» скрыт; поле showToLearner сохранено в модели.
@@ -820,7 +821,9 @@ function ScalePreviewModal({ testId, onClose }: { testId: string; onClose: () =>
           {supported.map((q) => (
             <div className="ou-formfield" key={q.id}>
               <label className="ou-formfield__lbl">{q.prompt}</label>
-              {q.type === "single" ? (
+              {/* Демо-ответ шкалы — тот же выбор ОДНОЙ единицы, что у одиночного
+                  выбора: список градаций (PRD-26). */}
+              {isSingleIndexChoice(q.type) ? (
                 <Select<string>
                   size="m"
                   fullWidth
@@ -909,6 +912,7 @@ const UNIT_HEADER: Record<ContributionQuestion["type"], string> = {
   multiple: "Вариант ответа",
   matching: "Пара ответа (левый → правый)",
   ranking: "Размещение (элемент @ позиция)",
+  scale: "Градация шкалы",
 };
 
 const QTYPE_LABEL: Record<ContributionQuestion["type"], string> = {
@@ -916,6 +920,7 @@ const QTYPE_LABEL: Record<ContributionQuestion["type"], string> = {
   multiple: "несколько выборов",
   matching: "сопоставление",
   ranking: "ранжирование",
+  scale: "шкала",
 };
 
 const UNIT_HINT: Partial<Record<ContributionQuestion["type"], string>> = {

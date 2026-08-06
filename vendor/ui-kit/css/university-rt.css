@@ -13,7 +13,6 @@
    layers:    primitives → semantic → density
    themes:    .ou.ou--light  (default)  |  .ou.ou--dark
    pulls:     _a11y.css (reduced-motion + fallback focus-visible)
-   ================================================================= */
    density:   .ou--compact | .ou--normal (default) | .ou--spacious
    ================================================================= */
 
@@ -3145,6 +3144,9 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou-uploader__title { font: var(--ou-text-body-l); font-weight: 600; }
 .ou-uploader__sub { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 .ou-uploader__cta {
+  /* A SPAN, not a button (the whole dropzone is the control), so nothing centres
+     its text inside the fixed height on its own — the label sat on the top line. */
+  display: inline-flex; align-items: center; justify-content: center;
   margin-top: var(--ou-space-2);
   height: 36px; padding: 0 var(--ou-space-4);
   background: var(--ou-bg-hover);
@@ -6253,6 +6255,49 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-stepper__num::before { content: attr(data-step); }
 .ou-stepper__step.is-done .ou-stepper__num { display: none; }
 
+/* ─── Choice mode ────────────────────────────────────────────────────────────
+   The stepper as an ANSWER control: an ordered scale (Likert) the user picks a
+   point on, not a progress indicator. Geometry, connector, vertical layout and
+   statuses are the base component's; this mode changes only what makes a
+   progress indicator unusable as an answer:
+     - bullet is larger and EMPTY (no step number, no check icon);
+     - labels wrap instead of being ellipsised and take the answer type scale
+       (--tb-answer-fs, set by the host's font-fit pass);
+     - a `done` step tints only its CONNECTOR — the point stays neutral, so the
+       fill reads as «position on the scale», not «steps completed»;
+     - `is-success` marks the right graduation when a verdict is shown. */
+.ou-stepper--choice .ou-stepper__bullet { width: 44px; height: 44px; color: transparent; }
+.ou-stepper--choice .ou-stepper__bullet svg { display: none; }
+/* Connector recomputed for the 44px bullet: centre at 22px, inset = radius + gap. */
+.ou-stepper--choice .ou-stepper__step:not(:last-child)::after {
+  top: 20px; left: calc(50% + 26px); right: calc(-50% + 26px); height: 4px; border-radius: 999px;
+}
+.ou-stepper--choice .ou-stepper__step { gap: var(--ou-space-3); }
+.ou-stepper--choice .ou-stepper__title {
+  white-space: normal; overflow: visible; text-overflow: clip;
+  font-size: var(--tb-answer-fs, 20px); font-weight: 400; line-height: 1.3; text-wrap: balance;
+}
+.ou-stepper--choice .ou-stepper__step.is-current .ou-stepper__title { font-weight: 600; }
+.ou-stepper--choice .ou-stepper__step.is-current .ou-stepper__bullet { box-shadow: 0 0 0 6px var(--ou-accent-soft); }
+.ou-stepper--choice .ou-stepper__step.is-done .ou-stepper__bullet {
+  background: var(--ou-bg-elevated); border-color: var(--ou-border-default);
+}
+.ou-stepper--choice .ou-stepper__step.is-done .ou-stepper__title { color: var(--ou-fg-muted); font-weight: 400; }
+.ou-stepper--choice .ou-stepper__step.is-success .ou-stepper__bullet {
+  background: var(--ou-success-default); border-color: var(--ou-success-default);
+  box-shadow: 0 0 0 6px var(--ou-success-soft);
+}
+.ou-stepper--choice .ou-stepper__step.is-success .ou-stepper__title { color: var(--ou-success-on-soft); font-weight: 600; }
+.ou-stepper--choice .ou-stepper__step.is-error .ou-stepper__bullet { box-shadow: 0 0 0 6px var(--ou-error-soft); }
+.ou-stepper--choice .ou-stepper__step.is-error .ou-stepper__title { color: var(--ou-error-on-soft); font-weight: 600; }
+/* Verdict shown: mute the «where I am» fill so only success/error carry colour. */
+.ou-stepper--choice.ou-stepper--review .ou-stepper__step.is-done::after { background: var(--ou-border-default); }
+/* Vertical: the base 28px bullet, connector at the same weight as horizontal. */
+.ou-stepper--choice.ou-stepper--vertical .ou-stepper__bullet { width: 28px; height: 28px; }
+.ou-stepper--choice.ou-stepper--vertical .ou-stepper__step:not(:last-child)::after {
+  top: 28px; bottom: -8px; left: 13px; right: auto; width: 4px; height: auto;
+}
+
 
 /* ─── Switch.css ───────────────────────────────── */
 /* UniversityRT · Switch */
@@ -7353,6 +7398,14 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-lgrid--min-lg { --ou-lgrid-min: 300px; }
 .ou-lgrid--min-xl { --ou-lgrid-min: 380px; }
 .ou-lgrid--label-control { grid-template-columns: 1fr var(--ou-lgrid-control, 6rem); align-items: center; }
+.ou-lgrid--main-aside { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
+.ou-lgrid--main-aside > :nth-child(2) { position: sticky; top: var(--ou-space-4); }
+.ou-lgrid--list-action { grid-template-columns: 1fr max-content; align-items: center; }
+.ou-lgrid--list-action > .ou-card__divider { grid-column: 1 / -1; }
+@media (max-width: 63.99rem) {
+  .ou-lgrid--main-aside { grid-template-columns: minmax(0, 1fr); }
+  .ou-lgrid--main-aside > :nth-child(2) { position: static; }
+}
 
 .ou-box--pad-1 { padding: var(--ou-space-1); }
 .ou-box--pad-2 { padding: var(--ou-space-2); }
@@ -7525,3 +7578,44 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-box--maxw-3xl { max-width: 48rem; }
 .ou-box--maxw-4xl { max-width: 56rem; }
 .ou-box--maxw-5xl { max-width: 64rem; }
+
+/* === RichTextEditor — поле с режимами ввода (plain / rich / html) === */
+.ou-rte { display: inline-flex; flex-direction: column; gap: var(--ou-space-2); min-width: 0; }
+.ou-rte--full { display: flex; width: 100%; }
+.ou-rte__lbl { font: var(--ou-text-body-s); font-weight: 500; color: var(--ou-fg-default); }
+.ou-rte__lbl-req { color: var(--ou-error-default); }
+.ou-rte__bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--ou-space-2); flex-wrap: wrap;
+}
+.ou-rte__tools { display: flex; align-items: center; gap: 2px; }
+.ou-rte__tools-sep { width: 1px; height: 16px; background: var(--ou-border-soft); margin: 0 4px; }
+.ou-rte__tools .ou-iconbtn svg { width: 14px; height: 14px; }
+.ou-rte__box {
+  position: relative;
+  background: var(--ou-bg-input);
+  border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  transition: border-color var(--ou-motion-fast), box-shadow var(--ou-motion-fast);
+}
+.ou-rte__box:hover { border-color: var(--ou-border-hover); }
+.ou-rte__box:focus-within { border-color: var(--ou-accent-default); box-shadow: var(--ou-shadow-focus); }
+.ou-rte--error .ou-rte__box { border-color: var(--ou-error-default); }
+.ou-rte__area {
+  padding: var(--ou-space-2) var(--ou-space-3);
+  font: var(--ou-text-body-s); color: var(--ou-fg-default);
+  outline: none; overflow-y: auto;
+}
+.ou-rte__area p { margin: 0 0 var(--ou-space-2); }
+.ou-rte__area p:last-child { margin-bottom: 0; }
+.ou-rte__area ul, .ou-rte__area ol { margin: 0 0 var(--ou-space-2); padding-left: var(--ou-space-5); }
+.ou-rte__area a { color: var(--ou-accent-default); text-decoration: underline; }
+.ou-rte__input {
+  display: block; width: 100%; resize: vertical;
+  padding: var(--ou-space-2) var(--ou-space-3);
+  font: var(--ou-text-body-s); color: var(--ou-fg-default);
+  background: transparent; border: 0; outline: none;
+}
+.ou-rte__input--code { font: var(--ou-text-code-s); }
+.ou-rte__msg { font: var(--ou-text-body-xs); color: var(--ou-fg-muted); }
+.ou-rte__msg--error { color: var(--ou-error-default); }

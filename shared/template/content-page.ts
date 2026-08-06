@@ -29,6 +29,8 @@ export interface ContentTemplateDef {
   kind?: string | null;
   /** Layout file this variant renders into; falls back to the `content` layout. */
   layoutFile?: string | null;
+  /** Marks the variant a page of this kind falls back to (PRD-1 §4.3.2). */
+  isDefault?: boolean;
   placeholders?: PlaceholderDef[];
 }
 
@@ -82,6 +84,48 @@ export function findContentTemplate(
     if (template.key === key) return template;
   }
   return null;
+}
+
+/**
+ * The variant a page of `kind` falls back to: the one marked `isDefault`, else the
+ * first declared for that kind (PRD-1 §4.3.2). Null when the template declares
+ * none — then there is nothing to render the page through.
+ */
+export function findDefaultContentTemplate(
+  kind: string | null | undefined,
+  contentTemplates: ContentTemplateDef[] | null | undefined,
+): ContentTemplateDef | null {
+  if (!contentTemplates || !kind) return null;
+  let first: ContentTemplateDef | null = null;
+  for (const template of contentTemplates) {
+    if (template.kind !== kind) continue;
+    if (template.isDefault) return template;
+    if (!first) first = template;
+  }
+  return first;
+}
+
+/**
+ * The variant a page actually RENDERS through: the one it is bound to, or — when
+ * that variant is not in this template — the kind's default (see
+ * {@link findDefaultContentTemplate}).
+ *
+ * The substitution is a rendering decision only: `templateKey` in the database is
+ * never rewritten, so the author's binding survives switching the design template
+ * back, and «Структура» keeps flagging the page as needing a mapping. Before this,
+ * an unbound page fell all the way through to {@link buildFallbackContentHtml} —
+ * an untemplated card that looked nothing like the rest of the test and hid, rather
+ * than showed, that a decision was pending.
+ * @returns the variant to render through, and whether it is a substitute
+ */
+export function resolveContentTemplate(
+  page: RenderableContentPage | null | undefined,
+  contentTemplates: ContentTemplateDef[] | null | undefined,
+): { template: ContentTemplateDef | null; substituted: boolean } {
+  const bound = findContentTemplate(page, contentTemplates);
+  if (bound) return { template: bound, substituted: false };
+  const fallback = findDefaultContentTemplate(page?.kind ?? page?.type, contentTemplates);
+  return { template: fallback, substituted: fallback !== null };
 }
 
 /**
@@ -161,8 +205,10 @@ export function buildContentPageRender(
   content: { template: { placeholders?: PlaceholderDef[] }; values: Record<string, unknown> };
   placeholderStyles: Record<string, unknown>;
   contentTemplate: ContentTemplateDef | null;
+  /** True when the page's own variant is unavailable and a default stood in. */
+  substituted: boolean;
 } {
-  const contentTemplate = findContentTemplate(page, contentTemplates);
+  const { template: contentTemplate, substituted } = resolveContentTemplate(page, contentTemplates);
   return {
     layoutKey: (contentTemplate && contentTemplate.layoutFile) || "content",
     skeleton: buildContentPageSkeleton(page, contentTemplate),
@@ -172,5 +218,6 @@ export function buildContentPageRender(
     },
     placeholderStyles: getPagePlaceholderStyles(page),
     contentTemplate,
+    substituted,
   };
 }

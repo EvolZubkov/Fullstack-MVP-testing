@@ -381,6 +381,7 @@ retake.allowed
 retake.blocked
 retake.lastAttemptDate
 retake.todayDate
+retake.effectiveToday
 retake.availableDate
 retake.nextAllowedDate
 retake.cooldownPeriodDays
@@ -390,6 +391,9 @@ retake.source
 
 `retake.availableDate` - каноническое поле для UI. `retake.nextAllowedDate` остаётся alias для
 совместимости и должен заполняться тем же значением, если plugin вернул `availableDate`.
+
+`retake.effectiveToday` - нормализованное «сегодня», от которого считаются производные величины
+(`availableDate`, обратный отсчёт); равно `todayDate`, если часы не пришлось нормализовать.
 
 Минимальный текст страницы должен объяснять:
 
@@ -502,6 +506,7 @@ updated_by
     "allowed": false,
     "lastAttemptDate": "2026-05-08",
     "todayDate": "2026-05-08",
+    "effectiveToday": "2026-05-08",
     "availableDate": "2026-06-07",
     "nextAllowedDate": "2026-06-07",
     "cooldownPeriodDays": 30,
@@ -616,6 +621,10 @@ Phase 1 (реализовано):
       в Phase 1).
 - [x] Если plugin не выбран, Core возвращает `allowed = true`.
 - [x] В тесте без `retakePolicy` старт и SCORM lifecycle остаются прежними (FR-02, byte-identical export).
+- [x] В тесте без включённого ограничения рантайм cooldown-плагина (`EligibilityEngine`,
+      `EligibilityPlugins`, `RetakeGate`) в пакет не запекается: он собирается только при
+      `retakePolicy.enabled` с разрешённым plugin — том же условии, при котором в `TEST_DATA`
+      попадают `retakePolicy` и `retakePlugin`.
 - [x] В gated-тесте SCORM `Initialize` вызывается только после разрешения gate и клика **"Начать курс"** (NFR-01).
 - [x] При активном cooldown показывается `block-wall` (системная страница шаблона `system.blocked`).
 - [x] В blocked-сценарии `cmi.completion_status`, `cmi.success_status`, `cmi.suspend_data`

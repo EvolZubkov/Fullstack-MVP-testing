@@ -1,73 +1,91 @@
 {
   "id": "default",
   "name": "Стандартный",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "templateApiVersion": "1.0",
   "description": "Базовый одноколоночный плеер. Используется по умолчанию для обратной совместимости.",
+  "themes": [
+    {
+      "id": "light",
+      "label": "Светлая"
+    },
+    {
+      "id": "dark",
+      "label": "Тёмная"
+    }
+  ],
   "params": [
     {
       "key": "primaryColor",
       "type": "color",
-      "label": "Основной цвет",
-      "default": "217 91% 42%",
+      "label": "Цвет кнопок и активных элементов",
+      "default": null,
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Кнопки «Далее» и «Начать», выбранный вариант ответа, пройденные точки прогресса, рамка фокуса."
     },
     {
       "key": "backgroundColor",
       "type": "color",
-      "label": "Цвет фона",
-      "default": "225 7% 7%",
+      "label": "Фон экрана",
+      "default": null,
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Подложка всего экрана — то, что видно под карточками и текстом."
     },
     {
       "key": "foregroundColor",
       "type": "color",
-      "label": "Цвет текста",
-      "default": "0 0% 98%",
+      "label": "Цвет основного текста",
+      "default": null,
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Заголовки, текст вопроса и текст учебных страниц на фоне экрана."
     },
     {
       "key": "cardColor",
       "type": "color",
-      "label": "Цвет карточек",
-      "default": "225 14% 14%",
+      "label": "Фон карточки",
+      "default": null,
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Заливка карточек: учебная страница, карточка вопроса, окно подтверждения, итоги."
     },
     {
       "key": "cardBorderColor",
       "type": "color",
-      "label": "Граница карточек",
-      "default": "0 0% 24%",
+      "label": "Граница карточки",
+      "default": null,
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Контур карточек и модальных окон."
     },
     {
       "key": "borderColor",
       "type": "color",
-      "label": "Цвет границ",
-      "default": "0 0% 22%",
+      "label": "Границы элементов",
+      "default": null,
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Рамки вариантов ответа и полей, разделители внутри карточек."
     },
     {
       "key": "mutedColor",
       "type": "color",
-      "label": "Приглушённый цвет",
-      "default": "225 10% 20%",
+      "label": "Фон вспомогательных блоков",
+      "default": null,
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Заливка невыполненных точек прогресса, вставки с пояснением, дорожки шкал."
     },
     {
       "key": "accentColor",
       "type": "color",
-      "label": "Акцентный цвет",
-      "default": "225 8% 22%",
+      "label": "Подсветка при наведении",
+      "default": null,
       "group": "Цвета",
-      "section": "branding"
+      "section": "branding",
+      "description": "Заливка варианта ответа и ссылки под курсором мыши."
     },
     {
       "key": "fontFamily",
@@ -80,7 +98,8 @@
         "Inter",
         "Roboto",
         "Arial"
-      ]
+      ],
+      "description": "Гарнитура всего текста пакета."
     },
     {
       "key": "logoUrl",
@@ -88,7 +107,8 @@
       "label": "Логотип",
       "default": null,
       "group": "Оформление",
-      "section": "branding"
+      "section": "branding",
+      "description": "Показывается в шапке экранов старта и итогов."
     },
     {
       "key": "progress.mode",
@@ -106,7 +126,8 @@
         "questions": "По вопросам",
         "pages": "По страницам",
         "hidden": "Не показывать"
-      }
+      },
+      "description": "Что считает индикатор в шапке: выданные вопросы, страницы или ничего."
     },
     {
       "key": "showProgressBar",
@@ -114,7 +135,8 @@
       "label": "Показывать прогресс-бар",
       "default": true,
       "group": "Навигация",
-      "section": "progress"
+      "section": "progress",
+      "description": "Полоса заполнения под счётчиком в шапке."
     }
   ],
   "contentTemplates": [
@@ -124,7 +146,23 @@
       "kind": "start",
       "pageKind": "start",
       "layoutFile": "layouts/start.html",
+      "isDefault": true,
       "placeholders": []
+    },
+    {
+      "key": "start.image-right",
+      "label": "Старт: изображение справа",
+      "kind": "start",
+      "pageKind": "start",
+      "layoutFile": "layouts/start.image-right.html",
+      "placeholders": [],
+      "settings": [
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение"
+        }
+      ]
     },
     {
       "key": "results.standard",
@@ -132,6 +170,26 @@
       "kind": "results",
       "pageKind": "results",
       "layoutFile": "layouts/results.html",
+      "placeholders": []
+    },
+    {
+      "key": "report.standard",
+      "label": "Отчёт: стандартный",
+      "kind": "report",
+      "layoutFile": "layouts/report.html",
+      "styleFile": "styles/report.css",
+      "isDefault": true,
+      "settings": [],
+      "placeholders": []
+    },
+    {
+      "key": "report.adaptive.standard",
+      "label": "Отчёт: уровни",
+      "kind": "report.adaptive",
+      "layoutFile": "layouts/report.adaptive.html",
+      "styleFile": "styles/report.css",
+      "isDefault": true,
+      "settings": [],
       "placeholders": []
     },
     {
@@ -151,25 +209,17 @@
             "mode": "growBox",
             "defaultFontSize": 16,
             "overflow": "warn"
-          },
-          "allowedMarks": [
-            "bold",
-            "italic",
-            "link"
-          ],
-          "allowedBlocks": [
-            "paragraph",
-            "bulletedList",
-            "numberedList"
-          ]
+          }
         }
       ]
     },
     {
       "key": "info.text",
-      "label": "Информация: текст",
+      "label": "Текст",
       "kind": "info",
       "pageKind": "content.info",
+      "layoutFile": "layouts/content.text.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
       "placeholders": [
         {
           "key": "title",
@@ -188,24 +238,717 @@
         },
         {
           "key": "body",
-          "type": "richText",
+          "type": "html",
           "label": "Текст",
           "required": false,
           "textFit": {
             "mode": "growBox",
             "defaultFontSize": 16,
             "overflow": "warn"
-          },
-          "allowedMarks": [
-            "bold",
-            "italic",
-            "link"
-          ],
-          "allowedBlocks": [
-            "paragraph",
-            "bulletedList",
-            "numberedList"
-          ]
+          }
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ],
+      "isDefault": true
+    },
+    {
+      "key": "info.text-lead",
+      "label": "Текст с подзаголовком",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/content.text.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "info.image-left",
+      "label": "Текст, изображение слева",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/content.image-left.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "info.image-left-lead",
+      "label": "Текст с подзаголовком, изображение слева",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/content.image-left.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "info.image-right",
+      "label": "Текст, изображение справа",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/content.image-right.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "info.image-right-lead",
+      "label": "Текст с подзаголовком, изображение справа",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/content.image-right.html",
+      "description": "Обычная страница: заголовок, текст и кнопка «Далее».",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.text",
+      "label": "Галерея: текст",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.text.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.text-lead",
+      "label": "Галерея: текст с подзаголовком",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.text.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.image-left",
+      "label": "Галерея: текст, изображение слева",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.image-left.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.image-left-lead",
+      "label": "Галерея: текст с подзаголовком, изображение слева",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.image-left.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.image-right",
+      "label": "Галерея: текст, изображение справа",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.image-right.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
+        }
+      ]
+    },
+    {
+      "key": "gallery.image-right-lead",
+      "label": "Галерея: текст с подзаголовком, изображение справа",
+      "kind": "info",
+      "pageKind": "content.info",
+      "layoutFile": "layouts/gallery.image-right.html",
+      "description": "Страница последовательности: точки навигации и «Назад». Несколько подряд идущих страниц с одним идентификатором образуют одну последовательность.",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "lead",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 160,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 17,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "html",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "image",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ],
+      "settings": [
+        {
+          "key": "sequenceId",
+          "type": "sequence",
+          "label": "Последовательность страниц"
+        },
+        {
+          "key": "nextLabel",
+          "type": "text",
+          "label": "Подпись кнопки",
+          "default": "Далее"
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Фон страницы"
         }
       ]
     },
@@ -314,12 +1057,14 @@
     "section-results": "layouts/section-results.html",
     "section-intro": "layouts/section-intro.html",
     "system.blocked": "layouts/system.blocked.html",
-    "system.transition": "layouts/system.transition.html"
+    "system.transition": "layouts/system.transition.html",
+    "report": "layouts/report.html",
+    "report.adaptive": "layouts/report.adaptive.html"
   },
   "assets": {
     "styles": [
       "styles/theme.css",
-      "styles/base.css"
+      "styles/report.css"
     ],
     "scripts": [
       "scripts/template.js"
@@ -361,7 +1106,12 @@
     "routes": [
       {
         "route": "start",
-        "label": "Старт"
+        "label": "Стандартный"
+      },
+      {
+        "route": "start.image-right",
+        "templateKey": "start.image-right",
+        "label": "Изображение справа"
       },
       {
         "route": "content.intro",
@@ -370,36 +1120,29 @@
         "label": "Введение раздела"
       },
       {
-        "route": "content.info",
-        "pageId": "demo-info",
-        "templateKey": "info.text",
-        "label": "Информация: текст"
-      },
-      {
         "route": "question.single",
         "questionId": "demo-single",
-        "label": "Вопрос: одиночный выбор"
+        "label": "Одиночный выбор"
       },
       {
         "route": "question.multiple",
         "questionId": "demo-multiple",
-        "label": "Вопрос: множественный выбор"
+        "label": "Множественный выбор"
       },
       {
         "route": "question.matching",
         "questionId": "demo-matching",
-        "label": "Вопрос: сопоставление"
+        "label": "Сопоставление"
       },
       {
         "route": "question.ranking",
         "questionId": "demo-ranking",
-        "label": "Вопрос: ранжирование"
+        "label": "Ранжирование"
       },
       {
-        "route": "content.summary",
-        "pageId": "demo-summary",
-        "templateKey": "summary.result",
-        "label": "Итог: результат"
+        "route": "question.scale",
+        "questionId": "demo-scale",
+        "label": "Шкала"
       },
       {
         "route": "review",
@@ -411,11 +1154,11 @@
       },
       {
         "route": "results",
-        "label": "Результаты"
+        "label": "Итоги теста"
       },
       {
         "route": "system.blocked",
-        "label": "Системная: доступ ограничен"
+        "label": "Доступ ограничен"
       }
     ]
   }

@@ -24,7 +24,7 @@
  *     the mutation; the Drawer footer's primary save stays bound to the test
  *     settings as in the rest of the editor.
  */
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Download,
@@ -33,6 +33,7 @@ import {
   Image as ImageIcon,
   Layout,
   Paperclip,
+  RotateCcw,
   Trash2,
   Upload,
   X,
@@ -45,10 +46,14 @@ import {
   IconButton,
   Input,
   NumberInput,
+  SegmentedControl,
   Select,
   Switch,
+  Table,
   Tag,
+  type TableColumn,
 } from "@universityrt/ui-kit";
+import type { TestTheme } from "@shared/template/themes";
 import {
   useDesignSettings,
   type MediaParamValue,
@@ -56,9 +61,13 @@ import {
   type TemplateParam,
   type UseDesignSettingsResult,
 } from "../use-design-settings";
-import { fromHex, toHex } from "./color-format";
+import { fromHex, manifestColorFormat, toHex, type ColorFormat } from "./color-format";
+import { extractThemeTokens } from "@shared/template/theme-tokens";
+import { useTemplateBundle } from "./use-template-bundle";
+import { DEFAULT_PARAM_CSS_VARS } from "@shared/template/params-css";
 import { TemplatePreviewModal } from "./template-preview-modal";
 import { TemplateGalleryModal } from "./template-gallery-modal";
+import { TemplateThumb } from "./template-thumb";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -75,14 +84,35 @@ export type DesignSectionProps = {
   design?: UseDesignSettingsResult;
 };
 
-type DesignRailKey = "template" | "branding" | "layout" | "progress";
+type DesignRailKey = "template" | "branding" | "colors" | "layout" | "progress";
 
 const RAIL_ITEMS: { key: DesignRailKey; label: string }[] = [
   { key: "template", label: "Шаблон" },
   { key: "branding", label: "Брендирование" },
+  // PRD-23: colours have logic the other params do not — inheritance from the
+  // template's palette, a storage format, a value per theme — so they get their
+  // own section instead of sitting between the font and the logo.
+  { key: "colors", label: "Цвета" },
   { key: "layout", label: "Макет" },
   { key: "progress", label: "Прогресс и шапка" },
 ];
+
+/**
+ * Params a rail section shows. Colours are picked by TYPE, not by the `section`
+ * the manifest declares: routing them by declaration would mean re-issuing every
+ * template already uploaded. What is left of «Брендирование» is therefore its
+ * params MINUS the colours.
+ */
+function paramsForRail(
+  params: TemplateParam[] | undefined,
+  key: Exclude<DesignRailKey, "template">,
+): TemplateParam[] {
+  const all = params ?? [];
+  if (key === "colors") return all.filter((p) => p.type === "color");
+  return all.filter(
+    (p) => (p.section ?? "branding") === key && !(key === "branding" && p.type === "color"),
+  );
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -99,7 +129,24 @@ export function DesignSection({ testId, design: designProp }: DesignSectionProps
   // the rail back to «Шаблон» (where the incompatible banner lives) and
   // disable branding / layout / progress — those panes have nothing to bind
   // to without a template manifest.
-  const effectiveActive: DesignRailKey = design.templateMissing ? "template" : active;
+  // PRD-23: a section the template puts nothing in is not shown. Before, it was
+  // shown and opened on a banner saying the template declares no params — a rail
+  // item that does nothing. «Шаблон» always stays: it is the card, not params.
+  // While the template is unresolved every section is listed, so the rail does not
+  // collapse to one item during loading or on a 404.
+  const visibleRail = useMemo(() => {
+    const params = design.template?.manifest.params;
+    if (!design.template) return RAIL_ITEMS;
+    return RAIL_ITEMS.filter(
+      (item) => item.key === "template" || paramsForRail(params, item.key).length > 0,
+    );
+  }, [design.template]);
+
+  const effectiveActive: DesignRailKey = design.templateMissing
+    ? "template"
+    : visibleRail.some((i) => i.key === active)
+      ? active
+      : "template";
   const isRailDisabled = (key: DesignRailKey): boolean =>
     design.templateMissing && key !== "template";
 
@@ -107,7 +154,7 @@ export function DesignSection({ testId, design: designProp }: DesignSectionProps
     <>
       <div className="ou-drawer__split" data-testid="design-split">
         <nav className="ou-drawer__rail" aria-label="Подразделы оформления">
-          {RAIL_ITEMS.map((item) => {
+          {visibleRail.map((item) => {
             const disabled = isRailDisabled(item.key);
             const showError = item.key === "template" && design.templateMissing;
             return (
@@ -163,6 +210,8 @@ export function DesignSection({ testId, design: designProp }: DesignSectionProps
               emptyDesc={`У выбранного шаблона «${design.template?.manifest.name ?? ""}» в секции «Брендирование» не объявлено ни одного параметра.`}
               testId="design-branding-pane"
             />
+          ) : effectiveActive === "colors" ? (
+            <ColorsPane design={design} onPreview={() => setPreviewOpen(true)} />
           ) : effectiveActive === "layout" ? (
             <SectionPane
               design={design}
@@ -187,6 +236,8 @@ export function DesignSection({ testId, design: designProp }: DesignSectionProps
         onClose={() => setPreviewOpen(false)}
         template={design.template}
         params={design.draft.params ?? {}}
+        theme={design.draft.theme}
+        paramsByTheme={design.draft.paramsByTheme}
       />
       <TemplateGalleryModal
         open={galleryOpen}
@@ -322,30 +373,32 @@ function TemplatePane({
           <Eye size={16} aria-hidden="true" />
         </button>
         <div className="tpl-thumb">
-          <div className="preview-sketch" data-wf-demo>
-            <div className="ps-header">
-              <div className="ps-logo" />
-              <div className="ps-title">
-                {(tpl.manifest.name ?? tpl.name).slice(0, 3).toUpperCase()}
+          <TemplateThumb template={tpl} name={tpl.manifest.name ?? tpl.name}>
+            <div className="preview-sketch">
+              <div className="ps-header">
+                <div className="ps-logo" />
+                <div className="ps-title">
+                  {(tpl.manifest.name ?? tpl.name).slice(0, 3).toUpperCase()}
+                </div>
+              </div>
+              <div className="ps-progress">
+                <div className="ps-progress-bar" />
+              </div>
+              <div className="ps-body">
+                <div className="ps-sidebar">
+                  <div className="ps-nav-item active" />
+                  <div className="ps-nav-item" />
+                  <div className="ps-nav-item" />
+                </div>
+                <div className="ps-content">
+                  <div className="ps-q">Вопрос…</div>
+                  <div className="ps-opt sel" />
+                  <div className="ps-opt" />
+                  <div className="ps-opt" />
+                </div>
               </div>
             </div>
-            <div className="ps-progress">
-              <div className="ps-progress-bar" />
-            </div>
-            <div className="ps-body">
-              <div className="ps-sidebar">
-                <div className="ps-nav-item active" />
-                <div className="ps-nav-item" />
-                <div className="ps-nav-item" />
-              </div>
-              <div className="ps-content">
-                <div className="ps-q">Вопрос…</div>
-                <div className="ps-opt sel" />
-                <div className="ps-opt" />
-                <div className="ps-opt" />
-              </div>
-            </div>
-          </div>
+          </TemplateThumb>
         </div>
         <div className="tpl-info">
           <div className="tpl-info__head">
@@ -398,18 +451,6 @@ function TemplatePane({
   );
 }
 
-/**
- * Returns params belonging to the given section. Params without an explicit
- * `section` field fall back to `"branding"` by convention.
- */
-function paramsBySection(
-  params: TemplateParam[] | undefined,
-  section: ParamSection,
-): TemplateParam[] {
-  return (params ?? []).filter(
-    (p) => (p.section ?? "branding") === section,
-  );
-}
 
 /**
  * Generic pane that renders template params for a given `ParamSection`.
@@ -429,8 +470,26 @@ function SectionPane({
   testId: string;
 }) {
   const tpl = design.template;
+  const params = useMemo(
+    () => paramsForRail(tpl?.manifest.params, section),
+    [tpl?.manifest.params, section],
+  );
+  // The template's stylesheet is the only place a `default: null` colour actually
+  // lives, so colour rows resolve their inherited value from it. Fetched ONLY for
+  // a section that has colours — «Макет» and «Прогресс» need no palette — and
+  // under the same react-query key as the previews, so opening one afterwards
+  // costs nothing.
+  const hasColorParams = useMemo(() => params.some((p) => p.type === "color"), [params]);
+  const bundle = useTemplateBundle(tpl?.id, !!tpl && hasColorParams);
+  const tokens = useMemo(
+    () => extractThemeTokens(bundle.data?.css ?? ""),
+    [bundle.data?.css],
+  );
+  const colorFormat = useMemo(
+    () => manifestColorFormat(tpl?.manifest.params),
+    [tpl?.manifest.params],
+  );
   if (!tpl) return null;
-  const params = paramsBySection(tpl.manifest.params, section);
   if (params.length === 0) {
     return (
       <div data-testid={testId}>
@@ -452,6 +511,9 @@ function SectionPane({
           param={p}
           value={design.draft.params?.[p.key]}
           onChange={(v) => design.setParam(p.key, v)}
+          onClear={() => design.clearParam(p.key)}
+          inheritedColor={tokens.light[cssVarOf(p)] ?? null}
+          colorFormat={colorFormat}
         />
       ))}
       <DesignSaveError design={design} />
@@ -459,20 +521,240 @@ function SectionPane({
   );
 }
 
-function ParamRow({
+/**
+ * PRD-23 «Цвета». Two shapes, decided by the TEMPLATE, not by the author's choice:
+ *
+ *   - the template ships one palette — a flat list of colours, as before;
+ *   - it ships several — the theme switch plus a table «параметр × тема», so both
+ *     palettes are visible at once and a colour missing from one of them is
+ *     noticeable without hunting. The table does NOT follow the switch: pinning a
+ *     theme must not hide (or lose) the palette the author already picked for the
+ *     other one.
+ */
+function ColorsPane({
+  design,
+  onPreview,
+}: {
+  design: UseDesignSettingsResult;
+  onPreview: () => void;
+}) {
+  const tpl = design.template;
+  const params = useMemo(
+    () => paramsForRail(tpl?.manifest.params, "colors"),
+    [tpl?.manifest.params],
+  );
+  // The stylesheet is the only place a `default: null` colour actually lives, so
+  // every «из шаблона» value is read from there.
+  const bundle = useTemplateBundle(tpl?.id, !!tpl && params.length > 0);
+  const tokens = useMemo(() => extractThemeTokens(bundle.data?.css ?? ""), [bundle.data?.css]);
+  const colorFormat = useMemo(
+    () => manifestColorFormat(tpl?.manifest.params),
+    [tpl?.manifest.params],
+  );
+  if (!tpl) return null;
+  const themed = design.themes.length >= 2;
+
+  if (!themed) {
+    return (
+      <div data-testid="design-colors-pane">
+        {params.map((p) => (
+          <ParamRow
+            key={p.key}
+            param={p}
+            value={design.draft.params?.[p.key]}
+            onChange={(v) => design.setParam(p.key, v)}
+            onClear={() => design.clearParam(p.key)}
+            inheritedColor={tokens.light[cssVarOf(p)] ?? null}
+            colorFormat={colorFormat}
+          />
+        ))}
+        <DesignSaveError design={design} />
+      </div>
+    );
+  }
+
+  const themeItems = [
+    ...design.themes.map((t) => ({ value: t.id as TestTheme, label: t.label })),
+    { value: "auto" as TestTheme, label: "Авто" },
+  ];
+  const pinned = design.themes.find((t) => t.id === design.theme);
+  const columns: TableColumn<TemplateParam>[] = [
+    {
+      key: "param",
+      header: "Параметр",
+      rowHeader: true,
+      width: "46%",
+      render: (p) => (
+        <>
+          <span className="design-colors-table__param">{p.label}</span>
+          {p.description ? (
+            <div className="design-colors-table__hint">{p.description}</div>
+          ) : null}
+        </>
+      ),
+    },
+    ...design.themes.map((t) => ({
+      key: t.id,
+      header: t.label,
+      render: (p: TemplateParam) => (
+        <ThemeColorCell
+          param={p}
+          themeId={t.id}
+          themeLabel={t.label}
+          value={design.themeParams[t.id]?.[p.key]}
+          inheritedColor={tokens[t.id][cssVarOf(p)] ?? null}
+          colorFormat={colorFormat}
+          onChange={(v) => design.setThemeParam(t.id, p.key, v)}
+          onClear={() => design.clearThemeParam(t.id, p.key)}
+        />
+      ),
+    })),
+  ];
+
+  return (
+    <div data-testid="design-colors-pane">
+      <div className="ou-formfield">
+        <label className="ou-formfield__lbl" id="design-theme-label">
+          Тема теста
+        </label>
+        <div className="design-theme-head">
+          <SegmentedControl<TestTheme>
+            items={themeItems}
+            value={design.theme}
+            onChange={(v) => design.setTheme(v)}
+            aria-labelledby="design-theme-label"
+            data-testid="design-theme-switch"
+          />
+          <Button
+            variant="ghost"
+            size="s"
+            leadingIcon={<Eye size={13} aria-hidden="true" />}
+            onClick={onPreview}
+            data-testid="design-theme-preview"
+          >
+            Предпросмотр
+          </Button>
+        </div>
+        <div className="ou-formfield__desc" data-testid="design-theme-desc">
+          {pinned
+            ? `Тест открывается в теме «${pinned.label}» у всех участников независимо от их системных настроек.`
+            : "Тест открывается в теме, выбранной у участника. Задайте цвета для обеих — иначе часть участников увидит не то, что вы задумали."}
+        </div>
+      </div>
+      <Table<TemplateParam>
+        columns={columns}
+        rows={params}
+        rowKey={(p) => p.key}
+        density="compact"
+        className="design-colors-table"
+        data-testid="design-colors-table"
+      />
+      <DesignSaveError design={design} />
+    </div>
+  );
+}
+
+/** One colour of one palette: the picker plus, for an override, the way back. */
+function ThemeColorCell({
+  param,
+  themeId,
+  themeLabel,
+  value,
+  inheritedColor,
+  colorFormat,
+  onChange,
+  onClear,
+}: {
+  param: TemplateParam;
+  themeId: string;
+  themeLabel: string;
+  value: unknown;
+  inheritedColor: string | null;
+  colorFormat: ColorFormat;
+  onChange: (v: unknown) => void;
+  onClear: () => void;
+}) {
+  const override = typeof value === "string" && value ? value : null;
+  const inherited = ((param.default as string | undefined) ?? "") || inheritedColor || "";
+  const effective = override ?? inherited;
+  return (
+    <div className="design-color-field">
+      <ColorPicker
+        value={toHex(effective, "#000000")}
+        aria-label={`${param.label}, тема «${themeLabel}»`}
+        onChange={(hex) => onChange(fromHex(hex, effective, colorFormat))}
+        data-testid={`design-theme-color-${themeId}-${param.key}`}
+      />
+      {override !== null && (
+        // Present ONLY on an override — its presence is also what marks the cell
+        // as changed, so the table needs no separate «изменено» badge.
+        <IconButton
+          icon={<RotateCcw width={14} height={14} aria-hidden="true" />}
+          aria-label={`Вернуть цвет шаблона: ${param.label}, тема «${themeLabel}»`}
+          title="Вернуть цвет шаблона"
+          variant="ghost"
+          size="s"
+          onClick={onClear}
+          data-testid={`design-theme-reset-${themeId}-${param.key}`}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * One design parameter: its control plus, when the manifest supplies one, the
+ * explanation of what the parameter actually paints. A colour named «Акцентный»
+ * says nothing about where it shows up; the description is where the template
+ * author tells the test author that (PRD-22, plan Э8).
+ */
+function ParamRow(props: {
+  param: TemplateParam;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  /** Drop the override, handing the param back to the template. */
+  onClear?: () => void;
+  /** Template's own value for this colour, read from its stylesheet. */
+  inheritedColor?: string | null;
+  /** Storage format this template's colours use. */
+  colorFormat?: ColorFormat;
+}) {
+  return (
+    <div className="ou-formfield" data-testid={`design-param-row-${props.param.key}`}>
+      <ParamControl {...props} />
+      {props.param.description ? (
+        <p className="ou-formfield__desc" data-testid={`design-param-desc-${props.param.key}`}>
+          {props.param.description}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** CSS custom property a param feeds, via its own `cssVar` or the shared map. */
+function cssVarOf(param: TemplateParam): string {
+  return (param as { cssVar?: string }).cssVar ?? DEFAULT_PARAM_CSS_VARS[param.key] ?? "";
+}
+
+function ParamControl({
   param,
   value,
   onChange,
+  onClear,
+  inheritedColor,
+  colorFormat = "hsl",
 }: {
   param: TemplateParam;
   value: unknown;
   onChange: (v: unknown) => void;
+  onClear?: () => void;
+  inheritedColor?: string | null;
+  colorFormat?: ColorFormat;
 }) {
   const fieldId = `design-param-${param.key}`;
   if (param.type === "text") {
     const v = typeof value === "string" ? value : "";
     return (
-      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
         <Input
           id={fieldId}
           size="m"
@@ -482,17 +764,20 @@ function ParamRow({
           onChange={(e) => onChange(e.target.value)}
           data-testid={`design-param-input-${param.key}`}
         />
-      </div>
     );
   }
   if (param.type === "color") {
-    const stored =
-      typeof value === "string" && value
-        ? value
-        : (param.default as string | undefined) ?? "";
-    const hexValue = toHex(stored, "#000000");
+    // What the author has explicitly set — the only thing that gets saved.
+    const override = typeof value === "string" && value ? value : null;
+    // What the template paints with when the author sets nothing: its manifest
+    // default, else the token from its stylesheet. Showing this (rather than a
+    // black placeholder) is what makes the field agree with the rendered test.
+    const inherited =
+      ((param.default as string | undefined) ?? "") || inheritedColor || "";
+    const effective = override ?? inherited;
+    const hexValue = toHex(effective, "#000000");
     return (
-      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
+      <>
         <label
           className="ou-formfield__lbl"
           htmlFor={fieldId}
@@ -500,20 +785,43 @@ function ParamRow({
         >
           {param.label}
         </label>
-        <ColorPicker
-          id={fieldId}
-          value={hexValue}
-          aria-labelledby={`${fieldId}-label`}
-          onChange={(hex) => onChange(fromHex(hex, stored))}
-          data-testid={`design-param-input-${param.key}`}
-        />
-      </div>
+        <div className="design-color-field">
+          <ColorPicker
+            id={fieldId}
+            value={hexValue}
+            aria-labelledby={`${fieldId}-label`}
+            // Round-trip through the format THIS template stores: `effective`
+            // carries it when the template ships a palette, `colorFormat` (from
+            // the manifest) decides when there is nothing to infer from.
+            onChange={(hex) => onChange(fromHex(hex, effective, colorFormat))}
+            data-testid={`design-param-input-${param.key}`}
+          />
+          {override === null ? (
+            <span
+              className="design-color-field__origin"
+              data-testid={`design-param-inherited-${param.key}`}
+            >
+              из шаблона
+            </span>
+          ) : (
+            // Without this an override is a one-way door: the author can repaint
+            // the colour but never hand it back to the template's own palette.
+            <Button
+              variant="ghost"
+              size="s"
+              onClick={() => onClear?.()}
+              data-testid={`design-param-reset-${param.key}`}
+            >
+              Вернуть из шаблона
+            </Button>
+          )}
+        </div>
+      </>
     );
   }
   if (param.type === "boolean") {
     const v = typeof value === "boolean" ? value : Boolean(param.default ?? false);
     return (
-      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
         <Switch
           id={fieldId}
           label={param.label}
@@ -521,14 +829,12 @@ function ParamRow({
           onChange={(e) => onChange(e.target.checked)}
           data-testid={`design-param-input-${param.key}`}
         />
-      </div>
     );
   }
   if (param.type === "select") {
     const opts = param.options ?? [];
     const v = typeof value === "string" ? value : (param.default as string) ?? opts[0] ?? "";
     return (
-      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
         <Select<string>
           id={fieldId}
           size="m"
@@ -539,7 +845,6 @@ function ParamRow({
           onChange={(next) => onChange(next)}
           data-testid={`design-param-input-${param.key}`}
         />
-      </div>
     );
   }
   if (param.type === "number") {
@@ -550,7 +855,6 @@ function ParamRow({
           ? param.default
           : 0;
     return (
-      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
         <NumberInput
           id={fieldId}
           size="m"
@@ -562,13 +866,11 @@ function ParamRow({
           onChange={(next) => onChange(next)}
           data-testid={`design-param-input-${param.key}`}
         />
-      </div>
     );
   }
   if (param.type === "url") {
     const v = typeof value === "string" ? value : (param.default as string) ?? "";
     return (
-      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
         <Input
           id={fieldId}
           type="url"
@@ -592,7 +894,6 @@ function ParamRow({
             ) : undefined
           }
         />
-      </div>
     );
   }
   if (param.type === "multiselect") {
@@ -603,7 +904,6 @@ function ParamRow({
         ? ((param.default as unknown[]).filter((x) => typeof x === "string") as string[])
         : [];
     return (
-      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
         <Combobox<string>
           id={fieldId}
           size="m"
@@ -615,7 +915,6 @@ function ParamRow({
           onValuesChange={(next) => onChange(next)}
           data-testid={`design-param-input-${param.key}`}
         />
-      </div>
     );
   }
   if (
@@ -634,7 +933,7 @@ function ParamRow({
     );
   }
   return (
-    <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
+    <>
       <label className="ou-formfield__lbl">{param.label}</label>
       <Banner
         tone="info"
@@ -642,7 +941,7 @@ function ParamRow({
         description={`Тип «${param.type}» не поддерживается этой версией редактора.`}
         data-testid={`design-param-unsupported-${param.key}`}
       />
-    </div>
+    </>
   );
 }
 
@@ -744,7 +1043,7 @@ function MediaParamRow({
   }
 
   return (
-    <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
+    <>
       <label className="ou-formfield__lbl" htmlFor={fieldId}>
         {param.label}
       </label>
@@ -811,7 +1110,7 @@ function MediaParamRow({
           data-testid={`design-param-error-${param.key}`}
         />
       )}
-    </div>
+    </>
   );
 }
 

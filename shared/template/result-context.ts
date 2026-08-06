@@ -34,8 +34,18 @@ function round1(n: number): number {
   return Math.round((Number(n) || 0) * 10) / 10;
 }
 
+/** Per-topic feedback composition — the SAME shape for standard and adaptive. */
+export interface TopicFeedbackInput {
+  /** Per-topic feedback text (`feedback_json.text`). */
+  feedback?: string | null;
+  /** Recommended courses/links (`feedback_json.links`). */
+  recommendedCourses?: Array<{ title: string; url?: string }> | null;
+  /** Recommended events (`feedback_json.events`). */
+  recommendedEvents?: Array<{ title: string; url?: string }> | null;
+}
+
 /** Normalized per-topic input (host adapts its own field names into this). */
-export interface TopicInput {
+export interface TopicInput extends TopicFeedbackInput {
   topicId?: string;
   topicName: string;
   correct: number;
@@ -46,8 +56,31 @@ export interface TopicInput {
   passed: boolean | null;
   /** SCORM-extra: per-topic pass threshold label, e.g. "Требуется: 70%". */
   requiredLabel?: string;
-  /** SCORM-extra: per-topic feedback. */
-  topicFeedback?: string;
+}
+
+/**
+ * The unified per-topic feedback view — `feedback` text + recommended courses/events
+ * with presence flags. Shared by standard and adaptive results so the feedback block
+ * is composed identically in both modes (spec §3.2 / plan 6.1). Feedback is a property
+ * of the test's settings, not the flow mode.
+ */
+export function buildTopicFeedbackView(t: TopicFeedbackInput): {
+  feedback?: string;
+  hasFeedback: boolean;
+  recommendedCourses: CtxRecommendation[];
+  recommendedEvents: CtxRecommendation[];
+  hasRecommendations: boolean;
+} {
+  const fb = String(t.feedback ?? "").trim();
+  const courses = (t.recommendedCourses ?? []).map((l) => ({ title: l.title, ...(l.url ? { url: l.url } : {}) }));
+  const events = (t.recommendedEvents ?? []).map((l) => ({ title: l.title, ...(l.url ? { url: l.url } : {}) }));
+  return {
+    ...(fb ? { feedback: fb } : {}),
+    hasFeedback: fb.length > 0,
+    recommendedCourses: courses,
+    recommendedEvents: events,
+    hasRecommendations: courses.length > 0 || events.length > 0,
+  };
 }
 
 /** Normalized standard result input. */
@@ -88,10 +121,11 @@ function topicView(t: TopicInput, withPoints: boolean): CtxTopicResultView {
     percent: Math.round(t.percent || 0),
     passClass: passed === true ? "is-pass" : passed === false ? "is-fail" : "",
     statusLabel: passed === true ? "Пройдено" : passed === false ? "Не пройдено" : "",
+    // Unified feedback composition (feedback + courses + events) — same as adaptive.
+    ...buildTopicFeedbackView(t),
   };
   if (withPoints) view.pointsLabel = round1(t.earnedPoints) + " / " + round1(t.possiblePoints);
   if (t.requiredLabel) view.requiredLabel = t.requiredLabel;
-  if (t.topicFeedback && String(t.topicFeedback).trim()) view.topicFeedback = t.topicFeedback;
   return view;
 }
 
@@ -140,6 +174,14 @@ export interface SectionResultInput {
   passed: boolean | null;
   /** Override the «Продолжить» label (e.g. the last section before test-finish). */
   continueLabel?: string;
+  /** Test title for the header (`course.title`); falls back to `topicName` when absent. */
+  courseTitle?: string;
+  /** Header subtitle "Попытка N из M". */
+  subtitle?: string;
+  /** 1-based position of this section among the test's sections (header tag + progress). */
+  sectionIndex?: number;
+  /** Total sections (header tag + progress); absent/0 drops the section tag + progress. */
+  sectionsTotal?: number;
 }
 
 /**
@@ -167,7 +209,15 @@ export function buildSectionResultContext(input: SectionResultInput): {
     summaryLabel: (input.correct != null ? input.correct : 0) + " из " + input.total + " верно · " + percent + "%",
     continueLabel: input.continueLabel || "Продолжить",
   };
-  return { course: { title: input.topicName || "" }, sectionResult };
+  // Header section-position tag + progress, when the host supplies the position.
+  if (input.sectionsTotal && input.sectionsTotal > 0 && input.sectionIndex) {
+    sectionResult.sectionLabel = "Раздел " + input.sectionIndex + " из " + input.sectionsTotal;
+    sectionResult.progressPercent = Math.round((input.sectionIndex / input.sectionsTotal) * 100);
+  }
+  return {
+    course: { title: input.courseTitle || input.topicName || "", subtitle: input.subtitle },
+    sectionResult,
+  };
 }
 
 /** Russian plural for «вопрос» (1 вопрос / 2 вопроса / 5 вопросов). */
@@ -192,8 +242,14 @@ function pluralMinutes(n: number): string {
 
 /** Normalized input for the «Введение раздела» screen (PRD-1 §4.3). */
 export interface SectionIntroInput {
-  /** 1-based section index (for the «Раздел N» eyebrow). */
+  /** 1-based section index (for the «Раздел N из M» eyebrow + header tag). */
   sectionNumber: number;
+  /** Total sections; enables «Раздел N из M» + the header progress. */
+  sectionsTotal?: number;
+  /** Test title for the header (`course.title`); falls back to `topicName`. */
+  courseTitle?: string;
+  /** Header subtitle «Попытка N из M». */
+  subtitle?: string;
   topicName: string;
   /** Topic description from its properties. */
   description?: string | null;
@@ -221,8 +277,10 @@ export function buildSectionIntroContext(input: SectionIntroInput): {
   const instrRaw = typeof input.instruction === "string" ? input.instruction : "";
   const instrText = instrRaw.replace(/<[^>]*>/g, "").trim();
   const illo = (input.illustration ?? "").trim();
+  const secNum = input.sectionNumber || 1;
+  const secTotal = input.sectionsTotal && input.sectionsTotal > 0 ? input.sectionsTotal : 0;
   const sectionIntro: CtxSectionIntro = {
-    eyebrow: "Раздел " + (input.sectionNumber || 1),
+    eyebrow: secTotal ? "Раздел " + secNum + " из " + secTotal : "Раздел " + secNum,
     topicName: input.topicName || "",
     description: desc,
     hasDescription: desc.length > 0,
@@ -235,16 +293,18 @@ export function buildSectionIntroContext(input: SectionIntroInput): {
     hasIllustration: illo.length > 0,
     continueLabel: input.continueLabel || "Далее",
   };
-  return { course: { title: input.topicName || "" }, sectionIntro };
+  if (secTotal) sectionIntro.progressPercent = Math.round((secNum / secTotal) * 100);
+  return {
+    course: { title: input.courseTitle || input.topicName || "", subtitle: input.subtitle },
+    sectionIntro,
+  };
 }
 
 /** Normalized adaptive per-topic input. */
-export interface AdaptiveTopicInput {
+export interface AdaptiveTopicInput extends TopicFeedbackInput {
   topicName: string;
   achievedLevelIndex: number | null;
   achievedLevelName?: string | null;
-  feedback?: string | null;
-  recommendedLinks?: Array<{ title: string; url: string }>;
 }
 
 /** Normalized adaptive result input. */
@@ -261,18 +321,35 @@ export interface AdaptiveResultContextOptions {
   showFinish?: boolean;
 }
 
-/** Map a normalized adaptive topic to its level-based view. */
+/**
+ * Tone of the level tag, as DS modifiers. The tag answers only what the model can
+ * answer — level CONFIRMED or the test's minimum NOT confirmed — and says nothing
+ * about how good the level is: the ladder is the author's, it differs from test to
+ * test, and the test defines no target rung. Colouring the rungs (top = success and
+ * so on) would invent a verdict the author never set.
+ *
+ * Both states are SOLID, not the pastel default: the tag is the topic's headline on
+ * the card, and a washed-out pill under the topic name reads as decoration.
+ */
+const TONE_CONFIRMED = "ou-tag--solid ou-tag--accent";
+const TONE_BELOW_MINIMUM = "ou-tag--solid ou-tag--error";
+
+/**
+ * Verdict for an adaptive topic where NO level was confirmed — the learner did not
+ * reach the LOWEST level the test defines. Said in full, because the tag is the verdict
+ * of the assessment: a terse «Не достигнут» leaves «что именно» to the reader. Exported
+ * so the PDF report prints the same words as the screen it is opened from.
+ */
+export const NO_LEVEL_CONFIRMED_LABEL = "Минимально требуемый уровень не подтверждён";
+
+/** Map a normalized adaptive topic to its level-based view (unified feedback). */
 function adaptiveTopicView(t: AdaptiveTopicInput): CtxAdaptiveTopicView {
   const achieved = t.achievedLevelIndex !== null && t.achievedLevelIndex !== undefined;
-  const links = (t.recommendedLinks || []).map((l) => ({ title: l.title, url: l.url }));
   return {
     topicName: t.topicName || "",
-    levelLabel: achieved ? (t.achievedLevelName as string) : "Не достигнут",
-    levelClass: achieved ? "is-info" : "is-fail",
-    feedback: t.feedback || "",
-    hasFeedback: !!(t.feedback && String(t.feedback).trim()),
-    hasLinks: links.length > 0,
-    links,
+    levelLabel: achieved ? (t.achievedLevelName as string) : NO_LEVEL_CONFIRMED_LABEL,
+    levelClass: achieved ? TONE_CONFIRMED : TONE_BELOW_MINIMUM,
+    ...buildTopicFeedbackView(t),
   };
 }
 

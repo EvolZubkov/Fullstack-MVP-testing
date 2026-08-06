@@ -46,6 +46,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { t } from "@/lib/i18n";
+import { handleMarkdownPaste } from "./paste-markdown";
 import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
 import { useContentGuard } from "@/features/content-protection/use-content-guard";
 import type { Question, Topic } from "@shared/schema";
@@ -56,6 +57,7 @@ const questionTypes = [
   { value: "multiple", label: t.questions.multipleChoice },
   { value: "matching", label: t.questions.matching },
   { value: "ranking", label: t.questions.ranking },
+  { value: "scale", label: t.questions.scaleChoice },
 ] as const;
 
 type QuestionType = typeof questionTypes[number]["value"];
@@ -64,7 +66,7 @@ type QuestionType = typeof questionTypes[number]["value"];
 // and the graded config are configured per test («Оценка» tab of the editor).
 const baseQuestionSchema = z.object({
   topicId: z.string().min(1, t.questions.topicRequired),
-  type: z.enum(["single", "multiple", "matching", "ranking"]),
+  type: z.enum(["single", "multiple", "matching", "ranking", "scale"]),
   prompt: z.string().min(1, t.questions.textRequired),
 });
 
@@ -105,6 +107,11 @@ export function QuestionEditorDrawer({
 
   const [singleOptions, setSingleOptions] = useState<string[]>(["", "", "", ""]);
   const [singleCorrect, setSingleCorrect] = useState<number>(0);
+
+  // PRD-26: шкала переиспользует состояние одиночного выбора (dataJson у них
+  // идентичен), поэтому смена типа single <-> scale сохраняет и подписи, и отметку.
+  // Своё у шкалы только одно — есть ли вообще правильная градация (FR-03).
+  const [scaleHasCorrect, setScaleHasCorrect] = useState<boolean>(false);
 
   const [multipleOptions, setMultipleOptions] = useState<string[]>(["", "", "", ""]);
   const [multipleCorrect, setMultipleCorrect] = useState<number[]>([]);
@@ -156,6 +163,7 @@ export function QuestionEditorDrawer({
   const resetQuestionData = () => {
     setSingleOptions(["", "", "", ""]);
     setSingleCorrect(0);
+    setScaleHasCorrect(false);
     setMultipleOptions(["", "", "", ""]);
     setMultipleCorrect([]);
     setMatchingLeft(["", "", ""]);
@@ -202,6 +210,11 @@ export function QuestionEditorDrawer({
         setMatchingPairs(correct.pairs || []);
       } else if (question.type === "ranking") {
         setRankingItems(data.items || ["", "", "", ""]);
+      } else if (question.type === "scale") {
+        setSingleOptions(data.options || ["", "", "", ""]);
+        // Наличие correctIndex И ЕСТЬ положение переключателя (FR-03).
+        setScaleHasCorrect(typeof correct?.correctIndex === "number");
+        setSingleCorrect(typeof correct?.correctIndex === "number" ? correct.correctIndex : 0);
       }
 
       setMediaUrl(question.mediaUrl || "");
@@ -289,6 +302,12 @@ export function QuestionEditorDrawer({
       case "ranking":
         dataJson = { items: rankingItems.filter((i) => i.trim()) };
         correctJson = { correctOrder: rankingItems.map((_, i) => i) };
+        break;
+      case "scale":
+        dataJson = { options: singleOptions.filter((o) => o.trim()) };
+        // Переключатель выключен — измерительный режим: ПУСТОЙ объект, а не null
+        // (колонка correct_json объявлена NOT NULL).
+        correctJson = scaleHasCorrect ? { correctIndex: singleCorrect } : {};
         break;
     }
 
@@ -380,14 +399,21 @@ export function QuestionEditorDrawer({
       else if (matchingPairs.length < left) errs.push("Сопоставьте все пары");
     } else if (selectedType === "ranking") {
       if (rankingItems.filter((i) => i.trim()).length < 2) errs.push("Добавьте не менее двух элементов");
+    } else if (selectedType === "scale") {
+      // Правильная градация обязательна ТОЛЬКО когда включён переключатель:
+      // измерительный опросник валиден и без неё.
+      if (singleOptions.filter((o) => o.trim()).length < 2) errs.push(t.questions.scaleErrorTooFewGraduations);
+      else if (scaleHasCorrect && !singleOptions[singleCorrect]?.trim()) errs.push(t.questions.scaleErrorNoCorrect);
     }
     return errs;
-  }, [watchedTopicId, watchedPrompt, selectedType, singleOptions, singleCorrect, multipleOptions, multipleCorrect, matchingLeft, matchingRight, matchingPairs, rankingItems]);
+  }, [watchedTopicId, watchedPrompt, selectedType, singleOptions, singleCorrect, scaleHasCorrect, multipleOptions, multipleCorrect, matchingLeft, matchingRight, matchingPairs, rankingItems]);
 
   /** Option/item texts of the active type — the list carried across type changes. */
   const currentOptionTexts = (): string[] => {
     switch (selectedType) {
       case "single": return singleOptions;
+      // Шкала делит состояние с одиночным выбором — тот же список подписей.
+      case "scale": return singleOptions;
       case "multiple": return multipleOptions;
       case "ranking": return rankingItems;
       case "matching": return matchingLeft;
@@ -408,15 +434,23 @@ export function QuestionEditorDrawer({
     if (next === "single") {
       const opts = padTexts(texts, 2);
       setSingleOptions(opts);
-      const carried = prev === "multiple" ? (multipleCorrect[0] ?? 0) : prev === "single" ? singleCorrect : 0;
+      const carried = prev === "multiple" ? (multipleCorrect[0] ?? 0) : (prev === "single" || prev === "scale") ? singleCorrect : 0;
       setSingleCorrect(Math.max(0, Math.min(carried, opts.length - 1)));
     } else if (next === "multiple") {
       const opts = padTexts(texts, 2);
       setMultipleOptions(opts);
-      const carried = prev === "single" ? [singleCorrect] : prev === "multiple" ? multipleCorrect : [];
+      const carried = (prev === "single" || prev === "scale") ? [singleCorrect] : prev === "multiple" ? multipleCorrect : [];
       setMultipleCorrect(carried.filter((i) => i >= 0 && i < opts.length));
     } else if (next === "ranking") {
       setRankingItems(padTexts(texts, 2));
+    } else if (next === "scale") {
+      const opts = padTexts(texts, 2);
+      setSingleOptions(opts);
+      const carried = prev === "multiple" ? (multipleCorrect[0] ?? 0) : singleCorrect;
+      setSingleCorrect(Math.max(0, Math.min(carried, opts.length - 1)));
+      // FR-30: переход НА шкалу сам по себе переключатель правильного ответа не
+      // включает — опросник без верных ответов должен быть умолчанием.
+      setScaleHasCorrect(false);
     } else if (next === "matching") {
       const left = padTexts(texts, 2);
       setMatchingLeft(left);
@@ -497,11 +531,15 @@ export function QuestionEditorDrawer({
           <Textarea
             label={t.questions.questionText}
             placeholder={t.questions.questionTextPlaceholder}
+            hint={t.questions.markdownHint}
             rows={2}
             fullWidth
             error={form.formState.errors.prompt?.message}
             data-testid="input-question-prompt"
             {...form.register("prompt")}
+            onPaste={(e) =>
+              handleMarkdownPaste(e, (v) => form.setValue("prompt", v, { shouldDirty: true }))
+            }
           />
 
           {selectedType === "single" && (
@@ -540,9 +578,34 @@ export function QuestionEditorDrawer({
             />
           )}
 
+          {/* PRD-26: шкала — тот же список подписей, что у одиночного выбора, плюс
+             переключатель наличия правильной градации. Отдельного компонента нет:
+             редактор один, иначе разметка двух списков разойдётся. */}
+          {selectedType === "scale" && (
+            <Stack gap={4}>
+              <Switch
+                label={t.questions.scaleHasCorrectAnswer}
+                description={t.questions.scaleHasCorrectAnswerHint}
+                checked={scaleHasCorrect}
+                onChange={(e) => setScaleHasCorrect(e.target.checked)}
+                data-testid="switch-scale-has-correct"
+              />
+              <SingleChoiceBuilder
+                options={singleOptions}
+                setOptions={setSingleOptions}
+                correctIndex={singleCorrect}
+                setCorrectIndex={setSingleCorrect}
+                label={scaleHasCorrect ? t.questions.scaleGraduationsWithCorrect : t.questions.scaleGraduations}
+                itemPlaceholder={t.questions.scaleGraduationPlaceholder}
+                showCorrect={scaleHasCorrect}
+              />
+            </Stack>
+          )}
+
           {/* PRD-16 FR-41/42: per-question shuffle (ranking is always shuffled — no toggle).
-             Rendered as a Switch to match the approved wireframe (state s-q-drawer). */}
-          {selectedType !== "ranking" && (
+             Rendered as a Switch to match the approved wireframe (state s-q-drawer).
+             PRD-26: a scale has no toggle either — its graduation order is content. */}
+          {selectedType !== "ranking" && selectedType !== "scale" && (
             <Switch
               label={t.questions.shuffleAnswers}
               checked={shuffleAnswers}
@@ -720,16 +783,28 @@ function remapIndexAfterMove(idx: number, from: number, to: number): number {
   return idx;
 }
 
+/**
+ * Ordered list of answer texts with ONE of them marked correct — the editor for both
+ * single choice and the PRD-26 scale. The scale reuses it rather than getting a copy,
+ * so the two cannot drift apart in markup; it only overrides the wording and, in
+ * measurement mode, hides the correct-answer radio column (`showCorrect={false}`).
+ */
 function SingleChoiceBuilder({
   options,
   setOptions,
   correctIndex,
   setCorrectIndex,
+  label = t.questions.answerOptionsSingle,
+  itemPlaceholder = t.questions.optionPlaceholder,
+  showCorrect = true,
 }: {
   options: string[];
   setOptions: (opts: string[]) => void;
   correctIndex: number;
   setCorrectIndex: (idx: number) => void;
+  label?: string;
+  itemPlaceholder?: string;
+  showCorrect?: boolean;
 }) {
   const groupName = useId();
   const dragIndex = useRef<number | null>(null);
@@ -757,7 +832,7 @@ function SingleChoiceBuilder({
 
   return (
     <Stack gap={4}>
-      <Label>{t.questions.answerOptionsSingle}</Label>
+      <Label>{label}</Label>
       <Stack gap={2}>
         {options.map((opt, i) => (
           <div key={i} onDragOver={(e) => e.preventDefault()} onDrop={() => moveOption(i)}>
@@ -765,17 +840,20 @@ function SingleChoiceBuilder({
               <span className="tb-drag-handle" draggable onDragStart={() => { dragIndex.current = i; }} aria-label="Перетащить вариант">
                 <GripVertical size={16} color="var(--ou-fg-muted)" />
               </span>
-              <Radio
-                name={groupName}
-                checked={correctIndex === i}
-                onChange={() => setCorrectIndex(i)}
-                aria-label={`${t.questions.correctAnswer} ${i + 1}`}
-              />
+              {showCorrect && (
+                <Radio
+                  name={groupName}
+                  checked={correctIndex === i}
+                  onChange={() => setCorrectIndex(i)}
+                  aria-label={`${t.questions.correctAnswer} ${i + 1}`}
+                />
+              )}
               <Box grow>
                 <Input
                   value={opt}
                   onChange={(e) => updateOption(i, e.target.value)}
-                  placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
+                  onPaste={(e) => handleMarkdownPaste(e, (v) => updateOption(i, v))}
+                  placeholder={`${itemPlaceholder} ${i + 1}`}
                   fullWidth
                   data-testid={`input-option-${i}`}
                 />
@@ -860,6 +938,7 @@ function MultipleChoiceBuilder({
                 <Input
                   value={opt}
                   onChange={(e) => updateOption(i, e.target.value)}
+                  onPaste={(e) => handleMarkdownPaste(e, (v) => updateOption(i, v))}
                   placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
                   fullWidth
                   data-testid={`input-multi-option-${i}`}
@@ -932,6 +1011,7 @@ function MatchingBuilder({
                 <Input
                   value={item}
                   onChange={(e) => updateLeft(i, e.target.value)}
+                  onPaste={(e) => handleMarkdownPaste(e, (v) => updateLeft(i, v))}
                   placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
                   fullWidth
                   data-testid={`input-matching-left-${i}`}
@@ -949,6 +1029,7 @@ function MatchingBuilder({
                 <Input
                   value={item}
                   onChange={(e) => updateRight(i, e.target.value)}
+                  onPaste={(e) => handleMarkdownPaste(e, (v) => updateRight(i, v))}
                   placeholder={`${t.questions.optionPlaceholder} ${String.fromCharCode(65 + i)}`}
                   fullWidth
                   data-testid={`input-matching-right-${i}`}
@@ -1007,6 +1088,7 @@ function RankingBuilder({
                 <Input
                   value={item}
                   onChange={(e) => updateItem(i, e.target.value)}
+                  onPaste={(e) => handleMarkdownPaste(e, (v) => updateItem(i, v))}
                   placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
                   fullWidth
                   data-testid={`input-ranking-${i}`}

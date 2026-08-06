@@ -2,18 +2,19 @@
  * @module client/pages/learner/template-question-screen
  *
  * Renders the test-taking question screen from the design template (PRD-12 #3):
- * single (radio), multiple (checkbox) and ranking (↑/↓ reorder). The shadow-isolated
- * template provides the chrome (header / progress / question card); the interaction
- * is HTML filled into the `question-interaction` slot — styled by the template's own
- * `.option`/`.rank-item` CSS and wired back to React via `data-action` click
- * delegation (mirrors the SCORM runtime). React keeps the answer state; navigation
- * is rendered on the template surface below. All four question types render via the
- * template; matching drags left chips onto right slots using the SHARED pointer
+ * single, multiple, ranking and matching. The shadow-isolated template provides the
+ * chrome (header / progress / question card); the interaction HTML is filled into the
+ * `question-interaction` slot from the SHARED emission
+ * ({@link module:shared/template/question-interaction}) — the DS `.ou-*` markup the
+ * SCORM package renders too — and wired back to React via `data-action`/`data-drag`
+ * delegation. React keeps the answer state; the navigation row is part of the
+ * template's scene (`.tb-scene__foot`, built from `state.nav`) for BOTH flows, so the
+ * host renders no chrome of its own. Matching drags answer chips onto prompt rows using the SHARED pointer
  * engine and the SHARED rich pool model ({@link module:shared/template/dnd/matching-model}),
  * the same engine the SCORM host runs — so both hosts compute drops identically.
  */
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { TemplateScreen } from "@/components/template-screen";
 import type { Question } from "@shared/schema";
 import type { CtxQuestionsProgress } from "@shared/template/context";
@@ -24,6 +25,23 @@ import {
   returnToPool,
   type MatchingState,
 } from "@shared/template/dnd/matching-model";
+import {
+  renderSingleChoice,
+  renderMultiple,
+  renderRanking,
+  renderMatching,
+  renderScale,
+  questionHint,
+  answerTexts,
+  type ReviewCorrect,
+} from "@shared/template/question-interaction";
+import { questionFont, optionFont } from "@shared/template/fit-font";
+import { buildQuestionNav, QUESTION_NAV_ACTIONS, type QuestionNavState } from "@shared/template/question-nav";
+import type { SceneTimersState } from "@shared/template/scene-timers";
+import { renderInlineMarkdown } from "@shared/text";
+
+/** Action names the shared nav row emits (plus the layout's own `nav:next`). */
+const NAV_ACTIONS: readonly string[] = Object.values(QUESTION_NAV_ACTIONS);
 
 function esc(s: unknown): string {
   return String(s)
@@ -31,63 +49,6 @@ function esc(s: unknown): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-/** True when option `oi` is currently chosen (single = equals, multiple = in array). */
-function isChosen(answer: unknown, oi: number): boolean {
-  return Array.isArray(answer) ? answer.includes(oi) : answer === oi;
-}
-
-/**
- * Answer key for review highlighting — mirrors the server `correctAnswer` payload
- * and SCORM's `q.correct` shape (single/multiple/matching/ranking).
- */
-type ReviewCorrect = {
-  correctIndex?: number;
-  correctIndices?: number[];
-  pairs?: { left: number; right: number }[];
-  correctOrder?: number[];
-};
-
-/**
- * Build choice options HTML (single → radio, multiple → checkbox). The template's
- * `.option` CSS styles both; clicks are delegated via `data-action="select:N"`.
- * In review mode (`review` set) options get `.correct-answer`/`.incorrect-answer`
- * classes — the SAME classes the SCORM runtime emits (server/scorm .../single.js,
- * multiple.js), so both hosts highlight review identically.
- */
-function optionsHtml(question: Question, answer: unknown, shuffleMapping?: number[], review?: ReviewCorrect): string {
-  const data = (question.dataJson as { options?: unknown[] }) || {};
-  const options = data.options || [];
-  const order =
-    shuffleMapping && shuffleMapping.length === options.length
-      ? shuffleMapping
-      : options.map((_, i) => i);
-  const inputType = question.type === "multiple" ? "checkbox" : "radio";
-  const correctIndices =
-    question.type === "multiple" && Array.isArray(review?.correctIndices) ? review!.correctIndices : null;
-  const correctIndex =
-    question.type !== "multiple" && typeof review?.correctIndex === "number" ? review!.correctIndex : null;
-  return order
-    .map((oi) => {
-      const chosen = isChosen(answer, oi);
-      let cls = `option${chosen ? " selected" : ""}`;
-      if (review) {
-        if (correctIndices) {
-          if (correctIndices.includes(oi)) cls += " correct-answer";
-          else if (chosen) cls += " incorrect-answer";
-        } else if (correctIndex !== null) {
-          if (oi === correctIndex) cls += " correct-answer";
-          else if (chosen) cls += " incorrect-answer";
-        }
-      }
-      return (
-        `<div class="${cls}" data-action="select:${oi}" data-index="${oi}" role="button" tabindex="0">` +
-        `<input type="${inputType}" ${chosen ? "checked" : ""} tabindex="-1" aria-hidden="true">` +
-        `<span>${esc(options[oi])}</span></div>`
-      );
-    })
-    .join("");
 }
 
 /** Compute the next answer when option `oi` is toggled, by question type. */
@@ -104,41 +65,6 @@ function rankingOrder(question: Question, answer: unknown, shuffleMapping?: numb
   const items = (question.dataJson as { items?: unknown[] })?.items || [];
   if (Array.isArray(answer) && answer.length === items.length) return answer as number[];
   return shuffleMapping && shuffleMapping.length === items.length ? shuffleMapping : items.map((_, i) => i);
-}
-
-const RANK_GRIP =
-  '<svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">' +
-  '<path d="M2.5 4.99524H17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>' +
-  '<path d="M14.1667 9.9952H2.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>' +
-  '<path d="M2.5 14.9951H10.8333" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
-
-/** Drag marker for matching chips — dots glyph (distinct from ranking's burger; mirrors ui-kit `dots`). */
-const MATCH_GRIP =
-  '<svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">' +
-  '<circle cx="7" cy="5" r="1.4"></circle><circle cx="13" cy="5" r="1.4"></circle>' +
-  '<circle cx="7" cy="10" r="1.4"></circle><circle cx="13" cy="10" r="1.4"></circle>' +
-  '<circle cx="7" cy="15" r="1.4"></circle><circle cx="13" cy="15" r="1.4"></circle></svg>';
-
-/** Build ranking HTML — draggable rows (HTML5 DnD via shadow delegation), mirrors SCORM. */
-function rankingHtml(question: Question, answer: unknown, shuffleMapping?: number[], review?: ReviewCorrect): string {
-  const items = (question.dataJson as { items?: unknown[] })?.items || [];
-  const order = rankingOrder(question, answer, shuffleMapping);
-  const correctOrder = review && Array.isArray(review.correctOrder) ? review.correctOrder : null;
-  return (
-    '<div class="ranking-board">' +
-    order
-      .map((oi, pos) => {
-        let cls = "rank-item rank-draggable";
-        if (correctOrder) cls += oi === correctOrder[pos] ? " correct-answer" : " incorrect-answer";
-        return (
-          `<div class="${cls}" data-drag="${pos}" data-drop="${pos}">` +
-          `<span class="rank-grip">${RANK_GRIP}</span>` +
-          `<span class="rank-text">${esc(items[oi])}</span></div>`
-        );
-      })
-      .join("") +
-    "</div>"
-  );
 }
 
 /** Reorder ranking by moving the item from `fromPos` to `toPos` (drop). */
@@ -168,75 +94,12 @@ function matchingLeftMapping(question: Question, shuffleMapping?: { left: number
 }
 
 /**
- * Build matching HTML — left chips dragged onto right slots via the shared pointer
- * engine. The pool of unmatched chips is kept in EXPLICIT order (the rich model)
- * and reconciled with the answer through {@link normalizePool}. Each left slot is a
- * drop zone (`data-drop="pool:<slot>"` so a chip can return to a precise slot); the
- * right tile is `data-drop="r<rightIdx>"`; chips carry `data-drag="<leftIdx>"`.
+ * Interaction HTML for the `question-interaction` slot, by question type. Emits the
+ * SHARED `.ou-*` markup ({@link module:shared/template/question-interaction}) so the web
+ * host and the SCORM package render byte-identical options; the local state helpers
+ * ({@link nextAnswer}, {@link reorderRanking}, {@link applyMatchingDrop}) wire the
+ * delegated actions back to React.
  */
-function matchingHtml(
-  question: Question,
-  answer: unknown,
-  shuffleMapping: { left: number[]; right: number[] } | undefined,
-  poolOrder: number[],
-  review?: ReviewCorrect,
-): string {
-  const data = (question.dataJson as { left?: unknown[]; right?: unknown[] }) || {};
-  const left = data.left || [];
-  const right = data.right || [];
-  const leftMapping = matchingLeftMapping(question, shuffleMapping);
-  const rightMapping = shuffleMapping?.right?.length === right.length ? shuffleMapping.right : right.map((_, i) => i);
-  const pairs = (answer && typeof answer === "object" ? answer : {}) as Record<number, number>;
-  const rightToLeft: Record<number, number> = {};
-  Object.keys(pairs).forEach((k) => {
-    rightToLeft[pairs[Number(k)]] = Number(k);
-  });
-  const pool = normalizePool(poolOrder, pairs, leftMapping);
-
-  // Review: correct right→left pairs (mirrors SCORM feedback.js highlightMatching).
-  const correctRightToLeft: Record<number, number> = {};
-  if (review && Array.isArray(review.pairs)) {
-    review.pairs.forEach((p) => {
-      correctRightToLeft[p.right] = p.left;
-    });
-  }
-
-  const chip = (li: number) =>
-    `<div class="match-chip" data-drag="${li}"><span class="match-grip" aria-hidden="true">${MATCH_GRIP}</span>` +
-    `<span class="match-chip-text">${esc(left[li])}</span></div>`;
-
-  let poolSlot = 0;
-  let html = '<div class="matching-board">';
-  for (const ri of rightMapping) {
-    const matchedLeft = rightToLeft[ri];
-    const isJoined = matchedLeft !== undefined;
-    let lineCls = `matching-line${isJoined ? " is-joined" : ""}`;
-    if (review && isJoined) {
-      lineCls += Number(matchedLeft) === Number(correctRightToLeft[ri]) ? " correct-answer" : " incorrect-answer";
-    }
-    html += `<div class="${lineCls}">`;
-    // A matched row's left pairs to THIS right (drop another chip = displace); an
-    // unmatched row's left is a pool slot. poolSlot advances ONLY on unmatched rows.
-    if (isJoined) {
-      html += `<div class="match-tile match-left-slot match-drop-left" data-drop="r${ri}">${chip(matchedLeft)}</div>`;
-    } else {
-      const poolLeft = poolSlot < pool.length ? pool[poolSlot] : null;
-      if (poolLeft !== null && poolLeft !== undefined) {
-        html += `<div class="match-tile match-left-slot match-drop-left" data-drop="pool:${poolSlot}">${chip(poolLeft)}</div>`;
-      } else {
-        html += `<div class="match-empty match-left-slot match-drop-left" data-drop="pool:${poolSlot}"><span class="slot-placeholder">Перетащите вариант</span></div>`;
-      }
-      poolSlot++;
-    }
-    html += `<div class="matching-gap"></div>`;
-    html += `<div class="match-tile match-right-tile match-drop-right" data-drop="r${ri}">${esc(right[ri])}</div>`;
-    html += `</div>`;
-  }
-  html += "</div>";
-  return html;
-}
-
-/** Interaction HTML for the `question-interaction` slot, by question type. */
 function interactionHtml(
   question: Question,
   answer: unknown,
@@ -245,11 +108,15 @@ function interactionHtml(
   review?: ReviewCorrect,
 ): string {
   const arr = Array.isArray(shuffleMapping) ? shuffleMapping : undefined;
-  if (question.type === "ranking") return rankingHtml(question, answer, arr, review);
+  if (question.type === "ranking") return renderRanking(question, answer, arr, review);
   if (question.type === "matching") {
-    return matchingHtml(question, answer, !Array.isArray(shuffleMapping) ? shuffleMapping : undefined, poolOrder, review);
+    return renderMatching(question, answer, !Array.isArray(shuffleMapping) ? shuffleMapping : undefined, poolOrder, review);
   }
-  return optionsHtml(question, answer, arr, review);
+  if (question.type === "multiple") return renderMultiple(question, answer, arr, review);
+  // The scale takes no shuffle mapping: the order of graduations is content, not
+  // presentation (see `hasFixedOptionOrder` in shared/questions/question-type).
+  if (question.type === "scale") return renderScale(question, answer, review);
+  return renderSingleChoice(question, answer, arr, review);
 }
 
 function mediaHtml(question: Question): string {
@@ -271,11 +138,26 @@ export interface TemplateQuestionScreenProps {
     theme?: { background: string; foreground: string };
     /** Per-test design-param CSS-var overrides (PRD-7 branding); applied on the shadow host. */
     cssVars?: Record<string, string>;
+    /** PRD-23: per-theme colour overrides, printed as CSS. */
+    themeCss?: string;
+    /** PRD-23: palette pinned by the author; absent means «Авто». */
+    dataTheme?: "light" | "dark";
+    /** PRD-23: template declares a choice of palettes (see resolveSceneTheme). */
+    themed?: boolean;
     /** Per-test branding for the render context (logo). */
     design?: { logoUrl?: string };
   };
   testTitle: string;
+  /** Header subtitle under the title ("Попытка N из M"); empty -> title-only header. */
+  subtitle?: string;
+  /** Bare «Вопрос N из M» — the section goes in {@link sectionName}, not in here. */
   counterLabel: string;
+  /**
+   * Section (topic) of the current question. Passed to the template as
+   * `state.sectionName`, which the layout prints as a tag beside the counter — the
+   * SAME context field the SCORM runtime fills, so both hosts render one meta row.
+   */
+  sectionName?: string;
   progressPercent: number;
   question: Question;
   answer: unknown;
@@ -289,21 +171,19 @@ export interface TemplateQuestionScreenProps {
   reviewMode?: boolean;
   /** Correct-answer key (correctIndex/correctIndices/pairs/correctOrder) for review. */
   correctAnswer?: ReviewCorrect;
-  /** Custom footer; when provided, replaces the default standard Назад/Далее nav. */
-  footer?: ReactNode;
-  /** When false, the default footer's «Далее»/«Завершить» is disabled (no usable
-   *  answer yet) — parity with the custom footer's «Отправить ответ» gate. */
-  answerReady?: boolean;
-  // Standard-mode nav (used only when `footer` is not provided):
-  canPrev?: boolean;
-  onPrev?: () => void;
-  /** PRD-19 (Block B): «Пропустить» — flexible-mode skip, shown when `canSkip`. */
-  canSkip?: boolean;
-  onSkip?: () => void;
-  isLast?: boolean;
-  isSubmitting?: boolean;
-  onNext?: () => void;
-  onSubmit?: () => void;
+  /**
+   * Navigation state of the row — REQUIRED, for the standard and the adaptive flow
+   * alike. The row is printed from the SHARED emitter INSIDE the scene
+   * (`.tb-scene__foot`), exactly as the SCORM runtime prints it: the host builds no
+   * footer of its own, since chrome next to the shadow root gets neither the
+   * template's scene surface nor the DS palette. Its buttons report back through
+   * {@link onNavAction} with the emitter's action names.
+   */
+  nav: QuestionNavState;
+  /** Countdown state for the header timers (shared painter, parity with the package). */
+  timers?: SceneTimersState;
+  /** Action from the shared nav row (`answer-back`/`answer-skip`/… or `nav:next`). */
+  onNavAction?: (action: string) => void;
   /** PRD-19 Block C: progress-pills map (Core-prepared); renders the pill row. */
   questionsProgress?: CtxQuestionsProgress;
   /** PRD-19 Block C: jump to an absolute question index from a pill click. */
@@ -327,7 +207,10 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
 
   const css = `${tpl.css}\n#q-progress-fill{width:${Math.round(progressPercent)}%}`;
   const slots = {
-    "question-text": esc(question.prompt),
+    // Inline, not block: the prompt renders into the scene's `<h2>` heading, and a
+    // paragraph inside it would be invalid. The SCORM twin fills the same slot
+    // through the same renderer, so the two hosts show identical markup.
+    "question-text": renderInlineMarkdown(question.prompt),
     "question-media": mediaHtml(question),
     "question-interaction": interactionHtml(
       question,
@@ -373,8 +256,11 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
 
   return (
     <div
-      className="tbh-minh-screen tbh-col tbh-noselect"
-      style={{ background: tpl.theme?.background }}
+      // No palette on the wrapper: the scene (`.tbh-fill`) covers it entirely and
+      // paints its own surface. Painting the host with `tpl.theme` used to show a
+      // LIGHT band under a dark scene — the value is read as the first
+      // `--background` in theme.css, i.e. always the base (light) palette.
+      className="tbh-screen tbh-col tbh-noselect"
       onCopy={(e) => e.preventDefault()}
       onCut={(e) => e.preventDefault()}
       onContextMenu={(e) => e.preventDefault()}
@@ -384,9 +270,19 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
         layout={tpl.layout}
         css={css}
         cssVars={tpl.cssVars}
-        context={{ course: { title: testTitle }, state: { questionCounterLabel: counterLabel, questionsProgress: props.questionsProgress }, design: tpl.design }}
+        themeCss={tpl.themeCss}
+        dataTheme={tpl.dataTheme}
+        themed={tpl.themed}
+        context={{ course: { title: testTitle, subtitle: props.subtitle }, state: { questionCounterLabel: counterLabel, sectionName: props.sectionName, questionHint: questionHint(question.type), questionFont: questionFont(question.prompt), optionFont: optionFont(answerTexts(question)), questionsProgress: props.questionsProgress, nav: buildQuestionNav(props.nav) }, design: tpl.design }}
         slots={slots}
+        timers={props.timers}
         onAction={(action) => {
+          // Nav row: reported verbatim, so the caller reads the emitter's own action
+          // names. Not gated by `locked` — navigating away is always allowed.
+          if (NAV_ACTIONS.includes(action)) {
+            props.onNavAction?.(action);
+            return;
+          }
           // PRD-19 Block C: pill navigation works even when the question is locked
           // (the lock guards answer editing, not navigating away).
           if (action.startsWith("goto:")) {
@@ -398,6 +294,14 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
           if (action.startsWith("select:")) {
             const i = Number(action.slice("select:".length));
             if (!Number.isNaN(i)) onAnswer(nextAnswer(question, answer, i));
+            return;
+          }
+          // Keyboard ranking reorder (ou-rank controls): move a row up/down one slot.
+          if (action.startsWith("rank-up:") || action.startsWith("rank-down:")) {
+            const up = action.startsWith("rank-up:");
+            const pos = Number(action.slice(action.indexOf(":") + 1));
+            const map = Array.isArray(shuffleMapping) ? shuffleMapping : undefined;
+            if (!Number.isNaN(pos)) onAnswer(reorderRanking(question, answer, map, pos, up ? pos - 1 : pos + 1));
             return;
           }
           if (action.startsWith("drop:")) {
@@ -417,40 +321,6 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
           }
         }}
       />
-
-      <div
-        className="tbh-foot"
-        style={{ color: tpl.theme?.foreground }}
-      >
-        {props.footer !== undefined ? (
-          props.footer
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={props.onPrev}
-              disabled={!props.canPrev}
-              className="tbh-navbtn"
-            >
-              ← Назад
-            </button>
-            {props.canSkip && (
-              <button type="button" onClick={props.onSkip} className="tbh-navbtn">
-                Пропустить
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={props.isLast ? props.onSubmit : props.onNext}
-              disabled={props.isSubmitting || props.answerReady === false}
-              className="tbh-primarybtn"
-              style={{ background: "#2563eb" }}
-            >
-              {props.isLast ? (props.isSubmitting ? "Отправка..." : "Завершить тест") : "Далее →"}
-            </button>
-          </>
-        )}
-      </div>
     </div>
   );
 }

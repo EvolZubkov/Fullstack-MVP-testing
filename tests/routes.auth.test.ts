@@ -39,9 +39,16 @@ function makeApp() {
   // Inject userId into session for authenticated routes
   app.use((req: any, _res: any, next: any) => {
     if (req.headers["x-test-user"]) req.session.userId = req.headers["x-test-user"];
+    // A magic-link session is seeded once and then lives in the session store, so
+    // a later request without the header still sees it — that is what lets the
+    // login test assert that the mark was actually REMOVED.
+    if (req.headers["x-test-magic"] && !req.session.magic) {
+      req.session.magic = JSON.parse(req.headers["x-test-magic"]);
+    }
     next();
   });
 
+  app.get("/probe-session", (req: any, res: any) => res.json({ magic: req.session.magic ?? null }));
   app.use("/api/auth", authRouter);
   return app;
 }
@@ -349,5 +356,48 @@ describe("POST /api/auth/change-password", () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(storageMock.updateUserPassword).toHaveBeenCalledWith("u1", "newpass123");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// magic-link scope
+// ─────────────────────────────────────────────────────────────────────────────
+describe("magic-link scope on the session", () => {
+  const magicHeader = JSON.stringify({ assignmentId: "a1", testId: "t1" });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(baseUser);
+    storageMock.getUserRoles.mockResolvedValue(["learner"]);
+  });
+
+  it("a password login clears the magic scope of the session", async () => {
+    storageMock.validatePassword.mockResolvedValue(baseUser);
+    storageMock.updateUserLastLogin.mockResolvedValue(undefined);
+    const agent = request.agent(makeApp());
+
+    const seeded = await agent.get("/probe-session").set("x-test-magic", magicHeader);
+    expect(seeded.body.magic).toEqual({ assignmentId: "a1", testId: "t1" });
+
+    const login = await agent.post("/api/auth/login").send({ email: "kate@test.com", password: "secret" });
+    expect(login.status).toBe(200);
+
+    const after = await agent.get("/probe-session");
+    expect(after.body.magic).toBeNull();
+  });
+
+  it("GET /me reports the magic scope of a restricted session", async () => {
+    const res = await request(makeApp())
+      .get("/api/auth/me")
+      .set("x-test-user", "u1")
+      .set("x-test-magic", magicHeader);
+    expect(res.status).toBe(200);
+    expect(res.body.user.magicScope).toEqual({ testId: "t1" });
+  });
+
+  it("GET /me reports a null magic scope for a normal session", async () => {
+    const res = await request(makeApp()).get("/api/auth/me").set("x-test-user", "u1");
+    expect(res.status).toBe(200);
+    expect(res.body.user.magicScope).toBeNull();
   });
 });

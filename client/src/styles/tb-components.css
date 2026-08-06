@@ -32,8 +32,29 @@
   --tb-input-w-sm: 140px;
   --tb-accent-rail-w: 2px;
   --tb-space-half:   2px;
+
   --wf-border-w: 1px;   /* fallback for portal-rendered components outside .tb-tests-list */
   /* gate-skip-end */
+}
+
+/* ── Categorical series for charts ──────────────────────────────────────
+   The DS ships no --ou-chart* scale, so the set is assembled from its semantic
+   hues: distinguishable neighbours, and every entry follows the theme because
+   each one is a DS token.
+
+   Declared on `.ou` (the class the theme provider puts on <body>), NOT on
+   :root — the semantic tokens live in the `.ou, .ou--light` / `.ou--dark`
+   blocks, so a :root declaration referenced variables that do not exist there
+   and every series silently collapsed to the inherited text colour. */
+.ou {
+  --tb-chart-1: var(--ou-accent-default);
+  --tb-chart-2: var(--ou-info-default);
+  --tb-chart-3: var(--ou-success-default);
+  --tb-chart-4: var(--ou-warning-default);
+  --tb-chart-5: var(--ou-error-default);
+  --tb-chart-6: var(--ou-accent-hover);
+  --tb-chart-7: var(--ou-info-700);
+  --tb-chart-8: var(--ou-success-700);
 }
 
 /* ── Drawer body scroll contract ────────────────────────────────────────
@@ -331,6 +352,50 @@
 /* Select в detail-row: уменьшаем растяжение, чтобы Number поместился рядом. */
 .tb-pass-table__detail-inner .ou-select { width: auto; min-width: 0; }
 .tb-pass-table__detail-inner .ou-select__trigger { min-width: var(--tb-input-w-sm); }
+
+/* PRD-24: expand-row правила «По вариантам». Grid [метка | Тип | Порог]:
+   колонка «Порог» = 1fr тянется до правого края ячейки (правый край совпадает с
+   full-width Select строки темы), колонка «Тип» = auto выравнивается по самому
+   широкому значению между строками, метки — в общей колонке. */
+.tb-pass-table__variants {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--ou-space-3);
+  row-gap: var(--ou-space-2);
+  min-width: 0;
+}
+.tb-pass-table__variant-label {
+  font: var(--ou-text-body-s); font-weight: 500; color: var(--ou-fg-default);
+  white-space: nowrap;
+}
+/* Field cells inside the grid: label sits inline before the control (как detail-inner).
+   DS `.ou-select` is a flex COLUMN (label above the trigger) and renders its label
+   inside itself as `.ou-field__lbl`, so the row layout is applied to the control
+   itself — not to a wrapper — otherwise «Тип» stacks above and breaks the grid rows. */
+.tb-pass-table__variants .ou-formfield {
+  display: inline-flex; flex-direction: row; align-items: center;
+  gap: var(--ou-space-2); margin-bottom: 0; min-width: 0;
+}
+.tb-pass-table__variants .ou-select {
+  flex-direction: row; align-items: center; gap: var(--ou-space-2);
+}
+.tb-pass-table__variants .ou-field__lbl,
+.tb-pass-table__variants .ou-formfield__lbl {
+  font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0; flex-shrink: 0;
+}
+.tb-pass-table__variants .ou-select { width: auto; min-width: 0; }
+.tb-pass-table__variants .ou-select__trigger { min-width: var(--tb-input-w-sm); }
+/* «Порог» stretches to the right edge of its column so all rows align right. */
+.tb-pass-table__variants .ou-number,
+.tb-pass-table__variants .ou-number__box { width: 100%; }
+/* Ceiling hint: its own grid row under the variant it belongs to, in the «Порог»
+   column — a full-width line under the block read as belonging to the last row. */
+.tb-pass-table__variant-hint {
+  grid-column: 3;
+  margin-top: calc(-1 * var(--ou-space-1));
+  font: var(--ou-text-body-xs); color: var(--ou-fg-muted);
+}
 
 /* Адаптив переехал в единый @container ниже (см. в конце файла). */
 
@@ -1451,6 +1516,58 @@
   background: var(--ou-accent-soft);
 }
 
+/* Variant picker: the option list on the left, one live page preview on the right
+   (the «Список + панель превью» layout). Collapses to a single column on narrow modals. */
+.variant-picker {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: var(--ou-space-4);
+  /* FIXED height so the modal doesn't jump as previews (different content heights)
+     render or the bundle loads — both panes fill it and scroll internally. */
+  height: var(--wf-size-440, 440px);
+  align-items: stretch;
+}
+.variant-picker__list { min-width: 0; min-height: 0; }
+.variant-picker__list .variant-list { max-height: 100%; height: 100%; }
+.variant-picker__preview {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-surface-1);
+  overflow: hidden;
+}
+/* Fit-to-box: the preview renders at a fixed reference canvas (see ScaledPreview) and
+   is scaled UNIFORMLY to fit this box — proportional, no scroll, aspect preserved. */
+.variant-picker__box {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.variant-picker__frame { flex: none; transform-origin: center center; }
+/* TemplateScreen's host fills the fixed reference frame so the scene lays out against
+   a definite size (its `height:100%` resolves) before the frame is scaled. */
+.variant-picker__frame > * { width: 100%; height: 100%; display: block; }
+.variant-picker__empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ou-space-6);
+  color: var(--ou-fg-muted);
+  font: var(--ou-text-body-s);
+  text-align: center;
+}
+@media (max-width: 720px) {
+  .variant-picker { grid-template-columns: 1fr; height: auto; }
+  .variant-picker__list .variant-list { max-height: var(--wf-size-240, 240px); }
+  .variant-picker__preview { height: var(--wf-size-280, 280px); }
+}
+
 /* Variant picker list inside the «Добавить страницу» modal. */
 .variant-list {
   list-style: none;
@@ -1516,6 +1633,16 @@
   flex-wrap: wrap;
   gap: var(--ou-space-2);
 }
+/* PRD-22: thumbnail of the loaded image next to the upload control. An empty
+   frame is kept when nothing is loaded, so the row does not jump on upload. */
+.image-field__preview {
+  width: 144px;
+  height: 96px;
+  flex-shrink: 0;
+  border: 1px solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-surface-3) center / cover no-repeat;
+}
 .design-media-chip {
   display: inline-flex;
   align-items: center;
@@ -1574,6 +1701,7 @@
 }
 .tpl-gallery-card.is-current { opacity: 0.85; }
 .tpl-gallery-card__thumb {
+  position: relative;
   aspect-ratio: 16 / 9;
   background: var(--ou-bg-surface-2);
   display: flex;
@@ -1581,9 +1709,31 @@
   justify-content: center;
   border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
 }
+/* «Глаз» поверх миниатюры. Собственная подложка — под ним произвольная картинка
+   шаблона, и на светлой обложке иконка без неё теряется. */
+.tpl-gallery-card__preview-btn {
+  position: absolute;
+  top: var(--ou-space-1);
+  right: var(--ou-space-1);
+  z-index: 1;
+  background: var(--ou-bg-elevated);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  box-shadow: var(--ou-shadow-s, 0 1px 3px rgb(0 0 0 / 0.18));
+}
 .tpl-gallery-card__thumb .preview-sketch {
   width: 80%;
   height: 80%;
+}
+/* The template's OWN preview asset (manifest.assets.preview). Fills the 16:9 thumb
+   edge to edge — same treatment as the PRD-3 admin registry card, so one template
+   reads the same wherever its thumbnail appears. The schematic sketch above stays
+   as the fallback for a template that ships no preview. */
+.tpl-thumb__img,
+.tpl-gallery-card__thumb .tpl-thumb__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 .tpl-gallery-card__body {
   padding: var(--ou-space-3);
@@ -1780,6 +1930,45 @@
 .tpl-desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 .tpl-actions { display: flex; gap: var(--ou-space-2); margin-top: var(--ou-space-1); }
 
+/* Colour param row: the picker plus the origin of the current value — either
+   «из шаблона» (no override yet) or the action that gives the colour back. */
+.design-color-field {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+}
+.design-color-field__origin {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+
+/* PRD-23 «Цвета» — theme switch and per-theme colour table.
+   The switch and the preview action share one row: the author picks how the test
+   looks and checks the result without leaving the field. */
+.design-theme-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ou-space-3);
+}
+
+/* The parameter column carries the description and is therefore greedy: without a
+   fixed layout it pushes the palette columns out of the pane. Palettes need only
+   enough width for a swatch and its reset action. */
+.design-colors-table table {
+  table-layout: fixed;
+}
+.design-colors-table__param {
+  font: var(--ou-text-body-s);
+  font-weight: 600;
+  color: var(--ou-fg-default);
+}
+.design-colors-table__hint {
+  font: var(--ou-text-caption);
+  color: var(--ou-fg-muted);
+  margin-top: var(--ou-space-1);
+}
+
 /* Preview sketch — schematic template thumbnail with header/progress/body. */
 .preview-sketch {
   width: 100%;
@@ -1887,10 +2076,11 @@
    width/height rules there have no effect. Targeting the inner .ou-modal lets
    the dialog actually grow to the preview's intended ~1120×860 footprint. */
 .tpl-preview-modal .ou-modal {
-  max-width: var(--wf-size-1120, 1120px);
+  /* Wider footprint so the 16:9 preview stage has comfortable room. */
+  max-width: min(var(--wf-size-1320, 1320px), 94vw);
   width: 100%;
   height: calc(100vh - var(--ou-space-7) * 2);
-  max-height: var(--wf-size-860, 860px);
+  max-height: var(--wf-size-900, 900px);
 }
 .tpl-preview-modal .ou-modal__body {
   padding: 0;
@@ -1898,6 +2088,13 @@
   flex-direction: column;
   min-height: 0;
   flex: 1;
+}
+/* The editor's preview rail is FLAT: every row is a screen, so rows keep the
+   group indent (--ou-space-6) instead of the admin rail's top-level alignment,
+   where a `--top` row deliberately lines up with the group headers around it.
+   Without this the list sat against the rail's left edge. */
+.tpl-preview-modal .tpl-check-rail__var--top {
+  padding-left: var(--ou-space-6);
 }
 .tpl-preview-frame {
   flex: 1;
@@ -2007,7 +2204,7 @@
 
 /* Tailwind-removal (stage 5) helpers: uppercase eyebrow label + row separator. */
 .tb-caps { text-transform: uppercase; letter-spacing: 0.025em; }
-.tb-row-sep { border-bottom: 1px solid hsl(var(--border) / 0.5); }
+.tb-row-sep { border-bottom: 1px solid var(--ou-border-soft); }
 .tb-row-sep:last-child { border-bottom: 0; }
 /* Fixed field widths for the scoring condition row (was Tailwind w-20/24/36). */
 .tb-fw-sm { width: 5rem; }
@@ -2057,3 +2254,41 @@
 }
 /* The tree inside the popover scrolls if tall (the popover itself frames it). */
 .tb-foldercombo__pop .tb-foldertree { max-height: 16rem; overflow-y: auto; }
+
+/* PRD-27: сетка полей выбранного вида отчёта в блоке обратной связи «Настроек».
+   Только раскладка — контролы внутри дизайн-системные. */
+.tb-report-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--ou-space-4);
+}
+.tb-report-fields > .ou-formfield { margin: 0; }
+
+/* PRD-27: сцена предпросмотра отчёта. Страница отчёта — это A4 в точках (595 в ширину),
+   в модальное окно она целиком не помещается, поэтому показывается В МАСШТАБЕ (FR-21).
+
+   Масштаб через `zoom`, а не `transform: scale()`: transform не меняет ПОТОК, из-за чего
+   коробку сцены пришлось бы задавать по высоте вручную — а высота страницы не постоянна
+   (тест на два раздела и тест на двадцать четыре дают разный рост), и страницу зажимало
+   с обрезкой. `zoom` пересчитывает саму раскладку, поэтому сцена сама вырастает под
+   содержимое, а прокрутка появляется только когда она и правда нужна.
+
+   `align-items: flex-start` обязателен: без него страница как flex-элемент растягивается
+   на высоту сцены и содержимое обрезается. */
+.tb-report-preview__stage {
+  --tb-report-preview-zoom: 0.72;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  overflow: auto;
+  margin-top: var(--ou-space-4);
+  /* Ровно ОДНА страница A4 в масштабе — короткий отчёт виден целиком без прокрутки,
+     длинный прокручивается, как он и разложится на несколько страниц в PDF. И не выше
+     60 % экрана, чтобы на невысоком мониторе окно не выходило за границы. */
+  max-height: min(calc(842px * var(--tb-report-preview-zoom)), 60vh);
+}
+.tb-report-preview__stage > [data-template-screen] {
+  flex: 0 0 auto;
+  width: 595px;
+  zoom: var(--tb-report-preview-zoom);
+}

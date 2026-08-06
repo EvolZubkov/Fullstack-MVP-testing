@@ -88,6 +88,13 @@ export async function buildScormExportData(
         templateVersion: rawDesignSettings.templateVersion as string | undefined,
         templateApiVersion: rawDesignSettings.templateApiVersion as string | undefined,
         params: (rawDesignSettings.params as Record<string, unknown>) ?? {},
+        // PRD-23: the palette choice and the per-theme colours travel with the
+        // package — without them the runtime repaints from the template defaults
+        // and the exported test looks unlike the one the author saw.
+        ...(rawDesignSettings.theme ? { theme: rawDesignSettings.theme as string } : {}),
+        ...(rawDesignSettings.paramsByTheme
+          ? { paramsByTheme: rawDesignSettings.paramsByTheme as Record<string, Record<string, unknown>> }
+          : {}),
       }
     : { templateId: "default", params: {} };
 

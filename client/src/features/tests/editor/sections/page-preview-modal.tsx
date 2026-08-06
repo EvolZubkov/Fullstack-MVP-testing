@@ -18,8 +18,10 @@ import { useMemo } from "react";
 import { Banner, Button, ModalDialog } from "@universityrt/ui-kit";
 import { TemplateScreen } from "@/components/template-screen";
 import { buildContentPageScreen, buildScreenInputs, type PreviewDemoDataset } from "@shared/template/preview-context";
+import type { SequencePlacement } from "@shared/template/page-sequences";
 import { buildSectionIntroContext } from "@shared/template/result-context";
 import { buildTemplateCssVars } from "@shared/template/params-css";
+import { startImageForVariant, type StartVariantDecl } from "@shared/template/start-image";
 import { useTemplateBundle } from "./use-template-bundle";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -33,6 +35,8 @@ export interface PagePreviewPage {
   topicId?: string | null;
   templateKey?: string | null;
   valuesJson?: unknown;
+  /** PRD-22 page settings — the `page.*` properties the layout binds (e.g. `nextLabel`). */
+  settingsJson?: Record<string, unknown> | null;
 }
 
 export type PagePreviewModalProps = {
@@ -65,11 +69,62 @@ export type PagePreviewModalProps = {
     /** Per-section data for the «Введение раздела» preview (topic name + count). */
     sections?: Array<{ topicId: string; topicName: string; questionCount: number }>;
   };
+  /**
+   * PRD-22: the page's place in its sequence, computed by the editor over the whole
+   * test. Supplied ⇒ the preview shows the navigation indicator the learner sees;
+   * absent ⇒ none, since a single page cannot imply a sequence.
+   */
+  sequencePlacement?: SequencePlacement | null;
 };
+
+// ─── Design-media helpers ───────────────────────────────────────────────────────
+
+/**
+ * Unwrap a media design param (`logoUrl` / `startImageUrl`) to a plain URL,
+ * mirroring both hosts' `resolveMediaUrl`: an image param is stored as a media
+ * envelope `{ url, name, … }` (or a bare string for legacy values), but the start
+ * layout binds a plain URL string.
+ */
+function mediaUrl(value: unknown): string | undefined {
+  if (typeof value === "string") return value || undefined;
+  if (value && typeof value === "object" && typeof (value as { url?: unknown }).url === "string") {
+    return (value as { url: string }).url || undefined;
+  }
+  return undefined;
+}
+
+/**
+ * The `design.*` context the start layouts bind, unwrapped from the draft params.
+ *
+ * PRD-22: the illustration comes from the START PAGE's own property, but only for
+ * the variant that DECLARES it; a variant without the property shows the test-wide
+ * branding illustration, exactly as its layout does in a run ({@link startImageForVariant}).
+ */
+function previewDesign(
+  params: Record<string, unknown>,
+  variant: StartVariantDecl | null | undefined,
+  pageSettings?: Record<string, unknown> | null,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  const logo = mediaUrl(params.logoUrl);
+  if (logo) out.logoUrl = logo;
+  const startImage = startImageForVariant(variant, pageSettings, params);
+  if (startImage) out.startImageUrl = startImage;
+  return out;
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function PagePreviewModal({ open, onClose, templateId, params, page, pageTitle, realData }: PagePreviewModalProps) {
+export function PagePreviewModal({
+  open,
+  onClose,
+  templateId,
+  params,
+  page,
+  pageTitle,
+  realData,
+  sequencePlacement,
+}: PagePreviewModalProps) {
   const bundleQuery = useTemplateBundle(templateId, open);
   const bundle = bundleQuery.data;
 
@@ -111,8 +166,28 @@ export function PagePreviewModal({ open, onClose, templateId, params, page, page
   // router) render the page's own values; router also gets the REAL topic-menu.
   const spec = useMemo(() => {
     if (!bundle) return null;
+    // The start screen honours the author's chosen VARIANT (start.image-right, …):
+    // match the demo screen by the page's `templateKey` (its route equals the
+    // variant key), falling back to the canonical `start`. The design illustration
+    // is injected into `design.*` from the draft branding params — the same
+    // `startImageUrl`/`logoUrl` both hosts resolve — so the picked image shows here.
+    if (page.kind === "start") {
+      const demoScreens = effectiveDemo ? buildScreenInputs(effectiveDemo, bundle.manifest) : [];
+      const byVariant = page.templateKey
+        ? demoScreens.find((s) => s.route === page.templateKey)
+        : undefined;
+      const chosen = byVariant ?? demoScreens.find((s) => s.route === "start") ?? null;
+      if (!chosen) return null;
+      const declaration = (bundle.manifest.contentTemplates ?? []).find(
+        (ct) => ct.key === page.templateKey,
+      ) as StartVariantDecl | undefined;
+      const design = previewDesign(params, declaration, page.settingsJson as Record<string, unknown> | null);
+      return {
+        ...chosen,
+        input: { ...chosen.input, context: { ...(chosen.input?.context ?? {}), design } },
+      };
+    }
     if (
-      page.kind === "start" ||
       page.kind === "results" ||
       page.kind === "questions" ||
       page.kind === "review" ||
@@ -120,15 +195,13 @@ export function PagePreviewModal({ open, onClose, templateId, params, page, page
     ) {
       const demoScreens = effectiveDemo ? buildScreenInputs(effectiveDemo, bundle.manifest) : [];
       const matches =
-        page.kind === "start"
-          ? (r: string) => r === "start"
-          : page.kind === "results"
-            ? (r: string) => r === "results" || r === "results.adaptive"
-            : page.kind === "review"
-              ? (r: string) => r === "review"
-              : page.kind === "section-results"
-                ? (r: string) => r === "section-results"
-                : (r: string) => r.startsWith("question");
+        page.kind === "results"
+          ? (r: string) => r === "results" || r === "results.adaptive"
+          : page.kind === "review"
+            ? (r: string) => r === "review"
+            : page.kind === "section-results"
+              ? (r: string) => r === "section-results"
+              : (r: string) => r.startsWith("question");
       return demoScreens.find((s) => matches(s.route)) ?? null;
     }
     // PRD-1 §4.3: «Введение раздела» (intro) renders via its own section-intro layout
@@ -172,6 +245,8 @@ export function PagePreviewModal({ open, onClose, templateId, params, page, page
       route,
       templateKey: page.templateKey ?? undefined,
       values,
+      settings: page.settingsJson ?? null,
+      sequencePlacement,
       courseTitle: realData?.courseTitle ?? effectiveDemo?.course.title ?? "",
       result,
       // Real topics → the router preview renders the actual topic-menu cards.
@@ -181,7 +256,7 @@ export function PagePreviewModal({ open, onClose, templateId, params, page, page
         status: t.status,
       })),
     });
-  }, [bundle, page, effectiveDemo, realData]);
+  }, [bundle, page, effectiveDemo, realData, sequencePlacement, params]);
 
   // Draft branding → CSS variables, via the SAME mapping the runtime uses.
   const cssVars = useMemo(() => buildTemplateCssVars(params, bundle?.manifest.params), [params, bundle]);

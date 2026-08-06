@@ -1,20 +1,32 @@
-<div class="layout-blocked-wrap">
-  <div class="card blocked-card" data-testid="retake-wall">
-    <div class="blocked-icon" role="img" aria-label="Доступ заблокирован">
-      <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+<div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow tb-scene__brandrow--center">
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title"></h1>
+        <span class="tb-scene__subtitle" data-path="course.subtitle"></span>
+      </div>
+      <div class="tb-scene__headtag"><span class="ou-tag ou-tag--neutral">Доступ ограничен</span></div>
     </div>
-    <div data-retake-branch="default">
-      <h1 class="blocked-title">Доступ к тесту ограничен</h1>
-      <p class="blocked-description">Для этого теста больше нет доступных попыток.</p>
+  </header>
+
+  <main class="tb-scene__body">
+    <div class="tb-scene__col tb-scene__col--center tb-scene__col--narrow" data-testid="retake-wall">
+      <span class="tb-blocked-icon" role="img" aria-label="Доступ ограничен">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      </span>
+      <div class="tb-blocked-branch" data-retake-branch="default">
+        <h2 class="tb-scene__hero tb-scene__hero--s">Доступ к тесту ограничен</h2>
+        <span class="tb-scene__lead">Для этого теста больше нет доступных попыток.</span>
+      </div>
+      <div class="tb-blocked-branch" data-retake-branch="cooldown" hidden>
+        <h2 class="tb-scene__hero tb-scene__hero--s">Повторное прохождение пока недоступно</h2>
+        <span class="tb-scene__lead">Этот курс можно проходить не чаще, чем раз в <span data-path="retake.cooldownPeriodDays">&mdash;</span> дн.</span>
+        <span class="tb-scene__lead" data-retake-available>Повторный запуск будет доступен с <strong data-path="retake.availableDateHuman">&mdash;</strong>.</span>
+      </div>
+      <div class="tb-blocked-branch" data-retake-branch="error" hidden>
+        <h2 class="tb-scene__hero tb-scene__hero--s">Не удалось проверить доступ</h2>
+        <span class="tb-scene__lead">Не удалось проверить доступность повторного прохождения. Обратитесь к администратору курса.</span>
+      </div>
     </div>
-    <div data-retake-branch="cooldown" hidden>
-      <h1 class="blocked-title">Повторное прохождение пока недоступно</h1>
-      <p class="blocked-description">Этот курс можно проходить не чаще, чем раз в <span data-path="retake.cooldownPeriodDays">&mdash;</span> дн.</p>
-      <p class="blocked-description" data-retake-available>Повторный запуск будет доступен с <strong data-path="retake.availableDateHuman">&mdash;</strong>.</p>
-    </div>
-    <div data-retake-branch="error" hidden>
-      <h1 class="blocked-title">Не удалось проверить доступ</h1>
-      <p class="blocked-description">Не удалось проверить доступность повторного прохождения. Обратитесь к администратору курса.</p>
-    </div>
-  </div>
+  </main>
 </div>

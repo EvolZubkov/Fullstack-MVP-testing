@@ -30,6 +30,20 @@ export interface PopoverProps extends React.HTMLAttributes<HTMLDivElement> {
   closeOnOutside?: boolean;
   /** Закрытие по Esc (по умолчанию true). */
   closeOnEsc?: boolean;
+  /**
+   * Рисовать собственную поверхность (фон, рамка, тень, ширина). По умолчанию
+   * `true`. `false` — компонент даёт только портал, привязку к anchor и закрытие,
+   * а поверхность целиком описывает класс потребителя: так всплывающий слой с
+   * готовым оформлением (палитра цвета, градиент) переезжает на общее
+   * позиционирование, не получая вторую рамку поверх своей.
+   */
+  chrome?: boolean;
+  /**
+   * Переворачивать на противоположную сторону, когда с выбранной не хватает
+   * места (по умолчанию `true`). Без этого попап у нижнего края экрана уезжает
+   * за границу и обрезается.
+   */
+  flip?: boolean;
 }
 
 const ArrowSvgH = () => (
@@ -49,12 +63,13 @@ export const Popover = forwardRef<HTMLDivElement, PopoverProps>(
     arrow = true, offset = 6, usePortal = true,
     header, footer, children,
     closeOnOutside = true, closeOnEsc = true,
+    chrome = true, flip = true,
     className, style, ...rest
   }, ref) => {
     const popRef = useRef<HTMLDivElement | null>(null);
-    const [pos, setPos] = useState<{ top: number; left: number; arrowX?: number; arrowY?: number }>({
-      top: 0, left: 0,
-    });
+    const [pos, setPos] = useState<{
+      top: number; left: number; arrowX?: number; arrowY?: number; side: PopoverPlacement;
+    }>({ top: 0, left: 0, side: placement });
 
     const compute = useCallback(() => {
       const anchor = anchorRef?.current;
@@ -65,7 +80,24 @@ export const Popover = forwardRef<HTMLDivElement, PopoverProps>(
       let top = 0, left = 0;
       let arrowX: number | undefined, arrowY: number | undefined;
 
-      switch (placement) {
+      // Flip to the opposite side when the chosen one does not fit AND the
+      // opposite one does — a popover pinned to a control near the bottom of the
+      // window would otherwise open off-screen.
+      const room = {
+        top: a.top,
+        bottom: window.innerHeight - a.bottom,
+        left: a.left,
+        right: window.innerWidth - a.right,
+      };
+      const opposite = { top: 'bottom', bottom: 'top', left: 'right', right: 'left' } as const;
+      const needed = (side: PopoverPlacement) =>
+        (side === 'top' || side === 'bottom' ? p.height : p.width) + offset;
+      const side: PopoverPlacement =
+        flip && room[placement] < needed(placement) && room[opposite[placement]] >= needed(placement)
+          ? opposite[placement]
+          : placement;
+
+      switch (side) {
         case 'top':
           top = a.top + window.scrollY - p.height - offset;
           left = a.left + window.scrollX + a.width / 2 - p.width / 2;
@@ -87,7 +119,7 @@ export const Popover = forwardRef<HTMLDivElement, PopoverProps>(
       // Keep popover inside the viewport horizontally for top/bottom,
       // vertically for left/right.
       const margin = 8;
-      if (placement === 'top' || placement === 'bottom') {
+      if (side === 'top' || side === 'bottom') {
         const minLeft = window.scrollX + margin;
         const maxLeft = window.scrollX + window.innerWidth - p.width - margin;
         const constrained = Math.min(Math.max(left, minLeft), maxLeft);
@@ -106,8 +138,8 @@ export const Popover = forwardRef<HTMLDivElement, PopoverProps>(
         top = constrained;
       }
 
-      setPos({ top, left, arrowX, arrowY });
-    }, [anchorRef, placement, offset]);
+      setPos({ top, left, arrowX, arrowY, side });
+    }, [anchorRef, placement, offset, flip]);
 
     useLayoutEffect(() => {
       if (!open) return;
@@ -146,7 +178,8 @@ export const Popover = forwardRef<HTMLDivElement, PopoverProps>(
     if (!open) return null;
 
     const anchored = !!anchorRef;
-    const arrowSide = ({ top: 'bottom', bottom: 'top', left: 'right', right: 'left' } as const)[placement];
+    const arrowSide = ({ top: 'bottom', bottom: 'top', left: 'right', right: 'left' } as const)[pos.side];
+    const showArrow = arrow && chrome;
 
     const arrowStyle: React.CSSProperties = {};
     if (pos.arrowX != null) (arrowStyle as Record<string, string>).left = `${pos.arrowX}px`;
@@ -168,16 +201,16 @@ export const Popover = forwardRef<HTMLDivElement, PopoverProps>(
           else if (ref) (ref as { current: HTMLDivElement | null }).current = el;
         }}
         className={cn(
-          'ou-popover',
-          size !== 'md' && `ou-popover--${size}`,
-          !arrow && 'ou-popover--no-arrow',
+          chrome && 'ou-popover',
+          chrome && size !== 'md' && `ou-popover--${size}`,
+          chrome && !arrow && 'ou-popover--no-arrow',
           className,
           cssStyleClass(popStyle, 'ou-popover-pos'),
         )}
         role="dialog"
         {...rest}
       >
-        {arrow && (
+        {showArrow && (
           <span
             className={cn(
               'ou-popover__arrow',
@@ -188,9 +221,15 @@ export const Popover = forwardRef<HTMLDivElement, PopoverProps>(
             {arrowSide === 'top' || arrowSide === 'bottom' ? <ArrowSvgH /> : <ArrowSvgV flip={arrowSide === 'right'} />}
           </span>
         )}
-        {header && <div className="ou-popover__header">{header}</div>}
-        <div className="ou-popover__body">{children}</div>
-        {footer && <div className="ou-popover__footer">{footer}</div>}
+        {chrome ? (
+          <>
+            {header && <div className="ou-popover__header">{header}</div>}
+            <div className="ou-popover__body">{children}</div>
+            {footer && <div className="ou-popover__footer">{footer}</div>}
+          </>
+        ) : (
+          children
+        )}
       </div>
     );
 

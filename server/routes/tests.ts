@@ -5,9 +5,13 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "../storage";
 import { db } from "../db";
-import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, questionScoringSchema } from "@shared/schema";
+import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, reportSettingsSchema, questionScoringSchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
-import { readScreenTemplate, readManifestContentTemplates } from "../services/template-render";
+import { readScreenTemplate, readManifestContentTemplates, readVariantLayouts } from "../services/template-render";
+import { withTemplateAssetBase } from "@shared/template/asset-base";
+import { declaredThemes, isTestTheme, supportsThemes, TEST_THEMES } from "@shared/template/themes";
+import { startImageForVariant, type StartVariantDecl } from "@shared/template/start-image";
+import { colorParamKeys } from "@shared/template/theme-params";
 import { resolveTemplateDir, resolveSystemScreenDir } from "../services/template-dir";
 import { requirePermission, requireUserContext } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
@@ -15,6 +19,7 @@ import { readableTestScope, canGrantAccess } from "../services/test-access";
 import { visibleTopic } from "../services/topic-access";
 import { assessTestPublish } from "../services/draw-feasibility";
 import { createTestSnapshot, getPublicationState } from "../services/test-snapshot";
+import { countUnmappedPages } from "../services/page-variant-audit";
 import { generateScormPackage } from "../scorm-exporter";
 import { buildScormExportData, ScormBuildError } from "../scorm/build-export-data";
 import { isSupportedTemplateApiVersion } from "../template-registry";
@@ -96,6 +101,8 @@ const testBodyBaseSchema = z.object({
   feedbackJson: feedbackContentSchema.nullable().optional(),
   flowPolicyJson: z.unknown().optional(),
   retakePolicyJson: retakePolicySchema.nullish(), // PRD-6
+  // PRD-27: выбранный вариант отчёта и значения его полей, по режиму теста.
+  reportSettingsJson: reportSettingsSchema.nullish(),
   // PRD-15 block D (FR-31): test-wide default price; null = system default (1).
   defaultQuestionPoints: z.number().int().min(0).nullable().optional(),
 
@@ -275,6 +282,11 @@ router.get("/", requirePermission("tests.read"), async (req, res) => {
     const allUsers = await storage.getUsers();
     const ownerNameById = new Map(allUsers.map((u) => [u.id, u.name || u.email]));
 
+    // PRD-22 (plan Э6): pages bound to a variant the test's design template no
+    // longer declares. Audited for the whole page of the list at once — see the
+    // service note on why this is not a per-test query.
+    const unmappedPages = await countUnmappedPages(visibleTests, storage);
+
     const testsWithSections = await Promise.all(
       visibleTests.map(async (test) => {
         const sections = await storage.getTestSections(test.id);
@@ -325,7 +337,14 @@ router.get("/", requirePermission("tests.read"), async (req, res) => {
         // PRD-15 FR-12: publication state for the list badge ("опубликован,
         // есть неопубликованные изменения"). Cheap for drafts (early return).
         const publication = await getPublicationState(test.id);
-        return { ...test, ownerName, sections: sectionsWithDetails, adaptiveSettings, publication };
+        return {
+          ...test,
+          ownerName,
+          sections: sectionsWithDetails,
+          adaptiveSettings,
+          publication,
+          unmappedPageCount: unmappedPages.get(test.id) ?? 0,
+        };
       })
     );
 
@@ -355,6 +374,10 @@ const SCREEN_LAYOUTS: Record<string, string> = {
   content: "content.html",
   // PRD-1 §4.3: «Введение раздела» has its own layout rather than the generic wrapper.
   "section-intro": "section-intro.html",
+  // PRD-4 §4.7 / PRD-12: the adaptive level-change interstitial. A pure system
+  // layout (no variant kind), like `blocked` — the file-level fallback below covers
+  // a template that does not ship it.
+  transition: "system.transition.html",
 };
 // System variant kind backing each screen (for the default-fallback resolution).
 // `blocked` is a pure system layout with no contentTemplate kind, so it has no
@@ -370,7 +393,7 @@ const SCREEN_KIND: Record<string, string | undefined> = {
 // instead of the bare session check.
 router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope("read"), async (req, res) => {
   try {
-    const layoutFile = SCREEN_LAYOUTS[req.params.screen];
+    let layoutFile = SCREEN_LAYOUTS[req.params.screen];
     if (!layoutFile) return res.status(400).json({ error: "Unknown screen" });
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
@@ -385,7 +408,36 @@ router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope(
     // cssVars/branding resolve against the ACTIVE template's manifest even when the
     // layout dir fell back to `default` (a screen kind the active template doesn't own).
     const paramsDir = await resolveTemplateDir(templateId, { activeOnly: true });
-    let payload = readScreenTemplate(dir, layoutFile, (test.designSettingsJson as any)?.params, paramsDir);
+    // PRD-1 §4.3: the start screen honours the author's chosen VARIANT
+    // (start.image-right, …). The `start` content page's templateKey selects a
+    // contentTemplate whose own `layoutFile` replaces the generic start.html —
+    // parity with the SCORM runtime (`startPage.resolveStartLayout`) and the editor
+    // preview. Only overridden when the variant actually ships its layout in `dir`.
+    // PRD-22: the same page also OWNS the illustration (`settings.image` of a
+    // variant like `start.image-right`), so its value is carried to the render
+    // context below — the page's picture wins over the branding param.
+    let startPageSettings: Record<string, unknown> | null = null;
+    let startVariant: StartVariantDecl | null = null;
+    if (req.params.screen === "start") {
+      try {
+        const startPage = (await storage.getContentPages(req.params.id)).find((p) => p.kind === "start");
+        startPageSettings = (startPage?.settingsJson as Record<string, unknown>) ?? null;
+        const startKey = startPage?.templateKey;
+        if (startKey) {
+          const ct = (
+            readManifestContentTemplates(dir) as Array<{ key?: string; layoutFile?: string; settings?: unknown }>
+          ).find((c) => c.key === startKey);
+          startVariant = (ct as StartVariantDecl | undefined) ?? null;
+          const rel = ct?.layoutFile;
+          if (typeof rel === "string" && rel && readVariantLayouts(dir)[rel]) {
+            layoutFile = rel.replace(/^layouts\//, "");
+          }
+        }
+      } catch {
+        /* keep the standard start.html on any lookup failure */
+      }
+    }
+    let payload = readScreenTemplate(dir, layoutFile, test.designSettingsJson as any, paramsDir);
     // File-level fallback (PRD-1 §4.3.2, PRD-3 NFR-06): a template that simply does
     // not ship this layout still renders — from the standard template — instead of
     // 404-ing the learner's screen. This is the only fallback `blocked` gets (it has
@@ -393,19 +445,58 @@ router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope(
     if (!payload) {
       const fallbackDir = await resolveTemplateDir("default", { activeOnly: false });
       if (path.resolve(fallbackDir) !== path.resolve(dir)) {
-        payload = readScreenTemplate(fallbackDir, layoutFile, (test.designSettingsJson as any)?.params, paramsDir);
+        payload = readScreenTemplate(fallbackDir, layoutFile, test.designSettingsJson as any, paramsDir);
       }
     }
     if (!payload) return res.status(404).json({ error: "Template not found" });
+    // PRD-22 FR-36: a layout may point at the template's own files by a relative
+    // path. In a SCORM package those files sit next to the page; on the web they
+    // are served by the template-assets route, so the base is applied here —
+    // otherwise every such image renders broken.
+    const assetsBase = `/api/templates/${encodeURIComponent(templateId)}/assets/`;
+    payload = { ...payload, layout: withTemplateAssetBase(payload.layout, assetsBase) };
+    // PRD-22: the start illustration the author uploaded ON THE PAGE overrides the
+    // test-wide branding param. Resolved through the SHARED rule the SCORM runtime
+    // uses (`resolveStartImageUrl`), so both hosts show the same picture.
+    if (req.params.screen === "start") {
+      const startImageUrl = startImageForVariant(
+        startVariant,
+        startPageSettings,
+        ((test.designSettingsJson as { params?: Record<string, unknown> } | null)?.params) ?? null,
+      );
+      // The illustration is REPLACED, not merged: a variant that does not own it
+      // must not keep the one `readScreenTemplate` derived from the branding param.
+      const { startImageUrl: _dropped, ...restDesign } = payload.design ?? {};
+      payload = {
+        ...payload,
+        design: { ...restDesign, ...(startImageUrl ? { startImageUrl } : {}) },
+      };
+    }
     // PRD-12 FR-6: the content screen also carries the manifest's placeholder
     // declarations — the web host builds its page skeleton from them through the
     // shared assembler, exactly as the SCORM runtime does from the bundled copy.
     // Read from the ACTIVE template (paramsDir), not a fallen-back layout dir.
     if (req.params.screen === "content") {
       const contentTemplates = readManifestContentTemplates(paramsDir);
+      const variantDir = contentTemplates.length ? paramsDir : dir;
+      // PRD-12 FR-6 / PRD-22: a variant with its own `layoutFile` must render
+      // through THAT layout on the web too. Serving only the generic wrapper made
+      // every variant of the grid look alike in the web run.
+      const variantLayouts = Object.fromEntries(
+        Object.entries(readVariantLayouts(variantDir)).map(([rel, html]) => [
+          rel,
+          withTemplateAssetBase(html, assetsBase),
+        ]),
+      );
       res.json({
         ...payload,
         contentTemplates: contentTemplates.length ? contentTemplates : readManifestContentTemplates(dir),
+        variantLayouts,
+        // PRD-22 FR-36: base for relative links in author CONTENT (the layout is
+        // already rewritten above). The stored value is host-independent
+        // (`images/x.png`); the web host prefixes it with this route, the SCORM
+        // runtime with the package's `template/`.
+        assetsBase,
       });
       return;
     }
@@ -512,6 +603,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       feedbackJson,
       flowPolicyJson,
       retakePolicyJson,
+      reportSettingsJson,
       defaultQuestionPoints,
       folderId,
     } = parsed.data;
@@ -561,6 +653,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         feedbackJson: feedbackJson ?? null,
         flowPolicyJson: flowPolicyJson ?? null,
         retakePolicyJson: retakePolicyJson ?? null,
+        reportSettingsJson: reportSettingsJson ?? null,
         defaultQuestionPoints: defaultQuestionPoints ?? null,
         folderId: folderId ?? null,
         // PRD-13: creator owns the test atomically in the INSERT (the post-insert
@@ -656,11 +749,22 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
       return res.json({ templateId: "default" });
     }
 
-    const { templateId, templateVersion, templateApiVersion, params = {} } = body as {
+    const {
+      templateId,
+      templateVersion,
+      templateApiVersion,
+      params = {},
+      theme,
+      paramsByTheme = {},
+    } = body as {
       templateId?: string;
       templateVersion?: string;
       templateApiVersion?: string;
       params?: Record<string, unknown>;
+      /** PRD-23: `light` | `dark` | `auto`; absent reads as `auto`. */
+      theme?: unknown;
+      /** PRD-23: colour overrides per declared theme. */
+      paramsByTheme?: Record<string, Record<string, unknown>>;
     };
 
     if (!templateId) {
@@ -699,12 +803,70 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
       });
     }
 
-    const designSettings = {
+    // ── PRD-23: theme choice and per-theme colours ──────────────────────────
+    // Rejected rather than dropped: a silently ignored field would let the editor
+    // believe a palette was saved and repaint the learner's screen with the other
+    // one. Every refusal names the field and the reason.
+    if (theme !== undefined && !isTestTheme(theme)) {
+      return res.status(422).json({
+        error: `Unknown theme: ${String(theme)}. Expected one of: ${TEST_THEMES.join(", ")}`,
+        field: "theme",
+      });
+    }
+    const themed = supportsThemes(manifest);
+    const themeIds = new Set<string>(declaredThemes(manifest).map((t) => t.id));
+    const byTheme = paramsByTheme ?? {};
+    if (!themed) {
+      if (Object.keys(byTheme).length > 0) {
+        return res.status(422).json({
+          error: `Template "${templateId}" declares no themes; paramsByTheme is not applicable`,
+          field: "paramsByTheme",
+        });
+      }
+      if (theme !== undefined && theme !== "auto") {
+        return res.status(422).json({
+          error: `Template "${templateId}" declares no themes; only "auto" is applicable`,
+          field: "theme",
+        });
+      }
+    } else {
+      const unknownThemes = Object.keys(byTheme).filter((t) => !themeIds.has(t as never));
+      if (unknownThemes.length > 0) {
+        return res.status(422).json({
+          error: `Unknown themes: ${unknownThemes.join(", ")}`,
+          field: "paramsByTheme",
+          unknownThemes,
+        });
+      }
+      // Only a colour splits per theme: a font or a logo paints the same in both,
+      // and accepting one here would create a value nothing ever reads.
+      const colorKeys = colorParamKeys(manifest.params as Array<{ key: string; type?: string }>);
+      for (const [themeId, values] of Object.entries(byTheme)) {
+        const bad = Object.keys((values ?? {}) as Record<string, unknown>).filter(
+          (k) => !colorKeys.has(k),
+        );
+        if (bad.length > 0) {
+          return res.status(422).json({
+            error: `Params not settable per theme: ${bad.join(", ")}`,
+            field: `paramsByTheme.${themeId}`,
+            extraKeys: bad,
+          });
+        }
+      }
+    }
+
+    const designSettings: Record<string, unknown> = {
       templateId,
       templateVersion: templateVersion ?? template.version,
       templateApiVersion: templateApiVersion ?? template.templateApiVersion,
       params: params ?? {},
     };
+    // Written only when they carry meaning, so a themeless test keeps the exact
+    // JSON shape it had before PRD-23.
+    if (themed) {
+      designSettings.theme = theme ?? "auto";
+      if (Object.keys(byTheme).length > 0) designSettings.paramsByTheme = byTheme;
+    }
 
     await storage.updateTest(testId, { designSettingsJson: designSettings });
     res.json(designSettings);
@@ -752,6 +914,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       feedbackJson,
       flowPolicyJson,
       retakePolicyJson,
+      reportSettingsJson,
       defaultQuestionPoints,
     } = parsed.data;
 
@@ -806,6 +969,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
         feedbackJson: feedbackJson ?? undefined,
         flowPolicyJson: flowPolicyJson ?? undefined,
         retakePolicyJson: retakePolicyJson ?? undefined,
+        reportSettingsJson: reportSettingsJson ?? undefined,
         defaultQuestionPoints,
       },
       // PRD-7 §6.3: sections live with the standard mode only. For adaptive,

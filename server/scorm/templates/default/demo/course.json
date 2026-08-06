@@ -23,8 +23,16 @@
     "maxAttempts": 3,
     "questionCount": 4,
     "topics": [
-      { "id": "topic-1", "title": "Базовые угрозы", "status": "available" },
-      { "id": "topic-2", "title": "Парольная защита", "status": "locked" }
+      {
+        "id": "topic-1",
+        "title": "Базовые угрозы",
+        "status": "available"
+      },
+      {
+        "id": "topic-2",
+        "title": "Парольная защита",
+        "status": "locked"
+      }
     ],
     "contentPages": [
       {
@@ -38,30 +46,209 @@
         }
       },
       {
-        "id": "demo-info",
+        "id": "demo-info-text",
         "type": "info",
+        "kind": "info",
         "route": "content.info",
         "templateKey": "info.text",
-        "topicId": "topic-1",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 11,
         "values": {
-          "title": "Перед началом",
-          "body": "<p>Короткий учебный блок с <strong>важным акцентом</strong> и понятным следующим шагом.</p><p>Внимательно читайте каждый вопрос перед тем, как выбирать ответ.</p>"
+          "title": "Как устроен тест",
+          "body": "<p>Тест состоит из нескольких разделов. Отвечайте по порядку — к пропущенным вопросам можно вернуться до завершения раздела.</p>"
         }
       },
       {
-        "id": "demo-summary",
-        "type": "summary",
-        "route": "content.summary",
-        "templateKey": "summary.result",
-        "topicId": "topic-1",
+        "id": "demo-info-text-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.text-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 12,
         "values": {
-          "title": "Итоги раздела",
-          "result": {
-            "path": "result.scorePercent",
-            "renderer": "core.ringChart",
-            "rendererOptions": { "showValue": true, "decimals": 0, "size": 150, "strokeWidth": 14 },
-            "label": ""
-          }
+          "title": "Что важно знать",
+          "lead": "Перед началом",
+          "body": "<ul><li>ответы можно менять до завершения раздела;</li><li>результат виден сразу после завершения.</li></ul>"
+        }
+      },
+      {
+        "id": "demo-info-image-left",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.image-left",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 13,
+        "values": {
+          "title": "Как читать результат",
+          "body": "<p>Итоговый балл переводится в проценты и сравнивается с порогом. Ниже порога раздел считается непройденным.</p>",
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNDAwIiB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MDAiIHJ4PSIxNiIgZmlsbD0iI2U4ZWVmNyIvPjxjaXJjbGUgY3g9IjE1MCIgY3k9IjEzMCIgcj0iNTgiIGZpbGw9IiM4ZmI0ZTMiLz48cmVjdCB4PSIyNTAiIHk9Ijk2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2I5Y2JlNiIvPjxyZWN0IHg9IjI1MCIgeT0iMTM0IiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxyZWN0IHg9IjI1MCIgeT0iMTcyIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxwYXRoIGQ9Ik02MCAzNDAgTDE5MCAyNDAgTDMwMCAzMDAgTDQzMCAxOTAgTDU4MCAyNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzViOGFjNyIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+        }
+      },
+      {
+        "id": "demo-info-image-left-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.image-left-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 14,
+        "values": {
+          "title": "Из чего складывается балл",
+          "lead": "Цена ответа",
+          "body": "<p>У каждого вопроса своя цена. Частично верный ответ приносит часть баллов, если так настроен тест.</p>",
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNDAwIiB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MDAiIHJ4PSIxNiIgZmlsbD0iI2U4ZWVmNyIvPjxjaXJjbGUgY3g9IjE1MCIgY3k9IjEzMCIgcj0iNTgiIGZpbGw9IiM4ZmI0ZTMiLz48cmVjdCB4PSIyNTAiIHk9Ijk2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2I5Y2JlNiIvPjxyZWN0IHg9IjI1MCIgeT0iMTM0IiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxyZWN0IHg9IjI1MCIgeT0iMTcyIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxwYXRoIGQ9Ik02MCAzNDAgTDE5MCAyNDAgTDMwMCAzMDAgTDQzMCAxOTAgTDU4MCAyNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzViOGFjNyIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+        }
+      },
+      {
+        "id": "demo-info-image-right",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.image-right",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 15,
+        "values": {
+          "title": "Сколько попыток",
+          "body": "<p>Число попыток задаёт автор теста. Между попытками может действовать перерыв.</p>",
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNDAwIiB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MDAiIHJ4PSIxNiIgZmlsbD0iI2U4ZWVmNyIvPjxjaXJjbGUgY3g9IjE1MCIgY3k9IjEzMCIgcj0iNTgiIGZpbGw9IiM4ZmI0ZTMiLz48cmVjdCB4PSIyNTAiIHk9Ijk2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2I5Y2JlNiIvPjxyZWN0IHg9IjI1MCIgeT0iMTM0IiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxyZWN0IHg9IjI1MCIgeT0iMTcyIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxwYXRoIGQ9Ik02MCAzNDAgTDE5MCAyNDAgTDMwMCAzMDAgTDQzMCAxOTAgTDU4MCAyNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzViOGFjNyIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+        }
+      },
+      {
+        "id": "demo-info-image-right-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.image-right-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 16,
+        "values": {
+          "title": "Что дальше",
+          "lead": "После теста",
+          "body": "<p>По итогам теста показывается сводка по разделам и рекомендации, если автор их подготовил.</p>",
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNDAwIiB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MDAiIHJ4PSIxNiIgZmlsbD0iI2U4ZWVmNyIvPjxjaXJjbGUgY3g9IjE1MCIgY3k9IjEzMCIgcj0iNTgiIGZpbGw9IiM4ZmI0ZTMiLz48cmVjdCB4PSIyNTAiIHk9Ijk2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2I5Y2JlNiIvPjxyZWN0IHg9IjI1MCIgeT0iMTM0IiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxyZWN0IHg9IjI1MCIgeT0iMTcyIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxwYXRoIGQ9Ik02MCAzNDAgTDE5MCAyNDAgTDMwMCAzMDAgTDQzMCAxOTAgTDU4MCAyNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzViOGFjNyIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+        }
+      },
+      {
+        "id": "demo-gallery-text",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.text",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 17,
+        "values": {
+          "title": "Как устроен тест",
+          "body": "<p>Тест состоит из нескольких разделов. Отвечайте по порядку — к пропущенным вопросам можно вернуться до завершения раздела.</p>"
+        },
+        "settings": {
+          "sequenceId": "Демо-галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-text-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.text-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 18,
+        "values": {
+          "title": "Что важно знать",
+          "lead": "Перед началом",
+          "body": "<ul><li>ответы можно менять до завершения раздела;</li><li>результат виден сразу после завершения.</li></ul>"
+        },
+        "settings": {
+          "sequenceId": "Демо-галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-image-left",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.image-left",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 19,
+        "values": {
+          "title": "Как читать результат",
+          "body": "<p>Итоговый балл переводится в проценты и сравнивается с порогом. Ниже порога раздел считается непройденным.</p>",
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNDAwIiB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MDAiIHJ4PSIxNiIgZmlsbD0iI2U4ZWVmNyIvPjxjaXJjbGUgY3g9IjE1MCIgY3k9IjEzMCIgcj0iNTgiIGZpbGw9IiM4ZmI0ZTMiLz48cmVjdCB4PSIyNTAiIHk9Ijk2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2I5Y2JlNiIvPjxyZWN0IHg9IjI1MCIgeT0iMTM0IiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxyZWN0IHg9IjI1MCIgeT0iMTcyIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxwYXRoIGQ9Ik02MCAzNDAgTDE5MCAyNDAgTDMwMCAzMDAgTDQzMCAxOTAgTDU4MCAyNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzViOGFjNyIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+        },
+        "settings": {
+          "sequenceId": "Демо-галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-image-left-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.image-left-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 20,
+        "values": {
+          "title": "Из чего складывается балл",
+          "lead": "Цена ответа",
+          "body": "<p>У каждого вопроса своя цена. Частично верный ответ приносит часть баллов, если так настроен тест.</p>",
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNDAwIiB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MDAiIHJ4PSIxNiIgZmlsbD0iI2U4ZWVmNyIvPjxjaXJjbGUgY3g9IjE1MCIgY3k9IjEzMCIgcj0iNTgiIGZpbGw9IiM4ZmI0ZTMiLz48cmVjdCB4PSIyNTAiIHk9Ijk2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2I5Y2JlNiIvPjxyZWN0IHg9IjI1MCIgeT0iMTM0IiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxyZWN0IHg9IjI1MCIgeT0iMTcyIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxwYXRoIGQ9Ik02MCAzNDAgTDE5MCAyNDAgTDMwMCAzMDAgTDQzMCAxOTAgTDU4MCAyNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzViOGFjNyIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+        },
+        "settings": {
+          "sequenceId": "Демо-галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-image-right",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.image-right",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 21,
+        "values": {
+          "title": "Сколько попыток",
+          "body": "<p>Число попыток задаёт автор теста. Между попытками может действовать перерыв.</p>",
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNDAwIiB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MDAiIHJ4PSIxNiIgZmlsbD0iI2U4ZWVmNyIvPjxjaXJjbGUgY3g9IjE1MCIgY3k9IjEzMCIgcj0iNTgiIGZpbGw9IiM4ZmI0ZTMiLz48cmVjdCB4PSIyNTAiIHk9Ijk2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2I5Y2JlNiIvPjxyZWN0IHg9IjI1MCIgeT0iMTM0IiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxyZWN0IHg9IjI1MCIgeT0iMTcyIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxwYXRoIGQ9Ik02MCAzNDAgTDE5MCAyNDAgTDMwMCAzMDAgTDQzMCAxOTAgTDU4MCAyNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzViOGFjNyIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+        },
+        "settings": {
+          "sequenceId": "Демо-галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-image-right-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.image-right-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 22,
+        "values": {
+          "title": "Что дальше",
+          "lead": "После теста",
+          "body": "<p>По итогам теста показывается сводка по разделам и рекомендации, если автор их подготовил.</p>",
+          "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NDAgNDAwIiB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSI0MDAiIHJ4PSIxNiIgZmlsbD0iI2U4ZWVmNyIvPjxjaXJjbGUgY3g9IjE1MCIgY3k9IjEzMCIgcj0iNTgiIGZpbGw9IiM4ZmI0ZTMiLz48cmVjdCB4PSIyNTAiIHk9Ijk2IiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2I5Y2JlNiIvPjxyZWN0IHg9IjI1MCIgeT0iMTM0IiB3aWR0aD0iMjMwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxyZWN0IHg9IjI1MCIgeT0iMTcyIiB3aWR0aD0iMjcwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2NiZDllYyIvPjxwYXRoIGQ9Ik02MCAzNDAgTDE5MCAyNDAgTDMwMCAzMDAgTDQzMCAxOTAgTDU4MCAyNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzViOGFjNyIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+"
+        },
+        "settings": {
+          "sequenceId": "Демо-галерея",
+          "nextLabel": "Начать"
         }
       }
     ],
@@ -72,10 +259,23 @@
         "type": "single",
         "prompt": "Какой пароль является наиболее надёжным с точки зрения безопасности?",
         "options": [
-          { "id": "s1", "text": "Дата рождения (например, 01011990)" },
-          { "id": "s2", "text": "Длинная случайная фраза: «Кофе&Море2024!»", "correct": true },
-          { "id": "s3", "text": "Название компании с цифрой в конце" },
-          { "id": "s4", "text": "Стандартный пароль qwerty123" }
+          {
+            "id": "s1",
+            "text": "Дата рождения (например, 01011990)"
+          },
+          {
+            "id": "s2",
+            "text": "Длинная случайная фраза: «Кофе&Море2024!»",
+            "correct": true
+          },
+          {
+            "id": "s3",
+            "text": "Название компании с цифрой в конце"
+          },
+          {
+            "id": "s4",
+            "text": "Стандартный пароль qwerty123"
+          }
         ]
       },
       {
@@ -84,10 +284,25 @@
         "type": "multiple",
         "prompt": "Какие действия помогают защитить корпоративные данные? Выберите все подходящие.",
         "options": [
-          { "id": "m1", "text": "Использовать разные пароли для разных сервисов", "correct": true },
-          { "id": "m2", "text": "Открывать вложения из незнакомых писем" },
-          { "id": "m3", "text": "Включить двухфакторную аутентификацию", "correct": true },
-          { "id": "m4", "text": "Блокировать экран при уходе с рабочего места", "correct": true }
+          {
+            "id": "m1",
+            "text": "Использовать разные пароли для разных сервисов",
+            "correct": true
+          },
+          {
+            "id": "m2",
+            "text": "Открывать вложения из незнакомых писем"
+          },
+          {
+            "id": "m3",
+            "text": "Включить двухфакторную аутентификацию",
+            "correct": true
+          },
+          {
+            "id": "m4",
+            "text": "Блокировать экран при уходе с рабочего места",
+            "correct": true
+          }
         ]
       },
       {
@@ -96,10 +311,26 @@
         "type": "matching",
         "prompt": "Сопоставьте тип угрозы с описанием.",
         "pairs": [
-          { "id": "p1", "left": "Фишинг", "right": "Поддельное письмо для кражи данных" },
-          { "id": "p2", "left": "Вредоносное ПО", "right": "Программа, повреждающая систему" },
-          { "id": "p3", "left": "Социальная инженерия", "right": "Манипуляция людьми для получения доступа" },
-          { "id": "p4", "left": "Брутфорс", "right": "Перебор паролей автоматически" }
+          {
+            "id": "p1",
+            "left": "Фишинг",
+            "right": "Поддельное письмо для кражи данных"
+          },
+          {
+            "id": "p2",
+            "left": "Вредоносное ПО",
+            "right": "Программа, повреждающая систему"
+          },
+          {
+            "id": "p3",
+            "left": "Социальная инженерия",
+            "right": "Манипуляция людьми для получения доступа"
+          },
+          {
+            "id": "p4",
+            "left": "Брутфорс",
+            "right": "Перебор паролей автоматически"
+          }
         ]
       },
       {
@@ -108,21 +339,78 @@
         "type": "ranking",
         "prompt": "Расположите шаги реакции на инцидент в правильном порядке.",
         "options": [
-          { "id": "r1", "text": "Обнаружить подозрительную активность" },
-          { "id": "r2", "text": "Сообщить в службу информационной безопасности" },
-          { "id": "r3", "text": "Изолировать поражённое устройство" },
-          { "id": "r4", "text": "Провести анализ инцидента и устранить уязвимость" }
+          {
+            "id": "r1",
+            "text": "Обнаружить подозрительную активность"
+          },
+          {
+            "id": "r2",
+            "text": "Сообщить в службу информационной безопасности"
+          },
+          {
+            "id": "r3",
+            "text": "Изолировать поражённое устройство"
+          },
+          {
+            "id": "r4",
+            "text": "Провести анализ инцидента и устранить уязвимость"
+          }
         ],
-        "order": ["r1", "r2", "r3", "r4"]
+        "order": [
+          "r1",
+          "r2",
+          "r3",
+          "r4"
+        ]
+      },
+      {
+        "id": "demo-scale",
+        "topicId": "topic-1",
+        "type": "scale",
+        "prompt": "Насколько уверенно вы распознаёте фишинговое письмо?",
+        "options": [
+          {
+            "id": "g1",
+            "text": "Совсем не уверен"
+          },
+          {
+            "id": "g2",
+            "text": "Скорее не уверен"
+          },
+          {
+            "id": "g3",
+            "text": "Затрудняюсь ответить"
+          },
+          {
+            "id": "g4",
+            "text": "Скорее уверен"
+          },
+          {
+            "id": "g5",
+            "text": "Полностью уверен"
+          }
+        ]
       }
     ]
   },
   "runtime": {
     "route": "start",
     "progress": {
-      "active": { "current": 2, "total": 4, "percent": 50 },
-      "question": { "current": 2, "total": 4, "percent": 50 },
-      "page": { "current": 4, "total": 9, "percent": 44 }
+      "active": {
+        "current": 2,
+        "total": 4,
+        "percent": 50
+      },
+      "question": {
+        "current": 2,
+        "total": 4,
+        "percent": 50
+      },
+      "page": {
+        "current": 4,
+        "total": 9,
+        "percent": 44
+      }
     },
     "result": {
       "score": 86,

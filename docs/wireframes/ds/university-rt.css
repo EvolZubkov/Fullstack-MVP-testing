@@ -13,7 +13,6 @@
    layers:    primitives → semantic → density
    themes:    .ou.ou--light  (default)  |  .ou.ou--dark
    pulls:     _a11y.css (reduced-motion + fallback focus-visible)
-   ================================================================= */
    density:   .ou--compact | .ou--normal (default) | .ou--spacious
    ================================================================= */
 

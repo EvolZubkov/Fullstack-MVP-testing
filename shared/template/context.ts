@@ -21,6 +21,12 @@
 /** Test-level info shown on the start screen and as the screen title (`course.*`). */
 export interface CtxCourse {
   title: string;
+  /**
+   * Header subtitle under the title (wireframe: "Попытка N из M"). Core-prepared
+   * by {@link module:shared/template/course-subtitle} on both hosts; empty string
+   * or absent -> the layout's `{{#if course.subtitle}}` renders a title-only header.
+   */
+  subtitle?: string;
   description?: string;
   questionCount?: number;
   passPercent?: number | null;
@@ -30,8 +36,28 @@ export interface CtxCourse {
   startPageContent?: string;
 }
 
+/** A recommended course/event link for failed-topic guidance (SCORM-extra). */
+export interface CtxRecommendation {
+  title: string;
+  url?: string;
+}
+
+/**
+ * The unified per-topic feedback composition (spec §3.2 / plan 6.1): feedback text +
+ * recommended courses + recommended events, with presence flags. The SAME shape in
+ * standard and adaptive results, so the feedback block is composed identically in both
+ * modes — feedback is a property of the test's settings, not the flow mode.
+ */
+export interface CtxTopicFeedback {
+  feedback?: string;
+  hasFeedback: boolean;
+  recommendedCourses: CtxRecommendation[];
+  recommendedEvents: CtxRecommendation[];
+  hasRecommendations: boolean;
+}
+
 /** A per-topic result row for the standard results layout (`result.topicResults[]`). */
-export interface CtxTopicResultView {
+export interface CtxTopicResultView extends CtxTopicFeedback {
   topicId?: string;
   topicName: string;
   correct: number;
@@ -45,27 +71,24 @@ export interface CtxTopicResultView {
   pointsLabel?: string;
   /** SCORM-extra: per-topic pass threshold, e.g. "Требуется: 70%". */
   requiredLabel?: string;
-  /** SCORM-extra: per-topic feedback text. */
-  topicFeedback?: string;
 }
 
 /** A per-topic row for the adaptive results layout (level-based, no score). */
-export interface CtxAdaptiveTopicView {
+export interface CtxAdaptiveTopicView extends CtxTopicFeedback {
   topicName: string;
-  /** Achieved level name or "Не достигнут". */
+  /**
+   * Confirmed level name, or «Минимально требуемый уровень не подтверждён» when the
+   * learner did not reach the lowest level the test defines.
+   */
   levelLabel: string;
-  /** Core-prepared class: `is-info` (achieved) / `is-fail` (not). */
+  /**
+   * Core-prepared DS tone modifiers for the level tag — two states only, because
+   * that is all the model asserts: `ou-tag--solid ou-tag--accent` (a level was
+   * confirmed; WHICH one the label says) / `ou-tag--solid ou-tag--error` (the test's
+   * minimum was not confirmed). The rungs themselves carry no colour: the ladder is
+   * the author's and differs from test to test.
+   */
   levelClass: string;
-  feedback?: string;
-  hasFeedback: boolean;
-  hasLinks: boolean;
-  links: Array<{ title: string; url: string }>;
-}
-
-/** A recommended course/event link for failed-topic guidance (SCORM-extra). */
-export interface CtxRecommendation {
-  title: string;
-  url?: string;
 }
 
 /**
@@ -99,7 +122,26 @@ export interface CtxResult {
   canRetry?: boolean;
   showFinish?: boolean;
   hasScormActions?: boolean;
+  /**
+   * Footer state of the results screen — the row is drawn by the LAYOUT, both
+   * hosts only fill these in (see `buildResultsNav`). Before this, the package
+   * overwrote the layout's footer with its own HTML and the web host rendered the
+   * layout as written, so the same screen offered different actions.
+   */
+  nav?: CtxResultsNav;
   [key: string]: unknown;
+}
+
+/** What the results layout binds its footer against (`result.nav`). */
+export interface CtxResultsNav {
+  /** Render «Скачать отчёт». */
+  showReport: boolean;
+  /** Render «Пройти заново» (failed and attempts remain). */
+  canRetry: boolean;
+  /** `data-action` of the primary button. */
+  primaryAction: string;
+  /** Its caption. */
+  primaryLabel: string;
 }
 
 /**
@@ -110,6 +152,19 @@ export interface CtxResult {
  */
 export interface CtxState {
   questionCounterLabel?: string;
+  /**
+   * Section (topic) the current question belongs to. The question layout prints it
+   * as a tag NEXT TO the counter, so the counter label itself must stay the bare
+   * «Вопрос N из M» on both hosts — a host that folds the section into the counter
+   * text renders a different meta row than the package does.
+   */
+  sectionName?: string;
+  /** Learner guidance subtitle by question type (both hosts, see questionHint). */
+  questionHint?: string;
+  /** Length-fit font for the question prompt, e.g. "28px" (see fit-font). */
+  questionFont?: string;
+  /** Length-fit font for the answer options, e.g. "18px" (see fit-font). */
+  optionFont?: string;
   exhausted?: boolean;
   canStart?: boolean;
   startLabel?: string;
@@ -234,6 +289,15 @@ export interface CtxReview {
   total: number;
   /** Pre-answer hint shown above the list. */
   hint: string;
+  /**
+   * True when the обзор was opened via the «К обзору» button MID-flow (not reached
+   * at the section/test end). Then the footer shows an accented «Назад» (returns to
+   * the origin question) and DEMOTES «Завершить …», to cut the risk of an accidental
+   * finish. False for the end-of-flow обзор (finish is the primary action).
+   */
+  canReturn: boolean;
+  /** «Назад» button label (only meaningful when {@link canReturn}). */
+  backLabel: string;
 }
 
 /**
@@ -263,6 +327,10 @@ export interface CtxSectionResult {
   summaryLabel: string;
   /** «Продолжить» action label. */
   continueLabel: string;
+  /** Header caption "Раздел N из M" (position among sections); absent when unknown. */
+  sectionLabel?: string;
+  /** Header progress-bar fill percent (section position / total); absent when unknown. */
+  progressPercent?: number;
 }
 
 /**
@@ -272,8 +340,10 @@ export interface CtxSectionResult {
  * it from {@link module:shared/template/result-context}.buildSectionIntroContext.
  */
 export interface CtxSectionIntro {
-  /** «Раздел N» eyebrow label. */
+  /** «Раздел N из M» (or «Раздел N» without a total) eyebrow + header-tag label. */
   eyebrow: string;
+  /** Header progress-bar fill percent (section position / total); absent when unknown. */
+  progressPercent?: number;
   /** Section/topic name (heading). */
   topicName: string;
   /** Topic description from its properties; empty string when absent. */
@@ -300,22 +370,24 @@ export interface CtxSectionIntro {
 
 /** Adaptive inter-level/topic transition interstitial (`transition.*`). */
 export interface CtxTransition {
-  isCorrect: boolean;
-  /** Core-prepared icon class: `is-pass` / `is-fail`. */
-  iconClass: string;
-  /** Core-prepared status label: `Правильно!` / `Неправильно`. */
+  /**
+   * The topic the level is DETERMINED FOR (eyebrow). This screen is a level change
+   * WITHIN a topic (adaptive_by_section / adaptive+router) — NOT a topic move (flat
+   * adaptive is a deferred future PRD) and NOT a per-answer verdict.
+   */
+  topicName: string;
+  /** Level-change title, e.g. «Сложность повышена» — never an answer verdict. */
   title: string;
-  /** Level change, when present. */
-  level?: {
+  /** The level change (always present — the screen exists because the level changed). */
+  level: {
     /** Core-prepared class: `is-up` / `is-down` / `is-complete`. */
     class: string;
     isUp: boolean;
     isDown: boolean;
     isComplete: boolean;
+    /** Supporting line, e.g. «Следующие вопросы будут сложнее». */
     message: string;
   };
-  /** Topic change, when present. */
-  topic?: { toTopic: string };
   /** Whether to render an explicit "Продолжить" action (SCORM) vs auto-advance (web). */
   showContinue?: boolean;
 }
@@ -338,6 +410,12 @@ export interface CtxRetake {
 export interface CtxDesign {
   /** Logo URL; absent → the `{{#if design.logoUrl}}` layout block renders nothing. */
   logoUrl?: string;
+  /**
+   * Start-screen illustration URL (PRD-7 branding). Present → the start layout shows
+   * the «with image» variant (illustration on the right); absent → the plain variant.
+   * Resolved to a plain URL string on both hosts (like {@link CtxDesign.logoUrl}).
+   */
+  startImageUrl?: string;
 }
 
 /**

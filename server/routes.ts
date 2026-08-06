@@ -9,6 +9,7 @@ import crypto from "node:crypto";
 
 import { routerConfig } from "./routes/index";
 import { config } from "./config";
+import { magicScopeGuard } from "./middleware/magic-scope";
 
 // Media upload configuration
 const mediaDir = path.resolve(process.cwd(), "uploads", "media");
@@ -31,12 +32,6 @@ const mediaUpload = multer({
     cb(ok ? null : new Error("Unsupported media type") as any, ok);
   },
 });
-
-declare module "express-session" {
-  interface SessionData {
-    userId: string;
-  }
-}
 
 const MemStore = MemoryStore(session);
 
@@ -78,6 +73,10 @@ export async function registerRoutes(
     })
   );
 
+  // A magic-link session is access to ONE test: everything under /api that the
+  // rule table does not name is refused here, before any router sees it.
+  app.use(magicScopeGuard);
+
   // Static files
   app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
   app.use("/docs", express.static(path.resolve(process.cwd(), "docs")));
@@ -96,10 +95,13 @@ export async function registerRoutes(
       if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
       const url = `/uploads/media/${req.file.filename}`;
+      // Busboy decodes the multipart filename as latin1 by default, so a UTF-8
+      // (e.g. Cyrillic) original name arrives mojibake — re-decode it to UTF-8.
+      const originalName = Buffer.from(req.file.originalname, "latin1").toString("utf8");
       res.json({
         url,
         mime: req.file.mimetype,
-        originalName: req.file.originalname,
+        originalName,
         size: req.file.size,
       });
     }

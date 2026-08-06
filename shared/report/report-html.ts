@@ -1,0 +1,92 @@
+/**
+ * @module shared/report/report-html
+ *
+ * Входные типы отчёта и его текстовые помощники.
+ *
+ * ВЁРСТКИ здесь больше нет: страницу отчёта рисует МАКЕТ шаблона
+ * (`contentTemplates[].layoutFile`, PRD-27 Фаза 2), а данные для него собирает
+ * {@link module:shared/report/report-context}. До PRD-27 страница собиралась кодом —
+ * инлайн-стилями, с зашитыми цветами, — из-за чего разработчик шаблона не мог изменить
+ * ни структуру отчёта, ни его оформление.
+ *
+ * Осталось то, что к вёрстке не относится: нормализованный вход, имя файла и подписи,
+ * которые считает ядро (DSL не считает — spec §9).
+ *
+ * Чистый модуль: ни DOM, ни Node, ни PDF-библиотек.
+ */
+
+import type { ResultInput, AdaptiveResultInput, AdaptiveTopicInput } from "../template/result-context";
+
+/** Background + logo of the report page, already resolved to data URLs. */
+export interface ReportAssets {
+  /** Page background (one of the `pdf-bg-*.png` plates); absent = gradient fallback. */
+  backgroundDataUrl?: string | null;
+  /** Brand logo printed above the headline; absent = no logo row. */
+  logoDataUrl?: string | null;
+}
+
+/** What the report prints besides the result itself. */
+export interface ReportMeta {
+  /**
+   * Which page to build — set by the host that knows the test's mode, so a consumer
+   * never has to guess from the shape of `topicResults`.
+   */
+  adaptive?: boolean;
+  /** Test title (the card headline). */
+  testName: string;
+  /** Learner's full name — LMS `cmi.learner_name` in SCORM, session user on the web. */
+  learnerName?: string | null;
+  /** ISO timestamp of the attempt being reported. */
+  timestamp?: string | null;
+  /** How many attempts the «Лучший результат за N попыток» line counts. */
+  attemptsCount?: number;
+}
+
+/** Standard-mode report input — the SAME normalized result the results screen takes. */
+export interface ReportInput extends ReportMeta {
+  result: ResultInput;
+}
+
+/** Adaptive-mode per-topic extras the report prints (counts have no level analogue). */
+export interface AdaptiveReportTopic extends AdaptiveTopicInput {
+  totalQuestionsAnswered?: number;
+  totalCorrect?: number;
+}
+
+/** Adaptive-mode report input. */
+export interface AdaptiveReportInput extends ReportMeta {
+  result: Omit<AdaptiveResultInput, "topicResults"> & { topicResults: AdaptiveReportTopic[] };
+}
+
+/** Russian plural form for a count (попытку / попытки / попыток). */
+export function pluralize(n: number, one: string, few: string, many: string): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 19) return many;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+}
+
+/** `дд.мм.гггг чч:мм` of an ISO timestamp (or now, when the host has none). */
+export function formatTimestamp(iso?: string | null): string {
+  const d = iso ? new Date(iso) : new Date();
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  return `${p2(d.getDate())}.${p2(d.getMonth() + 1)}.${d.getFullYear()} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+}
+
+/** Strip characters a file name cannot carry, and cap the length. */
+export function sanitizeFileName(name?: string | null): string {
+  if (!name) return "test";
+  return String(name)
+    .replace(/[^a-zA-Zа-яА-Я0-9_\-\s]/g, "")
+    .replace(/\s+/g, "_")
+    .substring(0, 50);
+}
+
+/** `Результаты_<Тест>_дд_мм_гггг.pdf` — the download name both hosts use. */
+export function reportFileName(testName?: string | null, date: Date = new Date()): string {
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  const stamp = `${p2(date.getDate())}_${p2(date.getMonth() + 1)}_${date.getFullYear()}`;
+  return `Результаты_${sanitizeFileName(testName)}_${stamp}.pdf`;
+}

@@ -27,7 +27,9 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
-    border: 0 solid hsl(var(--border));
+    /* DS border token: the legacy --border variable left with the rest of the
+       pre-DS palette. */
+    border: 0 solid var(--ou-border-soft);
   }
 
   html,

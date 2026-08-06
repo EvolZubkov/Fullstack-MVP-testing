@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: prd27 — Шаблон отчёта о результатах (выбор варианта и его параметры)
+    Файл: docs/wireframes/approved/prd27-report-template.html
+    Спецификация: docs/specs/prd-27/report-template.md
+
+    ДИЗАЙН НЕ ПЕРЕИЗОБРЕТАЕТСЯ. Блок обратной связи вкладки «Настройки» показан ровно
+    таким, каким он реализован сегодня: карточка `ou-card ou-card--outlined ou-card--sm`
+    с заголовком «Общая обратная связь теста» и списком `ou-formfield` внутри
+    `tb-feedback-block` (перенесено из prd7-editor-settings-tab.html без правок).
+    Полная вкладка — там же; здесь показано только её окружение вокруг дельты.
+
+    Что добавляет PRD-27 (и только это):
+      1) вторая карточка того же вида — «Отчёт о результатах», рядом с существующей;
+      2) в ней селектор варианта отчёта и поля `settings[]`, объявленные шаблоном;
+      3) действие «Предпросмотр отчёта» и модальное окно предпросмотра.
+
+    Состояния:
+      s-main       — карточка отчёта: вариант выбран, поля варианта заполнены (FR-12, FR-13)
+      s-switch     — смена варианта: что переносится, что теряется (FR-14)
+      s-none       — шаблон не объявил вариантов: деградация на «Стандартный» (FR-15)
+      s-preview    — модальное окно предпросмотра, исход «не пройден» (FR-17..FR-21)
+      s-preview-ok — то же, исход «пройден»: другие цвета и без рекомендаций (FR-19)
+      s-adaptive   — адаптивный тест: свой тип, свои варианты (FR-11, D-5)
+
+    Покрывает: FR-12..FR-21, FR-11, FR-15, D-5.
+  -->
+  <title>prd27 — Шаблон отчёта</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    /* ─── Эскизный фрейм ───────────────────────────────────────────────────────
+       Только каркас страницы эскиза и таблицы пояснений. UI холста — DS `ou-*`
+       и продуктовый `tb-components.css`; локальных render-классов нет. */
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+    .wf-state.active { display: block; }
+    :root { --wf-nav-h: 0px; }
+    .wf-notes { max-width: var(--wf-size-1120); margin: var(--ou-space-7) auto; padding: 0 var(--ou-space-4); }
+    .wf-notes-title { font: var(--ou-text-body-m); font-weight: 700; margin: var(--ou-space-5) 0 var(--ou-space-2); }
+    .wf-notes-intro { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-3); }
+    .wf-notes-table { width: 100%; border-collapse: collapse; margin-bottom: var(--ou-space-7); }
+    .wf-notes-table th, .wf-notes-table td { border: var(--wf-border-w) solid var(--ou-border-soft); padding: var(--ou-space-2) var(--ou-space-3); font: var(--ou-text-body-s); text-align: left; vertical-align: top; }
+    .wf-notes-table th { background: var(--ou-bg-surface-3); font-weight: 600; }
+    .wf-notes-table tr:nth-child(even) td { background: var(--ou-bg-elevated); }
+    .wf-notes-table code { font: var(--ou-text-code-s); background: var(--ou-bg-surface-3); padding: 0 var(--wf-space-tiny); border-radius: var(--wf-space-1q); }
+    /* Сцена предпросмотра: эскизный фрейм на месте страницы отчёта. Саму страницу
+       рисует МАКЕТ ШАБЛОНА, и эскизом она не задаётся (см. пояснения ниже). */
+    .wf-report-stage { height: var(--wf-size-420); border: var(--wf-border-w) dashed var(--ou-border-default); border-radius: var(--ou-radius-m); background: var(--ou-bg-surface-2); }
+
+    /* ─── Продуктовые классы вкладки «Настройки» ──────────────────────────────
+       `tb-feedback-block` и `tb-link-row*` НЕ переобъявляются: они приходят из
+       подключённого `tb-components.css` — того же файла, что грузит приложение.
+       Здесь только разделитель, которого в продуктовом слое нет. */
+    .wf-sep { border: 0; border-top: var(--wf-border-w) solid var(--ou-border-soft); margin: var(--ou-space-5) 0; }
+
+    /* ─── Дельта PRD-27: раскладка карточки отчёта ─────────────────────────────
+       Ровно два служебных класса РАСКЛАДКИ, оба на DS-токенах: сетка полей
+       варианта и строка предпросмотра изображения. Контролы внутри — DS. */
+    .tb-report-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--wf-size-240), 1fr)); gap: var(--ou-space-4); }
+    .tb-report-fields > .ou-formfield { margin: 0; }
+    .tb-report-asset { display: flex; align-items: center; gap: var(--ou-space-2); }
+    .tb-report-asset__thumb { width: var(--ou-space-9); height: var(--ou-space-8); border-radius: var(--ou-radius-xs); background: var(--ou-bg-surface-3); border: var(--wf-border-w) solid var(--ou-border-soft); flex: none; }
+    .tb-report-asset__name { font: var(--ou-text-body-s); color: var(--ou-fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  </style>
+</head>
+<body class="ou ou--light">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h6"/></symbol>
+</svg>
+
+<!-- ─── State switcher ─────────────────────────────────────────────────────── -->
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">PRD-27: отчёт о результатах:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this, 's-main')">Вариант и поля</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-switch')">Смена варианта</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-none')">Вариантов нет</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-preview')">Предпросмотр: не пройден</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-preview-ok')">Предпросмотр: пройден</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-adaptive')">Адаптивный тест</button>
+  <a class="wf-nav-link" href="prd7-editor-settings-tab.html">&larr; вкладка «Настройки» целиком (не меняется)</a>
+
+  <div class="wf-nav-sep"></div>
+  <button type="button" class="ou-btn ou-btn--secondary" onclick="toggleTheme(this)">Dark</button>
+  <button type="button" class="ou-btn ou-btn--secondary" onclick="toggleDensity(this)">Compact</button>
+  <button type="button" class="ou-btn ou-btn--secondary" onclick="toggleAnnots(this)">Аннотации</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-main — вариант выбран, поля варианта заполнены
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-main" class="wf-state shell active" data-state="main">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-main-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-main-title" class="ou-drawer__title">Сертификация: основы ИБ</h1></div>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оценка</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Шкалы</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Показатели</button>
+      </div></nav>
+      <div class="ou-drawer__body" tabindex="0">
+
+        <!-- СУЩЕСТВУЮЩАЯ карточка, 1:1 из prd7-editor-settings-tab.html -->
+        <section class="ou-card ou-card--outlined ou-card--sm">
+          <header class="ou-card__header">
+            <h3 class="ou-card__title">Общая обратная связь теста</h3>
+          </header>
+          <div class="ou-card__body">
+            <div class="tb-feedback-block">
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl" for="f-feedback-body">Текст обратной связи</label>
+                <div class="ou-textarea">
+                  <div class="ou-textarea__box">
+                    <textarea class="ou-textarea__input" id="f-feedback-body" rows="3">Поздравляем с прохождением теста! Рекомендуем повторить темы, в которых допущены ошибки.</textarea>
+                  </div>
+                </div>
+              </div>
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl">Ссылки</label>
+                <div class="tb-link-row">
+                  <svg class="tb-link-row__icon"><use href="#i-link"/></svg>
+                  <span class="tb-link-row__label">Руководство по информационной безопасности</span>
+                  <span class="tb-link-row__url">https://example.com/guide</span>
+                  <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить ссылку"><svg width="14" height="14"><use href="#i-x"/></svg></button>
+                </div>
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><svg width="12" height="12"><use href="#i-plus"/></svg> Добавить ссылку</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <hr class="wf-sep" />
+
+        <!-- ДЕЛЬТА PRD-27: вторая карточка того же вида -->
+        <section class="ou-card ou-card--outlined ou-card--sm">
+          <header class="ou-card__header">
+            <h3 class="ou-card__title">Отчёт о результатах</h3>
+          </header>
+          <div class="ou-card__body">
+            <div class="tb-feedback-block">
+
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl" for="f-report-variant">Вид отчёта</label>
+                <div class="ou-select ou-field--m" data-ou-options="Сертификат: с подложкой|Сертификат: строгий|Сводка на одну страницу">
+                  <button type="button" class="ou-select__trigger" id="f-report-variant">
+                    <span class="ou-select__value">Сертификат: с подложкой</span>
+                    <svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down"/></svg>
+                  </button>
+                </div>
+                <span class="ou-formfield__desc">Виды предлагает шаблон оформления «Сертификация»</span>
+              </div>
+
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl">Параметры вида</label>
+                <div class="tb-report-fields">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="f-rp-headline">Заголовок отчёта</label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="f-rp-headline" type="text" value="Итоги аттестации"></div></div>
+                  </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="f-rp-bg">Подложка страницы</label>
+                    <div class="tb-report-asset">
+                      <span class="tb-report-asset__thumb" aria-hidden="true"></span>
+                      <span class="tb-report-asset__name">certificate-bg.png</span>
+                      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" id="f-rp-bg">Заменить</button>
+                    </div>
+                  </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="f-rp-sign">Подпись под итогом</label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="f-rp-sign" type="text" value="Служба обучения"></div></div>
+                  </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Показывать рекомендации</label>
+                    <label class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Показывать рекомендации по непройденным темам"><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ou-formfield">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null, 's-preview')">
+                  <svg width="14" height="14"><use href="#i-file"/></svg> Предпросмотр отчёта
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </section>
+
+      </div>
+      <footer class="ou-drawer__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-switch — смена вида: что переносится, что теряется (FR-14)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-switch" class="wf-state shell" data-state="switch">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-switch-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-switch-title" class="ou-drawer__title">Сертификация: основы ИБ</h1></div>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оценка</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Шкалы</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Показатели</button>
+      </div></nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <section class="ou-card ou-card--outlined ou-card--sm">
+          <header class="ou-card__header">
+            <h3 class="ou-card__title">Отчёт о результатах</h3>
+          </header>
+          <div class="ou-card__body">
+            <div class="tb-feedback-block">
+
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl" for="f-report-variant-2">Вид отчёта</label>
+                <div class="ou-select ou-field--m" data-ou-options="Сертификат: с подложкой|Сертификат: строгий|Сводка на одну страницу">
+                  <button type="button" class="ou-select__trigger" id="f-report-variant-2">
+                    <span class="ou-select__value">Сертификат: строгий</span>
+                    <svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="ou-banner ou-banner--warning" role="status">
+                <span class="ou-banner__ico"><svg width="16" height="16"><use href="#i-warn"/></svg></span>
+                <div class="ou-banner__body">
+                  <div class="ou-banner__title">Часть параметров не переносится</div>
+                  <p class="ou-banner__desc">
+                    «Сертификат: строгий» не имеет полей «Подложка страницы» и «Показывать
+                    рекомендации» — их значения будут отброшены. «Заголовок отчёта» и
+                    «Подпись под итогом» сохранятся.
+                  </p>
+                </div>
+              </div>
+
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl">Параметры вида</label>
+                <div class="tb-report-fields">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="f-rp-headline-2">Заголовок отчёта</label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="f-rp-headline-2" type="text" value="Итоги аттестации"></div></div>
+                  </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="f-rp-sign-2">Подпись под итогом</label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="f-rp-sign-2" type="text" value="Служба обучения"></div></div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </section>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-none — шаблон не объявил вариантов отчёта (FR-15)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-none" class="wf-state shell" data-state="none">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-none-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-none-title" class="ou-drawer__title">Тест профессиональных знаний</h1></div>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оценка</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Шкалы</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Показатели</button>
+      </div></nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <section class="ou-card ou-card--outlined ou-card--sm">
+          <header class="ou-card__header">
+            <h3 class="ou-card__title">Отчёт о результатах</h3>
+          </header>
+          <div class="ou-card__body">
+            <div class="tb-feedback-block">
+
+              <div class="ou-banner ou-banner--info" role="status">
+                <span class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info"/></svg></span>
+                <div class="ou-banner__body">
+                  <div class="ou-banner__title">Шаблон «Мой шаблон» не предлагает видов отчёта</div>
+                  <p class="ou-banner__desc">
+                    Отчёт будет собран по виду шаблона «Стандартный», с цветами и логотипом
+                    этого теста. Настраиваемых параметров у него нет.
+                  </p>
+                </div>
+              </div>
+
+              <div class="ou-formfield">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null, 's-preview')">
+                  <svg width="14" height="14"><use href="#i-file"/></svg> Предпросмотр отчёта
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </section>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-preview — модальное окно предпросмотра, исход «не пройден»
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-preview" class="wf-state shell" data-state="preview">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dt-prev-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--xl">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 id="dt-prev-title" class="ou-modal__title">Предпросмотр отчёта</h1>
+          <p class="ou-modal__desc">Сертификат: с подложкой &middot; темы этого теста, показатели демонстрационные</p>
+        </div>
+        <span class="ou-tag ou-tag--neutral ou-tag--outline">Образец</span>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="ou-seg" role="group" aria-label="Исход попытки">
+          <button type="button" class="ou-seg__item is-active" aria-pressed="true">Не пройден</button>
+          <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 's-preview-ok')">Пройден</button>
+        </div>
+        <div class="wf-report-stage" role="img" aria-label="Страница отчёта: итог не пройден, четыре темы, блок рекомендаций"></div>
+      </div>
+      <footer class="ou-modal__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null, 's-main')">Закрыть</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-preview-ok — тот же предпросмотр, исход «пройден» (FR-19)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-preview-ok" class="wf-state shell" data-state="preview-ok">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dt-prev2-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--xl">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 id="dt-prev2-title" class="ou-modal__title">Предпросмотр отчёта</h1>
+          <p class="ou-modal__desc">Сертификат: с подложкой &middot; темы этого теста, показатели демонстрационные</p>
+        </div>
+        <span class="ou-tag ou-tag--neutral ou-tag--outline">Образец</span>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="ou-seg" role="group" aria-label="Исход попытки">
+          <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 's-preview')">Не пройден</button>
+          <button type="button" class="ou-seg__item is-active" aria-pressed="true">Пройден</button>
+        </div>
+        <div class="wf-report-stage" role="img" aria-label="Страница отчёта: итог пройден, четыре темы, без блока рекомендаций"></div>
+      </div>
+      <footer class="ou-modal__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null, 's-main')">Закрыть</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-adaptive — адаптивный тест: свой тип, свои виды (FR-11, D-5)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-adaptive" class="wf-state shell" data-state="adaptive">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-ad-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-ad-title" class="ou-drawer__title">Тест профессиональных знаний для HRBP</h1></div>
+        <span class="ou-tag ou-tag--info">Адаптивный</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оценка</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Шкалы</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Показатели</button>
+      </div></nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <section class="ou-card ou-card--outlined ou-card--sm">
+          <header class="ou-card__header">
+            <h3 class="ou-card__title">Отчёт о результатах</h3>
+          </header>
+          <div class="ou-card__body">
+            <div class="tb-feedback-block">
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl" for="f-report-variant-3">Вид отчёта</label>
+                <div class="ou-select ou-field--m" data-ou-options="Уровни: карточки тем|Уровни: таблица">
+                  <button type="button" class="ou-select__trigger" id="f-report-variant-3">
+                    <span class="ou-select__value">Уровни: карточки тем</span>
+                    <svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down"/></svg>
+                  </button>
+                </div>
+                <span class="ou-formfield__desc">Виды отчёта для обычных тестов здесь не предлагаются</span>
+              </div>
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl">Параметры вида</label>
+                <div class="tb-report-fields">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="f-rp-h3">Заголовок отчёта</label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="f-rp-h3" type="text" value="Профиль компетенций"></div></div>
+                  </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Показывать число вопросов</label>
+                    <label class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Показывать число заданных вопросов по теме"><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></label>
+                  </div>
+                </div>
+              </div>
+              <div class="ou-formfield">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null, 's-preview')">
+                  <svg width="14" height="14"><use href="#i-file"/></svg> Предпросмотр отчёта
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ─── Пояснения и связь с требованиями ────────────────────────────────────── -->
+<div class="wf-notes">
+  <p class="wf-notes-title">Что здесь показано</p>
+  <p class="wf-notes-intro">
+    Дельта PRD-27 — одна новая карточка в блоке обратной связи вкладки «Настройки» и одно
+    модальное окно. Окружение (карточка «Общая обратная связь теста», оболочка редактора,
+    вкладки) перенесено 1:1 из
+    <a href="prd7-editor-settings-tab.html">approved/prd7-editor-settings-tab.html</a>
+    и настоящим PRD не меняется.
+  </p>
+
+  <p class="wf-notes-title">Соответствие требованиям</p>
+  <table class="wf-notes-table">
+    <thead><tr><th>Элемент</th><th>Требование</th><th>Поведение</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Селектор «Вид отчёта»</td>
+        <td>FR-12</td>
+        <td>Виды, объявленные АКТИВНЫМ шаблоном для режима этого теста. Подписи из манифеста; подсказка называет шаблон-источник</td>
+      </tr>
+      <tr>
+        <td>Блок «Параметры вида»</td>
+        <td>FR-13</td>
+        <td>Только поля <code>settings[]</code> выбранного вида, в объявленном порядке. Типы отображаются теми же контролами, что поля страницы (PRD-22)</td>
+      </tr>
+      <tr>
+        <td>Предупреждение при смене вида</td>
+        <td>FR-14</td>
+        <td>Значения полей с совпадающими ключом и типом переносятся, остальные отбрасываются; отбрасываемые перечислены по именам</td>
+      </tr>
+      <tr>
+        <td>Сообщение «видов нет»</td>
+        <td>FR-15</td>
+        <td>Вместо селектора: отчёт соберётся по виду «Стандартного» с оформлением этого теста. Предпросмотр доступен и показывает именно этот результат</td>
+      </tr>
+      <tr>
+        <td>Действие «Предпросмотр отчёта»</td>
+        <td>FR-17, FR-21</td>
+        <td>Открывает окно с СТРАНИЦЕЙ отчёта, а не с PDF-файлом: ни растеризации, ни скачивания</td>
+      </tr>
+      <tr>
+        <td>Содержимое предпросмотра</td>
+        <td>FR-18</td>
+        <td>Название теста и темы — настоящие; баллы, вердикты и обратная связь демонстрационные. Слушатель обозначен нейтрально, персональные данные не используются</td>
+      </tr>
+      <tr>
+        <td>Переключатель исхода</td>
+        <td>FR-19</td>
+        <td>«Не пройден» / «Пройден»: меняются вердикт, цвета и наличие блока рекомендаций</td>
+      </tr>
+      <tr>
+        <td>Метка «Образец»</td>
+        <td>FR-18, FR-21</td>
+        <td>Тег в шапке окна: показанные показатели нельзя принять за результат реальной попытки</td>
+      </tr>
+      <tr>
+        <td>Открытие по несохранённым правкам</td>
+        <td>FR-20</td>
+        <td>Окно строится на текущем состоянии формы, включая несохранённые значения полей</td>
+      </tr>
+      <tr>
+        <td>Адаптивный тест</td>
+        <td>FR-11, D-5</td>
+        <td>Тот же блок предлагает виды ТИПА <code>report.adaptive</code>; виды обычного режима в списке не появляются, и наоборот</td>
+      </tr>
+      <tr>
+        <td>Размещение карточки</td>
+        <td>§7.1</td>
+        <td>Блок обратной связи «Настроек», следом за «Общей обратной связью теста»: отчёт — обратная связь обучающемуся, а не параметр оформления</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="wf-notes-title">Связь с моделью данных</p>
+  <table class="wf-notes-table">
+    <thead><tr><th>Элемент холста</th><th>Источник или адресат</th></tr></thead>
+    <tbody>
+      <tr><td>Список видов в селекторе</td><td><code>manifest.contentTemplates[]</code>, где <code>kind</code> = <code>report</code> либо <code>report.adaptive</code></td></tr>
+      <tr><td>Выбранный вид</td><td><code>tests.report_settings_json.&lt;режим&gt;.variantKey</code></td></tr>
+      <tr><td>Поля «Параметров вида»</td><td>объявление <code>settings[]</code> варианта; значения — <code>tests.report_settings_json.&lt;режим&gt;.values</code></td></tr>
+      <tr><td>Подсказка «Виды предлагает шаблон…»</td><td>ЧЕРНОВОЙ <code>templateId</code> вкладки «Оформление» (§4.2)</td></tr>
+      <tr><td>Страница в предпросмотре</td><td><code>layoutFile</code> варианта плюс контекст отчёта (§5), собранный на структуре этого теста</td></tr>
+      <tr><td>Пустое значение поля</td><td><code>default</code> из манифеста; при отсутствии обоих — пусто, и макет обязан это выдержать (FR-04)</td></tr>
+    </tbody>
+  </table>
+
+  <p class="wf-notes-title">Чего в эскизе намеренно нет</p>
+  <p class="wf-notes-intro">
+    Страница отчёта внутри окна предпросмотра показана заглушкой: её вёрстка принадлежит
+    ШАБЛОНУ, а не этому экрану, и эскизом не задаётся. Сегодняшний вид отчёта —
+    в <a href="../../specs/prd-27/report-template.md">спецификации</a> §6.2: перенос в макеты
+    «Стандартного» обязан воспроизвести его без изменений.
+  </p>
+</div>
+
+<script>
+  /* Wireframe-only controls, идентичны prd22-page-fields-sequences.html. */
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+    document.documentElement.style.setProperty('--wf-nav-h', nav.offsetHeight + 'px');
+  }
+
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (b) {
+      b.classList.toggle('active', b === btn);
+    });
+    document.body.classList.toggle('has-active-shell', !!target && target.classList.contains('shell'));
+    updateWireframeNavOffset();
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  window.toggleAnnots = function toggleAnnots(btn) {
+    var on = document.body.classList.toggle('wf-annots-on');
+    if (btn) btn.classList.toggle('active', on);
+  };
+
+  if (document.querySelector('.shell.active')) document.body.classList.add('has-active-shell');
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+</script>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = '/docs/wireframes/wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+
+</body>
+</html>

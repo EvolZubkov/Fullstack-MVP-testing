@@ -2,10 +2,10 @@
 /**
  * @module tests/transition-context
  *
- * Verifies the shared adaptive TRANSITION builder + layout (PRD-12 §10): the
- * builder's Core-prepared icon/level classes and labels, and an e2e render of the
- * real `system.transition.html` against the built context (icon, title, level box
- * with type class, topic note, and the gated "Продолжить" action).
+ * Verifies the shared adaptive TRANSITION builder + layout (PRD-12 §10, plan 6.2):
+ * this interstitial is a LEVEL CHANGE within the current topic — the title states the
+ * level change, the eyebrow names the topic. It is NOT a per-answer verdict and NOT a
+ * topic move (flat adaptive is a deferred future PRD).
  */
 
 import { describe, it, expect } from "vitest";
@@ -26,66 +26,62 @@ function render(context: unknown): HTMLElement {
 }
 
 describe("buildTransitionContext", () => {
-  it("correct + level up + topic + continue", () => {
+  it("titles the level change, names the topic, no per-answer verdict", () => {
     const { transition } = buildTransitionContext({
-      isCorrect: true,
-      levelTransition: { type: "up", message: "Уровень повышен" },
-      topicTransition: { toTopic: "Сети" },
+      topicName: "Базовые угрозы",
+      levelTransition: { type: "up", message: "" },
       showContinue: true,
     });
-    expect(transition.iconClass).toBe("is-pass");
-    expect(transition.title).toBe("Правильно!");
-    expect(transition.level).toEqual({ class: "is-up", isUp: true, isDown: false, isComplete: false, message: "Уровень повышен" });
-    expect(transition.topic).toEqual({ toTopic: "Сети" });
+    expect(transition.topicName).toBe("Базовые угрозы");
+    expect(transition.title).toBe("Сложность повышена");
+    expect(transition.title).not.toMatch(/Правильно|Неправильно/);
+    expect(transition.level).toEqual({
+      class: "is-up",
+      isUp: true,
+      isDown: false,
+      isComplete: false,
+      message: "Следующие вопросы будут сложнее",
+    });
     expect(transition.showContinue).toBe(true);
+    // No answer-verdict / topic-move fields.
+    expect((transition as Record<string, unknown>).isCorrect).toBeUndefined();
+    expect((transition as Record<string, unknown>).topic).toBeUndefined();
   });
 
-  it("incorrect + level down", () => {
-    const { transition } = buildTransitionContext({ isCorrect: false, levelTransition: { type: "down", message: "Понижен" } });
-    expect(transition.iconClass).toBe("is-fail");
-    expect(transition.title).toBe("Неправильно");
-    expect(transition.level!.class).toBe("is-down");
-    expect(transition.level!.isDown).toBe(true);
+  it("level down → «Сложность понижена», honours a host message", () => {
+    const { transition } = buildTransitionContext({ topicName: "Сети", levelTransition: { type: "down", message: "Стало проще" } });
+    expect(transition.title).toBe("Сложность понижена");
+    expect(transition.level.class).toBe("is-down");
+    expect(transition.level.isDown).toBe(true);
+    expect(transition.level.message).toBe("Стало проще");
     expect(transition.showContinue).toBe(false);
   });
 
-  it("complete level (any non up/down type)", () => {
-    const { transition } = buildTransitionContext({ isCorrect: true, levelTransition: { type: "complete", message: "Готово" } });
-    expect(transition.level!.class).toBe("is-complete");
-    expect(transition.level!.isComplete).toBe(true);
-  });
-
-  it("no level / no topic → omitted", () => {
-    const { transition } = buildTransitionContext({ isCorrect: true });
-    expect(transition.level).toBeUndefined();
-    expect(transition.topic).toBeUndefined();
+  it("complete level (any non up/down type) → «Уровень зафиксирован»", () => {
+    const { transition } = buildTransitionContext({ topicName: "БД", levelTransition: { type: "complete" } });
+    expect(transition.title).toBe("Уровень зафиксирован");
+    expect(transition.level.class).toBe("is-complete");
+    expect(transition.level.isComplete).toBe(true);
   });
 });
 
 describe("system.transition.html render", () => {
-  it("renders icon class, title, level box + message, topic, continue button", () => {
+  it("renders the level icon, topic eyebrow, level-change title, message + continue", () => {
     const root = render(
-      buildTransitionContext({
-        isCorrect: true,
-        levelTransition: { type: "up", message: "Уровень повышен" },
-        topicTransition: { toTopic: "Сети" },
-        showContinue: true,
-      }),
+      buildTransitionContext({ topicName: "Базовые угрозы", levelTransition: { type: "up", message: "Дальше сложнее" }, showContinue: true }),
     );
-    expect(root.querySelector(".transition-icon")?.className).toContain("is-pass");
-    expect(root.querySelector(".transition-title")?.textContent).toBe("Правильно!");
-    const level = root.querySelector(".transition-level");
-    expect(level?.className).toContain("is-up");
-    expect(level?.querySelector(".transition-level-msg")?.textContent).toBe("Уровень повышен");
-    expect(root.querySelector(".transition-topic")?.textContent).toContain("Сети");
+    expect(root.querySelector(".tb-transition-icon")?.className).toContain("is-up");
+    expect(root.querySelector(".tb-eyebrow")?.textContent).toContain("Базовые угрозы");
+    expect(root.querySelector(".tb-scene__hero")?.textContent).toBe("Сложность повышена");
+    expect(root.querySelector(".tb-scene__lead")?.textContent).toBe("Дальше сложнее");
     expect(root.querySelector('[data-action="continue"]')).not.toBeNull();
+    // No verdict / topic-move markup.
+    expect(root.textContent).not.toMatch(/Правильно|Неправильно|Переход к теме/);
   });
 
-  it("omits level/topic/continue when absent (web auto-advance)", () => {
-    const root = render(buildTransitionContext({ isCorrect: false }));
-    expect(root.querySelector(".transition-icon")?.className).toContain("is-fail");
-    expect(root.querySelector(".transition-level")).toBeNull();
-    expect(root.querySelector(".transition-topic")).toBeNull();
+  it("omits the continue action when the host auto-advances (web)", () => {
+    const root = render(buildTransitionContext({ topicName: "Сети", levelTransition: { type: "down" } }));
+    expect(root.querySelector(".tb-transition-icon")?.className).toContain("is-down");
     expect(root.querySelector('[data-action="continue"]')).toBeNull();
   });
 });

@@ -15,7 +15,7 @@ import {
 } from "@universityrt/ui-kit";
 import {
   FlaskConical, Info, RefreshCw, RotateCcw, X, ChevronLeft, ChevronRight, Download, Search,
-  CircleDot, CheckSquare, Unplug, ListOrdered, List, Layers, ChevronDown, ChevronUp,
+  CircleDot, CheckSquare, Unplug, ListOrdered, ThermometerSun, List, Layers, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useDebugSession } from "./use-debug-session";
 import {
@@ -479,6 +479,7 @@ function qTypeIcon(type: string) {
   if (type === "single") return <CircleDot {...p} />;
   if (type === "multiple") return <CheckSquare {...p} />;
   if (type === "matching") return <Unplug {...p} />;
+  if (type === "scale") return <ThermometerSun {...p} />;
   return <ListOrdered {...p} />;
 }
 
@@ -519,6 +520,17 @@ function ScorePanel({ snap }: { snap: InspectorSnapshot }) {
     { key: "topic", header: "Раздел", render: (s) => s.topicName },
     { key: "pts", header: "Балл", width: "92px", render: (s) => `${s.earnedPoints} / ${s.possiblePoints}` },
     { key: "pct", header: "%", width: "56px", render: (s) => String(s.percent) },
+    {
+      // PRD-24: which threshold gated this topic — and, for a per-variant rule, the
+      // variant this run was given (otherwise the verdict cannot be reasoned about).
+      key: "rule", header: "Порог", width: "168px",
+      render: (s) => (
+        <>
+          {s.ruleLabel ?? "—"}
+          {s.variantLabel ? <div className="dbg__ins-sub">{s.variantLabel}</div> : null}
+        </>
+      ),
+    },
     {
       // A section's pass/fail shows once IT is completed OR the run finished; else «в процессе» (N9).
       key: "verdict", header: "Итог", width: "104px",

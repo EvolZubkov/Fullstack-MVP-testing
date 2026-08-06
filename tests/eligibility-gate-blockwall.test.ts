@@ -84,6 +84,9 @@ beforeAll(() => {
 
 beforeEach(() => {
   document.body.innerHTML = '<div id="app"></div>';
+  // The gate now reads the portal chrome (SECID + the Date header). Offline here:
+  // every resolver degrades exactly as it does when the portal is unreachable.
+  vi.stubGlobal("fetch", () => Promise.reject(new Error("offline")));
 });
 
 describe("PRD-6 gate block page — rendered from the design template", () => {
@@ -107,8 +110,8 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
       await flush();
 
       const app = document.getElementById("app")!;
-      // Template surface — not the built-in fallback.
-      expect(app.querySelector(".blocked-card")).toBeTruthy();
+      // Template surface (scene layout) — not the built-in fallback.
+      expect(app.querySelector(".tb-scene")).toBeTruthy();
       expect(app.querySelector(".retake-wall__card")).toBeNull();
 
       const cooldown = app.querySelector('[data-retake-branch="cooldown"]') as HTMLElement;
@@ -136,7 +139,10 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
     const state: Record<string, unknown> = { templateLayouts: { "system.blocked": blockedLayout } };
     const gate = makeGate({ state, SCORM, escapeHtml });
 
-    // webtutorCooldown with no resolvable object_id => reject => failClosed => error branch.
+    // webtutorCooldown needs the portal chrome for its SECID; the stubbed `fetch`
+    // above rejects (offline), so fetchPortalChrome degrades to an empty page and
+    // resolveSecid finds nothing => reject('secid_not_resolved') => failClosed =>
+    // error branch. This is the actual failure path in front of a live portal.
     gate.run(
       gatedTestData({
         retakePolicy: {
@@ -144,14 +150,20 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
           cooldownPeriodDays: 30,
           eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failClosed" },
         },
-        retakePlugin: { runtimeEntry: "webtutorCooldown", config: { objectIdPatterns: ["object_id=(\\d{6,})"] } },
+        retakePlugin: {
+          runtimeEntry: "webtutorCooldown",
+          config: {
+            collectionEndpoint: "/wt/collection",
+            secidSource: { endpoint: "/", pattern: "[A-F0-9]{32}" },
+          },
+        },
       }),
       () => {},
     );
     await flush();
 
     const app = document.getElementById("app")!;
-    expect(app.querySelector(".blocked-card")).toBeTruthy();
+    expect(app.querySelector('[data-testid="retake-wall"]')).toBeTruthy();
     const cooldown = app.querySelector('[data-retake-branch="cooldown"]') as HTMLElement;
     const error = app.querySelector('[data-retake-branch="error"]') as HTMLElement;
     expect(error.style.display).not.toBe("none");
@@ -177,7 +189,8 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
 
       const app = document.getElementById("app")!;
       expect(app.querySelector(".retake-wall__card")).toBeTruthy();
-      expect(app.querySelector(".blocked-card")).toBeNull();
+      // The built-in fallback wall is used, not the template's scene layout.
+      expect(app.querySelector(".tb-scene")).toBeNull();
       expect(app.querySelector('[data-testid="retake-wall"]')).toBeTruthy();
     } finally {
       vi.useRealTimers();

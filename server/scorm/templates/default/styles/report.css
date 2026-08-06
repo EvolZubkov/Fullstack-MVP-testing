@@ -1,0 +1,219 @@
+/* Страница отчёта о результатах шаблона «Стандартный» (PRD-27).
+ *
+ * Всё скоуплено в `.tb-report`: отчёт рендерится в служебном контейнере ГЛАВНОГО
+ * документа, вне сцены, и не вправе ни зависеть от `theme.css`, ни протечь в приложение
+ * (§6.3). Селекторов `:root`/`html`/`body` здесь нет и быть не может — проверяется
+ * валидацией манифеста.
+ *
+ * Оформление воспроизводит страницу отчёта, которая до PRD-27 собиралась кодом
+ * инлайн-стилями: перенос, а не редизайн (§6.2). Поэтому цвета заданы значениями, а не
+ * токенами: те же значения, что печатались раньше.
+ */
+
+.tb-report {
+  width: 595px;
+  min-height: 842px;
+  padding: 20px 25px;
+  box-sizing: border-box;
+  position: relative;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #ffffff;
+  /* Подложку ставит МАКЕТ инлайном из `report.backgroundUrl`; без неё — этот градиент. */
+  background: linear-gradient(180deg, #1c1c2b 0%, #7700ff 100%);
+  background-size: cover;
+  background-position: center;
+}
+
+.tb-report__brand { margin-bottom: 15px; }
+.tb-report__brand img { height: 32px; }
+
+.tb-report__headline {
+  font-size: 42px;
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: 4px;
+  color: #ffffff;
+}
+.tb-report.is-pass .tb-report__headline { color: #22c55e; }
+
+.tb-report__attempts { font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 8px; }
+.tb-report__learner { font-size: 13px; color: #ffffff; margin-bottom: 4px; }
+.tb-report__date { font-size: 12px; color: #aca9a9; margin-bottom: 15px; }
+
+.tb-report__card {
+  background: rgba(31, 33, 41, 0.68);
+  border-radius: 18px;
+  padding: 18px 20px;
+  margin-bottom: 15px;
+}
+
+.tb-report__title { font-size: 22px; font-weight: 400; margin-bottom: 4px; }
+.tb-report__title--tight { margin-bottom: 15px; }
+.tb-report__title--solid { font-weight: 500; margin-bottom: 0; }
+.tb-report__subtitle { font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 20px; }
+.tb-report__lead { font-size: 11px; font-weight: 300; color: #aca9a9; margin-bottom: 15px; line-height: 1.5; }
+
+/* Счёт: метрики, кольцо процента, бейдж вердикта — одной строкой. */
+.tb-report__score { display: flex; align-items: center; gap: 20px; }
+.tb-report__metrics { display: flex; gap: 30px; }
+.tb-report__metric { text-align: center; }
+.tb-report__metric-num { font-size: 28px; font-weight: 900; }
+.tb-report__metric-lbl { font-size: 12px; font-weight: 300; color: #aca9a9; }
+
+.tb-report__ring {
+  width: 100px;
+  height: 100px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tb-report__ring svg {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.tb-report__ring-track { stroke: #2f2f2f; }
+.tb-report__ring-fill { stroke: #ef4444; }
+.tb-report.is-pass .tb-report__ring-fill { stroke: #22c55e; }
+.tb-report__ring-value { font-size: 28px; font-weight: 900; z-index: 1; }
+
+.tb-report__badge {
+  margin-left: auto;
+  padding: 10px 20px;
+  border-radius: 50px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #432027;
+  border: 2px solid #eb1e1e;
+  color: #ff3131;
+}
+.tb-report.is-pass .tb-report__badge {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: #22c55e;
+  color: #22c55e;
+}
+
+/* Темы: сетка, число колонок ставит хост инлайном по `report.gridColumns`. */
+.tb-report__topics { display: grid; gap: 10px; }
+
+.tb-report__topic {
+  background: linear-gradient(135deg, #2a2a3d 0%, #1f1f2e 100%);
+  border-radius: 10px;
+  padding: 10px;
+  position: relative;
+  overflow: hidden;
+}
+.tb-report__topic--level { padding: 12px; }
+
+.tb-report__topic-stripe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #ef4444;
+}
+.tb-report__topic.is-pass .tb-report__topic-stripe { background: #22c55e; }
+.tb-report__topic.is-achieved .tb-report__topic-stripe { background: #3b82f6; }
+.tb-report__topic.is-below .tb-report__topic-stripe { background: #6b7280; }
+
+.tb-report__topic-head { margin-bottom: 6px; }
+.tb-report__topic--level .tb-report__topic-head { margin-bottom: 8px; }
+.tb-report__topic-name { font-size: 12px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.tb-report__topic--level .tb-report__topic-name { font-size: 13px; }
+
+/* Вердикт темы стоит ПОД названием: рядом плашка не влезала в трёхколоночную
+   карточку и обрезалась по `overflow: hidden`. */
+.tb-report__topic-verdict {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 6px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+.tb-report__topic.is-pass .tb-report__topic-verdict {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+/* Подпись уровня переносится: это либо авторское название уровня, либо полный
+   вердикт «минимально требуемый уровень не подтверждён» — и то, и другое длиннее
+   карточки. */
+.tb-report__topic-level {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: 5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.35;
+  background: rgba(107, 114, 128, 0.2);
+  color: #6b7280;
+}
+.tb-report__topic.is-achieved .tb-report__topic-level {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+}
+
+.tb-report__topic-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 7px;
+  color: #aca9a9;
+  margin-bottom: 5px;
+}
+.tb-report__topic-counts { font-size: 11px; color: #aca9a9; margin-bottom: 6px; }
+
+.tb-report__topic-bar {
+  height: 3px;
+  background: #2f2f2f;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.tb-report__topic-bar-fill { height: 100%; border-radius: 2px; background: #ef4444; }
+.tb-report__topic.is-pass .tb-report__topic-bar-fill { background: #22c55e; }
+
+.tb-report__topic-fb {
+  font-size: 10px;
+  font-weight: 300;
+  line-height: 1.3;
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.7);
+}
+.tb-report__topic-fb--sep {
+  line-height: 1.4;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Рекомендации. Чип несёт `pdf-link-btn` + `data-url`: конвейер экспорта делает из
+   него настоящую ссылку PDF, иначе курс останется картинкой. */
+.tb-report__rec {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.tb-report__rec--plain { justify-content: flex-start; }
+.tb-report__rec-topic { font-size: 14px; font-weight: 700; }
+.tb-report__rec-chip {
+  padding: 10px 25px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 300;
+  color: #fafafa;
+  background: #59209b;
+}
+.tb-report__rec-chip--level { background: #1e40af; }
+.tb-report__event { font-size: 14px; font-weight: 300; color: #fafafa; }

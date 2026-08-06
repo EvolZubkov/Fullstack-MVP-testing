@@ -18,6 +18,7 @@
  */
 
 import type { CtxCourse, CtxState, CtxStartCooldown } from "./context";
+import { buildCourseSubtitle } from "./course-subtitle";
 
 /** Test info shown on the start screen (maps to `course.*`). */
 export interface StartInfo {
@@ -148,6 +149,12 @@ export function buildStartState(input: StartStateInput): StartRenderContext {
   const i = input.info;
   const course: CtxCourse = {
     title: i.title,
+    // Header subtitle "Попытка N из M": the upcoming attempt is one past those
+    // already completed. Same builder both hosts use on the question/обзор screens.
+    subtitle: buildCourseSubtitle({
+      attemptNumber: input.completedAttempts + 1,
+      maxAttempts: input.maxAttempts,
+    }),
     description: i.description || "",
     questionCount: i.questionCount,
     passPercent: i.passPercent,

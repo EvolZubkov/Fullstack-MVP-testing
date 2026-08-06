@@ -198,7 +198,9 @@ function submitAdaptiveAnswer(questionId, answer) {
   var rightItems = null;
   var rankingItems = null;
   
-  if (question.type === 'single' || question.type === 'multiple') {
+  // A scale keeps its graduations in the same `options` list (TBQType.hasOptionList),
+  // so telemetry reports its answer texts through this branch too.
+  if (typeof TBQType !== 'undefined' ? TBQType.hasOptionList(question.type) : (question.type === 'single' || question.type === 'multiple')) {
     answerOptions = question.data && question.data.options ? question.data.options : null;
   } else if (question.type === 'matching') {
     leftItems = question.data && question.data.left ? question.data.left : null;

@@ -14,18 +14,19 @@ import express from "express";
 import session from "express-session";
 
 // ─── Hoist mocks ──────────────────────────────────────────────────────────────
-const { storageMock, getRecentLogsMock } = vi.hoisted(() => ({
+const { storageMock, getRecentLogsMock, loggerMock } = vi.hoisted(() => ({
   storageMock: {
     getUser: vi.fn(),
     getUserRoles: vi.fn(),
   },
   getRecentLogsMock: vi.fn(),
+  loggerMock: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 vi.mock("../server/storage", () => ({ storage: storageMock }));
 vi.mock("../server/logger", () => ({
   getRecentLogs: getRecentLogsMock,
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  logger: loggerMock,
 }));
 
 import logsRouter from "../server/routes/logs";
@@ -43,12 +44,12 @@ const sampleResult = {
 };
 
 // ─── App factory ──────────────────────────────────────────────────────────────
-function makeApp(authenticated = true) {
+function makeApp(authenticated = true, userId = "u1") {
   const app = express();
   app.use(express.json());
   app.use(session({ secret: "test", resave: false, saveUninitialized: false }));
   app.use((req: any, _res: any, next: any) => {
-    if (authenticated) req.session.userId = "u1";
+    if (authenticated) req.session.userId = userId;
     next();
   });
   app.use("/api/logs", logsRouter);
@@ -106,5 +107,67 @@ describe("GET /api/logs", () => {
       search: undefined,
       limit: undefined,
     });
+  });
+});
+
+// ─── POST /api/logs/client ─────────────────────────────────────────────────────
+// The write side exists so a failure only the BROWSER can see (a learner screen
+// that renders nothing) still reaches «Логи». Any signed-in user may report —
+// learners hold no `logs.*` capability and are exactly who hits those screens —
+// so the guard is authentication plus a bounded, flattened, rate-limited payload.
+describe("POST /api/logs/client", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(adminUser);
+    storageMock.getUserRoles.mockResolvedValue(["learner"]);
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    const res = await request(makeApp(false)).post("/api/logs/client").send({ message: "boom" });
+    expect(res.status).toBe(401);
+    expect(loggerMock.error).not.toHaveBeenCalled();
+  });
+
+  it("records a learner's report as an error entry attributed to the user", async () => {
+    const res = await request(makeApp(true, "learner-1"))
+      .post("/api/logs/client")
+      .send({ scope: "take-test", message: "screen-template/start failed: HTTP 404" });
+    expect(res.status).toBe(204);
+    expect(loggerMock.error).toHaveBeenCalledWith(
+      "[client:take-test] screen-template/start failed: HTTP 404 (user=learner-1)",
+      "client",
+    );
+  });
+
+  it("rejects a report with no message", async () => {
+    const res = await request(makeApp(true, "learner-2")).post("/api/logs/client").send({ scope: "take-test" });
+    expect(res.status).toBe(400);
+    expect(loggerMock.error).not.toHaveBeenCalled();
+  });
+
+  // A line break in a report would otherwise forge extra entries downstream.
+  it("flattens line breaks and truncates an oversized message", async () => {
+    const res = await request(makeApp(true, "learner-3"))
+      .post("/api/logs/client")
+      .send({ scope: "a\nb", message: "x\ny" + "z".repeat(600) });
+    expect(res.status).toBe(204);
+    const [line] = loggerMock.error.mock.calls[0];
+    expect(line).not.toContain("\n");
+    expect(line).toContain("[client:a b]");
+    // 500 chars of message + the fixed prefix/suffix around it.
+    expect(line.length).toBeLessThan(560);
+  });
+
+  // The ring buffer is shared and finite: one browser must not be able to evict
+  // every real event from it.
+  it("stops accepting reports from one user past the per-minute budget", async () => {
+    const app = makeApp(true, "flooder");
+    for (let i = 0; i < 20; i += 1) {
+      const ok = await request(app).post("/api/logs/client").send({ message: `r${i}` });
+      expect(ok.status).toBe(204);
+    }
+    const blocked = await request(app).post("/api/logs/client").send({ message: "one too many" });
+    expect(blocked.status).toBe(429);
+    expect(loggerMock.error).toHaveBeenCalledTimes(20);
   });
 });

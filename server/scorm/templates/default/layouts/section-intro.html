@@ -1,33 +1,43 @@
-<div class="results-page section-intro">
-  {{#if design.logoUrl}}<div class="tb-brand"><img class="tb-brand__logo" src="{{ design.logoUrl }}" alt=""></div>{{/if}}
-  <div class="card section-intro__card">
-    <div class="section-intro__eyebrow">{{ sectionIntro.eyebrow }}</div>
-    <h1 class="section-intro__title" data-path="sectionIntro.topicName"></h1>
+<div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow tb-scene__brandrow--center">
+      {{#if design.logoUrl}}<span class="tb-scene__logo"><img src="{{ design.logoUrl }}" alt=""></span>{{/if}}
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title"></h1>
+        {{#if course.subtitle}}<span class="tb-scene__subtitle" data-path="course.subtitle"></span>{{/if}}
+      </div>
+      <div class="tb-scene__headtag"><span class="ou-tag ou-tag--neutral" data-path="sectionIntro.eyebrow"></span></div>
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
+    </div>
+    {{#if sectionIntro.progressPercent}}<div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width:{{sectionIntro.progressPercent}}%"></div></div>{{/if}}
+  </header>
 
-    {{#if sectionIntro.hasDescription}}
-    <div class="section-intro__desc" data-path="sectionIntro.description"></div>
-    {{/if}}
-
-    <div class="section-intro__meta">
-      <span class="section-intro__meta-item">
-        <span class="section-intro__meta-dot" aria-hidden="true"></span>{{ sectionIntro.questionCountLabel }}
-      </span>
-      {{#if sectionIntro.hasTimeLimit}}
-      <span class="section-intro__meta-item">
-        <span class="section-intro__meta-dot" aria-hidden="true"></span>{{ sectionIntro.timeLimitLabel }}
-      </span>
+  <main class="tb-scene__body">
+    <div class="tb-scene__col tb-scene__col--center">
+      <span class="tb-eyebrow">{{ sectionIntro.eyebrow }}</span>
+      <h2 class="tb-scene__hero" data-path="sectionIntro.topicName"></h2>
+      {{#if sectionIntro.hasDescription}}<span class="tb-scene__lead" data-path="sectionIntro.description"></span>{{/if}}
+      <div class="tb-meta-dots">
+        <span class="tb-meta-dots__item"><span class="tb-meta-dots__dot" aria-hidden="true"></span>{{ sectionIntro.questionCountLabel }}</span>
+        {{#if sectionIntro.hasTimeLimit}}<span class="tb-meta-dots__item"><span class="tb-meta-dots__dot" aria-hidden="true"></span>{{ sectionIntro.timeLimitLabel }}</span>{{/if}}
+      </div>
+      {{#if sectionIntro.hasInstruction}}
+      <div class="tb-card">
+        <span class="tb-card__head">Инструкция</span>
+        <span class="tb-card__body" data-slot="instruction"></span>
+      </div>
       {{/if}}
     </div>
-
-    {{#if sectionIntro.hasInstruction}}
-    <div class="section-intro__instruction">
-      <div class="section-intro__instruction-head">Инструкция</div>
-      <div class="section-intro__instruction-body" data-slot="instruction"></div>
-    </div>
-    {{/if}}
-
-    <div class="q-actions q-actions--center">
-      <button type="button" class="btn" data-action="section-intro-continue">{{ sectionIntro.continueLabel }}</button>
-    </div>
-  </div>
+  </main>
+  <footer class="tb-scene__foot">
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="section-intro-continue">{{ sectionIntro.continueLabel }}</button>
+  </footer>
 </div>

@@ -22,8 +22,8 @@ import { createHash } from "node:crypto";
 import { hashPassword } from "@vvlad1973/crypto";
 import pg from "pg";
 // Runs from /app inside the container (docker cp -> /app/set-password.mjs), so
-// the baked config loader (server/config-loader.mjs) and config file (config/) are
-// reachable relative to /app.
+// the baked config loader (server/config-loader.mjs) and the MOUNTED config volume
+// (/app/config) are reachable relative to /app.
 import { loadEnv, loadConfiguration } from "./server/config-loader.mjs";
 
 const EMAIL = (process.env.SP_EMAIL ?? "").trim();

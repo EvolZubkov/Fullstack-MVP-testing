@@ -864,9 +864,26 @@ describe("apiToEditorModel — retake policy", () => {
 // ─── editorModelToPayload (write path) ────────────────────────────────────────
 
 describe("editorModelToPayload — flow policy branch", () => {
-  it("omits flowPolicyJson for linear_flat", () => {
+  it("emits {mode:linear_flat, router:null} for linear_flat", () => {
     const payload = editorModelToPayload(makeModel({ flowMode: "linear_flat" }));
-    expect(payload).not.toHaveProperty("flowPolicyJson");
+    expect(payload.flowPolicyJson).toEqual({ mode: "linear_flat", router: null });
+  });
+
+  // Regression: switching an existing router test back to «Линейный» must send an
+  // explicit policy. Omitting the key made PUT /api/tests/:id a no-op for the
+  // column (undefined = "don't touch"), so the test stayed on router_by_topics.
+  it("overwrites a router policy when the author switches back to linear_flat", () => {
+    const routerModel = makeModel({
+      flowMode: "router_by_topics",
+      flowSettings: {
+        router: {
+          completionPolicy: "all_required_passed",
+          sectionUnlockRules: { s1: { mode: "always_available" } },
+        },
+      },
+    });
+    const payload = editorModelToPayload({ ...routerModel, flowMode: "linear_flat" });
+    expect(payload.flowPolicyJson).toEqual({ mode: "linear_flat", router: null });
   });
 
   it("emits {mode, router:null} for linear_by_topics", () => {

@@ -144,7 +144,7 @@ function bindMatchingDnDOnce() {
   // dblclick a matched chip → return it to the pool (kept for parity / a11y).
   document.addEventListener('dblclick', function (e) {
     if (isLocked() || !TB) return;
-    var chip = (e.target && e.target.closest) ? e.target.closest('.match-chip[data-drag]') : null;
+    var chip = (e.target && e.target.closest) ? e.target.closest('.ou-match__card--drag[data-drag]') : null;
     if (!chip) return;
     var q = currentQuestion();
     if (!q || q.type !== 'matching') return;

@@ -14,7 +14,7 @@ import path from "node:path";
 import { db } from "../db";
 import { templates } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
-import { requirePermission } from "../middleware/auth";
+import { requireAuth, requirePermission } from "../middleware/auth";
 import { logger } from "../logger";
 import { isSupportedTemplateApiVersion } from "../template-registry";
 import { encodeJsonForScript, injectIntoPreview } from "../scorm/preview-embed";
@@ -143,12 +143,54 @@ router.get("/:id/preview-page", requirePermission("templates.read"), async (req,
 router.get("/:id/bundle", requirePermission("templates.read"), async (req, res) => {
   try {
     const dir = await resolveTemplateDir(req.params.id);
-    const bundle = await readTemplateBundle(dir);
+    const bundle = await readTemplateBundle(dir, {
+      assetsBase: `/api/templates/${encodeURIComponent(req.params.id)}/assets/`,
+    });
     res.setHeader("Cache-Control", "no-store");
     res.json(bundle);
   } catch (error) {
     logger.error("Template bundle error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to read template bundle" });
+  }
+});
+
+/**
+ * GET /api/templates/:id/assets/* — serves a FILE of the template (image, style,
+ * font) to the web host (PRD-22 FR-37).
+ *
+ * Author content may reference the template's own assets by a relative path
+ * (`images/diagram.png`); inside a SCORM package those files sit next to the
+ * page, but on the web they had nowhere to point: static hosting covers only
+ * `/uploads` and `/docs`, and BUILT-IN templates live outside both. This route
+ * closes that gap for both kinds of template.
+ *
+ * Any signed-in user may read them: a learner taking the test needs the images,
+ * and an administrator previews a template BEFORE activating it — restricting to
+ * active templates would leave every draft preview with broken images. These are
+ * design files, not data. Path traversal is blocked by resolving against the
+ * template directory and rejecting anything that escapes it.
+ */
+router.get("/:id/assets/*assetPath", requireAuth, async (req, res) => {
+  try {
+    const dir = await resolveTemplateDir(req.params.id);
+    // Express 5 gives a named wildcard as an array of segments.
+    const raw = (req.params as Record<string, unknown>).assetPath;
+    const rel = Array.isArray(raw) ? raw.join("/") : String(raw ?? "");
+    const abs = path.resolve(dir, rel);
+    const root = path.resolve(dir);
+    if (abs !== root && !abs.startsWith(root + path.sep)) {
+      return res.status(400).json({ error: "Invalid asset path" });
+    }
+    // Manifest and layouts are contract, not assets: they travel through their own
+    // endpoints, so serving them here would be a second, unversioned way in.
+    const first = rel.split(/[\\/]/)[0];
+    if (first === "manifest.json" || first === "layouts" || first === "demo") {
+      return res.status(404).json({ error: "Not an asset" });
+    }
+    await fs.access(abs);
+    res.sendFile(abs, { headers: { "Cache-Control": "public, max-age=300" } });
+  } catch {
+    res.status(404).json({ error: "Asset not found" });
   }
 });
 

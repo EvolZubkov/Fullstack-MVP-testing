@@ -54,8 +54,8 @@ describe("DSL renders real default-template layouts", () => {
     const html = fs.readFileSync(path.join(LAYOUTS_DIR, "results.html"), "utf8");
     const out = renderTemplate(html, ctx);
 
-    // {{#unless result.passed}} branch rendered, {{#if result.passed}} skipped
-    expect(out).toContain("Тест не пройден");
+    // {{ result.passClass }} mixed into the verdict tag class resolves
+    expect(out).toContain("ou-tag is-fail");
     expect(out).not.toContain("Поздравляем!");
 
     // {{#each result.topicResults}} iterated with item-scoped fields
@@ -63,12 +63,12 @@ describe("DSL renders real default-template layouts", () => {
     expect(out).toContain("Тема B");
     expect(out).toContain("Результаты по темам"); // {{#if result.topicResults}}
 
-    // {{ percent }} inside an attribute resolves per each-item
-    expect(out).toContain('data-bar-width="80"');
-    expect(out).toContain('data-bar-width="40"');
+    // {{ percent }} inside an inline width style resolves per each-item
+    expect(out).toContain("width: 80%");
+    expect(out).toContain("width: 40%");
 
-    // {{ result.passClass }} mixed into a class attribute resolves
-    expect(out).toContain("ring-fg is-fail");
+    // {{ result.passClass }} mixed into the ring fill class resolves
+    expect(out).toContain("ou-ring__fill is-fail");
 
     // data-path is NOT a mustache tag — left verbatim for the DOM pass
     expect(out).toContain('data-path="course.title"');

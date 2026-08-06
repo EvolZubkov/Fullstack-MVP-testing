@@ -53,16 +53,15 @@ describe("results.html — superset gating", () => {
   it("web context: restart action only, no SCORM-only blocks", () => {
     const root = render(resultsLayout, webResult);
     expect(actions(root)).toEqual(["restart"]);
-    expect(root.querySelector(".topic-required")).toBeNull();
-    expect(root.querySelector(".results-rec-list")).toBeNull();
-    // The "Баллов" STAT (main card) always shows; only the per-topic points ROW is
+    expect(root.querySelector(".tb-topic-card__req")).toBeNull();
+    expect(root.querySelector(".tb-recs")).toBeNull();
+    // The score-strip "баллов" fact always shows; only the per-topic points ROW is
     // gated — so scope the check to the topic card.
-    expect(root.querySelector(".topic-card")?.textContent).not.toContain("Баллов");
-    expect(root.querySelectorAll(".topic-card .topic-row").length).toBe(1); // "Правильно" only
-    expect(root.textContent).not.toContain("Рекомендуемые курсы");
+    expect(root.querySelector(".tb-topic-card")?.textContent).not.toContain("Баллов");
+    expect(root.querySelectorAll(".tb-topic-card .ou-stat-row").length).toBe(1); // "Правильно" only
   });
 
-  it("SCORM context: points row + threshold + feedback + recommendations + back action", () => {
+  it("SCORM context: points row + threshold + per-topic feedback + recommendations + back action", () => {
     const scorm = {
       course: { title: "Тест" },
       result: {
@@ -72,24 +71,29 @@ describe("results.html — superset gating", () => {
             ...webResult.result.topicResults[0],
             pointsLabel: "4.0 / 5.0",
             requiredLabel: "Требуется: 70%",
-            topicFeedback: "Отличный результат",
+            // Unified per-topic feedback (plan 6.1): feedback + courses + events.
+            feedback: "Отличный результат",
+            hasFeedback: true,
+            recommendedCourses: [{ title: "Курс A", url: "https://e/a" }],
+            recommendedEvents: [{ title: "Семинар B" }],
+            hasRecommendations: true,
           },
         ],
-        recommendedCourses: [{ title: "Курс A", url: "https://e/a" }],
-        recommendedEvents: [{ title: "Семинар B" }],
         backAction: "back-to-start",
         backLabel: "Вернуться к тесту",
       },
     };
     const root = render(resultsLayout, scorm);
     expect(actions(root)).toEqual(["back-to-start"]); // restart is hidden via {{#unless backAction}}
-    expect(root.querySelector(".topic-required")?.textContent).toContain("70%");
-    expect(root.querySelectorAll(".topic-card .topic-row").length).toBe(2); // "Правильно" + "Баллов"
-    expect(root.querySelector(".topic-card")?.textContent).toContain("Баллов");
+    expect(root.querySelector(".tb-topic-card__req")?.textContent).toContain("70%");
+    expect(root.querySelectorAll(".tb-topic-card .ou-stat-row").length).toBe(2); // "Правильно" + "Баллов"
+    expect(root.querySelector(".tb-topic-card")?.textContent).toContain("Баллов");
     expect(root.textContent).toContain("4.0 / 5.0");
-    expect(root.textContent).toContain("Рекомендуемые курсы");
-    expect(root.textContent).toContain("Курс A");
-    expect(root.textContent).toContain("Рекомендуемые мероприятия");
+    // Recommendations are per-topic chips now (not a result-level section).
+    expect(root.querySelector(".tb-topic-card__fb-text")?.textContent).toContain("Отличный результат");
+    const recs = [...root.querySelectorAll(".tb-topic-card .tb-rec")].map((r) => r.textContent);
+    expect(recs).toContain("Курс A");
+    expect(recs).toContain("Семинар B");
     expect(root.querySelector('[data-action="back-to-start"]')?.textContent).toBe("Вернуться к тесту");
   });
 });
@@ -99,7 +103,7 @@ const webAdaptive = {
   result: {
     adaptive: true,
     topicResults: [
-      { topicName: "Сети", levelLabel: "Средний", levelClass: "is-info", hasFeedback: false, hasLinks: false },
+      { topicName: "Сети", levelLabel: "Средний", levelClass: "ou-tag--solid ou-tag--accent", hasFeedback: false, hasLinks: false },
     ],
   },
 };
@@ -108,24 +112,36 @@ describe("results.adaptive.html — superset gating", () => {
   it("web context: restart action only", () => {
     const root = render(adaptiveLayout, webAdaptive);
     expect(actions(root)).toEqual(["restart"]);
-    expect(root.querySelector('[data-action="download-pdf"]')).toBeNull();
+    expect(root.querySelector('[data-action="download-report"]')).toBeNull();
     expect(root.querySelector('[data-action="finish"]')).toBeNull();
   });
 
-  it("SCORM context: PDF + retry + finish actions, no web restart", () => {
+  it("report + retry + finish actions, no web restart", () => {
     const scorm = {
       course: { title: "Адаптивный тест" },
       result: {
         ...webAdaptive.result,
         hasScormActions: true,
-        showPdf: true,
+        // ONE report contract across both results layouts: the adaptive footer used to
+        // read `showPdf`/`download-pdf`, a spelling only the package filled — so the
+        // web host offered no report on adaptive tests (see shared/template/results-nav).
+        nav: { showReport: true },
         canRetry: true,
         showFinish: true,
       },
     };
     const root = render(adaptiveLayout, scorm);
-    expect(actions(root)).toEqual(["download-pdf", "restart-adaptive", "finish"]);
+    expect(actions(root)).toEqual(["download-report", "restart-adaptive", "finish"]);
     expect(root.querySelector('[data-action="restart"]')).toBeNull();
+  });
+
+  it("the report shows on the WEB adaptive footer too (nav is host-filled)", () => {
+    const web = {
+      course: { title: "Адаптивный тест" },
+      result: { ...webAdaptive.result, showBack: true, nav: { showReport: true } },
+    };
+    const root = render(adaptiveLayout, web);
+    expect(actions(root)).toEqual(["results-back", "download-report", "restart"]);
   });
 
   it("renders per-topic level pill + feedback/links only where present", () => {
@@ -137,22 +153,23 @@ describe("results.adaptive.html — superset gating", () => {
           {
             topicName: "Сети",
             levelLabel: "Средний",
-            levelClass: "is-info",
+            levelClass: "ou-tag--solid ou-tag--accent",
             feedback: "Хорошо",
             hasFeedback: true,
-            hasLinks: true,
-            links: [{ title: "Курс TCP/IP", url: "https://e/x" }],
+            hasRecommendations: true,
+            recommendedCourses: [{ title: "Курс TCP/IP", url: "https://e/x" }],
+            recommendedEvents: [],
           },
-          { topicName: "БД", levelLabel: "Не достигнут", levelClass: "is-fail", hasFeedback: false, hasLinks: false },
+          { topicName: "БД", levelLabel: "Минимально требуемый уровень не подтверждён", levelClass: "ou-tag--solid ou-tag--error", hasFeedback: false, hasRecommendations: false },
         ],
       },
     };
     const root = render(adaptiveLayout, ctx);
-    const cards = root.querySelectorAll(".topic-card");
+    const cards = root.querySelectorAll(".tb-topic-card");
     expect(cards.length).toBe(2);
-    expect(cards[0].querySelector(".topic-feedback")?.textContent).toContain("Хорошо");
-    expect(cards[0].querySelector(".topic-link")?.getAttribute("href")).toBe("https://e/x");
-    expect(cards[1].querySelector(".topic-feedback")).toBeNull();
-    expect(cards[1].querySelector(".results-pill")?.textContent).toContain("Не достигнут");
+    expect(cards[0].querySelector(".tb-topic-card__fb-text")?.textContent).toContain("Хорошо");
+    expect(cards[0].querySelector("a.tb-rec")?.getAttribute("href")).toBe("https://e/x");
+    expect(cards[1].querySelector(".tb-topic-card__fb-text")).toBeNull();
+    expect(cards[1].querySelector(".ou-tag")?.textContent).toContain("Минимально требуемый уровень не подтверждён");
   });
 });

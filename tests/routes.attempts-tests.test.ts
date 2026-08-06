@@ -70,6 +70,7 @@ function makeApp(router: express.Router, path = "/api") {
   app.use(session({ secret: "test", resave: false, saveUninitialized: false }));
   app.use((req: any, _res: any, next: any) => {
     if (req.headers["x-test-user"]) req.session.userId = req.headers["x-test-user"];
+    if (req.headers["x-test-magic"]) req.session.magic = JSON.parse(req.headers["x-test-magic"]);
     next();
   });
   app.use(path, router);
@@ -78,6 +79,10 @@ function makeApp(router: express.Router, path = "/api") {
 
 function asLearner(req: request.Test) { return req.set("x-test-user", "learner1"); }
 function asAuthor(req: request.Test) { return req.set("x-test-user", "author1"); }
+/** Learner whose session was opened by an assignment link scoped to `testId`. */
+function asScopedLearner(req: request.Test, testId: string) {
+  return asLearner(req).set("x-test-magic", JSON.stringify({ assignmentId: "a1", testId }));
+}
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 const dbTest = {
@@ -123,6 +128,18 @@ describe("Attempts routes — learner/tests", () => {
     expect(res.status).toBe(200);
     expect(res.body[0].sections[0].topicName).toBe("JS");
     expect(res.body[0].completedAttempts).toBe(0);
+  });
+
+  it("GET /learner/tests — narrows the list to the magic scope's test", async () => {
+    const other = { ...dbTest, id: "test2", title: "Test 2" };
+    storageMock.getAssignedTestsForUser.mockResolvedValue([dbTest, other]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 5 }]);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+
+    const res = await asScopedLearner(request(app).get("/api/learner/tests"), "test2");
+    expect(res.status).toBe(200);
+    expect(res.body.map((t: { id: string }) => t.id)).toEqual(["test2"]);
   });
 
   it("GET /learner/tests — accessible to any role (PRD-13 D1)", async () => {
@@ -725,6 +742,60 @@ describe("Attempts routes — finish attempt", () => {
     expect(res.body.success).toBe(true);
     expect(res.body.result.totalQuestions).toBe(1);
     expect(res.body.result.overallPassed).toBe(true);
+  });
+
+  // PRD-24: a topic in variants mode is gated by the threshold of the variant the
+  // learner actually got (pinned in variant_json.sections[].formId), not by a single
+  // rule shared by all variants.
+  describe("POST .../finish — by_variant thresholds (PRD-24)", () => {
+    const byVariantSection = {
+      topicId: "t1",
+      topicPassRuleJson: {
+        source: "by_variant",
+        byForm: { fA: { type: "percent", value: 50 }, fB: { type: "percent", value: 100 } },
+      },
+    };
+    const q2 = { ...dbQuestion, id: "q2" };
+    /** 1 correct of 2 → topic percent = 50. Overall 40 so an unpinned attempt would pass. */
+    const attemptWithForm = (formId: string) => ({
+      ...dbAttempt,
+      variantJson: { sections: [{ topicId: "t1", topicName: "JS", questionIds: ["q1", "q2"], formId }] },
+    });
+
+    beforeEach(() => {
+      storageMock.getTest.mockResolvedValue({ ...dbTest, overallPassRuleJson: { type: "percent", value: 40 } });
+      storageMock.getTestSections.mockResolvedValue([byVariantSection]);
+      storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion, q2]);
+      storageMock.getTopicCourses.mockResolvedValue([]);
+      storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
+    });
+
+    it("passes the topic when the delivered variant's threshold is met", async () => {
+      storageMock.getAttempt.mockResolvedValue(attemptWithForm("fA"));
+      const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+        .send({ answers: { q1: 0, q2: 1 } }));
+      expect(res.status).toBe(200);
+      expect(res.body.result.topicResults[0].passed).toBe(true); // 50% >= 50 (fA)
+    });
+
+    it("fails the topic when the delivered variant demands more, though another variant would pass", async () => {
+      storageMock.getAttempt.mockResolvedValue(attemptWithForm("fB"));
+      const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+        .send({ answers: { q1: 0, q2: 1 } }));
+      expect(res.status).toBe(200);
+      expect(res.body.result.topicResults[0].passed).toBe(false); // 50% < 100 (fB)
+    });
+
+    it("degrades to the overall rule for a legacy attempt without a pinned variant", async () => {
+      storageMock.getAttempt.mockResolvedValue({
+        ...dbAttempt,
+        variantJson: { sections: [{ topicId: "t1", topicName: "JS", questionIds: ["q1", "q2"] }] },
+      });
+      const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+        .send({ answers: { q1: 0, q2: 1 } }));
+      expect(res.status).toBe(200);
+      expect(res.body.result.topicResults[0].passed).toBe(true); // 50% >= 40 (overall)
+    });
   });
 
   it("POST /attempts/:id/finish — returns 404 when attempt not found", async () => {

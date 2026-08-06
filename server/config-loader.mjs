@@ -9,13 +9,17 @@
  * process.env. Selection is by NODE_ENV (first existing wins — no merge):
  *   config/<NODE_ENV>.config.jsonc, <NODE_ENV>.config.jsonc,
  *   config/config.jsonc, config.jsonc
- * `CONFIG_FILE` overrides the search with an explicit path.
+ * `CONFIG_FILE` overrides the search with an explicit path — and in the BUILT
+ * server it is the ONLY way to select a non-production file, because the bundle
+ * has NODE_ENV folded to "production" at build time (see {@link nodeEnv}).
  *
  * Authored as ESM (`.mjs`) because `@vvlad1973/utils` is an ES module. It is
  * bundled into the server for the app, imported directly by ESM tools, and
  * dynamically imported (`await import`) by the CommonJS deploy runner
  * (script/run-sql.cjs runs on Node 20, which cannot `require` ESM). It lives next
- * to server/config.ts (its typed wrapper); `config/` holds only config DATA.
+ * to server/config.ts (its typed wrapper); `config/` holds only config DATA — in
+ * a container that directory is a read-only VOLUME, not part of the image, so the
+ * files this loader reads are the host's (see docker/README.md).
  *
  * `loadConfiguration()` is async by design (getConfig awaits file I/O) — the app
  * awaits it once at startup and passes the result to `initConfig()`.
@@ -27,6 +31,24 @@ import fs from "node:fs";
 import path from "node:path";
 
 /**
+ * The environment name used to select a config file.
+ *
+ * CAUTION — in the BUILT server this is always `"production"`, whatever the
+ * container's NODE_ENV says: script/build.ts bundles with
+ * `define: { "process.env.NODE_ENV": '"production"' }` so the compiled app always
+ * behaves like production (static serving, strict crypto), and esbuild folds the
+ * read into a literal (bracket access is folded too — there is no way to read the
+ * real value here). Selection by NODE_ENV therefore works only when running from
+ * source (tsx: dev, tests, CLI tools). A deployment picks its file with
+ * `CONFIG_FILE` instead — that one IS read at runtime; compose sets it for every
+ * instance (docker/templates/docker-compose.yml).
+ * @returns {string|undefined} trimmed environment name, or undefined when unset.
+ */
+function nodeEnv() {
+  return process.env.NODE_ENV?.trim();
+}
+
+/**
  * Load the environment file for the current NODE_ENV (`.env.<NODE_ENV>` then
  * `.env`) into process.env. Called explicitly by the app bootstrap and CLI tools
  * BEFORE loadConfiguration — NOT during config loading, so tests (which set
@@ -34,12 +56,24 @@ import path from "node:path";
  * @returns {string|null} the file loaded, or null if none exists.
  */
 export function loadEnv() {
-  const env = process.env.NODE_ENV?.trim();
+  const env = nodeEnv();
   const candidates = env ? [`.env.${env}`, ".env"] : [".env"];
   for (const rel of candidates) {
     const abs = path.resolve(process.cwd(), rel);
     if (fs.existsSync(abs)) {
-      loadDotenv({ path: abs, quiet: true });
+      // dotenv reports a failure (EACCES on a mount owned by another user, EISDIR,
+      // ...) in its RETURN VALUE, not by throwing. Ignoring it is how an unreadable
+      // .env turns into "Loaded environment" followed by an app that dies on an
+      // empty DATABASE_URL — say what actually happened instead.
+      const { error } = loadDotenv({ path: abs, quiet: true });
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `[config] FAILED to read ${rel} (${error.code ?? error.message}) — ` +
+            "no variables were loaded from it; every { env } reference will resolve empty.",
+        );
+        return null;
+      }
       // eslint-disable-next-line no-console
       console.log(`[config] Loaded environment from ${rel}`);
       return rel;
@@ -53,7 +87,7 @@ function configScope() {
   const explicit = process.env.CONFIG_FILE?.trim();
   if (explicit) return [explicit];
 
-  const env = process.env.NODE_ENV?.trim();
+  const env = nodeEnv();
   const exts = [".jsonc", ".json"];
   const scope = [];
   if (env) {

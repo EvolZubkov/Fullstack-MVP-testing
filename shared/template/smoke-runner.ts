@@ -23,6 +23,13 @@
 
 import { renderScreenInto, type ScreenRenderInput } from "./render-screen";
 import { buildScreenInputs, type PreviewDemoDataset, type PreviewManifest } from "./preview-context";
+import { REPORT_KINDS, reportVariants, resolveReportValues } from "../report/report-variants";
+import { buildAdaptiveReportContext, buildReportContext } from "../report/report-context";
+import {
+  buildAdaptiveReportPreviewInput,
+  buildReportPreviewInput,
+  type ReportPreviewTest,
+} from "../report/report-preview";
 
 /** Per-screen smoke result. */
 export interface SmokeRouteResult {
@@ -79,6 +86,46 @@ function rowStatus(errors: string[], warnings: string[]): SmokeRouteResult["stat
   return errors.length ? "fail" : warnings.length ? "warn" : "pass";
 }
 
+/**
+ * A variant that ships its own layout owes ONE thing: the fields it declares must
+ * have somewhere to land. There are two legitimate ways — a `data-placeholder`
+ * region per field, or the generic `page-content` slot the host fills with the
+ * placeholder skeleton. When a layout offers neither, the author fills fields in
+ * «Структуре» and nothing of it reaches the learner; that is worth saying plainly.
+ *
+ * Silent when the variant declares no fields (system screens, question variants):
+ * there is nothing to lose.
+ * @param spec      Screen under check
+ * @param root      Container the screen was rendered into
+ * @param warnings  Collector, appended in place
+ */
+function checkPlaceholdersReachTheScreen(
+  spec: ReturnType<typeof buildScreenInputs>[number],
+  root: HTMLElement,
+  warnings: string[],
+): void {
+  const declared = spec.input.content?.template?.placeholders ?? [];
+  if (declared.length === 0) return;
+  // The skeleton lands in the slot, so every declared field reaches the screen.
+  if (root.querySelector('[data-slot="page-content"]')) return;
+
+  const missing = declared.filter((ph) => root.querySelector(`[data-placeholder="${ph.key}"]`) == null);
+  if (missing.length === 0) return;
+  if (missing.length === declared.length) {
+    warnings.push(
+      "Поля варианта не попадут на экран: в макете нет ни одного data-placeholder " +
+        'из объявленных и нет слота data-slot="page-content"',
+    );
+    return;
+  }
+  // Partial loss is the sneakier case: the screen looks right in the preview, and
+  // only the author who filled the missing field notices it vanished.
+  warnings.push(
+    "В макете нет области для полей: " + missing.map((ph) => ph.key).join(", ") +
+      " — значения этих полей на экран не попадут",
+  );
+}
+
 /** Render one screen in isolation and collect render/slot/console findings. */
 function checkScreen(
   spec: ReturnType<typeof buildScreenInputs>[number],
@@ -132,17 +179,19 @@ function checkScreen(
       errors.push("Экран отрисован пустым");
     }
     // A missing/unfilled slot never blocks activation (spec §17.1/§17.2, PRD-3
-    // §4.2/§4.3): the engine skips an absent slot (render-screen `fillSlots`) and
-    // the hosts render such a screen from the standard template instead. Report it
-    // as a warning naming the consequence, so the author can see what they lose.
+    // §4.2/§4.3): the engine skips an absent slot (render-screen `fillSlots`).
+    // The warning names what the author loses — the screen's own content region —
+    // and NOT «renders from the standard template», which is true only when the
+    // layout itself is missing (handled above).
     for (const slot of spec.expectedSlots) {
       const el = root.querySelector(`[data-slot="${slot}"]`);
       if (!el) {
-        warnings.push(`Нет слота data-slot="${slot}" — экран будет отрисован из стандартного шаблона`);
+        warnings.push(`Нет слота data-slot="${slot}" — эта часть экрана не будет заполнена`);
       } else if (!el.innerHTML.trim()) {
         warnings.push(`Не заполнен слот data-slot="${slot}"`);
       }
     }
+    checkPlaceholdersReachTheScreen(spec, root, warnings);
   }
 
   return { id: spec.id, route: spec.route, label: spec.label, status: rowStatus(errors, warnings), errors, warnings };
@@ -162,6 +211,50 @@ function checkTemplateJs(src: string): SmokeRouteResult {
 }
 
 /**
+ * Экраны ОТЧЁТА — по одному варианту каждого объявленного вида (PRD-27 FR-26).
+ *
+ * Отчёт не входит в `preview.routes[]`: это не экран прохождения, а документ. Но
+ * ломается он ровно так же, а замечает автор — только когда обучающийся не смог
+ * скачать PDF. Данные берутся тем же построителем, что и предпросмотр в настройках
+ * теста, чтобы проверка гоняла ровно ту страницу, что уйдёт в PDF.
+ *
+ * @param manifest Манифест проверяемого шаблона.
+ * @param dataset Демонстрационный набор шаблона — из него берутся название и темы.
+ */
+function reportSpecs(
+  manifest: PreviewManifest,
+  dataset: PreviewDemoDataset,
+): ReturnType<typeof buildScreenInputs> {
+  const out: ReturnType<typeof buildScreenInputs> = [];
+  const test: ReportPreviewTest = {
+    testName: dataset.course?.title || "Тест",
+    sections: (dataset.course?.topics ?? []).map((t) => ({ topicName: t.title })),
+  };
+  for (const kind of REPORT_KINDS) {
+    const variants = reportVariants(manifest, kind);
+    if (variants.length === 0) continue;
+    const variant = variants.find((v) => v.isDefault === true) ?? variants[0];
+    const values = resolveReportValues(variant, null);
+    // Исход «не пройден»: на нём страница показывает БОЛЬШЕ — вердикт, непройденные
+    // темы и блок рекомендаций, — то есть отрисовывается больше макета.
+    const context =
+      kind === "report.adaptive"
+        ? buildAdaptiveReportContext(buildAdaptiveReportPreviewInput(test, "failed"), { values, isPreview: true })
+        : buildReportContext(buildReportPreviewInput(test, "failed"), { values, isPreview: true });
+    out.push({
+      id: variant.key,
+      route: variant.key,
+      label: variant.label || variant.key,
+      variantKey: variant.key,
+      layoutKey: variant.layoutFile || kind,
+      expectedSlots: [],
+      input: { context: context as unknown as Record<string, unknown> },
+    } as ReturnType<typeof buildScreenInputs>[number]);
+  }
+  return out;
+}
+
+/**
  * Run the browser smoke-test across all preview screens (+ optional template.js
  * check) and return the aggregate {@link SmokeReport}. `ok` is the activation
  * gate signal the server persists and enforces (NFR-01).
@@ -170,6 +263,11 @@ export function runSmokeChecks(opts: SmokeRunOptions): SmokeReport {
   const render = opts.render ?? renderScreenInto;
   const specs = buildScreenInputs(opts.dataset, opts.manifest);
   const routes: SmokeRouteResult[] = specs.map((spec) => checkScreen(spec, opts, render));
+
+  // PRD-27 FR-26: виды отчёта проверяются наравне с экранами.
+  for (const spec of reportSpecs(opts.manifest, opts.dataset)) {
+    routes.push(checkScreen(spec, opts, render));
+  }
 
   if (opts.templateJs != null) routes.push(checkTemplateJs(opts.templateJs));
 

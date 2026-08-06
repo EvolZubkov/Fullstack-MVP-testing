@@ -26,7 +26,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  CheckSquare, ChevronDown, ChevronRight, CircleDot, ListOrdered, Pencil, RotateCcw, Unplug,
+  CheckSquare, ChevronDown, ChevronRight, CircleDot, ListOrdered, Pencil, RotateCcw, ThermometerSun, Unplug,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -55,7 +55,7 @@ export type ScoringSectionProps = {
 
 type QuestionRow = Question & { topicName?: string };
 
-type QuestionType = "single" | "multiple" | "matching" | "ranking";
+import type { QuestionType } from "@shared/questions/question-type";
 
 /** Question-type pictograms — same convention as the content tree (content-tree.tsx). */
 const TYPE_ICON: Record<QuestionType, LucideIcon> = {
@@ -63,12 +63,14 @@ const TYPE_ICON: Record<QuestionType, LucideIcon> = {
   multiple: CheckSquare,
   matching: Unplug,
   ranking: ListOrdered,
+  scale: ThermometerSun,
 };
 const TYPE_LABEL: Record<QuestionType, string> = {
   single: t.questions.singleChoice,
   multiple: t.questions.multipleChoice,
   matching: t.questions.matching,
   ranking: t.questions.ranking,
+  scale: t.questions.scaleChoice,
 };
 
 /** Human label of a graded-config kind (PRD-10). */

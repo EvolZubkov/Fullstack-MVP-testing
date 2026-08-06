@@ -16,7 +16,8 @@
  */
 import { scoreAnswer, type Answer, type CorrectData, type QuestionType } from "./engine";
 import type { QuestionScoring } from "../schema";
-import { resolveOverallRule, resolveTopicRule, checkPassRule } from "./pass-rule";
+import { isMeasurementOnly } from "../questions/question-type";
+import { resolveOverallRule, resolveTopicRule, checkPassRule, type ResolvedRule } from "./pass-rule";
 
 export interface AggregateQuestion {
   type: QuestionType;
@@ -32,6 +33,13 @@ export interface AggregateSection<E = unknown> {
   topicName: string;
   /** Stored topic pass rule (any authored shape — resolved here). */
   topicPassRule: unknown;
+  /**
+   * PRD-24: stable `formId` of the PRD-17 variant delivered for this topic in this
+   * attempt. Feeds the `by_variant` rule so the topic is gated by ITS variant's
+   * threshold. Absent/null (non-variant topic, legacy attempt, SCORM state without
+   * the pin) → the rule degrades to the overall one.
+   */
+  formId?: string | null;
   questions: AggregateQuestion[];
   /** Host-specific passthrough echoed verbatim into the topic result (feedback/recommendations). */
   extra?: E;
@@ -52,12 +60,27 @@ export interface AggregateTopicResult<E = unknown> {
   percent: number;
   passed: boolean | null;
   passRule: unknown;
+  /**
+   * PRD-24: the rule that ACTUALLY gated this topic, after resolution — i.e. the
+   * delivered variant's threshold for `by_variant`, the overall rule for
+   * `inherit_overall`, `null` when the topic is ungated. `passRule` above stays the
+   * raw authored shape; hosts render the «Требуется…» label from THIS field, which
+   * also survives being persisted with the attempt.
+   */
+  resolvedPassRule: ResolvedRule | null;
   extra?: E;
 }
 
 export interface AggregateResult<E = unknown> {
   correct: number;
+  /** Questions that took part in grading — measurement-only ones are not counted. */
   totalQuestions: number;
+  /**
+   * PRD-26 FR-09: the same count, exposed under its own name so a host can tell
+   * «nothing was graded» (a pure opinion inventory) from «everything was answered
+   * wrong». Zero means the run has no percent and no verdict to show.
+   */
+  scoredQuestions: number;
   earnedPoints: number;
   possiblePoints: number;
   percent: number;
@@ -74,13 +97,23 @@ export function aggregateStandardResult<E = unknown>(input: AggregateInput<E>): 
   let tPossible = 0;
   let tCorrect = 0;
   let tQuestions = 0;
+  let tScored = 0;
   let allTopicsPassed = true;
 
   const topicResults: AggregateTopicResult<E>[] = input.sections.map((sec) => {
     let earned = 0;
     let possible = 0;
     let correct = 0;
+    let scored = 0;
     for (const q of sec.questions) {
+      // PRD-26 FR-08: a measurement-only question (a scale whose author set no correct
+      // graduation) is not graded at all. It adds nothing to earned, nothing to
+      // possible, and is not counted among the questions — otherwise a 22-item survey
+      // would read as «0 из 22 верно» and drag the percent of a mixed test to zero.
+      // Its result is the contribution it makes to the PRD-5 scales, computed
+      // elsewhere.
+      if (isMeasurementOnly(q)) continue;
+      scored++;
       const ratio =
         q.answer === undefined || q.answer === null
           ? 0
@@ -89,16 +122,19 @@ export function aggregateStandardResult<E = unknown>(input: AggregateInput<E>): 
       earned += q.points * ratio;
       if (ratio === 1) correct++;
     }
-    const total = sec.questions.length;
+    const total = scored;
     const percent = possible > 0 ? (earned / possible) * 100 : 0;
-    const resolved = resolveTopicRule(sec.topicPassRule, overall);
-    const passed: boolean | null = resolved ? checkPassRule(resolved, percent, earned) : null;
+    const resolved = resolveTopicRule(sec.topicPassRule, overall, { formId: sec.formId ?? null });
+    // FR-09: a section with nothing to grade has no percent to compare, so it stays
+    // UNGATED (`null`) instead of failing its rule at 0%.
+    const passed: boolean | null = resolved && scored > 0 ? checkPassRule(resolved, percent, earned) : null;
     if (passed === false) allTopicsPassed = false;
 
     tEarned += earned;
     tPossible += possible;
     tCorrect += correct;
     tQuestions += total;
+    tScored += scored;
 
     return {
       topicId: sec.topicId,
@@ -110,16 +146,22 @@ export function aggregateStandardResult<E = unknown>(input: AggregateInput<E>): 
       percent,
       passed,
       passRule: sec.topicPassRule,
+      resolvedPassRule: resolved,
       extra: sec.extra,
     };
   });
 
   const percent = tPossible > 0 ? (tEarned / tPossible) * 100 : 0;
-  const overallPassed = checkPassRule(overall, percent, tEarned);
+  // FR-09: a test made entirely of measurement questions (an opinion inventory such as
+  // MBI) has nothing to grade, so there is no threshold to miss — it cannot be «not
+  // passed». Hosts read `scoredQuestions === 0` to hide the percent and the verdict;
+  // the meaning of such a run is carried by the PRD-2 indicators.
+  const overallPassed = tScored > 0 ? checkPassRule(overall, percent, tEarned) : true;
 
   return {
     correct: tCorrect,
     totalQuestions: tQuestions,
+    scoredQuestions: tScored,
     earnedPoints: tEarned,
     possiblePoints: tPossible,
     percent,

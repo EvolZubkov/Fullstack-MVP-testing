@@ -11,6 +11,10 @@
  * - empty / `точное`              -> null (exact match, 0/1; FR-02 default)
  * - `веса: w1 # w2 # ...`         -> weighted (single only); fewer weights than
  *   options pad with 0, more is an error; optional `; sMax=<n>`
+ * - `%A2B1C1D0`                   -> weighted (single only); the РТК answer-key
+ *   notation (scoring-model §11.3) accepted as a positional alias of `веса`:
+ *   letters name options by position and must run A, B, C… in order. Import-only —
+ *   `serializeScoring` always writes the canonical `веса:` form
  * - `ступени: <correct|wrong><op><rhs>[& ...] => <score>; ...` -> tiered (multiple/
  *   matching/ranking); tiers split by `;` or `,`, conditions by `&`; score uses
  *   a dot decimal (comma is a list separator); `rhs` is a number or the keyword
@@ -22,9 +26,10 @@
  */
 
 import { questionScoringSchema, type QuestionScoring } from "@shared/schema";
+import { isSingleIndexChoice } from "@shared/questions/question-type";
 
 /** Question types accepted by the scoring grammar. */
-export type ScoringQuestionType = "single" | "multiple" | "matching" | "ranking";
+export type ScoringQuestionType = "single" | "multiple" | "matching" | "ranking" | "scale";
 
 /** Parse outcome: a validated scoring config (or null = exact), or an error. */
 export type ParseScoringResult =
@@ -132,8 +137,9 @@ export function parseScoringCell(
   let value: unknown;
 
   if (lower.startsWith("веса:")) {
-    if (type !== "single") {
-      return { ok: false, error: "«веса» допустимы только для одиночного выбора" };
+    // Шкала оценивается теми же весами по позициям градаций (PRD-26 FR-07).
+    if (!isSingleIndexChoice(type)) {
+      return { ok: false, error: "«веса» допустимы только для одиночного выбора и шкалы" };
     }
     const { main, sMax, error } = extractSMax(text.slice(text.indexOf(":") + 1));
     if (error) return { ok: false, error };
@@ -155,9 +161,47 @@ export function parseScoringCell(
     while (weights.length < optionCount) weights.push(0);
 
     value = { kind: "weighted", weights, ...(sMax != null ? { sMax } : {}) };
+  } else if (text.startsWith("%")) {
+    // РТК answer-key notation (`%A2B1C1D0`) — the source format the certification
+    // banks are authored in (scoring-model §11.3). Positional alias of `веса`:
+    // the letter names the option by position, the number is its weight. Latin
+    // letters only — Cyrillic А/В/С are visually identical but order differently,
+    // so accepting them would silently mis-assign weights.
+    if (!isSingleIndexChoice(type)) {
+      return { ok: false, error: "ключ «%…» допустим только для одиночного выбора и шкалы" };
+    }
+    const body = text.slice(1);
+    const tokens = [...body.matchAll(/([A-Za-z])\s*(\d+(?:[.,]\d+)?)/g)];
+    const consumed = tokens.map((m) => m[0]).join("");
+    if (tokens.length === 0 || consumed.replace(/\s+/g, "") !== body.replace(/\s+/g, "")) {
+      return { ok: false, error: `некорректный ключ «${text}» (ожидается вид «%A2B1C1D0»)` };
+    }
+
+    const weights: number[] = [];
+    for (const [i, m] of tokens.entries()) {
+      const letter = m[1].toUpperCase();
+      const expected = String.fromCharCode(65 + i);
+      if (letter !== expected) {
+        return {
+          ok: false,
+          error: `буквы ключа должны идти по порядку A, B, C…: на позиции ${i + 1} стоит «${letter}», ожидалась «${expected}»`,
+        };
+      }
+      const n = Number(m[2].replace(",", "."));
+      if (!Number.isFinite(n) || n < 0) return { ok: false, error: `некорректный вес "${m[2]}"` };
+      weights.push(n);
+    }
+    if (weights.length > optionCount) {
+      return { ok: false, error: `весов (${weights.length}) больше числа вариантов (${optionCount})` };
+    }
+    while (weights.length < optionCount) weights.push(0);
+
+    value = { kind: "weighted", weights };
   } else if (lower.startsWith("ступени:")) {
-    if (type === "single") {
-      return { ok: false, error: "«ступени» недопустимы для одиночного выбора" };
+    // Ступени считают по счётчикам выбранных единиц, а у одного индекса счётчик
+    // всегда 0 или 1 — способ бессмысленный и для одиночного выбора, и для шкалы.
+    if (isSingleIndexChoice(type)) {
+      return { ok: false, error: "«ступени» недопустимы для одиночного выбора и шкалы" };
     }
     // `total` resolves to the per-type counter token: options/pairs/items.
     const totalToken: "T" | "P" | "N" = type === "matching" ? "P" : type === "ranking" ? "N" : "T";

@@ -78,8 +78,12 @@ export function attachPointerDnd(root: DndRoot, config: PointerDndConfig): () =>
 
   let dragState: DragState | null = null;
 
-  const clearOver = () =>
+  const clearOver = () => {
     root.querySelectorAll(".is-over").forEach((n) => (n as Element).classList.remove("is-over"));
+    // Matching also lights the whole ROW via the DS's `.ou-match__row.is-target`
+    // highlight (the LEFT prompt) — clear it alongside the per-zone `.is-over`.
+    root.querySelectorAll(".ou-match__row.is-target").forEach((n) => (n as Element).classList.remove("is-target"));
+  };
 
   // The drop zone the dragged card overlaps MOST by area (excluding its own
   // source zone). Registers from `threshold` of the card area — a forgiving drop.
@@ -173,7 +177,13 @@ export function attachPointerDnd(root: DndRoot, config: PointerDndConfig): () =>
     }
     clearOver();
     const dz = overlapDropZone(st);
-    if (dz) dz.classList.add("is-over");
+    if (dz) {
+      dz.classList.add("is-over");
+      // Light the target ROW via the DS drop-highlight (the LEFT prompt), so the
+      // learner sees «нужную строку» regardless of which cell the ghost overlaps.
+      const row = dz.closest(".ou-match__row");
+      if (row) row.classList.add("is-target");
+    }
   };
 
   const finish = () => {
@@ -189,15 +199,26 @@ export function attachPointerDnd(root: DndRoot, config: PointerDndConfig): () =>
     if (st.started) config.onDrop({ dropId: dz ? dz.getAttribute("data-drop") || "" : "", dragId: st.dragId });
   };
 
+  // Cards still carry the legacy `draggable="true"` attribute. On a REAL pointer
+  // drag the browser would then start a NATIVE HTML5 drag, which fires
+  // `pointercancel` and aborts this gesture — so mouse dragging silently did
+  // nothing (only synthetic PointerEvents, which never trigger native drag, worked).
+  // Suppress the native drag so this pointer engine is the sole mechanic.
+  const onDragStart = (e: Event) => {
+    if ((e.target as Element | null)?.closest?.("[data-drag]")) e.preventDefault();
+  };
+
   root.addEventListener("pointerdown", onPointerDown);
   root.addEventListener("pointermove", onPointerMove);
   root.addEventListener("pointerup", finish);
   root.addEventListener("pointercancel", finish);
+  root.addEventListener("dragstart", onDragStart);
   return () => {
     root.removeEventListener("pointerdown", onPointerDown);
     root.removeEventListener("pointermove", onPointerMove);
     root.removeEventListener("pointerup", finish);
     root.removeEventListener("pointercancel", finish);
+    root.removeEventListener("dragstart", onDragStart);
     if (dragState?.ghost) dragState.ghost.remove();
   };
 }

@@ -182,6 +182,43 @@ describe("<TestEditor /> — successful save", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
+  // PRD-22: the tests-list column «недоступный вариант» is server-computed, so it
+  // stays stale after the author remaps pages here unless the list is refetched.
+  it("invalidates the tests list on save so the «недоступный вариант» mark refreshes", async () => {
+    nextResponse(buildApiResponse());
+    const onClose = vi.fn();
+    const client = makeClient();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+
+    function Harness() {
+      const editor = useTestEditor({ mode: "edit", testId: "test-1" });
+      return (
+        <>
+          <button
+            type="button"
+            data-testid="harness-dirty"
+            onClick={() => editor.updateModel((m) => ({ ...m, basic: { ...m.basic, title: m.basic.title + " edited" } }))}
+          >
+            dirty
+          </button>
+          <TestEditorView open onClose={onClose} editor={editor} />
+        </>
+      );
+    }
+
+    render(withClient(client, <Harness />));
+    await screen.findByText("Sample Test");
+    act(() => {
+      fireEvent.click(screen.getByTestId("harness-dirty"));
+    });
+
+    nextResponse(buildApiResponse({ version: 8, title: "Sample Test edited" }));
+    fireEvent.click(screen.getByTestId("test-editor-save"));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["/api/tests"] });
+  });
+
   it("close-confirm «Сохранить» saves and exits", async () => {
     nextResponse(buildApiResponse());
     const onClose = vi.fn();

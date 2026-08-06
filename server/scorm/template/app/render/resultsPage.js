@@ -197,7 +197,6 @@ function finishAndClose() {
     achievedLevels: results.achievedLevels || null,
     failedTopicCourses: failedTopicCourses
   });
-  console.log('📤 Телеметрия: реальный результат попытки:', Math.round(results.percent) + '%, passed:', results.passed);
 
   // ===== LMS: отправляем лучшую попытку с хаком если нужно =====
   var attemptsExhausted = !!TEST_DATA.maxAttempts && !hasAttemptsLeft();
@@ -335,7 +334,7 @@ function finishScormAdaptive(results, passedForLms, resultComputation, scaleComp
             result: isCorrect ? 'correct' : 'incorrect',
             response: answer !== undefined && answer !== null ? JSON.stringify(answer) : '',
             correct: '',
-            description: question.prompt || ''
+            description: authorTextPlain(question.prompt)
           });
         });
       });
@@ -425,6 +424,20 @@ function gradedAnswerFor(q) {
   return state.answers[q.id];
 }
 
+/**
+ * PRD-24: stable id of the PRD-17 variant delivered for `topicId` in THIS run
+ * (pinned into `state.variant.sections` by generateVariant). Returns null for a
+ * non-variant topic and for sessions saved BEFORE the pin existed — the pass-rule
+ * resolver then degrades a `by_variant` rule to the overall one instead of failing.
+ */
+function deliveredFormId(topicId) {
+  var sections = (state.variant && state.variant.sections) || [];
+  for (var i = 0; i < sections.length; i++) {
+    if (sections[i].topicId === topicId) return sections[i].formId || null;
+  }
+  return null;
+}
+
 function computeSectionResult(topicId) {
   if (state.sectionResults && state.sectionResults[topicId]) {
     return state.sectionResults[topicId];
@@ -453,7 +466,13 @@ function computeSectionResult(topicId) {
   // PRD-18: resolve the topic rule via the SAME shared engine as calculateResults
   // (inherit_overall -> overall, none -> null), not the local pass-check.
   var passRule = section ? section.topicPassRule : null;
-  var resolvedRule = window.TBTemplate.resolveTopicRule(passRule, window.TBTemplate.resolveOverallRule(TEST_DATA.overallPassRule));
+  // PRD-24: pass the delivered variant so a `by_variant` rule gates this topic by ITS
+  // threshold. State saved before PRD-24 has no pin → null → degrades to the overall rule.
+  var resolvedRule = window.TBTemplate.resolveTopicRule(
+    passRule,
+    window.TBTemplate.resolveOverallRule(TEST_DATA.overallPassRule),
+    { formId: deliveredFormId(topicId) }
+  );
   var passed = resolvedRule ? window.TBTemplate.checkPassRule(resolvedRule, percent, earnedPoints) : null;
 
   var result = {
@@ -466,6 +485,9 @@ function computeSectionResult(topicId) {
     percent: percent,
     passed: passed,
     passRule: passRule,
+    // PRD-24: same as in calculateResults — the section screen must be able to show
+    // the threshold that actually applied to the delivered variant.
+    resolvedPassRule: resolvedRule,
     topicFeedback: section ? (section.topicFeedback || null) : null,
     recommendedCourses: section ? (section.recommendedCourses || []) : [],
     recommendedEvents: section ? (section.recommendedEvents || []) : [],
@@ -492,6 +514,8 @@ function calculateResults() {
         topicId: fq.topicId,
         topicName: fq.topicName,
         topicPassRule: section ? section.topicPassRule : null,
+        // PRD-24: the delivered variant decides which threshold gates this topic.
+        formId: deliveredFormId(fq.topicId),
         questions: [],
         extra: {
           topicFeedback: (section && section.topicFeedback) || null,
@@ -535,6 +559,11 @@ function calculateResults() {
         percent: t.percent,
         passed: t.passed,
         passRule: t.passRule,
+        // PRD-24: the rule that actually gated the topic (the delivered variant's
+        // threshold for a `by_variant` rule). The «Требуется…» label reads THIS, and
+        // it is persisted with the attempt, so dropping it here would silently blank
+        // the label — including for past attempts.
+        resolvedPassRule: t.resolvedPassRule,
         topicFeedback: t.extra.topicFeedback,
         recommendedCourses: t.extra.recommendedCourses,
         recommendedEvents: t.extra.recommendedEvents
@@ -558,7 +587,7 @@ function checkAnswer(q, answer) {
 
   var correct = q.correct || {};
 
-  if (q.type === 'single') {
+  if (TBQType.isSingleIndexChoice(q.type)) {
     return answer === correct.correctIndex ? 1 : 0;
   }
 
@@ -676,7 +705,7 @@ function finishScorm(results, passedForLms, resultComputation, scaleComputation)
   function to1(x) { return typeof x === 'number' ? x + 1 : x; }
 
   function mapScormType(q) {
-    if (q.type === 'single') return 'choice';
+    if (TBQType.isSingleIndexChoice(q.type)) return 'choice';
     if (q.type === 'multiple') return 'choice';
     if (q.type === 'matching') return 'matching';
     if (q.type === 'ranking') return 'sequencing';
@@ -686,7 +715,7 @@ function finishScorm(results, passedForLms, resultComputation, scaleComputation)
   function formatResponse(q, ans) {
     if (ans == null) return '';
 
-    if (q.type === 'single') return String(to1(ans));
+    if (TBQType.isSingleIndexChoice(q.type)) return String(to1(ans));
     if (q.type === 'multiple') return ans.map(to1).join(',');
     if (q.type === 'ranking') return ans.map(to1).join(',');
     if (q.type === 'matching') {
@@ -700,7 +729,7 @@ function finishScorm(results, passedForLms, resultComputation, scaleComputation)
 
   function getCorrectAnswerFor(q) {
     var c = q.correct || {};
-    if (q.type === 'single') return c.correctIndex;
+    if (TBQType.isSingleIndexChoice(q.type)) return c.correctIndex;
     if (q.type === 'multiple') return c.correctIndices || [];
     if (q.type === 'ranking') return c.correctOrder || [];
     if (q.type === 'matching') {
@@ -726,7 +755,7 @@ function finishScorm(results, passedForLms, resultComputation, scaleComputation)
       result: fullCorrect ? 'correct' : 'incorrect',
       response: formatResponse(q, ans),
       correct: formatResponse(q, getCorrectAnswerFor(q)),
-      description: q.prompt || ''
+      description: authorTextPlain(q.prompt)
     });
   });
 
@@ -789,7 +818,7 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
   var interactions = [];
 
   function mapScormType(q) {
-    if (q.type === 'single') return 'choice';
+    if (TBQType.isSingleIndexChoice(q.type)) return 'choice';
     if (q.type === 'multiple') return 'choice';
     if (q.type === 'matching') return 'matching';
     if (q.type === 'ranking') return 'sequencing';
@@ -797,7 +826,7 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
   }
 
   function formatResponse(q, answer) {
-    if (q.type === 'single') {
+    if (TBQType.isSingleIndexChoice(q.type)) {
       return answer !== undefined && answer !== null ? String(answer + 1) : '';
     }
     if (q.type === 'multiple') {
@@ -819,7 +848,7 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
 
   function getCorrectAnswerFor(q) {
     var c = q.correct;
-    if (q.type === 'single') return c.correctIndex;
+    if (TBQType.isSingleIndexChoice(q.type)) return c.correctIndex;
     if (q.type === 'multiple') return c.correctIndices;
     if (q.type === 'ranking') return c.correctOrder;
     if (q.type === 'matching') {
@@ -845,7 +874,7 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
       result: fullCorrect ? 'correct' : 'incorrect',
       response: formatResponse(q, ans),
       correct: formatResponse(q, getCorrectAnswerFor(q)),
-      description: q.prompt || ''
+      description: authorTextPlain(q.prompt)
     });
   });
 

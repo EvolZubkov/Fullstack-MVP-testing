@@ -1,20 +1,15 @@
-function renderSingleQuestionInput(q, answer, locked, correct, shuffleMapping) {
-  var correctIndex = (typeof correct.correctIndex === 'number') ? correct.correctIndex : -1;
-  var displayOrder = shuffleMapping || q.data.options.map(function(_, i) { return i; });
-  var html = '';
-
-  displayOrder.forEach(function(originalIndex) {
-    var selected = answer === originalIndex ? 'selected' : '';
-    var correctClass = '';
-    if (locked) {
-      if (originalIndex === correctIndex) correctClass = ' correct-answer';
-      else if (answer === originalIndex && originalIndex !== correctIndex) correctClass = ' incorrect-answer';
-    }
-    var clickHandler = locked ? '' : 'onclick="selectSingle(\'' + q.id + '\',' + originalIndex + ')"';
-    html += '<div class="option ' + selected + correctClass + '" data-index="' + originalIndex + '" ' + clickHandler + ' style="' + (locked ? 'cursor:default;' : '') + '">';
-    html += '<input type="radio" name="q_' + q.id + '" ' + (answer === originalIndex ? 'checked' : '') + ' ' + (locked ? 'disabled' : '') + '>';
-    html += escapeHtml(q.data.options[originalIndex]) + '</div>';
-  });
-
-  return html;
+/**
+ * @module render/questions/single
+ * @description Single-choice input for the SCORM runtime. Delegates to the SHARED
+ * emission (`TBTemplate.renderSingleChoice`) so the `.ou-*` markup is byte-identical to
+ * the web host; selection is delegated via `data-action="select:N"` (wired once in
+ * actions/answers). Review highlight applies only when showReview (showCorrectAnswers
+ * shown), mirroring the web.
+ *
+ * Depends on globals: window.TBTemplate.
+ */
+function renderSingleQuestionInput(q, answer, showReview, correct, shuffleMapping) {
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (!TB || !TB.renderSingleChoice) return '';
+  return TB.renderSingleChoice({ type: 'single', dataJson: q.data }, answer, shuffleMapping, showReview ? correct : undefined);
 }

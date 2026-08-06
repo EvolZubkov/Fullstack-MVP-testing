@@ -95,6 +95,10 @@
 /* Folder */
 .tb-content-tree .ct-row--folder .ct-name__label { font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ou-fg-muted); }
 .tb-content-tree .ct-foldercount { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+/* In the root row the heading itself is bold uppercase — the counts must not
+   inherit that, or the tree's totals shout while the same figures on folder rows
+   whisper. */
+.tb-content-tree .ct-rootrow .ct-foldercount { text-transform: none; font-weight: 400; letter-spacing: normal; }
 
 /* Topic */
 .tb-content-tree .ct-row--topic .ct-name__label { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-default); }

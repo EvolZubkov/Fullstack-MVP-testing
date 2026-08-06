@@ -91,7 +91,9 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #fff;
+  /* Theme switches through .ou--dark on body, so a literal white stayed white
+     there — the surface comes from the DS token. */
+  background: var(--ou-bg-surface-1);
   border: 1px solid var(--ou-border-default);
   border-radius: var(--ou-radius-m);
   box-shadow: var(--ou-shadow-s);
@@ -111,7 +113,7 @@
 .dbg__ref-toggle { display: inline-flex; align-items: center; gap: var(--ou-space-2); cursor: pointer; }
 .dbg__ref-lbl { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
 .dbg__frame-screen { flex: 1; min-height: 0; display: flex; }
-.dbg__iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+.dbg__iframe { flex: 1; width: 100%; border: 0; background: var(--ou-bg-surface-1); }
 
 /* Access (forbidden) screen — standalone, no player chrome. */
 .dbg__center { display: grid; place-items: center; height: 100vh; padding: var(--ou-space-6); }
@@ -186,6 +188,8 @@
   gap: var(--ou-space-2);
 }
 .dbg__ins-h:first-child { margin-top: 0; }
+/* PRD-24: secondary line inside a table cell (delivered variant under its threshold). */
+.dbg__ins-sub { font: var(--ou-text-body-xs); color: var(--ou-fg-muted); }
 .dbg__ins-toolbar { display: flex; align-items: center; gap: var(--ou-space-2); margin-bottom: var(--ou-space-2); }
 .dbg__ins-toolbar .dbg__bar-spacer { flex: 1; }
 

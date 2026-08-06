@@ -100,3 +100,88 @@ describe("useDesignSettings — version reconciliation (PRD-3)", () => {
     expect(result.current.templateOutdated).toBe(false);
   });
 });
+
+// ─── PRD-23: themes ──────────────────────────────────────────────────────────
+
+/** Same params as TEMPLATE, plus a declared pair of palettes. */
+const THEMED_TEMPLATE = {
+  ...TEMPLATE,
+  id: "certification",
+  manifest: {
+    ...TEMPLATE.manifest,
+    id: "certification",
+    themes: [
+      { id: "light", label: "Светлая" },
+      { id: "dark", label: "Тёмная" },
+    ],
+  },
+};
+
+function mountThemed(design: Record<string, unknown>) {
+  mockFetch((url) => {
+    if (url === `/api/tests/${TEST_ID}/design`) return jsonResponse(design);
+    if (url === `/api/templates/certification`) return jsonResponse(THEMED_TEMPLATE);
+    return jsonResponse({ error: "unexpected" }, 500);
+  });
+  return renderHook(() => useDesignSettings(TEST_ID), { wrapper });
+}
+
+describe("useDesignSettings — themes (PRD-23)", () => {
+  it("exposes the declared palettes and reads a missing choice as «Авто»", async () => {
+    const { result } = mountThemed({ templateId: "certification", params: {} });
+    await waitFor(() => expect(result.current.template).not.toBeNull());
+    expect(result.current.themes.map((t) => t.id)).toEqual(["light", "dark"]);
+    expect(result.current.theme).toBe("auto");
+  });
+
+  it("keeps the picked palettes when the author pins a theme", async () => {
+    const { result } = mountThemed({
+      templateId: "certification",
+      params: {},
+      paramsByTheme: { light: { primaryColor: "L" }, dark: { primaryColor: "D" } },
+    });
+    await waitFor(() => expect(result.current.template).not.toBeNull());
+    act(() => result.current.setTheme("light"));
+    await waitFor(() => expect(result.current.theme).toBe("light"));
+    // Pinning is a choice about DELIVERY, not an edit of the palettes.
+    expect(result.current.themeParams).toEqual({
+      light: { primaryColor: "L" },
+      dark: { primaryColor: "D" },
+    });
+  });
+
+  // FR-17 — the barrier case: a test branded before PRD-23 must not lose its
+  // colour when it lands on a template that ships two palettes.
+  it("shows a colour saved flat in every palette and moves it on the first edit", async () => {
+    const { result } = mountThemed({
+      templateId: "certification",
+      params: { primaryColor: "OLD", companyName: "Acme" },
+    });
+    await waitFor(() => expect(result.current.template).not.toBeNull());
+    expect(result.current.themeParams).toEqual({
+      light: { primaryColor: "OLD" },
+      dark: { primaryColor: "OLD" },
+    });
+
+    act(() => result.current.setThemeParam("dark", "primaryColor", "NEW"));
+    await waitFor(() =>
+      expect(result.current.themeParams.dark).toEqual({ primaryColor: "NEW" }),
+    );
+    // The light palette kept the old colour instead of following the dark edit…
+    expect(result.current.themeParams.light).toEqual({ primaryColor: "OLD" });
+    // …the flat leftover is gone, and the non-colour param stayed put.
+    expect(result.current.draft.params).toEqual({ companyName: "Acme" });
+  });
+
+  it("returns ONE palette to the template without touching the other", async () => {
+    const { result } = mountThemed({
+      templateId: "certification",
+      params: {},
+      paramsByTheme: { light: { primaryColor: "L" }, dark: { primaryColor: "D" } },
+    });
+    await waitFor(() => expect(result.current.template).not.toBeNull());
+    act(() => result.current.clearThemeParam("light", "primaryColor"));
+    await waitFor(() => expect(result.current.themeParams.light).toEqual({}));
+    expect(result.current.themeParams.dark).toEqual({ primaryColor: "D" });
+  });
+});

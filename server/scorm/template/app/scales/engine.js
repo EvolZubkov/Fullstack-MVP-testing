@@ -16,7 +16,9 @@ var ScaleEngine = (function () {
     if (m.sourceType === 'option') {
       var i = Number(m.sourceKey);
       if (isNaN(i)) return false;
-      if (qType === 'single') return answer === i;
+      // A scale is answered by ONE graduation index, so its per-option contribution
+      // is read exactly like single choice (PRD-26 FR-11).
+      if (TBQType.isSingleIndexChoice(qType)) return answer === i;
       if (qType === 'multiple') return Array.isArray(answer) && answer.indexOf(i) !== -1;
       return false;
     }
@@ -70,7 +72,9 @@ var ScaleEngine = (function () {
     Object.keys(byQuestion).forEach(function (questionId) {
       var ms = byQuestion[questionId];
       var vals = ms.map(function (m) { return m.value * m.weight; });
-      if (questionTypes[questionId] === 'single') {
+      // One-index answers (single choice, scale) activate at most ONE unit of the
+      // question, so the range is the extremum, not the sum.
+      if (TBQType.isSingleIndexChoice(questionTypes[questionId])) {
         mins.push(Math.min.apply(null, [0].concat(vals)));
         maxes.push(Math.max.apply(null, [0].concat(vals)));
       } else {

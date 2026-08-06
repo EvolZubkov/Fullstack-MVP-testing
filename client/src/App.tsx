@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { ToastProvider } from "@universityrt/ui-kit";
 import { queryClient } from "./lib/queryClient";
@@ -6,10 +7,12 @@ import { ToastBridge } from "@/hooks/use-toast";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { LoadingState } from "@/components/loading-state";
+import { isScopeViolation, subscribeScopeViolation } from "@/lib/magic-scope";
 import type { Capability } from "@shared/access";
 import NotFound from "@/pages/not-found";
 import NoAccessPage from "@/pages/no-access";
 import LoginPage from "@/pages/login";
+import HomeRoute from "@/pages/home";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
 import FirstLoginPage from "@/pages/first-login";
@@ -30,23 +33,7 @@ import HistoryPage from "@/pages/learner/history";
 import { LearnerLayout } from "@/pages/learner/layout";
 import LogsPage from "@/pages/author/logs";
 
-/**
- * Default landing path for the current user (PRD-13 FR-30), chosen by the most
- * privileged area they can access: content roles -> tests; managers -> users;
- * learners -> the learner area. Returns `null` when the user holds no capability
- * that grants access to ANY area (e.g. an account with no roles): callers must
- * then render a "no access" screen instead of redirecting, otherwise the
- * fallback would point at a route the user also cannot enter and the guard would
- * redirect back to it forever (an infinite-redirect black screen).
- */
-function homePath(can: (cap: Capability) => boolean): string | null {
-  if (can("topics.manage")) return "/author/tests";
-  if (can("groups.manage") || can("users.read")) return "/author/users";
-  if (can("attempts.self.read")) return "/learner";
-  return null;
-}
-
-function ProtectedRoute({
+export function ProtectedRoute({
   children,
   requiredPermission,
 }: {
@@ -55,6 +42,7 @@ function ProtectedRoute({
 }) {
   const { user, isLoading, can } = useAuth();
   const [location] = useLocation();
+  const scopeViolated = useSyncExternalStore(subscribeScopeViolation, isScopeViolation, () => false);
 
   if (isLoading) {
     return <LoadingState message="Loading..." />;
@@ -62,6 +50,24 @@ function ProtectedRoute({
 
   if (!user) {
     return <Redirect to="/login" />;
+  }
+
+  // A session opened by an assignment link is access to ONE test. Two routes stay
+  // open: that test and a result page — ownership of the attempt is the server's
+  // call, so the client does not duplicate the check. Everything else, including
+  // the first-login gate below, is outside the link's remit, and the way out of the
+  // test is a full authentication — so send the learner straight to the login form
+  // instead of an intermediate "you cannot go there" screen.
+  if (user.magicScope) {
+    const testPath = `/learner/test/${user.magicScope.testId}`;
+    // Wouter matches a route with an optional trailing slash, so `/learner/test/t1/`
+    // is the same page as `/learner/test/t1` — compare without it, or the learner
+    // gets bounced to the login form while standing on their own test.
+    const path = location.replace(/\/+$/, "") || "/";
+    const insideScope =
+      !scopeViolated && (path === testPath || path.startsWith("/learner/result/"));
+    if (!insideScope) return <Redirect to="/login" />;
+    return <>{children}</>;
   }
 
   // Проверка первого входа: нужно согласие GDPR или смена пароля
@@ -70,38 +76,27 @@ function ProtectedRoute({
   }
 
   // PRD-13: доступ к маршруту по праву (capability), а не по жёсткой роли.
+  // PRD-25 FR-19: отказ ведёт на главную. Раньше здесь выбиралась «самая
+  // привилегированная доступная область», и когда таковой не было, приходилось
+  // рисовать экран «нет доступа», иначе редирект зациклился бы. Теперь у любого
+  // аутентифицированного пользователя есть куда приземлиться: главная сама
+  // покажет «нет доступа», если ей нечего показать (FR-18).
   if (requiredPermission && !can(requiredPermission)) {
-    const target = homePath(can);
-    // No reachable landing area, or the only landing area IS this route:
-    // redirecting would loop forever, so show an explicit "no access" screen.
-    if (!target || target === location) {
-      return <NoAccessPage />;
-    }
-    return <Redirect to={target} />;
+    return location === "/" ? <NoAccessPage /> : <Redirect to="/" />;
   }
 
   return <>{children}</>;
 }
 
-function HomeRedirect() {
-  const { user, isLoading, can } = useAuth();
-
-  if (isLoading) {
-    return <LoadingState message="Loading..." />;
-  }
-
-  if (!user) {
-    return <Redirect to="/login" />;
-  }
-
-  const target = homePath(can);
-  return target ? <Redirect to={target} /> : <NoAccessPage />;
-}
-
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={HomeRedirect} />
+      {/* PRD-25: «/» — настоящая страница, а не редирект по ролям. */}
+      <Route path="/">
+        <ProtectedRoute>
+          <HomeRoute />
+        </ProtectedRoute>
+      </Route>
       <Route path="/login" component={LoginPage} />
       <Route path="/forgot-password" component={ForgotPasswordPage} />
       <Route path="/reset-password" component={ResetPasswordPage} />
@@ -153,7 +148,7 @@ function Router() {
 
       {/* PRD-18: in-service debug player — full-screen, no AuthorLayout (like take-test). */}
       <Route path="/author/tests/:testId/debug">
-        <ProtectedRoute requiredPermission="tests.export.scorm">
+        <ProtectedRoute requiredPermission="tests.debug.play">
           <DebugPlayerPage />
         </ProtectedRoute>
       </Route>

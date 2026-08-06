@@ -12,11 +12,15 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { buildQuestionNav } from "@shared/template/question-nav";
 
 // Shared spies created before the hoisted vi.mock factories run.
-const { navigateSpy, toastSpy } = vi.hoisted(() => ({
+const { navigateSpy, toastSpy, authState } = vi.hoisted(() => ({
   navigateSpy: vi.fn(),
   toastSpy: vi.fn(),
+  // Plain (non-restricted) session by default; individual tests opt into a
+  // magic-link session by setting `magicScope`.
+  authState: { user: { id: "u1", magicScope: null } as Record<string, unknown> | null },
 }));
 
 vi.mock("wouter", () => ({
@@ -27,6 +31,8 @@ vi.mock("wouter", () => ({
 vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: toastSpy }),
 }));
+
+vi.mock("@/lib/auth", () => ({ useAuth: () => authState }));
 
 // The template hosts render into a Shadow DOM via the shared renderer; replace
 // them with doubles that expose the render context (JSON) and the relevant
@@ -58,7 +64,23 @@ vi.mock("../template-question-screen", () => ({
       <button data-testid="qs-answer-1" onClick={() => props.onAnswer(1)}>
         a1
       </button>
-      {props.footer !== undefined ? (
+      {props.nav ? (
+        // The row lives in the TEMPLATE now; the double renders the same buttons the
+        // layout does from the shared nav context, so the flows exercise real state.
+        (() => { const n = buildQuestionNav(props.nav); return (
+        <div data-testid="qs-nav">
+          {n.showBack && (
+            <button type="button" disabled={!n.canPrev} onClick={() => props.onNavAction?.("answer-back")}>← Назад</button>
+          )}
+          {n.showSkip && (
+            <button type="button" onClick={() => props.onNavAction?.("answer-skip")}>Пропустить</button>
+          )}
+          {n.showReview && (
+            <button type="button" onClick={() => props.onNavAction?.("answer-return")}>К обзору</button>
+          )}
+          <button type="button" disabled={!n.primaryEnabled} onClick={() => props.onNavAction?.(n.primaryAction)}>{n.primaryLabel}</button>
+        </div>); })()
+      ) : props.footer !== undefined ? (
         <div data-testid="qs-footer">{props.footer}</div>
       ) : (
         <div data-testid="qs-nav">
@@ -158,6 +180,9 @@ const jsonRes = (body: unknown, ok = true, status = 200) => ({
 
 interface FetchCfg {
   tests?: unknown[];
+  // Second+ answer to `/api/learner/tests` (the ATTEMPTS_EXHAUSTED refresh re-reads
+  // this endpoint). Omit to keep answering with `tests` on every call.
+  testsRefetch?: ReturnType<typeof jsonRes>;
   noStartTpl?: boolean;
   noQuestionTpl?: boolean;
   startAttempt?: ReturnType<typeof jsonRes>;
@@ -168,10 +193,15 @@ interface FetchCfg {
 
 /** Install a per-URL `fetch` stub for one test. */
 function installFetch(cfg: FetchCfg) {
+  let testsCalls = 0;
   const fn = vi.fn(async (url: string, opts?: any) => {
     const u = String(url);
     void opts;
-    if (u === "/api/learner/tests") return jsonRes(cfg.tests ?? [standardTest()]);
+    if (u === "/api/learner/tests") {
+      testsCalls += 1;
+      if (testsCalls > 1 && cfg.testsRefetch) return cfg.testsRefetch;
+      return jsonRes(cfg.tests ?? [standardTest()]);
+    }
     if (u.includes("/screen-template/start"))
       return cfg.noStartTpl ? jsonRes({}, false, 404) : jsonRes(TPL());
     if (u.includes("/screen-template/question"))
@@ -195,6 +225,7 @@ beforeEach(() => {
   navigateSpy.mockClear();
   toastSpy.mockClear();
   localStorage.clear();
+  authState.user = { id: "u1", magicScope: null };
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -238,6 +269,38 @@ describe("<TakeTestPage /> init", () => {
     expect(ctx().course.title).toBe("Тест по основам");
     expect(ctx().state.canStart).toBe(true);
   });
+
+  // Regression: the templated start branch was gated on `testMode === "standard"`,
+  // and the legacy React start screen it replaced was removed — so an adaptive test
+  // matched NO render branch and hung on the "Подготовка теста..." fallthrough.
+  it("renders the start screen for an adaptive test", async () => {
+    installFetch({ tests: [standardTest({ mode: "adaptive", sections: [{ drawCount: 0 }] })] });
+    render(<TakeTestPage />);
+    await screen.findByTestId("template-screen");
+    expect(ctx().course.title).toBe("Тест по основам");
+    expect(ctx().state.canStart).toBe(true);
+  });
+
+  // Adaptive draws from levels, not from section quotas, so the up-front count is
+  // unknown: it must be ABSENT (the layout hides the fact) rather than a bare "0".
+  it("omits the question count on the adaptive start screen", async () => {
+    installFetch({ tests: [standardTest({ mode: "adaptive", sections: [{ drawCount: 0 }] })] });
+    render(<TakeTestPage />);
+    await screen.findByTestId("template-screen");
+    expect(ctx().course.questionCount).toBeUndefined();
+  });
+
+  it("shows the neutral service error and reports it when the start template is missing", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fn = installFetch({ noStartTpl: true });
+    render(<TakeTestPage />);
+    expect(await screen.findByText("Ошибка сервиса")).toBeInTheDocument();
+    expect(consoleSpy).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(fn.mock.calls.some((c) => String(c[0]) === "/api/logs/client")).toBe(true),
+    );
+    consoleSpy.mockRestore();
+  });
 });
 
 // ─── question delivery + navigation ───────────────────────────────────────────
@@ -252,7 +315,7 @@ describe("<TakeTestPage /> standard flow", () => {
   it("advances to the next question after answering and pressing next", async () => {
     await renderToQuestion();
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-next"));
+    fireEvent.click(screen.getByText("Далее"));
     await waitFor(() =>
       expect(screen.getByTestId("qs-counter").textContent).toContain("Вопрос 2 из 2"),
     );
@@ -261,35 +324,37 @@ describe("<TakeTestPage /> standard flow", () => {
   it("submits and navigates to the result when every question is answered", async () => {
     await renderToQuestion();
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-next"));
-    await screen.findByTestId("qs-submit");
+    fireEvent.click(screen.getByText("Далее"));
+    await screen.findByText("Завершить тест");
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-submit"));
+    fireEvent.click(screen.getByText("Завершить тест"));
     await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith("/learner/result/attempt-1"));
   });
 
-  it("blocks submit with a toast when questions remain unanswered (strict)", async () => {
+  // The shared nav row gates the forward button on a usable answer — the SAME gate
+  // the SCORM runtime applies (`submitDisabledAttr`). So an unanswered last question
+  // cannot reach submit at all: the button is inert rather than toasting afterwards.
+  it("keeps the strict finish button inert while the question has no answer", async () => {
     await renderToQuestion();
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-next"));
-    await screen.findByTestId("qs-submit");
+    fireEvent.click(screen.getByText("Далее"));
+    const finish = await screen.findByText("Завершить тест");
     // Do NOT answer question 2.
-    fireEvent.click(screen.getByTestId("qs-submit"));
-    await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ title: "Не все вопросы отвечены" }),
-      ),
+    expect(finish).toBeDisabled();
+    fireEvent.click(finish);
+    await waitFor(() => expect(navigateSpy).not.toHaveBeenCalledWith("/learner/result/attempt-1"));
+    expect(toastSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Тест завершён" }),
     );
-    expect(navigateSpy).not.toHaveBeenCalledWith("/learner/result/attempt-1");
   });
 
   it("shows the annulled-attempt screen when finish returns 404", async () => {
     await renderToQuestion({ finish: jsonRes({}, false, 404) });
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-next"));
-    await screen.findByTestId("qs-submit");
+    fireEvent.click(screen.getByText("Далее"));
+    await screen.findByText("Завершить тест");
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-submit"));
+    fireEvent.click(screen.getByText("Завершить тест"));
     expect(await screen.findByText("Тест обновлён")).toBeInTheDocument();
     expect(screen.getByText("Начать заново")).toBeInTheDocument();
   });
@@ -297,45 +362,110 @@ describe("<TakeTestPage /> standard flow", () => {
   it("toasts a submit error when finish fails with a server error", async () => {
     await renderToQuestion({ finish: jsonRes({}, false, 500) });
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-next"));
-    await screen.findByTestId("qs-submit");
+    fireEvent.click(screen.getByText("Далее"));
+    await screen.findByText("Завершить тест");
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-submit"));
+    fireEvent.click(screen.getByText("Завершить тест"));
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Ошибка отправки" })),
     );
   });
 
-  it("shows the «оформление недоступно» reload screen when the question template is missing", async () => {
+  // The learner is told nothing technical («оформление недоступно» named a concept
+  // they cannot act on); the cause goes to the console and the server log instead.
+  it("shows the neutral service error when the question template is missing", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     await renderToStart({ noQuestionTpl: true });
     fireEvent.click(screen.getByTestId("ts-start-test"));
-    expect(await screen.findByText("Оформление недоступно")).toBeInTheDocument();
+    expect(await screen.findByText("Ошибка сервиса")).toBeInTheDocument();
+    expect(screen.getByText("Обратитесь к администратору.")).toBeInTheDocument();
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
   });
 });
 
 // ─── start-screen gates ────────────────────────────────────────────────────────
 
 describe("<TakeTestPage /> start gates", () => {
-  it("toasts and returns to the list when attempts are exhausted", async () => {
-    await renderToStart({ startAttempt: jsonRes({ code: "ATTEMPTS_EXHAUSTED" }, false, 403) });
+  it("folds exhausted attempts into the start context instead of navigating away", async () => {
+    // The learner must keep access to their result: a magic-link session has no
+    // test list to fall back to, so the exhausted state renders where they are.
+    // The refresh answers with the post-race facts (a real attempt id) — matching
+    // the server invariant that ATTEMPTS_EXHAUSTED never fires without one.
+    await renderToStart({
+      startAttempt: jsonRes({ code: "ATTEMPTS_EXHAUSTED" }, false, 403),
+      testsRefetch: jsonRes([standardTest({ completedAttempts: 3, lastCompletedAttemptId: "attempt-1" })]),
+    });
     fireEvent.click(screen.getByTestId("ts-start-test"));
-    await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Попытки закончились" })),
-    );
-    expect(navigateSpy).toHaveBeenCalledWith("/learner");
+    await waitFor(() => expect(ctx().state.canViewResults).toBe(true));
+    expect(ctx().state.canStart).toBe(false);
+    expect(navigateSpy).not.toHaveBeenCalledWith("/learner");
+  });
+
+  // The concrete failure this guards: a hand-faked `completedAttempts` counter
+  // flips `canViewResults` to true while `lastCompletedAttemptId` stays whatever
+  // the stale initial load had — here `null` — leaving «Мой результат» dead. The
+  // fix re-reads `/api/learner/tests` so the id is real.
+  it("re-reads the server facts after a race that exhausts the last attempt, and «Мой результат» opens the real attempt", async () => {
+    await renderToStart({
+      tests: [standardTest({ maxAttempts: 1, completedAttempts: 0, lastCompletedAttemptId: null })],
+      startAttempt: jsonRes({ code: "ATTEMPTS_EXHAUSTED" }, false, 403),
+      testsRefetch: jsonRes([
+        standardTest({ maxAttempts: 1, completedAttempts: 1, lastCompletedAttemptId: "attempt-42" }),
+      ]),
+    });
+    fireEvent.click(screen.getByTestId("ts-start-test"));
+    await waitFor(() => expect(ctx().state.canViewResults).toBe(true));
+    fireEvent.click(screen.getByTestId("ts-view-results"));
+    expect(navigateSpy).toHaveBeenCalledWith("/learner/result/attempt-42");
+  });
+
+  // When the refresh itself cannot be completed (offline / 500), the local
+  // fallback must stop offering a start WITHOUT pretending there is a result to
+  // view — `lastCompletedAttemptId` is left untouched (still null here), so
+  // `hasCompletedResults` (Part 2) keeps «Мой результат» off the screen too.
+  it("falls back to a safe exhausted state (no dead result button) when the refresh itself fails", async () => {
+    await renderToStart({
+      tests: [standardTest({ maxAttempts: 1, completedAttempts: 0, lastCompletedAttemptId: null })],
+      startAttempt: jsonRes({ code: "ATTEMPTS_EXHAUSTED" }, false, 403),
+      testsRefetch: jsonRes({}, false, 500),
+    });
+    fireEvent.click(screen.getByTestId("ts-start-test"));
+    await waitFor(() => expect(ctx().state.canStart).toBe(false));
+    expect(ctx().state.canViewResults).toBe(false);
   });
 
   it("folds a retake cooldown into the start context instead of navigating away", async () => {
     await renderToStart({
+      // daysUntil is deliberately NOT derivable from availableDate under the
+      // suite's clock — this is the guard that would catch a regression back to
+      // a client-side, clock-based countdown.
       startAttempt: jsonRes(
-        { code: "RETAKE_COOLDOWN", cooldownPeriodDays: 7, availableDate: "2026-08-01" },
+        { code: "RETAKE_COOLDOWN", cooldownPeriodDays: 7, availableDate: "2026-08-01", daysUntil: 99 },
         false,
         403,
       ),
     });
     fireEvent.click(screen.getByTestId("ts-start-test"));
     await waitFor(() => expect(ctx().state.cooldown).toBeTruthy());
+    // The countdown comes from the SERVER date, not from the browser clock.
+    expect(ctx().state.cooldown.daysUntil).toBe(99);
     expect(navigateSpy).not.toHaveBeenCalledWith("/learner");
+  });
+
+  it("delivers a retake cooldown with the start-screen data and blocks the start button", async () => {
+    // Path (a): the cooldown arrives with the initial /api/learner/tests fetch
+    // (testMetadata.retakeGate), not via a 403 on start — this is the primary
+    // delivery path and must be covered separately from the 403 fallback above.
+    await renderToStart({
+      tests: [
+        standardTest({
+          retakeGate: { cooldownPeriodDays: 30, availableDate: "2026-08-01", daysUntil: 99 },
+        }),
+      ],
+    });
+    expect(ctx().state.cooldown.daysUntil).toBe(99);
+    expect(ctx().state.canStart).toBe(false);
   });
 
   it("navigates to the prior result from the start «view-results» action", async () => {
@@ -350,6 +480,34 @@ describe("<TakeTestPage /> start gates", () => {
     await renderToStart();
     fireEvent.click(screen.getByTestId("ts-back"));
     expect(navigateSpy).toHaveBeenCalledWith("/learner");
+  });
+});
+
+// ─── magic-link (restricted) session ──────────────────────────────────────────
+
+describe("<TakeTestPage /> magic-link scope", () => {
+  // A magic-link session has no test list to fall back to (the guard would just
+  // bounce a "/learner" navigation to /login), so the start screen must not offer
+  // the ghost "back to list" control at all.
+  it("offers the start-screen back control in a normal session", async () => {
+    await renderToStart();
+    expect(ctx().state.showBack).toBe(true);
+  });
+
+  it("hides the start-screen back control in a restricted (magic-link) session", async () => {
+    authState.user = { id: "u1", magicScope: { testId: "test-1" } };
+    await renderToStart();
+    expect(ctx().state.showBack).toBe(false);
+  });
+
+  // Defensive: even if the "back" action were somehow triggered in a restricted
+  // session (the button is hidden via showBack above), it must resolve to the
+  // learner's own test rather than the out-of-scope list.
+  it("sends a restricted session's «back» action to its own test, not the list", async () => {
+    authState.user = { id: "u1", magicScope: { testId: "test-1" } };
+    await renderToStart();
+    fireEvent.click(screen.getByTestId("ts-back"));
+    expect(navigateSpy).toHaveBeenCalledWith("/learner/test/test-1");
   });
 });
 
@@ -393,26 +551,28 @@ describe("<TakeTestPage /> resume", () => {
 // ─── flexible (PRD-19) flow ────────────────────────────────────────────────────
 
 describe("<TakeTestPage /> flexible flow", () => {
+  // PRD-19 обзор gate: with every question answered the обзор only appears when
+  // answers may still be edited — that is the case this suite walks.
   const flexAttempt = () =>
-    jsonRes(standardAttempt({ allowReturnToUnanswered: true, answerCommitScope: "test" }));
+    jsonRes(standardAttempt({ allowReturnToUnanswered: true, allowAnswerChange: true, answerCommitScope: "test" }));
 
   it("commits answers through the two-step footer, reaches the обзор, and finishes", async () => {
     await renderToStart({ startAttempt: flexAttempt() });
     fireEvent.click(screen.getByTestId("ts-start-test"));
     await screen.findByTestId("question-screen");
 
-    // Q1: answer → «Отправить ответ» → «Далее →».
+    // Q1: answer → «Отправить ответ» → «Далее».
     fireEvent.click(screen.getByTestId("qs-answer-0"));
     fireEvent.click(await screen.findByText("Отправить ответ"));
-    fireEvent.click(await screen.findByText("Далее →"));
+    fireEvent.click(await screen.findByText("Далее"));
     await waitFor(() =>
       expect(screen.getByTestId("qs-counter").textContent).toContain("Вопрос 2 из 2"),
     );
 
-    // Q2 (last): answer → «Отправить ответ» → «Далее →» reaches the обзор.
+    // Q2 (last): answer → «Отправить ответ» → «Далее» reaches the обзор.
     fireEvent.click(screen.getByTestId("qs-answer-0"));
     fireEvent.click(await screen.findByText("Отправить ответ"));
-    fireEvent.click(await screen.findByText("Далее →"));
+    fireEvent.click(await screen.findByText("Далее"));
 
     // Review screen (template host) → finish.
     await screen.findByTestId("ts-finish-review");
@@ -421,7 +581,7 @@ describe("<TakeTestPage /> flexible flow", () => {
     await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith("/learner/result/attempt-1"));
   });
 
-  it("skips a question and exposes the «Вернуться» обзор entry", async () => {
+  it("skips a question and exposes the «К обзору» обзор entry", async () => {
     await renderToStart({ startAttempt: flexAttempt() });
     fireEvent.click(screen.getByTestId("ts-start-test"));
     await screen.findByTestId("question-screen");
@@ -431,8 +591,8 @@ describe("<TakeTestPage /> flexible flow", () => {
     await waitFor(() =>
       expect(screen.getByTestId("qs-counter").textContent).toContain("Вопрос 2 из 2"),
     );
-    // A skipped question makes «Вернуться» (обзор) available.
-    fireEvent.click(await screen.findByText("Вернуться"));
+    // A skipped question makes «К обзору» (обзор) available.
+    fireEvent.click(await screen.findByText("К обзору"));
     await screen.findByTestId("ts-finish-review");
     expect(ctx().review.unansweredCount).toBeGreaterThan(0);
   });
@@ -543,7 +703,7 @@ describe("<TakeTestPage /> sectional flow", () => {
 
     // Answer the sole question of section A and advance → intercepts with results.
     fireEvent.click(screen.getByTestId("qs-answer-0"));
-    fireEvent.click(screen.getByTestId("qs-next"));
+    fireEvent.click(screen.getByText("Далее"));
 
     await screen.findByTestId("ts-section-continue");
     expect(ctx().sectionResult.scorePercent).toBe(100);

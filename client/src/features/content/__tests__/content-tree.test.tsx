@@ -139,7 +139,9 @@ describe("<ContentTree /> — data branches", () => {
     expect(screen.getByText("Аналитика")).toBeInTheDocument();
     expect(screen.getByText("Бюджетирование")).toBeInTheDocument();
     expect(screen.getByText("Инвестиции")).toBeInTheDocument();
-    expect(screen.getByText(/Все темы \(3\)/)).toBeInTheDocument();
+    // The root caption now spells out what each number counts (2 папки · 2 темы · 3 вопроса).
+    expect(document.querySelector(".ct-rootrow")!.textContent).toContain("Все темы");
+    expect(document.querySelector(".ct-rootrow")!.textContent).toContain("3 вопроса");
     expect(screen.getByText("Название")).toBeInTheDocument();
     // Topics start collapsed → their questions are not in the DOM yet.
     expect(screen.queryByText("Сколько будет 2+2?")).not.toBeInTheDocument();
@@ -402,5 +404,53 @@ describe("<ContentTree /> — filters & search", () => {
     await waitFor(() => expect(screen.getByText("Что такое акция?")).toBeInTheDocument());
     expect(screen.getByText(/Показано\s+1\s+совпадение/)).toBeInTheDocument();
     expect(screen.queryByText("Финансы")).not.toBeInTheDocument();
+  });
+});
+
+// ── Counts in row captions ────────────────────────────────────────────────
+// The root used to show a bare «(N)» that silently meant QUESTIONS, and a folder
+// showed only its own topics with a hard-coded «темы» ending — so «1 темы» and a
+// container folder reading «0 темы» while holding hundreds of questions.
+describe("<ContentTree /> — счётчики в подписях строк", () => {
+  it("корень расшифровывает, что именно посчитано", async () => {
+    renderTree();
+    await waitFor(() => expect(screen.getByText("Финансы")).toBeInTheDocument());
+    const root = document.querySelector(".ct-rootrow")!;
+    expect(root.textContent).toContain("2 папки");
+    expect(root.textContent).toContain("2 темы");
+    expect(root.textContent).toContain("3 вопроса");
+  });
+
+  it("папка считает всё вложенное вглубь, а не только своё", async () => {
+    renderTree();
+    await waitFor(() => expect(screen.getByText("Финансы")).toBeInTheDocument());
+    // f1 ⊃ f2 (пустая) + t1 (2 вопроса)
+    const row = screen.getByText("Финансы").closest(".ct-row")!;
+    expect(row.textContent).toContain("1 папка");
+    expect(row.textContent).toContain("1 тема");
+    expect(row.textContent).toContain("2 вопроса");
+  });
+
+  it("пустая папка так и говорит", async () => {
+    renderTree();
+    await waitFor(() => expect(screen.getByText("Аналитика")).toBeInTheDocument());
+    const row = screen.getByText("Аналитика").closest(".ct-row")!;
+    expect(row.textContent).toContain("пусто");
+  });
+
+  it("склоняет существительные по числу", async () => {
+    const one = {
+      folders: [{ id: "f1", name: "Одна", parentId: null }],
+      topics: [{ id: "t1", name: "Тема", folderId: "f1", ownerId: "u1", visibility: "shared" }],
+      questions: [
+        { id: "q1", topicId: "t1", type: "single", prompt: "Раз?", difficulty: null, tags: [], mediaType: null, createdBy: "u1" },
+      ],
+    };
+    renderTree(one);
+    await waitFor(() => expect(screen.getByText("Одна")).toBeInTheDocument());
+    const row = screen.getByText("Одна").closest(".ct-row")!;
+    expect(row.textContent).toContain("1 тема");
+    expect(row.textContent).toContain("1 вопрос");
+    expect(row.textContent).not.toContain("1 вопроса");
   });
 });

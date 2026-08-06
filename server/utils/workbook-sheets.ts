@@ -18,6 +18,8 @@
 
 import type { ScaleBand } from "@shared/scales/engine";
 import type { DrawStratum, QuestionScoring } from "@shared/schema";
+import { scales, resultVariables } from "@shared/schema";
+import { normalizeTags, TAG_MAX_LENGTH } from "@shared/tags";
 import { serializeScoring } from "./scoring-excel";
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -37,6 +39,39 @@ export const RESULT_VAR_WIDTHS = [18, 28, 10, 60, 18, 14, 20];
 export const MEASUREMENT_HEADERS = ["Вопрос", "Шкала", "Источник", "Ключ источника", "Значение", "Вес"];
 export const MEASUREMENT_WIDTHS = [14, 16, 12, 16, 10, 8];
 
+// ─── «Варианты теста» column of the «Вопросы» sheet ──────────────────────────
+//
+// Variant membership (PRD-17) rides on the «Вопросы» sheet. The column used to be
+// called just «Варианты», which collided with the answer options twice over: the
+// same sheet already carries «Тексты вариантов ответа» and «Следование вариантов
+// ответов», so the bare word read as "answer options" to every first-time author —
+// AND «Варианты» is itself the ancient name of the options column. Hence the
+// explicit name, with the old one still accepted (see {@link variantsColumnOf}).
+
+/** Canonical name of the variant-membership column. */
+export const VARIANTS_COLUMN = "Варианты теста";
+/** Legacy name, still read on import (older books and pre-rename exports). */
+export const VARIANTS_COLUMN_LEGACY = "Варианты";
+/** Canonical name of the answer-options column (whose ancient alias is the above). */
+export const OPTIONS_COLUMN = "Тексты вариантов ответа";
+
+/**
+ * Which column of a «Вопросы» sheet carries variant membership, or `null` when
+ * none does.
+ *
+ * The legacy name is honoured ONLY next to the canonical options column: a sheet
+ * that lacks «Тексты вариантов ответа» is an ancient bank export where «Варианты»
+ * still means the answer options — and which predates variants entirely, so it
+ * has no membership to read. The canonical name always wins when both appear.
+ */
+export function variantsColumnOf(headers: Set<string>): string | null {
+  if (headers.has(VARIANTS_COLUMN)) return VARIANTS_COLUMN;
+  if (headers.has(VARIANTS_COLUMN_LEGACY) && headers.has(OPTIONS_COLUMN)) {
+    return VARIANTS_COLUMN_LEGACY;
+  }
+  return null;
+}
+
 // ─── booleans / enums ────────────────────────────────────────────────────────
 
 const TRUE_WORDS = new Set(["да", "yes", "true", "1", "y", "истина"]);
@@ -50,6 +85,12 @@ export function parseBool(raw: unknown): boolean {
 export function serBool(b: boolean): string {
   return b ? "да" : "нет";
 }
+
+/**
+ * The yes/no pair offered in a dropdown. {@link parseBool} also accepts
+ * yes/true/1/истина; those stay readable but unadvertised.
+ */
+export const BOOL_CHOICES = [serBool(true), serBool(false)];
 
 const SOURCE_FROM: Record<string, string> = {
   вопрос: "question",
@@ -82,6 +123,37 @@ const CONTROLS_TO: Record<string, string> = {
   success: "успех",
   completion: "завершение",
 };
+
+// ─── canonical cell values of the enumerated columns ─────────────────────────
+//
+// The values an author may PICK, as opposed to everything the parsers tolerate.
+// The parsers above accept synonyms and English spellings so older books keep
+// loading; offering all of them would turn a dropdown into a quiz. Each list is
+// therefore derived from the export side (`*_TO`) or straight from the schema
+// enum the value must land in — never hand-written, because a hand-kept copy is
+// exactly how a template starts offering a value the importer no longer takes.
+//
+// Consumed by the workbook template (`server/services/workbook-template.ts`),
+// which turns them into Excel dropdowns.
+
+/** «Источник» of «Вклады вопросов». */
+export const MEASUREMENT_SOURCE_CHOICES = Object.values(SOURCE_TO);
+/** «Управляет статусом» of «Показатели». */
+export const CONTROLS_CHOICES = Object.values(CONTROLS_TO);
+/** Scale kind — the value lands in the `scales.type` enum as written. */
+export const SCALE_TYPE_CHOICES = [...scales.type.enumValues];
+/** «Агрегация» of «Шкалы». */
+export const SCALE_AGGREGATION_CHOICES = [...scales.aggregation.enumValues];
+/** «Нормализация» of «Шкалы». */
+export const SCALE_NORMALIZATION_CHOICES = [...scales.normalization.enumValues];
+/** «Направление» of «Шкалы». */
+export const SCALE_DIRECTION_CHOICES = [...scales.direction.enumValues];
+/** «SCORM» of «Шкалы». */
+export const SCALE_SCORM_CHOICES = [...scales.scormTarget.enumValues];
+/** «Тип» of «Показатели». */
+export const RESULT_VAR_TYPE_CHOICES = [...resultVariables.type.enumValues];
+/** «SCORM» of «Показатели» (a different default order than the scale one). */
+export const RESULT_VAR_SCORM_CHOICES = [...resultVariables.scormTarget.enumValues];
 
 // ─── bands grammar («Диапазоны») ──────────────────────────────────────────────
 
@@ -364,6 +436,28 @@ const QUOTA_MODE_FROM: Record<string, "exact" | "min"> = {
 /** PRD-11 mode → «Режим» cell (export). */
 const QUOTA_MODE_TO: Record<string, string> = { exact: "Ровно", min: "Не менее" };
 
+/** «Режим» of «Квоты». */
+export const QUOTA_MODE_CHOICES = Object.values(QUOTA_MODE_TO);
+
+/**
+ * «Тип порога» of «Пороги вариантов» — a variant threshold is always a concrete
+ * number, so only the two measurable types apply.
+ */
+export const PASS_TYPE_CHOICES = Object.values(PASS_TYPE_TO);
+
+/**
+ * «Тип порога» of «Структура» — the two measurable types plus the three modes
+ * {@link parseStructureRow} handles before consulting `PASS_TYPE_FROM`:
+ * inherit the test's rule, do not check at all, or take the threshold per
+ * variant from the «Пороги вариантов» sheet.
+ */
+export const STRUCTURE_PASS_TYPE_CHOICES = [
+  "Как у теста",
+  "Нет",
+  ...PASS_TYPE_CHOICES,
+  "По вариантам",
+];
+
 /** One parsed «Структура» row (refs resolved later by the orchestrator). */
 export interface ParsedSection {
   /** Topic name (resolved to `topicId` by the orchestrator). */
@@ -401,6 +495,11 @@ export function parseStructureRow(
     passRule = { source: "inherit_overall" };
   } else if (typeRaw === "нет" || typeRaw === "не проверять" || typeRaw === "none") {
     passRule = { source: "none" };
+  } else if (typeRaw === "по вариантам" || typeRaw === "by_variant") {
+    // PRD-24: the thresholds themselves live on the «Пороги вариантов» sheet and are
+    // keyed by formId, which only exists once the variant set is built — so the rule
+    // starts empty here and that pass fills it in.
+    passRule = { source: "by_variant", byForm: {} };
   } else {
     const type = PASS_TYPE_FROM[typeRaw];
     if (!type) return { ok: false, error: `неизвестный «Тип порога»: "${row["Тип порога"]}"` };
@@ -430,7 +529,10 @@ export function serializeStructureRow(s: {
   let passType = "Как у теста";
   let passValue: number | "" = "";
   if (rule.source === "none") passType = "Нет";
-  else if (rule.source === "custom" && rule.type) {
+  else if (rule.source === "by_variant") {
+    // PRD-24: no single number here — the thresholds go to «Пороги вариантов».
+    passType = "По вариантам";
+  } else if (rule.source === "custom" && rule.type) {
     passType = PASS_TYPE_TO[rule.type] ?? rule.type;
     passValue = typeof rule.value === "number" ? rule.value : "";
   }
@@ -457,8 +559,15 @@ export function parseQuotaRow(row: Record<string, unknown>): ParseResult<ParsedQ
   const topicName = String(row["Раздел"] ?? row["Тема"] ?? "").replace(/[\s ​﻿]+/g, " ").trim();
   if (!topicName) return { ok: false, error: "не указан раздел (тема)" };
 
-  const tag = String(row["Тег"] ?? "").trim();
+  // Normalized through the SAME helper the «Вопросы» sheet uses for question
+  // tags. Trimming alone let a quota keep a form the question side had already
+  // rewritten (whitespace runs, over-long text), and the draw matches tags by
+  // string — a quota that does not match spelling matches no questions at all.
+  const tag = normalizeTags([String(row["Тег"] ?? "")])[0] ?? "";
   if (!tag) return { ok: false, error: "не указан тег" };
+  if (tag.length > TAG_MAX_LENGTH) {
+    return { ok: false, error: `тег длиннее ${TAG_MAX_LENGTH} символов: "${tag}"` };
+  }
 
   const count = Number(String(row["Количество"] ?? "").trim());
   if (!Number.isInteger(count) || count < 1) {
@@ -480,6 +589,61 @@ export function serializeQuotaRow(topicName: string, stratum: DrawStratum): Reco
     "Тег": stratum.tag,
     "Количество": stratum.count,
     "Режим": QUOTA_MODE_TO[mode] ?? mode,
+  };
+}
+
+// ─── «Пороги вариантов» (PRD-24, FR-14) ──────────────────────────────────────
+//
+// A per-variant pass threshold is one row per (section, variant) — same shape as
+// «Квоты» is for strata. Variants are positional in the workbook (PRD-17 D-10), so
+// the key is the 1-based NUMBER, matching the «Варианты» column of «Вопросы»; the
+// importer maps it back to the stable formId AFTER the variant set is built.
+
+/** Canonical «Пороги вариантов» headers (one row per variant of a section). */
+export const VARIANT_THRESHOLD_HEADERS = ["Раздел", "Вариант", "Тип порога", "Порог"];
+export const VARIANT_THRESHOLD_WIDTHS = [28, 12, 16, 10];
+
+/** One parsed «Пороги вариантов» row (variant referenced by its 1-based number). */
+export interface ParsedVariantThreshold {
+  topicName: string;
+  variantNumber: number;
+  type: "percent" | "absolute";
+  value: number;
+}
+
+/** Parse a «Пороги вариантов» row. Accepts «2» or «Вариант 2» in the number cell. */
+export function parseVariantThresholdRow(
+  row: Record<string, unknown>,
+): ParseResult<ParsedVariantThreshold> {
+  const topicName = String(row["Раздел"] ?? row["Тема"] ?? "").replace(/[\s ​﻿]+/g, " ").trim();
+  if (!topicName) return { ok: false, error: "не указан раздел (тема)" };
+
+  const numberMatch = String(row["Вариант"] ?? "").match(/\d+/);
+  if (!numberMatch) return { ok: false, error: `некорректный «Вариант»: "${row["Вариант"]}"` };
+  const variantNumber = parseInt(numberMatch[0], 10);
+  if (!Number.isInteger(variantNumber) || variantNumber < 1) {
+    return { ok: false, error: `«Вариант» должен быть целым ≥ 1 ("${row["Вариант"]}")` };
+  }
+
+  const typeRaw = String(row["Тип порога"] ?? "").trim().toLowerCase();
+  const type = PASS_TYPE_FROM[typeRaw];
+  if (!type) return { ok: false, error: `неизвестный «Тип порога»: "${row["Тип порога"]}"` };
+
+  const value = Number(String(row["Порог"] ?? "").trim());
+  if (!Number.isFinite(value) || value < 0 || String(row["Порог"] ?? "").trim() === "") {
+    return { ok: false, error: `некорректный «Порог»: "${row["Порог"]}"` };
+  }
+
+  return { ok: true, value: { topicName, variantNumber, type, value } };
+}
+
+/** Serialize one variant threshold to a «Пороги вариантов» row (export). */
+export function serializeVariantThresholdRow(t: ParsedVariantThreshold): Record<string, unknown> {
+  return {
+    "Раздел": t.topicName,
+    "Вариант": t.variantNumber,
+    "Тип порога": PASS_TYPE_TO[t.type] ?? t.type,
+    "Порог": t.value,
   };
 }
 

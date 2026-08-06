@@ -1,0 +1,49 @@
+<div class="tb-report tb-report--adaptive" style="{{#if report.backgroundUrl}}background-image: url({{ report.backgroundUrl }});{{/if}}">
+  {{#if report.hasLogo}}<div class="tb-report__brand"><img src="{{ report.logoUrl }}" alt=""></div>{{/if}}
+
+  <div class="tb-report__headline">Результаты теста</div>
+  <div class="tb-report__attempts">Адаптивное тестирование</div>
+  {{#if report.hasLearnerName}}<div class="tb-report__learner">Слушатель: <span data-path="report.learnerName"></span></div>{{/if}}
+  <div class="tb-report__date">Дата прохождения: <span data-path="report.attemptDateLabel"></span></div>
+
+  <section class="tb-report__card">
+    <div class="tb-report__title tb-report__title--solid" data-path="course.title"></div>
+  </section>
+
+  {{#if report.hasTopics}}
+  <section class="tb-report__card">
+    <div class="tb-report__title tb-report__title--tight">Результаты по темам</div>
+    <div class="tb-report__topics" style="grid-template-columns: repeat({{ report.gridColumns }}, 1fr);">
+      {{#each result.topicResults}}
+      <div class="tb-report__topic tb-report__topic--level {{ achievedClass }}">
+        <div class="tb-report__topic-stripe"></div>
+        <div class="tb-report__topic-head">
+          <div class="tb-report__topic-name">{{ topicName }}</div>
+          <div class="tb-report__topic-level">{{ levelLabel }}</div>
+        </div>
+        {{#if hasCounts}}
+        <div class="tb-report__topic-counts">
+          <div>{{ answeredLabel }}</div>
+          <div>{{ correctLabel }}</div>
+        </div>
+        {{/if}}
+        {{#if hasFeedback}}<div class="tb-report__topic-fb tb-report__topic-fb--sep">{{ feedback }}</div>{{/if}}
+      </div>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+
+  {{#if report.hasCourses}}
+  <section class="tb-report__card">
+    <div class="tb-report__title tb-report__title--tight">Рекомендуемые материалы</div>
+    <div class="tb-report__lead">Изучите эти материалы для улучшения знаний.</div>
+    {{#each report.courses}}
+    <div class="tb-report__rec">
+      <div class="tb-report__rec-topic">{{ topicName }}</div>
+      <div class="pdf-link-btn tb-report__rec-chip tb-report__rec-chip--level" data-url="{{ url }}">{{ title }}</div>
+    </div>
+    {{/each}}
+  </section>
+  {{/if}}
+</div>

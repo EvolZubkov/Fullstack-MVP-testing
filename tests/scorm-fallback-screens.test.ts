@@ -41,7 +41,14 @@ function writeTemplate(dir: string, id: string, kinds: string[]): void {
       question: "layouts/question.html",
       results: "layouts/results.html",
     },
-    contentTemplates: kinds.map((kind) => ({ key: kind + ".x", label: kind, kind })),
+    contentTemplates: kinds.map((kind) => ({
+      key: kind + ".x",
+      label: kind,
+      kind,
+      // PRD-27: вид отчёта объявляется вместе со СВОИМ файлом макета — общего макета
+      // «на весь вид» у отчёта нет.
+      ...(kind.startsWith("report") ? { layoutFile: `layouts/${kind}.html`, isDefault: true } : {}),
+    })),
     params: [],
   };
   fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(manifest));
@@ -49,6 +56,9 @@ function writeTemplate(dir: string, id: string, kinds: string[]): void {
   fs.writeFileSync(path.join(dir, "layouts", "start.html"), "<div>own start</div>");
   fs.writeFileSync(path.join(dir, "layouts", "question.html"), '<div data-slot="question-text"></div>');
   fs.writeFileSync(path.join(dir, "layouts", "results.html"), "<div>own results</div>");
+  for (const kind of kinds.filter((k) => k.startsWith("report"))) {
+    fs.writeFileSync(path.join(dir, "layouts", `${kind}.html`), '<div class="tb-report">own report</div>');
+  }
   fs.writeFileSync(path.join(dir, "styles", "theme.css"), ":root{--primary:0 0% 0%;}");
   fs.writeFileSync(path.join(dir, "styles", "base.css"), ".own{display:block;}");
 }
@@ -120,7 +130,8 @@ describe("SCORM fallback screens (PRD-7 G21)", () => {
     expect(zip.file("template-default/manifest.json"), "default manifest bundled").toBeTruthy();
     expect(zip.file("template-default/layouts/start.html"), "default start layout bundled").toBeTruthy();
     expect(zip.file("styles-default.css"), "default CSS bundled").toBeTruthy();
-    // default's base.css is the real component CSS, so it must be non-trivial.
+    // default's theme.css is now the single component stylesheet (base.css was folded
+    // into it), so it must be non-trivial.
     expect((await zip.file("styles-default.css")!.async("string")).length).toBeGreaterThan(500);
 
     // index.html toggles in the fallback stylesheet.
@@ -147,6 +158,10 @@ describe("SCORM fallback screens (PRD-7 G21)", () => {
       "intro",
       "review",
       "section-results",
+      // PRD-27: отчёт — такой же системный экран с деградацией, поэтому «объявляет
+      // всё» означает и его виды.
+      "report",
+      "report.adaptive",
     ]);
 
     const buffer = await generateScormPackage(buildFixture(dir, "has-sysscreens") as any);
@@ -169,6 +184,8 @@ describe("SCORM fallback screens (PRD-7 G21)", () => {
       "intro",
       "review",
       "section-results",
+      "report",
+      "report.adaptive",
     ]);
 
     const buffer = await generateScormPackage(buildFixture(dir, "partial-sysscreens") as any);
@@ -177,5 +194,30 @@ describe("SCORM fallback screens (PRD-7 G21)", () => {
     const td = await readTestData(zip);
     expect(td.designSettings.fallbackLayoutKeys).toEqual(["results"]);
     expect(zip.file("template-default/manifest.json")).toBeTruthy();
+  });
+
+  it("шаблон без видов отчёта получает отчёт из «Стандартного» (PRD-27 FR-10)", async () => {
+    const dir = path.join(tmpRoot, "no-report");
+    // Объявлено ВСЁ, кроме отчёта: единственный запасной экран — он.
+    writeTemplate(dir, "no-report", [
+      "start",
+      "results",
+      "questions",
+      "intro",
+      "review",
+      "section-results",
+    ]);
+
+    const buffer = await generateScormPackage(buildFixture(dir, "no-report") as any);
+    const zip = await JSZip.loadAsync(buffer);
+
+    const td = await readTestData(zip);
+    expect(td.designSettings.fallbackLayoutKeys).toEqual(["report", "report.adaptive"]);
+    // Макет отчёта приезжает вложенным — без него тест на таком шаблоне остался бы
+    // без документа, хотя все экраны у него свои.
+    expect(zip.file("template-default/layouts/report.html")).toBeTruthy();
+    // И его стиль тоже: страница, собранная без оформления, — это тот же дефект.
+    const css = await zip.file("styles.css")!.async("string");
+    expect(css).toContain(".tb-report");
   });
 });

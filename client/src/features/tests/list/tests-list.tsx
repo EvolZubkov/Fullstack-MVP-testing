@@ -90,6 +90,7 @@ import {
 import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
 import type { PublishCheckFinding, PublishInfeasibleError } from "@/features/content-protection/types";
 import { TestEditor } from "@/features/tests/editor/test-editor";
+import type { EditorTabKey } from "@/features/tests/editor/use-test-editor";
 import { TestAccessPanel } from "@/features/tests/access/test-access-panel";
 import { AssignTestDialog } from "@/components/assign-test-dialog";
 import { useAuth } from "@/lib/auth";
@@ -132,6 +133,7 @@ function apiToEntry(row: ApiTestRow): TestListEntry {
     updatedAt: (row as { updatedAt?: string | Date | null }).updatedAt ?? null,
     createdAt: (row as { createdAt?: string | Date | null }).createdAt ?? null,
     publicationState: (row as { publication?: { state?: TestListEntry["publicationState"] } }).publication?.state,
+    unmappedPageCount: (row as { unmappedPageCount?: number }).unmappedPageCount ?? 0,
   };
 }
 
@@ -263,7 +265,7 @@ export function TestsListPage(): React.JSX.Element {
   //   - create: FAB → «Новый тест» → folder pick → empty draft with folderId
   const [editorTarget, setEditorTarget] = useState<
     | null
-    | { kind: "edit"; testId: string }
+    | { kind: "edit"; testId: string; tab?: EditorTabKey }
     | { kind: "create"; folderId: string | null }
   >(null);
 
@@ -328,6 +330,11 @@ export function TestsListPage(): React.JSX.Element {
   /** May this user grant access to THIS test (object scope, BRC-27). */
   const canGrantAccessFor = (test: TestListEntry) =>
     canGrantAccessCap && (isAdmin || test.ownerId === user?.id);
+
+  // PRD-13: SCORM generation is developer/admin only — the author role holds the
+  // debug run but NOT the export, so the two menu items are gated separately.
+  const canExportScorm = can("tests.export.scorm");
+  const canDebugPlay = can("tests.debug.play");
 
   // PRD-15 T-12 (E-12): publish-infeasible findings to show in the impact dialog.
   const [publishImpact, setPublishImpact] = useState<{
@@ -563,7 +570,7 @@ export function TestsListPage(): React.JSX.Element {
           rows={searchRows}
           query={searchQuery}
           onClearSearch={() => setSearchQuery("")}
-          onOpenTest={(id) => setEditorTarget({ kind: "edit", testId: id })}
+          onOpenTest={(id, tab) => setEditorTarget({ kind: "edit", testId: id, tab })}
           onAssign={(id, title) => {
             setAssignTest({ id, title });
             setAssignDialogOpen(true);
@@ -592,7 +599,7 @@ export function TestsListPage(): React.JSX.Element {
               return next;
             })
           }
-          onOpenTest={(id) => setEditorTarget({ kind: "edit", testId: id })}
+          onOpenTest={(id, tab) => setEditorTarget({ kind: "edit", testId: id, tab })}
           onAssign={(id, title) => {
             setAssignTest({ id, title });
             setAssignDialogOpen(true);
@@ -793,6 +800,7 @@ export function TestsListPage(): React.JSX.Element {
         }
         open={editorTarget !== null}
         onClose={() => setEditorTarget(null)}
+        initialTab={editorTarget?.kind === "edit" ? editorTarget.tab : undefined}
       />
 
       {/* Access panel (PRD-13, WF-2) ---------------------------------------- */}
@@ -894,35 +902,39 @@ export function TestsListPage(): React.JSX.Element {
             Общий доступ
           </button>
         )}
-        <button
-          type="button"
-          className="dropdown-item"
-          role="menuitem"
-          onClick={() => {
-            setTestMenu(null);
-            // PRD-18: open the in-service debug player in a chromeless popup window
-            // (no address bar), sized to the screen, named per test so it's reused.
-            window.open(
-              `/author/tests/${test.id}/debug`,
-              `tb-debug-${test.id}`,
-              `popup=yes,width=${window.screen.availWidth},height=${window.screen.availHeight},left=0,top=0`,
-            );
-          }}
-          data-testid={`menu-debug-${test.id}`}
-        >
-          <FlaskConical size={14} />
-          Выполнить отладку
-        </button>
-        <a
-          className="dropdown-item"
-          role="menuitem"
-          href={`/api/tests/${test.id}/export/scorm`}
-          onClick={() => setTestMenu(null)}
-          data-testid={`menu-export-${test.id}`}
-        >
-          <Download size={14} />
-          Экспорт SCORM
-        </a>
+        {canDebugPlay && (
+          <button
+            type="button"
+            className="dropdown-item"
+            role="menuitem"
+            onClick={() => {
+              setTestMenu(null);
+              // PRD-18: open the in-service debug player in a chromeless popup window
+              // (no address bar), sized to the screen, named per test so it's reused.
+              window.open(
+                `/author/tests/${test.id}/debug`,
+                `tb-debug-${test.id}`,
+                `popup=yes,width=${window.screen.availWidth},height=${window.screen.availHeight},left=0,top=0`,
+              );
+            }}
+            data-testid={`menu-debug-${test.id}`}
+          >
+            <FlaskConical size={14} />
+            Выполнить отладку
+          </button>
+        )}
+        {canExportScorm && (
+          <a
+            className="dropdown-item"
+            role="menuitem"
+            href={`/api/tests/${test.id}/export/scorm`}
+            onClick={() => setTestMenu(null)}
+            data-testid={`menu-export-${test.id}`}
+          >
+            <Download size={14} />
+            Экспорт SCORM
+          </a>
+        )}
         <a
           className="dropdown-item"
           role="menuitem"
@@ -1103,7 +1115,7 @@ function DefaultTree(props: {
   totalTests: number;
   expandedFolderIds: ReadonlySet<string>;
   onToggleFolder: (id: string) => void;
-  onOpenTest: (id: string) => void;
+  onOpenTest: (id: string, tab?: EditorTabKey) => void;
   onAssign: (id: string, title: string) => void;
   onOpenMore: (id: string) => void;
   onOpenFolderMore: (id: string) => void;
@@ -1153,6 +1165,7 @@ function DefaultTree(props: {
             indented={row.depth >= 2}
             onOpen={() => props.onOpenTest(row.id)}
             onEdit={() => props.onOpenTest(row.id)}
+            onOpenStructure={() => props.onOpenTest(row.id, "structure")}
             onAssign={() => props.onAssign(row.id, row.entry.title)}
             onMore={(e) => {
               e.stopPropagation();
@@ -1171,7 +1184,7 @@ function SearchTree(props: {
   rows: ReturnType<typeof buildSearchRows>;
   query: string;
   onClearSearch: () => void;
-  onOpenTest: (id: string) => void;
+  onOpenTest: (id: string, tab?: EditorTabKey) => void;
   onAssign: (id: string, title: string) => void;
   onOpenMore: (id: string) => void;
   testMenu: { id: string } | null;
@@ -1193,6 +1206,7 @@ function SearchTree(props: {
           breadcrumb={row.folderName}
           onOpen={() => props.onOpenTest(row.id)}
           onEdit={() => props.onOpenTest(row.id)}
+          onOpenStructure={() => props.onOpenTest(row.id, "structure")}
           onAssign={() => props.onAssign(row.id, row.entry.title)}
           onMore={(e) => {
             e.stopPropagation();
@@ -1266,6 +1280,8 @@ function TestRow(props: {
   breadcrumb?: string | null;
   onOpen: () => void;
   onEdit: () => void;
+  /** Opens the editor on «Структура» — where an unmapped page is resolved. */
+  onOpenStructure: () => void;
   onAssign: () => void;
   onMore: (e: React.MouseEvent) => void;
   menuOpen: boolean;
@@ -1281,6 +1297,7 @@ function TestRow(props: {
   const canAnyMenu =
     canEdit ||
     can("tests.export.scorm") ||
+    can("tests.debug.play") ||
     can("tests.publish") ||
     can("tests.delete") ||
     can("tests.access.grant");
@@ -1328,8 +1345,9 @@ function TestRow(props: {
       <div className="tree-test-owner">
         <span>{e.ownerName ?? "—"}</span>
       </div>
-      <div>
+      <div className="tb-status-cell">
         <StatusTag status={e.status} publicationState={e.publicationState} />
+        <UnmappedPagesMark count={e.unmappedPageCount ?? 0} testId={e.id} onOpen={props.onOpenStructure} />
       </div>
       <div>
         <span className={"mode-badge " + e.mode} title={modeTitle(e.mode)}>
@@ -1402,6 +1420,34 @@ function TestRow(props: {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * PRD-22 (plan Э6): a test holding content pages whose variant its design template
+ * no longer declares. The pages still render — through a substitute — so nothing
+ * in the run reveals it; the mark is how the author learns a decision is pending,
+ * and it takes them to «Структура», where the mapping is made.
+ */
+function UnmappedPagesMark(props: { count: number; testId: string; onOpen: () => void }) {
+  if (props.count <= 0) return null;
+  // Just a warning pictogram: the count lives in the tooltip (it is a hint, not a
+  // metric on screen), and it sits ON the status line rather than as a chip below.
+  const label = `Страниц с недоступным вариантом: ${props.count}. Открыть «Структуру».`;
+  return (
+    <button
+      type="button"
+      className="tb-unmapped-mark"
+      title={label}
+      aria-label={label}
+      onClick={(event) => {
+        event.stopPropagation();
+        props.onOpen();
+      }}
+      data-testid={`test-unmapped-${props.testId}`}
+    >
+      <TriangleAlert width={15} height={15} aria-hidden="true" />
+    </button>
   );
 }
 

@@ -25,6 +25,15 @@ const MY_TPL = {
     contentTemplates: [
       { key: "info.e-migr-1", label: "Материал", kind: "info", placeholders: [{ key: "title", type: "text" }, { key: "body", type: "richText" }] },
       { key: "info.175-snli", label: "Материал 2", kind: "info", placeholders: [{ key: "title", type: "text" }] },
+      // A gallery variant declares the `sequence` setting — pages bound to it take
+      // part in sequences and contribute their identifier to `sequenceIds`.
+      {
+        key: "gallery.card",
+        label: "Галерея: карточка",
+        kind: "info",
+        placeholders: [{ key: "title", type: "text" }],
+        settings: [{ key: "sequenceId", type: "sequence", label: "Последовательность" }],
+      },
     ],
   },
 };
@@ -100,11 +109,11 @@ describe("useContentPages — variant catalogue source", () => {
     expect(result.current.infoVariants.map((v) => v.key)).toEqual(["info.text"]);
   });
 
-  it("with a draft id, follows the DRAFT template before save (my-template → 2 info variants)", async () => {
+  it("with a draft id, follows the DRAFT template before save (my-template info variants)", async () => {
     installApi();
     const { result } = renderHook(() => useContentPages(TEST_ID, "my-template"), { wrapper: wrapper() });
     await waitFor(() => expect(result.current.contentTemplates.length).toBeGreaterThan(0));
-    expect(result.current.infoVariants.map((v) => v.key).sort()).toEqual(["info.175-snli", "info.e-migr-1"]);
+    expect(result.current.infoVariants.map((v) => v.key).sort()).toEqual(["gallery.card", "info.175-snli", "info.e-migr-1"]);
   });
 });
 
@@ -151,6 +160,38 @@ describe("useContentPages — local draft + commit/discard", () => {
     });
     expect(spies.put).toHaveBeenCalledTimes(1);
     expect(spies.put.mock.calls[0][0].body.templateKey).toBe("info.175-snli");
+  });
+
+  // PRD-22: a sequence identifier set on one page must be offered to the OTHER
+  // pages IMMEDIATELY — before any save — so an author can build a sequence in one
+  // pass. `sequenceIds` (the choices the combobox shows) is derived from the DRAFT,
+  // and settings now write to the draft live (single-save form), so a live
+  // `updateSettings` surfaces the id without a commit.
+  it("exposes a live-set sequence identifier through sequenceIds without commit", async () => {
+    const spies = installApi([
+      buildPage({ id: "pg-a", templateKey: "gallery.card", valuesJson: { values: { title: "A" } } }),
+      buildPage({ id: "pg-b", templateKey: "gallery.card", sortOrder: 1, valuesJson: { values: { title: "B" } } }),
+    ]);
+    const { result } = renderHook(() => useContentPages(TEST_ID, "my-template"), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.pages.length).toBe(2));
+    expect(result.current.sequenceIds).toEqual([]);
+
+    // Set the identifier on page A only — the way the combobox «Создать» does.
+    await act(async () => {
+      await result.current.updateSettings("pg-a", { sequenceId: "серия" });
+    });
+
+    // Immediately available as a choice for page B, and nothing was written.
+    expect(result.current.sequenceIds).toEqual(["серия"]);
+    expect(spies.put).not.toHaveBeenCalled();
+
+    // Selecting it on B forms a 2-page run — placements reflect it live.
+    await act(async () => {
+      await result.current.updateSettings("pg-b", { sequenceId: "серия" });
+    });
+    expect(result.current.sequencePlacements.get("pg-a")?.total).toBe(2);
+    expect(result.current.sequencePlacements.get("pg-b")?.total).toBe(2);
+    expect(spies.put).not.toHaveBeenCalled();
   });
 
   it("discard() rolls the draft back to the server state with no network writes", async () => {

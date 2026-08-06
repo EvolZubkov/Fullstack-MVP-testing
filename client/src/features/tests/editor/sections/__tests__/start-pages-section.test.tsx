@@ -28,6 +28,17 @@ const TEMPLATE = {
   manifest: {
     contentTemplates: [
       { key: "start.standard", label: "Старт: стандартный", kind: "start", pageKind: "start", placeholders: [] },
+      // PRD-22: the start variant with an illustration declares it as a page
+      // PROPERTY — no placeholders at all, so the row's expandability must follow
+      // `settings[]` too or the field is unreachable.
+      {
+        key: "start.image-right",
+        label: "Старт: изображение справа",
+        kind: "start",
+        pageKind: "start",
+        placeholders: [],
+        settings: [{ key: "image", type: "image", label: "Изображение" }],
+      },
       { key: "results.standard", label: "Итоги теста: стандартные", kind: "results", pageKind: "results", placeholders: [] },
       {
         key: "info.text",
@@ -54,6 +65,15 @@ const TEMPLATE = {
         kind: "info",
         description: "Содержимое полностью задано шаблоном.",
         placeholders: [],
+      },
+      // PRD-22: an author variant that declares page SETTINGS (nextLabel), used to
+      // check settings edit live into the draft too.
+      {
+        key: "gallery.card",
+        label: "Галерея: карточка",
+        kind: "info",
+        placeholders: [{ key: "title", type: "text", label: "Заголовок" }],
+        settings: [{ key: "nextLabel", type: "text", label: "Подпись кнопки", default: "Далее" }],
       },
       { key: "intro.hero", label: "Введение", kind: "intro", placeholders: [{ key: "title", type: "text", label: "Заголовок" }] },
       { key: "summary.result", label: "Итог: результат", kind: "summary", placeholders: [] },
@@ -128,6 +148,7 @@ type RawPage = {
   templateKey: string | null;
   sortOrder: number;
   valuesJson: Record<string, unknown>;
+  settingsJson?: Record<string, unknown>;
   autoAdvance: boolean;
   autoAdvanceDelayMs: number | null;
   createdAt: string;
@@ -225,11 +246,11 @@ function installApi(initialPages: RawPage[]) {
   return spies;
 }
 
-function renderSection(model: TestEditorModel) {
+function renderSection(model: TestEditorModel, opts?: { readOnly?: boolean }) {
   const client = makeQueryClient();
   return render(
     <QueryClientProvider client={client}>
-      <StructureSection model={model} testId={TEST_ID} />
+      <StructureSection model={model} testId={TEST_ID} readOnly={opts?.readOnly} />
     </QueryClientProvider>,
   );
 }
@@ -328,6 +349,19 @@ describe("<StructureSection /> — kind-aware layout", () => {
     expect(screen.getByTestId("structure-system-results")).toHaveTextContent("Итоги теста");
   });
 
+  it("PRD-22: a start variant whose only field is a page property expands and offers it", async () => {
+    installApi([
+      buildPage({ id: "pg-start", kind: "start", position: "before", topicId: null, templateKey: "start.image-right", valuesJson: { values: {} } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-system-start")).toBeInTheDocument());
+    // The illustration is declared in `settings[]`, not `placeholders[]` — the row
+    // must still be expandable, otherwise the author cannot upload the picture.
+    const toggle = screen.getByTestId("structure-system-start-expand");
+    fireEvent.click(toggle);
+    expect(await screen.findByText("Изображение")).toBeInTheDocument();
+  });
+
   it("linear_by_topics: «Введение раздела» + «Обзор раздела» + «Итоги раздела» nodes render inside the topic block", async () => {
     installApi([
       buildPage({ id: "pg-it1", kind: "intro", position: "before_topic", topicId: "t1", templateKey: "intro.hero", valuesJson: { values: { instruction: "Инструкция" } } }),
@@ -384,7 +418,11 @@ describe("<StructureSection /> — add page", () => {
 });
 
 describe("<StructureSection /> — inline edit", () => {
-  it("expands a page, edits a field and persists it to the local draft (no write yet)", async () => {
+  // The page form has a SINGLE save — the drawer footer. Editing a field writes
+  // straight into the local draft (no per-form «Сохранить»/«Отмена»), so an edit
+  // can never be lost by forgetting to click a second button, and the row does
+  // not collapse on typing.
+  it("edits a field live into the draft — no inline save button, nothing PUT yet", async () => {
     const spies = installApi([
       buildPage({ id: "pg-1", kind: "info", position: "before", topicId: null, templateKey: "info.text", valuesJson: { values: { title: "Старое" } } }),
     ]);
@@ -394,15 +432,48 @@ describe("<StructureSection /> — inline edit", () => {
     fireEvent.click(screen.getByTestId("structure-page-expand-pg-1"));
     const titleInput = await screen.findByTestId("structure-page-field-pg-1-title");
     fireEvent.change(titleInput, { target: { value: "Новый заголовок" } });
-    fireEvent.click(screen.getByTestId("structure-page-edit-save-pg-1"));
 
-    // Saved into the local draft — the form collapses, but nothing is PUT yet.
-    await waitFor(() => expect(screen.queryByTestId("structure-page-edit-fields-pg-1")).toBeNull());
+    // No per-form save/cancel — the edit is already in the draft.
+    expect(screen.queryByTestId("structure-page-edit-save-pg-1")).toBeNull();
+    expect(screen.queryByTestId("structure-page-edit-cancel-pg-1")).toBeNull();
+    // Local-draft only: nothing is written to the server until the drawer save.
     expect(spies.put).not.toHaveBeenCalled();
-    // Re-expand: the locally-saved value is there.
+
+    // Collapse via the row chevron, re-expand: the live edit persists.
+    fireEvent.click(screen.getByTestId("structure-page-expand-pg-1"));
+    await waitFor(() => expect(screen.queryByTestId("structure-page-edit-fields-pg-1")).toBeNull());
     fireEvent.click(screen.getByTestId("structure-page-expand-pg-1"));
     const reopened = (await screen.findByTestId("structure-page-field-pg-1-title")) as HTMLInputElement;
     expect(reopened.value).toBe("Новый заголовок");
+    expect(spies.put).not.toHaveBeenCalled();
+  });
+
+  it("edits a page SETTING live into the draft (PRD-22 nextLabel)", async () => {
+    const spies = installApi([
+      buildPage({
+        id: "pg-g",
+        kind: "info",
+        position: "before",
+        topicId: null,
+        templateKey: "gallery.card",
+        valuesJson: { values: { title: "Слайд" } },
+        settingsJson: { nextLabel: "Далее" },
+      }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-g")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("structure-page-expand-pg-g"));
+    const nextLabel = (await screen.findByTestId("structure-page-setting-pg-g-nextLabel")) as HTMLInputElement;
+    fireEvent.change(nextLabel, { target: { value: "Начать" } });
+
+    // Collapse + re-expand: the setting edit is in the draft, nothing PUT.
+    fireEvent.click(screen.getByTestId("structure-page-expand-pg-g"));
+    await waitFor(() => expect(screen.queryByTestId("structure-page-edit-fields-pg-g")).toBeNull());
+    fireEvent.click(screen.getByTestId("structure-page-expand-pg-g"));
+    const reopened = (await screen.findByTestId("structure-page-setting-pg-g-nextLabel")) as HTMLInputElement;
+    expect(reopened.value).toBe("Начать");
+    expect(spies.put).not.toHaveBeenCalled();
   });
 });
 
@@ -503,6 +574,53 @@ describe("<StructureSection /> — delete flow", () => {
   });
 });
 
+describe("<StructureSection /> — inline preview command", () => {
+  it("puts a preview button BEFORE the actions menu on author and system rows", async () => {
+    installApi([
+      buildPage({ id: "pg-start", kind: "start", position: "before", topicId: null, templateKey: "start.standard", valuesJson: { values: {} } }),
+      buildPage({ id: "pg-1", kind: "info", position: "before", topicId: null, valuesJson: { values: { title: "Страница" } } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-1")).toBeInTheDocument());
+
+    for (const [preview, actions] of [
+      ["structure-page-preview-inline-pg-1", "structure-page-actions-pg-1"],
+      ["structure-system-start-preview-inline", "structure-system-start-actions"],
+    ]) {
+      const eye = screen.getByTestId(preview);
+      const menu = screen.getByTestId(actions);
+      expect(eye).toBeInTheDocument();
+      // DOCUMENT_POSITION_FOLLOWING: the menu comes after the eye.
+      expect(eye.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
+  it("opens the page preview without going through the menu", async () => {
+    installApi([
+      buildPage({ id: "pg-1", kind: "info", position: "before", topicId: null, valuesJson: { values: { title: "Страница" } } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-1")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("structure-page-preview-inline-pg-1"));
+
+    expect(await screen.findByTestId("page-preview-modal")).toBeInTheDocument();
+  });
+
+  // A published test hides the whole actions menu, so before this the author had no
+  // way to look at a page at all. Preview changes nothing, so it stays available.
+  it("keeps the preview available on a published (read-only) test", async () => {
+    installApi([
+      buildPage({ id: "pg-1", kind: "info", position: "before", topicId: null, valuesJson: { values: { title: "Страница" } } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }), { readOnly: true });
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-1")).toBeInTheDocument());
+
+    expect(screen.getByTestId("structure-page-preview-inline-pg-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("structure-page-actions-pg-1")).toBeNull();
+  });
+});
+
 describe("<StructureSection /> — warnings", () => {
   it("renders a warning tag on pages whose templateKey is missing from the template", async () => {
     // `templateKeyMissing` is now derived client-side against the active catalogue:
@@ -523,14 +641,14 @@ describe("<StructureSection /> — warnings", () => {
   });
 
   it("shows the «Доступно вариантов» hint on an info page when the template offers several", async () => {
-    // TEMPLATE declares 3 info variants → the author info row surfaces the hint,
-    // symmetric with the system row (and «Сменить вариант» lives in its «...» menu).
+    // TEMPLATE declares 4 info variants (info.text/title/empty + gallery.card) → the
+    // author info row surfaces the hint, symmetric with the system row.
     installApi([
       buildPage({ id: "pg-info", kind: "info", position: "before", topicId: null, templateKey: "info.text", valuesJson: { values: { title: "T" } } }),
     ]);
     renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
     await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-info")).toBeInTheDocument());
-    expect(screen.getByTestId("structure-page-pg-info-variant-hint")).toHaveTextContent("Доступно вариантов: 3");
+    expect(screen.getByTestId("structure-page-pg-info-variant-hint")).toHaveTextContent("Доступно вариантов: 4");
   });
 });
 

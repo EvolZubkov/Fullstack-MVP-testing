@@ -317,6 +317,51 @@ describe("buildTestJson — standard mode", () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Author CSS in content pages. A pasted `<style>` is inert in the web host
+// (Shadow DOM) but styles the real document inside the package — a `body` rule
+// collapsed the fixed stage to a blank screen. The bake re-sanitises every page,
+// so scoping here also repairs pages that were saved before the fix.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("buildTestJson — author CSS is confined to the page block", () => {
+  const pageWith = (body: string): any => ({
+    id: "cp-1",
+    topicId: null,
+    position: "before_all",
+    mode: "template",
+    type: "info",
+    kind: "info",
+    templateKey: "info.text-lead",
+    sortOrder: 0,
+    valuesJson: { values: { body } },
+    settingsJson: {},
+  });
+  const bakePage = (body: string) =>
+    JSON.parse(buildTestJson({ ...exportData, contentPages: [pageWith(body)] } as any)).contentPages[0];
+
+  it("rewrites a document-level rule so it cannot reach the package body", () => {
+    const page = bakePage('<style>body { display: flex; min-height: 100vh; }</style><div class="card">x</div>');
+    expect(page.values.body).not.toMatch(/<style[^>]*>\s*body \{/);
+    expect(page.values.body).toContain('[data-placeholder="body"] { display: flex; min-height: 100vh; }');
+  });
+
+  it("stops the author's .btn from restyling the template's navigation button", () => {
+    const page = bakePage("<style>.btn { border-radius: 30px; }</style>");
+    expect(page.values.body).toContain('[data-placeholder="body"] .btn { border-radius: 30px; }');
+  });
+
+  it("leaves markup without CSS untouched", () => {
+    const page = bakePage("<p>Просто текст</p>");
+    expect(page.values.body).toBe("<p>Просто текст</p>");
+  });
+
+  it("does not stack prefixes when the page is packaged twice", () => {
+    const once = bakePage("<style>.card { color: red; }</style>").values.body;
+    const twice = bakePage(once).values.body;
+    expect(twice).toBe(once);
+  });
+});
+
 describe("buildTestJson — flowPolicy export (PRD-4 v1.1)", () => {
   it("defaults to linear_flat when flowPolicyJson is missing", () => {
     const data = JSON.parse(buildTestJson(exportData));
@@ -575,6 +620,33 @@ describe("buildManifest", () => {
     expect(xml).toContain("<imsss:minNormalizedMeasure>0.75</imsss:minNormalizedMeasure>");
   });
 
+  // PRD-24 FR-17: with a per-variant rule there is no single topic threshold, so the
+  // manifest advertises the LOWEST one — sequencing metadata must never be stricter
+  // than the rule the runtime actually applies, or a learner who cleared their own
+  // variant would be blocked by the LMS.
+  it("uses the minimum normalized variant threshold for a by_variant rule", () => {
+    const q = (id: string): any => ({ ...dbQuestion, id });
+    const byVariantSection: any = {
+      ...manifestSection,
+      questions: [q("q1"), q("q2"), q("q3"), q("q4")], // system default price = 1 each
+      topicPassRuleJson: {
+        source: "by_variant",
+        byForm: {
+          f1: { type: "percent", value: 60 }, // → 0.60
+          f2: { type: "absolute", value: 1 }, // 1 of 2 points in f2 → 0.50
+        },
+      },
+      formSetJson: {
+        forms: [
+          { id: "f1", label: "Вариант 1", questionIds: ["q1", "q2"] },
+          { id: "f2", label: "Вариант 2", questionIds: ["q3", "q4"] },
+        ],
+      },
+    };
+    const xml = buildManifest(manifestTest, { test: manifestTest, sections: [byVariantSection] } as any);
+    expect(xml).toContain("<imsss:minNormalizedMeasure>0.50</imsss:minNormalizedMeasure>");
+  });
+
   it("includes overall pass threshold for count rule", () => {
     const countTest = { ...manifestTest, overallPassRuleJson: { type: "count", value: 4 } };
     const xml = buildManifest(countTest, {
@@ -692,5 +764,53 @@ describe("buildManifest", () => {
     buildManifest(ruTest, { test: ruTest, sections: [manifestSection] });
     const written = JSON.parse(savedArg.mock.calls[0][0] as string);
     expect(written["test-ru"].code).toMatch(/Osnovy_JavaScript/);
+  });
+});
+
+describe("buildManifest — by_variant, краевые случаи (PRD-24)", () => {
+  const q = (id: string): any => ({ ...dbQuestion, id });
+  const sectionWith = (byForm: Record<string, unknown>, forms: unknown[]): any => ({
+    ...manifestSection,
+    questions: [q("q1"), q("q2")],
+    topicPassRuleJson: { source: "by_variant", byForm },
+    formSetJson: { forms },
+  });
+
+  it("вариант без заданного порога не участвует в минимуме", () => {
+    const xml = buildManifest(manifestTest, {
+      test: manifestTest,
+      sections: [sectionWith(
+        { f1: { type: "percent", value: 80 } }, // f2 без записи — пропускается
+        [
+          { id: "f1", label: "Вариант 1", questionIds: ["q1"] },
+          { id: "f2", label: "Вариант 2", questionIds: ["q2"] },
+        ],
+      )],
+    } as any);
+    expect(xml).toContain("<imsss:minNormalizedMeasure>0.80</imsss:minNormalizedMeasure>");
+  });
+
+  it("вариант без вопросов не делит на ноль", () => {
+    const xml = buildManifest(manifestTest, {
+      test: manifestTest,
+      sections: [sectionWith(
+        { f1: { type: "absolute", value: 3 } },
+        [{ id: "f1", label: "Вариант 1", questionIds: [] }],
+      )],
+    } as any);
+    expect(xml).toContain("<imsss:minNormalizedMeasure>0.00</imsss:minNormalizedMeasure>");
+  });
+
+  it("правило by_variant без набора вариантов оставляет нейтральный порог", () => {
+    const xml = buildManifest(manifestTest, {
+      test: manifestTest,
+      sections: [{
+        ...manifestSection,
+        questions: [q("q1")],
+        topicPassRuleJson: { source: "by_variant", byForm: { f1: { type: "percent", value: 90 } } },
+        formSetJson: null,
+      }],
+    } as any);
+    expect(xml).toContain("<imsss:minNormalizedMeasure>0.5</imsss:minNormalizedMeasure>");
   });
 });

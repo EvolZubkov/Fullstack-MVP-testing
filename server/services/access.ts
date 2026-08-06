@@ -17,6 +17,7 @@ import {
   effectiveRoles,
   getPermissions,
   hasPermission,
+  ROLES,
   type Capability,
   type Role,
 } from "@shared/access";
@@ -55,6 +56,32 @@ export async function userHasPermission(
   cap: Capability,
 ): Promise<boolean> {
   return hasPermission(await getEffectiveRoles(user), cap);
+}
+
+/**
+ * Whether this account may receive a passwordless assignment link (magic link,
+ * `GET /access/:token`). The link performs a full passwordless login as its
+ * recipient (scoped afterwards by `server/middleware/magic-scope.ts` to the one
+ * assigned test, but the account itself must never be enterable this way for
+ * anyone but a plain learner — PLAN_MAGIC_LINK_SCOPE.md, Этап 3 / defect D-3).
+ *
+ * Uses {@link getEffectiveRoles}, NOT the raw stored roles, so a configuration
+ * superadmin from `SUPERADMIN_EMAILS` is excluded even with an empty
+ * `user_roles` row.
+ *
+ * An account holding NO role at all also returns `false`: the JSDoc contract is
+ * "only a PURE learner may", and a roleless account is not a learner (it also
+ * lacks `attempts.take`, so it could not use the test the link opens either
+ * way). Denying by default here mirrors the deny-by-default posture already
+ * used by the magic-scope guard in this same effort, rather than reading the
+ * plan's "any role other than learner" literally as a double negative that
+ * would let a roleless account through.
+ */
+export async function mayReceiveAssignmentLink(
+  user: Pick<User, "id" | "emailHash">,
+): Promise<boolean> {
+  const roles = await getEffectiveRoles(user);
+  return roles.length === 1 && roles[0] === ROLES.LEARNER;
 }
 
 /**

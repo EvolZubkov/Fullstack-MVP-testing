@@ -49,14 +49,21 @@ function buildFixture(testId: string, retakePolicyJson: unknown) {
   };
 }
 
-async function decodeTestData(retakePolicyJson: unknown, testId: string) {
+async function buildAppJs(retakePolicyJson: unknown, testId: string) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const buffer = await generateScormPackage(buildFixture(testId, retakePolicyJson) as any);
   const zip = await JSZip.loadAsync(buffer);
-  const appjs = await zip.file("app.js")!.async("string");
+  return await zip.file("app.js")!.async("string");
+}
+
+async function decodeTestData(retakePolicyJson: unknown, testId: string) {
+  const appjs = await buildAppJs(retakePolicyJson, testId);
   const b64 = (appjs.match(/var b64 = "([A-Za-z0-9+/=]+)"/) || [])[1]!;
   return JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
 }
+
+/** Runtime globals the PRD-6 cooldown plugin (engine + plugins + gate) declares. */
+const GATE_GLOBALS = ["var EligibilityEngine", "var EligibilityPlugins", "var RetakeGate"];
 
 describe("SCORM package — PRD-6 retake policy export", () => {
   beforeAll(() => {
@@ -103,5 +110,54 @@ describe("SCORM package — PRD-6 retake policy export", () => {
   it("omits the gate when the policy is present but disabled (FR-02)", async () => {
     const td = await decodeTestData({ enabled: false, cooldownPeriodDays: 30 }, "retake-disabled");
     expect(td.retakePolicy).toBeUndefined();
+  });
+});
+
+describe("SCORM package — PRD-6 cooldown plugin bundling", () => {
+  beforeAll(() => {
+    identSnapshot = fs.existsSync(IDENT) ? fs.readFileSync(IDENT) : null;
+  });
+  afterAll(() => {
+    if (identSnapshot === null) {
+      if (fs.existsSync(IDENT)) fs.rmSync(IDENT);
+    } else {
+      fs.writeFileSync(IDENT, identSnapshot);
+    }
+  });
+
+  it("bundles the cooldown plugin runtime when the gate is active", async () => {
+    const appjs = await buildAppJs(
+      {
+        enabled: true,
+        cooldownPeriodDays: 30,
+        gateMode: "before_internal_start",
+        eligibilityPlugin: { key: "webtutor_cooldown", configId: "webtutor_catalog_default", failPolicy: "failOpen" },
+      },
+      "retake-bundle-on",
+    );
+    for (const g of GATE_GLOBALS) expect(appjs).toContain(g);
+  });
+
+  it("does not bundle the cooldown plugin runtime when no policy is set", async () => {
+    const appjs = await buildAppJs(null, "retake-bundle-off");
+    for (const g of GATE_GLOBALS) expect(appjs).not.toContain(g);
+  });
+
+  it("does not bundle the cooldown plugin runtime when the policy is disabled", async () => {
+    const appjs = await buildAppJs({ enabled: false, cooldownPeriodDays: 30 }, "retake-bundle-disabled");
+    for (const g of GATE_GLOBALS) expect(appjs).not.toContain(g);
+  });
+
+  it("does not bundle the cooldown plugin runtime when the plugin key is unresolvable", async () => {
+    const appjs = await buildAppJs(
+      {
+        enabled: true,
+        cooldownPeriodDays: 30,
+        gateMode: "before_internal_start",
+        eligibilityPlugin: { key: "no_such_plugin", configId: "nope", failPolicy: "failOpen" },
+      },
+      "retake-bundle-unknown",
+    );
+    for (const g of GATE_GLOBALS) expect(appjs).not.toContain(g);
   });
 });

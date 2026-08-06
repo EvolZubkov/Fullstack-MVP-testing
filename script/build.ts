@@ -2,6 +2,7 @@ import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile, mkdir, cp, writeFile } from "fs/promises";
 import { buildSharedRuntimeBundle, SHARED_RUNTIME_FILENAME } from "../server/scorm/builders/shared-runtime";
+import { copyDsAssetsInto } from "../server/scorm/builders/ds-styles";
 
 
 // server deps to bundle to reduce openat(2) syscalls
@@ -82,6 +83,31 @@ async function buildAll() {
     logLevel: "info",
   });
   
+  // Deploy-time data steps live next to the server bundle: the production image
+  // is installed with `--omit=dev`, so there is no tsx to run a TS script, and a
+  // hand-written JS twin would be a second copy of the text pipeline. Bundling
+  // them with the same esbuild config means the migration runs the SAME code the
+  // application does.
+  console.log("building deploy scripts...");
+  await esbuild({
+    entryPoints: ["script/backfill-page-text.ts"],
+    platform: "node",
+    bundle: true,
+    format: "cjs",
+    outfile: "dist/backfill-page-text.cjs",
+    banner: {
+      js: "const __importMetaUrl = require('url').pathToFileURL(__filename).href;",
+    },
+    define: {
+      "process.env.NODE_ENV": '"production"',
+      "import.meta.url": "__importMetaUrl",
+      "import.meta.dirname": "__dirname",
+    },
+    minify: false,
+    external: externals,
+    logLevel: "info",
+  });
+
   console.log("copying scorm assets...");
   await mkdir("dist/scorm/assets", { recursive: true });
   await cp("server/scorm/assets", "dist/scorm/assets", { recursive: true });
@@ -97,6 +123,12 @@ async function buildAll() {
   console.log("copying debug-player assets...");
   await mkdir("dist/scorm/debug-player/assets", { recursive: true });
   await cp("server/scorm/debug-player/assets", "dist/scorm/debug-player/assets", { recursive: true });
+
+  // The DS stylesheet + brand font are vendored INTO every SCORM package, but they live
+  // outside server/ (vendor/, client/public/) and the image carries only dist/ — copy them
+  // next to the other package assets or every export/debug build fails with ENOENT in prod.
+  console.log("copying DS stylesheet and brand font...");
+  copyDsAssetsInto("dist");
 
   // PRD-12 (2-7): pre-bundle the shared template runtime so the production
   // exporter reads it as a static asset (no esbuild at request time in prod).

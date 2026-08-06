@@ -1,39 +1,68 @@
-<div class="layout-question-wrap">
-  <div class="qbar">
-    <div class="qbar__l">
-      {{#if design.logoUrl}}<img class="qbar__logo" src="{{ design.logoUrl }}" alt="">{{/if}}
-      <span class="qbar__sec" data-path="state.sectionName"></span>
+<div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow">
+      {{#if design.logoUrl}}<span class="tb-scene__logo"><img src="{{ design.logoUrl }}" alt=""></span>{{/if}}
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title"></h1>
+        {{#if course.subtitle}}<span class="tb-scene__subtitle" data-path="course.subtitle"></span>{{/if}}
+      </div>
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
     </div>
-    <div class="qbar__c">{{#if state.questionsProgress}}<b class="qbar__count">отвечено {{state.questionsProgress.answeredCount}} &middot; пропущено {{state.questionsProgress.skippedCount}}</b>{{/if}}</div>
-    <div class="qbar__r">
-      <span class="question-meta" data-path="state.questionCounterLabel"></span>
-      <div class="q-timer q-timer--hidden" id="timer-display"></div>
+    {{#if state.questionsProgress}}
+    <div class="ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map" role="group" aria-label="Карта вопросов">
+      <div class="ou-quiz__dots">
+        {{#each state.questionsProgress.states}}
+        <button type="button" class="ou-quiz__dot {{statusClass}}" {{#unless clickable}}disabled{{/unless}} data-action="goto:{{index}}" aria-label="{{ariaLabel}}">{{number}}</button>
+        {{/each}}
+      </div>
+      <div class="ou-quiz__legend">
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+      </div>
+      <span class="tb-scene__mapcount tb-scene__mapcount--answered">отвечено <strong>{{state.questionsProgress.answeredCount}}</strong> из {{state.questionsProgress.total}}</span>
+      <span class="tb-scene__mapcount tb-scene__mapcount--skipped">пропущено {{state.questionsProgress.skippedCount}}</span>
     </div>
-  </div>
+    {{/if}}
+    <div class="tb-scene__progress"><div class="tb-scene__progress-fill" id="q-progress-fill"></div></div>
+  </header>
 
-  {{#if state.questionsProgress}}
-  <div class="tb-pills" role="group" aria-label="Карта вопросов">
-    <div class="tb-pills__dots">
-      {{#each state.questionsProgress.states}}
-      <button type="button" class="tb-pill {{statusClass}}" {{#unless clickable}}disabled{{/unless}} data-action="goto:{{index}}" aria-label="{{ariaLabel}}">{{number}}</button>
-      {{/each}}
+  <main class="tb-scene__body">
+    <div class="tb-scene__col" style="--tb-question-fs: {{state.questionFont}}; --tb-answer-fs: {{state.optionFont}}">
+      <div class="tb-scene__meta">
+        <span data-path="state.questionCounterLabel"></span>
+        {{#if state.sectionName}}<span class="ou-tag ou-tag--neutral" data-path="state.sectionName"></span>{{/if}}
+      </div>
+      <div class="tb-scene__q">
+        <h2 class="tb-scene__qtitle" data-slot="question-text"></h2>
+        {{#if state.questionHint}}<span class="tb-scene__qhint" data-path="state.questionHint"></span>{{/if}}
+      </div>
+      <div class="tb-qbody">
+        <div class="tb-qbody__media" data-slot="question-media"></div>
+        <div class="tb-qbody__answers">
+          <div data-slot="question-feedback"></div>
+          <div data-slot="question-interaction"></div>
+        </div>
+      </div>
     </div>
-    <div class="tb-pills__legend">
-      <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-answered"></span>отвечен</span>
-      <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-skipped"></span>пропущен</span>
-      <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-current"></span>текущий</span>
-      <span class="tb-pills__legend-item"><span class="tb-pills__legend-dot is-locked"></span>не выдан</span>
-    </div>
-  </div>
-  {{/if}}
-  {{#unless state.questionsProgress}}
-  <div class="progress-bar"><div class="progress-fill" id="q-progress-fill"></div></div>
-  {{/unless}}
+  </main>
 
-  <div class="question-card">
-    <div class="question-text" data-slot="question-text"></div>
-    <div data-slot="question-media"></div>
-    <div data-slot="question-interaction"></div>
-    <div data-slot="question-feedback"></div>
-  </div>
+  <!-- Navigation row. Composition is the TEMPLATE's decision; the host only supplies
+       `state.nav` (see shared/template/question-nav). Both hosts render this markup,
+       so the footer cannot differ between the web run and the package. -->
+  <footer class="tb-scene__foot">
+    {{#if state.nav.showBack}}<button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-back" {{#unless state.nav.canPrev}}disabled{{/unless}}>← Назад</button>{{/if}}
+    {{#if state.nav.showSkip}}<button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-skip">Пропустить</button>{{/if}}
+    {{#if state.nav.showReview}}<button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="answer-return">К обзору</button>{{/if}}
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="{{state.nav.primaryAction}}" {{#unless state.nav.primaryEnabled}}disabled{{/unless}} data-path="state.nav.primaryLabel"></button>
+  </footer>
 </div>

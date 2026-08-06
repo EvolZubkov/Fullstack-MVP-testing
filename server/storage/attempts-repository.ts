@@ -43,7 +43,9 @@ export class AttemptsRepository {
     // Whitelist: only the mutable progress/result fields. userId/testId/
     // testVersion/snapshotId/startedAt are fixed at creation and must not move.
     const set = pickDefined(updates, [
-      "variantJson", "answersJson", "resultJson", "finishedAt",
+      // `sectionTimerJson` is progress too: the server-owned remaining time of each
+      // section (see services/section-timer), moved here off the learner's browser.
+      "variantJson", "answersJson", "resultJson", "sectionTimerJson", "finishedAt",
     ] as const);
     if (Object.keys(set).length === 0) return this.getAttempt(id);
     const [updated] = await db.update(attempts).set(set).where(eq(attempts.id, id)).returning();

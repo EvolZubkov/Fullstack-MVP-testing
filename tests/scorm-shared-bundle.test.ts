@@ -32,4 +32,19 @@ describe("shared runtime bundle (SCORM package)", () => {
     );
     expect(html).toBe("<b>Демо</b>");
   }, 30000);
+
+  it("exposes the author-text pipeline, so the package renders prompts like the web host", async () => {
+    const code = await buildSharedRuntimeBundle();
+    const capture: { TBTemplate?: any } = {};
+    // eslint-disable-next-line no-new-func
+    new Function("sandbox", `${code}\nsandbox.TBTemplate = ${SHARED_RUNTIME_GLOBAL};`)(capture);
+
+    expect(typeof capture.TBTemplate?.renderInlineMarkdown).toBe("function");
+    expect(typeof capture.TBTemplate?.stripMarkdown).toBe("function");
+
+    expect(capture.TBTemplate.renderInlineMarkdown("Ответ **верный**")).toBe(
+      "Ответ <strong>верный</strong>",
+    );
+    expect(capture.TBTemplate.stripMarkdown("Ответ **верный**")).toBe("Ответ верный");
+  }, 30000);
 });

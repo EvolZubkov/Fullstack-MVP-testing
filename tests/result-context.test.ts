@@ -63,17 +63,19 @@ describe("buildResultContext → render real results.html (e2e)", () => {
     expect(root.querySelector('[data-path="result.scorePercent"]')?.textContent).toBe("60");
   });
 
-  it("renders the fail branch and the per-topic rows", () => {
-    expect(root.textContent).toContain("Тест не пройден");
+  it("renders the fail verdict and the per-topic cards", () => {
+    expect(root.querySelector(".tb-scene__headtag")?.textContent).toContain("Не пройден");
     expect(root.textContent).toContain("Тема A");
     expect(root.textContent).toContain("Тема B");
-    const widths = Array.from(root.querySelectorAll("[data-bar-width]")).map((b) => b.getAttribute("data-bar-width"));
-    expect(widths).toContain("80");
-    expect(widths).toContain("40");
+    const widths = Array.from(root.querySelectorAll(".tb-topic-card__bar .ou-progress__fill")).map(
+      (b) => (b as HTMLElement).style.width,
+    );
+    expect(widths).toContain("80%");
+    expect(widths).toContain("40%");
   });
 
   it("prepares the ring offset for the score ring", () => {
-    expect(root.querySelector(".results-ring")?.getAttribute("data-ring-offset")).toBeTruthy();
+    expect(root.querySelector(".ou-ring__fill")?.getAttribute("stroke-dashoffset")).toBeTruthy();
   });
 });
 
@@ -138,7 +140,7 @@ const adaptiveResult = {
       achievedLevelIndex: 1,
       achievedLevelName: "Средний",
       feedback: "Ваш уровень знаний по данной теме — средний",
-      recommendedLinks: [{ title: "Курс по коммуникациям", url: "https://example.test/comm" }],
+      recommendedCourses: [{ title: "Курс по коммуникациям", url: "https://example.test/comm" }],
     },
     {
       topicId: "b",
@@ -146,7 +148,7 @@ const adaptiveResult = {
       achievedLevelIndex: null,
       achievedLevelName: null,
       feedback: "",
-      recommendedLinks: [],
+      recommendedCourses: [],
     },
   ],
 };
@@ -161,23 +163,45 @@ describe("buildAdaptiveResultContext → render real results.adaptive.html (e2e)
     expect(root.querySelector('[data-path="course.title"]')?.textContent).toBe("Адаптивный тест");
   });
 
-  it("renders achieved level pills per topic", () => {
+  it("renders achieved level tags per topic", () => {
     expect(root.textContent).toContain("Внутренние коммуникации");
     expect(root.textContent).toContain("Средний");
-    expect(root.querySelector(".results-pill.is-info")).not.toBeNull(); // achieved
-    // not-achieved topic -> fallback label + is-fail pill
+    // A level was confirmed -> the neutral (solid accent) tone.
+    expect(root.querySelector(".ou-tag.ou-tag--solid.ou-tag--accent")).not.toBeNull();
+    // Nothing confirmed -> the label says so and the tone is the error one: the
+    // learner did not reach even the minimum level the test defines.
     expect(root.textContent).toContain("Безопасность");
-    expect(root.textContent).toContain("Не достигнут");
-    expect(root.querySelector(".results-pill.is-fail")).not.toBeNull();
+    expect(root.textContent).toContain("Минимально требуемый уровень не подтверждён");
+    expect(root.querySelector(".ou-tag.ou-tag--solid.ou-tag--error")).not.toBeNull();
   });
 
-  it("renders feedback and recommended links only where present (nested each)", () => {
+  // The rung the learner stopped on is content, not colour: whichever level was
+  // confirmed, the tag looks the same and only the label differs.
+  it("gives every confirmed level the same tone, whatever its rung", () => {
+    const built = buildAdaptiveResultContext(
+      {
+        mode: "adaptive",
+        overallPassed: true,
+        topicResults: [
+          { topicName: "Верх", achievedLevelIndex: 2, achievedLevelName: "Продвинутый" },
+          { topicName: "Низ", achievedLevelIndex: 0, achievedLevelName: "Базовый" },
+        ],
+      },
+      "Адаптивный тест",
+    );
+    const rows = built.result.topicResults as Array<{ levelLabel: string; levelClass: string }>;
+    expect(rows.map((r) => r.levelLabel)).toEqual(["Продвинутый", "Базовый"]);
+    expect(rows[0].levelClass).toBe(rows[1].levelClass);
+    expect(rows[0].levelClass).toBe("ou-tag--solid ou-tag--accent");
+  });
+
+  it("renders feedback and recommendations only where present (nested each)", () => {
     expect(root.textContent).toContain("Ваш уровень знаний по данной теме — средний");
-    const link = root.querySelector(".topic-link") as HTMLAnchorElement | null;
+    const link = root.querySelector("a.tb-rec") as HTMLAnchorElement | null;
     expect(link?.getAttribute("href")).toBe("https://example.test/comm");
     expect(link?.textContent).toContain("Курс по коммуникациям");
-    // exactly one feedback block and one link (second topic has neither)
-    expect(root.querySelectorAll(".topic-feedback")).toHaveLength(1);
-    expect(root.querySelectorAll(".topic-link")).toHaveLength(1);
+    // exactly one feedback block and one recommendation chip (second topic has neither)
+    expect(root.querySelectorAll(".tb-topic-card__fb-text")).toHaveLength(1);
+    expect(root.querySelectorAll(".tb-rec")).toHaveLength(1);
   });
 });

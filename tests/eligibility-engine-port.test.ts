@@ -46,11 +46,35 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
       ["2026-05-08", "2026-06-08", 30],
       ["2026-02-28", "2026-03-30", 30],
       ["bad", "2026-05-20", 30],
+      // Clock rolled back behind the last attempt (untrusted "today").
+      ["2026-05-20", "2026-05-01", 30],
+      // Valid last attempt, unparseable "today".
+      ["2026-05-08", "garbage", 30],
     ];
     for (const [last, today, days] of cases) {
       expect(port.EligibilityEngine.cooldownDecision(last, today, days)).toEqual(
         tsEngine.cooldownDecision(last, today, days),
       );
+    }
+  });
+
+  it("daysUntilDate matches", () => {
+    const cases: Array<[string | null, string | null | undefined]> = [
+      ["2026-06-30", "2026-06-28"],
+      ["2026-06-30", "2026-06-30"],
+      ["2026-06-29", "2026-06-30"],
+      [null, "2026-06-30"],
+      ["garbage", "2026-06-30"],
+      ["2026-06-30", "garbage"],
+      // `effectiveToday` from cooldownDecision is null when access is open (the
+      // dead-fallback removal in server/services/retake-gate.ts relies on this
+      // being tolerated, not coerced).
+      ["2026-06-30", null],
+      // Same tolerance for `undefined` (an omitted argument), not just `null`.
+      ["2026-06-30", undefined],
+    ];
+    for (const [iso, today] of cases) {
+      expect(port.EligibilityEngine.daysUntilDate(iso, today)).toEqual(tsEngine.daysUntilDate(iso, today));
     }
   });
 
@@ -74,9 +98,28 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
   });
 
   it("buildRetakeState matches", () => {
-    const result = { allowed: false, availableDate: "2026-06-07", source: "webtutor_cooldown", reason: "cooldown_active", data: { lastAttemptDate: "2026-05-08" } };
     const c = { todayDate: "2026-05-20", cooldownPeriodDays: 30 };
-    expect(port.EligibilityEngine.buildRetakeState(result, c)).toEqual(tsEngine.buildRetakeState(result, c));
+    const results: any[] = [
+      // `effectiveToday` is lifted out of `data` alongside `lastAttemptDate`...
+      { allowed: false, availableDate: "2026-06-07", source: "webtutor_cooldown", reason: "cooldown_active", data: { lastAttemptDate: "2026-05-08", effectiveToday: "2026-05-20" } },
+      // ...and stays null when the verdict carries no cooldown math (failPolicy).
+      { allowed: true, source: "core_failpolicy", reason: "plugin_error_fail_open", data: { error: "boom" } },
+      // An explicit null must not leak into the state either...
+      { allowed: false, availableDate: "2026-06-07", data: { lastAttemptDate: "2026-05-08", effectiveToday: null } },
+      // ...nor a value of the wrong TYPE: only `typeof === 'string'` is lifted, so a
+      // numeric date (a hand-rolled plugin returning 20260530) is dropped, not stringified.
+      { allowed: false, availableDate: "2026-06-07", data: { lastAttemptDate: 20260508, effectiveToday: 20260530 } },
+    ];
+    for (const result of results) {
+      expect(port.EligibilityEngine.buildRetakeState(result, c)).toEqual(tsEngine.buildRetakeState(result, c));
+    }
+    // The field genuinely arrives (a both-null parity match would prove nothing).
+    expect(tsEngine.buildRetakeState(results[0], c).effectiveToday).toBe("2026-05-20");
+    expect(tsEngine.buildRetakeState(results[1], c).effectiveToday).toBeNull();
+    // Both twins drop the non-string pair rather than carrying 20260530 through.
+    for (const impl of [tsEngine.buildRetakeState, port.EligibilityEngine.buildRetakeState]) {
+      expect(impl(results[3] as any, c)).toMatchObject({ lastAttemptDate: null, effectiveToday: null });
+    }
   });
 
   it("parseFlexibleDate matches", () => {
@@ -103,10 +146,21 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
   });
 
   it("suspendDataCooldownDecide matches", () => {
-    for (const d of ["2026-04-01", "2026-05-15", null]) {
+    // The last entry is an attempt AFTER the reported "today" — an untrusted (rolled
+    // back) clock — so `data.effectiveToday` differs from `data.todayDate` and the
+    // parity check covers the clamp, not just the pass-through case.
+    for (const d of ["2026-04-01", "2026-05-15", null, "2026-06-01"]) {
       expect(port.EligibilityPlugins.suspendDataCooldownDecide(d, ctx())).toEqual(
         tsPlugins.suspendDataCooldownDecide(d, ctx()),
       );
+    }
+    // The clamped value is the one the plugin reports (both twins, same assertion).
+    for (const impl of [tsPlugins, port.EligibilityPlugins as typeof tsPlugins]) {
+      expect(impl.suspendDataCooldownDecide("2026-06-01", ctx()).data).toMatchObject({
+        todayDate: "2026-05-20",
+        effectiveToday: "2026-06-01",
+      });
+      expect(impl.suspendDataCooldownDecide(null, ctx()).data).toMatchObject({ effectiveToday: null });
     }
   });
 

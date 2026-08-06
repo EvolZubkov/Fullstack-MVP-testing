@@ -21,15 +21,61 @@
     "passPercent": 80,
     "timeLimitMinutes": 45,
     "maxAttempts": 2,
-    "deadline": { "date": "19.07.2026", "time": "21:51:21" },
+    "deadline": {
+      "date": "19.07.2026",
+      "time": "21:51:21"
+    },
     "questionCount": 4,
     "topics": [
-      { "id": "topic-1", "title": "Компетенции руководителя. Часть 1", "description": "Компетенция — это поведение, которое приводит к успеху. Корпоративные компетенции руководителя — поведение, которое компания ожидает от своих лидеров.\n\nКак самый объёмный, этот блок вопросов по управленческим компетенциям разделён на две части. В первой части раздела вам предложат 8 ситуаций из разных сегментов и функций, в которых нужно принять оптимальное управленческое решение.", "status": "completed", "questionCount": 8, "timeLimitMinutes": 45, "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20200%20200'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%23E33A00'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%23ff7a4d'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%23c22f00'/%3E%3C/svg%3E" },
-      { "id": "topic-2", "title": "Компетенции руководителя. Часть 2", "status": "inProgress", "questionCount": 8, "timeLimitMinutes": 45, "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20200%20200'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%236C4AA6'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%23926fca'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%234e3480'/%3E%3C/svg%3E" },
-      { "id": "topic-3", "title": "Технологии компании", "status": "available", "questionCount": 12, "timeLimitMinutes": 20, "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20200%20200'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%232f8f8f'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%2355b3b3'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%231f6666'/%3E%3C/svg%3E" },
-      { "id": "topic-4", "title": "О компании", "status": "available", "questionCount": 16, "timeLimitMinutes": 25, "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20200%20200'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%23E33A00'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%23ff7a4d'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%23c22f00'/%3E%3C/svg%3E" },
-      { "id": "topic-5", "title": "Корпоративные финансы", "status": "available", "questionCount": 10, "timeLimitMinutes": 17, "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20200%20200'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%236C4AA6'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%23926fca'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%234e3480'/%3E%3C/svg%3E" },
-      { "id": "topic-6", "title": "Правовые основы", "status": "available", "questionCount": 10, "timeLimitMinutes": 17, "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20200%20200'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%232f8f8f'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%2355b3b3'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%231f6666'/%3E%3C/svg%3E" }
+      {
+        "id": "topic-1",
+        "title": "Компетенции руководителя. Часть 1",
+        "description": "Компетенция — это поведение, которое приводит к успеху. Корпоративные компетенции руководителя — поведение, которое компания ожидает от своих лидеров.\n\nКак самый объёмный, этот блок вопросов по управленческим компетенциям разделён на две части. В первой части раздела вам предложат 8 ситуаций из разных сегментов и функций, в которых нужно принять оптимальное управленческое решение.",
+        "status": "completed",
+        "questionCount": 8,
+        "timeLimitMinutes": 45,
+        "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20200%20200'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%23E33A00'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%23ff7a4d'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%23c22f00'/%3E%3C/svg%3E"
+      },
+      {
+        "id": "topic-2",
+        "title": "Компетенции руководителя. Часть 2",
+        "status": "inProgress",
+        "questionCount": 8,
+        "timeLimitMinutes": 45,
+        "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20200%20200'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%236C4AA6'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%23926fca'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%234e3480'/%3E%3C/svg%3E"
+      },
+      {
+        "id": "topic-3",
+        "title": "Технологии компании",
+        "status": "available",
+        "questionCount": 12,
+        "timeLimitMinutes": 20,
+        "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20200%20200'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%232f8f8f'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%2355b3b3'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%231f6666'/%3E%3C/svg%3E"
+      },
+      {
+        "id": "topic-4",
+        "title": "О компании",
+        "status": "available",
+        "questionCount": 16,
+        "timeLimitMinutes": 25,
+        "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20200%20200'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%23E33A00'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%23ff7a4d'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%23c22f00'/%3E%3C/svg%3E"
+      },
+      {
+        "id": "topic-5",
+        "title": "Корпоративные финансы",
+        "status": "available",
+        "questionCount": 10,
+        "timeLimitMinutes": 17,
+        "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20200%20200'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%236C4AA6'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%23926fca'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%234e3480'/%3E%3C/svg%3E"
+      },
+      {
+        "id": "topic-6",
+        "title": "Правовые основы",
+        "status": "available",
+        "questionCount": 10,
+        "timeLimitMinutes": 17,
+        "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20200%20200'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%232f8f8f'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%2355b3b3'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%231f6666'/%3E%3C/svg%3E"
+      }
     ],
     "contentPages": [
       {
@@ -40,45 +86,235 @@
         "templateKey": "router.menu",
         "topicId": null,
         "position": "before",
+        "sortOrder": 1,
         "values": {
-          "title": "Выберите раздел"
+          "title": "Выберите раздел",
+          "instruction": "Разделы можно проходить в любом порядке. После завершения раздела вы вернётесь в это меню."
         }
       },
       {
-        "id": "gallery-1",
-        "type": "gallery",
-        "kind": "gallery",
-        "route": "content.gallery",
-        "templateKey": "gallery.card",
+        "id": "demo-info-text",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.text",
         "topicId": null,
         "position": "before",
+        "sortOrder": 11,
         "values": {
-          "header": "Прежде, чем начать — несколько слов о тесте:",
-          "subheader": "Листайте галерею.",
-          "pillsTotal": 2,
-          "pillCurrent": 1,
-          "showBack": false,
-          "cardText": "<p>Карьера руководителя может складываться по-разному. Но что нужно, чтобы стать успешным лидером в «Ростелекоме»?</p><p>Тест состоит из 6 разделов и охватывает темы:</p><ol><li>Компетенции руководителя (часть 1)</li><li>Компетенции руководителя (часть 2)</li><li>Корпоративные финансы</li><li>Знания о компании</li><li>Технологии и их понимание</li><li>Правовые основы</li></ol>"
+          "title": "Как проходит сертификация",
+          "body": "<p>Тест поможет оценить вашу готовность к роли руководителя. В основе вопросов — опыт десятков успешных лидеров компании.</p><ol><li>Тест состоит из шести разделов; на каждый раздел отведено своё время.</li><li>Отвечайте на вопросы внимательно — таймер раздела нельзя приостановить.</li><li>Повторное прохождение доступно через 14 дней после последней попытки.</li><li>Результаты сертификационного теста действительны 1 год.</li></ol>"
+        },
+        "settings": {
+          "nextLabel": "Далее"
         }
       },
       {
-        "id": "gallery-2",
-        "type": "gallery",
-        "kind": "gallery",
-        "route": "content.gallery",
-        "templateKey": "gallery.card",
+        "id": "demo-info-text-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.text-lead",
         "topicId": null,
         "position": "before",
+        "sortOrder": 12,
         "values": {
-          "header": "Прежде, чем начать — несколько слов о тесте:",
-          "subheader": "Листайте галерею.",
-          "pillsTotal": 2,
-          "pillCurrent": 2,
-          "showBack": true,
+          "title": "Что важно знать",
+          "lead": "Перед началом",
+          "body": "<ul><li>вернуться к пропущенному вопросу можно до завершения раздела;</li><li>результат раздела виден сразу после его завершения;</li><li>перерыв между разделами не ограничен.</li></ul>"
+        },
+        "settings": {
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-info-image-left",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.image-left",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 13,
+        "values": {
+          "title": "Компетенции руководителя",
+          "body": "<p>Компетенция — это поведение, которое приводит к успеху. Корпоративные компетенции руководителя — поведение, которое компания ожидает от своих лидеров.</p>",
+          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%232f8f8f'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%2355b3b3'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%231f6666'/%3E%3C/svg%3E"
+        },
+        "settings": {
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-info-image-left-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.image-left-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 14,
+        "values": {
+          "title": "Как читать результат",
+          "lead": "Порог прохождения — 80 %",
+          "body": "<p>Итоговый балл переводится в проценты и сравнивается с порогом. Ниже порога раздел считается непройденным, и его можно перепройти после периода ожидания.</p>",
+          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%236C4AA6'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%23926fca'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%234e3480'/%3E%3C/svg%3E"
+        },
+        "settings": {
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-info-image-right",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.image-right",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 15,
+        "values": {
+          "title": "Технологии компании",
+          "body": "<p>Раздел проверяет понимание продуктов и технологической платформы «Ростелекома» — от инфраструктуры до сервисов для клиентов.</p>",
+          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%23E33A00'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%23ff7a4d'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%23c22f00'/%3E%3C/svg%3E"
+        },
+        "settings": {
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-info-image-right-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "info.image-right-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 16,
+        "values": {
+          "title": "Правовые основы",
+          "lead": "10 вопросов, 17 минут",
+          "body": "<p>Проверяются знания трудового и договорного права в объёме, необходимом руководителю для повседневных решений.</p>",
+          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%232f8f8f'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%2355b3b3'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%231f6666'/%3E%3C/svg%3E"
+        },
+        "settings": {
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-text",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.text",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 17,
+        "values": {
+          "title": "Прежде, чем начать — несколько слов о тесте",
+          "body": "<p>Карьера руководителя может складываться по-разному. Но что нужно, чтобы стать успешным лидером в «Ростелекоме»?</p><p>Тест состоит из 6 разделов и охватывает темы:</p><ol><li>Компетенции руководителя (часть 1)</li><li>Компетенции руководителя (часть 2)</li><li>Корпоративные финансы</li><li>Знания о компании</li><li>Технологии и их понимание</li><li>Правовые основы</li></ol>"
+        },
+        "settings": {
+          "sequenceId": "Вводная галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-text-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.text-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 18,
+        "values": {
+          "title": "Как проходить тест",
+          "lead": "Листайте галерею",
+          "body": "<p>Вам понадобится около 2 часов. После назначения тест доступен для прохождения в течение 14 дней.</p><p>Активировав тест, вы попадёте в меню, где можно выбрать любой из 6 разделов. Начать можно с любого.</p>"
+        },
+        "settings": {
+          "sequenceId": "Вводная галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-image-left",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.image-left",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 19,
+        "values": {
+          "title": "Что оценивает тест",
+          "body": "<p>Управленческие решения в реальных ситуациях, знание компании и её технологий, а также правовые и финансовые основы работы руководителя.</p>",
+          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%23E33A00'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%23ff7a4d'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%23c22f00'/%3E%3C/svg%3E"
+        },
+        "settings": {
+          "sequenceId": "Вводная галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-image-left-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.image-left-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 20,
+        "values": {
+          "title": "Сколько это займёт",
+          "lead": "Около двух часов",
+          "body": "<p>Каждый раздел ограничен по времени. Между разделами можно сделать перерыв и вернуться позже — прогресс сохранится.</p>",
+          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%236C4AA6'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%23926fca'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%234e3480'/%3E%3C/svg%3E"
+        },
+        "settings": {
+          "sequenceId": "Вводная галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-image-right",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.image-right",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 21,
+        "values": {
+          "title": "Если раздел не сдан",
+          "body": "<p>Непройденный раздел можно перепройти после периода ожидания. Результаты остальных разделов при этом сохраняются.</p>",
+          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%232f8f8f'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%2355b3b3'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%231f6666'/%3E%3C/svg%3E"
+        },
+        "settings": {
+          "sequenceId": "Вводная галерея",
+          "nextLabel": "Далее"
+        }
+      },
+      {
+        "id": "demo-gallery-image-right-lead",
+        "type": "info",
+        "kind": "info",
+        "route": "content.info",
+        "templateKey": "gallery.image-right-lead",
+        "topicId": null,
+        "position": "before",
+        "sortOrder": 22,
+        "values": {
+          "title": "Готовы?",
+          "lead": "Последний слайд",
+          "body": "<p>Дальше — меню разделов. Выберите любой и начните: таймер запускается только внутри раздела.</p>",
+          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%23E33A00'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%23ff7a4d'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%23c22f00'/%3E%3C/svg%3E"
+        },
+        "settings": {
+          "sequenceId": "Вводная галерея",
           "nextLabel": "Начать",
-          "image": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20420%20320'%3E%3Cpolygon%20points='210,60%20330,130%20330,240%20210,300%2090,240%2090,130'%20fill='%23E33A00'/%3E%3Cpolygon%20points='210,60%20330,130%20210,180%2090,130'%20fill='%23ff7a4d'/%3E%3Cpolygon%20points='210,180%20330,130%20330,240%20210,300'%20fill='%23c22f00'/%3E%3C/svg%3E",
-          "backgroundImage": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%209'%3E%3Cdefs%3E%3ClinearGradient%20id='g'%20x1='0'%20y1='0'%20x2='1'%20y2='1'%3E%3Cstop%20offset='0'%20stop-color='%23eef1f6'/%3E%3Cstop%20offset='1'%20stop-color='%23ffe9de'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width='16'%20height='9'%20fill='url(%23g)'/%3E%3C/svg%3E",
-          "cardText": "<p><strong>Как проходить тест?</strong></p><p>Вам понадобится около 2 часов. После назначения тест доступен для прохождения в течение 14 дней.</p><p>Активировав тест, вы попадёте в меню, где можно выбрать любой из 6 разделов. Начать можно с любого. После завершения раздела можно сделать перерыв и вернуться позже.</p>"
+          "backgroundImage": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%209'%3E%3Cdefs%3E%3ClinearGradient%20id='g'%20x1='0'%20y1='0'%20x2='1'%20y2='1'%3E%3Cstop%20offset='0'%20stop-color='%23eef1f6'/%3E%3Cstop%20offset='1'%20stop-color='%23ffe9de'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width='16'%20height='9'%20fill='url(%23g)'/%3E%3C/svg%3E"
         }
       },
       {
@@ -89,19 +325,30 @@
         "templateKey": "intro.standard",
         "topicId": "topic-1",
         "values": {
-          "instruction": "<p>Ответьте на все вопросы блока в отведённое время. Вернуться к пропущенным вопросам можно до завершения блока.</p>",
+          "instruction": "<p>Ответьте на все вопросы раздела в отведённое время. Вернуться к пропущенным вопросам можно до завершения раздела.</p>",
           "illustration": "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20400%20420'%3E%3Cg%20transform='translate%2840,180%29%20scale%280.8%29'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%232f8f8f'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%2355b3b3'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%231f6666'/%3E%3C/g%3E%3Cg%20transform='translate%28150,90%29%20scale%280.95%29'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%236C4AA6'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%23926fca'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%234e3480'/%3E%3C/g%3E%3Cg%20transform='translate%2890,10%29%20scale%281.1%29'%3E%3Cpolygon%20points='100,30%20170,70%20170,150%20100,190%2030,150%2030,70'%20fill='%23E33A00'/%3E%3Cpolygon%20points='100,30%20170,70%20100,110%2030,70'%20fill='%23ff7a4d'/%3E%3Cpolygon%20points='100,110%20170,70%20170,150%20100,190'%20fill='%23c22f00'/%3E%3C/g%3E%3C/svg%3E"
         }
       },
       {
-        "id": "demo-info",
-        "type": "info",
-        "route": "content.info",
-        "templateKey": "info.text",
+        "id": "demo-summary",
+        "type": "summary",
+        "kind": "summary",
+        "route": "content.summary",
+        "templateKey": "summary.result",
         "topicId": "topic-1",
         "values": {
-          "title": "Как проходит сертификация",
-          "body": "<p>Тест поможет оценить вашу готовность к роли руководителя. В основе вопросов — опыт десятков успешных лидеров компании.</p><ol><li>Тест состоит из шести блоков; на каждый блок отведено своё время.</li><li>Отвечайте на вопросы внимательно — таймер блока нельзя приостановить.</li><li>Повторное прохождение доступно через 14 дней после последней попытки.</li><li>Результаты сертификационного теста действительны 1 год.</li></ol>"
+          "title": "Итоги раздела",
+          "result": {
+            "path": "result.scorePercent",
+            "renderer": "core.ringChart",
+            "rendererOptions": {
+              "showValue": true,
+              "decimals": 0,
+              "size": 150,
+              "strokeWidth": 14
+            },
+            "label": ""
+          }
         }
       }
     ],
@@ -112,10 +359,23 @@
         "type": "single",
         "prompt": "Вам как руководителю поставлена задача подключиться вместе со своей командой к новому проекту, в котором уже есть команда, и возглавить его. Перед вами стоят очень амбициозные задачи: настроить диалог между двумя командами, быстрее пройти стадии формирования команды, оптимизировать процессы и распределить роли. Какую возможность для развития команды в «Ростелекоме» будет эффективно использовать в этой ситуации?",
         "options": [
-          { "id": "s1", "text": "Обращусь к HRBP, попрошу провести беседу с командой, чтобы сплотить их и наладить коммуникацию и взаимодействие" },
-          { "id": "s2", "text": "Обращусь к своему руководителю и попрошу помощи в налаживании процессов, формировании общих целей и миссии команды" },
-          { "id": "s3", "text": "Зайду в раздел «Обучение — Развитие команд» на корпоративном портале, через который можно обратиться за помощью к специалистам", "correct": true },
-          { "id": "s4", "text": "Назначу членам команды курс «Работа в команде» на платформе Онлайн-университета, чтобы они развивали навыки работы в команде" }
+          {
+            "id": "s1",
+            "text": "Обращусь к HRBP, попрошу провести беседу с командой, чтобы сплотить их и наладить коммуникацию и взаимодействие"
+          },
+          {
+            "id": "s2",
+            "text": "Обращусь к своему руководителю и попрошу помощи в налаживании процессов, формировании общих целей и миссии команды"
+          },
+          {
+            "id": "s3",
+            "text": "Зайду в раздел «Обучение — Развитие команд» на корпоративном портале, через который можно обратиться за помощью к специалистам",
+            "correct": true
+          },
+          {
+            "id": "s4",
+            "text": "Назначу членам команды курс «Работа в команде» на платформе Онлайн-университета, чтобы они развивали навыки работы в команде"
+          }
         ]
       },
       {
@@ -124,10 +384,25 @@
         "type": "multiple",
         "prompt": "Что помогает руководителю развивать самостоятельность команды? Выберите все подходящие.",
         "options": [
-          { "id": "m1", "text": "Делегировать ответственность, а не только задачи", "correct": true },
-          { "id": "m2", "text": "Принимать все ключевые решения единолично" },
-          { "id": "m3", "text": "Давать право на ошибку и разбирать её конструктивно", "correct": true },
-          { "id": "m4", "text": "Поддерживать инициативу сотрудников", "correct": true }
+          {
+            "id": "m1",
+            "text": "Делегировать ответственность, а не только задачи",
+            "correct": true
+          },
+          {
+            "id": "m2",
+            "text": "Принимать все ключевые решения единолично"
+          },
+          {
+            "id": "m3",
+            "text": "Давать право на ошибку и разбирать её конструктивно",
+            "correct": true
+          },
+          {
+            "id": "m4",
+            "text": "Поддерживать инициативу сотрудников",
+            "correct": true
+          }
         ]
       },
       {
@@ -136,10 +411,26 @@
         "type": "matching",
         "prompt": "Сопоставьте стиль руководства с ситуацией, в которой он наиболее уместен.",
         "pairs": [
-          { "id": "p1", "left": "Директивный", "right": "Кризис: нужны быстрые решения" },
-          { "id": "p2", "left": "Наставнический", "right": "Развитие нового сотрудника" },
-          { "id": "p3", "left": "Поддерживающий", "right": "Опытная, но демотивированная команда" },
-          { "id": "p4", "left": "Делегирующий", "right": "Зрелая самостоятельная команда" }
+          {
+            "id": "p1",
+            "left": "Директивный",
+            "right": "Кризис: нужны быстрые решения"
+          },
+          {
+            "id": "p2",
+            "left": "Наставнический",
+            "right": "Развитие нового сотрудника"
+          },
+          {
+            "id": "p3",
+            "left": "Поддерживающий",
+            "right": "Опытная, но демотивированная команда"
+          },
+          {
+            "id": "p4",
+            "left": "Делегирующий",
+            "right": "Зрелая самостоятельная команда"
+          }
         ]
       },
       {
@@ -148,21 +439,50 @@
         "type": "ranking",
         "prompt": "Расположите шаги развивающей обратной связи сотруднику в правильном порядке.",
         "options": [
-          { "id": "r1", "text": "Описать конкретный факт или поведение" },
-          { "id": "r2", "text": "Объяснить его влияние на результат" },
-          { "id": "r3", "text": "Обсудить, что можно улучшить" },
-          { "id": "r4", "text": "Договориться о следующих шагах" }
+          {
+            "id": "r1",
+            "text": "Описать конкретный факт или поведение"
+          },
+          {
+            "id": "r2",
+            "text": "Объяснить его влияние на результат"
+          },
+          {
+            "id": "r3",
+            "text": "Обсудить, что можно улучшить"
+          },
+          {
+            "id": "r4",
+            "text": "Договориться о следующих шагах"
+          }
         ],
-        "order": ["r1", "r2", "r3", "r4"]
+        "order": [
+          "r1",
+          "r2",
+          "r3",
+          "r4"
+        ]
       }
     ]
   },
   "runtime": {
     "route": "start",
     "progress": {
-      "active": { "current": 2, "total": 4, "percent": 50 },
-      "question": { "current": 2, "total": 4, "percent": 50 },
-      "page": { "current": 4, "total": 9, "percent": 44 }
+      "active": {
+        "current": 2,
+        "total": 4,
+        "percent": 50
+      },
+      "question": {
+        "current": 2,
+        "total": 4,
+        "percent": 50
+      },
+      "page": {
+        "current": 4,
+        "total": 9,
+        "percent": 44
+      }
     },
     "result": {
       "score": 84,

@@ -19,6 +19,7 @@
  *   - FR-25h adaptive payload excluded when `mode === "standard"`
  */
 import type { DrawBlueprint, EligibilityPluginRef, FormSet, RetakePolicy } from "@shared/schema";
+import type { ReportSettings } from "@shared/schema";
 import { formSetSchema } from "@shared/schema";
 import type {
   AdaptiveLevelConfig,
@@ -90,6 +91,7 @@ export type ApiTestResponse = {
   sections?: unknown[];
   adaptiveSettings?: unknown;
   retakePolicyJson?: unknown;
+  reportSettingsJson?: unknown;
   /** PRD-15 block D (FR-31): test-wide default price; null = system (1). */
   defaultQuestionPoints?: number | null;
   /** PRD-15 block D (FR-30): per-(test, question) scoring overrides. */
@@ -257,6 +259,19 @@ function readTopicPassRuleFromApi(raw: unknown): TopicPassRule {
   if (isPlainObject(raw)) {
     if (raw.source === "inherit_overall") return { source: "inherit_overall" };
     if (raw.source === "none") return { source: "none" };
+    // PRD-24: per-variant thresholds keyed by the stable formId. Entries that are not
+    // a well-formed {type, value} pair are dropped — a malformed threshold must not
+    // silently become a gate the author never set.
+    if (raw.source === "by_variant" && isPlainObject(raw.byForm)) {
+      const byForm: Record<string, { type: "percent" | "absolute"; value: number }> = {};
+      for (const [formId, entry] of Object.entries(raw.byForm)) {
+        if (!isPlainObject(entry)) continue;
+        const type = entry.type;
+        if (type !== "percent" && type !== "absolute") continue;
+        byForm[formId] = { type, value: typeof entry.value === "number" ? entry.value : 0 };
+      }
+      return { source: "by_variant", byForm };
+    }
     if (raw.source === "custom") {
       const type = raw.type;
       if (type === "percent" || type === "absolute") {
@@ -706,6 +721,28 @@ export function defaultRetakePolicy(): RetakePolicy {
 }
 
 /**
+ * Normalize `tests.report_settings_json` into the editor's report slice (PRD-27).
+ * Anything that is not a well-formed branch is dropped rather than half-read: a
+ * malformed value must not make the block offer a variant that does not exist.
+ */
+function readReportSettingsFromApi(api: ApiTestResponse): ReportSettings {
+  const raw = api.reportSettingsJson;
+  if (!isPlainObject(raw)) return {};
+  const out: ReportSettings = {};
+  for (const mode of ["standard", "adaptive"] as const) {
+    const branch = (raw as Record<string, unknown>)[mode];
+    if (!isPlainObject(branch)) continue;
+    const b = branch as Record<string, unknown>;
+    if (typeof b.variantKey !== "string" || b.variantKey.length === 0) continue;
+    out[mode] = {
+      variantKey: b.variantKey,
+      values: isPlainObject(b.values) ? (b.values as Record<string, unknown>) : {},
+    };
+  }
+  return out;
+}
+
+/**
  * Normalize `tests.retake_policy_json` into the editor's {@link RetakePolicy}.
  * Tolerates the legacy `cooldownDays` alias and missing/partial fields; an
  * absent/!object value yields the disabled default (PRD-6 FR-02).
@@ -785,6 +822,7 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
     scales: [],
     measurements: [],
     retakePolicy: defaultRetakePolicy(),
+    report: {},
     scoring: { defaultQuestionPoints: null, questionOverrides: [] },
   };
 }
@@ -878,6 +916,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
     scales: scalesModel,
     measurements: buildMeasurementsFromApi(src, scalesModel),
     retakePolicy: readRetakePolicyFromApi(src),
+    report: readReportSettingsFromApi(src),
     scoring: {
       defaultQuestionPoints:
         typeof src.defaultQuestionPoints === "number" ? src.defaultQuestionPoints : null,
@@ -893,14 +932,13 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
  *
  * Rules applied (decisions §6):
  *   - writes `status`, never `published` (§6.2);
- *   - omits `flowPolicyJson` for `linear_flat` (§3.1, §6.3);
+ *   - always writes `flowPolicyJson`, `linear_flat` included (§3.1, §6.3):
+ *     the PUT patch treats a missing key as "keep the stored policy";
  *   - normalises empty `description`/`webhookUrl` to `null` (§6.8);
  *   - strips `scormHref` from feedback assets (§6.5);
  *   - copies `expectedVersion` from model snapshot (§6.6).
  */
 export function editorModelToPayload(model: TestEditorModel): TestSettingsPayload {
-  const flowPolicyJson = buildFlowPolicyForPayload(model);
-
   const feedbackJson: FeedbackPayload = {
     format: model.basic.feedback.format,
     text: model.basic.feedback.text,
@@ -915,6 +953,7 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     status: model.basic.status,
     mode: model.mode,
     flowMode: model.flowMode,
+    flowPolicyJson: buildFlowPolicyForPayload(model),
     overallPassRuleJson: model.passRules.overall,
     passDecisionPolicy: model.passRules.decisionPolicy,
     timeLimitMinutes: model.runtime.timeLimitMinutes,
@@ -929,6 +968,10 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     // PRD-6 FR-02: a disabled policy persists as `null` so the export stays
     // byte-identical to legacy tests (the gate is omitted from the package).
     retakePolicyJson: model.retakePolicy.enabled ? model.retakePolicy : null,
+    // PRD-27: пустой выбор персистится как `null` — тест без настройки берёт вариант
+    // с `isDefault`, и колонка не заполняется бессмысленным `{}`.
+    reportSettingsJson:
+      model.report && (model.report.standard || model.report.adaptive) ? model.report : null,
     // PRD-15 block D (FR-31): test-wide default price (null = system default).
     // Defensive `?.` — drafts persisted before block D have no scoring slice.
     defaultQuestionPoints: model.scoring?.defaultQuestionPoints ?? null,
@@ -936,13 +979,62 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     folderId: model.folderId,
   };
 
-  if (flowPolicyJson !== undefined) {
-    payload.flowPolicyJson = flowPolicyJson;
-  }
   return payload;
 }
 
 // ─── Exported phase-2B helpers ────────────────────────────────────────────────
+
+/**
+ * PRD-24: change a topic's variant set and keep its per-variant pass rule in step,
+ * in ONE model update so the two can never be observed out of sync.
+ *
+ * - variant added → seed a threshold for it (from an existing entry, else from the
+ *   test's overall rule) — an uncovered variant is a blocking validation error;
+ * - variant removed → drop its entry, so no orphan threshold blocks the save;
+ * - variants mode switched off → the rule falls back to «Как у теста», since
+ *   `by_variant` is meaningless without a variant set.
+ *
+ * Rules with any other source are left untouched.
+ */
+export function applyFormSetChange(
+  model: TestEditorModel,
+  topicId: string,
+  formSet: FormSet | null,
+): TestEditorModel {
+  const sections = model.sections.map((s) => (s.topicId === topicId ? { ...s, formSet } : s));
+  const rule = model.passRules.byTopic[topicId];
+  if (rule?.source !== "by_variant") {
+    return { ...model, sections };
+  }
+
+  const forms = formSet?.forms ?? [];
+  let nextRule: TopicPassRule;
+  if (!formSet) {
+    // Variants mode switched off — the rule has nothing left to key on.
+    // NB: a set that merely dropped below two variants is an intermediate editing
+    // state (validation already flags it), so the authored thresholds are KEPT
+    // rather than silently discarded.
+    nextRule = { source: "inherit_overall" };
+  } else {
+    const seed =
+      Object.values(rule.byForm)[0] ??
+      (model.passRules.overall.type === "percent"
+        ? { type: "percent" as const, value: model.passRules.overall.value }
+        : { type: "percent" as const, value: 70 });
+    const byForm: Record<string, { type: "percent" | "absolute"; value: number }> = {};
+    for (const form of forms) byForm[form.id] = rule.byForm[form.id] ?? seed;
+    nextRule = { source: "by_variant", byForm };
+  }
+
+  return {
+    ...model,
+    sections,
+    passRules: {
+      ...model.passRules,
+      byTopic: { ...model.passRules.byTopic, [topicId]: nextRule },
+    },
+  };
+}
 
 /**
  * Build `TestSectionPayload[]` from the editor model.
@@ -1056,8 +1148,18 @@ export function mapApiRouterFlowToEditor(api: ApiTestResponse): FlowRouterSettin
 
 // ─── Internal: flow policy payload builder ────────────────────────────────────
 
-function buildFlowPolicyForPayload(model: TestEditorModel): FlowPolicyPayload | undefined {
-  if (model.flowMode === "linear_flat") return undefined;
+/**
+ * Build the outgoing `flow_policy_json` for the current `flowMode`.
+ *
+ * ALWAYS returns a policy, `linear_flat` included. `PUT /api/tests/:id` is a
+ * partial patch: a missing `flowPolicyJson` means "keep what is stored", so
+ * omitting it for `linear_flat` (the pre-fix behaviour) made switching a
+ * router / by-topics test back to «Линейный» a silent no-op — the column kept
+ * the old mode and the editor re-read it on the next open. All readers treat
+ * both `null` and `{ mode: "linear_flat" }` as the flat default, so writing the
+ * mode explicitly is safe for legacy rows and for the create path alike.
+ */
+function buildFlowPolicyForPayload(model: TestEditorModel): FlowPolicyPayload {
   if (model.flowMode === "router_by_topics") {
     return {
       mode: "router_by_topics",

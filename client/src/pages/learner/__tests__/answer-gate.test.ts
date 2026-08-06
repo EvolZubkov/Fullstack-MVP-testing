@@ -7,7 +7,31 @@
  * every branch is deterministic.
  */
 import { describe, it, expect } from "vitest";
-import { hasAnswer, rankingDeliveryOrder, shuffleIndices } from "../answer-gate";
+import { deliversShuffledOrder, hasAnswer, rankingDeliveryOrder, shuffleIndices } from "../answer-gate";
+
+describe("deliversShuffledOrder (PRD-16 FR-41/FR-42)", () => {
+  it("honours the author's switch for choice and matching questions", () => {
+    expect(deliversShuffledOrder({ type: "single", shuffleAnswers: false })).toBe(false);
+    expect(deliversShuffledOrder({ type: "multiple", shuffleAnswers: false })).toBe(false);
+    expect(deliversShuffledOrder({ type: "matching", shuffleAnswers: false })).toBe(false);
+    expect(deliversShuffledOrder({ type: "single", shuffleAnswers: true })).toBe(true);
+  });
+
+  it("shuffles when the flag is absent (legacy rows) or the question is missing", () => {
+    expect(deliversShuffledOrder({ type: "single" })).toBe(true);
+    expect(deliversShuffledOrder(null)).toBe(false);
+  });
+
+  it("always shuffles ranking — its authored order is the answer key (FR-42)", () => {
+    expect(deliversShuffledOrder({ type: "ranking", shuffleAnswers: false })).toBe(true);
+  });
+
+  it("never shuffles a scale — its graduation order is content (PRD-26 FR-04)", () => {
+    expect(deliversShuffledOrder({ type: "scale" })).toBe(false);
+    expect(deliversShuffledOrder({ type: "scale", shuffleAnswers: true })).toBe(false);
+    expect(deliversShuffledOrder({ type: "scale", shuffleAnswers: false })).toBe(false);
+  });
+});
 
 describe("hasAnswer", () => {
   it("returns true when the question is missing (defensive guard)", () => {
@@ -19,6 +43,14 @@ describe("hasAnswer", () => {
     const q = { type: "single", dataJson: { options: ["a", "b"] } };
     expect(hasAnswer(q, 0)).toBe(true);
     expect(hasAnswer(q, undefined)).toBe(false);
+  });
+
+  it("scale: a chosen graduation counts, including the first one", () => {
+    const q = { type: "scale", dataJson: { options: ["Никогда", "Редко", "Часто"] } };
+    expect(hasAnswer(q, 0)).toBe(true);
+    expect(hasAnswer(q, 2)).toBe(true);
+    expect(hasAnswer(q, undefined)).toBe(false);
+    expect(hasAnswer(q, null)).toBe(false);
   });
 
   it("multiple: a non-empty selection counts, an empty one does not", () => {

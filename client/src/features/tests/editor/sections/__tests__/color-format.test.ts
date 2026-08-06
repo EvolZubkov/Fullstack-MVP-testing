@@ -15,7 +15,33 @@
  *     and the `hexToHsl(...) ?? pickerHex` guard for an unparseable picker value.
  */
 import { describe, expect, it } from "vitest";
-import { detectColorFormat, toHex, hexToHsl, fromHex } from "../color-format";
+import {
+  detectColorFormat,
+  toHex,
+  hexToHsl,
+  fromHex,
+  manifestColorFormat,
+} from "../color-format";
+
+describe("manifestColorFormat", () => {
+  it("reads the format off the template's colour defaults", () => {
+    expect(
+      manifestColorFormat([
+        { type: "text", default: "Inter" },
+        { type: "color", default: "217 91% 42%" },
+      ]),
+    ).toBe("hsl");
+    expect(manifestColorFormat([{ type: "color", default: "#E33A00" }])).toBe("hex");
+  });
+
+  // The certification template declares every colour as null so its theme.css
+  // drives light/dark. HSL is the platform convention, so that is the answer.
+  it("defaults to hsl when the template declares no colour values", () => {
+    expect(manifestColorFormat([{ type: "color", default: null }])).toBe("hsl");
+    expect(manifestColorFormat([])).toBe("hsl");
+    expect(manifestColorFormat(null)).toBe("hsl");
+  });
+});
 
 // ─── detectColorFormat ─────────────────────────────────────────────────────────
 
@@ -141,10 +167,14 @@ describe("fromHex", () => {
   });
 
   it("falls back to the fallbackFormat when the original is unparseable", () => {
-    // Default fallbackFormat is "hex".
-    expect(fromHex("#ff0000", null)).toBe("#FF0000");
-    // Explicit "hsl" fallback for an empty original.
+    // The default is HSL — the platform convention. A template whose palette lives
+    // in theme.css declares `default: null`, so the first edit has nothing to infer
+    // from; writing HEX there produced `hsl(#7700FF)`, which the browser drops,
+    // leaving the element with no colour at all.
+    expect(fromHex("#ff0000", null)).toBe("0 100% 50%");
     expect(fromHex("#ff0000", "", "hsl")).toBe("0 100% 50%");
+    // A HEX-storing template is honoured when the caller says so.
+    expect(fromHex("#ff0000", "", "hex")).toBe("#FF0000");
   });
 
   it("keeps the picker value when hexToHsl cannot parse it", () => {

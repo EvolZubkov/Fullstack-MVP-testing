@@ -23,6 +23,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { buildQuestionNav } from "@shared/template/question-nav";
 
 const { navigateSpy, toastSpy } = vi.hoisted(() => ({
   navigateSpy: vi.fn(),
@@ -37,6 +38,10 @@ vi.mock("wouter", () => ({
 vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: toastSpy }),
 }));
+
+// This suite exercises standard (non-restricted) sessions only; the magic-link
+// scoping itself is covered in take-test.test.tsx.
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { id: "u1", magicScope: null } }) }));
 
 vi.mock("@/components/template-screen", () => ({
   TemplateScreen: (props: any) => (
@@ -80,7 +85,23 @@ vi.mock("../template-question-screen", () => ({
       <button type="button" data-testid="qs-ans-rank-wrong" onClick={() => props.onAnswer([2, 1, 0])}>rkw</button>
       <button type="button" data-testid="qs-goto-0" onClick={() => props.onNavigateToQuestion?.(0)}>g0</button>
       <button type="button" data-testid="qs-goto-99" onClick={() => props.onNavigateToQuestion?.(99)}>g99</button>
-      {props.footer !== undefined ? (
+      {props.nav ? (
+        // The row lives in the TEMPLATE now; the double renders the same buttons the
+        // layout does from the shared nav context, so the flows exercise real state.
+        (() => { const n = buildQuestionNav(props.nav); return (
+        <div data-testid="qs-nav">
+          {n.showBack && (
+            <button type="button" disabled={!n.canPrev} onClick={() => props.onNavAction?.("answer-back")}>← Назад</button>
+          )}
+          {n.showSkip && (
+            <button type="button" onClick={() => props.onNavAction?.("answer-skip")}>Пропустить</button>
+          )}
+          {n.showReview && (
+            <button type="button" onClick={() => props.onNavAction?.("answer-return")}>К обзору</button>
+          )}
+          <button type="button" disabled={!n.primaryEnabled} onClick={() => props.onNavAction?.(n.primaryAction)}>{n.primaryLabel}</button>
+        </div>); })()
+      ) : props.footer !== undefined ? (
         <div data-testid="qs-footer">{props.footer}</div>
       ) : (
         <div data-testid="qs-nav">
@@ -272,14 +293,17 @@ describe("<TakeTestPage /> resume variants", () => {
 // ─── strict «Далее» validation ─────────────────────────────────────────────────
 
 describe("<TakeTestPage /> strict next validation", () => {
-  it("blocks «Далее» with a toast when the current question is unanswered", async () => {
+  // The shared nav row (renderQuestionNav) disables the forward button until the
+  // answer is usable — the same gate the SCORM runtime applies, so the learner is
+  // stopped BEFORE the click instead of by a toast after it.
+  it("держит «Далее» неактивной, пока текущий вопрос без ответа", async () => {
     await renderToQuestion();
-    fireEvent.click(screen.getByTestId("qs-next")); // no answer selected
-    expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Требуется ответ" }));
+    expect(screen.getByText("Далее")).toBeDisabled();
+    fireEvent.click(screen.getByText("Далее")); // no answer selected
     expect(counter()).toContain("Вопрос 1 из 2");
   });
 
-  it("blocks «Далее» when a multiple-choice answer is an empty selection", async () => {
+  it("держит «Далее» неактивной при пустом множественном выборе", async () => {
     await renderToQuestion({
       startAttempt: jsonRes(
         attemptBody({
@@ -289,11 +313,10 @@ describe("<TakeTestPage /> strict next validation", () => {
       ),
     });
     fireEvent.click(screen.getByTestId("qs-ans-multi-empty")); // []
-    fireEvent.click(screen.getByTestId("qs-next"));
-    expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Требуется ответ" }));
+    expect(screen.getByText("Далее")).toBeDisabled();
   });
 
-  it("blocks «Далее» when a matching answer is incomplete", async () => {
+  it("держит «Далее» неактивной при неполном сопоставлении", async () => {
     await renderToQuestion({
       startAttempt: jsonRes(
         attemptBody({
@@ -303,8 +326,7 @@ describe("<TakeTestPage /> strict next validation", () => {
       ),
     });
     fireEvent.click(screen.getByTestId("qs-ans-match-partial")); // { 0: 0 } — left 1 unmatched
-    fireEvent.click(screen.getByTestId("qs-next"));
-    expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Требуется ответ" }));
+    expect(screen.getByText("Далее")).toBeDisabled();
   });
 });
 
@@ -385,7 +407,7 @@ describe("<TakeTestPage /> flexible navigation", () => {
     await renderToQuestion({ startAttempt: flexAttempt() });
     fireEvent.click(screen.getByTestId("qs-ans-0"));
     fireEvent.click(await screen.findByText("Отправить ответ"));
-    fireEvent.click(await screen.findByText("Далее →"));
+    fireEvent.click(await screen.findByText("Далее"));
     await waitFor(() => expect(counter()).toContain("Вопрос 2 из 2"));
   }
 
@@ -411,6 +433,9 @@ describe("<TakeTestPage /> sectional flexible flow", () => {
     jsonRes(
       attemptBody({
         allowReturnToUnanswered: true,
+        // PRD-19 обзор gate: these walks answer every question, so the обзор is
+        // due only because answers stay editable.
+        allowAnswerChange: true,
         answerCommitScope: "section",
         showSectionResults: true,
         variantJson: {
@@ -430,10 +455,10 @@ describe("<TakeTestPage /> sectional flexible flow", () => {
       sectionResult: jsonRes({ topicName: "Тема A", correct: 1, total: 1, percent: 100, passed: true }),
     });
 
-    // Section A: answer, commit, «Далее →» crosses the boundary → section обзор.
+    // Section A: answer, commit, «Далее» crosses the boundary → section обзор.
     fireEvent.click(screen.getByTestId("qs-ans-0"));
     fireEvent.click(await screen.findByText("Отправить ответ"));
-    fireEvent.click(await screen.findByText("Далее →"));
+    fireEvent.click(await screen.findByText("Далее"));
     await screen.findByTestId("ts-finish-review");
 
     // Finish the section → computed section-results screen.
@@ -445,10 +470,10 @@ describe("<TakeTestPage /> sectional flexible flow", () => {
     fireEvent.click(screen.getByTestId("ts-section-continue"));
     await waitFor(() => expect(counter()).toContain("Вопрос 2 из 2"));
 
-    // Section B (last): commit, «Далее →» → section обзор → finish → section-results.
+    // Section B (last): commit, «Далее» → section обзор → finish → section-results.
     fireEvent.click(screen.getByTestId("qs-ans-0"));
     fireEvent.click(await screen.findByText("Отправить ответ"));
-    fireEvent.click(await screen.findByText("Далее →"));
+    fireEvent.click(await screen.findByText("Далее"));
     fireEvent.click(await screen.findByTestId("ts-finish-review"));
     await screen.findByTestId("ts-section-continue");
 
@@ -457,11 +482,31 @@ describe("<TakeTestPage /> sectional flexible flow", () => {
     await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith("/learner/result/attempt-1"));
   });
 
+  // PRD-19 обзор gate: nothing was skipped and nothing may be edited, so the
+  // обзор would list questions the learner can no longer touch — the section goes
+  // straight to its results instead.
+  it("skips the обзор when every answer is in and none can be changed", async () => {
+    await renderToQuestion({
+      startAttempt: sectionalFlex({ allowAnswerChange: false }),
+      sectionResult: jsonRes({ topicName: "Тема A", correct: 1, total: 1, percent: 100, passed: true }),
+    });
+
+    fireEvent.click(screen.getByTestId("qs-ans-0"));
+    fireEvent.click(await screen.findByText("Отправить ответ"));
+    fireEvent.click(await screen.findByText("Далее"));
+
+    // The stub renders a button per action id, so the SCREEN is identified by the
+    // context it received: section-results, with no обзор in between.
+    await waitFor(() => expect(ctx().sectionResult).toBeTruthy());
+    expect(ctx().review).toBeUndefined();
+    expect(ctx().sectionResult.scorePercent).toBe(100);
+  });
+
   it("advances directly to the next section when section-results is unavailable", async () => {
     await renderToQuestion({ startAttempt: sectionalFlex({ showSectionResults: false }) });
     fireEvent.click(screen.getByTestId("qs-ans-0"));
     fireEvent.click(await screen.findByText("Отправить ответ"));
-    fireEvent.click(await screen.findByText("Далее →"));
+    fireEvent.click(await screen.findByText("Далее"));
     fireEvent.click(await screen.findByTestId("ts-finish-review"));
     // No section-results screen → straight to section B.
     await waitFor(() => expect(counter()).toContain("Вопрос 2 из 2"));
@@ -492,9 +537,9 @@ describe("<TakeTestPage /> flat flexible обзор", () => {
 
   it("jumps from the обзор back to a question via a pill", async () => {
     await renderToQuestion({ startAttempt: flexAttempt() });
-    fireEvent.click(await screen.findByText("Пропустить")); // Q1 → Q2, скип открывает «Вернуться»
+    fireEvent.click(await screen.findByText("Пропустить")); // Q1 → Q2, скип открывает «К обзору»
     await waitFor(() => expect(counter()).toContain("Вопрос 2 из 2"));
-    fireEvent.click(await screen.findByText("Вернуться"));
+    fireEvent.click(await screen.findByText("К обзору"));
     await screen.findByTestId("ts-goto:1");
     fireEvent.click(screen.getByTestId("ts-goto:1")); // обзор pill → jump to question 2
     await screen.findByTestId("question-screen");

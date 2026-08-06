@@ -56,13 +56,18 @@ const TEMPLATE = {
         label: "Богатый вариант",
         kind: "info",
         description: "Несколько полей.",
+        // PRD-22: content types only. `number` / `boolean` / `select` are page
+        // PROPERTIES and live in `settings[]`, not among placeholders.
         placeholders: [
           { key: "heading", type: "text", label: "Заголовок" },
           { key: "body", type: "textarea", label: "Текст" },
+          { key: "pic", type: "image", label: "Картинка" },
+        ],
+        settings: [
           { key: "count", type: "number", label: "Число" },
           { key: "flag", type: "boolean", label: "Флаг" },
           { key: "choice", type: "select", label: "Выбор", options: ["A", "B"] },
-          { key: "pic", type: "image", label: "Картинка" },
+          { key: "sequenceId", type: "sequence", label: "Последовательность" },
         ],
       },
       { key: "intro.hero", label: "Введение", kind: "intro", placeholders: [{ key: "title", type: "text", label: "Заголовок" }] },
@@ -293,6 +298,55 @@ describe("<StructureSection /> — author replace-variant apply", () => {
     // The row badge switches to the new variant label in the local draft.
     await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-a")).toHaveTextContent("Только заголовок"));
   });
+
+  // ── Plan Э5: an unavailable variant is the author's decision, not a silent one ──
+
+  it("summarizes the pages that need mapping and opens the dialog for one", async () => {
+    installApi([
+      buildPage({ id: "pg-x", kind: "info", position: "before", topicId: null, templateKey: "info.gone", valuesJson: { values: { title: "Осиротевшая" } } }),
+      buildPage({ id: "pg-y", kind: "info", position: "before", topicId: null, templateKey: "info.gone2", valuesJson: { values: { title: "И вторая" } } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+
+    const banner = await screen.findByTestId("structure-unmapped-banner");
+    expect(banner).toHaveTextContent("Страниц требуют сопоставления: 2");
+    // Each listed page takes the author straight to its mapping dialog.
+    fireEvent.click(screen.getByRole("button", { name: "Осиротевшая" }));
+    expect(await screen.findByTestId("structure-replace-confirm")).toBeInTheDocument();
+  });
+
+  it("preselects the first offered variant when the page's own is unavailable", async () => {
+    installApi([
+      buildPage({ id: "pg-x", kind: "info", position: "before", topicId: null, templateKey: "info.gone", valuesJson: { values: { title: "T", body: "<p>x</p>" } } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-page-missing-pg-x")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("structure-page-actions-pg-x"));
+    fireEvent.click(screen.getByTestId("structure-page-replace-pg-x"));
+
+    // «Применить» must be live: with the stale key preselected it was disabled, so
+    // the one page that needs the dialog was the one page it could not fix.
+    const confirm = await screen.findByTestId("structure-replace-confirm");
+    expect(confirm).not.toBeDisabled();
+    fireEvent.click(confirm);
+    await waitFor(() => expect(screen.queryByTestId("structure-page-missing-pg-x")).toBeNull());
+    expect(screen.getByTestId("structure-page-row-pg-x")).toHaveTextContent("Материал");
+  });
+
+  it("lists the values at risk even though the current variant is unreachable", async () => {
+    installApi([
+      buildPage({ id: "pg-x", kind: "info", position: "before", topicId: null, templateKey: "info.gone", valuesJson: { values: { title: "T", legacyField: "Пропадёт" } } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-page-missing-pg-x")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("structure-page-actions-pg-x"));
+    fireEvent.click(screen.getByTestId("structure-page-replace-pg-x"));
+    // `legacyField` is not declared by any reachable variant, so the stored values
+    // themselves are what the warning is computed from.
+    expect(await screen.findByTestId("structure-replace-diff")).toHaveTextContent("legacyField");
+  });
 });
 
 // ─── PageEditForm: control types + html + banners ──────────────────────────────
@@ -308,17 +362,24 @@ describe("<StructureSection /> — page edit form", () => {
     fireEvent.click(screen.getByTestId("structure-page-expand-pg-rich"));
     await screen.findByTestId("structure-page-field-pg-rich-heading"); // text
     expect(screen.getByTestId("structure-page-field-pg-rich-body")).toBeInTheDocument(); // textarea
-    expect(screen.getByTestId("structure-page-field-pg-rich-count")).toBeInTheDocument(); // number
-    expect(screen.getByTestId("structure-page-field-pg-rich-flag")).toBeInTheDocument(); // boolean
-    expect(screen.getByTestId("structure-page-field-pg-rich-choice")).toBeInTheDocument(); // select
     expect(screen.getByTestId("structure-page-field-pg-rich-pic")).toBeInTheDocument(); // image
+    // PRD-22: page properties render after the content fields, in the same list.
+    expect(screen.getByTestId("structure-page-setting-pg-rich-count")).toBeInTheDocument(); // number
+    expect(screen.getByTestId("structure-page-setting-pg-rich-flag")).toBeInTheDocument(); // boolean
+    expect(screen.getByTestId("structure-page-setting-pg-rich-choice")).toBeInTheDocument(); // select
+    expect(screen.getByTestId("structure-page-setting-pg-rich-sequenceId")).toBeInTheDocument(); // sequence
 
     fireEvent.change(screen.getByTestId("structure-page-field-pg-rich-heading"), { target: { value: "H" } });
-    fireEvent.change(screen.getByTestId("structure-page-field-pg-rich-body"), { target: { value: "B" } });
-    fireEvent.click(screen.getByTestId("structure-page-edit-save-pg-rich"));
-    await waitFor(() => expect(screen.queryByTestId("structure-page-edit-fields-pg-rich")).toBeNull());
+    // `textarea` has a plain-text ceiling, so the field shows no mode switch —
+    // just the input. Its testid is suffixed by the shared editor component.
+    expect(screen.queryByTestId("structure-page-field-pg-rich-body-mode-rich")).toBeNull();
+    fireEvent.change(screen.getByTestId("structure-page-field-pg-rich-body-input"), { target: { value: "B" } });
+    // Single-save model: edits go straight into the draft, no per-form button.
+    expect(screen.queryByTestId("structure-page-edit-save-pg-rich")).toBeNull();
 
-    // Re-expand: the edits are in the draft.
+    // Collapse via the chevron and re-expand: the edits are in the draft.
+    fireEvent.click(screen.getByTestId("structure-page-expand-pg-rich"));
+    await waitFor(() => expect(screen.queryByTestId("structure-page-edit-fields-pg-rich")).toBeNull());
     fireEvent.click(screen.getByTestId("structure-page-expand-pg-rich"));
     const heading = (await screen.findByTestId("structure-page-field-pg-rich-heading")) as HTMLInputElement;
     expect(heading.value).toBe("H");
@@ -413,6 +474,25 @@ describe("<StructureSection /> — system row markers", () => {
     renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
     await waitFor(() => expect(screen.getByTestId("structure-system-results")).toBeInTheDocument());
     expect(screen.getByTestId("structure-system-results-fallback-tag")).toBeInTheDocument();
+  });
+
+  // The tests list counts a system page bound to a dropped variant, so the row
+  // has to say so too — the marker used to live on author rows only, and the
+  // author saw a warning in the list with nothing to act on in the structure.
+  it("marks a SYSTEM row whose variant the template no longer declares", async () => {
+    installApi([
+      buildPage({
+        id: "pg-res",
+        kind: "results",
+        position: "after",
+        topicId: null,
+        templateKey: "results.gone",
+        valuesJson: { values: {} },
+      }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-system-results")).toBeInTheDocument());
+    expect(screen.getByTestId("structure-system-results-missing-tag")).toBeInTheDocument();
   });
 });
 

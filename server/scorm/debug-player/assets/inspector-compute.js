@@ -64,16 +64,27 @@
     return null;
   }
 
+  /**
+   * Answered by picking ONE option index — 'single' and 'scale'. Mirrors
+   * `isSingleIndexChoice` (shared/questions/question-type); this file is loaded as a
+   * standalone script in the debug-player host page, so it cannot reach the package's
+   * `TBQType` global and keeps its own copy.
+   */
+  function isOneIndexChoice(t) {
+    return t === "single" || t === "scale";
+  }
+
   function typeLabel(t) {
     return t === "single" ? "Один ответ" : t === "multiple" ? "Несколько" :
-      t === "matching" ? "Соответствие" : t === "ranking" ? "Ранжирование" : (t || "?");
+      t === "matching" ? "Соответствие" : t === "ranking" ? "Ранжирование" :
+      t === "scale" ? "Шкала" : (t || "?");
   }
 
   // Human-readable answer using the package's own option/left/right/items text.
   function humanAnswer(q, ans) {
     if (ans === null || ans === undefined) return "(нет ответа)";
     var d = q.data || {};
-    if (q.type === "single") {
+    if (isOneIndexChoice(q.type)) {
       var o = d.options || [];
       return (typeof ans === "number" && o[ans] != null) ? o[ans] : "#" + ans;
     }
@@ -105,7 +116,7 @@
     if (m.sourceType === "option") {
       var i = Number(m.sourceKey);
       if (isNaN(i)) return false;
-      if (qType === "single") return answer === i;
+      if (isOneIndexChoice(qType)) return answer === i;
       if (qType === "multiple") return Array.isArray(answer) && answer.indexOf(i) !== -1;
       return false;
     }
@@ -381,6 +392,32 @@
   }
   function humanCompletion(v) { return v === "completed" ? "завершено" : v === "incomplete" ? "не завершено" : String(v); }
   function humanSuccess(v) { return v === "passed" ? "зачёт ✓" : v === "failed" ? "незачёт ✗" : v === "unknown" ? "не определён" : String(v); }
+
+  /**
+   * PRD-24: human label for the RESOLVED topic rule (`{type:'percent'|'count'}`),
+   * i.e. the threshold that actually gated the topic. `null` = ungated.
+   */
+  function passRuleLabel(rule) {
+    if (!rule) return "без порога";
+    return rule.type === "percent" ? "≥ " + rule.value + "%" : "≥ " + rule.value + " баллов";
+  }
+
+  /**
+   * PRD-24: label of the variant this run delivered for a topic, read from the pin
+   * the runtime writes into the attempt state. Null for non-variant topics.
+   */
+  function variantLabelFor(pkg, topicId) {
+    var vs = (((pkg.state || {}).variant || {}).sections || [])
+      .filter(function (s) { return s.topicId === topicId; })[0];
+    if (!vs || !vs.formId) return null;
+    var def = ((pkg.TEST_DATA || {}).sections || [])
+      .filter(function (s) { return s.topicId === topicId; })[0];
+    var forms = (def && def.formSet && def.formSet.forms) || [];
+    for (var i = 0; i < forms.length; i++) {
+      if (forms[i].id === vs.formId) return forms[i].label || ("Вариант " + (i + 1));
+    }
+    return null;
+  }
   function collectByIndex(traffic, start, prefix) {
     var map = {}, order = [], i = start;
     while (i < traffic.length && traffic[i].fn === "SetValue" && traffic[i].key.indexOf(prefix) === 0) {
@@ -673,13 +710,20 @@
           topicName: td.topicName, earnedPoints: round2(td.earnedPoints), possiblePoints: round2(td.possiblePoints),
           percent: Math.round(td.percent || 0), passed: td.passed, correct: td.correct, total: td.total,
           completed: !!topicDone[td.topicId],
+          // PRD-24: the rule that ACTUALLY gated the topic. For a `by_variant` topic
+          // that is the delivered variant's threshold — without it the methodologist
+          // sees a verdict with no way to tell WHICH threshold produced it.
+          rule: td.resolvedPassRule || null,
+          ruleLabel: passRuleLabel(td.resolvedPassRule),
+          variantLabel: variantLabelFor(pkg, td.topicId),
         };
       }),
     };
   }
 
-  // ── Выдача: what THIS run delivered per section — variant (PRD-17, formId
-  // inferred from the drawn id-set, not stored in state) or per-tag quota
+  // ── Выдача: what THIS run delivered per section — variant (PRD-17; the formId is
+  // read from the pin the runtime writes into the attempt state, PRD-24, falling back
+  // to inference over the drawn id-set for pre-PRD-24 state) or per-tag quota
   // plan-vs-actual (PRD-11), or a plain/whole-topic draw. Adaptive → level path. ──
   function buildDraw(pkg) {
     if (!pkg || !pkg.state) return { available: false, adaptive: false };
@@ -727,12 +771,23 @@
         out.forms = def.formSet.forms.map(function (f, i) {
           return { id: f.id, label: f.label || ("Вариант " + (i + 1)), index: i + 1 };
         });
-        var set = {};
-        drawnIds.forEach(function (id) { set[id] = 1; });
-        for (var i = 0; i < def.formSet.forms.length; i++) {
-          var fids = def.formSet.forms[i].questionIds || [];
-          if (fids.length === drawnIds.length && fids.every(function (id) { return set[id]; })) {
-            out.formId = def.formSet.forms[i].id; out.formIndex = i + 1; break;
+        // PRD-24: the runtime now PINS the delivered variant, so read it back instead
+        // of guessing. Inference over the drawn id-set stays as a fallback for state
+        // captured before the pin existed (and it cannot tell apart two variants that
+        // share the same questions, which the pin can).
+        if (vs.formId) {
+          out.formId = vs.formId;
+          for (var pi = 0; pi < def.formSet.forms.length; pi++) {
+            if (def.formSet.forms[pi].id === vs.formId) { out.formIndex = pi + 1; break; }
+          }
+        } else {
+          var set = {};
+          drawnIds.forEach(function (id) { set[id] = 1; });
+          for (var i = 0; i < def.formSet.forms.length; i++) {
+            var fids = def.formSet.forms[i].questionIds || [];
+            if (fids.length === drawnIds.length && fids.every(function (id) { return set[id]; })) {
+              out.formId = def.formSet.forms[i].id; out.formIndex = i + 1; break;
+            }
           }
         }
       } else if (def.drawBlueprint && def.drawBlueprint.strata && def.drawBlueprint.strata.length) {
@@ -784,9 +839,20 @@
       "font:700 13px/1 system-ui,sans-serif;font-variant-numeric:tabular-nums;";
     return b;
   }
+  // True while a pointer drag gesture is in flight: the shared DnD engine
+  // (shared/template/dnd/pointer-dnd) appends a `[data-drag-ghost]` card to the
+  // document for the whole duration of a started drag. Mutating the captured
+  // chip's subtree during that window (adding/removing an «Эталон» badge, toggling
+  // its padding) makes the browser fire `pointercancel`, which the engine treats as
+  // a drop-abort — so the overlay's per-tick repaint silently killed matching /
+  // ranking drags while «Эталон» was on. The overlay must stand still until the
+  // gesture ends; the next tick repaints.
+  function dragInFlight(doc) {
+    try { return !!doc.querySelector('[data-drag-ghost]'); } catch (e) { return false; }
+  }
   function clearReference(iframeWin) {
     var doc = iframeWin && iframeWin.document;
-    if (!doc) return;
+    if (!doc || dragInFlight(doc)) return;
     var marks = doc.querySelectorAll('[data-tb-ref="1"]');
     for (var i = 0; i < marks.length; i++) {
       if (marks[i].parentNode) marks[i].parentNode.removeChild(marks[i]);
@@ -805,71 +871,101 @@
     if (!el) return;
     if (el.getAttribute("data-tb-ref-pad") === null) el.setAttribute("data-tb-ref-pad", el.style.paddingLeft);
     el.style.position = "relative";
-    el.style.paddingLeft = "40px";
+    // The pair letter sits at left:10px and is ~32px wide, so the content needs to
+    // start past ~44px or the badge touches the text; 52px leaves a clear gutter.
+    el.style.paddingLeft = "52px";
   }
   function applyReference(iframeWin) {
     var doc = iframeWin && iframeWin.document;
     var st = null;
     try { st = iframeWin.state; } catch (e) {}
     if (!doc || !st || !st.flatQuestions) return;
+    // Never repaint mid-drag — see dragInFlight. Leaving the overlay untouched keeps
+    // the captured chip's subtree stable so the gesture can complete.
+    if (dragInFlight(doc)) return;
     clearReference(iframeWin);
-    var byId = {};
-    st.flatQuestions.forEach(function (fq) { byId[fq.question.id] = fq.question; });
 
-    // single / multiple — ✓ on the correct option(s). qid is parsed from the
-    // option's onclick (selectSingle/toggleMultiple), present while answering.
-    var groups = {};
-    var opts = doc.querySelectorAll(".option[data-index]");
-    for (var i = 0; i < opts.length; i++) {
-      var oc = opts[i].getAttribute("onclick") || "";
-      var m = /\(\s*['"]([^'"]+)['"]/.exec(oc);
-      var qid = m ? m[1] : null;
-      if (!qid || !byId[qid]) continue;
-      (groups[qid] = groups[qid] || { q: byId[qid], opts: [] }).opts.push(opts[i]);
-    }
-    Object.keys(groups).forEach(function (qid) {
-      var q = groups[qid].q, c = q.correct || {};
-      var correctSet = q.type === "single"
+    // The debug player shows ONE question at a time. The revised «Стандартный»
+    // markup (ou-radio-card / ou-rank / ou-match) no longer carries the qid on the
+    // option, so the reference targets the CURRENT question from the live state.
+    var curFq = st.flatQuestions[st.currentIndex];
+    var curQ = curFq && curFq.question;
+    if (!curQ) return;
+    var data = curQ.data || {};
+    var c = curQ.correct || {};
+
+    // single / multiple — ✓ on the correct option(s). Options are `.ou-radio-card`
+    // rows keyed by `data-index`, in the shuffled display order.
+    if (curQ.type === "single" || curQ.type === "multiple") {
+      var correctSet = curQ.type === "single"
         ? (typeof c.correctIndex === "number" ? [c.correctIndex] : [])
         : (Array.isArray(c.correctIndices) ? c.correctIndices : []);
-      groups[qid].opts.forEach(function (opt) {
-        var idx = parseInt(opt.getAttribute("data-index"), 10);
+      var opts = doc.querySelectorAll(".ou-radio-card[data-index]");
+      for (var i = 0; i < opts.length; i++) {
+        var idx = parseInt(opts[i].getAttribute("data-index"), 10);
         if (correctSet.indexOf(idx) !== -1) {
-          opt.style.position = "relative";
-          opt.appendChild(tbRefBadge(doc, "✓", "ok"));
-        }
-      });
-    });
-
-    // ranking — the correct 1-based position of each item.
-    var boards = doc.querySelectorAll(".ranking-board[data-qid]");
-    for (var b = 0; b < boards.length; b++) {
-      var rq = byId[boards[b].getAttribute("data-qid")];
-      if (!rq) continue;
-      var co = (rq.correct && Array.isArray(rq.correct.correctOrder)) ? rq.correct.correctOrder : [];
-      var items = boards[b].querySelectorAll(".rank-item[data-item]");
-      for (var j = 0; j < items.length; j++) {
-        var pos = co.indexOf(parseInt(items[j].getAttribute("data-item"), 10));
-        if (pos !== -1) {
-          items[j].style.position = "relative";
-          items[j].appendChild(tbRefBadge(doc, String(pos + 1), "num"));
+          opts[i].style.position = "relative";
+          opts[i].appendChild(tbRefBadge(doc, "✓", "ok"));
         }
       }
     }
 
-    // matching — paired letters A/B/C on the chip (data-drag=left) and the right tile.
-    var mboards = doc.querySelectorAll(".matching-board[data-qid]");
-    for (var mb = 0; mb < mboards.length; mb++) {
-      var mq = byId[mboards[mb].getAttribute("data-qid")];
-      if (!mq) continue;
-      var pairs = (mq.correct && Array.isArray(mq.correct.pairs)) ? mq.correct.pairs : [];
-      pairs.forEach(function (p, idx) {
+    // scale — ✓ on the correct graduation. The scale renders as the DS Stepper in
+    // choice mode, so its rows are `.ou-stepper__step`, not `.ou-radio-card`. A
+    // MEASUREMENT-only scale carries no `correctIndex`, so nothing is marked — there
+    // is no reference answer to show.
+    if (curQ.type === "scale" && typeof c.correctIndex === "number") {
+      var steps = doc.querySelectorAll(".ou-stepper--choice .ou-stepper__step[data-index]");
+      for (var si = 0; si < steps.length; si++) {
+        if (parseInt(steps[si].getAttribute("data-index"), 10) === c.correctIndex) {
+          steps[si].style.position = "relative";
+          steps[si].appendChild(tbRefBadge(doc, "✓", "ok"));
+        }
+      }
+    }
+
+    // ranking — the correct 1-based position of each item. Rows carry the DISPLAY
+    // position (`data-drag`), not the item index, so rows are matched to items by
+    // their rendered title text.
+    if (curQ.type === "ranking") {
+      var items = Array.isArray(data.items) ? data.items : [];
+      var co = Array.isArray(c.correctOrder) ? c.correctOrder : [];
+      var textPos = {};
+      co.forEach(function (itemIdx, pos) { textPos[String(items[itemIdx])] = pos + 1; });
+      var rows = doc.querySelectorAll(".ou-rank__item");
+      for (var r = 0; r < rows.length; r++) {
+        var t = rows[r].querySelector(".ou-rank__title");
+        var p = t ? textPos[t.textContent] : undefined;
+        if (p) { rows[r].style.position = "relative"; rows[r].appendChild(tbRefBadge(doc, String(p), "num")); }
+      }
+    }
+
+    // matching — paired letters A/B/C on the fixed prompt (right item) and the
+    // draggable chip (left item), matched by text since the DOM keys chips by the
+    // left INDEX only. One letter per correct pair.
+    if (curQ.type === "matching") {
+      var left = Array.isArray(data.left) ? data.left : [];
+      var right = Array.isArray(data.right) ? data.right : [];
+      var pairs = Array.isArray(c.pairs) ? c.pairs : [];
+      var mrows = doc.querySelectorAll(".ou-match__row");
+      var chips = doc.querySelectorAll(".ou-match__card--drag:not(.ou-match__card--empty)");
+      pairs.forEach(function (pair, idx) {
         var letter = String.fromCharCode(65 + idx);
-        var line = mboards[mb].querySelector('.matching-line[data-right="' + p.right + '"]');
-        var rt = line ? line.querySelector(".match-right-tile") : null;
-        if (rt) { reserveKeyGutter(rt); rt.appendChild(tbRefBadge(doc, letter, "key")); }
-        var chip = mboards[mb].querySelector('.match-chip[data-drag="' + p.left + '"]');
-        if (chip) { reserveKeyGutter(chip); chip.appendChild(tbRefBadge(doc, letter, "key")); }
+        var rightText = String(right[pair.right]);
+        var leftText = String(left[pair.left]);
+        for (var mr = 0; mr < mrows.length; mr++) {
+          var fixedT = mrows[mr].querySelector(".ou-match__card--fixed .ou-match__card-title");
+          if (fixedT && fixedT.textContent === rightText) {
+            var fc = mrows[mr].querySelector(".ou-match__card--fixed");
+            reserveKeyGutter(fc); fc.appendChild(tbRefBadge(doc, letter, "key"));
+          }
+        }
+        for (var ci = 0; ci < chips.length; ci++) {
+          var ct = chips[ci].querySelector(".ou-match__card-title");
+          if (ct && ct.textContent === leftText) {
+            reserveKeyGutter(chips[ci]); chips[ci].appendChild(tbRefBadge(doc, letter, "key"));
+          }
+        }
       });
     }
   }

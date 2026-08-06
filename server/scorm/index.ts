@@ -8,6 +8,9 @@ import { readAsset } from "./assets/read-asset";
 import { extractEmbeddedMediaIntoAssets } from "./builders/media-assets";
 import { copyDirToFiles, getTemplatesRootDir } from "./builders/template-copy";
 import { getSharedRuntimeBundle } from "./builders/shared-runtime";
+import { readVendorDsCss, readPackageFontFiles, assemblePackageStyles } from "./builders/ds-styles";
+import { resolveReportBake, reportKindForMode } from "@shared/report/report-variants";
+import type { ReportSettings } from "@shared/schema";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -85,6 +88,10 @@ const FALLBACK_KIND_LAYOUT: Record<string, string> = {
   intro: "section-intro",
   review: "review",
   "section-results": "section-results",
+  // PRD-27 FR-10: шаблон, не объявивший вида отчёта, отчёта не лишает — страница
+  // берётся из вложенного «Стандартного». Ключ макета совпадает с видом.
+  report: "report",
+  "report.adaptive": "report.adaptive",
 };
 
 /**
@@ -117,6 +124,38 @@ function computeFallbackLayoutKeys(templateDir: string, defaultDir: string): str
     .map(([, layoutKey]) => layoutKey);
 }
 
+/**
+ * CSS выбранного варианта отчёта (PRD-27 FR-22).
+ *
+ * Ищется сначала в активном шаблоне, затем во вложенном `default`: когда активный вида
+ * отчёта не объявил, макет берётся из `default` — и стиль обязан приехать оттуда же,
+ * иначе страница соберётся без оформления.
+ *
+ * @param templateDir Каталог активного шаблона.
+ * @param defaultDir Каталог вложенного «Стандартного».
+ * @param styleFile Путь из манифеста относительно корня шаблона; `null` — стиля нет.
+ */
+function readReportStyle(templateDir: string, defaultDir: string, styleFile: string | null): string {
+  if (!styleFile) return "";
+  for (const dir of [templateDir, defaultDir]) {
+    try {
+      return fs.readFileSync(path.join(dir, styleFile), "utf8");
+    } catch {
+      // Следующий каталог.
+    }
+  }
+  return "";
+}
+
+/** Разобранный `manifest.json` каталога шаблона; `null` — прочитать не удалось. */
+function readTemplateManifest(dir: string): unknown {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(dir, "manifest.json"), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
 export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   // Resolve the template directory up-front so we can detect which system screens
   // the active template doesn't declare and must fall back to the bundled `default`
@@ -133,6 +172,29 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   if (data.designSettings && fallbackLayoutKeys.length > 0) {
     data.designSettings.fallbackLayoutKeys = fallbackLayoutKeys;
   }
+
+  // PRD-27 FR-22: выбор ВАРИАНТА отчёта разрешается здесь — только сборщик видит и
+  // манифест активного шаблона, и выбор автора. Дальше он едет в TEST_DATA (для
+  // рантайма) и определяет, чей `styleFile` вложить в `styles.css`. Когда вид отчёта
+  // не объявлен, деградация та же, что у прочих системных экранов: макет из
+  // вложенного `default` — иначе тест на стороннем шаблоне остался бы без отчёта.
+  const reportKind = reportKindForMode(data.test.mode);
+  let reportBake = resolveReportBake(
+    readTemplateManifest(templateDir),
+    reportKind,
+    (data.test.reportSettingsJson as ReportSettings | null)?.[
+      data.test.mode === "adaptive" ? "adaptive" : "standard"
+    ] ?? null,
+  );
+  if (!reportBake.variantKey) {
+    // Активный шаблон вида не объявил. Макет приходит из вложенного «Стандартного» по
+    // КАНОНИЧЕСКОМУ ключу (так его находит `systemLayout`), а стиль — из его же
+    // варианта: без этого шага страница собиралась бы вообще без оформления, потому
+    // что своего `styleFile` у несуществующего варианта нет.
+    const fromDefault = resolveReportBake(readTemplateManifest(defaultDir), reportKind, null);
+    reportBake = { ...fromDefault, variantKey: null, layoutKey: reportKind };
+  }
+  if (data.designSettings) data.designSettings.report = reportBake;
 
   const testJson = buildTestJson(data);
 
@@ -158,6 +220,12 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   const escapeHtmlJs = readOneOf([
     "app/utils/scorm/escapeHtml.js",
     "app/utils/escapeHtml.js",
+  ]);
+
+  // PRD-26: question-type traits — the ES5 mirror of shared/questions/question-type.
+  // Must precede every part that branches on the question type.
+  const qTypeJs = readOneOf([
+    "app/utils/qtype.js",
   ]);
 
   const shuffleJs = readOneOf([
@@ -244,12 +312,20 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   ]);
 
   // PRD-6 retake gate — plain-JS ports of shared/eligibility/* (engine + plugins)
-  // and the runtime gate. Bundled for every package; the gate only runs when the
-  // test carries a retake policy (RetakeGate.isGated), so unpolicied packages are
-  // unaffected at runtime (the bundled bytes differ — see test-json conditional export).
-  const eligibilityEngineJs = readOneOf(["app/eligibility/engine.js"]);
-  const eligibilityPluginsJs = readOneOf(["app/eligibility/plugins.js"]);
-  const eligibilityGateJs = readOneOf(["app/eligibility/gate.js"]);
+  // and the runtime gate. Bundled ONLY when the test actually has the cooldown
+  // restriction switched on: buildTestJson bakes `retakePolicy` + the resolved
+  // `retakePlugin` under exactly that condition, and without them the gate could
+  // never fire (RetakeGate.isGated reads the same two fields), so for every other
+  // package these are dead bytes. bootstrap/main.js guards the call with
+  // `typeof RetakeGate !== "undefined"`, so the absent globals boot the course directly.
+  const retakeGated = !!(
+    patchedTestObj?.retakePolicy?.enabled === true &&
+    patchedTestObj?.retakePolicy?.eligibilityPlugin?.key &&
+    patchedTestObj?.retakePlugin?.runtimeEntry
+  );
+  const eligibilityEngineJs = retakeGated ? readOneOf(["app/eligibility/engine.js"]) : "";
+  const eligibilityPluginsJs = retakeGated ? readOneOf(["app/eligibility/plugins.js"]) : "";
+  const eligibilityGateJs = retakeGated ? readOneOf(["app/eligibility/gate.js"]) : "";
 
   const resultsPageJs = readOneOf([
     "app/render/resultsPage.js",
@@ -267,6 +343,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   const qMultipleJs = readOneOf(["app/render/questions/multiple.js"]);
   const qMatchingJs = readOneOf(["app/render/questions/matching.js"]);
   const qRankingJs  = readOneOf(["app/render/questions/ranking.js"]);
+  const qScaleJs    = readOneOf(["app/render/questions/scale.js"]);
   const qIndexJs    = readOneOf(["app/render/questions/index.js"]);
   const viewResultsJs = readOneOf(["app/render/viewResults.js"]);
 
@@ -305,9 +382,16 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   ]);
   const telemetryEnabled = !!(data.telemetry && data.telemetry.enabled);
 
+  // Telemetry OFF ships a no-op stand-in rather than the real runtime: no endpoint, no
+  // request signing, no LMS profile reads, no retry buffer. The `Telemetry` NAME still
+  // has to be bound — its call sites are spread across the render/action code, and the
+  // adaptive screens are bundled in every package regardless of the test's mode, so an
+  // unresolved reference is a ReferenceError as soon as the learner reaches that screen.
+  // Removing the call sites by regex instead is what used to leave that hole: a form the
+  // pattern did not anticipate (`Telemetry.finish(results)`) survived the strip.
   const telemetryJs = telemetryEnabled
     ? tryReadAsset(["app/telemetry/telemetry.js"])
-    : "";
+    : readOneOf(["app/telemetry/telemetry-disabled.js"]);
 
   // PRD-12 (2-7): shared template runtime bundled from `@shared` and exposed as the
   // `TBTemplate` global — the same renderer the web host uses. Prepended so every
@@ -317,6 +401,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   let appJs = joinJsParts([
     sharedRuntimeJs,
     escapeHtmlJs,
+    qTypeJs,
     telemetryJs,
     shuffleJs,
     suspendAttemptsJs,
@@ -333,6 +418,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     qMultipleJs,
     qMatchingJs,
     qRankingJs,
+    qScaleJs,
     qIndexJs,
     answerActionsJs,
     matchingDndJs,
@@ -357,10 +443,6 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     eligibilityGateJs,
     bootstrapMainJs,
   ]).replace("__TEST_JSON_B64__", testJsonB64);
-  
-  if (!telemetryEnabled) {
-    appJs = stripTelemetryArtifacts(appJs);
-  }
 
   const mediaHrefs = Object.keys(assets);
 
@@ -393,7 +475,11 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   if (fallbackLayoutKeys.length > 0 && fs.existsSync(defaultDir) && path.resolve(defaultDir) !== path.resolve(templateDir)) {
     copyDirToFiles(defaultDir, "template-default", templateFiles);
   }
-  const manifestHrefs = mediaHrefs.concat(Object.keys(templateFiles));
+  // Revision «Стандартный» on ui-kit: brand-font woff2 embedded under assets/fonts/,
+  // referenced by the vendored DS `@font-face` in styles.css. Declared in the manifest
+  // alongside media so strict LMS validators see every packaged resource.
+  const fontFiles = readPackageFontFiles();
+  const manifestHrefs = mediaHrefs.concat(Object.keys(templateFiles)).concat(Object.keys(fontFiles));
 
   // PRD-12 CSS unification: the package stylesheet is the SINGLE template CSS source
   // (theme.css tokens + base.css), the SAME files the web host loads — no separate
@@ -406,12 +492,27 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
       return "";
     }
   };
-  const stylesCss = readStyle("theme.css") + "\n" + readStyle("base.css");
+  // Revision «Стандартный» on ui-kit: the design system + brand font are vendored
+  // FIRST, the template's own theme.css/base.css layer OVER it, and the palette bridge
+  // is appended — so `.ou-*` learner screens render identically to the web host offline
+  // in the LMS and the DS accent follows the test's --primary.
+  const stylesCss = assemblePackageStyles(
+    readVendorDsCss(),
+    readStyle("theme.css"),
+    readStyle("base.css"),
+    // PRD-27 FR-22: стиль ВЫБРАННОГО варианта отчёта, а не какой-нибудь `report.css`
+    // по соглашению об имени: варианты вправе иметь разные `styleFile`. Он обязан
+    // лежать в документе к моменту растеризации — читать файл из рантайма для этого
+    // поздно. Путь в манифесте задан от корня шаблона, а `readStyle` смотрит в
+    // `styles/`, поэтому файл читается от каталога шаблона напрямую.
+    readReportStyle(templateDir, defaultDir, reportBake.styleFile),
+  );
 
   // PRD-7 G21: default template CSS for fallback system screens. Loaded into the
   // package as `styles-default.css` and toggled active by the runtime only while a
   // fallback screen is shown (the package is one screen at a time), so it never
-  // conflicts with the active template's own screens.
+  // conflicts with the active template's own screens. The default ships a single
+  // scene stylesheet now (theme.css) — the legacy base.css was folded into it.
   const readDefaultStyle = (f: string): string => {
     try {
       return fs.readFileSync(path.join(defaultDir, "styles", f), "utf8");
@@ -419,8 +520,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
       return "";
     }
   };
-  const stylesDefaultCss =
-    fallbackLayoutKeys.length > 0 ? readDefaultStyle("theme.css") + "\n" + readDefaultStyle("base.css") : "";
+  const stylesDefaultCss = fallbackLayoutKeys.length > 0 ? readDefaultStyle("theme.css") : "";
 
   // Vendored PDF-export libraries (no CDN — the package must work offline inside the LMS).
   // html2canvas + jsPDF are shipped in the package (from server/scorm/assets/vendor/) and
@@ -437,6 +537,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "app.js": appJs,
     "vendor/html2canvas.min.js": html2canvasJs,
     "vendor/jspdf.umd.min.js": jspdfJs,
+    ...fontFiles,
     ...templateFiles,
   };
   if (stylesDefaultCss) files["styles-default.css"] = stylesDefaultCss;
@@ -463,20 +564,3 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   return buildZip(files);
 }
 
-function stripTelemetryArtifacts(src: string) {
-  // 1) убрать Telemetry.finish({ ... }, ...); и Telemetry.answer({ ... });
-  src = src.replace(/Telemetry\.(finish|answer)\(\s*\{[\s\S]*?\}\s*(?:,\s*[^)]*)?\);\s*/g, "");
-
-  // 2) убрать простые вызовы Telemetry.*
-  src = src.replace(/^\s*Telemetry\.(init|start|startNewAttempt)\([^)]*\);\s*$/gm, "");
-  src = src.replace(/^\s*Telemetry\.(start|startNewAttempt)\(\);\s*$/gm, "");
-
-  // 3) убрать присваивания attemptNumber из телеметрии (обычно используются только для логов/finish)
-  src = src.replace(/^\s*var\s+\w+\s*=\s*Telemetry\.getAttemptNumber\(\);\s*$/gm, "");
-
-  // 4) убрать комментарии и логи, где вообще упоминается телеметрия/Telemetry
-  src = src.replace(/^\s*\/\/.*(telemetr|Telemetry).*$/gim, "");
-  src = src.replace(/^\s*console\.log\(.*(telemetr|Telemetry).*?\);\s*$/gim, "");
-
-  return src;
-}

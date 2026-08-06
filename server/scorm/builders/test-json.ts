@@ -1,8 +1,9 @@
 import type { Test, TestSection, Topic, Question, TopicCourse, TopicEvent, PassRule, AdaptiveTopicSettings, AdaptiveLevel, AdaptiveLevelLink, ContentPage, ResultVariable, Scale, QuestionMeasurement, RetakePolicy, TestQuestionScoring } from "@shared/schema";
-import { sanitizeHtml } from "../../utils/html-sanitizer";
+import { sanitizeHtml, placeholderScope } from "../../utils/html-sanitizer";
 import { findEligibilityPlugin, findEligibilityConfig } from "@shared/eligibility/registry";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 import { buildTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
+import type { ReportBake } from "@shared/report/report-variants";
 
 interface AdaptiveLevelWithLinks extends AdaptiveLevel {
   links: AdaptiveLevelLink[];
@@ -18,6 +19,10 @@ interface DesignSettingsExport {
   templateVersion?: string;
   templateApiVersion?: string;
   params: Record<string, unknown>;
+  /** PRD-23: palette the author pinned (`light`/`dark`/`auto`). */
+  theme?: string;
+  /** PRD-23: colour overrides per declared palette. */
+  paramsByTheme?: Record<string, Record<string, unknown>>;
   /**
    * System variant kinds (`start`/`results`) the active template does NOT declare
    * in its `contentTemplates`, so the runtime must render them from the bundled
@@ -31,6 +36,13 @@ interface DesignSettingsExport {
    * `systemLayout()` looks up.
    */
   fallbackLayoutKeys?: string[];
+  /**
+   * PRD-27 FR-22: разрешённый выбор ВАРИАНТА отчёта — макет, стиль и значения полей.
+   * Считает {@link module:shared/report/report-variants resolveReportBake} на стороне
+   * сборщика (он один видит манифест шаблона), рантайм только читает. Отсутствие =
+   * отчёт собирается канонической деградацией, как до этого PRD (FR-28).
+   */
+  report?: ReportBake;
 }
 
 interface ExportData {
@@ -187,7 +199,9 @@ export function buildTestJson(data: ExportData): string {
       // null = inherit_test (section uses the test-wide timer, no extra timer);
       // number = custom limit in minutes (section timer starts on entry).
       timeLimitMinutes: s.timeLimitMinutes ?? null,
-      topicPassRule: (s.topicPassRuleJson as PassRule | null) ?? null,
+      // PRD-24: the rule may now be `{source:'by_variant', byForm}` as well, so it is
+      // baked as authored — the runtime resolves it through the shared engine.
+      topicPassRule: (s.topicPassRuleJson as unknown) ?? null,
       // PRD-11: stratified-draw blueprint. Included only when set so packages
       // without quotas stay byte-identical (FR-02); runtime reads section.drawBlueprint.
       ...(s.drawBlueprintJson ? { drawBlueprint: s.drawBlueprintJson } : {}),
@@ -227,6 +241,11 @@ export function buildTestJson(data: ExportData): string {
           // for untagged questions stay byte-identical (FR-02); the draw blueprint
           // is useless without them.
           ...(Array.isArray(q.tags) && q.tags.length ? { tags: q.tags } : {}),
+          // PRD-16 FR-41: «Случайный порядок вариантов» off — the runtime must
+          // deliver the authored order (shuffleMappingFor). Baked only when off
+          // (the default is on) so packages of untouched tests stay
+          // byte-identical (FR-02).
+          ...(q.shuffleAnswers === false ? { shuffleAnswers: false } : {}),
         };
       }),
     })),
@@ -312,6 +331,8 @@ export function buildTestJson(data: ExportData): string {
             feedbackIncorrect: q.feedbackIncorrect || null,
             // PRD-10: graded answer scoring (see standard-section map above).
             ...(baked.scoring ? { scoring: baked.scoring } : {}),
+            // PRD-16 FR-41 (see standard-section map above).
+            ...(q.shuffleAnswers === false ? { shuffleAnswers: false } : {}),
           };
         }),
       };
@@ -324,9 +345,18 @@ export function buildTestJson(data: ExportData): string {
       templateVersion: data.designSettings.templateVersion,
       templateApiVersion: data.designSettings.templateApiVersion,
       params: data.designSettings.params,
+      // PRD-23: omitted for a template without themes, so a themeless package keeps
+      // exactly the TEST_DATA shape it had before.
+      ...(data.designSettings.theme ? { theme: data.designSettings.theme } : {}),
+      ...(data.designSettings.paramsByTheme
+        ? { paramsByTheme: data.designSettings.paramsByTheme }
+        : {}),
       ...(data.designSettings.fallbackLayoutKeys && data.designSettings.fallbackLayoutKeys.length > 0
         ? { fallbackLayoutKeys: data.designSettings.fallbackLayoutKeys }
         : {}),
+      // PRD-27: включается только когда шаблон вид отчёта объявил — пакет теста на
+      // шаблоне без отчёта сохраняет прежнюю форму TEST_DATA (FR-28).
+      ...(data.designSettings.report ? { report: data.designSettings.report } : {}),
     };
   }
 
@@ -335,11 +365,25 @@ export function buildTestJson(data: ExportData): string {
     test.contentPages = data.contentPages.map((page) => {
       const rawValues = (page.valuesJson as { values?: Record<string, unknown>; placeholderStyles?: Record<string, unknown> }) ?? {};
       const values = rawValues.values ?? {};
-      // Re-sanitize all string values that may contain HTML
+      // Re-sanitize all string values that may contain HTML. Author CSS is also
+      // confined to the placeholder region it renders into: inside the package the
+      // markup lands in the REAL document, where a pasted `body { … }` rule would
+      // restyle the whole player (a fixed-stage template collapses to a blank
+      // screen). Re-scoping on every build also repairs pages saved before the fix;
+      // it is idempotent, so already-scoped values pass through unchanged.
       const sanitizedValues: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(values)) {
-        sanitizedValues[k] = typeof v === "string" ? sanitizeHtml(v) : v;
+        sanitizedValues[k] = typeof v === "string" ? sanitizeHtml(v, { scope: placeholderScope(k) }) : v;
       }
+      // PRD-22 FR-30: page SETTINGS travel with the page. Without this the LMS
+      // package loses the sequence identifier (no navigation dots) and the media
+      // packer never sees the background image, leaving a dead link to /uploads.
+      const rawSettings = (page.settingsJson ?? {}) as Record<string, unknown>;
+      const sanitizedSettings: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(rawSettings)) {
+        sanitizedSettings[k] = typeof v === "string" ? sanitizeHtml(v) : v;
+      }
+
       return {
         id: page.id,
         topicId: page.topicId,
@@ -355,6 +399,7 @@ export function buildTestJson(data: ExportData): string {
         sortOrder: page.sortOrder,
         values: sanitizedValues,
         placeholderStyles: rawValues.placeholderStyles ?? {},
+        settings: sanitizedSettings,
         autoAdvance: page.autoAdvance,
         autoAdvanceDelayMs: page.autoAdvanceDelayMs,
       };

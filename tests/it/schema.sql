@@ -47,6 +47,7 @@ CREATE TABLE "attempts" (
 	"variant_json" jsonb NOT NULL,
 	"answers_json" jsonb,
 	"result_json" jsonb,
+	"section_timer_json" jsonb,
 	"started_at" timestamp NOT NULL,
 	"finished_at" timestamp
 );
@@ -62,6 +63,7 @@ CREATE TABLE "content_pages" (
 	"template_key" text,
 	"sort_order" integer DEFAULT 0 NOT NULL,
 	"values_json" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"settings_json" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"auto_advance" boolean DEFAULT false NOT NULL,
 	"auto_advance_delay_ms" integer,
 	"created_at" timestamp DEFAULT now() NOT NULL,
@@ -334,7 +336,8 @@ CREATE TABLE "tests" (
 	"default_question_points" integer,
 	"allow_return_to_unanswered" boolean DEFAULT true NOT NULL,
 	"allow_answer_change" boolean DEFAULT false NOT NULL,
-	"show_section_results" boolean DEFAULT true NOT NULL
+	"show_section_results" boolean DEFAULT true NOT NULL,
+	"report_settings_json" jsonb
 );
 
 CREATE TABLE "topic_access_grants" (
@@ -358,7 +361,8 @@ CREATE TABLE "topics" (
 	"owner_id" varchar(36),
 	"visibility" text DEFAULT 'shared' NOT NULL,
 	"name_normalized" text,
-	"code" text
+	"code" text,
+	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 
 CREATE TABLE "user_groups" (
@@ -435,5 +439,6 @@ CREATE UNIQUE INDEX "test_snapshots_test_version_idx" ON "test_snapshots" USING 
 CREATE INDEX "tests_status_idx" ON "tests" USING btree ("status");
 CREATE UNIQUE INDEX "topic_access_grants_topic_grantee_idx" ON "topic_access_grants" USING btree ("topic_id","grantee_id");
 CREATE UNIQUE INDEX "topics_owner_name_normalized_idx" ON "topics" USING btree ("owner_id","name_normalized") WHERE owner_id IS NOT NULL;
+CREATE INDEX "topics_updated_at_idx" ON "topics" USING btree ("updated_at");
 CREATE UNIQUE INDEX "user_groups_user_group_idx" ON "user_groups" USING btree ("user_id","group_id");
 CREATE UNIQUE INDEX "user_roles_user_role_idx" ON "user_roles" USING btree ("user_id","role");

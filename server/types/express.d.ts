@@ -28,7 +28,7 @@ export interface TopicIdParams {
 // Типизированные тела запросов
 export interface CreateQuestionBody {
   topicId: string;
-  type: "single" | "multiple" | "matching" | "ranking";
+  type: "single" | "multiple" | "matching" | "ranking" | "scale";
   prompt: string;
   dataJson: unknown;
   correctJson: unknown;

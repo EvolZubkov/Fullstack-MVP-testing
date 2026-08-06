@@ -15,6 +15,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { drawStratumSchema, drawBlueprintSchema } from "../shared/schema";
+import { TAG_MAX_LENGTH } from "../shared/tags";
 
 // ─── drawStratumSchema ───────────────────────────────────────────────────────
 
@@ -37,8 +38,12 @@ describe("drawStratumSchema", () => {
     expect(() => drawStratumSchema.parse({ tag: "   ", count: 1 })).toThrow();
   });
 
-  it("rejects a tag longer than 50 chars after normalization", () => {
-    expect(() => drawStratumSchema.parse({ tag: "x".repeat(51), count: 1 })).toThrow();
+  // Bound to TAG_MAX_LENGTH, not to a literal: the limit is a product decision that
+  // has already moved once (50 → 100, competence wordings were being cut mid-phrase),
+  // and a hard-coded number here just goes red without telling anyone anything.
+  it("accepts a tag exactly at the limit and rejects one over it", () => {
+    expect(() => drawStratumSchema.parse({ tag: "x".repeat(TAG_MAX_LENGTH), count: 1 })).not.toThrow();
+    expect(() => drawStratumSchema.parse({ tag: "x".repeat(TAG_MAX_LENGTH + 1), count: 1 })).toThrow();
   });
 
   it("rejects count < 1 and non-integer count", () => {

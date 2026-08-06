@@ -343,6 +343,44 @@ describe("POST /api/tests/:id/content-pages", () => {
     const callArgs = storageMock.createContentPage.mock.calls[0][0];
     expect(callArgs.valuesJson.values.body).not.toContain("onerror");
   });
+
+  // A `<style>` block is not unsafe, so it is kept — but its rules must not
+  // escape the page block. In the package the markup lands in the real document,
+  // where a pasted `body { … }` rule restyles the whole player.
+  it("confines CSS of a template placeholder to its own region", async () => {
+    const testWithTemplate = { ...baseTest, designSettingsJson: { templateId: "corporate" } };
+    storageMock.getTest.mockResolvedValue(testWithTemplate);
+    dbMock.select.mockReturnValue(dbMock._makeChain([corporateTemplate]));
+
+    await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({
+        topicId: "topic-1",
+        position: "before_topic",
+        type: "intro",
+        mode: "template",
+        templateKey: "intro.hero",
+        valuesJson: { values: { title: "t", body: "<style>body { display: flex; }</style>" } },
+      });
+
+    const callArgs = storageMock.createContentPage.mock.calls[0][0];
+    expect(callArgs.valuesJson.values.body).toContain('[data-placeholder="body"] { display: flex; }');
+  });
+
+  it("confines CSS of an html-mode page to the page container", async () => {
+    await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({
+        topicId: "topic-1",
+        position: "before_topic",
+        type: "html",
+        mode: "html",
+        valuesJson: { values: { __html: "<style>body { display: flex; }</style>" } },
+      });
+
+    const callArgs = storageMock.createContentPage.mock.calls[0][0];
+    expect(callArgs.valuesJson.values.__html).toContain(".content-page--html { display: flex; }");
+  });
 });
 
 // ─── PUT /api/tests/:id/content-pages/reorder ────────────────────────────────

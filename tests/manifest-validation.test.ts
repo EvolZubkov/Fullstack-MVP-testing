@@ -16,6 +16,7 @@ vi.mock("../server/logger", () => ({
 }));
 
 import { isSupportedTemplateApiVersion } from "../server/template-registry";
+import { PLACEHOLDER_TYPES, SETTING_TYPES } from "../shared/template/field-types";
 
 const TEMPLATES_DIR = path.resolve(process.cwd(), "server", "scorm", "templates");
 // Validate whatever built-in templates actually ship (derived from disk) so adding
@@ -114,11 +115,18 @@ for (const templateId of BUILTIN_IDS) {
       }
     });
 
-    it("placeholder types are from the allowed set", () => {
-      const allowed = new Set(["text", "textarea", "richText", "image", "number", "boolean", "resultField", "asset", "font", "color", "select"]);
+    // The allowed sets come from the PRD-22 registry, not a copy: a list kept here
+    // by hand had already fallen behind it (`html` was missing) and would fail a
+    // manifest the platform accepts.
+    it("placeholder and setting types are from the allowed sets", () => {
+      const placeholders = new Set<string>(PLACEHOLDER_TYPES);
+      const settings = new Set<string>(SETTING_TYPES);
       for (const ct of m.contentTemplates as Record<string, unknown>[]) {
-        for (const ph of ct.placeholders as Record<string, unknown>[]) {
-          expect(allowed.has(ph.type as string), `unknown type "${ph.type}" in ${templateId}`).toBe(true);
+        for (const ph of (ct.placeholders ?? []) as Record<string, unknown>[]) {
+          expect(placeholders.has(ph.type as string), `unknown type "${ph.type}" in ${templateId}`).toBe(true);
+        }
+        for (const s of (ct.settings ?? []) as Record<string, unknown>[]) {
+          expect(settings.has(s.type as string), `unknown setting type "${s.type}" in ${templateId}`).toBe(true);
         }
       }
     });

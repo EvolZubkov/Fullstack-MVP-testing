@@ -19,7 +19,9 @@ function confirmAnswer() {
   var rightItems = null;
   var rankingItems = null;
   
-  if (q.type === 'single' || q.type === 'multiple') {
+  // A scale carries its graduations in the same `options` list, so telemetry reports
+  // its answer texts through this branch too (TBQType.hasOptionList).
+  if (typeof TBQType !== 'undefined' ? TBQType.hasOptionList(q.type) : (q.type === 'single' || q.type === 'multiple')) {
     answerOptions = q.data && q.data.options ? q.data.options : null;
   } else if (q.type === 'matching') {
     leftItems = q.data && q.data.left ? q.data.left : null;
@@ -50,27 +52,18 @@ function confirmAnswer() {
     items: rankingItems
   });
   
-  // PRD-19 (Block B): lock the inputs only when the answer is frozen. With
-  // allowAnswerChange the learner may re-open and re-confirm, so keep the inputs
-  // live (re-selecting resets the fixation, see reopenIfCommitted in answers.js).
-  if (!TEST_DATA.allowAnswerChange) {
-    lockAnswerOptions(q);
-  }
+  // Re-render the input from the SHARED emission so the locked state and (when
+  // showCorrectAnswers) the correct/incorrect highlight are painted on the `.ou-*`
+  // markup — the render reads the committed status (isAnswerLocked) + review key.
+  // This replaces the legacy point-wise class mutation on `.option`/`.rank-item`/
+  // `.matching-line`, which no longer exist. Interaction is guarded by the delegated
+  // handlers (isAnswerLocked), so a locked answer ignores clicks even with data-action.
+  if (typeof rerenderCurrentQuestionInput === 'function') rerenderCurrentQuestionInput();
 
-  // Committed accent: mark matching/ranking boards as submitted so a drag-based
-  // answer is VISIBLY fixed right after «Отправить ответ» — parity with the
-  // persistent `.option.selected` on single/multiple. Done point-wise because this
-  // commit path updates the DOM in place (no full re-render). When showCorrectAnswers
-  // is on, the green/red correctness states below win (CSS :not()).
-  document.querySelectorAll('.matching-board, .ranking-board').forEach(function (b) {
-    b.classList.add('is-locked');
-  });
-
-  // PRD-19 (Block B): reveal correctness + feedback only when showCorrectAnswers.
-  // The explicit fixation itself works without feedback — flexible-mode
-  // «Отправить ответ» with showCorrectAnswers off just commits and advances.
+  // PRD-19 (Block B): reveal the feedback text only when showCorrectAnswers. The
+  // explicit fixation itself works without feedback — flexible-mode «Отправить ответ»
+  // with showCorrectAnswers off just commits and advances.
   if (TEST_DATA.showCorrectAnswers) {
-    highlightCorrectAnswers(q, answer);
     insertFeedback(q, isCorrect, scoreRatio);
   }
 
@@ -232,28 +225,26 @@ function highlightRanking(q, answer) {
 
 
 function insertFeedback(q, isCorrect, scoreRatio) {
-  // Проверяем что feedback ещё не вставлен
-  var existing = document.querySelector('.feedback-block');
-  if (existing) return;
-  
-  var statusColor = isCorrect ? '#16a34a' : '#dc2626';
-  var statusBg = isCorrect ? '#dcfce7' : '#fee2e2';
-  var statusText = isCorrect ? 'Правильно!' : (scoreRatio > 0 ? 'Частично правильно' : 'Неправильно');
-  
+  // Already inserted? The DS banner keeps `feedback-block` as its marker class so
+  // this dedup hook (and any teardown that clears `.feedback-block`) still matches.
+  if (document.querySelector('.feedback-block')) return;
+
+  // Verdict → DS banner tone (revision «Стандартный»: the answer-check feedback is
+  // the shared `.ou-banner`, not inline-styled chrome). Partial credit reads as a
+  // warning, a full miss as an error.
+  var tone = isCorrect ? 'success' : (scoreRatio > 0 ? 'warning' : 'error');
+  var statusText = isCorrect ? 'Правильно!' : (scoreRatio > 0 ? 'Частично правильно' : 'Неверно');
+
   var feedbackText = null;
   if (q.feedbackMode === 'conditional') {
     feedbackText = isCorrect ? q.feedbackCorrect : q.feedbackIncorrect;
   } else {
     feedbackText = q.feedback;
   }
-  
-  var html = '<div class="feedback-block" style="margin-top:16px;padding:12px;border-radius:8px;background:' + statusBg + ';border:1px solid ' + statusColor + ';">';
-  html += '<div style="font-weight:600;color:' + statusColor + ';margin-bottom:4px;">' + statusText + '</div>';
-  
-  if (feedbackText) {
-    html += '<div style="color:#333;font-size:14px;">' + escapeHtml(feedbackText) + '</div>';
-  }
-  html += '</div>';
+
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (!TB || !TB.feedbackBanner) return;
+  var html = TB.feedbackBanner(tone, statusText, feedbackText ? TB.feedbackDesc(feedbackText) : '');
 
   // Prefer the template's dedicated feedback slot (question.html); fall back to
   // appending after the card (hardcoded chrome / older layouts).
@@ -269,7 +260,11 @@ function insertFeedback(q, isCorrect, scoreRatio) {
 }
 
 function updateNavigationButton() {
-  var nav = document.querySelector('.navigation');
+  // The revised «Стандартный» question nav row IS the scene footer
+  // (buildQuestionNavHtml → `.tb-scene__foot`); `.navigation` is only the legacy
+  // fallback chrome. Without this the post-commit «Отправить ответ»/«Принять» →
+  // «Далее» swap silently no-oped and the learner was stuck with no forward button.
+  var nav = document.querySelector('.tb-scene__foot') || document.querySelector('.navigation');
   if (!nav) return;
 
   var total = state.flatQuestions.length;
@@ -279,8 +274,8 @@ function updateNavigationButton() {
   // two-button flexible row (Отправить ответ / Пропустить) is replaced cleanly by
   // the post-commit Далее/Завершить — a textContent swap on a single .btn would
   // leave the «Пропустить» button stranded.
-  if (typeof buildQuestionNavHtml === 'function') {
-    nav.outerHTML = buildQuestionNavHtml(current, total);
+  if (typeof render === 'function') {
+    render();
     return;
   }
 

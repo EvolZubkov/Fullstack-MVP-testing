@@ -64,7 +64,7 @@ describe("readResultsRenderPayload", () => {
   it("standard: builds the results.html payload with score fields", () => {
     const p = readResultsRenderPayload(DEFAULT_DIR, standardResult, "Тест");
     expect(p).not.toBeNull();
-    expect(p!.layout).toContain("results-page");
+    expect(p!.layout).toContain("tb-scene");
     const ctx = p!.context as { result: Record<string, unknown> };
     expect(ctx.result.scorePercent).toBe(80);
     expect(ctx.result.passClass).toBe("is-pass");
@@ -79,9 +79,9 @@ describe("readResultsRenderPayload", () => {
     const ctx = p!.context as { result: { adaptive?: boolean; topicResults: any[] } };
     expect(ctx.result.adaptive).toBe(true);
     expect(ctx.result.topicResults[0].levelLabel).toBe("Средний");
-    expect(ctx.result.topicResults[0].levelClass).toBe("is-info");
-    expect(ctx.result.topicResults[1].levelLabel).toBe("Не достигнут");
-    expect(ctx.result.topicResults[1].levelClass).toBe("is-fail");
+    expect(ctx.result.topicResults[0].levelClass).toBe("ou-tag--solid ou-tag--accent");
+    expect(ctx.result.topicResults[1].levelLabel).toBe("Минимально требуемый уровень не подтверждён");
+    expect(ctx.result.topicResults[1].levelClass).toBe("ou-tag--solid ou-tag--error");
   });
 
   it("returns a theme so the embedding host can match the surface", () => {

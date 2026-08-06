@@ -373,11 +373,23 @@
       // раздел») before returning to the router hub. finishSection → section-results
       // → advanceAfterSection() calls returnFromTopic. Strict mode returns directly.
       if (
-        TEST_DATA.allowReturnToUnanswered &&
         !(state.sectionCommitted && state.sectionCommitted[state.currentRouterTopic]) &&
+        typeof reviewIsWorthShowing === "function" &&
+        reviewIsWorthShowing(state.currentRouterTopic) &&
         typeof goToReview === "function"
       ) {
         goToReview();
+        return;
+      }
+      // Nothing to act on in the обзор: still fix the section and show its
+      // results (FR-05a) — «Продолжить» there returns to the hub. Going straight
+      // back skipped the section results the test asks to show.
+      if (
+        !(state.sectionCommitted && state.sectionCommitted[state.currentRouterTopic]) &&
+        TEST_DATA.showSectionResults &&
+        typeof finishSection === "function"
+      ) {
+        finishSection(state.currentRouterTopic, false, 0, true);
         return;
       }
       RouterFlow.returnFromTopic();
@@ -387,9 +399,10 @@
     // end-of-test обзор («Завершить тест») rather than submitting directly.
     // Strict flat submits directly (unchanged behaviour).
     if (
-      TEST_DATA.allowReturnToUnanswered &&
       TEST_DATA.answerCommitScope !== "section" &&
       state.phase !== "review" &&
+      typeof reviewIsWorthShowing === "function" &&
+      reviewIsWorthShowing(null) &&
       typeof goToReview === "function"
     ) {
       goToReview();
@@ -423,11 +436,11 @@
       : null;
     if (hasNext && nextTopic === curTopic) return false; // still inside the section
 
-    if (TEST_DATA.allowReturnToUnanswered) {
-      if (typeof goToReview === "function") { goToReview(); return true; } // flexible → обзор
+    if (typeof reviewIsWorthShowing === "function" && reviewIsWorthShowing(curTopic)) {
+      if (typeof goToReview === "function") { goToReview(); return true; } // → обзор
       return false;
     }
-    // Strict (no return): no обзор/modal, but show the computed section-results
+    // No обзор needed (nothing to act on there): show the computed section-results
     // between sections when enabled (FR-05a). The last section flows to the test
     // results (which already carries the per-topic breakdown).
     var isLast = typeof isLastSectionTopic === "function" && isLastSectionTopic(curTopic);
@@ -477,12 +490,30 @@
     renderContentPage(page, manifest.contentTemplates || []);
     // Replace the content page's default «Далее» (which advances pageSequence)
     // with post-results navigation: «Далее» through the pages, then «Завершить».
+    // The button is found by its `data-nav` contract, not by a `.navigation`
+    // wrapper: a layout may name its footer anything (the certification gallery
+    // uses `.gallery__nav`), and keying on the class left such a page wired to
+    // the ordinary page advance — which walks out of the post-results chain.
     var app = document.getElementById("app");
+    var last = idx >= pages.length - 1;
     var nav = app ? app.querySelector(".navigation") : null;
     if (nav) {
-      nav.innerHTML = idx >= pages.length - 1
-        ? '<button class="btn" data-action="test-finish" onclick="finishAndClose()">Завершить тест</button>'
-        : '<button class="btn" data-nav="next" onclick="nextPostResults()">Далее</button>';
+      nav.innerHTML = last
+        ? '<button class="ou-btn ou-btn--primary ou-btn--m" data-action="test-finish" onclick="finishAndClose()">Завершить тест</button>'
+        : '<button class="ou-btn ou-btn--primary ou-btn--m" data-nav="next" onclick="nextPostResults()">Далее</button>';
+      return;
+    }
+    var btn = app && typeof findScreenNavButton === "function"
+      ? findScreenNavButton(app, "next")
+      : null;
+    if (!btn) return;
+    // The layout's own button keeps its place and styling; only its wiring and
+    // (on the last page) its label change.
+    btn.onclick = last ? finishAndClose : nextPostResults;
+    if (last) {
+      btn.textContent = "Завершить тест";
+      btn.removeAttribute("data-nav");
+      btn.setAttribute("data-action", "test-finish");
     }
   }
 

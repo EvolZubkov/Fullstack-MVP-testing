@@ -6,6 +6,10 @@ import { storage } from "../../storage";
 import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { checkAnswer } from "../../utils/check-answer";
+// Analytics reports are read by people, not re-imported: the question text goes in
+// without its markdown markers. The question-bank export is the opposite case and
+// keeps the stored text verbatim, so an export/import round trip cannot lose markup.
+import { stripMarkdown } from "@shared/text";
 import { loadTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
 import {
   analyticsScope,
@@ -194,7 +198,7 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
           attempt.id,
           username,
           startDateStr,
-          question.prompt,
+          stripMarkdown(question.prompt),
           topicMap.get(question.topicId) || "Unknown",
           formatQuestionType(question.type),
           scoring.difficultyOf(question) || 50,
@@ -243,7 +247,7 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
       const correctJson = question.correctJson as any;
 
       questionStatsData.push([
-        question.prompt,
+        stripMarkdown(question.prompt),
         topicMap.get(question.topicId) || "Unknown",
         formatQuestionType(question.type),
         scoring.difficultyOf(question) || 50,
@@ -616,7 +620,7 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
             attempt.id,
             username,
             startStr,
-            q.prompt,
+            stripMarkdown(q.prompt),
             topicMap.get(q.topicId) || "Unknown",
             formatQuestionType(q.type),
             (scoring ? scoring.difficultyOf(q) : q.difficulty) || 50,
@@ -662,7 +666,7 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
 
         rows.push([
           testTitleMap.get(s.testId) || s.testId,
-          q.prompt,
+          stripMarkdown(q.prompt),
           topicMap.get(q.topicId) || "Unknown",
           formatQuestionType(q.type),
           (scoring ? scoring.difficultyOf(q) : q.difficulty) || 50,
@@ -960,7 +964,7 @@ router.post("/export/excel-lms", requirePermission("analytics.export"), async (r
             attempt.lmsUserName || "—",
             attempt.lmsUserEmail || "—",
             startStr,
-            ans.questionPrompt || q?.prompt || "—",
+            stripMarkdown(ans.questionPrompt || q?.prompt || "—"),
             ans.topicName || topicMap.get(ans.topicId || "") || "—",
             formatQuestionType(ans.questionType || q?.type || "unknown"),
             ans.difficulty || q?.difficulty || 50,
@@ -991,7 +995,7 @@ router.post("/export/excel-lms", requirePermission("analytics.export"), async (r
           const testId = pkg.testId || "";
           const key = `${testId}:${ans.questionId}`;
           const s = stat.get(key) || {
-            prompt: ans.questionPrompt || q?.prompt || "—",
+            prompt: stripMarkdown(ans.questionPrompt || q?.prompt || "—"),
             testId,
             total: 0,
             correct: 0,

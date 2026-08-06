@@ -19,10 +19,12 @@
  * + clears `params`. The Drawer footer's primary Save persists.
  */
 import { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Eye, Search } from "lucide-react";
 import { Banner, Button, ModalDialog, Tag } from "@universityrt/ui-kit";
 import { useQuery } from "@tanstack/react-query";
 import type { TemplateRow } from "../use-design-settings";
+import { TemplateThumb } from "./template-thumb";
+import { TemplatePreviewModal } from "./template-preview-modal";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -50,12 +52,14 @@ async function fetchTemplates(): Promise<TemplateRow[]> {
 export function TemplateGalleryModal(props: TemplateGalleryModalProps) {
   const [selectedId, setSelectedId] = useState<string>(props.currentTemplateId);
   const [query, setQuery] = useState("");
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   // Reset on open so each fresh open starts pre-selected on the current template.
   useEffect(() => {
     if (props.open) {
       setSelectedId(props.currentTemplateId);
       setQuery("");
+      setPreviewId(null);
     }
   }, [props.open, props.currentTemplateId]);
 
@@ -76,6 +80,9 @@ export function TemplateGalleryModal(props: TemplateGalleryModalProps) {
   }, [templates, query]);
 
   const selected = templates.find((t) => t.id === selectedId) ?? null;
+  // Template the «глаз» opened for a look. Separate from `selectedId`: looking at
+  // a template must not move the selection the Apply button acts on.
+  const previewTemplate = templates.find((t) => t.id === previewId) ?? null;
   const isSameAsCurrent = selectedId === props.currentTemplateId;
   // PRD-7 S12-G3: dirty-params confirm renders a destructive Apply button +
   // a warning banner. Banner content lists the param-keys that will be lost
@@ -89,6 +96,11 @@ export function TemplateGalleryModal(props: TemplateGalleryModalProps) {
     <ModalDialog
       open={props.open}
       onClose={props.onClose}
+      // While a template preview is stacked on top, Esc / backdrop must dismiss
+      // THAT modal only. Both dialogs listen on `document`, so without this the
+      // one keypress closes the gallery too and the author loses their place.
+      closeOnEsc={previewTemplate === null}
+      closeOnBackdrop={previewTemplate === null}
       size="xl"
       className="tpl-gallery-modal"
       title="Выбор шаблона"
@@ -217,19 +229,36 @@ export function TemplateGalleryModal(props: TemplateGalleryModalProps) {
                 data-testid={`design-gallery-card-${tpl.id}`}
               >
                 <div className="tpl-gallery-card__thumb">
-                  <div className="preview-sketch">
-                    <div className="ps-header">
-                      <div className="ps-logo" />
-                      <div className="ps-title">{name.slice(0, 3).toUpperCase()}</div>
-                    </div>
-                    <div className="ps-body">
-                      <div className="ps-content">
-                        <div className="ps-q">Вопрос…</div>
-                        <div className="ps-opt sel" />
-                        <div className="ps-opt" />
+                  {/* Посмотреть шаблон, не выбирая его: клик по глазу не должен
+                      всплывать до карточки, иначе «посмотреть» станет «выбрать». */}
+                  <button
+                    type="button"
+                    className="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tpl-gallery-card__preview-btn"
+                    aria-label={`Предпросмотр «${name}»`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPreviewId(tpl.id);
+                    }}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    data-testid={`design-gallery-card-${tpl.id}-preview`}
+                  >
+                    <Eye size={14} aria-hidden="true" />
+                  </button>
+                  <TemplateThumb template={tpl} name={name}>
+                    <div className="preview-sketch">
+                      <div className="ps-header">
+                        <div className="ps-logo" />
+                        <div className="ps-title">{name.slice(0, 3).toUpperCase()}</div>
+                      </div>
+                      <div className="ps-body">
+                        <div className="ps-content">
+                          <div className="ps-q">Вопрос…</div>
+                          <div className="ps-opt sel" />
+                          <div className="ps-opt" />
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  </TemplateThumb>
                 </div>
                 <div className="tpl-gallery-card__body">
                   <div className="tpl-gallery-card__name">
@@ -259,6 +288,15 @@ export function TemplateGalleryModal(props: TemplateGalleryModalProps) {
           })}
         </div>
       )}
+      {/* Preview of a template the author has not chosen yet, so it renders with the
+          template's OWN defaults — passing the current test's params would paint a
+          foreign template in the outgoing template's colours. */}
+      <TemplatePreviewModal
+        open={previewTemplate !== null}
+        onClose={() => setPreviewId(null)}
+        template={previewTemplate}
+        params={{}}
+      />
     </ModalDialog>
   );
 }

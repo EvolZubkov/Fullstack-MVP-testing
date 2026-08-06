@@ -487,6 +487,13 @@
       <button
         type="button"
         class="ou-btn ou-btn--secondary"
+        onclick="showState(this, 'pass-by-variant')"
+      >
+        s-pass-by-variant
+      </button>
+      <button
+        type="button"
+        class="ou-btn ou-btn--secondary"
         onclick="showState(this, 'limits-no-topics')"
       >
         s-limits-no-topics
@@ -2543,6 +2550,550 @@
                           >
                             <span class="ou-select__value"
                               >Не проверять отдельно</span
+                            ><svg
+                              class="ou-select__chev"
+                              width="14"
+                              height="14"
+                            >
+                              <use href="#i-chevron-down" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">
+              Показать изменения
+            </button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">
+              Сохранить
+            </button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ═══════════ STATE: s-pass-by-variant — PRD-24 §7 Пороги по вариантам ═══════════ -->
+    <div id="wf-pass-by-variant" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text">
+              <h1 class="ou-drawer__title">
+                Сертификационный тест для руководителей
+              </h1>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline" aria-label="Статус теста: Черновик">Черновик</span>
+            <span
+              class="ou-tag ou-tag--warning ou-tag--outline"
+              aria-label="Есть несохранённые изменения"
+              >Изменено</span
+            >
+            <span class="ou-tag ou-tag--info ou-tag--outline" aria-label="Версия теста v6">v6</span>
+            <button
+              type="button"
+              class="ou-drawer__close"
+              aria-label="Закрыть редактор"
+            >
+              <svg width="16" height="16"><use href="#i-x" /></svg>
+            </button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div
+              class="ou-tabs__list"
+              role="tablist"
+              aria-label="Разделы редактора"
+            >
+              <button
+                type="button"
+                class="ou-tabs__tab"
+                role="tab"
+                aria-selected="false"
+              >
+                Состав
+              </button>
+              <button
+                type="button"
+                class="ou-tabs__tab is-active"
+                role="tab"
+                aria-selected="true"
+                aria-label="Настройки, есть несохранённые изменения"
+              >
+                Настройки
+                <span class="status-dot dirty" aria-hidden="true"></span>
+              </button>
+              <button
+                type="button"
+                class="ou-tabs__tab"
+                role="tab"
+                aria-selected="false"
+              >
+                Оформление
+              </button>
+              <button
+                type="button"
+                class="ou-tabs__tab"
+                role="tab"
+                aria-selected="false"
+              >
+                Структура
+              </button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы настроек">
+                <button type="button" class="ou-drawer__rail-item">
+                  Основное
+                </button>
+                <button
+                  type="button"
+                  class="ou-drawer__rail-item is-active"
+                  aria-current="page"
+                >
+                  Правила прохождения
+                </button>
+                <button type="button" class="ou-drawer__rail-item">
+                  Ограничения
+                </button>
+                <button type="button" class="ou-drawer__rail-item">
+                  Интеграция
+                </button>
+                <button type="button" class="ou-drawer__rail-item">
+                  Адаптивный режим
+                </button>
+              </nav>
+              <div class="tb-settings-content">
+                <!-- Карточка 1: Правило прохождения ТЕСТА (без изменений PRD-24) -->
+                <section
+                  class="ou-card ou-card--outlined ou-card--sm tb-pass-card"
+                >
+                  <header class="ou-card__header">
+                    <h3 class="ou-card__title">Тест пройден, если:</h3>
+                  </header>
+                  <div class="ou-card__body">
+                    <fieldset class="ou-radio-group ou-radio-group--vertical">
+                      <div class="ou-radio-group__items">
+                        <label class="ou-radio-field">
+                          <span class="ou-radio ou-radio--m is-on"
+                            ><input
+                              type="radio"
+                              name="pass-policy-bv"
+                              class="ou-radio__input"
+                              checked /><span class="ou-radio__ring"
+                              ><span class="ou-radio__dot"></span></span
+                          ></span>
+                          <span class="ou-radio-field__text"
+                            ><span class="ou-radio-field__label"
+                              >достигнут общий проходной порог и пройдены все
+                              обязательные темы</span
+                            ></span
+                          >
+                        </label>
+                      </div>
+                    </fieldset>
+
+                    <hr class="wf-sep" />
+
+                    <div class="tb-pass-overall">
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl" for="f-pass-type-bv"
+                          >Тип общего правила</label
+                        >
+                        <div
+                          class="ou-select ou-field--m"
+                          data-ou-options="Процент правильных ответов|Сумма баллов|Не задано"
+                        >
+                          <button
+                            type="button"
+                            class="ou-select__trigger"
+                            id="f-pass-type-bv"
+                          >
+                            <span class="ou-select__value"
+                              >Процент правильных ответов</span
+                            ><svg
+                              class="ou-select__chev"
+                              width="14"
+                              height="14"
+                            >
+                              <use href="#i-chevron-down" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="ou-formfield">
+                        <label class="ou-formfield__lbl" for="f-pass-val-bv"
+                          >Порог</label
+                        >
+                        <div class="ou-number ou-number--m ou-number--split">
+                          <div class="ou-number__box">
+                            <button
+                              type="button"
+                              class="ou-number__btn"
+                              aria-label="Уменьшить"
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                width="14"
+                                height="14"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2.2"
+                                stroke-linecap="round"
+                              >
+                                <path d="M5 12h14" />
+                              </svg></button
+                            ><input
+                              class="ou-number__input"
+                              id="f-pass-val-bv"
+                              type="number"
+                              value="70"
+                            /><span class="ou-number__suffix">%</span
+                            ><button
+                              type="button"
+                              class="ou-number__btn"
+                              aria-label="Увеличить"
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                width="14"
+                                height="14"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2.2"
+                                stroke-linecap="round"
+                              >
+                                <path d="M12 5v14M5 12h14" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <!-- Таблица: Правила прохождения тем — тема в режиме вариантов -->
+                <h3 class="tb-topics-title wf-annot-wrap--block">
+                  Правила прохождения тем
+                  <span class="wf-annot">PRD-24 FR-01/FR-11</span>
+                </h3>
+                <table
+                  class="tb-table tb-pass-table"
+                  aria-label="Правила прохождения тем"
+                >
+                  <thead>
+                    <tr>
+                      <th scope="col" class="tb-pass-table__topic-col">Тема</th>
+                      <th scope="col">Правило прохождения темы</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <!-- Тема 1: режим вариантов -> доступен пункт «По вариантам» (FR-02) -->
+                    <tr>
+                      <td>Корпоративные компетенции (часть 1)</td>
+                      <td>
+                        <div
+                          class="ou-select ou-field--s ou-field--full"
+                          data-ou-options="Как у теста|Индивидуальное правило|Не проверять отдельно|По вариантам"
+                        >
+                          <button
+                            type="button"
+                            class="ou-select__trigger"
+                            aria-label="Правило прохождения темы Корпоративные компетенции (часть 1)"
+                          >
+                            <span class="ou-select__value">По вариантам</span
+                            ><svg
+                              class="ou-select__chev"
+                              width="14"
+                              height="14"
+                            >
+                              <use href="#i-chevron-down" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <!-- Expand-row: порог на каждый вариант (FR-03) -->
+                    <tr class="tb-pass-table__detail">
+                      <td></td>
+                      <td>
+                        <div class="tb-pass-table__variants">
+                          <!-- Вариант 1: процент -->
+                          <span class="tb-pass-table__variant-label"
+                            >Вариант 1</span
+                          >
+                            <div class="ou-formfield">
+                              <label class="ou-formfield__lbl">Тип</label>
+                              <div
+                                class="ou-select ou-field--s ou-field--full"
+                                data-ou-options="Процент|Сумма баллов"
+                              >
+                                <button
+                                  type="button"
+                                  class="ou-select__trigger"
+                                  aria-label="Тип порога варианта 1 темы Корпоративные компетенции (часть 1)"
+                                >
+                                  <span class="ou-select__value">Процент</span
+                                  ><svg
+                                    class="ou-select__chev"
+                                    width="14"
+                                    height="14"
+                                  >
+                                    <use href="#i-chevron-down" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                            <div class="ou-formfield">
+                              <div
+                                class="ou-number ou-number--s ou-number--split"
+                              >
+                                <div class="ou-number__box">
+                                  <button
+                                    type="button"
+                                    class="ou-number__btn"
+                                    aria-label="Уменьшить"
+                                  >
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      width="14"
+                                      height="14"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      stroke-width="2.2"
+                                      stroke-linecap="round"
+                                    >
+                                      <path d="M5 12h14" />
+                                    </svg></button
+                                  ><input
+                                    class="ou-number__input"
+                                    type="number"
+                                    value="65"
+                                    aria-label="Порог варианта 1 темы Корпоративные компетенции (часть 1)"
+                                  /><span class="ou-number__suffix">%</span
+                                  ><button
+                                    type="button"
+                                    class="ou-number__btn"
+                                    aria-label="Увеличить"
+                                  >
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      width="14"
+                                      height="14"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      stroke-width="2.2"
+                                      stroke-linecap="round"
+                                    >
+                                      <path d="M12 5v14M5 12h14" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          <!-- Вариант 2: сумма баллов (тип может отличаться от варианта 1, FR-03/D-7) -->
+                          <span class="tb-pass-table__variant-label"
+                            >Вариант 2</span
+                          >
+                            <div class="ou-formfield">
+                              <label class="ou-formfield__lbl">Тип</label>
+                              <div
+                                class="ou-select ou-field--s ou-field--full"
+                                data-ou-options="Процент|Сумма баллов"
+                              >
+                                <button
+                                  type="button"
+                                  class="ou-select__trigger"
+                                  aria-label="Тип порога варианта 2 темы Корпоративные компетенции (часть 1)"
+                                >
+                                  <span class="ou-select__value"
+                                    >Сумма баллов</span
+                                  ><svg
+                                    class="ou-select__chev"
+                                    width="14"
+                                    height="14"
+                                  >
+                                    <use href="#i-chevron-down" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                            <div class="ou-formfield">
+                              <div
+                                class="ou-number ou-number--s ou-number--split"
+                              >
+                                <div class="ou-number__box">
+                                  <button
+                                    type="button"
+                                    class="ou-number__btn"
+                                    aria-label="Уменьшить"
+                                  >
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      width="14"
+                                      height="14"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      stroke-width="2.2"
+                                      stroke-linecap="round"
+                                    >
+                                      <path d="M5 12h14" />
+                                    </svg></button
+                                  ><input
+                                    class="ou-number__input"
+                                    type="number"
+                                    value="7"
+                                    aria-label="Порог варианта 2 темы Корпоративные компетенции (часть 1)"
+                                  /><button
+                                    type="button"
+                                    class="ou-number__btn"
+                                    aria-label="Увеличить"
+                                  >
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      width="14"
+                                      height="14"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      stroke-width="2.2"
+                                      stroke-linecap="round"
+                                    >
+                                      <path d="M12 5v14M5 12h14" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                            <span class="tb-pass-table__variant-hint"
+                              >макс. 8 баллов</span
+                            >
+                        </div>
+                      </td>
+                    </tr>
+
+                    <!-- Тема 2: без вариантов -> обычные 3 пункта (FR-02) -->
+                    <tr>
+                      <td>О компании</td>
+                      <td>
+                        <div
+                          class="ou-select ou-field--s ou-field--full"
+                          data-ou-options="Как у теста|Индивидуальное правило|Не проверять отдельно"
+                        >
+                          <button
+                            type="button"
+                            class="ou-select__trigger"
+                            aria-label="Правило прохождения темы О компании"
+                          >
+                            <span class="ou-select__value"
+                              >Индивидуальное правило</span
+                            ><svg
+                              class="ou-select__chev"
+                              width="14"
+                              height="14"
+                            >
+                              <use href="#i-chevron-down" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr class="tb-pass-table__detail">
+                      <td></td>
+                      <td>
+                        <div class="tb-pass-table__detail-inner">
+                          <div class="ou-formfield">
+                            <label class="ou-formfield__lbl">Тип</label>
+                            <div
+                              class="ou-select ou-field--s ou-field--full"
+                              data-ou-options="Процент|Сумма баллов"
+                            >
+                              <button
+                                type="button"
+                                class="ou-select__trigger"
+                                aria-label="Тип индивидуального правила темы О компании"
+                              >
+                                <span class="ou-select__value">Сумма баллов</span
+                                ><svg
+                                  class="ou-select__chev"
+                                  width="14"
+                                  height="14"
+                                >
+                                  <use href="#i-chevron-down" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                          <div class="ou-formfield">
+                            <div
+                              class="ou-number ou-number--s ou-number--split"
+                            >
+                              <div class="ou-number__box">
+                                <button
+                                  type="button"
+                                  class="ou-number__btn"
+                                  aria-label="Уменьшить"
+                                >
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    width="14"
+                                    height="14"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2.2"
+                                    stroke-linecap="round"
+                                  >
+                                    <path d="M5 12h14" />
+                                  </svg></button
+                                ><input
+                                  class="ou-number__input"
+                                  type="number"
+                                  value="15"
+                                  aria-label="Значение порога темы О компании"
+                                /><button
+                                  type="button"
+                                  class="ou-number__btn"
+                                  aria-label="Увеличить"
+                                >
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    width="14"
+                                    height="14"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2.2"
+                                    stroke-linecap="round"
+                                  >
+                                    <path d="M12 5v14M5 12h14" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+
+                    <!-- Тема 3: без вариантов -> «Как у теста» -->
+                    <tr>
+                      <td>Технологии</td>
+                      <td>
+                        <div
+                          class="ou-select ou-field--s ou-field--full"
+                          data-ou-options="Как у теста|Индивидуальное правило|Не проверять отдельно"
+                        >
+                          <button
+                            type="button"
+                            class="ou-select__trigger"
+                            aria-label="Правило прохождения темы Технологии"
+                          >
+                            <span class="ou-select__value">Как у теста</span
                             ><svg
                               class="ou-select__chev"
                               width="14"
@@ -6883,6 +7434,32 @@
             </td>
           </tr>
           <tr>
+            <td>PRD-24 / FR-01,02</td>
+            <td>
+              Пороги по вариантам (состояние <code>s-pass-by-variant</code>):
+              у темы в режиме «Варианты теста» (PRD-17,
+              <code>form_set_json</code> задан) Select правила прохождения темы
+              получает ЧЕТВЁРТЫЙ пункт «По вариантам»
+              (<code>topicPassRule.source = by_variant</code>). У тем без
+              вариантов список прежний — три пункта.
+            </td>
+          </tr>
+          <tr>
+            <td>PRD-24 / FR-03,11</td>
+            <td>
+              При выборе «По вариантам» раскрывается блок со строкой на вариант:
+              ведущая метка «Вариант N» + «Тип» (Процент / Сумма баллов) +
+              «Порог». Тип может отличаться между вариантами (D-7). Для
+              абсолютного порога — подсказка с достижимым максимумом баллов
+              ИМЕННО этого варианта (валидация FR-13). Раскладка —
+              grid <code>[метка | Тип | Порог]</code>
+              (<code>tb-pass-table__variants</code>): колонка «Порог» тянется до
+              правого края ячейки, поэтому правый край контролов совпадает с
+              full-width Select строки темы; колонка «Тип» выравнивается по
+              самому широкому значению между строками.
+            </td>
+          </tr>
+          <tr>
             <td>FR-43 / §3.5</td>
             <td>
               Ограничения: лимит времени теста, switch «Индивидуальные лимиты
@@ -7332,6 +7909,22 @@
                 Опция disabled; если уже выбрана — inline error в строке темы
               </td>
               <td>FR-15g</td>
+            </tr>
+            <tr>
+              <td>Опция «По вариантам» (by_variant) в правиле темы</td>
+              <td>
+                Тема в режиме «Варианты теста» (PRD-17,
+                <code>form_set_json</code> задан, &ge;2 варианта);
+                недоступна в адаптивном режиме
+              </td>
+              <td>
+                Пункта нет в Select у тем без вариантов. Записи порогов
+                синхронизируются с набором вариантов: добавлен вариант — запись
+                создаётся, удалён — удаляется; выключен режим вариантов — правило
+                нормализуется в «Как у теста». Абсолютный порог валидируется
+                против достижимого максимума ИМЕННО этого варианта
+              </td>
+              <td>PRD-24 FR-02, FR-12, FR-13</td>
             </tr>
             <tr>
               <td>Toggle «Обязательная» (sections[].required)</td>

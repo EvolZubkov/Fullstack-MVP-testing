@@ -246,6 +246,8 @@
       renderReviewRoute();
     } else if (route === "section-results") {
       renderSectionResultsRoute();
+    } else if (route === "system.transition") {
+      renderTransitionRoute();
     } else if (route === "system.blocked" || route === "system.locked" ||
                route.indexOf("system.") === 0) {
       var systemData = Object.assign({}, buildDslData(), {
@@ -361,6 +363,40 @@
       sectionResult: built ? built.sectionResult : {}
     });
     renderLayoutPage("section-results", data);
+  }
+
+  /**
+   * PRD-12 §10: the adaptive «Правильно/Неправильно + смена уровня» interstitial.
+   * Like review / section-results, this screen binds a TOP-LEVEL namespace
+   * (`transition.*`) that buildDslData does not surface, so without a context of
+   * its own every `{{#if}}` in the layout is false and the screen renders as a bare
+   * icon with an empty title — a template defect that is not one.
+   *
+   * The facts come from the template's demo dataset (`runtime.transition`) when it
+   * supplies them, else from defaults that exercise every branch of the layout
+   * (correct answer + level change + topic change + «Продолжить»). A template may
+   * set any field to `null` to hide that block. Built through the SAME shared
+   * builder production uses, so the preview mirrors the learner screen.
+   */
+  function renderTransitionRoute() {
+    var TBt = (typeof window !== "undefined") ? window.TBTemplate : null;
+    var base = buildDslData();
+    var demo = (demoData.runtime || {}).transition || {};
+    var topics = (demoData.course || {}).topics || [];
+    var input = {
+      isCorrect: demo.isCorrect != null ? !!demo.isCorrect : true,
+      // `undefined` = not declared → default; explicit `null` = intentionally absent.
+      levelTransition: demo.levelTransition !== undefined
+        ? demo.levelTransition
+        : { type: "up", message: "Уровень повышен" },
+      topicTransition: demo.topicTransition !== undefined
+        ? demo.topicTransition
+        : (topics[1] ? { toTopic: topics[1].title || "" } : null),
+      showContinue: demo.showContinue != null ? !!demo.showContinue : true
+    };
+    var built = (TBt && TBt.buildTransitionContext) ? TBt.buildTransitionContext(input) : null;
+    var data = Object.assign({}, base, { transition: built ? built.transition : {} });
+    renderLayoutPage("system.transition", data);
   }
 
   // ─── Question rendering ───────────────────────────────────────────────────────

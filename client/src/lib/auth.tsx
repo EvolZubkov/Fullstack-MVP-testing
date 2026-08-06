@@ -6,8 +6,14 @@ import { hasPermission, type Role, type Capability } from "@shared/access";
  * User as returned by the auth API: DB fields plus the effective role set and
  * permission list computed by the server (PRD-13). `roles` includes the
  * configuration superadmin when applicable; `permissions` is the union.
+ * `magicScope` is present only for a session opened by an assignment link and
+ * names the single test that session may reach.
  */
-export type AuthUser = User & { roles?: Role[]; permissions?: Capability[] };
+export type AuthUser = User & {
+  roles?: Role[];
+  permissions?: Capability[];
+  magicScope?: { testId: string } | null;
+};
 
 interface AuthContextType {
   user: AuthUser | null;

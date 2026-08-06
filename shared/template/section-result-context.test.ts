@@ -66,4 +66,37 @@ describe("buildSectionResultContext", () => {
     expect(sectionResult.continueLabel).toBe("К завершению теста");
     expect(sectionResult.summaryLabel).toBe("0 из 3 верно · 0%");
   });
+
+  it("header: test title + subtitle in course, «Раздел N из M» tag + progress from position", () => {
+    const { course, sectionResult } = buildSectionResultContext({
+      topicName: "Базовые угрозы",
+      correct: 5,
+      total: 6,
+      percent: 85,
+      passed: true,
+      courseTitle: "Основы информационной безопасности",
+      subtitle: "Попытка 1 из 2",
+      sectionIndex: 1,
+      sectionsTotal: 3,
+    });
+    // Header shows the TEST title; the section name stays in sectionResult for the body h2.
+    expect(course.title).toBe("Основы информационной безопасности");
+    expect(course.subtitle).toBe("Попытка 1 из 2");
+    expect(sectionResult.topicName).toBe("Базовые угрозы");
+    expect(sectionResult.sectionLabel).toBe("Раздел 1 из 3");
+    expect(sectionResult.progressPercent).toBe(33); // round(1/3*100)
+  });
+
+  it("no section position: section tag + progress omitted (title falls back to topic)", () => {
+    const { course, sectionResult } = buildSectionResultContext({
+      topicName: "Сеть",
+      correct: 3,
+      total: 4,
+      percent: 75,
+      passed: true,
+    });
+    expect(course.title).toBe("Сеть"); // fallback when no courseTitle
+    expect(sectionResult.sectionLabel).toBeUndefined();
+    expect(sectionResult.progressPercent).toBeUndefined();
+  });
 });

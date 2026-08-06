@@ -4,6 +4,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { normalizeTag, normalizeTags, TAG_MAX_LENGTH } from "./tags";
 import { STORED_ROLES } from "./access/roles";
+import { PLACEHOLDER_TYPES, SETTING_TYPES } from "./template/field-types";
 
 export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey(),
@@ -143,12 +144,19 @@ export const topics = pgTable("topics", {
   // (NULL) → formulas fall back to the UUID. Uniqueness is not enforced at the DB
   // level — resolution is per-test (migration 032).
   code: text("code"),
+  // PRD-25 FR-20: time of the last change to the topic itself or to any of its
+  // questions. Backs the «Мои темы и вопросы» home-page section, which orders by
+  // recency. Touched by the topic and question repositories in the same
+  // transaction as the mutation — see server/storage/shared.ts#touchTopics.
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
   // FR-27: hard uniqueness only WITHIN one owner; legacy unowned rows (owner
   // NULL) are excluded by the partial predicate, so they never collide.
   ownerNameIdx: uniqueIndex("topics_owner_name_normalized_idx")
     .on(table.ownerId, table.nameNormalized)
     .where(sql`owner_id IS NOT NULL`),
+  // PRD-25: the home page reads the most recently touched topics first.
+  updatedAtIdx: index("topics_updated_at_idx").on(table.updatedAt),
 }));
 
 // PRD-15 block C (FR-19): access to a topic for a non-owner USER. `use` lets
@@ -241,7 +249,7 @@ export type QuestionScoring = z.infer<typeof questionScoringSchema>;
 export const questions = pgTable("questions", {
   id: varchar("id", { length: 36 }).primaryKey(),
   topicId: varchar("topic_id", { length: 36 }).notNull(),
-  type: text("type", { enum: ["single", "multiple", "matching", "ranking"] }).notNull(),
+  type: text("type", { enum: ["single", "multiple", "matching", "ranking", "scale"] }).notNull(),
   prompt: text("prompt").notNull(),
   dataJson: jsonb("data_json").notNull(),
   correctJson: jsonb("correct_json").notNull(),
@@ -316,6 +324,27 @@ export const retakePolicySchema = z.preprocess(
 export type EligibilityPluginRef = z.infer<typeof eligibilityPluginRefSchema>;
 export type RetakePolicy = z.infer<typeof retakePolicySchema>;
 
+/** Выбор варианта отчёта и значения его полей для ОДНОГО режима (PRD-27 §4.1). */
+export const reportModeSettingsSchema = z.object({
+  /** `contentTemplates[].key` выбранного варианта. */
+  variantKey: z.string().min(1),
+  /** Значения `settings[]` варианта. Ключи, которых вариант не объявляет, отбрасываются. */
+  values: z.record(z.string(), z.unknown()).default({}),
+});
+
+/**
+ * `tests.report_settings_json`. Ключи ветвей — РЕЖИМЫ теста, а не виды манифеста: тест
+ * одного режима хранит одну ветку, но обе сохраняются при смене режима, чтобы настройка
+ * не терялась (§4.1). Отсутствие ветки = вариант с `isDefault` активного шаблона.
+ */
+export const reportSettingsSchema = z.object({
+  standard: reportModeSettingsSchema.nullish(),
+  adaptive: reportModeSettingsSchema.nullish(),
+});
+
+export type ReportModeSettings = z.infer<typeof reportModeSettingsSchema>;
+export type ReportSettings = z.infer<typeof reportSettingsSchema>;
+
 export const tests = pgTable("tests", {
   id: varchar("id", { length: 36 }).primaryKey(),
   folderId: varchar("folder_id", { length: 36 }),
@@ -360,6 +389,12 @@ export const tests = pgTable("tests", {
   // PRD-19 (FR-05a): show the section-results screen (optional system node, sectioned tests).
   // Default true; not applicable to linear_flat (no sections) — ignored by the runtime there.
   showSectionResults: boolean("show_section_results").notNull().default(true),
+  // PRD-27 (D-4): выбранный вариант ОТЧЁТА и значения его полей, по режиму теста.
+  // Отдельно от `design_settings_json`, хотя выбор и принадлежит шаблону: тот коммитится
+  // черновиком вкладки «Оформление», а поля отчёта живут в блоке обратной связи вкладки
+  // «Настройки», и один черновик связал бы две вкладки порядком сохранения (§4.2).
+  // NULL = автор ничего не выбирал: берётся вариант с `isDefault`.
+  reportSettingsJson: jsonb("report_settings_json").$type<ReportSettings>(),
 }, (table) => ({
   // Test lists filter by lifecycle status (draft/published/archived).
   statusIdx: index("tests_status_idx").on(table.status),
@@ -519,6 +554,14 @@ export const attempts = pgTable("attempts", {
   variantJson: jsonb("variant_json").notNull(),
   answersJson: jsonb("answers_json"),
   resultJson: jsonb("result_json"),
+  /**
+   * Section time budgets of THIS attempt (`shared/flow/section-budget`), kept
+   * server-side on purpose: the remaining time of a section decides whether the
+   * learner may keep answering, so it must not live where the learner can edit it
+   * (it used to sit in `localStorage`). Shape: `{ budgets, lastSeenAt, activeMs }`.
+   * NULL for attempts of tests without section limits.
+   */
+  sectionTimerJson: jsonb("section_timer_json"),
   startedAt: timestamp("started_at").notNull(),
   finishedAt: timestamp("finished_at"),
 }, (table) => ({
@@ -590,7 +633,7 @@ export type InsertTestQuestionScoring = z.infer<typeof insertTestQuestionScoring
 export const insertTestFolderSchema = createInsertSchema(testFolders).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertFolderSchema = createInsertSchema(folders).omit({ id: true });
-export const insertTopicSchema = createInsertSchema(topics).omit({ id: true }).extend({
+export const insertTopicSchema = createInsertSchema(topics).omit({ id: true, updatedAt: true }).extend({
   // Optional readable id (slug): lower snake_case, ≤64. Blank → NULL (use the UUID).
   code: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? null : v),
@@ -703,6 +746,42 @@ export const passRuleSchema = z.object({
 });
 
 export type PassRule = z.infer<typeof passRuleSchema>;
+
+/**
+ * PRD-24: per-variant pass threshold. Stored inside a topic rule's `byForm`,
+ * keyed by the stable PRD-17 `formId`. `percent` compares the points-based
+ * percent; `absolute` compares Σ earned points of the delivered variant
+ * (same basis as the other sources — PRD-10 FR-10).
+ */
+export const byVariantThresholdSchema = z.object({
+  type: z.enum(["percent", "absolute"]),
+  value: z.number(),
+});
+
+export type ByVariantThreshold = z.infer<typeof byVariantThresholdSchema>;
+
+/**
+ * PRD-24: the topic pass-rule union as stored in
+ * `test_sections.topic_pass_rule_json`. `by_variant` carries a per-`formId`
+ * threshold map (PRD-17 variants); the other three sources are the PRD-7 ones.
+ * `resolveTopicRule` (shared/scoring/pass-rule) stays the runtime authority and
+ * tolerates legacy shapes, so this schema is for authoring/validation paths.
+ */
+export const topicPassRuleSchema = z.discriminatedUnion("source", [
+  z.object({ source: z.literal("inherit_overall") }),
+  z.object({ source: z.literal("none") }),
+  z.object({
+    source: z.literal("custom"),
+    type: z.enum(["percent", "absolute"]),
+    value: z.number(),
+  }),
+  z.object({
+    source: z.literal("by_variant"),
+    byForm: z.record(z.string(), byVariantThresholdSchema),
+  }),
+]);
+
+export type TopicPassRuleJson = z.infer<typeof topicPassRuleSchema>;
 
 /**
  * Feedback structures (PRD-7 §3.4 / decisions.md §3.4, §3.5).
@@ -970,7 +1049,7 @@ export type AdaptiveAnswerResponse = z.infer<typeof adaptiveAnswerResponseSchema
 export const detailedAnswerSchema = z.object({
   questionId: z.string(),
   questionPrompt: z.string(),
-  questionType: z.enum(["single", "multiple", "matching", "ranking"]),
+  questionType: z.enum(["single", "multiple", "matching", "ranking", "scale"]),
   topicId: z.string(),
   topicName: z.string(),
   userAnswer: z.unknown(),
@@ -1042,7 +1121,7 @@ export type AdaptiveLevelStats = z.infer<typeof adaptiveLevelStatsSchema>;
 export const questionStatsSchema = z.object({
   questionId: z.string(),
   questionPrompt: z.string(),
-  questionType: z.enum(["single", "multiple", "matching", "ranking"]),
+  questionType: z.enum(["single", "multiple", "matching", "ranking", "scale"]),
   topicId: z.string(),
   topicName: z.string(),
   difficulty: z.number(),
@@ -1227,7 +1306,7 @@ export const scormAnswers = pgTable("scorm_answers", {
   // Данные вопроса
   questionId: varchar("question_id", { length: 36 }).notNull(),
   questionPrompt: text("question_prompt").notNull(),
-  questionType: text("question_type", { enum: ["single", "multiple", "matching", "ranking"] }).notNull(),
+  questionType: text("question_type", { enum: ["single", "multiple", "matching", "ranking", "scale"] }).notNull(),
   topicId: varchar("topic_id", { length: 36 }),
   topicName: text("topic_name"),
   difficulty: integer("difficulty"),
@@ -1312,6 +1391,12 @@ export const contentPages = pgTable("content_pages", {
   templateKey: text("template_key"),
   sortOrder: integer("sort_order").notNull().default(0),
   valuesJson: jsonb("values_json").notNull().default({}),
+  /** PRD-22: values of the variant's `settings[]` — PROPERTIES of the page
+   *  (sequence identifier, button caption, background), kept apart from the
+   *  authored CONTENT in `values_json` so the two have their own rules: content
+   *  migrates by shared placeholder keys on variant replace, while a setting like
+   *  the sequence identifier survives even a variant that no longer declares it. */
+  settingsJson: jsonb("settings_json").notNull().default({}),
   autoAdvance: boolean("auto_advance").notNull().default(false),
   autoAdvanceDelayMs: integer("auto_advance_delay_ms"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -1347,13 +1432,67 @@ export type ScormAnswer = typeof scormAnswers.$inferSelect;
  * PRD-1 §4.3: variant.kind — functional role of a template variant.
  * Drives variant binding rules in PRD-7 §1.4 (silent binding for system kinds).
  */
-export const variantKindSchema = z.enum(["start", "questions", "router", "summary", "results", "intro", "info", "review", "section-results", "gallery"]);
+/**
+ * PRD-22: `gallery` is NOT a kind. A gallery slide is a variant of the author
+ * page kind `info` with its own `layoutFile`; the navigation indicator comes from
+ * the `sequence` setting, not from a separate page kind.
+ *
+ * PRD-27: `report` and `report.adaptive` are the ATTEMPT REPORT (the PDF the learner
+ * downloads). Two kinds, not two variants of one: the standard report prints points,
+ * the adaptive one confirmed levels, and a variant of one mode cannot be picked for the
+ * other. Unlike the page kinds, a report variant is not an author PAGE — it is bound to
+ * the test through the feedback settings (see `shared/report/report-variants`).
+ */
+export const variantKindSchema = z.enum([
+  "start",
+  "questions",
+  "router",
+  "summary",
+  "results",
+  "intro",
+  "info",
+  "review",
+  "section-results",
+  "report",
+  "report.adaptive",
+]);
 export type VariantKind = z.infer<typeof variantKindSchema>;
 
 /**
+ * One field declaration inside a variant. `type` is checked against the shared
+ * registry (`shared/template/field-types`); everything template-specific
+ * (`textFit`, `constraints`, `allowedRenderers`, …) passes through untouched.
+ *
+ * PRD-22: the type used to be `z.unknown()`, so a typo like `richtext` reached the
+ * editor and silently became a single-line input. Attribute-level checks (e.g.
+ * `select` without `options`) live in `validateVariantFields` — they need the
+ * whole field, and the manifest validator reports them with variant + field key.
+ */
+const placeholderDeclSchema = z.object({
+  key: z.string().min(1),
+  type: z.enum(PLACEHOLDER_TYPES),
+  label: z.string().optional(),
+  required: z.boolean().optional(),
+}).passthrough();
+
+/**
+ * One page-PROPERTY declaration (PRD-22). Unlike a placeholder it never renders
+ * into the layout: it drives behaviour (`sequence`) or styling (`image` used as a
+ * background). May carry a default value and be required.
+ */
+const settingDeclSchema = z.object({
+  key: z.string().min(1),
+  type: z.enum(SETTING_TYPES),
+  label: z.string().optional(),
+  required: z.boolean().optional(),
+  default: z.unknown().optional(),
+  options: z.array(z.string()).optional(),
+}).passthrough();
+
+/**
  * Single entry in `manifest.contentTemplates[]`. Schema is intentionally narrow:
- * it locks the variant-binding contract (key/label/kind) and lets template-specific
- * shape (placeholders, pageKind, textFit, etc.) pass through unchanged.
+ * it locks the variant-binding contract (key/label/kind) plus the closed field-type
+ * registry, and lets template-specific shape (pageKind, textFit, etc.) pass through.
  */
 export const contentTemplateEntrySchema = z.object({
   key: z.string().min(1),
@@ -1361,7 +1500,8 @@ export const contentTemplateEntrySchema = z.object({
   kind: variantKindSchema,
   pageKind: z.string().optional(),
   isDefault: z.boolean().optional(),
-  placeholders: z.array(z.unknown()).optional(),
+  placeholders: z.array(placeholderDeclSchema).optional(),
+  settings: z.array(settingDeclSchema).optional(),
 }).passthrough();
 
 /**
@@ -1421,11 +1561,21 @@ export function isSupportedTemplateApiVersion(version: string): boolean {
   return (SUPPORTED_TEMPLATE_API_VERSIONS as readonly string[]).includes(version);
 }
 
+/**
+ * PRD-23: `theme` and `paramsByTheme` are optional — a template that declares no
+ * themes keeps exactly the shape it had before, so no stored test needs migrating.
+ * `params` stays the flat map: it holds everything for a themeless template and the
+ * non-colour params for a themed one.
+ */
 export const designSettingsSchema = z.object({
   templateId: z.string(),
   templateVersion: z.string(),
   templateApiVersion: z.string(),
   params: z.record(z.string(), z.unknown()),
+  theme: z.enum(["light", "dark", "auto"]).optional(),
+  paramsByTheme: z
+    .record(z.enum(["light", "dark"]), z.record(z.string(), z.unknown()))
+    .optional(),
 });
 
 export type DesignSettings = z.infer<typeof designSettingsSchema>;

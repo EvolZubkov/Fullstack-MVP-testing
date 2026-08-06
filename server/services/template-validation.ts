@@ -28,6 +28,9 @@ import { templateManifestSchema, isSupportedTemplateApiVersion } from "@shared/s
 // both runtime hosts use, so a layout it rejects would throw unhandled in the
 // preview/runtime — we reject it at import instead (see the layout-syntax pass).
 import { compileTemplate } from "@shared/template/dsl";
+import { validateVariantFields } from "@shared/template/field-types";
+import { validateManifestThemes } from "@shared/template/themes";
+import { validateReportVariants } from "@shared/report/report-variants";
 import type { TemplateEntries } from "./template-package";
 
 /** Default ZIP size ceiling (PRD-3 §8): 20 MB. */
@@ -124,6 +127,21 @@ function collectReferences(manifest: Record<string, unknown>): Array<{ ref: stri
     });
   }
 
+  // Page variants declare their own layout (PRD-22: the page fields come from the
+  // manifest), and it is the ONLY declaration of that file — `layouts` holds the
+  // canonical screens. Without this the variant layouts count as unused files and a
+  // healthy package permanently reports «Комплектность: Предупреждения», while a
+  // missing variant layout goes unreported.
+  const contentTemplates = manifest.contentTemplates;
+  if (Array.isArray(contentTemplates)) {
+    contentTemplates.forEach((ct, i) => {
+      if (ct && typeof ct === "object") {
+        const c = ct as Record<string, unknown>;
+        push(c.layoutFile, `contentTemplates[${i}].layoutFile (${asString(c.key) ?? i})`);
+      }
+    });
+  }
+
   const plugins = manifest.rendererPlugins;
   if (Array.isArray(plugins)) {
     plugins.forEach((pl, i) => {
@@ -179,6 +197,101 @@ function collectTemplateSources(manifest: Record<string, unknown>): Array<{ ref:
 }
 
 /**
+ * Field-type problems across all variants of a manifest, as blocking issues
+ * (PRD-22). Exported so the activation gate can re-check an ALREADY installed
+ * template — one that predates the closed registry and would otherwise stay
+ * active with a field the editor cannot render.
+ */
+export function collectFieldTypeIssues(manifest: Record<string, unknown>): ValidationIssue[] {
+  const variants = manifest.contentTemplates;
+  if (!Array.isArray(variants)) return [];
+  const out: ValidationIssue[] = [];
+  variants.forEach((raw, index) => {
+    const variant = (raw ?? {}) as { key?: unknown; placeholders?: unknown; settings?: unknown };
+    const variantKey =
+      typeof variant.key === "string" && variant.key.length > 0 ? variant.key : `#${index + 1}`;
+    for (const issue of validateVariantFields(variant)) {
+      out.push({
+        code: "FIELD_TYPE_UNKNOWN",
+        message: `Вариант "${variantKey}", поле "${issue.field}": ${issue.message}`,
+        ref: `contentTemplates.${variantKey}.${issue.list}.${issue.field}`,
+      });
+    }
+  });
+  return out;
+}
+
+/**
+ * Report-variant problems of a manifest (PRD-27 FR-25), as blocking issues.
+ *
+ * Needs the package files: the checks that matter are about the LAYOUT and the CSS,
+ * not the declaration. A report layout leaning on the scene layer or on document
+ * selectors renders correctly inside a SCORM package (where the template stylesheet
+ * sits in the main document) and breaks on the web (where it is injected into the
+ * screen's shadow root) — see PRD-27 §6.3 and risk R-1a. Only a static check catches
+ * that; review and the runtime both stay silent.
+ */
+export function collectReportVariantIssues(
+  entries: TemplateEntries,
+  manifest: Record<string, unknown>,
+): ValidationIssue[] {
+  return validateReportVariants(manifest, (path) => text(entries, path)).map((issue) => ({
+    code: "REPORT_VARIANT_INVALID",
+    message: `Отчёт, вариант "${issue.variantKey}": ${issue.message}`,
+    ref: issue.ref,
+  }));
+}
+
+/**
+ * Concatenated text of every stylesheet the manifest declares. Empty when the
+ * template declares none or the entries are missing — callers treat that as «no
+ * evidence» and skip the checks that need the palette.
+ */
+export function stylesheetText(
+  entries: TemplateEntries,
+  manifest: Record<string, unknown>,
+): string {
+  const assets = manifest.assets as { styles?: unknown } | undefined;
+  const declared = Array.isArray(assets?.styles) ? (assets?.styles as unknown[]) : [];
+  const parts: string[] = [];
+  for (const entry of declared) {
+    const path = asString(entry);
+    if (!path) continue;
+    const body = text(entries, path);
+    if (body) parts.push(body);
+  }
+  return parts.join("\n");
+}
+
+/**
+ * Theme-declaration problems of a manifest (PRD-23), split by severity.
+ *
+ * Exported so the activation gate can re-check an ALREADY installed template:
+ * a package uploaded before PRD-23 carries a passing report from its own era, and
+ * an id outside the closed registry must not become active through it. The gate
+ * has no package files, so it calls this WITHOUT `css` and gets the declaration
+ * checks only; reconciling the declaration with the palette needs the stylesheet
+ * and therefore happens at upload/validate.
+ */
+export function collectThemeIssues(
+  manifest: Record<string, unknown>,
+  css?: string,
+): { blocking: ValidationIssue[]; warnings: ValidationIssue[] } {
+  const blocking: ValidationIssue[] = [];
+  const warnings: ValidationIssue[] = [];
+  for (const issue of validateManifestThemes(manifest, css)) {
+    const where = issue.theme ? `Тема "${issue.theme}": ` : "";
+    const entry: ValidationIssue = {
+      code: issue.level === "blocking" ? "THEME_INVALID" : "THEME_ADVISORY",
+      message: `${where}${issue.message}`,
+      ref: issue.theme ? `themes.${issue.theme}` : "themes",
+    };
+    (issue.level === "blocking" ? blocking : warnings).push(entry);
+  }
+  return { blocking, warnings };
+}
+
+/**
  * Validates an extracted template package. Returns a structured report; the
  * caller persists it as `validation_json` and gates activation on `ok`.
  */
@@ -221,6 +334,32 @@ export function validateTemplatePackage(
         ref: issue.path.join(".") || "<root>",
       });
     }
+  }
+
+  // ── field types of every variant (PRD-22) ─────────────────────────────────
+  // Reported separately from MANIFEST_SCHEMA so the message names the VARIANT and
+  // the FIELD: a template author fixing `richtext` needs to know where it sits,
+  // not just that some enum failed. Runs on the raw manifest, so it also reports
+  // variants the schema pass already rejected for another reason.
+  for (const issue of collectFieldTypeIssues(manifest)) {
+    blocking.push(issue);
+  }
+
+  // ── report variants (PRD-27 FR-25) ────────────────────────────────────────
+  // Checked against the package FILES, not just the declaration: the failure mode
+  // is a layout that works in the LMS and breaks in the browser (§6.3, R-1a).
+  for (const issue of collectReportVariantIssues(entries, manifest)) {
+    blocking.push(issue);
+  }
+
+  // ── themes declared by the manifest (PRD-23) ──────────────────────────────
+  // Reconciled with the template's own stylesheet: a declared theme with no
+  // tokens would give the test author a colour column that paints nothing, and a
+  // second palette shipped WITHOUT a declaration is unreachable for them.
+  {
+    const themeIssues = collectThemeIssues(manifest, stylesheetText(entries, manifest));
+    blocking.push(...themeIssues.blocking);
+    warnings.push(...themeIssues.warnings);
   }
 
   const id = asString(manifest.id);

@@ -11,7 +11,7 @@ export interface StepperStep {
   disabled?: boolean;
 }
 
-export type StepperStatus = 'done' | 'current' | 'pending' | 'error';
+export type StepperStatus = 'done' | 'current' | 'pending' | 'error' | 'success';
 
 export interface StepperProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onChange'> {
   steps: StepperStep[];
@@ -25,6 +25,19 @@ export interface StepperProps extends Omit<React.HTMLAttributes<HTMLDivElement>,
   vertical?: boolean;
   /** Без подписей. */
   compact?: boolean;
+  /**
+   * Choice mode: the stepper is an ANSWER control (an ordered scale the user picks a
+   * point on), not a progress indicator. Bullets are larger and EMPTY — no step number
+   * and no check icon — labels wrap instead of being ellipsised, and a `done` step
+   * tints only its connector so the fill reads as «position on the scale» rather than
+   * «steps completed».
+   */
+  choice?: boolean;
+  /**
+   * Verdict mode, meaningful together with {@link StepperProps.choice}: the accent fill
+   * is muted so only the verdict colours (`success` / `error`) carry meaning.
+   */
+  review?: boolean;
 }
 
 const CheckIcon = () => (
@@ -56,7 +69,7 @@ function resolveStatus(
 export const Stepper = forwardRef<HTMLDivElement, StepperProps>(
   ({
     steps, current = 0, statuses, onStepClick,
-    vertical, compact, className, ...rest
+    vertical, compact, choice, review, className, ...rest
   }, ref) => {
     const currentIdx = typeof current === 'number'
       ? current
@@ -69,6 +82,8 @@ export const Stepper = forwardRef<HTMLDivElement, StepperProps>(
           'ou-stepper',
           vertical && 'ou-stepper--vertical',
           compact && 'ou-stepper--compact',
+          choice && 'ou-stepper--choice',
+          choice && review && 'ou-stepper--review',
           className,
         )}
         role="group" aria-label="Стэппер"
@@ -79,8 +94,12 @@ export const Stepper = forwardRef<HTMLDivElement, StepperProps>(
           const isClickable = !!onStepClick && !step.disabled;
           const Tag = (isClickable ? 'button' : 'div') as 'button' | 'div';
 
-          const bulletContent =
-            status === 'done' ? <CheckIcon />
+          // In choice mode the bullet is a scale point, so it stays EMPTY: a step number
+          // would read as a visible score for the graduation, and a check icon as
+          // «completed». An explicitly supplied icon still wins.
+          const bulletContent = choice
+            ? step.icon ?? null
+            : status === 'done' ? <CheckIcon />
             : status === 'error' ? <ErrorIcon />
             : step.icon ?? <span className="ou-stepper__num" data-step={idx + 1} />;
 
@@ -96,6 +115,7 @@ export const Stepper = forwardRef<HTMLDivElement, StepperProps>(
                 status === 'done' && 'is-done',
                 status === 'current' && 'is-current',
                 status === 'error' && 'is-error',
+                status === 'success' && 'is-success',
                 step.disabled && 'is-disabled',
               )}
               aria-current={status === 'current' ? 'step' : undefined}

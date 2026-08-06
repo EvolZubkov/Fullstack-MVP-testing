@@ -12,6 +12,7 @@ import {
   MAX_TEMPLATE_ZIP_BYTES,
 } from "../server/services/template-validation";
 import { readDirEntries, type TemplateEntries } from "../server/services/template-package";
+import { declaredThemes, supportsThemes } from "@shared/template/themes";
 
 /** Builds an entry map from a path -> text record. */
 function entriesOf(record: Record<string, string>): TemplateEntries {
@@ -232,6 +233,113 @@ describe("validateTemplatePackage — warnings (§4.2)", () => {
     expect(codes).toContain("UNUSED_FILE");
     expect(codes).toContain("OPTIONAL_LAYOUT_MISSING");
   });
+
+  // A page-variant layout is declared ONLY as `contentTemplates[].layoutFile`
+  // (PRD-22: the page fields come from the manifest). Those paths were absent from
+  // the reference set, so every variant layout was reported as an unused file and
+  // the card carried a permanent «Комплектность: Предупреждения» badge for a package
+  // with nothing wrong with it.
+  it("layout из contentTemplates[].layoutFile не считается неиспользуемым", () => {
+    const r = validateTemplatePackage(
+      validPackage({
+        manifest: {
+          contentTemplates: [
+            { key: "q.std", label: "Стандартный вопрос", kind: "questions", placeholders: [] },
+            {
+              key: "info.text",
+              label: "Текст",
+              kind: "info",
+              pageKind: "content.info",
+              layoutFile: "layouts/content.text.html",
+              placeholders: [],
+            },
+          ],
+        },
+        files: { "layouts/content.text.html": '<div data-slot="page-content"></div>' },
+      }),
+      { mode: "create" },
+    );
+    expect(r.ok).toBe(true);
+    expect(r.warnings.filter((w) => w.code === "UNUSED_FILE")).toEqual([]);
+  });
+
+  it("отсутствующий layout из contentTemplates[].layoutFile блокирует импорт", () => {
+    const r = validateTemplatePackage(
+      validPackage({
+        manifest: {
+          contentTemplates: [
+            {
+              key: "info.text",
+              label: "Текст",
+              kind: "info",
+              pageKind: "content.info",
+              layoutFile: "layouts/content.text.html",
+              placeholders: [],
+            },
+          ],
+        },
+      }),
+      { mode: "create" },
+    );
+    expect(r.ok).toBe(false);
+    expect(r.blocking.map((b) => b.code)).toContain("FILE_MISSING");
+  });
+});
+
+describe("validateTemplatePackage — theme declaration (PRD-23)", () => {
+  /** Stylesheet with a light base and a dark palette, as `certification` ships. */
+  const CSS_BOTH =
+    ':root{--background:240 4% 93%}\n' +
+    '@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--background:240 10% 10%}}\n' +
+    ':root[data-theme="dark"]{--background:240 10% 10%}';
+  const BOTH = [
+    { id: "light", label: "Светлая" },
+    { id: "dark", label: "Тёмная" },
+  ];
+
+  it("accepts a declaration backed by the template's own stylesheet", () => {
+    const r = validateTemplatePackage(
+      validPackage({ manifest: { themes: BOTH }, files: { "styles/base.css": CSS_BOTH } }),
+      { mode: "create" },
+    );
+    expect(r.ok).toBe(true);
+    expect(r.warnings.map((w) => w.code)).not.toContain("THEME_ADVISORY");
+  });
+
+  it("blocks a theme the stylesheet does not back with tokens", () => {
+    // The default fixture ships a stylesheet with no palette at all.
+    const r = validateTemplatePackage(validPackage({ manifest: { themes: BOTH } }), {
+      mode: "create",
+    });
+    expect(r.ok).toBe(false);
+    const themeIssue = r.blocking.find((b) => b.code === "THEME_INVALID");
+    expect(themeIssue?.ref).toBe("themes.light");
+  });
+
+  it("blocks an id outside the closed registry", () => {
+    const r = validateTemplatePackage(
+      validPackage({
+        manifest: { themes: [...BOTH, { id: "sepia", label: "Сепия" }] },
+        files: { "styles/base.css": CSS_BOTH },
+      }),
+      { mode: "create" },
+    );
+    expect(r.ok).toBe(false);
+    expect(r.blocking.find((b) => b.code === "THEME_INVALID")?.message).toContain("sepia");
+  });
+
+  it("warns when a second palette ships without a declaration", () => {
+    const r = validateTemplatePackage(validPackage({ files: { "styles/base.css": CSS_BOTH } }), {
+      mode: "create",
+    });
+    expect(r.ok).toBe(true);
+    expect(r.warnings.map((w) => w.code)).toContain("THEME_ADVISORY");
+  });
+
+  it("stays silent for a single-palette template that declares nothing", () => {
+    const r = validateTemplatePackage(validPackage(), { mode: "create" });
+    expect(r.warnings.map((w) => w.code)).not.toContain("THEME_ADVISORY");
+  });
 });
 
 describe("the shipping `default` built-in passes its own validator", () => {
@@ -244,5 +352,31 @@ describe("the shipping `default` built-in passes its own validator", () => {
       throw new Error("default template failed validation: " + JSON.stringify(r.blocking, null, 2));
     }
     expect(r.ok).toBe(true);
+  });
+});
+
+describe("the in-repo `certification` template passes the validator", () => {
+  it("validates with no blocking issues", async () => {
+    const dir = path.resolve(process.cwd(), "templates", "certification");
+    const entries = await readDirEntries(dir);
+    const r = validateTemplatePackage(entries, { mode: "create" });
+    if (!r.ok) {
+      throw new Error("certification failed validation: " + JSON.stringify(r.blocking, null, 2));
+    }
+    expect(r.ok).toBe(true);
+  });
+
+  // PRD-23 Э7: the template ships both palettes AND declares them, so the author
+  // can pick a theme and colour each one. The advisory that fired before Э7 (a
+  // dark palette nobody declared) must be gone.
+  it("declares both palettes and draws no theme advisory", async () => {
+    const dir = path.resolve(process.cwd(), "templates", "certification");
+    const entries = await readDirEntries(dir);
+    const r = validateTemplatePackage(entries, { mode: "create" });
+    expect(r.warnings.map((w) => w.code)).not.toContain("THEME_ADVISORY");
+
+    const manifest = JSON.parse(entries.get("manifest.json")!.toString("utf8")) as unknown;
+    expect(declaredThemes(manifest).map((t) => t.id)).toEqual(["light", "dark"]);
+    expect(supportsThemes(manifest)).toBe(true);
   });
 });

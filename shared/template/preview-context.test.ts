@@ -7,7 +7,7 @@
  * reusing the same primitives as the demo preview (no second renderer).
  */
 import { describe, it, expect } from "vitest";
-import { buildContentPageScreen, type PreviewManifest } from "./preview-context";
+import { buildContentPageScreen, buildScreenInputs, type PreviewManifest } from "./preview-context";
 
 const MANIFEST: PreviewManifest = {
   layouts: { content: "layouts/content.html", question: "layouts/question.html" },
@@ -55,5 +55,33 @@ describe("buildContentPageScreen", () => {
     });
     expect(spec.layoutKey).toBe("content");
     expect(spec.input.content?.template.placeholders).toEqual([]);
+  });
+});
+
+describe("buildScreenInputs — question preview text", () => {
+  it("renders the prompt through the author-text pipeline, as the learner screen does", () => {
+    const dataset = {
+      course: {
+        title: "Демо",
+        questions: [
+          {
+            id: "q1",
+            type: "single",
+            prompt: "Что такое **замыкание**?",
+            dataJson: { options: ["А", "Б"] },
+          },
+        ],
+      },
+    } as unknown as Parameters<typeof buildScreenInputs>[0];
+    const manifest = {
+      layouts: { question: "layouts/question.html" },
+      preview: { routes: [{ route: "question.single" }] },
+    } as unknown as PreviewManifest;
+
+    const question = buildScreenInputs(dataset, manifest).find((s) => s.route.startsWith("question"));
+    // «Что» is a hanging word — the typography pass binds it with a non-breaking space.
+    expect(question?.input.slots?.["question-text"]).toBe(
+      "Что такое <strong>замыкание</strong>?",
+    );
   });
 });

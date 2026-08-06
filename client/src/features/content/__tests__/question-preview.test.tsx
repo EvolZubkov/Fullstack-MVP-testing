@@ -40,6 +40,38 @@ describe("<QuestionPreview />", () => {
     ["A", "B", "C"].forEach((o) => expect(screen.getByText(o)).toBeInTheDocument());
   });
 
+  it("scale: lists the graduations in the authored order", () => {
+    const grades = ["Никогда", "Редко", "Часто", "Постоянно"];
+    render(<QuestionPreview question={q({
+      type: "scale",
+      dataJson: { options: grades } as never,
+      correctJson: {} as never,
+    })} />);
+    grades.forEach((g) => expect(screen.getByText(g)).toBeInTheDocument());
+  });
+
+  it("scale in measurement mode marks NOTHING as correct", () => {
+    // PRD-26: an inventory item has no right answer, so a green mark here would be
+    // a plain lie to the author.
+    const { container } = render(<QuestionPreview question={q({
+      type: "scale",
+      dataJson: { options: ["Никогда", "Постоянно"] } as never,
+      correctJson: {} as never,
+    })} />);
+    expect(container.querySelector(".ou-text--tone-success")).toBeNull();
+  });
+
+  it("scale with a correct graduation marks exactly that one", () => {
+    const { container } = render(<QuestionPreview question={q({
+      type: "scale",
+      dataJson: { options: ["Никогда", "Редко", "Часто"] } as never,
+      correctJson: { correctIndex: 2 } as never,
+    })} />);
+    const marked = container.querySelectorAll(".ou-text--tone-success");
+    expect(marked).toHaveLength(1);
+    expect(marked[0].textContent).toBe("Часто");
+  });
+
   it("single with no options renders without crashing (empty fallback)", () => {
     const { container } = render(<QuestionPreview question={q({ type: "single", dataJson: {} as never })} />);
     expect(container.querySelector(".ct-qpreview")).toBeInTheDocument();

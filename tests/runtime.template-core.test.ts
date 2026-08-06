@@ -371,3 +371,68 @@ describe("Runtime Core – autoAdvance", () => {
     expect(cb2).toHaveBeenCalledOnce();
   });
 });
+
+// ─── PRD-23: themed templates in the package runtime ─────────────────────────
+
+/**
+ * `applyThemeCss` delegates the printing to the shared bundle (`TBTemplate`) — the
+ * package always ships it. These tests wire the REAL shared printer to the global,
+ * so a drift between the runtime's expectations and the shared contract fails here.
+ */
+describe("applyThemeCss (PRD-23)", () => {
+  const THEMED = {
+    params: [{ key: "primaryColor", type: "color", cssVar: "--primary" }],
+    themes: [
+      { id: "light", label: "Светлая" },
+      { id: "dark", label: "Тёмная" },
+    ],
+  };
+
+  let applyThemeCss: (design: unknown, manifest: unknown) => void;
+
+  beforeEach(async () => {
+    const themeCss = await import("../shared/template/theme-css");
+    (window as any).TBTemplate = {
+      buildTemplateThemeCss: themeCss.buildTemplateThemeCss,
+      sceneThemeAttribute: themeCss.sceneThemeAttribute,
+      baseParams: themeCss.baseParams,
+    };
+    document.documentElement.removeAttribute("data-theme");
+    document.getElementById("tb-theme-vars")?.remove();
+    applyThemeCss = loadTemplateCore()._internal.applyThemeCss;
+  });
+
+  afterEach(() => {
+    delete (window as any).TBTemplate;
+  });
+
+  it("injects the per-theme block as a stylesheet, not as inline properties", () => {
+    applyThemeCss({ paramsByTheme: { dark: { primaryColor: "D" } } }, THEMED);
+    const style = document.getElementById("tb-theme-vars");
+    expect(style).not.toBeNull();
+    expect(style!.textContent).toContain('[data-theme="dark"]');
+    // Inline would beat every stylesheet and freeze one palette.
+    expect(document.documentElement.style.getPropertyValue("--primary")).toBe("");
+  });
+
+  it("pins the palette on <html> when the author fixed one", () => {
+    applyThemeCss({ theme: "dark", paramsByTheme: { dark: { primaryColor: "D" } } }, THEMED);
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+  });
+
+  it("leaves the attribute off for «Авто» so the media query decides", () => {
+    applyThemeCss({ theme: "auto", paramsByTheme: { dark: { primaryColor: "D" } } }, THEMED);
+    expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
+  });
+
+  it("does nothing for a template without themes", () => {
+    applyThemeCss({ params: { primaryColor: "X" } }, { params: THEMED.params });
+    expect(document.getElementById("tb-theme-vars")).toBeNull();
+    expect(document.documentElement.hasAttribute("data-theme")).toBe(false);
+  });
+
+  it("survives a package built without the shared bundle", () => {
+    delete (window as any).TBTemplate;
+    expect(() => applyThemeCss({ paramsByTheme: { dark: { primaryColor: "D" } } }, THEMED)).not.toThrow();
+  });
+});

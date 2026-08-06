@@ -30,6 +30,8 @@ vi.mock("../server/logger", () => ({
 // eslint-disable-next-line import/first -- import after vi.mock
 import { config } from "../server/config";
 // eslint-disable-next-line import/first
+import { logger } from "../server/logger";
+// eslint-disable-next-line import/first
 import {
   sendPasswordResetEmail,
   sendAssignmentEmail,
@@ -125,6 +127,71 @@ describe("sendAssignmentEmail", () => {
   it("returns false when the transport throws", async () => {
     m.sendMail.mockRejectedValueOnce(new Error("boom"));
     expect(await sendAssignmentEmail(base)).toBe(false);
+  });
+
+  // D-3 (PLAN_MAGIC_LINK_SCOPE.md, Этап 3): withheld for privileged recipients —
+  // `magicLink` is omitted and the letter falls back to a plain login link.
+  describe("without a magicLink (withheld for a privileged recipient)", () => {
+    const withheld = { to: "u@x.test", testTitle: "Quiz" };
+
+    it("renders a login call-to-action instead of a magic link", async () => {
+      const ok = await sendAssignmentEmail(withheld);
+      expect(ok).toBe(true);
+      const call = m.sendMail.mock.calls[0][0];
+      expect(call.html).toContain("/login");
+      expect(call.html).toContain("Войти и пройти тест");
+      expect(call.html).toContain("После входа тест будет в списке назначенных.");
+      expect(call.text).toContain("/login");
+      expect(call.text).toContain("После входа тест будет в списке назначенных.");
+    });
+
+    it("mentions no token, access link or the reason it is absent", async () => {
+      const ok = await sendAssignmentEmail(withheld);
+      expect(ok).toBe(true);
+      const call = m.sendMail.mock.calls[0][0];
+      expect(call.html).not.toContain("/access/");
+      expect(call.text).not.toContain("/access/");
+      // No hint at roles/permissions anywhere in the letter (product decision
+      // 2026-07-30: forwarded e-mails must not disclose the protection).
+      expect(call.html).not.toMatch(/роль|прав/i);
+      expect(call.text).not.toMatch(/роль|прав/i);
+    });
+
+    it("logs the login URL (and no token) when SMTP is not configured", async () => {
+      disableSmtp();
+      expect(await sendAssignmentEmail(withheld)).toBe(false);
+      const loggedLoginLine = (logger.info as any).mock.calls
+        .map((c: unknown[]) => String(c[0]))
+        .find((line: string) => line.startsWith("Login: "));
+      expect(loggedLoginLine).toContain("/login");
+      const loggedLinkLine = (logger.info as any).mock.calls
+        .map((c: unknown[]) => String(c[0]))
+        .find((line: string) => line.startsWith("Link: "));
+      expect(loggedLinkLine).toBeUndefined();
+    });
+
+    it("logs the login URL (and no token) when the transport throws", async () => {
+      m.sendMail.mockRejectedValueOnce(new Error("boom"));
+      expect(await sendAssignmentEmail(withheld)).toBe(false);
+      const loggedLoginLine = (logger.info as any).mock.calls
+        .map((c: unknown[]) => String(c[0]))
+        .find((line: string) => line.startsWith("Login: "));
+      expect(loggedLoginLine).toContain("/login");
+    });
+  });
+
+  it("with a magicLink, the call-to-action is unchanged (byte-identical CTA block)", async () => {
+    // Guards against regressions in the branch that must stay untouched: the
+    // exact copy an already-passing recipient has always seen.
+    await sendAssignmentEmail(base);
+    const call = m.sendMail.mock.calls[0][0];
+    expect(call.html).toContain(
+      "Для прохождения теста нажмите на кнопку ниже — вход произойдёт автоматически, пароль не требуется:",
+    );
+    expect(call.html).toContain(`<a href="${base.magicLink}" class="button">Пройти тест</a>`);
+    expect(call.html).toContain("Ссылка персональная — не передавайте её другим людям.");
+    expect(call.text).toContain("Для прохождения перейдите по ссылке (пароль не требуется):");
+    expect(call.text).toContain("Ссылка персональная — не передавайте её другим.");
   });
 });
 

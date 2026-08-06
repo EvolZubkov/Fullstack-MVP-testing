@@ -141,7 +141,18 @@ export interface ScoreVM {
   percent?: number;
   passed?: boolean;
   rule?: { type: string; value: number } | null;
-  sections?: { topicName: string; earnedPoints: number; possiblePoints: number; percent: number; passed: boolean | null; correct: number; total: number; completed: boolean }[];
+  sections?: {
+    topicName: string; earnedPoints: number; possiblePoints: number; percent: number;
+    passed: boolean | null; correct: number; total: number; completed: boolean;
+    /**
+     * PRD-24: the threshold that ACTUALLY gated the topic, already humanised
+     * («≥ 60%» / «≥ 7 баллов» / «без порога»), plus the variant this run delivered.
+     * For a per-variant rule the verdict is meaningless without knowing which of
+     * the variants' thresholds applied.
+     */
+    ruleLabel?: string;
+    variantLabel?: string | null;
+  }[];
 }
 
 export interface DrawSectionVM {

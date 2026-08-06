@@ -14,7 +14,8 @@ import { Button, Checkbox, SegmentedControl, Select, Slider, Switch, TagInput } 
 import { normalizeTag, tagKey, TAG_MAX_LENGTH } from "@shared/tags";
 import { t } from "@/lib/i18n";
 
-export type QuestionType = "single" | "multiple" | "matching" | "ranking";
+export type { QuestionType } from "@shared/questions/question-type";
+import type { QuestionType } from "@shared/questions/question-type";
 export type MediaBucket = "image" | "audio" | "video" | "none";
 export type ContentScope = "all" | "mine" | "accessible" | "shared";
 
@@ -50,6 +51,7 @@ export const TYPE_OPTS: { value: QuestionType; label: string }[] = [
   { value: "multiple", label: t.questions.multipleChoice },
   { value: "matching", label: t.questions.matching },
   { value: "ranking", label: t.questions.ranking },
+  { value: "scale", label: t.questions.scaleChoice },
 ];
 export const MEDIA_OPTS: { value: MediaBucket; label: string }[] = [
   { value: "image", label: "С изображением" },

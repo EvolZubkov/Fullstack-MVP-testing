@@ -85,6 +85,9 @@
       unlockRules: (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.sectionUnlockRules) || {},
       completionPolicy:
         (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.routerCompletionPolicy) || null,
+      // PRD-19: a completed section's card shows its pass/fail only when the test
+      // reveals section results; otherwise the hub keeps it a neutral «Завершена».
+      showSectionResults: TEST_DATA.showSectionResults !== false,
     };
   }
 
@@ -113,13 +116,18 @@
     }
     var app = document.getElementById("app");
     if (!app) return;
-    // The router is a HUB — navigation is via the topic cards, not the content
-    // wrapper's «Далее». Remove that nav so the run matches the «Структура» preview.
+    // The router hub is the test-entry menu — the attempt subtitle ("Попытка N")
+    // belongs on the in-attempt screens, not on the section menu. Drop it.
+    var sub = app.querySelector(".tb-scene__subtitle");
+    if (sub && sub.parentNode) sub.parentNode.removeChild(sub);
+    // The router is a HUB, but «Завершить» belongs in the STANDARD footer, in the
+    // usual navigation slot — the content wrapper's own primary button, repurposed
+    // below (label + gating + handler). Drop only the fallback `.navigation` block
+    // (the no-layout branch of renderContentPage), which would duplicate it.
     var nav = app.querySelector(".navigation");
     if (nav && nav.parentNode) nav.parentNode.removeChild(nav);
-    // Cards (and the «Завершить» action) live INSIDE the content wrapper's
-    // page-content slot — the SAME DOM the preview builds (buildRouterCards into
-    // page-content) — so the run and the structure preview look identical.
+    // Cards live INSIDE the content wrapper's page-content slot — the SAME DOM the
+    // preview builds — so the run and the structure preview look identical.
     var host = app.querySelector('[data-slot="page-content"]') || app;
     // Cards / progress / «Завершить» come from the SHARED builder — the same
     // markup and the same open/locked rules the web host renders, so a section
@@ -148,6 +156,24 @@
     );
 
     var ready = isRouterReadyToFinish();
+
+    // «Завершить» in the standard footer: the content wrapper's primary nav button,
+    // relabelled and wired to finishRouter, inert until every required section is
+    // done. Re-runs on each hub render, so completing a section enables it.
+    var finishBtn = typeof findScreenNavButton === "function"
+      ? findScreenNavButton(app, "next")
+      : null;
+    if (finishBtn) {
+      finishBtn.textContent = "Завершить";
+      finishBtn.disabled = !ready;
+      if (ready) {
+        finishBtn.removeAttribute("aria-disabled");
+        finishBtn.onclick = finishRouter;
+      } else {
+        finishBtn.setAttribute("aria-disabled", "true");
+        finishBtn.onclick = null;
+      }
+    }
 
     // PRD-8 FR-18: emit router lifecycle events for diagnostics + template
     // extensions. The first time the «Завершить» action becomes available

@@ -60,6 +60,13 @@ function makeDesign(over: Partial<UseDesignSettingsResult> = {}): UseDesignSetti
     templateMissing: false,
     templateOutdated: false,
     setParam: vi.fn(),
+    clearParam: vi.fn(),
+    themes: [],
+    theme: "auto",
+    setTheme: vi.fn(),
+    themeParams: {},
+    setThemeParam: vi.fn(),
+    clearThemeParam: vi.fn(),
     resetToDefaults: vi.fn(),
     setTemplate: vi.fn(),
     applyDefaultTemplate: vi.fn(),
@@ -81,14 +88,23 @@ function renderSection(design: UseDesignSettingsResult) {
   );
 }
 
-/** Render a branding-only template with the given params + preloaded draft values. */
-function renderBranding(params: TemplateParam[], params_values: Record<string, unknown> = {}) {
+/**
+ * Render a template with the given params + preloaded draft values, and open the
+ * section that holds them. PRD-23 split the old single «Брендирование» pane: a
+ * colour param now lives in «Цвета», everything else stays put — so a fixture of
+ * colours alone opens on «Цвета».
+ */
+function renderBranding(
+  params: TemplateParam[],
+  params_values: Record<string, unknown> = {},
+  rail: "branding" | "colors" = params.every((p) => p.type === "color") ? "colors" : "branding",
+) {
   const design = makeDesign({
     template: templateRow({}, { params }),
     draft: { templateId: "corporate", params: params_values },
   });
   const result = renderSection(design);
-  fireEvent.click(screen.getByTestId("design-rail-branding"));
+  fireEvent.click(screen.getByTestId(`design-rail-${rail}`));
   return { design, ...result };
 }
 
@@ -127,8 +143,9 @@ describe("<DesignSection /> — null template", () => {
     renderSection(makeDesign({ template: null }));
     // Template pane sub-component returns null.
     expect(screen.queryByTestId("design-template-pane")).toBeNull();
-    // Visiting each content rail computes its emptyDesc with the `?? ""` fallback.
-    for (const rail of ["branding", "layout", "progress"] as const) {
+    // Visiting each content rail computes its emptyDesc with the `?? ""` fallback;
+    // «Цвета» takes the `if (!tpl) return null` guard of ColorsPane.
+    for (const rail of ["branding", "colors", "layout", "progress"] as const) {
       fireEvent.click(screen.getByTestId(`design-rail-${rail}`));
       expect(screen.queryByTestId(`design-${rail}-pane`)).toBeNull();
     }
@@ -179,9 +196,8 @@ describe("<DesignSection /> — explicit param sections", () => {
       }),
     });
     renderSection(design);
-    // Branding is empty (param is assigned to layout).
-    fireEvent.click(screen.getByTestId("design-rail-branding"));
-    expect(screen.getByTestId("design-branding-pane-empty")).toBeInTheDocument();
+    // PRD-23: branding holds nothing, so it is not offered at all.
+    expect(screen.queryByTestId("design-rail-branding")).toBeNull();
     // Layout carries the param row.
     fireEvent.click(screen.getByTestId("design-rail-layout"));
     expect(screen.getByTestId("design-param-row-cols")).toBeInTheDocument();
@@ -271,8 +287,11 @@ describe("<DesignSection /> — ParamRow default-value branches", () => {
       ],
       { hue: "120 50% 50%", flag: true, size: "M" },
     );
-    // Stored string colour is used verbatim (the `typeof value === "string" && value` branch).
+    // Stored string colour is used verbatim (the `typeof value === "string" && value` branch)
+    // — in «Цвета», where PRD-23 moved every colour.
+    fireEvent.click(screen.getByTestId("design-rail-colors"));
     expect(screen.getByTestId("design-param-row-hue")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("design-rail-branding"));
     // Stored boolean value wins over the default.
     expect((screen.getByTestId("design-param-input-flag") as HTMLInputElement).checked).toBe(true);
     // Stored select value shown in the trigger.
@@ -422,5 +441,79 @@ describe("<DesignSection /> — MediaParamRow upload", () => {
       expect(screen.getByTestId("design-param-input-logo")).toHaveTextContent("Загрузка…"),
     );
     expect(screen.getByTestId("design-param-input-logo")).toBeDisabled();
+  });
+});
+
+// ─── Colour params: value shown vs value stored ──────────────────────────────
+
+describe("<DesignSection /> — colour params", () => {
+  /** A bundle response carrying a certification-style theme.css. */
+  function stubBundle(css: string) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        String(url).includes("/bundle")
+          ? new Response(JSON.stringify({ manifest: { params: [] }, demo: null, layouts: {}, css }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            })
+          : new Response("[]", { status: 200 }),
+      ),
+    );
+  }
+
+  const THEME_CSS = ':root { --primary: 15 100% 45%; --background: 240 4% 93%; }';
+
+  // The certification template leaves colours to theme.css (`default: null`).
+  // Before this the field showed #000000 — a colour the learner never sees.
+  it("shows the colour the template actually paints with, not a black placeholder", async () => {
+    stubBundle(THEME_CSS);
+    renderBranding([{ key: "primaryColor", type: "color", label: "Цвет кнопок", default: null }]);
+
+    // 15 100% 45% → #E63900, the template's brand orange.
+    await waitFor(() =>
+      expect(screen.getByTestId("design-param-input-primaryColor")).toHaveTextContent("#E63900"),
+    );
+    expect(screen.getByTestId("design-param-inherited-primaryColor")).toHaveTextContent("из шаблона");
+  });
+
+  // The bug: the picker speaks HEX, and with nothing stored the editor guessed
+  // HEX too — but the template composes hsl(var(--primary)), so `hsl(#7700FF)`
+  // was dropped by the browser and the button lost its colour.
+  it("stores an edit in the template's HSL format, not the picker's HEX", async () => {
+    stubBundle(THEME_CSS);
+    const { design } = renderBranding([
+      { key: "primaryColor", type: "color", label: "Цвет кнопок", default: null },
+    ]);
+    await waitFor(() => expect(screen.getByTestId("design-param-input-primaryColor")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("design-param-input-primaryColor"));
+    fireEvent.change(document.querySelector(".ou-color-pop__hex") as HTMLInputElement, {
+      target: { value: "#7700FF" },
+    });
+    const apply = [...document.querySelectorAll("button")].find((b) => /Готово|ОК|Применить/i.test(b.textContent ?? ""));
+    if (apply) fireEvent.click(apply);
+
+    await waitFor(() => expect(design.setParam).toHaveBeenCalled());
+    const [key, value] = (design.setParam as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1)!;
+    expect(key).toBe("primaryColor");
+    // #7700FF as the template stores colours; the round-trip is lossless —
+    // hsl(268 100% 50%) renders back to rgb(119, 0, 255).
+    expect(value).toBe("268 100% 50%");
+  });
+
+  it("offers «Вернуть из шаблона» only once the colour is overridden", async () => {
+    stubBundle(THEME_CSS);
+    const { design } = renderBranding(
+      [{ key: "primaryColor", type: "color", label: "Цвет кнопок", default: null }],
+      { primaryColor: "271 100% 50%" },
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("design-param-reset-primaryColor")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("design-param-inherited-primaryColor")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("design-param-reset-primaryColor"));
+    expect(design.clearParam).toHaveBeenCalledWith("primaryColor");
   });
 });

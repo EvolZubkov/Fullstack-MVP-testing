@@ -42,16 +42,17 @@ describe("start.html — info + state-driven actions", () => {
     expect(root.querySelector('[data-path="course.title"]')?.textContent).toBe("Базовые технологии");
     expect(root.querySelector('[data-path="course.questionCount"]')?.textContent).toBe("40");
     expect(root.querySelector('[data-path="course.passPercent"]')?.textContent).toBe("80");
-    expect(root.textContent).toContain("Ограничение времени"); // {{#if timeLimitMinutes}}
-    expect(root.textContent).toContain("Попыток разрешено"); // {{#if maxAttempts}}
+    expect(root.textContent).toContain("на прохождение"); // {{#if timeLimitMinutes}} (facts strip)
+    expect(root.textContent).toContain("попыток"); // {{#if maxAttempts}}
     expect(root.textContent).toContain("одна попытка в день"); // {{#if startPageContent}}
   });
 
   it("fresh attempt: start + back, no resume/exhausted", () => {
     const root = render({ canStart: true, startLabel: "Начать тестирование", showBack: true });
-    expect(actions(root)).toEqual(["start-test", "back"]);
+    // Footer follows the wireframe: «К списку тестов» left (DOM-first), primary right.
+    expect(actions(root)).toEqual(["back", "start-test"]);
     expect(root.querySelector('[data-action="start-test"]')?.textContent).toBe("Начать тестирование");
-    expect(root.textContent).not.toContain("Попытки закончились");
+    expect(root.textContent).not.toContain("Попытки исчерпаны");
   });
 
   it("in-progress: resume (labelled) + start (relabelled) + back", () => {
@@ -62,7 +63,7 @@ describe("start.html — info + state-driven actions", () => {
       startLabel: "Начать заново",
       showBack: true,
     });
-    expect(actions(root)).toEqual(["resume", "start-test", "back"]);
+    expect(actions(root)).toEqual(["back", "resume", "start-test"]);
     expect(root.querySelector('[data-action="resume"]')?.textContent).toBe("Продолжить тест");
     expect(root.querySelector('[data-action="start-test"]')?.textContent).toBe("Начать заново");
   });
@@ -70,7 +71,7 @@ describe("start.html — info + state-driven actions", () => {
   it("exhausted: note + back only", () => {
     const root = render({ exhausted: true, canStart: false, canResume: false, showBack: true });
     expect(actions(root)).toEqual(["back"]);
-    expect(root.textContent).toContain("Попытки закончились");
+    expect(root.textContent).toContain("Попытки исчерпаны");
   });
 
   it("SCORM-richer actions gate on flags absent from the web context", () => {
@@ -90,17 +91,17 @@ describe("start.html — info + state-driven actions", () => {
   describe("PRD-19 Block F — cooldown / prior result on the start screen (FR-20)", () => {
     it("cooldown (date only, SCORM pre-Initialize): cooldown card + DISABLED start, no actions", () => {
       const root = render({ cooldown: { availableDateHuman: "30.06.2026", daysUntil: 2 } });
-      // Cooldown card with the next-available date and the derived «через N дн.».
-      expect(root.querySelector(".start-cooldown")).toBeTruthy();
+      // Cooldown banner with the next-available date and the derived «через N дн.».
+      expect(root.querySelector(".tb-cooldown")).toBeTruthy();
       expect(root.querySelector('[data-path="state.cooldown.availableDateHuman"]')?.textContent).toBe("30.06.2026");
       expect(root.textContent).toContain("через");
       expect(root.querySelector('[data-path="state.cooldown.daysUntil"]')?.textContent).toBe("2");
       // FR-20: start button rendered but DISABLED (not hidden), and NOT clickable.
-      const disabled = root.querySelector(".start-btn[disabled]");
+      const disabled = root.querySelector(".ou-btn[disabled]");
       expect(disabled?.textContent).toBe("Начать тестирование");
       expect(root.querySelector('[data-action="start-test"]')).toBeNull();
       // No prior result on the pre-Initialize SCORM path.
-      expect(root.querySelector(".start-prior-row")).toBeNull();
+      expect(root.querySelector(".tb-prior")).toBeNull();
       expect(actions(root)).toEqual([]);
     });
 
@@ -111,13 +112,15 @@ describe("start.html — info + state-driven actions", () => {
         canViewResults: true,
         canDownloadReport: true,
       });
-      const cd = root.querySelector(".start-cooldown")!;
-      expect(cd.querySelector('[data-path="state.priorResult.percent"]')?.textContent).toBe("65");
-      expect(cd.querySelector(".prior-fail")?.textContent).toBe("не пройдено");
-      expect(cd.querySelector('[data-path="state.priorResult.attemptsLabel"]')?.textContent).toBe("попытка 2 из 3");
-      // Review + download grouped in the card; start stays disabled (no start-test).
+      // Cooldown banner + a separate prior-result banner (the prior summary).
+      expect(root.querySelector(".tb-cooldown")).toBeTruthy();
+      const prior = root.querySelector(".tb-prior")!;
+      expect(prior.querySelector('[data-path="state.priorResult.percent"]')?.textContent).toBe("65");
+      expect(prior.querySelector(".prior-fail")?.textContent).toBe("не пройдено");
+      expect(prior.querySelector('[data-path="state.priorResult.attemptsLabel"]')?.textContent).toBe("попытка 2 из 3");
+      // Review + download grouped in the prior banner; start stays disabled (no start-test).
       expect(actions(root)).toEqual(["view-results", "download-report"]);
-      expect(root.querySelector(".start-btn[disabled]")).toBeTruthy();
+      expect(root.querySelector(".ou-btn[disabled]")).toBeTruthy();
     });
 
     it("eligible retake (FR-19): separate prior card, start enabled, no duplicate review", () => {
@@ -128,9 +131,9 @@ describe("start.html — info + state-driven actions", () => {
         canDownloadReport: true,
         priorResult: { percent: 88, verdictLabel: "пройдено", verdictClass: "", attemptsLabel: "" },
       });
-      // Eligible ⇒ the prior summary is its own card, NOT the cooldown card.
-      expect(root.querySelector(".start-prior")).toBeTruthy();
-      expect(root.querySelector(".start-cooldown")).toBeNull();
+      // Eligible ⇒ the prior summary is its own banner, no cooldown banner.
+      expect(root.querySelector(".tb-prior")).toBeTruthy();
+      expect(root.querySelector(".tb-cooldown")).toBeNull();
       expect(root.querySelector(".prior-fail")).toBeNull(); // passed ⇒ no fail class
       // Review + download live in the prior card; the standalone start-actions
       // «Мой результат» is suppressed (no duplicate) when a prior card is shown.

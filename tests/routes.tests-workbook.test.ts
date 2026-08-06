@@ -338,7 +338,7 @@ describe("POST /:id/workbook/import — «Структура» + «Квоты» 
     "Варианты": vars,
   });
 
-  it("строит form_set_json из колонки «Варианты» (FR-13)", async () => {
+  it("строит form_set_json из СТАРОГО имени колонки «Варианты» (совместимость)", async () => {
     let n = 0;
     storageMock.createQuestion.mockImplementation(async () => ({ id: `nq${++n}` }));
     const buf = await makeWorkbook({
@@ -352,6 +352,68 @@ describe("POST /:id/workbook/import — «Структура» + «Квоты» 
     expect(fs.forms.map((f: any) => f.label)).toEqual(["Вариант 1", "Вариант 2"]);
     expect(fs.forms[0].questionIds).toEqual(["nq1", "nq3"]); // вариант 1
     expect(fs.forms[1].questionIds).toEqual(["nq2", "nq3"]); // вариант 2
+  });
+
+  // The column is named «Варианты теста»: on the «Вопросы» sheet the bare word
+  // «варианты» already belongs to the answer options («Тексты вариантов ответа»),
+  // so the short name read as «варианты ответа» to every first-time author.
+  const vQuestionNew = (key: string, vars: string) => ({
+    "Ключ строки": key, "Тема": "JavaScript", "Тип вопроса": "multiple_choice",
+    "Текст вопроса": `${key}?`, "Тексты вариантов ответа": "3#4#5", "Номера правильных ответов": "2",
+    "Варианты теста": vars,
+  });
+
+  it("строит form_set_json из колонки «Варианты теста»", async () => {
+    let n = 0;
+    storageMock.createQuestion.mockImplementation(async () => ({ id: `nq${++n}` }));
+    const buf = await makeWorkbook({
+      "Вопросы": [vQuestionNew("q1", "1"), vQuestionNew("q2", "2"), vQuestionNew("q3", "1; 2")],
+      "Структура": [{ "Раздел": "JavaScript", "Порядок": "1", "Вопросов в выборке": "3", "Тип порога": "Сумма баллов", "Порог": "2" }],
+    });
+    const res = await postWorkbook(buf);
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    const fs = (testSettingsMock.save.mock.calls[0][1] as any).sections[0].formSetJson;
+    expect(fs.forms.map((f: any) => f.label)).toEqual(["Вариант 1", "Вариант 2"]);
+    expect(fs.forms[0].questionIds).toEqual(["nq1", "nq3"]);
+    expect(fs.forms[1].questionIds).toEqual(["nq2", "nq3"]);
+  });
+
+  it("новое имя имеет приоритет, когда в листе есть оба", async () => {
+    let n = 0;
+    storageMock.createQuestion.mockImplementation(async () => ({ id: `nq${++n}` }));
+    const buf = await makeWorkbook({
+      "Вопросы": [
+        { ...vQuestionNew("q1", "1"), "Варианты": "2" },
+        { ...vQuestionNew("q2", "2"), "Варианты": "1" },
+      ],
+      "Структура": [{ "Раздел": "JavaScript", "Вопросов в выборке": "2", "Тип порога": "Сумма баллов", "Порог": "1" }],
+    });
+    const res = await postWorkbook(buf);
+    expect(res.body.errors).toEqual([]);
+    const fs = (testSettingsMock.save.mock.calls[0][1] as any).sections[0].formSetJson;
+    expect(fs.forms[0].questionIds).toEqual(["nq1"]); // из «Варианты теста», не из «Варианты»
+    expect(fs.forms[1].questionIds).toEqual(["nq2"]);
+  });
+
+  // «Варианты» is ALSO the ancient name of «Тексты вариантов ответа». It keeps
+  // that meaning only on a sheet without the canonical options column — where
+  // variant membership cannot be expressed anyway.
+  it("древний лист без «Текстов вариантов ответа» читает «Варианты» как тексты ответов", async () => {
+    storageMock.createQuestion.mockImplementation(async () => ({ id: "nq1" }));
+    const buf = await makeWorkbook({
+      "Вопросы": [{
+        "Ключ строки": "q1", "Тема": "JavaScript", "Тип вопроса": "multiple_choice",
+        "Текст вопроса": "2+2?", "Варианты": "3#4#5", "Номера правильных ответов": "2",
+      }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.questions.created).toBe(1);
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({ dataJson: { options: ["3", "4", "5"] } }),
+    );
   });
 
   it("один вариант на тему → ошибка «нужно ≥2», секция без form_set_json", async () => {
@@ -421,6 +483,23 @@ describe("POST /:id/workbook/import — «Оценка»", () => {
     expect(res.body.scoring).toEqual({ rows: 1 });
     expect(storageMock.replaceTestQuestionScoring).not.toHaveBeenCalled();
   });
+
+  // «Балл» / «Цена ответа» / «Сложность» — НЕЗАВИСИМЫЕ звенья цепочки (§5.3
+  // гайда): неразобранная градуированная цена не должна утаскивать за собой
+  // валидные балл и сложность той же строки.
+  it("невалидная «Цена ответа» не отменяет «Балл» и «Сложность» той же строки", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      "Оценка": [{ "Вопрос": "q1", "Балл": "2", "Цена ответа": "не грамматика", "Сложность": "80" }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors.some((e: string) => e.includes("Оценка"))).toBe(true);
+    expect(res.body.scoring).toEqual({ rows: 1 });
+    expect(storageMock.replaceTestQuestionScoring).toHaveBeenCalledWith("test-1", [
+      expect.objectContaining({ questionId: "newq-1", points: 2, difficulty: 80, scoringJson: null }),
+    ]);
+  });
 });
 
 // ─── Legacy «Вопросы»-sheet scoring fallback (нет листа «Оценка») ──────────────
@@ -458,6 +537,39 @@ describe("POST /:id/workbook/import — цена ответа на листе «
     expect(res.body.scoring.rows).toBe(0);
   });
 
+  // Регрессия исходного дефекта: книга сертификации РТК несла «Балл»=2 рядом с
+  // «Ценой ответа» в нераспознанной нотации — балл молча терялся, и вопрос
+  // проваливался к системному умолчанию в 1 балл.
+  it("невалидная «Цена ответа» на листе «Вопросы» не отменяет «Балл» строки", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [{ ...questionRow, "Балл": "2", "Цена ответа": "ступени: correct == total => 2" }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors.some((e: string) => /Вопросы.*одиночн/i.test(e))).toBe(true);
+    expect(res.body.scoring).toEqual({ rows: 1 });
+    expect(storageMock.replaceTestQuestionScoring).toHaveBeenCalledWith("test-1", [
+      expect.objectContaining({ questionId: "newq-1", points: 2, scoringJson: null }),
+    ]);
+  });
+
+  // PRD-10 §1.2: ключ РТК `%A2B1C1D0` — исходная нотация весов одиночного выбора.
+  it("разбирает ключ РТК «%…» в колонке «Цена ответа» листа «Вопросы»", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [{ ...questionRow, "Балл": "2", "Цена ответа": "%A0B2C1" }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    expect(storageMock.replaceTestQuestionScoring).toHaveBeenCalledWith("test-1", [
+      expect.objectContaining({
+        questionId: "newq-1",
+        points: 2,
+        scoringJson: { kind: "weighted", weights: [0, 2, 1] },
+      }),
+    ]);
+  });
+
   it("лист «Оценка» имеет приоритет над «Балл»/«Цена ответа» листа «Вопросы»", async () => {
     const buf = await makeWorkbook({
       "Вопросы": [{ ...questionRow, "Балл": "9", "Цена ответа": "веса: 1 # 0 # 0" }],
@@ -470,6 +582,75 @@ describe("POST /:id/workbook/import — цена ответа на листе «
     expect(storageMock.replaceTestQuestionScoring).toHaveBeenCalledWith("test-1", [
       expect.objectContaining({ questionId: "newq-1", points: 2, scoringJson: null }),
     ]);
+  });
+});
+
+// ─── Предупреждение о конфликте источников оценки ────────────────────────────
+// The template offers «Балл»/«Цена ответа» on «Вопросы» AND an «Оценка» sheet.
+// When a book carries both, «Оценка» silently wins — which is a surprise worth
+// saying out loud, especially when «Оценка» is empty and therefore CLEARS the
+// test's overrides while the author believes they filled them in on «Вопросы».
+
+describe("POST /:id/workbook/import — конфликт источников оценки", () => {
+  it("оба источника → предупреждение, что оценка взята с листа «Оценка»", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [{ ...questionRow, "Балл": "9" }],
+      "Оценка": [{ "Вопрос": "q1", "Балл": "2" }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.warnings).toHaveLength(1);
+    expect(res.body.warnings[0]).toContain("Оценка");
+    expect(res.body.warnings[0]).toContain("Вопросы");
+  });
+
+  it("пустой лист «Оценка» рядом с «Баллом» — предупреждение говорит, что строк 0", async () => {
+    // The trap: an untouched «Оценка» sheet from the template clears the whole
+    // override set, so the «Балл» the author filled in on «Вопросы» is dropped.
+    const buf = await makeWorkbook({
+      "Вопросы": [{ ...questionRow, "Балл": "9" }],
+      "Оценка": [],
+    });
+    // makeWorkbook skips empty sheets — add the header-only sheet explicitly.
+    const wb = await readWorkbookFromBuffer(buf);
+    wb.addWorksheet("Оценка").addRow(["Вопрос", "Балл", "Цена ответа", "Сложность"]);
+    const res = await postWorkbook(await workbookToBuffer(wb));
+
+    expect(res.body.warnings).toHaveLength(1);
+    expect(res.body.warnings[0]).toContain("0");
+    expect(res.body.scoring.rows).toBe(0);
+    expect(storageMock.replaceTestQuestionScoring).toHaveBeenCalledWith("test-1", []);
+  });
+
+  it("только лист «Оценка», без колонок на «Вопросах» → предупреждения нет", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      "Оценка": [{ "Вопрос": "q1", "Балл": "2" }],
+    });
+    const res = await postWorkbook(buf);
+    expect(res.body.warnings).toEqual([]);
+  });
+
+  it("только колонки на «Вопросах», без листа «Оценка» → предупреждения нет", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [{ ...questionRow, "Балл": "2" }],
+    });
+    const res = await postWorkbook(buf);
+    expect(res.body.warnings).toEqual([]);
+  });
+
+  it("колонки на «Вопросах» есть, но пусты → предупреждения нет", async () => {
+    // The shipped template carries both the «Оценка» sheet and the scoring
+    // columns, so a book that simply uses the canonical sheet must stay quiet.
+    const buf = await makeWorkbook({
+      "Вопросы": [{ ...questionRow, "Балл": "", "Цена ответа": "" }],
+      "Оценка": [{ "Вопрос": "q1", "Балл": "2" }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.warnings).toEqual([]);
+    expect(res.body.scoring.rows).toBe(1);
   });
 
   it("дедуплицированный вопрос сохраняет алиас «Ключ строки» для резолва цены", async () => {
@@ -607,8 +788,8 @@ describe("GET /:id/workbook/export", () => {
     expect(rows[0]).toMatchObject({ "Вопрос": "q1", "Балл": 7, "Сложность": 90 });
   });
 
-  // PRD-17 (FR-13): section variants round-trip via the «Варианты» column (numbers).
-  it("выгружает колонку «Варианты» номерами по позиции формы", async () => {
+  // PRD-17 (FR-13): section variants round-trip via «Варианты теста» (numbers).
+  it("выгружает колонку «Варианты теста» номерами по позиции формы", async () => {
     storageMock.getTestSections.mockResolvedValue([
       {
         topicId: "t1", drawCount: 5, sortOrder: 0, required: true, topicPassRuleJson: null, drawBlueprintJson: null,
@@ -621,7 +802,9 @@ describe("GET /:id/workbook/export", () => {
     storageMock.getQuestions.mockResolvedValue([exportQuestion, { ...exportQuestion, id: "q-2", prompt: "3+3?" }]);
     const res = await getExport();
     const wb = await readWorkbookFromBuffer(res.body as Buffer);
-    const byId = new Map(sheetToObjects(wb.getWorksheet("Вопросы")!).map((r: any) => [r["ID"], String(r["Варианты"])]));
+    const byId = new Map(
+      sheetToObjects(wb.getWorksheet("Вопросы")!).map((r: any) => [r["ID"], String(r["Варианты теста"])]),
+    );
     expect(byId.get("q-1")).toBe("1; 2"); // в обоих вариантах
     expect(byId.get("q-2")).toBe("2");
   });
@@ -659,5 +842,79 @@ describe("Round-trip: экспорт → реимпорт", () => {
         expect.objectContaining({ scaleId: "s-1", sourceType: "option", sourceKey: "1", valueJson: 3 }),
       ]),
     );
+  });
+});
+
+// ─── PRD-24: лист «Пороги вариантов» ─────────────────────────────────────────
+
+describe("POST /:id/workbook/import — «Пороги вариантов» (PRD-24 FR-14)", () => {
+  /** Two questions split across two variants of the same topic. */
+  const q = (key: string, variants: string) => ({
+    ...questionRow,
+    "Ключ строки": key,
+    "Текст вопроса": `Вопрос ${key}`,
+    "Варианты": variants,
+  });
+  const structure = [{ "Раздел": "JavaScript", "Вопросов в выборке": "1", "Тип порога": "По вариантам" }];
+
+  it("привязывает пороги к вариантам по номеру и складывает их в правило", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [q("q1", "1"), q("q2", "2")],
+      "Структура": structure,
+      "Пороги вариантов": [
+        { "Раздел": "JavaScript", "Вариант": "1", "Тип порога": "Процент", "Порог": "60" },
+        { "Раздел": "JavaScript", "Вариант": "2", "Тип порога": "Сумма баллов", "Порог": "1" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    const saved = testSettingsMock.save.mock.calls[0][1].sections[0];
+    const formIds = saved.formSetJson.forms.map((f: { id: string }) => f.id);
+    // keyed by the freshly minted formId, in variant order
+    expect(saved.topicPassRuleJson).toEqual({
+      source: "by_variant",
+      byForm: {
+        [formIds[0]]: { type: "percent", value: 60 },
+        [formIds[1]]: { type: "absolute", value: 1 },
+      },
+    });
+  });
+
+  it("номер варианта, которого нет у темы → ошибка строки", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [q("q1", "1"), q("q2", "2")],
+      "Структура": structure,
+      "Пороги вариантов": [
+        { "Раздел": "JavaScript", "Вариант": "1", "Тип порога": "Процент", "Порог": "60" },
+        { "Раздел": "JavaScript", "Вариант": "2", "Тип порога": "Процент", "Порог": "60" },
+        { "Раздел": "JavaScript", "Вариант": "9", "Тип порога": "Процент", "Порог": "60" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+    expect(res.body.errors.some((e: string) => /вариант 9 не объявлен/i.test(e))).toBe(true);
+  });
+
+  it("неполное покрытие вариантов → ошибка раздела (книга не обходит валидацию)", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [q("q1", "1"), q("q2", "2")],
+      "Структура": structure,
+      "Пороги вариантов": [{ "Раздел": "JavaScript", "Вариант": "1", "Тип порога": "Процент", "Порог": "60" }],
+    });
+    const res = await postWorkbook(buf);
+    expect(res.body.errors.some((e: string) => /задано 1 из 2 порогов/i.test(e))).toBe(true);
+  });
+
+  it("книга без листа порогов импортируется как прежде", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      "Структура": [{ "Раздел": "JavaScript", "Вопросов в выборке": "1", "Тип порога": "Процент", "Порог": "70" }],
+    });
+    const res = await postWorkbook(buf);
+    expect(res.body.errors).toEqual([]);
+    expect(testSettingsMock.save.mock.calls[0][1].sections[0].topicPassRuleJson).toEqual({
+      source: "custom", type: "percent", value: 70,
+    });
   });
 });

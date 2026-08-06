@@ -115,8 +115,23 @@ export interface GridProps extends React.HTMLAttributes<HTMLDivElement> {
   cols?: 1 | 2 | 3 | 4 | 5 | 6;
   /** Responsive auto-fit: each column is at least this preset min-width. */
   minItem?: GridMinItem;
-  /** Named column template: `label-control` = flexible label + fixed control column (center-aligned). */
-  template?: 'label-control';
+  /**
+   * Named column template.
+   *
+   * - `label-control` — flexible label + fixed control column (center-aligned).
+   * - `main-aside` — wide main column + narrow aside (2:1), top-aligned. The aside
+   *   (the SECOND child) sticks while the main column scrolls, so urgent items and
+   *   shortcuts stay reachable; on narrow viewports the grid collapses to one
+   *   column and the aside stops sticking. For work-surface pages that pair a
+   *   stream of content with a secondary rail.
+   * - `list-action` — a row list of «content + trailing action». The action column
+   *   is `max-content`, so it sizes to the WIDEST action in the list and every row
+   *   lines up, without a hand-picked width that a longer label (or a translation)
+   *   would break. Feed it a flat sequence of pairs; a `CardDivider` between rows
+   *   spans both columns on its own. Pair with `fullWidth` on the buttons so the
+   *   shorter ones stretch to the shared column.
+   */
+  template?: 'label-control' | 'main-aside' | 'list-action';
   gap?: Space;
 }
 

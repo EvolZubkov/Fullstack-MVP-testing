@@ -110,16 +110,15 @@ function render() {
     renderStandardQuestion(qData, current, total, progress);
 }
 
-/** Feedback block HTML shown under a question once the answer is accepted. */
+/** Feedback block HTML shown under a question once the answer is accepted.
+ *  Emits the shared DS `.ou-banner` (revision «Стандартный»), so standard and adaptive
+ *  answer-check verdicts share one component. */
 function buildQuestionFeedbackHtml(q) {
     var answer = state.answers[q.id];
     var scoreRatio = checkAnswer(q, answer);
     var isCorrect = scoreRatio === 1;
-    var statusColor = isCorrect ? '#16a34a' : '#dc2626';
-    var statusText = isCorrect ? 'Правильно!' : (scoreRatio > 0 ? 'Частично правильно' : 'Неправильно');
-
-    var html = '<div class="feedback-block" style="margin-top:16px;padding:12px;border-radius:8px;background:' + (isCorrect ? '#dcfce7' : '#fee2e2') + ';border:1px solid ' + statusColor + ';">';
-    html += '<div style="font-weight:600;color:' + statusColor + ';margin-bottom:4px;">' + statusText + '</div>';
+    var tone = isCorrect ? 'success' : (scoreRatio > 0 ? 'warning' : 'error');
+    var statusText = isCorrect ? 'Правильно!' : (scoreRatio > 0 ? 'Частично правильно' : 'Неверно');
 
     var feedbackText = null;
     if (q.feedbackMode === 'conditional') {
@@ -127,11 +126,10 @@ function buildQuestionFeedbackHtml(q) {
     } else {
         feedbackText = q.feedback;
     }
-    if (feedbackText) {
-        html += '<div style="color:#333;font-size:14px;">' + escapeHtml(feedbackText) + '</div>';
-    }
-    html += '</div>';
-    return html;
+
+    var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    if (!TB || !TB.feedbackBanner) return '';
+    return TB.feedbackBanner(tone, statusText, feedbackText ? TB.feedbackDesc(feedbackText) : '');
 }
 
 // PRD-19 (Block D): true when the current scope has ≥1 skipped question — drives
@@ -150,10 +148,44 @@ function hasSkippedInScope() {
     return false;
 }
 
+// PRD-19: does the scope still hold a question without a committed answer — the
+// input of the SHARED обзор gate (TBTemplate.shouldShowReview). `topicId` null =
+// the whole test (flat flow).
+function hasUnansweredInScope(topicId) {
+    if (!state.flatQuestions) return false;
+    for (var i = 0; i < state.flatQuestions.length; i++) {
+        var fq = state.flatQuestions[i];
+        if (!fq || !fq.question) continue;
+        if (topicId && fq.topicId !== topicId) continue;
+        if (!state.questionStatuses || state.questionStatuses[fq.question.id] !== 'answered') return true;
+    }
+    return false;
+}
+
+// PRD-19: the shared gate — shown only while the learner can still act there
+// (return to a skipped question, or revise an answer). Otherwise the flow goes
+// straight to the section results.
+function reviewIsWorthShowing(topicId) {
+    var TB = typeof TBTemplate !== 'undefined' ? TBTemplate : null;
+    var input = {
+        allowReturnToUnanswered: TEST_DATA.allowReturnToUnanswered,
+        allowAnswerChange: TEST_DATA.allowAnswerChange,
+        hasUnanswered: hasUnansweredInScope(topicId),
+    };
+    if (TB && typeof TB.shouldShowReview === 'function') return TB.shouldShowReview(input);
+    // Bundle missing (defensive): fall back to the same rule inline.
+    if (input.allowAnswerChange) return true;
+    return input.allowReturnToUnanswered !== false && input.hasUnanswered;
+}
+
 // PRD-19 (Block D): open the обзор screen (section-finish / test-finish).
-function goToReview() {
+// `fromButton` = opened via «К обзору» MID-flow (not the end-of-flow обзор): remember
+// the origin question so the обзор can offer an accented «Назад» back to it and demote
+// «Завершить …» (cut accidental finishes). End-of-flow entry passes nothing → null.
+function goToReview(fromButton) {
     state.phase = 'review';
     state.feedbackShown = false;
+    state.reviewOrigin = fromButton ? state.currentIndex : null;
     render();
 }
 
@@ -167,27 +199,32 @@ function showFinishConfirm(unansweredCount, finishLabel, onConfirm) {
     if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
     var back = document.createElement('div');
     back.id = 'tb-finish-modal';
-    back.className = 'tb-modal-backdrop';
+    // DS ou-modal; <html> is the .ou theme provider, so DS tokens resolve here.
+    back.className = 'ou-modal-root';
     back.setAttribute('role', 'dialog');
     back.setAttribute('aria-modal', 'true');
     back.innerHTML =
-        '<div class="tb-modal">' +
-          '<div class="tb-modal__head">' +
-            '<div class="tb-modal__icon" aria-hidden="true">!</div>' +
-            '<div><h2 class="tb-modal__title">' + escapeHtml(finishLabel) + '?</h2>' +
-            '<p class="tb-modal__desc">Вопросов без ответа: ' + unansweredCount +
-              '. Они будут засчитаны как неверные. После завершения вернуться к ним нельзя.</p></div>' +
+        '<div class="ou-modal__backdrop" data-modal="cancel"></div>' +
+        '<div class="ou-modal ou-modal--s">' +
+          '<div class="ou-modal__head ou-modal__head--icon">' +
+            '<span class="ou-modal__icon ou-modal__icon--warning" aria-hidden="true">' +
+              '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>' +
+            '</span>' +
+            '<div class="ou-modal__head-text">' +
+              '<h2 class="ou-modal__title">' + escapeHtml(finishLabel) + '?</h2>' +
+              '<p class="ou-modal__desc">Вопросов без ответа: ' + unansweredCount +
+                '. Они будут засчитаны как неверные. После завершения вернуться к ним нельзя.</p>' +
+            '</div>' +
           '</div>' +
-          '<div class="tb-modal__foot">' +
-            '<button type="button" class="btn btn-outline" data-modal="cancel">Отмена</button>' +
-            '<button type="button" class="btn" data-modal="confirm">' + escapeHtml(finishLabel) + '</button>' +
+          '<div class="ou-modal__foot">' +
+            '<button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-modal="cancel">Отмена</button>' +
+            '<button type="button" class="ou-btn ou-btn--primary ou-btn--m" data-modal="confirm">' + escapeHtml(finishLabel) + '</button>' +
           '</div>' +
         '</div>';
     document.body.appendChild(back);
     function close() { if (back.parentNode) back.parentNode.removeChild(back); }
-    back.querySelector('[data-modal="cancel"]').addEventListener('click', close);
+    Array.prototype.forEach.call(back.querySelectorAll('[data-modal="cancel"]'), function (el) { el.addEventListener('click', close); });
     back.querySelector('[data-modal="confirm"]').addEventListener('click', function () { close(); onConfirm(); });
-    back.addEventListener('click', function (e) { if (e.target === back) close(); });
 }
 
 // PRD-19 (Block D / D5): true when `topicId` is the LAST section in delivery order
@@ -233,19 +270,37 @@ function renderReviewScreen() {
         else { submit(); }
         return;
     }
+    // Opened via «К обзору» mid-flow? Then offer «Назад» to the origin question and
+    // highlight it as «текущий». Only questions the learner has actually reached
+    // (flat index <= the current position) or committed are «delivered» — the обзор
+    // must not reveal not-yet-issued questions.
+    var fromButton = (state.reviewOrigin !== null && state.reviewOrigin !== undefined);
+    var frontier = state.currentIndex;
+    var statusMap = state.questionStatuses || {};
     var built = TB.buildReviewContext({
-        questions: state.flatQuestions.map(function (fq) {
-            return { id: fq.question.id, topicId: fq.topicId, prompt: fq.question.prompt };
+        questions: state.flatQuestions.map(function (fq, i) {
+            var st = statusMap[fq.question.id];
+            return {
+                id: fq.question.id, topicId: fq.topicId, prompt: fq.question.prompt,
+                delivered: (i <= frontier) || st === 'answered' || st === 'skipped'
+            };
         }),
-        statuses: state.questionStatuses || {},
+        statuses: statusMap,
         commitScope: sectionScope ? 'section' : 'test',
         scopeTopicId: scopeTopicId,
         isTest: !sectionScope,
         scopeLabel: sectionScope ? ('Раздел «' + scopeName + '» · обзор') : 'Обзор теста',
-        finishLabel: finishLabel
+        finishLabel: finishLabel,
+        currentIndex: fromButton ? state.currentIndex : -1,
+        canReturn: fromButton,
+        backLabel: 'Назад'
     });
     var context = {
-        course: { title: TEST_DATA.title },
+        course: {
+            title: TEST_DATA.title,
+            timeLimitMinutes: TEST_DATA.timeLimitMinutes || null,
+            maxAttempts: TEST_DATA.maxAttempts || null
+        },
         design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {},
         state: { questionsProgress: built.questionsProgress },
         review: built.review
@@ -254,6 +309,8 @@ function renderReviewScreen() {
     // Mount directly into #app so .tb-pad > .review-page fills the fixed stage
     // and the bottom nav anchors — mirrors renderGalleryPage (no wrapper div).
     TB.renderScreenInto(app, { layout: layout, context: context });
+    // Reveal + paint the running countdowns (the обзор is mid-test).
+    if (typeof revealSceneTimers === 'function') revealSceneTimers(app);
     var actionEls = app.querySelectorAll('[data-action]');
     Array.prototype.forEach.call(actionEls, function (el) {
         var a = el.getAttribute('data-action') || '';
@@ -265,8 +322,17 @@ function renderReviewScreen() {
                 // offers «К обзору» to return (the обзор itself has no «back»).
                 if (!isNaN(idx)) { state.fromReview = true; state.phase = 'question'; goToQuestionIndex(idx); }
             });
+        } else if (a === 'review-back') {
+            // «Назад» (mid-flow обзор): return to the question the learner came from.
+            el.addEventListener('click', function () {
+                var origin = state.reviewOrigin;
+                state.reviewOrigin = null;
+                state.phase = 'question';
+                goToQuestionIndex((typeof origin === 'number' && origin >= 0) ? origin : state.currentIndex);
+            });
         } else if (a === 'finish-review') {
             el.addEventListener('click', function () {
+                state.reviewOrigin = null;
                 var unanswered = built.review.unansweredCount;
                 if (sectionScope && scopeTopicId) {
                     // Section finish (D5): confirm-if-unanswered handled inside finishSection.
@@ -346,12 +412,20 @@ function renderSectionResults(topicId, isLast) {
     // Router mode returns to the hub («Продолжить»); the «Завершить тест» step lives
     // on the hub (FR-05b). Linear sectional uses «Завершить тест» only on the last.
     var isRouterMode = (typeof RouterFlow !== 'undefined' && RouterFlow.isRouterMode());
+    // Section position among the test's sections — drives the header «Раздел N из M»
+    // tag + progress (matching the wireframe). Absent order simply drops both.
+    var secList = (typeof TEST_DATA !== 'undefined' && TEST_DATA.sections) ? TEST_DATA.sections : [];
+    var secPos = 0;
+    for (var si = 0; si < secList.length; si++) { if (secList[si].topicId === topicId) { secPos = si + 1; break; } }
     var built = TB.buildSectionResultContext({
         topicName: sr.topicName,
         correct: sr.correct,
         total: sr.total,
         percent: sr.percent,
         passed: sr.passed,
+        courseTitle: TEST_DATA.title,
+        sectionIndex: secPos || undefined,
+        sectionsTotal: secList.length,
         continueLabel: (isLast && !isRouterMode) ? 'Завершить тест' : 'Продолжить'
     });
     var context = {
@@ -360,22 +434,25 @@ function renderSectionResults(topicId, isLast) {
         sectionResult: built.sectionResult
     };
     app.innerHTML = '';
-    // Mount directly into #app so .tb-pad > .results-page fills the fixed stage
+    // Mount directly into #app so .tb-pad > .tb-scene fills the fixed stage
     // (section-results ring centered) — mirrors renderGalleryPage (no wrapper div).
     TB.renderScreenInto(app, { layout: layout, context: context });
+    // Section-results is mid-test — reveal + paint the running countdowns.
+    if (typeof revealSceneTimers === 'function') revealSceneTimers(app);
     var btn = app.querySelector('[data-action="section-continue"]');
     if (btn) btn.addEventListener('click', advance);
 }
 
 /**
- * Navigation row HTML, onclick-wired. PRD-19 (Block B):
- * - strict-linear (allowReturnToUnanswered=false, B2): original single-button
- *   flow verbatim — «Принять» (showCorrectAnswers only) → «Далее»/«Завершить»;
- * - flexible (allowReturnToUnanswered=true, B3): before fixation two buttons —
- *   «Пропустить» (left) + «Отправить ответ» (right); after fixation «Далее»/
- *   «Завершить тест».
+ * Navigation STATE for the question layout's footer (`state.nav`). The row itself
+ * is drawn by the TEMPLATE — this runtime no longer builds buttons, it only
+ * resolves the run state the layout binds against (PRD-19 Block B: strict-linear
+ * vs flexible, fixation, «К обзору»), exactly as the web host does.
+ *
+ * The layout's buttons carry `data-action` and no inline handlers;
+ * {@link wireQuestionNav} binds them to this runtime's functions.
  */
-function buildQuestionNavHtml(current, total) {
+function buildQuestionNavState(current, total) {
     var hasNext = current < total - 1 ||
         (state.pageSequence && state.currentPageIndex < state.pageSequence.length - 1);
 
@@ -386,81 +463,70 @@ function buildQuestionNavHtml(current, total) {
     var submitReady = !navFq || typeof hasAnswer !== 'function'
         ? true
         : hasAnswer(navFq.question, state.answers[navFq.question.id]);
-    var submitDisabledAttr = submitReady ? '' : ' disabled';
-
-    if (!TEST_DATA.allowReturnToUnanswered) {
-        var sh = '<div class="navigation" style="justify-content:flex-end">';
-        if (TEST_DATA.showCorrectAnswers && !state.feedbackShown) {
-            sh += '<button class="btn" data-action="answer-submit" onclick="confirmAnswer()"' + submitDisabledAttr + '>Принять</button>';
-        } else if (hasNext) {
-            sh += '<button class="btn" data-nav="next" onclick="next()">Далее</button>';
-        } else {
-            sh += '<button class="btn" data-action="test-finish" onclick="submit()">Завершить тест</button>';
-        }
-        sh += '</div>';
-        return sh;
-    }
-
-    // Flexible mode. «Вернуться» → обзор (Block D) and the clickable progress
-    // pills (Block C) are layered on later; goToNextUnanswered() already backs them.
     var fq = state.flatQuestions[current];
     var committed = state.feedbackShown ||
         !!(fq && state.questionStatuses && state.questionStatuses[fq.question.id] === 'answered');
-
-    var left = '';
-    var right = '';
-    // PRD-19 (Block B): «Назад» — return to the previous accessible question
-    // (bounded to the current section in sectional flows). Parity with the web
-    // host (take-test.tsx); rendered always in flexible mode, disabled when no
-    // accessible previous question exists (first question of the test/section).
     var prevIdx = typeof prevAccessibleQuestionIndex === 'function' ? prevAccessibleQuestionIndex() : -1;
-    left += '<button class="btn btn-outline" data-action="answer-back" onclick="goBack()"' + (prevIdx < 0 ? ' disabled' : '') + '>← Назад</button>';
-    if (!committed) {
-        left += '<button class="btn btn-outline" data-action="answer-skip" onclick="skipQuestion()">Пропустить</button>';
-        right += '<button class="btn" data-action="answer-submit" onclick="confirmAnswer()"' + submitDisabledAttr + '>Отправить ответ</button>';
-    } else {
-        // PRD-19 (Block D / FR-16): the question page has NO finish button — «Далее»
-        // always advances; завершение happens on the обзор (section-finish/test-finish).
-        // On the last item «Далее» → advancePageSequence reaches the обзор (D5).
-        right += '<button class="btn" data-nav="next" onclick="next()">Далее</button>';
-    }
-    // PRD-19 (Block D / FR-04c): «К обзору» → обзор. Shown when skipped questions
-    // exist in scope (the obvious navigation path alongside the quick pills) OR the
-    // learner jumped here FROM the обзор (a review jump must always be able to return —
-    // the обзор itself has no «back»). Cleared when the section is finished.
-    if (hasSkippedInScope() || state.fromReview) {
-        left += '<button class="btn btn-outline" data-action="answer-return" onclick="goToReview()">К обзору</button>';
-    }
 
-    return '<div class="navigation">' +
-        '<div class="navigation__left" style="display:flex;gap:12px">' + left + '</div>' +
-        '<div class="navigation__right" style="display:flex;gap:12px">' + right + '</div>' +
-        '</div>';
+    return window.TBTemplate.buildQuestionNav({
+        flexible: !!TEST_DATA.allowReturnToUnanswered,
+        committed: committed,
+        canPrev: prevIdx >= 0,
+        answerReady: submitReady,
+        hasNext: hasNext,
+        showAccept: !!TEST_DATA.showCorrectAnswers && !state.feedbackShown,
+        showReview: hasSkippedInScope() || !!state.fromReview
+    });
 }
 
 /**
- * Stepped text-fit for the fixed-stage question body: when the prompt + options
- * overflow `.question-card`, lower the `--q-fit` multiplier (which the template CSS
- * applies to the prompt/option font + spacing) one discrete step at a time until it
- * fits — so content shrinks BEFORE the card scrolls. There is a LOWER BOUND: once the
- * smallest step is reached, stepping stops and the card's own overflow-y:auto takes
- * over (scroll is the fallback below the minimum readable size). No-op for cards that
- * do not overflow (e.g. scrolling, non-fixed-stage templates) — the first step fits.
- * @param {Element|null} card  The `.question-card` (or null → no-op).
+ * Binds the shared nav row's action attributes to this runtime's navigation
+ * functions. Replaces the inline `onclick`s the row used to carry — the markup is
+ * shared with the web host now, and behaviour is per host.
+ *
+ * @param {Element} row The `.tb-scene__foot` element just mounted.
  */
-function fitQuestionText(card) {
-  if (!card || !card.style) return;
-  card.classList.remove('question-card--scroll'); // measure with overflow visible
-  // 1 → 0.7: at most a 30% shrink; below that the text gets too small, so scroll.
-  var steps = [1, 0.94, 0.88, 0.82, 0.76, 0.7];
-  var fits = false;
-  for (var i = 0; i < steps.length; i++) {
-    card.style.setProperty('--q-fit', String(steps[i]));
-    if (card.scrollHeight <= card.clientHeight + 1) { fits = true; break; } // fits at this step
-  }
-  // Turn on scroll ONLY when even the smallest step overflows — scroll (overflow:hidden on
-  // x) clips the «Эталон» debug markers drawn in a left gutter, so keep it off otherwise.
-  if (!fits) card.classList.add('question-card--scroll');
+function wireQuestionNav(row) {
+    if (!row) return;
+    var handlers = {
+        'answer-back': function () { if (typeof goBack === 'function') goBack(); },
+        'answer-skip': function () { if (typeof skipQuestion === 'function') skipQuestion(); },
+        'answer-submit': function () { if (typeof confirmAnswer === 'function') confirmAnswer(); },
+        'answer-return': function () { if (typeof goToReview === 'function') goToReview(true); },
+        'answer-next': function () { if (typeof next === 'function') next(); },
+        'test-finish': function () { if (typeof submit === 'function') submit(); }
+    };
+    row.querySelectorAll('button').forEach(function (btn) {
+        var action = btn.getAttribute('data-action');
+        var handler = action ? handlers[action] : null;
+        if (handler) btn.addEventListener('click', handler);
+    });
+}
+
+/**
+ * Attempt line ("Попытка N из M") via the shared builder, so the SCORM and web
+ * screens read identically (parity, PRD-12). Used by the retake WALL only: the
+ * results header no longer carries the counter (run parameters are not header
+ * material), and the in-run header never did.
+ *
+ * The attempt number is REPORTED ONLY WHEN IT IS KNOWN. A package has no
+ * cross-attempt storage of its own (`suspend_data` is per attempt and WebTutor
+ * offers nothing else), so the number can only come from our telemetry endpoint.
+ * With telemetry off — the normal state of an LMS upload — the counter is a
+ * placeholder `1`, and printing it would tell a learner on their third attempt
+ * that it is their first. In that case the header stays title-only.
+ *
+ * @returns {string} "Попытка N из M", or "" when the number is not known.
+ */
+function scormCourseSubtitle() {
+    var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    if (!TB || !TB.buildCourseSubtitle) return '';
+    var known = typeof Telemetry !== 'undefined' && Telemetry.hasAttemptNumber && Telemetry.hasAttemptNumber();
+    if (!known) return '';
+    return TB.buildCourseSubtitle({
+        attemptNumber: Telemetry.getAttemptNumber(),
+        maxAttempts: TEST_DATA.maxAttempts || null
+    });
 }
 
 /**
@@ -468,7 +534,7 @@ function fitQuestionText(card) {
  * `question` layout via the SHARED renderer (TBTemplate.renderScreenInto) — the
  * SAME layout + renderer the web host mounts — filling the question chrome from a
  * public context + controlled slots; progress/timer are applied imperatively
- * (the layout ships #timer-display hidden). The nav row is appended below. Falls
+ * (the layout ships the DS timers hidden). The nav row is appended below. Falls
  * back to the original hardcoded chrome if the design template failed to load.
  */
 function renderStandardQuestion(qData, current, total, progress) {
@@ -494,26 +560,39 @@ function renderStandardQuestion(qData, current, total, progress) {
             scopeLabel: sectionScope ? ('Вопросы раздела «' + (qData.topicName || '') + '»') : 'Вопросы теста'
         }) : null;
         var context = {
-            course: { title: TEST_DATA.title },
-            state: { questionCounterLabel: counterLabel, sectionName: (qData.topicName || '') },
+            course: {
+                title: TEST_DATA.title,
+                timeLimitMinutes: TEST_DATA.timeLimitMinutes || null,
+                maxAttempts: TEST_DATA.maxAttempts || null
+            },
+            state: {
+                questionCounterLabel: counterLabel,
+                sectionName: (qData.topicName || ''),
+                nav: buildQuestionNavState(current, total),
+                questionHint: (TB && TB.questionHint) ? TB.questionHint(q.type) : '',
+                questionFont: (TB && TB.questionFont) ? TB.questionFont(q.prompt) : '',
+                optionFont: (TB && TB.optionFont && TB.answerTexts) ? TB.optionFont(TB.answerTexts({ type: q.type, dataJson: q.data })) : ''
+            },
             design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {}
         };
         if (qProgress) context.state.questionsProgress = qProgress;
         var slots = {
-            'question-text': escapeHtml(q.prompt),
+            'question-text': authorTextHtml(q.prompt),
             'question-media': renderQuestionMedia(q),
             'question-interaction': '<div id="question-input">' + renderQuestionInput(q) + '</div>',
             'question-feedback': showFeedback ? buildQuestionFeedbackHtml(q) : ''
         };
         app.innerHTML = '';
-        // Mount directly into #app so .tb-pad > .layout-question-wrap fills the
+        // Mount directly into #app so .tb-pad > .tb-scene fills the
         // fixed stage and the appended nav row anchors at the bottom — mirrors
         // renderGalleryPage (a wrapper div would defeat the child-combinator rule).
         TB.renderScreenInto(app, { layout: layout, context: context, slots: slots });
 
         // PRD-19 Block C: wire pill clicks → goToQuestionIndex (frontier enforced
-        // by the `disabled` attribute the builder set on non-reachable pills).
-        var pills = app.querySelectorAll('.tb-pill[data-action]');
+        // by the `disabled` attribute the builder set on non-reachable pills). The map
+        // pills are `.ou-quiz__dot` (revision «Стандартный»); the old `.tb-pill`
+        // selector matched nothing, so the navigator was dead on the question screen.
+        var pills = app.querySelectorAll('.ou-quiz__dot[data-action]');
         Array.prototype.forEach.call(pills, function (btn) {
             btn.addEventListener('click', function () {
                 if (btn.disabled) return;
@@ -536,24 +615,29 @@ function renderStandardQuestion(qData, current, total, progress) {
             }
         }
 
-        // Timer — the layout ships #timer-display hidden; reveal when a timer runs.
-        var timerEl = app.querySelector('#timer-display');
-        if (timerEl && state.remainingSeconds !== null) {
-            timerEl.classList.remove('q-timer--hidden');
-            timerEl.textContent = formatTime(state.remainingSeconds);
-            if (state.remainingSeconds <= 60) { timerEl.style.color = '#dc2626'; timerEl.style.fontWeight = 'bold'; timerEl.classList.add('q-timer--urgent'); }
-        }
+        // Timers — the layout ships both DS timers hidden; reveal + paint whichever
+        // countdown is running (presence thus follows the test/section time-limit
+        // settings). paintTimer drives the DS __num + is-critical state.
+        if (typeof revealSceneTimers === 'function') revealSceneTimers(app);
 
-        // Nav row below the card (kept onclick-wired; no global delegator needed).
-        var navWrap = document.createElement('div');
-        navWrap.innerHTML = buildQuestionNavHtml(current, total);
-        if (navWrap.firstChild) app.appendChild(navWrap.firstChild);
+        // The nav row came from the LAYOUT (state.nav); bind its buttons here.
+        wireQuestionNav(app.querySelector('.tb-scene__foot'));
 
         syncMatchingHeights();
-        // Stepped text-fit: shrink the prompt/options to fit the fixed stage before
-        // falling back to the card's internal scroll. Measured AFTER the nav is in
-        // place (so the card's available height is final).
-        fitQuestionText(app.querySelector('.question-card'));
+        // The length-based questionFont/optionFont set the INITIAL --tb-question-fs /
+        // --tb-answer-fs; a HEIGHT-based pass then balances them: the header takes up to
+        // 1/4 of the field at the largest size that fits, the options take the largest
+        // size that keeps them all on screen without scrolling. Re-run on resize.
+        if (TB && TB.fitQuestionScene) {
+            var fitCol = function () {
+                TB.fitQuestionScene(app.querySelector('.tb-scene__body'), app.querySelector('.tb-scene__col'), app.querySelector('.tb-scene__q'));
+            };
+            fitCol();
+            requestAnimationFrame(fitCol); // after fonts/layout settle
+            if (state._fitQ) window.removeEventListener('resize', state._fitQ);
+            state._fitQ = fitCol;
+            window.addEventListener('resize', fitCol);
+        }
         return;
     }
 
@@ -571,7 +655,7 @@ function renderStandardQuestion(qData, current, total, progress) {
     }
     html += '<div class="card">';
     html += '<div style="color:#666;margin-bottom:8px;">Вопрос ' + (current + 1) + ' из ' + total + ' | ' + escapeHtml(qData.topicName) + '</div>';
-    html += '<div class="question-text">' + escapeHtml(q.prompt) + '</div>';
+    html += '<div class="question-text">' + authorTextHtml(q.prompt) + '</div>';
     html += renderQuestionMedia(q);
     html += '<div id="question-input">';
     html += renderQuestionInput(q);
@@ -580,9 +664,10 @@ function renderStandardQuestion(qData, current, total, progress) {
         html += buildQuestionFeedbackHtml(q);
     }
     html += '</div>';
-    html += buildQuestionNavHtml(current, total);
 
     app.innerHTML = html;
+    // Same shared row here, so the no-template fallback keeps working navigation.
+    wireQuestionNav(app.querySelector('.tb-scene__foot'));
     syncMatchingHeights();
 }
 

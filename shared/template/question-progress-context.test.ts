@@ -35,7 +35,9 @@ describe("buildQuestionProgress", () => {
     expect(r.total).toBe(4);
     expect(r.answeredCount).toBe(1);
     expect(r.skippedCount).toBe(1);
-    expect(r.states.map((s) => s.statusClass)).toEqual(["is-answered", "is-skipped", "is-current", ""]);
+    // Skipped pills carry `is-flagged` (the DS `.ou-quiz__dot.is-flagged::after` corner
+    // marker), which STATUS_WORD maps to «пропущен».
+    expect(r.states.map((s) => s.statusClass)).toEqual(["is-answered", "is-flagged", "is-current", ""]);
     // Frontier: issued (<= current) are clickable; the future q4 is not.
     expect(r.states.map((s) => s.clickable)).toEqual([true, true, true, false]);
     // goto target is the absolute index; display number is 1-based.

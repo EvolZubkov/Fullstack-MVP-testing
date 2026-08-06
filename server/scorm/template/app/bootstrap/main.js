@@ -75,6 +75,9 @@
       // биндинги DnD
       bindMatchingDnDOnce();
       bindRankingDnDOnce();
+      // Делегированные клики по вариантам/ранжированию из общей эмиссии
+      // (data-action="select:N" / "rank-up|rank-down:pos") — заменяют inline onclick.
+      if (typeof bindQuestionInputClicksOnce === 'function') bindQuestionInputClicksOnce();
 
       // ===== ВОССТАНОВЛЕНИЕ СЕССИИ =====
       var recovery = determineRecovery();

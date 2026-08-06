@@ -22,6 +22,7 @@
 export const ROLES = {
   SUPERADMIN: "superadmin",
   ADMINISTRATOR: "administrator",
+  DEVELOPER: "developer",
   AUTHOR: "author",
   MANAGER: "manager",
   LEARNER: "learner",
@@ -36,6 +37,7 @@ export type Role = (typeof ROLES)[keyof typeof ROLES];
  */
 export const STORED_ROLES = [
   ROLES.ADMINISTRATOR,
+  ROLES.DEVELOPER,
   ROLES.AUTHOR,
   ROLES.MANAGER,
   ROLES.LEARNER,
@@ -51,10 +53,26 @@ export type StoredRole = (typeof STORED_ROLES)[number];
 export const ROLE_PRIORITY: readonly Role[] = [
   ROLES.SUPERADMIN,
   ROLES.ADMINISTRATOR,
+  ROLES.DEVELOPER,
   ROLES.AUTHOR,
   ROLES.MANAGER,
   ROLES.LEARNER,
 ];
+
+/**
+ * The authoring class: roles whose object-level scope over content is the one
+ * described for the author in role-model.md section 6 — own topics/tests plus
+ * grants, and the shared topic pool. `developer` is an author who additionally
+ * generates SCORM packages, so every scope rule that names the author must name
+ * it too. Use {@link hasAuthoringRole} instead of comparing against
+ * `ROLES.AUTHOR` directly.
+ */
+export const AUTHORING_ROLES: readonly Role[] = [ROLES.DEVELOPER, ROLES.AUTHOR];
+
+/** Does the role set contain any role of the authoring class. */
+export function hasAuthoringRole(roles: readonly Role[]): boolean {
+  return AUTHORING_ROLES.some((role) => roles.includes(role));
+}
 
 /** Type guard: is the given string a storable/assignable role. */
 export function isStoredRole(value: string): value is StoredRole {

@@ -1,27 +1,57 @@
-<div class="results-page section-results">
-  {{#if design.logoUrl}}<div class="tb-brand"><img class="tb-brand__logo" src="{{ design.logoUrl }}" alt=""></div>{{/if}}
-  <div class="card section-results__card">
-    <div class="section-results__eyebrow">Итоги раздела</div>
-    <div class="section-results__title">Раздел «<span data-path="sectionResult.topicName"></span>»</div>
-
-    <div class="results-ring">
-      <svg viewBox="0 0 140 140" width="140" height="140">
-        <circle cx="70" cy="70" r="63" class="ring-bg" stroke-width="14" fill="none"></circle>
-        <circle cx="70" cy="70" r="63" class="ring-fg {{ sectionResult.passClass }}" stroke-width="14" fill="none" stroke-linecap="round" style="stroke-dasharray:395.84;stroke-dashoffset:{{ sectionResult.ringDashoffset }}"></circle>
-      </svg>
-      <div class="results-ring-center">
-        <div class="results-ring-pct"><span data-path="sectionResult.scorePercent"></span>%</div>
-        <div class="results-ring-label">Баллы</div>
+<div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow tb-scene__brandrow--center">
+      {{#if design.logoUrl}}<span class="tb-scene__logo"><img src="{{ design.logoUrl }}" alt=""></span>{{/if}}
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title"></h1>
+        {{#if course.subtitle}}<span class="tb-scene__subtitle" data-path="course.subtitle"></span>{{/if}}
+      </div>
+      {{#if sectionResult.sectionLabel}}<div class="tb-scene__headtag"><span class="ou-tag ou-tag--neutral" data-path="sectionResult.sectionLabel"></span></div>{{/if}}
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
       </div>
     </div>
+    {{#if sectionResult.sectionLabel}}<div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width:{{sectionResult.progressPercent}}%"></div></div>{{/if}}
+  </header>
 
-    <div class="section-results__summary" data-path="sectionResult.summaryLabel"></div>
-    {{#if sectionResult.hasVerdict}}
-    <div class="results-pill {{ sectionResult.passClass }}" data-path="sectionResult.statusLabel"></div>
-    {{/if}}
+  <main class="tb-scene__body">
+    <div class="tb-scene__col tb-scene__col--center tb-scene__col--narrow">
+      <span class="tb-eyebrow">Итоги раздела</span>
+      <h2 class="tb-scene__hero tb-scene__hero--s">Раздел «<span data-path="sectionResult.topicName"></span>»</h2>
 
-    <div class="q-actions q-actions--center">
-      <button type="button" class="btn" data-action="section-continue">{{ sectionResult.continueLabel }}</button>
+      <div class="ou-ring tb-ring">
+        <svg class="ou-ring__svg" width="140" height="140" viewBox="0 0 140 140">
+          <circle class="ou-ring__track" cx="70" cy="70" r="63" stroke-width="12"></circle>
+          <circle class="ou-ring__fill {{ sectionResult.passClass }}" cx="70" cy="70" r="63" stroke-width="12" stroke-linecap="round" stroke-dasharray="395.84" stroke-dashoffset="{{ sectionResult.ringDashoffset }}"></circle>
+        </svg>
+        <div class="ou-ring__center">
+          <div class="ou-ring__value"><span data-path="sectionResult.scorePercent"></span>%</div>
+          <div class="ou-ring__label">баллы</div>
+        </div>
+      </div>
+
+      {{#if sectionResult.hasVerdict}}<span class="ou-tag {{ sectionResult.passClass }}" data-path="sectionResult.statusLabel"></span>{{/if}}
+
+      <div class="tb-facts tb-facts--center">
+        <div class="tb-facts__item">
+          <div class="tb-facts__num" data-path="sectionResult.total"></div>
+          <div class="tb-facts__lbl">вопросов</div>
+        </div>
+        <div class="tb-facts__item">
+          <div class="tb-facts__num">{{sectionResult.correct}} / {{sectionResult.total}}</div>
+          <div class="tb-facts__lbl">верно</div>
+        </div>
+      </div>
     </div>
-  </div>
+  </main>
+
+  <footer class="tb-scene__foot">
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="section-continue">{{ sectionResult.continueLabel }}</button>
+  </footer>
 </div>

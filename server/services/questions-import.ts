@@ -16,6 +16,8 @@ import { createHash } from "crypto";
 import { storage } from "../storage";
 import { logger } from "../logger";
 import { normalizeTags } from "@shared/tags";
+import { hasOptionList, hasFixedOptionOrder, isMeasurementOnly } from "@shared/questions/question-type";
+import { normalizeIncomingText, normalizeQuestionData } from "./question-text";
 import type { Question } from "@shared/schema";
 import type { Role } from "@shared/access";
 import {
@@ -33,9 +35,12 @@ const typeFromExcel: Record<string, string> = {
   ranking: "ranking",
   single: "single",
   multiple: "multiple",
+  // PRD-26: the scale is declared by its own name. Its rule for the correct-answer
+  // column differs from single choice — an empty cell means measurement mode (FR-23).
+  scale: "scale",
 };
 
-type QuestionType = "single" | "multiple" | "matching" | "ranking";
+type QuestionType = "single" | "multiple" | "matching" | "ranking" | "scale";
 
 /** SHA-256 от type + prompt + нормализованные варианты ответов. */
 export function computeQuestionHash(type: string, prompt: string, dataJson: unknown): string {
@@ -60,6 +65,12 @@ export interface ResolvedQuestion {
   unitCount: number;
   /** Content hash — pins «Оценка» overrides to the question state (FR-30). */
   contentHash: string | null;
+  /**
+   * PRD-26: the question is a measurement-only scale (no correct graduation), so the
+   * «Оценка» sheet has nothing to price on it. Carried here so the workbook passes do
+   * not have to re-read the question just to learn this.
+   */
+  measurementOnly: boolean;
 }
 
 export interface QuestionImportResult {
@@ -67,13 +78,27 @@ export interface QuestionImportResult {
   updated: number;
   skipped: number;
   errors: string[];
+  /**
+   * Non-blocking notices: the row imports, but something in it is likely not what the
+   * author meant. Same channel the workbook import already exposes; forwarded there
+   * prefixed with the sheet name.
+   */
+  warnings: string[];
   /** Local `Ключ строки` alias → resolved question (FR-15.6). */
   aliasToQuestion: Map<string, ResolvedQuestion>;
 }
 
+/**
+ * Read one text cell the way the import must store it: markup converted to the
+ * markdown subset, whitespace canonical. An empty cell reads as an empty string.
+ */
+function cellText(raw: unknown): string {
+  return normalizeIncomingText(String(raw ?? ""), { convertHtml: true });
+}
+
 /** Derive the option/pair/item count from a parsed dataJson. */
 function unitCountOf(type: QuestionType, dataJson: any): number {
-  if (type === "single" || type === "multiple") return dataJson.options?.length ?? 0;
+  if (hasOptionList(type)) return dataJson.options?.length ?? 0;
   if (type === "matching") return dataJson.left?.length ?? 0;
   return dataJson.items?.length ?? 0;
 }
@@ -126,6 +151,7 @@ export async function importQuestionRows(
     updated: 0,
     skipped: 0,
     errors: [],
+    warnings: [],
     aliasToQuestion: new Map(),
   };
 
@@ -168,31 +194,68 @@ export async function importQuestionRows(
         continue;
       }
 
-      // Текст вопроса.
-      const prompt = String(row["Текст вопроса"] || row["Вопрос"] || "").trim();
+      // Текст вопроса — в канонической форме: ячейка приходит из Word, из чужой
+      // системы или из ручной правки, а храниться должна так же, как из редактора.
+      // Разметку в ячейке переводим в markdown: автор её не набирал, а хранить
+      // теги как видимые символы — значит показать ученику «<b>».
+      const prompt = cellText(row["Текст вопроса"] || row["Вопрос"]);
       if (!prompt) {
         result.errors.push(`Строка ${rowNum}: пустой вопрос`);
         continue;
       }
 
-      // Варианты и правильные ответы.
-      const optionsStr = String(row["Тексты вариантов ответа"] || row["Варианты"] || "").trim();
+      // Варианты и правильные ответы. «Варианты» is the ancient name of the
+      // options column, but on a workbook sheet that name belongs to the variant
+      // membership («Варианты теста» since the rename) — so the alias applies only
+      // when the canonical options column is ABSENT, i.e. on a truly old file.
+      const optionsStr = String(
+        row["Тексты вариантов ответа"] ||
+          (hasCol("Тексты вариантов ответа") ? "" : row["Варианты"]) ||
+          "",
+      ).trim();
       const correctStr = String(row["Номера правильных ответов"] || row["Правильный ответ"] || "").trim();
 
       let dataJson: unknown = {};
       let correctJson: unknown = {};
 
-      if (type === "single" || type === "multiple") {
+      if (hasOptionList(type)) {
         const separator = optionsStr.includes("#") ? "#" : "|";
         const options = optionsStr.split(separator).map((s) => s.trim()).filter(Boolean);
 
         if (options.length < 2) {
-          result.errors.push(`Строка ${rowNum}: нужно минимум 2 варианта ответа`);
+          result.errors.push(
+            type === "scale"
+              ? `Строка ${rowNum}: нужно минимум 2 градации шкалы`
+              : `Строка ${rowNum}: нужно минимум 2 варианта ответа`,
+          );
           continue;
         }
         dataJson = { options };
 
-        if (type === "single") {
+        if (type === "scale") {
+          // PRD-26 FR-23: the correct-answer column IS the author's switch. Empty →
+          // measurement mode: `{}`, never `null` (the column is NOT NULL). One number
+          // → a checked scale. Several numbers make no sense: a scale answer is one
+          // graduation, and silently taking the first would hide the author's mistake.
+          if (correctStr === "") {
+            correctJson = {};
+          } else {
+            const nums = correctStr.split(/[,;.\s]+/).filter(Boolean);
+            if (nums.length > 1) {
+              result.errors.push(
+                `Строка ${rowNum}: у шкалы правильная градация одна или её нет вовсе; ` +
+                  `указано несколько номеров "${correctStr}"`,
+              );
+              continue;
+            }
+            const idx = parseInt(nums[0], 10) - 1;
+            if (isNaN(idx) || idx < 0 || idx >= options.length) {
+              result.errors.push(`Строка ${rowNum}: некорректный номер правильной градации "${correctStr}"`);
+              continue;
+            }
+            correctJson = { correctIndex: idx };
+          }
+        } else if (type === "single") {
           const idx = parseInt(correctStr, 10) - 1;
           if (isNaN(idx) || idx < 0 || idx >= options.length) {
             result.errors.push(`Строка ${rowNum}: некорректный номер правильного ответа "${correctStr}"`);
@@ -312,6 +375,17 @@ export async function importQuestionRows(
       // Следование вариантов.
       const shuffleStr = String(row["Следование вариантов ответов"] || "Random").trim().toLowerCase();
       const shuffleAnswers = shuffleStr !== "fixed";
+      // PRD-26 FR-24: the column does not apply to a scale — the order of graduations
+      // runs from one pole to the other and is never shuffled. An explicit `Random`
+      // is not an error (the value is stored, both hosts ignore it), but it means the
+      // author expected something that will not happen, so it is worth saying.
+      if (hasFixedOptionOrder(type) && hasCol("Следование вариантов ответов") && shuffleAnswers && shuffleStr !== "") {
+        result.warnings.push(
+          `Строка ${rowNum}: у шкалы порядок градаций содержателен и не перемешивается — ` +
+            `значение «${String(row["Следование вариантов ответов"]).trim()}» в колонке ` +
+            `«Следование вариантов ответов» не применяется`,
+        );
+      }
 
       // PRD-14 Ф0 (FR-04): сложность сохраняет явный 0; диапазон 0..100. T-40:
       // «Балл» больше не свойство вопроса — цена задаётся листом «Оценка» теста.
@@ -328,9 +402,16 @@ export async function importQuestionRows(
       const feedbackModeRaw = String(row["Режим ОС"] || "").trim().toLowerCase();
       const feedbackMode: "general" | "conditional" =
         feedbackModeRaw === "условная" || feedbackModeRaw === "conditional" ? "conditional" : "general";
-      const feedback = String(row["Обратная связь"] || "").trim() || null;
-      const feedbackCorrect = String(row["ОС при верном"] || "").trim() || null;
-      const feedbackIncorrect = String(row["ОС при неверном"] || "").trim() || null;
+      const feedback = cellText(row["Обратная связь"]) || null;
+      const feedbackCorrect = cellText(row["ОС при верном"]) || null;
+      const feedbackIncorrect = cellText(row["ОС при неверном"]) || null;
+
+      // Canonical answer texts BEFORE the hash: the hash deduplicates imported
+      // rows and pins published snapshots, so hashing a value the write path is
+      // about to rewrite would produce a hash no stored row can ever match.
+      // Per element, AFTER the separator split — otherwise markup spanning two
+      // options would swallow the `#`/`|` between them.
+      dataJson = normalizeQuestionData(dataJson, { convertHtml: true });
 
       // The unit count (options / pairs / items) backs the «Измерения» alias.
       const unitCount = unitCountOf(type, dataJson);
@@ -416,7 +497,7 @@ export async function importQuestionRows(
           if (hasCol("Теги")) updatePayload.tags = tags;
           if (!dryRun) await storage.updateQuestion(rowId, updatePayload as any);
           result.updated++;
-          recordAlias(row, { id: rowId, type, unitCount, contentHash });
+          recordAlias(row, { id: rowId, type, unitCount, contentHash, measurementOnly: isMeasurementOnly({ type, correctJson }) });
           continue;
         }
       }
@@ -437,6 +518,7 @@ export async function importQuestionRows(
               id: dup.id,
               type: dup.type as QuestionType,
               unitCount: unitCountOf(dup.type as QuestionType, dup.dataJson),
+              measurementOnly: isMeasurementOnly(dup),
               contentHash: dup.contentHash ?? contentHash,
             });
           }
@@ -468,7 +550,7 @@ export async function importQuestionRows(
 
       existingHashes.add(contentHash);
       result.created++;
-      recordAlias(row, { id: newId, type, unitCount, contentHash });
+      recordAlias(row, { id: newId, type, unitCount, contentHash, measurementOnly: isMeasurementOnly({ type, correctJson }) });
     } catch (err) {
       result.errors.push(`Строка ${rowNum}: ${(err as Error).message}`);
     }
