@@ -16,6 +16,7 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { renderScreenInto } from "../shared/template/render-screen";
+import { buildResultContext } from "../shared/template/result-context";
 import { buildResultsNav } from "../shared/template/results-nav";
 
 const layoutsDir = path.join(process.cwd(), "server", "scorm", "templates", "default", "layouts");
@@ -410,6 +411,74 @@ describe("results.adaptive.html — консолидированный блок 
       expect(root.querySelector(".tb-recs-block")).not.toBeNull();
       expect(root.querySelectorAll(".tb-recs-group")).toHaveLength(1);
       expect(root.querySelector(".tb-eyebrow")).toBeNull();
+    });
+  }
+});
+
+/**
+ * Блок «Результаты по темам» целиком: он держится на НАЛИЧИИ темы в контексте, а всё
+ * его содержимое гасится поодиночке. У чисто измерительного теста (опросник Маслач)
+ * это оставляло на экране заголовок, разделитель и карточку с названием темы и вечно
+ * пустой полосой прогресса — блок без единого факта. Правило живёт в построителе, а не
+ * в макете, поэтому проверяется именно связка «построитель + макет» и на ОБОИХ
+ * шаблонах: сторонние шаблоны гасят заголовок тем же `{{#if result.topicResults}}`.
+ */
+describe("results.html — блок «Результаты по темам» молчит, когда темам нечего сказать", () => {
+  const measurementRun = {
+    passed: false,
+    percent: 0,
+    totalQuestions: 22,
+    correct: 0,
+    earnedPoints: 0,
+    possiblePoints: 0,
+    topicResults: [
+      {
+        topicId: "t1",
+        topicName: "Опросник профессионального выгорания Маслач",
+        correct: 0,
+        total: 0,
+        percent: 0,
+        earnedPoints: 0,
+        possiblePoints: 0,
+        passed: null,
+      },
+    ],
+  };
+
+  for (const [templateId, layout] of standardLayouts) {
+    it(`${templateId}: измерительная тема не оставляет ни заголовка, ни карточки`, () => {
+      const root = render(layout, buildResultContext(measurementRun, "Опросник", { withTopicPoints: true }));
+      expect(root.querySelector(".tb-topics-grid")).toBeNull();
+      expect(root.querySelector(".tb-topic-card")).toBeNull();
+      expect(root.textContent).not.toContain("Результаты по темам");
+    });
+
+    it(`${templateId}: оцениваемая тема блок сохраняет`, () => {
+      const graded = {
+        ...measurementRun,
+        topicResults: [
+          { ...measurementRun.topicResults[0], correct: 3, total: 4, percent: 75, earnedPoints: 3, possiblePoints: 4 },
+        ],
+      };
+      const root = render(layout, buildResultContext(graded, "Тест", { withTopicPoints: true }));
+      expect(root.querySelector(".tb-topic-card")).not.toBeNull();
+      expect(root.textContent).toContain("Результаты по темам");
+    });
+
+    it(`${templateId}: у темы без оценивания нет и полосы прогресса`, () => {
+      // Карточка выживает ради курсов темы — показать их больше негде, — но полоса
+      // прогресса без оцениваемых вопросов всегда пуста и означать ничего не может.
+      const withCourses = {
+        ...measurementRun,
+        topicResults: [
+          { ...measurementRun.topicResults[0], recommendedCourses: [{ title: "Курс A", url: "https://e/a" }] },
+        ],
+      };
+      const root = render(layout, buildResultContext(withCourses, "Опросник", { withTopicPoints: true }));
+      const card = root.querySelector(".tb-topic-card") as HTMLElement;
+      expect(card).not.toBeNull();
+      expect(card.querySelector(".tb-topic-card__bar")).toBeNull();
+      expect(card.querySelector("a.tb-rec")?.getAttribute("href")).toBe("https://e/a");
     });
   }
 });

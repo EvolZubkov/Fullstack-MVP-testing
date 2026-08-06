@@ -266,28 +266,69 @@ describe("строка «Баллов» темы следует за настр�
   });
 });
 
-describe("тема без оцениваемых вопросов не печатает «Баллов»", () => {
+describe("тема, которой нечего сказать, карточки не получает", () => {
   // aggregateStandardResult никогда не засчитывает измерительные вопросы в `total`
-  // темы — у чисто измерительной темы `total: 0` и `possiblePoints: 0`. Строка
-  // «Баллов 0.0 / 0.0» в такой теме — та же бессмыслица, ради которой существует
-  // `hideScoreSummary`, только уровнем ниже; макет гасит соседнюю строку «Правильно»
-  // по тому же признаку (`{{#if total}}`), так что обе строки должны молчать вместе.
+  // темы — у чисто измерительной темы `total: 0` и `possiblePoints: 0`. Все слоты
+  // карточки такой темы гасятся поодиночке: «Правильно» — по `total`, «Баллов» — по
+  // `pointsLabel`, плашка вердикта — по пустой метке. Остаётся заголовок «Результаты
+  // по темам», разделитель и карточка с названием темы и вечно пустой полосой —
+  // ровно та бессмыслица, ради которой существует `hideScoreSummary`, уровнем ниже.
+  // Такая тема выбывает из `topicResults` целиком: пустой массив макеты гасят вместе
+  // с заголовком (`{{#if result.topicResults}}`), включая сторонние шаблоны.
   const measurementOnlyTopic = {
     ...BASE,
     topicResults: [{ topicId: "t1", topicName: "Тема 1", correct: 0, total: 0, percent: 0, earnedPoints: 0, possiblePoints: 0, passed: null }],
   };
 
-  it("сводка показана, но у темы нет оцениваемых вопросов — «Баллов» не появляется", () => {
+  it("сводка показана, но у темы нет оцениваемых вопросов — карточки нет", () => {
     const ctx = buildResultContext(measurementOnlyTopic, "Маслач", {
       withTopicPoints: true,
       measures: { ...MEASURES, hasPassThreshold: true, blockSettings: { scoreSummary: "show" as const } },
     });
+    expect(ctx.result.topicResults).toEqual([]);
+  });
+
+  it("без измерений тоже нет", () => {
+    const ctx = buildResultContext(measurementOnlyTopic, "Контрольный", { withTopicPoints: true });
+    expect(ctx.result.topicResults).toEqual([]);
+  });
+
+  it("тема с оцениваемыми вопросами остаётся, даже когда «Баллов» скрыты настройкой", () => {
+    const graded = {
+      ...BASE,
+      topicResults: [{ topicId: "t1", topicName: "Тема 1", correct: 3, total: 4, percent: 75, earnedPoints: 3, possiblePoints: 4, passed: null }],
+    };
+    const ctx = buildResultContext(graded, "Маслач", {
+      withTopicPoints: true,
+      measures: { ...MEASURES, hasPassThreshold: true, blockSettings: { scoreSummary: "hide" as const } },
+    });
+    expect(ctx.result.topicResults).toHaveLength(1);
     expect((ctx.result.topicResults as any[])[0].pointsLabel).toBeUndefined();
   });
 
-  it("без измерений тоже не появляется", () => {
-    const ctx = buildResultContext(measurementOnlyTopic, "Контрольный", { withTopicPoints: true });
-    expect((ctx.result.topicResults as any[])[0].pointsLabel).toBeUndefined();
+  it("тема без оценивания, но с курсами, карточку сохраняет — курсы темы больше показать негде", () => {
+    const withCourses = {
+      ...BASE,
+      topicResults: [
+        {
+          ...measurementOnlyTopic.topicResults[0],
+          recommendedCourses: [{ title: "Курс A", url: "https://e/a" }],
+        },
+      ],
+    };
+    const ctx = buildResultContext(withCourses, "Маслач", { withTopicPoints: true });
+    expect(ctx.result.topicResults).toHaveLength(1);
+    expect((ctx.result.topicResults as any[])[0].hasRecommendations).toBe(true);
+  });
+
+  it("тема без оценивания, но с вердиктом, карточку сохраняет — вердикт вынесен, значит есть что сказать", () => {
+    const judged = {
+      ...BASE,
+      topicResults: [{ ...measurementOnlyTopic.topicResults[0], passed: false }],
+    };
+    const ctx = buildResultContext(judged, "Контрольный", { withTopicPoints: true });
+    expect(ctx.result.topicResults).toHaveLength(1);
+    expect((ctx.result.topicResults as any[])[0].statusLabel).toBe("Не пройдено");
   });
 });
 

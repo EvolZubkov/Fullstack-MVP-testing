@@ -417,6 +417,45 @@ export interface ResultRenderContext {
   result: CtxResult;
 }
 
+/**
+ * Does this topic have ANYTHING to tell the learner — i.e. is a card for it worth
+ * rendering at all?
+ *
+ * Every slot of the topic card is gated on its own: «Правильно» on `total`, «Баллов»
+ * on `pointsLabel`, the verdict tag on an empty label, the courses on
+ * `hasRecommendations`. The CARD and the «Результаты по темам» heading above it were
+ * not: they stood on the mere PRESENCE of the topic in `topicResults`. A purely
+ * measurement topic (a burnout inventory: `aggregateStandardResult` counts no
+ * measurement-only question toward `total`) on a test whose score summary is off
+ * therefore rendered a heading, a separator and a card holding a topic name and a
+ * forever-empty progress bar — a block without a single fact in it, the same nonsense
+ * PRD-29 removed from the test-level summary, two levels down.
+ *
+ * Such a topic is dropped from `topicResults` entirely rather than hidden by a flag:
+ * an empty array is falsy in the DSL, so `{{#if result.topicResults}}` takes the
+ * heading, the separator and the grid with it — in the shipped templates AND in any
+ * third-party one uploaded through the PRD-3 registry, which no layout edit here
+ * could reach.
+ *
+ * THREE things count as something to say, and the last two are why this is not simply
+ * `total > 0`:
+ * - graded questions (`total > 0`) — the counts, the points and the bar mean something;
+ * - a PRONOUNCED verdict (`passed !== null`) — a host that judged the topic has stated
+ *   a fact about it, and we never erase a stated fact;
+ * - the topic's own courses and events — the topic card is their ONLY route to the
+ *   learner (the consolidated «Рекомендации» block is fed by feedback texts and
+ *   attachments, not by these; see `topicRecommendationSources`), so dropping the card
+ *   would drop what the author hung on the topic.
+ */
+export function topicHasContent(t: TopicInput): boolean {
+  return (
+    t.total > 0 ||
+    t.passed != null ||
+    (t.recommendedCourses?.length ?? 0) > 0 ||
+    (t.recommendedEvents?.length ?? 0) > 0
+  );
+}
+
 /** Map a normalized topic to its presentational view (Core-prepared class + label). */
 function topicView(t: TopicInput, withPoints: boolean): CtxTopicResultView {
   const passed = t.passed;
@@ -530,7 +569,10 @@ export function buildResultContext(
     correct: input.correct,
     earnedPoints: round1(input.earnedPoints),
     possiblePoints: round1(input.possiblePoints),
-    topicResults: (input.topicResults || []).map((t) => topicView(t, withTopicPoints)),
+    // A topic with nothing to report brings no card — see {@link topicHasContent}. The
+    // filter runs BEFORE the mapping so the array can end up empty, which is what takes
+    // the whole «Результаты по темам» section down with it.
+    topicResults: (input.topicResults || []).filter(topicHasContent).map((t) => topicView(t, withTopicPoints)),
   };
   if (opts.recommendedCourses && opts.recommendedCourses.length) result.recommendedCourses = opts.recommendedCourses;
   if (opts.recommendedEvents && opts.recommendedEvents.length) result.recommendedEvents = opts.recommendedEvents;

@@ -141,7 +141,7 @@
           <div class="ou-card__body">
             <span class="tb-topic-card__name">{{topicName}}</span>
             <span class="ou-tag ou-tag--s {{passClass}}">{{statusLabel}}</span>
-            <div class="ou-progress ou-progress--s tb-topic-card__bar {{passClass}}"><div class="ou-progress__track"><div class="ou-progress__fill" style="width: {{percent}}%"></div></div></div>
+            {{#if total}}<div class="ou-progress ou-progress--s tb-topic-card__bar {{passClass}}"><div class="ou-progress__track"><div class="ou-progress__fill" style="width: {{percent}}%"></div></div></div>{{/if}}
             <div class="tb-stat-rows">
               {{#if total}}<div class="ou-stat-row ou-stat-row--compact"><div class="ou-stat-row__body"><div class="ou-stat-row__title">Правильно</div></div><span class="tb-stat-val">{{correct}} / {{total}}</span></div>{{/if}}
               {{#if pointsLabel}}<div class="ou-stat-row ou-stat-row--compact"><div class="ou-stat-row__body"><div class="ou-stat-row__title">Баллов</div></div><span class="tb-stat-val">{{pointsLabel}}</span></div>{{/if}}

@@ -26,6 +26,7 @@
 import {
   buildResultContext,
   buildAdaptiveResultContext,
+  topicHasContent,
   type MeasuresInput,
   type ResultRenderContext,
 } from "../template/result-context";
@@ -219,7 +220,15 @@ export function buildReportContext(input: ReportInput, opts: ReportContextOption
     ...(input.hasPassThreshold !== undefined ? { hasPassThreshold: input.hasPassThreshold } : {}),
     ...(opts.measures ? { measures: opts.measures } : {}),
   });
-  const topics = input.result.topicResults ?? [];
+  // ТЕ ЖЕ темы, что оставил экранный сборщик (`topicHasContent`), и по той же причине:
+  // §5.2 — отчёт не вправе показать иное, чем экран, с которого его скачали, а тема без
+  // единого факта печаталась бы карточкой «0 из 0 (0%)» и «0.0/0.0».
+  //
+  // Фильтр здесь ОБЯЗАТЕЛЕН, а не для красоты: строки отчёта дополняются ниже по
+  // ИНДЕКСУ в паре с этим списком, и несогласованные списки приписали бы теме чужие
+  // счётчики. `unmasteredRecommendations` от фильтра не беднеет — тему с курсами или
+  // мероприятиями `topicHasContent` как раз оставляет.
+  const topics = (input.result.topicResults ?? []).filter(topicHasContent);
   const passed = !!input.result.passed;
   const percent = base.result.scorePercent ?? 0;
   const circumference = 2 * Math.PI * REPORT_RING_RADIUS;
