@@ -91,6 +91,7 @@ export {
   isSingleIndexChoice,
   hasOptionList,
   hasFixedOptionOrder,
+  distributesBudget,
   isMeasurementOnly,
 } from "../questions/question-type";
 // Ревизия «Стандартный»: состояние навигационной строки вопроса. Саму строку
