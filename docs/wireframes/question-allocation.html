@@ -1,0 +1,1072 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: вопрос типа «распределение баллов» в шаблоне «Стандартный».
+    Файл: docs/wireframes/question-allocation.html
+    Источник данных: docs/references/Опросник ЧИЛ_V3.6_фин.xlsx
+                     (опросник ведущего стиля человекоцентричного лидерства,
+                      14 блоков по 4 утверждения, бюджет 7 баллов на блок,
+                      четыре стиля-шкалы, максимум 98 баллов на стиль).
+    Спека: docs/specs/prd-44/scale-allocation-question-type.md (FR-28..FR-36, FR-44..FR-46).
+    План: docs/specs/prd-44/implementation-plan.md (фаза 0).
+    Статус: НА СОГЛАСОВАНИИ.
+
+    Холст взят один в один с согласованного экрана вопроса
+    (docs/wireframes/approved/question-scale.html): шапка, карта вопросов, полоса
+    прогресса, подвал и колонка вопроса скопированы без изменений. Дельта ровно
+    одна — блок ответа вместо вертикального списка ou-radio-card.
+
+    Состояния (переключатель в навбаре):
+      s-empty   — нетронутый вопрос, счётчик «Осталось: 7 из 7»
+      s-partial — частичное распределение, «Осталось: 3 из 7»
+      s-done    — весь бюджет распределён, «Вы использовали все баллы»
+      s-min     — ненулевой минимум на вариант: поля предзаполнены минимумом
+      s-narrow  — узкий экран: подпись над парой «ползунок и поле»
+      s-review  — экран обзора: только чтение, без разметки верности
+      s-editor  — карточка редактора вопроса
+
+    Решения, зафиксированные до эскиза (из спеки):
+      - модель «один вопрос = один экран» не меняется, матричной раскладки нет;
+      - тип ВСЕГДА измерительный: верного распределения не существует, поэтому
+        блока правильного ответа нет ни на экране обзора, ни в редакторе;
+      - готовность строгая: вопрос отвечен, только когда сумма РОВНО равна бюджету;
+      - перебор невозможен по построению, состояния «перебор» не существует;
+      - привязка утверждений к шкалам живёт во вкладке «Вклады вопросов» редактора
+        теста, а не в карточке вопроса.
+  -->
+  <title>Вопрос «распределение баллов» — стандартный шаблон</title>
+
+  <link rel="stylesheet" href="/vendor/ui-kit/css/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+
+  <style>
+    /* ─── Эскизный фрейм ──────────────────────────────────────────────────
+       Перенесён из approved/question-scale.html без изменений. */
+    .wf-annot-wrap { position: relative; display: inline-flex; }
+    /* Блочный вариант обёртки ДОЛЖЕН сбрасывать inline-flex: иначе обёрнутый
+       элемент сжимается по содержимому — ползунок внутри терял ширину колонки
+       и оставался одной точкой без дорожки. */
+    .wf-annot-wrap--block { position: relative; display: block; }
+    .wf-annot {
+      display: none;
+      position: absolute;
+      top: calc(-1 * var(--ou-space-2));
+      right: calc(-1 * var(--ou-space-1));
+      z-index: 200;
+      background: var(--ou-warning-default);
+      color: var(--ou-fg-default);
+      border-radius: var(--ou-radius-s);
+      padding: 0 var(--ou-space-1);
+      font-weight: 700;
+      font-size: var(--wf-space-10);
+      line-height: var(--ou-space-5);
+      pointer-events: none;
+      white-space: nowrap;
+      box-shadow: var(--ou-shadow-sm);
+    }
+    body.wf-annots-on .wf-annot { display: block; }
+
+    .wf-scene {
+      height: calc(100vh - var(--wf-nav-offset, 52px));
+      display: flex; flex-direction: column; overflow: hidden;
+      font-family: var(--ou-font-family-base);
+    }
+    .wf-answers > .wf-state { padding-top: 0; }
+    .wf-answers > .wf-state.active { display: flex; flex-direction: column; gap: var(--ou-space-5); }
+
+    /* ─── Предлагаемое дополнение ui-kit: составной BudgetAllocation ────────
+       Пара «ползунок и числовое поле» собирается из СУЩЕСТВУЮЩИХ примитивов
+       (Slider — ou-slider, NumberInput — ou-number). Новым в дизайн-системе
+       становится только их группа с общим бюджетом: счётчик остатка, строки
+       утверждений и синхронизация пары по остатку. Правила ниже объявлены в
+       эскизе локально; при согласовании они переезжают в vendor/ui-kit
+       (BudgetAllocation.tsx + BudgetAllocation.css в ОБЕ копии бандла) и
+       отсюда удаляются.
+
+       Почему группа, а не «просто два примитива рядом»: доступный максимум
+       КАЖДОЙ строки зависит от остатка бюджета, то есть от значений соседних
+       строк. Это состояние группы, и владеть им должен один компонент —
+       иначе синхронизацию пришлось бы повторять на каждом экране заново. */
+    .ou-alloc { display: flex; flex-direction: column; gap: var(--ou-space-4); }
+
+    /* Счётчик остатка — область aria-live: изменение остатка должен озвучивать
+       экранный диктор (FR-34), поэтому это не декоративная подпись. */
+    .ou-alloc__counter {
+      display: flex; align-items: baseline; gap: var(--ou-space-2);
+      font: var(--ou-text-title-s); color: var(--ou-fg-muted);
+    }
+    .ou-alloc__counter strong {
+      font-size: 1.5em; line-height: 1; color: var(--ou-fg-default);
+      font-weight: 700; font-variant-numeric: tabular-nums;
+    }
+    .ou-alloc__counter.is-complete { color: var(--ou-success-on-soft); }
+    .ou-alloc__counter.is-complete strong { color: var(--ou-success-on-soft); }
+
+    .ou-alloc__rows { display: flex; flex-direction: column; gap: var(--ou-space-3); }
+
+    /* Строка утверждения: подпись занимает свободное место, пара «ползунок и
+       поле» — фиксированную колонку справа. Порядок именно такой: сначала
+       читают утверждение, потом назначают ему вес. */
+    .ou-alloc__row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 220px 108px;
+      align-items: center;
+      gap: var(--ou-space-4);
+      padding: var(--ou-space-3) var(--ou-space-4);
+      border: 1px solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-m);
+      background: var(--ou-bg-elevated);
+    }
+    /* Строка с ненулевым баллом подсвечена мягко: это НЕ «правильно», а
+       «сюда учащийся положил вес». Цвета вердикта у типа нет вовсе. */
+    .ou-alloc__row.is-weighted { border-color: var(--ou-accent-default); }
+    .ou-alloc__label {
+      font-size: var(--tb-answer-fs, 20px); font-weight: 400; line-height: 1.35;
+      color: var(--ou-fg-default); text-wrap: pretty;
+    }
+    .ou-alloc__slider { justify-self: stretch; }
+    /* Недоступный хвост дорожки. Шкала ползунка ФИКСИРОВАНА бюджетом: длина
+       дорожки всегда означает одно и то же, иначе значение строки визуально
+       прыгало бы при изменении СОСЕДНЕЙ строки, хотя сама строка не менялась.
+       А вот стоп подвижен — он равен `значение + остаток`, и его надо показать,
+       иначе учащийся упирается в невидимую стену и не понимает, почему ползунок
+       дальше не идёт. Заштрихованная зона отвечает на это до попытки. */
+    .ou-alloc__cap {
+      position: absolute; top: -3px; bottom: -3px; right: 0;
+      border-radius: 0 999px 999px 0;
+      background: var(--ou-bg-surface-2);
+      border-left: 2px solid var(--ou-border-default);
+      pointer-events: none;
+    }
+    .ou-alloc__slider .ou-slider { max-width: none; width: 100%; }
+    .ou-alloc__field .ou-number__box { width: 108px; }
+
+    /* Узкий экран: подпись встаёт над парой, пара делит ширину строки.
+       Раскладка задаётся медиазапросом в theme.css шаблона — единственном общем
+       источнике оформления сцены для обоих хостов (FR-36). */
+    .ou-alloc--narrow .ou-alloc__row {
+      grid-template-columns: minmax(0, 1fr) 108px;
+      grid-template-areas: "label label" "slider field";
+      row-gap: var(--ou-space-3);
+    }
+    .ou-alloc--narrow .ou-alloc__label  { grid-area: label; }
+    .ou-alloc--narrow .ou-alloc__slider { grid-area: slider; }
+    .ou-alloc--narrow .ou-alloc__field  { grid-area: field; }
+
+    /* Обзор ответов: те же строки только для чтения. Ползунок остаётся как
+       индикатор доли, интерактив снят. Разметки верности нет — эталона нет. */
+    .ou-alloc--readonly .ou-alloc__row { background: var(--ou-bg-surface-2); }
+    .ou-alloc--readonly .ou-slider__thumb { cursor: default; }
+    .ou-alloc--readonly .ou-alloc__value {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 108px; height: var(--ou-size-control-m);
+      border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-m);
+      font: var(--ou-text-title-s); font-variant-numeric: tabular-nums;
+      color: var(--ou-fg-default); background: var(--ou-bg-elevated);
+    }
+
+    /* Узкая колонка эскиза для состояния «узкий экран». */
+    .wf-narrow-frame {
+      width: 420px; margin-inline: auto; padding: var(--ou-space-4);
+      border: 1px dashed var(--ou-border-default); border-radius: var(--ou-radius-l);
+    }
+  </style>
+</head>
+<body class="ou ou--dark ou--normal">
+
+<!-- ─── State switcher ─────────────────────────────────────────────────────── -->
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">Распределение баллов — состояние:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this,'s-empty')">Нетронутый</button>
+  <button class="wf-btn"        type="button" onclick="showState(this,'s-partial')">Частично</button>
+  <button class="wf-btn"        type="button" onclick="showState(this,'s-done')">Всё распределено</button>
+  <button class="wf-btn"        type="button" onclick="showState(this,'s-min')">С минимумом</button>
+  <button class="wf-btn"        type="button" onclick="showState(this,'s-narrow')">Узкий экран</button>
+  <button class="wf-btn"        type="button" onclick="showState(this,'s-review')">Обзор ответов</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn" type="button" onclick="toggleTheme(this)">Light</button>
+  <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
+  <button class="wf-btn" type="button" onclick="toggleAnnots(this)">Аннотации</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     ХОЛСТ. Сцена скопирована с согласованного экрана вопроса; переключатель
+     состояний меняет ТОЛЬКО содержимое блока ответа.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="wf-scene" style="padding-top:var(--wf-nav-offset,52px);box-sizing:content-box">
+
+  <header style="background:var(--ou-bg-elevated);border-bottom:1px solid var(--ou-border-soft);padding:var(--ou-space-4) 24px 0;display:flex;flex-direction:column;gap:var(--ou-space-3);position:relative">
+    <div style="display:flex;align-items:flex-start;gap:var(--ou-space-4)">
+      <span style="width:44px;height:44px;flex:none;border-radius:var(--ou-radius-m);background:var(--ou-accent-soft);color:var(--ou-accent-default);display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;letter-spacing:.02em">РТ</span>
+      <div style="min-width:0;display:flex;flex-direction:column;gap:2px;padding-top:2px">
+        <h1 style="margin:0;font:var(--ou-text-display-s);color:var(--ou-fg-default);letter-spacing:-.01em;text-wrap:pretty">Опросник ведущего стиля человекоцентричного лидерства</h1>
+        <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Диагностика · Попытка 1 из 1</span>
+      </div>
+    </div>
+
+    <div class="ou-quiz ou-quiz--circle ou-quiz--m" style="width:100%;flex-direction:row;align-items:center;gap:var(--ou-space-5);padding-bottom:var(--ou-space-4)">
+      <div class="ou-quiz__dots" style="flex:none">
+        <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 1">1</button>
+        <button type="button" class="ou-quiz__dot is-current"  aria-label="Вопрос 2">2</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 3">3</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 4">4</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 5">5</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 6">6</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 7">7</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 8">8</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 9">9</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 10">10</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 11">11</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 12">12</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 13">13</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 14">14</button>
+      </div>
+      <div class="ou-quiz__legend" style="margin-top:0;align-items:center">
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot" style="background:transparent;box-shadow:inset 0 0 0 2px var(--ou-accent-default)"></span>текущий</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+      </div>
+      <span style="margin-left:auto;flex:none;text-align:right;font:var(--ou-text-body-m);color:var(--ou-fg-muted)">отвечено <strong style="color:var(--ou-fg-default);font-weight:600">1</strong> из 14 · пропущено 0</span>
+    </div>
+
+    <div style="position:absolute;left:0;right:0;bottom:-1px;height:3px;background:var(--ou-bg-surface-3)">
+      <div style="height:100%;width:14%;background:var(--ou-accent-default);border-radius:0 999px 999px 0;transition:width 240ms var(--ou-easing-standard)"></div>
+    </div>
+  </header>
+
+  <main style="flex:1;min-height:0;overflow:auto;padding:24px">
+    <div style="width:75%;height:100%;display:flex;flex-direction:column;gap:var(--ou-space-4)">
+      <div style="display:flex;align-items:center;gap:var(--ou-space-3)">
+        <span style="font:var(--ou-text-body-m);color:var(--ou-fg-muted)">Вопрос 2 из 14</span>
+        <span class="ou-tag ou-tag--neutral">Человекоцентричное лидерство</span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:var(--ou-space-2)">
+        <h2 style="margin:0;font-weight:600;font-size:30px;line-height:1.25;color:var(--ou-fg-default);letter-spacing:-.015em;text-wrap:pretty">Подчинённый только что присоединился к команде и испытывает трудности. Как вы распределите своё внимание?</h2>
+        <span class="wf-annot-wrap" style="display:inline-block">
+          <span class="wf-annot">подсказка типа</span>
+          <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Распределите 7 баллов между вариантами</span>
+        </span>
+      </div>
+
+      <!-- ─── БЛОК ОТВЕТА — единственная дельта относительно согласованного экрана ─── -->
+      <div class="wf-answers" style="flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;padding-block:var(--ou-space-6)">
+
+        <!-- ── НЕТРОНУТЫЙ ВОПРОС ────────────────────────────────────────────
+             Минимум на вариант равен нулю (умолчание и случай референса),
+             поэтому предзаполнения нет: пустой вопрос выглядит пустым. -->
+        <div id="s-empty" class="wf-state active">
+          <div class="wf-annot-wrap wf-annot-wrap--block">
+            <span class="wf-annot">счётчик остатка · aria-live</span>
+            <div class="ou-alloc">
+              <div class="ou-alloc__counter" role="status" aria-live="polite">
+                Осталось: <strong>7</strong> из 7
+              </div>
+              <div class="ou-alloc__rows">
+                <div class="ou-alloc__row" data-index="0">
+                  <span class="ou-alloc__label">Разберу вместе с ним первую рабочую задачу</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:100%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="7" aria-valuenow="0" aria-label="Разберу вместе с ним первую рабочую задачу" style="left:0%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-alloc__field">
+                    <div class="ou-number ou-number--m ou-number--split">
+                      <div class="ou-number__box">
+                        <button type="button" class="ou-number__btn" aria-label="Меньше" disabled>&minus;</button>
+                        <input class="ou-number__input" type="text" inputmode="numeric" value="0" aria-label="Баллы: Разберу вместе с ним первую рабочую задачу">
+                        <button type="button" class="ou-number__btn" aria-label="Больше">+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ou-alloc__row" data-index="1">
+                  <span class="ou-alloc__label">Познакомлю с командой и объясню, к кому идти с чем</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:100%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="7" aria-valuenow="0" aria-label="Познакомлю с командой и объясню, к кому идти с чем" style="left:0%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-alloc__field">
+                    <div class="ou-number ou-number--m ou-number--split">
+                      <div class="ou-number__box">
+                        <button type="button" class="ou-number__btn" aria-label="Меньше" disabled>&minus;</button>
+                        <input class="ou-number__input" type="text" inputmode="numeric" value="0" aria-label="Баллы: Познакомлю с командой и объясню, к кому идти с чем">
+                        <button type="button" class="ou-number__btn" aria-label="Больше">+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ou-alloc__row" data-index="2">
+                  <span class="ou-alloc__label">Дам чёткий регламент и сроки на первый месяц</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:100%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="7" aria-valuenow="0" aria-label="Дам чёткий регламент и сроки на первый месяц" style="left:0%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-alloc__field">
+                    <div class="ou-number ou-number--m ou-number--split">
+                      <div class="ou-number__box">
+                        <button type="button" class="ou-number__btn" aria-label="Меньше" disabled>&minus;</button>
+                        <input class="ou-number__input" type="text" inputmode="numeric" value="0" aria-label="Баллы: Дам чёткий регламент и сроки на первый месяц">
+                        <button type="button" class="ou-number__btn" aria-label="Больше">+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ou-alloc__row" data-index="3">
+                  <span class="ou-alloc__label">Расскажу, ради чего мы это делаем, и чем он усилит команду</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:100%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="7" aria-valuenow="0" aria-label="Расскажу, ради чего мы это делаем, и чем он усилит команду" style="left:0%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-alloc__field">
+                    <div class="ou-number ou-number--m ou-number--split">
+                      <div class="ou-number__box">
+                        <button type="button" class="ou-number__btn" aria-label="Меньше" disabled>&minus;</button>
+                        <input class="ou-number__input" type="text" inputmode="numeric" value="0" aria-label="Баллы: Расскажу, ради чего мы это делаем, и чем он усилит команду">
+                        <button type="button" class="ou-number__btn" aria-label="Больше">+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── ЧАСТИЧНОЕ РАСПРЕДЕЛЕНИЕ ──────────────────────────────────────
+             Осталось 3 балла. Доступный максимум КАЖДОЙ строки равен её
+             значению плюс остаток: у строки со значением 3 это 6, у нулевой —
+             3. Ползунок физически не доходит дальше, поэтому «перебор» на
+             экране невозможен и сообщения о нём нет. -->
+        <div id="s-partial" class="wf-state">
+          <div class="wf-annot-wrap wf-annot-wrap--block">
+            <span class="wf-annot">кнопка «Далее» ещё заблокирована</span>
+            <div class="ou-alloc">
+              <div class="ou-alloc__counter" role="status" aria-live="polite">
+                Осталось: <strong>3</strong> из 7
+              </div>
+              <div class="ou-alloc__rows">
+                <div class="ou-alloc__row is-weighted" data-index="0">
+                  <span class="ou-alloc__label">Разберу вместе с ним первую рабочую задачу</span>
+                  <div class="ou-alloc__slider">
+                    <div class="wf-annot-wrap wf-annot-wrap--block">
+                      <span class="wf-annot">максимум сейчас 6 = 3 + остаток 3</span>
+                      <div class="ou-slider ou-slider--h">
+                        <div class="ou-slider__rail">
+                          <div class="ou-slider__fill" style="left:0;right:57.2%"></div>
+                          <div class="ou-alloc__cap" style="left:85.7%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="6" aria-valuenow="3" aria-label="Разберу вместе с ним первую рабочую задачу" style="left:42.8%"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-alloc__field">
+                    <div class="ou-number ou-number--m ou-number--split">
+                      <div class="ou-number__box">
+                        <button type="button" class="ou-number__btn" aria-label="Меньше">&minus;</button>
+                        <input class="ou-number__input" type="text" inputmode="numeric" value="3" aria-label="Баллы: Разберу вместе с ним первую рабочую задачу">
+                        <button type="button" class="ou-number__btn" aria-label="Больше">+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ou-alloc__row is-weighted" data-index="1">
+                  <span class="ou-alloc__label">Познакомлю с командой и объясню, к кому идти с чем</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:85.8%"></div>
+                        <div class="ou-alloc__cap" style="left:57.1%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="4" aria-valuenow="1" aria-label="Познакомлю с командой и объясню, к кому идти с чем" style="left:14.2%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-alloc__field">
+                    <div class="ou-number ou-number--m ou-number--split">
+                      <div class="ou-number__box">
+                        <button type="button" class="ou-number__btn" aria-label="Меньше">&minus;</button>
+                        <input class="ou-number__input" type="text" inputmode="numeric" value="1" aria-label="Баллы: Познакомлю с командой и объясню, к кому идти с чем">
+                        <button type="button" class="ou-number__btn" aria-label="Больше">+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ou-alloc__row" data-index="2">
+                  <span class="ou-alloc__label">Дам чёткий регламент и сроки на первый месяц</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:100%"></div>
+                        <div class="ou-alloc__cap" style="left:42.9%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="3" aria-valuenow="0" aria-label="Дам чёткий регламент и сроки на первый месяц" style="left:0%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-alloc__field">
+                    <div class="ou-number ou-number--m ou-number--split">
+                      <div class="ou-number__box">
+                        <button type="button" class="ou-number__btn" aria-label="Меньше" disabled>&minus;</button>
+                        <input class="ou-number__input" type="text" inputmode="numeric" value="0" aria-label="Баллы: Дам чёткий регламент и сроки на первый месяц">
+                        <button type="button" class="ou-number__btn" aria-label="Больше">+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ou-alloc__row" data-index="3">
+                  <span class="ou-alloc__label">Расскажу, ради чего мы это делаем, и чем он усилит команду</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:100%"></div>
+                        <div class="ou-alloc__cap" style="left:42.9%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="3" aria-valuenow="0" aria-label="Расскажу, ради чего мы это делаем, и чем он усилит команду" style="left:0%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-alloc__field">
+                    <div class="ou-number ou-number--m ou-number--split">
+                      <div class="ou-number__box">
+                        <button type="button" class="ou-number__btn" aria-label="Меньше" disabled>&minus;</button>
+                        <input class="ou-number__input" type="text" inputmode="numeric" value="0" aria-label="Баллы: Расскажу, ради чего мы это делаем, и чем он усилит команду">
+                        <button type="button" class="ou-number__btn" aria-label="Больше">+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── ВЕСЬ БЮДЖЕТ РАСПРЕДЕЛЁН ─────────────────────────────────────
+             Формулировка счётчика меняется на «Вы использовали все баллы»
+             (взята из референса). Кнопка «Далее» разблокирована: готовность
+             строгая, сумма ровно равна бюджету. -->
+        <div id="s-done" class="wf-state">
+          <div class="wf-annot-wrap wf-annot-wrap--block">
+            <span class="wf-annot">вопрос отвечен · «Далее» активна</span>
+            <div class="ou-alloc">
+              <div class="ou-alloc__counter is-complete" role="status" aria-live="polite">
+                Вы использовали все баллы
+              </div>
+              <div class="ou-alloc__rows">
+                <div class="ou-alloc__row is-weighted" data-index="0">
+                  <span class="ou-alloc__label">Разберу вместе с ним первую рабочую задачу</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:57.2%"></div>
+                        <div class="ou-alloc__cap" style="left:42.9%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="3" aria-valuenow="3" aria-label="Разберу вместе с ним первую рабочую задачу" style="left:42.8%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-alloc__field">
+                    <div class="ou-number ou-number--m ou-number--split">
+                      <div class="ou-number__box">
+                        <button type="button" class="ou-number__btn" aria-label="Меньше">&minus;</button>
+                        <input class="ou-number__input" type="text" inputmode="numeric" value="3" aria-label="Баллы: Разберу вместе с ним первую рабочую задачу">
+                        <button type="button" class="ou-number__btn" aria-label="Больше" disabled>+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ou-alloc__row is-weighted" data-index="1">
+                  <span class="ou-alloc__label">Познакомлю с командой и объясню, к кому идти с чем</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:85.8%"></div>
+                        <div class="ou-alloc__cap" style="left:14.3%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="1" aria-valuenow="1" aria-label="Познакомлю с командой и объясню, к кому идти с чем" style="left:14.2%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-alloc__field">
+                    <div class="ou-number ou-number--m ou-number--split">
+                      <div class="ou-number__box">
+                        <button type="button" class="ou-number__btn" aria-label="Меньше">&minus;</button>
+                        <input class="ou-number__input" type="text" inputmode="numeric" value="1" aria-label="Баллы: Познакомлю с командой и объясню, к кому идти с чем">
+                        <button type="button" class="ou-number__btn" aria-label="Больше" disabled>+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ou-alloc__row is-weighted" data-index="2">
+                  <span class="ou-alloc__label">Дам чёткий регламент и сроки на первый месяц</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:85.8%"></div>
+                        <div class="ou-alloc__cap" style="left:14.3%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="1" aria-valuenow="1" aria-label="Дам чёткий регламент и сроки на первый месяц" style="left:14.2%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-alloc__field">
+                    <div class="ou-number ou-number--m ou-number--split">
+                      <div class="ou-number__box">
+                        <button type="button" class="ou-number__btn" aria-label="Меньше">&minus;</button>
+                        <input class="ou-number__input" type="text" inputmode="numeric" value="1" aria-label="Баллы: Дам чёткий регламент и сроки на первый месяц">
+                        <button type="button" class="ou-number__btn" aria-label="Больше" disabled>+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ou-alloc__row is-weighted" data-index="3">
+                  <span class="ou-alloc__label">Расскажу, ради чего мы это делаем, и чем он усилит команду</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:71.5%"></div>
+                        <div class="ou-alloc__cap" style="left:28.6%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="2" aria-valuenow="2" aria-label="Расскажу, ради чего мы это делаем, и чем он усилит команду" style="left:28.5%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-alloc__field">
+                    <div class="ou-number ou-number--m ou-number--split">
+                      <div class="ou-number__box">
+                        <button type="button" class="ou-number__btn" aria-label="Меньше">&minus;</button>
+                        <input class="ou-number__input" type="text" inputmode="numeric" value="2" aria-label="Баллы: Расскажу, ради чего мы это делаем, и чем он усилит команду">
+                        <button type="button" class="ou-number__btn" aria-label="Больше" disabled>+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── НЕНУЛЕВОЙ МИНИМУМ НА ВАРИАНТ ────────────────────────────────
+             Минимум обеспечивается ПРЕДЗАПОЛНЕНИЕМ, а не запретом: поля
+             стартуют с минимума, счётчик показывает остаток после него.
+             Иначе учащийся попадает в тупик — распределил весь бюджет и
+             оставил одно утверждение нулём, а поднять его уже нечем. -->
+        <div id="s-min" class="wf-state">
+          <div class="wf-annot-wrap wf-annot-wrap--block">
+            <span class="wf-annot">минимум 1 · остаток 7 − 4·1 = 3</span>
+            <div class="ou-alloc">
+              <div class="ou-alloc__counter" role="status" aria-live="polite">
+                Осталось: <strong>3</strong> из 7
+              </div>
+              <div class="ou-alloc__rows">
+                <div class="ou-alloc__row is-weighted" data-index="0">
+                  <span class="ou-alloc__label">Разберу вместе с ним первую рабочую задачу</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:85.8%"></div>
+                        <div class="ou-alloc__cap" style="left:57.1%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="1" aria-valuemax="4" aria-valuenow="1" aria-label="Разберу вместе с ним первую рабочую задачу" style="left:14.2%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-alloc__field">
+                    <div class="ou-number ou-number--m ou-number--split">
+                      <div class="ou-number__box">
+                        <button type="button" class="ou-number__btn" aria-label="Меньше" disabled>&minus;</button>
+                        <input class="ou-number__input" type="text" inputmode="numeric" value="1" aria-label="Баллы: Разберу вместе с ним первую рабочую задачу">
+                        <button type="button" class="ou-number__btn" aria-label="Больше">+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ou-alloc__row is-weighted" data-index="1">
+                  <span class="ou-alloc__label">Познакомлю с командой и объясню, к кому идти с чем</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:85.8%"></div>
+                        <div class="ou-alloc__cap" style="left:57.1%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="1" aria-valuemax="4" aria-valuenow="1" aria-label="Познакомлю с командой и объясню, к кому идти с чем" style="left:14.2%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-alloc__field">
+                    <div class="ou-number ou-number--m ou-number--split">
+                      <div class="ou-number__box">
+                        <button type="button" class="ou-number__btn" aria-label="Меньше" disabled>&minus;</button>
+                        <input class="ou-number__input" type="text" inputmode="numeric" value="1" aria-label="Баллы: Познакомлю с командой и объясню, к кому идти с чем">
+                        <button type="button" class="ou-number__btn" aria-label="Больше">+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ou-alloc__row is-weighted" data-index="2">
+                  <span class="ou-alloc__label">Дам чёткий регламент и сроки на первый месяц</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:85.8%"></div>
+                        <div class="ou-alloc__cap" style="left:57.1%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="1" aria-valuemax="4" aria-valuenow="1" aria-label="Дам чёткий регламент и сроки на первый месяц" style="left:14.2%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-alloc__field">
+                    <div class="ou-number ou-number--m ou-number--split">
+                      <div class="ou-number__box">
+                        <button type="button" class="ou-number__btn" aria-label="Меньше" disabled>&minus;</button>
+                        <input class="ou-number__input" type="text" inputmode="numeric" value="1" aria-label="Баллы: Дам чёткий регламент и сроки на первый месяц">
+                        <button type="button" class="ou-number__btn" aria-label="Больше">+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ou-alloc__row is-weighted" data-index="3">
+                  <span class="ou-alloc__label">Расскажу, ради чего мы это делаем, и чем он усилит команду</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:85.8%"></div>
+                        <div class="ou-alloc__cap" style="left:57.1%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="1" aria-valuemax="4" aria-valuenow="1" aria-label="Расскажу, ради чего мы это делаем, и чем он усилит команду" style="left:14.2%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-alloc__field">
+                    <div class="ou-number ou-number--m ou-number--split">
+                      <div class="ou-number__box">
+                        <button type="button" class="ou-number__btn" aria-label="Меньше" disabled>&minus;</button>
+                        <input class="ou-number__input" type="text" inputmode="numeric" value="1" aria-label="Баллы: Расскажу, ради чего мы это делаем, и чем он усилит команду">
+                        <button type="button" class="ou-number__btn" aria-label="Больше">+</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── УЗКИЙ ЭКРАН ─────────────────────────────────────────────────
+             Подпись встаёт над парой «ползунок и поле». Раскладку задаёт
+             медиазапрос в theme.css шаблона, отдельного макета для пакета
+             не появляется. -->
+        <div id="s-narrow" class="wf-state">
+          <div class="wf-narrow-frame">
+            <div class="wf-annot-wrap wf-annot-wrap--block">
+              <span class="wf-annot">ширина сцены телефона</span>
+              <div class="ou-alloc ou-alloc--narrow">
+                <div class="ou-alloc__counter" role="status" aria-live="polite">
+                  Осталось: <strong>3</strong> из 7
+                </div>
+                <div class="ou-alloc__rows">
+                  <div class="ou-alloc__row is-weighted" data-index="0">
+                    <span class="ou-alloc__label" style="font-size:17px">Разберу вместе с ним первую рабочую задачу</span>
+                    <div class="ou-alloc__slider">
+                      <div class="ou-slider ou-slider--h">
+                        <div class="ou-slider__rail">
+                          <div class="ou-slider__fill" style="left:0;right:57.2%"></div>
+                          <div class="ou-alloc__cap" style="left:85.7%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="6" aria-valuenow="3" aria-label="Разберу вместе с ним первую рабочую задачу" style="left:42.8%"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="ou-alloc__field">
+                      <div class="ou-number ou-number--m ou-number--split">
+                        <div class="ou-number__box">
+                          <button type="button" class="ou-number__btn" aria-label="Меньше">&minus;</button>
+                          <input class="ou-number__input" type="text" inputmode="numeric" value="3" aria-label="Баллы: Разберу вместе с ним первую рабочую задачу">
+                          <button type="button" class="ou-number__btn" aria-label="Больше">+</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ou-alloc__row is-weighted" data-index="1">
+                    <span class="ou-alloc__label" style="font-size:17px">Познакомлю с командой и объясню, к кому идти с чем</span>
+                    <div class="ou-alloc__slider">
+                      <div class="ou-slider ou-slider--h">
+                        <div class="ou-slider__rail">
+                          <div class="ou-slider__fill" style="left:0;right:85.8%"></div>
+                          <div class="ou-alloc__cap" style="left:57.1%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="4" aria-valuenow="1" aria-label="Познакомлю с командой и объясню, к кому идти с чем" style="left:14.2%"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="ou-alloc__field">
+                      <div class="ou-number ou-number--m ou-number--split">
+                        <div class="ou-number__box">
+                          <button type="button" class="ou-number__btn" aria-label="Меньше">&minus;</button>
+                          <input class="ou-number__input" type="text" inputmode="numeric" value="1" aria-label="Баллы: Познакомлю с командой и объясню, к кому идти с чем">
+                          <button type="button" class="ou-number__btn" aria-label="Больше">+</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ou-alloc__row" data-index="2">
+                    <span class="ou-alloc__label" style="font-size:17px">Дам чёткий регламент и сроки на первый месяц</span>
+                    <div class="ou-alloc__slider">
+                      <div class="ou-slider ou-slider--h">
+                        <div class="ou-slider__rail">
+                          <div class="ou-slider__fill" style="left:0;right:100%"></div>
+                          <div class="ou-alloc__cap" style="left:42.9%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="3" aria-valuenow="0" aria-label="Дам чёткий регламент и сроки на первый месяц" style="left:0%"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="ou-alloc__field">
+                      <div class="ou-number ou-number--m ou-number--split">
+                        <div class="ou-number__box">
+                          <button type="button" class="ou-number__btn" aria-label="Меньше" disabled>&minus;</button>
+                          <input class="ou-number__input" type="text" inputmode="numeric" value="0" aria-label="Баллы: Дам чёткий регламент и сроки на первый месяц">
+                          <button type="button" class="ou-number__btn" aria-label="Больше">+</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ou-alloc__row" data-index="3">
+                    <span class="ou-alloc__label" style="font-size:17px">Расскажу, ради чего мы это делаем, и чем он усилит команду</span>
+                    <div class="ou-alloc__slider">
+                      <div class="ou-slider ou-slider--h">
+                        <div class="ou-slider__rail">
+                          <div class="ou-slider__fill" style="left:0;right:100%"></div>
+                          <div class="ou-alloc__cap" style="left:42.9%"></div>
+                        <div class="ou-slider__thumb" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="3" aria-valuenow="0" aria-label="Расскажу, ради чего мы это делаем, и чем он усилит команду" style="left:0%"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="ou-alloc__field">
+                      <div class="ou-number ou-number--m ou-number--split">
+                        <div class="ou-number__box">
+                          <button type="button" class="ou-number__btn" aria-label="Меньше" disabled>&minus;</button>
+                          <input class="ou-number__input" type="text" inputmode="numeric" value="0" aria-label="Баллы: Расскажу, ради чего мы это делаем, и чем он усилит команду">
+                          <button type="button" class="ou-number__btn" aria-label="Больше">+</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── ОБЗОР ОТВЕТОВ ───────────────────────────────────────────────
+             Только чтение и БЕЗ разметки верности: правильного распределения
+             не существует. Ползунок остаётся как индикатор доли — он и был
+             способом эту долю задать. -->
+        <div id="s-review" class="wf-state">
+          <div class="wf-annot-wrap wf-annot-wrap--block">
+            <span class="wf-annot">без цвета вердикта — эталона нет</span>
+            <div class="ou-alloc ou-alloc--readonly">
+              <div class="ou-alloc__counter is-complete">
+                Распределено 7 из 7
+              </div>
+              <div class="ou-alloc__rows">
+                <div class="ou-alloc__row" data-index="0">
+                  <span class="ou-alloc__label">Разберу вместе с ним первую рабочую задачу</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:57.2%"></div>
+                        <div class="ou-slider__thumb" aria-hidden="true" style="left:42.8%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <span class="ou-alloc__value">3</span>
+                </div>
+
+                <div class="ou-alloc__row" data-index="1">
+                  <span class="ou-alloc__label">Познакомлю с командой и объясню, к кому идти с чем</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:85.8%"></div>
+                        <div class="ou-slider__thumb" aria-hidden="true" style="left:14.2%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <span class="ou-alloc__value">1</span>
+                </div>
+
+                <div class="ou-alloc__row" data-index="2">
+                  <span class="ou-alloc__label">Дам чёткий регламент и сроки на первый месяц</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:85.8%"></div>
+                        <div class="ou-slider__thumb" aria-hidden="true" style="left:14.2%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <span class="ou-alloc__value">1</span>
+                </div>
+
+                <div class="ou-alloc__row" data-index="3">
+                  <span class="ou-alloc__label">Расскажу, ради чего мы это делаем, и чем он усилит команду</span>
+                  <div class="ou-alloc__slider">
+                    <div class="ou-slider ou-slider--h">
+                      <div class="ou-slider__rail">
+                        <div class="ou-slider__fill" style="left:0;right:71.5%"></div>
+                        <div class="ou-slider__thumb" aria-hidden="true" style="left:28.5%"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <span class="ou-alloc__value">2</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <footer style="background:var(--ou-bg-elevated);border-top:1px solid var(--ou-border-soft);padding:var(--ou-space-4) 24px;display:flex;align-items:center;gap:var(--ou-space-3)">
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">
+      <span class="ou-btn__ico" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="m12 19-7-7 7-7"></path></svg>
+      </span>
+      Назад
+    </button>
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">К обзору ответов</button>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:var(--ou-space-3)">
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Пропустить</button>
+      <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Далее</button>
+    </div>
+  </footer>
+</div>
+
+<script>
+  /* Wireframe-only controls, идентичны approved/question-scale.html. */
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+    document.documentElement.style.setProperty('--wf-nav-h', nav.offsetHeight + 'px');
+  }
+
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (b) {
+      b.classList.toggle('active', b === btn);
+    });
+    updateWireframeNavOffset();
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  window.toggleAnnots = function toggleAnnots(btn) {
+    var on = document.body.classList.toggle('wf-annots-on');
+    if (btn) btn.classList.toggle('active', on);
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     ПОЯСНЕНИЯ И DS MAPPING (вне холста)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="wf-page">
+
+<section class="wf-notes" aria-label="Поведение">
+  <h3 class="wf-notes-title">Поведение экрана</h3>
+  <table>
+    <thead>
+      <tr><th>Место</th><th>Когда</th><th>Что происходит</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Счётчик остатка</td>
+        <td>всегда над группой</td>
+        <td>«Осталось: N из 7», при нулевом остатке — «Вы использовали все баллы». Формулировки взяты из референса. Область <code>aria-live</code>: изменение остатка озвучивает экранный диктор.</td>
+      </tr>
+      <tr>
+        <td>Доступный максимум строки</td>
+        <td>после каждого изменения</td>
+        <td>Равен <code>min(максимум на вариант, значение строки + остаток)</code>. Ползунок и поле публикуют именно его, поэтому перебор невозможен ПО ПОСТРОЕНИЮ — и для мыши, и для клавиатуры, и для вставки. Состояния «перебор» не существует, сообщения об ошибке для него нет.</td>
+      </tr>
+      <tr>
+        <td>Недоступный хвост дорожки</td>
+        <td>когда потолок строки ниже бюджета</td>
+        <td>Шкала ползунка ФИКСИРОВАНА бюджетом: длина дорожки всегда означает одно и то же. Иначе значение строки визуально прыгало бы при изменении СОСЕДНЕЙ строки, хотя сама строка не менялась. Подвижен только стоп — он равен «значение + остаток», и он показан глушёной зоной с чертой. Без неё учащийся упирается в невидимую стену и не понимает, почему ползунок дальше не идёт.</td>
+      </tr>
+      <tr>
+        <td>Готовность ответа</td>
+        <td>сумма равна бюджету</td>
+        <td>Только тогда вопрос считается отвеченным. Нетронутый и частично распределённый вопрос — пропущенный: «Далее» заблокирована, счётчик пропущенных и возврат к незавершённым работают штатно.</td>
+      </tr>
+      <tr>
+        <td>Ненулевой минимум на вариант</td>
+        <td>автор задал минимум больше нуля</td>
+        <td>Поля стартуют со значения минимума, счётчик показывает остаток после него. Опуститься ниже минимума ввод не даёт. Предзаполнение, а не запрет: иначе учащийся распределит весь бюджет и застрянет с нулевым утверждением.</td>
+      </tr>
+      <tr>
+        <td>Узкий экран</td>
+        <td>ширина сцены меньше порога</td>
+        <td>Подпись встаёт над парой «ползунок и поле». Раскладку задаёт медиазапрос в <code>theme.css</code> шаблона — общем источнике оформления сцены для веба и пакета. Отдельного макета для пакета не появляется.</td>
+      </tr>
+      <tr>
+        <td>Обзор и повторный просмотр</td>
+        <td>после отправки</td>
+        <td>Те же строки только для чтения, БЕЗ разметки верности: правильного распределения не существует. Числовое поле заменяется значением.</td>
+      </tr>
+      <tr>
+        <td>Клавиатура</td>
+        <td>всегда</td>
+        <td>Числовое поле — обычный ввод. Ползунок — стрелки и <code>Home</code>/<code>End</code>. У каждой пары <code>aria-label</code> из текста утверждения: без него диктор читает четыре одинаковых «Значение».</td>
+      </tr>
+      <tr>
+        <td>Порядок утверждений</td>
+        <td>по признаку вопроса</td>
+        <td>Подчиняется общей настройке «Следование вариантов ответов» (умолчание — случайный порядок). Ротация утверждений, которую референс ведёт вручную ключом на листе механики, обеспечивается этим общим механизмом.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="wf-mapping" aria-label="DS mapping">
+  <h3 class="wf-notes-title">DS Mapping</h3>
+  <table>
+    <thead>
+      <tr><th>Элемент холста</th><th>Компонент DS</th><th>Токены</th><th>Примечание</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Ползунок строки</td>
+        <td><code>Slider</code> (<code>ou-slider ou-slider--h</code>, <code>__rail</code> / <code>__fill</code> / <code>__thumb</code>)</td>
+        <td><code>--ou-accent-default</code>, <code>--ou-bg-surface-3</code>, <code>--ou-border-default</code></td>
+        <td>СУЩЕСТВУЮЩИЙ компонент, применяется без правок. В эскизе снят только штатный <code>max-width: 360px</code>, чтобы ползунок занял колонку строки.</td>
+      </tr>
+      <tr>
+        <td>Числовое поле со степпером</td>
+        <td><code>NumberInput</code> (<code>ou-number ou-number--m ou-number--split</code>, <code>__box</code> / <code>__btn</code> / <code>__input</code>)</td>
+        <td><code>--ou-size-control-m</code>, <code>--ou-border-soft</code>, <code>--ou-bg-elevated</code></td>
+        <td>СУЩЕСТВУЮЩИЙ компонент, применяется без правок.</td>
+      </tr>
+      <tr>
+        <td>Группа с общим бюджетом</td>
+        <td><code>BudgetAllocation</code> (<code>ou-alloc</code>, <code>__counter</code> / <code>__rows</code> / <code>__row</code> / <code>__label</code> / <code>__slider</code> / <code>__field</code>; модификаторы <code>--narrow</code>, <code>--readonly</code>; состояние <code>is-weighted</code>)</td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-soft</code>, <code>--ou-accent-default</code>, <code>--tb-answer-fs</code></td>
+        <td>НОВЫЙ составной компонент. Правки ui-kit: <code>BudgetAllocation.tsx</code>, стори на три состояния и правила в ОБЕ копии бандла (<code>vendor/ui-kit/css/university-rt.css</code> — источник, <code>client/src/styles/vendor/</code> — загружаемая копия). В эскизе правила объявлены локально в <code>&lt;style&gt;</code> и после согласования оттуда удаляются.</td>
+      </tr>
+      <tr>
+        <td>Шапка, карта вопросов, подвал</td>
+        <td><code>QuizMap</code> (<code>ou-quiz</code>), <code>Tag</code>, <code>Button</code></td>
+        <td><code>--ou-*</code></td>
+        <td>Без изменений относительно согласованного экрана вопроса.</td>
+      </tr>
+      <tr>
+        <td>Метанавигация состояний, метки требований, «Пояснения», «DS Mapping»</td>
+        <td><code>Wireframe utility</code> (<code>wf-nav</code>, <code>wf-annot</code>, <code>wf-notes</code>, <code>wf-mapping</code>)</td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-*</code></td>
+        <td>Не мигрирует в продуктовый UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="wf-notes" aria-label="Вопросы к согласованию">
+  <h3 class="wf-notes-title">Вопросы к согласованию</h3>
+  <table>
+    <thead>
+      <tr><th>Место</th><th>Неоднозначность</th><th>Решение в эскизе</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Пара «ползунок и поле»</td>
+        <td>Нужны ли оба элемента, или хватило бы одного.</td>
+        <td>Оба, как принято в спеке: ползунок даёт быстрое распределение и показывает доли, поле — точное значение и клавиатурный ввод. Они синхронны. Альтернатива (только степпер) требует много нажатий при бюджете 7 и не показывает пропорцию.</td>
+      </tr>
+      <tr>
+        <td>Подсветка строки с баллом</td>
+        <td>Отмечать ли строку, которой учащийся дал вес.</td>
+        <td>Отмечена мягко — акцентная рамка (<code>is-weighted</code>). Это НЕ «правильно», а «сюда положен вес»; цвета вердикта у типа нет вовсе. Альтернатива — не отмечать, тогда при бюджете 7 и четырёх утверждениях труднее увидеть, что уже тронуто.</td>
+      </tr>
+      <tr>
+        <td>Формулировка счётчика</td>
+        <td>Что писать над группой.</td>
+        <td>«Осталось: N из 7» и «Вы использовали все баллы» — взяты из референса дословно. Альтернативы: «Распределено N из 7», «Нераспределённых баллов: N».</td>
+      </tr>
+      <tr>
+        <td>Подсказка типа</td>
+        <td>Строка под текстом вопроса.</td>
+        <td>«Распределите 7 баллов между вариантами» — число подставляется из бюджета вопроса.</td>
+      </tr>
+      <tr>
+        <td>Недоступный хвост</td>
+        <td>Показывать ли, докуда ползунок дойти не может.</td>
+        <td>Показываем глушёной зоной с чертой стопа. Альтернатива — не показывать: тогда перебор по-прежнему невозможен, но причина остановки ползунка остаётся необъяснённой. Элемента с таким смыслом в дизайн-системе нет, он добавляется вместе с составным компонентом.</td>
+      </tr>
+      <tr>
+        <td>Порог узкого экрана</td>
+        <td>При какой ширине подпись уходит наверх.</td>
+        <td>В эскизе показан вид на ширине телефона; конкретный порог подтверждается на браузерной приёмке вместе с остальными типами.</td>
+      </tr>
+      <tr>
+        <td>Карточка редактора</td>
+        <td>Эскиз карточки автора в этот файл не вошёл.</td>
+        <td>Три поля («Бюджет», «Минимум на вариант», «Максимум на вариант») ставятся в существующую карточку вопроса рядом со списком вариантов; блок правильного ответа для типа скрыт. Отдельного эскиза не потребовалось: это форма из существующих полей без новой раскладки. Если нужен отдельный эскиз — добавляется до фазы 4.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+</body>
+</html>
