@@ -6184,6 +6184,12 @@ span.ou-quiz__dot:hover { transform: none; }
   pointer-events: none;
 }
 
+/* The thumb goes ON TOP of the tail. Both are positioned siblings with no z-index, so
+   they paint in DOM order and the tail — which comes last — cut the right half of the
+   thumb away whenever the stop met it, i.e. exactly when the budget was spent
+   (ceiling === value) and the handle sat on the boundary. */
+.ou-alloc__slider .ou-slider__thumb { z-index: 1; }
+
 /* Только чтение (обзор ответов): интерактив снят, разметки верности НЕТ —
    правильного распределения не существует. */
 .ou-alloc--readonly .ou-alloc__row { background: var(--ou-bg-surface-2); }
