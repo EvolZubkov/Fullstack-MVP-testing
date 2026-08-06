@@ -129,6 +129,12 @@
        предзаполнены, и правило «не ноль» подсветило бы все строки сразу —
        подсветка сказала бы «вы это выбрали» там, где выбор сделала система. */
     .ou-alloc__row.is-weighted { border-color: var(--ou-accent-default); }
+    /* Размер подписи утверждения берётся ТОЛЬКО из общей переменной `--tb-answer-fs`
+       и нигде не задаётся литералом — как у вариантов остальных типов. Её ставят два
+       общих прохода: длиновой (`optionFont(answerTexts(question))` до рендера, по
+       самому длинному утверждению) и рантаймовый по высоте (`fitQuestionScene`
+       после рендера, чтобы список влез в поле без прокрутки). Жёсткий размер здесь
+       отнял бы у второго прохода единственный рычаг. */
     .ou-alloc__label {
       font-size: var(--tb-answer-fs, 20px); font-weight: 400; line-height: 1.35;
       color: var(--ou-fg-default); text-wrap: pretty;
@@ -776,7 +782,7 @@
                 </div>
                 <div class="ou-alloc__rows">
                   <div class="ou-alloc__row is-weighted" data-index="0">
-                    <span class="ou-alloc__label" style="font-size:17px">Разберу вместе с ним первую рабочую задачу</span>
+                    <span class="ou-alloc__label">Разберу вместе с ним первую рабочую задачу</span>
                     <div class="ou-alloc__slider">
                       <div class="ou-slider ou-slider--h">
                         <div class="ou-slider__rail">
@@ -798,7 +804,7 @@
                   </div>
 
                   <div class="ou-alloc__row is-weighted" data-index="1">
-                    <span class="ou-alloc__label" style="font-size:17px">Познакомлю с командой и объясню, к кому идти с чем</span>
+                    <span class="ou-alloc__label">Познакомлю с командой и объясню, к кому идти с чем</span>
                     <div class="ou-alloc__slider">
                       <div class="ou-slider ou-slider--h">
                         <div class="ou-slider__rail">
@@ -820,7 +826,7 @@
                   </div>
 
                   <div class="ou-alloc__row" data-index="2">
-                    <span class="ou-alloc__label" style="font-size:17px">Дам чёткий регламент и сроки на первый месяц</span>
+                    <span class="ou-alloc__label">Дам чёткий регламент и сроки на первый месяц</span>
                     <div class="ou-alloc__slider">
                       <div class="ou-slider ou-slider--h">
                         <div class="ou-slider__rail">
@@ -842,7 +848,7 @@
                   </div>
 
                   <div class="ou-alloc__row" data-index="3">
-                    <span class="ou-alloc__label" style="font-size:17px">Расскажу, ради чего мы это делаем, и чем он усилит команду</span>
+                    <span class="ou-alloc__label">Расскажу, ради чего мы это делаем, и чем он усилит команду</span>
                     <div class="ou-alloc__slider">
                       <div class="ou-slider ou-slider--h">
                         <div class="ou-slider__rail">
@@ -1055,6 +1061,11 @@
         <td>Обзор и повторный просмотр</td>
         <td>после отправки</td>
         <td>Те же строки только для чтения, БЕЗ разметки верности: правильного распределения не существует. Числовое поле заменяется значением.</td>
+      </tr>
+      <tr>
+        <td>Размер подписей утверждений</td>
+        <td>всегда</td>
+        <td>Тот же механизм, что у вариантов остальных типов: переменная <code>--tb-answer-fs</code>, которую ставят два общих прохода — длиновой (<code>optionFont</code> по самому длинному утверждению, до рендера) и рантаймовый по высоте (<code>fitQuestionScene</code>, чтобы список влез в поле без прокрутки). Своего размера тип не задаёт: литерал в разметке отнял бы у второго прохода единственный рычаг. На узком поле диапазон сужается ступенью S3 шаблона, как и для остальных типов.</td>
       </tr>
       <tr>
         <td>Клавиатура</td>
