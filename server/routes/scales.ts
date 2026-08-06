@@ -23,6 +23,7 @@ import { requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { logger } from "../logger";
 import { materializeScaleDomains } from "../services/scale-domain";
+import { allocationBudgets } from "@shared/questions/allocation";
 import { syncEntityUsages } from "../services/media/usage-index";
 import { insertScaleSchema, insertQuestionMeasurementSchema, type Scale, type QuestionMeasurement } from "@shared/schema";
 import {
@@ -313,6 +314,7 @@ router.post("/:id/scales/preview", requirePermission("tests.edit"), requireTestS
       toMeasurementSpecs(measurements, scales),
       answers,
       questionTypes,
+      allocationBudgets(questions),
     );
     res.json({ values, errors });
   } catch (error) {

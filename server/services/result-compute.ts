@@ -20,6 +20,7 @@ import {
   type Answer,
 } from "@shared/scales/engine";
 import { computeResultVariables, type ResultVariableSpec } from "@shared/formula/result-variables";
+import type { AllocationSpec } from "@shared/questions/allocation";
 import type { EvalContext, FormulaValue, ScaleResult } from "@shared/formula/types";
 
 /** A test's graded-scoring configuration, mapped to the `@shared` engine specs. */
@@ -27,6 +28,14 @@ export interface ScoringConfig {
   scales: ScaleSpec[];
   measurements: MeasurementSpec[];
   resultVariables: ResultVariableSpec[];
+  /**
+   * PRD-44: allocation spec of every budget question that feeds a scale, keyed by question
+   * id. It travels WITH the scoring configuration rather than as a separate argument for a
+   * reason: the budget bounds the scale's domain, so it is as much a part of «how this test
+   * is scored» as the measurements are, and callers that never heard of the type keep
+   * working. Empty for a test without budget questions.
+   */
+  budgets: Record<string, AllocationSpec>;
 }
 
 /** The computed graded namespaces for one attempt. */
@@ -65,7 +74,7 @@ export function computeAttemptResult(
   base: AttemptResultBase,
 ): AttemptComputation {
   const scaleComputation = config.scales.length
-    ? computeScales(config.scales, config.measurements, answers, questionTypes)
+    ? computeScales(config.scales, config.measurements, answers, questionTypes, config.budgets ?? {})
     : { values: {} as Record<string, ScaleResult>, errors: [] };
 
   // Topics are keyed by UUID and (when set) the author's custom code, so

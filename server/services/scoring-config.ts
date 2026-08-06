@@ -17,13 +17,21 @@ import { parseScaleInterpretation } from "@shared/scales/interpretation";
 import type { ResultVariableSpec } from "@shared/formula/result-variables";
 import { storage } from "../storage";
 import type { ScoringConfig } from "./result-compute";
-import type { Scale, QuestionMeasurement, ResultVariable } from "@shared/schema";
+import { allocationBudgets } from "@shared/questions/allocation";
+import type { Scale, QuestionMeasurement, Question, ResultVariable } from "@shared/schema";
 
 /** The scoring rows reader — live storage by default, a snapshot at delivery. */
 export interface ScoringConfigSource {
   getScales(testId: string): Promise<Scale[]>;
   getQuestionMeasurements(testId: string): Promise<QuestionMeasurement[]>;
   getResultVariables(testId: string): Promise<ResultVariable[]>;
+  /**
+   * PRD-44: the measured questions themselves, needed for the budget of an allocation
+   * question (its `dataJson` bounds the scale's domain). Read through the SOURCE, not
+   * through live storage, so a snapshot-delivered attempt is normalized against the
+   * budget it was published with — the snapshot source already serves frozen rows here.
+   */
+  getQuestionsByIds(ids: string[]): Promise<Question[]>;
 }
 
 /**
@@ -79,5 +87,11 @@ export async function loadScoringConfig(
     sortOrder: rv.sortOrder ?? 0,
   }));
 
-  return { scales, measurements, resultVariables };
+  // PRD-44: only questions that actually feed a scale are fetched — a test without
+  // budget questions makes no extra query and gets an empty map.
+  const measuredIds = Array.from(new Set(measurements.map((m) => m.questionId)));
+  const measuredQuestions = measuredIds.length ? await source.getQuestionsByIds(measuredIds) : [];
+  const budgets = allocationBudgets(measuredQuestions);
+
+  return { scales, measurements, resultVariables, budgets };
 }

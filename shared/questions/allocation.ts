@@ -84,6 +84,31 @@ export function allocationSpec(dataJson: unknown): AllocationSpec {
   return { options, budget, minPerOption, maxPerOption };
 }
 
+/** The question shape {@link allocationBudgets} reads — every host passes its own rows. */
+export interface BudgetQuestion {
+  id: string;
+  type: string;
+  dataJson?: unknown;
+}
+
+/**
+ * Allocation specs of a question set, keyed by question id — what the scale engine needs to
+ * bound a scale's domain (PRD-44 FR-15).
+ *
+ * It exists so nobody re-derives the map: the domain is what percent normalization and the
+ * PRD-29 band ruler both read, and a second derivation is a second chance to get it wrong.
+ * Questions of other types are skipped, so the result is empty for a test without budget
+ * questions and the callers stay type-agnostic.
+ */
+export function allocationBudgets(questions: readonly BudgetQuestion[]): Record<string, AllocationSpec> {
+  const out: Record<string, AllocationSpec> = {};
+  for (const q of questions) {
+    if (q.type !== "allocation") continue;
+    out[q.id] = allocationSpec(q.dataJson);
+  }
+  return out;
+}
+
 /**
  * Can this configuration be filled in at all (FR-05)? Both directions have to hold: the
  * floors must fit inside the budget, and the ceilings must be able to reach it. Without

@@ -18,6 +18,7 @@
 
 import { storage } from "../storage";
 import { achievableRange, type MeasurementSpec, type QuestionType } from "@shared/scales/engine";
+import { allocationBudgets } from "@shared/questions/allocation";
 import type { QuestionMeasurement, Scale } from "@shared/schema";
 
 /** Bounds a scale's contributions can actually reach. */
@@ -84,6 +85,9 @@ export async function materializeScaleDomains(testId: string): Promise<number> {
   const questions = await storage.getQuestionsByIds(questionIds);
   const types: Record<string, QuestionType> = {};
   for (const q of questions) types[q.id] = q.type as QuestionType;
+  // PRD-44: the budget bounds an allocation question's contribution, so the stored domain
+  // must be computed with it — without it the domain collapses and every band moves.
+  const budgets = allocationBudgets(questions);
 
   const specs = toMeasurementSpecs(measurements, scales);
   let written = 0;
@@ -92,6 +96,7 @@ export async function materializeScaleDomains(testId: string): Promise<number> {
       specs.filter((m) => m.scaleKey === scale.key),
       scale.aggregation,
       types,
+      budgets,
     );
     const patch = domainPatch((scale.configJson ?? {}) as Record<string, unknown>, range);
     if (!patch) continue;
