@@ -192,6 +192,36 @@
     @media (max-width: 1100px) {
       .wf-scene > main { padding: var(--ou-space-4) !important; }
       .wf-scene > main > div { width: 100% !important; }
+
+      /* Сцена перестаёт быть окном фиксированной высоты и растёт по содержимому,
+         а прокручивается СТРАНИЦА. На настольном экране сцена занимает окно и
+         прокрутка живёт внутри области вопроса; на телефоне такая же посадка
+         съедает всю высоту шапкой и подвалом — вопрос обрезается, а до блока
+         ответа доскроллить нечем. */
+      .wf-scene { height: auto !important; overflow: visible !important; }
+      .wf-scene > main { flex: none !important; min-height: 0 !important; overflow: visible !important; }
+      .wf-answers { justify-content: flex-start !important; }
+    }
+
+    /* Телефон: шапка сцены отдаёт место вопросу. Легенда карты вопросов и счётчик
+       «отвечено N из 14» — справочные, на 375px они рвут строку по горизонтали. */
+    @media (max-width: 700px) {
+      .wf-scene .ou-quiz__legend { display: none !important; }
+      .wf-scene .ou-quiz > span:last-child { display: none !important; }
+      /* `flex:none` на ряду номеров стоит инлайном и запрещает ему сжиматься —
+         из-за этого страница уезжала вбок. Разрешаем сжатие и перенос. */
+      .wf-scene .ou-quiz { flex-wrap: wrap !important; gap: var(--ou-space-3) !important; }
+      .wf-scene .ou-quiz__dots {
+        flex: 1 1 auto !important; min-width: 0 !important; flex-wrap: wrap !important;
+      }
+      /* Заголовки сцены скопированы с настольного экрана инлайновыми размерами;
+         30px на 375px съедают экран целиком. */
+      .wf-scene h1 { font: var(--ou-text-title-m) !important; }
+      .wf-scene h2 { font-size: 22px !important; }
+      .wf-scene > header { padding-inline: var(--ou-space-4) !important; }
+      .wf-scene > footer { padding-inline: var(--ou-space-4) !important; flex-wrap: wrap !important; }
+      /* Таблицы пояснений прокручиваются вбок, а не сжимаются в столбик букв. */
+      .wf-page table { display: block; overflow-x: auto; }
     }
 
     /* Обзор ответов: те же строки только для чтения. Ползунок остаётся как
