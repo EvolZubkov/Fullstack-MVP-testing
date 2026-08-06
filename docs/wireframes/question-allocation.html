@@ -123,8 +123,11 @@
       border-radius: var(--ou-radius-m);
       background: var(--ou-bg-elevated);
     }
-    /* Строка с ненулевым баллом подсвечена мягко: это НЕ «правильно», а
-       «сюда учащийся положил вес». Цвета вердикта у типа нет вовсе. */
+    /* Строка, которой учащийся дал вес СВЕРХ минимума, подсвечена мягко: это НЕ
+       «правильно», а «сюда положен вес». Цвета вердикта у типа нет вовсе.
+       Именно «выше минимума», а не «не ноль»: при ненулевом минимуме поля
+       предзаполнены, и правило «не ноль» подсветило бы все строки сразу —
+       подсветка сказала бы «вы это выбрали» там, где выбор сделала система. */
     .ou-alloc__row.is-weighted { border-color: var(--ou-accent-default); }
     .ou-alloc__label {
       font-size: var(--tb-answer-fs, 20px); font-weight: 400; line-height: 1.35;
@@ -172,9 +175,21 @@
     }
 
     /* Узкая колонка эскиза для состояния «узкий экран». */
+    /* Узкий экран показан КОЛОНКОЙ телефонной ширины во всю высоту сцены, а не
+       рамкой внутри настольного холста: телефонная раскладка в область ответа
+       настольной сцены не помещается, и последняя строка обрезалась нижней
+       кромкой. Настольные шапка и подвал в этом состоянии скрыты намеренно —
+       PRD-44 меняет блок ответа, а мобильная адаптация сцены целиком идёт
+       отдельным треком и здесь не пересматривается. */
+    /* !important здесь обязателен: сцена скопирована с согласованного экрана
+       вместе с ИНЛАЙНОВЫМИ стилями, а инлайн бьёт любой селектор. Это правило
+       эскизного слоя, в продуктовый UI оно не мигрирует. */
+    body.wf-phone .wf-scene > header,
+    body.wf-phone .wf-scene > footer { display: none !important; }
+    body.wf-phone .wf-scene > main > div { width: 430px !important; }
     .wf-narrow-frame {
-      width: 420px; margin-inline: auto; padding: var(--ou-space-4);
-      border: 1px dashed var(--ou-border-default); border-radius: var(--ou-radius-l);
+      width: 100%; padding: 0;
+      border: 0; border-radius: 0;
     }
   </style>
 </head>
@@ -242,7 +257,7 @@
   </header>
 
   <main style="flex:1;min-height:0;overflow:auto;padding:24px">
-    <div style="width:75%;height:100%;display:flex;flex-direction:column;gap:var(--ou-space-4)">
+    <div style="width:75%;min-height:100%;display:flex;flex-direction:column;gap:var(--ou-space-4)">
       <div style="display:flex;align-items:center;gap:var(--ou-space-3)">
         <span style="font:var(--ou-text-body-m);color:var(--ou-fg-muted)">Вопрос 2 из 14</span>
         <span class="ou-tag ou-tag--neutral">Человекоцентричное лидерство</span>
@@ -583,7 +598,7 @@
                 Осталось: <strong>3</strong> из 7
               </div>
               <div class="ou-alloc__rows">
-                <div class="ou-alloc__row is-weighted" data-index="0">
+                <div class="ou-alloc__row" data-index="0">
                   <span class="ou-alloc__label">Разберу вместе с ним первую рабочую задачу</span>
                   <div class="ou-alloc__slider">
                     <div class="ou-slider ou-slider--h">
@@ -605,7 +620,7 @@
                   </div>
                 </div>
 
-                <div class="ou-alloc__row is-weighted" data-index="1">
+                <div class="ou-alloc__row" data-index="1">
                   <span class="ou-alloc__label">Познакомлю с командой и объясню, к кому идти с чем</span>
                   <div class="ou-alloc__slider">
                     <div class="ou-slider ou-slider--h">
@@ -627,7 +642,7 @@
                   </div>
                 </div>
 
-                <div class="ou-alloc__row is-weighted" data-index="2">
+                <div class="ou-alloc__row" data-index="2">
                   <span class="ou-alloc__label">Дам чёткий регламент и сроки на первый месяц</span>
                   <div class="ou-alloc__slider">
                     <div class="ou-slider ou-slider--h">
@@ -649,7 +664,7 @@
                   </div>
                 </div>
 
-                <div class="ou-alloc__row is-weighted" data-index="3">
+                <div class="ou-alloc__row" data-index="3">
                   <span class="ou-alloc__label">Расскажу, ради чего мы это делаем, и чем он усилит команду</span>
                   <div class="ou-alloc__slider">
                     <div class="ou-slider ou-slider--h">
@@ -879,6 +894,9 @@
 
   window.showState = function showState(btn, id) {
     var target = document.getElementById(id);
+    // Узкий экран меняет не только блок ответа, но и ширину колонки, поэтому
+    // состояние отмечается на body, а не только показом своего .wf-state.
+    document.body.classList.toggle('wf-phone', id === 's-narrow');
     document.querySelectorAll('.wf-state').forEach(function (el) {
       el.classList.toggle('active', el === target);
     });
@@ -1036,7 +1054,7 @@
       <tr>
         <td>Подсветка строки с баллом</td>
         <td>Отмечать ли строку, которой учащийся дал вес.</td>
-        <td>Отмечена мягко — акцентная рамка (<code>is-weighted</code>). Это НЕ «правильно», а «сюда положен вес»; цвета вердикта у типа нет вовсе. Альтернатива — не отмечать, тогда при бюджете 7 и четырёх утверждениях труднее увидеть, что уже тронуто.</td>
+        <td>Отмечена мягко — акцентная рамка (<code>is-weighted</code>) на строках ВЫШЕ минимума. Это НЕ «правильно», а «сюда положен вес»; цвета вердикта у типа нет вовсе. Правило именно «выше минимума», а не «не ноль»: при ненулевом минимуме поля предзаполнены, и правило «не ноль» подсветило бы все строки сразу — подсветка сказала бы «вы это выбрали» там, где выбор сделала система (видно в состоянии «С минимумом»).</td>
       </tr>
       <tr>
         <td>Формулировка счётчика</td>
