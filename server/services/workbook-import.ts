@@ -41,7 +41,7 @@ import type { Role } from "@shared/access";
 import { importQuestionRows, type ResolvedQuestion } from "./questions-import";
 import { testSettingsService, type SectionPayload } from "./test-settings";
 import { parseScoringCell } from "../utils/scoring-excel";
-import { hasOptionList, isMeasurementOnly } from "@shared/questions/question-type";
+import { hasOptionList, isMeasurementOnly, distributesBudget } from "@shared/questions/question-type";
 
 import {
   parseScaleRow,
@@ -476,9 +476,15 @@ export async function importWorkbook(
       // effect right now — silently storing dead numbers is how «почему не считается»
       // tickets are born.
       if (q.measurementOnly && (input.points != null || input.scoringRaw !== "")) {
+        // Причина у двух измерительных типов разная, и называть её надо точно: у шкалы
+        // это ОТСУТСТВИЕ правильной градации (появится — цена оживёт), у распределения
+        // сам тип (PRD-44 FR-10) — оживать нечему.
         result.warnings.push(
-          `${input.where}: вопрос "${input.ref}" — измерительная шкала без правильной ` +
-            `градации, поэтому «Балл»/«Цена ответа» на результат не влияют (значения сохранены)`,
+          distributesBudget(q.type)
+            ? `${input.where}: вопрос "${input.ref}" — распределение баллов, оно не проверяется ` +
+              `и не приносит баллов, поэтому «Балл»/«Цена ответа» на результат не влияют (значения сохранены)`
+            : `${input.where}: вопрос "${input.ref}" — измерительная шкала без правильной ` +
+              `градации, поэтому «Балл»/«Цена ответа» на результат не влияют (значения сохранены)`,
         );
       }
 

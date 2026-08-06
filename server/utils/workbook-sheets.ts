@@ -102,12 +102,17 @@ const SOURCE_FROM: Record<string, string> = {
   option: "option",
   matching_pair: "matching_pair",
   ranking_position: "ranking_position",
+  // PRD-44: вклад распределения бюджета. Ключ — индекс утверждения, как у «варианта»:
+  // утверждения лежат в том же списке `options`.
+  распределение: "option_allocation",
+  option_allocation: "option_allocation",
 };
 const SOURCE_TO: Record<string, string> = {
   question: "вопрос",
   option: "вариант",
   matching_pair: "пара",
   ranking_position: "позиция",
+  option_allocation: "распределение",
 };
 
 const CONTROLS_FROM: Record<string, string> = {
@@ -361,7 +366,7 @@ export interface ParsedMeasurement {
   questionRef: string;
   /** Scale `key`. */
   scaleKey: string;
-  sourceType: "question" | "option" | "matching_pair" | "ranking_position";
+  sourceType: "question" | "option" | "matching_pair" | "ranking_position" | "option_allocation";
   /** 0-based source key string (empty for `question`). */
   sourceKey: string;
   value: number;
@@ -381,7 +386,10 @@ export function parseMeasurementRow(row: Record<string, unknown>): ParseResult<P
 
   const sourceKey = String(row["Ключ источника"] ?? "").trim();
 
-  const value = Number(String(row["Значение"] ?? "").trim());
+  // PRD-44 FR-14: пустой коэффициент означает 1 — в опроснике из 56 строк вкладов
+  // единица стоит в каждой, и требовать её явно значит требовать 56 одинаковых ячеек.
+  const valueRaw = String(row["Значение"] ?? "").trim();
+  const value = valueRaw === "" ? 1 : Number(valueRaw);
   if (!Number.isFinite(value)) return { ok: false, error: `некорректное значение "${row["Значение"]}"` };
 
   const weightRaw = String(row["Вес"] ?? "").trim();
@@ -403,7 +411,8 @@ export function validateSourceKey(
   if (sourceType === "question") {
     return sourceKey ? "для источника «вопрос» ключ источника должен быть пустым" : null;
   }
-  if (sourceType === "option") {
+  // «вариант» и «распределение» ключуются одинаково — индексом в списке `options`.
+  if (sourceType === "option" || sourceType === "option_allocation") {
     const i = Number(sourceKey);
     if (!Number.isInteger(i) || i < 0 || i >= unitCount) return `ключ источника вне диапазона: "${sourceKey}"`;
     return null;

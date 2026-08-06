@@ -17,7 +17,8 @@ import { storage } from "../storage";
 import { logger } from "../logger";
 import { syncEntityUsages } from "./media/usage-index";
 import { normalizeTags } from "@shared/tags";
-import { hasOptionList, hasFixedOptionOrder, isMeasurementOnly } from "@shared/questions/question-type";
+import { hasOptionList, hasFixedOptionOrder, isMeasurementOnly, distributesBudget } from "@shared/questions/question-type";
+import { isAllocationFeasible } from "@shared/questions/allocation";
 import { normalizeIncomingText, normalizeQuestionData } from "./question-text";
 import type { Question } from "@shared/schema";
 import type { Role } from "@shared/access";
@@ -39,9 +40,13 @@ const typeFromExcel: Record<string, string> = {
   // PRD-26: the scale is declared by its own name. Its rule for the correct-answer
   // column differs from single choice — an empty cell means measurement mode (FR-23).
   scale: "scale",
+  // PRD-44: budget allocation. Its statements ride the ordinary options column; the
+  // budget and the per-option domain come in three columns of their own.
+  allocation: "allocation",
+  распределение: "allocation",
 };
 
-type QuestionType = "single" | "multiple" | "matching" | "ranking" | "scale";
+type QuestionType = "single" | "multiple" | "matching" | "ranking" | "scale" | "allocation";
 
 /** SHA-256 от type + prompt + нормализованные варианты ответов. */
 export function computeQuestionHash(type: string, prompt: string, dataJson: unknown): string {
@@ -233,7 +238,54 @@ export async function importQuestionRows(
         }
         dataJson = { options };
 
-        if (type === "scale") {
+        if (type === "allocation") {
+          // PRD-44 FR-38/FR-39/FR-40. Три колонки описывают бюджет и домен варианта;
+          // колонка правильных ответов должна быть ПУСТА — эталонного распределения у
+          // метода нет вовсе, поэтому заполненная ячейка это ошибка автора, а не
+          // значение, которое можно молча выбросить.
+          if (correctStr !== "") {
+            result.errors.push(
+              `Строка ${rowNum}: у распределения баллов нет правильного ответа — ` +
+                `колонка «Номера правильных ответов» должна быть пустой`,
+            );
+            continue;
+          }
+          const budgetRaw = String(row["Бюджет распределения"] ?? "").trim();
+          const budget = Number(budgetRaw);
+          if (budgetRaw === "" || !Number.isInteger(budget) || budget < 1 || budget > 1000) {
+            result.errors.push(
+              `Строка ${rowNum}: укажите «Бюджет распределения» — целое от 1 до 1000, получено "${budgetRaw}"`,
+            );
+            continue;
+          }
+          const minRaw = String(row["Минимум на вариант"] ?? "").trim();
+          const maxRaw = String(row["Максимум на вариант"] ?? "").trim();
+          const minPerOption = minRaw === "" ? 0 : Number(minRaw);
+          const maxPerOption = maxRaw === "" ? budget : Number(maxRaw);
+          if (!Number.isInteger(minPerOption) || minPerOption < 0 || !Number.isInteger(maxPerOption)) {
+            result.errors.push(`Строка ${rowNum}: минимум и максимум на вариант — целые неотрицательные числа`);
+            continue;
+          }
+          if (minPerOption > maxPerOption || maxPerOption > budget) {
+            result.errors.push(
+              `Строка ${rowNum}: домен варианта должен укладываться в 0 <= минимум <= максимум <= бюджет`,
+            );
+            continue;
+          }
+          const spec = { options, budget, minPerOption, maxPerOption };
+          const feasibility = isAllocationFeasible(spec);
+          if (!feasibility.ok) {
+            result.errors.push(
+              `Строка ${rowNum}: ` +
+                (feasibility.kind === "min"
+                  ? `распределение невыполнимо — минимумы требуют ${feasibility.required} баллов, а бюджет ${feasibility.available}`
+                  : `распределение невыполнимо — нужно распределить ${feasibility.required} баллов, а максимумы дают только ${feasibility.available}`),
+            );
+            continue;
+          }
+          dataJson = spec;
+          correctJson = {};
+        } else if (type === "scale") {
           // PRD-26 FR-23: the correct-answer column IS the author's switch. Empty →
           // measurement mode: `{}`, never `null` (the column is NOT NULL). One number
           // → a checked scale. Several numbers make no sense: a scale answer is one
@@ -386,6 +438,21 @@ export async function importQuestionRows(
             `значение «${String(row["Следование вариантов ответов"]).trim()}» в колонке ` +
             `«Следование вариантов ответов» не применяется`,
         );
+      }
+
+      // PRD-44 FR-38: три колонки бюджета описывают ТОЛЬКО распределение. Заполненные
+      // у другого типа они не ошибка (значения просто некуда положить), но означают,
+      // что автор ждал поведения, которого не будет, — об этом стоит сказать.
+      const BUDGET_COLUMNS = ["Бюджет распределения", "Минимум на вариант", "Максимум на вариант"];
+      if (!distributesBudget(type)) {
+        const filled = BUDGET_COLUMNS.filter((c) => String(row[c] ?? "").trim() !== "");
+        if (filled.length > 0) {
+          result.warnings.push(
+            `Строка ${rowNum}: ${filled.map((c) => `«${c}»`).join(", ")} ` +
+              `${filled.length === 1 ? "применяется" : "применяются"} только к распределению баллов — ` +
+              `у типа «${String(row["Тип вопроса"] || row["Тип"]).trim()}» значение не используется`,
+          );
+        }
       }
 
       // PRD-14 Ф0 (FR-04): сложность сохраняет явный 0; диапазон 0..100. T-40:
