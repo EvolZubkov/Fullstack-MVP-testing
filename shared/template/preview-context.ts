@@ -27,7 +27,7 @@ import {
 import { buildResultsNav } from "./results-nav";
 import { buildTransitionContext } from "./transition-context";
 import { buildReviewContext } from "./review-context";
-import { renderSingleChoice, renderMultiple, renderRanking, renderMatching, renderScale } from "./question-interaction";
+import { renderSingleChoice, renderMultiple, renderRanking, renderMatching, renderScale, renderAllocation } from "./question-interaction";
 import { renderInlineMarkdown } from "../text/markdown";
 import { renderQuestionMedia } from "./question-media";
 import {
@@ -79,6 +79,10 @@ export interface PreviewQuestion {
   id: string;
   type: string;
   prompt: string;
+  /** PRD-44: бюджет распределения и домен варианта (только для типа `allocation`). */
+  budget?: number;
+  minPerOption?: number;
+  maxPerOption?: number;
   options?: Array<{ id: string; text: string; correct?: boolean }>;
   pairs?: Array<{ id: string; left: string; right: string }>;
   order?: string[];
@@ -367,6 +371,21 @@ function buildInteraction(q: PreviewQuestion): string {
       // PRD-26: nothing is picked in the preview either, so the scale shows its
       // graduations with no fill — the administrator sees the control, not an answer.
       return renderScale({ type: "scale", dataJson: { options: texts } }, undefined);
+    case "allocation":
+      // PRD-44 FR-55: ничего не распределено — администратор видит сам интерактив и
+      // счётчик остатка, а не чужой ответ.
+      return renderAllocation(
+        {
+          type: "allocation",
+          dataJson: {
+            options: texts,
+            budget: q.budget ?? 7,
+            minPerOption: q.minPerOption ?? 0,
+            maxPerOption: q.maxPerOption ?? q.budget ?? 7,
+          },
+        },
+        {},
+      );
     case "matching": {
       const pairs = q.pairs ?? [];
       return renderMatching(

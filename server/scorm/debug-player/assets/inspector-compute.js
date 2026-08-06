@@ -77,7 +77,7 @@
   function typeLabel(t) {
     return t === "single" ? "Один ответ" : t === "multiple" ? "Несколько" :
       t === "matching" ? "Соответствие" : t === "ranking" ? "Ранжирование" :
-      t === "scale" ? "Шкала" : (t || "?");
+      t === "scale" ? "Шкала" : t === "allocation" ? "Распределение баллов" : (t || "?");
   }
 
   // Human-readable answer using the package's own option/left/right/items text.
@@ -105,6 +105,15 @@
       var it = d.items || [], order = Array.isArray(ans) ? ans : [];
       return order.map(function (ix, pos) { return (pos + 1) + ". " + (it[ix] != null ? it[ix] : "#" + ix); }).join("   ");
     }
+    // PRD-44: распределение показывается ЦЕЛИКОМ, вместе с нулями — инспектор нужен,
+    // чтобы видеть вектор ответа, а не его непустую часть.
+    if (q.type === "allocation") {
+      var op = d.options || [], assigned = (ans && typeof ans === "object") ? ans : {};
+      if (!op.length) return "(нет ответа)";
+      return op.map(function (label, i) {
+        return (label != null ? label : "#" + i) + ": " + Number(assigned[i] || 0);
+      }).join("; ");
+    }
     return String(ans);
   }
 
@@ -128,6 +137,11 @@
       var ip = String(m.sourceKey).split(":"), item = Number(ip[0]), pos = Number(ip[1]);
       return Array.isArray(answer) && answer[pos] === item;
     }
+    if (m.sourceType === "option_allocation") {
+      if (typeof answer !== "object" || answer === null || Array.isArray(answer)) return false;
+      var assignedPts = answer[String(Number(m.sourceKey))];
+      return typeof assignedPts === "number" && isFinite(assignedPts) && assignedPts !== 0;
+    }
     return false;
   }
 
@@ -135,7 +149,13 @@
     var out = [];
     (pkg.measurements || []).forEach(function (m) {
       if (m.questionId !== q.id) return;
-      if (isActiveMeasure(m, ans, q.type)) out.push({ scaleKey: m.scaleKey, delta: m.value * m.weight });
+      if (!isActiveMeasure(m, ans, q.type)) return;
+      // PRD-44: вклад распределения равен ПРИСВОЕННОМУ баллу, а не фиксированной
+      // величине, — иначе инспектор показывал бы не то, что посчитал движок.
+      var delta = m.sourceType === "option_allocation"
+        ? (ans[String(Number(m.sourceKey))] || 0) * m.value * m.weight
+        : m.value * m.weight;
+      out.push({ scaleKey: m.scaleKey, delta: delta });
     });
     return out;
   }
@@ -261,6 +281,14 @@
       var ratio = pr ? pr.ratio : 0;
       var answered = !(ans == null || (Array.isArray(ans) && ans.length === 0) ||
         (q.type === "matching" && (!ans || !Object.keys(ans).length)));
+      // PRD-44 FR-31: распределение отвечено только при полной сумме — частичное
+      // здесь должно читаться как «не отвечен», как и в самом прохождении.
+      if (q.type === "allocation") {
+        var spec = q.data || {};
+        var total = 0;
+        Object.keys(ans || {}).forEach(function (k) { total += Number(ans[k]) || 0; });
+        answered = Number(spec.budget) > 0 && total === Number(spec.budget);
+      }
       var verdict = !answered ? "none" : ratio >= 1 ? "correct" : ratio > 0 ? "partial" : "wrong";
       var status = (liveStatuses && liveStatuses[q.id]) ? liveStatuses[q.id] : (answered ? "answered" : "unanswered");
       var points = q.points || 1;
