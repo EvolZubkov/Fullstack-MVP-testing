@@ -140,3 +140,40 @@ describe("shuffleIndices", () => {
     expect(shuffleIndices(1)).toEqual([0]);
   });
 });
+
+describe("hasAnswer — распределение баллов (PRD-44 FR-31)", () => {
+  const Q = {
+    type: "allocation",
+    dataJson: { options: ["А", "Б", "В", "Г"], budget: 7, minPerOption: 0, maxPerOption: 7 },
+  };
+
+  it("нетронутый вопрос не отвечен", () => {
+    // Ветка `default` вернула бы `true` для любого объекта — именно поэтому правило
+    // задано ЯВНО: частичное распределение засчиталось бы как готовый ответ.
+    expect(hasAnswer(Q, undefined)).toBe(false);
+    expect(hasAnswer(Q, {})).toBe(false);
+  });
+
+  it("частичное распределение не отвечено", () => {
+    expect(hasAnswer(Q, { 0: 3, 1: 1, 2: 0, 3: 0 })).toBe(false);
+  });
+
+  it("сумма РОВНО в бюджет — отвечен", () => {
+    expect(hasAnswer(Q, { 0: 3, 1: 1, 2: 1, 3: 2 })).toBe(true);
+  });
+
+  it("нули считаются, а не игнорируются", () => {
+    expect(hasAnswer(Q, { 0: 7, 1: 0, 2: 0, 3: 0 })).toBe(true);
+  });
+
+  it("испорченная конфигурация не проходит как отвеченная", () => {
+    expect(hasAnswer({ type: "allocation", dataJson: null }, {})).toBe(false);
+  });
+});
+
+describe("deliversShuffledOrder — распределение (FR-07)", () => {
+  it("утверждения подчиняются общей настройке порядка", () => {
+    expect(deliversShuffledOrder({ type: "allocation" })).toBe(true);
+    expect(deliversShuffledOrder({ type: "allocation", shuffleAnswers: false })).toBe(false);
+  });
+});

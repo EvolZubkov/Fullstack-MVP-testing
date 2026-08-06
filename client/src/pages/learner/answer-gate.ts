@@ -6,6 +6,7 @@
  * both hosts must agree so scoring and the «Отправить ответ» gate never diverge.
  */
 import { hasFixedOptionOrder } from "@shared/questions/question-type";
+import { allocationSpec, isAllocationComplete } from "@shared/questions/allocation";
 
 /** Produces a permutation of `[0..length-1]`. Injectable for deterministic tests. */
 export type ShuffleFn = (length: number) => number[];
@@ -105,6 +106,12 @@ export function hasAnswer(question: { type?: string; dataJson?: unknown } | null
       const need = Array.isArray(data?.items) ? data.items.length : 0;
       return Array.isArray(answer) && answer.length === need;
     }
+    // PRD-44 FR-31: отвечен ТОЛЬКО когда сумма ровно равна бюджету. Ветка задана явно,
+    // а не оставлена `default`: тот вернул бы `true` для любого объекта, и частичное
+    // распределение прошло бы как готовый ответ — вопрос перестал бы попадать в счётчик
+    // пропущенных и в возврат к незавершённым.
+    case "allocation":
+      return isAllocationComplete(allocationSpec(question.dataJson), answer);
     default:
       return answer !== undefined && answer !== null;
   }

@@ -101,6 +101,15 @@ function hasAnswer(q, answer) {
     return !!(state.rankingTouched && state.rankingTouched[q.id]);
   }
 
+  // PRD-44 FR-31: распределение отвечено, только когда сумма ровно равна бюджету.
+  // Зеркало веб-хоста; без этой ветки хвост функции вернул бы `true` для любого
+  // объекта, и пакет пускал бы дальше с недобором, а веб — нет.
+  if (typeof TBQType !== 'undefined' && TBQType.distributesBudget(q.type)) {
+    var TBa = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    if (!TBa || !TBa.isAllocationComplete || !TBa.allocationSpec) return false;
+    return TBa.isAllocationComplete(TBa.allocationSpec(q.data), answer);
+  }
+
   return answer !== undefined && answer !== null;
 }
 

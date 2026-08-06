@@ -23,8 +23,14 @@ const REQUIRED = [
   "nextScaleIndex",
   "isSingleIndexChoice",
   "isMeasurementOnly",
-  // PRD-44: признак «распределяет бюджет» — рантайм пакета ветвится по нему.
+  // PRD-44: признак «распределяет бюджет», разметка группы и модель распределения —
+  // рантайм пакета считает по ним готовность ответа и потолок строки.
   "distributesBudget",
+  "renderAllocation",
+  "allocationSpec",
+  "isAllocationComplete",
+  "optionCeiling",
+  "setAllocationValue",
   "questionHint",
   "answerTexts",
   "fitFont",

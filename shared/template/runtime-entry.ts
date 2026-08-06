@@ -87,6 +87,19 @@ export {
 // признаков (app/utils/qtype.js), а клавиатуру берёт отсюда — считать индекс градации
 // дважды нельзя, иначе хосты разойдутся в поведении стрелок.
 export { nextScaleIndex } from "./scale-keyboard";
+// PRD-44: модель распределения бюджета. Рантайм пакета считает по ней готовность
+// ответа и потолок строки — второй копии арифметики в пакете не появляется.
+export {
+  allocationSpec,
+  allocationRemaining,
+  allocationTotal,
+  isAllocationComplete,
+  normalizeAllocation,
+  optionCeiling,
+  seedAllocation,
+  setAllocationValue,
+} from "../questions/allocation";
+export { renderAllocation } from "./question-interaction";
 export {
   isSingleIndexChoice,
   hasOptionList,
