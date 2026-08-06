@@ -6119,6 +6119,94 @@ span.ou-quiz__dot:hover { transform: none; }
 .ou-slider--error   .ou-slider__thumb { border-color: var(--ou-error-default); }
 
 
+/* ─── BudgetAllocation.css ───────────────────────────────── */
+/* Распределение бюджета между утверждениями (PRD-44). Составлен из существующих
+   примитивов: строка это Slider + NumberInput, новое здесь — только группа с общим
+   бюджетом. Разметку с теми же классами порождает framework-free двойник для сцены
+   учащегося, поэтому имена классов менять нельзя в одностороннем порядке. */
+.ou-alloc { display: flex; flex-direction: column; gap: var(--ou-space-4); }
+.ou-alloc.is-disabled { opacity: 0.6; pointer-events: none; }
+
+/* Счётчик остатка — главный статус экрана, читается с одного взгляда. */
+.ou-alloc__counter {
+  display: flex; align-items: baseline; gap: var(--ou-space-2);
+  font: var(--ou-text-heading-s); color: var(--ou-fg-muted);
+}
+.ou-alloc__counter strong {
+  font-size: 1.5em; line-height: 1; color: var(--ou-fg-default);
+  font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.ou-alloc__counter.is-complete,
+.ou-alloc__counter.is-complete strong { color: var(--ou-success-on-soft); }
+
+.ou-alloc__rows { display: flex; flex-direction: column; gap: var(--ou-space-3); }
+
+/* Строка: подпись занимает свободное место, пара «ползунок и поле» — колонку справа.
+   Порядок именно такой: сначала читают утверждение, потом назначают ему вес. */
+.ou-alloc__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px 108px;
+  align-items: center;
+  gap: var(--ou-space-4);
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border: 1px solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-elevated);
+}
+/* Строка, которой дали вес СВЕРХ минимума. Это НЕ «правильно», а «сюда положен вес»:
+   цвета вердикта у типа нет вовсе. Именно «выше минимума», а не «не ноль» — при
+   ненулевом минимуме поля предзаполнены, и правило «не ноль» отметило бы все строки
+   сразу, сказав «вы это выбрали» там, где выбрала система. */
+.ou-alloc__row.is-weighted { border-color: var(--ou-accent-default); }
+
+.ou-alloc__label {
+  font-size: var(--tb-answer-fs, 20px); font-weight: 400; line-height: 1.35;
+  color: var(--ou-fg-default); text-wrap: pretty;
+}
+
+.ou-alloc__slider { position: relative; justify-self: stretch; }
+.ou-alloc__slider .ou-slider { max-width: none; width: 100%; }
+.ou-alloc__field .ou-number__box { width: 108px; }
+
+/* Недоступный хвост дорожки. Шкала ползунка ФИКСИРОВАНА бюджетом: длина дорожки
+   всегда означает одно и то же, иначе значение строки визуально прыгало бы при
+   изменении СОСЕДНЕЙ строки. Подвижен только стоп — он равен «значение + остаток»,
+   и без этой зоны ползунок упирается в невидимую стену. */
+.ou-alloc__cap {
+  position: absolute; top: 50%; right: 0;
+  height: 12px; transform: translateY(-50%);
+  border-radius: 0 999px 999px 0;
+  background: var(--ou-bg-surface-2);
+  border-left: 2px solid var(--ou-border-default);
+  pointer-events: none;
+}
+
+/* Только чтение (обзор ответов): интерактив снят, разметки верности НЕТ —
+   правильного распределения не существует. */
+.ou-alloc--readonly .ou-alloc__row { background: var(--ou-bg-surface-2); }
+.ou-alloc--readonly .ou-slider__thumb { cursor: default; }
+.ou-alloc__value {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 108px; height: var(--ou-size-control-m);
+  border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-m);
+  font: var(--ou-text-heading-s); font-variant-numeric: tabular-nums;
+  color: var(--ou-fg-default); background: var(--ou-bg-elevated);
+}
+
+/* Узкий контейнер: ползунок уезжает ПОД текст утверждения. Порог тот же, что у
+   ступени S2 сцены, — подпись рядом с парой ниже него уже рвётся. */
+@media (max-width: 700px) {
+  .ou-alloc__row {
+    grid-template-columns: minmax(0, 1fr) 108px;
+    grid-template-areas: "label label" "slider field";
+    row-gap: var(--ou-space-3);
+  }
+  .ou-alloc__label  { grid-area: label; }
+  .ou-alloc__slider { grid-area: slider; }
+  .ou-alloc__field  { grid-area: field; }
+  .ou-alloc__value  { grid-area: field; }
+}
+
 /* ─── Spinner.css ───────────────────────────────── */
 /* UniversityRT · Spinner */
 .ou-spinner-wrap { display: inline-flex; align-items: center; gap: var(--ou-space-3); }
