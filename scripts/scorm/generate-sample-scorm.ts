@@ -48,7 +48,7 @@ const TOPIC_ID = "topic-crypto";
 
 let qSeq = 0;
 function q(
-  type: "single" | "multiple" | "matching" | "ranking",
+  type: "single" | "multiple" | "matching" | "ranking" | "allocation",
   prompt: string,
   dataJson: unknown,
   correctJson: unknown,
@@ -109,6 +109,12 @@ const questions = [
   q("ranking", "Упорядочьте длины ключей по возрастанию.",
     { items: ["DES (56 бит)", "3DES (112 бит)", "AES-128", "AES-256"] },
     { correctOrder: [0, 1, 2, 3] }, 60),
+  // PRD-44: распределение бюджета — единственный тип, где величину вклада задаёт
+  // учащийся. В образце нужен, чтобы приёмка пакета проверяла ЖИВОЙ интерактив, а
+  // не только разметку: жест ползунка, счётчик остатка и запись взаимодействия.
+  q("allocation", "Распределите 7 баллов между мерами защиты по их важности.",
+    { options: ["Обучение сотрудников", "Двухфакторная аутентификация", "Резервное копирование", "Регламент реагирования"], budget: 7, minPerOption: 0, maxPerOption: 7 },
+    {}, 50),
 ];
 
 // ─── Content pages ──────────────────────────────────────────────────────────────

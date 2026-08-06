@@ -785,10 +785,16 @@ function finishScorm(results, passedForLms, resultComputation, scaleComputation)
     var ans = gradedAnswerFor(q);
     var fullCorrect = checkAnswer(q, ans) === 1;
 
+    // Измерительный вопрос (шкала без верной градации, распределение баллов) не
+    // бывает верным или неверным: эталона у него нет. `incorrect` показал бы в отчёте
+    // LMS ошибку ученика там, где ошибаться не в чем, — SCORM 2004 для этого имеет
+    // отдельный исход `neutral` (PRD-26 FR-08, PRD-44 FR-09).
+    var measurementOnly = typeof TBQType !== 'undefined' && TBQType.isMeasurementOnly(q);
+
     interactions.push({
       id: 'q_' + q.id,
       type: mapScormType(q),
-      result: fullCorrect ? 'correct' : 'incorrect',
+      result: measurementOnly ? 'neutral' : (fullCorrect ? 'correct' : 'incorrect'),
       response: formatResponse(q, ans),
       correct: formatResponse(q, getCorrectAnswerFor(q)),
       description: authorTextPlain(q.prompt)

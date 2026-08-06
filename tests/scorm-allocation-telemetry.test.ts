@@ -57,6 +57,24 @@ describe("тип взаимодействия (FR-54)", () => {
   });
 });
 
+describe("исход взаимодействия", () => {
+  // Извлекается вместе с окружением: строка исхода собирается в теле цикла, поэтому
+  // проверяется правило, а не переписанная копия.
+  const src2 = readFileSync(
+    resolve(process.cwd(), "server/scorm/template/app/render/resultsPage.js"),
+    "utf8",
+  );
+
+  it("измерительный вопрос помечается neutral, а не incorrect", () => {
+    // `incorrect` показал бы в отчёте LMS ошибку ученика там, где эталона нет вовсе.
+    expect(src2).toContain("measurementOnly ? 'neutral'");
+  });
+
+  it("правило опирается на признак типа, а не на сравнение с литералом", () => {
+    expect(src2).toContain("TBQType.isMeasurementOnly(q)");
+  });
+});
+
 describe("строка ответа (FR-54)", () => {
   it("вектор «индекс[.]балл» через запятую", () => {
     expect(runtime.formatResponse(ALLOC, { 0: 3, 1: 1, 2: 1, 3: 2 })).toBe("0[.]3,1[.]1,2[.]1,3[.]2");
