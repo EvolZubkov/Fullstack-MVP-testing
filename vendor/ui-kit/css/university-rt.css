@@ -6176,7 +6176,10 @@ span.ou-quiz__dot:hover { transform: none; }
   position: absolute; top: 50%; right: 0;
   height: 12px; transform: translateY(-50%);
   border-radius: 0 999px 999px 0;
-  background: var(--ou-bg-surface-2);
+  /* Фон РОВНО как у строки: дорожка визуально заканчивается на стопе, а не меняет
+     оттенок. В светлой теме `--ou-bg-surface-2` почти совпадал с полупрозрачной
+     дорожкой, и стоп был не виден вовсе — проверено в браузере. */
+  background: var(--ou-bg-elevated);
   border-left: 2px solid var(--ou-border-default);
   pointer-events: none;
 }
