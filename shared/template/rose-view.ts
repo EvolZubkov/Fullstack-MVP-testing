@@ -57,8 +57,19 @@ import {
  */
 const MAX_AXES = 6;
 
-/** Grid rings at equal shares of the whole: 25, 50, 75 and 100 per cent. */
-const RING_SHARES = [0.25, 0.5, 0.75, 1];
+/**
+ * The rose draws NO grid rings, so the field is bounded by nothing but the sectors.
+ *
+ * They were there — at equal shares of the whole — and three things sank them. They carry no
+ * labels, for the same reason the radar's do not: with different bands per scale a labelled
+ * common grid would state something false. Their outer ring marks a state that cannot occur
+ * in an ipsative method — one scale holding the entire budget. And once the captions moved in
+ * to the figure, the outer ring ran straight through them.
+ *
+ * What is left is what the chart is for: sectors compared with each other. The field is kept
+ * as the type's `rings` array so both diagrams share one context shape — for the rose it is
+ * simply empty, and an empty DSL loop draws nothing.
+ */
 
 /** One sector: a scale's share of the whole, ready to draw. */
 export interface CtxRoseSector {
@@ -210,7 +221,7 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
     width: WIDTH,
     height: HEIGHT,
     sectors,
-    rings: RING_SHARES.map((s) => ({ cx: CENTER_X, cy: CENTER_Y, radius: round1(RADIUS * Math.sqrt(s)) })),
+    rings: [],
     labels,
     ariaLabel: `Расклад по шкалам: ${sectors
       .map((s) => `${s.label} — ${s.levelText || "уровень не определён"}`)

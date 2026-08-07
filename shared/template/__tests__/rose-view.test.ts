@@ -42,8 +42,8 @@ describe("buildRoseChart", () => {
     expect(chart!.sectors.map((s) => s.sharePercent)).toEqual([34.7, 16.3, 14.3, 34.7]);
   });
 
-  it("держит кольца сетки по равным долям целого", () => {
-    expect(buildRoseChart({ axes: CHIL, ramp })!.rings.map((r) => r.radius)).toEqual([50, 70.7, 86.6, 100]);
+  it("не рисует колец сетки: они безымянны и лезут под подписи", () => {
+    expect(buildRoseChart({ axes: CHIL, ramp })!.rings).toEqual([]);
   });
 
   it("стягивает подписи к фигуре, а не к краю поля", () => {
