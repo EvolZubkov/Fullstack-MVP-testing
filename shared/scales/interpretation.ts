@@ -62,7 +62,18 @@ export interface IndicatorInterpretation {
 
 const VALENCES: readonly Valence[] = ["higher_is_better", "lower_is_better", "none"];
 
+/**
+ * A number, or null when the config carries no number here.
+ *
+ * `null` and `""` are rejected BEFORE `Number()` because both convert to a finite
+ * zero. The editor stores an unfilled domain as an explicit `domainMin: null` (not as
+ * an absent key), and an empty numeric form field arrives as `""` — so the plain
+ * conversion turned «no domain» into the domain 0..0, and the results screen printed
+ * «18 из 0» to the learner. A band missing a bound is dropped for the same reason:
+ * a zero invented for it would silently move the boundary of a neighbouring level.
+ */
 function asNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }

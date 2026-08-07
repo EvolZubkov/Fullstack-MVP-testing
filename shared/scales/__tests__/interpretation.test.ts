@@ -80,6 +80,29 @@ describe("parseScaleInterpretation", () => {
     expect(parsed.bands).toEqual([]);
   });
 
+  it("явный null домена — это ОТСУТСТВИЕ домена, а не ноль", () => {
+    // Редактор сохраняет незаполненный домен именно так (`domainMin: null`), а не
+    // отсутствием ключа. `Number(null)` равен нулю и конечен, поэтому домен становился
+    // отрезком 0..0 — и карточка печатала учащемуся «18 из 0».
+    const parsed = parseScaleInterpretation({ domainMin: null, domainMax: null, bands: [] });
+    expect(parsed.domainMin).toBeNull();
+    expect(parsed.domainMax).toBeNull();
+  });
+
+  it("пустая строка домена тоже не число", () => {
+    // Пустое числовое поле формы доезжает строкой; `Number("")` — ноль.
+    const parsed = parseScaleInterpretation({ domainMin: "", domainMax: "", bands: [] });
+    expect(parsed.domainMin).toBeNull();
+    expect(parsed.domainMax).toBeNull();
+  });
+
+  it("интервал без границы отбрасывается, а не сползает в ноль", () => {
+    const parsed = parseScaleInterpretation({
+      bands: [{ min: null, max: 14, level: "low" }, { min: 15, max: 24, level: "moderate" }],
+    });
+    expect(parsed.bands.map((b) => b.level)).toEqual(["moderate"]);
+  });
+
   it("сортирует интервалы по возрастанию min", () => {
     const parsed = parseScaleInterpretation({
       bands: [{ min: 25, max: 45, level: "high" }, { min: 0, max: 14, level: "low" }],
