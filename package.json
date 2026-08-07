@@ -20,6 +20,7 @@
     "lint:md": "npx --no-install markdownlint-cli2 \"docs/**/*.md\" \"client/src/**/*.md\" \"docker/*.md\" \"*.md\" \"!CHANGELOG.md\" \"!**/node_modules/**\"",
     "lint:md:fix": "npx --no-install markdownlint-cli2 --fix \"docs/**/*.md\" \"client/src/**/*.md\" \"docker/*.md\" \"*.md\" \"!CHANGELOG.md\" \"!**/node_modules/**\"",
     "check:wireframes:ds": "node scripts/docs/check-wireframes-ds.mjs",
+    "check:author-numbers": "node scripts/check/check-author-numbers.mjs",
     "scorm:sample": "tsx scripts/scorm/generate-sample-scorm.ts",
     "scorm:template": "tsx scripts/scorm/generate-template-scorm.ts",
     "scorm:player": "node scripts/scorm/scorm-player.mjs",
