@@ -1549,108 +1549,19 @@ git commit -m "fix(prd-45): смежные границы уровней бол�
 
 ---
 
-## Задача 8: перестановка уровней
+## Задача 8: перестановка уровней — СНЯТА
 
-**Файлы:**
+**Статус:** снята из охвата 2026-08-07 решением пользователя, переведена в технический долг
+(см. §7 спецификации). Не выполнять.
 
-- Изменить: `client/src/features/tests/editor/sections/levels-editor.tsx`
-- Тест: `client/src/features/tests/editor/sections/__tests__/levels-editor.test.tsx`
+Чистые функции `moveLevel` в `levels-model.ts` и их тесты сохранены и остаются зелёными — они
+готовы к подключению, когда до долга дойдёт очередь. Интерфейсной части нет: ручка
+перетаскивания удалена из шапки карточки Задачей 7, потому что иконка с курсором «схватить»,
+за которой ничего не происходит, обещает автору недоступное действие.
 
-- [ ] **Шаг 1: написать падающий тест**
-
-Дописать в `__tests__/levels-editor.test.tsx` внутрь `describe("LevelsEditor", ...)`:
-
-```tsx
-  it("moves level content up on ArrowUp and leaves the boundaries alone", () => {
-    const onBands = vi.fn();
-    render(<Host initial={THREE} onBands={onBands} />);
-    fireEvent.keyDown(screen.getByLabelText("Переместить уровень 3"), { key: "ArrowUp" });
-    const emitted = onBands.mock.calls[0][0] as ScaleBandModel[];
-    expect(emitted.map((b) => b.level)).toEqual(["low", "high", "mid"]);
-    expect(emitted.map((b) => [b.min, b.max])).toEqual([["0", "15"], ["15", "29"], ["29", "98"]]);
-  });
-
-  it("moves level content down on ArrowDown", () => {
-    const onBands = vi.fn();
-    render(<Host initial={THREE} onBands={onBands} />);
-    fireEvent.keyDown(screen.getByLabelText("Переместить уровень 1"), { key: "ArrowDown" });
-    expect((onBands.mock.calls[0][0] as ScaleBandModel[]).map((b) => b.level)).toEqual(["mid", "low", "high"]);
-  });
-
-  it("has no move handle in read-only mode", () => {
-    render(<LevelsEditor bands={THREE} index={0} readOnly domain={null} onChange={vi.fn()} />);
-    expect(screen.queryByLabelText("Переместить уровень 1")).toBeNull();
-  });
-```
-
-- [ ] **Шаг 2: убедиться, что тест падает**
-
-Запустить: `npm test -- client/src/features/tests/editor/sections/__tests__/levels-editor.test.tsx`
-
-Ожидается: FAIL — `Unable to find a label with the text of: Переместить уровень 3`.
-
-- [ ] **Шаг 3: сделать ручку интерактивной**
-
-В `levels-editor.tsx` добавить `moveLevel` в импорт из `./levels-model` и локальное состояние
-перетаскивания сразу после `feedbackFor`:
-
-```tsx
-  // Index of the card being dragged, or null. Mouse drag and keyboard reorder
-  // share one code path — the grip is a real button so the keyboard has a target.
-  const [dragFrom, setDragFrom] = useState<number | null>(null);
-```
-
-Заменить строку с `<GripVertical ... />` в шапке карточки на:
-
-```tsx
-              {!readOnly && (
-                <button
-                  type="button"
-                  className="tb-levels__grip"
-                  aria-label={`Переместить уровень ${i + 1}`}
-                  draggable
-                  onDragStart={() => setDragFrom(i)}
-                  onDragEnd={() => setDragFrom(null)}
-                  onKeyDown={(e) => {
-                    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-                    e.preventDefault();
-                    emit(moveLevel(draft, i, e.key === "ArrowUp" ? i - 1 : i + 1));
-                  }}
-                >
-                  <GripVertical width={16} height={16} aria-hidden="true" />
-                </button>
-              )}
-```
-
-Обернуть карточку в контейнер, принимающий сброс: заменить `<div key={l.clientKey}>` на
-
-```tsx
-        <div
-          key={l.clientKey}
-          onDragOver={(e) => {
-            if (dragFrom !== null) e.preventDefault();
-          }}
-          onDrop={() => {
-            if (dragFrom === null) return;
-            emit(moveLevel(draft, dragFrom, i));
-            setDragFrom(null);
-          }}
-        >
-```
-
-- [ ] **Шаг 4: убедиться, что тесты проходят**
-
-Запустить: `npm test -- client/src/features/tests/editor/sections/__tests__/levels-editor.test.tsx`
-
-Ожидается: PASS, 12 тестов.
-
-- [ ] **Шаг 5: закоммитить**
-
-```bash
-git add client/src/features/tests/editor/sections/levels-editor.tsx \
-        client/src/features/tests/editor/sections/__tests__/levels-editor.test.tsx
-git commit -m "feat(prd-45): перестановка содержимого уровней мышью и с клавиатуры"
-```
+При возврате к задаче учесть: `feedbackFor` в `LevelsEditor` хранится индексом, а не
+`clientKey`, поэтому переупорядочивание с открытой модалкой рекомендаций запишет их не тому
+уровню — это надо чинить одновременно с подключением перестановки.
 
 ---
 
@@ -1788,7 +1699,7 @@ git commit -m "docs(prd-45): результат приёмки редактор�
 | FR-09 ошибка порядка на поле и в баннере | 2, 5 |
 | FR-10 предупреждение о непокрытом домене | 2, 5, 6 |
 | FR-11 ослабление проверки перекрытия | 7 |
-| FR-12 перестановка уровней | 3, 8 |
+| ~~FR-12 перестановка уровней~~ | снята в техдолг 2026-08-07; `moveLevel` в модели готов (задача 3), интерфейса нет |
 | FR-13 пиктограммы в баннерах, текст под полями | 5 |
 | FR-14 один редактор на обе вкладки | 6 |
 | FR-15 уведомление о сомкнутых границах легаси | 2, 5 |
