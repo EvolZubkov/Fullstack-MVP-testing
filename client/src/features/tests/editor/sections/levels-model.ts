@@ -13,6 +13,7 @@
 
 import type { LevelTone } from "@shared/scales/interpretation";
 
+import { formatAuthorNumber, parseAuthorNumber } from "../numeric-input";
 import type { ScaleBandModel } from "../test-editor.types";
 import type { FeedbackEditorValue } from "./feedback-editor-modal";
 
@@ -84,4 +85,122 @@ export function draftToBands(draft: LevelsDraft): ScaleBandModel[] {
     tone: l.tone,
     feedback: l.feedback,
   }));
+}
+
+/** Per-field messages plus the blocking one that stops saving. */
+export type LevelsErrors = {
+  start: string | null;
+  cuts: Array<string | null>;
+  end: string | null;
+  blocking: string | null;
+};
+
+type Slot = { raw: string; name: string };
+
+/** The boundary row the author sees, left to right, each with its role name. */
+function slots(draft: LevelsDraft): Slot[] {
+  return [
+    { raw: draft.start, name: "начала" },
+    ...draft.cuts.map((c) => ({ raw: c, name: "порога" })),
+    { raw: draft.end, name: "конца" },
+  ];
+}
+
+/**
+ * The only two things that can go wrong once boundaries are cut points: a field
+ * that is not a number, and a row that stops ascending. Overlaps and gaps are
+ * unrepresentable by construction.
+ *
+ * @public
+ */
+export function draftErrors(draft: LevelsDraft): LevelsErrors {
+  const out: LevelsErrors = { start: null, cuts: draft.cuts.map(() => null), end: null, blocking: null };
+  if (draft.levels.length === 0) return out;
+
+  const row = slots(draft);
+  const values = row.map((slot) => parseAuthorNumber(slot.raw.trim()));
+  // First message wins: the author fixes one field at a time, and a field
+  // carrying two complaints at once reads as noise.
+  const set = (i: number, message: string) => {
+    if (i === 0) out.start = out.start ?? message;
+    else if (i === row.length - 1) out.end = out.end ?? message;
+    else out.cuts[i - 1] = out.cuts[i - 1] ?? message;
+  };
+
+  values.forEach((v, i) => {
+    if (v === null) set(i, "Укажите число");
+  });
+  if (values.some((v) => v === null)) {
+    out.blocking = "Границы уровней заданы не полностью: укажите числа во всех полях.";
+    return out;
+  }
+
+  for (let i = 1; i < values.length; i++) {
+    const prev = values[i - 1] as number;
+    const cur = values[i] as number;
+    // Non-strict: a zero-width level is legal, exactly as a single band 0..0 is today.
+    if (cur >= prev) continue;
+    set(i - 1, `Больше следующего ${row[i].name} ${formatAuthorNumber(cur)}`);
+    set(i, `Меньше предыдущего ${row[i - 1].name} ${formatAuthorNumber(prev)}`);
+    out.blocking = "Числа в ряду «Начало — пороги — Конец» должны идти по возрастанию.";
+  }
+  return out;
+}
+
+/**
+ * True when the STORED bands leave a hole between neighbours — a legacy pair
+ * («0-15» / «16-29»). Drives the notice that opening the card closed the hole.
+ *
+ * @public
+ */
+export function hasStoredGap(bands: ScaleBandModel[]): boolean {
+  for (let i = 0; i < bands.length - 1; i++) {
+    const upper = parseAuthorNumber(bands[i].max.trim());
+    const lower = parseAuthorNumber(bands[i + 1].min.trim());
+    if (upper === null || lower === null) continue;
+    if (upper !== lower) return true;
+  }
+  return false;
+}
+
+/** One stripe of the coverage ribbon. */
+export type CoverageSegment =
+  | { kind: "level"; index: number; from: number; to: number }
+  | { kind: "gap"; from: number; to: number };
+
+/**
+ * The ribbon above the level list. Null while the row does not parse or does not
+ * ascend — a ribbon drawn from broken numbers would lie about the coverage.
+ *
+ * @public
+ */
+export function coverageSegments(
+  draft: LevelsDraft,
+  domain: { min: number; max: number } | null,
+): CoverageSegment[] | null {
+  if (draft.levels.length === 0) return null;
+
+  const bounds: number[] = [];
+  for (const raw of [draft.start, ...draft.cuts, draft.end]) {
+    const v = parseAuthorNumber(raw.trim());
+    if (v === null) return null;
+    bounds.push(v);
+  }
+  for (let i = 1; i < bounds.length; i++) {
+    if (bounds[i] < bounds[i - 1]) return null;
+  }
+
+  const levels: CoverageSegment[] = draft.levels.map((_, i) => ({
+    kind: "level",
+    index: i,
+    from: bounds[i],
+    to: bounds[i + 1],
+  }));
+  if (domain === null) return levels;
+
+  const from = bounds[0];
+  const to = bounds[bounds.length - 1];
+  const head: CoverageSegment[] = domain.min < from ? [{ kind: "gap", from: domain.min, to: from }] : [];
+  const tail: CoverageSegment[] = domain.max > to ? [{ kind: "gap", from: to, to: domain.max }] : [];
+  return [...head, ...levels, ...tail];
 }
