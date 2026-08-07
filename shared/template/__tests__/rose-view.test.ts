@@ -42,24 +42,16 @@ describe("buildRoseChart", () => {
     expect(chart!.sectors.map((s) => s.sharePercent)).toEqual([34.7, 16.3, 14.3, 34.7]);
   });
 
-  it("не рисует колец сетки: они безымянны и лезут под подписи", () => {
-    expect(buildRoseChart({ axes: CHIL, ramp })!.rings).toEqual([]);
+  it("держит кольца сетки по равным долям целого", () => {
+    expect(buildRoseChart({ axes: CHIL, ramp })!.rings.map((r) => r.radius)).toEqual([50, 70.7, 86.6, 100]);
   });
 
-  it("стягивает подписи к фигуре, а не к краю поля", () => {
-    // Наибольший сектор ЧИЛ — 58.9, значит подписи стоят на 58.9 + 30, а не на 100 + 30:
-    // иначе между фигурой и подписями висит пустой пояс шириной в треть чертежа.
+  it("выносит подписи за внешнее кольцо, а не внутрь сетки", () => {
+    // Кольца доходят до края поля, поэтому кольцо подписей — 100 + 30. Внутри сетки
+    // внешняя окружность прошла бы прямо через строки подписей.
     const chart = buildRoseChart({ axes: CHIL, ramp })!;
     const top = chart.labels.find((l) => l.text === "Целеустремленный")!;
-    expect(top.x).toBe(242.9);
-  });
-
-  it("не даёт подписям налезть на фигуру, когда одна шкала забрала всё", () => {
-    const skewed = [axis("a", 98), axis("b", 0), axis("c", 0)];
-    const chart = buildRoseChart({ axes: skewed, ramp })!;
-    const label = chart.labels.find((l) => l.text === "a")!;
-    // Кольцо подписей = 100 + 30, потому что наибольший сектор дорос до края поля.
-    expect(label.x).toBe(round1(180 + Math.cos(-Math.PI / 6) * 130));
+    expect(top.x).toBe(round1(180 + Math.cos(-Math.PI / 4) * 130));
   });
 
   it("не выпускает сектор за поле даже когда одна шкала забрала всё", () => {

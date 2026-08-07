@@ -43,11 +43,12 @@ if (!chart) throw new Error("роза не построилась");
 const lines: string[] = [];
 lines.push(`<svg class="tb-rose__svg" viewBox="0 0 ${chart.width} ${chart.height}" role="img"`);
 lines.push(`     aria-label="${chart.ariaLabel}">`);
-for (const r of chart.rings) {
-  lines.push(`  <circle class="tb-rose__ring" cx="${r.cx}" cy="${r.cy}" r="${r.radius}"></circle>`);
-}
 for (const s of chart.sectors) {
   lines.push(`  <path class="tb-rose__sector" d="${s.d}" style="--tb-hue: ${s.color}"></path>`);
+}
+// Кольца ПОВЕРХ заливок: под непрозрачными секторами они видны только в промежутках.
+for (const r of chart.rings) {
+  lines.push(`  <circle class="tb-rose__ring" cx="${r.cx}" cy="${r.cy}" r="${r.radius}"></circle>`);
 }
 for (const l of chart.labels) {
   lines.push(`  <text class="${l.className}" x="${l.x}" y="${l.y}" text-anchor="${l.anchor}">${l.text}</text>`);

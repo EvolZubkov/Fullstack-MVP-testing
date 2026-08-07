@@ -58,18 +58,17 @@ import {
 const MAX_AXES = 6;
 
 /**
- * The rose draws NO grid rings, so the field is bounded by nothing but the sectors.
+ * Grid rings at equal shares of the whole: 25, 50, 75 and 100 per cent.
  *
- * They were there — at equal shares of the whole — and three things sank them. They carry no
- * labels, for the same reason the radar's do not: with different bands per scale a labelled
- * common grid would state something false. Their outer ring marks a state that cannot occur
- * in an ipsative method — one scale holding the entire budget. And once the captions moved in
- * to the figure, the outer ring ran straight through them.
+ * Drawn ON TOP of the sectors, unlike the radar's, which sit under a polygon that is mostly
+ * transparent. A rose's fills are opaque, so rings underneath them are visible only in the
+ * gaps between short sectors — exactly where they say least. Over the fills they read as one
+ * scale laid across the whole figure.
  *
- * What is left is what the chart is for: sectors compared with each other. The field is kept
- * as the type's `rings` array so both diagrams share one context shape — for the rose it is
- * simply empty, and an empty DSL loop draws nothing.
+ * Unlabelled, for the reason PRD-29 §6.5 gives: different scales carry different bands, so one
+ * labelled common grid would state something false about most of them.
  */
+const RING_SHARES = [0.25, 0.5, 0.75, 1];
 
 /** One sector: a scale's share of the whole, ready to draw. */
 export interface CtxRoseSector {
@@ -199,12 +198,11 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
     directions.push({ cos: Math.cos(middle), sin: Math.sin(middle) });
   }
 
-  // Captions ring the FIGURE, not the field. The sectors of a real profile stop well short of
-  // the edge — a third of the whole puts one at 0.59 of it — so a ring at the field edge would
-  // leave a band of empty canvas between the figure and its own labels, and the drawing would
-  // read as a small mark in a large box. One shared ring, not one distance per sector: ragged
-  // captions at four different radii stop looking like one legend for one figure.
-  const labelRing = Math.max(...sectors.map((s) => s.radius)) + LABEL_GAP;
+  // Captions ring the FIELD, not the figure: the grid reaches the field edge, so a caption
+  // placed by the sectors would have the outer ring running through its lines. One shared
+  // ring, not one distance per sector — ragged captions at four different radii stop reading
+  // as one legend for one figure.
+  const labelRing = RADIUS + LABEL_GAP;
   const labels: CtxChartLabel[] = sectors.flatMap((sector, i) =>
     placeCaption({
       name: sector.label,
@@ -221,7 +219,7 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
     width: WIDTH,
     height: HEIGHT,
     sectors,
-    rings: [],
+    rings: RING_SHARES.map((s) => ({ cx: CENTER_X, cy: CENTER_Y, radius: round1(RADIUS * Math.sqrt(s)) })),
     labels,
     ariaLabel: `Расклад по шкалам: ${sectors
       .map((s) => `${s.label} — ${s.levelText || "уровень не определён"}`)
