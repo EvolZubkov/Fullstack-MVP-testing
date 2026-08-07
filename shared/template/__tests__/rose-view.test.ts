@@ -1,0 +1,99 @@
+import { describe, expect, it } from "vitest";
+import { buildRoseChart } from "../rose-view";
+import { type RadarAxisInput } from "../radar-view";
+import { LEVEL_SCHEMES } from "../level-ramp";
+import type { LearnerVisibility, ScaleInterpretation } from "../../scales/interpretation";
+
+const ramp = LEVEL_SCHEMES.traffic;
+
+/** Шкала типологии: домен 0..98, направления нет, три уровня. */
+function styleScale(): ScaleInterpretation {
+  return {
+    domainMin: 0,
+    domainMax: 98,
+    valence: "none",
+    bands: [
+      { min: 0, max: 20, level: "low", label: "Слабо выражен" },
+      { min: 20, max: 40, level: "mid", label: "Выражен" },
+      { min: 40, max: 98, level: "high", label: "Доминирующий" },
+    ],
+  };
+}
+
+function axis(name: string, value: number, visibility: LearnerVisibility = "level_and_value"): RadarAxisInput {
+  return { key: name, name, value, visibility, interpretation: styleScale() };
+}
+
+/** Контрольная выкладка ЧИЛ: 34 / 16 / 14 / 34, сумма 98 (PRD-44 A-02). */
+const CHIL = [
+  axis("Целеустремленный", 34),
+  axis("Вдохновляющий", 16),
+  axis("Командный", 14),
+  axis("Процессный", 34),
+];
+
+describe("buildRoseChart", () => {
+  it("считает радиус как корень доли от суммы — контрольные числа ЧИЛ", () => {
+    const chart = buildRoseChart({ axes: CHIL, ramp });
+    expect(chart).not.toBeNull();
+    expect(chart!.sectors.map((s) => s.radius)).toEqual([58.9, 40.4, 37.8, 58.9]);
+    expect(chart!.sectors.map((s) => s.sharePercent)).toEqual([34.7, 16.3, 14.3, 34.7]);
+  });
+
+  it("ставит эталонное кольцо ровного расклада на F/√N", () => {
+    expect(buildRoseChart({ axes: CHIL, ramp })!.evenRing.radius).toBe(50);
+    const three = buildRoseChart({ axes: CHIL.slice(0, 3), ramp });
+    expect(three!.evenRing.radius).toBe(57.7);
+  });
+
+  it("рисует ровный расклад ровно по эталонному кольцу", () => {
+    const even = [axis("a", 10), axis("b", 10), axis("c", 10), axis("d", 10)];
+    const chart = buildRoseChart({ axes: even, ramp })!;
+    expect(chart.sectors.every((s) => s.radius === chart.evenRing.radius)).toBe(true);
+  });
+
+  it("не выпускает сектор за поле даже когда одна шкала забрала всё", () => {
+    const skewed = [axis("a", 98), axis("b", 0), axis("c", 0)];
+    const chart = buildRoseChart({ axes: skewed, ramp })!;
+    expect(chart.sectors[0].radius).toBe(100);
+    expect(chart.sectors[1].radius).toBe(0);
+  });
+
+  it("режет круг на равные секторы, первый — сверху, дальше по часовой", () => {
+    const chart = buildRoseChart({ axes: CHIL, ramp })!;
+    expect(chart.sectors[0].d).toBe("M 180,150 L 180,91.1 A 58.9,58.9 0 0,1 238.9,150 Z");
+  });
+
+  it("подписывает сектор названием шкалы и меткой уровня, без чисел", () => {
+    const chart = buildRoseChart({ axes: CHIL, ramp })!;
+    const texts = chart.labels.map((l) => l.text);
+    expect(texts).toContain("Командный");
+    expect(texts).toContain("Выражен");
+    expect(texts.join(" ")).not.toMatch(/\d/);
+  });
+
+  it("отказывается строиться, когда сумма значений равна нулю", () => {
+    expect(buildRoseChart({ axes: [axis("a", 0), axis("b", 0), axis("c", 0)], ramp })).toBeNull();
+  });
+
+  it("отказывается строиться меньше чем на трёх видимых шкалах", () => {
+    expect(buildRoseChart({ axes: CHIL.slice(0, 2), ramp })).toBeNull();
+  });
+
+  it("отказывается строиться больше чем на семи шкалах", () => {
+    const many = Array.from({ length: 8 }, (_, i) => axis(`s${i}`, 10));
+    expect(buildRoseChart({ axes: many, ramp })).toBeNull();
+  });
+
+  it("отказывается строиться, когда хотя бы у одной шкалы скрыт балл", () => {
+    const hidden = [axis("a", 34), axis("b", 16, "level"), axis("c", 14)];
+    expect(buildRoseChart({ axes: hidden, ramp })).toBeNull();
+  });
+
+  it("не берёт в расклад шкалы, скрытые от ученика", () => {
+    const withHidden = [...CHIL, axis("Служебная", 50, "hidden")];
+    const chart = buildRoseChart({ axes: withHidden, ramp })!;
+    expect(chart.sectors).toHaveLength(4);
+    expect(chart.sectors[0].sharePercent).toBe(34.7);
+  });
+});
