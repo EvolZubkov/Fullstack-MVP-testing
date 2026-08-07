@@ -69,6 +69,7 @@
       --wf-size-800:   800px;
       --wf-size-360:   360px;
       --wf-marker-size: 22px;
+      --wf-nav-offset: 88px;
       /* gate-skip-end */
     }
 
@@ -152,7 +153,9 @@
       overflow: hidden;
     }
     .wf-caption { max-width: var(--wf-size-1280); margin: 0 auto var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
-    .wf-state { display: none; padding-top: var(--wf-size-52); }
+    /* Отступ считается от ВЫСОТЫ навигации с кнопками, а не от голой полосы:
+       при 52px шапка сцены уходила под навигацию. */
+    .wf-state { display: none; padding-top: var(--wf-nav-offset); }
     .wf-state.active { display: block; }
     .wf-page { max-width: var(--wf-size-1280); margin-inline: auto; }
     .wf-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ou-space-6); padding: var(--ou-space-6); }
@@ -174,7 +177,10 @@
     .wf-nav-title { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
   </style>
 </head>
-<body>
+<!-- Классы ou/ou--dark обязательны: семантические токены ДС объявлены под
+     селектором .ou.ou--dark, а не в :root. Без них КАЖДОЕ var(--ou-*) невалидно
+     и отбрасывается, и страница молча рендерится без стилей. -->
+<body class="ou ou--dark ou--normal">
 
 <nav class="wf-nav">
   <span class="wf-nav-title">PRD-46 — роза расклада по шкалам</span>
@@ -413,7 +419,9 @@
             <text class="tb-radar__label" x="310" y="150" text-anchor="middle">Вдохновляющий</text>
             <text class="tb-radar__label" x="180" y="285" text-anchor="middle">Командный</text>
             <text class="tb-radar__label" x="50" y="150" text-anchor="middle">Процессный</text>
-            <text class="tb-radar__caption" x="180" y="298" text-anchor="middle">шкала до 40</text>
+            <!-- Подпись предела в углу, а НЕ по центру снизу: под нижней осью она
+                 вплотную подходит к подписи шкалы и читается как её часть. -->
+            <text class="tb-radar__caption" x="6" y="294" text-anchor="start">шкала до 40</text>
           </svg>
         </figure>
       </div>
