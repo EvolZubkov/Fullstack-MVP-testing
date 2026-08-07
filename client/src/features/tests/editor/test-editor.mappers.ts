@@ -779,7 +779,20 @@ function buildScalesFromApi(src: ApiTestResponse): ScaleModel[] {
   return out.sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
-const MEASUREMENT_SOURCE_TYPES = new Set(["question", "option", "matching_pair", "ranking_position"]);
+/**
+ * Accepted source kinds, mirroring the `question_measurements.source_type` enum in
+ * `shared/schema.ts`. An unlisted kind is silently rewritten to `question` below, so a
+ * type missing here does not fail loudly — it hides the rows in the matrix and, worse,
+ * writes them back under the wrong kind on the next save. Adding a source kind means
+ * adding it HERE too (PRD-44 added `option_allocation`).
+ */
+const MEASUREMENT_SOURCE_TYPES = new Set([
+  "question",
+  "option",
+  "matching_pair",
+  "ranking_position",
+  "option_allocation",
+]);
 
 /**
  * Map the raw `measurements` rows from the API into editor models, resolving each

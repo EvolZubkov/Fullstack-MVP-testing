@@ -736,6 +736,20 @@ describe("apiToEditorModel — measurements (scaleId → key resolution)", () =>
     expect(m.weight).toBe(4);
   });
 
+  // Каждый вид источника из перечисления схемы обязан пережить загрузку. Пропуск
+  // одного вида не падает, а молча превращается в `question`: матрица вкладов теряет
+  // значения, а следующее сохранение переписывает строки чужим видом.
+  it.each(["question", "option", "matching_pair", "ranking_position", "option_allocation"])(
+    "сохраняет вид источника %s",
+    (sourceType) => {
+      const [m] = apiToEditorModel({
+        ...base,
+        measurements: [{ scaleId: "s1", questionId: "q1", valueJson: 1, sourceType, sourceKey: "0" }],
+      }).measurements;
+      expect(m.sourceType).toBe(sourceType);
+    },
+  );
+
   it("drops rows with unresolved scale, non-string scaleId/questionId, non-object, or non-number value", () => {
     const out = apiToEditorModel({
       ...base,
