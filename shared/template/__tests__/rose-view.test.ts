@@ -55,6 +55,10 @@ describe("buildRoseChart", () => {
     expect(three.rings.map((r) => r.radius)).toEqual([50, 70.7, 86.6, 100]);
   });
 
+  it("подписывает эталонное кольцо: иначе пунктир нечитаем", () => {
+    expect(buildRoseChart({ axes: CHIL, ramp })!.evenRingCaption).toBe("пунктир — ровная доля");
+  });
+
   it("рисует ровный расклад ровно по эталонному кольцу", () => {
     const even = [axis("a", 10), axis("b", 10), axis("c", 10), axis("d", 10)];
     const chart = buildRoseChart({ axes: even, ramp })!;

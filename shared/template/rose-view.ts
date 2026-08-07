@@ -59,6 +59,12 @@ const MAX_AXES = 6;
 /** Grid rings at equal shares of the whole: 25, 50, 75 and 100 per cent. */
 const RING_SHARES = [0.25, 0.5, 0.75, 1];
 
+/**
+ * Caption of the reference ring. Wording avoids «поровну» on purpose: the ring marks the share
+ * ONE scale would hold in an even split, not the split itself.
+ */
+const EVEN_RING_CAPTION = "пунктир — ровная доля";
+
 /** One sector: a scale's share of the whole, ready to draw. */
 export interface CtxRoseSector {
   key: string;
@@ -90,6 +96,12 @@ export interface CtxRoseChart {
    * profile looks like, and no number has to be printed to say so.
    */
   evenRing: CtxRoseRing;
+  /**
+   * Caption of the reference ring. Not decoration: a dashed circle nobody named is a mark
+   * whose meaning cannot be recovered from the picture, and the first reader of the wireframe
+   * asked what it was. It carries no digits, so the «no numbers on the chart» rule holds.
+   */
+  evenRingCaption: string;
   labels: CtxChartLabel[];
   ariaLabel: string;
 }
@@ -209,6 +221,7 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
       .filter((radius) => radius !== evenRadius)
       .map((radius) => ({ cx: CENTER_X, cy: CENTER_Y, radius })),
     evenRing: { cx: CENTER_X, cy: CENTER_Y, radius: evenRadius },
+    evenRingCaption: EVEN_RING_CAPTION,
     labels,
     ariaLabel: `Расклад по шкалам: ${sectors
       .map((s) => `${s.label} — ${s.levelText || "уровень не определён"}`)
