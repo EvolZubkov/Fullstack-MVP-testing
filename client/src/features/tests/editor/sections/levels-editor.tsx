@@ -193,7 +193,7 @@ export function LevelsEditor({
           <div className="tb-levels__coverstat">
             {segments.some((s) => s.kind === "gap") && domain !== null
               ? `Границы шкалы ${domain.min} … ${domain.max}, уровнями закрыто ${draft.start} … ${draft.end}`
-              : `Шкала разобрана целиком, уровней: ${total}`}
+              : `Шкала разобрана целиком, ${total} ${pluralize(total, "уровень", "уровня", "уровней")}`}
           </div>
         )}
       </div>

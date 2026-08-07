@@ -132,7 +132,7 @@ describe("LevelsEditor", () => {
 
   it("shows the coverage status under the ribbon", () => {
     render(<Host initial={THREE} />);
-    expect(screen.getByText("Шкала разобрана целиком, уровней: 3")).toBeInTheDocument();
+    expect(screen.getByText("Шкала разобрана целиком, 3 уровня")).toBeInTheDocument();
   });
 
   it("hides every control in read-only mode", () => {
