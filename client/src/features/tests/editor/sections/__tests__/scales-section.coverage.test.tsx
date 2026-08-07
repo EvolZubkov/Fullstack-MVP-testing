@@ -231,25 +231,23 @@ describe("<ScalesSection /> — «Список шкал»", () => {
     expect(screen.getByTestId("scales-card-0")).toHaveTextContent("среднее");
   });
 
-  it("bands editor: add, edit, and remove rows (from the empty-bands state)", () => {
-    renderStateful(baseModel({ scales: [makeScale()] }));
+  it("levels editor: add, edit, and remove levels (from the empty state)", () => {
+    renderStateful(baseModel({ scales: [makeScale({ bands: [] })] }));
     fireEvent.click(screen.getByLabelText("Развернуть шкалу"));
-    expect(screen.getByText("Диапазоны не заданы")).toBeInTheDocument();
+    expect(screen.getByTestId("scales-levels-empty-0")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("scales-band-add-0"));
-    const min = screen.getByLabelText("min диапазона 1") as HTMLInputElement;
-    fireEvent.change(min, { target: { value: "0" } });
-    fireEvent.change(screen.getByLabelText("max диапазона 1"), { target: { value: "5" } });
-    fireEvent.change(screen.getByLabelText("метка диапазона 1"), { target: { value: "Низкий" } });
-    fireEvent.change(screen.getByLabelText("уровень диапазона 1"), { target: { value: "low" } });
-    expect(min.value).toBe("0");
+    fireEvent.click(screen.getByTestId("scales-level-add-0"));
+    const label = screen.getByLabelText("Название уровня 1") as HTMLInputElement;
+    fireEvent.change(label, { target: { value: "Низкий" } });
+    fireEvent.change(screen.getByLabelText("Код уровня 1"), { target: { value: "low" } });
+    expect(label.value).toBe("Низкий");
 
-    fireEvent.click(screen.getByTestId("scales-band-add-0"));
-    expect(screen.getByLabelText("min диапазона 2")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("scales-level-add-0"));
+    expect(screen.getByLabelText("Порог между уровнями 1 и 2")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText("Удалить диапазон 1"));
-    // One band left → its own remover remains, but there's no «диапазона 2» row.
-    expect(screen.queryByLabelText("min диапазона 2")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Удалить уровень 2"));
+    // One level left → no threshold field, because a threshold needs two levels.
+    expect(screen.queryByLabelText("Порог между уровнями 1 и 2")).toBeNull();
   });
 
   it("removing a scale also drops its measurements from the draft", () => {
