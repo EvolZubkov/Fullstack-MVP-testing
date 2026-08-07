@@ -360,7 +360,7 @@ function finishScormAdaptive(results, passedForLms, resultComputation, scaleComp
           interactions.push({
             id: 'q_' + qId,
             type: 'other',
-            result: isCorrect ? 'correct' : 'incorrect',
+            result: interactionResultFor(question, isCorrect),
             response: answer !== undefined && answer !== null ? JSON.stringify(answer) : '',
             correct: '',
             description: authorTextPlain(question.prompt)
@@ -717,6 +717,25 @@ function collectFailedTopicCourses(results) {
   return courses;
 }
 
+/**
+ * The SCORM 2004 outcome of ONE question interaction.
+ *
+ * A measurement question (a scale without a correct grading, an allocation of points)
+ * is never right or wrong: it has no reference answer at all, so grading returns zero
+ * and `incorrect` would show the LMS report a learner mistake where there is nothing
+ * to get wrong. SCORM 2004 has a separate outcome for exactly this — `neutral`
+ * (PRD-26 FR-08, PRD-44 FR-09). The rule reads the TYPE trait, so it covers both
+ * measurement types at once and any future one.
+ *
+ * Top-level, and called from BOTH finish paths on purpose: the rule used to live in
+ * the body of `finishScorm`, which nothing calls any more — the package ships
+ * `finishScormLmsOnly`, and it kept reporting `incorrect`.
+ */
+function interactionResultFor(question, fullCorrect) {
+  var measurementOnly = typeof TBQType !== 'undefined' && TBQType.isMeasurementOnly(question);
+  return measurementOnly ? 'neutral' : (fullCorrect ? 'correct' : 'incorrect');
+}
+
 function finishScorm(results, passedForLms, resultComputation, scaleComputation) {
   var objectives = results.topicResults.map(function (tr) {
     return {
@@ -785,16 +804,10 @@ function finishScorm(results, passedForLms, resultComputation, scaleComputation)
     var ans = gradedAnswerFor(q);
     var fullCorrect = checkAnswer(q, ans) === 1;
 
-    // Измерительный вопрос (шкала без верной градации, распределение баллов) не
-    // бывает верным или неверным: эталона у него нет. `incorrect` показал бы в отчёте
-    // LMS ошибку ученика там, где ошибаться не в чем, — SCORM 2004 для этого имеет
-    // отдельный исход `neutral` (PRD-26 FR-08, PRD-44 FR-09).
-    var measurementOnly = typeof TBQType !== 'undefined' && TBQType.isMeasurementOnly(q);
-
     interactions.push({
       id: 'q_' + q.id,
       type: mapScormType(q),
-      result: measurementOnly ? 'neutral' : (fullCorrect ? 'correct' : 'incorrect'),
+      result: interactionResultFor(q, fullCorrect),
       response: formatResponse(q, ans),
       correct: formatResponse(q, getCorrectAnswerFor(q)),
       description: authorTextPlain(q.prompt)
@@ -913,7 +926,7 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
     interactions.push({
       id: 'q_' + q.id,
       type: mapScormType(q),
-      result: fullCorrect ? 'correct' : 'incorrect',
+      result: interactionResultFor(q, fullCorrect),
       response: formatResponse(q, ans),
       correct: formatResponse(q, getCorrectAnswerFor(q)),
       description: authorTextPlain(q.prompt)

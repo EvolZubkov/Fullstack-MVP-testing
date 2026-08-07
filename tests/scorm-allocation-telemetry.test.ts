@@ -30,15 +30,28 @@ function extract(name: string): string {
   return m[0];
 }
 
+/** A top-level `function name(...) { ... }` — closing brace at column 0. */
+function extractTopLevel(name: string): string {
+  const m = src.match(new RegExp(`function ${name}\\([^)]*\\)\\s*\\{[\\s\\S]*?\\n\\}`));
+  if (!m) throw new Error(`${name} не найдена в resultsPage.js`);
+  return m[0];
+}
+
 const runtime = new Function(
   `${qtypeSrc}
   ${extract("to1")}
   ${extract("mapScormType")}
   ${extract("formatResponse")}
-  return { mapScormType: mapScormType, formatResponse: formatResponse };`,
+  ${extractTopLevel("interactionResultFor")}
+  return {
+    mapScormType: mapScormType,
+    formatResponse: formatResponse,
+    interactionResultFor: interactionResultFor
+  };`,
 )() as {
   mapScormType: (q: { type: string }) => string;
   formatResponse: (q: { type: string }, ans: unknown) => string;
+  interactionResultFor: (q: { type: string }, fullCorrect: boolean) => string;
 };
 
 const ALLOC = { type: "allocation" };
@@ -58,20 +71,34 @@ describe("тип взаимодействия (FR-54)", () => {
 });
 
 describe("исход взаимодействия", () => {
-  // Извлекается вместе с окружением: строка исхода собирается в теле цикла, поэтому
-  // проверяется правило, а не переписанная копия.
-  const src2 = readFileSync(
-    resolve(process.cwd(), "server/scorm/template/app/render/resultsPage.js"),
-    "utf8",
-  );
-
   it("измерительный вопрос помечается neutral, а не incorrect", () => {
     // `incorrect` показал бы в отчёте LMS ошибку ученика там, где эталона нет вовсе.
-    expect(src2).toContain("measurementOnly ? 'neutral'");
+    expect(runtime.interactionResultFor(ALLOC, false)).toBe("neutral");
+    expect(runtime.interactionResultFor({ type: "scale" }, false)).toBe("neutral");
   });
 
-  it("правило опирается на признак типа, а не на сравнение с литералом", () => {
-    expect(src2).toContain("TBQType.isMeasurementOnly(q)");
+  it("обычный вопрос сохраняет верность ответа", () => {
+    expect(runtime.interactionResultFor({ type: "single" }, true)).toBe("correct");
+    expect(runtime.interactionResultFor({ type: "single" }, false)).toBe("incorrect");
+  });
+
+  it("правило зовёт ЖИВОЙ путь отправки в LMS, а не только мёртвую копию", () => {
+    // Первая версия правила лежала в теле `finishScorm`, которую никто не вызывает:
+    // пакет отправляет результат через `finishScormLmsOnly`, и там измерительный
+    // вопрос по-прежнему уходил как `incorrect`. Проверка по тексту файла этого не
+    // видела — она находила правило в мёртвой функции и молчала.
+    const live = src.slice(src.indexOf("function finishScormLmsOnly"));
+    expect(live).toContain("interactionResultFor(q, fullCorrect)");
+  });
+
+  it("адаптивный путь отправки судит по тому же правилу", () => {
+    // У адаптивного теста своя сборка взаимодействий; измерительный вопрос в нём
+    // такой же, как в обычном, и вторая копия правила разошлась бы молча.
+    const adaptive = src.slice(
+      src.indexOf("function finishScormAdaptive"),
+      src.indexOf("function interactionResultFor"),
+    );
+    expect(adaptive).toContain("interactionResultFor(question, isCorrect)");
   });
 });
 
