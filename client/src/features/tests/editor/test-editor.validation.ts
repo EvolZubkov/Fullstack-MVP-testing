@@ -672,6 +672,10 @@ function validateScales(model: TestEditorModel, errors: ValidationIssue[]): void
     // Bands: each row must be numeric with min ≤ max, and rows must ascend on raw.
     // Touching neighbours are legal (see the overlap check below). A trailing
     // fully-empty row (the "new" row) is ignored so the author can leave it blank.
+    // A band IS a level to the author — PRD-45 retired «диапазон», `min` and `max`
+    // from the UI — so these messages speak the levels editor's vocabulary and
+    // repeat the ordering sentence `draftErrors` shows inside the card verbatim.
+    // The save gate and the card must not describe one fault two ways.
     let prevMax: number | null = null;
     s.bands.forEach((band, j) => {
       const minRaw = band.min.trim();
@@ -685,7 +689,7 @@ function validateScales(model: TestEditorModel, errors: ValidationIssue[]): void
         errors.push({
           field: `scales[${i}].bands[${j}]`,
           code: "band_number",
-          message: `Диапазон ${j + 1}: укажите числовые min и max.`,
+          message: `Уровень ${j + 1}: границы заданы не полностью — укажите числа во всех полях.`,
           severity: "error",
         });
         return;
@@ -694,7 +698,7 @@ function validateScales(model: TestEditorModel, errors: ValidationIssue[]): void
         errors.push({
           field: `scales[${i}].bands[${j}]`,
           code: "band_order",
-          message: `Диапазон ${j + 1}: min не может быть больше max.`,
+          message: `Уровень ${j + 1}: нижняя граница больше верхней. Числа в ряду «Начало — пороги — Конец» должны идти по возрастанию.`,
           severity: "error",
         });
       }
@@ -705,7 +709,7 @@ function validateScales(model: TestEditorModel, errors: ValidationIssue[]): void
         errors.push({
           field: `scales[${i}].bands[${j}]`,
           code: "band_overlap",
-          message: `Диапазон ${j + 1}: перекрывает предыдущий. Границы уровней должны идти по возрастанию.`,
+          message: `Уровень ${j + 1}: перекрывает предыдущий. Числа в ряду «Начало — пороги — Конец» должны идти по возрастанию.`,
           severity: "error",
         });
       }

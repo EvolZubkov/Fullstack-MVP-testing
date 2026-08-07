@@ -78,6 +78,15 @@ describe("LevelsEditor", () => {
     expect(screen.getAllByTestId(/^scales-level-seg-0-/)).toHaveLength(3);
   });
 
+  it("carries the full level name in the stripe title, so a clipped caption stays readable", () => {
+    render(<Host initial={THREE} />);
+    // The stripe ellipses its caption once the level's span is narrow (see
+    // `.tb-levels__seglbl`); jsdom lays nothing out, so the tooltip is what a test
+    // can hold on to — and the tooltip is the only way back to the full name.
+    expect(screen.getByTestId("scales-level-seg-0-0")).toHaveAttribute("title", "Слабо");
+    expect(screen.getByTestId("scales-level-seg-0-2")).toHaveAttribute("title", "Ярко");
+  });
+
   it("adds a level by halving the last one", () => {
     const onBands = vi.fn();
     render(<Host initial={[band("0", "98", "only")]} onBands={onBands} />);

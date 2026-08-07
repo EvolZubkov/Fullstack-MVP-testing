@@ -156,7 +156,9 @@ export function LevelsEditor({
             // (see `LevelsErrors.kind`); «не полностью» over four filled fields
             // sent the author hunting for an empty one that does not exist.
             <div className="tb-levels__seg tb-levels__seg--unknown" data-testid={`${testIdPrefix}-levels-noribbon-${index}`}>
-              {errors.kind === "order" ? "Порядок границ нарушен" : "Границы заданы не полностью"}
+              <span className="tb-levels__seglbl">
+                {errors.kind === "order" ? "Порядок границ нарушен" : "Границы заданы не полностью"}
+              </span>
             </div>
           ) : (
             segments.map((s, i) =>
@@ -165,8 +167,9 @@ export function LevelsEditor({
                   key={`gap-${i}`}
                   className="tb-levels__seg tb-levels__seg--gap"
                   style={{ flexGrow: Math.max(s.to - s.from, 0.001) }}
+                  title="не разобрано"
                 >
-                  не разобрано
+                  <span className="tb-levels__seglbl">не разобрано</span>
                 </div>
               ) : (
                 <div
@@ -177,9 +180,13 @@ export function LevelsEditor({
                     background: toneRibbon(draft.levels[s.index].tone).bg,
                     color: toneRibbon(draft.levels[s.index].tone).fg,
                   }}
+                  // A narrow stripe now ellipses its caption (see `tb-levels__seglbl`),
+                  // so the full name has to stay reachable — hovering is the only
+                  // affordance a stripe has.
+                  title={levelTitle(draft.levels[s.index], s.index)}
                   data-testid={`${testIdPrefix}-level-seg-${index}-${s.index}`}
                 >
-                  {levelTitle(draft.levels[s.index], s.index)}
+                  <span className="tb-levels__seglbl">{levelTitle(draft.levels[s.index], s.index)}</span>
                 </div>
               ),
             )

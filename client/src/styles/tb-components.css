@@ -2336,13 +2336,24 @@
    base and `flex-grow` only splits what is LEFT, so the CEL scale's 15.3 / 14.3 /
    70.4 span was drawn as 19.6 / 20.1 / 59.5 — measured in a browser. From zero the
    grow factors own the whole width; the residual (~0.8pp) is the fixed padding,
-   which is chrome and not span. A hair-thin level then ellipses its caption —
-   correct for a proportion ribbon, and `overflow: hidden` already handles it. */
+   which is chrome and not span. A narrow level then has to ellipse its caption,
+   which `.tb-levels__seglbl` below does — this box cannot. */
 .tb-levels__seg {
   display: flex; align-items: center; justify-content: center;
   min-width: 0; flex-basis: 0; padding: 0 var(--ou-space-1);
   font: var(--ou-text-body-xs); font-weight: 600;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  overflow: hidden;
+}
+/* The caption needs a box of its own: `text-overflow` requires a block formatting
+   context, and the anonymous text of a flex item never gets one. Declared on
+   `.tb-levels__seg` itself the ellipsis silently did nothing — «Слабо выражен»
+   spilled past BOTH edges of a 74px stripe and was clipped to «лабо выраже»
+   (measured live: scrollWidth 83 vs clientWidth 74). The very defect PRD-45 set
+   out to remove, so it cannot come back through the ribbon. Inside this span the
+   same declarations work, and the stripe carries a `title` with the full name. */
+.tb-levels__seglbl {
+  min-width: 0; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* Without this the ribbon is one flat bar. Tone defaults to «Авто», so a typical
    scale paints EVERY stripe the same `--ou-bg-muted` and the boundaries — the
