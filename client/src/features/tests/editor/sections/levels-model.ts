@@ -117,6 +117,14 @@ export type LevelsErrors = {
   cuts: Array<string | null>;
   end: string | null;
   blocking: string | null;
+  /**
+   * WHICH of the two blocking conditions fired, as a token rather than prose.
+   * The coverage ribbon cannot be drawn in either case and has to say why — and
+   * «границы заданы не полностью» is a lie when all four fields hold numbers and
+   * only their order is wrong. Sniffing {@link LevelsErrors.blocking} for that
+   * would tie the ribbon's wording to the banner's; this cannot drift.
+   */
+  kind: "incomplete" | "order" | null;
 };
 
 type Slot = { raw: string; name: string };
@@ -138,7 +146,13 @@ function slots(draft: LevelsDraft): Slot[] {
  * @public
  */
 export function draftErrors(draft: LevelsDraft): LevelsErrors {
-  const out: LevelsErrors = { start: null, cuts: draft.cuts.map(() => null), end: null, blocking: null };
+  const out: LevelsErrors = {
+    start: null,
+    cuts: draft.cuts.map(() => null),
+    end: null,
+    blocking: null,
+    kind: null,
+  };
   if (draft.levels.length === 0) return out;
 
   const row = slots(draft);
@@ -156,6 +170,7 @@ export function draftErrors(draft: LevelsDraft): LevelsErrors {
   });
   if (values.some((v) => v === null)) {
     out.blocking = "Границы уровней заданы не полностью: укажите числа во всех полях.";
+    out.kind = "incomplete";
     return out;
   }
 
@@ -167,6 +182,7 @@ export function draftErrors(draft: LevelsDraft): LevelsErrors {
     set(i - 1, `Больше следующего ${row[i].name} ${formatAuthorNumber(cur)}`);
     set(i, `Меньше предыдущего ${row[i - 1].name} ${formatAuthorNumber(prev)}`);
     out.blocking = "Числа в ряду «Начало — пороги — Конец» должны идти по возрастанию.";
+    out.kind = "order";
   }
   return out;
 }

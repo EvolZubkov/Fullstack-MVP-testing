@@ -151,7 +151,13 @@ export function LevelsEditor({
         />
         <div className="tb-levels__ribbon">
           {segments === null ? (
-            <div className="tb-levels__seg tb-levels__seg--unknown">Границы заданы не полностью</div>
+            // Two different faults hide behind one `null`, and the author fixes
+            // them differently. `errors.kind` names the one that actually fired
+            // (see `LevelsErrors.kind`); «не полностью» over four filled fields
+            // sent the author hunting for an empty one that does not exist.
+            <div className="tb-levels__seg tb-levels__seg--unknown" data-testid={`${testIdPrefix}-levels-noribbon-${index}`}>
+              {errors.kind === "order" ? "Порядок границ нарушен" : "Границы заданы не полностью"}
+            </div>
           ) : (
             segments.map((s, i) =>
               s.kind === "gap" ? (

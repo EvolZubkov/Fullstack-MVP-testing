@@ -603,7 +603,7 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
             index={index}
             seed={bandSpan(v) ?? { min: 0, max: 0 }}
             switchLabel="Задать границы вручную"
-            switchDescription="Выключено — границы берутся из охвата диапазонов. Ноль — законная граница, а не признак «не задано»."
+            switchDescription="Выключено — границы берутся из охвата уровней. Ноль — законная граница, а не признак «не задано»."
             minLabel="Минимум"
             maxLabel="Максимум"
             onChange={onChange}

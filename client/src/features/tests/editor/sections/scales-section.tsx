@@ -57,6 +57,7 @@ import {
   type PreviewQuestionContext,
   type ScalePreviewResult,
 } from "../scales-api";
+import { pluralize } from "@/lib/i18n";
 import type { FieldErrorIndex } from "../field-errors";
 import { formatAuthorNumber, parseAuthorNumber, sanitizeAuthorNumberInput } from "../numeric-input";
 import { FoldAllButtons, useSectionFold } from "./section-fold";
@@ -222,14 +223,6 @@ function effectiveDomain(
 /** Stable per-row key: the server id once persisted, else the client key. */
 function rowKey(s: ScaleModel, index: number): string {
   return s.id ?? s.clientKey ?? `row-${index}`;
-}
-
-function pluralBands(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return `${n} диапазон`;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${n} диапазона`;
-  return `${n} диапазонов`;
 }
 
 function pluralQuestions(n: number): string {
@@ -571,7 +564,9 @@ function ScaleCard({
   const subtitle = [
     AGG_LABEL[s.aggregation],
     RECALC_LABEL[recalc],
-    s.bands.length > 0 ? pluralBands(s.bands.length) : null,
+    // «уровень», not «диапазон»: PRD-45 retired ranges from the UI, and the card's
+    // subtitle was the last place still counting them.
+    s.bands.length > 0 ? `${s.bands.length} ${pluralize(s.bands.length, "уровень", "уровня", "уровней")}` : null,
     coverage > 0 ? pluralQuestions(coverage) : "без вкладов",
   ]
     .filter(Boolean)
@@ -773,7 +768,7 @@ function ScaleForm({
         index={index}
         seed={effectiveDomain(s, suggestedDomain)}
         switchLabel="Задать границы шкалы вручную"
-        switchDescription="Выключено — границы берутся из охвата диапазонов. Ноль — законная граница, а не признак «не задано»."
+        switchDescription="Выключено — границы берутся из охвата уровней. Ноль — законная граница, а не признак «не задано»."
         minLabel="Минимум шкалы"
         maxLabel="Максимум шкалы"
         onChange={onChange}

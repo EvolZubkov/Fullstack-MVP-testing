@@ -2329,13 +2329,32 @@
 .tb-levels__ribbon { display: flex; height: var(--ou-size-control-s); border-radius: var(--ou-radius-s); overflow: hidden; }
 /* No `color` here: the stripe's foreground comes from its tone, inline, paired with
    the background it must be legible on (see `TONE_CHIPS.ribbonFg`). A blanket white
-   was unreadable on the «Авто» and warning stripes. */
+   was unreadable on the «Авто» and warning stripes.
+
+   `flex-basis: 0` is what makes FR-04's «доля ширины пропорциональна охвату
+   уровня» actually true. With the default `auto` the caption's own width is the
+   base and `flex-grow` only splits what is LEFT, so the CEL scale's 15.3 / 14.3 /
+   70.4 span was drawn as 19.6 / 20.1 / 59.5 — measured in a browser. From zero the
+   grow factors own the whole width; the residual (~0.8pp) is the fixed padding,
+   which is chrome and not span. A hair-thin level then ellipses its caption —
+   correct for a proportion ribbon, and `overflow: hidden` already handles it. */
 .tb-levels__seg {
   display: flex; align-items: center; justify-content: center;
-  min-width: 0; padding: 0 var(--ou-space-1);
+  min-width: 0; flex-basis: 0; padding: 0 var(--ou-space-1);
   font: var(--ou-text-body-xs); font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* Without this the ribbon is one flat bar. Tone defaults to «Авто», so a typical
+   scale paints EVERY stripe the same `--ou-bg-muted` and the boundaries — the
+   proportions the ribbon exists to show — are invisible.
+   `currentColor`, not a fixed divider colour, and not a `gap`: measured in a
+   browser, a `--ou-border-default` seam reaches only 1.21:1 against the warning
+   stripe and 1.02:1 against the favourable one, i.e. it vanishes on exactly the
+   saturated fills. A stripe's `currentColor` is its `TONE_CHIPS.ribbonFg`, which
+   that table guarantees ≥4.5:1 against its own `ribbonBg` — measured here at
+   7.11–14:1 across all five tones, in BOTH themes, whatever the neighbour is.
+   An inset shadow also costs no width, so the spans stay exactly proportional. */
+.tb-levels__seg + .tb-levels__seg { box-shadow: inset var(--wf-border-w) 0 0 currentColor; }
 /* The hatch alternates two REAL DS surfaces. `--ou-bg-subtle` reads like a token
    but is defined nowhere in the DS, so a stripe built on it collapses to
    transparent — the ribbon would show the page through the «uncovered» span. */

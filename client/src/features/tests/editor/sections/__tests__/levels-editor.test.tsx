@@ -151,6 +151,20 @@ describe("LevelsEditor", () => {
     expect(after.value).toBe("1,");
   });
 
+  it("blames the ORDER, not completeness, when every boundary is a number", () => {
+    render(<Host initial={[band("0", "42", "a"), band("42", "29", "b")]} />);
+    const ribbon = screen.getByTestId("scales-levels-noribbon-0");
+    expect(ribbon).toHaveTextContent("Порядок границ нарушен");
+    expect(ribbon).not.toHaveTextContent("не полностью");
+  });
+
+  it("blames completeness when a boundary is not a number", () => {
+    render(<Host initial={[band("0", "42", "a"), band("42", "", "b")]} />);
+    const ribbon = screen.getByTestId("scales-levels-noribbon-0");
+    expect(ribbon).toHaveTextContent("Границы заданы не полностью");
+    expect(ribbon).not.toHaveTextContent("Порядок");
+  });
+
   it("puts the ordering message under the offending field", () => {
     render(<Host initial={[band("0", "42", "a"), band("42", "29", "b")]} />);
     expect(screen.getByText("Меньше предыдущего порога 42")).toBeInTheDocument();

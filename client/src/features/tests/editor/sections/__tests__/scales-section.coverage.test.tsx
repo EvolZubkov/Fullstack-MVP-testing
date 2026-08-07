@@ -204,7 +204,7 @@ describe("<ScalesSection /> — «Список шкал»", () => {
     renderControlled(model);
 
     const covered = screen.getByTestId("scales-card-0");
-    expect(covered).toHaveTextContent("2 диапазона");
+    expect(covered).toHaveTextContent("2 уровня");
     expect(covered).toHaveTextContent("2 вопроса");
     expect(covered.querySelector(".tb-status-dot--ok")).not.toBeNull();
 
