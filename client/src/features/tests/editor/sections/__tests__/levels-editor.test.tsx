@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 import { LevelsEditor } from "../levels-editor";
 import type { FeedbackEditorValue } from "../feedback-editor-modal";
 import type { ScaleBandModel } from "../../test-editor.types";
+import type { Valence } from "@shared/scales/interpretation";
 
 function band(min: string, max: string, level: string, label = ""): ScaleBandModel {
   return { clientKey: `b-${level}`, min, max, label, level, text: "", tone: "" };
@@ -25,13 +26,22 @@ function fb(p: Partial<FeedbackEditorValue>): FeedbackEditorValue {
 const THREE = [band("0", "15", "low", "Слабо"), band("15", "29", "mid", "Средне"), band("29", "98", "high", "Ярко")];
 
 /** Stateful host: the component is controlled, so the test owns the bands. */
-function Host({ initial, onBands }: { initial: ScaleBandModel[]; onBands?: (b: ScaleBandModel[]) => void }) {
+function Host({
+  initial,
+  onBands,
+  valence = "none",
+}: {
+  initial: ScaleBandModel[];
+  onBands?: (b: ScaleBandModel[]) => void;
+  valence?: Valence;
+}) {
   const [bands, setBands] = useState(initial);
   return (
     <LevelsEditor
       bands={bands}
       index={0}
       readOnly={false}
+      valence={valence}
       domain={{ min: 0, max: 98 }}
       onChange={(next) => {
         setBands(next);
@@ -76,6 +86,42 @@ describe("LevelsEditor", () => {
   it("draws one ribbon stripe per level", () => {
     render(<Host initial={THREE} />);
     expect(screen.getAllByTestId(/^scales-level-seg-0-/)).toHaveLength(3);
+  });
+
+  // The ribbon is a preview of what the LEARNER will see, and the learner sees the
+  // tone `deriveLevelTone` computes — an author who never touched «Как трактовать»
+  // must still get the coloured split, not a grey rail.
+  it("paints an «Авто» level with the tone derived from the scale's direction", () => {
+    render(<Host initial={THREE} valence="higher_is_better" />);
+    expect(screen.getByTestId("scales-level-seg-0-0")).toHaveStyle({ background: "var(--ou-error-600)" });
+    expect(screen.getByTestId("scales-level-seg-0-1")).toHaveStyle({ background: "var(--ou-warning-default)" });
+    expect(screen.getByTestId("scales-level-seg-0-2")).toHaveStyle({ background: "var(--ou-success-default)" });
+  });
+
+  it("flips the derived ramp when lower is better", () => {
+    render(<Host initial={THREE} valence="lower_is_better" />);
+    expect(screen.getByTestId("scales-level-seg-0-0")).toHaveStyle({ background: "var(--ou-success-default)" });
+    expect(screen.getByTestId("scales-level-seg-0-2")).toHaveStyle({ background: "var(--ou-error-600)" });
+  });
+
+  it("keeps «Авто» levels neutral when the scale declares no direction", () => {
+    render(<Host initial={THREE} valence="none" />);
+    for (const i of [0, 1, 2]) {
+      expect(screen.getByTestId(`scales-level-seg-0-${i}`)).toHaveStyle({ background: "var(--ou-neutral-600)" });
+    }
+  });
+
+  it("lets an explicit tone override the derived one", () => {
+    const pinned = [{ ...THREE[0], tone: "favorable" as const }, THREE[1], THREE[2]];
+    render(<Host initial={pinned} valence="higher_is_better" />);
+    expect(screen.getByTestId("scales-level-seg-0-0")).toHaveStyle({ background: "var(--ou-success-default)" });
+  });
+
+  it("rules the level card in the same colour its stripe carries", () => {
+    const { container } = render(<Host initial={THREE} valence="higher_is_better" />);
+    const cards = container.querySelectorAll(".tb-levels__card");
+    expect(cards[0]).toHaveStyle({ borderLeftColor: "var(--ou-error-default)" });
+    expect(cards[2]).toHaveStyle({ borderLeftColor: "var(--ou-success-default)" });
   });
 
   it("carries the full level name in the stripe title, so a clipped caption stays readable", () => {
@@ -132,6 +178,7 @@ describe("LevelsEditor", () => {
         bands={[band("10", "69", "only")]}
         index={0}
         readOnly={false}
+        valence="none"
         domain={{ min: 0, max: 98 }}
         onChange={vi.fn()}
       />,
@@ -203,7 +250,7 @@ describe("LevelsEditor", () => {
   });
 
   it("hides every control in read-only mode", () => {
-    render(<LevelsEditor bands={THREE} index={0} readOnly domain={null} onChange={vi.fn()} />);
+    render(<LevelsEditor bands={THREE} index={0} readOnly valence="none" domain={null} onChange={vi.fn()} />);
     expect(screen.queryByTestId("scales-level-add-0")).toBeNull();
     expect(screen.queryByLabelText("Удалить уровень 1")).toBeNull();
     expect((screen.getByLabelText("Начало") as HTMLInputElement).disabled).toBe(true);

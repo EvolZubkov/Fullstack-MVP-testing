@@ -751,6 +751,7 @@ function ScaleForm({
         bands={s.bands}
         index={index}
         readOnly={readOnly}
+        valence={s.valence}
         domain={s.domainMin !== null && s.domainMax !== null
           ? { min: s.domainMin, max: s.domainMax }
           : suggestedDomain}

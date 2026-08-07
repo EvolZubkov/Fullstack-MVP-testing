@@ -583,6 +583,7 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
             bands={v.bands}
             index={index}
             readOnly={readOnly}
+            valence={v.valence}
             testIdPrefix="metrics"
             domain={v.domainMin !== null && v.domainMax !== null
               ? { min: v.domainMin, max: v.domainMax }

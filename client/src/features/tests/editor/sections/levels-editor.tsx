@@ -23,6 +23,9 @@ import {
 } from "@universityrt/ui-kit";
 import { ChevronRight, Plus, Trash2 } from "lucide-react";
 
+import { deriveLevelTone } from "@shared/template/measure-view";
+import type { LevelTone, Valence } from "@shared/scales/interpretation";
+
 import { pluralize } from "@/lib/i18n";
 
 import { hasFeedbackContent } from "../scales-api";
@@ -53,6 +56,12 @@ export type LevelsEditorProps = {
   testIdPrefix?: string;
   /** Effective scale domain for the ribbon; null when nothing declares one. */
   domain?: { min: number; max: number } | null;
+  /**
+   * The owning scale's / indicator's favourable direction. Needed because a level
+   * whose tone is «Авто» has no colour of its own — it inherits one from the ramp,
+   * and the ramp runs the way the valence points.
+   */
+  valence: Valence;
 };
 
 /**
@@ -92,6 +101,7 @@ export function LevelsEditor({
   onChange,
   testIdPrefix = "scales",
   domain = null,
+  valence,
 }: LevelsEditorProps) {
   // Which level's recommendations modal is open (level index, not the level).
   const [feedbackFor, setFeedbackFor] = useState<number | null>(null);
@@ -100,6 +110,15 @@ export function LevelsEditor({
   const errors = draftErrors(draft);
   const segments = coverageSegments(draft, domain);
   const total = draft.levels.length;
+
+  /**
+   * The colour a level is actually drawn in — its explicit tone, else the one the
+   * results screen would derive for it. The ribbon is a preview of the split the
+   * LEARNER sees, so painting an untouched level grey would preview a screen that
+   * does not exist: `deriveLevelTone` is the very function that colours the result.
+   */
+  const effectiveTone = (level: LevelDraft, i: number): LevelTone | "" =>
+    level.tone || deriveLevelTone(valence, i, total);
 
   const emit = (next: LevelsDraft) => onChange(draftToBands(next));
   const setBound = (patch: Partial<Pick<LevelsDraft, "start" | "end">>) => emit({ ...draft, ...patch });
@@ -177,8 +196,8 @@ export function LevelsEditor({
                   className="tb-levels__seg"
                   style={{
                     flexGrow: Math.max(s.to - s.from, 0.001),
-                    background: toneRibbon(draft.levels[s.index].tone).bg,
-                    color: toneRibbon(draft.levels[s.index].tone).fg,
+                    background: toneRibbon(effectiveTone(draft.levels[s.index], s.index)).bg,
+                    color: toneRibbon(effectiveTone(draft.levels[s.index], s.index)).fg,
                   }}
                   // A narrow stripe now ellipses its caption (see `tb-levels__seglbl`),
                   // so the full name has to stay reachable — hovering is the only
@@ -241,7 +260,7 @@ export function LevelsEditor({
             </div>
           )}
 
-          <section className="tb-levels__card" style={{ borderLeftColor: toneColour(l.tone) }}>
+          <section className="tb-levels__card" style={{ borderLeftColor: toneColour(effectiveTone(l, i)) }}>
             {/* No drag handle: reordering level content is deferred to technical
                 debt (decision of 2026-08-07), and a grip that grabs nothing is a
                 promise the card cannot keep. `moveLevel` in `levels-model` stays
