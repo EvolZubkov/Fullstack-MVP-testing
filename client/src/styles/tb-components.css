@@ -2303,3 +2303,81 @@
   width: 9px; height: 9px; border-radius: 50%;
   display: inline-block; flex: 0 0 auto;
 }
+
+/* ─── PRD-45: levels editor ─────────────────────────────────────────────────── */
+/* The predecessor was a six-column table whose header carried every field label —
+   scrolling the drawer left the fields anonymous. Here each field owns its label,
+   and the only shared grid is the coverage strip: one 88 / 1fr / 88 track set on
+   two rows, so the labels share a baseline and the ribbon shares the control
+   baseline with both number fields. */
+.tb-levels { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+
+.tb-levels__cover {
+  display: grid; grid-template-columns: 88px 1fr 88px;
+  column-gap: var(--ou-space-2); align-items: center;
+  margin-bottom: var(--ou-space-3);
+}
+.tb-levels__caplbl { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+.tb-levels__caplbl--end { text-align: right; }
+.tb-levels__ribbon { display: flex; height: 34px; border-radius: var(--ou-radius-s); overflow: hidden; }
+.tb-levels__seg {
+  display: flex; align-items: center; justify-content: center;
+  min-width: 0; padding: 0 var(--ou-space-1);
+  font: var(--ou-text-body-xs); font-weight: 600; color: var(--ou-neutral-0);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* The hatch alternates two REAL DS surfaces. `--ou-bg-subtle` reads like a token
+   but is defined nowhere in the DS, so a stripe built on it collapses to
+   transparent — the ribbon would show the page through the «uncovered» span. */
+.tb-levels__seg--gap {
+  background: repeating-linear-gradient(45deg,
+    var(--ou-bg-muted), var(--ou-bg-muted) 5px,
+    var(--ou-bg-surface-2) 5px, var(--ou-bg-surface-2) 10px);
+  color: var(--ou-fg-muted); font-weight: 400;
+}
+.tb-levels__seg--unknown { flex: 1; background: var(--ou-bg-muted); color: var(--ou-fg-muted); font-weight: 400; }
+
+.tb-levels__card {
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-left-width: 4px; border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-surface-1);
+  padding: var(--ou-space-3) var(--ou-space-4);
+}
+.tb-levels__head { display: flex; align-items: center; gap: var(--ou-space-2); margin-bottom: var(--ou-space-3); }
+.tb-levels__grip { color: var(--ou-fg-muted); cursor: grab; flex: 0 0 auto; }
+.tb-levels__title { font: var(--ou-text-body-m); font-weight: 600; }
+.tb-levels__spacer { flex: 1; }
+.tb-levels__range { font: var(--ou-text-body-s); color: var(--ou-fg-muted); font-variant-numeric: tabular-nums; }
+
+.tb-levels__grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--ou-space-3); }
+
+/* The tone row is a DS SegmentedControl: inline-flex, nowrap by design, natural
+   width ~540px with all five labels. The drawer is `--xl` (1040px) minus a 240px
+   rail, so it fits at full size — but the drawer caps at `100vw - space-7`, and on
+   a ~800px viewport the card narrows past the row's natural width. Without this
+   the row would push out of the card. Scrolling the row inside its own strip keeps
+   the card intact and keeps every label readable, which is the whole point of
+   leaving the Select behind. */
+.tb-levels__tone { margin-top: var(--ou-space-3); overflow-x: auto; }
+.tb-levels__tonelbl { display: block; font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-bottom: var(--ou-space-1); }
+
+.tb-levels__fold {
+  display: flex; align-items: center; gap: var(--ou-space-2); width: 100%;
+  margin-top: var(--ou-space-3); padding-top: var(--ou-space-2);
+  border: none; border-top: var(--wf-border-w) solid var(--ou-border-soft);
+  background: none; color: var(--ou-fg-default);
+  font: var(--ou-text-body-s); text-align: left; cursor: pointer;
+}
+.tb-levels__chev { color: var(--ou-fg-muted); flex: 0 0 auto; }
+.tb-levels__badge { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+
+.tb-levels__cut { display: grid; grid-template-columns: 88px 1fr 88px; column-gap: var(--ou-space-2); align-items: center; padding: var(--ou-space-2) 0; }
+.tb-levels__cutrule { display: flex; align-items: center; gap: var(--ou-space-2); min-width: 0; }
+.tb-levels__cutline { flex: 1; height: 1px; background: var(--ou-border-soft); }
+.tb-levels__cutlbl { font: var(--ou-text-caption); color: var(--ou-fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.tb-levels__empty {
+  border: var(--wf-border-w) dashed var(--ou-border-default); border-radius: var(--ou-radius-m);
+  padding: var(--ou-space-6); text-align: center; color: var(--ou-fg-muted);
+}
+.tb-levels__empty-act { margin-top: var(--ou-space-3); }
