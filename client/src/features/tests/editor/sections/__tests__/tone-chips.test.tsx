@@ -33,4 +33,16 @@ describe("ToneChips", () => {
     fireEvent.click(screen.getByText("Авто"));
     expect(onChange).toHaveBeenCalledWith("");
   });
+
+  it("does not report a change while disabled", () => {
+    const onChange = vi.fn();
+    render(<ToneChips value="" ariaLabel="оценка" disabled onChange={onChange} />);
+    fireEvent.click(screen.getByText("Внимание"));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("exposes the test id it was given", () => {
+    render(<ToneChips value="" ariaLabel="оценка" testId="scales-level-tone-0-1" onChange={vi.fn()} />);
+    expect(screen.getByTestId("scales-level-tone-0-1")).toBeInTheDocument();
+  });
 });
