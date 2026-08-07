@@ -71,6 +71,16 @@ const MAX_AXES = 6;
  */
 const RING_SHARES = [0.25, 0.5, 0.75, 1];
 
+/**
+ * How far a ray runs past the outer ring.
+ *
+ * A ray stopping exactly on the ring reads as if the ring cut it off, and the two lines fight
+ * for the same pixel where they meet. A short overhang says instead that the ray is the
+ * boundary between two scales and the ring is the scale of the whole — two different things
+ * crossing. Kept well inside the caption ring so nothing runs into the text.
+ */
+const SPOKE_OVERHANG = 6;
+
 /** One sector: a scale's share of the whole, ready to draw. */
 export interface CtxRoseSector {
   key: string;
@@ -246,8 +256,8 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
       return {
         cx: CENTER_X,
         cy: CENTER_Y,
-        x: round1(CENTER_X + Math.cos(angle) * RADIUS),
-        y: round1(CENTER_Y + Math.sin(angle) * RADIUS),
+        x: round1(CENTER_X + Math.cos(angle) * (RADIUS + SPOKE_OVERHANG)),
+        y: round1(CENTER_Y + Math.sin(angle) * (RADIUS + SPOKE_OVERHANG)),
       };
     }),
     labels,

@@ -46,13 +46,13 @@ describe("buildRoseChart", () => {
     expect(buildRoseChart({ axes: CHIL, ramp })!.rings.map((r) => r.radius)).toEqual([50, 70.7, 86.6, 100]);
   });
 
-  it("чертит оси по границам секторов до края поля", () => {
+  it("чертит оси по границам секторов и выпускает концы за внешнее кольцо", () => {
     const chart = buildRoseChart({ axes: CHIL, ramp })!;
     expect(chart.spokes.map((s) => [s.x, s.y])).toEqual([
-      [180, 50],
-      [280, 150],
-      [180, 250],
-      [80, 150],
+      [180, 44],
+      [286, 150],
+      [180, 256],
+      [74, 150],
     ]);
     expect(chart.spokes[0].cx).toBe(180);
     expect(chart.spokes[0].cy).toBe(150);
