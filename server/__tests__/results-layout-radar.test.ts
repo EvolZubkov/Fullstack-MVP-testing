@@ -48,7 +48,7 @@ function measures(showRadar: boolean) {
     ramp: LEVEL_SCHEMES.traffic,
     scaleKind: "band_ruler" as const,
     indicatorKind: "label" as const,
-    showRadar,
+    chartSettings: { scalesChartKind: showRadar ? ("radar" as const) : ("none" as const) },
     indicators: [],
     scales: [
       { key: "a", name: "Эмоциональное истощение", value: 27, visibility: "level_and_value" as const, interpretation: scale(45, [0, 15, 25]) },

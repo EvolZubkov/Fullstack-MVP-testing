@@ -119,9 +119,9 @@ export function buildMeasuresInput(source: MeasuresSource): MeasuresInput {
     indicators,
     hasPassThreshold: source.hasPassThreshold,
     blockSettings: source.blockSettings,
-    // PRD-35. Lives in the SAME `settings_json` of the results page as the block
+    // PRD-35/46. Lives in the SAME `settings_json` of the results page as the block
     // settings, so nothing new travels from the route — only the reading of it.
-    showRadar: source.blockSettings?.showCompetencyRadar === true,
+    chartSettings: source.blockSettings,
   };
 }
 

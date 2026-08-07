@@ -12,6 +12,8 @@
  * Pure — no DOM, no Node.
  */
 
+import type { ScalesChartKind } from "./scales-chart";
+
 export type BlockSetting = "auto" | "show" | "hide";
 
 export interface ResultsBlockSettings {
@@ -19,11 +21,15 @@ export interface ResultsBlockSettings {
   indicators?: BlockSetting;
   scales?: BlockSetting;
   /**
-   * PRD-35. Boolean, not three-position, on purpose: `auto` exists where the
-   * manifest cannot know what the test contains, and here the answer is never
-   * derivable — a profile diagram is an editorial decision, not a consequence of
-   * the data.
+   * PRD-46. Which cross-scale diagram to draw: `none` / `auto` / `radar` / `rose`.
+   *
+   * Four-valued, not the boolean PRD-35 declared. That boolean rested on «the answer is never
+   * derivable», which stopped being true once the rose existed: whether the scales divide one
+   * whole IS derivable from the contribution model, so `auto` now has something to read. The
+   * choice between the two claims stays the author's — `auto` is opt-in, not the default.
    */
+  scalesChartKind?: ScalesChartKind;
+  /** PRD-35's boolean, read only when the four-valued key is absent. */
   showCompetencyRadar?: boolean;
 }
 

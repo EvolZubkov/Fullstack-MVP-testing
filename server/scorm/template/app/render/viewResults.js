@@ -270,10 +270,11 @@ function buildResultsMeasures(scaleComputation, varComputation) {
     // the test's feedback on — two copies could disagree about the very same test.
     hasPassThreshold: vrHasPassThreshold(),
     blockSettings: blockSettings,
-    // PRD-35: the radar switch travels in the SAME settings of the «Итоги» variant.
-    // Explicitly `=== true`, so a package built before PRD-35 (no key at all) keeps
-    // the screen exactly as it was.
-    showRadar: blockSettings.showCompetencyRadar === true
+    // PRD-35/46: the chart setting travels in the SAME settings of the «Итоги» variant, so
+    // the package hands them over untouched and the ONE decision rule in Core reads them —
+    // including PRD-35's boolean, which it migrates. A package built before either PRD has
+    // no key at all and keeps the screen exactly as it was.
+    chartSettings: blockSettings
   };
 }
 

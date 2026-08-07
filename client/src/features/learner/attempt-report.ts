@@ -117,7 +117,15 @@ export async function downloadAttemptReport(
     values,
     design: render.design,
     ...(measures
-      ? { measures: { ...measures, showRadar: values.showCompetencyRadar === true } }
+      ? {
+          measures: {
+            ...measures,
+            chartSettings: {
+              scalesChartKind: values.scalesChartKind as never,
+              showCompetencyRadar: values.showCompetencyRadar === true,
+            },
+          },
+        }
       : {}),
   };
   // The server flags the mode (`adaptive`) — the page differs, the input shape follows.

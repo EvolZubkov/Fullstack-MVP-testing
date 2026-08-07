@@ -1574,7 +1574,7 @@ describe("Attempts routes — result and history", () => {
       // PRD-35: у отчёта СВОЙ переключатель — клиент подмешивает его к тем же измерениям.
       const ctx = buildReportContext(res.body.report, {
         values: { showCompetencyRadar: true },
-        measures: { ...res.body.measures, showRadar: true },
+        measures: { ...res.body.measures, chartSettings: { scalesChartKind: "radar" as const } },
       });
       expect(ctx.result.scalesChart?.axes).toHaveLength(3);
     });
