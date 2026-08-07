@@ -225,7 +225,20 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
   const hasDomain = interpretation.domainMin !== null && interpretation.domainMax !== null;
   const hasBands = interpretation.bands.length > 0;
   const renderKind = resolveRenderKind(input.requestedKind, { hasDomain, hasBands, isNumeric });
-  const showValue = input.visibility === "level_and_value" && renderKind !== "label";
+  // The render kind governs the FORM of the value slot (ruler, ring, bar, plain number);
+  // the visibility governs whether the value is shown AT ALL. So the gate here is
+  // numeric-ness, not the kind: `label` means «no diagram», never «no number».
+  //
+  // It used to read `renderKind !== "label"`, and that silenced the value of every
+  // NUMERIC measure drawn as a label — which is the default of «Вид показателей» in the
+  // shipped template. A numeric indicator without interpretation bands then had nothing
+  // left: no level (no bands) and no value (this gate), so its card rendered as an empty
+  // banner beside string indicators that read fine.
+  //
+  // A non-numeric measure keeps `showValue: false`, and that is not an exception to the
+  // rule but the same rule: its value IS the outcome label the level slot already prints,
+  // so a value slot would print the code twice.
+  const showValue = input.visibility === "level_and_value" && isNumeric;
 
   const base: CtxMeasureView = {
     key: input.key,

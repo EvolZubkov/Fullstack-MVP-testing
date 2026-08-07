@@ -40,17 +40,20 @@
       <div class="tb-scene__q"><h3 class="tb-scene__subhead">Ваш результат</h3></div>
       <div class="tb-measures">
         {{#each result.indicators}}
-        <div class="ou-formsection tb-measure">
+        <div class="ou-formsection tb-measure" data-render="{{renderKind}}">
           <div class="ou-formsection__intro">
             <h4 class="ou-formsection__title">{{name}}</h4>
           </div>
           <div class="ou-formsection__body">
+            {{#if showValue}}<span class="ou-slider__val"><strong>{{valueLabel}}</strong></span>{{/if}}
+            {{#if levelLabel}}
             <div class="ou-banner ou-banner--subtle ou-banner--{{bannerVariant}}">
               <div class="ou-banner__body">
                 <div class="ou-banner__title">{{levelLabel}}</div>
                 {{#if text}}<div class="ou-banner__desc">{{text}}</div>{{/if}}
               </div>
             </div>
+            {{/if}}
           </div>
         </div>
         {{/each}}

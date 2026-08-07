@@ -213,3 +213,54 @@ describe("buildMeasureView", () => {
     expect(v.tone).toBe("neutral");
   });
 });
+
+describe("числовой показатель без полос интерпретации", () => {
+  // Массовый случай PRD-2: показатель считает ЧИСЛО («Отрыв ведущего стиля»), полос
+  // толкования у него нет, а вид показателей в шаблоне по умолчанию — «метка».
+  // Карточка при этом не несла ничего: уровня нет (полос нет), значение гасил вид.
+  function gap(overrides: Partial<Parameters<typeof buildMeasureView>[0]> = {}) {
+    return buildMeasureView({
+      key: "lead_gap",
+      name: "Отрыв ведущего стиля",
+      value: 18,
+      visibility: "level_and_value",
+      interpretation: { domainMin: null, domainMax: null, valence: "none", bands: [], outcomes: [] },
+      requestedKind: "label",
+      ramp: LEVEL_SCHEMES.traffic,
+      ...overrides,
+    });
+  }
+
+  it("показывает значение, хотя вид — «метка»", () => {
+    // Вид отвечает за ФОРМУ показа значения (диаграмма, линейка, голое число), а
+    // видимость — за то, показывать ли его вообще. «Метка» = без диаграммы, а не
+    // «без значения»: иначе автор выбрал «уровень и значение» и не получил ни того,
+    // ни другого.
+    const v = gap();
+    expect(v.renderKind).toBe("label");
+    expect(v.showValue).toBe(true);
+    expect(v.valueText).toBe("18");
+    expect(v.valueLabel).toBe("18");
+  });
+
+  it("при видимости «уровень» значение остаётся скрытым", () => {
+    expect(gap({ visibility: "level" }).showValue).toBe(false);
+  });
+
+  it("у строкового исхода отдельного значения нет — метка исхода и есть значение", () => {
+    // Здесь `showValue` обязан остаться ложным: значение и уровень — одно и то же,
+    // и карточка напечатала бы код исхода дважды.
+    const v = gap({
+      value: "growing",
+      interpretation: {
+        domainMin: null,
+        domainMax: null,
+        valence: "none",
+        bands: [],
+        outcomes: [{ code: "growing", label: "Возрастающее истощение" }],
+      },
+    });
+    expect(v.showValue).toBe(false);
+    expect(v.levelLabel).toBe("Возрастающее истощение");
+  });
+});
