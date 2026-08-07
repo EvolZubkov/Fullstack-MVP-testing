@@ -46,9 +46,12 @@ lines.push(`     aria-label="${chart.ariaLabel}">`);
 for (const s of chart.sectors) {
   lines.push(`  <path class="tb-rose__sector" d="${s.d}" style="--tb-hue: ${s.color}"></path>`);
 }
-// Кольца ПОВЕРХ заливок: под непрозрачными секторами они видны только в промежутках.
+// Сетка ПОВЕРХ заливок: под непрозрачными секторами она видна только в промежутках.
 for (const r of chart.rings) {
   lines.push(`  <circle class="tb-rose__ring" cx="${r.cx}" cy="${r.cy}" r="${r.radius}"></circle>`);
+}
+for (const s of chart.spokes) {
+  lines.push(`  <line class="tb-rose__axis" x1="${s.cx}" y1="${s.cy}" x2="${s.x}" y2="${s.y}"></line>`);
 }
 for (const l of chart.labels) {
   lines.push(`  <text class="${l.className}" x="${l.x}" y="${l.y}" text-anchor="${l.anchor}">${l.text}</text>`);

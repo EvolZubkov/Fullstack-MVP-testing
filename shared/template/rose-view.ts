@@ -90,11 +90,26 @@ export interface CtxRoseRing {
   radius: number;
 }
 
+/**
+ * One ray of the grid, from the centre to the field edge.
+ *
+ * The rays follow sector BOUNDARIES, not their middles: a boundary is where one scale ends
+ * and the next begins, so the ray continues the edge the reader already sees on the fill and
+ * carries it out to the rim. Carries the centre for the same reason a ring does.
+ */
+export interface CtxRoseSpoke {
+  cx: number;
+  cy: number;
+  x: number;
+  y: number;
+}
+
 export interface CtxRoseChart {
   width: number;
   height: number;
   sectors: CtxRoseSector[];
   rings: CtxRoseRing[];
+  spokes: CtxRoseSpoke[];
   /**
    * The ring an EVEN split lands on, at `F / √N`. It is the chart's reference: a figure
    * bulging past it on one side and sinking inside it on another is exactly what a skewed
@@ -220,6 +235,15 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
     height: HEIGHT,
     sectors,
     rings: RING_SHARES.map((s) => ({ cx: CENTER_X, cy: CENTER_Y, radius: round1(RADIUS * Math.sqrt(s)) })),
+    spokes: visible.map((_, i) => {
+      const angle = -Math.PI / 2 + step * i;
+      return {
+        cx: CENTER_X,
+        cy: CENTER_Y,
+        x: round1(CENTER_X + Math.cos(angle) * RADIUS),
+        y: round1(CENTER_Y + Math.sin(angle) * RADIUS),
+      };
+    }),
     labels,
     ariaLabel: `Расклад по шкалам: ${sectors
       .map((s) => `${s.label} — ${s.levelText || "уровень не определён"}`)

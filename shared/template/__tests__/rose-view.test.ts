@@ -46,6 +46,18 @@ describe("buildRoseChart", () => {
     expect(buildRoseChart({ axes: CHIL, ramp })!.rings.map((r) => r.radius)).toEqual([50, 70.7, 86.6, 100]);
   });
 
+  it("чертит оси по границам секторов до края поля", () => {
+    const chart = buildRoseChart({ axes: CHIL, ramp })!;
+    expect(chart.spokes.map((s) => [s.x, s.y])).toEqual([
+      [180, 50],
+      [280, 150],
+      [180, 250],
+      [80, 150],
+    ]);
+    expect(chart.spokes[0].cx).toBe(180);
+    expect(chart.spokes[0].cy).toBe(150);
+  });
+
   it("выносит подписи за внешнее кольцо, а не внутрь сетки", () => {
     // Кольца доходят до края поля, поэтому кольцо подписей — 100 + 30. Внутри сетки
     // внешняя окружность прошла бы прямо через строки подписей.
