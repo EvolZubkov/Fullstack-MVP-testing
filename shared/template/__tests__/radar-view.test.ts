@@ -182,6 +182,55 @@ describe("buildRadarChart", () => {
     }
   });
 
+  it("держит поле 360×300 с центром 180: подписи боковых осей рассчитаны на этот запас", () => {
+    const chart = buildRadarChart({
+      ramp,
+      axes: [
+        axis("a", 45, scale(45, [0, 15, 25])),
+        axis("b", 5, scale(25, [0, 5, 10])),
+        axis("c", 20, scale(40, [0, 28, 33])),
+      ],
+    });
+    expect(chart!.width).toBe(360);
+    expect(chart!.height).toBe(300);
+    expect(chart!.axes[0].cx).toBe(180);
+    expect(chart!.axes[0].cy).toBe(150);
+  });
+
+  it("центрирует подпись горизонтальной оси, а не якорит её наружу", () => {
+    const chart = buildRadarChart({
+      ramp,
+      axes: [
+        { ...axis("top", 20, scale(45, [0, 15, 25])), name: "Верх" },
+        { ...axis("right", 30, scale(40, [0, 28, 33])), name: "Вдохновляющий" },
+        { ...axis("bottom", 3, scale(25, [0, 5, 10])), name: "Низ" },
+        { ...axis("left", 30, scale(40, [0, 28, 33])), name: "Процессный" },
+      ],
+    });
+    // Четыре оси: вторая — строго справа, четвёртая — строго слева.
+    const right = chart!.axes[1];
+    const left = chart!.axes[3];
+    expect(right.axisY).toBeCloseTo(right.cy, 1);
+    expect(left.axisY).toBeCloseTo(left.cy, 1);
+
+    // Ни одна подпись не якорится наружу — иначе боковая уезжает за край поля.
+    expect(chart!.labels.every((l) => l.anchor === "middle")).toBe(true);
+
+    // Подпись боковой оси центрируется по вертикали относительно луча: имя выше
+    // линии оси, уровень ниже — блок из двух строк симметричен CENTER_Y.
+    const rightLabels = chart!.labels.filter((l) => l.x > chart!.axes[0].cx);
+    expect(rightLabels.map((l) => l.text)).toEqual(["Вдохновляющий", "Уровень 1"]);
+    expect(rightLabels[0].y).toBeLessThan(right.cy);
+    expect(rightLabels[1].y).toBeGreaterThan(right.cy);
+    const middle = (rightLabels[0].y + rightLabels[1].y) / 2;
+    expect(middle).toBeCloseTo(right.cy, 1);
+
+    // Та же симметрия слева: обе стороны считаются одним правилом.
+    const leftLabels = chart!.labels.filter((l) => l.x < chart!.axes[0].cx);
+    expect(leftLabels.map((l) => l.text)).toEqual(["Процессный", "Уровень 1"]);
+    expect((leftLabels[0].y + leftLabels[1].y) / 2).toBeCloseTo(left.cy, 1);
+  });
+
   it("отдаёт строку polygonPoints по числу осей", () => {
     const chart = buildRadarChart({
       ramp,
