@@ -81,15 +81,22 @@
       align-items: start;
     }
     .tb-appearance__list { display: flex; flex-direction: column; }
+    /* Колонки фиксированной ширины, содержимое прижато влево. Во flex-строке чипы
+       уезжали к правому краю и вставали на разной высоте по горизонтали: ширина
+       чипа зависит от текста («#8F6AE6» против «По схеме уровней», «target»
+       против «users-round»), и колонка переставала читаться колонкой. Ширины
+       рассчитаны на самый длинный вариант каждого столбца. */
     .tb-appearance__row {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 190px 170px;
       align-items: center;
+      justify-items: start;
       gap: var(--ou-space-3);
       padding: var(--ou-space-3) 0;
       border-block-end: var(--wf-border-w) solid var(--ou-border-soft);
     }
     .tb-appearance__row:last-child { border-block-end: 0; }
-    .tb-appearance__name { flex: 1; min-width: 0; font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+    .tb-appearance__name { min-width: 0; font: var(--ou-text-body-m); color: var(--ou-fg-default); }
     .tb-appearance__note { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 
     .tb-rose__sector { fill: hsl(var(--tb-hue)); stroke: var(--ou-bg-surface-2); stroke-width: 2; }
