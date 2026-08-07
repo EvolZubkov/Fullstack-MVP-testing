@@ -92,6 +92,12 @@ export interface CtxRoseSector {
   color: HslTriple;
   radius: number;
   sharePercent: number;
+  /**
+   * `""` or `tb-rose__sector--overflow`: the DSL has no conditional classes. Set when the
+   * share runs past the edge of the field and the sector had to be clamped — silently cutting
+   * it would understate a dominant scale exactly where it matters most.
+   */
+  overflowClass: string;
 }
 
 /** One grid ring. Each carries the centre: a DSL loop cannot reach its parent. */
@@ -132,9 +138,37 @@ export interface CtxRoseChart {
   ariaLabel: string;
 }
 
+/**
+ * What the edge of the field stands for.
+ *
+ * `full` is the literal reading — the edge is the whole, one scale holding everything. It is
+ * honest and permanently wasteful: with N scales the average share is `1/N`, a dominant one
+ * reaches a third to a half, and «took everything» never happens. At four scales the outer
+ * third of the radius is empty whatever the answers, and the figure reads as a small mark in
+ * a large circle.
+ *
+ * `balanced` pins the edge at TWICE the even share (`2/N`), which a real profile approaches
+ * and rarely passes. The scale still depends on nothing but the number of scales, so two
+ * profiles stay comparable by overlay — the property `attempt` gives up.
+ *
+ * `attempt` pins the edge at the largest share of this attempt. The figure always fills the
+ * field and can never overflow, but every attempt gets its own scale: two people with
+ * different splits can draw the same figure.
+ */
+export type RoseField = "full" | "balanced" | "attempt";
+
 export interface RoseChartInput {
   axes: RadarAxisInput[];
   ramp: LevelRamp;
+  /** Defaults to `balanced`: a default has to draw a readable figure without being asked. */
+  field?: RoseField;
+}
+
+/** Share the edge of the field stands for, given the mode and what the attempt holds. */
+function fieldShare(field: RoseField, count: number, maxShare: number): number {
+  if (field === "attempt") return maxShare > 0 ? maxShare : 1;
+  if (field === "full") return 1;
+  return Math.min(1, 2 / count);
 }
 
 /** Colour of the band the value fell into, matching the card beside the chart. */
@@ -191,6 +225,12 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
   // paint the same value differently from the card standing beside it.
   const byIdentity = visible.every((a) => a.interpretation.valence === "none");
 
+  // The edge of the field is a share, not a value: see {@link RoseField} for why the literal
+  // «the whole» is the wrong default. Computed once — a per-sector edge would make the areas
+  // incomparable, which is the one thing the chart exists to show.
+  const shares = visible.map((a) => (a.value as number) / total);
+  const edgeShare = fieldShare(input.field ?? "balanced", visible.length, Math.max(...shares));
+
   const step = (Math.PI * 2) / visible.length;
   const sectors: CtxRoseSector[] = [];
   /** Direction of each caption, kept for the second pass over the sectors. */
@@ -198,8 +238,9 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
 
   for (let i = 0; i < visible.length; i += 1) {
     const source = visible[i];
-    const share = (source.value as number) / total;
-    const radius = round1(RADIUS * Math.sqrt(share));
+    const share = shares[i];
+    const overflow = share > edgeShare;
+    const radius = round1(RADIUS * Math.sqrt(Math.min(share, edgeShare) / edgeShare));
 
     const bands = source.interpretation.bands;
     const band = findBand(bands, source.value as number);
@@ -225,6 +266,7 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
         levelColor(input.ramp, source.interpretation, band ? bands.indexOf(band) : -1),
       radius,
       sharePercent: round1(share * 100),
+      overflowClass: overflow ? "tb-rose__sector--overflow" : "",
     });
     directions.push({ cos: Math.cos(middle), sin: Math.sin(middle) });
   }

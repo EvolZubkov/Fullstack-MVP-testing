@@ -128,6 +128,12 @@
       border-radius: calc(var(--ou-radius-m) - 2px);
       background: var(--ou-bg-surface-3); color: var(--ou-fg-default); flex-shrink: 0;
     }
+    /* Пустая ячейка — пунктиром, а не пустым квадратом: пиктограмма НЕОБЯЗАТЕЛЬНА,
+       и «не выбрана» должно читаться как состояние, а не как не догрузившийся глиф. */
+    .tb-icon-trigger__box--empty {
+      background: transparent;
+      border: var(--wf-border-w) dashed var(--ou-border-default);
+    }
 
     .tb-icon-grid {
       display: grid;
@@ -218,10 +224,10 @@
 
     <!-- Роза ЧИЛ, вывод ядра. Используется как превью набора. -->
     <g id="rose-chil">
-      <path class="tb-rose__sector" d="M 180,150 L 180,91.1 A 58.9,58.9 0 0,1 238.9,150 Z" style="--tb-hue: 257.9 71.3% 65.9%"></path>
-      <path class="tb-rose__sector" d="M 180,150 L 220.4,150 A 40.4,40.4 0 0,1 180,190.4 Z" style="--tb-hue: 28.2 97.1% 41.2%"></path>
-      <path class="tb-rose__sector" d="M 180,150 L 180,187.8 A 37.8,37.8 0 0,1 142.2,150 Z" style="--tb-hue: 167.4 100% 30.8%"></path>
-      <path class="tb-rose__sector" d="M 180,150 L 121.1,150 A 58.9,58.9 0 0,1 180,91.1 Z" style="--tb-hue: 13.6 71.7% 51.6%"></path>
+      <path class="tb-rose__sector" d="M 180,150 L 180,66.7 A 83.3,83.3 0 0,1 263.3,150 Z" style="--tb-hue: 257.9 71.3% 65.9%"></path>
+      <path class="tb-rose__sector" d="M 180,150 L 237.1,150 A 57.1,57.1 0 0,1 180,207.1 Z" style="--tb-hue: 28.2 97.1% 41.2%"></path>
+      <path class="tb-rose__sector" d="M 180,150 L 180,203.5 A 53.5,53.5 0 0,1 126.5,150 Z" style="--tb-hue: 167.4 100% 30.8%"></path>
+      <path class="tb-rose__sector" d="M 180,150 L 96.7,150 A 83.3,83.3 0 0,1 180,66.7 Z" style="--tb-hue: 13.6 71.7% 51.6%"></path>
       <circle class="tb-rose__ring" cx="180" cy="150" r="50"></circle>
       <circle class="tb-rose__ring" cx="180" cy="150" r="70.7"></circle>
       <circle class="tb-rose__ring" cx="180" cy="150" r="86.6"></circle>
@@ -230,10 +236,22 @@
       <line class="tb-rose__axis" x1="180" y1="150" x2="286" y2="150"></line>
       <line class="tb-rose__axis" x1="180" y1="150" x2="180" y2="256"></line>
       <line class="tb-rose__axis" x1="180" y1="150" x2="74" y2="150"></line>
-      <g class="tb-rose__icon" transform="translate(263.9, 12.1) scale(0.667)"><use href="#i-target"></use></g>
-      <g class="tb-rose__icon" transform="translate(263.9, 225.9) scale(0.667)"><use href="#i-sparkles"></use></g>
-      <g class="tb-rose__icon" transform="translate(80.1, 225.9) scale(0.667)"><use href="#i-users-round"></use></g>
-      <g class="tb-rose__icon" transform="translate(80.1, 12.1) scale(0.667)"><use href="#i-settings"></use></g>
+      <g class="tb-rose__icon" transform="translate(263.9, 12.1) scale(0.667)">
+      <path d="M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0"></path>
+      <path d="M6 12a6 6 0 1 0 12 0a6 6 0 1 0 -12 0"></path>
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>
+      </g>
+      <g class="tb-rose__icon" transform="translate(263.9, 225.9) scale(0.667)">
+      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"></path>
+      <path d="M20 3v4"></path>
+      <path d="M22 5h-4"></path>
+      <path d="M4 17v2"></path>
+      <path d="M5 18H3"></path>
+      </g>
+      <g class="tb-rose__icon" transform="translate(80.1, 12.1) scale(0.667)">
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+      <path d="M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"></path>
+      </g>
     </g>
   </defs>
 </svg>
@@ -258,6 +276,11 @@
       </div>
 
       <div class="wf-subhead">Оформление шкал</div>
+      <div class="ou-banner ou-banner--subtle ou-banner--info" style="margin-bottom: var(--ou-space-4)">
+        <div class="ou-banner__body">
+          <div class="ou-banner__desc">Цвет доступен, потому что ни у одной шкалы теста не объявлено направление. Стоит объявить его хотя бы у одной — и цвет по идентичности пропадёт у ВСЕХ: два языка цвета на одной фигуре не смешиваются, роза целиком перейдёт на схему уровней. Пиктограммы это не затрагивает.</div>
+        </div>
+      </div>
       <div class="tb-appearance">
         <div class="tb-appearance__list">
 
@@ -292,8 +315,8 @@
               <span class="ou-color-trigger__value">#009D7C</span>
             </button>
             <button type="button" class="tb-icon-trigger">
-              <span class="tb-icon-trigger__box"><svg class="tb-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-users-round"></use></svg></span>
-              <span>users-round</span>
+              <span class="tb-icon-trigger__box tb-icon-trigger__box--empty" aria-hidden="true"></span>
+              <span class="tb-appearance__note">Не выбрана</span>
             </button>
           </div>
 
@@ -309,25 +332,13 @@
             </button>
           </div>
 
-          <div class="tb-appearance__row">
-            <span class="tb-appearance__name">Устойчивость к нагрузке<br><span class="tb-appearance__note">цвет показывает уровень: у шкалы объявлено направление</span></span>
-            <button type="button" class="ou-color-trigger" disabled style="--swatch: #5F657B">
-              <span class="ou-color-trigger__swatch"></span>
-              <span class="ou-color-trigger__value">По схеме уровней</span>
-            </button>
-            <button type="button" class="tb-icon-trigger">
-              <span class="tb-icon-trigger__box"><svg class="tb-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-shield"></use></svg></span>
-              <span>shield</span>
-            </button>
-          </div>
-
         </div>
 
         <div>
           <svg width="260" height="216" viewBox="0 0 360 300" role="img" aria-label="Превью: так выглядит набор на диаграмме">
             <use href="#rose-chil"></use>
           </svg>
-          <p class="tb-appearance__note">Превью набора. Соседние секторы смыкаются, поэтому близкие оттенки видно сразу — по одному цвету этого не заметить.</p>
+          <p class="tb-appearance__note">Превью набора. Соседние секторы смыкаются, поэтому близкие оттенки видно сразу — по одному цвету этого не заметить. У «Командного» пиктограмма не выбрана: подпись просто не резервирует под неё строку.</p>
         </div>
       </div>
 

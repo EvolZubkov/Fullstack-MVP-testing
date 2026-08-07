@@ -35,11 +35,33 @@ const CHIL = [
 ];
 
 describe("buildRoseChart", () => {
-  it("считает радиус как корень доли от суммы — контрольные числа ЧИЛ", () => {
+  it("умолчание — сбалансированное поле: край равен двойной ровной доле", () => {
     const chart = buildRoseChart({ axes: CHIL, ramp });
     expect(chart).not.toBeNull();
-    expect(chart!.sectors.map((s) => s.radius)).toEqual([58.9, 40.4, 37.8, 58.9]);
+    // Доли те же, а поле теперь 2/N = 50%, поэтому 34.7% даёт √(0.347/0.5) = 0.833.
     expect(chart!.sectors.map((s) => s.sharePercent)).toEqual([34.7, 16.3, 14.3, 34.7]);
+    expect(chart!.sectors.map((s) => s.radius)).toEqual([83.3, 57.1, 53.5, 83.3]);
+  });
+
+  it("«полное» поле считает от целого: контрольные числа ЧИЛ", () => {
+    const chart = buildRoseChart({ axes: CHIL, ramp, field: "full" })!;
+    expect(chart.sectors.map((s) => s.radius)).toEqual([58.9, 40.4, 37.8, 58.9]);
+  });
+
+  it("«по попытке» доводит наибольшую долю до края поля", () => {
+    const chart = buildRoseChart({ axes: CHIL, ramp, field: "attempt" })!;
+    expect(chart.sectors[0].radius).toBe(100);
+    // Соотношения площадей сохраняются: 16.3 к 34.7 даёт корень отношения долей.
+    expect(chart.sectors[1].radius).toBe(round1(100 * Math.sqrt(16 / 34)));
+  });
+
+  it("доля выше сбалансированного поля упирается в кольцо и помечается", () => {
+    const skewed = [axis("a", 70), axis("b", 15), axis("c", 15)];
+    const chart = buildRoseChart({ axes: skewed, ramp })!;
+    // Поле при трёх шкалах — 2/3; доля 70% его превышает.
+    expect(chart.sectors[0].radius).toBe(100);
+    expect(chart.sectors[0].overflowClass).toBe("tb-rose__sector--overflow");
+    expect(chart.sectors[1].overflowClass).toBe("");
   });
 
   it("держит кольца сетки по равным долям целого", () => {
@@ -75,7 +97,7 @@ describe("buildRoseChart", () => {
 
   it("режет круг на равные секторы, первый — сверху, дальше по часовой", () => {
     const chart = buildRoseChart({ axes: CHIL, ramp })!;
-    expect(chart.sectors[0].d).toBe("M 180,150 L 180,91.1 A 58.9,58.9 0 0,1 238.9,150 Z");
+    expect(chart.sectors[0].d).toBe("M 180,150 L 180,66.7 A 83.3,83.3 0 0,1 263.3,150 Z");
   });
 
   it("ставит пиктограмму шкалы над подписью и сдвигает текст на строку", () => {
