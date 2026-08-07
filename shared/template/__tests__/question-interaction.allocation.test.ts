@@ -124,6 +124,22 @@ describe("renderAllocation — разметка", () => {
     expect(html).toContain("&lt;img");
   });
 
+  it("карта перемешивания меняет ПОРЯДОК строк, но не индексы (FR-07)", () => {
+    // Ответ и вклады в шкалы ключуются авторским индексом, поэтому перемешать сами
+    // индексы значило бы перенести баллы учащегося на чужую шкалу.
+    const html = renderAllocation(Q, { 0: 3, 1: 1, 2: 2, 3: 1 }, false, [3, 1, 0, 2]);
+    const indices = Array.from(html.matchAll(/data-index="(\d+)"/g)).map((m: RegExpMatchArray) => m[1]);
+    expect(indices).toEqual(["3", "1", "0", "2"]);
+    // Значение каждой строки по-прежнему её собственное.
+    expect(values(html)).toEqual([1, 1, 3, 2]);
+  });
+
+  it("без карты порядок авторский", () => {
+    const html = renderAllocation(Q, {});
+    const indices = Array.from(html.matchAll(/data-index="(\d+)"/g)).map((m: RegExpMatchArray) => m[1]);
+    expect(indices).toEqual(["0", "1", "2", "3"]);
+  });
+
   it("испорченный dataJson даёт пустую группу, а не исключение", () => {
     expect(() => renderAllocation({ type: "allocation", dataJson: null }, {})).not.toThrow();
   });

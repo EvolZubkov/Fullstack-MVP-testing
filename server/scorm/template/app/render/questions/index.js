@@ -33,7 +33,7 @@ function renderQuestionInput(q) {
         answer = seed;
       }
     }
-    return renderAllocationQuestionInput(q, answer, showReview);
+    return renderAllocationQuestionInput(q, answer, showReview, shuffleMapping);
   }
   return '<div>Неизвестный тип вопроса</div>';
 }

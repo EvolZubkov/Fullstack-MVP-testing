@@ -116,7 +116,7 @@ function interactionHtml(
   if (question.type === "scale") return renderScale(question, answer, review);
   // PRD-44: у распределения нет разметки верности — `review` здесь означает «только
   // чтение», а не «показать правильный ответ», которого у типа не существует.
-  if (distributesBudget(question.type)) return renderAllocation(question, answer, review !== undefined);
+  if (distributesBudget(question.type)) return renderAllocation(question, answer, review !== undefined, arr);
   return renderSingleChoice(question, answer, arr, review);
 }
 

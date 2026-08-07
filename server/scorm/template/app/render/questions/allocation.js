@@ -9,8 +9,8 @@
  *
  * Depends on globals: window.TBTemplate.
  */
-function renderAllocationQuestionInput(q, answer, showReview) {
+function renderAllocationQuestionInput(q, answer, showReview, shuffleMapping) {
   var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
   if (!TB || !TB.renderAllocation) return '';
-  return TB.renderAllocation({ type: 'allocation', dataJson: q.data }, answer, !!showReview);
+  return TB.renderAllocation({ type: 'allocation', dataJson: q.data }, answer, !!showReview, shuffleMapping);
 }

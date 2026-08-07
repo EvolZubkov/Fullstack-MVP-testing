@@ -622,11 +622,16 @@ function allocationRow(
  *
  * `review` renders the same rows read-only and WITHOUT any verdict class: the type has
  * no correct distribution, so there is nothing to mark (FR-33).
+ *
+ * `shuffleMapping` maps a display position to the AUTHOR's statement index. The rows move,
+ * the indices do not: the answer and the scale contributions are both keyed by the author
+ * index, so shuffling those would move the learner's points onto a different scale.
  */
 export function renderAllocation(
   question: InteractionQuestion,
   answer: unknown,
   review?: boolean,
+  shuffleMapping?: number[],
 ): string {
   const spec = allocationSpec(question.dataJson);
   if (spec.options.length === 0) return `<div class="ou-alloc"></div>`;
@@ -640,8 +645,11 @@ export function renderAllocation(
       ? "Вы использовали все баллы"
       : `Осталось: <strong>${remaining}</strong> из ${spec.budget}`;
 
-  const rows = spec.options
-    .map((_, i) => allocationRow(spec, normalized, i, review === true))
+  // Порядок ВЫДАЧИ берётся из карты перемешивания (FR-07), но внутри строки остаётся
+  // АВТОРСКИЙ индекс: на него ключуются и ответ, и вклады в шкалы. Перемешать сами
+  // индексы значило бы перенести баллы на чужую шкалу.
+  const rows = displayOrder(spec.options.length, shuffleMapping)
+    .map((i) => allocationRow(spec, normalized, i, review === true))
     .join("");
 
   return (
