@@ -2360,7 +2360,6 @@
   padding: var(--ou-space-3) var(--ou-space-4);
 }
 .tb-levels__head { display: flex; align-items: center; gap: var(--ou-space-2); margin-bottom: var(--ou-space-3); }
-.tb-levels__grip { color: var(--ou-fg-muted); cursor: grab; flex: 0 0 auto; }
 .tb-levels__title { font: var(--ou-text-body-m); font-weight: 600; }
 .tb-levels__spacer { flex: 1; }
 .tb-levels__range { font: var(--ou-text-body-s); color: var(--ou-fg-muted); font-variant-numeric: tabular-nums; }

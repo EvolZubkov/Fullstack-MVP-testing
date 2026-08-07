@@ -21,7 +21,7 @@ import {
   Input,
   Textarea,
 } from "@universityrt/ui-kit";
-import { ChevronRight, GripVertical, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, Plus, Trash2 } from "lucide-react";
 
 import { pluralize } from "@/lib/i18n";
 
@@ -229,8 +229,11 @@ export function LevelsEditor({
           )}
 
           <section className="tb-levels__card" style={{ borderLeftColor: toneColour(l.tone) }}>
+            {/* No drag handle: reordering level content is deferred to technical
+                debt (decision of 2026-08-07), and a grip that grabs nothing is a
+                promise the card cannot keep. `moveLevel` in `levels-model` stays
+                ready for the day the debt is picked up. */}
             <header className="tb-levels__head">
-              <GripVertical className="tb-levels__grip" width={16} height={16} aria-hidden="true" />
               <span className="tb-levels__title">{levelTitle(l, i)}</span>
               <span className="tb-levels__spacer" />
               <span className="tb-levels__range" data-testid={`${testIdPrefix}-level-range-${index}-${i}`}>

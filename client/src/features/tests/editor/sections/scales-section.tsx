@@ -65,6 +65,7 @@ import { achievableRange } from "@shared/scales/engine";
 import type { AllocationSpec } from "@shared/questions/allocation";
 import type { LearnerVisibility, Valence } from "@shared/scales/interpretation";
 import { LevelsEditor } from "./levels-editor";
+import { bandsToDraft, draftErrors } from "./levels-model";
 
 export type ScalesSectionProps = {
   model: TestEditorModel;
@@ -250,26 +251,12 @@ function keyErrorOf(s: ScaleModel, index: number, scales: ScaleModel[]): string 
   return null;
 }
 
-/** Blocking band error message for one scale (numeric/order/overlap), else null. */
+/**
+ * Blocking band error for one scale, delegated to the levels model so the card
+ * header, the save gate and the editor itself never disagree about what is wrong.
+ */
 function bandErrorOf(s: ScaleModel): string | null {
-  let prevMax: number | null = null;
-  for (let j = 0; j < s.bands.length; j++) {
-    const b = s.bands[j];
-    const minRaw = b.min.trim();
-    const maxRaw = b.max.trim();
-    if (minRaw === "" && maxRaw === "" && b.label.trim() === "" && b.level.trim() === "") continue;
-    const min = parseAuthorNumber(minRaw);
-    const max = parseAuthorNumber(maxRaw);
-    if (min === null || max === null) {
-      return `Диапазон ${j + 1}: укажите числовые min и max.`;
-    }
-    if (min > max) return `Диапазон ${j + 1}: min не может быть больше max.`;
-    if (prevMax !== null && min <= prevMax) {
-      return `Диапазон ${j + 1}: пересекается с предыдущим. Вводите по возрастанию raw без пересечений.`;
-    }
-    prevMax = max;
-  }
-  return null;
+  return draftErrors(bandsToDraft(s.bands)).blocking;
 }
 
 export function ScalesSection({ model, testId, updateModel, readOnly = false }: ScalesSectionProps) {
@@ -613,7 +600,6 @@ function ScaleCard({
             index={index}
             readOnly={readOnly}
             keyError={keyError}
-            bandError={bandError}
             suggestedDomain={suggestedDomain}
             onChange={onChange}
           />
@@ -625,12 +611,16 @@ function ScaleCard({
 
 // ─── Scale form ─────────────────────────────────────────────────────────────────
 
+/**
+ * The band error is NOT rendered here: {@link bandErrorOf} now returns the very
+ * message {@link LevelsEditor} already shows in its own blocking banner, so a
+ * second copy would print the same sentence twice under one card.
+ */
 function ScaleForm({
   scale: s,
   index,
   readOnly,
   keyError,
-  bandError,
   suggestedDomain,
   onChange,
 }: {
@@ -638,7 +628,6 @@ function ScaleForm({
   index: number;
   readOnly: boolean;
   keyError: string | null;
-  bandError: string | null;
   suggestedDomain: { min: number; max: number } | null;
   onChange: (patch: Partial<ScaleModel>) => void;
 }) {
@@ -727,7 +716,16 @@ function ScaleForm({
       </Grid>
 
       <hr className="wf-sep" />
-      <div className="tb-section-label">Диапазоны (пороги) → уровень</div>
+      <div className="tb-section-label">Уровни шкалы</div>
+      {/* The one thing the shared editor's own banner cannot say: this tab's
+          publication address. `LevelsEditor` also serves «Показатели», where no
+          `scale.<key>` path exists, so it stays path-free and the address lives
+          here. `tb-card-desc`, not `ou-formfield__desc`: the latter has no margins
+          of its own — it leans on `.ou-formfield`'s flex gap, which a card body
+          does not provide. */}
+      <p className="tb-card-desc">
+        Код уровня публикуется как scale.{"{"}ключ{"}"}.level и доступен формулам показателей.
+      </p>
       <LevelsEditor
         bands={s.bands}
         index={index}
@@ -736,16 +734,6 @@ function ScaleForm({
           ? { min: s.domainMin, max: s.domainMax }
           : suggestedDomain}
         onChange={setBands}
-      />
-      {bandError && <Banner tone="error" size="sm" description={bandError} />}
-      <Banner
-        tone="info"
-        size="sm"
-        description={
-          "«Уровень» — произвольный код (напр. high / passed), публикуется в scale.{key}.level " +
-          "для формул показателей. «Метка» необязательна: пусто → обучающемуся показывается код. " +
-          "Диапазоны вводятся по возрастанию raw, не пересекаются."
-        }
       />
 
       <hr className="wf-sep" />

@@ -269,18 +269,32 @@ describe("<ScalesSection /> — «Список шкал»", () => {
 
 describe("<ScalesSection /> — validation banners", () => {
   it.each([
-    ["non-numeric band", [{ min: "x", max: "1", label: "", level: "hi", text: "", tone: "" as const }], /укажите числовые min и max/],
-    ["min greater than max", [{ min: "5", max: "1", label: "", level: "hi", text: "", tone: "" as const }], /min не может быть больше max/],
+    ["non-numeric band", [{ min: "x", max: "1", label: "", level: "hi", text: "", tone: "" as const }], /Укажите число/],
     [
-      "overlapping bands",
-      [{ min: "0", max: "5", label: "", level: "a", text: "", tone: "" as const }, { min: "3", max: "8", label: "", level: "b", text: "", tone: "" as const }],
-      /пересекается с предыдущим/,
+      "descending thresholds",
+      [
+        { min: "0", max: "42", label: "", level: "a", text: "", tone: "" as const },
+        { min: "42", max: "29", label: "", level: "b", text: "", tone: "" as const },
+      ],
+      /должны идти по возрастанию/,
     ],
   ])("flags %s", (_name, bands, message) => {
     renderStateful(baseModel({ scales: [makeScale({ bands })] }));
     fireEvent.click(screen.getByLabelText("Развернуть шкалу"));
     expect(screen.getByTestId("scales-error-banner")).toBeInTheDocument();
     expect(screen.getByText(message)).toBeInTheDocument();
+  });
+
+  it("accepts touching boundaries — that is what the levels editor writes", () => {
+    renderStateful(baseModel({ scales: [makeScale({ bands: [
+      { min: "0", max: "15", label: "", level: "low", text: "", tone: "" },
+      { min: "15", max: "29", label: "", level: "mid", text: "", tone: "" },
+    ] })] }));
+    // The save gate must stay open: `bands[i].max === bands[i + 1].min` is what
+    // the levels editor writes on every edit, not an overlap.
+    expect(screen.queryByTestId("scales-error-banner")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Развернуть шкалу"));
+    expect(screen.queryByTestId("scales-levels-error-0")).toBeNull();
   });
 
   it("flags a bad key grammar", () => {

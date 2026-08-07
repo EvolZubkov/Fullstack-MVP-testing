@@ -669,9 +669,9 @@ function validateScales(model: TestEditorModel, errors: ValidationIssue[]): void
 
     // Label is optional (empty -> key shown). Не валидируем.
 
-    // Bands: each row must be numeric with min ≤ max; rows must be ascending and
-    // non-overlapping on raw. A trailing fully-empty row (the "new" row) is
-    // ignored so the author can leave it blank.
+    // Bands: each row must be numeric with min ≤ max, and rows must ascend on raw.
+    // Touching neighbours are legal (see the overlap check below). A trailing
+    // fully-empty row (the "new" row) is ignored so the author can leave it blank.
     let prevMax: number | null = null;
     s.bands.forEach((band, j) => {
       const minRaw = band.min.trim();
@@ -698,11 +698,14 @@ function validateScales(model: TestEditorModel, errors: ValidationIssue[]): void
           severity: "error",
         });
       }
-      if (prevMax !== null && min <= prevMax) {
+      // PRD-45: the levels editor writes touching boundaries by construction
+      // (`bands[i].max === bands[i + 1].min`), and `findBand` resolves the shared
+      // point to the LOWER band. Only a real overlap is an error now.
+      if (prevMax !== null && min < prevMax) {
         errors.push({
           field: `scales[${i}].bands[${j}]`,
           code: "band_overlap",
-          message: `Диапазон ${j + 1}: пересекается с предыдущим. Вводите по возрастанию raw без пересечений.`,
+          message: `Диапазон ${j + 1}: перекрывает предыдущий. Границы уровней должны идти по возрастанию.`,
           severity: "error",
         });
       }
