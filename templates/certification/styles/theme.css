@@ -668,15 +668,27 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 
 /* ── PRD-29: measure row (a scale or an indicator on the results screen) ──
    Structural mirror of the standard template: `ou-formsection` supplies the two-column
-   grid, the rhythm and the hairline between rows; the delta is only what the DS cannot
+   rhythm and the hairline between rows; the delta is only what the DS cannot
    know — the zone colour, the read-only state of a control-shaped element, and the
    vertical budget of THIS screen. Byte parity is not required here (the palette is this
    template's own), but every value below is a DS token, so nothing has to diverge.
 
    The section's own 32px rhythm is meant for a settings form that scrolls freely. Here
    four sections spend 256px of a 650px body on padding alone, which pushes the third
-   scale below the fold — and a measurement result exists to be read as a whole. */
-.tb-measure.ou-formsection { padding: var(--ou-space-4) 0; }
+   scale below the fold — and a measurement result exists to be read as a whole.
+
+   The DS grid is DROPPED (PRD-46). `ou-formsection` is a FORM layout: its 280px first
+   column is meant for the label and description of a field, with the controls beside it.
+   A measure row is a readout, not a form — its left column holds two short lines (name
+   and level tag) next to a tall right column, so 280px plus a 48px gutter stand empty
+   down the whole row. The narrow-scene container query that used to do this at 700px is
+   gone with it: there is nothing left for it to collapse. */
+.tb-measure.ou-formsection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-4);
+  padding: var(--ou-space-4) 0;
+}
 /* The level tag does not stretch across the label column. */
 .tb-measure__level { align-self: flex-start; }
 /* The entity name sits one step BELOW the block heading. The DS gives a form section's
@@ -725,14 +737,6 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 .tb-scene .ou-ring__fill.tb-tone--attention { stroke: var(--ou-warning-default); }
 .tb-scene .ou-ring__fill.tb-tone--critical  { stroke: var(--ou-error-default); }
 
-/* Narrow scene: the two-column section collapses to a single stack. The query measures
-   the SCENE (`@container tbscene`), not the viewport — the whole mobile adaptation of
-   this template is built on container steps 900 / 700 / 520, and a viewport `@media`
-   here would fire out of step with everything around it. 700 is the step where the rest
-   of the scene already goes single-column. */
-@container tbscene (max-width: 700px) {
-  .tb-measure.ou-formsection { display: flex; flex-direction: column; gap: var(--ou-space-4); }
-}
 
 /* Zones paint the rail DISCRETELY: the finding of a banded method is categorical, and a
    gradient would hide the step across a boundary. `ou-slider__fill` already gives the

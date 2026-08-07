@@ -75,7 +75,14 @@
 
     /* ── Дельта PRD-29, перенесена из согласованного эскиза без правок: без
        неё карточки шкал в этом файле выглядели бы иначе, чем в PRD-29/35 ── */
-    .tb-measure.ou-formsection { padding: var(--ou-space-4) 0; }
+    /* ДЕЛЬТА PRD-46: карточка шкалы больше не наследует сетку формы. Правка внесена
+       в сам theme.css, здесь она повторена, чтобы эскиз описывал себя целиком. */
+    .tb-measure.ou-formsection {
+      display: flex;
+      flex-direction: column;
+      gap: var(--ou-space-4);
+      padding: var(--ou-space-4) 0;
+    }
     .tb-measure__level { align-self: flex-start; }
     .tb-measure .ou-formsection__title { font: var(--ou-text-heading-s); font-weight: 400; }
     .tb-measure__slider { max-width: none; display: flex; }
