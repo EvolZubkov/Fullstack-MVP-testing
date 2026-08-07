@@ -93,6 +93,19 @@ describe("LevelsEditor", () => {
     expect(screen.getByTestId("scales-levels-empty-0")).toHaveTextContent("обучающийся увидит только числовой балл");
   });
 
+  it("opens the interpretation fold when the level already has text", () => {
+    const filled = [{ ...band("0", "98", "only", "Ярко"), text: "Проявляется устойчиво" }];
+    render(<Host initial={filled} />);
+    expect(screen.getByText("Толкование для обучающегося").closest("button"))
+      .toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("keeps the interpretation fold shut when the level has no text", () => {
+    render(<Host initial={[band("0", "98", "only", "Ярко")]} />);
+    expect(screen.getByText("Толкование для обучающегося").closest("button"))
+      .toHaveAttribute("aria-expanded", "false");
+  });
+
   it("hides every control in read-only mode", () => {
     render(<LevelsEditor bands={THREE} index={0} readOnly domain={null} onChange={vi.fn()} />);
     expect(screen.queryByTestId("scales-level-add-0")).toBeNull();

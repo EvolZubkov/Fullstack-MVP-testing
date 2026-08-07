@@ -248,7 +248,10 @@ export function LevelsEditor({
               />
             </div>
 
-            <Collapsible>
+            {/* A level that already has an interpretation opens with it visible: a
+                card showing only the «задано» badge hides the very text the author
+                came to check. Uncontrolled — the author's own toggling wins after. */}
+            <Collapsible defaultOpen={l.text.trim() !== ""}>
               <CollapsibleTrigger className="tb-levels__fold">
                 <ChevronRight className="tb-levels__chev" width={14} height={14} aria-hidden="true" />
                 Толкование для обучающегося
