@@ -297,6 +297,14 @@ describe("<ScalesSection /> — validation banners", () => {
     expect(screen.queryByTestId("scales-levels-error-0")).toBeNull();
   });
 
+  it("stays silent about a fully-empty trailing row, exactly as the save gate does", () => {
+    renderStateful(baseModel({ scales: [makeScale({ bands: [
+      { min: "0", max: "15", label: "", level: "low", text: "", tone: "" },
+      { min: "", max: "", label: "", level: "", text: "", tone: "" },
+    ] })] }));
+    expect(screen.queryByTestId("scales-error-banner")).toBeNull();
+  });
+
   it("flags a bad key grammar", () => {
     renderStateful(baseModel({ scales: [makeScale({ key: "Bad Key" })] }));
     fireEvent.click(screen.getByLabelText("Развернуть шкалу"));

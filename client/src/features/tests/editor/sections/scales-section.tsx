@@ -252,11 +252,37 @@ function keyErrorOf(s: ScaleModel, index: number, scales: ScaleModel[]): string 
 }
 
 /**
+ * Drop a fully-empty LAST row — the leftover «new» row of the retired bands
+ * table. «Fully empty» is byte-for-byte the criterion `test-editor.validation.ts`
+ * applies (min, max, label and level all blank after `trim()`); the two must not
+ * drift, or the card and the save gate start disagreeing again.
+ *
+ * Only the trailing row goes. An empty row in the MIDDLE is a genuine hole in the
+ * interpretation and must keep shouting.
+ */
+function dropEmptyTrailingBand(bands: ScaleBandModel[]): ScaleBandModel[] {
+  const last = bands[bands.length - 1];
+  if (last === undefined) return bands;
+  const empty =
+    last.min.trim() === "" &&
+    last.max.trim() === "" &&
+    last.label.trim() === "" &&
+    last.level.trim() === "";
+  return empty ? bands.slice(0, -1) : bands;
+}
+
+/**
  * Blocking band error for one scale, delegated to the levels model so the card
  * header, the save gate and the editor itself never disagree about what is wrong.
+ *
+ * A fully-empty trailing row is dropped first: `test-editor.validation.ts` has
+ * always ignored it, and the card's banner claims saving is blocked — so a card
+ * complaining about a row the real save gate lets through would simply be lying.
+ * The level card still shows «Укажите число» under the field itself, which is
+ * where the author can actually act on it.
  */
 function bandErrorOf(s: ScaleModel): string | null {
-  return draftErrors(bandsToDraft(s.bands)).blocking;
+  return draftErrors(bandsToDraft(dropEmptyTrailingBand(s.bands))).blocking;
 }
 
 export function ScalesSection({ model, testId, updateModel, readOnly = false }: ScalesSectionProps) {
