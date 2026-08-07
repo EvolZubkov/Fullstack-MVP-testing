@@ -106,6 +106,35 @@ describe("LevelsEditor", () => {
       .toHaveAttribute("aria-expanded", "false");
   });
 
+  it("blocks with a banner when the row stops ascending", () => {
+    render(<Host initial={[band("0", "42", "a"), band("42", "29", "b")]} />);
+    expect(screen.getByTestId("scales-levels-error-0")).toHaveTextContent("по возрастанию");
+  });
+
+  it("warns when the domain is wider than the levels cover", () => {
+    render(
+      <LevelsEditor
+        bands={[band("10", "69", "only")]}
+        index={0}
+        readOnly={false}
+        domain={{ min: 0, max: 98 }}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("scales-levels-uncovered-0")).toBeInTheDocument();
+    expect(screen.getAllByText("не разобрано")).toHaveLength(2);
+  });
+
+  it("notices that a legacy gap has been closed", () => {
+    render(<Host initial={[band("0", "15", "low"), band("16", "29", "mid")]} />);
+    expect(screen.getByTestId("scales-levels-closed-gap-0")).toHaveTextContent("сомкнуты");
+  });
+
+  it("shows the coverage status under the ribbon", () => {
+    render(<Host initial={THREE} />);
+    expect(screen.getByText("Шкала разобрана целиком, уровней: 3")).toBeInTheDocument();
+  });
+
   it("hides every control in read-only mode", () => {
     render(<LevelsEditor bands={THREE} index={0} readOnly domain={null} onChange={vi.fn()} />);
     expect(screen.queryByTestId("scales-level-add-0")).toBeNull();

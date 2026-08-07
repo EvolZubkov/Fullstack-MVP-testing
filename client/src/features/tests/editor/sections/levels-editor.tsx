@@ -23,6 +23,8 @@ import {
 } from "@universityrt/ui-kit";
 import { ChevronRight, GripVertical, Plus, Trash2 } from "lucide-react";
 
+import { pluralize } from "@/lib/i18n";
+
 import { hasFeedbackContent } from "../scales-api";
 import type { ScaleBandModel } from "../test-editor.types";
 import { FeedbackEditorModal } from "./feedback-editor-modal";
@@ -36,6 +38,7 @@ import {
   draftToBands,
   hasStoredGap,
   removeLevel,
+  type LevelDraft,
   type LevelsDraft,
 } from "./levels-model";
 
@@ -61,6 +64,20 @@ function rangeOf(draft: LevelsDraft, i: number): string {
   const from = i === 0 ? draft.start : draft.cuts[i - 1];
   const to = i === draft.levels.length - 1 ? draft.end : draft.cuts[i];
   return `${from || "?"} … ${to || "?"}`;
+}
+
+/**
+ * What the recommendations fold reports without being opened: the author needs to
+ * know whether there is a text, attachments, or both, not merely «заданы». Courses,
+ * files and events all count as one kind of «материал» — the fold is a summary, and
+ * splitting three counters across a badge would say less, not more.
+ */
+function feedbackBadge(value: LevelDraft["feedback"]): string {
+  if (!hasFeedbackContent(value)) return "не заданы";
+  const hasText = (value?.text ?? "").trim() !== "";
+  const items = (value?.links.length ?? 0) + (value?.assets.length ?? 0) + (value?.events?.length ?? 0);
+  const materials = items > 0 ? `${items} ${pluralize(items, "материал", "материала", "материалов")}` : "";
+  return [hasText ? "текст" : "", materials].filter(Boolean).join(", ");
 }
 
 export function LevelsEditor({
@@ -168,6 +185,17 @@ export function LevelsEditor({
           onChange={(e) => setBound({ end: e.target.value })}
           data-testid={`${testIdPrefix}-levels-end-${index}`}
         />
+
+        {/* The ribbon's own caption. It replaces the numbers that used to be
+            repeated under both ends — a scale reads as covered or not, and that
+            verdict is what the author is looking for, not the digits again. */}
+        {segments !== null && (
+          <div className="tb-levels__coverstat">
+            {segments.some((s) => s.kind === "gap") && domain !== null
+              ? `Границы шкалы ${domain.min} … ${domain.max}, уровнями закрыто ${draft.start} … ${draft.end}`
+              : `Шкала разобрана целиком, уровней: ${total}`}
+          </div>
+        )}
       </div>
 
       {draft.levels.map((l, i) => (
@@ -230,6 +258,7 @@ export function LevelsEditor({
                 fullWidth
                 label="Код уровня"
                 aria-label={`Код уровня ${i + 1}`}
+                hint="Машинное имя для формул показателей"
                 placeholder="напр. high"
                 value={l.level}
                 disabled={readOnly}
@@ -246,6 +275,9 @@ export function LevelsEditor({
                 onChange={(tone) => setLevel(i, { tone })}
                 testId={`${testIdPrefix}-level-tone-${index}-${i}`}
               />
+              {/* `ToneChips` shortens «По направлению шкалы» to «Авто» so the row
+                  cannot wrap; its full meaning is spelled out here (PRD-45 FR-06). */}
+              <span className="tb-levels__tonehint">Авто — цвет по направлению шкалы</span>
             </div>
 
             {/* A level that already has an interpretation opens with it visible: a
@@ -272,16 +304,20 @@ export function LevelsEditor({
               </CollapsibleContent>
             </Collapsible>
 
-            {!readOnly && (
-              <button type="button" className="tb-levels__fold" onClick={() => setFeedbackFor(i)}>
-                <ChevronRight className="tb-levels__chev" width={14} height={14} aria-hidden="true" />
-                Рекомендации
-                <span className="tb-levels__spacer" />
-                <span className="tb-levels__badge">
-                  {hasFeedbackContent(l.feedback) ? "заданы" : "не заданы"}
-                </span>
-              </button>
-            )}
+            {/* Stays visible while reading, like the interpretation fold above it:
+                whether recommendations exist is part of what the author came to
+                see, so the row is disabled rather than removed. */}
+            <button
+              type="button"
+              className="tb-levels__fold"
+              disabled={readOnly}
+              onClick={() => setFeedbackFor(i)}
+            >
+              <ChevronRight className="tb-levels__chev" width={14} height={14} aria-hidden="true" />
+              Рекомендации
+              <span className="tb-levels__spacer" />
+              <span className="tb-levels__badge">{feedbackBadge(l.feedback)}</span>
+            </button>
           </section>
         </div>
       ))}
@@ -325,6 +361,16 @@ export function LevelsEditor({
           data-testid={`${testIdPrefix}-levels-closed-gap-${index}`}
         />
       )}
+      {/* Deliberately path-free: the same editor serves the «Показатели» tab, where
+          no `scale.<key>` address exists, so naming one would be wrong half the time. */}
+      <Banner
+        tone="info"
+        size="sm"
+        description={
+          "«Код уровня» — машинное имя, по которому уровень доступен формулам показателей. " +
+          "«Название» видит обучающийся; пусто — покажется код."
+        }
+      />
 
       {open && feedbackFor !== null && (
         <FeedbackEditorModal
