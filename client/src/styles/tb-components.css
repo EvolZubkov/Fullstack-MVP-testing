@@ -2297,3 +2297,9 @@
   width: 595px;
   zoom: var(--tb-report-preview-zoom);
 }
+
+/* ─── PRD-45: tone dot inside the level's SegmentedControl ──────────────────── */
+.tb-tone-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  display: inline-block; flex: 0 0 auto;
+}
