@@ -195,10 +195,11 @@
 .tb-table--mb { margin-bottom: var(--ou-space-3); }
 .tb-table__cell--nowrap { white-space: nowrap; }
 
-/* PRD-5 «Диапазоны (пороги)» editor: a 5-column row of DS Inputs must FIT the
-   drawer pane (it scrolls only vertically) instead of overflowing to the right.
-   Fixed layout + full-width, shrinkable inputs make the columns share the available
-   width; the actions column is a fixed narrow track for the delete button. */
+/* PRD-29 «Исходы» editor (OutcomesEditor): a row of DS Inputs must FIT the drawer
+   pane (it scrolls only vertically) instead of overflowing to the right. Fixed
+   layout + full-width, shrinkable inputs make the columns share the available
+   width; the actions column is a fixed narrow track for the delete button.
+   PRD-45 moved the NUMERIC twin off this table — see .tb-levels below. */
 .tb-bands-table { table-layout: fixed; }
 .tb-bands-table__act { width: 40px; }
 .tb-bands-table .ou-field,
