@@ -29,7 +29,7 @@ import { hasFeedbackContent } from "../scales-api";
 import type { ScaleBandModel } from "../test-editor.types";
 import { FeedbackEditorModal } from "./feedback-editor-modal";
 import { emptyFeedbackValue } from "./outcomes-editor";
-import { ToneChips, TONE_CHIPS } from "./tone-chips";
+import { ToneChips, toneColour, toneRibbon } from "./tone-chips";
 import {
   addLevel,
   bandsToDraft,
@@ -37,6 +37,7 @@ import {
   draftErrors,
   draftToBands,
   hasStoredGap,
+  levelBounds,
   removeLevel,
   type LevelDraft,
   type LevelsDraft,
@@ -54,15 +55,19 @@ export type LevelsEditorProps = {
   domain?: { min: number; max: number } | null;
 };
 
-/** Colour of a ribbon stripe: the level's tone, or the neutral «auto» dot. */
-function segColour(tone: string): string {
-  return TONE_CHIPS.find((c) => c.value === tone)?.colour ?? "var(--ou-fg-muted)";
+/**
+ * What the author sees as this level's name: their label, else its code, else its
+ * ordinal. One helper because the name appears in four places — ribbon stripe, card
+ * title, threshold caption, feedback modal — and a level with a code but no label
+ * used to read as «high» in the header and «уровень 2» forty pixels below it.
+ */
+function levelTitle(level: LevelDraft, i: number): string {
+  return level.label.trim() || level.level.trim() || `Уровень ${i + 1}`;
 }
 
 /** The computed «from … to» caption in a card header — text, never a field. */
 function rangeOf(draft: LevelsDraft, i: number): string {
-  const from = i === 0 ? draft.start : draft.cuts[i - 1];
-  const to = i === draft.levels.length - 1 ? draft.end : draft.cuts[i];
+  const { from, to } = levelBounds(draft, i);
   return `${from || "?"} … ${to || "?"}`;
 }
 
@@ -107,7 +112,7 @@ export function LevelsEditor({
 
   if (total === 0) {
     return (
-      <div className="tb-levels">
+      <div className="tb-levels" data-testid={`${testIdPrefix}-levels-${index}`}>
         <div className="tb-levels__empty" data-testid={`${testIdPrefix}-levels-empty-${index}`}>
           Уровни не заданы — обучающийся увидит только числовой балл
           {!readOnly && (
@@ -163,13 +168,12 @@ export function LevelsEditor({
                   className="tb-levels__seg"
                   style={{
                     flexGrow: Math.max(s.to - s.from, 0.001),
-                    background: segColour(draft.levels[s.index].tone),
+                    background: toneRibbon(draft.levels[s.index].tone).bg,
+                    color: toneRibbon(draft.levels[s.index].tone).fg,
                   }}
                   data-testid={`${testIdPrefix}-level-seg-${index}-${s.index}`}
                 >
-                  {draft.levels[s.index].label.trim() ||
-                    draft.levels[s.index].level.trim() ||
-                    `Уровень ${s.index + 1}`}
+                  {levelTitle(draft.levels[s.index], s.index)}
                 </div>
               ),
             )
@@ -217,17 +221,17 @@ export function LevelsEditor({
               <div className="tb-levels__cutrule">
                 <span className="tb-levels__cutline" />
                 <span className="tb-levels__cutlbl">
-                  {`порог: ${draft.cuts[i - 1] || "?"} и ниже — «${draft.levels[i - 1].label.trim() || `уровень ${i}`}», выше — «${l.label.trim() || `уровень ${i + 1}`}»`}
+                  {`порог: ${draft.cuts[i - 1] || "?"} и ниже — «${levelTitle(draft.levels[i - 1], i - 1)}», выше — «${levelTitle(l, i)}»`}
                 </span>
                 <span className="tb-levels__cutline" />
               </div>
             </div>
           )}
 
-          <section className="tb-levels__card" style={{ borderLeftColor: segColour(l.tone) }}>
+          <section className="tb-levels__card" style={{ borderLeftColor: toneColour(l.tone) }}>
             <header className="tb-levels__head">
               <GripVertical className="tb-levels__grip" width={16} height={16} aria-hidden="true" />
-              <span className="tb-levels__title">{l.label.trim() || l.level.trim() || `Уровень ${i + 1}`}</span>
+              <span className="tb-levels__title">{levelTitle(l, i)}</span>
               <span className="tb-levels__spacer" />
               <span className="tb-levels__range" data-testid={`${testIdPrefix}-level-range-${index}-${i}`}>
                 {rangeOf(draft, i)}
@@ -355,8 +359,9 @@ export function LevelsEditor({
           tone="info"
           size="sm"
           description={
-            "Границы уровней сомкнуты — баллы, прежде не попадавшие ни в один уровень, теперь " +
-            "относятся к нижнему из соседних. Запишется при сохранении."
+            "Границы уровней сомкнуты в редакторе — баллы, прежде не попадавшие ни в один " +
+            "уровень, показаны в нижнем из соседних. Чтобы смыкание сохранилось, измените " +
+            "любое поле уровней перед сохранением теста."
           }
           data-testid={`${testIdPrefix}-levels-closed-gap-${index}`}
         />
@@ -375,7 +380,7 @@ export function LevelsEditor({
       {open && feedbackFor !== null && (
         <FeedbackEditorModal
           open
-          title={`Рекомендации для уровня «${open.label.trim() || open.level.trim() || `уровень ${feedbackFor + 1}`}»`}
+          title={`Рекомендации для уровня «${levelTitle(open, feedbackFor)}»`}
           description="Текст и подборка материалов, которые увидит обучающийся с этим уровнем"
           value={open.feedback ?? emptyFeedbackValue()}
           hideAssets={false}

@@ -10,10 +10,16 @@ import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { LevelsEditor } from "../levels-editor";
+import type { FeedbackEditorValue } from "../feedback-editor-modal";
 import type { ScaleBandModel } from "../../test-editor.types";
 
 function band(min: string, max: string, level: string, label = ""): ScaleBandModel {
   return { clientKey: `b-${level}`, min, max, label, level, text: "", tone: "" };
+}
+
+/** A feedback value with only the parts a test cares about filled in. */
+function fb(p: Partial<FeedbackEditorValue>): FeedbackEditorValue {
+  return { format: "plain", text: "", links: [], assets: [], events: [], ...p };
 }
 
 const THREE = [band("0", "15", "low", "Слабо"), band("15", "29", "mid", "Средне"), band("29", "98", "high", "Ярко")];
@@ -133,6 +139,44 @@ describe("LevelsEditor", () => {
   it("shows the coverage status under the ribbon", () => {
     render(<Host initial={THREE} />);
     expect(screen.getByText("Шкала разобрана целиком, 3 уровня")).toBeInTheDocument();
+  });
+
+  it("keeps focus and caret in the field being typed into", () => {
+    render(<Host initial={THREE} />);
+    const cut = screen.getByLabelText("Порог между уровнями 1 и 2") as HTMLInputElement;
+    cut.focus();
+    fireEvent.change(cut, { target: { value: "1," } });
+    const after = screen.getByLabelText("Порог между уровнями 1 и 2") as HTMLInputElement;
+    expect(document.activeElement).toBe(after);
+    expect(after.value).toBe("1,");
+  });
+
+  it("puts the ordering message under the offending field", () => {
+    render(<Host initial={[band("0", "42", "a"), band("42", "29", "b")]} />);
+    expect(screen.getByText("Меньше предыдущего порога 42")).toBeInTheDocument();
+  });
+
+  it("does not rewrite a legacy gap until the author edits something", () => {
+    const onBands = vi.fn();
+    render(<Host initial={[band("0", "15", "low"), band("16", "29", "mid")]} onBands={onBands} />);
+    expect(onBands).not.toHaveBeenCalled();
+  });
+
+  it("summarises recommendations as text plus a counted material", () => {
+    const withText = [{ ...band("0", "98", "only"), feedback: fb({ text: "Читайте" }) }];
+    render(<Host initial={withText} />);
+    expect(screen.getByText("Рекомендации").closest("button")).toHaveTextContent("текст");
+  });
+
+  it("counts courses, files and events together in the recommendations badge", () => {
+    const rich = [
+      {
+        ...band("0", "98", "only"),
+        feedback: fb({ text: "Читайте", links: [{ title: "к", url: "u" }], events: [{ title: "с" }] }),
+      },
+    ];
+    render(<Host initial={rich} />);
+    expect(screen.getByText("Рекомендации").closest("button")).toHaveTextContent("текст, 2 материала");
   });
 
   it("hides every control in read-only mode", () => {

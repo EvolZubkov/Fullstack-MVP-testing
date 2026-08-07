@@ -74,17 +74,41 @@ export function bandsToDraft(bands: ScaleBandModel[]): LevelsDraft {
 
 /** Fold the draft back into stored bands. @public */
 export function draftToBands(draft: LevelsDraft): ScaleBandModel[] {
+  return draft.levels.map((l, i) => {
+    // Raw, unnormalised strings on purpose: the editor re-derives the draft from
+    // these on every render, so anything reformatted here would fight the author
+    // mid-keystroke (see the module note above).
+    const { from, to } = levelBounds(draft, i);
+    return {
+      clientKey: l.clientKey,
+      min: from,
+      max: to,
+      label: l.label,
+      level: l.level,
+      text: l.text,
+      tone: l.tone,
+      feedback: l.feedback,
+    };
+  });
+}
+
+/**
+ * Where level `i` starts and ends in the draft: the outer bounds for the first and
+ * last level, the surrounding cuts for everything between. The SAME rule
+ * {@link draftToBands} folds by — a card header that computed it separately would
+ * be a second source of truth for the one thing this module exists to own.
+ *
+ * Raw strings, not numbers: the caller renders half-typed input as readily as valid
+ * input, and parsing here would erase the difference.
+ *
+ * @public
+ */
+export function levelBounds(draft: LevelsDraft, i: number): { from: string; to: string } {
   const last = draft.levels.length - 1;
-  return draft.levels.map((l, i) => ({
-    clientKey: l.clientKey,
-    min: i === 0 ? draft.start : draft.cuts[i - 1],
-    max: i === last ? draft.end : draft.cuts[i],
-    label: l.label,
-    level: l.level,
-    text: l.text,
-    tone: l.tone,
-    feedback: l.feedback,
-  }));
+  return {
+    from: i === 0 ? draft.start : draft.cuts[i - 1],
+    to: i === last ? draft.end : draft.cuts[i],
+  };
 }
 
 /** Per-field messages plus the blocking one that stops saving. */

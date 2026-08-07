@@ -2310,10 +2310,13 @@
    and the only shared grid is the coverage strip: one 88 / 1fr / 88 track set on
    two rows, so the labels share a baseline and the ribbon shares the control
    baseline with both number fields. */
-.tb-levels { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+/* One width for the two boundary columns: the threshold field MUST line up under
+   «Начало», and the whole layout is that alignment. Two literals could drift apart
+   in separate edits; one token cannot. */
+.tb-levels { display: flex; flex-direction: column; gap: var(--ou-space-2); --tb-levels-bound-w: 88px; }
 
 .tb-levels__cover {
-  display: grid; grid-template-columns: 88px 1fr 88px;
+  display: grid; grid-template-columns: var(--tb-levels-bound-w) 1fr var(--tb-levels-bound-w);
   column-gap: var(--ou-space-2); align-items: center;
   margin-bottom: var(--ou-space-3);
 }
@@ -2323,10 +2326,13 @@
    `--ou-size-control-s` is 32px normally, 28px dense and 40px roomy, so a hard
    34px matched the flanking number fields in no density at all (FR-04). */
 .tb-levels__ribbon { display: flex; height: var(--ou-size-control-s); border-radius: var(--ou-radius-s); overflow: hidden; }
+/* No `color` here: the stripe's foreground comes from its tone, inline, paired with
+   the background it must be legible on (see `TONE_CHIPS.ribbonFg`). A blanket white
+   was unreadable on the «Авто» and warning stripes. */
 .tb-levels__seg {
   display: flex; align-items: center; justify-content: center;
   min-width: 0; padding: 0 var(--ou-space-1);
-  font: var(--ou-text-body-xs); font-weight: 600; color: var(--ou-neutral-0);
+  font: var(--ou-text-body-xs); font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 /* The hatch alternates two REAL DS surfaces. `--ou-bg-subtle` reads like a token
@@ -2381,15 +2387,18 @@
 /* `Collapsible` stamps data-state on its trigger, so the closed «▸» turns into an
    open «▾» without the component tracking the state twice. */
 .tb-levels__chev { color: var(--ou-fg-muted); flex: 0 0 auto; transition: transform var(--ou-motion-fast) var(--ou-easing-standard); }
-[data-state="open"] > .tb-levels__chev { transform: rotate(90deg); }
+.tb-levels__fold[data-state="open"] > .tb-levels__chev { transform: rotate(90deg); }
 .tb-levels__badge { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
 
 /* `start`, not `center`: an invalid threshold grows its field by a message line,
    and centring would drag the rule line down with it. The rule keeps its own
    control-height box instead, so it stays level with the field either way. */
-.tb-levels__cut { display: grid; grid-template-columns: 88px 1fr 88px; column-gap: var(--ou-space-2); align-items: start; padding: var(--ou-space-2) 0; }
+.tb-levels__cut { display: grid; grid-template-columns: var(--tb-levels-bound-w) 1fr var(--tb-levels-bound-w); column-gap: var(--ou-space-2); align-items: start; padding: var(--ou-space-2) 0; }
+/* Grid children default to min-width:auto, which a long error message would push
+   past the track; this lets the field shrink to its column instead. */
+.tb-levels__cutfield { min-width: 0; }
 .tb-levels__cutrule { display: flex; align-items: center; gap: var(--ou-space-2); min-width: 0; min-height: var(--ou-size-control-s); }
-.tb-levels__cutline { flex: 1; height: 1px; background: var(--ou-border-soft); }
+.tb-levels__cutline { flex: 1; height: var(--wf-border-w); background: var(--ou-border-soft); }
 .tb-levels__cutlbl { font: var(--ou-text-caption); color: var(--ou-fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .tb-levels__empty {

@@ -13,6 +13,7 @@ import {
   draftErrors,
   draftToBands,
   hasStoredGap,
+  levelBounds,
   moveLevel,
   removeLevel,
 } from "../levels-model";
@@ -66,6 +67,31 @@ describe("draftToBands", () => {
 });
 
 const THREE = bandsToDraft([band("0", "15", "low"), band("15", "29", "mid"), band("29", "98", "high")]);
+
+describe("levelBounds", () => {
+  it("reads the outer bounds for the edges and the cuts in between", () => {
+    expect(levelBounds(THREE, 0)).toEqual({ from: "0", to: "15" });
+    expect(levelBounds(THREE, 1)).toEqual({ from: "15", to: "29" });
+    expect(levelBounds(THREE, 2)).toEqual({ from: "29", to: "98" });
+  });
+
+  it("spans start to end when there is a single level", () => {
+    expect(levelBounds(bandsToDraft([band("0", "10", "only")]), 0)).toEqual({ from: "0", to: "10" });
+  });
+
+  it("agrees with draftToBands — they must not drift apart", () => {
+    const bands = draftToBands(THREE);
+    THREE.levels.forEach((_, i) => {
+      expect(levelBounds(THREE, i)).toEqual({ from: bands[i].min, to: bands[i].max });
+    });
+  });
+
+  it("hands back half-typed input untouched", () => {
+    const draft = { ...THREE, cuts: ["1,", "29"] };
+    expect(levelBounds(draft, 0).to).toBe("1,");
+    expect(levelBounds(draft, 1).from).toBe("1,");
+  });
+});
 
 describe("draftErrors", () => {
   it("passes a well-ordered draft", () => {
