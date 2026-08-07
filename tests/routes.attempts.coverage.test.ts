@@ -22,6 +22,8 @@ const { storageMock } = vi.hoisted(() => ({
     getUser: vi.fn(), getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getUsers: vi.fn().mockResolvedValue([]),
     getTopics: vi.fn().mockResolvedValue([]), getQuestionsByTopic: vi.fn(),
+    // «Оценивает ли тест хоть что-нибудь» для обложки списка (пусто = нет).
+    getGradingTraitsByTopics: vi.fn().mockResolvedValue([]),
     getQuestionsByIds: vi.fn(), getTopicCourses: vi.fn().mockResolvedValue([]),
     getTopicEvents: vi.fn().mockResolvedValue([]),
     getAssignedTestsForUser: vi.fn(),
@@ -175,6 +177,33 @@ describe("GET /learner/tests — branches", () => {
     expect(res.body[0].sections[0].topicName).toBe("Unknown");
     expect(res.body[0].retakeGate).toMatchObject({ cooldownPeriodDays: 30 });
     expect(res.body[0].priorResult).toMatchObject({ percent: 42, passed: false });
+  });
+
+  it("отвечает, оценивает ли тест: измерительная методика — нет", async () => {
+    storageMock.getAssignedTestsForUser.mockResolvedValue([dbTest]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "Стили" }]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 5 }]);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+    storageMock.getGradingTraitsByTopics.mockResolvedValue([
+      { topicId: "t1", type: "allocation", correctJson: {} },
+      { topicId: "t1", type: "scale", correctJson: {} },
+    ]);
+    const res = await asLearner(request(app).get("/api/learner/tests"));
+    expect(res.status).toBe(200);
+    expect(res.body[0].hasGradedContent).toBe(false);
+  });
+
+  it("один проверяемый вопрос в теме — тест оценивает", async () => {
+    storageMock.getAssignedTestsForUser.mockResolvedValue([dbTest]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "Стили" }]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 5 }]);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+    storageMock.getGradingTraitsByTopics.mockResolvedValue([
+      { topicId: "t1", type: "allocation", correctJson: {} },
+      { topicId: "t1", type: "single", correctJson: { correctIndex: 0 } },
+    ]);
+    const res = await asLearner(request(app).get("/api/learner/tests"));
+    expect(res.body[0].hasGradedContent).toBe(true);
   });
 
   it("returns 500 when the store throws", async () => {

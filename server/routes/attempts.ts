@@ -45,6 +45,7 @@ import {
 } from "../services/test-snapshot";
 import type { QuestionType } from "@shared/scales/engine";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
+import { isMeasurementOnly } from "@shared/questions/question-type";
 // PRD-32: ONE address rule for a feedback attachment, and ONE source-priority rule for
 // the topic's feedback text — the same helpers the SCORM bake runs.
 import { feedbackAssets, topicFeedbackTexts } from "@shared/template/result-context";
@@ -358,7 +359,24 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
       })
     );
 
-    res.json(testsWithSections);
+    // Does each test GRADE at all? The start screen drops «проходной балл» when it
+    // does not (a measurement method — see `shared/template/start-state`). Resolved
+    // for the whole list in ONE query over the topics it draws from, since the answer
+    // is a property of the content, not of the learner's attempts.
+    const gradedTopics = new Set<string>();
+    const listedTopicIds = Array.from(
+      new Set(testsWithSections.flatMap((t) => t.sections.map((s) => s.topicId))),
+    );
+    for (const q of await storage.getGradingTraitsByTopics(listedTopicIds)) {
+      if (!isMeasurementOnly(q)) gradedTopics.add(q.topicId);
+    }
+
+    res.json(
+      testsWithSections.map((t) => ({
+        ...t,
+        hasGradedContent: t.sections.some((s) => gradedTopics.has(s.topicId)),
+      })),
+    );
   } catch (error) {
     logger.error("Get learner tests error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch tests" });

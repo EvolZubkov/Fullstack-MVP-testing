@@ -99,3 +99,22 @@ export function isMeasurementOnly(question: TypedQuestion): boolean {
     | undefined;
   return !key || typeof key.correctIndex !== "number";
 }
+
+/**
+ * Does this SET of questions grade anything at all? False for a measurement method —
+ * a questionnaire built entirely of allocations and keyless scales, where no answer
+ * is right or wrong and no points exist to compare against a threshold.
+ *
+ * The question is asked BEFORE an attempt exists (the start screen's «проходной
+ * балл»), which is why it reads the content rather than the earned/possible points
+ * PRD-29 §6.7 uses on the results screen: at that moment there is nothing scored yet.
+ * A MIXED test — one graded question among measurements — grades, and keeps its
+ * threshold: the rule answers «is there anything to grade», not «is everything
+ * graded».
+ *
+ * An empty set counts as not grading: a test with no questions has nothing to
+ * threshold either.
+ */
+export function hasGradedContent(questions: readonly TypedQuestion[]): boolean {
+  return questions.some((q) => !isMeasurementOnly(q));
+}

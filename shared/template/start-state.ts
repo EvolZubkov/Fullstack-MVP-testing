@@ -26,6 +26,20 @@ export interface StartInfo {
   description?: string;
   questionCount?: number;
   passPercent?: number | null;
+  /**
+   * Whether the test GRADES at all — false for a measurement method (every question
+   * is measurement-only: a PRD-44 allocation, or a PRD-26 scale with no answer key).
+   * `undefined` means the host has not been taught to answer, and the fact is shown
+   * as before, so legacy hosts and stored packages keep their behaviour.
+   *
+   * The flag exists because a pass threshold is NOT a statement of intent: every test
+   * is created with the default 70 %, and the author of a burnout inventory never
+   * opens that setting. PRD-29 §6.7 settled the same question one screen later — the
+   * results summary and verdict stand on TWO facts, «порог задан И есть что
+   * оценивать» — and «проходной балл 70 %» on the cover of a questionnaire with no
+   * correct answers is that same nonsense, printed before the learner even starts.
+   */
+  hasGradedContent?: boolean;
   timeLimitMinutes?: number | null;
   maxAttempts?: number | null;
   startPageContent?: string;
@@ -157,7 +171,11 @@ export function buildStartState(input: StartStateInput): StartRenderContext {
     }),
     description: i.description || "",
     questionCount: i.questionCount,
-    passPercent: i.passPercent,
+    // A measurement test has no pass threshold to speak of — the fact is dropped
+    // here rather than in each layout, so every design template (and every future
+    // one) inherits the rule from the ONE builder both hosts call. `null` is what
+    // the layouts' `{{#if course.passPercent}}` already gates on.
+    passPercent: i.hasGradedContent === false ? null : i.passPercent,
     timeLimitMinutes: i.timeLimitMinutes,
     maxAttempts: i.maxAttempts,
     startPageContent: i.startPageContent || "",

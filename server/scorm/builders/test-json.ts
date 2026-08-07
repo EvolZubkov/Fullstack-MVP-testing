@@ -5,6 +5,7 @@ import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 import { effectiveSectionOrder } from "@shared/draw/assemble-delivery";
 import { buildTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
 import { parseScaleInterpretation } from "@shared/scales/interpretation";
+import { hasGradedContent } from "@shared/questions/question-type";
 // PRD-32: ONE address rule for a feedback attachment, and ONE source-priority rule for
 // the topic's feedback text — the same helpers the web grader runs.
 import { feedbackAssets, topicFeedbackTexts } from "@shared/template/result-context";
@@ -215,6 +216,14 @@ export function buildTestJson(data: ExportData): string {
     // and rendered by the content-flow runtime; the DB column is kept write-only
     // for legacy clients (decisions §1, S10 §3.3).
     passPercent: passPercent,
+    // Does this test grade at all? Baked only when the answer is NO, so packages of
+    // every control test stay byte-identical and the runtime's `!== false` reading
+    // keeps stored packages behaving as before (FR-02 style). A measurement method
+    // carries the default 70 % threshold it was created with, and the start screen
+    // must not advertise it — see the rule in `shared/template/start-state`.
+    ...(hasGradedContent(data.sections.flatMap((s) => s.questions))
+      ? {}
+      : { hasGradedContent: false }),
     totalQuestions: totalQuestions,
     sections: data.sections.map((s) => {
       // PRD-32: attachments of the TOPIC and of THIS test's section over it, resolved

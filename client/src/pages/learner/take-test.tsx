@@ -297,6 +297,8 @@ type TestMetadata = {
   timeLimitMinutes: number | null;
   startPageContent: string | null;
   passPercent: number | null;
+  /** Whether the test grades anything (false ⇒ measurement method, no pass threshold). */
+  hasGradedContent: boolean;
   hasInProgress: boolean;
   resumeIndex: number | null;
   resumeTotal: number | null;
@@ -330,6 +332,9 @@ function buildTestMetadataFromListEntry(test: any): TestMetadata {
     timeLimitMinutes: test.timeLimitMinutes || null,
     startPageContent: test.startPageContent || null,
     passPercent,
+    // Absent on a payload from a server that predates the flag ⇒ treat as grading,
+    // i.e. exactly the behaviour this screen had before.
+    hasGradedContent: test.hasGradedContent !== false,
     hasInProgress,
     resumeIndex: test.resumeIndex ?? null,
     resumeTotal: test.resumeTotal ?? null,
@@ -2631,6 +2636,7 @@ export default function TakeTestPage() {
         // вопросов» (the layout hides a fact it is not given).
         questionCount: testMode === "adaptive" ? undefined : testMetadata.totalQuestions,
         passPercent: testMetadata.passPercent,
+        hasGradedContent: testMetadata.hasGradedContent,
         timeLimitMinutes: testMetadata.timeLimitMinutes,
         maxAttempts: testMetadata.maxAttempts,
         startPageContent: testMetadata.startPageContent || "",

@@ -404,6 +404,7 @@ var RetakeGate = (function () {
           description: td.description || '',
           questionCount: td.totalQuestions,
           passPercent: td.passPercent,
+          hasGradedContent: td.hasGradedContent !== false,
           timeLimitMinutes: td.timeLimitMinutes,
           maxAttempts: td.maxAttempts
         },

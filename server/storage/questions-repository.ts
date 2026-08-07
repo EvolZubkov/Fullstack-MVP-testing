@@ -43,6 +43,32 @@ export class QuestionsRepository {
       .orderBy(sql`${questions.orderIndex} ASC NULLS LAST`, questions.id);
   }
 
+  /**
+   * The grading TRAITS of every question in the given topics — the two columns
+   * {@link module:shared/questions/question-type isMeasurementOnly} reads, and
+   * nothing else.
+   *
+   * Batched over topics on purpose: its caller is the learner's test LIST, which
+   * asks the question «does this test grade at all» once per assigned test. Reading
+   * whole rows per topic there would be a query per section and a payload of option
+   * texts nobody looks at. The predicate itself stays in the shared module — the
+   * measurement rule must not be re-expressed in SQL, or the answer key's meaning
+   * would live in two places.
+   */
+  async getGradingTraitsByTopics(
+    topicIds: string[],
+  ): Promise<Array<{ topicId: string; type: string; correctJson: unknown }>> {
+    if (topicIds.length === 0) return [];
+    return db
+      .select({
+        topicId: questions.topicId,
+        type: questions.type,
+        correctJson: questions.correctJson,
+      })
+      .from(questions)
+      .where(inArray(questions.topicId, topicIds));
+  }
+
   async getContentHashesByTopic(topicId: string): Promise<Set<string>> {
     const rows = await db
       .select({ contentHash: questions.contentHash })

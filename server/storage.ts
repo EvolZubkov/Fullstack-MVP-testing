@@ -229,6 +229,10 @@ export interface IStorage {
   getMeasurementsForQuestions(questionIds: string[]): Promise<Array<{ testId: string; questionId: string }>>;
   getTopicPageRefs(topicId: string): Promise<Array<{ testId: string }>>;
   getContentHashesByTopic(topicId: string): Promise<Set<string>>;
+  /** Question type + answer key of the given topics — input of `isMeasurementOnly`. */
+  getGradingTraitsByTopics(
+    topicIds: string[],
+  ): Promise<Array<{ topicId: string; type: string; correctJson: unknown }>>;
   getQuestion(id: string): Promise<Question | undefined>;
   getQuestionsByIds(ids: string[]): Promise<Question[]>;
   createQuestion(question: InsertQuestion): Promise<Question>;
@@ -813,6 +817,12 @@ export class DatabaseStorage implements IStorage {
 
   getContentHashesByTopic(topicId: string): Promise<Set<string>> {
     return this.questionsRepo.getContentHashesByTopic(topicId);
+  }
+
+  getGradingTraitsByTopics(
+    topicIds: string[],
+  ): Promise<Array<{ topicId: string; type: string; correctJson: unknown }>> {
+    return this.questionsRepo.getGradingTraitsByTopics(topicIds);
   }
 
   getQuestion(id: string): Promise<Question | undefined> {

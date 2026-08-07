@@ -24,6 +24,9 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
     getUsers: vi.fn().mockResolvedValue([]),
     setTestOwner: vi.fn().mockResolvedValue(undefined),
     getTopics: vi.fn(), getQuestionsByTopic: vi.fn(),
+    // «Оценивает ли тест хоть что-нибудь» для обложки списка: пусто = нечего
+    // оценивать, что для этих наборов безразлично — они смотрят другие поля.
+    getGradingTraitsByTopics: vi.fn().mockResolvedValue([]),
     getQuestionsByIds: vi.fn(), getTopicCourses: vi.fn(),
     getTopicEvents: vi.fn().mockResolvedValue([]),
     getAssignedTestsForUser: vi.fn(),

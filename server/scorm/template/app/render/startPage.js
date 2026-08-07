@@ -86,6 +86,9 @@ function buildScormStartContext() {
       description: TEST_DATA.description || '',
       questionCount: TEST_DATA.totalQuestions,
       passPercent: TEST_DATA.passPercent,
+      // Absent in every package built before the flag existed, and in every package
+      // of a test that does grade — `!== false` is what keeps both showing it.
+      hasGradedContent: TEST_DATA.hasGradedContent !== false,
       timeLimitMinutes: TEST_DATA.timeLimitMinutes,
       maxAttempts: TEST_DATA.maxAttempts,
       // PRD-7 S10: startPageContent migrated to an intro content page; not shown here.

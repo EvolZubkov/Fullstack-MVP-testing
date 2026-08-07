@@ -15,6 +15,7 @@ import {
   QUESTION_TYPES,
   distributesBudget,
   hasFixedOptionOrder,
+  hasGradedContent,
   hasOptionList,
   isMeasurementOnly,
   isSingleIndexChoice,
@@ -80,5 +81,33 @@ describe("измерительный вопрос", () => {
     expect(isMeasurementOnly({ type: "multiple", correctJson: {} })).toBe(false);
     expect(isMeasurementOnly({ type: "matching", correctJson: {} })).toBe(false);
     expect(isMeasurementOnly({ type: "ranking", correctJson: {} })).toBe(false);
+  });
+});
+
+describe("оценивает ли тест хоть что-нибудь", () => {
+  it("методика целиком из распределений и шкал без эталона — не оценивает", () => {
+    expect(
+      hasGradedContent([
+        { type: "allocation", correctJson: {} },
+        { type: "scale", correctJson: {} },
+      ]),
+    ).toBe(false);
+  });
+
+  it("один проверяемый вопрос среди измерительных — оценивает", () => {
+    expect(
+      hasGradedContent([
+        { type: "allocation", correctJson: {} },
+        { type: "single", correctJson: { correctIndex: 0 } },
+      ]),
+    ).toBe(true);
+  });
+
+  it("шкала с верной градацией — уже оценивает", () => {
+    expect(hasGradedContent([{ type: "scale", correctJson: { correctIndex: 2 } }])).toBe(true);
+  });
+
+  it("пустой набор не оценивает — порогу нечего мерить", () => {
+    expect(hasGradedContent([])).toBe(false);
   });
 });
