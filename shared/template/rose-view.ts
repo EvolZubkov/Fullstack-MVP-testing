@@ -34,6 +34,7 @@
 
 import { findBand, type ScaleInterpretation } from "../scales/interpretation";
 import { zoneColors, type HslTriple, type LevelRamp } from "./level-ramp";
+import { categoricalColor } from "./categorical-palette";
 import type { RadarAxisInput } from "./radar-view";
 import {
   CENTER_X,
@@ -48,11 +49,12 @@ import {
 } from "./chart-frame";
 
 /**
- * Above this many scales a sector is 45 degrees or less and its caption no longer fits the
- * arc it belongs to; the reader stops being able to say which slice a name refers to. Seven
- * is also the length of the categorical hue order, so the limit binds in both directions.
+ * Above this many scales a sector is narrower than its own caption and the reader stops being
+ * able to say which slice a name refers to. Six is also the length of the categorical hue
+ * order — a seventh hue could not be added without pushing a neighbouring pair back under the
+ * separation floor — so the limit binds for both reasons at once.
  */
-const MAX_AXES = 7;
+const MAX_AXES = 6;
 
 /** Grid rings at equal shares of the whole: 25, 50, 75 and 100 per cent. */
 const RING_SHARES = [0.25, 0.5, 0.75, 1];
@@ -98,7 +100,7 @@ export interface RoseChartInput {
 }
 
 /** Colour of the band the value fell into, matching the card beside the chart. */
-function sectorColor(
+function levelColor(
   ramp: LevelRamp,
   interpretation: Pick<ScaleInterpretation, "valence" | "bands">,
   bandIndex: number,
@@ -144,6 +146,13 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
   }
   if (!(total > 0)) return null;
 
+  // A typology has no better or worse level to signal, so colour is free to carry identity
+  // instead — and has to, because the level ramp answers `valence: none` with a neutral grey
+  // that would leave the sectors telling apart only by position. One scale with a declared
+  // direction is enough to put the whole chart back on the level ramp: mixing the two would
+  // paint the same value differently from the card standing beside it.
+  const byIdentity = visible.every((a) => a.interpretation.valence === "none");
+
   const step = (Math.PI * 2) / visible.length;
   const sectors: CtxRoseSector[] = [];
   const labels: CtxChartLabel[] = [];
@@ -169,7 +178,9 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
       label: source.name,
       levelText,
       d: sectorPath(radius, from, to),
-      color: sectorColor(input.ramp, source.interpretation, band ? bands.indexOf(band) : -1),
+      color:
+        (byIdentity ? categoricalColor(i) : null) ??
+        levelColor(input.ramp, source.interpretation, band ? bands.indexOf(band) : -1),
       radius,
       sharePercent: round1(share * 100),
     });

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildRoseChart } from "../rose-view";
 import { type RadarAxisInput } from "../radar-view";
-import { LEVEL_SCHEMES } from "../level-ramp";
+import { LEVEL_SCHEMES, zoneColors } from "../level-ramp";
+import { CATEGORICAL_HUES } from "../categorical-palette";
 import type { LearnerVisibility, ScaleInterpretation } from "../../scales/interpretation";
 
 const ramp = LEVEL_SCHEMES.traffic;
@@ -80,9 +81,24 @@ describe("buildRoseChart", () => {
     expect(buildRoseChart({ axes: CHIL.slice(0, 2), ramp })).toBeNull();
   });
 
-  it("отказывается строиться больше чем на семи шкалах", () => {
-    const many = Array.from({ length: 8 }, (_, i) => axis(`s${i}`, 10));
-    expect(buildRoseChart({ axes: many, ramp })).toBeNull();
+  it("строится на шести шкалах и отказывается на семи", () => {
+    const six = Array.from({ length: 6 }, (_, i) => axis(`s${i}`, 10));
+    expect(buildRoseChart({ axes: six, ramp })).not.toBeNull();
+    expect(buildRoseChart({ axes: [...six, axis("s6", 10)], ramp })).toBeNull();
+  });
+
+  it("красит типологию по идентичности: свой оттенок каждой шкале", () => {
+    const chart = buildRoseChart({ axes: CHIL, ramp })!;
+    expect(chart.sectors.map((s) => s.color)).toEqual(CATEGORICAL_HUES.slice(0, 4));
+  });
+
+  it("красит по уровню, когда у шкалы объявлено направление", () => {
+    const directed = ["a", "b", "c"].map((name) => ({
+      ...axis(name, 90),
+      interpretation: { ...styleScale(), valence: "higher_is_better" as const },
+    }));
+    const chart = buildRoseChart({ axes: directed, ramp })!;
+    expect(chart.sectors[0].color).toBe(zoneColors(ramp, 3, "higher_is_better")[2]);
   });
 
   it("отказывается строиться, когда хотя бы у одной шкалы скрыт балл", () => {
