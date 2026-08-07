@@ -204,3 +204,55 @@ export function coverageSegments(
   const tail: CoverageSegment[] = domain.max > to ? [{ kind: "gap", from: to, to: domain.max }] : [];
   return [...head, ...levels, ...tail];
 }
+
+/**
+ * Append a level. The first one spans the whole known domain; every next one is
+ * cut off the last level at its midpoint, so the author never starts from an
+ * invalid row.
+ *
+ * @public
+ */
+export function addLevel(draft: LevelsDraft, domain: { min: number; max: number } | null): LevelsDraft {
+  if (draft.levels.length === 0) {
+    return {
+      start: formatAuthorNumber(domain?.min ?? 0),
+      cuts: [],
+      end: formatAuthorNumber(domain?.max ?? 0),
+      levels: [emptyLevel()],
+    };
+  }
+  const lowerRaw = draft.cuts.length > 0 ? draft.cuts[draft.cuts.length - 1] : draft.start;
+  const lower = parseAuthorNumber(lowerRaw.trim());
+  const upper = parseAuthorNumber(draft.end.trim());
+  const cut = lower === null || upper === null ? "" : formatAuthorNumber((lower + upper) / 2);
+  return { ...draft, cuts: [...draft.cuts, cut], levels: [...draft.levels, emptyLevel()] };
+}
+
+/**
+ * Remove a level together with ONE adjacent cut — the one below it, or the one
+ * above it for the first level. Whichever goes, the neighbours close ranks and
+ * the covered span stays exactly as it was.
+ *
+ * @public
+ */
+export function removeLevel(draft: LevelsDraft, index: number): LevelsDraft {
+  const levels = draft.levels.filter((_, i) => i !== index);
+  if (levels.length === 0) return { start: "", cuts: [], end: "", levels: [] };
+  const cutToDrop = index === 0 ? 0 : index - 1;
+  return { ...draft, cuts: draft.cuts.filter((_, i) => i !== cutToDrop), levels };
+}
+
+/**
+ * Reorder level CONTENT. Boundaries are positional and stay put: the author is
+ * saying «these texts belong to the other end of the scale», not «move the
+ * threshold».
+ *
+ * @public
+ */
+export function moveLevel(draft: LevelsDraft, from: number, to: number): LevelsDraft {
+  if (from === to || to < 0 || to >= draft.levels.length) return draft;
+  const levels = [...draft.levels];
+  const [moved] = levels.splice(from, 1);
+  levels.splice(to, 0, moved);
+  return { ...draft, levels };
+}

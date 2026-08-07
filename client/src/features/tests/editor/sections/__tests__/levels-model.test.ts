@@ -6,7 +6,16 @@
 
 import { describe, expect, it } from "vitest";
 
-import { bandsToDraft, coverageSegments, draftErrors, draftToBands, hasStoredGap } from "../levels-model";
+import {
+  addLevel,
+  bandsToDraft,
+  coverageSegments,
+  draftErrors,
+  draftToBands,
+  hasStoredGap,
+  moveLevel,
+  removeLevel,
+} from "../levels-model";
 import type { ScaleBandModel } from "../../test-editor.types";
 
 function band(min: string, max: string, level: string): ScaleBandModel {
@@ -130,5 +139,71 @@ describe("coverageSegments", () => {
   it("returns null while the numbers do not parse or do not ascend", () => {
     expect(coverageSegments({ ...THREE, end: "x" }, null)).toBeNull();
     expect(coverageSegments({ ...THREE, cuts: ["42", "29"] }, null)).toBeNull();
+  });
+});
+
+describe("addLevel", () => {
+  it("seeds the first level from the domain", () => {
+    const draft = addLevel({ start: "", cuts: [], end: "", levels: [] }, { min: 0, max: 98 });
+    expect(draft.start).toBe("0");
+    expect(draft.end).toBe("98");
+    expect(draft.cuts).toEqual([]);
+    expect(draft.levels).toHaveLength(1);
+  });
+
+  it("seeds the first level with zeroes when the domain is unknown", () => {
+    const draft = addLevel({ start: "", cuts: [], end: "", levels: [] }, null);
+    expect([draft.start, draft.end]).toEqual(["0", "0"]);
+  });
+
+  it("cuts the last level in half", () => {
+    const draft = addLevel(bandsToDraft([band("0", "98", "only")]), null);
+    expect(draft.cuts).toEqual(["49"]);
+    expect(draft.levels).toHaveLength(2);
+  });
+
+  it("leaves the new cut empty when the last level does not parse", () => {
+    const draft = addLevel(bandsToDraft([band("0", "x", "only")]), null);
+    expect(draft.cuts).toEqual([""]);
+  });
+});
+
+describe("removeLevel", () => {
+  it("drops the cut below the level, so coverage stays continuous", () => {
+    const draft = removeLevel(THREE, 1);
+    expect(draft.cuts).toEqual(["29"]);
+    expect(draft.levels.map((l) => l.level)).toEqual(["low", "high"]);
+  });
+
+  it("drops the cut ABOVE the first level", () => {
+    const draft = removeLevel(THREE, 0);
+    expect(draft.cuts).toEqual(["29"]);
+    expect(draft.levels.map((l) => l.level)).toEqual(["mid", "high"]);
+  });
+
+  it("keeps the outer bounds when the last level goes", () => {
+    const draft = removeLevel(THREE, 2);
+    expect([draft.start, draft.end]).toEqual(["0", "98"]);
+    expect(draft.cuts).toEqual(["15"]);
+  });
+
+  it("empties the whole draft when the only level goes", () => {
+    expect(removeLevel(bandsToDraft([band("0", "10", "only")]), 0)).toEqual({
+      start: "", cuts: [], end: "", levels: [],
+    });
+  });
+});
+
+describe("moveLevel", () => {
+  it("moves the level CONTENT and leaves the boundaries alone", () => {
+    const draft = moveLevel(THREE, 2, 0);
+    expect(draft.levels.map((l) => l.level)).toEqual(["high", "low", "mid"]);
+    expect(draft.cuts).toEqual(["15", "29"]);
+    expect([draft.start, draft.end]).toEqual(["0", "98"]);
+  });
+
+  it("ignores an out-of-range target", () => {
+    expect(moveLevel(THREE, 0, 3)).toBe(THREE);
+    expect(moveLevel(THREE, 0, -1)).toBe(THREE);
   });
 });
