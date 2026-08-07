@@ -9,7 +9,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { apiToEditorModel, emptyEditorModel } from "../test-editor.mappers";
 import { validateTestEditor } from "../test-editor.validation";
 import { saveScales, saveMeasurements, loadContributionQuestions, previewScales } from "../scales-api";
-import type { QuestionMeasurementModel, ScaleBandModel, ScaleModel, TestEditorModel } from "../test-editor.types";
+import type {
+  QuestionMeasurementModel,
+  ResultVariableModel,
+  ScaleBandModel,
+  ScaleModel,
+  TestEditorModel,
+} from "../test-editor.types";
 
 function band(overrides: Partial<ScaleBandModel> = {}): ScaleBandModel {
   return { min: "0", max: "10", label: "Низкий", level: "low", text: "", tone: "", ...overrides };
@@ -145,6 +151,67 @@ describe("validateTestEditor — scales", () => {
   it("ignores a fully-empty trailing band row", () => {
     const bands = [band({ min: "0", max: "16" }), { min: "", max: "", label: "", level: "", text: "", tone: "" as const }];
     expect(scaleErrors([scale({ bands })])).toEqual([]);
+  });
+
+  // PRD-45 FR-11: the levels editor writes ONE threshold into both neighbours, so
+  // touching boundaries are what every scale it creates looks like. A gate that
+  // rejected `min === prevMax` would block saving every such scale, and the
+  // non-adjacent pair above (16/17) would not notice the regression.
+  it("accepts touching band boundaries (the levels editor's own output)", () => {
+    const bands = [band({ min: "0", max: "15" }), band({ min: "15", max: "29" })];
+    expect(scaleErrors([scale({ bands })])).toEqual([]);
+  });
+
+  // PRD-45: «Добавить уровень» seeds the new threshold as the midpoint of the last
+  // level, formatted through `formatAuthorNumber` — a ru-decimal comma. Parsing it
+  // with a bare `Number` yielded NaN, so «Сохранить» went dead with the card green
+  // and no field highlighted.
+  it("accepts a fractional threshold written with a ru-decimal comma", () => {
+    const bands = [band({ min: "0", max: "73,5" }), band({ min: "73,5", max: "98" })];
+    expect(scaleErrors([scale({ bands })])).toEqual([]);
+  });
+});
+
+// ─── Validation — numeric indicator bands (PRD-45 FR-09/FR-14) ─────────────────
+
+describe("validateTestEditor — bands of a numeric result variable", () => {
+  const variable = (over: Partial<ResultVariableModel> = {}): ResultVariableModel => ({
+    name: "idx",
+    label: "Индекс",
+    type: "number",
+    formula: "1",
+    learnerVisibility: "hidden",
+    scormTarget: "none",
+    controlsStatus: "none",
+    bands: [],
+    outcomes: [],
+    domainMin: null,
+    domainMax: null,
+    valence: "none",
+    sortOrder: 0,
+    ...over,
+  });
+  const varErrors = (vars: ResultVariableModel[]) =>
+    validateTestEditor({ ...emptyEditorModel({ folderId: null }), resultVariables: vars }).errors.filter((e) =>
+      e.field.startsWith("resultVariables"),
+    );
+
+  it("blocks a descending pair — it would leave every score without a level", () => {
+    const bands = [band({ min: "0", max: "42" }), band({ min: "42", max: "29" })];
+    const errors = varErrors([variable({ bands })]);
+    expect(errors.some((e) => e.field === "resultVariables[0].bands[1]" && e.code === "band_order")).toBe(true);
+  });
+
+  it("accepts a well-formed ascending pair", () => {
+    const bands = [band({ min: "0", max: "42" }), band({ min: "42", max: "60" })];
+    expect(varErrors([variable({ bands })])).toEqual([]);
+  });
+
+  it("leaves a non-numeric indicator's bands alone", () => {
+    // A boolean indicator interprets through `outcomes`; stale numeric bands from
+    // a type flip must not block saving.
+    const bands = [band({ min: "0", max: "42" }), band({ min: "42", max: "29" })];
+    expect(varErrors([variable({ type: "boolean", bands })])).toEqual([]);
   });
 });
 

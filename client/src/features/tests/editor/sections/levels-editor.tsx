@@ -21,7 +21,7 @@ import {
   Input,
   Textarea,
 } from "@universityrt/ui-kit";
-import { ChevronRight, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { deriveLevelTone } from "@shared/template/measure-view";
 import type { LevelTone, Valence } from "@shared/scales/interpretation";
@@ -343,7 +343,15 @@ export function LevelsEditor({
               </CollapsibleContent>
             </Collapsible>
 
-            {/* Stays visible while reading, like the interpretation fold above it:
+            {/* Keeps the fold row's geometry so the two rows line up, but NOT its
+                promise: recommendations open in a modal, so the leading icon is the
+                pencil every other modal editor in the editor uses (see
+                `feedback-preview`, `scoring-section`), not a chevron that would
+                announce an expansion that never happens. The chevron rotation is
+                keyed to `[data-state]`, which only a Collapsible trigger carries,
+                so nothing here can spin.
+
+                Stays visible while reading, like the interpretation fold above it:
                 whether recommendations exist is part of what the author came to
                 see, so the row is disabled rather than removed. */}
             <button
@@ -352,7 +360,7 @@ export function LevelsEditor({
               disabled={readOnly}
               onClick={() => setFeedbackFor(i)}
             >
-              <ChevronRight className="tb-levels__chev" width={14} height={14} aria-hidden="true" />
+              <Pencil className="tb-levels__chev" width={14} height={14} aria-hidden="true" />
               Рекомендации
               <span className="tb-levels__spacer" />
               <span className="tb-levels__badge">{feedbackBadge(l.feedback)}</span>

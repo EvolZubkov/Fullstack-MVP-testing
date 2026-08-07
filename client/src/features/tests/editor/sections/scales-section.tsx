@@ -60,6 +60,7 @@ import {
 import { pluralize } from "@/lib/i18n";
 import type { FieldErrorIndex } from "../field-errors";
 import { formatAuthorNumber, parseAuthorNumber, sanitizeAuthorNumberInput } from "../numeric-input";
+import { isEmptyBandRow } from "../test-editor.validation";
 import { FoldAllButtons, useSectionFold } from "./section-fold";
 import { isSingleIndexChoice, distributesBudget, type QuestionType } from "@shared/questions/question-type";
 import { achievableRange } from "@shared/scales/engine";
@@ -245,37 +246,18 @@ function keyErrorOf(s: ScaleModel, index: number, scales: ScaleModel[]): string 
 }
 
 /**
- * Drop a fully-empty LAST row — the leftover «new» row of the retired bands
- * table. «Fully empty» is byte-for-byte the criterion `test-editor.validation.ts`
- * applies (min, max, label and level all blank after `trim()`); the two must not
- * drift, or the card and the save gate start disagreeing again.
- *
- * Only the trailing row goes. An empty row in the MIDDLE is a genuine hole in the
- * interpretation and must keep shouting.
- */
-function dropEmptyTrailingBand(bands: ScaleBandModel[]): ScaleBandModel[] {
-  const last = bands[bands.length - 1];
-  if (last === undefined) return bands;
-  const empty =
-    last.min.trim() === "" &&
-    last.max.trim() === "" &&
-    last.label.trim() === "" &&
-    last.level.trim() === "";
-  return empty ? bands.slice(0, -1) : bands;
-}
-
-/**
  * Blocking band error for one scale, delegated to the levels model so the card
  * header, the save gate and the editor itself never disagree about what is wrong.
  *
- * A fully-empty trailing row is dropped first: `test-editor.validation.ts` has
- * always ignored it, and the card's banner claims saving is blocked — so a card
- * complaining about a row the real save gate lets through would simply be lying.
- * The level card still shows «Укажите число» under the field itself, which is
- * where the author can actually act on it.
+ * Fully-empty rows — leftover «new» rows of the retired bands table — are dropped
+ * first, using {@link isEmptyBandRow}, the very predicate the save gate applies.
+ * Not a copy of it: the card's banner claims saving is blocked, so a card
+ * complaining about a row the gate lets through would simply be lying. The gate
+ * ignores such a row at ANY position, so this does too — and the level card still
+ * shows «Укажите число» under the field itself, which is where the author can act.
  */
 function bandErrorOf(s: ScaleModel): string | null {
-  return draftErrors(bandsToDraft(dropEmptyTrailingBand(s.bands))).blocking;
+  return draftErrors(bandsToDraft(s.bands.filter((b) => !isEmptyBandRow(b)))).blocking;
 }
 
 export function ScalesSection({ model, testId, updateModel, readOnly = false }: ScalesSectionProps) {

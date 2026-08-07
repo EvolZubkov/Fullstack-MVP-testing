@@ -303,6 +303,17 @@ describe("<ScalesSection /> — validation banners", () => {
     expect(screen.queryByTestId("scales-error-banner")).toBeNull();
   });
 
+  it("stays silent about a fully-empty row in the MIDDLE too — the gate ignores it as well", () => {
+    // The card's banner says saving is blocked. The save gate skips an empty row
+    // wherever it sits, so a card shouting about one would block nothing and lie.
+    renderStateful(baseModel({ scales: [makeScale({ bands: [
+      { min: "0", max: "15", label: "", level: "low", text: "", tone: "" },
+      { min: "", max: "", label: "", level: "", text: "", tone: "" },
+      { min: "15", max: "29", label: "", level: "mid", text: "", tone: "" },
+    ] })] }));
+    expect(screen.queryByTestId("scales-error-banner")).toBeNull();
+  });
+
   it("flags a bad key grammar", () => {
     renderStateful(baseModel({ scales: [makeScale({ key: "Bad Key" })] }));
     fireEvent.click(screen.getByLabelText("Развернуть шкалу"));
