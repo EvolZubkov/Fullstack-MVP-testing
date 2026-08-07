@@ -196,12 +196,19 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
     );
   }
 
+  // With four scales the even split lands exactly on the 25% ring, and drawing both would
+  // stack two identical circles — the reference ring is the one that carries meaning, so the
+  // grid gives way to it rather than hiding underneath.
+  const evenRadius = round1(RADIUS / Math.sqrt(visible.length));
+
   return {
     width: WIDTH,
     height: HEIGHT,
     sectors,
-    rings: RING_SHARES.map((s) => ({ cx: CENTER_X, cy: CENTER_Y, radius: round1(RADIUS * Math.sqrt(s)) })),
-    evenRing: { cx: CENTER_X, cy: CENTER_Y, radius: round1(RADIUS / Math.sqrt(visible.length)) },
+    rings: RING_SHARES.map((s) => round1(RADIUS * Math.sqrt(s)))
+      .filter((radius) => radius !== evenRadius)
+      .map((radius) => ({ cx: CENTER_X, cy: CENTER_Y, radius })),
+    evenRing: { cx: CENTER_X, cy: CENTER_Y, radius: evenRadius },
     labels,
     ariaLabel: `Расклад по шкалам: ${sectors
       .map((s) => `${s.label} — ${s.levelText || "уровень не определён"}`)

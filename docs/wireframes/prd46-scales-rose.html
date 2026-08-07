@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: PRD-46 — Роза расклада по шкалам вместо радара.
+    Файл: docs/wireframes/prd46-scales-rose.html
+    Спецификация: docs/specs/prd-46/scales-chart-choice.md
+
+    ЧТО ЭТО. PRD-35 дал экрану итогов радар: набор независимых осей, каждая
+    относительно своего домена. Для ипсативной методики (опросник ЧИЛ, PRD-44)
+    это неверно дважды — она утверждает независимость, которой нет, и рисует
+    фигуру в трети радиуса, потому что домен каждой шкалы равен всему бюджету.
+    Эскиз показывает дельту PRD-46: та же методика розой, плюс настраиваемый
+    предел оси у радара.
+
+    ЭТО ДОРАБОТКА, А НЕ НОВЫЙ ЭКРАН. Сцена, блок «По шкалам» и карточки шкал
+    взяты из согласованного docs/wireframes/prd35-competency-radar.html: те же
+    ou-formsection / ou-slider / tb-zone, та же сетка tb-measures--chart.
+    Дельта — классы tb-rose* вместо tb-radar* и данные ЧИЛ вместо Маслача.
+
+    ИСТОЧНИКИ РАЗМЕТКИ.
+      - сцена и существующие блоки — реальный шаблон «Стандартный»
+        (server/scorm/templates/default/styles/theme.css, подключён как есть);
+      - компоненты — ДС UniversityRT (client/src/styles/vendor/university-rt.css);
+      - слой «Дельта PRD-46» — новое: классы tb-rose*.
+      Классы с префиксом wf- — каркас эскиза, не UI.
+
+    ГЕОМЕТРИЯ НЕ НАРИСОВАНА НА ГЛАЗ. SVG розы выведен ядром
+    (shared/template/rose-view.ts) через scripts/dev/rose-wireframe-svg.mts и
+    вставлен сюда без правок. Контрольная выкладка ЧИЛ: 34 / 16 / 14 / 34 при
+    сумме 98, то есть доли 34.7 / 16.3 / 14.3 / 34.7 процента и радиусы
+    58.9 / 40.4 / 37.8 / 58.9 при поле 100.
+
+    ЧТО ПРОВЕРЯЕТ ЭСКИЗ:
+      1. площадь сектора равна доле шкалы в целом: два «выраженных» стиля
+         занимают вдвое с лишним больше «слабых», а не впятеро, как вышло бы
+         при радиусе прямо по значению;
+      2. эталонное кольцо ровного расклада (по 25 процентов на стиль) читается
+         как опора: два стиля выпирают за него, два проваливаются внутрь;
+      3. цвет несёт идентичность, а не оценку: у типологии нет лучшего и
+         худшего уровня, поэтому у каждого стиля свой оттенок, а метка уровня
+         стоит подписью;
+      4. цифр на диаграмме нет НИ У ОДНОГО сектора — значение печатает карточка;
+      5. предел оси радара снимает «пятно в центре»: слева домен 98, справа
+         заданный автором предел 40, данные одни и те же;
+      6. при скрытых баллах роза не строится, а карточки остаются на месте.
+
+    СОСТОЯНИЯ:
+      s-rose    роза сбоку от карточек, четыре стиля ЧИЛ
+      s-limit   тот же ЧИЛ радаром: предел «домен» против предела «заданный»
+      s-hidden  видимость «только уровень»: диаграммы нет, карточки остаются
+
+    Правила и соответствие разделам PRD-46 — в таблицах под холстом.
+  -->
+  <title>PRD-46 — Роза расклада по шкалам</title>
+  <link rel="stylesheet" href="/client/src/styles/vendor/university-rt.css">
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css">
+  <link rel="stylesheet" href="/server/scorm/templates/default/styles/theme.css">
+  <style>
+    :root {
+      /* gate-skip-start */
+      /* WIREFRAME-ONLY: литеральные px. В ДС нет шкалы толщин линий и размеров
+         холста эскиза, поэтому каркас держит их у себя. */
+      --wf-border-w:   1px;
+      --wf-size-52:    52px;
+      --wf-size-1280: 1280px;
+      --wf-size-800:   800px;
+      --wf-size-360:   360px;
+      --wf-marker-size: 22px;
+      /* gate-skip-end */
+    }
+
+    /* ── Дельта PRD-29, перенесена из согласованного эскиза без правок: без
+       неё карточки шкал в этом файле выглядели бы иначе, чем в PRD-29/35 ── */
+    .tb-measure.ou-formsection { padding: var(--ou-space-4) 0; }
+    .tb-measure__level { align-self: flex-start; }
+    .tb-measure .ou-formsection__title { font: var(--ou-text-heading-s); font-weight: 400; }
+    .tb-measure__slider { max-width: none; display: flex; }
+    .tb-measure__slider .ou-slider__header { justify-content: flex-end; }
+    .tb-measure__slider .ou-slider__rail { height: var(--ou-space-3); margin-bottom: var(--ou-space-6); }
+    .tb-measure__slider .ou-slider__val { font: var(--ou-text-body-m); }
+    .tb-measure__slider .ou-slider__val strong { font: var(--ou-text-display-s); }
+    .tb-measure__slider .ou-slider__mark-lbl { font: var(--ou-text-body-s); top: var(--ou-space-5); }
+    .tb-measure .ou-formsection__sub { font: var(--ou-text-body-m); }
+    .tb-measure__marker {
+      cursor: default; pointer-events: none;
+      width: var(--wf-marker-size); height: var(--wf-marker-size);
+    }
+    /* gate-skip-start */
+    .tb-zone { background: hsl(var(--tb-zone)); border-radius: 0; }
+    /* gate-skip-end */
+    .tb-zone:first-child {
+      border-start-start-radius: var(--ou-radius-pill);
+      border-end-start-radius: var(--ou-radius-pill);
+    }
+    .tb-zone:not(:has(~ .tb-zone)) {
+      border-start-end-radius: var(--ou-radius-pill);
+      border-end-end-radius: var(--ou-radius-pill);
+    }
+    .tb-scene .ou-tag.tb-tone--neutral { background: var(--ou-info-soft); color: var(--ou-info-on-soft); }
+
+    /* ── Дельта PRD-35, перенесена без правок: сетка блока «По шкалам» ── */
+    .tb-measures--chart {
+      display: grid;
+      grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+      gap: var(--ou-space-6);
+      align-items: start;
+    }
+    .tb-rose { position: sticky; top: 0; }
+
+    /* ── Дельта PRD-46: компонент розы ── */
+    .tb-rose__svg { width: 100%; height: auto; display: block; }
+    .tb-rose__ring { fill: none; stroke: var(--ou-border-soft); stroke-width: var(--wf-border-w); }
+    /* Эталонное кольцо — единственная подписанная величина диаграммы, поэтому
+       оно отличается от сетки штрихом, а не цветом: цвет уже занят секторами. */
+    .tb-rose__ring--even {
+      stroke: var(--ou-fg-default);
+      stroke-width: 2;
+      stroke-dasharray: 4 4;
+    }
+    /* Зазор в 2px между заливками: без него соседние секторы сливаются в одно
+       пятно там, где их доли близки. */
+    .tb-rose__sector {
+      fill: hsl(var(--tb-hue));
+      stroke: var(--ou-bg-surface-2);
+      stroke-width: 2;
+    }
+    .tb-rose__label { fill: var(--ou-fg-default); font: var(--ou-text-body-s); }
+    .tb-rose__level { fill: var(--ou-fg-muted); font: var(--ou-text-body-xs); }
+
+    .tb-radar__ring,
+    .tb-radar__axis { fill: none; stroke: var(--ou-border-soft); stroke-width: var(--wf-border-w); }
+    .tb-radar__shape { fill: var(--ou-fg-muted); fill-opacity: 0.14; stroke: var(--ou-fg-muted); stroke-width: 2; }
+    .tb-radar__dot { fill: var(--ou-fg-muted); stroke: var(--ou-bg-surface-2); stroke-width: 2; }
+    .tb-radar__label { fill: var(--ou-fg-default); font: var(--ou-text-body-s); }
+    .tb-radar__svg { width: 100%; height: auto; display: block; }
+    .tb-radar__caption { fill: var(--ou-fg-muted); font: var(--ou-text-body-xs); }
+
+    @media (max-width: 900px) {
+      .tb-measures--chart { grid-template-columns: 1fr; }
+    }
+
+    /* ── Каркас эскиза ── */
+    .wf-viewport {
+      width: var(--wf-size-1280);
+      max-width: 100%;
+      background: var(--ou-bg-surface-1);
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      margin-inline: auto;
+      overflow: hidden;
+    }
+    .wf-caption { max-width: var(--wf-size-1280); margin: 0 auto var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+    .wf-state { display: none; padding-top: var(--wf-size-52); }
+    .wf-state.active { display: block; }
+    .wf-page { max-width: var(--wf-size-1280); margin-inline: auto; }
+    .wf-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ou-space-6); padding: var(--ou-space-6); }
+    .wf-pair figcaption { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-bottom: var(--ou-space-2); }
+    .wf-notes { max-width: var(--wf-size-1280); margin: var(--ou-space-8) auto 0; }
+    .wf-doc-title { max-width: var(--wf-size-1280); margin: var(--ou-space-8) auto 0; font: var(--ou-text-heading-m); color: var(--ou-fg-default); }
+    .wf-notes-title { font: var(--ou-text-body-m); font-weight: 700; margin: var(--ou-space-5) 0 var(--ou-space-2); }
+    .wf-notes-table { width: 100%; border-collapse: collapse; margin-bottom: var(--ou-space-7); }
+    .wf-notes-table th, .wf-notes-table td { border: var(--wf-border-w) solid var(--ou-border-soft); padding: var(--ou-space-2) var(--ou-space-3); font: var(--ou-text-body-s); text-align: left; vertical-align: top; }
+    .wf-notes-table th { background: var(--ou-bg-surface-3); font-weight: 600; }
+    .wf-notes-table code { font: var(--ou-text-code-s); background: var(--ou-bg-surface-3); padding: 0 var(--ou-space-1); border-radius: var(--ou-radius-s); }
+    .wf-nav {
+      position: fixed; inset-block-start: 0; inset-inline: 0; z-index: 10;
+      display: flex; align-items: center; gap: var(--ou-space-3);
+      padding: var(--ou-space-2) var(--ou-space-5);
+      background: var(--ou-bg-surface-2);
+      border-block-end: var(--wf-border-w) solid var(--ou-border-soft);
+    }
+    .wf-nav-title { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+  </style>
+</head>
+<body>
+
+<nav class="wf-nav">
+  <span class="wf-nav-title">PRD-46 — роза расклада по шкалам</span>
+  <button type="button" class="ou-btn ou-btn--s is-active" onclick="showState(this, 's-rose')">Роза: ЧИЛ</button>
+  <button type="button" class="ou-btn ou-btn--s" onclick="showState(this, 's-limit')">Предел оси радара</button>
+  <button type="button" class="ou-btn ou-btn--s" onclick="showState(this, 's-hidden')">Баллы скрыты</button>
+</nav>
+
+<section class="wf-state active" id="s-rose">
+  <div class="wf-page">
+    <p class="wf-caption">Вид диаграммы — «роза». Круг равен всему профилю, сектор равен доле стиля, пунктирное кольцо — ровный расклад по 25 процентов на стиль. Два стиля выпирают за кольцо, два проваливаются внутрь: это и есть вывод методики. Цифр на диаграмме нет — значение печатает карточка справа.</p>
+    <div class="wf-viewport">
+      <div class="tb-scene">
+
+        <header class="tb-scene__header tb-scene__header--flush">
+          <div class="tb-scene__brandrow tb-scene__brandrow--center">
+            <span class="tb-scene__logo" aria-hidden="true">РТ</span>
+            <div class="tb-scene__titles">
+              <h1 class="tb-scene__title">Опросник ЧИЛ</h1>
+              <span class="tb-scene__subtitle">Результат методики</span>
+            </div>
+          </div>
+        </header>
+
+        <main class="tb-scene__body">
+          <div class="tb-scene__col tb-scene__col--wide">
+
+            <div class="tb-scene__q"><h3 class="tb-scene__subhead">По шкалам</h3></div>
+            <div class="tb-measures tb-measures--chart">
+
+              <!-- ДЕЛЬТА PRD-46. Выведено ядром, вставлено без правок:
+                   npx tsx scripts/dev/rose-wireframe-svg.mts -->
+              <div class="tb-rose">
+                <svg class="tb-rose__svg" viewBox="0 0 360 300" role="img"
+                     aria-label="Расклад по шкалам: Целеустремлённый — Выражен; Вдохновляющий — Слабо выражен; Командный — Слабо выражен; Процессный — Выражен">
+                  <circle class="tb-rose__ring" cx="180" cy="150" r="70.7"></circle>
+                  <circle class="tb-rose__ring" cx="180" cy="150" r="86.6"></circle>
+                  <circle class="tb-rose__ring" cx="180" cy="150" r="100"></circle>
+                  <path class="tb-rose__sector" d="M 180,150 L 180,91.1 A 58.9,58.9 0 0,1 238.9,150 Z" style="--tb-hue: 257.9 71.3% 65.9%"></path>
+                  <path class="tb-rose__sector" d="M 180,150 L 220.4,150 A 40.4,40.4 0 0,1 180,190.4 Z" style="--tb-hue: 28.2 97.1% 41.2%"></path>
+                  <path class="tb-rose__sector" d="M 180,150 L 180,187.8 A 37.8,37.8 0 0,1 142.2,150 Z" style="--tb-hue: 167.4 100% 30.8%"></path>
+                  <path class="tb-rose__sector" d="M 180,150 L 121.1,150 A 58.9,58.9 0 0,1 180,91.1 Z" style="--tb-hue: 13.6 71.7% 51.6%"></path>
+                  <!-- Эталонное кольцо рисуется ПОВЕРХ заливок: под ними оно
+                       целиком скрыто, а это единственная опора чтения. -->
+                  <circle class="tb-rose__ring tb-rose__ring--even" cx="180" cy="150" r="50"></circle>
+                  <text class="tb-rose__label" x="271.9" y="43.1" text-anchor="middle">Целеустремлённый</text>
+                  <text class="tb-rose__level" x="271.9" y="58.1" text-anchor="middle">Выражен</text>
+                  <text class="tb-rose__label" x="271.9" y="241.9" text-anchor="middle">Вдохновляющий</text>
+                  <text class="tb-rose__level" x="271.9" y="256.9" text-anchor="middle">Слабо выражен</text>
+                  <text class="tb-rose__label" x="88.1" y="241.9" text-anchor="middle">Командный</text>
+                  <text class="tb-rose__level" x="88.1" y="256.9" text-anchor="middle">Слабо выражен</text>
+                  <text class="tb-rose__label" x="88.1" y="43.1" text-anchor="middle">Процессный</text>
+                  <text class="tb-rose__level" x="88.1" y="58.1" text-anchor="middle">Выражен</text>
+                </svg>
+              </div>
+
+              <!-- Карточки шкал — структура дословно из согласованного PRD-35. -->
+              <div>
+                <div class="ou-formsection tb-measure" data-render="band_ruler">
+                  <div class="ou-formsection__intro">
+                    <h4 class="ou-formsection__title">Целеустремлённый</h4>
+                    <span class="ou-tag ou-tag--l tb-measure__level tb-tone--neutral">Выражен</span>
+                  </div>
+                  <div class="ou-formsection__body">
+                    <div class="ou-slider ou-slider--h tb-measure__slider">
+                      <div class="ou-slider__header">
+                        <span class="ou-slider__val"><strong>34</strong> из 98</span>
+                      </div>
+                      <div class="ou-slider__rail" role="img" aria-label="Слабо выражен 0–20, выражен 20–40, доминирующий 40–98; значение 34 — выражен">
+                        <span class="ou-slider__fill tb-zone" style="left: 0%; width: 20.4%; --tb-zone: 215 16% 35%"></span>
+                        <span class="ou-slider__fill tb-zone is-current" style="left: 20.4%; width: 20.4%; --tb-zone: 215 16% 50%"></span>
+                        <span class="ou-slider__fill tb-zone" style="left: 40.8%; width: 59.2%; --tb-zone: 215 16% 65%"></span>
+                        <span class="ou-slider__thumb tb-measure__marker" style="left: 34.7%"></span>
+                        <div class="ou-slider__marks">
+                          <span class="ou-slider__mark" style="left: 0%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                          <span class="ou-slider__mark" style="left: 20.4%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 20.4%">20</span>
+                          <span class="ou-slider__mark" style="left: 40.8%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 40.8%">40</span>
+                          <span class="ou-slider__mark" style="left: 100%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 100%">98</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p class="ou-formsection__sub">Вы ставите цель раньше процесса и держите её, даже когда обстоятельства меняются.</p>
+                  </div>
+                </div>
+
+                <div class="ou-formsection tb-measure" data-render="band_ruler">
+                  <div class="ou-formsection__intro">
+                    <h4 class="ou-formsection__title">Вдохновляющий</h4>
+                    <span class="ou-tag ou-tag--l tb-measure__level tb-tone--neutral">Слабо выражен</span>
+                  </div>
+                  <div class="ou-formsection__body">
+                    <div class="ou-slider ou-slider--h tb-measure__slider">
+                      <div class="ou-slider__header">
+                        <span class="ou-slider__val"><strong>16</strong> из 98</span>
+                      </div>
+                      <div class="ou-slider__rail" role="img" aria-label="Слабо выражен 0–20, выражен 20–40, доминирующий 40–98; значение 16 — слабо выражен">
+                        <span class="ou-slider__fill tb-zone is-current" style="left: 0%; width: 20.4%; --tb-zone: 215 16% 35%"></span>
+                        <span class="ou-slider__fill tb-zone" style="left: 20.4%; width: 20.4%; --tb-zone: 215 16% 50%"></span>
+                        <span class="ou-slider__fill tb-zone" style="left: 40.8%; width: 59.2%; --tb-zone: 215 16% 65%"></span>
+                        <span class="ou-slider__thumb tb-measure__marker" style="left: 16.3%"></span>
+                        <div class="ou-slider__marks">
+                          <span class="ou-slider__mark" style="left: 0%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                          <span class="ou-slider__mark" style="left: 20.4%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 20.4%">20</span>
+                          <span class="ou-slider__mark" style="left: 40.8%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 40.8%">40</span>
+                          <span class="ou-slider__mark" style="left: 100%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 100%">98</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p class="ou-formsection__sub">Заражать идеей и вести за собой — не ваш основной инструмент влияния.</p>
+                  </div>
+                </div>
+
+                <div class="ou-formsection tb-measure" data-render="band_ruler">
+                  <div class="ou-formsection__intro">
+                    <h4 class="ou-formsection__title">Командный</h4>
+                    <span class="ou-tag ou-tag--l tb-measure__level tb-tone--neutral">Слабо выражен</span>
+                  </div>
+                  <div class="ou-formsection__body">
+                    <div class="ou-slider ou-slider--h tb-measure__slider">
+                      <div class="ou-slider__header">
+                        <span class="ou-slider__val"><strong>14</strong> из 98</span>
+                      </div>
+                      <div class="ou-slider__rail" role="img" aria-label="Слабо выражен 0–20, выражен 20–40, доминирующий 40–98; значение 14 — слабо выражен">
+                        <span class="ou-slider__fill tb-zone is-current" style="left: 0%; width: 20.4%; --tb-zone: 215 16% 35%"></span>
+                        <span class="ou-slider__fill tb-zone" style="left: 20.4%; width: 20.4%; --tb-zone: 215 16% 50%"></span>
+                        <span class="ou-slider__fill tb-zone" style="left: 40.8%; width: 59.2%; --tb-zone: 215 16% 65%"></span>
+                        <span class="ou-slider__thumb tb-measure__marker" style="left: 14.3%"></span>
+                        <div class="ou-slider__marks">
+                          <span class="ou-slider__mark" style="left: 0%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                          <span class="ou-slider__mark" style="left: 20.4%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 20.4%">20</span>
+                          <span class="ou-slider__mark" style="left: 40.8%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 40.8%">40</span>
+                          <span class="ou-slider__mark" style="left: 100%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 100%">98</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p class="ou-formsection__sub">Согласование и общая ответственность занимают у вас меньше места, чем результат.</p>
+                  </div>
+                </div>
+
+                <div class="ou-formsection tb-measure" data-render="band_ruler">
+                  <div class="ou-formsection__intro">
+                    <h4 class="ou-formsection__title">Процессный</h4>
+                    <span class="ou-tag ou-tag--l tb-measure__level tb-tone--neutral">Выражен</span>
+                  </div>
+                  <div class="ou-formsection__body">
+                    <div class="ou-slider ou-slider--h tb-measure__slider">
+                      <div class="ou-slider__header">
+                        <span class="ou-slider__val"><strong>34</strong> из 98</span>
+                      </div>
+                      <div class="ou-slider__rail" role="img" aria-label="Слабо выражен 0–20, выражен 20–40, доминирующий 40–98; значение 34 — выражен">
+                        <span class="ou-slider__fill tb-zone" style="left: 0%; width: 20.4%; --tb-zone: 215 16% 35%"></span>
+                        <span class="ou-slider__fill tb-zone is-current" style="left: 20.4%; width: 20.4%; --tb-zone: 215 16% 50%"></span>
+                        <span class="ou-slider__fill tb-zone" style="left: 40.8%; width: 59.2%; --tb-zone: 215 16% 65%"></span>
+                        <span class="ou-slider__thumb tb-measure__marker" style="left: 34.7%"></span>
+                        <div class="ou-slider__marks">
+                          <span class="ou-slider__mark" style="left: 0%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                          <span class="ou-slider__mark" style="left: 20.4%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 20.4%">20</span>
+                          <span class="ou-slider__mark" style="left: 40.8%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 40.8%">40</span>
+                          <span class="ou-slider__mark" style="left: 100%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 100%">98</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p class="ou-formsection__sub">Порядок, регламент и предсказуемость для вас — рабочий инструмент, а не ограничение.</p>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="wf-state" id="s-limit">
+  <div class="wf-page">
+    <p class="wf-caption">Те же четыре значения, нарисованные радаром. Слева предел оси — домен шкалы: он равен 98, потому что отвечает на вопрос «сколько набрал бы стиль, забравший весь бюджет», и фигура сжимается в пятно. Справа автор задал предел показа 40. Данные не изменились, изменился масштаб; подпись предела стоит под диаграммой, потому что иначе две картинки нельзя сравнить.</p>
+    <div class="wf-viewport">
+      <div class="wf-pair">
+        <figure>
+          <figcaption>Предел оси: домен шкалы (98)</figcaption>
+          <svg class="tb-radar__svg" viewBox="0 0 360 300" role="img" aria-label="Радар в масштабе домена: фигура занимает треть поля">
+            <circle class="tb-radar__ring" cx="180" cy="150" r="25"></circle>
+            <circle class="tb-radar__ring" cx="180" cy="150" r="50"></circle>
+            <circle class="tb-radar__ring" cx="180" cy="150" r="75"></circle>
+            <circle class="tb-radar__ring" cx="180" cy="150" r="100"></circle>
+            <line class="tb-radar__axis" x1="180" y1="150" x2="180" y2="50"></line>
+            <line class="tb-radar__axis" x1="180" y1="150" x2="280" y2="150"></line>
+            <line class="tb-radar__axis" x1="180" y1="150" x2="180" y2="250"></line>
+            <line class="tb-radar__axis" x1="180" y1="150" x2="80" y2="150"></line>
+            <polygon class="tb-radar__shape" points="180,115.3 196.3,150 180,164.3 145.3,150"></polygon>
+            <circle class="tb-radar__dot" cx="180" cy="115.3" r="5"></circle>
+            <circle class="tb-radar__dot" cx="196.3" cy="150" r="5"></circle>
+            <circle class="tb-radar__dot" cx="180" cy="164.3" r="5"></circle>
+            <circle class="tb-radar__dot" cx="145.3" cy="150" r="5"></circle>
+            <text class="tb-radar__label" x="180" y="35" text-anchor="middle">Целеустремлённый</text>
+            <text class="tb-radar__label" x="310" y="150" text-anchor="middle">Вдохновляющий</text>
+            <text class="tb-radar__label" x="180" y="285" text-anchor="middle">Командный</text>
+            <text class="tb-radar__label" x="50" y="150" text-anchor="middle">Процессный</text>
+          </svg>
+        </figure>
+        <figure>
+          <figcaption>Предел оси: заданный автором (40)</figcaption>
+          <svg class="tb-radar__svg" viewBox="0 0 360 300" role="img" aria-label="Радар в масштабе заданного предела: фигура занимает поле целиком">
+            <circle class="tb-radar__ring" cx="180" cy="150" r="25"></circle>
+            <circle class="tb-radar__ring" cx="180" cy="150" r="50"></circle>
+            <circle class="tb-radar__ring" cx="180" cy="150" r="75"></circle>
+            <circle class="tb-radar__ring" cx="180" cy="150" r="100"></circle>
+            <line class="tb-radar__axis" x1="180" y1="150" x2="180" y2="50"></line>
+            <line class="tb-radar__axis" x1="180" y1="150" x2="280" y2="150"></line>
+            <line class="tb-radar__axis" x1="180" y1="150" x2="180" y2="250"></line>
+            <line class="tb-radar__axis" x1="180" y1="150" x2="80" y2="150"></line>
+            <polygon class="tb-radar__shape" points="180,65 220,150 180,185 95,150"></polygon>
+            <circle class="tb-radar__dot" cx="180" cy="65" r="5"></circle>
+            <circle class="tb-radar__dot" cx="220" cy="150" r="5"></circle>
+            <circle class="tb-radar__dot" cx="180" cy="185" r="5"></circle>
+            <circle class="tb-radar__dot" cx="95" cy="150" r="5"></circle>
+            <text class="tb-radar__label" x="180" y="35" text-anchor="middle">Целеустремлённый</text>
+            <text class="tb-radar__label" x="310" y="150" text-anchor="middle">Вдохновляющий</text>
+            <text class="tb-radar__label" x="180" y="285" text-anchor="middle">Командный</text>
+            <text class="tb-radar__label" x="50" y="150" text-anchor="middle">Процессный</text>
+            <text class="tb-radar__caption" x="180" y="298" text-anchor="middle">шкала до 40</text>
+          </svg>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="wf-state" id="s-hidden">
+  <div class="wf-page">
+    <p class="wf-caption">У «Вдохновляющего» видимость «только уровень»: автор скрыл балл. Роза показывает доли целого, а доля скрытого балла — тот же балл в других единицах, поэтому диаграмма не строится. Ученику она просто отсутствует, карточки остаются на месте; автору редактор называет причину.</p>
+    <div class="wf-viewport">
+      <div class="tb-scene">
+        <main class="tb-scene__body">
+          <div class="tb-scene__col tb-scene__col--wide">
+            <div class="tb-scene__q"><h3 class="tb-scene__subhead">По шкалам</h3></div>
+            <div class="tb-measures">
+              <div class="ou-formsection tb-measure" data-render="label">
+                <div class="ou-formsection__intro">
+                  <h4 class="ou-formsection__title">Целеустремлённый</h4>
+                  <span class="ou-tag ou-tag--l tb-measure__level tb-tone--neutral">Выражен</span>
+                </div>
+              </div>
+              <div class="ou-formsection tb-measure" data-render="label">
+                <div class="ou-formsection__intro">
+                  <h4 class="ou-formsection__title">Вдохновляющий</h4>
+                  <span class="ou-tag ou-tag--l tb-measure__level tb-tone--neutral">Слабо выражен</span>
+                </div>
+              </div>
+              <div class="ou-formsection tb-measure" data-render="label">
+                <div class="ou-formsection__intro">
+                  <h4 class="ou-formsection__title">Командный</h4>
+                  <span class="ou-tag ou-tag--l tb-measure__level tb-tone--neutral">Слабо выражен</span>
+                </div>
+              </div>
+              <div class="ou-formsection tb-measure" data-render="label">
+                <div class="ou-formsection__intro">
+                  <h4 class="ou-formsection__title">Процессный</h4>
+                  <span class="ou-tag ou-tag--l tb-measure__level tb-tone--neutral">Выражен</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+</section>
+
+<h2 class="wf-doc-title">Правила эскиза и соответствие PRD-46</h2>
+<div class="wf-notes">
+  <div class="wf-notes-title">Геометрия розы</div>
+  <table class="wf-notes-table">
+    <tr><th>Величина</th><th>Значение на эскизе</th><th>Раздел</th></tr>
+    <tr><td>Угол сектора</td><td><code>360 / N</code> — по 90 градусов на четыре стиля</td><td>§3.1</td></tr>
+    <tr><td>Радиус сектора</td><td><code>F · √(доля от суммы)</code> — 58.9 / 40.4 / 37.8 / 58.9</td><td>§3.1</td></tr>
+    <tr><td>Эталонное кольцо</td><td><code>F / √N</code> = 50: ровный расклад по 25 процентов</td><td>§3.1</td></tr>
+    <tr><td>Кольца сетки</td><td>Равные доли целого: 50, 75 и 100 процентов; кольцо 25 процентов совпало с эталонным и не дублируется</td><td>§3.1</td></tr>
+    <tr><td>Опора масштаба</td><td>Сумма значений, не домен шкалы</td><td>§3.2</td></tr>
+  </table>
+
+  <div class="wf-notes-title">Что проверяет каждое состояние</div>
+  <table class="wf-notes-table">
+    <tr><th>Состояние</th><th>Проверяемое утверждение</th><th>Раздел</th></tr>
+    <tr><td><code>s-rose</code></td><td>Площадь равна доле; эталонное кольцо читается как опора; цвет несёт идентичность, а уровень — подпись; цифр на диаграмме нет</td><td>§3.1, §7</td></tr>
+    <tr><td><code>s-limit</code></td><td>Предел оси снимает пятно в центре; подпись предела обязательна, иначе масштабы несравнимы</td><td>§6</td></tr>
+    <tr><td><code>s-hidden</code></td><td>Скрытый балл запрещает розу; экран без диаграммы остаётся целым</td><td>§3.4</td></tr>
+  </table>
+
+  <div class="wf-notes-title">Границы эскиза</div>
+  <table class="wf-notes-table">
+    <tr><th>Вопрос</th><th>Ответ</th></tr>
+    <tr><td>Откуда SVG розы</td><td>Выведен ядром <code>shared/template/rose-view.ts</code> через <code>scripts/dev/rose-wireframe-svg.mts</code> и вставлен без правок</td></tr>
+    <tr><td>Откуда карточки шкал</td><td>Структура дословно из согласованного <code>docs/wireframes/prd35-competency-radar.html</code>, данные заменены на ЧИЛ</td></tr>
+    <tr><td>Откуда цвета секторов</td><td>Выведены из токенов <code>--ou-cat-*</code> и проверены на различимость соседних пар в обеих темах</td></tr>
+    <tr><td>Чего на эскизе нет</td><td>Настроек автора: они относятся к редактору теста, а не к экрану итогов</td></tr>
+  </table>
+</div>
+
+<script>
+  function showState(btn, id) {
+    document.querySelectorAll('.wf-state').forEach((s) => s.classList.toggle('active', s.id === id));
+    document.querySelectorAll('.wf-nav .ou-btn').forEach((b) => b.classList.toggle('is-active', b === btn));
+  }
+</script>
+
+</body>
+</html>

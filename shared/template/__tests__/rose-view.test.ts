@@ -47,6 +47,14 @@ describe("buildRoseChart", () => {
     expect(three!.evenRing.radius).toBe(57.7);
   });
 
+  it("не дублирует кольцо сетки, совпавшее с эталонным", () => {
+    const four = buildRoseChart({ axes: CHIL, ramp })!;
+    expect(four.evenRing.radius).toBe(50);
+    expect(four.rings.map((r) => r.radius)).toEqual([70.7, 86.6, 100]);
+    const three = buildRoseChart({ axes: CHIL.slice(0, 3), ramp })!;
+    expect(three.rings.map((r) => r.radius)).toEqual([50, 70.7, 86.6, 100]);
+  });
+
   it("рисует ровный расклад ровно по эталонному кольцу", () => {
     const even = [axis("a", 10), axis("b", 10), axis("c", 10), axis("d", 10)];
     const chart = buildRoseChart({ axes: even, ramp })!;
