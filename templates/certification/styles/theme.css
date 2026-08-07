@@ -765,9 +765,13 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
    CORE prepares (`result.scalesBlockClass`), not by `:has(.tb-radar)` — the package
    renders inside whatever engine the LMS embeds. Every colour is a DS token, so the
    RTK palette flows in by itself and no brand delta is needed here. */
+/* 480 and not 360 (PRD-46): the 360-unit viewport exists for the captions of a six-axis
+   chart, but the figure is a circle of radius 100 in the middle of it, so a 360px column
+   rendered it about 120px across. The column is the only lever — widening the geometry
+   pushes the captions off the canvas. */
 .tb-measures--chart {
   display: grid;
-  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 480px) minmax(0, 1fr);
   gap: var(--ou-space-6);
   align-items: start;
 }

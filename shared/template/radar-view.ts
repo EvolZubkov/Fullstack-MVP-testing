@@ -39,6 +39,7 @@ import {
   CENTER_X,
   CENTER_Y,
   HEIGHT,
+  LABEL_GAP,
   MIN_AXES,
   RADIUS,
   WIDTH,
@@ -187,6 +188,8 @@ export function buildRadarChart(input: RadarChartInput): CtxRadarChart | null {
         levelText,
         cos,
         sin,
+        // Every ray ends at the field edge, so the captions ring the field itself.
+        ringRadius: RADIUS + LABEL_GAP,
         nameClass: "tb-radar__label",
         levelClass: "tb-radar__level",
       }),

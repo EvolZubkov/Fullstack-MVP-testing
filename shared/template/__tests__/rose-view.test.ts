@@ -3,6 +3,7 @@ import { buildRoseChart } from "../rose-view";
 import { type RadarAxisInput } from "../radar-view";
 import { LEVEL_SCHEMES, zoneColors } from "../level-ramp";
 import { CATEGORICAL_HUES } from "../categorical-palette";
+import { round1 } from "../chart-frame";
 import type { LearnerVisibility, ScaleInterpretation } from "../../scales/interpretation";
 
 const ramp = LEVEL_SCHEMES.traffic;
@@ -41,28 +42,24 @@ describe("buildRoseChart", () => {
     expect(chart!.sectors.map((s) => s.sharePercent)).toEqual([34.7, 16.3, 14.3, 34.7]);
   });
 
-  it("ставит эталонное кольцо ровного расклада на F/√N", () => {
-    expect(buildRoseChart({ axes: CHIL, ramp })!.evenRing.radius).toBe(50);
-    const three = buildRoseChart({ axes: CHIL.slice(0, 3), ramp });
-    expect(three!.evenRing.radius).toBe(57.7);
+  it("держит кольца сетки по равным долям целого", () => {
+    expect(buildRoseChart({ axes: CHIL, ramp })!.rings.map((r) => r.radius)).toEqual([50, 70.7, 86.6, 100]);
   });
 
-  it("не дублирует кольцо сетки, совпавшее с эталонным", () => {
-    const four = buildRoseChart({ axes: CHIL, ramp })!;
-    expect(four.evenRing.radius).toBe(50);
-    expect(four.rings.map((r) => r.radius)).toEqual([70.7, 86.6, 100]);
-    const three = buildRoseChart({ axes: CHIL.slice(0, 3), ramp })!;
-    expect(three.rings.map((r) => r.radius)).toEqual([50, 70.7, 86.6, 100]);
+  it("стягивает подписи к фигуре, а не к краю поля", () => {
+    // Наибольший сектор ЧИЛ — 58.9, значит подписи стоят на 58.9 + 30, а не на 100 + 30:
+    // иначе между фигурой и подписями висит пустой пояс шириной в треть чертежа.
+    const chart = buildRoseChart({ axes: CHIL, ramp })!;
+    const top = chart.labels.find((l) => l.text === "Целеустремленный")!;
+    expect(top.x).toBe(242.9);
   });
 
-  it("подписывает эталонное кольцо: иначе пунктир нечитаем", () => {
-    expect(buildRoseChart({ axes: CHIL, ramp })!.evenRingCaption).toBe("пунктир — ровная доля");
-  });
-
-  it("рисует ровный расклад ровно по эталонному кольцу", () => {
-    const even = [axis("a", 10), axis("b", 10), axis("c", 10), axis("d", 10)];
-    const chart = buildRoseChart({ axes: even, ramp })!;
-    expect(chart.sectors.every((s) => s.radius === chart.evenRing.radius)).toBe(true);
+  it("не даёт подписям налезть на фигуру, когда одна шкала забрала всё", () => {
+    const skewed = [axis("a", 98), axis("b", 0), axis("c", 0)];
+    const chart = buildRoseChart({ axes: skewed, ramp })!;
+    const label = chart.labels.find((l) => l.text === "a")!;
+    // Кольцо подписей = 100 + 30, потому что наибольший сектор дорос до края поля.
+    expect(label.x).toBe(round1(180 + Math.cos(-Math.PI / 6) * 130));
   });
 
   it("не выпускает сектор за поле даже когда одна шкала забрала всё", () => {

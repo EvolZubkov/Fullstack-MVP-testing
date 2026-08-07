@@ -40,6 +40,7 @@ import {
   CENTER_X,
   CENTER_Y,
   HEIGHT,
+  LABEL_GAP,
   MIN_AXES,
   RADIUS,
   WIDTH,
@@ -58,12 +59,6 @@ const MAX_AXES = 6;
 
 /** Grid rings at equal shares of the whole: 25, 50, 75 and 100 per cent. */
 const RING_SHARES = [0.25, 0.5, 0.75, 1];
-
-/**
- * Caption of the reference ring. Wording avoids «поровну» on purpose: the ring marks the share
- * ONE scale would hold in an even split, not the split itself.
- */
-const EVEN_RING_CAPTION = "пунктир — ровная доля";
 
 /** One sector: a scale's share of the whole, ready to draw. */
 export interface CtxRoseSector {
@@ -95,13 +90,6 @@ export interface CtxRoseChart {
    * bulging past it on one side and sinking inside it on another is exactly what a skewed
    * profile looks like, and no number has to be printed to say so.
    */
-  evenRing: CtxRoseRing;
-  /**
-   * Caption of the reference ring. Not decoration: a dashed circle nobody named is a mark
-   * whose meaning cannot be recovered from the picture, and the first reader of the wireframe
-   * asked what it was. It carries no digits, so the «no numbers on the chart» rule holds.
-   */
-  evenRingCaption: string;
   labels: CtxChartLabel[];
   ariaLabel: string;
 }
@@ -167,7 +155,8 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
 
   const step = (Math.PI * 2) / visible.length;
   const sectors: CtxRoseSector[] = [];
-  const labels: CtxChartLabel[] = [];
+  /** Direction of each caption, kept for the second pass over the sectors. */
+  const directions: { cos: number; sin: number }[] = [];
 
   for (let i = 0; i < visible.length; i += 1) {
     const source = visible[i];
@@ -196,32 +185,32 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
       radius,
       sharePercent: round1(share * 100),
     });
-    labels.push(
-      ...placeCaption({
-        name: source.name,
-        levelText,
-        cos: Math.cos(middle),
-        sin: Math.sin(middle),
-        nameClass: "tb-rose__label",
-        levelClass: "tb-rose__level",
-      }),
-    );
+    directions.push({ cos: Math.cos(middle), sin: Math.sin(middle) });
   }
 
-  // With four scales the even split lands exactly on the 25% ring, and drawing both would
-  // stack two identical circles — the reference ring is the one that carries meaning, so the
-  // grid gives way to it rather than hiding underneath.
-  const evenRadius = round1(RADIUS / Math.sqrt(visible.length));
+  // Captions ring the FIGURE, not the field. The sectors of a real profile stop well short of
+  // the edge — a third of the whole puts one at 0.59 of it — so a ring at the field edge would
+  // leave a band of empty canvas between the figure and its own labels, and the drawing would
+  // read as a small mark in a large box. One shared ring, not one distance per sector: ragged
+  // captions at four different radii stop looking like one legend for one figure.
+  const labelRing = Math.max(...sectors.map((s) => s.radius)) + LABEL_GAP;
+  const labels: CtxChartLabel[] = sectors.flatMap((sector, i) =>
+    placeCaption({
+      name: sector.label,
+      levelText: sector.levelText,
+      cos: directions[i].cos,
+      sin: directions[i].sin,
+      ringRadius: labelRing,
+      nameClass: "tb-rose__label",
+      levelClass: "tb-rose__level",
+    }),
+  );
 
   return {
     width: WIDTH,
     height: HEIGHT,
     sectors,
-    rings: RING_SHARES.map((s) => round1(RADIUS * Math.sqrt(s)))
-      .filter((radius) => radius !== evenRadius)
-      .map((radius) => ({ cx: CENTER_X, cy: CENTER_Y, radius })),
-    evenRing: { cx: CENTER_X, cy: CENTER_Y, radius: evenRadius },
-    evenRingCaption: EVEN_RING_CAPTION,
+    rings: RING_SHARES.map((s) => ({ cx: CENTER_X, cy: CENTER_Y, radius: round1(RADIUS * Math.sqrt(s)) })),
     labels,
     ariaLabel: `Расклад по шкалам: ${sectors
       .map((s) => `${s.label} — ${s.levelText || "уровень не определён"}`)

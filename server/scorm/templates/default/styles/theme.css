@@ -807,9 +807,15 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
    (`result.scalesBlockClass`), not by `:has(.tb-radar)`: the package renders inside
    whatever engine the LMS embeds, and core-side computation exists precisely to avoid
    depending on it. */
+/* 480 and not 360 (PRD-46): the viewport of both diagrams is 360 units wide because the
+   captions of a six-axis chart need that much horizontal room, but the FIGURE itself is a
+   circle of radius 100 in the middle of it. Rendered into a 360px column the figure came out
+   about 120px across — a small mark in a large box, while the cards beside it had width to
+   spare. The column is the only lever here: the geometry cannot be widened without pushing
+   the captions off the canvas. */
 .tb-measures--chart {
   display: grid;
-  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 480px) minmax(0, 1fr);
   gap: var(--ou-space-6);
   align-items: start;
 }

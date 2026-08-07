@@ -118,6 +118,16 @@ export interface CaptionInput {
   /** Direction of the ray the caption belongs to. */
   cos: number;
   sin: number;
+  /**
+   * Distance from the centre the captions sit at.
+   *
+   * A parameter and not `RADIUS + LABEL_GAP`, because the two charts measure it from
+   * different things. The radar's rays always end at the field edge, so its captions ring
+   * the field. The rose's sectors rarely reach the edge — a typical share of a third puts
+   * them at 0.59 of it — and a caption ring at the field edge would leave a band of empty
+   * canvas a third of the drawing wide between the figure and its own labels.
+   */
+  ringRadius: number;
   nameClass: string;
   levelClass: string;
 }
@@ -139,8 +149,8 @@ export interface CaptionInput {
 export function placeCaption(input: CaptionInput): CtxChartLabel[] {
   const lines = wrapLabel(input.name, MAX_LINE_CHARS, MAX_LINES);
   const blockLines = lines.length + (input.levelText ? 1 : 0);
-  const x = round1(CENTER_X + input.cos * (RADIUS + LABEL_GAP));
-  const baseline = CENTER_Y + input.sin * (RADIUS + LABEL_GAP);
+  const x = round1(CENTER_X + input.cos * input.ringRadius);
+  const baseline = CENTER_Y + input.sin * input.ringRadius;
 
   let firstY: number;
   if (Math.abs(input.sin) < HORIZONTAL_SIN) {

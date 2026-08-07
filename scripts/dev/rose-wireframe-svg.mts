@@ -49,16 +49,9 @@ for (const r of chart.rings) {
 for (const s of chart.sectors) {
   lines.push(`  <path class="tb-rose__sector" d="${s.d}" style="--tb-hue: ${s.color}"></path>`);
 }
-// The reference ring goes ON TOP of the fills: underneath them it is entirely hidden, and it
-// is the only anchor the reader has for judging the skew.
-lines.push(
-  `  <circle class="tb-rose__ring tb-rose__ring--even" cx="${chart.evenRing.cx}" cy="${chart.evenRing.cy}" r="${chart.evenRing.radius}"></circle>`,
-);
 for (const l of chart.labels) {
   lines.push(`  <text class="${l.className}" x="${l.x}" y="${l.y}" text-anchor="${l.anchor}">${l.text}</text>`);
 }
-// Без подписи пунктирное кольцо — знак, смысл которого с картинки не восстановить.
-lines.push(`  <text class="tb-rose__caption" x="6" y="294" text-anchor="start">${chart.evenRingCaption}</text>`);
 lines.push("</svg>");
 
 console.log(lines.join("\n"));

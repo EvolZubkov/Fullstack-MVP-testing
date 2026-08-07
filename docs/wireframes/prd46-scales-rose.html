@@ -112,7 +112,7 @@
     /* ── Дельта PRD-35, перенесена без правок: сетка блока «По шкалам» ── */
     .tb-measures--chart {
       display: grid;
-      grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 480px) minmax(0, 1fr);
       gap: var(--ou-space-6);
       align-items: start;
     }
@@ -121,13 +121,6 @@
     /* ── Дельта PRD-46: компонент розы ── */
     .tb-rose__svg { width: 100%; height: auto; display: block; }
     .tb-rose__ring { fill: none; stroke: var(--ou-border-soft); stroke-width: var(--wf-border-w); }
-    /* Эталонное кольцо — единственная подписанная величина диаграммы, поэтому
-       оно отличается от сетки штрихом, а не цветом: цвет уже занят секторами. */
-    .tb-rose__ring--even {
-      stroke: var(--ou-fg-default);
-      stroke-width: 2;
-      stroke-dasharray: 4 4;
-    }
     /* Зазор в 2px между заливками: без него соседние секторы сливаются в одно
        пятно там, где их доли близки. */
     .tb-rose__sector {
@@ -137,7 +130,6 @@
     }
     .tb-rose__label { fill: var(--ou-fg-default); font: var(--ou-text-body-s); }
     .tb-rose__level { fill: var(--ou-fg-muted); font: var(--ou-text-body-xs); }
-    .tb-rose__caption { fill: var(--ou-fg-muted); font: var(--ou-text-body-xs); }
 
     .tb-radar__ring,
     .tb-radar__axis { fill: none; stroke: var(--ou-border-soft); stroke-width: var(--wf-border-w); }
@@ -224,6 +216,7 @@
               <div class="tb-rose">
                 <svg class="tb-rose__svg" viewBox="0 0 360 300" role="img"
                      aria-label="Расклад по шкалам: Целеустремлённый — Выражен; Вдохновляющий — Слабо выражен; Командный — Слабо выражен; Процессный — Выражен">
+                  <circle class="tb-rose__ring" cx="180" cy="150" r="50"></circle>
                   <circle class="tb-rose__ring" cx="180" cy="150" r="70.7"></circle>
                   <circle class="tb-rose__ring" cx="180" cy="150" r="86.6"></circle>
                   <circle class="tb-rose__ring" cx="180" cy="150" r="100"></circle>
@@ -231,18 +224,14 @@
                   <path class="tb-rose__sector" d="M 180,150 L 220.4,150 A 40.4,40.4 0 0,1 180,190.4 Z" style="--tb-hue: 28.2 97.1% 41.2%"></path>
                   <path class="tb-rose__sector" d="M 180,150 L 180,187.8 A 37.8,37.8 0 0,1 142.2,150 Z" style="--tb-hue: 167.4 100% 30.8%"></path>
                   <path class="tb-rose__sector" d="M 180,150 L 121.1,150 A 58.9,58.9 0 0,1 180,91.1 Z" style="--tb-hue: 13.6 71.7% 51.6%"></path>
-                  <!-- Эталонное кольцо рисуется ПОВЕРХ заливок: под ними оно
-                       целиком скрыто, а это единственная опора чтения. -->
-                  <circle class="tb-rose__ring tb-rose__ring--even" cx="180" cy="150" r="50"></circle>
-                  <text class="tb-rose__label" x="271.9" y="43.1" text-anchor="middle">Целеустремлённый</text>
-                  <text class="tb-rose__level" x="271.9" y="58.1" text-anchor="middle">Выражен</text>
-                  <text class="tb-rose__label" x="271.9" y="241.9" text-anchor="middle">Вдохновляющий</text>
-                  <text class="tb-rose__level" x="271.9" y="256.9" text-anchor="middle">Слабо выражен</text>
-                  <text class="tb-rose__label" x="88.1" y="241.9" text-anchor="middle">Командный</text>
-                  <text class="tb-rose__level" x="88.1" y="256.9" text-anchor="middle">Слабо выражен</text>
-                  <text class="tb-rose__label" x="88.1" y="43.1" text-anchor="middle">Процессный</text>
-                  <text class="tb-rose__level" x="88.1" y="58.1" text-anchor="middle">Выражен</text>
-                  <text class="tb-rose__caption" x="6" y="294" text-anchor="start">пунктир — ровная доля</text>
+                  <text class="tb-rose__label" x="242.9" y="72.1" text-anchor="middle">Целеустремлённый</text>
+                  <text class="tb-rose__level" x="242.9" y="87.1" text-anchor="middle">Выражен</text>
+                  <text class="tb-rose__label" x="242.9" y="212.9" text-anchor="middle">Вдохновляющий</text>
+                  <text class="tb-rose__level" x="242.9" y="227.9" text-anchor="middle">Слабо выражен</text>
+                  <text class="tb-rose__label" x="117.1" y="212.9" text-anchor="middle">Командный</text>
+                  <text class="tb-rose__level" x="117.1" y="227.9" text-anchor="middle">Слабо выражен</text>
+                  <text class="tb-rose__label" x="117.1" y="72.1" text-anchor="middle">Процессный</text>
+                  <text class="tb-rose__level" x="117.1" y="87.1" text-anchor="middle">Выражен</text>
                 </svg>
               </div>
 
