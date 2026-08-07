@@ -65,6 +65,16 @@ export interface RadarAxisInput {
    * library, and both hosts must draw the identical glyph.
    */
   iconPaths?: string[];
+  /**
+   * Colour the author picked for this scale (PRD-46), as an HSL triple.
+   *
+   * Read ONLY where colour carries identity — a typology, where no level is better than
+   * another. Where a direction is declared the colour states the verdict, and letting an
+   * author paint over it would put one colour on the diagram and another on the same value in
+   * the card beside it. So the field is offered by the editor exactly in the case the renderer
+   * honours it, and ignored otherwise rather than silently changing what the chart claims.
+   */
+  color?: HslTriple;
 }
 
 export interface CtxRadarAxis {

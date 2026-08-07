@@ -217,8 +217,11 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
       label: source.name,
       levelText,
       d: sectorPath(radius, from, to),
+      // The author's own colour outranks the palette slot, but only inside the identity
+      // branch; the slot stays reserved either way, so painting one scale does not shift the
+      // hues of its neighbours between attempts.
       color:
-        (byIdentity ? categoricalColor(i) : null) ??
+        (byIdentity ? source.color || categoricalColor(i) : null) ??
         levelColor(input.ramp, source.interpretation, band ? bands.indexOf(band) : -1),
       radius,
       sharePercent: round1(share * 100),

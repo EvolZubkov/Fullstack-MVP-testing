@@ -119,6 +119,25 @@ describe("buildRoseChart", () => {
     expect(chart.sectors.map((s) => s.color)).toEqual(CATEGORICAL_HUES.slice(0, 4));
   });
 
+  it("берёт цвет, заданный автором, вместо слота палитры", () => {
+    const painted = CHIL.map((a, i) => (i === 1 ? { ...a, color: "10 50% 50%" } : a));
+    const colors = buildRoseChart({ axes: painted, ramp })!.sectors.map((s) => s.color);
+    expect(colors[1]).toBe("10 50% 50%");
+    // Остальные секторы остаются на своих слотах: авторский выбор не сдвигает ряд.
+    expect(colors[0]).toBe(CATEGORICAL_HUES[0]);
+    expect(colors[2]).toBe(CATEGORICAL_HUES[2]);
+  });
+
+  it("не даёт авторскому цвету перебить оценку, когда направление объявлено", () => {
+    const directed = ["a", "b", "c"].map((name) => ({
+      ...axis(name, 90),
+      color: "10 50% 50%",
+      interpretation: { ...styleScale(), valence: "higher_is_better" as const },
+    }));
+    const chart = buildRoseChart({ axes: directed, ramp })!;
+    expect(chart.sectors[0].color).toBe(zoneColors(ramp, 3, "higher_is_better")[2]);
+  });
+
   it("красит по уровню, когда у шкалы объявлено направление", () => {
     const directed = ["a", "b", "c"].map((name) => ({
       ...axis(name, 90),
