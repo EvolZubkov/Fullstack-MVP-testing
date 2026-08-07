@@ -247,14 +247,14 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
   // lights up «Сохранить» after add / edit / drag / reorder / variant change.
   const combinedDirty = editor.isDirty || design.isDirty || contentPages.isDirty;
   const combinedSaving = editor.isSaving || design.isSaving;
-  // Read-only when the test is published. Structure tab already enforces
-  // this internally (drag-handles disabled, no row-menu, fieldset-disabled
-  // expand); the drawer footer collapses to a single «Закрыть» button per
-  // wireframe `s-readonly` (prd7-structure-linear-by-topics.html). Other tabs
-  // (Composition/Settings/Design) do not yet propagate the flag — until they
-  // do, the close-confirm guard remains in place to avoid silent edit loss
-  // from those tabs while published.
-  const isReadOnly = editor.model?.basic.status === "published";
+  // Публикация НЕ запирает редактор. По BRD (раздел 4.7, BRC-20) публикуется
+  // снапшот: доставка обслуживается им, а рабочая версия остаётся редактируемой
+  // всегда, и правки не влияют на выдачу до переопубликации. Прежний замок был из
+  // PRD-7 (`s-readonly`, до появления снапшотов) и пережил PRD-15 блок B: он
+  // отбирал у автора правку шкал, показателей, оценки и структуры опубликованного
+  // теста, хотя чинить методику после публикации — обычное дело. Признак
+  // «опубликован, есть неопубликованные изменения» и действие «Опубликовать
+  // изменения» (FR-12) живут в списке тестов и приходят с сервера в `publication`.
 
   const requestClose = useCallback(() => {
     if (combinedSaving) return;
@@ -575,7 +575,6 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
               savedFlowMode={editor.savedFlowMode}
               onGoToComposition={() => setActiveTab("composition")}
               updateModel={editor.updateModel}
-              readOnly={editor.model.basic.status === "published"}
               designDraft={design.draft}
             />
           )}
@@ -584,7 +583,6 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
               model={editor.model}
               testId={editor.model.id}
               updateModel={editor.updateModel}
-              readOnly={editor.model.basic.status === "published"}
             />
           )}
           {editor.model && activeTab === "scales" && (
@@ -592,7 +590,6 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
               model={editor.model}
               testId={editor.model.id}
               updateModel={editor.updateModel}
-              readOnly={editor.model.basic.status === "published"}
               fieldErrors={fieldErrors}
             />
           )}
@@ -601,7 +598,6 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
               model={editor.model}
               testId={editor.model.id}
               updateModel={editor.updateModel}
-              readOnly={editor.model.basic.status === "published"}
               fieldErrors={fieldErrors}
             />
           )}
@@ -629,24 +625,9 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
         <footer
           className="ou-drawer__foot"
           data-testid="test-editor-foot"
-          data-state={isReadOnly ? "readonly" : combinedDirty ? "dirty" : "default"}
+          data-state={combinedDirty ? "dirty" : "default"}
         >
-          {isReadOnly ? (
-            // s-readonly per wireframe prd7-structure-linear-by-topics.html
-            // (footer: single ghost «Закрыть»). No Save / no Cancel / no
-            // changes-popover — published tests are read-only at the Drawer
-            // level. Status tag «Опубликован» in the header already signals
-            // mode. `requestClose` still guards against silent edit loss if
-            // Composition/Settings/Design (not yet read-only) were dirtied.
-            <Button
-              variant="ghost"
-              size="m"
-              onClick={requestClose}
-              data-testid="test-editor-cancel"
-            >
-              Закрыть
-            </Button>
-          ) : combinedDirty ? (
+          {combinedDirty ? (
             <>
               <div className="tb-changes-anchor">
                 <Button

@@ -359,7 +359,6 @@ function BasicPane({
         draftTemplateId={draftTemplateId}
         designParams={draftDesignParams}
         value={model.report ?? {}}
-        readOnly={model.basic.status === "published"}
         onChange={(next) => updateModel((m) => ({ ...m, report: next }))}
         // FR-18: предпросмотр строится на РЕАЛЬНОЙ структуре редактируемого теста —
         // его названии и разделах; демонстрационные только числа и вердикты.

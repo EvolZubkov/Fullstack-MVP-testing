@@ -145,8 +145,11 @@ export type StructureSectionProps = {
   /**
    * Renders the tab in read-only mode (PRD-7 G19). Drives: dimmed grips,
    * hidden insert-rows, row action-menu replaced by an eye-icon (preview),
-   * variant-replace disabled, expand-toggle hidden. Driven from the drawer
-   * by `test.status === "published"`.
+   * variant-replace disabled, expand-toggle hidden.
+   *
+   * NOT driven by publication: the working version stays editable after publish
+   * (BRD раздел 4.7, BRC-20) — delivery is served by the snapshot. The flag is
+   * kept for hosts that genuinely have no edit rights.
    */
   readOnly?: boolean;
   /**
