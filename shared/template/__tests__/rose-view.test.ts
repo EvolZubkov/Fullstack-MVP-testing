@@ -78,6 +78,20 @@ describe("buildRoseChart", () => {
     expect(chart.sectors[0].d).toBe("M 180,150 L 180,91.1 A 58.9,58.9 0 0,1 238.9,150 Z");
   });
 
+  it("ставит пиктограмму шкалы над подписью и сдвигает текст на строку", () => {
+    const withIcon = CHIL.map((a, i) => (i === 0 ? { ...a, iconPaths: ["M0 0h24"] } : a));
+    const chart = buildRoseChart({ axes: withIcon, ramp })!;
+    expect(chart.icons).toHaveLength(1);
+    expect(chart.icons[0].paths).toEqual(["M0 0h24"]);
+    // Блок вырос на строку, поэтому над кругом он поднимается выше, а имя уезжает под иконку.
+    expect(chart.icons[0].transform).toBe("translate(263.9, 12.1) scale(0.667)");
+    expect(chart.labels.find((l) => l.text === "Целеустремленный")!.y).toBe(43.1);
+  });
+
+  it("не заводит пиктограмм, когда шкалы их не объявили", () => {
+    expect(buildRoseChart({ axes: CHIL, ramp })!.icons).toEqual([]);
+  });
+
   it("подписывает сектор названием шкалы и меткой уровня, без чисел", () => {
     const chart = buildRoseChart({ axes: CHIL, ramp })!;
     const texts = chart.labels.map((l) => l.text);

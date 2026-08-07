@@ -110,6 +110,27 @@ export function wrapLabel(text: string, maxChars: number, maxLines: number): str
   return lines;
 }
 
+/**
+ * Side of the icon box, in chart units. Lucide draws on a 24-unit grid, so the icon is scaled
+ * by `ICON_SIZE / 24`; the box is one caption line tall, which keeps the block's vertical
+ * rhythm the same whether an icon is present or not.
+ */
+export const ICON_SIZE = 16;
+
+/**
+ * An icon above a caption, ready to draw.
+ *
+ * Geometry and not a component name: the SCORM package renders inside whatever engine the LMS
+ * embeds, with no React and no icon font, so whatever the author picked has to arrive as
+ * contours. Every source node is normalised to a path `d`, because a DSL loop cannot switch
+ * the tag it emits.
+ */
+export interface CtxChartIcon {
+  /** Ready for the `transform` attribute: places and scales the 24-unit grid. */
+  transform: string;
+  paths: string[];
+}
+
 export interface CaptionInput {
   /** Scale name; wrapped here, because the DSL cannot measure text. */
   name: string;
@@ -128,8 +149,15 @@ export interface CaptionInput {
    * canvas a third of the drawing wide between the figure and its own labels.
    */
   ringRadius: number;
+  /** Contours of the scale's icon, already normalised to path data; absent when unset. */
+  iconPaths?: string[];
   nameClass: string;
   levelClass: string;
+}
+
+export interface CaptionOutput {
+  labels: CtxChartLabel[];
+  icon: CtxChartIcon | null;
 }
 
 /**
@@ -146,9 +174,12 @@ export interface CaptionInput {
  * or "below": its block is centred ON the ray, half over and half under, the way a centred
  * anchor already treats X. Growing downwards there hung the whole caption below the line.
  */
-export function placeCaption(input: CaptionInput): CtxChartLabel[] {
+export function placeCaption(input: CaptionInput): CaptionOutput {
   const lines = wrapLabel(input.name, MAX_LINE_CHARS, MAX_LINES);
-  const blockLines = lines.length + (input.levelText ? 1 : 0);
+  const hasIcon = Array.isArray(input.iconPaths) && input.iconPaths.length > 0;
+  // The icon takes a line of its own in the block, so a captioned ray keeps the same rhythm
+  // with and without one and the «grows upwards» clamp above the circle still holds.
+  const blockLines = lines.length + (input.levelText ? 1 : 0) + (hasIcon ? 1 : 0);
   const x = round1(CENTER_X + input.cos * input.ringRadius);
   const baseline = CENTER_Y + input.sin * input.ringRadius;
 
@@ -161,10 +192,12 @@ export function placeCaption(input: CaptionInput): CtxChartLabel[] {
     firstY = baseline;
   }
 
+  // The icon owns the first slot; the text starts one line lower when it is present.
+  const textFirstY = hasIcon ? firstY + LINE_STEP : firstY;
   const out: CtxChartLabel[] = lines.map((text, line) => ({
     text,
     x,
-    y: round1(firstY + line * LINE_STEP),
+    y: round1(textFirstY + line * LINE_STEP),
     anchor: "middle" as const,
     className: input.nameClass,
   }));
@@ -172,10 +205,21 @@ export function placeCaption(input: CaptionInput): CtxChartLabel[] {
     out.push({
       text: input.levelText,
       x,
-      y: round1(firstY + lines.length * LINE_STEP),
+      y: round1(textFirstY + lines.length * LINE_STEP),
       anchor: "middle" as const,
       className: input.levelClass,
     });
   }
-  return out;
+
+  const scale = ICON_SIZE / 24;
+  const icon = hasIcon
+    ? {
+        // The slot's baseline is `firstY`; a glyph hangs ABOVE its baseline, so the box top
+        // is one icon height up, and the box is centred on the caption's own x.
+        transform: `translate(${round1(x - ICON_SIZE / 2)}, ${round1(firstY - ICON_SIZE)}) scale(${Math.round(scale * 1000) / 1000})`,
+        paths: input.iconPaths as string[],
+      }
+    : null;
+
+  return { labels: out, icon };
 }

@@ -46,6 +46,7 @@ import {
   WIDTH,
   placeCaption,
   round1,
+  type CtxChartIcon,
   type CtxChartLabel,
 } from "./chart-frame";
 
@@ -110,6 +111,8 @@ export interface CtxRoseChart {
   sectors: CtxRoseSector[];
   rings: CtxRoseRing[];
   spokes: CtxRoseSpoke[];
+  /** Icons of the captions that have one; a caption without an icon contributes nothing. */
+  icons: CtxChartIcon[];
   /**
    * The ring an EVEN split lands on, at `F / √N`. It is the chart's reference: a figure
    * bulging past it on one side and sinking inside it on another is exactly what a skewed
@@ -218,17 +221,20 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
   // ring, not one distance per sector — ragged captions at four different radii stop reading
   // as one legend for one figure.
   const labelRing = RADIUS + LABEL_GAP;
-  const labels: CtxChartLabel[] = sectors.flatMap((sector, i) =>
+  const captions = sectors.map((sector, i) =>
     placeCaption({
       name: sector.label,
       levelText: sector.levelText,
       cos: directions[i].cos,
       sin: directions[i].sin,
       ringRadius: labelRing,
+      iconPaths: visible[i].iconPaths,
       nameClass: "tb-rose__label",
       levelClass: "tb-rose__level",
     }),
   );
+  const labels: CtxChartLabel[] = captions.flatMap((c) => c.labels);
+  const icons: CtxChartIcon[] = captions.map((c) => c.icon).filter((c): c is CtxChartIcon => c !== null);
 
   return {
     width: WIDTH,
@@ -245,6 +251,7 @@ export function buildRoseChart(input: RoseChartInput): CtxRoseChart | null {
       };
     }),
     labels,
+    icons,
     ariaLabel: `Расклад по шкалам: ${sectors
       .map((s) => `${s.label} — ${s.levelText || "уровень не определён"}`)
       .join("; ")}`,

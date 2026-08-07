@@ -59,6 +59,12 @@ export interface RadarAxisInput {
   visibility: LearnerVisibility;
   /** Shape shared by scales and numeric indicators; the radar reads only the numeric part. */
   interpretation: Pick<ScaleInterpretation, "domainMin" | "domainMax" | "valence" | "bands">;
+  /**
+   * Contours of the scale's icon, already normalised to path data (PRD-46). The name the
+   * author picked is resolved to geometry by the HOST, not here: the package carries no icon
+   * library, and both hosts must draw the identical glyph.
+   */
+  iconPaths?: string[];
 }
 
 export interface CtxRadarAxis {
@@ -192,7 +198,7 @@ export function buildRadarChart(input: RadarChartInput): CtxRadarChart | null {
         ringRadius: RADIUS + LABEL_GAP,
         nameClass: "tb-radar__label",
         levelClass: "tb-radar__level",
-      }),
+      }).labels,
     );
 
     prepared.push({
