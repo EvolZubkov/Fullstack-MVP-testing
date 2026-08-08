@@ -419,7 +419,11 @@ const hex = (c) =>
 
 // ─── main ─────────────────────────────────────────────────────────────────────
 
-const css = readFileSync(DS_CSS, "utf8");
+// Line endings are normalised because THEME_BLOCKS spells its multi-line selectors with
+// `\n`. On Windows `core.autocrlf=true` checks the stylesheet out with CRLF, and the guard
+// then failed to find a block that was right there — a red guard on a fresh clone, blamed
+// on whatever landed last.
+const css = readFileSync(DS_CSS, "utf8").replace(/\r\n/g, "\n");
 const themes = Object.fromEntries(
   Object.entries(THEME_BLOCKS).map(([theme, selectors]) => [theme, readTokens(css, selectors)]),
 );
