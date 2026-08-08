@@ -84,7 +84,7 @@ export type DesignSectionProps = {
   design?: UseDesignSettingsResult;
 };
 
-type DesignRailKey = "template" | "branding" | "colors" | "layout" | "progress";
+type DesignRailKey = "template" | "branding" | "colors" | "layout" | "progress" | "report";
 
 const RAIL_ITEMS: { key: DesignRailKey; label: string }[] = [
   { key: "template", label: "Шаблон" },
@@ -95,6 +95,10 @@ const RAIL_ITEMS: { key: DesignRailKey; label: string }[] = [
   { key: "colors", label: "Цвета" },
   { key: "layout", label: "Макет" },
   { key: "progress", label: "Прогресс и шапка" },
+  // PRD-47 §6.2: отчёт — часть шаблона, его поля объявляет манифест ровно как параметры
+  // оформления. Место им здесь, а не в общих настройках теста. Хранение при этом НЕ
+  // переезжает: поля отчёта остаются своей колонкой (PRD-27 §4.2).
+  { key: "report", label: "Отчёт о результатах" },
 ];
 
 /**
@@ -138,7 +142,13 @@ export function DesignSection({ testId, design: designProp }: DesignSectionProps
     const params = design.template?.manifest.params;
     if (!design.template) return RAIL_ITEMS;
     return RAIL_ITEMS.filter(
-      (item) => item.key === "template" || paramsForRail(params, item.key).length > 0,
+      (item) =>
+        item.key === "template" ||
+        // PRD-47 §6.2: отчёт есть у любого теста. Даже когда шаблон не объявил видов,
+        // карточка объясняет, что отчёт соберётся видом «Стандартный», — спрятать пункт
+        // значит спрятать это объяснение. Остальные пункты без параметров бессмысленны.
+        item.key === "report" ||
+        paramsForRail(params, item.key).length > 0,
     );
   }, [design.template]);
 

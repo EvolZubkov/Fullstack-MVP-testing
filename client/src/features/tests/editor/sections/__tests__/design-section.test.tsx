@@ -121,6 +121,18 @@ describe("<DesignSection /> — rail navigation", () => {
     expect(screen.queryByTestId("design-rail-progress")).toBeNull();
   });
 
+  it("показывает «Отчёт о результатах» даже без объявленных видов (PRD-47 §6.2)", async () => {
+    // Прочие пункты прячутся при отсутствии параметров, этот — нет: отчёт есть у любого
+    // теста, и при шаблоне без видов карточка объясняет, что он соберётся «Стандартным».
+    // Спрятать пункт значит спрятать это объяснение.
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+
+    expect(screen.getByTestId("design-rail-report")).toBeInTheDocument();
+  });
+
   it("switches pane when a rail item is clicked", async () => {
     renderWithClient(<DesignSection testId={TEST_ID} />);
     await waitFor(() =>
