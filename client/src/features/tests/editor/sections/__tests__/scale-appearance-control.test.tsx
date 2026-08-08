@@ -42,6 +42,15 @@ describe("<ScaleAppearanceControl />", () => {
     expect(screen.getByTestId("appearance-color-s1")).toBeEnabled();
   });
 
+  it("непокрашенная шкала показывает СЛОТ палитры, а не общий цвет-заглушку", () => {
+    // Слот — это то, что роза и нарисует; одинаковый чип у всех строк утверждал бы, что все
+    // четыре сектора одного цвета, тогда как превью рядом рисует четыре разных.
+    renderControl({ scales: FOUR });
+    const values = FOUR.map((s) => screen.getByTestId(`appearance-color-${s.key}`).textContent);
+    expect(new Set(values).size).toBe(FOUR.length);
+    expect(values[0]).toContain("#8F6AE6");
+  });
+
   it("скрытую от учащегося шкалу не показывает и говорит, сколько их", () => {
     renderControl({ scales: [...FOUR, scale("s5", { learnerVisibility: "hidden" })] });
     expect(screen.queryByText("Шкала s5")).toBeNull();

@@ -25,6 +25,7 @@ import { Banner, ColorPicker } from "@universityrt/ui-kit";
 import { IconGlyph, IconPickerModal, useGlyphTable, type GlyphTable } from "./icon-picker-modal";
 import { buildRoseChart } from "@shared/template/rose-view";
 import { LEVEL_SCHEMES } from "@shared/template/level-ramp";
+import { categoricalColor } from "@shared/template/categorical-palette";
 import { parseScaleAppearance, type ScaleAppearanceMap } from "@shared/template/scale-appearance";
 import type { LearnerVisibility, Valence } from "@shared/scales/interpretation";
 import { fromHex, toHex } from "./color-format";
@@ -47,8 +48,23 @@ export interface AppearanceScale {
  */
 const PREVIEW_WEIGHTS = [10, 5, 4, 10, 7, 6];
 
-/** Colour offered by the picker for a scale the author has not painted yet. */
-const UNSET_HEX = "#8F6AE6";
+/**
+ * Colour the picker shows for a scale the author has not painted yet.
+ *
+ * The PALETTE SLOT, not a constant: the slot is what the rose actually draws until the author
+ * overrides it, and a row showing one colour while the sector beside it shows another would be
+ * a lie about the current state. The slot is reserved by POSITION, so it is the position that
+ * decides — the same rule the renderer follows.
+ *
+ * Past the end of the palette there is no slot; the rose refuses to draw more than six scales
+ * anyway, so the chip falls back to a neutral rather than pretending a seventh hue exists.
+ */
+function unsetHex(index: number): string {
+  return toHex(categoricalColor(index) ?? "", NEUTRAL_HEX);
+}
+
+/** Neutral used where no identity hue applies: past the palette, and on a disabled field. */
+const NEUTRAL_HEX = "#7A7F8A";
 
 export function ScaleAppearanceControl(props: {
   label: string;
@@ -138,13 +154,18 @@ export function ScaleAppearanceControl(props: {
           />
           <div className="tb-appearance">
             <div className="tb-appearance__list">
-              {drawn.map((scale) => {
+              {drawn.map((scale, index) => {
                 const stored = map[scale.key]?.color;
                 return (
                   <div className="tb-appearance__row" key={scale.key}>
                     <span className="tb-appearance__name">{scale.label || scale.key}</span>
                     <ColorPicker
-                      value={toHex(stored, UNSET_HEX)}
+                      // Neutral while the field is off. The swatch is an assertion about what
+                      // the sector will be painted, and where a direction is declared that is
+                      // the LEVEL the learner reached — a hue no editor can know. Leaving the
+                      // identity colour on a disabled chip would state the one thing that is
+                      // certainly not going to be drawn.
+                      value={byIdentity ? toHex(stored, unsetHex(index)) : NEUTRAL_HEX}
                       // The picker speaks HEX and the renderer's contract is an HSL triple, so
                       // the value converts on the way out (see `color-format`): one format in
                       // storage, and no `hsl(#RRGGBB)` ever reaches a stylesheet.
