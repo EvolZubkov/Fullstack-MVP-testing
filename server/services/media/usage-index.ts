@@ -96,6 +96,40 @@ export async function clearCascadedUsages(
   }
 }
 
+/**
+ * Re-indexes a test's WHOLE set of scales.
+ *
+ * The unit of indexing is the SET, not one scale (spec §6.1): the storage contract has no
+ * `getScale(id)`, and a set-wide rewrite makes removal self-healing — the rows of a scale,
+ * or of a LEVEL, that no longer exists simply do not come back.
+ *
+ * Lives here rather than in the route because the route is not the only writer: the Excel
+ * import (`workbook-import.ts`) writes scales straight through the storage, and a copy of
+ * this call per writer is exactly how one of them ends up forgotten.
+ *
+ * Best effort: a missing index row REFUSES a file (it never grants one) and heals on the
+ * next `POST /api/media/reindex`, while a failed save would cost the author their work.
+ */
+export async function syncScaleFeedbackUsages(testId: string): Promise<void> {
+  try {
+    await syncEntityUsages("scale_feedback", testId, await storage.getScales(testId));
+  } catch (error) {
+    logger.error(`Media usage sync failed for scales of ${testId}: ${(error as Error).message}`, "scales");
+  }
+}
+
+/** The result-variable counterpart of {@link syncScaleFeedbackUsages}, same reasoning. */
+export async function syncVariableFeedbackUsages(testId: string): Promise<void> {
+  try {
+    await syncEntityUsages("variable_feedback", testId, await storage.getResultVariables(testId));
+  } catch (error) {
+    logger.error(
+      `Media usage sync failed for result variables of ${testId}: ${(error as Error).message}`,
+      "result-variables",
+    );
+  }
+}
+
 /** What a full rebuild processed. */
 export interface ReindexReport {
   entities: number;

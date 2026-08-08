@@ -20,26 +20,12 @@ import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { logger } from "../logger";
-import { syncEntityUsages } from "../services/media/usage-index";
+import { syncVariableFeedbackUsages } from "../services/media/usage-index";
 import { insertResultVariableSchema } from "@shared/schema";
 import type { ValueType } from "@shared/formula";
 
 const router = Router();
 const VALUE_TYPES: readonly string[] = ["boolean", "number", "string"];
-
-/**
- * Re-indexes the test's WHOLE set of result variables — see the scales counterpart
- * (spec §6.1): the storage contract has no `getResultVariable(id)`, and rewriting the set
- * makes deletion self-healing. Best effort: a missing index row refuses a file (it never
- * grants one) and heals on the next rebuild, while a failed save costs the author the work.
- */
-async function syncVariableFeedbackUsages(testId: string): Promise<void> {
-  try {
-    await syncEntityUsages("variable_feedback", testId, await storage.getResultVariables(testId));
-  } catch (error) {
-    logger.error(`Media usage sync failed for result variables of ${testId}: ${(error as Error).message}`, "result-variables");
-  }
-}
 
 /** True when another result variable already drives the same success/completion status. */
 async function controlsStatusConflict(

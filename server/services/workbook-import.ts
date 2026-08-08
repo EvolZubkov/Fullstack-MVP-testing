@@ -39,6 +39,7 @@ import { randomUUID } from "crypto";
 import type { ValueType } from "@shared/formula";
 import type { Role } from "@shared/access";
 import { importQuestionRows, type ResolvedQuestion } from "./questions-import";
+import { syncScaleFeedbackUsages, syncVariableFeedbackUsages } from "./media/usage-index";
 import { testSettingsService, type SectionPayload } from "./test-settings";
 import { parseScoringCell } from "../utils/scoring-excel";
 import { hasOptionList, isMeasurementOnly, distributesBudget } from "@shared/questions/question-type";
@@ -230,6 +231,11 @@ export async function importWorkbook(
         result.scales.created++;
       }
     }
+    // The import writes scales straight through the storage, so nothing else re-indexes
+    // their attachments. It matters when the book DROPS a level: the level's feedback
+    // goes with it, and its `media_usages` rows would otherwise stay and keep granting
+    // a file the test no longer uses. The set-wide rewrite is self-healing.
+    if (!dryRun) await syncScaleFeedbackUsages(testId);
   }
 
   // ── Pass 3: «Показатели» (upsert by name; validate formula; controlsStatus guard). ──
@@ -298,6 +304,10 @@ export async function importWorkbook(
         controllerOwner.set(data.controlsStatus, data.name);
       }
     }
+    // Same rule as the scales pass: whoever writes the entity re-indexes it. The book
+    // does not carry indicator feedback today, but it does CREATE indicators, and the
+    // rule must not depend on which fields a sheet happens to have a column for.
+    if (!dryRun) await syncVariableFeedbackUsages(testId);
   }
 
   // Resolve a «Вопрос» cell → ResolvedQuestion: alias first, then ID. Shared by

@@ -29,6 +29,8 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     getResultVariables: vi.fn(),
     validateResultVariableFormula: vi.fn(),
     getTest: vi.fn(),
+    replaceMediaUsages: vi.fn(),
+    getMediaAssetByStorageKey: vi.fn(),
   },
   testSettingsMock: { create: vi.fn(), save: vi.fn() },
 }));
@@ -257,6 +259,59 @@ describe("a scale the book creates", () => {
     expect(storageMock.createScale.mock.calls[0][0].configJson).toEqual({
       bands: [{ min: 0, max: 10, level: "low" }],
     });
+  });
+});
+
+describe("индекс использования медиа", () => {
+  const ASSET_LOW = "11111111-1111-4111-8111-111111111111";
+  const ASSET_HIGH = "22222222-2222-4222-8222-222222222222";
+
+  /** The stored scale, with an attachment on EACH level. */
+  const withAssets = {
+    ...STORED_SCALE,
+    configJson: {
+      ...RICH_CONFIG,
+      bands: [
+        {
+          ...RICH_CONFIG.bands[0],
+          feedback: { assets: [{ title: "Памятка", url: `/api/media/${ASSET_LOW}` }] },
+        },
+        {
+          ...RICH_CONFIG.bands[1],
+          feedback: { assets: [{ title: "Буклет", url: `/api/media/${ASSET_HIGH}` }] },
+        },
+      ],
+    },
+  };
+
+  beforeEach(() => {
+    // The storage remembers what the import wrote, so the re-index reads the NEW set —
+    // reading the stale one would make this test pass without proving anything.
+    let current = withAssets;
+    storageMock.getScales.mockImplementation(async () => [current]);
+    storageMock.updateScale.mockImplementation(async (_id: string, data: any) => {
+      current = { ...current, ...data };
+      return current;
+    });
+  });
+
+  it("снимает ссылку на вложение уровня, которого книга больше не называет", async () => {
+    // The book keeps «low» and drops «high» — with it goes the attachment of «high»,
+    // and the index row must go too: a stale row keeps granting a file the test no
+    // longer uses. Nothing else re-indexes this, the import writes past the routes.
+    const res = await run([{ ...serializeScaleRow(withAssets), "Диапазоны": "0..60 low «Низкий»" }]);
+
+    expect(res.errors).toEqual([]);
+    expect(storageMock.replaceMediaUsages).toHaveBeenCalledTimes(1);
+    const [entityType, entityId, refs] = storageMock.replaceMediaUsages.mock.calls[0];
+    expect(entityType).toBe("scale_feedback");
+    expect(entityId).toBe("test-1");
+    expect(refs.map((r: any) => r.assetId)).toEqual([ASSET_LOW]);
+  });
+
+  it("предпросмотр индекс не трогает", async () => {
+    await run([{ ...serializeScaleRow(withAssets), "Диапазоны": "0..60 low «Низкий»" }], true);
+    expect(storageMock.replaceMediaUsages).not.toHaveBeenCalled();
   });
 });
 

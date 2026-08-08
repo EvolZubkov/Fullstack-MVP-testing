@@ -24,7 +24,7 @@ import { requireTestScope } from "../middleware/test-scope";
 import { logger } from "../logger";
 import { materializeScaleDomains } from "../services/scale-domain";
 import { allocationBudgets } from "@shared/questions/allocation";
-import { syncEntityUsages } from "../services/media/usage-index";
+import { syncScaleFeedbackUsages } from "../services/media/usage-index";
 import { insertScaleSchema, insertQuestionMeasurementSchema, type Scale, type QuestionMeasurement } from "@shared/schema";
 import {
   computeScales,
@@ -51,22 +51,6 @@ async function fillDomains(testId: string): Promise<void> {
     await materializeScaleDomains(testId);
   } catch (error) {
     logger.error("Materialize scale domains error: " + (error as Error).message, "scales");
-  }
-}
-
-/**
- * Re-indexes the test's WHOLE set of scales. The unit of indexing is the set, not one scale
- * (spec §6.1): there is no `getScale(id)` in the storage contract, and a set-wide rewrite also
- * makes deletion self-healing — the removed scale's rows simply do not come back.
- *
- * Best effort, like {@link fillDomains}: a missing index row refuses a file (it never grants
- * one) and heals on the next rebuild, while a failed save costs the author the work itself.
- */
-async function syncScaleFeedbackUsages(testId: string): Promise<void> {
-  try {
-    await syncEntityUsages("scale_feedback", testId, await storage.getScales(testId));
-  } catch (error) {
-    logger.error(`Media usage sync failed for scales of ${testId}: ${(error as Error).message}`, "scales");
   }
 }
 
