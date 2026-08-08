@@ -17,7 +17,7 @@
  */
 
 import type { ScaleBand } from "@shared/scales/engine";
-import type { InterpretationBand, LearnerVisibility } from "@shared/scales/interpretation";
+import type { InterpretationBand, LearnerVisibility, Valence } from "@shared/scales/interpretation";
 import type { DrawStratum, QuestionScoring } from "@shared/schema";
 import { scales, resultVariables } from "@shared/schema";
 import { normalizeTags, TAG_MAX_LENGTH } from "@shared/tags";
@@ -28,9 +28,10 @@ export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string
 /** Canonical headers per test-scoped sheet (export column order). */
 export const SCALE_HEADERS = [
   "Ключ", "Название", "Описание", "Тип", "Агрегация", "Нормализация", "Направление",
-  "Диапазоны", "Показывать ученику", "SCORM",
+  "Диапазоны", "Границы шкалы", "Предел показа", "Благоприятное направление",
+  "Показывать ученику", "SCORM",
 ];
-export const SCALE_WIDTHS = [16, 28, 40, 12, 14, 14, 12, 50, 18, 14];
+export const SCALE_WIDTHS = [16, 28, 40, 12, 14, 14, 12, 50, 16, 14, 24, 18, 14];
 
 export const RESULT_VAR_HEADERS = [
   "Имя", "Метка", "Тип", "Формула", "Показывать ученику", "SCORM", "Управляет статусом",
@@ -256,15 +257,127 @@ export const VISIBILITY_CHOICES = [
   VISIBILITY_TO.level_and_value,
 ];
 
+// ─── «Границы шкалы» и «Предел показа» ────────────────────────────────────────
+
+const DOMAIN_RE = /^(-?\d+(?:\.\d+)?)\.\.(-?\d+(?:\.\d+)?)$/;
+
+/**
+ * Parse the «Границы шкалы» cell: `мин..макс`, the same `..` the bands use.
+ *
+ * ONE cell for the pair, because half a domain is not a domain — a lone bound would
+ * have to be stored, and the results screen prints «18 из 0» the moment it is. Empty
+ * → `null`, meaning the author left the bounds to the span of the levels.
+ */
+export function parseDomain(raw: unknown): ParseResult<{ min: number; max: number } | null> {
+  const text = String(raw ?? "").trim();
+  if (!text) return { ok: true, value: null };
+
+  const m = DOMAIN_RE.exec(text);
+  if (!m) return { ok: false, error: `некорректные границы шкалы "${text}", ожидается «мин..макс»` };
+  const min = Number(m[1]);
+  const max = Number(m[2]);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) {
+    return { ok: false, error: `некорректные границы шкалы "${text}"` };
+  }
+  return { ok: true, value: { min, max } };
+}
+
+/** Serialize a scale domain back to the «Границы шкалы» grammar. */
+export function serializeDomain(min: number | null, max: number | null): string {
+  return min === null || max === null ? "" : `${min}..${max}`;
+}
+
+/**
+ * A plain number, or `null` for an empty cell.
+ *
+ * `null` and `""` are ruled out BEFORE `Number()`: both convert to a finite zero, and
+ * zero is a legal display limit, so absence can never be expressed by a value.
+ */
+function parseOptionalNumber(raw: unknown): ParseResult<number | null> {
+  const text = String(raw ?? "").trim();
+  if (!text) return { ok: true, value: null };
+  const n = Number(text.replace(",", "."));
+  return Number.isFinite(n) ? { ok: true, value: n } : { ok: false, error: `не число: "${text}"` };
+}
+
+/** The same reading, applied to a value already stored in `config_json`. */
+function storedNumber(value: unknown): number | null {
+  const parsed = parseOptionalNumber(value);
+  return parsed.ok ? parsed.value : null;
+}
+
+// ─── «Благоприятное направление» (valence, PRD-29) ────────────────────────────
+
+/**
+ * The three positions of {@link Valence}, worded exactly as the scale card words them
+ * («Благоприятное направление»). NOT to be confused with the «Направление» column,
+ * which is the `direction` of the DB row: that one inverts the value during
+ * aggregation, this one only says how the value is to be JUDGED — it colours the
+ * levels and orders the ramp. Two different questions, hence two columns.
+ */
+const VALENCE_TO: Record<Valence, string> = {
+  higher_is_better: "Чем больше, тем лучше",
+  lower_is_better: "Чем больше, тем хуже",
+  none: "Без оценки",
+};
+
+/** The values offered in the column's dropdown. */
+export const VALENCE_CHOICES = Object.values(VALENCE_TO);
+
+/** Read the column, accepting the stored code as well as the wording. */
+function parseValence(raw: unknown): Valence {
+  const cell = String(raw ?? "").trim().toLowerCase();
+  for (const [code, text] of Object.entries(VALENCE_TO) as Array<[Valence, string]>) {
+    if (cell === text.toLowerCase() || cell === code) return code;
+  }
+  return "none";
+}
+
+/** Serialize a valence into its cell text. */
+function serValence(v: Valence): string {
+  return VALENCE_TO[v] ?? VALENCE_TO.none;
+}
+
 // ─── «Шкалы» ──────────────────────────────────────────────────────────────────
 
-/** Parse a «Шкалы» row into an `insertScaleSchema` input (без testId/sortOrder). */
-export function parseScaleRow(row: Record<string, unknown>): ParseResult<Record<string, unknown>> {
+/**
+ * Parse a «Шкалы» row into an `insertScaleSchema` input (без testId/sortOrder).
+ *
+ * @param headers The sheet's ACTUAL header row. It decides which interpretation
+ *   fields the returned `configJson` names at all, and {@link mergeScaleConfig}
+ *   leaves every field it does not name alone — that is what keeps a book written
+ *   before these columns existed readable instead of destructive. The row object
+ *   cannot answer this on its own: `sheetToObjects` drops empty cells, so «no
+ *   column» and «empty cell» look identical there while meaning opposite things.
+ *   Defaults to the row's own keys, which is what a hand-written row object means.
+ */
+export function parseScaleRow(
+  row: Record<string, unknown>,
+  headers: Set<string> | string[] = Object.keys(row),
+): ParseResult<Record<string, unknown>> {
   const key = String(row["Ключ"] ?? "").trim();
   if (!key) return { ok: false, error: "не указан ключ шкалы" };
 
   const bands = parseBands(row["Диапазоны"]);
   if (!bands.ok) return bands;
+
+  const columns = headers instanceof Set ? headers : new Set(headers);
+  const config: Record<string, unknown> = { bands: bands.value };
+
+  if (columns.has("Границы шкалы")) {
+    const domain = parseDomain(row["Границы шкалы"]);
+    if (!domain.ok) return { ok: false, error: `колонка «Границы шкалы»: ${domain.error}` };
+    config.domainMin = domain.value?.min ?? null;
+    config.domainMax = domain.value?.max ?? null;
+  }
+  if (columns.has("Предел показа")) {
+    const displayMax = parseOptionalNumber(row["Предел показа"]);
+    if (!displayMax.ok) return { ok: false, error: `колонка «Предел показа»: ${displayMax.error}` };
+    config.displayMax = displayMax.value;
+  }
+  if (columns.has("Благоприятное направление")) {
+    config.valence = parseValence(row["Благоприятное направление"]);
+  }
 
   return {
     ok: true,
@@ -276,11 +389,11 @@ export function parseScaleRow(row: Record<string, unknown>): ParseResult<Record<
       aggregation: String(row["Агрегация"] ?? "").trim() || "sum",
       normalization: String(row["Нормализация"] ?? "").trim() || "none",
       direction: String(row["Направление"] ?? "").trim() || "positive",
-      // ALWAYS present, empty array included: {@link mergeScaleConfig} treats a missing
-      // key as «the book does not set this field», and an emptied «Диапазоны» cell is the
-      // author's only way to clear the levels. Written as `{}` before, an emptied cell
-      // silently kept the old levels once merging arrived.
-      configJson: { bands: bands.value },
+      // `bands` is ALWAYS present, empty array included: {@link mergeScaleConfig} treats a
+      // missing key as «the book does not set this field», and an emptied «Диапазоны» cell
+      // is the author's only way to clear the levels. Written as `{}` before, an emptied
+      // cell silently kept the old levels once merging arrived.
+      configJson: config,
       learnerVisibility: parseLearnerVisibility(row["Показывать ученику"]),
       scormTarget: String(row["SCORM"] ?? "").trim() || "none",
     },
@@ -300,7 +413,11 @@ export function serializeScaleRow(s: {
   learnerVisibility: LearnerVisibility;
   scormTarget: string;
 }): Record<string, unknown> {
-  const bands = (s.configJson as { bands?: ScaleBand[] })?.bands;
+  // Read RAW, not through `parseScaleInterpretation`: that one falls back to the span of
+  // the levels when no domain is stored, and exporting an invented domain would turn it
+  // into an explicit one on the next import — the book would author what nobody authored.
+  const config = (s.configJson ?? {}) as Record<string, unknown>;
+  const bands = config.bands as ScaleBand[] | undefined;
   return {
     "Ключ": s.key,
     "Название": s.label,
@@ -310,6 +427,9 @@ export function serializeScaleRow(s: {
     "Нормализация": s.normalization,
     "Направление": s.direction,
     "Диапазоны": serializeBands(bands),
+    "Границы шкалы": serializeDomain(storedNumber(config.domainMin), storedNumber(config.domainMax)),
+    "Предел показа": storedNumber(config.displayMax) ?? "",
+    "Благоприятное направление": serValence(parseValence(config.valence)),
     "Показывать ученику": serLearnerVisibility(s.learnerVisibility),
     "SCORM": s.scormTarget,
   };

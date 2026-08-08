@@ -190,9 +190,12 @@ export async function importWorkbook(
   const scalesSheet = findSheet(workbook, "Шкалы");
   if (scalesSheet) {
     const rows = sheetToObjects(scalesSheet);
+    // The HEADER row, not the row objects: `sheetToObjects` drops empty cells, so only
+    // the headers can tell «the book has no such column» from «the author cleared it».
+    const scaleColumns = sheetHeaders(scalesSheet);
     for (let i = 0; i < rows.length; i++) {
       const where = `Лист «Шкалы», строка ${i + 2}`;
-      const parsed = parseScaleRow(rows[i]);
+      const parsed = parseScaleRow(rows[i], scaleColumns);
       if (!parsed.ok) {
         result.errors.push(`${where}: ${parsed.error}`);
         continue;

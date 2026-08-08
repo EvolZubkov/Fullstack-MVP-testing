@@ -189,6 +189,61 @@ describe("«Диапазоны»: the cell owns the levels", () => {
   });
 });
 
+describe("the three columns the book gained", () => {
+  it("sets the domain, the display limit and the favourable direction", async () => {
+    const res = await run([
+      {
+        ...serializeScaleRow(STORED_SCALE),
+        "Границы шкалы": "-10..40",
+        "Предел показа": 25,
+        "Благоприятное направление": "Чем больше, тем лучше",
+      },
+    ]);
+
+    expect(res.errors).toEqual([]);
+    const config = writtenConfig();
+    expect(config.domainMin).toBe(-10);
+    expect(config.domainMax).toBe(40);
+    expect(config.displayMax).toBe(25);
+    expect(config.valence).toBe("higher_is_better");
+  });
+
+  it("clears a field when the cell of a column the book HAS is empty", async () => {
+    const res = await run([
+      {
+        ...serializeScaleRow(STORED_SCALE),
+        "Границы шкалы": "",
+        "Предел показа": "",
+        "Благоприятное направление": "",
+      },
+    ]);
+
+    expect(res.errors).toEqual([]);
+    const config = writtenConfig();
+    // The distinction that carries the meaning: an empty CELL is «clear it», an
+    // absent COLUMN is «the book does not set this» (asserted on the legacy book above).
+    expect(config.domainMin).toBeNull();
+    expect(config.domainMax).toBeNull();
+    expect(config.displayMax).toBeNull();
+    expect(config.valence).toBe("none");
+  });
+
+  it("refuses half a domain with a readable reason", async () => {
+    const res = await run([{ ...serializeScaleRow(STORED_SCALE), "Границы шкалы": "0.." }]);
+
+    expect(res.errors).toHaveLength(1);
+    expect(res.errors[0]).toContain("Границы шкалы");
+    expect(storageMock.updateScale).not.toHaveBeenCalled();
+  });
+
+  it("exports what it imports", () => {
+    const row = serializeScaleRow(STORED_SCALE);
+    expect(row["Границы шкалы"]).toBe("0..60");
+    expect(row["Предел показа"]).toBe(35);
+    expect(row["Благоприятное направление"]).toBe("Чем больше, тем хуже");
+  });
+});
+
 describe("a scale the book creates", () => {
   it("gets exactly what the book says, with nothing merged into it", async () => {
     storageMock.getScales.mockResolvedValue([]);
