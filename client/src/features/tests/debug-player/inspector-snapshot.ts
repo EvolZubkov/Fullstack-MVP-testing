@@ -33,7 +33,14 @@ export interface ProtocolRow {
    * may carry an editable draft, so the protocol surfaces the skip/return state.
    */
   status: "unanswered" | "answered" | "skipped";
-  verdict: "none" | "correct" | "partial" | "wrong";
+  /**
+   * `measure` — измерительный вопрос: он не проверяется, вердикта у него нет
+   * (PRD-26 FR-08). Значение приходит из compute, а не выводится в UI, чтобы правило
+   * «что считается измерительным» жило в одном месте.
+   */
+  verdict: "none" | "correct" | "partial" | "wrong" | "measure";
+  /** True для измерительного вопроса — балл и вердикт к нему неприменимы. */
+  measurement?: boolean;
   ratio: number;
   ratioPct: number;
   score: number | null;
