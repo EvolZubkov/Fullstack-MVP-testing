@@ -74,6 +74,25 @@
     return t === "single" || t === "scale";
   }
 
+  /**
+   * Measurement-only question: never checked, earns no points, adds nothing to the
+   * possible total — its only result is the contribution it makes to the PRD-5 scales
+   * (PRD-26 FR-08; an allocation is measurement-only by type, PRD-44 FR-09). Mirrors
+   * `isMeasurementOnly` (shared/questions/question-type) for the same reason as
+   * `isOneIndexChoice` above: this file is a standalone script in the host page and
+   * cannot reach the package's `TBQType` global.
+   *
+   * The answer key travels as `correct` in the baked payload and as `correctJson` on
+   * the server; both are accepted so no caller has to reshape its question first.
+   */
+  function isMeasureOnly(q) {
+    if (!q) return false;
+    if (q.type === "allocation") return true;
+    if (q.type !== "scale") return false;
+    var key = (q.correctJson !== undefined && q.correctJson !== null) ? q.correctJson : q.correct;
+    return !key || typeof key.correctIndex !== "number";
+  }
+
   function typeLabel(t) {
     return t === "single" ? "Один ответ" : t === "multiple" ? "Несколько" :
       t === "matching" ? "Соответствие" : t === "ranking" ? "Ранжирование" :
@@ -289,16 +308,23 @@
         Object.keys(ans || {}).forEach(function (k) { total += Number(ans[k]) || 0; });
         answered = Number(spec.budget) > 0 && total === Number(spec.budget);
       }
-      var verdict = !answered ? "none" : ratio >= 1 ? "correct" : ratio > 0 ? "partial" : "wrong";
+      // У измерительного вопроса эталона нет, поэтому «неверно» и «0 / 1» здесь читались
+      // бы как ошибка ученика и расходились бы с агрегатом: он такой вопрос не считает
+      // ни заработанным, ни возможным баллом (PRD-26 FR-08). Единственный его результат —
+      // вклад в шкалы, он и остаётся в строке.
+      var measure = isMeasureOnly(q);
+      var verdict = measure ? "measure"
+        : !answered ? "none" : ratio >= 1 ? "correct" : ratio > 0 ? "partial" : "wrong";
       var status = (liveStatuses && liveStatuses[q.id]) ? liveStatuses[q.id] : (answered ? "answered" : "unanswered");
-      var points = q.points || 1;
-      var earned = pr ? points * pr.ratio : 0;
+      var points = measure ? 0 : (q.points || 1);
+      var earned = (measure || !pr) ? 0 : points * pr.ratio;
       return {
         idx: i + 1, topicName: row.topicName || "", prompt: q.prompt || "", type: q.type, typeLabel: typeLabel(q.type),
         answerStr: humanAnswer(q, ans), answered: answered, status: status, verdict: verdict,
-        ratio: Math.round(ratio * 100) / 100, ratioPct: Math.round(ratio * 100),
-        score: pr ? pr.score : null, sMax: pr ? pr.sMax : null,
-        priceNote: priceNote(pr),
+        measurement: measure,
+        ratio: measure ? 0 : Math.round(ratio * 100) / 100, ratioPct: measure ? 0 : Math.round(ratio * 100),
+        score: (measure || !pr) ? null : pr.score, sMax: (measure || !pr) ? null : pr.sMax,
+        priceNote: measure ? "цена: не начисляется — измерительный вопрос" : priceNote(pr),
         earned: Math.round(earned * 100) / 100, points: points,
         difficulty: (showDiff && q.difficulty != null) ? q.difficulty : null,
         levelName: row.levelName || null,
