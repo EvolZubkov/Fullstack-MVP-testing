@@ -447,6 +447,127 @@
     "state": {
       "currentTopicId": "topic-1",
       "currentPageId": "demo-intro"
+    },
+    "measures": {
+      "ramp": {
+        "favorable": "142 76% 36%",
+        "mid": "38 92% 50%",
+        "unfavorable": "0 84% 60%"
+      },
+      "scaleKind": "band_ruler",
+      "indicatorKind": "label",
+      "hasPassThreshold": true,
+      "ipsativeScales": false,
+      "chartSettings": {
+        "scalesChartKind": "radar",
+        "radarAxisLimit": "domain"
+      },
+      "scales": [
+        {
+          "key": "demo_focus",
+          "name": "Ориентация на результат",
+          "value": 38,
+          "visibility": "level_and_value",
+          "interpretation": {
+            "domainMin": 0,
+            "domainMax": 50,
+            "displayMax": null,
+            "valence": "higher_is_better",
+            "bands": [
+              {
+                "min": 0,
+                "max": 24,
+                "level": "low",
+                "label": "Низкий"
+              },
+              {
+                "min": 25,
+                "max": 50,
+                "level": "high",
+                "label": "Высокий"
+              }
+            ]
+          }
+        },
+        {
+          "key": "demo_team",
+          "name": "Работа в команде",
+          "value": 21,
+          "visibility": "level_and_value",
+          "interpretation": {
+            "domainMin": 0,
+            "domainMax": 50,
+            "displayMax": null,
+            "valence": "higher_is_better",
+            "bands": [
+              {
+                "min": 0,
+                "max": 24,
+                "level": "low",
+                "label": "Низкий"
+              },
+              {
+                "min": 25,
+                "max": 50,
+                "level": "high",
+                "label": "Высокий"
+              }
+            ]
+          }
+        },
+        {
+          "key": "demo_care",
+          "name": "Внимание к деталям",
+          "value": 44,
+          "visibility": "level_and_value",
+          "interpretation": {
+            "domainMin": 0,
+            "domainMax": 50,
+            "displayMax": null,
+            "valence": "higher_is_better",
+            "bands": [
+              {
+                "min": 0,
+                "max": 24,
+                "level": "low",
+                "label": "Низкий"
+              },
+              {
+                "min": 25,
+                "max": 50,
+                "level": "high",
+                "label": "Высокий"
+              }
+            ]
+          }
+        }
+      ],
+      "indicators": [
+        {
+          "key": "readiness",
+          "name": "Готовность к роли",
+          "value": "Условно готов",
+          "visibility": "level_and_value",
+          "interpretation": {
+            "domainMin": null,
+            "domainMax": null,
+            "valence": "none",
+            "bands": [],
+            "outcomes": [
+              {
+                "code": "ready",
+                "label": "Готов",
+                "tone": "favorable"
+              },
+              {
+                "code": "partly",
+                "label": "Условно готов",
+                "tone": "attention"
+              }
+            ]
+          }
+        }
+      ]
     }
   }
 }

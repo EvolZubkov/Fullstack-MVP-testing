@@ -23,6 +23,7 @@ import {
   buildSectionResultContext,
   buildSectionIntroContext,
   type ResultInput,
+  type MeasuresInput,
 } from "./result-context";
 import { buildResultsNav } from "./results-nav";
 import { buildTransitionContext } from "./transition-context";
@@ -118,6 +119,15 @@ export interface PreviewDemoDataset {
     result?: Record<string, unknown>;
     sectionResult?: Record<string, unknown>;
     progress?: Record<string, unknown>;
+    /**
+     * PRD-47 §5.4: демо-измерения — блок шкал, показателей и диаграмма профиля.
+     *
+     * Живут ЗДЕСЬ, а не отдельным файлом отчёта: предпросмотр страницы итогов и
+     * предпросмотр отчёта обязаны показывать одно и то же, иначе автор сверяет два
+     * разных вымысла. Отсутствие ключа сохраняет прежний вид для шаблонов, чей
+     * демо-набор измерений не объявил.
+     */
+    measures?: MeasuresInput;
   };
 }
 
