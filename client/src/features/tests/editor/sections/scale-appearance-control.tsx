@@ -60,11 +60,15 @@ const PREVIEW_WEIGHTS = [10, 5, 4, 10, 7, 6];
  * anyway, so the chip falls back to a neutral rather than pretending a seventh hue exists.
  */
 function unsetHex(index: number): string {
-  return toHex(categoricalColor(index) ?? "", NEUTRAL_HEX);
+  return toHex(categoricalColor(index) ?? "", NO_COLOUR);
 }
 
-/** Neutral used where no identity hue applies: past the palette, and on a disabled field. */
-const NEUTRAL_HEX = "#7A7F8A";
+/**
+ * «No colour here» for the picker — the DS renders it as its own empty swatch rather than as
+ * some grey, so nothing has to invent a hex literal for a state that HAS no colour. Used where
+ * no identity hue applies: past the end of the palette, and on a field the level ramp owns.
+ */
+const NO_COLOUR = "";
 
 export function ScaleAppearanceControl(props: {
   label: string;
@@ -165,7 +169,7 @@ export function ScaleAppearanceControl(props: {
                       // the LEVEL the learner reached — a hue no editor can know. Leaving the
                       // identity colour on a disabled chip would state the one thing that is
                       // certainly not going to be drawn.
-                      value={byIdentity ? toHex(stored, unsetHex(index)) : NEUTRAL_HEX}
+                      value={byIdentity ? toHex(stored, unsetHex(index)) : NO_COLOUR}
                       // The picker speaks HEX and the renderer's contract is an HSL triple, so
                       // the value converts on the way out (see `color-format`): one format in
                       // storage, and no `hsl(#RRGGBB)` ever reaches a stylesheet.
