@@ -46,7 +46,6 @@ import {
   type FeedbackEditorValue,
 } from "./feedback-editor-modal";
 import { FeedbackPreview } from "./feedback-preview";
-import { ReportSettingsCard } from "./report-settings-card";
 import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
@@ -72,10 +71,6 @@ export type SettingsSectionProps = {
   updateModel: (updater: (m: TestEditorModel) => TestEditorModel) => void;
   /** FR-20c: per-field validation errors for inline highlighting. */
   fieldErrors?: FieldErrorIndex;
-  /** PRD-27: черновой шаблон вкладки «Оформление» — каталог видов отчёта считается на нём (§4.2). */
-  draftTemplateId?: string;
-  /** PRD-27: черновой брендинг вкладки «Оформление» — им красится предпросмотр отчёта. */
-  draftDesignParams?: Record<string, unknown>;
 };
 
 /** Backwards-compatible alias: original skeleton lived under this name. */
@@ -114,8 +109,6 @@ export function SettingsSection({
   model,
   updateModel,
   fieldErrors = EMPTY_FIELD_ERRORS,
-  draftTemplateId,
-  draftDesignParams,
 }: SettingsSectionProps) {
   const [active, setActive] = useState<RailKey>("basic");
   // Per requirements: «Адаптивный режим» sub-section is only relevant when
@@ -187,13 +180,7 @@ export function SettingsSection({
         data-testid={`settings-pane-${effectiveActive}`}
       >
         {effectiveActive === "basic" && (
-          <BasicPane
-            model={model}
-            updateModel={updateModel}
-            fieldErrors={fieldErrors}
-            draftTemplateId={draftTemplateId}
-            draftDesignParams={draftDesignParams}
-          />
+          <BasicPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
         )}
         {effectiveActive === "pass-rules" && (
           <PassRulesPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
@@ -224,8 +211,6 @@ function BasicPane({
   model,
   updateModel,
   fieldErrors = EMPTY_FIELD_ERRORS,
-  draftTemplateId,
-  draftDesignParams,
 }: SettingsSectionProps) {
   // PRD-7 S13.2-G7: «Общая обратная связь теста» card. The model already
   // carries the underlying fields (basic.feedback / feedbackLinks /
@@ -352,28 +337,13 @@ function BasicPane({
         )}
       </div>
 
-      <hr className="wf-sep" />
-
-      <ReportSettingsCard
-        mode={model.mode}
-        draftTemplateId={draftTemplateId}
-        designParams={draftDesignParams}
-        value={model.report ?? {}}
-        onChange={(next) => updateModel((m) => ({ ...m, report: next }))}
-        // FR-18: предпросмотр строится на РЕАЛЬНОЙ структуре редактируемого теста —
-        // его названии и разделах; демонстрационные только числа и вердикты.
-        testName={model.basic.title}
-        sections={model.sections.map((s) => ({
-          topicId: s.topicId,
-          topicName: s.topicName,
-          questionCount: s.drawCount,
-        }))}
-        levelNames={
-          model.mode === "adaptive"
-            ? (model.adaptive.topics.find((t) => t.enabled)?.levels ?? []).map((l) => l.levelName)
-            : undefined
-        }
-      />
+      {/*
+        PRD-47 §6.2: карточка «Отчёт о результатах» переехала на вкладку «Оформление», в
+        свой пункт рейла. Отчёт — часть шаблона, его поля объявляет манифест ровно как
+        параметры оформления, и место им рядом с «Макетом», а не под правилами
+        прохождения. Хранение при этом НЕ переехало: поля отчёта остаются своей колонкой
+        (PRD-27 §4.2), поэтому `model.report` по-прежнему часть модели теста.
+      */}
 
       <hr className="wf-sep" />
 

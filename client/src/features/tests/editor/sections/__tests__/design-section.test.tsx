@@ -133,6 +133,29 @@ describe("<DesignSection /> — rail navigation", () => {
     expect(screen.getByTestId("design-rail-report")).toBeInTheDocument();
   });
 
+  it("рисует карточку отчёта в своём пункте рейла (PRD-47 §6.2)", async () => {
+    // Переезд, а не переработка: состав карточки тот же, меняется только вкладка.
+    const model = {
+      id: TEST_ID,
+      mode: "standard" as const,
+      report: {},
+      basic: { title: "Демо" },
+      sections: [],
+      adaptive: { topics: [] },
+    };
+    renderWithClient(
+      <DesignSection testId={TEST_ID} model={model as never} updateModel={vi.fn()} />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-rail-report"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("report-settings-card")).toBeInTheDocument(),
+    );
+  });
+
   it("switches pane when a rail item is clicked", async () => {
     renderWithClient(<DesignSection testId={TEST_ID} />);
     await waitFor(() =>

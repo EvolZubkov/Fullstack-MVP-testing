@@ -560,12 +560,17 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
               model={editor.model}
               updateModel={editor.updateModel}
               fieldErrors={fieldErrors}
-              draftTemplateId={design.draft.templateId}
-              draftDesignParams={design.draft.params}
             />
           )}
           {editor.model && activeTab === "design" && (
-            <DesignSection testId={editor.model.id} design={design} />
+            <DesignSection
+              testId={editor.model.id}
+              design={design}
+              // PRD-47 §6.2: пункт «Отчёт о результатах» правит `model.report` — хранение
+              // осталось своей колонкой, переехал только элемент интерфейса.
+              model={editor.model}
+              updateModel={editor.updateModel}
+            />
           )}
           {editor.model && activeTab === "structure" && (
             <StructureSection

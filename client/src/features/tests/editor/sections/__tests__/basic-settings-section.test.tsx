@@ -131,6 +131,14 @@ describe("<SettingsSection /> — side rail", () => {
 // ─── Basic pane bindings ──────────────────────────────────────────────────────
 
 describe("<SettingsSection /> — Основное pane", () => {
+  it("не показывает карточку отчёта: она переехала на «Оформление» (PRD-47 §6.2)", () => {
+    // Отчёт — часть шаблона, и его поля объявляет манифест ровно как параметры
+    // оформления. В общих настройках теста им больше не место.
+    render(<SettingsSection model={baseModel()} updateModel={vi.fn()} />);
+
+    expect(screen.queryByTestId("report-settings-card")).toBeNull();
+  });
+
   it("updates basic.title on input change", () => {
     const updateModel = vi.fn();
     const model = baseModel();
