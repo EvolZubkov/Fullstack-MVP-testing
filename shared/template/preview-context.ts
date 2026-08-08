@@ -583,7 +583,12 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
             { passed: true, topicResults: (c.topics ?? []).map((t) => ({ topicName: t.title, achievedLevelIndex: 0, achievedLevelName: "Базовый" })) },
             c.title,
           )
-        : buildResultContext(resultInputFromRuntime(dataset), c.title);
+        : buildResultContext(resultInputFromRuntime(dataset), c.title, {
+            // PRD-47 §5.4: тот же демо-набор, из которого измерения получает отчёт.
+            // Отсутствие ключа сохраняет прежний вид для шаблонов, чей демо-набор
+            // измерений не объявил, — экран тогда рисуется как контрольный тест.
+            ...(dataset.runtime?.measures ? { measures: dataset.runtime.measures } : {}),
+          });
     // Both runtime hosts fill `result.nav`, so a preview WITHOUT it falls into the
     // layout's legacy single-button branch — a footer neither host renders any more.
     // Every flag is on so the preview proves the layout draws the whole row: without

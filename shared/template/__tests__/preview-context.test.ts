@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import type { PreviewDemoDataset } from "../preview-context";
+import { buildScreenInputs, type PreviewDemoDataset } from "../preview-context";
 
 /** Демо-набор поставляемого шаблона — тот же файл, что читает предпросмотр страниц. */
 function demoDataset(): PreviewDemoDataset {
@@ -38,5 +38,27 @@ describe("демо-набор шаблона", () => {
     for (const scale of demoDataset().runtime!.measures!.scales) {
       expect(scale.visibility).not.toBe("hidden");
     }
+  });
+});
+
+describe("предпросмотр экрана итогов", () => {
+  /** Манифест с одним экраном итогов: предпросмотр строит экраны по `preview.routes`. */
+  const MANIFEST = { preview: { routes: ["results"] } } as never;
+
+  it("получает те же демо-измерения, что и отчёт (PRD-47 §5.4)", () => {
+    // Разные источники у двух предпросмотров означали бы, что автор сверяет два вымысла.
+    const demo = demoDataset();
+    const results = buildScreenInputs(demo, MANIFEST).find((s) => s.route === "results");
+
+    expect(results, "экран итогов не собрался — проверять нечего").toBeTruthy();
+    const result = (results!.input.context as { result?: Record<string, unknown> }).result ?? {};
+    expect(result.scales).toHaveLength(demo.runtime!.measures!.scales.length);
+  });
+
+  it("рисует профиль видом из демо-набора: у экрана свои настройки", () => {
+    const results = buildScreenInputs(demoDataset(), MANIFEST).find((s) => s.route === "results")!;
+    const result = (results.input.context as { result?: Record<string, unknown> }).result ?? {};
+
+    expect((result.scalesChart as { kind?: string } | undefined)?.kind).toBe("radar");
   });
 });
