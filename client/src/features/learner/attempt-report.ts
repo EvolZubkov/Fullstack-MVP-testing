@@ -15,6 +15,7 @@ import type { ReportInput, AdaptiveReportInput } from "@shared/report/report-htm
 import type { MeasuresInput } from "@shared/template/result-context";
 import { buildReportContext, buildAdaptiveReportContext } from "@shared/report/report-context";
 import { exportReportPdf, inlineReportImageValues } from "@shared/report/export-pdf";
+import { buildReportMeasures } from "@shared/report/report-measures";
 
 /** Where the server serves the report's libraries (see server/routes/report.ts). */
 const LIB_BASE = "/api/report/lib/";
@@ -113,24 +114,14 @@ export async function downloadAttemptReport(
   // PRD-35: у отчёта СВОЙ переключатель радара — он в полях варианта отчёта, а не в
   // настройках экрана итогов. Документ уносят специалисту, и профиль там уместен
   // даже тогда, когда ученику на экране его не показывают (и наоборот).
+  //
+  // PRD-47 §5.1: вход отчёта делает ОДИН сборщик, общий с пакетом. Сборка «здесь и
+  // руками» строила `chartSettings` с нуля и теряла облик шкал: колонки у отчёта нет,
+  // и карта цвета с пиктограммами приезжает с экрана.
   const opts = {
     values,
     design: render.design,
-    ...(measures
-      ? {
-          measures: {
-            ...measures,
-            chartSettings: {
-              scalesChartKind: values.scalesChartKind as never,
-              showCompetencyRadar: values.showCompetencyRadar === true,
-              // PRD-46 §6: предел оси — свойство ФИГУРЫ, а не экрана, поэтому у отчёта он
-              // свой, из полей варианта отчёта, рядом со своим переключателем вида.
-              // Незаявленное значение ядро само сводит к «домену».
-              radarAxisLimit: values.radarAxisLimit,
-            },
-          },
-        }
-      : {}),
+    ...(measures ? { measures: buildReportMeasures(measures, values) } : {}),
   };
   // The server flags the mode (`adaptive`) — the page differs, the input shape follows.
   const context = report.adaptive

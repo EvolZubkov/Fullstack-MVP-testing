@@ -93,6 +93,30 @@ describe("downloadAttemptReport", () => {
     expect(opts.design).toEqual(render.design);
   });
 
+  it("несёт облик шкал с экрана в отчёт (PRD-47 §4.2)", async () => {
+    // Своя сборка `chartSettings` строила объект с нуля и теряла карту цвета и
+    // пиктограмм: колонки у отчёта нет, покраска приезжает с экрана. Профиль в PDF
+    // выходил палитрой по умолчанию, пока автор видел на экране свои цвета.
+    const measures = {
+      ramp: { favorable: "142 76% 36%", mid: "38 92% 50%", unfavorable: "0 84% 60%" },
+      scaleKind: "band_ruler",
+      indicatorKind: "label",
+      scales: [],
+      indicators: [],
+      chartSettings: { scaleAppearance: { cel: { color: "210 60% 50%" } } },
+    };
+    const { downloadAttemptReport } = await import("../attempt-report");
+    await downloadAttemptReport(
+      standardReport as never,
+      { ...render, values: { ...render.values, scalesChartKind: "rose" } } as never,
+      measures as never,
+    );
+    const [, opts] = buildReportContext.mock.calls[0];
+    expect(opts.measures.chartSettings.scaleAppearance).toEqual({ cel: { color: "210 60% 50%" } });
+    // …и вид по-прежнему берётся из полей ОТЧЁТА, а не с экрана.
+    expect(opts.measures.chartSettings.scalesChartKind).toBe("rose");
+  });
+
   it("инлайнит картинки варианта до сборки контекста (FR-05)", async () => {
     // Растеризатор снимает то, что уже в документе: ссылку на файл шаблона он бы не
     // догрузил, и подложка молча пропала бы из PDF.
