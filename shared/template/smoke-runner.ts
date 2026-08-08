@@ -26,6 +26,7 @@ import { buildScreenInputs, type PreviewDemoDataset, type PreviewManifest } from
 import { REPORT_KINDS, reportVariants, resolveReportValues } from "../report/report-variants";
 import { reportImageKeys, resolveReportImageValues } from "../report/report-assets";
 import { buildAdaptiveReportContext, buildReportContext } from "../report/report-context";
+import { buildReportMeasures } from "../report/report-measures";
 import {
   buildAdaptiveReportPreviewInput,
   buildReportPreviewInput,
@@ -278,10 +279,20 @@ function reportSpecs(
     const values = assetBase ? resolveReportImageValues(declared, imageKeys, assetBase) : declared;
     // Исход «не пройден»: на нём страница показывает БОЛЬШЕ — вердикт, непройденные
     // темы и блок рекомендаций, — то есть отрисовывается больше макета.
+    // PRD-47 §5.4: те же демо-измерения, что у экранов, и через ТОТ ЖЕ сборщик, каким
+    // пользуются оба хоста — иначе проверка гоняла бы страницу без блока измерений, то
+    // есть не ту, что уйдёт в PDF. Набор без измерений сохраняет прежнее поведение.
+    const reportOpts = {
+      values,
+      isPreview: true,
+      ...(dataset.runtime?.measures
+        ? { measures: buildReportMeasures(dataset.runtime.measures, values) }
+        : {}),
+    };
     const context =
       kind === "report.adaptive"
-        ? buildAdaptiveReportContext(buildAdaptiveReportPreviewInput(test, "failed"), { values, isPreview: true })
-        : buildReportContext(buildReportPreviewInput(test, "failed"), { values, isPreview: true });
+        ? buildAdaptiveReportContext(buildAdaptiveReportPreviewInput(test, "failed"), reportOpts)
+        : buildReportContext(buildReportPreviewInput(test, "failed"), reportOpts);
     out.push({
       id: variant.key,
       route: variant.key,
