@@ -101,7 +101,7 @@ function scaleWithLevels(over: Partial<ScaleModel> = {}): ScaleModel {
       { min: "0", max: "5", label: "Низкий", level: "low", text: "", tone: "" },
       { min: "6", max: "10", label: "Высокий", level: "high", text: "", tone: "" },
     ],
-    domainMin: null, domainMax: null, valence: "none",
+    domainMin: null, domainMax: null, displayMax: null, valence: "none",
     learnerVisibility: "hidden", scormTarget: "none", sortOrder: 0,
     ...over,
   };

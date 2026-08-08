@@ -86,7 +86,7 @@
           <polygon class="tb-radar__shape" points="{{result.scalesChart.polygonPoints}}"></polygon>
           {{/if}}
           {{#each result.scalesChart.axes}}
-          <circle class="tb-radar__dot {{quantizedClass}}" cx="{{x}}" cy="{{y}}" r="6" style="--tb-zone:{{color}}"></circle>
+          <circle class="tb-radar__dot {{quantizedClass}} {{overflowClass}}" cx="{{x}}" cy="{{y}}" r="6" style="--tb-zone:{{color}}"></circle>
           {{/each}}
           {{#each result.scalesChart.icons}}
           <g class="tb-rose__icon" transform="{{transform}}">{{#each paths}}<path d="{{.}}"></path>{{/each}}</g>
@@ -95,6 +95,9 @@
           <text class="{{className}}" x="{{x}}" y="{{y}}" text-anchor="{{anchor}}">{{text}}</text>
           {{/each}}
         </svg>
+        {{#if result.scalesChart.limitCaption}}
+        <p class="tb-chart__limit">{{result.scalesChart.limitCaption}}</p>
+        {{/if}}
       </div>
       {{/if}}
       <div class="tb-report__scale-list">

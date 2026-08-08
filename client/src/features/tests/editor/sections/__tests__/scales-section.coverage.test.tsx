@@ -77,7 +77,7 @@ function makeScale(over: Partial<ScaleModel> = {}): ScaleModel {
     clientKey: "scale-seed",
     key: "comp", label: "Компетенция", type: "number", aggregation: "sum",
     normalization: "none", direction: "positive", bands: [],
-    domainMin: null, domainMax: null, valence: "none",
+    domainMin: null, domainMax: null, displayMax: null, valence: "none",
     learnerVisibility: "hidden", scormTarget: "none", sortOrder: 0,
     ...over,
   };

@@ -178,6 +178,7 @@ function emptyScale(sortOrder: number): ScaleModel {
     bands: [],
     domainMin: null,
     domainMax: null,
+    displayMax: null,
     valence: "none",
     learnerVisibility: "hidden",
     scormTarget: "none",
@@ -757,6 +758,14 @@ function ScaleForm({
         onChange={onChange}
       />
 
+      <DisplayMaxField
+        value={s.displayMax}
+        readOnly={readOnly}
+        index={index}
+        seed={effectiveDomain(s, suggestedDomain).max}
+        onChange={onChange}
+      />
+
       {manualDomain && (
         <>
           <Button
@@ -910,6 +919,58 @@ export function DomainFields({
               data-testid={`${testIdPrefix}-domain-max-${index}`}
             />
           </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * PRD-46 §6: how far a full ray of the radar stretches for THIS scale.
+ *
+ * Stands next to the domain because it is read against it, and is deliberately NOT part of
+ * it: the domain says what the scale measures and drives the ruler and the band boundaries
+ * in the card, while this number changes nothing but the size of a drawing.
+ *
+ * Opt-in through a switch, like the manual domain and for the same reason: absence is a
+ * meaningful state («draw to the domain»), and a field pre-filled with the domain would make
+ * every scale look deliberately limited.
+ *
+ * The description says plainly that the value is read only under one setting of the test —
+ * otherwise an author sets it, sees no change on the results screen, and has nowhere to look.
+ */
+function DisplayMaxField(props: {
+  value: number | null;
+  readOnly: boolean;
+  index: number;
+  /** Bound the field starts from when switched on — the scale's own upper bound. */
+  seed: number;
+  onChange: (patch: { displayMax?: number | null }) => void;
+}) {
+  const { value, readOnly, index, seed, onChange } = props;
+  return (
+    <>
+      <div className="ou-formfield">
+        <Switch
+          label="Задать предел показа на диаграмме"
+          description="Читается, только когда у экрана итогов выбран предел оси «заданный автором». Нужен, когда домен недостижимо велик: фигура иначе жмётся к центру и различия шкал пропадают."
+          checked={value !== null}
+          disabled={readOnly}
+          onChange={(e) => onChange({ displayMax: e.target.checked ? seed : null })}
+          data-testid={`scales-display-max-manual-${index}`}
+        />
+      </div>
+      {value !== null && (
+        <div className="ou-formfield">
+          <NumberInput
+            size="m"
+            fullWidth
+            label="Предел показа"
+            value={value}
+            disabled={readOnly}
+            onChange={(next) => onChange({ displayMax: next })}
+            data-testid={`scales-display-max-${index}`}
+          />
         </div>
       )}
     </>

@@ -658,6 +658,18 @@ function buildScaleDomain(configJson: unknown): { domainMin: number | null; doma
   return min === null || max === null ? { domainMin: null, domainMax: null } : { domainMin: min, domainMax: max };
 }
 
+/**
+ * PRD-46 §6: the scale's display limit for the radar, or `null` when unset.
+ *
+ * A single optional number, unlike the domain: there is nothing to pair it with, and no
+ * fallback to derive here — «not set» is a meaningful state the chart answers itself.
+ */
+function buildScaleDisplayMax(configJson: unknown): number | null {
+  const config = isPlainObject(configJson) ? (configJson as Record<string, unknown>) : {};
+  const raw = config.displayMax;
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+}
+
 /** PRD-29: the favourable direction stored in `config_json`; unknown degrades to "none". */
 function buildScaleValence(configJson: unknown): ScaleModel["valence"] {
   const config = isPlainObject(configJson) ? (configJson as Record<string, unknown>) : {};
@@ -768,6 +780,10 @@ function buildScalesFromApi(src: ApiTestResponse): ScaleModel[] {
         : "positive",
       bands: buildScaleBands(r.configJson),
       ...buildScaleDomain(r.configJson),
+      // PRD-46 §6. NOT part of `buildScaleDomain`: that one insists on a complete PAIR,
+      // because half a domain is not a domain — the display limit is a single optional
+      // number and stands on its own.
+      displayMax: buildScaleDisplayMax(r.configJson),
       valence: buildScaleValence(r.configJson),
       learnerVisibility: toLearnerVisibility(r.learnerVisibility),
       scormTarget: SCALE_TARGETS.has(r.scormTarget as string)

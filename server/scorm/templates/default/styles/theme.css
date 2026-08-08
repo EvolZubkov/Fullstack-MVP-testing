@@ -842,8 +842,22 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 /* A quantized ray (visibility «level»): the hollow vertex says the exact position is
    not disclosed. Without the distinction the dot would read as a precise value. */
 .tb-radar__dot--quantized { fill: var(--ou-bg-surface-2); stroke: hsl(var(--tb-zone)); }
+/* PRD-46: балл выше предела оси. Луч упёрся в кольцо, и точка обязана сказать об этом:
+   иначе значение «ровно на пределе» и значение «за пределом» рисуются одинаково, а
+   молча обрезанный луч занижает как раз ту шкалу, которая выделяется сильнее прочих.
+   Кольцо вокруг точки, а не другой цвет: цвет здесь уже занят уровнем. */
+.tb-radar__dot--over { stroke: var(--ou-fg-default); stroke-width: 2; }
 .tb-radar__label { fill: var(--ou-fg-default); font: var(--ou-text-body-s); }
 .tb-radar__level { fill: var(--ou-fg-muted); font: var(--ou-text-body-xs); }
+/* Подпись предела: чем считается полный луч. Это масштаб рисунка, а не балл ученика,
+   поэтому запрет на числа из PRD-35 §4.3 не нарушается. Под фигурой и мелким кеглем —
+   служебная строка не должна спорить за внимание с самим профилем. */
+.tb-chart__limit {
+  margin: var(--ou-space-2) 0 0;
+  font: var(--ou-text-body-xs);
+  color: var(--ou-fg-muted);
+  text-align: center;
+}
 
 /* Narrow scene: the diagram moves ABOVE the cards. The step is 900, not the 700 used by
    the measure row — two columns need the width of the diagram plus a readable card

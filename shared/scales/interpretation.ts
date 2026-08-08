@@ -48,6 +48,17 @@ export interface InterpretationOutcome {
 export interface ScaleInterpretation {
   domainMin: number | null;
   domainMax: number | null;
+  /**
+   * PRD-46 §6: what the author wants a FULL ray of the radar to stand for, when that is not
+   * the domain. Optional and read by nothing else — the domain still decides what the scale
+   * MEASURES, this only decides how far the drawing stretches.
+   *
+   * The case it exists for: a domain nobody ever approaches. A scale scored 0..98 whose real
+   * answers sit between 10 and 35 draws a figure crumpled into a third of the field, and the
+   * differences between scales — the only thing a profile is read for — disappear with it.
+   * `null` = not set; the radar then falls back to `domainMax`, which is what it always did.
+   */
+  displayMax: number | null;
   valence: Valence;
   bands: InterpretationBand[];
 }
@@ -135,7 +146,15 @@ function resolveDomain(
 export function parseScaleInterpretation(configJson: unknown): ScaleInterpretation {
   const config = (configJson ?? {}) as Record<string, unknown>;
   const bands = asBands(config.bands);
-  return { ...resolveDomain(config, bands), valence: asValence(config.valence), bands };
+  return {
+    ...resolveDomain(config, bands),
+    // NOT folded into `resolveDomain`: there is no fallback to invent here. An absent display
+    // limit means «draw to the domain», and that answer belongs to the radar, which is the
+    // only reader — inventing one from the bands would silently rescale existing charts.
+    displayMax: asNumber(config.displayMax),
+    valence: asValence(config.valence),
+    bands,
+  };
 }
 
 /** Parse a result variable's `config_json` into its interpretation. Never throws. */

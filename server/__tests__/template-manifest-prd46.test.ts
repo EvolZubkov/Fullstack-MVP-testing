@@ -86,3 +86,31 @@ describe.each(Object.entries(TEMPLATES))("манифест «%s»: оформл�
     }
   });
 });
+
+/**
+ * PRD-46 §6. Предел оси — свойство ФИГУРЫ, поэтому объявляется у каждого варианта, который
+ * рисует диаграмму, а не только у экрана итогов: отчёт уносят специалисту, и у него свой
+ * переключатель вида.
+ *
+ * Умолчание сторожится отдельно: любое значение, кроме «домена», перерисовало бы диаграмму
+ * каждому существующему тесту в другом масштабе, и на экране ничто бы об этом не сказало.
+ */
+describe.each(Object.entries(TEMPLATES))("манифест «%s»: предел оси радара", (_name, path) => {
+  it("объявлен везде, где объявлен выбор вида", () => {
+    const withKind = variants(path);
+    expect(withKind.length).toBeGreaterThan(0);
+    for (const variant of withKind) {
+      expect(variant.settings!.some((s) => s.key === "radarAxisLimit"), variant.key).toBe(true);
+    }
+  });
+
+  it("несёт три значения с русскими подписями и умалчивает в «домене»", () => {
+    for (const variant of variants(path)) {
+      const field = variant.settings!.find((s) => s.key === "radarAxisLimit")!;
+      expect(field.type).toBe("select");
+      expect(field.options).toEqual(["domain", "declared", "attempt"]);
+      expect(Object.keys(field.optionLabels ?? {})).toEqual(["domain", "declared", "attempt"]);
+      expect(field.default).toBe("domain");
+    }
+  });
+});

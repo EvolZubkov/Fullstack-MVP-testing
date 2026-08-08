@@ -99,6 +99,7 @@ function scale(overrides: Partial<ScaleModel> = {}): ScaleModel {
     bands: [],
     domainMin: null,
     domainMax: null,
+    displayMax: null,
     valence: "none",
     learnerVisibility: "hidden",
     scormTarget: "none",

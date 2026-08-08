@@ -375,6 +375,16 @@ export type ScaleModel = {
   domainMin: number | null;
   domainMax: number | null;
   /**
+   * PRD-46 §6: how far a full ray of the radar stretches, when the domain is not the
+   * right answer. Read ONLY by the chart, and only when the test sets the axis limit to
+   * «заданный автором»; `null` = not set, the chart falls back to the domain.
+   *
+   * Deliberately separate from the domain: the domain says what the scale MEASURES and
+   * drives the ruler and the band boundaries in the card, while this one says nothing
+   * about the measurement and only rescales a drawing.
+   */
+  displayMax: number | null;
+  /**
    * PRD-29: which end of the scale is favourable. NOT the same as `direction`:
    * `direction` inverts the value during aggregation, `valence` says how the
    * value is to be JUDGED (it colours levels and orders the ruler's ramp).

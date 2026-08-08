@@ -250,6 +250,11 @@
 .tb-report .tb-radar__shape { fill: #8b5cf6; fill-opacity: 0.18; stroke: #8b5cf6; stroke-width: 2; }
 .tb-report .tb-radar__dot { fill: hsl(var(--tb-zone)); stroke: #11151e; stroke-width: 2; }
 .tb-report .tb-radar__dot--quantized { fill: #11151e; stroke: hsl(var(--tb-zone)); }
+/* PRD-46: балл выше предела оси — луч упёрся в кольцо. Обводка светлая: в отчёте
+   фон тёмный, и обводка фоном была бы невидима. */
+.tb-report .tb-radar__dot--over { stroke: #fafafa; stroke-width: 2; }
+/* Подпись предела: масштаб рисунка, а не балл ученика. */
+.tb-report .tb-chart__limit { margin: 6px 0 0; font-size: 10px; color: rgba(250, 250, 250, 0.7); text-align: center; }
 .tb-report .tb-radar__label { fill: #fafafa; font-size: 11px; }
 .tb-report .tb-radar__level { fill: rgba(250, 250, 250, 0.7); font-size: 10px; }
 

@@ -44,6 +44,7 @@ function scale(overrides: Partial<ScaleModel> = {}): ScaleModel {
     sortOrder: 0,
     domainMin: null,
     domainMax: null,
+    displayMax: null,
     valence: "none",
     ...overrides,
   };

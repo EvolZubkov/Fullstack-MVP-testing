@@ -12,7 +12,12 @@
  * Pure — no DOM, no Node.
  */
 
-import { buildRadarChart, type CtxRadarAxis, type RadarAxisInput } from "./radar-view";
+import {
+  buildRadarChart,
+  type CtxRadarAxis,
+  type RadarAxisInput,
+  type RadarAxisLimit,
+} from "./radar-view";
 import {
   buildRoseChart,
   type CtxRoseSector,
@@ -46,6 +51,22 @@ export interface ChartKindSettings {
    * variants and disagree about which chart is being dressed.
    */
   scaleAppearance?: unknown;
+  /** PRD-46 §6: what a full ray of the RADAR stands for. Unread by the rose. */
+  radarAxisLimit?: unknown;
+}
+
+const AXIS_LIMITS: readonly string[] = ["domain", "declared", "attempt"];
+
+/**
+ * The author's axis limit, defaulting to `domain`.
+ *
+ * An unknown value degrades to `domain` rather than to anything that redraws: a setting the
+ * current build does not understand must not silently rescale a chart, because the figure
+ * would still look plausible and nothing on screen would say it changed.
+ */
+export function axisLimitSetting(settings: ChartKindSettings): RadarAxisLimit {
+  const raw = settings.radarAxisLimit;
+  return typeof raw === "string" && AXIS_LIMITS.includes(raw) ? (raw as RadarAxisLimit) : "domain";
 }
 
 const KINDS: readonly string[] = ["none", "auto", "radar", "rose"];
@@ -112,6 +133,12 @@ export interface CtxScalesChart {
   sectors: CtxRoseSector[];
   spokes: CtxRoseSpoke[];
   icons: CtxChartIcon[];
+  /**
+   * Radar only; empty for the rose AND under the default limit. What a full ray stands for,
+   * in words — see {@link module:shared/template/radar-view CtxRadarChart.limitCaption}. The
+   * rose needs no such line: its reference is the even-split ring, which is drawn.
+   */
+  limitCaption: string;
 }
 
 export interface ScalesChartInput {
@@ -166,13 +193,14 @@ export function buildScalesChart(input: ScalesChartInput): CtxScalesChart | null
       sectors: rose.sectors,
       spokes: rose.spokes,
       icons: rose.icons,
+      limitCaption: "",
     };
   }
 
   // Fed the dressed axes as well, though it reads neither field today: its vertices state the
   // level and its captions carry no glyph. Handing both builders the SAME axes is what keeps
   // «which figure is drawn» the only difference between the two branches.
-  const radar = buildRadarChart({ axes, ramp: input.ramp });
+  const radar = buildRadarChart({ axes, ramp: input.ramp, limit: axisLimitSetting(input.settings) });
   if (!radar) return null;
   return {
     kind,
@@ -188,6 +216,7 @@ export function buildScalesChart(input: ScalesChartInput): CtxScalesChart | null
     sectors: [],
     spokes: [],
     icons: [],
+    limitCaption: radar.limitCaption,
   };
 }
 

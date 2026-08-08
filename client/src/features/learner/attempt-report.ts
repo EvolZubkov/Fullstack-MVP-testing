@@ -123,6 +123,10 @@ export async function downloadAttemptReport(
             chartSettings: {
               scalesChartKind: values.scalesChartKind as never,
               showCompetencyRadar: values.showCompetencyRadar === true,
+              // PRD-46 §6: предел оси — свойство ФИГУРЫ, а не экрана, поэтому у отчёта он
+              // свой, из полей варианта отчёта, рядом со своим переключателем вида.
+              // Незаявленное значение ядро само сводит к «домену».
+              radarAxisLimit: values.radarAxisLimit,
             },
           },
         }

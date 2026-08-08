@@ -88,6 +88,9 @@ function toConfigJson(s: ScaleModel): Record<string, unknown> {
     config.domainMin = s.domainMin;
     config.domainMax = s.domainMax;
   }
+  // PRD-46 §6: written only when set, so a scale nobody rescaled keeps the config it had
+  // and the radar keeps drawing to the domain.
+  if (s.displayMax !== null) config.displayMax = s.displayMax;
   return config;
 }
 
