@@ -17,7 +17,7 @@
  */
 
 import type { ScaleBand } from "@shared/scales/engine";
-import type { LearnerVisibility } from "@shared/scales/interpretation";
+import type { InterpretationBand, LearnerVisibility } from "@shared/scales/interpretation";
 import type { DrawStratum, QuestionScoring } from "@shared/schema";
 import { scales, resultVariables } from "@shared/schema";
 import { normalizeTags, TAG_MAX_LENGTH } from "@shared/tags";
@@ -276,7 +276,11 @@ export function parseScaleRow(row: Record<string, unknown>): ParseResult<Record<
       aggregation: String(row["Агрегация"] ?? "").trim() || "sum",
       normalization: String(row["Нормализация"] ?? "").trim() || "none",
       direction: String(row["Направление"] ?? "").trim() || "positive",
-      configJson: bands.value.length ? { bands: bands.value } : {},
+      // ALWAYS present, empty array included: {@link mergeScaleConfig} treats a missing
+      // key as «the book does not set this field», and an emptied «Диапазоны» cell is the
+      // author's only way to clear the levels. Written as `{}` before, an emptied cell
+      // silently kept the old levels once merging arrived.
+      configJson: { bands: bands.value },
       learnerVisibility: parseLearnerVisibility(row["Показывать ученику"]),
       scormTarget: String(row["SCORM"] ?? "").trim() || "none",
     },
@@ -309,6 +313,68 @@ export function serializeScaleRow(s: {
     "Показывать ученику": serLearnerVisibility(s.learnerVisibility),
     "SCORM": s.scormTarget,
   };
+}
+
+/**
+ * Carry over what the «Диапазоны» grammar cannot express.
+ *
+ * The cell says `min..max код «подпись»` and nothing more, so a level's explanatory
+ * text, its tone override and its whole feedback block (PRD-29/PRD-32: text, links,
+ * events, assets) have no place in the book. They are matched back by the level CODE,
+ * which is the level's identity — the code is what formulas address as
+ * `scale.<ключ>.level`, and it is what the author keeps stable while moving a
+ * boundary. Bounds and label come from the cell: those the book DOES express.
+ *
+ * A code the book no longer names loses its content, deliberately: the level is gone.
+ * Duplicate codes are consumed in order, so a config that has two of them stays
+ * predictable instead of copying the first one everywhere.
+ */
+function mergeBands(stored: InterpretationBand[], incoming: ScaleBand[]): InterpretationBand[] {
+  const byLevel = new Map<string, InterpretationBand[]>();
+  for (const band of stored) {
+    const list = byLevel.get(band.level) ?? [];
+    list.push(band);
+    byLevel.set(band.level, list);
+  }
+  return incoming.map((band) => {
+    const prev = byLevel.get(band.level)?.shift();
+    if (!prev) return band;
+    const merged: InterpretationBand = { ...band };
+    if (prev.text !== undefined) merged.text = prev.text;
+    if (prev.tone !== undefined) merged.tone = prev.tone;
+    if (prev.feedback !== undefined) merged.feedback = prev.feedback;
+    return merged;
+  });
+}
+
+/**
+ * Merge a parsed «Шкалы» row's `configJson` onto the one already stored.
+ *
+ * **The book defines, in full, the fields it has a column for, and does not touch the
+ * fields it has none for.** The «Шкалы» sheet carries the bands (and, since PRD-46,
+ * the domain, the valence and the display limit); everything else in `config_json`
+ * belongs to the editor and must survive a round trip through Excel untouched.
+ *
+ * The distinction that carries the meaning here is «no column» versus «empty cell».
+ * A key absent from `incoming` means the book does not set that field, so the stored
+ * value stands — that is what makes a legacy book readable. An empty CELL of a column
+ * the book does have arrives as an explicit value (`[]`, `null`) and wins, because
+ * clearing a field is something the author must be able to do from the book.
+ *
+ * Only for an EXISTING scale. A scale the book creates has nothing to merge with and
+ * gets exactly what the row says.
+ */
+export function mergeScaleConfig(
+  stored: unknown,
+  incoming: Record<string, unknown>,
+): Record<string, unknown> {
+  const base = (stored && typeof stored === "object" ? stored : {}) as Record<string, unknown>;
+  const merged: Record<string, unknown> = { ...base, ...incoming };
+  if (Array.isArray(incoming.bands)) {
+    const storedBands = Array.isArray(base.bands) ? (base.bands as InterpretationBand[]) : [];
+    merged.bands = mergeBands(storedBands, incoming.bands as ScaleBand[]);
+  }
+  return merged;
 }
 
 // ─── «Показатели» ──────────────────────────────────────────────────────────────

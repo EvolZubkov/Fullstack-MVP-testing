@@ -45,6 +45,7 @@ import { hasOptionList, isMeasurementOnly, distributesBudget } from "@shared/que
 
 import {
   parseScaleRow,
+  mergeScaleConfig,
   parseResultVariableRow,
   parseMeasurementRow,
   validateSourceKey,
@@ -198,7 +199,14 @@ export async function importWorkbook(
       }
       const existing = scaleByKey.get(String(parsed.value.key));
       const sortOrder = existing?.sortOrder ?? scaleIdByKey.size;
-      const check = insertScaleSchema.safeParse({ ...parsed.value, testId, sortOrder });
+      // Merged HERE and not in `parseScaleRow`: the parser sees one row and knows
+      // nothing of what is stored, while `existing` is already in hand. Without this
+      // the update wrote `{ bands }` wholesale and one round trip through the book
+      // erased the domain, the valence, `displayMax` and every level's feedback.
+      const configJson = existing
+        ? mergeScaleConfig(existing.configJson, parsed.value.configJson as Record<string, unknown>)
+        : parsed.value.configJson;
+      const check = insertScaleSchema.safeParse({ ...parsed.value, configJson, testId, sortOrder });
       if (!check.success) {
         const first = check.error.issues[0];
         result.errors.push(`${where}: ${first.message} (${first.path.join(".")})`);
