@@ -161,6 +161,26 @@ describe("DebugPlayerPage — ready", () => {
     expect(createUrl).toHaveBeenCalled();
   });
 
+  it("не выносит вердикта измерительному вопросу (PRD-26 FR-08)", () => {
+    // Эталона у измерительного вопроса нет: красное «неверно» читалось бы как ошибка
+    // ученика. Вердикт «measure» приходит из compute — UI только его называет.
+    installTB({
+      buildProtocolRows: vi.fn(() => ({
+        rows: [row({
+          idx: 1, prompt: "Насколько вы согласны?", type: "scale", typeLabel: "Шкала",
+          verdict: "measure", measurement: true, ratio: 0, ratioPct: 0, score: null, sMax: null,
+          priceNote: "цена: не начисляется — измерительный вопрос", earned: 0, points: 0,
+        })],
+        note: "",
+      })),
+    });
+    render(<DebugPlayerPage />);
+    fireEvent.click(screen.getByRole("tab", { name: "Протокол" }));
+    expect(screen.getByText("не оценивается")).toBeInTheDocument();
+    expect(screen.queryByText("неверно")).not.toBeInTheDocument();
+    expect(screen.getByText("цена: не начисляется — измерительный вопрос")).toBeInTheDocument();
+  });
+
   it("shows the per-section quota plan-vs-actual on the «Выдача» tab", () => {
     render(<DebugPlayerPage />);
     fireEvent.click(screen.getByRole("tab", { name: "Выдача" }));

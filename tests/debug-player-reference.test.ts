@@ -20,7 +20,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { renderMatching, renderRanking } from "@shared/template/question-interaction";
 
-interface ProtocolStatusRow { idx: number; status: string; answered: boolean }
+interface ProtocolStatusRow {
+  idx: number; status: string; answered: boolean; verdict: string; measurement: boolean;
+  points: number; earned: number; score: number | null; sMax: number | null; priceNote: string | null;
+}
 interface ScoreSection { topicName: string; percent: number; passed: boolean | null; completed: boolean }
 interface RefApi {
   applyReference(win: { document: Document; state: unknown } | null): void;
@@ -307,6 +310,50 @@ describe("Протокол — skip/return commit status (PRD-19 FR-24)", () => 
     const { rows } = ref().buildProtocolRows(pkg, {}, "live");
     // q1/q2 carry an answer → 'answered'; q3 has none → 'unanswered'.
     expect(rows.map((r) => r.status)).toEqual(["answered", "answered", "unanswered"]);
+  });
+});
+
+describe("Протокол — измерительный вопрос не получает вердикта (PRD-26 FR-08)", () => {
+  // Эталона у измерительного вопроса нет, поэтому вердикт к нему неприменим. Пакет в
+  // этой сцене без ScoringEngine — цена не считается ни у кого, и проверяемый вопрос
+  // честно уходит в «wrong»: именно на этом фоне видно, что измерительный из него выведен.
+  const win = {
+    TEST_DATA: { mode: "standard" },
+    state: {
+      phase: "question",
+      currentIndex: 3,
+      flatQuestions: [
+        // Шкала без правильной градации и распределение — измерительные.
+        { question: { id: "m1", type: "scale", prompt: "Шкала", correct: {}, points: 1 }, topicName: "T" },
+        { question: { id: "m2", type: "allocation", prompt: "Распределение", correct: { correctIndex: 1 }, points: 1, data: { budget: 10 } }, topicName: "T" },
+        // Шкала С правильной градацией остаётся проверяемой.
+        { question: { id: "g1", type: "scale", prompt: "Шкала с ключом", correct: { correctIndex: 1 }, points: 1 }, topicName: "T" },
+      ],
+      answers: { m1: 2, m2: { 0: 10 }, g1: 0 },
+      questionStatuses: { m1: "answered", m2: "answered", g1: "answered" },
+    },
+  };
+
+  it("вместо «неверно» ставит вердикт «measure» и не начисляет возможного балла", () => {
+    const pkg = ref().readPkg(win);
+    const { rows } = ref().buildProtocolRows(pkg, {}, "live");
+    expect(rows.map((r) => r.verdict)).toEqual(["measure", "measure", "wrong"]);
+    // Возможный балл измерительного вопроса — ноль, как и в агрегате: иначе итог
+    // протокола («из N баллов») расходился бы с панелью «Оценка».
+    expect(rows.map((r) => r.points)).toEqual([0, 0, 1]);
+    expect(rows.map((r) => r.earned)).toEqual([0, 0, 0]);
+    expect(rows[0].measurement).toBe(true);
+    expect(rows[2].measurement).toBe(false);
+  });
+
+  it("подменяет заметку о цене — начислять измерительному вопросу нечего", () => {
+    const pkg = ref().readPkg(win);
+    const { rows } = ref().buildProtocolRows(pkg, {}, "live");
+    expect(rows[0].priceNote).toBe("цена: не начисляется — измерительный вопрос");
+    expect(rows[0].score).toBeNull();
+    expect(rows[0].sMax).toBeNull();
+    // Статус «отвечен» измерительный вопрос сохраняет — он про навигацию, не про оценку.
+    expect(rows[0].status).toBe("answered");
   });
 });
 

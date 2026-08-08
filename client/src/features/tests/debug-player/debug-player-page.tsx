@@ -498,6 +498,9 @@ function QuestionLabel({ type, prompt, topic }: { type: string; prompt: string; 
 }
 
 function verdictTag(r: ProtocolRow) {
+  // Измерительный вопрос не проверяется — вердикта у него нет и быть не может
+  // (PRD-26 FR-08). Красное «неверно» здесь читалось бы как ошибка ученика.
+  if (r.verdict === "measure") return <Tag size="s" variant="outline">не оценивается</Tag>;
   if (r.verdict === "none") return <Tag size="s" variant="soft">нет ответа</Tag>;
   if (r.verdict === "correct") return <Tag size="s" tone="success">верно</Tag>;
   if (r.verdict === "partial") return <Tag size="s" tone="warning">{`частично ${r.ratioPct}%`}</Tag>;

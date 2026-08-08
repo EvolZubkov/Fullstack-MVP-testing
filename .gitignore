@@ -58,3 +58,4 @@ templates/*.zip
 .claude/settings.json
 .claude/worktrees/
 docs/references/workbook_Выгорание_Маслач (1).xlsx
+.superpowers/
