@@ -83,23 +83,32 @@ export interface CompositionSource {
  * keeps answering from the content it was taken on).
  *
  * Ordered so that nothing is read until it can change the answer: an author who named the
- * diagram gets no reads at all, and neither does a test with fewer than two shown scales. That
- * is the whole reason the flag is computed rather than stored — the results screen renders on
- * every visit, and only the tests whose author asked the system to decide pay for it.
+ * diagram in BOTH places gets no reads at all, and neither does a test with fewer than two
+ * shown scales. That is the whole reason the flag is computed rather than stored — the results
+ * screen renders on every visit, and only the tests whose author asked the system to decide
+ * pay for it.
  *
- * KNOWN LIMIT of that guard: the REPORT carries its own switch (PRD-35 §9), and the answer it
- * receives is the one computed for the SCREEN. A test whose screen names a diagram while its
- * report says `auto` therefore gets a radar in the report. That is the safe direction — a false
- * negative states less about the data, never more — but it is a divergence, and closing it
- * means knowing the report variant's fields here, where only the screen's settings are read.
+ * PRD-47 §5.3: `auto` in EITHER place counts, because the report carries its own switch
+ * (PRD-35 §9) and the answer travels to both documents. Computing it when the report is
+ * generated is not an option: in the package the report is assembled on the client from baked
+ * data, and there is nothing there to read the contribution rows from. The price of the wider
+ * guard is one delivery-time computation for a test that left `auto` only in its report —
+ * paid once per delivery, not per frame, and cheaper than two documents disagreeing.
+ *
+ * @param settings Chart settings of the RESULTS screen (`content_pages.settings_json`).
+ * @param reportSettings Chart settings of the REPORT variant (`tests.report_settings_json`,
+ *   branch of the test's mode). Absent for callers that have no report in hand.
  */
 export async function ipsativeScalesForDelivery(
   src: CompositionSource,
   testId: string,
   scales: Scale[],
   settings: ChartKindSettings,
+  reportSettings: ChartKindSettings = {},
 ): Promise<boolean> {
-  if (chartKindSetting(settings) !== "auto") return false;
+  if (chartKindSetting(settings) !== "auto" && chartKindSetting(reportSettings) !== "auto") {
+    return false;
+  }
   const scaleKeys = drawnScaleKeys(scales);
   if (scaleKeys.length < 2) return false;
 

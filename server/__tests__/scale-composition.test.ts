@@ -110,6 +110,24 @@ describe("ipsativeScalesForDelivery", () => {
     }
   });
 
+  it("считает признак, когда «авто» стоит ТОЛЬКО в отчёте (PRD-47 §4.3)", async () => {
+    // Экран называет вид явно, отчёт оставлен на «авто». Без признака отчёт нарисует
+    // радар на ипсативной методике — расхождение двух документов одного продукта.
+    // Считать при генерации отчёта нельзя: в пакете он собирается на клиенте из
+    // запечённых данных, читать оттуда нечем.
+    await expect(
+      ipsativeScalesForDelivery(source(), "t1", visible, { scalesChartKind: "rose" }, { scalesChartKind: "auto" }),
+    ).resolves.toBe(true);
+  });
+
+  it("не читает ничего, когда «авто» нет ни на экране, ни в отчёте", async () => {
+    const src = source();
+    await expect(
+      ipsativeScalesForDelivery(src, "t1", visible, { scalesChartKind: "rose" }, { scalesChartKind: "radar" }),
+    ).resolves.toBe(false);
+    expect(src.getQuestionMeasurements).not.toHaveBeenCalled();
+  });
+
   it("не читает вопросы, когда показанных шкал меньше двух", async () => {
     const src = source();
     await expect(

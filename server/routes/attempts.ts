@@ -33,6 +33,7 @@ import {
 } from "../services/result-context";
 import type { MeasuresInput } from "@shared/template/result-context";
 import type { ResultsBlockSettings } from "@shared/template/results-blocks";
+import type { ChartKindSettings } from "@shared/template/scales-chart";
 import type { ReportInput, AdaptiveReportInput } from "@shared/report/report-html";
 import { pingSection } from "../services/section-timer";
 import { buildResultsNav, RESULTS_NAV_ACTIONS } from "@shared/template/results-nav";
@@ -223,14 +224,29 @@ async function resultsMaterialForAttempt(
     // «Автоматически» and the state of the test decides.
     const blockSettings = (pages.find((p) => p.kind === "results")?.settingsJson ?? {}) as ResultsBlockSettings;
     const passRule = deliveredTest?.overallPassRuleJson as PassRule | null | undefined;
+    // PRD-47 §5.3: у отчёта свой переключатель вида, и «авто» в нём требует того же
+    // признака. `tests.report_settings_json` ветвится по РЕЖИМУ теста, а не по виду
+    // манифеста, поэтому берётся ветка своего режима. Отсутствие ветки означает вариант
+    // по умолчанию, а на «авто» умолчания манифеста не ставятся.
+    const reportBranch =
+      deliveredTest?.mode === "adaptive"
+        ? deliveredTest?.reportSettingsJson?.adaptive
+        : deliveredTest?.reportSettingsJson?.standard;
+    const reportChartSettings = (reportBranch?.values ?? {}) as ChartKindSettings;
     return {
       scales,
       variables,
       blockSettings,
       // PRD-46 §5: read from the SAME delivered source as the scales, so a finished attempt
       // is judged on the content it was taken on. Costs nothing unless the author left the
-      // choice of the diagram to the system.
-      ipsativeScales: await ipsativeScalesForDelivery(src, attempt.testId, scales, blockSettings),
+      // choice of the diagram to the system — on the screen or in the report.
+      ipsativeScales: await ipsativeScalesForDelivery(
+        src,
+        attempt.testId,
+        scales,
+        blockSettings,
+        reportChartSettings,
+      ),
       hasPassThreshold: !!passRule && passRule.type !== "none",
       testFeedback: (deliveredTest?.feedbackJson as Partial<FeedbackContent> | null) ?? null,
     };
