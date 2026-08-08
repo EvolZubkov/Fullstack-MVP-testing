@@ -14,6 +14,7 @@
 import { describe, it, expect } from "vitest";
 import { buildTestJson } from "../builders/test-json";
 import { buildSharedRuntimeBundle, SHARED_RUNTIME_GLOBAL } from "../builders/shared-runtime";
+import { parseScaleInterpretation } from "@shared/scales/interpretation";
 
 const SCALE = {
   id: "s1",
@@ -277,4 +278,47 @@ describe("shared runtime bundle (PRD-29)", () => {
     expect(parsed.valence).toBe("lower_is_better");
     expect(parsed.bands).toHaveLength(2);
   }, 30000);
+});
+
+/**
+ * Зеркальность выпечки шкалы.
+ *
+ * Пакет несёт ВТОРОЕ представление интерпретации: `config_json` разбирается на сборке и
+ * укладывается плоско, а рантайм перечитывает плоский объект тем же общим парсером. Пока
+ * представления два, поле, не доехавшее до пакета, не падает — пакет просто рисует другую
+ * фигуру, чем веб, при одинаковых настройках теста (PRD-29 §9 называет это дефектом; на
+ * `displayMax` из PRD-46 так и случилось).
+ *
+ * Поэтому здесь сторожится не список полей, а ПРАВИЛО: что разобрал парсер — то и лежит в
+ * пакете. Тест переживает появление новых полей интерпретации и краснеет ровно тогда, когда
+ * кто-то вернёт перечисление полей руками.
+ */
+describe("выпечка шкалы зеркальна интерпретации", () => {
+  /** Каждое поле, которое разобрал общий парсер, обязано лежать в испечённой шкале. */
+  function expectMirrored(scale: Record<string, unknown>): void {
+    const baked = bake({ test: baseTest, sections: [], questions: [], scales: [scale] }) as {
+      scales: Record<string, unknown>[];
+    };
+    const parsed = parseScaleInterpretation(scale.configJson) as unknown as Record<string, unknown>;
+    const keys = Object.keys(parsed);
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) {
+      expect(baked.scales[0], `поле «${key}» не доехало в пакет`).toHaveProperty(key);
+      expect(baked.scales[0][key], `поле «${key}» доехало искажённым`).toEqual(parsed[key]);
+    }
+  }
+
+  it("несёт КАЖДОЕ поле разобранной интерпретации, а не выбранные руками", () => {
+    expectMirrored(SCALE as unknown as Record<string, unknown>);
+  });
+
+  it("правило держится и на шкале, у которой заполнено всё необязательное", () => {
+    // Шкала без необязательных полей прошла бы проверку сама собой; настоящая ловушка —
+    // поле, которое появляется, только когда автор его задал.
+    const scale = SCALE as unknown as Record<string, unknown>;
+    expectMirrored({
+      ...scale,
+      configJson: { ...(scale.configJson as Record<string, unknown>), displayMax: 40 },
+    });
+  });
 });

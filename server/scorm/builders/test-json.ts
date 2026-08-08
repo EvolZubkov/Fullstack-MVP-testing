@@ -560,6 +560,15 @@ export function buildTestJson(data: ExportData): string {
       // label/text/feedback — not only the bands the scale engine grades with. Parsed
       // here (once, at bake time) with the shared parser, and laid out FLAT so the
       // runtime can re-read it through that very same parser.
+      //
+      // Spread WHOLE, never field by field. The enumeration this replaces was not a filter
+      // anybody chose — it was the residue of PRD-5, where the package needed one key
+      // (`bands`) for the scale engine, extended once by hand in PRD-29. Nothing was ever
+      // deliberately kept out, and the cost of the shape was paid in PRD-46: `displayMax`
+      // was added to the interpretation, nobody remembered this literal, and the package
+      // silently drew a different figure than the web host from the same test. A field of
+      // `ScaleInterpretation` is by definition something the card is built from, so the
+      // default has to be «travels», with omission the thing that needs a reason.
       const interpretation = parseScaleInterpretation(s.configJson);
       return {
         key: s.key,
@@ -569,13 +578,7 @@ export function buildTestJson(data: ExportData): string {
         aggregation: s.aggregation,
         normalization: s.normalization,
         direction: s.direction,
-        domainMin: interpretation.domainMin,
-        domainMax: interpretation.domainMax,
-        // PRD-46 §6. Written only when the author set one: `null` on every scale would change
-        // the bytes of every package that has scales, for a field almost no test uses.
-        ...(interpretation.displayMax !== null ? { displayMax: interpretation.displayMax } : {}),
-        valence: interpretation.valence,
-        bands: interpretation.bands,
+        ...interpretation,
         learnerVisibility: s.learnerVisibility,
         scormTarget: s.scormTarget,
         sortOrder: s.sortOrder,
