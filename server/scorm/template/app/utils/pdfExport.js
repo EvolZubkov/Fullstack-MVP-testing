@@ -228,6 +228,16 @@ async function exportResultsToPDF(results, testName, learnerName, timestamp) {
       // Значения полей варианта — те, что автор задал в блоке обратной связи (FR-16).
       values: pdfImageValues
     };
+    // PRD-47 §4.1: без этого отчёт в LMS печатался без блока измерений ЦЕЛИКОМ — не без
+    // одной фигуры: карточек шкал, показателей и профиля в контексте просто не было.
+    // Вход экрана рантайм уже собирает; в отчётный его превращает ТОТ ЖЕ сборщик, что на
+    // вебе, поэтому вид берётся из полей отчёта, а облик шкал — с экрана итогов.
+    var screenMeasures = (typeof currentAttemptMeasures === 'function')
+      ? currentAttemptMeasures(results)
+      : null;
+    if (screenMeasures && typeof TB.buildReportMeasures === 'function') {
+      opts.measures = TB.buildReportMeasures(screenMeasures, pdfImageValues || {});
+    }
     var context = isAdaptive
       ? TB.buildAdaptiveReportContext(Object.assign({}, meta, { result: pdfAdaptiveInput(results) }), opts)
       : TB.buildReportContext(Object.assign({}, meta, { result: pdfStandardInput(results) }), opts);

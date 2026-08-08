@@ -208,3 +208,6 @@ export {
 export { reportFileName, formatTimestamp as reportTimestamp } from "../report/report-html";
 export { buildReportContext, buildAdaptiveReportContext } from "../report/report-context";
 export { exportReportPdf, inlineReportImageValues } from "../report/export-pdf";
+// PRD-47 §5.1: вход измерений отчёта делается из входа экрана — одним сборщиком на оба
+// хоста, иначе пакет и веб разойдутся тем же способом, каким уже расходились раньше.
+export { buildReportMeasures } from "../report/report-measures";
