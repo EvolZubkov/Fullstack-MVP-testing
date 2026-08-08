@@ -21,6 +21,7 @@ import {
 } from "./rose-view";
 import type { CtxChartIcon, CtxChartLabel } from "./chart-frame";
 import type { LevelRamp } from "./level-ramp";
+import { applyScaleAppearance, parseScaleAppearance } from "./scale-appearance";
 
 /** Values of the author's setting, in the order the manifest lists them. */
 export type ScalesChartKind = "none" | "auto" | "radar" | "rose";
@@ -35,6 +36,16 @@ export type ResolvedChartKind = "radar" | "rose" | null;
 export interface ChartKindSettings {
   scalesChartKind?: ScalesChartKind;
   showCompetencyRadar?: boolean;
+  /**
+   * PRD-46: the per-scale look, as the author's map of `key → { color, icon }` (see
+   * `scale-appearance`). Typed as `unknown` on purpose — it arrives from `settings_json`,
+   * which nothing validates, so it is parsed rather than trusted.
+   *
+   * It rides in the SAME settings object as the kind, so a host that already hands over its
+   * variant settings needs no second channel — and the two can never be read from different
+   * variants and disagree about which chart is being dressed.
+   */
+  scaleAppearance?: unknown;
 }
 
 const KINDS: readonly string[] = ["none", "auto", "radar", "rose"];
@@ -124,7 +135,13 @@ export interface ScalesChartInput {
  * they chose. Only `auto` is allowed to pick, and it picks before either builder runs.
  */
 export function buildScalesChart(input: ScalesChartInput): CtxScalesChart | null {
-  const visible = input.axes.filter((a) => a.visibility !== "hidden");
+  // PRD-46: the author's look is applied HERE and not in either host. Both already hand over
+  // the variant settings the map rides in, so one application point is also the only way the
+  // two players cannot end up drawing differently coloured sectors from the same test — the
+  // parity the PRD-29 §9 rule asks for, bought by construction rather than by two mirrored
+  // edits kept in step by hand.
+  const axes = applyScaleAppearance(input.axes, parseScaleAppearance(input.settings.scaleAppearance));
+  const visible = axes.filter((a) => a.visibility !== "hidden");
   const kind = resolveChartKind({
     setting: chartKindSetting(input.settings),
     ipsative: input.ipsative,
@@ -133,7 +150,7 @@ export function buildScalesChart(input: ScalesChartInput): CtxScalesChart | null
   if (!kind) return null;
 
   if (kind === "rose") {
-    const rose = buildRoseChart({ axes: input.axes, ramp: input.ramp, field: input.field });
+    const rose = buildRoseChart({ axes, ramp: input.ramp, field: input.field });
     if (!rose) return null;
     return {
       kind,
@@ -152,7 +169,10 @@ export function buildScalesChart(input: ScalesChartInput): CtxScalesChart | null
     };
   }
 
-  const radar = buildRadarChart({ axes: input.axes, ramp: input.ramp });
+  // Fed the dressed axes as well, though it reads neither field today: its vertices state the
+  // level and its captions carry no glyph. Handing both builders the SAME axes is what keeps
+  // «which figure is drawn» the only difference between the two branches.
+  const radar = buildRadarChart({ axes, ramp: input.ramp });
   if (!radar) return null;
   return {
     kind,

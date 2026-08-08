@@ -46,6 +46,15 @@ export const SETTING_TYPES = [
   "image",
   /** Identifier of a page sequence; drives the navigation indicator (PRD-22). */
   "sequence",
+  /**
+   * Per-scale look for the rose — colour and pictogram, as a MAP keyed by scale key
+   * (PRD-46 §7, `shared/template/scale-appearance`).
+   *
+   * A type of its own rather than a generic «object» one: the control is not a text box over
+   * JSON but a row per scale of the test, and the registry exists precisely so a field the
+   * editor cannot draw is a template error instead of a silently degraded input.
+   */
+  "scaleAppearance",
 ] as const;
 
 export type SettingType = (typeof SETTING_TYPES)[number];

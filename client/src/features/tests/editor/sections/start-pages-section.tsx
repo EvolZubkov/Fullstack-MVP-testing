@@ -112,6 +112,8 @@ import type { TestEditorModel } from "../test-editor.types";
 import { PagePreviewModal } from "./page-preview-modal";
 import { VariantPreviewPicker } from "./variant-preview-picker";
 import { SanitizeBanner } from "./sanitize-banner";
+import { ScaleAppearanceControl, type AppearanceScale } from "./scale-appearance-control";
+import { SCALE_APPEARANCE_KEY } from "@shared/template/scale-appearance";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -310,6 +312,18 @@ export type DropState = { overId: string; side: DropSide } | null;
 const DropContext = createContext<DropState>(null);
 
 /**
+ * The test's scales, for the PRD-46 «Оформление шкал» property of the «Итоги
+ * теста» variant. Passed by context and not through props: the property sits at
+ * the bottom of the page-row → edit-form → setting-control chain, and threading
+ * a value only one control reads through every row in between would put the
+ * scales list into components that have nothing to do with them.
+ *
+ * Empty by default, so the control renders its «нет шкал» state in isolation
+ * (component tests) instead of failing.
+ */
+const ScalesContext = createContext<AppearanceScale[]>([]);
+
+/**
  * New `sortOrder` list after dropping `activeId` on the `side` of `overId`
  * inside `zone` (already sorted). Returns `null` for a no-op. Pure — unit tested
  * independently of the @dnd-kit sensors (which need real DOM measurements
@@ -438,7 +452,25 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
     readOnly,
   };
 
+  // PRD-46: the author's ORDER is the drawing order of the rose, so the list is sorted the
+  // same way the hosts read it — a preview whose sectors sat in a different order than the
+  // results screen would be worse than no preview.
+  const appearanceScales: AppearanceScale[] = useMemo(
+    () =>
+      model.scales
+        .slice()
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((s) => ({
+          key: s.key,
+          label: s.label,
+          valence: s.valence,
+          learnerVisibility: s.learnerVisibility,
+        })),
+    [model.scales],
+  );
+
   return (
+    <ScalesContext.Provider value={appearanceScales}>
     <div data-testid="structure-section">
       {savedFlowMode !== null && savedFlowMode !== undefined && savedFlowMode !== model.flowMode && (
         <Banner
@@ -524,6 +556,7 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
         />
       )}
     </div>
+    </ScalesContext.Provider>
   );
 }
 
@@ -1873,7 +1906,7 @@ function PageEditForm(props: {
         ))}
         {/* PRD-22: page properties follow the content fields in the same list —
             the form layout does not change, only its contents. */}
-        {(variant?.settings ?? []).map((st) => (
+        {(variant?.settings ?? []).filter(showsSetting(settings)).map((st) => (
           <div className="ou-formfield" key={`setting-${st.key}`}>
             <SettingControl
               setting={st}
@@ -1965,6 +1998,20 @@ function PlaceholderControl(props: {
         />
       );
   }
+}
+
+/**
+ * Which declared properties this page actually shows, given what the others hold.
+ *
+ * One rule so far, PRD-46: «Оформление шкал» dresses the ROSE — the radar colours its vertices
+ * by level and knows nothing about a scale's identity, so beside a radar the block would be
+ * configuring something nobody reads. Standing next to the kind select it can simply not
+ * appear; on a rail of its own it would hang there always. A map already saved is NOT touched
+ * by hiding the block: the value stays in `settings_json` and comes back with the rose.
+ */
+function showsSetting(settings: Record<string, unknown>) {
+  return (st: ContentTemplateSetting): boolean =>
+    st.key !== SCALE_APPEARANCE_KEY || settings.scalesChartKind === "rose";
 }
 
 /**
@@ -2062,7 +2109,36 @@ export function SettingControl(props: {
           data-testid={testId}
         />
       );
+    case "scaleAppearance":
+      return <ScaleAppearanceSetting label={label} setting={st} value={value} onChange={onChange} testId={testId} />;
   }
+}
+
+/**
+ * The PRD-46 look map, wired to the test's scales.
+ *
+ * A wrapper of its own because {@link SettingControl} is a pure switch over the registry and
+ * takes no test-wide data: the scales arrive by context (see {@link ScalesContext}), and a hook
+ * cannot be called inside a `switch` branch.
+ */
+function ScaleAppearanceSetting(props: {
+  label: string;
+  setting: ContentTemplateSetting;
+  value: unknown;
+  onChange: (value: unknown) => void;
+  testId: string;
+}) {
+  const scales = useContext(ScalesContext);
+  return (
+    <ScaleAppearanceControl
+      label={props.label}
+      description={props.setting.description}
+      value={props.value}
+      onChange={props.onChange}
+      scales={scales}
+      testId={props.testId}
+    />
+  );
 }
 
 /**

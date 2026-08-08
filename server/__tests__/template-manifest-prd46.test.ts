@@ -22,6 +22,7 @@ interface Field {
 
 interface ContentTemplate {
   key: string;
+  kind?: string;
   settings?: Field[];
 }
 
@@ -53,6 +54,35 @@ describe.each(Object.entries(TEMPLATES))("манифест «%s»: выбор в
       expect(field.options).toEqual(["none", "auto", "radar", "rose"]);
       expect(Object.keys(field.optionLabels ?? {})).toEqual(["none", "auto", "radar", "rose"]);
       expect(field.default).toBe("none");
+    }
+  });
+});
+
+/**
+ * PRD-46 §7. Оформление шкал — цвет и пиктограмма — приносит ШАБЛОН, поэтому объявляется
+ * рядом с выбором вида, а не в форме шкалы. Проверяется ровно то, чего нельзя увидеть из
+ * кода: объявление стоит у экрана итогов обоих поставляемых шаблонов, умалчивает в пустой
+ * карте и заявляет свой тип из закрытого реестра — незнакомый тип редактор встретит
+ * диагностикой вместо контрола.
+ */
+describe.each(Object.entries(TEMPLATES))("манифест «%s»: оформление шкал", (_name, path) => {
+  function resultsVariants(): ContentTemplate[] {
+    return variants(path).filter((c) => c.kind === "results");
+  }
+
+  it("объявлено у экрана итогов рядом с выбором вида", () => {
+    const results = resultsVariants();
+    expect(results.length).toBeGreaterThan(0);
+    for (const variant of results) {
+      expect(variant.settings!.some((s) => s.key === "scaleAppearance")).toBe(true);
+    }
+  });
+
+  it("несёт свой тип поля и умалчивает в пустой карте", () => {
+    for (const variant of resultsVariants()) {
+      const field = variant.settings!.find((s) => s.key === "scaleAppearance")!;
+      expect(field.type).toBe("scaleAppearance");
+      expect(field.default).toEqual({});
     }
   });
 });

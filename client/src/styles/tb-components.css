@@ -32,6 +32,10 @@
   --tb-input-w-sm: 140px;
   --tb-accent-rail-w: 2px;
   --tb-space-half:   2px;
+  /* PRD-46 «Оформление шкал»: ширина колонки цвета рассчитана на самую длинную
+     подпись чипа («По схеме уровней»), ширина превью — на читаемую розу. */
+  --tb-appearance-color-w: 190px;
+  --tb-appearance-preview-w: 260px;
 
   --wf-border-w: 1px;   /* fallback for portal-rendered components outside .tb-tests-list */
   /* gate-skip-end */
@@ -2436,3 +2440,52 @@
   padding: var(--ou-space-6); text-align: center; color: var(--ou-fg-muted);
 }
 .tb-levels__empty-act { margin-top: var(--ou-space-3); }
+
+/* ── PRD-46: оформление шкал в настройках варианта «Итоги теста» ─────────
+   Эскиз: docs/wireframes/approved/prd46-scale-visual.html.
+
+   Список и превью стоят РЯДОМ: цвета выбираются набором, и следствие выбора
+   должно быть видно, пока выбор идёт, а не после прохождения теста. */
+.tb-appearance-field { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+
+.tb-appearance {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--tb-appearance-preview-w);
+  gap: var(--ou-space-6);
+  align-items: start;
+}
+.tb-appearance__list { display: flex; flex-direction: column; }
+/* Колонки фиксированной ширины, содержимое прижато влево. Во flex-строке чипы
+   уезжали к правому краю и вставали на разной высоте по горизонтали: ширина
+   чипа зависит от текста («#8F6AE6» против «По схеме уровней»), и колонка
+   переставала читаться колонкой. Ширина рассчитана на самый длинный вариант. */
+.tb-appearance__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--tb-appearance-color-w);
+  align-items: center;
+  justify-items: start;
+  gap: var(--ou-space-3);
+  padding: var(--ou-space-3) 0;
+  border-block-end: var(--wf-border-w) solid var(--ou-border-soft);
+}
+.tb-appearance__row:last-child { border-block-end: 0; }
+.tb-appearance__name { min-width: 0; font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+.tb-appearance__note { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: var(--ou-space-2) 0 0; }
+
+.tb-appearance__preview { width: 100%; height: auto; }
+
+/* Превью строится ядром розы, поэтому классы фигуры — те же, что в макетах
+   пакета: расхождение классов означало бы, что автор сверяет НЕ ту картинку,
+   которую получит. Стили ДС-шаблона в авторскую оболочку не попадают, отсюда
+   эта короткая копия правил заливки и сетки. */
+.tb-appearance__preview .tb-rose__sector {
+  fill: hsl(var(--tb-hue));
+  /* Обводка цветом ФОНА: зазор между соседними заливками, а не линия. */
+  stroke: var(--ou-bg-surface-1);
+  stroke-width: 2;
+}
+.tb-appearance__preview .tb-rose__sector--overflow { stroke: var(--ou-fg-default); stroke-dasharray: 3 3; }
+.tb-appearance__preview .tb-chart__ring,
+.tb-appearance__preview .tb-chart__axis {
+  fill: none; stroke: var(--ou-border-soft); stroke-width: var(--wf-border-w);
+}
