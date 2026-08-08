@@ -571,6 +571,9 @@ export function buildTestJson(data: ExportData): string {
         direction: s.direction,
         domainMin: interpretation.domainMin,
         domainMax: interpretation.domainMax,
+        // PRD-46 §6. Written only when the author set one: `null` on every scale would change
+        // the bytes of every package that has scales, for a field almost no test uses.
+        ...(interpretation.displayMax !== null ? { displayMax: interpretation.displayMax } : {}),
         valence: interpretation.valence,
         bands: interpretation.bands,
         learnerVisibility: s.learnerVisibility,

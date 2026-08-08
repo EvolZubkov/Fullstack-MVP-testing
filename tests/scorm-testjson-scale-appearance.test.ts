@@ -79,6 +79,11 @@ describe("buildTestJson — облик шкал (PRD-46)", () => {
     expect(out.contentPages[0].settings.scaleAppearance.s1).toEqual({ color: "257.9 71.3% 65.9%" });
   });
 
+  it("настройка предела оси едет в пакет как есть", () => {
+    const out = parse(buildTestJson(exportData({ scalesChartKind: "radar", radarAxisLimit: "attempt" })));
+    expect(out.contentPages[0].settings.radarAxisLimit).toBe("attempt");
+  });
+
   it("тест без карты даёт прежние байты", () => {
     const before = buildTestJson(exportData({ scalesChartKind: "rose" }));
     const after = buildTestJson(exportData({ scalesChartKind: "rose" }));
