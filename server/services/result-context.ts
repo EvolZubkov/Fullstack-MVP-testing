@@ -54,6 +54,13 @@ export interface MeasuresSource {
   blockSettings: ResultsBlockSettings;
   hasPassThreshold: boolean;
   /**
+   * PRD-46 §5: do the shown scales divide one whole? Answered by the CALLER
+   * (`ipsativeScalesForDelivery`), which is the only side holding the contribution rows and
+   * the allocation budgets; this adapter is pure and only carries the answer across. Absent =
+   * not ipsative, so `auto` draws the radar — what the screen did before this PRD.
+   */
+  ipsativeScales?: boolean;
+  /**
    * The test's own feedback block AS STORED (`tests.feedback_json`): text, course
    * links, events and PDF assets whose address lives in `url` — the media-library
    * address; the legacy `scormHref` is read only where `url` is absent. PRD-29 §7.1
@@ -119,9 +126,10 @@ export function buildMeasuresInput(source: MeasuresSource): MeasuresInput {
     indicators,
     hasPassThreshold: source.hasPassThreshold,
     blockSettings: source.blockSettings,
-    // PRD-35. Lives in the SAME `settings_json` of the results page as the block
+    // PRD-35/46. Lives in the SAME `settings_json` of the results page as the block
     // settings, so nothing new travels from the route — only the reading of it.
-    showRadar: source.blockSettings?.showCompetencyRadar === true,
+    chartSettings: source.blockSettings,
+    ipsativeScales: source.ipsativeScales === true,
   };
 }
 

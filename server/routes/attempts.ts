@@ -14,6 +14,7 @@ import {
   effectiveSectionOrder,
   type DeliverySection,
 } from "@shared/draw/assemble-delivery";
+import { ipsativeScalesForDelivery } from "../services/scale-composition";
 import { loadScoringConfig } from "../services/scoring-config";
 import { loadTestScoringContext } from "../services/effective-scoring";
 import { computeAttemptResult } from "../services/result-compute";
@@ -226,6 +227,10 @@ async function resultsMaterialForAttempt(
       scales,
       variables,
       blockSettings,
+      // PRD-46 §5: read from the SAME delivered source as the scales, so a finished attempt
+      // is judged on the content it was taken on. Costs nothing unless the author left the
+      // choice of the diagram to the system.
+      ipsativeScales: await ipsativeScalesForDelivery(src, attempt.testId, scales, blockSettings),
       hasPassThreshold: !!passRule && passRule.type !== "none",
       testFeedback: (deliveredTest?.feedbackJson as Partial<FeedbackContent> | null) ?? null,
     };

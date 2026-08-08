@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: PRD-46 — Оформление шкал в настройках варианта «Итоги теста».
+    Файл: docs/wireframes/approved/prd46-scale-visual.html
+    Статус: СОГЛАСОВАН 2026-08-08.
+    Спецификация: docs/specs/prd-46/scales-chart-choice.md
+
+    ЧТО ЭТО. Роза красит секторы по идентичности шкалы (PRD-46 §7), значит у
+    шкалы появляется облик: цвет и пиктограмма. Эскиз показывает, где автор их
+    задаёт.
+
+    ПОЧЕМУ НЕ В ФОРМЕ ШКАЛЫ. Первая редакция этого эскиза ставила оба поля
+    рядом с доменом и интервалами — и смешивала оформление с сутью измерения.
+    Шкала описывает, ЧТО измеряется; цвет и пиктограмма — как это нарисовано,
+    и приносит их шаблон. Поэтому облик живёт в настройках варианта, которые и
+    есть поверхность оформления, приносимая шаблоном.
+
+    ПОЧЕМУ ИМЕННО РЯДОМ С ВЫБОРОМ ВИДА. Оформление не имеет смысла без него:
+    цвет по идентичности и пиктограммы читает роза, радар красит по уровню и об
+    идентичности не знает. Стоя рядом, блок просто не показывается при радаре —
+    на отдельном рейле он висел бы всегда и настраивал несуществующее.
+
+    ПОЧЕМУ СПИСКОМ, А НЕ ПОЛЕМ НА ШКАЛУ. Цвета выбираются НАБОРОМ: рядом видно,
+    не сливаются ли два оттенка на соседних секторах. Поэтому строка на шкалу и
+    превью всей розы рядом — иначе набор собирается вслепую по одному.
+
+    ИСТОЧНИКИ РАЗМЕТКИ.
+      - компоненты — ДС UniversityRT (client/src/styles/vendor/university-rt.css);
+      - выбор цвета — компонент ДС ColorPicker (ou-color-trigger / ou-color-pop);
+      - модалка — ou-modal ДС;
+      - пиктограммы — контуры lucide из lucide-react без правок;
+      - роза в превью — вывод ядра (shared/template/rose-view.ts).
+      Классы с префиксом wf- — каркас эскиза, не UI.
+
+    ХРАНЕНИЕ. Одно поле настроек варианта со значением-картой: ключ шкалы →
+    { color, icon }. Ключ стабилен, поэтому переименование шкалы ничего не
+    ломает, а удаление оставляет безвредную осиротевшую запись. Шаблон, который
+    розу не рисует, этого поля не объявляет — и блок не появляется.
+
+    ЧТО ПРОВЕРЯЕТ ЭСКИЗ:
+      1. облик задаётся там же, где выбран вид диаграммы, и не появляется, когда
+         вид его не читает;
+      2. набор виден набором: строки шкал и превью всей фигуры рядом;
+      3. у шкалы с объявленным направлением цвет недоступен И ОБЪЯСНЁН, потому
+         что там цвет высказывает вердикт;
+      4. пиктограмма доступна всегда: она идентичность, а не оценка.
+
+    СОСТОЯНИЯ:
+      s-rose    вид «Роза»: блок оформления развёрнут
+      s-picker  открыт селектор пиктограмм из строки шкалы
+      s-radar   вид «Радар»: блока оформления нет, объяснено почему
+
+    Правила и соответствие разделам PRD-46 — в таблицах под холстом.
+  -->
+  <title>PRD-46 — Оформление шкал в настройках итогов</title>
+  <link rel="stylesheet" href="/client/src/styles/vendor/university-rt.css">
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css">
+  <link rel="stylesheet" href="/server/scorm/templates/default/styles/theme.css">
+  <style>
+    :root {
+      /* gate-skip-start */
+      /* WIREFRAME-ONLY: литеральные px каркаса. */
+      --wf-border-w: 1px;
+      --wf-size-1040: 1040px;
+      --wf-nav-offset: 88px;
+      --wf-icon-cell: 44px;
+      --wf-preview: 260px;
+      /* gate-skip-end */
+    }
+
+    /* ── Дельта PRD-46: блок оформления шкал ── */
+    /* Список и превью стоят рядом: цвета выбираются набором, и следствие выбора
+       должно быть видно, пока выбор идёт, а не после прохождения теста. */
+    .tb-appearance {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) var(--wf-preview);
+      gap: var(--ou-space-6);
+      align-items: start;
+    }
+    .tb-appearance__list { display: flex; flex-direction: column; }
+    /* Колонки фиксированной ширины, содержимое прижато влево. Во flex-строке чипы
+       уезжали к правому краю и вставали на разной высоте по горизонтали: ширина
+       чипа зависит от текста («#8F6AE6» против «По схеме уровней», «target»
+       против «users-round»), и колонка переставала читаться колонкой. Ширины
+       рассчитаны на самый длинный вариант каждого столбца. */
+    .tb-appearance__row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 190px 170px;
+      align-items: center;
+      justify-items: start;
+      gap: var(--ou-space-3);
+      padding: var(--ou-space-3) 0;
+      border-block-end: var(--wf-border-w) solid var(--ou-border-soft);
+    }
+    .tb-appearance__row:last-child { border-block-end: 0; }
+    .tb-appearance__name { min-width: 0; font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+    .tb-appearance__note { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+    .tb-rose__sector { fill: hsl(var(--tb-hue)); stroke: var(--ou-bg-surface-2); stroke-width: 2; }
+    .tb-rose__ring,
+    .tb-rose__axis { fill: none; stroke: var(--ou-border-soft); stroke-width: var(--wf-border-w); }
+    .tb-rose__label { fill: var(--ou-fg-default); font: var(--ou-text-body-s); }
+    .tb-rose__level { fill: var(--ou-fg-muted); font: var(--ou-text-body-xs); }
+    .tb-rose__icon,
+    .tb-icon {
+      fill: none; stroke: currentColor; stroke-width: 2;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+    .tb-rose__icon { color: var(--ou-fg-muted); }
+
+    /* Триггер пиктограммы повторяет геометрию ou-color-trigger: два соседних
+       контрола одной строки не должны различаться высотой и радиусом. */
+    .tb-icon-trigger {
+      display: inline-flex; align-items: center; gap: var(--ou-space-2);
+      height: 36px; padding: 2px var(--ou-space-3) 2px 2px;
+      background: var(--ou-bg-elevated);
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      border-radius: var(--ou-radius-m);
+      cursor: pointer; font: var(--ou-text-body-s); color: var(--ou-fg-default);
+    }
+    .tb-icon-trigger:hover { border-color: var(--ou-fg-muted); }
+    .tb-icon-trigger__box {
+      width: 28px; height: 28px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: calc(var(--ou-radius-m) - 2px);
+      background: var(--ou-bg-surface-3); color: var(--ou-fg-default); flex-shrink: 0;
+    }
+    /* Пустая ячейка — пунктиром, а не пустым квадратом: пиктограмма НЕОБЯЗАТЕЛЬНА,
+       и «не выбрана» должно читаться как состояние, а не как не догрузившийся глиф. */
+    .tb-icon-trigger__box--empty {
+      background: transparent;
+      border: var(--wf-border-w) dashed var(--ou-border-default);
+    }
+
+    .tb-icon-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(var(--wf-icon-cell), 1fr));
+      gap: var(--ou-space-2);
+      max-height: 320px; overflow-y: auto;
+      padding-top: var(--ou-space-3);
+    }
+    .tb-icon-cell {
+      aspect-ratio: 1;
+      display: inline-flex; align-items: center; justify-content: center;
+      border: var(--wf-border-w) solid transparent;
+      border-radius: var(--ou-radius-m);
+      background: transparent; color: var(--ou-fg-muted); cursor: pointer;
+    }
+    .tb-icon-cell:hover { background: var(--ou-bg-hover); color: var(--ou-fg-default); }
+    .tb-icon-cell.is-selected {
+      border-color: var(--ou-accent-default);
+      background: var(--ou-accent-soft);
+      color: var(--ou-fg-default);
+    }
+
+    /* ── Каркас эскиза ── */
+    .wf-state { display: none; padding-top: var(--wf-nav-offset); }
+    .wf-state.active { display: block; }
+    .wf-page { max-width: var(--wf-size-1040); margin-inline: auto; }
+    .wf-caption { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-3); }
+    .wf-viewport {
+      background: var(--ou-bg-surface-1);
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      padding: var(--ou-space-6);
+      position: relative;
+    }
+    .wf-modal-host { min-height: 560px; }
+    .wf-modal-host .ou-modal-root { position: absolute; }
+    .wf-subhead { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: 0.04em; margin: var(--ou-space-6) 0 var(--ou-space-3); }
+    .wf-doc-title { max-width: var(--wf-size-1040); margin: var(--ou-space-8) auto 0; font: var(--ou-text-heading-m); color: var(--ou-fg-default); }
+    .wf-notes { max-width: var(--wf-size-1040); margin: var(--ou-space-4) auto 0; }
+    .wf-notes-title { font: var(--ou-text-body-m); font-weight: 700; margin: var(--ou-space-5) 0 var(--ou-space-2); }
+    .wf-notes-table { width: 100%; border-collapse: collapse; margin-bottom: var(--ou-space-7); }
+    .wf-notes-table th, .wf-notes-table td { border: var(--wf-border-w) solid var(--ou-border-soft); padding: var(--ou-space-2) var(--ou-space-3); font: var(--ou-text-body-s); text-align: left; vertical-align: top; }
+    .wf-notes-table th { background: var(--ou-bg-surface-3); font-weight: 600; }
+    .wf-notes-table code { font: var(--ou-text-code-s); background: var(--ou-bg-surface-3); padding: 0 var(--ou-space-1); border-radius: var(--ou-radius-s); }
+    .wf-nav {
+      position: fixed; inset-block-start: 0; inset-inline: 0; z-index: 1100;
+      display: flex; align-items: center; gap: var(--ou-space-3);
+      padding: var(--ou-space-2) var(--ou-space-5);
+      background: var(--ou-bg-surface-2);
+      border-block-end: var(--wf-border-w) solid var(--ou-border-soft);
+    }
+    .wf-nav-title { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+  </style>
+</head>
+
+<!-- Классы ou/ou--dark обязательны: семантические токены ДС объявлены под
+     селектором .ou.ou--dark, а не в :root. -->
+<body class="ou ou--dark ou--normal">
+
+<!-- Контуры lucide без правок. Окружности записаны двумя полудугами: в пакет
+     пиктограмма уезжает контурами, и разметка здесь совпадает с выводом ядра. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="i-target">
+      <path d="M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0"></path>
+      <path d="M6 12a6 6 0 1 0 12 0a6 6 0 1 0 -12 0"></path>
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>
+    </g>
+    <g id="i-sparkles">
+      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"></path>
+      <path d="M20 3v4"></path><path d="M22 5h-4"></path>
+      <path d="M4 17v2"></path><path d="M5 18H3"></path>
+    </g>
+    <g id="i-settings">
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+      <path d="M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"></path>
+    </g>
+    <g id="i-users-round">
+      <path d="M18 21a8 8 0 0 0-16 0"></path>
+      <path d="M5 8a5 5 0 1 0 10 0a5 5 0 1 0 -10 0"></path>
+      <path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3"></path>
+    </g>
+    <g id="i-shield"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path></g>
+    <g id="i-zap"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"></path></g>
+    <g id="i-flag">
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+      <path d="M4 22v-7"></path>
+    </g>
+
+    <!-- Роза ЧИЛ, вывод ядра. Используется как превью набора. -->
+    <g id="rose-chil">
+      <path class="tb-rose__sector" d="M 180,150 L 180,66.7 A 83.3,83.3 0 0,1 263.3,150 Z" style="--tb-hue: 257.9 71.3% 65.9%"></path>
+      <path class="tb-rose__sector" d="M 180,150 L 237.1,150 A 57.1,57.1 0 0,1 180,207.1 Z" style="--tb-hue: 28.2 97.1% 41.2%"></path>
+      <path class="tb-rose__sector" d="M 180,150 L 180,203.5 A 53.5,53.5 0 0,1 126.5,150 Z" style="--tb-hue: 167.4 100% 30.8%"></path>
+      <path class="tb-rose__sector" d="M 180,150 L 96.7,150 A 83.3,83.3 0 0,1 180,66.7 Z" style="--tb-hue: 13.6 71.7% 51.6%"></path>
+      <circle class="tb-rose__ring" cx="180" cy="150" r="50"></circle>
+      <circle class="tb-rose__ring" cx="180" cy="150" r="70.7"></circle>
+      <circle class="tb-rose__ring" cx="180" cy="150" r="86.6"></circle>
+      <circle class="tb-rose__ring" cx="180" cy="150" r="100"></circle>
+      <line class="tb-rose__axis" x1="180" y1="150" x2="180" y2="44"></line>
+      <line class="tb-rose__axis" x1="180" y1="150" x2="286" y2="150"></line>
+      <line class="tb-rose__axis" x1="180" y1="150" x2="180" y2="256"></line>
+      <line class="tb-rose__axis" x1="180" y1="150" x2="74" y2="150"></line>
+      <g class="tb-rose__icon" transform="translate(263.9, 12.1) scale(0.667)">
+      <path d="M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0"></path>
+      <path d="M6 12a6 6 0 1 0 12 0a6 6 0 1 0 -12 0"></path>
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>
+      </g>
+      <g class="tb-rose__icon" transform="translate(263.9, 225.9) scale(0.667)">
+      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"></path>
+      <path d="M20 3v4"></path>
+      <path d="M22 5h-4"></path>
+      <path d="M4 17v2"></path>
+      <path d="M5 18H3"></path>
+      </g>
+      <g class="tb-rose__icon" transform="translate(80.1, 12.1) scale(0.667)">
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+      <path d="M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"></path>
+      </g>
+    </g>
+  </defs>
+</svg>
+
+<nav class="wf-nav">
+  <span class="wf-nav-title">PRD-46 — оформление шкал</span>
+  <button type="button" class="ou-btn ou-btn--s is-active" onclick="showState(this, 's-rose')">Вид «Роза»</button>
+  <button type="button" class="ou-btn ou-btn--s" onclick="showState(this, 's-picker')">Селектор пиктограмм</button>
+  <button type="button" class="ou-btn ou-btn--s" onclick="showState(this, 's-radar')">Вид «Радар»</button>
+</nav>
+
+<section class="wf-state active" id="s-rose">
+  <div class="wf-page">
+    <p class="wf-caption">Настройки варианта «Итоги теста», фрагмент. Выбор вида диаграммы существует (сегодня это галочка «Радар компетенций»), дельта PRD-46 — четыре значения вместо двух и блок оформления под ним. Строка на шкалу, а не поле на шкалу: цвета выбираются набором, и превью справа показывает, что получилось, пока выбор идёт.</p>
+    <div class="wf-viewport">
+
+      <div class="ou-formfield">
+        <label class="ou-field ou-field--full">
+          <span class="ou-field__lbl">Диаграмма по шкалам</span>
+          <span class="ou-field__box"><select class="ou-input"><option>Роза — расклад целого</option></select></span>
+        </label>
+      </div>
+
+      <div class="wf-subhead">Оформление шкал</div>
+      <div class="ou-banner ou-banner--subtle ou-banner--info" style="margin-bottom: var(--ou-space-4)">
+        <div class="ou-banner__body">
+          <div class="ou-banner__desc">Цвет доступен, потому что ни у одной шкалы теста не объявлено направление. Стоит объявить его хотя бы у одной — и цвет по идентичности пропадёт у ВСЕХ: два языка цвета на одной фигуре не смешиваются, роза целиком перейдёт на схему уровней. Пиктограммы это не затрагивает.</div>
+        </div>
+      </div>
+      <div class="tb-appearance">
+        <div class="tb-appearance__list">
+
+          <div class="tb-appearance__row">
+            <span class="tb-appearance__name">Целеустремлённый</span>
+            <button type="button" class="ou-color-trigger" aria-expanded="false" style="--swatch: #8F6AE6">
+              <span class="ou-color-trigger__swatch"></span>
+              <span class="ou-color-trigger__value">#8F6AE6</span>
+            </button>
+            <button type="button" class="tb-icon-trigger" onclick="showState(document.querySelectorAll('.wf-nav .ou-btn')[1], 's-picker')">
+              <span class="tb-icon-trigger__box"><svg class="tb-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-target"></use></svg></span>
+              <span>target</span>
+            </button>
+          </div>
+
+          <div class="tb-appearance__row">
+            <span class="tb-appearance__name">Вдохновляющий</span>
+            <button type="button" class="ou-color-trigger" style="--swatch: #CF6303">
+              <span class="ou-color-trigger__swatch"></span>
+              <span class="ou-color-trigger__value">#CF6303</span>
+            </button>
+            <button type="button" class="tb-icon-trigger">
+              <span class="tb-icon-trigger__box"><svg class="tb-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sparkles"></use></svg></span>
+              <span>sparkles</span>
+            </button>
+          </div>
+
+          <div class="tb-appearance__row">
+            <span class="tb-appearance__name">Командный</span>
+            <button type="button" class="ou-color-trigger" style="--swatch: #009D7C">
+              <span class="ou-color-trigger__swatch"></span>
+              <span class="ou-color-trigger__value">#009D7C</span>
+            </button>
+            <button type="button" class="tb-icon-trigger">
+              <span class="tb-icon-trigger__box tb-icon-trigger__box--empty" aria-hidden="true"></span>
+              <span class="tb-appearance__note">Не выбрана</span>
+            </button>
+          </div>
+
+          <div class="tb-appearance__row">
+            <span class="tb-appearance__name">Процессный</span>
+            <button type="button" class="ou-color-trigger" style="--swatch: #DC532B">
+              <span class="ou-color-trigger__swatch"></span>
+              <span class="ou-color-trigger__value">#DC532B</span>
+            </button>
+            <button type="button" class="tb-icon-trigger">
+              <span class="tb-icon-trigger__box"><svg class="tb-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-settings"></use></svg></span>
+              <span>settings</span>
+            </button>
+          </div>
+
+        </div>
+
+        <div>
+          <svg width="260" height="216" viewBox="0 0 360 300" role="img" aria-label="Превью: так выглядит набор на диаграмме">
+            <use href="#rose-chil"></use>
+          </svg>
+          <p class="tb-appearance__note">Превью набора. Соседние секторы смыкаются, поэтому близкие оттенки видно сразу — по одному цвету этого не заметить. У «Командного» пиктограмма не выбрана: подпись просто не резервирует под неё строку.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="wf-state" id="s-picker">
+  <div class="wf-page">
+    <p class="wf-caption">Селектор пиктограмм, открытый из строки шкалы. Список — полный набор lucide с поиском по имени, а не короткая подборка: методики приходят разные, и угадать за автора набор нельзя. В эскизе показаны семь глифов, в продукте — весь набор.</p>
+    <div class="wf-viewport wf-modal-host">
+
+      <div class="wf-subhead">Оформление шкал</div>
+      <div class="tb-appearance__list">
+        <div class="tb-appearance__row">
+          <span class="tb-appearance__name">Целеустремлённый</span>
+          <button type="button" class="ou-color-trigger" style="--swatch: #8F6AE6">
+            <span class="ou-color-trigger__swatch"></span>
+            <span class="ou-color-trigger__value">#8F6AE6</span>
+          </button>
+          <button type="button" class="tb-icon-trigger">
+            <span class="tb-icon-trigger__box"><svg class="tb-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-target"></use></svg></span>
+            <span>target</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="ou-modal-root">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--m" role="dialog" aria-modal="true" aria-labelledby="picker-title">
+          <div class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h2 class="ou-modal__title" id="picker-title">Пиктограмма шкалы «Целеустремлённый»</h2>
+              <p class="ou-modal__desc">Появится в подписи шкалы на диаграмме итогов.</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть">✕</button>
+          </div>
+          <div class="ou-modal__body">
+            <label class="ou-field ou-field--full">
+              <span class="ou-field__lbl">Поиск по имени</span>
+              <span class="ou-field__box"><input class="ou-input" type="search" placeholder="target, users, shield…"></span>
+            </label>
+            <div class="tb-icon-grid">
+              <button type="button" class="tb-icon-cell is-selected" aria-pressed="true" title="target"><svg class="tb-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-target"></use></svg></button>
+              <button type="button" class="tb-icon-cell" title="sparkles"><svg class="tb-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sparkles"></use></svg></button>
+              <button type="button" class="tb-icon-cell" title="settings"><svg class="tb-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-settings"></use></svg></button>
+              <button type="button" class="tb-icon-cell" title="users-round"><svg class="tb-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-users-round"></use></svg></button>
+              <button type="button" class="tb-icon-cell" title="shield"><svg class="tb-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-shield"></use></svg></button>
+              <button type="button" class="tb-icon-cell" title="zap"><svg class="tb-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-zap"></use></svg></button>
+              <button type="button" class="tb-icon-cell" title="flag"><svg class="tb-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-flag"></use></svg></button>
+            </div>
+          </div>
+          <div class="ou-modal__foot ou-modal__foot--between">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Без пиктограммы</button>
+            <span>
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s">Отмена</button>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--s">Выбрать</button>
+            </span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="wf-state" id="s-radar">
+  <div class="wf-page">
+    <p class="wf-caption">Вид «Радар». Блока оформления нет вовсе: радар красит вершины по уровню и об идентичности шкалы ничего не знает, поэтому цвет и пиктограмма ему нечего сказать. Это и есть довод в пользу того, чтобы держать оформление рядом с выбором вида, а не на отдельном рейле, где оно висело бы всегда.</p>
+    <div class="wf-viewport">
+
+      <div class="ou-formfield">
+        <label class="ou-field ou-field--full">
+          <span class="ou-field__lbl">Диаграмма по шкалам</span>
+          <span class="ou-field__box"><select class="ou-input"><option>Радар — каждая шкала к своему пределу</option></select></span>
+        </label>
+      </div>
+
+      <div class="ou-banner ou-banner--subtle ou-banner--info">
+        <div class="ou-banner__body">
+          <div class="ou-banner__desc">Оформление шкал настраивается для розы: там цвет и пиктограмма различают шкалы между собой. На радаре цвет вершины показывает уровень.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<h2 class="wf-doc-title">Правила эскиза и соответствие PRD-46</h2>
+<div class="wf-notes">
+  <div class="wf-notes-title">Что задаёт автор и где это лежит</div>
+  <table class="wf-notes-table">
+    <tr><th>Поле</th><th>Где лежит</th><th>Когда доступно</th></tr>
+    <tr><td>Диаграмма по шкалам</td><td>Настройка варианта <code>scalesChartKind</code>: нет / авто / радар / роза</td><td>Всегда</td></tr>
+    <tr><td>Оформление шкал</td><td>Настройка варианта со значением-картой: ключ шкалы → <code>{ color, icon }</code></td><td>Только при виде «роза»</td></tr>
+    <tr><td>Цвет строки</td><td>Тройка HSL внутри карты</td><td>Только у шкал без направления</td></tr>
+    <tr><td>Пиктограмма строки</td><td>Имя иконки lucide внутри карты</td><td>Всегда</td></tr>
+  </table>
+
+  <div class="wf-notes-title">Решения, которые видно на эскизе</div>
+  <table class="wf-notes-table">
+    <tr><th>Решение</th><th>Почему так</th></tr>
+    <tr><td>Оформление — в настройках варианта, а не в форме шкалы</td><td>Шкала описывает, ЧТО измеряется; цвет и пиктограмма — как это нарисовано, и приносит их шаблон</td></tr>
+    <tr><td>Рядом с выбором вида, а не на рейле «Шкалы»</td><td>Оформление читает только роза; рядом блок можно не показывать при радаре, на рейле он висел бы всегда</td></tr>
+    <tr><td>Строка на шкалу плюс превью набора</td><td>Соседние секторы смыкаются, и близкие оттенки видно только рядом</td></tr>
+    <tr><td>Карта по ключу шкалы, а не по имени</td><td>Ключ стабилен: переименование шкалы ничего не ломает, удаление оставляет безвредную запись</td></tr>
+    <tr><td>Цвет выключен, а не спрятан, при объявленном направлении</td><td>Исчезнувшее поле читается как дефект; выключенное с объяснением — как правило</td></tr>
+    <tr><td>Пиктограмма доступна и при направлении</td><td>Она несёт идентичность, а не оценку, поэтому с вердиктом не спорит</td></tr>
+  </table>
+
+  <div class="wf-notes-title">Границы эскиза</div>
+  <table class="wf-notes-table">
+    <tr><th>Вопрос</th><th>Ответ</th></tr>
+    <tr><td>Откуда выбор цвета</td><td>Компонент ДС <code>ColorPicker</code>, свой пикер не заводится</td></tr>
+    <tr><td>Почему hex в поле, а HSL в хранении</td><td>Пикер ДС работает в hex, а цветовой контракт рендерера — тройки HSL; конвертация на сохранении, в данных один формат</td></tr>
+    <tr><td>Что рисует обобщённый контрол настроек</td><td>Выбор вида — обычный <code>select</code> из манифеста, своего кода не требует. Карта оформления — новый тип поля, у него свой контрол</td></tr>
+    <tr><td>Чего на эскизе нет</td><td>Остальных настроек варианта: они не меняются</td></tr>
+  </table>
+</div>
+
+<script>
+  function showState(btn, id) {
+    document.querySelectorAll('.wf-state').forEach((s) => s.classList.toggle('active', s.id === id));
+    document.querySelectorAll('.wf-nav .ou-btn').forEach((b) => b.classList.toggle('is-active', b === btn));
+  }
+</script>
+
+</body>
+</html>

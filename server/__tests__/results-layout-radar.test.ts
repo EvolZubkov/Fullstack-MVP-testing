@@ -48,7 +48,7 @@ function measures(showRadar: boolean) {
     ramp: LEVEL_SCHEMES.traffic,
     scaleKind: "band_ruler" as const,
     indicatorKind: "label" as const,
-    showRadar,
+    chartSettings: { scalesChartKind: showRadar ? ("radar" as const) : ("none" as const) },
     indicators: [],
     scales: [
       { key: "a", name: "Эмоциональное истощение", value: 27, visibility: "level_and_value" as const, interpretation: scale(45, [0, 15, 25]) },
@@ -67,7 +67,7 @@ describe("макет итогов: радар", () => {
   it("рисует диаграмму и переводит блок в две колонки", () => {
     const html = render(true);
     expect(html).toContain('class="tb-measures tb-measures--chart"');
-    expect(html).toContain('class="tb-radar"');
+    expect(html).toContain('class="tb-chart"');
     expect(html).toContain("tb-radar__shape");
     // Три вершины, три подписи, три метки уровня.
     expect(html.match(/tb-radar__dot/g)).toHaveLength(3);

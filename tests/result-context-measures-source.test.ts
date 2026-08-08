@@ -126,6 +126,13 @@ describe("buildMeasuresInput", () => {
   it("своя схема без середины оставляет её пустой", () => {
     expect(buildMeasuresInput({ ...SOURCE, params: { levelScheme: "custom" } }).ramp.mid).toBeNull();
   });
+
+  it("передаёт признак ипсативности в общий сборщик (PRD-46)", () => {
+    // Адаптер его НЕ выводит: вкладов и бюджетов в его входе нет. Он переносит ответ,
+    // который дал вызывающий, — тем же швом, каким переносит рампу и настройки блока.
+    expect(buildMeasuresInput({ ...SOURCE, ipsativeScales: true }).ipsativeScales).toBe(true);
+    expect(buildMeasuresInput(SOURCE).ipsativeScales).toBe(false);
+  });
 });
 
 describe("buildResultContext + measures", () => {

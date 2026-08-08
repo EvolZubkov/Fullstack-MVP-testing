@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { buildResultContext } from "@shared/template/result-context";
-import { buildRadarChart } from "@shared/template/radar-view";
+import { buildScalesChart } from "@shared/template/scales-chart";
 import { LEVEL_SCHEMES } from "@shared/template/level-ramp";
 import type { ScaleInterpretation } from "@shared/scales/interpretation";
 
@@ -47,13 +47,18 @@ const BASE = {
 
 describe("паритет радара", () => {
   it("контекст итогов и прямой вызов ядра дают идентичную геометрию", () => {
-    const direct = buildRadarChart({ axes, ramp: LEVEL_SCHEMES.traffic });
+    const direct = buildScalesChart({
+      axes,
+      ramp: LEVEL_SCHEMES.traffic,
+      settings: { scalesChartKind: "radar" },
+      ipsative: false,
+    });
     const ctx = buildResultContext(BASE, "Тест", {
       measures: {
         ramp: LEVEL_SCHEMES.traffic,
         scaleKind: "band_ruler",
         indicatorKind: "label",
-        showRadar: true,
+        chartSettings: { scalesChartKind: "radar" as const },
         indicators: [],
         scales: axes,
       },
@@ -66,9 +71,9 @@ describe("паритет радара", () => {
       resolve("server/scorm/template/app/render/viewResults.js"),
       "utf-8",
     );
-    expect(runtime).toContain("showRadar");
-    // Именно `=== true`: пакет, собранный до PRD-35, ключа не несёт вовсе и обязан
-    // выглядеть как прежде.
-    expect(runtime).toContain("blockSettings.showCompetencyRadar === true");
+    // Пакет отдаёт настройки как есть и НЕ решает сам: миграция булева ключа PRD-35 и
+    // выбор вида живут в ядре, одним правилом на оба хоста. Пакет, собранный до PRD-35,
+    // ключа не несёт вовсе, и ядро читает это как «диаграммы нет».
+    expect(runtime).toContain("chartSettings: blockSettings");
   });
 });

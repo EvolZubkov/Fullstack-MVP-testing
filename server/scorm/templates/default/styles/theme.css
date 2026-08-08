@@ -708,14 +708,28 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 .ou-tag.is-partial { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
 
 /* ── PRD-29: measure row (a scale or an indicator on the results screen) ──
-   `ou-formsection` supplies the two-column grid, the rhythm and the hairline between
-   rows; the delta is only what the DS cannot know — the zone colour, the read-only
-   state of a control-shaped element, and the vertical budget of THIS screen.
+   `ou-formsection` supplies the rhythm and the hairline between rows; the delta is only
+   what the DS cannot know — the zone colour, the read-only state of a control-shaped
+   element, and the vertical budget of THIS screen.
 
    The section's own 32px rhythm is meant for a settings form that scrolls freely. Here
    four sections spend 256px of a 650px body on padding alone, which pushes the third
-   scale below the fold — and a measurement result exists to be read as a whole. */
-.tb-measure.ou-formsection { padding: var(--ou-space-4) 0; }
+   scale below the fold — and a measurement result exists to be read as a whole.
+
+   The DS grid is DROPPED (PRD-46). `ou-formsection` is a FORM layout: its 280px first
+   column is meant for the label and description of a field, with the controls beside it.
+   A measure row is a readout, not a form — its left column holds two short lines (name
+   and level tag) next to a tall right column (rail, boundary labels, interpretation), so
+   280px plus a 48px gutter stand empty down the whole row. The wider the screen, the
+   more of it. Stacking also gives the rail the full width of the block, which is what a
+   readout wants. The narrow-scene container query that used to do this at 700px is gone
+   with it: there is nothing left for it to collapse. */
+.tb-measure.ou-formsection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-4);
+  padding: var(--ou-space-4) 0;
+}
 /* The level tag does not stretch across the label column. */
 .tb-measure__level { align-self: flex-start; }
 /* The entity name sits one step BELOW the block heading. The DS gives a form section's
@@ -726,9 +740,9 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
    the two levels are parted by WEIGHT: the heading keeps 600, the name drops to 400. */
 .tb-measure .ou-formsection__title { font: var(--ou-text-heading-s); font-weight: 400; }
 
-/* The DS slider is a 360px-wide form control; here it is a full-width readout inside
-   the content column, so the cap is relaxed. With the name moved to the label column
-   the header holds the value alone — keep it against the right end of the rail. */
+/* The DS slider is a 360px-wide form control; here it is a full-width readout, so the
+   cap is relaxed. The name stands above the rail on its own line, so the header holds
+   the value alone — keep it against the right end of the rail. */
 .tb-measure__slider { max-width: none; display: flex; }
 .tb-measure__slider .ou-slider__header { justify-content: flex-end; }
 /* Sizes: this is not a control operated at arm's length in a dense form but a readout
@@ -764,15 +778,6 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 .tb-scene .ou-ring__fill.tb-tone--attention { stroke: var(--ou-warning-default); }
 .tb-scene .ou-ring__fill.tb-tone--critical  { stroke: var(--ou-error-default); }
 
-/* Narrow scene: the two-column section collapses to a single stack. The query measures
-   the SCENE (`@container tbscene`), not the viewport — the whole mobile adaptation of
-   this template is built on container steps 900 / 700 / 520, and a viewport `@media`
-   here would fire out of step with everything around it. 700 is the step where the rest
-   of the scene already goes single-column. */
-@container tbscene (max-width: 700px) {
-  .tb-measure.ou-formsection { display: flex; flex-direction: column; gap: var(--ou-space-4); }
-}
-
 /* Zones paint the rail DISCRETELY: the finding of a banded method is categorical, and a
    gradient would hide the step across a boundary. `ou-slider__fill` already gives the
    absolute positioning and the pill radius; only the colour is ours, and it arrives as
@@ -802,21 +807,27 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
    (`result.scalesBlockClass`), not by `:has(.tb-radar)`: the package renders inside
    whatever engine the LMS embeds, and core-side computation exists precisely to avoid
    depending on it. */
+/* 480 and not 360 (PRD-46): the viewport of both diagrams is 360 units wide because the
+   captions of a six-axis chart need that much horizontal room, but the FIGURE itself is a
+   circle of radius 100 in the middle of it. Rendered into a 360px column the figure came out
+   about 120px across — a small mark in a large box, while the cards beside it had width to
+   spare. The column is the only lever here: the geometry cannot be widened without pushing
+   the captions off the canvas. */
 .tb-measures--chart {
   display: grid;
-  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 480px) minmax(0, 1fr);
   gap: var(--ou-space-6);
   align-items: start;
 }
 /* The list of scales is longer than the diagram, so the diagram follows the reading
    down instead of leaving a column of air beside it. */
-.tb-radar { position: sticky; top: 0; }
-.tb-radar__svg { width: 100%; height: auto; display: block; }
+.tb-chart { position: sticky; top: 0; }
+.tb-chart__svg { width: 100%; height: auto; display: block; }
 /* Rings and rays are the auxiliary grid, not data — border tone, not text tone. The
    rings carry NO labels: three scales have three different band boundaries, so one
    labelled grid would state something false about two of them. */
-.tb-radar__ring,
-.tb-radar__axis { fill: none; stroke: var(--ou-border-soft); stroke-width: 1; }
+.tb-chart__ring,
+.tb-chart__axis { fill: none; stroke: var(--ou-border-soft); stroke-width: 1; }
 /* The figure itself is neutral. Each axis has its OWN tone, so there is nothing to
    paint the whole polygon with; evaluation is carried by the vertices and the level
    labels beside them. */
@@ -839,7 +850,7 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
    column, and that runs out earlier than the row itself collapses. */
 @container tbscene (max-width: 900px) {
   .tb-measures--chart { grid-template-columns: 1fr; }
-  .tb-radar { position: static; max-width: 360px; margin-inline: auto; }
+  .tb-chart { position: static; max-width: 360px; margin-inline: auto; }
 }
 
 /* PRD-29: the single recommendations block, structured by resource type. The chip row
@@ -1383,3 +1394,29 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   }
   .tb-scene .ou-rank__btn { min-width: 44px; min-height: 44px; }
 }
+/* ── PRD-46: роза. Заливка непрозрачна, поэтому сетка рисуется ПОВЕРХ секторов —
+   под ними она видна только в промежутках между короткими секторами, то есть там,
+   где говорит меньше всего. Цвет приходит тройкой HSL из ядра, как и у зон PRD-29:
+   палитра здесь своя не заводится. */
+.tb-rose__sector {
+  fill: hsl(var(--tb-hue));
+  /* Зазор в 2px между заливками: без него соседние секторы сливаются в одно пятно
+     там, где их доли близки. Обводка цветом ФОНА, а не линией — так зазор одинаково
+     работает и на светлой, и на тёмной сцене. */
+  stroke: var(--ou-bg-surface-2);
+  stroke-width: 2;
+}
+/* Доля, не поместившаяся в поле, упирается в кольцо: пунктирный край говорит, что
+   сектор обрезан, а не что шкала ровно на пределе. */
+.tb-rose__sector--overflow { stroke: var(--ou-fg-default); stroke-dasharray: 3 3; }
+/* Пиктограмма приходит контурами lucide: обводка без заливки и скруглённые концы —
+   иначе штрихи выглядят обрубленными на мелком размере. */
+.tb-rose__icon {
+  fill: none;
+  stroke: var(--ou-fg-muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tb-rose__label { fill: var(--ou-fg-default); font: var(--ou-text-body-s); }
+.tb-rose__level { fill: var(--ou-fg-muted); font: var(--ou-text-body-xs); }

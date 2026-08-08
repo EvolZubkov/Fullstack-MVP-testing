@@ -68,6 +68,14 @@ interface ExportData {
   resultVariables?: ResultVariable[];
   scales?: Scale[];
   measurements?: QuestionMeasurement[];
+  /**
+   * PRD-46 §5: do the visible scales divide one whole? Resolved by the ASSEMBLER
+   * (`build-export-data`) — the only place that sees the contribution rows and the
+   * allocation budgets — and baked, because the runtime holds neither. Absent/false ⇒
+   * the runtime reads «not ipsative», i.e. the `auto` setting draws a radar, which is
+   * exactly what a package built before this PRD does.
+   */
+  ipsativeScales?: boolean;
   designSettings?: DesignSettingsExport;
   /**
    * Already-resolved on-disk directory of the selected template (built-in or
@@ -580,6 +588,12 @@ export function buildTestJson(data: ExportData): string {
         };
       })
       .filter((m): m is NonNullable<typeof m> => m !== null);
+
+    // PRD-46 §5. Written only when TRUE: absence already means «not ipsative» to the
+    // runtime, so a `false` would change the bytes of every measurement package built
+    // so far without changing a pixel of it (FR-02). Inside the scales gate on purpose
+    // — with no scales there is no figure the verdict could describe.
+    if (data.ipsativeScales) test.ipsativeScales = true;
   }
 
   // Add telemetry config if present

@@ -44,8 +44,13 @@ export function domainPatch(
   return { ...config, domainMin: range.min, domainMax: range.max };
 }
 
-/** DB measurement rows -> engine specs, with `scaleId` resolved to the scale key. */
-function toMeasurementSpecs(measurements: QuestionMeasurement[], scales: Scale[]): MeasurementSpec[] {
+/**
+ * DB measurement rows -> engine specs, with `scaleId` resolved to the scale key.
+ *
+ * Exported because the ipsativity predicate (PRD-46) needs the SAME translation: two copies
+ * of it would be two chances to disagree about which rows belong to which scale.
+ */
+export function toMeasurementSpecs(measurements: QuestionMeasurement[], scales: Scale[]): MeasurementSpec[] {
   const scaleKeyById = new Map(scales.map((s) => [s.id, s.key]));
   const out: MeasurementSpec[] = [];
   for (const m of measurements) {

@@ -19,7 +19,7 @@
  */
 
 import type { CtxMeasureView } from "./measure-view";
-import type { CtxRadarChart } from "./radar-view";
+import type { CtxScalesChart } from "./scales-chart";
 import type { CtxRecommendations } from "./recommendations";
 
 /** Test-level info shown on the start screen and as the screen title (`course.*`). */
@@ -160,10 +160,11 @@ export interface CtxResult {
   scales?: CtxMeasureView[];
   indicators?: CtxMeasureView[];
   /**
-   * PRD-35: cross-scale profile. Present only when the author switched the radar ON
-   * and the chart is feasible — three or more visible scales, each with a domain.
+   * PRD-35/46: cross-scale profile — a radar or a rose, in ONE shape. Present only when the
+   * author asked for a diagram and the chosen one is feasible: three or more visible scales,
+   * each with a domain, and for the rose a whole to divide.
    */
-  scalesChart?: CtxRadarChart;
+  scalesChart?: CtxScalesChart;
   /**
    * Class of the scales block: `tb-measures`, plus the `--chart` modifier when the
    * radar is drawn. Core-prepared because the DSL cannot append a class

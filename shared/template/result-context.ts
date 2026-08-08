@@ -25,7 +25,7 @@ import type {
   CtxRecommendation,
 } from "./context";
 import { buildMeasureView, type RenderKind } from "./measure-view";
-import { buildRadarChart } from "./radar-view";
+import { buildScalesChart, type ChartKindSettings } from "./scales-chart";
 import { collectRecommendations } from "./recommendations";
 import { resolveResultsBlocks, type ResultsBlockSettings } from "./results-blocks";
 import type {
@@ -177,11 +177,20 @@ export interface MeasuresInput {
   hasPassThreshold?: boolean;
   blockSettings?: ResultsBlockSettings;
   /**
-   * PRD-35: the author's explicit switch on the `results` variant. There is no
-   * `auto` mode — an absent flag means the radar is off, for existing tests and new
-   * ones alike.
+   * PRD-46: which diagram the author asked for, as the raw setting values.
+   *
+   * A separate field rather than a read of `blockSettings`, because the REPORT carries its own
+   * switch: the document goes to a specialist, and a profile belongs there even when the
+   * learner's screen does not show one (PRD-35 §9). The results host passes its block
+   * settings, the report host passes the report variant's — the decision rule is one.
    */
-  showRadar?: boolean;
+  chartSettings?: ChartKindSettings;
+  /**
+   * PRD-46: do the scales divide one whole? Computed by the HOST
+   * (`shared/scales/composition`), because the render context carries results, not the
+   * contribution model they came from.
+   */
+  ipsativeScales?: boolean;
 }
 
 /**
@@ -627,17 +636,21 @@ export function buildResultContext(
     if (blocks.scales && visibleScales.length) {
       result.scales = visibleScales.map((m) =>
         buildMeasureView({ ...m, requestedKind: opts.measures!.scaleKind, ramp: opts.measures!.ramp }));
-      // PRD-35. The radar is built INSIDE the scales branch: a hidden block must not
-      // leave a dangling chart on the screen. `buildRadarChart` returns null on its
-      // own refusals (fewer than three axes, a scale without a domain), and that
-      // refusal is silent for the learner — the author is told why in the editor.
+      // PRD-35/46. The chart is built INSIDE the scales branch: a hidden block must not
+      // leave a dangling diagram on the screen. `buildScalesChart` returns null on every
+      // refusal — the setting says «none», or the builder cannot draw the figure it was
+      // asked for — and the refusal is silent for the learner; the author is told why in
+      // the editor.
       result.scalesBlockClass = "tb-measures";
-      if (opts.measures.showRadar) {
-        const chart = buildRadarChart({ axes: visibleScales, ramp: opts.measures.ramp });
-        if (chart) {
-          result.scalesChart = chart;
-          result.scalesBlockClass = "tb-measures tb-measures--chart";
-        }
+      const chart = buildScalesChart({
+        axes: visibleScales,
+        ramp: opts.measures.ramp,
+        settings: opts.measures.chartSettings ?? {},
+        ipsative: opts.measures.ipsativeScales === true,
+      });
+      if (chart) {
+        result.scalesChart = chart;
+        result.scalesBlockClass = "tb-measures tb-measures--chart";
       }
     }
     if (blocks.indicators && visibleIndicators.length) {
