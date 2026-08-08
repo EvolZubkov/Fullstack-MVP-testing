@@ -135,4 +135,30 @@ describe("облик на розе", () => {
     const sectors = rose({ scaleAppearance: { s1: { color: "#8F6AE6" } } }).sectors;
     expect(sectors[1].color).toBe(CATEGORICAL_HUES[1]);
   });
+
+  it("контуры доезжают до подписи: пиктограмма приходит геометрией, не именем", () => {
+    const chart = rose({
+      scaleAppearance: { s1: { icon: "target", iconPaths: ["M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0"] } },
+    });
+    expect(chart.icons).toHaveLength(1);
+    expect(chart.icons[0].paths).toEqual(["M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0"]);
+    expect(chart.icons[0].transform).toMatch(/^translate\(/);
+  });
+
+  it("имя без контуров не рисует глиф и не ломает подпись", () => {
+    // Хост не смог разрешить имя — например, набор пересобран после обновления библиотеки.
+    // Подпись остаётся на месте: шкала без пиктограммы это штатное состояние.
+    const chart = rose({ scaleAppearance: { s1: { icon: "нет-такого-глифа" } } });
+    expect(chart.icons).toEqual([]);
+    expect(chart.labels.some((l) => l.text.includes("Шкала 1"))).toBe(true);
+  });
+
+  it("шкала без пиктограммы не резервирует под неё строку подписи", () => {
+    const withIcon = rose({ scaleAppearance: { s0: { icon: "target", iconPaths: ["M0 0"] } } });
+    const without = rose({});
+    expect(withIcon.icons).toHaveLength(1);
+    expect(without.icons).toEqual([]);
+    // Подписи шкал без пиктограммы стоят там же, где стояли бы без всякой карты.
+    expect(without.labels).toEqual(rose({ scaleAppearance: {} }).labels);
+  });
 });

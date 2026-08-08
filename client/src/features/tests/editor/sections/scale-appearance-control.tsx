@@ -20,8 +20,9 @@
  * `shared/template/scale-appearance` for the contract and why it does not live on the scale.
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Banner, ColorPicker } from "@universityrt/ui-kit";
+import { IconGlyph, IconPickerModal, useGlyphTable, type GlyphTable } from "./icon-picker-modal";
 import { buildRoseChart } from "@shared/template/rose-view";
 import { LEVEL_SCHEMES } from "@shared/template/level-ramp";
 import { parseScaleAppearance, type ScaleAppearanceMap } from "@shared/template/scale-appearance";
@@ -61,8 +62,13 @@ export function ScaleAppearanceControl(props: {
 }) {
   const { label, description, value, onChange, scales, testId } = props;
   const disabled = Boolean(props.disabled);
+  /** Key of the scale whose pictogram picker is open; `null` while none is. */
+  const [picking, setPicking] = useState<string | null>(null);
 
   const map = useMemo(() => parseScaleAppearance(value), [value]);
+  // The glyph table is a quarter of a megabyte, so it is fetched only once something needs
+  // drawing: a set pictogram to show in a row, or an open picker asking for the whole set.
+  const glyphs = useGlyphTable(picking !== null || Object.values(map).some((l) => l.icon));
   // The chart draws what the learner sees, so those are the scales worth dressing. A scale
   // hidden from the learner never reaches the figure; its stored entry survives untouched and
   // comes back the moment the scale is shown again.
@@ -80,6 +86,25 @@ export function ScaleAppearanceControl(props: {
       ...map,
       [key]: { ...map[key], color: fromHex(hex, previous, "hsl") },
     };
+    onChange(next);
+  };
+
+  /**
+   * Write the chosen glyph NAME. The contours are not written here: they are resolved by the
+   * host when the chart is built, so the stored value survives a library upgrade and no editor
+   * ever bakes geometry into the test.
+   */
+  const setIcon = (key: string, icon: string | undefined) => {
+    setPicking(null);
+    if (disabled) return;
+    const look = { ...map[key] };
+    if (icon) look.icon = icon;
+    else delete look.icon;
+    // A row with neither colour nor pictogram leaves the map entirely: an entry that declares
+    // nothing would still make «this scale is dressed» true for every reader of the map.
+    const next: ScaleAppearanceMap = { ...map };
+    if (look.color === undefined && look.icon === undefined) delete next[key];
+    else next[key] = look;
     onChange(next);
   };
 
@@ -106,8 +131,8 @@ export function ScaleAppearanceControl(props: {
             size="sm"
             description={
               byIdentity
-                ? "Цвет доступен, потому что ни у одной шкалы теста не объявлено направление. Стоит объявить его хотя бы у одной — и цвет по идентичности пропадёт у ВСЕХ: два языка цвета на одной фигуре не смешиваются, роза целиком перейдёт на схему уровней."
-                : "Хотя бы у одной шкалы объявлено направление, поэтому цвет на розе показывает уровень и совпадает с линейкой в карточке рядом. Задать свой цвет нельзя: два языка цвета на одной фигуре не смешиваются."
+                ? "Цвет доступен, потому что ни у одной шкалы теста не объявлено направление. Стоит объявить его хотя бы у одной — и цвет по идентичности пропадёт у ВСЕХ: два языка цвета на одной фигуре не смешиваются, роза целиком перейдёт на схему уровней. Пиктограммы это не затрагивает."
+                : "Хотя бы у одной шкалы объявлено направление, поэтому цвет на розе показывает уровень и совпадает с линейкой в карточке рядом. Задать свой цвет нельзя: два языка цвета на одной фигуре не смешиваются. Пиктограмма остаётся доступной — она несёт идентичность, а не оценку."
             }
             data-testid={`${testId}-color-rule`}
           />
@@ -129,20 +154,78 @@ export function ScaleAppearanceControl(props: {
                       aria-label={`Цвет шкалы «${scale.label || scale.key}»`}
                       data-testid={`${testId}-color-${scale.key}`}
                     />
+                    <IconTrigger
+                      icon={map[scale.key]?.icon}
+                      glyphs={glyphs}
+                      scaleLabel={scale.label || scale.key}
+                      onOpen={() => setPicking(scale.key)}
+                      testId={`${testId}-icon-${scale.key}`}
+                    />
                   </div>
                 );
               })}
             </div>
-            <ScaleSetPreview scales={drawn} map={map} byIdentity={byIdentity} testId={testId} />
+            <ScaleSetPreview
+              scales={drawn}
+              map={map}
+              glyphs={glyphs}
+              byIdentity={byIdentity}
+              testId={testId}
+            />
           </div>
           {hiddenCount > 0 && (
             <p className="tb-appearance__note" data-testid={`${testId}-hidden-note`}>
               Скрытых от учащегося шкал: {hiddenCount}. На диаграмме они не рисуются, поэтому строк для них нет.
             </p>
           )}
+          {picking !== null && (
+            <IconPickerModal
+              scaleLabel={drawn.find((s) => s.key === picking)?.label || picking}
+              value={map[picking]?.icon}
+              onPick={(name) => setIcon(picking, name)}
+              onClose={() => setPicking(null)}
+            />
+          )}
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * The pictogram cell of a row: the current glyph plus its name, or an explicit «не выбрана».
+ *
+ * The empty box is DASHED and not blank. A pictogram is optional, so «not chosen» has to read
+ * as a state of the field; an empty square reads as a glyph that failed to load.
+ *
+ * Available even where the colour is not: a pictogram carries identity, not a verdict, so it
+ * does not argue with the level the colour states.
+ */
+function IconTrigger(props: {
+  icon: string | undefined;
+  glyphs: GlyphTable | null;
+  scaleLabel: string;
+  onOpen: () => void;
+  testId: string;
+}) {
+  const paths = props.icon ? (props.glyphs?.[props.icon] ?? null) : null;
+  return (
+    <button
+      type="button"
+      className="tb-icon-trigger"
+      onClick={props.onOpen}
+      aria-label={`Пиктограмма шкалы «${props.scaleLabel}»`}
+      data-testid={props.testId}
+    >
+      {paths ? (
+        <span className="tb-icon-trigger__box">
+          <IconGlyph paths={paths} size={18} />
+        </span>
+      ) : (
+        <span className="tb-icon-trigger__box tb-icon-trigger__box--empty" aria-hidden="true" />
+      )}
+      {props.icon ? <span>{props.icon}</span> : <span className="tb-appearance__note">Не выбрана</span>}
+    </button>
   );
 }
 
@@ -161,25 +244,33 @@ export function ScaleAppearanceControl(props: {
 function ScaleSetPreview(props: {
   scales: AppearanceScale[];
   map: ScaleAppearanceMap;
+  glyphs: GlyphTable | null;
   byIdentity: boolean;
   testId: string;
 }) {
-  const { scales, map, byIdentity, testId } = props;
+  const { scales, map, glyphs, byIdentity, testId } = props;
 
   const chart = useMemo(() => {
     if (!byIdentity) return null;
     return buildRoseChart({
-      axes: scales.map((scale, i) => ({
-        key: scale.key,
-        name: scale.label || scale.key,
-        value: PREVIEW_WEIGHTS[i % PREVIEW_WEIGHTS.length],
-        visibility: "level_and_value" as const,
-        interpretation: { domainMin: null, domainMax: null, valence: scale.valence, bands: [] },
-        ...(map[scale.key]?.color ? { color: map[scale.key].color } : {}),
-      })),
+      axes: scales.map((scale, i) => {
+        const icon = map[scale.key]?.icon;
+        const paths = icon ? glyphs?.[icon] : undefined;
+        return {
+          key: scale.key,
+          name: scale.label || scale.key,
+          value: PREVIEW_WEIGHTS[i % PREVIEW_WEIGHTS.length],
+          visibility: "level_and_value" as const,
+          interpretation: { domainMin: null, domainMax: null, valence: scale.valence, bands: [] },
+          ...(map[scale.key]?.color ? { color: map[scale.key].color } : {}),
+          // Resolved here for the same reason the hosts resolve: the builder places CONTOURS,
+          // never a name. The preview therefore shows the very glyph the chart will draw.
+          ...(paths && paths.length ? { iconPaths: paths } : {}),
+        };
+      }),
       ramp: LEVEL_SCHEMES.traffic,
     });
-  }, [scales, map, byIdentity]);
+  }, [scales, map, glyphs, byIdentity]);
 
   if (!byIdentity) {
     return (
@@ -222,6 +313,13 @@ function ScaleSetPreview(props: {
         ))}
         {chart.spokes.map((spoke, i) => (
           <line key={`spoke-${i}`} className="tb-chart__axis" x1={spoke.cx} y1={spoke.cy} x2={spoke.x} y2={spoke.y} />
+        ))}
+        {chart.icons.map((icon, i) => (
+          <g key={`icon-${i}`} className="tb-rose__icon" transform={icon.transform}>
+            {icon.paths.map((d, j) => (
+              <path key={j} d={d} />
+            ))}
+          </g>
         ))}
       </svg>
       <p className="tb-appearance__note">

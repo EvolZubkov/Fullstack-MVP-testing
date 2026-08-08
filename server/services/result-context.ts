@@ -22,6 +22,7 @@ import {
 import type { MeasureInput, MeasuresInput } from "@shared/template/result-context";
 import type { ReportInput, AdaptiveReportInput, ReportMeta } from "@shared/report/report-html";
 import { LEVEL_SCHEMES, type LevelRamp } from "@shared/template/level-ramp";
+import { withResolvedScaleIcons } from "./scale-icons";
 import { parseIndicatorInterpretation, parseScaleInterpretation } from "@shared/scales/interpretation";
 import type { RenderKind } from "@shared/template/measure-view";
 import type { ResultsBlockSettings } from "@shared/template/results-blocks";
@@ -128,7 +129,12 @@ export function buildMeasuresInput(source: MeasuresSource): MeasuresInput {
     blockSettings: source.blockSettings,
     // PRD-35/46. Lives in the SAME `settings_json` of the results page as the block
     // settings, so nothing new travels from the route — only the reading of it.
-    chartSettings: source.blockSettings,
+    //
+    // The pictogram is the one part that cannot travel as stored: the author picked a NAME and
+    // the chart draws contours, so the glyph is resolved here, where the icon table exists. The
+    // package resolves at bake for the same reason (`test-json`), and both go through the one
+    // resolver — a name has to mean the same picture in both players.
+    chartSettings: withResolvedScaleIcons(source.blockSettings),
     ipsativeScales: source.ipsativeScales === true,
   };
 }

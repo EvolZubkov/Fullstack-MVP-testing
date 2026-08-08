@@ -35,7 +35,12 @@
   /* PRD-46 «Оформление шкал»: ширина колонки цвета рассчитана на самую длинную
      подпись чипа («По схеме уровней»), ширина превью — на читаемую розу. */
   --tb-appearance-color-w: 190px;
+  --tb-appearance-icon-w: 170px;
   --tb-appearance-preview-w: 260px;
+  --tb-icon-trigger-h: 36px;
+  --tb-icon-trigger-box: 28px;
+  --tb-icon-cell: 44px;
+  --tb-icon-grid-h: 320px;
 
   --wf-border-w: 1px;   /* fallback for portal-rendered components outside .tb-tests-list */
   /* gate-skip-end */
@@ -2461,7 +2466,7 @@
    переставала читаться колонкой. Ширина рассчитана на самый длинный вариант. */
 .tb-appearance__row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--tb-appearance-color-w);
+  grid-template-columns: minmax(0, 1fr) var(--tb-appearance-color-w) var(--tb-appearance-icon-w);
   align-items: center;
   justify-items: start;
   gap: var(--ou-space-3);
@@ -2488,4 +2493,62 @@
 .tb-appearance__preview .tb-chart__ring,
 .tb-appearance__preview .tb-chart__axis {
   fill: none; stroke: var(--ou-border-soft); stroke-width: var(--wf-border-w);
+}
+
+/* Контуры lucide: обводка без заливки и скруглённые концы — иначе штрихи
+   выглядят обрубленными на мелком размере. Те же правила, что у `.tb-rose__icon`
+   в теме шаблона: пиктограмма в редакторе и на диаграмме — одна и та же фигура. */
+.tb-icon,
+.tb-appearance__preview .tb-rose__icon {
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.tb-appearance__preview .tb-rose__icon { color: var(--ou-fg-muted); }
+
+/* Триггер пиктограммы повторяет геометрию ou-color-trigger: два соседних
+   контрола одной строки не должны различаться высотой и радиусом. */
+.tb-icon-trigger {
+  display: inline-flex; align-items: center; gap: var(--ou-space-2);
+  height: var(--tb-icon-trigger-h); padding: var(--tb-space-half) var(--ou-space-3) var(--tb-space-half) var(--tb-space-half);
+  background: var(--ou-bg-elevated);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  cursor: pointer; font: var(--ou-text-body-s); color: var(--ou-fg-default);
+  max-width: 100%; min-width: 0;
+}
+.tb-icon-trigger:hover { border-color: var(--ou-fg-muted); }
+.tb-icon-trigger:disabled { cursor: default; opacity: 0.6; }
+.tb-icon-trigger > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-icon-trigger__box {
+  width: var(--tb-icon-trigger-box); height: var(--tb-icon-trigger-box);
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: calc(var(--ou-radius-m) - var(--tb-space-half));
+  background: var(--ou-bg-surface-3); color: var(--ou-fg-default); flex-shrink: 0;
+}
+/* Пустая ячейка — пунктиром, а не пустым квадратом: пиктограмма НЕОБЯЗАТЕЛЬНА,
+   и «не выбрана» должно читаться как состояние, а не как не догрузившийся глиф. */
+.tb-icon-trigger__box--empty {
+  background: transparent;
+  border: var(--wf-border-w) dashed var(--ou-border-default);
+}
+
+.tb-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tb-icon-cell), 1fr));
+  gap: var(--ou-space-2);
+  max-height: var(--tb-icon-grid-h); overflow-y: auto;
+  padding-top: var(--ou-space-3);
+}
+.tb-icon-cell {
+  aspect-ratio: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: var(--wf-border-w) solid transparent;
+  border-radius: var(--ou-radius-m);
+  background: transparent; color: var(--ou-fg-muted); cursor: pointer;
+}
+.tb-icon-cell:hover { background: var(--ou-bg-hover); color: var(--ou-fg-default); }
+.tb-icon-cell.is-selected {
+  border-color: var(--ou-accent-default);
+  background: var(--ou-accent-soft);
+  color: var(--ou-fg-default);
 }

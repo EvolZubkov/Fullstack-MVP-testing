@@ -4,6 +4,7 @@ import { findEligibilityPlugin, findEligibilityConfig } from "@shared/eligibilit
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 import { effectiveSectionOrder } from "@shared/draw/assemble-delivery";
 import { buildTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
+import { withResolvedScaleIcons } from "../../services/scale-icons";
 import { parseScaleInterpretation } from "@shared/scales/interpretation";
 import { hasGradedContent } from "@shared/questions/question-type";
 // PRD-32: ONE address rule for a feedback attachment, and ONE source-priority rule for
@@ -495,6 +496,12 @@ export function buildTestJson(data: ExportData): string {
       for (const [k, v] of Object.entries(rawSettings)) {
         sanitizedSettings[k] = typeof v === "string" ? sanitizeHtml(v) : v;
       }
+      // PRD-46: the scale pictogram is stored as a NAME and drawn as contours. Nothing inside a
+      // package can look a name up — no React, no icon font, no library — so the geometry is
+      // baked in HERE, alongside the settings it belongs to. Unconditional, like the ipsativity
+      // verdict: the answer costs one lookup per build and has to be in the package before it
+      // is known under which settings it will be read.
+      const packedSettings = withResolvedScaleIcons(sanitizedSettings);
 
       return {
         id: page.id,
@@ -511,7 +518,7 @@ export function buildTestJson(data: ExportData): string {
         sortOrder: page.sortOrder,
         values: sanitizedValues,
         placeholderStyles: rawValues.placeholderStyles ?? {},
-        settings: sanitizedSettings,
+        settings: packedSettings,
         autoAdvance: page.autoAdvance,
         autoAdvanceDelayMs: page.autoAdvanceDelayMs,
       };

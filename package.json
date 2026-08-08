@@ -27,6 +27,7 @@
     "scorm:template": "tsx scripts/scorm/generate-template-scorm.ts",
     "scorm:player": "node scripts/scorm/scorm-player.mjs",
     "scorm:previews": "node scripts/docs/generate-prd1-template-previews.mjs",
+    "icons:gen": "tsx scripts/build/gen-lucide-icons.ts",
     "test:watch": "vitest",
     "push:upstream": "git push upstream HEAD",
     "docs:pdf": "node scripts/docs/build-docs-pdf.mjs"

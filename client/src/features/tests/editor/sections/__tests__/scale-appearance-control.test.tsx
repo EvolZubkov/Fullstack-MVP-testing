@@ -92,4 +92,35 @@ describe("<ScaleAppearanceControl />", () => {
     renderControl({ scales: [] });
     expect(screen.getByTestId("appearance-empty")).toHaveTextContent("В тесте нет шкал");
   });
+
+  it("пиктограмма доступна и при объявленном направлении: она идентичность, а не оценка", () => {
+    renderControl({ scales: [scale("s1", { valence: "higher_is_better" }), scale("s2"), scale("s3")] });
+    expect(screen.getByTestId("appearance-color-s1")).toBeDisabled();
+    expect(screen.getByTestId("appearance-icon-s1")).toBeEnabled();
+  });
+
+  it("непустая пиктограмма показана именем, пустая — состоянием, а не пустым квадратом", () => {
+    renderControl({ scales: FOUR, value: { s1: { icon: "target" } } });
+    expect(screen.getByTestId("appearance-icon-s1")).toHaveTextContent("target");
+    expect(screen.getByTestId("appearance-icon-s2")).toHaveTextContent("Не выбрана");
+  });
+
+  it("хранит ИМЯ глифа, а не его контуры: геометрию подставляет хост", async () => {
+    const onChange = vi.fn();
+    renderControl({ scales: FOUR, onChange });
+    fireEvent.click(screen.getByTestId("appearance-icon-s3"));
+    // Таблица глифов подгружается лениво — ждём, пока сетка появится.
+    fireEvent.change(await screen.findByTestId("icon-picker-search"), { target: { value: "target" } });
+    fireEvent.click(await screen.findByTestId("icon-picker-cell-target"));
+    fireEvent.click(screen.getByTestId("icon-picker-apply"));
+    expect(onChange).toHaveBeenCalledWith({ s3: { icon: "target" } });
+  });
+
+  it("«Без пиктограммы» убирает запись целиком, если больше в ней ничего нет", async () => {
+    const onChange = vi.fn();
+    renderControl({ scales: FOUR, value: { s1: { icon: "target" }, s2: { color: "10 20% 30%" } }, onChange });
+    fireEvent.click(screen.getByTestId("appearance-icon-s1"));
+    fireEvent.click(await screen.findByTestId("icon-picker-clear"));
+    expect(onChange).toHaveBeenCalledWith({ s2: { color: "10 20% 30%" } });
+  });
 });
