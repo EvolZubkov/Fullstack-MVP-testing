@@ -821,13 +821,13 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 }
 /* The list of scales is longer than the diagram, so the diagram follows the reading
    down instead of leaving a column of air beside it. */
-.tb-radar { position: sticky; top: 0; }
-.tb-radar__svg { width: 100%; height: auto; display: block; }
+.tb-chart { position: sticky; top: 0; }
+.tb-chart__svg { width: 100%; height: auto; display: block; }
 /* Rings and rays are the auxiliary grid, not data — border tone, not text tone. The
    rings carry NO labels: three scales have three different band boundaries, so one
    labelled grid would state something false about two of them. */
-.tb-radar__ring,
-.tb-radar__axis { fill: none; stroke: var(--ou-border-soft); stroke-width: 1; }
+.tb-chart__ring,
+.tb-chart__axis { fill: none; stroke: var(--ou-border-soft); stroke-width: 1; }
 /* The figure itself is neutral. Each axis has its OWN tone, so there is nothing to
    paint the whole polygon with; evaluation is carried by the vertices and the level
    labels beside them. */
@@ -850,7 +850,7 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
    column, and that runs out earlier than the row itself collapses. */
 @container tbscene (max-width: 900px) {
   .tb-measures--chart { grid-template-columns: 1fr; }
-  .tb-radar { position: static; max-width: 360px; margin-inline: auto; }
+  .tb-chart { position: static; max-width: 360px; margin-inline: auto; }
 }
 
 /* PRD-29: the single recommendations block, structured by resource type. The chip row
@@ -1394,3 +1394,29 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   }
   .tb-scene .ou-rank__btn { min-width: 44px; min-height: 44px; }
 }
+/* ── PRD-46: роза. Заливка непрозрачна, поэтому сетка рисуется ПОВЕРХ секторов —
+   под ними она видна только в промежутках между короткими секторами, то есть там,
+   где говорит меньше всего. Цвет приходит тройкой HSL из ядра, как и у зон PRD-29:
+   палитра здесь своя не заводится. */
+.tb-rose__sector {
+  fill: hsl(var(--tb-hue));
+  /* Зазор в 2px между заливками: без него соседние секторы сливаются в одно пятно
+     там, где их доли близки. Обводка цветом ФОНА, а не линией — так зазор одинаково
+     работает и на светлой, и на тёмной сцене. */
+  stroke: var(--ou-bg-surface-2);
+  stroke-width: 2;
+}
+/* Доля, не поместившаяся в поле, упирается в кольцо: пунктирный край говорит, что
+   сектор обрезан, а не что шкала ровно на пределе. */
+.tb-rose__sector--overflow { stroke: var(--ou-fg-default); stroke-dasharray: 3 3; }
+/* Пиктограмма приходит контурами lucide: обводка без заливки и скруглённые концы —
+   иначе штрихи выглядят обрубленными на мелком размере. */
+.tb-rose__icon {
+  fill: none;
+  stroke: var(--ou-fg-muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tb-rose__label { fill: var(--ou-fg-default); font: var(--ou-text-body-s); }
+.tb-rose__level { fill: var(--ou-fg-muted); font: var(--ou-text-body-xs); }

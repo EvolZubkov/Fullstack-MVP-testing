@@ -39,17 +39,31 @@
     <div class="tb-report__title tb-report__title--tight">По шкалам</div>
     <div class="tb-report__scales">
       {{#if result.scalesChart}}
-      <div class="tb-radar">
-        <svg class="tb-radar__svg" viewBox="0 0 {{result.scalesChart.width}} {{result.scalesChart.height}}" role="img" aria-label="{{result.scalesChart.ariaLabel}}">
+      <!-- PRD-46: ОДИН блок на радар и розу. Ядро отдаёт обе диаграммы одной формой, и
+          неподходящие списки приходят ПУСТЫМИ — пустой цикл не рисует ничего. Порядок
+          слоёв важен: заливки розы непрозрачны, поэтому сетка идёт ПОВЕРХ них. -->
+      <div class="tb-chart">
+        <svg class="tb-chart__svg" viewBox="0 0 {{result.scalesChart.width}} {{result.scalesChart.height}}" role="img" aria-label="{{result.scalesChart.ariaLabel}}">
+          {{#each result.scalesChart.sectors}}
+          <path class="tb-rose__sector {{overflowClass}}" d="{{d}}" style="--tb-hue:{{color}}"></path>
+          {{/each}}
           {{#each result.scalesChart.rings}}
-          <circle class="tb-radar__ring" cx="{{cx}}" cy="{{cy}}" r="{{radius}}"></circle>
+          <circle class="tb-chart__ring" cx="{{cx}}" cy="{{cy}}" r="{{radius}}"></circle>
+          {{/each}}
+          {{#each result.scalesChart.spokes}}
+          <line class="tb-chart__axis" x1="{{cx}}" y1="{{cy}}" x2="{{x}}" y2="{{y}}"></line>
           {{/each}}
           {{#each result.scalesChart.axes}}
-          <line class="tb-radar__axis" x1="{{cx}}" y1="{{cy}}" x2="{{axisX}}" y2="{{axisY}}"></line>
+          <line class="tb-chart__axis" x1="{{cx}}" y1="{{cy}}" x2="{{axisX}}" y2="{{axisY}}"></line>
           {{/each}}
+          {{#if result.scalesChart.isRadar}}
           <polygon class="tb-radar__shape" points="{{result.scalesChart.polygonPoints}}"></polygon>
+          {{/if}}
           {{#each result.scalesChart.axes}}
           <circle class="tb-radar__dot {{quantizedClass}}" cx="{{x}}" cy="{{y}}" r="6" style="--tb-zone:{{color}}"></circle>
+          {{/each}}
+          {{#each result.scalesChart.icons}}
+          <g class="tb-rose__icon" transform="{{transform}}">{{#each paths}}<path d="{{.}}"></path>{{/each}}</g>
           {{/each}}
           {{#each result.scalesChart.labels}}
           <text class="{{className}}" x="{{x}}" y="{{y}}" text-anchor="{{anchor}}">{{text}}</text>

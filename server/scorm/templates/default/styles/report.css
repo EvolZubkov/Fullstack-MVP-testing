@@ -244,9 +244,9 @@
 .tb-report__scale-val { font-size: 14px; font-weight: 300; }
 .tb-report__scale-lvl { font-size: 12px; font-weight: 700; }
 .tb-report__scale-text { font-size: 12px; font-weight: 300; margin-top: 4px; }
-.tb-report .tb-radar__svg { width: 100%; height: auto; display: block; }
-.tb-report .tb-radar__ring,
-.tb-report .tb-radar__axis { fill: none; stroke: rgba(255, 255, 255, 0.18); stroke-width: 1; }
+.tb-report .tb-chart__svg { width: 100%; height: auto; display: block; }
+.tb-report .tb-chart__ring,
+.tb-report .tb-chart__axis { fill: none; stroke: rgba(255, 255, 255, 0.18); stroke-width: 1; }
 .tb-report .tb-radar__shape { fill: #8b5cf6; fill-opacity: 0.18; stroke: #8b5cf6; stroke-width: 2; }
 .tb-report .tb-radar__dot { fill: hsl(var(--tb-zone)); stroke: #11151e; stroke-width: 2; }
 .tb-report .tb-radar__dot--quantized { fill: #11151e; stroke: hsl(var(--tb-zone)); }
@@ -261,3 +261,13 @@
 .tb-report .tb-report__scale-lvl.tb-tone--neutral   { color: hsl(217 91% 65%); }
 .tb-report .tb-report__scale-lvl.tb-tone--attention { color: hsl(38 92% 55%); }
 .tb-report .tb-report__scale-lvl.tb-tone--critical  { color: hsl(0 84% 65%); }
+/* PRD-46: роза в печати. Цвета секторов приходят из ядра, поэтому здесь только
+   контрастная обводка под тёмный фон отчёта и типографика подписей. */
+.tb-report .tb-rose__sector { fill: hsl(var(--tb-hue)); stroke: #11151e; stroke-width: 2; }
+.tb-report .tb-rose__sector--overflow { stroke: #fafafa; stroke-dasharray: 3 3; }
+.tb-report .tb-rose__icon {
+  fill: none; stroke: rgba(250, 250, 250, 0.7); stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.tb-report .tb-rose__label { fill: #fafafa; font-size: 11px; }
+.tb-report .tb-rose__level { fill: rgba(250, 250, 250, 0.7); font-size: 10px; }
