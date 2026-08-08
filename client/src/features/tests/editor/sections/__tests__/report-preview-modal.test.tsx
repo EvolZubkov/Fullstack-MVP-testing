@@ -230,3 +230,55 @@ describe("это страница, а не PDF (FR-21)", () => {
     expect(onClose).toHaveBeenCalled();
   });
 });
+
+describe("блок измерений в предпросмотре (PRD-47 §5.4)", () => {
+  /** Демо-набор шаблона: у предпросмотра нет прогона, измерения берутся отсюда. */
+  const DEMO_MEASURES = {
+    ramp: { favorable: "142 76% 36%", mid: "38 92% 50%", unfavorable: "0 84% 60%" },
+    scaleKind: "band_ruler",
+    indicatorKind: "label",
+    scales: ["demo_focus", "demo_team", "demo_care"].map((key, i) => ({
+      key,
+      name: `Шкала ${i + 1}`,
+      value: 20 + i * 8,
+      visibility: "level_and_value",
+      interpretation: {
+        domainMin: 0,
+        domainMax: 50,
+        displayMax: null,
+        valence: "higher_is_better",
+        bands: [{ min: 0, max: 50, level: "high", label: "Высокий" }],
+      },
+    })),
+    indicators: [],
+    // Настройки ЭКРАНА: вид отчёта берётся не отсюда.
+    chartSettings: { scalesChartKind: "rose" },
+  };
+
+  const WITH_DEMO = { ...BUNDLE, demo: { course: { title: "Демо" }, runtime: { measures: DEMO_MEASURES } } };
+
+  it("показывает карточки шкал из демо-набора шаблона", async () => {
+    mockFetch(WITH_DEMO);
+    renderModal({ variant: undefined });
+    await waitFor(() => expect(rendered.length).toBeGreaterThan(0));
+
+    expect((lastContext().result as { scales?: unknown[] }).scales).toHaveLength(3);
+  });
+
+  it("рисует диаграмму видом из полей ОТЧЁТА, а не из демо-набора", async () => {
+    mockFetch(WITH_DEMO);
+    renderModal({ variant: undefined, values: { scalesChartKind: "radar" } });
+    await waitFor(() => expect(rendered.length).toBeGreaterThan(0));
+
+    const chart = (lastContext().result as { scalesChart?: { kind?: string } }).scalesChart;
+    expect(chart?.kind).toBe("radar");
+  });
+
+  it("шаблон без демо-измерений рисует отчёт как раньше — без блока", async () => {
+    mockFetch(BUNDLE);
+    renderModal({ variant: undefined });
+    await waitFor(() => expect(rendered.length).toBeGreaterThan(0));
+
+    expect((lastContext().result as { scales?: unknown[] }).scales).toBeUndefined();
+  });
+});

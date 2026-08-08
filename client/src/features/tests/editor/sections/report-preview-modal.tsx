@@ -18,6 +18,7 @@ import { Banner, Button, ModalDialog, SegmentedControl, Tag } from "@universityr
 import { TemplateScreen } from "@/components/template-screen";
 import { buildTemplateCssVars } from "@shared/template/params-css";
 import { buildAdaptiveReportContext, buildReportContext } from "@shared/report/report-context";
+import { buildReportMeasures } from "@shared/report/report-measures";
 import {
   buildAdaptiveReportPreviewInput,
   buildReportPreviewInput,
@@ -93,11 +94,21 @@ export function ReportPreviewModal({
     const test = { testName, sections, levelNames };
     const design = params as Record<string, unknown>;
     // `isPreview` — тот же флаг, что и у выдачи: макет вправе пометить страницу образцом.
-    const opts = { values: previewValues, design, isPreview: true };
+    // PRD-47 §5.4: у предпросмотра нет прогона, поэтому измерения ему даёт демо-набор
+    // ШАБЛОНА — тот же, из которого предпросмотр страниц берёт всё остальное. Вид
+    // диаграммы при этом берётся из полей ОТЧЁТА: у него свой переключатель, и подмена
+    // показала бы автору не тот документ, что уйдёт в PDF.
+    const demoMeasures = bundle?.demo?.runtime?.measures;
+    const opts = {
+      values: previewValues,
+      design,
+      isPreview: true,
+      ...(demoMeasures ? { measures: buildReportMeasures(demoMeasures, previewValues) } : {}),
+    };
     return adaptive
       ? buildAdaptiveReportContext(buildAdaptiveReportPreviewInput(test, outcome), opts)
       : buildReportContext(buildReportPreviewInput(test, outcome), opts);
-  }, [adaptive, testName, sections, levelNames, outcome, previewValues, params]);
+  }, [adaptive, testName, sections, levelNames, outcome, previewValues, params, bundle]);
 
   const cssVars = useMemo(
     () => buildTemplateCssVars(params, bundle?.manifest.params),
