@@ -160,6 +160,52 @@ describe("buildScormExportData", () => {
   });
 });
 
+describe("buildScormExportData — ипсативность (PRD-46 §5)", () => {
+  const SCALE_KEYS = ["cel", "vdo", "kom", "pro"];
+
+  /** Четыре варианта блока кормят четыре шкалы один к одному — устройство ЧИЛ. */
+  const block = (questionId: string) =>
+    SCALE_KEYS.map((_k, index) => ({
+      questionId,
+      scaleId: `sc-${index}`,
+      sourceType: "option_allocation",
+      sourceKey: String(index),
+      valueJson: 1,
+      weight: 1,
+    }));
+
+  const chil = (over: { hiddenIndex?: number } = {}) => {
+    storageMock.getScales.mockResolvedValue(
+      SCALE_KEYS.map((key, i) => ({
+        id: `sc-${i}`,
+        key,
+        learnerVisibility: i === over.hiddenIndex ? "hidden" : "level_and_value",
+      })) as never,
+    );
+    storageMock.getQuestionMeasurements.mockResolvedValue([...block("q1"), ...block("q2")] as never);
+    storageMock.getQuestionsByTopic.mockResolvedValue([
+      { id: "q1", type: "allocation", dataJson: { options: ["a", "b", "c", "d"], budget: 7 } },
+      { id: "q2", type: "allocation", dataJson: { options: ["a", "b", "c", "d"], budget: 7 } },
+    ] as never);
+  };
+
+  it("признаёт модель ЧИЛ и кладёт признак в данные выгрузки", async () => {
+    chil();
+    expect((await buildScormExportData("t1", { source: "debug" })).ipsativeScales).toBe(true);
+  });
+
+  it("скрытая шкала выводит модель из ипсативных", async () => {
+    // Доля, отданная её варианту, из профиля уходит, и сумма показанных шкал перестаёт
+    // быть постоянной — роза заявила бы целое, которого нет.
+    chil({ hiddenIndex: 3 });
+    expect((await buildScormExportData("t1", { source: "debug" })).ipsativeScales).toBe(false);
+  });
+
+  it("у теста без шкал признак ложен и лишних чтений не делает", async () => {
+    expect((await buildScormExportData("t1", { source: "debug" })).ipsativeScales).toBe(false);
+  });
+});
+
 describe("liveDataSource — live read facade backing the debug source", () => {
   it("delegates every getter to live storage", async () => {
     storageMock.getTopics.mockResolvedValue([{ id: "tp1" }] as never);

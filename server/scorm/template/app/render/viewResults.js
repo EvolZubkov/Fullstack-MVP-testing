@@ -274,7 +274,12 @@ function buildResultsMeasures(scaleComputation, varComputation) {
     // the package hands them over untouched and the ONE decision rule in Core reads them —
     // including PRD-35's boolean, which it migrates. A package built before either PRD has
     // no key at all and keeps the screen exactly as it was.
-    chartSettings: blockSettings
+    chartSettings: blockSettings,
+    // PRD-46: the verdict is BAKED, not derived here. The package carries neither the
+    // contribution rows nor the allocation budgets it is read from, and a second rule for
+    // «what counts as ipsative» would be a second chance to disagree with the web host
+    // (PRD-29 §9). No key ⇒ false, so a package built before this PRD draws what it drew.
+    ipsativeScales: TD.ipsativeScales === true
   };
 }
 
