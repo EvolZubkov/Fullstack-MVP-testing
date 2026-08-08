@@ -36,7 +36,6 @@ import {
   Stack,
   Switch,
   Tag,
-  Textarea,
 } from "@universityrt/ui-kit";
 import { Check, ChevronDown, ChevronRight, Info, Plus, Trash2 } from "lucide-react";
 
@@ -52,22 +51,23 @@ import {
   loadContributionQuestions,
   loadScalePreviewContext,
   previewScales,
-  hasFeedbackContent,
   type ContributionQuestion,
   type ContributionUnit,
   type PreviewAnswer,
   type PreviewQuestionContext,
   type ScalePreviewResult,
 } from "../scales-api";
+import { pluralize } from "@/lib/i18n";
 import type { FieldErrorIndex } from "../field-errors";
 import { formatAuthorNumber, parseAuthorNumber, sanitizeAuthorNumberInput } from "../numeric-input";
+import { isEmptyBandRow } from "../test-editor.validation";
 import { FoldAllButtons, useSectionFold } from "./section-fold";
 import { isSingleIndexChoice, distributesBudget, type QuestionType } from "@shared/questions/question-type";
 import { achievableRange } from "@shared/scales/engine";
 import type { AllocationSpec } from "@shared/questions/allocation";
-import type { LearnerVisibility, LevelTone, Valence } from "@shared/scales/interpretation";
-import { FeedbackEditorModal } from "./feedback-editor-modal";
-import { TONE_OPTIONS, emptyFeedbackValue } from "./outcomes-editor";
+import type { LearnerVisibility, Valence } from "@shared/scales/interpretation";
+import { LevelsEditor } from "./levels-editor";
+import { bandsToDraft, draftErrors } from "./levels-model";
 
 export type ScalesSectionProps = {
   model: TestEditorModel;
@@ -165,11 +165,6 @@ function recalcPatch(v: RecalcValue): Pick<ScaleModel, "normalization" | "direct
   return { normalization: "percent", direction: "inverse" };
 }
 
-function emptyBand(): ScaleBandModel {
-  localKeyCounter += 1;
-  return { clientKey: `band-${localKeyCounter}`, min: "", max: "", label: "", level: "", text: "", tone: "" };
-}
-
 function emptyScale(sortOrder: number): ScaleModel {
   localKeyCounter += 1;
   return {
@@ -231,14 +226,6 @@ function rowKey(s: ScaleModel, index: number): string {
   return s.id ?? s.clientKey ?? `row-${index}`;
 }
 
-function pluralBands(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return `${n} диапазон`;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${n} диапазона`;
-  return `${n} диапазонов`;
-}
-
 function pluralQuestions(n: number): string {
   const mod10 = n % 10;
   const mod100 = n % 100;
@@ -258,26 +245,19 @@ function keyErrorOf(s: ScaleModel, index: number, scales: ScaleModel[]): string 
   return null;
 }
 
-/** Blocking band error message for one scale (numeric/order/overlap), else null. */
+/**
+ * Blocking band error for one scale, delegated to the levels model so the card
+ * header, the save gate and the editor itself never disagree about what is wrong.
+ *
+ * Fully-empty rows — leftover «new» rows of the retired bands table — are dropped
+ * first, using {@link isEmptyBandRow}, the very predicate the save gate applies.
+ * Not a copy of it: the card's banner claims saving is blocked, so a card
+ * complaining about a row the gate lets through would simply be lying. The gate
+ * ignores such a row at ANY position, so this does too — and the level card still
+ * shows «Укажите число» under the field itself, which is where the author can act.
+ */
 function bandErrorOf(s: ScaleModel): string | null {
-  let prevMax: number | null = null;
-  for (let j = 0; j < s.bands.length; j++) {
-    const b = s.bands[j];
-    const minRaw = b.min.trim();
-    const maxRaw = b.max.trim();
-    if (minRaw === "" && maxRaw === "" && b.label.trim() === "" && b.level.trim() === "") continue;
-    const min = parseAuthorNumber(minRaw);
-    const max = parseAuthorNumber(maxRaw);
-    if (min === null || max === null) {
-      return `Диапазон ${j + 1}: укажите числовые min и max.`;
-    }
-    if (min > max) return `Диапазон ${j + 1}: min не может быть больше max.`;
-    if (prevMax !== null && min <= prevMax) {
-      return `Диапазон ${j + 1}: пересекается с предыдущим. Вводите по возрастанию raw без пересечений.`;
-    }
-    prevMax = max;
-  }
-  return null;
+  return draftErrors(bandsToDraft(s.bands.filter((b) => !isEmptyBandRow(b)))).blocking;
 }
 
 export function ScalesSection({ model, testId, updateModel, readOnly = false }: ScalesSectionProps) {
@@ -566,7 +546,9 @@ function ScaleCard({
   const subtitle = [
     AGG_LABEL[s.aggregation],
     RECALC_LABEL[recalc],
-    s.bands.length > 0 ? pluralBands(s.bands.length) : null,
+    // «уровень», not «диапазон»: PRD-45 retired ranges from the UI, and the card's
+    // subtitle was the last place still counting them.
+    s.bands.length > 0 ? `${s.bands.length} ${pluralize(s.bands.length, "уровень", "уровня", "уровней")}` : null,
     coverage > 0 ? pluralQuestions(coverage) : "без вкладов",
   ]
     .filter(Boolean)
@@ -621,7 +603,6 @@ function ScaleCard({
             index={index}
             readOnly={readOnly}
             keyError={keyError}
-            bandError={bandError}
             suggestedDomain={suggestedDomain}
             onChange={onChange}
           />
@@ -633,12 +614,16 @@ function ScaleCard({
 
 // ─── Scale form ─────────────────────────────────────────────────────────────────
 
+/**
+ * The band error is NOT rendered here: {@link bandErrorOf} now returns the very
+ * message {@link LevelsEditor} already shows in its own blocking banner, so a
+ * second copy would print the same sentence twice under one card.
+ */
 function ScaleForm({
   scale: s,
   index,
   readOnly,
   keyError,
-  bandError,
   suggestedDomain,
   onChange,
 }: {
@@ -646,7 +631,6 @@ function ScaleForm({
   index: number;
   readOnly: boolean;
   keyError: string | null;
-  bandError: string | null;
   suggestedDomain: { min: number; max: number } | null;
   onChange: (patch: Partial<ScaleModel>) => void;
 }) {
@@ -735,17 +719,25 @@ function ScaleForm({
       </Grid>
 
       <hr className="wf-sep" />
-      <div className="tb-section-label">Диапазоны (пороги) → уровень</div>
-      <BandsEditor bands={s.bands} index={index} readOnly={readOnly} onChange={setBands} />
-      {bandError && <Banner tone="error" size="sm" description={bandError} />}
-      <Banner
-        tone="info"
-        size="sm"
-        description={
-          "«Уровень» — произвольный код (напр. high / passed), публикуется в scale.{key}.level " +
-          "для формул показателей. «Метка» необязательна: пусто → обучающемуся показывается код. " +
-          "Диапазоны вводятся по возрастанию raw, не пересекаются."
-        }
+      <div className="tb-section-label">Уровни шкалы</div>
+      {/* The one thing the shared editor's own banner cannot say: this tab's
+          publication address. `LevelsEditor` also serves «Показатели», where no
+          `scale.<key>` path exists, so it stays path-free and the address lives
+          here. `tb-card-desc`, not `ou-formfield__desc`: the latter has no margins
+          of its own — it leans on `.ou-formfield`'s flex gap, which a card body
+          does not provide. */}
+      <p className="tb-card-desc">
+        Код уровня публикуется как scale.{"{"}ключ{"}"}.level и доступен формулам показателей.
+      </p>
+      <LevelsEditor
+        bands={s.bands}
+        index={index}
+        readOnly={readOnly}
+        valence={s.valence}
+        domain={s.domainMin !== null && s.domainMax !== null
+          ? { min: s.domainMin, max: s.domainMax }
+          : suggestedDomain}
+        onChange={setBands}
       />
 
       <hr className="wf-sep" />
@@ -759,7 +751,7 @@ function ScaleForm({
         index={index}
         seed={effectiveDomain(s, suggestedDomain)}
         switchLabel="Задать границы шкалы вручную"
-        switchDescription="Выключено — границы берутся из охвата диапазонов. Ноль — законная граница, а не признак «не задано»."
+        switchDescription="Выключено — границы берутся из охвата уровней. Ноль — законная граница, а не признак «не задано»."
         minLabel="Минимум шкалы"
         maxLabel="Максимум шкалы"
         onChange={onChange}
@@ -919,193 +911,6 @@ export function DomainFields({
             />
           </div>
         </div>
-      )}
-    </>
-  );
-}
-
-// ─── Bands editor ───────────────────────────────────────────────────────────────
-
-/**
- * The numeric interpretation editor. Also used by the «Показатели» tab for a
- * NUMERIC indicator (PRD-29) — a numeric interpretation is one notion, and a
- * second table would drift from this one the moment either side changed. Its
- * non-numeric twin is {@link OutcomesEditor}.
- *
- * @public
- */
-export function BandsEditor({
-  bands,
-  index,
-  readOnly,
-  onChange,
-  testIdPrefix = "scales",
-}: {
-  bands: ScaleBandModel[];
-  index: number;
-  readOnly: boolean;
-  onChange: (bands: ScaleBandModel[]) => void;
-  /** Distinguishes the scale card's table from the indicator card's one. */
-  testIdPrefix?: string;
-}) {
-  // Which row's recommendations modal is open (row index, not the row itself).
-  const [feedbackFor, setFeedbackFor] = useState<number | null>(null);
-
-  const update = (j: number, patch: Partial<ScaleBandModel>) =>
-    onChange(bands.map((b, i) => (i === j ? { ...b, ...patch } : b)));
-  const remove = (j: number) => onChange(bands.filter((_, i) => i !== j));
-  const add = () => onChange([...bands, emptyBand()]);
-
-  const open = feedbackFor !== null ? bands[feedbackFor] : undefined;
-
-  return (
-    <>
-      <table className="tb-table tb-table--mb tb-bands-table" data-testid={`${testIdPrefix}-bands-${index}`}>
-        <colgroup>
-          <col />
-          <col />
-          <col />
-          <col />
-          <col />
-          <col className="tb-bands-table__act" />
-        </colgroup>
-        <thead>
-          <tr>
-            <th>min</th>
-            <th>max</th>
-            <th>Метка (опц.)</th>
-            <th>Уровень</th>
-            <th>Оценка</th>
-            <th><span className="sr-only">Действия</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          {bands.length === 0 ? (
-            <tr>
-              <td colSpan={6}><span className="tb-card-desc">Диапазоны не заданы</span></td>
-            </tr>
-          ) : (
-            bands.map((b, j) => {
-              const k = b.clientKey ?? `band-${j}`;
-              return (
-                <Fragment key={k}>
-                <tr>
-                  <td>
-                    <Input
-                      size="s"
-                      value={b.min}
-                      disabled={readOnly}
-                      aria-label={`min диапазона ${j + 1}`}
-                      onChange={(e) => update(j, { min: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <Input
-                      size="s"
-                      value={b.max}
-                      disabled={readOnly}
-                      aria-label={`max диапазона ${j + 1}`}
-                      onChange={(e) => update(j, { max: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <Input
-                      size="s"
-                      value={b.label}
-                      disabled={readOnly}
-                      placeholder="(опционально)"
-                      aria-label={`метка диапазона ${j + 1}`}
-                      onChange={(e) => update(j, { label: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <Input
-                      size="s"
-                      value={b.level}
-                      disabled={readOnly}
-                      placeholder="напр. high"
-                      aria-label={`уровень диапазона ${j + 1}`}
-                      onChange={(e) => update(j, { level: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <Select<LevelTone | "">
-                      size="s"
-                      value={b.tone}
-                      disabled={readOnly}
-                      options={TONE_OPTIONS}
-                      aria-label={`оценка диапазона ${j + 1}`}
-                      onChange={(value) => update(j, { tone: value })}
-                    />
-                  </td>
-                  <td>
-                    {!readOnly && (
-                      <IconButton
-                        icon={<Trash2 width={14} height={14} aria-hidden="true" />}
-                        aria-label={`Удалить диапазон ${j + 1}`}
-                        variant="ghost"
-                        size="s"
-                        onClick={() => remove(j)}
-                      />
-                    )}
-                  </td>
-                </tr>
-                {/* Continuation row: the explanatory text is a paragraph and does
-                    not fit a table cell, so it lives under the row and the table
-                    itself stays compact. */}
-                <tr className="tb-bands-table__detail">
-                  <td colSpan={6}>
-                    <Stack gap={2} align="start">
-                      <Textarea
-                        size="s"
-                        fullWidth
-                        rows={2}
-                        value={b.text}
-                        disabled={readOnly}
-                        placeholder="Что означает этот уровень — текст для обучающегося"
-                        aria-label={`толкование диапазона ${j + 1}`}
-                        onChange={(e) => update(j, { text: e.target.value })}
-                      />
-                      {!readOnly && (
-                        <Button size="s" variant="ghost" onClick={() => setFeedbackFor(j)}>
-                          {hasFeedbackContent(b.feedback) ? "Рекомендации заданы" : "Рекомендации"}
-                        </Button>
-                      )}
-                    </Stack>
-                  </td>
-                </tr>
-                </Fragment>
-              );
-            })
-          )}
-        </tbody>
-      </table>
-      {!readOnly && (
-        <Button
-          variant="ghost"
-          size="s"
-          leadingIcon={<Plus size={16} aria-hidden="true" />}
-          onClick={add}
-          data-testid={`${testIdPrefix}-band-add-${index}`}
-        >
-          Добавить диапазон
-        </Button>
-      )}
-
-      {open && feedbackFor !== null && (
-        <FeedbackEditorModal
-          open
-          title={`Рекомендации для уровня «${open.label.trim() || open.level.trim() || `диапазон ${feedbackFor + 1}`}»`}
-          description="Текст и подборка материалов, которые увидит обучающийся с этим уровнем"
-          value={open.feedback ?? emptyFeedbackValue()}
-          hideAssets={false}
-          onCancel={() => setFeedbackFor(null)}
-          onSave={(value) => {
-            update(feedbackFor, { feedback: value });
-            setFeedbackFor(null);
-          }}
-          testId={`${testIdPrefix}-band-feedback-${index}`}
-        />
       )}
     </>
   );

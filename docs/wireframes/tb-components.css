@@ -654,3 +654,141 @@
   .tb-adaptive-topics__toggle-lbl { display: none; }
 }
 /* gate-skip-end */
+
+/* ─── PRD-45: tone dot inside the level's SegmentedControl ──────────────────── */
+.tb-tone-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  display: inline-block; flex: 0 0 auto;
+}
+
+/* ─── PRD-45: levels editor ─────────────────────────────────────────────────── */
+/* The predecessor was a six-column table whose header carried every field label —
+   scrolling the drawer left the fields anonymous. Here each field owns its label,
+   and the only shared grid is the coverage strip: one 88 / 1fr / 88 track set on
+   two rows, so the labels share a baseline and the ribbon shares the control
+   baseline with both number fields. */
+/* One width for the two boundary columns: the threshold field MUST line up under
+   «Начало», and the whole layout is that alignment. Two literals could drift apart
+   in separate edits; one token cannot. */
+.tb-levels { display: flex; flex-direction: column; gap: var(--ou-space-2); --tb-levels-bound-w: 88px; }
+
+.tb-levels__cover {
+  display: grid; grid-template-columns: var(--tb-levels-bound-w) 1fr var(--tb-levels-bound-w);
+  column-gap: var(--ou-space-2); align-items: center;
+  margin-bottom: var(--ou-space-3);
+}
+.tb-levels__caplbl { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+.tb-levels__caplbl--end { text-align: right; }
+/* Height comes from the SAME token the DS gives an `s` control, not a literal:
+   `--ou-size-control-s` is 32px normally, 28px dense and 40px roomy, so a hard
+   34px matched the flanking number fields in no density at all (FR-04). */
+.tb-levels__ribbon { display: flex; height: var(--ou-size-control-s); border-radius: var(--ou-radius-s); overflow: hidden; }
+/* No `color` here: the stripe's foreground comes from its tone, inline, paired with
+   the background it must be legible on (see `TONE_CHIPS.ribbonFg`). A blanket white
+   was unreadable on the «Авто» and warning stripes.
+
+   `flex-basis: 0` is what makes FR-04's «доля ширины пропорциональна охвату
+   уровня» actually true. With the default `auto` the caption's own width is the
+   base and `flex-grow` only splits what is LEFT, so the CEL scale's 15.3 / 14.3 /
+   70.4 span was drawn as 19.6 / 20.1 / 59.5 — measured in a browser. From zero the
+   grow factors own the whole width; the residual (~0.8pp) is the fixed padding,
+   which is chrome and not span. A narrow level then has to ellipse its caption,
+   which `.tb-levels__seglbl` below does — this box cannot. */
+.tb-levels__seg {
+  display: flex; align-items: center; justify-content: center;
+  min-width: 0; flex-basis: 0; padding: 0 var(--ou-space-1);
+  font: var(--ou-text-body-xs); font-weight: 600;
+  overflow: hidden;
+}
+/* The caption needs a box of its own: `text-overflow` requires a block formatting
+   context, and the anonymous text of a flex item never gets one. Declared on
+   `.tb-levels__seg` itself the ellipsis silently did nothing — «Слабо выражен»
+   spilled past BOTH edges of a 74px stripe and was clipped to «лабо выраже»
+   (measured live: scrollWidth 83 vs clientWidth 74). The very defect PRD-45 set
+   out to remove, so it cannot come back through the ribbon. Inside this span the
+   same declarations work, and the stripe carries a `title` with the full name. */
+.tb-levels__seglbl {
+  min-width: 0; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Without this the ribbon is one flat bar. Tone defaults to «Авто», so a typical
+   scale paints EVERY stripe the same `--ou-bg-muted` and the boundaries — the
+   proportions the ribbon exists to show — are invisible.
+   `currentColor`, not a fixed divider colour, and not a `gap`: measured in a
+   browser, a `--ou-border-default` seam reaches only 1.21:1 against the warning
+   stripe and 1.02:1 against the favourable one, i.e. it vanishes on exactly the
+   saturated fills. A stripe's `currentColor` is its `TONE_CHIPS.ribbonFg`, which
+   that table guarantees ≥4.5:1 against its own `ribbonBg` — measured here at
+   7.11–14:1 across all five tones, in BOTH themes, whatever the neighbour is.
+   An inset shadow also costs no width, so the spans stay exactly proportional. */
+.tb-levels__seg + .tb-levels__seg { box-shadow: inset var(--wf-border-w) 0 0 currentColor; }
+/* The hatch alternates two REAL DS surfaces. `--ou-bg-subtle` reads like a token
+   but is defined nowhere in the DS, so a stripe built on it collapses to
+   transparent — the ribbon would show the page through the «uncovered» span. */
+.tb-levels__seg--gap {
+  background: repeating-linear-gradient(45deg,
+    var(--ou-bg-muted), var(--ou-bg-muted) 5px,
+    var(--ou-bg-surface-2) 5px, var(--ou-bg-surface-2) 10px);
+  color: var(--ou-fg-muted); font-weight: 400;
+}
+.tb-levels__seg--unknown { flex: 1; background: var(--ou-bg-muted); color: var(--ou-fg-muted); font-weight: 400; }
+/* Third grid row, under the ribbon only — the verdict on coverage in words. */
+.tb-levels__coverstat {
+  grid-column: 2; text-align: center;
+  font: var(--ou-text-caption); color: var(--ou-fg-muted);
+  margin-top: var(--ou-space-1);
+}
+
+.tb-levels__card {
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-left-width: 4px; border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-surface-1);
+  padding: var(--ou-space-3) var(--ou-space-4);
+}
+.tb-levels__head { display: flex; align-items: center; gap: var(--ou-space-2); margin-bottom: var(--ou-space-3); }
+.tb-levels__title { font: var(--ou-text-body-m); font-weight: 600; }
+.tb-levels__spacer { flex: 1; }
+.tb-levels__range { font: var(--ou-text-body-s); color: var(--ou-fg-muted); font-variant-numeric: tabular-nums; }
+
+.tb-levels__grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--ou-space-3); }
+
+/* The tone row is a DS SegmentedControl: inline-flex, nowrap by design, natural
+   width ~540px with all five labels. The drawer is `--xl` (1040px) minus a 240px
+   rail, so it fits at full size — but the drawer caps at `100vw - space-7`, and on
+   a ~800px viewport the card narrows past the row's natural width. Without this
+   the row would push out of the card. Scrolling the row inside its own strip keeps
+   the card intact and keeps every label readable, which is the whole point of
+   leaving the Select behind. */
+.tb-levels__tone { margin-top: var(--ou-space-3); overflow-x: auto; }
+.tb-levels__tonelbl { display: block; font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-bottom: var(--ou-space-1); }
+.tb-levels__tonehint { display: block; font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); }
+
+.tb-levels__fold {
+  display: flex; align-items: center; gap: var(--ou-space-2); width: 100%;
+  margin-top: var(--ou-space-3); padding-top: var(--ou-space-2);
+  border: none; border-top: var(--wf-border-w) solid var(--ou-border-soft);
+  background: none; color: var(--ou-fg-default);
+  font: var(--ou-text-body-s); text-align: left; cursor: pointer;
+}
+/* `Collapsible` stamps data-state on its trigger, so the closed «▸» turns into an
+   open «▾» without the component tracking the state twice. */
+.tb-levels__chev { color: var(--ou-fg-muted); flex: 0 0 auto; transition: transform var(--ou-motion-fast) var(--ou-easing-standard); }
+.tb-levels__fold[data-state="open"] > .tb-levels__chev { transform: rotate(90deg); }
+.tb-levels__badge { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+
+/* `start`, not `center`: an invalid threshold grows its field by a message line,
+   and centring would drag the rule line down with it. The rule keeps its own
+   control-height box instead, so it stays level with the field either way. */
+.tb-levels__cut { display: grid; grid-template-columns: var(--tb-levels-bound-w) 1fr var(--tb-levels-bound-w); column-gap: var(--ou-space-2); align-items: start; padding: var(--ou-space-2) 0; }
+/* Grid children default to min-width:auto, which a long error message would push
+   past the track; this lets the field shrink to its column instead. */
+.tb-levels__cutfield { min-width: 0; }
+.tb-levels__cutrule { display: flex; align-items: center; gap: var(--ou-space-2); min-width: 0; min-height: var(--ou-size-control-s); }
+.tb-levels__cutline { flex: 1; height: var(--wf-border-w); background: var(--ou-border-soft); }
+.tb-levels__cutlbl { font: var(--ou-text-caption); color: var(--ou-fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.tb-levels__empty {
+  border: var(--wf-border-w) dashed var(--ou-border-default); border-radius: var(--ou-radius-m);
+  padding: var(--ou-space-6); text-align: center; color: var(--ou-fg-muted);
+}
+.tb-levels__empty-act { margin-top: var(--ou-space-3); }

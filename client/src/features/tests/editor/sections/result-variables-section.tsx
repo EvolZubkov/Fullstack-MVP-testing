@@ -82,7 +82,8 @@ import {
   type ScaleRef,
   type TopicRef,
 } from "../result-variables-builder";
-import { bandSpan, BandsEditor, DomainFields, VALENCE_OPTIONS, VISIBILITY_OPTIONS } from "./scales-section";
+import { bandSpan, DomainFields, VALENCE_OPTIONS, VISIBILITY_OPTIONS } from "./scales-section";
+import { LevelsEditor } from "./levels-editor";
 import { OutcomesEditor } from "./outcomes-editor";
 
 const STATUS_OPTIONS: Array<{ value: ResultVariableControlsStatus; label: string }> = [
@@ -578,11 +579,15 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
       <div className="tb-section-label">Толкование результата</div>
       {v.type === "number" ? (
         <>
-          <BandsEditor
+          <LevelsEditor
             bands={v.bands}
             index={index}
             readOnly={readOnly}
+            valence={v.valence}
             testIdPrefix="metrics"
+            domain={v.domainMin !== null && v.domainMax !== null
+              ? { min: v.domainMin, max: v.domainMax }
+              : null}
             onChange={(bands) => onChange({ bands })}
           />
           {/* PRD-29+: same domain+valence mechanics as the «Шкалы» tab — a numeric
@@ -599,7 +604,7 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
             index={index}
             seed={bandSpan(v) ?? { min: 0, max: 0 }}
             switchLabel="Задать границы вручную"
-            switchDescription="Выключено — границы берутся из охвата диапазонов. Ноль — законная граница, а не признак «не задано»."
+            switchDescription="Выключено — границы берутся из охвата уровней. Ноль — законная граница, а не признак «не задано»."
             minLabel="Минимум"
             maxLabel="Максимум"
             onChange={onChange}

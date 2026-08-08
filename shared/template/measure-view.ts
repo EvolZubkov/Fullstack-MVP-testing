@@ -21,6 +21,7 @@ import {
   type LearnerVisibility,
   type LevelTone,
   type ScaleInterpretation,
+  type Valence,
 } from "../scales/interpretation";
 import { rampColor, zoneColors, type HslTriple, type LevelRamp } from "./level-ramp";
 
@@ -205,7 +206,18 @@ function toneOf(
   count: number,
 ): LevelTone {
   if (override) return override;
-  const { valence } = input.interpretation;
+  return deriveLevelTone(input.interpretation.valence, index, count);
+}
+
+/**
+ * The tone a level carries when its author left «Авто»: derived from the scale's
+ * valence and the level's position on the ramp. Exported because the AUTHOR-side
+ * levels editor paints its coverage ribbon with it — a ribbon that previewed the
+ * split in colours the learner never sees would preview nothing.
+ *
+ * @public
+ */
+export function deriveLevelTone(valence: Valence, index: number, count: number): LevelTone {
   if (valence === "none" || count <= 1 || index < 0) return "neutral";
   const position = index / (count - 1);
   const t = valence === "lower_is_better" ? 1 - position : position;

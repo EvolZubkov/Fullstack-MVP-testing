@@ -204,7 +204,7 @@ describe("<ScalesSection /> — «Список шкал»", () => {
     renderControlled(model);
 
     const covered = screen.getByTestId("scales-card-0");
-    expect(covered).toHaveTextContent("2 диапазона");
+    expect(covered).toHaveTextContent("2 уровня");
     expect(covered).toHaveTextContent("2 вопроса");
     expect(covered.querySelector(".tb-status-dot--ok")).not.toBeNull();
 
@@ -231,25 +231,23 @@ describe("<ScalesSection /> — «Список шкал»", () => {
     expect(screen.getByTestId("scales-card-0")).toHaveTextContent("среднее");
   });
 
-  it("bands editor: add, edit, and remove rows (from the empty-bands state)", () => {
-    renderStateful(baseModel({ scales: [makeScale()] }));
+  it("levels editor: add, edit, and remove levels (from the empty state)", () => {
+    renderStateful(baseModel({ scales: [makeScale({ bands: [] })] }));
     fireEvent.click(screen.getByLabelText("Развернуть шкалу"));
-    expect(screen.getByText("Диапазоны не заданы")).toBeInTheDocument();
+    expect(screen.getByTestId("scales-levels-empty-0")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("scales-band-add-0"));
-    const min = screen.getByLabelText("min диапазона 1") as HTMLInputElement;
-    fireEvent.change(min, { target: { value: "0" } });
-    fireEvent.change(screen.getByLabelText("max диапазона 1"), { target: { value: "5" } });
-    fireEvent.change(screen.getByLabelText("метка диапазона 1"), { target: { value: "Низкий" } });
-    fireEvent.change(screen.getByLabelText("уровень диапазона 1"), { target: { value: "low" } });
-    expect(min.value).toBe("0");
+    fireEvent.click(screen.getByTestId("scales-level-add-0"));
+    const label = screen.getByLabelText("Название уровня 1") as HTMLInputElement;
+    fireEvent.change(label, { target: { value: "Низкий" } });
+    fireEvent.change(screen.getByLabelText("Код уровня 1"), { target: { value: "low" } });
+    expect(label.value).toBe("Низкий");
 
-    fireEvent.click(screen.getByTestId("scales-band-add-0"));
-    expect(screen.getByLabelText("min диапазона 2")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("scales-level-add-0"));
+    expect(screen.getByLabelText("Порог между уровнями 1 и 2")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText("Удалить диапазон 1"));
-    // One band left → its own remover remains, but there's no «диапазона 2» row.
-    expect(screen.queryByLabelText("min диапазона 2")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Удалить уровень 2"));
+    // One level left → no threshold field, because a threshold needs two levels.
+    expect(screen.queryByLabelText("Порог между уровнями 1 и 2")).toBeNull();
   });
 
   it("removing a scale also drops its measurements from the draft", () => {
@@ -269,18 +267,51 @@ describe("<ScalesSection /> — «Список шкал»", () => {
 
 describe("<ScalesSection /> — validation banners", () => {
   it.each([
-    ["non-numeric band", [{ min: "x", max: "1", label: "", level: "hi", text: "", tone: "" as const }], /укажите числовые min и max/],
-    ["min greater than max", [{ min: "5", max: "1", label: "", level: "hi", text: "", tone: "" as const }], /min не может быть больше max/],
+    ["non-numeric band", [{ min: "x", max: "1", label: "", level: "hi", text: "", tone: "" as const }], /Укажите число/],
     [
-      "overlapping bands",
-      [{ min: "0", max: "5", label: "", level: "a", text: "", tone: "" as const }, { min: "3", max: "8", label: "", level: "b", text: "", tone: "" as const }],
-      /пересекается с предыдущим/,
+      "descending thresholds",
+      [
+        { min: "0", max: "42", label: "", level: "a", text: "", tone: "" as const },
+        { min: "42", max: "29", label: "", level: "b", text: "", tone: "" as const },
+      ],
+      /должны идти по возрастанию/,
     ],
   ])("flags %s", (_name, bands, message) => {
     renderStateful(baseModel({ scales: [makeScale({ bands })] }));
     fireEvent.click(screen.getByLabelText("Развернуть шкалу"));
     expect(screen.getByTestId("scales-error-banner")).toBeInTheDocument();
     expect(screen.getByText(message)).toBeInTheDocument();
+  });
+
+  it("accepts touching boundaries — that is what the levels editor writes", () => {
+    renderStateful(baseModel({ scales: [makeScale({ bands: [
+      { min: "0", max: "15", label: "", level: "low", text: "", tone: "" },
+      { min: "15", max: "29", label: "", level: "mid", text: "", tone: "" },
+    ] })] }));
+    // The save gate must stay open: `bands[i].max === bands[i + 1].min` is what
+    // the levels editor writes on every edit, not an overlap.
+    expect(screen.queryByTestId("scales-error-banner")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Развернуть шкалу"));
+    expect(screen.queryByTestId("scales-levels-error-0")).toBeNull();
+  });
+
+  it("stays silent about a fully-empty trailing row, exactly as the save gate does", () => {
+    renderStateful(baseModel({ scales: [makeScale({ bands: [
+      { min: "0", max: "15", label: "", level: "low", text: "", tone: "" },
+      { min: "", max: "", label: "", level: "", text: "", tone: "" },
+    ] })] }));
+    expect(screen.queryByTestId("scales-error-banner")).toBeNull();
+  });
+
+  it("stays silent about a fully-empty row in the MIDDLE too — the gate ignores it as well", () => {
+    // The card's banner says saving is blocked. The save gate skips an empty row
+    // wherever it sits, so a card shouting about one would block nothing and lie.
+    renderStateful(baseModel({ scales: [makeScale({ bands: [
+      { min: "0", max: "15", label: "", level: "low", text: "", tone: "" },
+      { min: "", max: "", label: "", level: "", text: "", tone: "" },
+      { min: "15", max: "29", label: "", level: "mid", text: "", tone: "" },
+    ] })] }));
+    expect(screen.queryByTestId("scales-error-banner")).toBeNull();
   });
 
   it("flags a bad key grammar", () => {

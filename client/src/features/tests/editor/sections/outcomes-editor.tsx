@@ -1,17 +1,18 @@
 /**
  * @module features/tests/editor/sections/outcomes-editor
  * @description PRD-29: the outcome-list editor — the string/boolean twin of the
- * numeric `BandsEditor` (scales-section). A numeric interpretation attaches its
- * meaning to an INTERVAL; a string or boolean one has no intervals at all, so the
- * formula returns a CODE and the author enumerates the codes it can return.
+ * numeric {@link LevelsEditor} (`levels-editor`). A numeric interpretation attaches
+ * its meaning to an INTERVAL; a string or boolean one has no intervals at all, so
+ * the formula returns a CODE and the author enumerates the codes it can return.
  *
- * The two editors are deliberately built the same way (same `tb-bands-table`, same
- * `Input size="s"` cells, same trash `IconButton`, same expandable continuation row
- * carrying the long explanatory text and the «Рекомендации» button) — they are two
- * forms of one notion, and an author moving between them must not have to relearn
- * the UI. Recommendations are edited by the SHARED {@link FeedbackEditorModal}.
+ * The two editors no longer share a shape: PRD-45 moved the numeric twin off the
+ * `tb-bands-table` onto level cards, because interval boundaries are cut points and
+ * a table of min/max pairs let silent gaps through. A code list has no boundaries
+ * to cut, so this editor keeps its table. What the two still share is the closed
+ * list of tones and the recommendations modal — the SHARED
+ * {@link FeedbackEditorModal}.
  *
- * The tone options and the feedback helpers are exported because `BandsEditor`
+ * The tone options and the feedback helpers are exported because `LevelsEditor`
  * consumes them too: one closed list of methodological states for both editors.
  */
 

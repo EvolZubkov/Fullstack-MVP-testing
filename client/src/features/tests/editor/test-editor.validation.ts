@@ -16,11 +16,13 @@ import {
   type AdaptiveTopicConfig,
   type EditorSection,
   type PassDecisionPolicy,
+  type ScaleBandModel,
   type TestEditorModel,
   type TopicPassRule,
   type ValidationIssue,
   type ValidationResult,
 } from "./test-editor.types";
+import { parseAuthorNumber } from "./numeric-input";
 import { resolveEffectiveScoring } from "@shared/scoring/effective-scoring";
 import { normalizeTag, TAG_MAX_LENGTH } from "@shared/tags";
 
@@ -534,8 +536,10 @@ const RESULT_VAR_NAME_RE = /^[a-z][a-z0-9_]{0,63}$/;
  * validity is enforced server-side by the create/update endpoints (422) and
  * surfaced live via the validate-formula call in the section; here we cover the
  * checks the editor can make from the draft alone: name grammar/uniqueness,
- * required label/formula, and the `controls_status` rules (boolean-only, at most
- * one success / one completion controller per test).
+ * required label/formula, the `controls_status` rules (boolean-only, at most one
+ * success / one completion controller per test) and — for a NUMERIC indicator —
+ * its interpretation bands, through the same {@link validateInterpretationBands}
+ * the scales tab uses.
  */
 function validateResultVariables(
   model: TestEditorModel,
@@ -596,6 +600,15 @@ function validateResultVariables(
           "Измените тип или сбросьте в «Нет».",
         severity: "error",
       });
+    }
+
+    // PRD-45 FR-09/FR-14: a numeric indicator is interpreted by the SAME levels
+    // editor a scale is, so its bands answer to the same gate. Without this the
+    // editor's own red banner was the only objection: «Сохранить» stayed enabled
+    // and a descending pair («0–42» then «42–29») reached `config_json`, where
+    // `findBand` returns null across the whole span — a learner with no level.
+    if (v.type === "number") {
+      validateInterpretationBands(v.bands, (j) => `resultVariables[${i}].bands[${j}]`, errors);
     }
 
     if (v.controlsStatus === "success") successCount += 1;
@@ -669,44 +682,86 @@ function validateScales(model: TestEditorModel, errors: ValidationIssue[]): void
 
     // Label is optional (empty -> key shown). Не валидируем.
 
-    // Bands: each row must be numeric with min ≤ max; rows must be ascending and
-    // non-overlapping on raw. A trailing fully-empty row (the "new" row) is
-    // ignored so the author can leave it blank.
-    let prevMax: number | null = null;
-    s.bands.forEach((band, j) => {
-      const minRaw = band.min.trim();
-      const maxRaw = band.max.trim();
-      if (minRaw === "" && maxRaw === "" && band.label.trim() === "" && band.level.trim() === "") {
-        return; // empty draft row
-      }
-      const min = Number(minRaw);
-      const max = Number(maxRaw);
-      if (minRaw === "" || maxRaw === "" || Number.isNaN(min) || Number.isNaN(max)) {
-        errors.push({
-          field: `scales[${i}].bands[${j}]`,
-          code: "band_number",
-          message: `Диапазон ${j + 1}: укажите числовые min и max.`,
-          severity: "error",
-        });
-        return;
-      }
-      if (min > max) {
-        errors.push({
-          field: `scales[${i}].bands[${j}]`,
-          code: "band_order",
-          message: `Диапазон ${j + 1}: min не может быть больше max.`,
-          severity: "error",
-        });
-      }
-      if (prevMax !== null && min <= prevMax) {
-        errors.push({
-          field: `scales[${i}].bands[${j}]`,
-          code: "band_overlap",
-          message: `Диапазон ${j + 1}: пересекается с предыдущим. Вводите по возрастанию raw без пересечений.`,
-          severity: "error",
-        });
-      }
-      prevMax = max;
-    });
+    validateInterpretationBands(s.bands, (j) => `scales[${i}].bands[${j}]`, errors);
+  });
+}
+
+/**
+ * True when a band row carries nothing at all — the leftover «new» row of the
+ * retired bands table. Ignored wherever it sits, not only at the end: the row is
+ * an artefact of the old editor, and an author who blanked one in the middle has
+ * said «this level is gone», not «this level is broken». `scales-section` folds
+ * the same rows away before showing the card's banner, so the card and the gate
+ * agree on which rows exist at all.
+ */
+export function isEmptyBandRow(band: ScaleBandModel): boolean {
+  return (
+    band.min.trim() === "" &&
+    band.max.trim() === "" &&
+    band.label.trim() === "" &&
+    band.level.trim() === ""
+  );
+}
+
+/**
+ * The interpretation bands of ONE numeric owner: a scale (PRD-5) or a numeric
+ * result indicator (PRD-2). Each row must be numeric with min ≤ max, and rows must
+ * ascend on raw; touching neighbours are legal (see the overlap check below).
+ *
+ * One implementation for both owners on purpose (PRD-45): they render the SAME
+ * `LevelsEditor`, so a second copy of the rules would drift exactly the way this
+ * gate's bare `Number` drifted from the editor's `parseAuthorNumber` — the editor
+ * seeds a midpoint threshold through `formatAuthorNumber`, so a fractional cut
+ * arrives here as «73,5», which `Number` read as NaN and blocked saving over with
+ * no error visible in any card.
+ *
+ * A band IS a level to the author — PRD-45 retired «диапазон», `min` and `max`
+ * from the UI — so these messages speak the levels editor's vocabulary and repeat
+ * the ordering sentence `draftErrors` shows inside the card verbatim. The save gate
+ * and the card must not describe one fault two ways.
+ *
+ * @param bands - Rows exactly as the author edits them (raw, possibly ru-decimal).
+ * @param fieldOf - Builds the owner-specific `field` path of row `j`.
+ * @param errors - Accumulator the caller passes through.
+ */
+function validateInterpretationBands(
+  bands: ScaleBandModel[],
+  fieldOf: (index: number) => string,
+  errors: ValidationIssue[],
+): void {
+  let prevMax: number | null = null;
+  bands.forEach((band, j) => {
+    if (isEmptyBandRow(band)) return; // empty draft row
+    const min = parseAuthorNumber(band.min);
+    const max = parseAuthorNumber(band.max);
+    if (min === null || max === null) {
+      errors.push({
+        field: fieldOf(j),
+        code: "band_number",
+        message: `Уровень ${j + 1}: границы заданы не полностью — укажите числа во всех полях.`,
+        severity: "error",
+      });
+      return;
+    }
+    if (min > max) {
+      errors.push({
+        field: fieldOf(j),
+        code: "band_order",
+        message: `Уровень ${j + 1}: нижняя граница больше верхней. Числа в ряду «Начало — пороги — Конец» должны идти по возрастанию.`,
+        severity: "error",
+      });
+    }
+    // PRD-45: the levels editor writes touching boundaries by construction
+    // (`bands[i].max === bands[i + 1].min`), and `findBand` resolves the shared
+    // point to the LOWER band. Only a real overlap is an error now.
+    if (prevMax !== null && min < prevMax) {
+      errors.push({
+        field: fieldOf(j),
+        code: "band_overlap",
+        message: `Уровень ${j + 1}: перекрывает предыдущий. Числа в ряду «Начало — пороги — Конец» должны идти по возрастанию.`,
+        severity: "error",
+      });
+    }
+    prevMax = max;
   });
 }
