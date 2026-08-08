@@ -301,6 +301,7 @@ export function LevelsEditor({
                 placeholder="напр. high"
                 value={l.level}
                 disabled={readOnly}
+                error={errors.levels[i] ?? undefined}
                 onChange={(e) => setLevel(i, { level: e.target.value })}
               />
             </div>

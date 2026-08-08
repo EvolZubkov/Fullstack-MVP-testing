@@ -97,7 +97,16 @@ function asBands(value: unknown): InterpretationBand[] {
       const min = asNumber(b.min);
       const max = asNumber(b.max);
       if (min === null || max === null) return null;
-      const band: InterpretationBand = { min, max, level: String(b.level ?? "") };
+      // Same answer as {@link asOutcomes} gives an outcome without a code, and for the
+      // same reason: the code is the level's IDENTITY, not one of its texts. Without it
+      // the level cannot be marked as the current one on the ruler (`band.level ===
+      // currentLevel` degenerates), cannot be named by a result-variable formula, is
+      // published to the LMS as an empty `scale.<ключ>.level`, and loses its own text and
+      // feedback the moment the book carries it. The LABEL is what may be absent — every
+      // reader falls back to `label ?? level`.
+      const level = String(b.level ?? "");
+      if (!level) return null;
+      const band: InterpretationBand = { min, max, level };
       if (b.label) band.label = String(b.label);
       if (b.text) band.text = String(b.text);
       if (b.tone) band.tone = b.tone as LevelTone;

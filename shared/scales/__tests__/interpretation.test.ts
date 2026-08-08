@@ -103,6 +103,19 @@ describe("parseScaleInterpretation", () => {
     expect(parsed.bands.map((b) => b.level)).toEqual(["moderate"]);
   });
 
+  it("уровень без кода отбрасывается: код — это его опознание", () => {
+    // Тот же ответ, что у исхода без кода: записи, которую нельзя опознать, нет.
+    // Пустой код нельзя пометить текущим на линейке, на него нельзя сослаться из
+    // формулы, и за ним не удержать толкование при загрузке книги.
+    const parsed = parseScaleInterpretation({
+      bands: [
+        { min: 0, max: 14, level: "", label: "Низкий" },
+        { min: 15, max: 24, level: "moderate" },
+      ],
+    });
+    expect(parsed.bands.map((b) => b.level)).toEqual(["moderate"]);
+  });
+
   it("сортирует интервалы по возрастанию min", () => {
     const parsed = parseScaleInterpretation({
       bands: [{ min: 25, max: 45, level: "high" }, { min: 0, max: 14, level: "low" }],

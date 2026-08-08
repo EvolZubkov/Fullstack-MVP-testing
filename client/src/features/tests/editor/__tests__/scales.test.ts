@@ -148,6 +148,19 @@ describe("validateTestEditor — scales", () => {
     expect(scaleErrors([scale({ bands })]).some((e) => e.code === "band_overlap")).toBe(true);
   });
 
+  it("requires a level code, and says so per level", () => {
+    // The code is the level's identity: `parseScaleInterpretation` DROPS a level
+    // without one, so saving it would quietly delete the level on the next read.
+    const bands = [band({ min: "0", max: "16" }), band({ min: "16", max: "30", level: "  " })];
+    const errors = scaleErrors([scale({ bands })]);
+    expect(errors.some((e) => e.field === "scales[0].bands[1]" && e.code === "band_code")).toBe(true);
+    expect(errors.some((e) => e.field === "scales[0].bands[0]")).toBe(false);
+  });
+
+  it("keeps the level LABEL optional — only the code is required", () => {
+    expect(scaleErrors([scale({ bands: [band({ label: "" })] })])).toEqual([]);
+  });
+
   it("ignores a fully-empty trailing band row", () => {
     const bands = [band({ min: "0", max: "16" }), { min: "", max: "", label: "", level: "", text: "", tone: "" as const }];
     expect(scaleErrors([scale({ bands })])).toEqual([]);

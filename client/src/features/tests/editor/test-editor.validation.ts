@@ -743,6 +743,17 @@ function validateInterpretationBands(
       });
       return;
     }
+    // The code is the level's IDENTITY, and `parseScaleInterpretation` drops a level
+    // without one — saving such a level would delete it on the next read, silently.
+    // The LABEL stays optional: every reader falls back to `label ?? level`.
+    if (band.level.trim() === "") {
+      errors.push({
+        field: fieldOf(j),
+        code: "band_code",
+        message: `Уровень ${j + 1}: укажите код уровня — по нему уровень адресуют формулы показателей и получает система обучения.`,
+        severity: "error",
+      });
+    }
     if (min > max) {
       errors.push({
         field: fieldOf(j),

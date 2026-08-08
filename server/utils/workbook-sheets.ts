@@ -183,7 +183,17 @@ function splitBandSegments(text: string): string[] {
   return out.map((s) => s.trim()).filter(Boolean);
 }
 
-const BAND_RE = /^(-?\d+(?:\.\d+)?)\.\.(-?\d+(?:\.\d+)?)\s+(\S+)(?:\s+«([^»]*)»)?$/;
+/**
+ * `мин..макс код «подпись»`.
+ *
+ * The code group excludes the quotation marks on purpose. It used to be `\S+`, which is
+ * greedy: a level whose code was empty serialized to «0..15  «Низкий»» and parsed back
+ * with the LABEL as its code, silently renaming the level to its own caption. The code is
+ * the level's identity — formulas name it, the LMS receives it as `scale.<ключ>.level`,
+ * and the import keeps a level's text and feedback by it — so a cell that cannot state it
+ * must fail loudly instead of inventing one.
+ */
+const BAND_RE = /^(-?\d+(?:\.\d+)?)\.\.(-?\d+(?:\.\d+)?)\s+([^\s«»]+)(?:\s+«([^»]*)»)?$/;
 
 /**
  * Parse the «Диапазоны» cell: `min..max код «подпись»; …` (PRD-14 §12.2).

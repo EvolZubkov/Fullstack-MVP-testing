@@ -126,6 +126,44 @@ describe("draftErrors", () => {
   it("says nothing when there are no levels", () => {
     expect(draftErrors({ start: "", cuts: [], end: "", levels: [] }).blocking).toBeNull();
   });
+
+  it("requires the code of every level and points at the one that lacks it", () => {
+    // The code is the level's identity: a level without one is DROPPED on read
+    // (`parseScaleInterpretation`), so saving it would delete the level silently.
+    const levels = THREE.levels.map((l, i) => (i === 1 ? { ...l, level: "  " } : l));
+    const e = draftErrors({ ...THREE, levels });
+    expect(e.levels).toEqual([null, "Укажите код уровня", null]);
+    expect(e.blocking).toBe("У каждого уровня должен быть код: по нему уровень адресуют формулы показателей.");
+    expect(e.kind).toBe("code");
+  });
+
+  it("keeps the level LABEL optional — only the code is required", () => {
+    const levels = THREE.levels.map((l) => ({ ...l, label: "" }));
+    expect(draftErrors({ ...THREE, levels }).blocking).toBeNull();
+  });
+
+  it("names the broken NUMBERS first — the structure before the code", () => {
+    const levels = THREE.levels.map((l) => ({ ...l, level: "" }));
+    const e = draftErrors({ ...THREE, end: "x", levels });
+    expect(e.blocking).toBe("Границы уровней заданы не полностью: укажите числа во всех полях.");
+    // …and the per-level message is still there, so the author sees both faults.
+    expect(e.levels[0]).toBe("Укажите код уровня");
+  });
+});
+
+describe("addLevel — код уровня", () => {
+  it("подставляет свободный код, чтобы обязательность не била по автору", () => {
+    const one = addLevel({ start: "", cuts: [], end: "", levels: [] }, { min: 0, max: 98 });
+    expect(one.levels[0].level).toBe("level1");
+    const two = addLevel(one, { min: 0, max: 98 });
+    expect(two.levels.map((l) => l.level)).toEqual(["level1", "level2"]);
+  });
+
+  it("не наступает на код, который автор уже занял", () => {
+    const seeded = addLevel({ start: "", cuts: [], end: "", levels: [] }, { min: 0, max: 98 });
+    const renamed = { ...seeded, levels: [{ ...seeded.levels[0], level: "level2" }] };
+    expect(addLevel(renamed, { min: 0, max: 98 }).levels[1].level).toBe("level1");
+  });
 });
 
 describe("hasStoredGap", () => {

@@ -46,9 +46,23 @@ function nextKey(): string {
   return `level-${localKeyCounter}`;
 }
 
-/** A level with no content yet. @public */
-export function emptyLevel(): LevelDraft {
-  return { clientKey: nextKey(), label: "", level: "", text: "", tone: "" };
+/**
+ * A level with no content yet, except the one field it may not go without.
+ *
+ * The code is the level's identity — a level without one is dropped on read and
+ * blocks saving — so a freshly added level would open with an error under a field
+ * the author has not reached yet. `level1`, `level2` … keeps the requirement out of
+ * their way; the author renames it to `low`/`high` whenever they care, and the
+ * blocking message only fires if they clear it on purpose.
+ *
+ * @param taken Codes already used in this draft, so the seed never collides.
+ * @public
+ */
+export function emptyLevel(taken: Iterable<string> = []): LevelDraft {
+  const used = new Set([...taken].map((code) => code.trim()));
+  let n = 1;
+  while (used.has(`level${n}`)) n += 1;
+  return { clientKey: nextKey(), label: "", level: `level${n}`, text: "", tone: "" };
 }
 
 /** Unfold stored bands into the draft the author edits. @public */
@@ -116,15 +130,18 @@ export type LevelsErrors = {
   start: string | null;
   cuts: Array<string | null>;
   end: string | null;
+  /** One message per level, indexed like {@link LevelsDraft.levels}. */
+  levels: Array<string | null>;
   blocking: string | null;
   /**
-   * WHICH of the two blocking conditions fired, as a token rather than prose.
-   * The coverage ribbon cannot be drawn in either case and has to say why — and
-   * «границы заданы не полностью» is a lie when all four fields hold numbers and
-   * only their order is wrong. Sniffing {@link LevelsErrors.blocking} for that
-   * would tie the ribbon's wording to the banner's; this cannot drift.
+   * WHICH of the blocking conditions fired, as a token rather than prose.
+   * The coverage ribbon cannot be drawn for a broken boundary row and has to say
+   * why — and «границы заданы не полностью» is a lie when all four fields hold
+   * numbers and only their order is wrong. Sniffing {@link LevelsErrors.blocking}
+   * for that would tie the ribbon's wording to the banner's; this cannot drift.
+   * `code` is different in kind: the numbers are fine and the ribbon draws.
    */
-  kind: "incomplete" | "order" | null;
+  kind: "incomplete" | "order" | "code" | null;
 };
 
 type Slot = { raw: string; name: string };
@@ -150,10 +167,21 @@ export function draftErrors(draft: LevelsDraft): LevelsErrors {
     start: null,
     cuts: draft.cuts.map(() => null),
     end: null,
+    levels: draft.levels.map(() => null),
     blocking: null,
     kind: null,
   };
   if (draft.levels.length === 0) return out;
+
+  // The code is the level's IDENTITY — `parseScaleInterpretation` drops a level
+  // without one, so a saved codeless level would vanish on the next read. Checked
+  // BEFORE the numbers and never returned early on: the two faults are independent,
+  // and the author should see the missing code even while a boundary is half-typed.
+  // The LABEL stays optional; every reader falls back to `label ?? level`.
+  draft.levels.forEach((level, i) => {
+    if (level.level.trim() === "") out.levels[i] = "Укажите код уровня";
+  });
+  const missingCode = out.levels.some((message) => message !== null);
 
   const row = slots(draft);
   const values = row.map((slot) => parseAuthorNumber(slot.raw.trim()));
@@ -183,6 +211,12 @@ export function draftErrors(draft: LevelsDraft): LevelsErrors {
     set(i, `Меньше предыдущего ${row[i - 1].name} ${formatAuthorNumber(prev)}`);
     out.blocking = "Числа в ряду «Начало — пороги — Конец» должны идти по возрастанию.";
     out.kind = "order";
+  }
+  // The structure speaks first: a broken boundary row also breaks the ribbon, while
+  // a missing code leaves the picture intact and only costs the level its identity.
+  if (out.blocking === null && missingCode) {
+    out.blocking = "У каждого уровня должен быть код: по нему уровень адресуют формулы показателей.";
+    out.kind = "code";
   }
   return out;
 }
@@ -265,7 +299,8 @@ export function addLevel(draft: LevelsDraft, domain: { min: number; max: number 
   const lower = parseAuthorNumber(lowerRaw.trim());
   const upper = parseAuthorNumber(draft.end.trim());
   const cut = lower === null || upper === null ? "" : formatAuthorNumber((lower + upper) / 2);
-  return { ...draft, cuts: [...draft.cuts, cut], levels: [...draft.levels, emptyLevel()] };
+  const taken = draft.levels.map((l) => l.level);
+  return { ...draft, cuts: [...draft.cuts, cut], levels: [...draft.levels, emptyLevel(taken)] };
 }
 
 /**
