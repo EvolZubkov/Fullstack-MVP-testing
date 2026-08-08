@@ -2008,10 +2008,18 @@ function PlaceholderControl(props: {
  * configuring something nobody reads. Standing next to the kind select it can simply not
  * appear; on a rail of its own it would hang there always. A map already saved is NOT touched
  * by hiding the block: the value stays in `settings_json` and comes back with the rose.
+ *
+ * `auto` counts as «a rose may be drawn». It is the setting an ipsative method is meant to be
+ * left on — the whole point of PRD-46 — and there the screen DOES get a rose; hiding the block
+ * would make the look unreachable for exactly the tests it exists for, and force the author to
+ * pin the kind explicitly, giving up the automatic fall back to the radar. Where `auto`
+ * resolves to a radar the map is simply not read, which costs nothing.
  */
-function showsSetting(settings: Record<string, unknown>) {
+const CHART_KINDS_WITH_LOOK = new Set(["rose", "auto"]);
+
+export function showsSetting(settings: Record<string, unknown>) {
   return (st: ContentTemplateSetting): boolean =>
-    st.key !== SCALE_APPEARANCE_KEY || settings.scalesChartKind === "rose";
+    st.key !== SCALE_APPEARANCE_KEY || CHART_KINDS_WITH_LOOK.has(String(settings.scalesChartKind));
 }
 
 /**
