@@ -976,11 +976,13 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 /* Полноэкранный просмотр (attachQuestionMediaFullscreen). Разметку строит ЯДРО, поэтому
    здесь только вид: до PRD-38 те же значения писались инлайном из рантайма.
    Правило `[hidden]` обязательно: собственный `display: flex` перебивает браузерное
-   `display: none` от атрибута, и без него оверлей виден всегда. */
+   `display: none` от атрибута, и без него оверлей виден всегда.
+   Затемнение — токеном ДС (им же затемняют фон модалка и ящик), а не литералом:
+   слой сцены обязан брать палитру только из `--ou-*`, иначе он не следует теме. */
 .qm-overlay {
   position: fixed; inset: 0; z-index: 99999;
   display: flex; align-items: center; justify-content: center;
-  padding: var(--ou-space-6); background: rgb(0 0 0 / 0.85);
+  padding: var(--ou-space-6); background: var(--ou-bg-backdrop);
 }
 .qm-overlay[hidden] { display: none; }
 .qm-overlay__stage { display: flex; align-items: center; justify-content: center; max-width: 95vw; max-height: 90vh; }

@@ -105,7 +105,13 @@ describe("TemplateScreen — themes (PRD-23)", () => {
       />,
     );
     const shadow = shadowOf(container);
-    const styles = [...shadow.querySelectorAll("style")];
+    // Only the sheets that carry a PALETTE. The protection sheet (PRD-34) is injected
+    // into the shadow tree by the renderer itself, lands after everything and holds
+    // print rules and the toast — no colours. Counting it made this check read as a
+    // regression while nothing about the palette order had changed.
+    const styles = [...shadow.children].filter(
+      (n) => n.tagName === "STYLE" && !n.hasAttribute("data-tb-protection"),
+    );
     // Equal specificity → the LAST rule wins, so the test's palette must come last.
     expect(styles.at(-1)?.getAttribute("data-tb-theme")).not.toBeNull();
     const host = container.querySelector("[data-template-screen]") as HTMLElement;

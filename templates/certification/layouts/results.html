@@ -66,8 +66,9 @@
       <div class="{{result.scalesBlockClass}}">
         {{#if result.scalesChart}}
         <!-- PRD-46: ОДИН блок на радар и розу. Ядро отдаёт обе диаграммы одной формой, и
-            неподходящие списки приходят ПУСТЫМИ — пустой цикл не рисует ничего. Порядок
-            слоёв важен: заливки розы непрозрачны, поэтому сетка идёт ПОВЕРХ них. -->
+            неподходящие списки приходят ПУСТЫМИ — пустой цикл не рисует ничего, поэтому
+            ветвиться по виду разметке не требуется (в DSL и нечем). Порядок слоёв важен:
+            заливки розы непрозрачны, поэтому сетка идёт ПОВЕРХ них. -->
         <div class="tb-chart">
           <svg class="tb-chart__svg" viewBox="0 0 {{result.scalesChart.width}} {{result.scalesChart.height}}" role="img" aria-label="{{result.scalesChart.ariaLabel}}">
             {{#each result.scalesChart.sectors}}
