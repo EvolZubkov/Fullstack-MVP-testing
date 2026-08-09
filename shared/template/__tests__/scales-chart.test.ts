@@ -9,7 +9,7 @@
  * method the system does not), hidden values do not (an honest figure cannot be built).
  */
 import { describe, expect, it } from "vitest";
-import { buildScalesChart, chartKindSetting, resolveChartKind } from "../scales-chart";
+import { buildScalesChart, chartKindSetting, legacyChartKind, resolveChartKind } from "../scales-chart";
 import { LEVEL_SCHEMES } from "../level-ramp";
 import type { RadarAxisInput } from "../radar-view";
 import type { LearnerVisibility, ScaleInterpretation } from "../../scales/interpretation";
@@ -139,5 +139,24 @@ describe("chartKindSetting", () => {
 
   it("незнакомое значение падает в «нет», а не в случайный вид", () => {
     expect(chartKindSetting({ scalesChartKind: "spiral" as never })).toBe("none");
+  });
+});
+
+describe("legacyChartKind", () => {
+  // Правило для хоста, который сливает значения с умолчаниями манифеста (отчёт): после
+  // слияния «не трогал» и «выбрал не показывать» неразличимы, поэтому перенос считается
+  // ДО него.
+  it("включённая галочка при нетронутом поле переносится в радар", () => {
+    expect(legacyChartKind({ showCompetencyRadar: true })).toBe("radar");
+  });
+
+  it("тронутое поле переносить нечего — включая выбранное «нет»", () => {
+    expect(legacyChartKind({ scalesChartKind: "none", showCompetencyRadar: true })).toBeNull();
+    expect(legacyChartKind({ scalesChartKind: "rose", showCompetencyRadar: true })).toBeNull();
+  });
+
+  it("без галочки переноса нет", () => {
+    expect(legacyChartKind({})).toBeNull();
+    expect(legacyChartKind({ showCompetencyRadar: false })).toBeNull();
   });
 });

@@ -85,6 +85,30 @@ export function chartKindSetting(settings: ChartKindSettings): ScalesChartKind {
   return settings.showCompetencyRadar === true ? "radar" : "none";
 }
 
+/**
+ * The kind the author's PRD-35 boolean stands for while the new field is UNTOUCHED, or `null`
+ * when nothing has to be carried over.
+ *
+ * {@link chartKindSetting} already migrates the boolean, but only where an untouched field is
+ * still ABSENT — which holds for a results page, whose `settings_json` stores what the author
+ * saved and nothing else. The report resolves its fields against the manifest first
+ * (`resolveReportValues`), so by the time the kind is read, the untouched field already carries
+ * the manifest default `none`, and an explicit `none` rightly outranks the boolean. The two
+ * cases are indistinguishable afterwards, so the carry-over has to happen where the AUTHORED
+ * values are still in hand.
+ *
+ * "Untouched" is `undefined`/`null` — the same absence `resolveReportValues` treats as "author
+ * gave nothing"; an author who did open the selector and chose «Не показывать» has touched it,
+ * and their choice stands.
+ *
+ * @param authored Values as the author saved them, BEFORE manifest defaults are merged in.
+ */
+export function legacyChartKind(authored: ChartKindSettings): ScalesChartKind | null {
+  const explicit = authored.scalesChartKind;
+  if (explicit !== undefined && explicit !== null) return null;
+  return authored.showCompetencyRadar === true ? "radar" : null;
+}
+
 export interface ChartKindInput {
   setting: ScalesChartKind;
   /** Do the scales divide one whole? See `shared/scales/composition`. */

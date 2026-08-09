@@ -17,6 +17,7 @@
  */
 
 import { validateVariantFields, isSettingType, SETTING_TYPES } from "../template/field-types";
+import { legacyChartKind, type ChartKindSettings } from "../template/scales-chart";
 import { reportImageKeys, resolveReportImageValues } from "./report-assets";
 
 /** Виды отчёта. Обычный режим и адаптивный — разные виды (D-5). */
@@ -111,6 +112,9 @@ export function resolveReportVariant(
  * Поле, которого вариант не объявляет, отбрасывается — так смена варианта не тащит
  * чужие значения (FR-14).
  *
+ * Единственное исключение из «умолчание перекрывает пустоту» — вид диаграммы по шкалам:
+ * см. {@link applyLegacyChartKind}.
+ *
  * @param variant Объявление варианта.
  * @param authored Значения, сохранённые автором теста.
  */
@@ -126,7 +130,32 @@ export function resolveReportValues(
     const given = authored ? authored[key] : undefined;
     out[key] = given !== undefined && given !== null ? given : (field.default ?? "");
   }
-  return out;
+  return applyLegacyChartKind(out, authored);
+}
+
+/**
+ * Перенести галочку радара PRD-35 в новое поле вида диаграммы, пока автор его не трогал.
+ *
+ * Без этого умолчание манифеста (`none`) молча отменяло авторскую настройку: PRD-46 добавил
+ * варианту отчёта поле `scalesChartKind`, у сохранённых раньше тестов его в значениях нет,
+ * значит поле берёт умолчание — а явная строка старше булева флага, и диаграмма из отчёта
+ * исчезала без единой правки автора. Экрана это не касалось: там нетронутое поле остаётся
+ * ОТСУТСТВУЮЩИМ, и перенос делает сам `chartKindSetting`.
+ *
+ * Правило действует только когда вариант объявляет оба поля; выбранное автором «Не
+ * показывать» остаётся в силе — это тронутое поле.
+ *
+ * @param values Значения, уже слитые с умолчаниями манифеста.
+ * @param authored Значения, сохранённые автором.
+ */
+function applyLegacyChartKind(
+  values: Record<string, unknown>,
+  authored?: Record<string, unknown> | null,
+): Record<string, unknown> {
+  if (!authored) return values;
+  if (!Object.prototype.hasOwnProperty.call(values, "scalesChartKind")) return values;
+  const carried = legacyChartKind(authored as ChartKindSettings);
+  return carried ? { ...values, scalesChartKind: carried } : values;
 }
 
 /** Что нужно знать хосту, чтобы собрать отчёт выбранным вариантом (FR-22). */
