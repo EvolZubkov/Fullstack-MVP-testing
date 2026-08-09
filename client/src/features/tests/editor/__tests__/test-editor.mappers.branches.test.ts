@@ -1220,6 +1220,33 @@ describe("residual type-guard branches", () => {
   });
 });
 
+describe("report settings — legacy branch without a variant key", () => {
+  // Settings saved before the report had variants (PRD-35) carry values and no key. The
+  // hosts render from them (an absent key resolves to the `isDefault` variant), so the
+  // editor has to show them — dropping the branch left the author looking at an empty card
+  // while the report kept printing a radar.
+  it("keeps a keyless branch that still carries values", () => {
+    const model = apiToEditorModel({
+      reportSettingsJson: { standard: { values: { showCompetencyRadar: true } } },
+    });
+    expect(model.report.standard?.variantKey).toBeUndefined();
+    expect(model.report.standard?.values).toEqual({ showCompetencyRadar: true });
+  });
+
+  it("drops a branch that carries neither a key nor values", () => {
+    const model = apiToEditorModel({ reportSettingsJson: { standard: { values: {} }, adaptive: {} } });
+    expect(model.report.standard).toBeUndefined();
+    expect(model.report.adaptive).toBeUndefined();
+  });
+
+  it("keeps reading a normal branch with a key", () => {
+    const model = apiToEditorModel({
+      reportSettingsJson: { standard: { variantKey: "report.standard", values: { headline: "X" } } },
+    });
+    expect(model.report.standard).toEqual({ variantKey: "report.standard", values: { headline: "X" } });
+  });
+});
+
 // ─── round-trip sanity ────────────────────────────────────────────────────────
 
 describe("round-trip — apiToEditorModel then editorModelToPayload", () => {

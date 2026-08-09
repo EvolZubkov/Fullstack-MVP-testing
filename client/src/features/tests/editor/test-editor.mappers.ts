@@ -877,11 +877,14 @@ function readReportSettingsFromApi(api: ApiTestResponse): ReportSettings {
     const branch = (raw as Record<string, unknown>)[mode];
     if (!isPlainObject(branch)) continue;
     const b = branch as Record<string, unknown>;
-    if (typeof b.variantKey !== "string" || b.variantKey.length === 0) continue;
-    out[mode] = {
-      variantKey: b.variantKey,
-      values: isPlainObject(b.values) ? (b.values as Record<string, unknown>) : {},
-    };
+    const key = typeof b.variantKey === "string" && b.variantKey.length > 0 ? b.variantKey : undefined;
+    const values = isPlainObject(b.values) ? (b.values as Record<string, unknown>) : {};
+    // Ветка БЕЗ ключа варианта — не мусор, а настройки, сохранённые до появления
+    // вариантов отчёта (PRD-35): хосты собирают по ним отчёт, разрешая вариант через
+    // `isDefault`. Отбросить её значило бы показать автору пустую карточку и умолчания
+    // шаблона там, где настройка есть и работает.
+    if (!key && Object.keys(values).length === 0) continue;
+    out[mode] = { ...(key ? { variantKey: key } : {}), values };
   }
   return out;
 }

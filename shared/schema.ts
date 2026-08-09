@@ -399,8 +399,14 @@ export type RetakePolicy = z.infer<typeof retakePolicySchema>;
 
 /** Выбор варианта отчёта и значения его полей для ОДНОГО режима (PRD-27 §4.1). */
 export const reportModeSettingsSchema = z.object({
-  /** `contentTemplates[].key` выбранного варианта. */
-  variantKey: z.string().min(1),
+  /**
+   * `contentTemplates[].key` выбранного варианта. Необязателен: настройки отчёта
+   * существовали ДО того, как у отчёта появились варианты (PRD-35), и такие ветки лежат в
+   * базе без ключа. Отсутствие ключа = вариант, помеченный `isDefault`, — ровно так его
+   * и разрешает `resolveReportVariant`, поэтому требовать ключ значило бы отбрасывать
+   * настройку, по которой хосты уже собирают отчёт.
+   */
+  variantKey: z.string().min(1).optional(),
   /** Значения `settings[]` варианта. Ключи, которых вариант не объявляет, отбрасываются. */
   values: z.record(z.string(), z.unknown()).default({}),
 });

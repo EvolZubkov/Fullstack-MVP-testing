@@ -70,8 +70,17 @@ describe("схема tests.report_settings_json", () => {
     expect(parsed.standard?.values).toEqual({});
   });
 
-  it("вариант без ключа отклоняется: выбирать нечего", () => {
+  it("пустой ключ варианта отклоняется: выбирать нечего", () => {
     expect(() => reportSettingsSchema.parse({ standard: { variantKey: "" } })).toThrow();
+  });
+
+  it("ветка БЕЗ ключа варианта сохраняется: так лежат настройки времён PRD-35", () => {
+    // Отчёт настраивался раньше, чем у него появились варианты, и такие ветки в базе
+    // ключа не несут. Отклонять их значит терять настройку, по которой хосты уже
+    // собирают отчёт: отсутствие ключа разрешается вариантом с `isDefault`.
+    const parsed = reportSettingsSchema.parse({ standard: { values: { showCompetencyRadar: true } } });
+    expect(parsed.standard?.variantKey).toBeUndefined();
+    expect(parsed.standard?.values).toEqual({ showCompetencyRadar: true });
   });
 });
 
