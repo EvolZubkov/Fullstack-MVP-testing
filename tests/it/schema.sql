@@ -320,7 +320,7 @@ CREATE TABLE "test_sections" (
 	"feedback_json" jsonb,
 	"draw_blueprint_json" jsonb,
 	"form_set_json" jsonb,
-	"question_order" text DEFAULT 'random' NOT NULL,
+	"question_order" text,
 	"default_points" integer,
 	"sort_order" integer DEFAULT 0 NOT NULL
 );
@@ -360,8 +360,10 @@ CREATE TABLE "tests" (
 	"design_settings_json" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"retake_policy_json" jsonb,
 	"default_question_points" integer,
+	"question_order" text DEFAULT 'random' NOT NULL,
 	"allow_return_to_unanswered" boolean DEFAULT true NOT NULL,
 	"allow_answer_change" boolean DEFAULT false NOT NULL,
+	"quick_advance" boolean DEFAULT false NOT NULL,
 	"show_section_results" boolean DEFAULT true NOT NULL,
 	"report_settings_json" jsonb,
 	"copy_protection" boolean DEFAULT true NOT NULL,
