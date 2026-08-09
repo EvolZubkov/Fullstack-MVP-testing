@@ -18,7 +18,13 @@ import type { RegionTarget } from "./spec";
 /** Marks every element the measures cover. Print rule and listeners key off it. */
 export const PROTECTED_ATTR = "data-tb-protected";
 
-const STYLE_ATTR = "data-tb-protection";
+/**
+ * Attribute of the stylesheet this module injects into EVERY rendered root. Exported
+ * because a caller that judges what the TEMPLATE produced has to subtract it: the sheet
+ * lands unconditionally, so a root is never literally empty (see the smoke runner).
+ */
+export const PROTECTION_STYLE_ATTR = "data-tb-protection";
+const STYLE_ATTR = PROTECTION_STYLE_ATTR;
 const WIRED_ATTR = "data-tb-protection-wired";
 /** DS toast stack — the design system owns both the look AND the position (fixed, bottom right). */
 const TOAST_CLASS = "ou-toast-stack";

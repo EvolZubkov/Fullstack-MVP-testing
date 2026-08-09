@@ -32,6 +32,7 @@ import {
   buildReportPreviewInput,
   type ReportPreviewTest,
 } from "../report/report-preview";
+import { PROTECTION_STYLE_ATTR } from "./protection/apply";
 
 /** Per-screen smoke result. */
 export interface SmokeRouteResult {
@@ -135,6 +136,21 @@ function checkPlaceholdersReachTheScreen(
   );
 }
 
+/**
+ * Did the TEMPLATE put nothing on the screen?
+ *
+ * Not `root.innerHTML.trim()`: since PRD-34 `applyProtection` injects its own stylesheet
+ * into every rendered root unconditionally (the sheet carries the watermark and the blur
+ * veil too), so the root is never literally empty — and the check that guards activation
+ * against a broken layout stopped firing, silently. What the runtime adds to a screen is
+ * not what the screen renders, so it is subtracted before judging.
+ */
+function renderedNothing(root: HTMLElement): boolean {
+  const clone = root.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll("[" + PROTECTION_STYLE_ATTR + "]").forEach((n) => n.remove());
+  return !clone.innerHTML.trim();
+}
+
 /** Render one screen in isolation and collect render/slot/console findings. */
 function checkScreen(
   spec: ReturnType<typeof buildScreenInputs>[number],
@@ -184,7 +200,7 @@ function checkScreen(
   for (const m of capWarn) warnings.push("Предупреждение в консоли: " + m);
 
   if (errors.length === 0) {
-    if (!root.innerHTML.trim()) {
+    if (renderedNothing(root)) {
       errors.push("Экран отрисован пустым");
     }
     // A missing/unfilled slot never blocks activation (spec §17.1/§17.2, PRD-3
