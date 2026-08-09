@@ -273,4 +273,70 @@ describe("buildAdaptiveResultContext → render real results.adaptive.html (e2e)
     expect(root.querySelectorAll(".tb-topic-card__fb-text")).toHaveLength(1);
     expect(root.querySelectorAll(".tb-rec")).toHaveLength(1);
   });
+
+  // issue #33: a test without scales or indicators must render the screen it always did.
+  it("draws no measurement blocks for a test that declares none", () => {
+    expect(root.textContent).not.toContain("По шкалам");
+    expect(root.textContent).not.toContain("Ваш результат");
+  });
+});
+
+/**
+ * issue #33: измерения на АДАПТИВНОМ экране итогов — сквозь настоящий адаптер веб-хоста
+ * (`server/services/result-context`) и настоящий макет, потому что дефект был именно
+ * между ними: значения считались, а до экрана не доходили.
+ */
+describe("adaptive results + measures → render real results.adaptive.html (e2e)", () => {
+  /** Материал экрана в том виде, в каком его читает маршрут результата. */
+  const material = {
+    scales: [
+      {
+        id: "s1", testId: "t", key: "comm", label: "Коммуникация", sortOrder: 0,
+        learnerVisibility: "level_and_value",
+        configJson: {
+          domainMin: 0, domainMax: 10, valence: "higher_is_better",
+          bands: [
+            { min: 0, max: 5, level: "low", label: "Низкий" },
+            { min: 5.01, max: 10, level: "high", label: "Высокий" },
+          ],
+        },
+      },
+    ] as any,
+    variables: [
+      {
+        id: "v1", testId: "t", name: "profile", label: "Профиль", sortOrder: 0,
+        learnerVisibility: "level",
+        configJson: { outcomes: [{ code: "ok", label: "Устойчивый", text: "Рекомендаций нет." }] },
+      },
+    ] as any,
+    // Значения — из СОХРАНЁННОГО результата попытки, как их кладёт `completeMeasuresSource`.
+    scaleResults: { comm: { raw: 8, normalized: 8, percent: 80, level: "high", label: "Высокий", hasValue: true } },
+    variableValues: { profile: "ok" },
+    blockSettings: {},
+    hasPassThreshold: false,
+  };
+
+  const ctx = buildAdaptiveResultContext(adaptiveResult, "Адаптивный тест", material);
+  const root = document.createElement("div");
+  renderScreenInto(root, { layout: adaptiveLayout, context: ctx });
+
+  it("рисует блок показателей и блок шкал", () => {
+    expect(root.textContent).toContain("Ваш результат");
+    expect(root.textContent).toContain("Устойчивый");
+    expect(root.textContent).toContain("По шкалам");
+    expect(root.textContent).toContain("Коммуникация");
+    expect(root.textContent).toContain("Высокий");
+  });
+
+  it("уровни тем остаются на месте и выше измерений", () => {
+    const text = root.textContent ?? "";
+    expect(text.indexOf("Результаты по темам")).toBeGreaterThan(-1);
+    expect(text.indexOf("Результаты по темам")).toBeLessThan(text.indexOf("Ваш результат"));
+    expect(text.indexOf("Ваш результат")).toBeLessThan(text.indexOf("По шкалам"));
+  });
+
+  it("шкала рисуется линейкой с зонами, как на обычном экране", () => {
+    expect(root.querySelector(".tb-measure__slider")).not.toBeNull();
+    expect(root.querySelectorAll(".ou-slider__fill.tb-zone").length).toBeGreaterThan(0);
+  });
 });

@@ -18,6 +18,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { renderScreenInto } from "../shared/template/render-screen";
 import { buildReportContext, buildAdaptiveReportContext } from "../shared/report/report-context";
+import { LEVEL_SCHEMES } from "../shared/template/level-ramp";
 import type { ReportInput, AdaptiveReportInput } from "../shared/report/report-html";
 
 const DEFAULT_DIR = path.resolve(process.cwd(), "server", "scorm", "templates", "default");
@@ -511,6 +512,58 @@ describe("макет печатает консолидированный бло�
       expect(cards[0].querySelector(".tb-report__topic-fb")?.textContent).toBe(
         "Ваш уровень знаний по данной теме - начальный",
       );
+    });
+
+    // issue #33: блок показателей — новый в обоих макетах отчёта, блок шкал в адаптивном
+    // до этой работы стоял мёртвым (контекст его не наполнял ни разу).
+    it(`${templateId}: печатает показатели и шкалы в обоих режимах`, () => {
+      const measures = {
+        ramp: LEVEL_SCHEMES.traffic,
+        scaleKind: "band_ruler" as const,
+        indicatorKind: "label" as const,
+        scales: [
+          {
+            key: "comm", name: "Коммуникация", value: 8, visibility: "level_and_value" as const,
+            interpretation: {
+              domainMin: 0, domainMax: 10, valence: "higher_is_better" as const,
+              bands: [
+                { min: 0, max: 5, level: "low", label: "Низкий" },
+                { min: 5.01, max: 10, level: "high", label: "Высокий" },
+              ],
+            },
+          },
+        ],
+        indicators: [
+          {
+            key: "profile", name: "Профиль", value: "ok", visibility: "level" as const,
+            interpretation: {
+              domainMin: null, domainMax: null, valence: "none" as const, bands: [],
+              outcomes: [{ code: "ok", label: "Устойчивый" }],
+            },
+          },
+        ],
+      };
+      for (const [layoutName, root] of [
+        ["report.html", renderToRoot(reportLayout, buildReportContext(STANDARD, { measures }))],
+        ["report.adaptive.html", renderToRoot(adaptiveLayout, buildAdaptiveReportContext(ADAPTIVE, { measures }))],
+      ] as const) {
+        const text = visibleText(root);
+        expect(text, layoutName).toContain("Ваш результат");
+        expect(text, layoutName).toContain("Устойчивый");
+        expect(text, layoutName).toContain("По шкалам");
+        expect(text, layoutName).toContain("Коммуникация");
+      }
+    });
+
+    // Тест без измерений печатает документ ровно как прежде — карточек не прибавилось.
+    it(`${templateId}: без измерений новых карточек в отчёте нет`, () => {
+      for (const [layoutName, root] of [
+        ["report.html", renderToRoot(reportLayout, buildReportContext(STANDARD))],
+        ["report.adaptive.html", renderToRoot(adaptiveLayout, buildAdaptiveReportContext(ADAPTIVE))],
+      ] as const) {
+        expect(visibleText(root), layoutName).not.toContain("Ваш результат");
+        expect(visibleText(root), layoutName).not.toContain("По шкалам");
+      }
     });
   }
 });

@@ -385,4 +385,80 @@ describe("контекст адаптивного отчёта", () => {
   it("адаптивный отчёт без обратной связи блока не несёт", () => {
     expect(buildAdaptiveReportContext(adaptiveInput()).result.recommendations).toBeUndefined();
   });
+
+  /**
+   * issue #33. Отчёт не вправе показать иное, чем экран, с которого его скачали (§5.2),
+   * поэтому измерения печатаются и в адаптивном документе — тем же сборщиком и с тем же
+   * составом карточек.
+   */
+  describe("измерения в адаптивном отчёте", () => {
+    const MEASURES = {
+      ramp: LEVEL_SCHEMES.traffic,
+      scaleKind: "band_ruler" as const,
+      indicatorKind: "label" as const,
+      scales: [
+        {
+          key: "comm",
+          name: "Коммуникация",
+          value: 8,
+          visibility: "level_and_value" as const,
+          interpretation: {
+            domainMin: 0,
+            domainMax: 10,
+            valence: "higher_is_better" as const,
+            bands: [
+              { min: 0, max: 5, level: "low", label: "Низкий" },
+              { min: 5.01, max: 10, level: "high", label: "Высокий" },
+            ],
+          },
+        },
+      ],
+      indicators: [
+        {
+          key: "profile",
+          name: "Профиль",
+          value: "ok",
+          visibility: "level" as const,
+          interpretation: {
+            domainMin: null,
+            domainMax: null,
+            valence: "none" as const,
+            bands: [],
+            outcomes: [{ code: "ok", label: "Устойчивый" }],
+          },
+        },
+      ],
+    };
+
+    it("печатает шкалы и показатели", () => {
+      const ctx = buildAdaptiveReportContext(adaptiveInput(), { measures: MEASURES });
+      expect(ctx.result.scales?.map((s: any) => s.name)).toEqual(["Коммуникация"]);
+      expect(ctx.result.scales?.[0].levelLabel).toBe("Высокий");
+      expect(ctx.result.indicators?.map((i: any) => i.levelLabel)).toEqual(["Устойчивый"]);
+    });
+
+    it("без измерений документ прежний", () => {
+      const ctx = buildAdaptiveReportContext(adaptiveInput());
+      expect(ctx.result.scales).toBeUndefined();
+      expect(ctx.result.indicators).toBeUndefined();
+    });
+
+    it("радар подчиняется переключателю ВАРИАНТА отчёта", () => {
+      const threeAxes = {
+        ...MEASURES,
+        chartSettings: { scalesChartKind: "radar" as const },
+        scales: ["a", "b", "c"].map((key, i) => ({
+          ...MEASURES.scales[0], key, name: `Шкала ${key}`, value: 2 + i * 3,
+        })),
+      };
+      expect(buildAdaptiveReportContext(adaptiveInput(), { measures: threeAxes }).result.scalesChart?.axes)
+        .toHaveLength(3);
+      expect(
+        buildAdaptiveReportContext(adaptiveInput(), {
+          measures: { ...threeAxes, chartSettings: { scalesChartKind: "none" as const } },
+        })
+          .result.scalesChart,
+      ).toBeUndefined();
+    });
+  });
 });

@@ -550,46 +550,19 @@ function buildAdaptiveResult() {
 }
 
 /**
- * Get adaptive result for SCORM reporting
+ * The adaptive result restated in the STANDARD result's words — for the LMS report and
+ * for the PRD-2 result-variable formulas, neither of which knows what a level is.
+ *
+ * The mapping itself is the SHARED `TBTemplate.adaptiveResultAsStandard`, not a copy of
+ * it: the web host feeds the very same formulas from the very same adaptive result
+ * (issue #33), and two spellings of «one answered question is one point» would show up
+ * as one formula returning different values in the LMS and in the browser.
+ *
+ * @returns {Object|null} Standard-shaped result, or null when no adaptive run finished.
  */
 function getAdaptiveResultForScorm() {
   if (!state.adaptiveState || !state.adaptiveState.result) {
     return null;
   }
-
-  var result = state.adaptiveState.result;
-  
-  // Calculate overall stats
-  var totalQuestions = 0;
-  var totalCorrect = 0;
-
-  result.topicResults.forEach(function(tr) {
-    totalQuestions += tr.totalQuestionsAnswered;
-    totalCorrect += tr.totalCorrect;
-  });
-
-  var percent = totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : 0;
-
-  return {
-    correct: totalCorrect,
-    totalQuestions: totalQuestions,
-    earnedPoints: totalCorrect, // Each question = 1 point in adaptive
-    possiblePoints: totalQuestions,
-    percent: percent,
-    passed: result.overallPassed,
-    topicResults: result.topicResults.map(function(tr) {
-      return {
-        topicId: tr.topicId,
-        topicName: tr.topicName,
-        correct: tr.totalCorrect,
-        total: tr.totalQuestionsAnswered,
-        percent: tr.levelPercent,
-        earnedPoints: tr.totalCorrect,
-        possiblePoints: tr.totalQuestionsAnswered,
-        passed: tr.achievedLevelIndex !== null,
-        achievedLevelName: tr.achievedLevelName,
-        recommendedCourses: tr.recommendedLinks
-      };
-    })
-  };
+  return window.TBTemplate.adaptiveResultAsStandard(state.adaptiveState.result);
 }

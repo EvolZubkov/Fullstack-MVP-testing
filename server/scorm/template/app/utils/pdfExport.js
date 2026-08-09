@@ -152,6 +152,33 @@ function pdfAdaptiveInput(results) {
 }
 
 /**
+ * Измерения (PRD-29) для отчёта — шкалы и показатели той попытки, которую печатаем.
+ *
+ * Собираются ТЕМИ ЖЕ функциями, что питают экран итогов (`viewResults.js`), по тому же
+ * правилу, каким экран выбирает источник значений:
+ * - у СОХРАНЁННОЙ попытки (есть `completedAt`) берутся значения, записанные ВМЕСТЕ с ней:
+ *   пересчёт по сегодняшнему толкованию изменил бы то, что ученик уже получил;
+ * - у текущей попытки значения считаются детерминированно (`currentAttemptMeasures`);
+ * - АДАПТИВНАЯ попытка всегда текущая (её `downloadPDF` берёт из `state`), а сборщику
+ *   нужен результат в стандартной форме — её даёт `getAdaptiveResultForScorm`.
+ *
+ * @param {Object} results Результат, который печатается (стандартной или адаптивной формы).
+ * @param {boolean} isAdaptive Режим теста.
+ * @returns {Object|null} MeasuresInput либо null, если тест не объявил ни шкал, ни показателей.
+ */
+function pdfReportMeasures(results, isAdaptive) {
+  if (typeof buildResultsMeasures !== 'function' || typeof currentAttemptMeasures !== 'function') return null;
+  if (isAdaptive) {
+    var flat = (typeof getAdaptiveResultForScorm === 'function') ? getAdaptiveResultForScorm() : null;
+    return flat ? currentAttemptMeasures(flat) : null;
+  }
+  if (results && results.completedAt) {
+    return buildResultsMeasures({ values: results.scaleValues || {} }, { values: results.resultValues || {} });
+  }
+  return currentAttemptMeasures(results);
+}
+
+/**
  * Запечённый сборщиком выбор варианта отчёта (PRD-27 FR-22): макет, значения полей и
  * ключи полей-картинок (FR-05). Отсутствует у пакетов, собранных до этого PRD, — тогда
  * работает деградация по виду, а картинок у отчёта нет.
@@ -232,9 +259,11 @@ async function exportResultsToPDF(results, testName, learnerName, timestamp) {
     // одной фигуры: карточек шкал, показателей и профиля в контексте просто не было.
     // Вход экрана рантайм уже собирает; в отчётный его превращает ТОТ ЖЕ сборщик, что на
     // вебе, поэтому вид берётся из полей отчёта, а облик шкал — с экрана итогов.
-    var screenMeasures = (typeof currentAttemptMeasures === 'function')
-      ? currentAttemptMeasures(results)
-      : null;
+    //
+    // Источник значений выбирает `pdfReportMeasures` (issue #33): у сохранённой попытки
+    // берутся записанные с ней значения, у адаптивной — её результат в стандартной форме.
+    // Без этого выбора в обоих случаях печатался пустой блок.
+    var screenMeasures = pdfReportMeasures(results, isAdaptive);
     if (screenMeasures && typeof TB.buildReportMeasures === 'function') {
       opts.measures = TB.buildReportMeasures(screenMeasures, pdfImageValues || {});
     }

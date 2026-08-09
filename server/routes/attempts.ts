@@ -4,7 +4,12 @@ import { logger } from "../logger";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { checkAnswer } from "../utils/check-answer";
-import { aggregateStandardResult, aggregateAdaptiveResult, type AggregateSection } from "@shared/scoring/aggregate";
+import {
+  aggregateStandardResult,
+  aggregateAdaptiveResult,
+  adaptiveResultAsStandard,
+  type AggregateSection,
+} from "@shared/scoring/aggregate";
 import type { CorrectData, Answer } from "@shared/scoring/engine";
 import { drawSection } from "@shared/draw/blueprint";
 import { selectForm } from "@shared/draw/forms";
@@ -1016,7 +1021,7 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
 
     let result: any = null;
     if (isFinished) {
-      result = await buildAdaptiveResult(variant, test.id, src);
+      result = await buildAdaptiveResult(variant, test.id, src, updatedAnswers);
     }
 
     await storage.updateAttempt(attempt.id, {
@@ -1112,7 +1117,14 @@ router.post("/attempts/:attemptId/expire-topic-adaptive", requirePermission("att
 
     let result: any = null;
     if (isFinished) {
-      result = await buildAdaptiveResult(variant, test.id, src);
+      // The timer closed the topic, so nothing new was answered: the attempt's stored
+      // answers ARE the input the measurements are computed from.
+      result = await buildAdaptiveResult(
+        variant,
+        test.id,
+        src,
+        (attempt.answersJson ?? {}) as Record<string, unknown>,
+      );
     }
 
     await storage.updateAttempt(attempt.id, {
@@ -1602,11 +1614,12 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
           );
         }
       }
-      // В ОТВЕТ едут только настоящие измерения: по ним клиент печатает шкалы и радар
-      // в отчёте, и пустой набор заставил бы его рисовать блок измерений у теста,
-      // который их не объявляет. Адаптивной попытке они не едут и теперь: отчёт по ней
-      // строится по уровням, и блок измерений в нём — отдельная работа, а не побочный
-      // эффект того, что материал стал читаться для обоих режимов.
+      // В ОТВЕТ едут только настоящие измерения: по ним клиент печатает шкалы, показатели
+      // и радар в отчёте, и пустой набор заставил бы его рисовать блок измерений у теста,
+      // который их не объявляет. С issue #33 они едут ОБОИМ режимам: шкалу питают вклады,
+      // навешенные на вопросы, а адаптивный тест задаёт вопросы, как любой другой —
+      // значения по нему считались и уезжали в LMS ещё до этой работы, не доходя только
+      // до экрана и до отчёта.
       //
       // Нормализуется ЗДЕСЬ, после разрешения макета: рампу и виды отображения задают
       // параметры того самого экрана (`render.params`) — ровно те, с которыми
@@ -1614,7 +1627,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       // может разойтись с экраном, с которого его скачали. Макета нет вовсе (клиент
       // рисует свою разметку) — остаются значения по умолчанию из манифеста.
       measures =
-        resultJson.mode !== "adaptive" && material && (material.scales.length > 0 || material.variables.length > 0)
+        material && (material.scales.length > 0 || material.variables.length > 0)
           ? buildMeasuresInput(completeMeasuresSource(material, render?.params, resultJson))
           : undefined;
       // Footer state for the layout-drawn results row (the package fills the same
@@ -1892,7 +1905,25 @@ async function moveToNextTopicOrFinish(variant: any, currentTopic: any, currentL
 // the engine's input. `levels` is sorted by `levelIndex` ascending — the SAME order
 // `levelsState` was built in — so the engine's POSITIONAL `finalLevelIndex` lookup
 // aligns. `failureLinks` mirrors the SCORM failure branch (lowest level's links).
-async function buildAdaptiveResult(variant: any, testId: string, storage: any) {
+//
+// issue #33: it also computes the graded namespaces — scales (PRD-5) and result
+// variables (PRD-2) — and stores them WITH the attempt, exactly as the standard
+// `/finish` does. A scale is fed by the measurements an author hung on questions, and
+// an adaptive test asks questions like any other; the package had been computing them
+// for an adaptive run all along (and shipping them to the LMS), while the web computed
+// nothing at all, so the adaptive results screen had nothing to show even after the
+// layout learned to show it.
+//
+// @param answers The attempt's answers — the ONE input the values depend on besides the
+//   test's own configuration. Values are computed ONCE, here, and never recomputed on
+//   read: regrading a finished attempt against today's interpretation would change what
+//   the learner already scored (PRD-29, the same rule the standard mode follows).
+async function buildAdaptiveResult(
+  variant: any,
+  testId: string,
+  storage: any,
+  answers: Record<string, unknown> = {},
+) {
   const adaptiveSettings = await storage.getAdaptiveTopicSettingsByTest(testId);
   const adaptiveLevels = await storage.getAdaptiveLevelsByTest(testId);
   // Sections of THIS test: the section over a topic is the second authoring point of
@@ -1955,6 +1986,43 @@ async function buildAdaptiveResult(variant: any, testId: string, storage: any) {
     feedbackTexts: string[];
     recommendedAssets: { title: string; url: string }[];
   }>({ topics });
+
+  // issue #33: scales and indicators of THIS attempt, through the SAME shared engines the
+  // standard `/finish` runs. No-op for a test that declares neither — an adaptive result
+  // then keeps exactly the shape it has always had, and attempts finished before this
+  // work stay valid (both fields are optional in `adaptiveAttemptResultSchema`).
+  const scoringConfig = await loadScoringConfig(testId, storage);
+  let scaleResults: Record<string, unknown> | undefined;
+  let resultVariables: Record<string, unknown> | undefined;
+  if (scoringConfig.scales.length > 0 || scoringConfig.resultVariables.length > 0) {
+    // Types of the questions actually ANSWERED: the scale engine needs them to decide
+    // which measurement units fired, and it bounds `percent` normalization by the
+    // DELIVERED set — which in the adaptive mode is precisely what the ladder asked.
+    const answeredIds = Object.keys(answers);
+    const answeredQuestions = answeredIds.length > 0 ? await storage.getQuestionsByIds(answeredIds) : [];
+    const questionTypes: Record<string, QuestionType> = {};
+    for (const q of answeredQuestions) questionTypes[q.id] = q.type as QuestionType;
+    // The formulas of PRD-2 speak percent / score / topicById(...).passed — words the
+    // level ladder does not have. The shared restatement gives them those words, and it
+    // is the very one the package feeds them through (`getAdaptiveResultForScorm`).
+    const flat = adaptiveResultAsStandard(aggregated);
+    const topicCodeById = new Map(
+      ((await storage.getTopics()) as Array<{ id: string; code?: string | null }>).map(
+        (t) => [t.id, t.code ?? null] as const,
+      ),
+    );
+    const computation = computeAttemptResult(scoringConfig, answers as Record<string, Answer>, questionTypes, {
+      percent: flat.percent,
+      topicResults: flat.topicResults.map((t) => ({ ...t, code: topicCodeById.get(t.topicId) ?? null })),
+    });
+    if (Object.keys(computation.scaleResults).length > 0) scaleResults = computation.scaleResults;
+    if (Object.keys(computation.resultVariables).length > 0) resultVariables = computation.resultVariables;
+    // `controls_status` is deliberately NOT applied here, unlike in the standard mode.
+    // An adaptive verdict is pronounced by the LADDER — `overallPassed` means «every
+    // topic confirmed a level» — and letting a formula overwrite it would make the
+    // level tags on the screen and the verdict above them state opposite things.
+  }
+
   // Hoist the passthrough onto the topic result itself: `adaptiveTopicResultSchema`
   // spells these two out (and the shared results builder reads them by those names), so
   // an `extra` envelope would only be a second spelling of the same fact.
@@ -1965,6 +2033,8 @@ async function buildAdaptiveResult(variant: any, testId: string, storage: any) {
       feedbackTexts: extra?.feedbackTexts ?? [],
       recommendedAssets: extra?.recommendedAssets ?? [],
     })),
+    ...(scaleResults ? { scaleResults } : {}),
+    ...(resultVariables ? { resultVariables } : {}),
   };
 }
 

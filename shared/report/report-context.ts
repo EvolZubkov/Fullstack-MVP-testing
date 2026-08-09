@@ -299,6 +299,11 @@ export function buildAdaptiveReportContext(
   // нечего сказать.
   const base = buildAdaptiveResultContext(input.result, input.testName || "", {
     ...(input.feedback ? { testFeedback: input.feedback } : {}),
+    // issue #33: измерения печатаются и в адаптивном отчёте — тем же блоком и из того же
+    // сборщика, что на экране, с которого документ скачали (§5.2). Радар у отчёта СВОЙ
+    // переключатель (поле варианта отчёта), и он уже подмешан в `opts.measures` хостом,
+    // как в обычном режиме.
+    ...(opts.measures ? { measures: opts.measures } : {}),
   });
   const topics = input.result.topicResults ?? [];
   const report = reportBlock(input, topics.length, opts);
