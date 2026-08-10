@@ -215,6 +215,35 @@ async function saveOrCollect(
 }
 
 /**
+ * Carry the target's own feedback into every section the «Обратная связь» sheet did NOT
+ * name, matching the current sections by topic.
+ *
+ * «Структура» rewrites the sections wholesale — `testSettingsService` deletes them and
+ * inserts the payload — so a field the payload leaves out is not "left alone", it is
+ * ERASED. Feedback is the one section field a book may legitimately say nothing about:
+ * every book exported before the sheet existed carries «Структура» and no «Обратная
+ * связь», and applying such a book must not blank out the target's per-section feedback.
+ * A workbook does not change what it does not name (FR-20).
+ *
+ * A section the sheet DID name keeps whatever the sheet gave it, `null` included: a named
+ * owner takes its feedback WHOLE from the book, which is how an author erases it.
+ */
+async function keepUnnamedSectionFeedback(
+  testId: string,
+  sections: SectionPayload[],
+): Promise<void> {
+  const unnamed = sections.filter((s) => !("feedbackJson" in s));
+  if (unnamed.length === 0) return;
+
+  const current = await storage.getTestSections(testId);
+  const feedbackByTopic = new Map(current.map((s) => [s.topicId, s.feedbackJson]));
+  for (const section of unnamed) {
+    if (!feedbackByTopic.has(section.topicId)) continue;
+    section.feedbackJson = feedbackByTopic.get(section.topicId);
+  }
+}
+
+/**
  * A «Папка / Подпапка» path → the id of the last folder, creating the missing ones.
  *
  * Creating rather than failing: the workbook already creates missing TOPICS by name, and a
@@ -1016,6 +1045,10 @@ export async function importWorkbook(
     // absent, and the service leaves that column alone.
     const patch = buildTestPatch(settingsDraft, current);
     if (sections.length > 0 || Object.keys(patch).length > 0) {
+      // Read HERE and nowhere earlier: the query answers "what would the rewrite destroy",
+      // and under `dryRun` there is no rewrite — the plan the preview reports does not
+      // depend on it, exactly as the test row above is only read on the saving path.
+      if (sections.length > 0) await keepUnnamedSectionFeedback(testId, sections);
       await saveOrCollect(testId, {
         test: {
           status: (current?.status as "draft" | "published" | "archived") ?? "draft",

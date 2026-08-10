@@ -128,6 +128,9 @@ beforeEach(() => {
   storageMock.replaceTestQuestionScoring.mockResolvedValue([]);
   storageMock.getTestFolders.mockResolvedValue([]);
   storageMock.createTestFolder.mockResolvedValue({ id: "folder-new", name: "Папка", parentId: null });
+  // Разделы приёмника: импорт «Структуры» читает их, чтобы не стереть обратную связь
+  // раздела, которого книга не назвала. По умолчанию тест-приёмник разделов не имеет.
+  storageMock.getTestSections.mockResolvedValue([]);
   testSettingsMock.save.mockResolvedValue({ id: "test-1" });
 });
 
@@ -1692,6 +1695,78 @@ describe("POST /:id/workbook/import — обратная связь и реко�
 
     expect(res.status).toBe(200);
     expect(res.body.errors.some((e: string) => /Право/.test(e))).toBe(true);
+  });
+
+  // «Структура» переписывает разделы удалением и вставкой, поэтому поле, которого нет в
+  // полезной нагрузке, не «остаётся как было», а СТИРАЕТСЯ. Книга не меняет того, чего не
+  // назвала (FR-20), и книга Э1 — со «Структурой», но без листа «Обратная связь» — обязана
+  // оставить обратную связь разделов приёмника нетронутой.
+  describe("раздел, которого лист не назвал", () => {
+    const existingSection = {
+      topicId: "t1",
+      drawCount: 2,
+      sortOrder: 0,
+      required: true,
+      topicPassRuleJson: null,
+      drawBlueprintJson: null,
+      feedbackJson: {
+        format: "plain",
+        text: "Отзыв, который уже есть в тесте",
+        links: [{ title: "Курс", url: "https://example.test/c" }],
+        assets: [],
+        events: [],
+      },
+    };
+
+    beforeEach(() => {
+      storageMock.getTestSections.mockResolvedValue([existingSection]);
+    });
+
+    it("книга без листа «Обратная связь» сохраняет обратную связь раздела", async () => {
+      const buf = await makeWorkbook({ "Структура": structureRows });
+      const res = await postWorkbook(buf);
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toEqual([]);
+      const payload = testSettingsMock.save.mock.calls[0][1] as any;
+      expect(payload.sections[0].feedbackJson).toEqual(existingSection.feedbackJson);
+    });
+
+    it("названный раздел с пустым текстом и без рекомендаций обратную связь обнуляет", async () => {
+      const buf = await makeWorkbook({
+        "Структура": structureRows,
+        "Обратная связь": [
+          { "Уровень": "Раздел", "Раздел": "JavaScript", "Формат": "Простой", "Текст": "" },
+        ],
+      });
+      const res = await postWorkbook(buf);
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toEqual([]);
+      const payload = testSettingsMock.save.mock.calls[0][1] as any;
+      expect(payload.sections[0].feedbackJson).toBeNull();
+    });
+
+    it("названный раздел с текстом свою обратную связь заменяет", async () => {
+      const buf = await makeWorkbook({
+        "Структура": structureRows,
+        "Обратная связь": [
+          { "Уровень": "Раздел", "Раздел": "JavaScript", "Формат": "Простой", "Текст": "Новый отзыв" },
+        ],
+      });
+      const res = await postWorkbook(buf);
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toEqual([]);
+      const payload = testSettingsMock.save.mock.calls[0][1] as any;
+      expect(payload.sections[0].feedbackJson).toEqual({
+        format: "plain",
+        text: "Новый отзыв",
+        links: [],
+        assets: [],
+        events: [],
+      });
+    });
   });
 
   // Книга без «Структуры» разделы не переписывает — применить обратную связь разделу

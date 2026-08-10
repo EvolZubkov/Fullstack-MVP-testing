@@ -40,6 +40,9 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     updateResultVariable: vi.fn(),
     validateResultVariableFormula: vi.fn(),
     upsertQuestionMeasurements: vi.fn(),
+    // Разделы приёмника: импорт «Структуры» читает их, чтобы не стереть обратную
+    // связь раздела, которого книга не назвала. У свежесозданного теста их нет.
+    getTestSections: vi.fn(),
   },
   testSettingsMock: { create: vi.fn(), save: vi.fn() },
 }));
@@ -98,6 +101,7 @@ beforeEach(() => {
   storageMock.createResultVariable.mockResolvedValue({ id: "rv-new" });
   storageMock.validateResultVariableFormula.mockResolvedValue({ valid: true });
   storageMock.upsertQuestionMeasurements.mockResolvedValue([]);
+  storageMock.getTestSections.mockResolvedValue([]);
   storageMock.getTest.mockResolvedValue({ id: "test-new", title: "Новый тест", status: "draft" });
   testSettingsMock.create.mockResolvedValue({ id: "test-new", title: "Новый тест" });
   testSettingsMock.save.mockResolvedValue({ id: "test-new" });
