@@ -21,6 +21,16 @@ FR-19, FR-20, FR-22, FR-23, FR-25.
 
 ---
 
+## Правила, обязательные для каждой задачи
+
+- **Комментарии в коде и JSDoc — ПО-АНГЛИЙСКИ** (правило проекта; соседний
+  `workbook-sheets.ts` написан так же). Пользовательские строки — имена ячеек, метки
+  значений, тексты ошибок — остаются русскими. Названия `describe`/`it` в тестах — русские,
+  как в соседних файлах `tests/`.
+- Тесты запускать только как `npm test -- <путь>`; полный прогон без аргументов запрещён,
+  в копии работают другие сессии.
+- Коммитить только перечисленные в задаче файлы: индекс общий.
+
 ## Что план НЕ делает
 
 - Листы «Обратная связь», «Рекомендации», «Страницы», «Поля страниц», «Адаптивные уровни»,
@@ -418,8 +428,9 @@ function textParam(
   return {
     name,
     read: (s) => String(get(s) ?? ""),
-    // Пустая ячейка сюда не доходит (её отсеивает parseSettingsSheet), поэтому текстовый
-    // параметр книгой не стирается — осознанное следствие правила «пусто = как есть».
+    // An empty cell never reaches here (parseSettingsSheet filters it out), so a text
+    // parameter cannot be CLEARED by a workbook — the accepted consequence of the
+    // "empty = leave as is" rule.
     write: (raw, draft) => { draft[bucket][key] = raw; return; },
   };
 }
@@ -461,7 +472,7 @@ function branch(value: unknown, ...path: string[]): Record<string, unknown> {
   return typeof cur === "object" && cur !== null ? (cur as Record<string, unknown>) : {};
 }
 
-// ─── Словари значений (метки дословно из редактора и PRD-8) ──────────────────
+// ─── Value dictionaries (labels verbatim from the editor and PRD-8) ──────────
 
 const MODE_LABELS = { standard: "Стандартный", adaptive: "Адаптивный" };
 
@@ -498,14 +509,14 @@ const PLUGIN_LABELS: Record<string, string> = Object.fromEntries(
   ELIGIBILITY_PLUGINS.map((p) => [p.key, p.name]),
 );
 
-// ─── Реестр ──────────────────────────────────────────────────────────────────
+// ─── The registry ────────────────────────────────────────────────────────────
 
 /**
- * Порядок строк = порядок групп вкладки «Настройки» редактора. Автор, открывший книгу,
- * читает её сверху вниз в том же порядке, в каком настраивал тест.
+ * Row order = the order of the editor's «Настройки» tab groups. An author who opens the
+ * workbook reads it top to bottom in the same order they configured the test in.
  */
 export const SETTING_PARAMS: SettingParam[] = [
-  // ── Основное ──
+  // ── «Основное» ──
   textParam("Название", (s) => s.title, "test", "title"),
   textParam("Описание", (s) => s.description, "test", "description"),
   {
@@ -536,7 +547,7 @@ export const SETTING_PARAMS: SettingParam[] = [
   boolParam("Показывать правильные ответы после прохождения", (s) => s.showCorrectAnswers, "test", "showCorrectAnswers"),
   boolParam("Показывать уровень сложности при прохождении", (s) => s.showDifficultyLevel, "test", "showDifficultyLevel"),
 
-  // ── Правила прохождения ──
+  // ── «Правила прохождения» ──
   enumParam("Тип общего правила", OVERALL_TYPE_LABELS, (s) => branch(s.overallPassRuleJson).type, "overall", "type"),
   intParam("Порог", (s) => branch(s.overallPassRuleJson).value, "overall", "value"),
   enumParam(
@@ -668,8 +679,8 @@ git commit -m "feat(workbook): реестр параметров листа «Н
 
 ```ts
 // ─── «Настройки» (PRD-48 §4.1) ────────────────────────────────────────────────
-// Контракт листа живёт в отдельном модуле: он вырос из одного параметра в реестр из
-// сорока, и держать его здесь значило бы утопить в нём остальные восемь листов.
+// The sheet's contract lives in its own module: it grew from one parameter into a
+// registry of forty, and keeping it here would drown the other eight sheets in it.
 export {
   SETTINGS_HEADERS,
   SETTINGS_WIDTHS,
@@ -711,9 +722,10 @@ export {
 (строки 130-146 текущей редакции):
 
 ```ts
-  // ── «Настройки» (PRD-48 §4.1): параметры САМОГО теста, читаются раньше всего —
-  // проход структуры сохраняет их вместе с разделами. Книга без листа не меняет в
-  // тесте ничего: ровно это должна значить книга, снятая до появления параметра.
+  // ── «Настройки» (PRD-48 §4.1): settings OF THE TEST, read before anything else so
+  // the structure pass can save them together with the sections. A book without the
+  // sheet changes nothing — that is what a book exported before a parameter existed
+  // has to keep meaning.
   let settingsDraft: SettingsDraft = emptySettingsDraft();
   const settingsSheet = findSheet(workbook, "Настройки");
   if (settingsSheet) {
@@ -729,11 +741,11 @@ export {
 
 ```ts
 /**
- * Патч строки `tests` из черновика листа «Настройки».
+ * Patch for the `tests` row built from the «Настройки» draft.
  *
- * JSON-колонки собираются ПОВЕРХ текущего значения, а не с нуля: строка «Период охлаждения»
- * без строки «Разделять период» иначе обнулила бы вторую половину политики, которую книга
- * даже не упоминала (FR-20).
+ * JSON columns are merged OVER the current value rather than rebuilt from scratch: a
+ * «Период охлаждения» row without a «Разделять период» row would otherwise wipe the half
+ * of the policy the book never mentioned (FR-20).
  */
 function buildTestPatch(draft: SettingsDraft, current: Test | undefined): Record<string, unknown> {
   const patch: Record<string, unknown> = { ...draft.test };
@@ -784,9 +796,9 @@ function buildTestPatch(draft: SettingsDraft, current: Test | undefined): Record
 со «Структурой» (около строки 735) и переписать ветвь без «Структуры» (строки 745-753):
 
 ```ts
-  // Книга может нести «Настройки» БЕЗ «Структуры» — настройки существующего теста,
-  // отредактированные отдельно. Их сохранение не должно требовать пересылки разделов
-  // (служба переписывает разделы только когда их назвали в payload).
+  // A book may carry «Настройки» WITHOUT «Структура» — settings of an existing test,
+  // edited on their own. Saving them must not require re-sending sections (the service
+  // rewrites sections only when the payload names them).
   if (!dryRun && !structureSheet) {
     const current = await storage.getTest(testId);
     const patch = buildTestPatch(settingsDraft, current);
@@ -806,7 +818,7 @@ function buildTestPatch(draft: SettingsDraft, current: Test | undefined): Record
 В `server/routes/tests-workbook.ts` перед сборкой книги собрать путь папки и передать его в источник:
 
 ```ts
-      // «Папка» листа «Настройки» — путь от корня; собирается по цепочке родителей.
+      // «Папка» of the settings sheet — the path from the root, walked up the parents.
       const folders = await storage.getTestFolders();
       const folderById = new Map(folders.map((f) => [f.id, f]));
       const folderPath = (() => {
@@ -927,11 +939,11 @@ git commit -m "feat(workbook): лист «Настройки» переноси�
 
 ```ts
 /**
- * Путь «Папка / Подпапка» → id последней папки, создавая недостающие.
+ * A «Папка / Подпапка» path → the id of the last folder, creating the missing ones.
  *
- * Создание, а не ошибка: книга уже создаёт недостающие ТЕМЫ по имени, и папка — та же
- * иерархия имён. Требовать заранее заведённое дерево значило бы просить автора руками
- * повторить структуру, которую книга и так описывает.
+ * Creating rather than failing: the workbook already creates missing TOPICS by name, and a
+ * folder is the same hierarchy of names. Demanding a pre-built tree would ask the author to
+ * reproduce by hand the structure the book already describes.
  */
 async function resolveFolderPath(path: string, actorId: string | null): Promise<string | null> {
   const names = path.split("/").map((s) => s.trim()).filter(Boolean);
@@ -961,8 +973,8 @@ async function resolveFolderPath(path: string, actorId: string | null): Promise<
 В `importWorkbook` перед обеими ветвями сохранения добавить:
 
 ```ts
-  // Папка резолвится ЗДЕСЬ, а не в реестре: реестр — чистый разбор ячеек, а путь требует
-  // хранилища и может создавать записи.
+  // The folder resolves HERE, not in the registry: the registry is pure cell parsing,
+  // while a path needs storage and may create rows.
   if (!dryRun && settingsDraft.folderPath !== undefined) {
     const folderId = await resolveFolderPath(settingsDraft.folderPath, actor?.id ?? null);
     settingsDraft.test.folderId = folderId;
@@ -1038,9 +1050,9 @@ git commit -m "feat(workbook): папка теста переносится пу
 `flowPolicyJson: { mode: "router_by_topics" },` и добавить перед вызовом `save`:
 
 ```ts
-      // Сценарий пишется ТОЛЬКО когда книга его назвала (PRD-48 FR-06). Прежде импорт
-      // безусловно ставил `router_by_topics` (PRD-14 FR-16), и линейный тест после круга
-      // «экспорт — импорт» становился тестом со страницей-маршрутизатором.
+      // The flow is written ONLY when the book named it (PRD-48 FR-06). The import used
+      // to set `router_by_topics` unconditionally (PRD-14 FR-16), so a linear test came
+      // back from an export/import round trip as a router-page test.
       const flowPatch: Record<string, unknown> = {};
       if (settingsDraft.flowMode) {
         const currentRouter = (current?.flowPolicyJson as { router?: unknown } | null)?.router ?? null;
@@ -1132,12 +1144,12 @@ git commit -m "fix(workbook): импорт больше не навязывае�
 
 ```ts
 /**
- * Сохранение с переводом отказов службы в построчные ошибки книги.
+ * Save, turning the service's refusals into per-row workbook errors.
  *
- * Служба бросает `FlowPolicyValidationError` на сочетаниях, которые редактор не даёт
- * собрать (адаптивный режим в плоском сценарии, адаптивный раздел без уровней). До PRD-48
- * это исключение доходило до маршрута и превращалось в 500 «Failed to import workbook» —
- * автор видел отказ без единого слова о причине.
+ * The service throws `FlowPolicyValidationError` on combinations the editor cannot even
+ * assemble (adaptive mode in the flat flow, an adaptive section without levels). Before
+ * PRD-48 that exception reached the route and became a 500 "Failed to import workbook" —
+ * the author saw a refusal without a single word about the cause.
  */
 async function saveOrCollect(
   testId: string,
@@ -1243,7 +1255,7 @@ describe("«Структура»: поля раздела (PRD-48 FR-09)", () =>
 export const STRUCTURE_HEADERS = [
   "Раздел", "Порядок", "Вопросов в выборке", "Тип порога", "Порог", "Обязательный",
   "Случайный порядок вопросов",
-  // PRD-48 FR-09: поля раздела, которых книге не хватало для полного переноса.
+  // PRD-48 FR-09: the section fields the workbook was missing for a full transfer.
   "Выдавать все вопросы темы", "Лимит времени темы", "Цена вопроса по умолчанию",
 ];
 export const STRUCTURE_WIDTHS = [28, 10, 20, 16, 10, 14, 26, 24, 20, 26];
@@ -1263,7 +1275,8 @@ export const STRUCTURE_WIDTHS = [28, 10, 20, 16, 10, 14, 26, 24, 20, 26];
 `drawAll: boolean`, `timeLimitMinutes: number | null`, `defaultPoints: number | null`:
 
 ```ts
-  // Пустая ячейка = умолчание раздела, а не ноль: колонок могло не быть в книге вовсе.
+  // An empty cell means the section default, NOT zero: the columns may be absent from
+  // the book entirely (an older export).
   const drawAll = String(row["Выдавать все вопросы темы"] ?? "").trim().toLowerCase() === "да";
   const timeLimitRaw = String(row["Лимит времени темы"] ?? "").trim();
   const defaultPointsRaw = String(row["Цена вопроса по умолчанию"] ?? "").trim();
@@ -1350,8 +1363,9 @@ git commit -m "feat(workbook): «Структура» переносит выд�
 (поле `topicCode?: string | null` в типе аргумента), в `parseStructureRow` — `topicCode` в результат:
 
 ```ts
-  // Код темы едет ради ФОРМУЛ показателей: они зовут тему как `topicById("<код>")`,
-  // и книга без кодов оставит формулы без адресата (`topics.code`, миграция 032).
+  // The topic code travels for the sake of result-variable FORMULAS: they address a
+  // topic as `topicById("<code>")`, and a book without codes leaves those formulas
+  // without an addressee (`topics.code`, migration 032).
   const topicCode = String(row["Код темы"] ?? "").trim() || null;
 ```
 
@@ -1360,9 +1374,9 @@ git commit -m "feat(workbook): «Структура» переносит выд�
 В `server/services/workbook-import.ts` в проходе «Структура», сразу после успешного резолва `topicId`:
 
 ```ts
-      // Код проставляется теме БЕЗ кода и не перетирает существующий: тема разделяется
-      // между тестами, и книга одного теста не вправе сменить адрес, по которому тему
-      // зовут формулы другого (PRD-48 FR-10).
+      // The code is set on a topic that has NONE and never overwrites an existing one:
+      // a topic is shared between tests, and one test's book may not rename the address
+      // another test's formulas call it by (PRD-48 FR-10).
       if (!dryRun && sec.topicCode && !topicId.startsWith("__newtopic__:")) {
         const topic = topics.find((t) => t.id === topicId);
         if (topic && !topic.code) await storage.updateTopic(topicId, { code: sec.topicCode });
@@ -1443,11 +1457,11 @@ git commit -m "feat(workbook): код темы едет книгой, чтобы
 
 ```ts
 /**
- * «Доступность раздела» → режим разблокировки маршрутизатора (PRD-8 §3.2).
+ * «Доступность раздела» → the router's unlock mode (PRD-8 §3.2).
  *
- * Ключами правил служат ИДЕНТИФИКАТОРЫ ТЕМ, а не разделов: `isSectionUnlocked` в
- * `shared/flow/router-hub` смотрит `unlockRules[section.topicId]`. Поэтому книга адресует
- * их именами тем — идентификаторы разделов при импорте всё равно новые.
+ * The rules are keyed by TOPIC ids, not section ids: `isSectionUnlocked` in
+ * `shared/flow/router-hub` reads `unlockRules[section.topicId]`. That is why the workbook
+ * addresses them by topic NAME — section ids are minted anew on every import anyway.
  */
 const UNLOCK_MODE_FROM: Record<string, "always_available" | "after_sections_completed" | "after_sections_passed"> = {
   "": "always_available",
@@ -1488,7 +1502,7 @@ export const UNLOCK_MODE_CHOICES = Object.values(UNLOCK_MODE_TO);
 В `server/services/workbook-import.ts` в проходе «Структура» накапливать карту (перед циклом):
 
 ```ts
-    // Правила разблокировки: имена тем сейчас, идентификаторы — после резолва всех строк.
+    // Unlock rules: topic NAMES for now, ids once every row has been resolved.
     const unlockByTopicName = new Map<string, { mode: string; dependsOn: string[] }>();
 ```
 
@@ -1503,8 +1517,9 @@ export const UNLOCK_MODE_CHOICES = Object.values(UNLOCK_MODE_TO);
 и перед сборкой `flowPatch`:
 
 ```ts
-      // Имена зависимостей → идентификаторы тем. Имя, которого нет среди разделов книги,
-      // это опечатка автора: молча выброшенная зависимость открыла бы закрытый раздел.
+      // Dependency names → topic ids. A name absent from the book's sections is an
+      // author's typo: a silently dropped dependency would OPEN a section meant to be
+      // locked.
       const unlockRules: Record<string, unknown> = {};
       for (const [name, rule] of unlockByTopicName) {
         const id = topicIdByName.get(name);
@@ -1591,9 +1606,9 @@ git commit -m "feat(workbook): правила разблокировки раз�
 заполнить «Настройки» именами:
 
 ```ts
-  // «Настройки» — единственный ролевой лист, который приходит НЕ пустым: это список
-  // «параметр — значение», и пустой лист не сказал бы автору, какие параметры бывают.
-  // Значения остаются пустыми, а пустая ячейка ничего не меняет (PRD-48 §4.4).
+  // «Настройки» is the ONLY role sheet that ships non-empty: it is a parameter/value
+  // list, and an empty sheet would not tell the author which parameters exist. The
+  // values stay blank, and a blank cell changes nothing (PRD-48 §4.4).
   const settingsSheet = wb.worksheets.find((w) => w.name === SHEET_SETTINGS);
   if (settingsSheet) {
     for (const name of SETTING_PARAM_NAMES) settingsSheet.addRow([name, ""]);
