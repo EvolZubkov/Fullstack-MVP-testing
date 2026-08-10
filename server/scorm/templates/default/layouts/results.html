@@ -110,15 +110,15 @@
         {{#each result.scales}}
         <div class="ou-formsection tb-measure" data-render="{{renderKind}}">
           <div class="ou-formsection__intro">
-            <h4 class="ou-formsection__title">{{name}}</h4>
+            <div class="tb-measure__head">
+              <h4 class="ou-formsection__title">{{name}}</h4>
+              {{#unless isRing}}{{#if showValue}}<span class="ou-slider__val"><strong>{{valueText}}</strong>{{#if maxText}} из {{maxText}}{{/if}}</span>{{/if}}{{/unless}}
+            </div>
             {{#if levelLabel}}<span class="ou-tag ou-tag--l tb-measure__level {{toneClass}}">{{levelLabel}}</span>{{/if}}
           </div>
           <div class="ou-formsection__body">
             {{#if zones}}
             <div class="ou-slider ou-slider--h tb-measure__slider">
-              <div class="ou-slider__header">
-                {{#if showValue}}<span class="ou-slider__val"><strong>{{valueText}}</strong> из {{maxText}}</span>{{/if}}
-              </div>
               <div class="ou-slider__rail" role="img" aria-label="{{ariaLabel}}">
                 {{#each zones}}
                 <span class="ou-slider__fill tb-zone{{#if current}} is-current{{/if}}"
@@ -147,9 +147,6 @@
               </div>
             </div>
             {{/if}}
-            {{#unless zones}}{{#unless isRing}}
-            {{#if showValue}}<span class="ou-slider__val"><strong>{{valueLabel}}</strong></span>{{/if}}
-            {{/unless}}{{/unless}}
             {{#if text}}<p class="ou-formsection__sub">{{& textHtml }}</p>{{/if}}
           </div>
         </div>

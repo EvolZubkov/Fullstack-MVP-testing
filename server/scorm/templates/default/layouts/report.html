@@ -146,6 +146,19 @@
             {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
             <span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>
           </div>
+          <!-- Линейка — та же фигура, что на экране итогов: вид измерения задаёт ОДНА
+               настройка «Вид шкал», и документ обязан показать ученику то же, что показал
+               экран. Гейт тот же, что на экране, — наличие зон: шкала без домена рисуется
+               числом, и рисовать ей пустую полосу не из чего. Зоны, положение маркера и
+               границы приходят ПОСЧИТАННЫМИ из ядра (`buildMeasureView`) — отчёт
+               растеризуется, и вычислений на его стороне быть не должно. -->
+          {{#if zones}}
+          <div class="tb-report__scale-rail">
+            {{#each zones}}<span class="tb-report__scale-zone" style="left:{{leftPercent}}%;width:{{widthPercent}}%;--tb-zone:{{color}}"></span>{{/each}}
+            <span class="tb-report__scale-marker" style="left:{{markerPercent}}%"></span>
+            {{#each marks}}<span class="tb-report__scale-mark" style="left:{{percent}}%">{{label}}</span>{{/each}}
+          </div>
+          {{/if}}
           {{#if text}}<div class="tb-report__scale-text">{{& textHtml }}</div>{{/if}}
         </div>
         {{/each}}

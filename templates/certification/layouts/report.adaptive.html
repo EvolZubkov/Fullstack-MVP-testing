@@ -111,6 +111,14 @@
             {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
             <span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>
           </div>
+          <!-- Линейка шкалы — см. `report.html`: тот же гейт и тот же источник чисел. -->
+          {{#if zones}}
+          <div class="tb-report__scale-rail">
+            {{#each zones}}<span class="tb-report__scale-zone" style="left:{{leftPercent}}%;width:{{widthPercent}}%;--tb-zone:{{color}}"></span>{{/each}}
+            <span class="tb-report__scale-marker" style="left:{{markerPercent}}%"></span>
+            {{#each marks}}<span class="tb-report__scale-mark" style="left:{{percent}}%">{{label}}</span>{{/each}}
+          </div>
+          {{/if}}
           {{#if text}}<div class="tb-report__scale-text">{{& textHtml }}</div>{{/if}}
         </div>
         {{/each}}

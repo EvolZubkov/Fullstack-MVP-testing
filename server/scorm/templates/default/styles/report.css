@@ -266,6 +266,60 @@
    слушателю одним сплошным полотном. `pre-wrap` держит переносы автора и переносит
    длинные строки по ширине страницы. */
 .tb-report__scale-text { font-size: 12px; font-weight: 300; margin-top: 4px; white-space: pre-wrap; }
+
+/* Линейка шкалы. Ту же фигуру рисует экран итогов, но повторить её стилями оттуда
+   нельзя: отчёт печатается ВНЕ сцены, токенов дизайн-системы не видит и правила
+   `theme.css` до него не доходят (§6.3) — поэтому геометрия и цвета объявлены здесь
+   заново, литералами, как всё в этом файле.
+
+   Размеры уменьшены против экрана: полоса живёт в колонке рядом с диаграммой, а на A4
+   это около 285 px, где экранные 12 px рельса и 22 px маркера читались бы грубо. */
+.tb-report__scale-rail {
+  position: relative;
+  height: 8px;
+  /* Подписи границ позиционированы абсолютно и своей высоты не занимают — зазор под них
+     обязан дать сам рельс, иначе числа лягут на толкование уровня (та же причина, что у
+     `.tb-measure__slider .ou-slider__rail` на экране). */
+  margin: 8px 0 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+/* Зоны красятся ДИСКРЕТНО: вывод интервальной методики категориален, и градиент скрыл бы
+   переход через границу. Цвет приходит тройкой HSL из ядра — CSS не считает ничего. */
+.tb-report__scale-zone { position: absolute; top: 0; bottom: 0; background: hsl(var(--tb-zone)); }
+/* Скруглены только концы ДОМЕНА. Проверка соседа, а не `:last-child`: последним ребёнком
+   рельса идёт маркер, а за ним подписи границ — по позиции последнюю зону не поймать. */
+.tb-report__scale-zone:first-child {
+  border-start-start-radius: 999px;
+  border-end-start-radius: 999px;
+}
+.tb-report__scale-zone:not(:has(~ .tb-report__scale-zone)) {
+  border-start-end-radius: 999px;
+  border-end-end-radius: 999px;
+}
+/* Маркер — метка значения, а не орган управления: ни тени наведения, ни курсора. Тёмная
+   обводка отделяет его от светлой зоны, на которую он чаще всего попадает. */
+.tb-report__scale-marker {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(28, 28, 43, 0.55);
+}
+/* Под рельсом стоят ЧИСЛА границ; имя уровня печатает метка рядом со значением — так же,
+   как на экране, где три подписи в одну дорожку не помещаются. */
+.tb-report__scale-mark {
+  position: absolute;
+  top: 12px;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 300;
+  color: rgba(250, 250, 250, 0.7);
+  white-space: nowrap;
+}
 .tb-report .tb-chart__svg { width: 100%; height: auto; display: block; }
 .tb-report .tb-chart__ring,
 .tb-report .tb-chart__axis { fill: none; stroke: rgba(255, 255, 255, 0.18); stroke-width: 1; }

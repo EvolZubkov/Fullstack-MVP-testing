@@ -740,11 +740,25 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
    the two levels are parted by WEIGHT: the heading keeps 600, the name drops to 400. */
 .tb-measure .ou-formsection__title { font: var(--ou-text-heading-s); font-weight: 400; }
 
+/* Name and value are ONE line: they are a single statement («шкала — столько-то»), and
+   splitting them cost a whole row per measure, which a list of scales pays over and over.
+   The value keeps the right edge, the name takes what is left — so the numbers of all
+   measures line up in a column the eye can run down. Baseline, not centre: the value is a
+   display-size number next to a heading-size name, and centring would leave neither
+   sitting on the line the other does. */
+.tb-measure__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ou-space-4);
+}
+/* The name wraps; the reading does not — «39 из 98» broken across lines is unreadable. */
+.tb-measure__head .ou-slider__val { white-space: nowrap; }
+
 /* The DS slider is a 360px-wide form control; here it is a full-width readout, so the
-   cap is relaxed. The name stands above the rail on its own line, so the header holds
-   the value alone — keep it against the right end of the rail. */
+   cap is relaxed. The value moved up into the name row, so the DS slider header is gone
+   from the markup entirely — the wrapper holds the rail alone. */
 .tb-measure__slider { max-width: none; display: flex; }
-.tb-measure__slider .ou-slider__header { justify-content: flex-end; }
 /* Sizes: this is not a control operated at arm's length in a dense form but a readout
    taken in at a glance, so the rail and the boundary labels move one step up the DS
    scale. The DS lays the labels UNDER the rail absolutely, so they take no space of
@@ -761,11 +775,11 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
    domain stays quiet. At the slider's own body-s it read as a footnote next to the
    scale name.
 
-   Scoped to the ROW, not to the slider: a scale with no domain prints its value OUTSIDE
-   the slider wrapper (the `{{#unless zones}}` branch of results.html), and scoping to
-   `.tb-measure__slider` would leave it small and muted next to a large one in the same
-   list. The interpretation text under the readout is the finding itself, not a form
-   hint, so it leaves the DS caption size too. */
+   Scoped to the ROW, not to the slider: the value lives in the name row now, outside the
+   slider wrapper, and every render kind prints it there — a scale with no domain prints
+   the bare number, one with a domain prints «значение из максимума». The interpretation
+   text under the readout is the finding itself, not a form hint, so it leaves the DS
+   caption size too. */
 .tb-measure .ou-slider__val { font: var(--ou-text-body-m); }
 .tb-measure .ou-slider__val strong { font: var(--ou-text-display-s); }
 /* Толкование уровня — авторский текст, его переводы строк держатся (см. `.tb-recs-group__text`). */
