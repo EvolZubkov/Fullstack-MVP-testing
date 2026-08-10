@@ -12,6 +12,12 @@
  * before a parameter existed resets nothing; `0` in a limit means "no limit", verbatim as
  * the editor's hint puts it; a boolean is «Да»/«Нет».
  *
+ * The workbook is never STRICTER than the editor (spec §9). Two consequences run through
+ * the whole registry: an out-of-range number is clamped to the boundary exactly as the
+ * editor's `clampIntervalHours`/`clampCooldown` do, and a value the registry does not
+ * recognise survives the round trip instead of being dropped — the editor keeps an unknown
+ * plugin key selectable, and the workbook must not be the thing that deletes it.
+ *
  * Several parameters write into one JSON column, so the sheet is applied not to the `tests`
  * row but to a DRAFT ({@link SettingsDraft}): the import merges its branches onto the test's
  * current state and only then calls the settings service.
@@ -22,6 +28,9 @@ import { ELIGIBILITY_PLUGINS } from "@shared/eligibility/registry";
 /** Sheet headers. The sheet is a «параметр — значение» list, not a table of columns. */
 export const SETTINGS_HEADERS = ["Параметр", "Значение"];
 export const SETTINGS_WIDTHS = [46, 44];
+
+/** The two column keys, taken from {@link SETTINGS_HEADERS} so a rename lands in one place. */
+const [PARAM_COL, VALUE_COL] = SETTINGS_HEADERS;
 
 /** Export source: the test row plus its folder path (resolved by the route). */
 export type SettingsSource = Partial<Test> & { folderPath?: string | null };
@@ -81,6 +90,25 @@ export interface SettingParam {
 const YES = "Да";
 const NO = "Нет";
 
+/**
+ * Strip the junk a cell collects on its way through Excel and Word: non-breaking and
+ * zero-width spaces, a BOM, and runs of ordinary spaces. Applied to parameter NAMES and to
+ * the values of closed-vocabulary parameters — never to free text, where the inner spacing
+ * is content the author typed.
+ */
+function cleanCell(raw: string): string {
+  return raw.replace(/[\s ​﻿]+/g, " ").trim();
+}
+
+/** {@link cleanCell} plus case folding — the form in which names and labels are compared. */
+function normalizeCell(raw: string): string {
+  return cleanCell(raw).toLowerCase();
+}
+
+/**
+ * A yes/no parameter. Reads as «Да»/«Нет» and accepts either spelling in any case; a cell
+ * that is neither is a row error, since there is no third reading of a switch.
+ */
 function boolParam(
   name: string,
   get: (s: SettingsSource) => unknown,
@@ -94,14 +122,27 @@ function boolParam(
       return v === true ? YES : v === false ? NO : "";
     },
     write: (raw, draft) => {
-      const v = raw.toLowerCase();
-      if (v === "да") { draft[bucket][key] = true; return; }
-      if (v === "нет") { draft[bucket][key] = false; return; }
+      const v = normalizeCell(raw);
+      if (v === normalizeCell(YES)) { draft[bucket][key] = true; return; }
+      if (v === normalizeCell(NO)) { draft[bucket][key] = false; return; }
       return `значение должно быть «${YES}» или «${NO}», получено "${raw}"`;
     },
   };
 }
 
+/**
+ * A whole-number parameter.
+ *
+ * `zeroIsNull` marks a LIMIT, where the editor spells "no limit" as `0`: such a parameter
+ * reads an absent value back as «0» and stores `null` when the cell says `0`, so the round
+ * trip carries "unlimited" rather than losing it to an empty cell.
+ *
+ * `min`/`max` CLAMP, they do not reject. The editor silently clamps the same fields
+ * (`clampIntervalHours`, `Math.min(3650, Math.max(1, …))`), and per spec §9 the workbook
+ * must not be stricter than the editor: rejecting would let the export produce a cell its
+ * own import refuses, breaking the transfer FR-21 promises. A non-integer cell IS a row
+ * error — that is a typo, not a value out of range, and guessing at it would be worse.
+ */
 function intParam(
   name: string,
   get: (s: SettingsSource) => unknown,
@@ -118,15 +159,19 @@ function intParam(
       return String(v);
     },
     write: (raw, draft) => {
-      if (!/^-?\d+$/.test(raw)) return `нужно целое число, получено "${raw}"`;
-      const n = Number(raw);
+      const cleaned = cleanCell(raw);
+      if (!/^-?\d+$/.test(cleaned)) return `нужно целое число, получено "${raw}"`;
+      const n = Number(cleaned);
       if (zeroIsNull && n === 0) { draft[bucket][key] = null; return; }
-      if (n < min || n > max) return `число вне диапазона ${min}..${max}: ${n}`;
-      draft[bucket][key] = n;
+      draft[bucket][key] = Math.min(max, Math.max(min, n));
     },
   };
 }
 
+/**
+ * A free-text parameter. The cell is stored verbatim — inner spacing is the author's text,
+ * not junk, so {@link cleanCell} deliberately stays away from it.
+ */
 function textParam(
   name: string,
   get: (s: SettingsSource) => unknown,
@@ -143,29 +188,47 @@ function textParam(
   };
 }
 
+/**
+ * A parameter chosen from a vocabulary. Reads as the human label and accepts either that
+ * label or the stored value itself, so a workbook hand-filled with `percent` still loads.
+ *
+ * A value missing from the vocabulary is read back RAW rather than as an empty cell:
+ * empty means "leave as is" on import, so blanking it would delete the setting silently.
+ * With `open` the raw value is also accepted back — the vocabulary is a registry that grows
+ * outside this module (eligibility plugins), and the editor likewise keeps an unknown key
+ * selectable instead of dropping it. Closed vocabularies stay closed: their values are
+ * constrained by the schema, and an unknown one there is a typo worth reporting.
+ */
 function enumParam(
   name: string,
   labels: Record<string, string>,
   get: (s: SettingsSource) => unknown,
   bucket: Bucket,
   key: string,
+  opts: { open?: boolean } = {},
 ): SettingParam {
   const byLabel = new Map(
-    Object.entries(labels).map(([value, label]) => [label.toLowerCase(), value]),
+    Object.entries(labels).map(([value, label]) => [normalizeCell(label), value]),
   );
   return {
     name,
     read: (s) => {
       const v = get(s);
-      return typeof v === "string" && labels[v] ? labels[v] : "";
+      if (typeof v !== "string" || v === "") return "";
+      return labels[v] ?? v;
     },
     write: (raw, draft) => {
-      const value = byLabel.get(raw.toLowerCase());
-      if (!value) {
-        return `недопустимое значение "${raw}"; ожидается одно из: ${Object.values(labels).join(", ")}`;
+      const cleaned = cleanCell(raw);
+      const byLabelMatch = byLabel.get(normalizeCell(raw));
+      if (byLabelMatch) { draft[bucket][key] = byLabelMatch; return; }
+      // Case-sensitive on purpose: stored values are identifiers (`failClosed`), and
+      // folding their case would hand the column a value the schema does not accept.
+      if (Object.prototype.hasOwnProperty.call(labels, cleaned)) {
+        draft[bucket][key] = cleaned;
+        return;
       }
-      draft[bucket][key] = value;
-      return;
+      if (opts.open) { draft[bucket][key] = cleaned; return; }
+      return `недопустимое значение "${raw}"; ожидается одно из: ${Object.values(labels).join(", ")}`;
     },
   };
 }
@@ -243,7 +306,7 @@ export const SETTING_PARAMS: SettingParam[] = [
       return FLOW_LABELS[key];
     },
     write: (raw, draft) => {
-      const entry = Object.entries(FLOW_LABELS).find(([, l]) => l.toLowerCase() === raw.toLowerCase());
+      const entry = Object.entries(FLOW_LABELS).find(([, l]) => normalizeCell(l) === normalizeCell(raw));
       if (!entry) {
         return `недопустимое значение "${raw}"; ожидается одно из: ${Object.values(FLOW_LABELS).join(", ")}`;
       }
@@ -269,7 +332,7 @@ export const SETTING_PARAMS: SettingParam[] = [
   // ── Limits ──
   intParam("Максимум попыток", (s) => s.maxAttempts, "test", "maxAttempts", { zeroIsNull: true }),
   intParam("Лимит времени теста", (s) => s.timeLimitMinutes, "test", "timeLimitMinutes", { zeroIsNull: true }),
-  intParam("Цена вопроса по умолчанию", (s) => s.defaultQuestionPoints, "test", "defaultQuestionPoints"),
+  intParam("Балл за вопрос по умолчанию", (s) => s.defaultQuestionPoints, "test", "defaultQuestionPoints"),
   boolParam("Разрешить возврат к неотвеченным вопросам", (s) => s.allowReturnToUnanswered, "test", "allowReturnToUnanswered"),
   boolParam("Позволить изменять ответ до завершения", (s) => s.allowAnswerChange, "test", "allowAnswerChange"),
   boolParam("Не показывать обзор, если отвечены все вопросы", (s) => s.skipReviewWhenComplete, "test", "skipReviewWhenComplete"),
@@ -285,7 +348,7 @@ export const SETTING_PARAMS: SettingParam[] = [
   boolParam("Разделять период по результату попытки", (s) => branch(s.retakePolicyJson).cooldownByOutcome, "retake", "cooldownByOutcome"),
   intParam("При успешном прохождении, дней", (s) => branch(s.retakePolicyJson).cooldownPeriodDaysPassed, "retake", "cooldownPeriodDaysPassed", { min: 1, max: 3650 }),
   intParam("При неуспешном прохождении, дней", (s) => branch(s.retakePolicyJson).cooldownPeriodDaysFailed, "retake", "cooldownPeriodDaysFailed", { min: 1, max: 3650 }),
-  enumParam("Способ проверки (плагин)", PLUGIN_LABELS, (s) => branch(s.retakePolicyJson, "eligibilityPlugin").key, "plugin", "key"),
+  enumParam("Способ проверки (плагин)", PLUGIN_LABELS, (s) => branch(s.retakePolicyJson, "eligibilityPlugin").key, "plugin", "key", { open: true }),
   enumParam("При ошибке проверки допуска", FAIL_POLICY_LABELS, (s) => branch(s.retakePolicyJson, "eligibilityPlugin").failPolicy, "plugin", "failPolicy"),
   boolParam("Ограничение между попытками", (s) => branch(s.retakePolicyJson, "attemptInterval").enabled, "attemptInterval", "enabled"),
   intParam("Интервал, часов", (s) => branch(s.retakePolicyJson, "attemptInterval").hours, "attemptInterval", "hours", { min: 1, max: 8760 }),
@@ -303,20 +366,20 @@ export const SETTING_PARAMS: SettingParam[] = [
 ];
 
 /** Parameter by cell name: compared case-insensitively and free of Excel's sticky spaces. */
-const PARAM_BY_NAME = new Map(SETTING_PARAMS.map((p) => [normalizeName(p.name), p]));
-
-function normalizeName(raw: string): string {
-  return raw.replace(/[\s ​﻿]+/g, " ").trim().toLowerCase();
-}
+const PARAM_BY_NAME = new Map(SETTING_PARAMS.map((p) => [normalizeCell(p.name), p]));
 
 /** Export: one row per registry parameter, always all of them. */
 export function serializeSettingsRows(src: SettingsSource): Record<string, unknown>[] {
-  return SETTING_PARAMS.map((p) => ({ "Параметр": p.name, "Значение": p.read(src) }));
+  return SETTING_PARAMS.map((p) => ({ [PARAM_COL]: p.name, [VALUE_COL]: p.read(src) }));
 }
 
 /**
  * Sheet import. Returns the draft and per-row errors: a row with an error is dropped and
  * the rest are applied — as with every other sheet of the workbook.
+ *
+ * Rows are applied in order, so a parameter repeated twice ends up at its LAST occurrence.
+ * The sheet is a list of settings, of which a test has one each; a duplicate is a hand-edit
+ * artefact, and taking the last one matches how the author reads the sheet top to bottom.
  */
 export function parseSettingsSheet(rows: Record<string, unknown>[]): {
   draft: SettingsDraft;
@@ -327,17 +390,17 @@ export function parseSettingsSheet(rows: Record<string, unknown>[]): {
 
   rows.forEach((row, i) => {
     const where = `Лист «Настройки», строка ${i + 2}`;
-    const name = String(row["Параметр"] ?? "").replace(/[\s ​﻿]+/g, " ").trim();
+    const name = cleanCell(String(row[PARAM_COL] ?? ""));
     if (!name) {
-      errors.push(`${where}: не указан «Параметр»`);
+      errors.push(`${where}: не указан «${PARAM_COL}»`);
       return;
     }
-    const param = PARAM_BY_NAME.get(normalizeName(name));
+    const param = PARAM_BY_NAME.get(normalizeCell(name));
     if (!param) {
       errors.push(`${where}: неизвестный параметр: "${name}"`);
       return;
     }
-    const raw = String(row["Значение"] ?? "").trim();
+    const raw = String(row[VALUE_COL] ?? "").trim();
     if (raw === "") return; // "leave as is"
     const error = param.write(raw, draft);
     if (error) errors.push(`${where}: «${name}» — ${error}`);
