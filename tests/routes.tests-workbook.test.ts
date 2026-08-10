@@ -871,6 +871,114 @@ describe("GET /:id/workbook/export", () => {
   });
 });
 
+// ─── Выгрузка: проводка PRD-48 в роуте ───────────────────────────────────────
+// Сериализаторы строк покрыты юнитами, а вот СБОРКА их аргументов живёт в роуте:
+// карта кодов тем, чтение `flowPolicyJson.router.sectionUnlockRules` с переводом
+// идентификаторов тем в имена и обход родителей папки для параметра «Папка».
+
+describe("GET /:id/workbook/export — коды тем, разблокировка и путь папки", () => {
+  const jsTopic = { id: "t1", name: "JavaScript", code: "js" };
+  const mainTopic = { id: "t-main", name: "Основной", code: null };
+
+  beforeEach(() => {
+    storageMock.getTopics.mockResolvedValue([jsTopic, mainTopic]);
+    storageMock.getTestSections.mockResolvedValue([
+      { topicId: "t1", drawCount: 5, sortOrder: 0, required: true, topicPassRuleJson: null, drawBlueprintJson: null },
+      { topicId: "t-main", drawCount: 3, sortOrder: 1, required: true, topicPassRuleJson: null, drawBlueprintJson: null },
+    ]);
+    storageMock.getQuestions.mockResolvedValue([]);
+    storageMock.getScales.mockResolvedValue([]);
+    storageMock.getResultVariables.mockResolvedValue([]);
+    storageMock.getQuestionMeasurements.mockResolvedValue([]);
+  });
+
+  it("«Код темы» берётся из темы, а не из раздела; тема без кода даёт пустую ячейку", async () => {
+    const res = await getExport();
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+    const rows = sheetToObjects(wb.getWorksheet("Структура")!);
+
+    expect(rows[0]).toMatchObject({ "Раздел": "JavaScript", "Код темы": "js" });
+    // Пустая ячейка на импорте означает «оставить как есть» — код не выдумывается.
+    expect(String(rows[1]["Код темы"] ?? "")).toBe("");
+  });
+
+  it("правила разблокировки выгружаются ИМЕНАМИ тем, а не идентификаторами", async () => {
+    storageMock.getTest.mockResolvedValue({
+      ...baseTest,
+      flowPolicyJson: {
+        mode: "router_by_topics",
+        router: {
+          sectionUnlockRules: {
+            "t-main": { mode: "after_sections_passed", sectionIds: ["t1"] },
+          },
+        },
+      },
+    });
+
+    const res = await getExport();
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+    const rows = sheetToObjects(wb.getWorksheet("Структура")!);
+
+    // Раздел без правила — «Доступен сразу», зависимостей нет.
+    expect(rows[0]).toMatchObject({ "Раздел": "JavaScript", "Доступность раздела": "Доступен сразу" });
+    expect(String(rows[0]["Зависит от разделов"] ?? "")).toBe("");
+    expect(rows[1]).toMatchObject({
+      "Раздел": "Основной",
+      "Доступность раздела": "После успешного прохождения выбранных разделов",
+      "Зависит от разделов": "JavaScript",
+    });
+    // Идентификаторов тем в книге быть не должно: на другом стенде они мертвы.
+    expect(JSON.stringify(rows)).not.toContain("t-main");
+  });
+
+  it("«Папка» выгружается путём от корня", async () => {
+    storageMock.getTest.mockResolvedValue({ ...baseTest, folderId: "f2" });
+    storageMock.getTestFolders.mockResolvedValue([
+      { id: "f1", name: "Аттестация", parentId: null },
+      { id: "f2", name: "2026", parentId: "f1" },
+    ]);
+
+    const res = await getExport();
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+    const rows = sheetToObjects(wb.getWorksheet("Настройки")!);
+    const folder = rows.find((r: any) => r["Параметр"] === "Папка");
+
+    expect(folder?.["Значение"]).toBe("Аттестация / 2026");
+  });
+
+  it("тест вне папок выгружается пустой «Папкой»", async () => {
+    storageMock.getTest.mockResolvedValue({ ...baseTest, folderId: null });
+    storageMock.getTestFolders.mockResolvedValue([{ id: "f1", name: "Аттестация", parentId: null }]);
+
+    const res = await getExport();
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+    const rows = sheetToObjects(wb.getWorksheet("Настройки")!);
+    const folder = rows.find((r: any) => r["Параметр"] === "Папка");
+
+    expect(String(folder?.["Значение"] ?? "")).toBe("");
+  });
+
+  // Дерево папок приходит из базы как плоский список, и цикл в нём — вопрос
+  // испорченных данных, а не невозможного случая: без защиты обход зациклится и
+  // выгрузка повиснет вместо того, чтобы отдать книгу.
+  it("цикл в дереве папок не подвешивает выгрузку", async () => {
+    storageMock.getTest.mockResolvedValue({ ...baseTest, folderId: "f2" });
+    storageMock.getTestFolders.mockResolvedValue([
+      { id: "f1", name: "Аттестация", parentId: "f2" },
+      { id: "f2", name: "2026", parentId: "f1" },
+    ]);
+
+    const res = await getExport();
+    expect(res.status).toBe(200);
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+    const rows = sheetToObjects(wb.getWorksheet("Настройки")!);
+    const folder = String(rows.find((r: any) => r["Параметр"] === "Папка")?.["Значение"] ?? "");
+
+    // Каждая папка цикла названа ровно один раз — обход останавливается на повторе.
+    expect(folder).toBe("Аттестация / 2026");
+  });
+});
+
 describe("Round-trip: экспорт → реимпорт", () => {
   beforeEach(() => {
     storageMock.getTestSections.mockResolvedValue([
