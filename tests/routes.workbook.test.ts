@@ -175,7 +175,7 @@ describe("POST /api/workbook/import-new", () => {
     expect(storageMock.createScale).toHaveBeenCalled();
   });
 
-  it("со «Структурой»: создаёт тест и применяет разделы (router_by_topics)", async () => {
+  it("со «Структурой»: создаёт тест и применяет разделы", async () => {
     const buf = await makeWorkbook({
       "Вопросы": [questionRow],
       "Структура": [
@@ -193,10 +193,53 @@ describe("POST /api/workbook/import-new", () => {
     expect(testSettingsMock.save).toHaveBeenCalledWith(
       "test-new",
       expect.objectContaining({
-        test: expect.objectContaining({ flowPolicyJson: { mode: "router_by_topics" } }),
         sections: [expect.objectContaining({ topicId: "t1", drawCount: 5 })],
       }),
     );
+  });
+
+  // PRD-48 FR-07: тест, созданный импортом, остаётся линейным, пока книга не
+  // назвала сценарий. Ни `create`, ни `save` не пишут `flow_policy_json` — а
+  // пустую колонку все читатели трактуют как «Линейный». Раньше проход
+  // «Структуры» ставил здесь маршрутизатор (PRD-14 FR-16).
+  it("книга без сценария создаёт ЛИНЕЙНЫЙ тест", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      "Структура": [
+        { "Раздел": "JavaScript", "Порядок": "1", "Вопросов в выборке": "5", "Тип порога": "Сумма баллов", "Порог": "4" },
+      ],
+    });
+    const res = await request(makeApp())
+      .post("/api/workbook/import-new")
+      .field("newTestTitle", "Линейный тест")
+      .attach("file", buf, "wb.xlsx");
+
+    expect(res.status).toBe(201);
+    expect(res.body.errors).toEqual([]);
+    const created = (testSettingsMock.create.mock.calls[0][0] as any).test;
+    expect(created).not.toHaveProperty("flowPolicyJson");
+    expect(testSettingsMock.save).toHaveBeenCalledTimes(1);
+    const saved = (testSettingsMock.save.mock.calls[0][1] as any).test;
+    expect(saved).not.toHaveProperty("flowPolicyJson");
+  });
+
+  it("сценарий из «Настроек» применяется и к новому тесту", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [{ "Параметр": "Сценарий прохождения", "Значение": "Через страницу-маршрутизатор" }],
+      "Вопросы": [questionRow],
+      "Структура": [
+        { "Раздел": "JavaScript", "Порядок": "1", "Вопросов в выборке": "5", "Тип порога": "Сумма баллов", "Порог": "4" },
+      ],
+    });
+    const res = await request(makeApp())
+      .post("/api/workbook/import-new")
+      .field("newTestTitle", "Маршрутизатор")
+      .attach("file", buf, "wb.xlsx");
+
+    expect(res.status).toBe(201);
+    expect(res.body.errors).toEqual([]);
+    const saved = (testSettingsMock.save.mock.calls[0][1] as any).test;
+    expect(saved.flowPolicyJson).toMatchObject({ mode: "router_by_topics" });
   });
 
   it("без названия нового теста → 400", async () => {

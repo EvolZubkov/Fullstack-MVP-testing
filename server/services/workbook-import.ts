@@ -104,14 +104,44 @@ function unitCountOfQuestion(q: { type: string; dataJson: unknown }): number {
 }
 
 /**
+ * `flow_policy_json` for the patch, or nothing at all.
+ *
+ * The flow is written ONLY when the book named it (PRD-48 FR-06). The import used to set
+ * `router_by_topics` unconditionally (PRD-14 FR-16), so a linear test came back from an
+ * export/import round trip as a router-page test.
+ *
+ * A linear scenario has no router page, so its settings are cleared instead of being left
+ * behind as dead JSON. The reverse — moving TO the router — keeps the settings the book did
+ * not mention, the same merge every other JSON column here does.
+ *
+ * The router branch alone (a book naming «Политика завершения маршрутизатора» without a
+ * scenario) still applies: it rides on the CURRENT mode, so a named parameter is never
+ * silently dropped and the scenario stays untouched.
+ */
+function buildFlowPatch(draft: SettingsDraft, current: Test | undefined): Record<string, unknown> {
+  const cur = (current?.flowPolicyJson ?? {}) as { mode?: unknown; router?: unknown };
+  const hasRouterSettings = Object.keys(draft.router).length > 0;
+  if (!draft.flowMode && !hasRouterSettings) return {};
+
+  const mode = draft.flowMode ?? (typeof cur.mode === "string" ? cur.mode : "linear_flat");
+  if (mode !== "router_by_topics") return { flowPolicyJson: { mode, router: null } };
+
+  const curRouter = typeof cur.router === "object" && cur.router !== null ? cur.router : {};
+  return { flowPolicyJson: { mode, router: { ...curRouter, ...draft.router } } };
+}
+
+/**
  * Patch for the `tests` row built from the «Настройки» draft.
  *
  * JSON columns are merged OVER the current value rather than rebuilt from scratch: a
  * «Период охлаждения» row without a «Разделять период» row would otherwise wipe the half
  * of the policy the book never mentioned (FR-20).
+ *
+ * BOTH save branches (with and without «Структура») go through here, so a parameter is
+ * applied on the same terms wherever the book happens to carry it.
  */
 function buildTestPatch(draft: SettingsDraft, current: Test | undefined): Record<string, unknown> {
-  const patch: Record<string, unknown> = { ...draft.test };
+  const patch: Record<string, unknown> = { ...draft.test, ...buildFlowPatch(draft, current) };
 
   if (Object.keys(draft.overall).length > 0) {
     patch.overallPassRuleJson = { ...(current?.overallPassRuleJson as object ?? {}), ...draft.overall };
@@ -625,7 +655,8 @@ export async function importWorkbook(
   // The whole test's structure: one section per «Структура» row (topic + draw
   // count + per-topic pass rule), with «Квоты» rows supplying each section's
   // per-tag draw blueprint. Applied via testSettingsService (it materializes the
-  // router page and runs flow validation). The flow is fixed to router_by_topics.
+  // router page and runs flow validation). The flow itself comes from «Настройки»
+  // (PRD-48 FR-06) — structure alone no longer implies a router page.
   const structureSheet = findSheet(workbook, "Структура");
   const quotasSheet = findSheet(workbook, "Квоты");
 
@@ -807,7 +838,6 @@ export async function importWorkbook(
       const current = await storage.getTest(testId);
       await testSettingsService.save(testId, {
         test: {
-          flowPolicyJson: { mode: "router_by_topics" },
           status: (current?.status as "draft" | "published" | "archived") ?? "draft",
           // PRD-48 §4.1: settings from «Настройки»; a key the sheet did not carry
           // stays absent, and the service leaves that column alone.

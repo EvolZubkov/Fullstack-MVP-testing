@@ -282,7 +282,7 @@ describe("POST /:id/workbook/import?dryRun=true — предпросмотр", (
 });
 
 describe("POST /:id/workbook/import — «Структура» + «Квоты» (FR-16)", () => {
-  it("создаёт разделы с порогом и квотами; режим router_by_topics", async () => {
+  it("создаёт разделы с порогом и квотами", async () => {
     const buf = await makeWorkbook({
       "Вопросы": [questionRow],
       "Структура": [
@@ -298,7 +298,6 @@ describe("POST /:id/workbook/import — «Структура» + «Квоты» 
     expect(testSettingsMock.save).toHaveBeenCalledWith(
       "test-1",
       expect.objectContaining({
-        test: expect.objectContaining({ flowPolicyJson: { mode: "router_by_topics" } }),
         sections: [
           expect.objectContaining({
             topicId: "t1",
@@ -922,6 +921,117 @@ describe("POST /:id/workbook/import — «Пороги вариантов» (PRD
     expect(res.body.errors).toEqual([]);
     expect(testSettingsMock.save.mock.calls[0][1].sections[0].topicPassRuleJson).toEqual({
       source: "custom", type: "percent", value: 70,
+    });
+  });
+});
+
+// ─── PRD-48 FR-06/FR-07: сценарий прохождения ────────────────────────────────
+// Проход «Структуры» БЕЗУСЛОВНО ставил `router_by_topics` (PRD-14 FR-16), и
+// линейный тест возвращался из круга «экспорт → импорт» маршрутизатором. Теперь
+// сценарий приходит с листа «Настройки», а книга, которая его не назвала, не
+// трогает его вовсе.
+
+describe("POST /:id/workbook/import — сценарий прохождения (PRD-48)", () => {
+  const finTopic = {
+    id: "t-fin", name: "Финансы", description: null, folderId: null, createdAt: new Date(),
+  };
+  const structureRow = { "Раздел": "Финансы", "Порядок": 1, "Вопросов в выборке": 2 };
+  const flowRow = (value: string) => ({ "Параметр": "Сценарий прохождения", "Значение": value });
+
+  /** Аргумент `test` единственного вызова save. */
+  const savedTest = () =>
+    (testSettingsMock.save.mock.calls[0][1] as any).test as Record<string, unknown>;
+
+  beforeEach(() => {
+    storageMock.getTopics.mockResolvedValue([finTopic]);
+  });
+
+  it("книга со «Структурой» без сценария не делает тест маршрутизатором", async () => {
+    const buf = await makeWorkbook({ "Структура": [structureRow] });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.structure.sections).toBe(1);
+    expect(testSettingsMock.save).toHaveBeenCalledTimes(1);
+    // Именно ОТСУТСТВУЕТ, а не «равно чему-то»: импорт не вправе трогать
+    // сценарий, которого книга не называла.
+    expect(savedTest()).not.toHaveProperty("flowPolicyJson");
+  });
+
+  it("сценарий из книги применяется", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [flowRow("Через страницу-маршрутизатор")],
+      "Структура": [structureRow],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(savedTest().flowPolicyJson).toMatchObject({ mode: "router_by_topics" });
+  });
+
+  it("линейный сценарий из книги обнуляет ветвь router", async () => {
+    storageMock.getTest.mockResolvedValue({
+      ...baseTest,
+      flowPolicyJson: { mode: "router_by_topics", router: { completionPolicy: "all_required_passed" } },
+    });
+    const buf = await makeWorkbook({
+      "Настройки": [flowRow("Линейный по темам")],
+      "Структура": [structureRow],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(savedTest().flowPolicyJson).toEqual({ mode: "linear_by_topics", router: null });
+  });
+
+  // Книга может нести ОДНИ «Настройки» — ветвь сохранения без «Структуры»
+  // применяет сценарий на тех же правилах.
+  it("книга с одними «Настройками» тоже применяет сценарий", async () => {
+    const buf = await makeWorkbook({ "Настройки": [flowRow("Через страницу-маршрутизатор")] });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(savedTest().flowPolicyJson).toMatchObject({ mode: "router_by_topics" });
+  });
+
+  // Настройки самого маршрутизатора живут в той же колонке: переход на него не
+  // должен стирать политику завершения, которой книга не касалась.
+  it("переход на маршрутизатор сохраняет его настройки", async () => {
+    storageMock.getTest.mockResolvedValue({
+      ...baseTest,
+      flowPolicyJson: { mode: "linear_flat", router: { completionPolicy: "all_required_completed" } },
+    });
+    const buf = await makeWorkbook({ "Настройки": [flowRow("Через страницу-маршрутизатор")] });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(savedTest().flowPolicyJson).toEqual({
+      mode: "router_by_topics",
+      router: { completionPolicy: "all_required_completed" },
+    });
+  });
+
+  it("политика завершения из книги перекрывает сохранённую", async () => {
+    storageMock.getTest.mockResolvedValue({
+      ...baseTest,
+      flowPolicyJson: { mode: "router_by_topics", router: { completionPolicy: "all_required_completed" } },
+    });
+    const buf = await makeWorkbook({
+      "Настройки": [
+        flowRow("Через страницу-маршрутизатор"),
+        { "Параметр": "Политика завершения маршрутизатора", "Значение": "Только если все обязательные разделы пройдены" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    expect(savedTest().flowPolicyJson).toEqual({
+      mode: "router_by_topics",
+      router: { completionPolicy: "all_required_passed" },
     });
   });
 });
