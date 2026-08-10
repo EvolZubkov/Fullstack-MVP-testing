@@ -651,12 +651,12 @@ export function serializeMeasurementRow(m: {
 export const STRUCTURE_HEADERS = [
   // NB: «Порядок» here is the ORDER OF SECTIONS in the test (sort_order), which
   // is why the PRD-30 delivery setting is a separate, explicitly named column.
-  "Раздел", "Порядок", "Вопросов в выборке", "Тип порога", "Порог", "Обязательный",
+  "Раздел", "Код темы", "Порядок", "Вопросов в выборке", "Тип порога", "Порог", "Обязательный",
   "Случайный порядок вопросов",
   // PRD-48 FR-09: the section fields the workbook was missing for a full transfer.
   "Выдавать все вопросы темы", "Лимит времени темы", "Балл по умолчанию в секции",
 ];
-export const STRUCTURE_WIDTHS = [28, 10, 20, 16, 10, 14, 26, 24, 20, 26];
+export const STRUCTURE_WIDTHS = [28, 22, 10, 20, 16, 10, 14, 26, 24, 20, 26];
 
 /** Canonical «Квоты» headers (one row per PRD-11 stratum). */
 export const QUOTA_HEADERS = ["Раздел", "Тег", "Количество", "Режим"];
@@ -729,6 +729,8 @@ export const STRUCTURE_PASS_TYPE_CHOICES = [
 export interface ParsedSection {
   /** Topic name (resolved to `topicId` by the orchestrator). */
   topicName: string;
+  /** PRD-48 FR-10: the topic's short code (`topics.code`); `null` = not carried. */
+  topicCode: string | null;
   /** Sort order; the orchestrator orders sections by this. */
   sortOrder: number;
   drawCount: number;
@@ -752,6 +754,11 @@ export function parseStructureRow(
 ): ParseResult<ParsedSection> {
   const topicName = String(row["Раздел"] ?? row["Тема"] ?? "").replace(/[\s ​﻿]+/g, " ").trim();
   if (!topicName) return { ok: false, error: "не указан раздел (тема)" };
+
+  // The topic code travels for the sake of result-variable FORMULAS: they address a
+  // topic as `topicById("<code>")`, and a book without codes leaves those formulas
+  // without an addressee (`topics.code`, migration 032).
+  const topicCode = String(row["Код темы"] ?? "").trim() || null;
 
   const orderRaw = String(row["Порядок"] ?? "").trim();
   const sortOrder = orderRaw === "" ? rowIndex : Number(orderRaw);
@@ -813,7 +820,7 @@ export function parseStructureRow(
   return {
     ok: true,
     value: {
-      topicName, sortOrder, drawCount, passRule, required, questionOrder,
+      topicName, topicCode, sortOrder, drawCount, passRule, required, questionOrder,
       drawAll, timeLimitMinutes, defaultPoints,
     },
   };
@@ -822,6 +829,8 @@ export function parseStructureRow(
 /** Serialize a section to a «Структура» row (export). */
 export function serializeStructureRow(s: {
   topicName: string;
+  /** PRD-48 FR-10: the topic's short code, the address formulas call it by. */
+  topicCode?: string | null;
   sortOrder: number;
   drawCount: number;
   topicPassRuleJson: unknown;
@@ -848,6 +857,7 @@ export function serializeStructureRow(s: {
   }
   return {
     "Раздел": s.topicName,
+    "Код темы": s.topicCode ?? "",
     "Порядок": s.sortOrder + 1,
     "Вопросов в выборке": s.drawCount,
     "Тип порога": passType,

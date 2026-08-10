@@ -24,6 +24,8 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     // questions
     getTopics: vi.fn(),
     createTopic: vi.fn(),
+    // PRD-48 FR-10: «Код темы» проставляется теме, у которой его нет.
+    updateTopic: vi.fn(),
     getQuestion: vi.fn(),
     createQuestion: vi.fn(),
     updateQuestion: vi.fn(),
@@ -112,6 +114,7 @@ beforeEach(() => {
   storageMock.getUser.mockResolvedValue(authorUser);
   storageMock.getUserRoles.mockResolvedValue(["administrator"]);
   storageMock.getTopics.mockResolvedValue([dbTopic]);
+  storageMock.updateTopic.mockResolvedValue(dbTopic);
   storageMock.getContentHashesByTopic.mockResolvedValue(new Set());
   storageMock.getQuestionsByTopic.mockResolvedValue([]);
   storageMock.createQuestion.mockResolvedValue({ id: "newq-1" });
@@ -432,6 +435,57 @@ describe("POST /:id/workbook/import — «Структура» + «Квоты» 
     const res = await postWorkbook(buf);
     expect(res.body.errors.some((e: string) => /только один вариант/.test(e))).toBe(true);
     expect((testSettingsMock.save.mock.calls[0][1] as any).sections[0].formSetJson).toBeNull();
+  });
+});
+
+// ─── «Код темы» (PRD-48 FR-10) ────────────────────────────────────────────────
+// Формулы показателей адресуют тему как topicById("<код>"): книга, приехавшая на
+// другой стенд без кодов, оставит формулы без адресата.
+
+describe("POST /:id/workbook/import — «Код темы»", () => {
+  const withCode = {
+    id: "t-law", name: "Право", code: "law", description: null, folderId: null, createdAt: new Date(),
+  };
+  const withoutCode = {
+    id: "t-fin", name: "Финансы", code: null, description: null, folderId: null, createdAt: new Date(),
+  };
+
+  it("проставляется теме без кода и не перетирает существующий", async () => {
+    storageMock.getTopics.mockResolvedValue([withCode, withoutCode]);
+    const buf = await makeWorkbook({
+      "Структура": [
+        { "Раздел": "Финансы", "Порядок": 1, "Вопросов в выборке": 1, "Код темы": "fin" },
+        { "Раздел": "Право", "Порядок": 2, "Вопросов в выборке": 1, "Код темы": "другой" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    // Тема без кода получила его; тема с кодом не тронута ВОВСЕ.
+    expect(storageMock.updateTopic).toHaveBeenCalledTimes(1);
+    expect(storageMock.updateTopic).toHaveBeenCalledWith("t-fin", { code: "fin" });
+  });
+
+  it("dryRun не пишет код", async () => {
+    storageMock.getTopics.mockResolvedValue([withoutCode]);
+    const buf = await makeWorkbook({
+      "Структура": [{ "Раздел": "Финансы", "Порядок": 1, "Вопросов в выборке": 1, "Код темы": "fin" }],
+    });
+    await postWorkbook(buf, "?dryRun=true");
+
+    expect(storageMock.updateTopic).not.toHaveBeenCalled();
+  });
+
+  it("книга без колонки «Код темы» не трогает коды", async () => {
+    storageMock.getTopics.mockResolvedValue([withoutCode]);
+    const buf = await makeWorkbook({
+      "Структура": [{ "Раздел": "Финансы", "Порядок": 1, "Вопросов в выборке": 1 }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    expect(storageMock.updateTopic).not.toHaveBeenCalled();
   });
 });
 

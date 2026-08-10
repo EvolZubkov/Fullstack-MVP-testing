@@ -108,6 +108,9 @@ router.get(
       const topicIds = new Set(sections.map((s) => s.topicId));
       const topics = await storage.getTopics();
       const topicName = new Map(topics.map((t) => [t.id, t.name]));
+      // PRD-48 FR-10: the topic's short code rides along so the formulas that address
+      // it as `topicById("<code>")` keep their addressee on another stand.
+      const topicCode = new Map(topics.map((t) => [t.id, t.code]));
 
       const scales = await storage.getScales(testId);
       const resultVars = await storage.getResultVariables(testId);
@@ -160,6 +163,7 @@ router.get(
       const structureRows = orderedSections.map((s) =>
         serializeStructureRow({
           topicName: topicName.get(s.topicId) || "",
+          topicCode: topicCode.get(s.topicId) ?? null,
           sortOrder: s.sortOrder,
           drawCount: s.drawCount,
           topicPassRuleJson: s.topicPassRuleJson,

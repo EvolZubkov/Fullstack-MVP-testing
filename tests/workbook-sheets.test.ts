@@ -246,6 +246,8 @@ describe("parseStructureRow", () => {
     );
     expect(r.ok && r.value).toEqual({
       topicName: "О компании",
+      // PRD-48 FR-10: колонки «Код темы» нет — код не переносится.
+      topicCode: null,
       sortOrder: 1,
       drawCount: 12,
       passRule: { source: "custom", type: "absolute", value: 15 },

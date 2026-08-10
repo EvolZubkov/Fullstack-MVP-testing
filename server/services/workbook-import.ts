@@ -738,6 +738,14 @@ export async function importWorkbook(
       }
       usedTopicKeys.add(key);
 
+      // The code is set on a topic that has NONE and never overwrites an existing one:
+      // a topic is shared between tests, and one test's book may not rename the address
+      // another test's formulas call it by (PRD-48 FR-10).
+      if (!dryRun && sec.topicCode && !topicId.startsWith("__newtopic__:")) {
+        const topic = topics.find((t) => t.id === topicId);
+        if (topic && !topic.code) await storage.updateTopic(topicId, { code: sec.topicCode });
+      }
+
       const strata = quotasByTopic.get(key) ?? [];
       const quotaSum = strata.reduce((s, q) => s + q.count, 0);
       if (quotaSum > sec.drawCount) {
