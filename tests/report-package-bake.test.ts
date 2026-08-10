@@ -159,7 +159,9 @@ describe("выбор варианта запекается в пакет (FR-22)
     // Картинки варианта — файлы шаблона, а он лежит в пакете под `template/` (FR-05),
     // поэтому ожидание строится с той же базой, с какой запекает сборщик.
     const expected = resolveReportBake(defaultManifest(), "report", null, "template/");
-    expect(td.designSettings.report).toEqual(expected);
+    // `enabled` добавляет сборщик поверх выбора вида: выдавать ли документ — общая
+    // настройка теста, и рантайму она нужна там же, где макет (PRD-27 §7.1).
+    expect(td.designSettings.report).toEqual({ ...expected, enabled: true });
     // Не «какой-нибудь report.css по имени файла», а именно объявленный вариантом.
     expect(td.designSettings.report.styleFile).toBe(expected.styleFile);
   });

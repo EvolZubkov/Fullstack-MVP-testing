@@ -22,6 +22,7 @@ function fakePdf() {
   const calls = {
     ctor: [] as unknown[],
     addImage: [] as unknown[][],
+    addPage: 0,
     link: [] as unknown[][],
     saved: [] as string[],
   };
@@ -32,6 +33,9 @@ function fakePdf() {
     addImage(...args: unknown[]) {
       calls.addImage.push(args);
     }
+    addPage() {
+      calls.addPage += 1;
+    }
     link(...args: unknown[]) {
       calls.link.push(args);
     }
@@ -40,6 +44,26 @@ function fakePdf() {
     }
   }
   return { calls, jsPDF: Doc as unknown as never };
+}
+
+/**
+ * Дать jsdom высоты: он раскладку не считает, а разбивка на страницы стоит именно на
+ * измеренных координатах. Высота блока читается из его `data-h`, корень занимает их сумму.
+ */
+function stubLayout() {
+  return vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const own = Number((this as HTMLElement).dataset?.h ?? NaN);
+    if (Number.isFinite(own)) {
+      let top = 0;
+      for (const sibling of [...(this.parentElement?.children ?? [])]) {
+        if (sibling === this) break;
+        top += Number((sibling as HTMLElement).dataset?.h ?? 0);
+      }
+      return { top, bottom: top + own, left: 0, right: 595, width: 595, height: own } as DOMRect;
+    }
+    const total = [...this.children].reduce((sum, c) => sum + Number((c as HTMLElement).dataset?.h ?? 0), 0);
+    return { top: 0, bottom: total, left: 0, right: 595, width: 595, height: total } as DOMRect;
+  });
 }
 
 /** Страница отчёта: макет варианта + контекст, как их отдаёт шаблон. */
@@ -89,6 +113,86 @@ describe("exportReportPdf", () => {
     expect(calls.link).toHaveLength(1);
     const [, , , , opts] = calls.link[0] as [number, number, number, number, { url: string; newWindow: boolean }];
     expect(opts).toEqual({ url: "https://e/a", newWindow: true });
+  });
+
+  it("раскладывает документ по страницам A4, не разрывая карточки", async () => {
+    // Отчёт печатался ОДНОЙ страницей произвольной высоты — «колбасой», которую нечем
+    // ни распечатать, ни пролистать. Теперь страница всегда A4, а разрыв проходит между
+    // карточками: три по 500 px при полезной высоте A4 не уживаются на одном листе.
+    const rect = stubLayout();
+    try {
+      const { calls, jsPDF } = fakePdf();
+      const html2canvas = vi.fn().mockResolvedValue(fakeCanvas(1190, 1000));
+      await exportReportPdf(
+        {
+          layout:
+            '<div class="tb-report">' +
+            '<section data-h="500">Счёт</section>' +
+            '<section data-h="500">Темы</section>' +
+            '<section data-h="500">Показатели</section>' +
+            "</div>",
+          context: {},
+        },
+        "T",
+        { jsPDF, html2canvas },
+      );
+      // Каждая карточка получает свой лист: снимок на страницу, addPage между ними.
+      expect(html2canvas).toHaveBeenCalledTimes(3);
+      expect(calls.addImage).toHaveLength(3);
+      expect(calls.addPage).toBe(2);
+      // Формат страницы — A4, а не высота содержимого.
+      expect(calls.ctor[0]).toMatchObject({ format: [210, 297] });
+      // На каждом листе — только его карточка: разрыва внутри карточки нет.
+      const printed = html2canvas.mock.calls.map(([el]) => (el as HTMLElement).textContent);
+      expect(printed).toEqual(["Счёт", "Темы", "Показатели"]);
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
+  it("короткий отчёт остаётся одной страницей", async () => {
+    const rect = stubLayout();
+    try {
+      const { calls, jsPDF } = fakePdf();
+      const html2canvas = vi.fn().mockResolvedValue(fakeCanvas(1190, 400));
+      await exportReportPdf(
+        { layout: '<div class="tb-report"><section data-h="200">Счёт</section></div>', context: {} },
+        "T",
+        { jsPDF, html2canvas },
+      );
+      expect(calls.addPage).toBe(0);
+      expect(calls.addImage).toHaveLength(1);
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
+  it("ссылки уходят на ТУ страницу, где напечатан их чип", async () => {
+    // Растр без этого превращает рекомендацию в мёртвую картинку, а координаты чипа
+    // на второй странице отсчитываются от её собственного верха, а не от начала документа.
+    const rect = stubLayout();
+    try {
+      const { calls, jsPDF } = fakePdf();
+      const html2canvas = vi.fn().mockResolvedValue(fakeCanvas(1190, 1000));
+      await exportReportPdf(
+        {
+          layout:
+            '<div class="tb-report">' +
+            '<section data-h="600">Первая</section>' +
+            '<section data-h="600"><div class="pdf-link-btn" data-url="https://e/a">Курс</div></section>' +
+            "</div>",
+          context: {},
+        },
+        "T",
+        { jsPDF, html2canvas },
+      );
+      expect(calls.addPage).toBe(1);
+      expect(calls.link).toHaveLength(1);
+      const [, , , , opts] = calls.link[0] as [number, number, number, number, { url: string }];
+      expect(opts.url).toBe("https://e/a");
+    } finally {
+      rect.mockRestore();
+    }
   });
 
   it("refuses to run without the libraries", async () => {

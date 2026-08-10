@@ -19,13 +19,30 @@ import type { ReportVariantOption } from "../../use-report-variants";
 const rendered: Array<{ layout: string; context: Record<string, unknown>; css?: string }> = [];
 
 vi.mock("@/components/template-screen", () => ({
-  TemplateScreen: (props: { layout: string; context: unknown; css?: string }) => {
+  // Двойник рисует страницу в НАСТОЯЩИЙ теневой корень и зовёт `onShadowReady`: окно
+  // раскладывает документ по листам A4 уже после рендера, и без теневого дерева эта
+  // половина поведения не проверялась бы вовсе.
+  TemplateScreen: (props: {
+    layout: string;
+    context: unknown;
+    css?: string;
+    onShadowReady?: (shadow: ShadowRoot) => void;
+  }) => {
     rendered.push({
       layout: props.layout,
       context: props.context as Record<string, unknown>,
       css: props.css,
     });
-    return <div data-testid="template-screen">{props.layout}</div>;
+    // Сцена ставится ОДИН раз, как у настоящего компонента: он перестраивает теневое
+    // дерево только при смене входов, а не на каждый ререндер родителя. Иначе счётчик
+    // листов, поднятый окном в состояние, стирал бы собственные листы.
+    const mount = (host: HTMLDivElement | null) => {
+      if (!host || host.shadowRoot) return;
+      const shadow = host.attachShadow({ mode: "open" });
+      shadow.innerHTML = `<div><div class="tb-report"><section>Карточка</section></div></div>`;
+      props.onShadowReady?.(shadow);
+    };
+    return <div data-testid="template-screen" ref={mount}>{props.layout}</div>;
   },
 }));
 
@@ -220,6 +237,26 @@ describe("это страница, а не PDF (FR-21)", () => {
     expect(labels).not.toContain("Скачать");
     expect(labels.some((l) => /скачать|pdf/i.test(l))).toBe(false);
     expect(screen.getByTestId("report-preview-close")).toBeTruthy();
+  });
+
+  // FR-21/FR-23: окно показывает ЛИСТЫ, а не ленту. Пока раскладка жила только в
+  // конвейере экспорта, автор согласовывал одну длинную страницу и узнавал о разрывах из
+  // скачанного файла. jsdom размеров не считает, поэтому документ здесь укладывается в
+  // один лист — проверяется сама проводка: листы построены, лента убрана, счёт объявлен.
+  it("раскладывает документ по листам A4 и подписывает их", async () => {
+    mockFetch(BUNDLE);
+    renderModal();
+    const host = await screen.findByTestId("template-screen");
+    await waitFor(() => {
+      const shadow = host.shadowRoot as ShadowRoot;
+      expect(shadow.textContent).toContain("Страница 1 из 1");
+    });
+    const shadow = host.shadowRoot as ShadowRoot;
+    // Исходная лента заменена окнами листов: страница осталась ровно одна.
+    expect(shadow.querySelectorAll(".tb-report")).toHaveLength(1);
+    expect(shadow.textContent).toContain("Карточка");
+    // Счёт листов объявлен автору в подзаголовке окна.
+    expect(screen.getByText(/1 страница A4/)).toBeTruthy();
   });
 
   it("«Закрыть» закрывает окно", async () => {

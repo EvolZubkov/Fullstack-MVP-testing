@@ -29,7 +29,9 @@ const MANIFEST = {
         isDefault: true,
         settings: [
           { key: "headline", type: "text", label: "Заголовок отчёта", default: "Итоги" },
-          { key: "showRecs", type: "boolean", label: "Показывать рекомендации", default: true },
+          // Содержательное поле: решает, ЧТО попадёт в документ, — значит живёт в
+          // «Настройках», рядом с обратной связью.
+          { key: "showRecs", type: "boolean", scope: "content", label: "Показывать рекомендации", default: true },
           { key: "backgroundImage", type: "image", label: "Подложка страницы", default: "assets/report/bg.png" },
         ],
       },
@@ -79,6 +81,7 @@ function renderCard(
   render(
     <QueryClientProvider client={client}>
       <ReportSettingsCard
+        scope={over.scope}
         mode={over.mode ?? "standard"}
         draftTemplateId={over.draftTemplateId ?? "certification"}
         value={value}
@@ -180,7 +183,9 @@ describe("поля выбранного вида", () => {
     mockFetch({ certification: MANIFEST });
     renderCard();
     expect(await screen.findByLabelText("Заголовок отчёта")).toBeTruthy();
-    expect(screen.getByLabelText("Показывать рекомендации")).toBeTruthy();
+    // «Показывать рекомендации» объявлено содержательным и живёт на другой стороне —
+    // см. describe «две стороны настроек отчёта».
+    expect(screen.queryByLabelText("Показывать рекомендации")).toBeNull();
   });
 
   it("правка поля сохраняет выбранный вид и значение", async () => {
@@ -248,5 +253,54 @@ describe("смена вида (FR-14)", () => {
     await screen.findByLabelText("Подложка страницы");
     // Открытие карточки ничего не меняет: значение по умолчанию живёт в манифесте.
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("две стороны настроек отчёта", () => {
+  // Настройки отчёта разложены по двум экранам: «что получит слушатель» — в «Настройках»,
+  // рядом с обратной связью; «как это выглядит» — в «Оформлении». Делит поля САМ ШАБЛОН
+  // признаком `scope`, поэтому карточка обязана показывать ровно свою половину.
+  it("оформление: вид отчёта и картинки, без содержательных полей", async () => {
+    mockFetch({ certification: MANIFEST });
+    renderCard({ scope: "appearance" });
+    expect(await screen.findByLabelText("Вид отчёта")).toBeTruthy();
+    expect(await screen.findByLabelText("Подложка страницы")).toBeTruthy();
+    expect(screen.queryByLabelText("Показывать рекомендации")).toBeNull();
+    // Выдача документа — вопрос содержания, здесь его нет.
+    expect(screen.queryByTestId("report-enabled-switch")).toBeNull();
+  });
+
+  it("содержание: выдача и содержательные поля, без вида и картинок", async () => {
+    mockFetch({ certification: MANIFEST });
+    renderCard({ scope: "content" });
+    expect(await screen.findByLabelText("Показывать рекомендации")).toBeTruthy();
+    expect(screen.queryByLabelText("Вид отчёта")).toBeNull();
+    expect(screen.queryByLabelText("Подложка страницы")).toBeNull();
+    expect(screen.getByTestId("report-enabled-switch")).toBeTruthy();
+  });
+
+  it("поле без признака остаётся в оформлении", async () => {
+    // Совместимость со старыми шаблонами: до признака все поля жили в «Оформлении».
+    mockFetch({ certification: MANIFEST });
+    renderCard({ scope: "appearance" });
+    expect(await screen.findByLabelText("Заголовок отчёта")).toBeTruthy();
+  });
+
+  it("выключение отчёта пишется в общую настройку, а не в ветку режима", async () => {
+    // Документ либо положен слушателю этого теста, либо нет: от режима это не зависит,
+    // поэтому признак лежит вне ветвей `standard`/`adaptive`.
+    mockFetch({ certification: MANIFEST });
+    const { onChange } = renderCard({ scope: "content" });
+    const toggle = await screen.findByTestId("report-enabled-switch");
+    fireEvent.click(toggle);
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
+  });
+
+  it("отсутствие признака = отчёт выдаётся", async () => {
+    // Настройки не было вовсе, и каждый существующий тест обязан остаться с отчётом.
+    mockFetch({ certification: MANIFEST });
+    renderCard({ scope: "content" });
+    const toggle = (await screen.findByTestId("report-enabled-switch")) as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
   });
 });

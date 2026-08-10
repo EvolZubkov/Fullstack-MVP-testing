@@ -169,7 +169,7 @@ describe("results.html — текст обратной связи только �
           hasRecommendations: true,
         },
       ],
-      recommendations: { texts: [TEXT], links: [], events: [], assets: [], hasAny: true },
+      recommendations: { texts: [TEXT], textsHtml: [TEXT], links: [], events: [], assets: [], hasAny: true },
     },
   };
 
@@ -339,6 +339,10 @@ describe("results.adaptive.html — консолидированный блок 
   // дословно: это паритет режимов, а не новая вёрстка.
   const recommendations = {
     texts: ["Повторите тему «Сети»."],
+    // Разметку текста печатает `textsHtml` — его наполняет `collectRecommendations`
+    // из формата, выбранного автором; здесь контекст собран руками, поэтому поле задано
+    // явно (обычный текст = сам себе разметка).
+    textsHtml: ["Повторите тему «Сети»."],
     links: [{ title: "Курс TCP/IP", url: "https://e/course" }],
     events: [{ title: "Семинар по сетям" }],
     assets: [{ title: "Разбор темы", url: "/api/media/aaaa" }],
@@ -405,7 +409,14 @@ describe("results.adaptive.html — консолидированный блок 
         course: { title: "Адаптивный тест" },
         result: {
           ...webAdaptive.result,
-          recommendations: { texts: ["Только текст"], links: [], events: [], assets: [], hasAny: true },
+          recommendations: {
+            texts: ["Только текст"],
+            textsHtml: ["Только текст"],
+            links: [],
+            events: [],
+            assets: [],
+            hasAny: true,
+          },
         },
       });
       expect(root.querySelector(".tb-recs-block")).not.toBeNull();

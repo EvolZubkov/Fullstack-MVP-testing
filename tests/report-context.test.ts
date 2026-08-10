@@ -158,6 +158,49 @@ describe("контекст обычного отчёта", () => {
     expect((ctx.result.topicResults as any[])?.[0].pointsLabel).toBe("3 / 5");
   });
 
+  it("измерительному тесту отчёт не выносит вердикта, которого нет на экране (PRD-29 §6.7)", () => {
+    // Опросник без правильных ответов: возможных баллов ноль, а порог 70 % стоит просто
+    // потому, что он умолчание любого нового теста. Экран по этой паре признаков снимает
+    // и сводку, и вердикт; отчёт печатал зелёное «Тест пройден» с бейджем «пройден» —
+    // ровно то утверждение о слушателе, которого экран не делает (§5.2).
+    const measurement = input({
+      result: { passed: true, percent: 0, totalQuestions: 0, correct: 0, earnedPoints: 0, possiblePoints: 0, topicResults: [] },
+      hasPassThreshold: true,
+    });
+    const ctx = buildReportContext(measurement);
+    // Шапка не пустеет: у документа, в отличие от экрана, заголовка теста над ней нет.
+    // Формулировка — та же, что уже печатает адаптивный отчёт, где вердикта нет по природе.
+    expect(ctx.report.verdictHeadline).toBe("Результаты теста");
+    expect(ctx.report.verdictBadge).toBe("");
+    expect(ctx.report.verdictClass).toBe("");
+    // Признак сводки доезжает до макета: карточку счёта гейтит он.
+    const withMeasures = buildReportContext(measurement, {
+      measures: {
+        ramp: LEVEL_SCHEMES.traffic,
+        scaleKind: "band_ruler",
+        indicatorKind: "label",
+        scales: [],
+        indicators: [],
+        hasPassThreshold: true,
+      },
+    });
+    expect(withMeasures.result.hideScoreSummary).toBe(true);
+  });
+
+  it("оценивающий тест вердикт сохраняет", () => {
+    // Обратная сторона того же правила: у теста с порогом и ненулевыми баллами шапка,
+    // бейдж и класс остаются прежними — гашение не должно расползтись на контрольные тесты.
+    const passed = buildReportContext(input({ result: { ...input().result, passed: true }, hasPassThreshold: true }));
+    expect(passed.report.verdictHeadline).toBe("Тест пройден");
+    expect(passed.report.verdictBadge).toBe("пройден");
+    expect(passed.report.verdictClass).toBe("is-pass");
+    // Хост, не научившийся слать признак порога, вердикта не теряет (PRD-29 §6.7).
+    const unknown = buildReportContext(input());
+    expect(unknown.report.verdictHeadline).toBe("Тест не пройден");
+    expect(unknown.report.verdictBadge).toBe("не пройден");
+    expect(unknown.report.verdictClass).toBe("is-fail");
+  });
+
   it("картинки приходят значениями полей ВАРИАНТА, а не отдельным блоком (FR-05)", () => {
     // Ядро не знает ни имён этих полей, ни их файлов: и то и другое объявляет шаблон.
     const withImages = buildReportContext(input(), {

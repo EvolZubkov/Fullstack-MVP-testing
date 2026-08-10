@@ -555,6 +555,62 @@ describe("макет печатает консолидированный бло�
       }
     });
 
+    // Сетка «диаграмма слева, список справа» включается модификатором, а не самим
+    // блоком: без диаграммы единственный ребёнок — список толкований — падал в колонку
+    // 240 px и печатался лентой в половину ширины страницы A4.
+    it(`${templateId}: колонки блока измерений только там, где есть диаграмма`, () => {
+      const scale = {
+        key: "comm", name: "Коммуникация", value: 8, visibility: "level_and_value" as const,
+        interpretation: {
+          domainMin: 0, domainMax: 10, displayMax: null, valence: "higher_is_better" as const,
+          bands: [
+            { min: 0, max: 5, level: "low", label: "Низкий" },
+            { min: 5.01, max: 10, level: "high", label: "Высокий" },
+          ],
+        },
+      };
+      const indicator = {
+        key: "profile", name: "Профиль", value: "ok", visibility: "level" as const,
+        interpretation: {
+          domainMin: null, domainMax: null, valence: "none" as const, bands: [],
+          outcomes: [{ code: "ok", label: "Устойчивый" }],
+        },
+      };
+      const base = {
+        ramp: LEVEL_SCHEMES.traffic,
+        scaleKind: "band_ruler" as const,
+        indicatorKind: "label" as const,
+        scales: [scale],
+        indicators: [indicator],
+      };
+      // Диаграмма выключена — ни один блок измерений колонок не получает.
+      const plain = renderToRoot(reportLayout, buildReportContext(STANDARD, { measures: base }));
+      const blocks = [...plain.querySelectorAll(".tb-report__scales")];
+      expect(blocks.length, "оба блока измерений на месте").toBe(2);
+      for (const block of blocks) {
+        expect(block.classList.contains("tb-report__scales--chart")).toBe(false);
+      }
+
+      // Диаграмма включена — колонки появляются РОВНО у блока шкал, который её рисует.
+      // Осей нужно три: фигуру по одной шкале ядро не строит.
+      const charted = renderToRoot(
+        reportLayout,
+        // Переключатель диаграммы у отчёта СВОЙ — поле варианта, а не блок экрана итогов.
+        buildReportContext(STANDARD, {
+          measures: {
+            ...base,
+            scales: ["a", "b", "c"].map((key, i) => ({ ...scale, key, name: `Шкала ${key}`, value: 2 + i * 3 })),
+            chartSettings: { scalesChartKind: "radar" },
+          },
+        }),
+      );
+      const chartBlock = charted.querySelector(".tb-chart")?.closest(".tb-report__scales");
+      expect(chartBlock, "блок с диаграммой").toBeTruthy();
+      expect(chartBlock!.classList.contains("tb-report__scales--chart")).toBe(true);
+      const indicatorsBlock = [...charted.querySelectorAll(".tb-report__scales")].find((b) => !b.querySelector(".tb-chart"));
+      expect(indicatorsBlock!.classList.contains("tb-report__scales--chart")).toBe(false);
+    });
+
     // Тест без измерений печатает документ ровно как прежде — карточек не прибавилось.
     it(`${templateId}: без измерений новых карточек в отчёте нет`, () => {
       for (const [layoutName, root] of [
