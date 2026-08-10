@@ -116,8 +116,12 @@ function unitCountOfQuestion(q: { type: string; dataJson: unknown }): number {
  * not mention, the same merge every other JSON column here does.
  *
  * The router branch alone (a book naming «Политика завершения маршрутизатора» without a
- * scenario) still applies: it rides on the CURRENT mode, so a named parameter is never
- * silently dropped and the scenario stays untouched.
+ * scenario) rides on the CURRENT mode. On a router test the named parameter is applied. On
+ * a LINEAR one it is DROPPED with the rest of the branch — and that is the right outcome,
+ * not an oversight: a linear test has no router page, so the policy has nothing to govern,
+ * and storing it would leave dead JSON to be resurrected by a later scenario switch. The
+ * drop is silent because it changes nothing an author or a learner can observe; either way
+ * the scenario itself stays as it was.
  */
 function buildFlowPatch(draft: SettingsDraft, current: Test | undefined): Record<string, unknown> {
   const cur = (current?.flowPolicyJson ?? {}) as { mode?: unknown; router?: unknown };

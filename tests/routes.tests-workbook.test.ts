@@ -1091,6 +1091,117 @@ describe("POST /:id/workbook/import — сценарий прохождения 
   });
 });
 
+// ─── PRD-48 FR-20: JSON-настройки собираются ПОВЕРХ текущих ──────────────────
+// Несколько параметров листа живут в одной JSON-колонке. Книга, назвавшая один из
+// них, не вправе обнулить соседей, которых не называла: собранная с нуля политика
+// стёрла бы «Разделять период по результату попытки», вводный блок отчёта или тип
+// общего правила — молча и без единой строки в `errors`.
+
+describe("POST /:id/workbook/import — слияние JSON-настроек (FR-20)", () => {
+  const savedTest = () => (testSettingsMock.save.mock.calls[0][1] as any).test;
+
+  /** Книга «Настройки» из одной строки — ровно один названный параметр. */
+  const oneParam = (name: string, value: unknown) =>
+    makeWorkbook({ "Настройки": [{ "Параметр": name, "Значение": value }] });
+
+  it("«Период охлаждения» не обнуляет остальную политику повторного прохождения", async () => {
+    storageMock.getTest.mockResolvedValue({
+      ...baseTest,
+      retakePolicyJson: {
+        enabled: true,
+        cooldownPeriodDays: 30,
+        cooldownByOutcome: true,
+        cooldownPeriodDaysPassed: 90,
+        cooldownPeriodDaysFailed: 7,
+        blockedPageId: "page-1",
+        attemptInterval: { enabled: true, hours: 24 },
+        eligibilityPlugin: { key: "external", failPolicy: "failClosed" },
+      },
+    });
+
+    const res = await postWorkbook(await oneParam("Период охлаждения, календарных дней", "14"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(savedTest().retakePolicyJson).toEqual({
+      enabled: true,
+      cooldownPeriodDays: 14,
+      cooldownByOutcome: true,
+      cooldownPeriodDaysPassed: 90,
+      cooldownPeriodDaysFailed: 7,
+      // Не параметр листа вовсе (раздел 5 спеки) — обязан уцелеть тем более.
+      blockedPageId: "page-1",
+      attemptInterval: { enabled: true, hours: 24 },
+      eligibilityPlugin: { key: "external", failPolicy: "failClosed" },
+    });
+  });
+
+  it("«Интервал, часов» не выключает само ограничение между попытками", async () => {
+    storageMock.getTest.mockResolvedValue({
+      ...baseTest,
+      retakePolicyJson: { enabled: true, attemptInterval: { enabled: true, hours: 24 } },
+    });
+
+    const res = await postWorkbook(await oneParam("Интервал, часов", "6"));
+
+    expect(res.body.errors).toEqual([]);
+    expect(savedTest().retakePolicyJson).toEqual({
+      enabled: true,
+      attemptInterval: { enabled: true, hours: 6 },
+    });
+  });
+
+  it("вводный текст итогов не стирает ни его формат, ни блок отчёта", async () => {
+    storageMock.getTest.mockResolvedValue({
+      ...baseTest,
+      introJson: {
+        reportSameAsResults: true,
+        results: { format: "html", text: "<p>Итоги</p>" },
+        report: { format: "plain", text: "Отчёт" },
+      },
+    });
+
+    const res = await postWorkbook(await oneParam("Вводный текст на экране итогов", "Новый текст"));
+
+    expect(res.body.errors).toEqual([]);
+    expect(savedTest().introJson).toEqual({
+      reportSameAsResults: true,
+      results: { format: "html", text: "Новый текст" },
+      report: { format: "plain", text: "Отчёт" },
+    });
+  });
+
+  it("«Порог» не сбрасывает тип общего правила", async () => {
+    storageMock.getTest.mockResolvedValue({
+      ...baseTest,
+      overallPassRuleJson: { type: "percent", value: 70 },
+    });
+
+    const res = await postWorkbook(await oneParam("Порог", "80"));
+
+    expect(res.body.errors).toEqual([]);
+    expect(savedTest().overallPassRuleJson).toEqual({ type: "percent", value: 80 });
+  });
+
+  // Обратная сторона того же правила: колонку, которой книга не касалась вовсе,
+  // патч не должен упоминать — иначе служба перезапишет её умолчанием.
+  it("книга без параметров колонки не упоминает её в патче", async () => {
+    storageMock.getTest.mockResolvedValue({
+      ...baseTest,
+      retakePolicyJson: { enabled: true, cooldownPeriodDays: 30 },
+      introJson: { results: { format: "plain", text: "Итоги" } },
+      overallPassRuleJson: { type: "percent", value: 70 },
+    });
+
+    const res = await postWorkbook(await oneParam("Лимит времени теста", "45"));
+
+    expect(res.body.errors).toEqual([]);
+    expect(savedTest()).not.toHaveProperty("retakePolicyJson");
+    expect(savedTest()).not.toHaveProperty("introJson");
+    expect(savedTest()).not.toHaveProperty("overallPassRuleJson");
+  });
+});
+
 // ─── PRD-48 §4.1: «Название» ─────────────────────────────────────────────────
 // В СУЩЕСТВУЮЩИЙ тест книга название применяет — это переименование, которого
 // автор и ждёт. Не применяется оно только при создании теста импортом
