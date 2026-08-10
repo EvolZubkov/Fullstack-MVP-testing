@@ -33,4 +33,21 @@ describe("shouldShowReview", () => {
     expect(shouldShowReview({ hasUnanswered: true })).toBe(true);
     expect(shouldShowReview({ hasUnanswered: false })).toBe(false);
   });
+
+  it("автор может выключить обзор, когда отвечено всё", () => {
+    // Право правки остаётся: пока есть пропущенные, обзор — единственный путь к ним.
+    expect(shouldShowReview({
+      allowReturnToUnanswered: true, allowAnswerChange: true, hasUnanswered: true, skipReviewWhenComplete: true,
+    })).toBe(true);
+    // А когда отвечать больше нечего, экран нечего и предлагать.
+    expect(shouldShowReview({
+      allowReturnToUnanswered: true, allowAnswerChange: true, hasUnanswered: false, skipReviewWhenComplete: true,
+    })).toBe(false);
+  });
+
+  it("без признака автора правило прежнее", () => {
+    expect(shouldShowReview({
+      allowReturnToUnanswered: true, allowAnswerChange: true, hasUnanswered: false,
+    })).toBe(true);
+  });
 });

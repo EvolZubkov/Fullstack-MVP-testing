@@ -94,6 +94,8 @@ const testBodyBaseSchema = z.object({
   // PRD-43: independent of allowReturnToUnanswered.
   quickAdvance: z.boolean().optional(),
   showSectionResults: z.boolean().optional(),
+  // Обзор при полностью отвеченном объёме — авторское решение, см. `review-gate`.
+  skipReviewWhenComplete: z.boolean().optional(),
   // PRD-34 (FR-01): настройки защиты от копирования.
   copyProtection: z.boolean().optional(),
   // PRD-30 FR-16: the test-wide delivery order (the topics' default).
@@ -605,6 +607,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       allowAnswerChange,
       quickAdvance,
       showSectionResults,
+      skipReviewWhenComplete,
       copyProtection,
       protectionWatermark,
       protectionHideOnBlur,
@@ -664,6 +667,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         allowAnswerChange,
         quickAdvance,
         showSectionResults,
+        skipReviewWhenComplete,
         copyProtection,
         protectionWatermark,
         protectionHideOnBlur,
@@ -967,6 +971,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       allowAnswerChange,
       quickAdvance,
       showSectionResults,
+      skipReviewWhenComplete,
       copyProtection,
       protectionWatermark,
       protectionHideOnBlur,
@@ -1029,6 +1034,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
         allowAnswerChange,
         quickAdvance,
         showSectionResults,
+        skipReviewWhenComplete,
         copyProtection,
         protectionWatermark,
         protectionHideOnBlur,

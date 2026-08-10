@@ -22,6 +22,18 @@ export interface ReviewGateInput {
   allowAnswerChange?: boolean;
   /** Whether the scope (section / test) still holds a question without an answer. */
   hasUnanswered: boolean;
+  /**
+   * Авторское «когда отвечено всё, обзор не нужен» (`tests.skip_review_when_complete`).
+   *
+   * Правило ниже выводит показ из ПРАВ навигации, и по этим правам обзор при разрешённой
+   * правке остаётся полезным всегда. Но польза эта — суждение о методике, а не о правах:
+   * у опросника, который проходят подряд и ни к чему не возвращаются, экран со списком
+   * отвеченных вопросов стоит между учащимся и результатом. Решить это может только автор,
+   * поэтому признак отдельный, а не вывод из существующих двух.
+   *
+   * Отсутствие = прежнее поведение: ни один уже настроенный тест не меняет выдачу.
+   */
+  skipReviewWhenComplete?: boolean;
 }
 
 /**
@@ -34,6 +46,10 @@ export interface ReviewGateInput {
 export function shouldShowReview(input: ReviewGateInput): boolean {
   const canReturn = input.allowReturnToUnanswered ?? true;
   const canEdit = input.allowAnswerChange ?? false;
+  // Авторский признак идёт ПЕРВЫМ и только при полностью отвеченном объёме: пока
+  // что-то пропущено, обзор — единственный путь к пропущенному, и отнимать его
+  // нельзя ни по какому пожеланию оформления.
+  if (input.skipReviewWhenComplete && !input.hasUnanswered) return false;
   // Editing re-opens EVERY answered question, so the обзор is the way to reach
   // them — it stays useful even when nothing was skipped.
   if (canEdit) return true;

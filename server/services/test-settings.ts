@@ -187,6 +187,7 @@ export interface TestPayload {
   // PRD-43: independent of allowReturnToUnanswered.
   quickAdvance?: boolean;
   showSectionResults?: boolean;
+  skipReviewWhenComplete?: boolean;
   // PRD-34 (FR-01): настройки защиты от копирования.
   copyProtection?: boolean;
   protectionWatermark?: boolean;
@@ -287,6 +288,8 @@ export class TestSettingsService {
         // allowReturnToUnanswered defaulting to true, i.e. flexible-two-step).
         quickAdvance: payload.test.quickAdvance ?? false,
         showSectionResults: payload.test.showSectionResults ?? true,
+        // Обзор при полностью отвеченном объёме: новый тест ведёт себя как прежде.
+        skipReviewWhenComplete: payload.test.skipReviewWhenComplete ?? false,
         // PRD-34 (FR-03): новый тест — защита ВКЛ по умолчанию.
         copyProtection: payload.test.copyProtection ?? true,
         // PRD-30 FR-16: новый тест — «перемешивание», сегодняшнее поведение.

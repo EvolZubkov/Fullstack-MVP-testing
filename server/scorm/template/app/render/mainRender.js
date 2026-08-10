@@ -166,9 +166,13 @@ function reviewIsWorthShowing(topicId) {
         allowReturnToUnanswered: TEST_DATA.allowReturnToUnanswered,
         allowAnswerChange: TEST_DATA.allowAnswerChange,
         hasUnanswered: hasUnansweredInScope(topicId),
+        // Авторское «когда отвечено всё, обзор не нужен». Отсутствие в пакете,
+        // собранном до этой настройки, читается как прежнее поведение.
+        skipReviewWhenComplete: TEST_DATA.skipReviewWhenComplete,
     };
     if (TB && typeof TB.shouldShowReview === 'function') return TB.shouldShowReview(input);
     // Bundle missing (defensive): fall back to the same rule inline.
+    if (input.skipReviewWhenComplete && !input.hasUnanswered) return false;
     if (input.allowAnswerChange) return true;
     return input.allowReturnToUnanswered !== false && input.hasUnanswered;
 }

@@ -642,12 +642,15 @@ export default function TakeTestPage() {
     // PRD-43: independent of allowReturnToUnanswered.
     quickAdvance: boolean;
     showSectionResults: boolean;
+    /** Авторское «когда отвечено всё, обзор не нужен» — правило в `review-gate`. */
+    skipReviewWhenComplete: boolean;
     answerCommitScope: "test" | "section";
   }>({
     allowReturnToUnanswered: false,
     allowAnswerChange: false,
     quickAdvance: true,
     showSectionResults: true,
+    skipReviewWhenComplete: false,
     answerCommitScope: "test",
   });
   // PRD-34 (FR-01): настройки защиты текста задания. Как и navSettings, приходят с
@@ -1081,6 +1084,7 @@ export default function TakeTestPage() {
             ? data.attempt.quickAdvance
             : !(data.attempt.allowReturnToUnanswered ?? false),
         showSectionResults: data.attempt.showSectionResults ?? true,
+        skipReviewWhenComplete: data.attempt.skipReviewWhenComplete ?? false,
         answerCommitScope: data.attempt.answerCommitScope ?? "test",
       });
       setProtectionSettings({
@@ -1277,6 +1281,7 @@ export default function TakeTestPage() {
           ? data.quickAdvance
           : !(data.allowReturnToUnanswered ?? false),
       showSectionResults: data.showSectionResults ?? true,
+      skipReviewWhenComplete: data.skipReviewWhenComplete ?? false,
       answerCommitScope: data.answerCommitScope ?? "test",
     });
     setProtectionSettings({
@@ -1794,6 +1799,7 @@ export default function TakeTestPage() {
               allowReturnToUnanswered: navSettings.allowReturnToUnanswered,
               allowAnswerChange: navSettings.allowAnswerChange,
               hasUnanswered: hasUnansweredIn(nextStatus, currentRouterTopic),
+              skipReviewWhenComplete: navSettings.skipReviewWhenComplete,
             })
           ) {
             setReviewFromButton(false);
@@ -1881,6 +1887,7 @@ export default function TakeTestPage() {
             allowReturnToUnanswered: navSettings.allowReturnToUnanswered,
             allowAnswerChange: navSettings.allowAnswerChange,
             hasUnanswered: hasUnansweredIn(nextStatus, curTopic!),
+            skipReviewWhenComplete: navSettings.skipReviewWhenComplete,
           })
         ) {
           setReviewFromButton(false);
@@ -1900,6 +1907,7 @@ export default function TakeTestPage() {
         allowReturnToUnanswered: navSettings.allowReturnToUnanswered,
         allowAnswerChange: navSettings.allowAnswerChange,
         hasUnanswered: hasUnansweredIn(nextStatus, null),
+        skipReviewWhenComplete: navSettings.skipReviewWhenComplete,
       })
     ) {
       setReviewFromButton(false);

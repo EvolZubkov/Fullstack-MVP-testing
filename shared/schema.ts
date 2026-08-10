@@ -508,6 +508,12 @@ export const tests = pgTable("tests", {
   // PRD-19 (FR-05a): show the section-results screen (optional system node, sectioned tests).
   // Default true; not applicable to linear_flat (no sections) — ignored by the runtime there.
   showSectionResults: boolean("show_section_results").notNull().default(true),
+  // Обзор при полностью отвеченном объёме. `shouldShowReview` выводит показ из ПРАВ
+  // навигации, и по ним обзор при разрешённой правке полезен всегда; нужен ли он тесту,
+  // который проходят подряд и ни к чему не возвращаются, — суждение о методике, и вынести
+  // его может только автор. Default false: ни один настроенный тест не меняет выдачу.
+  // Действует ТОЛЬКО когда пропущенных нет — путь к пропущенному не отнимается никогда.
+  skipReviewWhenComplete: boolean("skip_review_when_complete").notNull().default(false),
   // PRD-34 (FR-01): protection of the question text from casual copying. Default TRUE —
   // existing tests DO change behaviour, which is the accepted decision (FR-03), not a
   // side effect. A training test whose text is meant to be taken away turns it off.

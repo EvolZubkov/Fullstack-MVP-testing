@@ -209,6 +209,7 @@ export function buildTestJson(data: ExportData): string {
     // PRD-43: independent of allowReturnToUnanswered.
     quickAdvance: data.test.quickAdvance ?? false,
     showSectionResults: data.test.showSectionResults ?? true,
+    skipReviewWhenComplete: data.test.skipReviewWhenComplete ?? false,
     // PRD-34 (FR-01, FR-26): настройки защиты для рантайма пакета. `protectionActive`
     // отдельным полем: в отладочном прогоне защита и скрытие выключены, а водяной знак
     // остаётся (FR-19, FR-25).

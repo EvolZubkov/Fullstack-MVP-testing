@@ -471,6 +471,8 @@ export type TestEditorModel = {
     // PRD-43: НЕЗАВИСИМ от allowReturnToUnanswered; взаимоискл. с showCorrectAnswers (гасится в UI).
     quickAdvance: boolean;
     showSectionResults: boolean; // FR-05a (секционные)
+    // Обзор при полностью отвеченном объёме — авторское решение (см. `review-gate`).
+    skipReviewWhenComplete: boolean;
     // PRD-34: защита текста задания. Три НЕЗАВИСИМЫХ переключателя (FR-02).
     copyProtection: boolean; // FR-01, умолчание ВКЛ
     protectionWatermark: boolean; // FR-16, умолчание ВЫКЛ
@@ -557,6 +559,7 @@ export type TestSettingsPayload = {
   // PRD-43: независим от allowReturnToUnanswered.
   quickAdvance: boolean;
   showSectionResults: boolean;
+  skipReviewWhenComplete: boolean;
   // PRD-34: настройки защиты текста задания.
   copyProtection: boolean;
   protectionWatermark: boolean;

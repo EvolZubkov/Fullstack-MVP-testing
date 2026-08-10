@@ -1083,6 +1083,21 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
       </div>
       <div className="ou-formfield">
         <Switch
+          label="Не показывать обзор, если отвечены все вопросы"
+          description="Обзор нужен, чтобы вернуться к пропущенному вопросу. Когда пропущенных не осталось, ученик перейдёт сразу к завершению. Пока что-то пропущено, обзор показывается всегда."
+          checked={model.runtime.skipReviewWhenComplete}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, skipReviewWhenComplete: checked },
+            }));
+          }}
+          data-testid="settings-skip-review-complete-checkbox"
+        />
+      </div>
+      <div className="ou-formfield">
+        <Switch
           label="Переходить к следующему вопросу сразу после ответа"
           description="Без отдельного нажатия «Далее»: ответ фиксируется и сразу открывается следующий вопрос."
           checked={model.runtime.quickAdvance && !quickAdvanceDisabled}

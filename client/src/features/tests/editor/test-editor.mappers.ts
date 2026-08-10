@@ -93,6 +93,7 @@ export type ApiTestResponse = {
   // PRD-43: независим от allowReturnToUnanswered.
   quickAdvance?: boolean | null;
   showSectionResults?: boolean | null;
+  skipReviewWhenComplete?: boolean | null;
   copyProtection?: boolean | null;
   protectionWatermark?: boolean | null;
   protectionHideOnBlur?: boolean | null;
@@ -1003,6 +1004,7 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
       // + ВЫКЛ быстрого перехода).
       quickAdvance: false,
       showSectionResults: true,
+      skipReviewWhenComplete: false,
       // PRD-34 (FR-03): новый тест — защита ВКЛ.
       copyProtection: true,
       protectionWatermark: false,
@@ -1116,6 +1118,8 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
       // PRD-19 (Блок A): итоги раздела ВКЛ по умолчанию.
       showSectionResults:
         typeof src.showSectionResults === "boolean" ? src.showSectionResults : true,
+      skipReviewWhenComplete:
+        typeof src.skipReviewWhenComplete === "boolean" ? src.skipReviewWhenComplete : false,
       // PRD-34 (FR-05): поля нет (тест до PRD-34) → умолчание, то есть защита ВКЛ.
       copyProtection:
         typeof src.copyProtection === "boolean" ? src.copyProtection : true,
@@ -1193,6 +1197,7 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     allowAnswerChange: model.runtime.allowAnswerChange,
     quickAdvance: model.runtime.quickAdvance,
     showSectionResults: model.runtime.showSectionResults,
+    skipReviewWhenComplete: model.runtime.skipReviewWhenComplete,
     copyProtection: model.runtime.copyProtection,
     protectionWatermark: model.runtime.protectionWatermark,
     protectionHideOnBlur: model.runtime.protectionHideOnBlur,
