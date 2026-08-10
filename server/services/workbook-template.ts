@@ -10,6 +10,10 @@
  *   file imports as a no-op until the author adds rows. Their headers are taken
  *   from the SAME constants the importer and the exporter use: a hand-kept copy
  *   is how a template silently lags behind the format it is meant to seed.
+ *   «Настройки» is the one exception: it ships the full list of parameter NAMES
+ *   with empty values, because it is a parameter/value list rather than a table
+ *   and its header row alone would name none of the settings that exist. Empty
+ *   values keep the download a no-op all the same.
  * - {@link HELP_SHEET} — a per-column reference: one row per (sheet, column)
  *   with obligation, meaning, accepted values and a concrete example. It is the
  *   only in-file documentation an author has, so it spells out every enumerated
@@ -63,6 +67,7 @@ import {
   SCALE_SCORM_CHOICES,
   SCALE_TYPE_CHOICES,
   STRUCTURE_PASS_TYPE_CHOICES,
+  UNLOCK_MODE_CHOICES,
   SETTINGS_HEADERS,
   SETTINGS_WIDTHS,
   SETTING_PARAM_NAMES,
@@ -185,6 +190,10 @@ const VALIDATED_COLUMNS: Record<string, Record<string, string[]>> = {
     "Тип порога": STRUCTURE_PASS_TYPE_CHOICES,
     "Обязательный": BOOL_CHOICES,
     "Случайный порядок вопросов": BOOL_CHOICES,
+    "Выдавать все вопросы темы": BOOL_CHOICES,
+    // Three long phrases nobody retypes correctly, and a near miss is a hard row
+    // error rather than a default — exactly the case a dropdown exists for.
+    "Доступность раздела": UNLOCK_MODE_CHOICES,
   },
   [SHEET_QUOTAS]: {
     "Режим": QUOTA_MODE_CHOICES,
@@ -265,6 +274,16 @@ function colLetter(index: number): string {
 }
 
 /**
+ * Longest enumeration a hint may spell out. Excel caps the input message at 255
+ * characters and the error message at 225, and a file over the cap opens through
+ * the "found unreadable content" repair — which strips the very validations this
+ * module adds. The «Параметр» column alone lists thirty-eight names, so past this
+ * bound the hint names no values at all and points at the dropdown instead: the
+ * list is one click away, whereas a repaired file has lost it.
+ */
+const MAX_LISTED_CHARS = 140;
+
+/**
  * Attach the dropdowns of one role sheet.
  *
  * The error is a WARNING rather than a hard stop: the importer accepts more
@@ -286,6 +305,13 @@ function applyColumnValidations(
     const formula = ranges.get(choices.join("|"));
     if (!formula) continue;
     const listed = choices.join(", ");
+    const short = listed.length <= MAX_LISTED_CHARS;
+    const prompt = short
+      ? `Выберите значение из списка: ${listed}`
+      : "Выберите значение из выпадающего списка ячейки.";
+    const error = short
+      ? `Ожидается одно из: ${listed}. Другое значение загрузка может не принять или понять иначе.`
+      : "Ожидается значение из выпадающего списка. Другое загрузка может не принять или понять иначе.";
     for (let row = 2; row <= VALIDATED_ROWS + 1; row += 1) {
       ws.getCell(row, index + 1).dataValidation = {
         type: "list",
@@ -293,11 +319,11 @@ function applyColumnValidations(
         formulae: [formula],
         showInputMessage: true,
         promptTitle: column,
-        prompt: `Выберите значение из списка: ${listed}`,
+        prompt,
         showErrorMessage: true,
         errorStyle: "warning",
         errorTitle: "Значение не из списка",
-        error: `Ожидается одно из: ${listed}. Другое значение загрузка может не принять или понять иначе.`,
+        error,
       };
     }
   }
@@ -485,8 +511,13 @@ export const EXAMPLE_ROWS: Record<string, Record<string, unknown>[]> = {
     },
   ],
 
+  // Three parameters of three different shapes — a vocabulary, another vocabulary
+  // and a number — so the reader sees that «Значение» is read per parameter and not
+  // as one common list. The rest of the names are on the «Настройки» sheet itself.
   [SHEET_SETTINGS]: [
+    { "Параметр": "Сценарий прохождения", "Значение": "Линейный по темам" },
     { "Параметр": "Порядок выдачи вопросов", "Значение": "Перемешивание" },
+    { "Параметр": "Максимум попыток", "Значение": 3 },
   ],
 
   [SHEET_STRUCTURE]: [
@@ -651,8 +682,10 @@ const HELP_ROWS: HelpRow[] = [
   GAP,
 
   title("ЛИСТ «Настройки» — настройки САМОГО теста. Одна строка = один параметр."),
-  [SHEET_SETTINGS, "Параметр", "да", "Имя настройки теста. Сейчас поддержан один: «Порядок выдачи вопросов». Незнакомый параметр — ошибка импорта, а не молчаливый пропуск.", "Порядок выдачи вопросов"],
-  [SHEET_SETTINGS, "Значение", "нет", "Для «Порядка выдачи вопросов»: «Фиксированный порядок» (темы и вопросы по индексу) | «Перемешивание» (по умолчанию: внутри темы, темы блоками) | «Полное перемешивание» (вопросы всех тем одним потоком). Пусто — настройка теста не меняется.", "Перемешивание"],
+  [SHEET_SETTINGS, "Параметр", "да", "Имя настройки — так же, как она подписана в редакторе теста. Все имена уже вписаны в колонку на самом листе «Настройки», выдумывать их не нужно: лишние строки можно удалить. Незнакомый параметр — ошибка импорта, а не молчаливый пропуск.", "Порядок выдачи вопросов"],
+  [SHEET_SETTINGS, "Значение", "нет", "Читается по своему параметру: переключатель — «Да» или «Нет»; число — целое, причём 0 у ограничений означает «без ограничения»; название или текст — как есть; параметр с выбором — та же подпись, что в редакторе. Пусто — настройка теста не меняется, поэтому очистить значение книгой нельзя.", "Перемешивание"],
+  ["", "", "", "«Порядок выдачи вопросов»: «Фиксированный порядок» (темы и вопросы по индексу) | «Перемешивание» (по умолчанию: внутри темы, темы блоками) | «Полное перемешивание» (вопросы всех тем одним потоком).", "Перемешивание"],
+  ["", "", "", "«Сценарий прохождения»: «Линейный» | «Линейный по темам» | «Через страницу-маршрутизатор». Только последний включает страницу выбора разделов, и только при нём действуют колонки доступности листа «Структура».", "Линейный по темам"],
   ["", "", "", "Тема может отклониться от правила теста — колонкой «Случайный порядок вопросов» на листе «Структура». При «Полном перемешивании» тема с фиксированным порядком выдаётся неразрывным блоком в случайном месте потока.", ""],
   GAP,
 
@@ -860,8 +893,8 @@ function styleExampleSheet(ws: ExcelJS.Worksheet, lines: ExampleLine[]): void {
 
 /**
  * Build the «Импорт» section's workbook template: empty role sheets (headers
- * only, with dropdowns on the enumerated columns), the per-column reference and
- * the filled example.
+ * only, with dropdowns on the enumerated columns; «Настройки» additionally lists
+ * every parameter name), the per-column reference and the filled example.
  */
 export async function buildWorkbookTemplate(): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
@@ -875,6 +908,20 @@ export async function buildWorkbookTemplate(): Promise<ExcelJS.Workbook> {
     ws.getRow(1).alignment = { vertical: "middle", wrapText: true };
     ws.views = [{ state: "frozen", ySplit: 1 }];
     applyColumnValidations(ws, sheet.name, sheet.headers, ranges);
+  }
+
+  // «Настройки» is the ONLY role sheet that ships non-empty: it is a parameter/value
+  // list, and an empty sheet would not tell the author which parameters exist. The
+  // values stay blank, and a blank cell changes nothing (PRD-48 §4.4).
+  //
+  // Written by explicit row index rather than with `addRow`: attaching the dropdowns
+  // above materialized rows 2..501, so `addRow` would append the list BELOW them —
+  // out of sight and out of the importer's reach.
+  const settingsSheet = wb.worksheets.find((w) => w.name === SHEET_SETTINGS);
+  if (settingsSheet) {
+    SETTING_PARAM_NAMES.forEach((name, i) => {
+      settingsSheet.getCell(i + 2, 1).value = name;
+    });
   }
 
   addAoaSheet(wb, HELP_SHEET, [HELP_HEADERS, ...HELP_ROWS], HELP_WIDTHS);

@@ -37,6 +37,8 @@ import {
   QUOTA_MODE_CHOICES,
   SCALE_TYPE_CHOICES,
   STRUCTURE_PASS_TYPE_CHOICES,
+  UNLOCK_MODE_CHOICES,
+  SETTING_PARAM_NAMES,
   parseBool,
   parseMeasurementRow,
   parseQuotaRow,
@@ -223,9 +225,29 @@ describe("шаблон книги — валидность примеров", ()
   it("ролевые листы шаблона пусты — скачанный файл ничего не создаёт", async () => {
     const wb = await buildWorkbookTemplate();
     for (const name of ROLE_SHEET_NAMES) {
+      // «Настройки» — единственное исключение: это список «параметр — значение», и
+      // пустой лист не назвал бы автору ни одной настройки. Он проверяется ниже.
+      if (name === "Настройки") continue;
       const ws = wb.worksheets.find((w) => w.name === name)!;
       expect(sheetToObjects(ws), `лист «${name}» должен быть без строк данных`).toEqual([]);
     }
+  });
+
+  it("лист «Настройки» шаблона перечисляет все параметры", async () => {
+    const wb = await buildWorkbookTemplate();
+    const sheet = wb.worksheets.find((w) => w.name === "Настройки")!;
+    const names = sheetToObjects(sheet).map((r) => String(r["Параметр"]));
+    expect(names).toEqual(SETTING_PARAM_NAMES);
+    expect(names.length).toBeGreaterThan(30);
+  });
+
+  it("значения на листе «Настройки» пусты — шаблон ничего не переносит", async () => {
+    // Пустая ячейка «Значение» означает «оставить как есть», поэтому скачанный
+    // шаблон остаётся холостым, несмотря на 38 заполненных строк.
+    const wb = await buildWorkbookTemplate();
+    const sheet = wb.worksheets.find((w) => w.name === "Настройки")!;
+    const values = sheetToObjects(sheet).map((r) => String(r["Значение"] ?? ""));
+    expect(values.filter((v) => v !== "")).toEqual([]);
   });
 
   it("строки-примеры проходят настоящий импорт без единой ошибки", async () => {
@@ -316,11 +338,35 @@ describe("шаблон книги — проверка ввода", () => {
     expect(choicesBehind(wb, "Вопросы", "Режим ОС")).toEqual(FEEDBACK_MODE_CHOICES);
     expect(choicesBehind(wb, "Структура", "Тип порога")).toEqual(STRUCTURE_PASS_TYPE_CHOICES);
     expect(choicesBehind(wb, "Структура", "Обязательный")).toEqual(BOOL_CHOICES);
+    expect(choicesBehind(wb, "Структура", "Выдавать все вопросы темы")).toEqual(BOOL_CHOICES);
+    expect(choicesBehind(wb, "Структура", "Доступность раздела")).toEqual(UNLOCK_MODE_CHOICES);
     expect(choicesBehind(wb, "Квоты", "Режим")).toEqual(QUOTA_MODE_CHOICES);
     expect(choicesBehind(wb, "Пороги вариантов", "Тип порога")).toEqual(PASS_TYPE_CHOICES);
     expect(choicesBehind(wb, "Шкалы", "Тип")).toEqual(SCALE_TYPE_CHOICES);
     expect(choicesBehind(wb, "Показатели", "Управляет статусом")).toEqual(CONTROLS_CHOICES);
     expect(choicesBehind(wb, "Вклады вопросов", "Источник")).toEqual(MEASUREMENT_SOURCE_CHOICES);
+  });
+
+  // Excel не открывает книгу, где подсказка проверки длиннее 255 символов, а текст
+  // ошибки — 225: файл идёт «на восстановление», и восстановление вырезает сами
+  // проверки. Колонка «Параметр» перечисляет 38 имён, поэтому граница не теоретическая.
+  it("подсказки проверок укладываются в ограничения Excel", async () => {
+    const wb = await buildWorkbookTemplate();
+    const long: string[] = [];
+    for (const name of ROLE_SHEET_NAMES) {
+      const ws = wb.worksheets.find((w) => w.name === name)!;
+      headersOf(ws).forEach((column, i) => {
+        const dv = ws.getCell(2, i + 1).dataValidation as
+          | { promptTitle?: string; prompt?: string; errorTitle?: string; error?: string }
+          | undefined;
+        if (!dv) return;
+        if ((dv.prompt ?? "").length > 255) long.push(`${name}/${column}: подсказка`);
+        if ((dv.error ?? "").length > 225) long.push(`${name}/${column}: текст ошибки`);
+        if ((dv.promptTitle ?? "").length > 32) long.push(`${name}/${column}: заголовок подсказки`);
+        if ((dv.errorTitle ?? "").length > 32) long.push(`${name}/${column}: заголовок ошибки`);
+      });
+    }
+    expect(long).toEqual([]);
   });
 
   it("лист-источник списков скрыт и не является ролевым", async () => {
@@ -352,6 +398,16 @@ describe("шаблон книги — проверка ввода", () => {
     for (const value of choicesBehind(wb, "Структура", "Тип порога")) {
       const row = { "Раздел": "Финансы", "Вопросов в выборке": 3, "Тип порога": value, "Порог": 50 };
       expect(parseStructureRow(row, 0).ok, `«Тип порога» = «${value}»`).toBe(true);
+    }
+
+    // Три длинные фразы: список обязан предлагать ровно то написание, которое
+    // разборщик узнаёт, иначе строка отвергается целиком.
+    for (const value of choicesBehind(wb, "Структура", "Доступность раздела")) {
+      const row = {
+        "Раздел": "Финансы", "Вопросов в выборке": 3, "Тип порога": "Нет",
+        "Доступность раздела": value, "Зависит от разделов": "Право",
+      };
+      expect(parseStructureRow(row, 0).ok, `«Доступность раздела» = «${value}»`).toBe(true);
     }
 
     for (const value of choicesBehind(wb, "Квоты", "Режим")) {
