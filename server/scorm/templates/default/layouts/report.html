@@ -74,12 +74,16 @@
   </section>
   {{/if}}
 
-  {{#if result.indicators}}
+  <!-- ПОКАЗАТЕЛЬ — СВОЯ карточка, а не строка внутри общей. Раскладка режет документ
+       между блоками верхнего уровня, и одна карточка на все показатели становилась
+       «переростком» в полтора листа: её приходилось резать растром, а хвост в полторы
+       сотни пикселей открывал почти пустую страницу. Отдельными карточками они ложатся
+       плотно. Заголовок несёт первая — иначе он остался бы карточкой из одной строки. -->
+  {{#each result.indicators}}
   <section class="tb-report__card">
-    <div class="tb-report__title tb-report__title--tight">Ваш результат</div>
+    {{#if @first}}<div class="tb-report__title tb-report__title--tight">Ваш результат</div>{{/if}}
     <div class="tb-report__scales">
       <div class="tb-report__scale-list">
-        {{#each result.indicators}}
         <div class="tb-report__scale">
           <div class="tb-report__scale-name">{{name}}</div>
           <div class="tb-report__scale-meta">
@@ -88,11 +92,10 @@
           </div>
           {{#if text}}<div class="tb-report__scale-text">{{& textHtml }}</div>{{/if}}
         </div>
-        {{/each}}
       </div>
     </div>
   </section>
-  {{/if}}
+  {{/each}}
 
   {{#if result.scales}}
   <section class="tb-report__card">

@@ -16,7 +16,7 @@
 
 import { reportFileName } from "./report-html";
 import { renderScreenInto } from "../template/render-screen";
-import { buildReportSheets, PAGE_WIDTH_PX } from "./paginate-dom";
+import { buildReportSheets, PAGE_HEIGHT_PX, PAGE_WIDTH_PX } from "./paginate-dom";
 
 /** Minimal surface this module uses from jsPDF. */
 export interface JsPdfLike {
@@ -98,13 +98,29 @@ function sliceCanvas(
   sliceTop: number,
   sliceHeight: number,
   doc: Document,
+  padTo?: number,
 ): HTMLCanvasElement | null {
+  const copied = Math.min(sliceHeight, canvas.height - sliceTop);
   const target = doc.createElement("canvas");
   target.width = canvas.width;
-  target.height = Math.min(sliceHeight, canvas.height - sliceTop);
+  // ЛИСТ ВСЕГДА ПОЛНОЙ ВЫСОТЫ. Кусок, которым кончается разрезанная карточка, короче
+  // страницы, и снимок «сколько получилось» ложился на A4 картинкой в треть листа — низ
+  // оставался БЕЛОЙ БУМАГОЙ, потому что фон отчёта живёт в снимке, а не в PDF.
+  target.height = Math.max(copied, padTo ?? 0);
   const ctx = target.getContext("2d");
   if (!ctx) return null;
-  ctx.drawImage(canvas, 0, sliceTop, canvas.width, target.height, 0, 0, canvas.width, target.height);
+  ctx.drawImage(canvas, 0, sliceTop, canvas.width, copied, 0, 0, canvas.width, copied);
+  // Добор фоном: берётся НИЖНЯЯ строка пикселей самого куска и растягивается вниз. Фон
+  // страницы — вертикальный градиент, поэтому его продолжение и есть последняя строка;
+  // отдельного знания о цвете шаблона конвейеру не требуется, а внешний шаблон с любой
+  // подложкой получает своё продолжение, а не выдуманный цвет.
+  if (target.height > copied && copied > 0) {
+    ctx.drawImage(
+      canvas,
+      0, sliceTop + copied - 1, canvas.width, 1,
+      0, copied, canvas.width, target.height - copied,
+    );
+  }
   return target;
 }
 
@@ -208,10 +224,22 @@ export async function exportReportPdf(page: ReportPage, testName: string, deps: 
       const pxPerCssPx = canvas.width / PAGE_WIDTH_PX;
       // Кусок вырезается только тогда, когда лист не покрывает элемент целиком; резать
       // нечем (нет 2D-контекста, как в jsdom) — печатается снимок целиком.
+      const pageHeightPx = Math.round(PAGE_HEIGHT_PX * pxPerCssPx);
+      // Два РАЗНЫХ повода тронуть снимок, и путать их нельзя. РЕЗАТЬ надо, когда лист не
+      // покрывает элемент целиком. ДОПОЛНЯТЬ — когда снимок ниже страницы: иначе внизу
+      // листа останется белая бумага вместо фона отчёта.
       const whole = sheet.top === 0 && sheet.height * pxPerCssPx >= canvas.height - 1;
-      const image = whole
-        ? canvas
-        : sliceCanvas(canvas, Math.round(sheet.top * pxPerCssPx), Math.round(sheet.height * pxPerCssPx), doc);
+      const short = canvas.height < pageHeightPx - 1;
+      const image =
+        whole && !short
+          ? canvas
+          : sliceCanvas(
+              canvas,
+              Math.round(sheet.top * pxPerCssPx),
+              Math.round(sheet.height * pxPerCssPx),
+              doc,
+              pageHeightPx,
+            );
       const drawn = image ?? canvas;
       if (sheetIndex > 0) pdf.addPage?.();
       sheetIndex += 1;
@@ -227,7 +255,10 @@ export async function exportReportPdf(page: ReportPage, testName: string, deps: 
           newWindow: true,
         });
       }
-      if (!image) break;
+      // Прерываться можно ТОЛЬКО когда не удалось разрезать там, где разрез был нужен
+      // (нет 2D-контекста — так выглядит jsdom). Неудавшийся ДОБОР фона документ не
+      // портит: лист печатается как есть, остальные листы по-прежнему нужны.
+      if (!image && !whole) break;
     }
 
     const fileName = reportFileName(testName);

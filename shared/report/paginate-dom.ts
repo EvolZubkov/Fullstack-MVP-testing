@@ -22,6 +22,13 @@ export const PAGE_WIDTH_PX = 595;
 export const PAGE_HEIGHT_PX = 842;
 
 /**
+ * Начиная с какой высоты вложенный элемент считается БЛОКОМ, а не строкой текста.
+ * Строка отчёта — 12–20 px с интерлиньяжем; всё, что заметно выше, — контейнер, и его
+ * нижняя граница годится в предпочтительное место разреза.
+ */
+const MIN_BLOCK_HEIGHT_PX = 40;
+
+/**
  * Один лист документа.
  *
  * `root` — элемент, который печатается; `top`/`height` — видимая часть этого элемента.
@@ -100,6 +107,31 @@ function measureBlocks(rendered: HTMLElement, scale: number): ReportBlockBox[] {
  * Среда без раскладки вернёт пустой список — тогда {@link sliceBySafeLines} режет по высоте
  * листа, то есть ровно так, как резал бы без этой функции.
  */
+/**
+ * Границы КРУПНЫХ вложенных блоков — карточки показателя, строки шкалы, абзаца
+ * рекомендаций. Разрез по ним оставляет блок целым, поэтому у края листа они выигрывают
+ * у строки (см. {@link module:shared/report/paginate} `SliceOptions.blockLines`).
+ *
+ * Крупным считается элемент не глубже третьего уровня и выше одной строки: глубже лежат
+ * уже сами строки и подписи, а их низы и так собирает {@link safeCutLines}. Отбор идёт по
+ * ГЕОМЕТРИИ, а не по классам: имена классов принадлежат шаблону, и внешний шаблон,
+ * назвавший карточку иначе, потерял бы это правило молча.
+ */
+function blockCutLines(root: HTMLElement, scale: number, minHeight: number): number[] {
+  const rootTop = root.getBoundingClientRect().top;
+  const lines: number[] = [];
+  const walk = (el: Element, depth: number) => {
+    for (const child of [...el.children]) {
+      const rect = child.getBoundingClientRect();
+      const height = rect.height / scale;
+      if (height >= minHeight) lines.push((rect.bottom - rootTop) / scale);
+      if (depth < 3) walk(child, depth + 1);
+    }
+  };
+  walk(root, 1);
+  return lines;
+}
+
 function safeCutLines(root: Element, doc: Document, scale: number): number[] {
   const rootTop = root.getBoundingClientRect().top;
   const lines: number[] = [];
@@ -162,7 +194,11 @@ export function buildReportSheets(rendered: HTMLElement, doc: Document, mount?: 
     // проходит ВНУТРИ блока. Проходит он по нижней границе строки: строка, разрезанная
     // пополам, нечитаема на обеих половинах.
     const height = sheetRoot.offsetHeight || sheetRoot.getBoundingClientRect().height / scale || pagePlan.height;
-    for (const slice of sliceBySafeLines(safeCutLines(sheetRoot, doc, scale), height, PAGE_HEIGHT_PX)) {
+    // Подсказки о крупных границах считаются от той же высоты строки, что и правило
+    // висячей строки: «выше одной строки» — это и есть «не строка, а блок».
+    const lines = safeCutLines(sheetRoot, doc, scale);
+    const blockLines = blockCutLines(sheetRoot, scale, MIN_BLOCK_HEIGHT_PX);
+    for (const slice of sliceBySafeLines(lines, height, PAGE_HEIGHT_PX, { blockLines })) {
       sheets.push({ root: sheetRoot, top: slice.top, height: slice.height });
     }
   }

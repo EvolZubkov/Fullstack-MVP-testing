@@ -113,3 +113,59 @@ describe("paginateBlocks", () => {
     expect(pages.map((p) => p.blocks)).toEqual([[0], [1], [2]]);
   });
 });
+
+describe("разрез без висячих строк и по крупным границам", () => {
+  /** Строки одинаковой высоты — так выглядит абзац после раскладки. */
+  const rows = (step: number, count: number) =>
+    Array.from({ length: count }, (_, i) => (i + 1) * step);
+
+  it("не оставляет на следующем листе одну строку", () => {
+    // Блок 810 px строками по 20 на листе 802: разрез по краю пришёлся бы на 800, и на
+    // второй лист уехали бы жалкие 10 px — половина строки, висящая одна на странице.
+    const slices = sliceBySafeLines(rows(20, 41), 810, 802);
+    const tail = slices[slices.length - 1];
+    expect(tail.height).toBeGreaterThanOrEqual(40);
+    // И первый лист при этом не потерял больше, чем отдал.
+    expect(slices[0].height + tail.height).toBe(810);
+  });
+
+  it("режет по границе вложенного блока, когда она рядом с краем листа", () => {
+    // 800 — низ строки, 780 — низ карточки показателя. Разрез по 780 оставляет целый
+    // блок на листе; разница в 20 px не стоит разорванной карточки.
+    const slices = sliceBySafeLines(rows(20, 100), 1600, 802, { blockLines: [780] });
+    expect(slices[0]).toEqual({ top: 0, height: 780 });
+  });
+
+  it("далёкую границу блока не предпочитает строке", () => {
+    // 400 — это половина листа: резать там значит выбросить 400 px бумаги ради
+    // целостности блока, который и так будет разрезан следующим листом.
+    const slices = sliceBySafeLines(rows(20, 100), 1600, 802, { blockLines: [400] });
+    expect(slices[0].height).toBe(800);
+  });
+
+  it("без подсказок ведёт себя как прежде", () => {
+    expect(sliceBySafeLines(rows(20, 100), 1200, 802)).toEqual([
+      { top: 0, height: 800 },
+      { top: 800, height: 400 },
+    ]);
+  });
+});
+
+describe("хвост не превращается в почти пустую страницу", () => {
+  it("подтягивает огрызок до четверти листа", () => {
+    // Блок 1007 px на листе 802: по краю разрез дал бы 842 + 165 — полная страница и
+    // огрызок. Хвост обязан дорасти минимум до четверти листа.
+    const lines = Array.from({ length: 100 }, (_, i) => (i + 1) * 14);
+    const slices = sliceBySafeLines(lines, 1007, 802);
+    const tail = slices[slices.length - 1];
+    expect(tail.height).toBeGreaterThanOrEqual(802 * 0.25);
+    expect(slices.reduce((sum, s) => sum + s.height, 0)).toBe(1007);
+  });
+
+  it("нормальный хвост не трогает", () => {
+    const lines = Array.from({ length: 200 }, (_, i) => (i + 1) * 20);
+    const slices = sliceBySafeLines(lines, 1400, 802);
+    expect(slices[0].height).toBe(800);
+    expect(slices[1].height).toBe(600);
+  });
+});

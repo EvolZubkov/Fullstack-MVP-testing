@@ -20,8 +20,11 @@
   color: #ffffff;
   /* Подложку ставит МАКЕТ инлайном из `report.backgroundUrl`; без неё — этот градиент. */
   background: linear-gradient(180deg, #1c1c2b 0%, #7700ff 100%);
-  background-size: cover;
-  background-position: center;
+  /* Фон повторяется КАЖДЫЙ ЛИСТ — иначе страницы многостраничного отчёта получают
+     разные куски растянутого градиента. Подробности — в шаблоне «Стандартный». */
+  background-size: 100% 842px;
+  background-repeat: repeat-y;
+  background-position: top center;
 }
 
 .tb-report__brand { margin-bottom: 15px; }

@@ -52,6 +52,51 @@ export interface ReportSlice {
 const MIN_SLICE_PX = 1;
 
 /**
+ * Насколько близко к краю листа должна лежать граница вложенного блока, чтобы разрез
+ * прошёл по ней, а не по строке. Доля высоты листа.
+ */
+const BLOCK_PREFERENCE_ZONE = 0.15;
+
+/**
+ * Наименьшая доля листа, которую не стыдно отдать под хвост разрезанного блока.
+ *
+ * Полный лист плюс огрызок в полторы сотни пикселей — это и есть та «почти пустая
+ * страница», ради которой всё затевалось. Дешевле недобрать немного на предыдущем листе:
+ * два умеренных листа читаются лучше, чем полный и почти пустой.
+ */
+const MIN_TAIL_SHARE = 0.25;
+
+/** Подсказки хоста о том, где резать приятнее. */
+export interface SliceOptions {
+  /**
+   * Границы вложенных блоков — низ карточки показателя, шкалы, абзаца рекомендаций.
+   * Разрез по ним оставляет блок целым, поэтому вблизи края листа они выигрывают у
+   * строки. Хост собирает их тем же обходом, что и безопасные линии.
+   */
+  blockLines?: number[];
+}
+
+/**
+ * Высота строки, оценённая по безопасным линиям.
+ *
+ * Считается медианой расстояний между соседними линиями, а не средним: список несёт и
+ * низы вложенных элементов, поэтому в нём есть единичные большие разрывы, которые
+ * среднее вытянуло бы, а медиана игнорирует. Пустой или вырожденный список даёт `0` —
+ * тогда правило висячей строки просто не применяется.
+ */
+function lineStep(safeLines: number[]): number {
+  const sorted = [...new Set(safeLines)].sort((a, b) => a - b);
+  const gaps: number[] = [];
+  for (let i = 1; i < sorted.length; i += 1) {
+    const gap = sorted[i] - sorted[i - 1];
+    if (gap > 0) gaps.push(gap);
+  }
+  if (!gaps.length) return 0;
+  gaps.sort((a, b) => a - b);
+  return gaps[Math.floor(gaps.length / 2)];
+}
+
+/**
  * Разрезать блок, который выше страницы, ПО БЕЗОПАСНЫМ ЛИНИЯМ.
  *
  * Безопасная линия — низ визуальной строки текста либо низ вложенного элемента; их
@@ -72,10 +117,18 @@ export function sliceBySafeLines(
   safeLines: number[],
   contentHeight: number,
   pageHeight: number,
+  opts: SliceOptions = {},
 ): ReportSlice[] {
   if (!(pageHeight > 0) || contentHeight <= pageHeight) {
     return [{ top: 0, height: contentHeight }];
   }
+  const blockLines = opts.blockLines ?? [];
+  const zone = pageHeight * BLOCK_PREFERENCE_ZONE;
+  // Хвост обязан нести И не меньше двух строк (иначе строка висит одна), И заметную долю
+  // листа (иначе страница выходит почти пустой). Оба порога — про одно и то же: последний
+  // лист документа должен выглядеть страницей, а не обрезком.
+  const minTail = Math.max(2 * lineStep(safeLines), pageHeight * MIN_TAIL_SHARE);
+
   const slices: ReportSlice[] = [];
   let top = 0;
   while (contentHeight - top > pageHeight) {
@@ -84,9 +137,39 @@ export function sliceBySafeLines(
     for (const line of safeLines) {
       if (line > top + MIN_SLICE_PX && line <= limit && line > cut) cut = line;
     }
+    // Граница вложенного блока БЛИЗКО к краю листа выигрывает у строки: потерять
+    // десяток пикселей бумаги дешевле, чем разорвать карточку показателя пополам.
+    // Далёкая граница проигрывает — за целостность блока, который всё равно будет
+    // разрезан следующим листом, полстраницы не отдают.
+    let preferred = 0;
+    for (const line of blockLines) {
+      if (line > top + MIN_SLICE_PX && line <= limit && line >= limit - zone && line > preferred) {
+        preferred = line;
+      }
+    }
+    if (preferred) cut = preferred;
     if (!cut) cut = limit;
     slices.push({ top, height: cut - top });
     top = cut;
+  }
+
+  // ВИСЯЧАЯ СТРОКА: хвост в одну строку — не страница, а брак вёрстки. Если остаток
+  // меньше двух строк, последний разрез отступает назад по безопасной линии, отдавая
+  // хвосту достаточно текста. Отступать некуда (нет подходящей линии) — печатаем как
+  // есть: напечатать что-нибудь лучше, чем не напечатать ничего.
+  const tail = contentHeight - top;
+  if (slices.length && minTail > 0 && tail < minTail) {
+    let moved = 0;
+    for (const line of safeLines) {
+      if (line > slices[slices.length - 1].top + MIN_SLICE_PX && contentHeight - line >= minTail && line > moved) {
+        moved = line;
+      }
+    }
+    if (moved) {
+      const last = slices[slices.length - 1];
+      last.height = moved - last.top;
+      top = moved;
+    }
   }
   slices.push({ top, height: contentHeight - top });
   return slices;
