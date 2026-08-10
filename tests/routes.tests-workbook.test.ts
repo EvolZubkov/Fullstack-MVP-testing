@@ -871,6 +871,81 @@ describe("GET /:id/workbook/export", () => {
   });
 });
 
+// ─── PRD-48 FR-23: книга СТАРОГО формата ─────────────────────────────────────
+// Книга, снятая до этой работы: лист «Настройки» с одной строкой «Порядок выдачи
+// вопросов» и «Структура» без новых колонок. Такая книга обязана импортироваться без
+// ошибок и не менять того, чего не касалась: разборы ячеек покрыты юнитами, а вот
+// сквозной прогон через роут проверяет ещё и то, ЧТО уходит в службу настроек.
+
+describe("POST /:id/workbook/import — книга старого формата (FR-23)", () => {
+  const finTopic = { id: "t-fin", name: "Финансы", code: null };
+
+  beforeEach(() => {
+    storageMock.getTopics.mockResolvedValue([finTopic]);
+    // Тест-приёмник живёт своей жизнью: у него есть и сценарий, и защита, и кулдаун —
+    // ни одного из них старая книга не называет.
+    storageMock.getTest.mockResolvedValue({
+      ...baseTest,
+      flowPolicyJson: { mode: "router_by_topics", router: { completionPolicy: "all_required_passed" } },
+      copyProtection: true,
+      retakePolicyJson: { enabled: true, cooldownPeriodDays: 30 },
+      overallPassRuleJson: { type: "percent", value: 70 },
+    });
+  });
+
+  /** Ровно те листы и колонки, что были у книги до PRD-48. */
+  const legacyBook = () =>
+    makeWorkbook({
+      "Настройки": [{ "Параметр": "Порядок выдачи вопросов", "Значение": "Полное перемешивание" }],
+      "Структура": [
+        {
+          "Раздел": "Финансы", "Порядок": 1, "Вопросов в выборке": 3,
+          "Тип порога": "Сумма баллов", "Порог": 2, "Обязательный": "да",
+          "Случайный порядок вопросов": "",
+        },
+      ],
+      "Квоты": [{ "Раздел": "Финансы", "Тег": "basics", "Количество": 2 }],
+    });
+
+  it("импортируется без ошибок и применяет порядок выдачи", async () => {
+    const res = await postWorkbook(await legacyBook());
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.warnings).toEqual([]);
+    expect(res.body.structure).toEqual({ sections: 1, quotas: 1 });
+    expect((testSettingsMock.save.mock.calls[0][1] as any).test).toMatchObject({
+      questionOrder: "shuffle_all",
+    });
+  });
+
+  it("в патче нет ни одного поля, которого книга не называла", async () => {
+    await postWorkbook(await legacyBook());
+
+    const patch = (testSettingsMock.save.mock.calls[0][1] as any).test as Record<string, unknown>;
+    // `status` служба требует всегда, остальное — только названное книгой.
+    expect(Object.keys(patch).sort()).toEqual(["questionOrder", "status"]);
+  });
+
+  it("разделы применяются, но новые поля раздела остаются незаданными", async () => {
+    await postWorkbook(await legacyBook());
+
+    const section = (testSettingsMock.save.mock.calls[0][1] as any).sections[0];
+    expect(section).toMatchObject({
+      topicId: "t-fin",
+      drawCount: 3,
+      required: true,
+      topicPassRuleJson: { source: "custom", type: "absolute", value: 2 },
+      // Колонок в книге нет: тема выдаётся выборкой, лимита и своего балла у неё нет,
+      // а порядок вопросов — «как в тесте».
+      drawAll: false,
+      timeLimitMinutes: null,
+      defaultPoints: null,
+      questionOrder: null,
+    });
+  });
+});
+
 // ─── Выгрузка: проводка PRD-48 в роуте ───────────────────────────────────────
 // Сериализаторы строк покрыты юнитами, а вот СБОРКА их аргументов живёт в роуте:
 // карта кодов тем, чтение `flowPolicyJson.router.sectionUnlockRules` с переводом
