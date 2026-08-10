@@ -679,6 +679,32 @@ export {
   type SettingsSource,
 } from "./workbook-settings";
 
+// ─── «Обратная связь» / «Рекомендации» (PRD-48 §4, FR-12/FR-13) ───────────────
+// Two sheets, one contract, and the second is subordinate to the first: courses,
+// materials and events live INSIDE the owner's `feedback_json`, so a recommendation
+// whose owner is not named on «Обратная связь» has nowhere to be stored. Their module
+// is separate for the same reason «Настройки» has one — it carries its own parsing,
+// serialization and owner resolution — and is re-exported here so the sheets of the
+// workbook keep ONE entry point.
+export {
+  FEEDBACK_SHEET_NAME,
+  RECOMMENDATION_SHEET_NAME,
+  FEEDBACK_HEADERS,
+  FEEDBACK_WIDTHS,
+  RECOMMENDATION_HEADERS,
+  RECOMMENDATION_WIDTHS,
+  LEVEL_CHOICES,
+  RECOMMENDATION_TYPE_CHOICES,
+  FEEDBACK_FORMAT_CHOICES,
+  serializeFeedbackRows,
+  serializeRecommendationRows,
+  parseFeedbackSheets,
+  type FeedbackPayload,
+  type FeedbackSource,
+  type FeedbackSectionSource,
+  type ParsedFeedbackSheets,
+} from "./workbook-feedback";
+
 /** «Тип порога» cell → the editor's `topicPassRuleJson` shape (PRD-7). */
 const PASS_TYPE_FROM: Record<string, "percent" | "absolute"> = {
   "процент": "percent",

@@ -1054,6 +1054,112 @@ describe("GET /:id/workbook/export — коды тем, разблокировк
   });
 });
 
+// ─── PRD-48 FR-12/FR-13: «Обратная связь» + «Рекомендации» ───────────────────
+// Обратная связь есть у теста и у раздела, форма одна; курсы, материалы и
+// мероприятия лежат ВНУТРИ неё, поэтому «Рекомендации» подчинены «Обратной
+// связи» так же, как «Квоты» — «Структуре». Раздел адресуется ИМЕНЕМ темы:
+// идентификаторы на другом стенде мертвы.
+
+describe("GET /:id/workbook/export — обратная связь и рекомендации", () => {
+  const jsTopic = { id: "topic-js-0001", name: "JavaScript", code: null };
+  const testFeedback = {
+    format: "plain",
+    text: "Общий отзыв по тесту",
+    links: [{ title: "Курс по JS", url: "https://example.test/js" }],
+    assets: [{ title: "Памятка", url: "https://example.test/memo.pdf" }],
+    events: [{ title: "Вебинар", url: "" }],
+  };
+  const sectionFeedback = {
+    format: "html",
+    text: "<b>Отзыв по теме</b>",
+    links: [{ title: "Курс по замыканиям", url: "https://example.test/closures" }],
+    assets: [],
+    events: [],
+  };
+
+  beforeEach(() => {
+    storageMock.getTopics.mockResolvedValue([jsTopic]);
+    storageMock.getTest.mockResolvedValue({ ...baseTest, feedbackJson: testFeedback });
+    storageMock.getTestSections.mockResolvedValue([
+      {
+        topicId: jsTopic.id, drawCount: 5, sortOrder: 0, required: true,
+        topicPassRuleJson: null, drawBlueprintJson: null, feedbackJson: sectionFeedback,
+      },
+    ]);
+    storageMock.getQuestions.mockResolvedValue([]);
+    storageMock.getScales.mockResolvedValue([]);
+    storageMock.getResultVariables.mockResolvedValue([]);
+    storageMock.getQuestionMeasurements.mockResolvedValue([]);
+  });
+
+  it("пишет по строке на владельца и по строке на каждую рекомендацию", async () => {
+    const res = await getExport();
+    expect(res.status).toBe(200);
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+
+    const fbRows = sheetToObjects(wb.getWorksheet("Обратная связь")!);
+    expect(fbRows).toHaveLength(2);
+    expect(fbRows[0]).toMatchObject({
+      "Уровень": "Тест", "Формат": "Простой", "Текст": "Общий отзыв по тесту",
+    });
+    expect(String(fbRows[0]["Раздел"] ?? "")).toBe("");
+    expect(fbRows[1]).toMatchObject({
+      "Уровень": "Раздел", "Раздел": "JavaScript", "Формат": "HTML", "Текст": "<b>Отзыв по теме</b>",
+    });
+
+    // `sheetToObjects` выбрасывает пустые ячейки, поэтому строки сводятся к полному
+    // набору колонок: пустая «Ссылка» мероприятия — значимое значение, а не пропуск.
+    const recRows = sheetToObjects(wb.getWorksheet("Рекомендации")!).map((r: any) =>
+      Object.fromEntries(
+        ["Уровень", "Раздел", "Тип", "Заголовок", "Ссылка"].map((h) => [h, String(r[h] ?? "")]),
+      ),
+    );
+    expect(recRows).toEqual([
+      { "Уровень": "Тест", "Раздел": "", "Тип": "Курс", "Заголовок": "Курс по JS", "Ссылка": "https://example.test/js" },
+      { "Уровень": "Тест", "Раздел": "", "Тип": "Материал", "Заголовок": "Памятка", "Ссылка": "https://example.test/memo.pdf" },
+      { "Уровень": "Тест", "Раздел": "", "Тип": "Мероприятие", "Заголовок": "Вебинар", "Ссылка": "" },
+      {
+        "Уровень": "Раздел", "Раздел": "JavaScript", "Тип": "Курс",
+        "Заголовок": "Курс по замыканиям", "Ссылка": "https://example.test/closures",
+      },
+    ]);
+
+    // Раздел выгружен ИМЕНЕМ темы: идентификатор на другом стенде не найдёт никого.
+    expect(JSON.stringify(fbRows)).not.toContain(jsTopic.id);
+    expect(JSON.stringify(recRows)).not.toContain(jsTopic.id);
+  });
+
+  // Порядок листов описывает тест сверху вниз: обратная связь принадлежит структуре,
+  // а не оценке, поэтому стоит между «Порогами вариантов» и «Оценкой».
+  it("оба листа стоят между «Порогами вариантов» и «Оценкой»", async () => {
+    const res = await getExport();
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+    const names = wb.worksheets.map((w) => w.name);
+
+    expect(names.indexOf("Обратная связь")).toBe(names.indexOf("Пороги вариантов") + 1);
+    expect(names.indexOf("Рекомендации")).toBe(names.indexOf("Обратная связь") + 1);
+    expect(names.indexOf("Оценка")).toBe(names.indexOf("Рекомендации") + 1);
+  });
+
+  // Тест без обратной связи — листы всё равно есть, одними заголовками: книга
+  // описывает контракт целиком, иначе автору некуда вписать первую строку.
+  it("тест без обратной связи даёт листы с одними заголовками", async () => {
+    storageMock.getTest.mockResolvedValue({ ...baseTest, feedbackJson: null });
+    storageMock.getTestSections.mockResolvedValue([
+      {
+        topicId: jsTopic.id, drawCount: 5, sortOrder: 0, required: true,
+        topicPassRuleJson: null, drawBlueprintJson: null, feedbackJson: null,
+      },
+    ]);
+
+    const res = await getExport();
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+
+    expect(sheetToObjects(wb.getWorksheet("Обратная связь")!)).toEqual([]);
+    expect(sheetToObjects(wb.getWorksheet("Рекомендации")!)).toEqual([]);
+  });
+});
+
 describe("Round-trip: экспорт → реимпорт", () => {
   beforeEach(() => {
     storageMock.getTestSections.mockResolvedValue([

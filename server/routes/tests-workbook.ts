@@ -46,6 +46,15 @@ import {
   SCORING_OVERRIDE_HEADERS,
   SCORING_OVERRIDE_WIDTHS,
   VARIANTS_COLUMN,
+  FEEDBACK_SHEET_NAME,
+  FEEDBACK_HEADERS,
+  FEEDBACK_WIDTHS,
+  RECOMMENDATION_SHEET_NAME,
+  RECOMMENDATION_HEADERS,
+  RECOMMENDATION_WIDTHS,
+  serializeFeedbackRows,
+  serializeRecommendationRows,
+  type FeedbackSource,
 } from "../utils/workbook-sheets";
 import type { DrawBlueprint, FormSet } from "@shared/schema";
 
@@ -221,6 +230,18 @@ router.get(
         });
       }
 
+      // «Обратная связь» + «Рекомендации» (PRD-48 FR-12/FR-13): the feedback of the
+      // test and of every section, plus the courses/materials/events that live inside
+      // it. The section is addressed by TOPIC NAME, the only key that survives the trip
+      // to another stand — section and topic ids are minted anew there.
+      const feedbackSections = orderedSections.map((s) => ({
+        topicName: topicName.get(s.topicId) || "",
+        feedback: (s.feedbackJson ?? null) as FeedbackSource | null,
+      }));
+      const testFeedback = (test.feedbackJson ?? null) as FeedbackSource | null;
+      const feedbackRows = serializeFeedbackRows(testFeedback, feedbackSections);
+      const recommendationRows = serializeRecommendationRows(testFeedback, feedbackSections);
+
       // «Оценка» (PRD-15 block D, FR-36): the test's per-question scoring
       // overrides, referenced by the same local alias as «Вклады вопросов».
       const overrides = await storage.getTestQuestionScoring(testId);
@@ -251,6 +272,10 @@ router.get(
       addSheet(wb, "Структура", structureRows, STRUCTURE_HEADERS, STRUCTURE_WIDTHS);
       addSheet(wb, "Квоты", quotaRows, QUOTA_HEADERS, QUOTA_WIDTHS);
       addSheet(wb, "Пороги вариантов", variantThresholdRows, VARIANT_THRESHOLD_HEADERS, VARIANT_THRESHOLD_WIDTHS);
+      // PRD-48 FR-12/FR-13: обратная связь принадлежит СТРУКТУРЕ теста, а не его
+      // оценке, поэтому оба листа стоят сразу за разделами и перед «Оценкой».
+      addSheet(wb, FEEDBACK_SHEET_NAME, feedbackRows, FEEDBACK_HEADERS, FEEDBACK_WIDTHS);
+      addSheet(wb, RECOMMENDATION_SHEET_NAME, recommendationRows, RECOMMENDATION_HEADERS, RECOMMENDATION_WIDTHS);
       addSheet(wb, "Оценка", scoringRows, SCORING_OVERRIDE_HEADERS, SCORING_OVERRIDE_WIDTHS);
       addSheet(wb, "Шкалы", scaleRows, SCALE_HEADERS, SCALE_WIDTHS);
       addSheet(wb, "Показатели", rvRows, RESULT_VAR_HEADERS, RESULT_VAR_WIDTHS);
