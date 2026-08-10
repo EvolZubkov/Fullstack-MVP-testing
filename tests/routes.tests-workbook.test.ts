@@ -1163,6 +1163,68 @@ describe("GET /:id/workbook/export — обратная связь и реком
   });
 });
 
+// Круг этапа: обратная связь обоих владельцев вместе со всеми тремя видами
+// рекомендаций переезжает книгой из одного теста в ДРУГОЙ — то есть ровно так, как
+// её переносят между стендами.
+describe("Round-trip: обратная связь и рекомендации через роуты", () => {
+  const jsTopic = { id: "topic-js-0001", name: "JavaScript", code: null };
+  /** Ссылки непустые у всех троих: материал, сохранённый без адреса, возвращается
+   *  с пустой строкой, и строгое сравнение спорило бы о равенстве «нет» и «пусто». */
+  const testFeedback = {
+    format: "plain",
+    text: "Общий отзыв по тесту",
+    links: [{ title: "Курс по JS", url: "https://example.test/js" }],
+    assets: [{ title: "Памятка", url: "https://example.test/memo.pdf" }],
+    events: [{ title: "Вебинар", url: "https://example.test/webinar" }],
+  };
+  const sectionFeedback = {
+    format: "html",
+    text: "<b>Отзыв по теме</b>",
+    links: [{ title: "Курс по замыканиям", url: "https://example.test/closures" }],
+    assets: [{ title: "Конспект", url: "https://example.test/notes.pdf" }],
+    events: [{ title: "Практикум", url: "https://example.test/workshop" }],
+  };
+
+  beforeEach(() => {
+    storageMock.getTopics.mockResolvedValue([jsTopic]);
+    storageMock.getTest.mockResolvedValue({ ...baseTest, feedbackJson: testFeedback });
+    storageMock.getTestSections.mockResolvedValue([
+      {
+        topicId: jsTopic.id, drawCount: 5, sortOrder: 0, required: true,
+        topicPassRuleJson: null, drawBlueprintJson: null, feedbackJson: sectionFeedback,
+      },
+    ]);
+    storageMock.getQuestions.mockResolvedValue([]);
+    storageMock.getScales.mockResolvedValue([]);
+    storageMock.getResultVariables.mockResolvedValue([]);
+    storageMock.getQuestionMeasurements.mockResolvedValue([]);
+  });
+
+  it("книга переносит обратную связь теста и раздела со всеми рекомендациями в другой тест", async () => {
+    const exportRes = await getExport();
+    expect(exportRes.status).toBe(200);
+
+    // Приёмник — другой тест, и своих разделов у него нет: всё, что окажется в
+    // сохранении, приехало книгой.
+    storageMock.getTest.mockResolvedValue({ id: "test-2", title: "Приёмник", status: "draft" });
+    storageMock.getTestSections.mockResolvedValue([]);
+
+    const res = await request(makeApp())
+      .post("/api/tests/test-2/workbook/import")
+      .attach("file", exportRes.body as Buffer, "wb.xlsx");
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+
+    const [savedTestId, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
+    expect(savedTestId).toBe("test-2");
+    expect(payload.test.feedbackJson).toEqual(testFeedback);
+    expect(payload.sections).toHaveLength(1);
+    expect(payload.sections[0].topicId).toBe(jsTopic.id);
+    expect(payload.sections[0].feedbackJson).toEqual(sectionFeedback);
+  });
+});
+
 describe("Round-trip: экспорт → реимпорт", () => {
   beforeEach(() => {
     storageMock.getTestSections.mockResolvedValue([
