@@ -221,8 +221,11 @@ describe("exportReportPdf", () => {
       { jsPDF, html2canvas },
     );
     // Растеризуется отрисованный корень, и подстановка из контекста уже произошла.
+    // Растеризуется СТРАНИЦА, внутри которой лежит отрисованный корень: лист обрезает
+    // содержимое сам, поэтому снимок и лист — одно и то же.
     const target = html2canvas.mock.calls[0][0] as HTMLElement;
-    expect(target.className).toContain("tb-report");
+    expect(target.className).toContain("tb-report-page");
+    expect(target.querySelector(".tb-report")).not.toBeNull();
     expect(target.textContent).toBe("Тест пройден");
   });
 

@@ -16,7 +16,7 @@
 
 import { reportFileName } from "./report-html";
 import { renderScreenInto } from "../template/render-screen";
-import { buildReportSheets, PAGE_HEIGHT_PX, PAGE_WIDTH_PX } from "./paginate-dom";
+import { buildReportPages, PAGE_HEIGHT_PX, PAGE_WIDTH_PX } from "./paginate-dom";
 
 /** Minimal surface this module uses from jsPDF. */
 export interface JsPdfLike {
@@ -80,49 +80,6 @@ function collectLinks(pageRoot: Element): LinkBox[] {
   return links;
 }
 
-/**
- * Вырезать из снимка страницы кусок высотой в лист.
- *
- * Нужно единственному случаю — карточке, которая выше страницы сама по себе: перенести её
- * некуда, и она печатается несколькими листами. Возвращает `null`, когда резать нечем
- * (нет 2D-контекста, как в jsdom) — вызывающий тогда печатает снимок целиком, что для
- * одностраничного отчёта и есть верный ответ.
- *
- * @param canvas Снимок листа.
- * @param sliceTop Верх куска в пикселях снимка.
- * @param sliceHeight Высота куска в пикселях снимка.
- * @param doc Документ, в котором создаётся промежуточный холст.
- */
-function sliceCanvas(
-  canvas: HTMLCanvasElement,
-  sliceTop: number,
-  sliceHeight: number,
-  doc: Document,
-  padTo?: number,
-): HTMLCanvasElement | null {
-  const copied = Math.min(sliceHeight, canvas.height - sliceTop);
-  const target = doc.createElement("canvas");
-  target.width = canvas.width;
-  // ЛИСТ ВСЕГДА ПОЛНОЙ ВЫСОТЫ. Кусок, которым кончается разрезанная карточка, короче
-  // страницы, и снимок «сколько получилось» ложился на A4 картинкой в треть листа — низ
-  // оставался БЕЛОЙ БУМАГОЙ, потому что фон отчёта живёт в снимке, а не в PDF.
-  target.height = Math.max(copied, padTo ?? 0);
-  const ctx = target.getContext("2d");
-  if (!ctx) return null;
-  ctx.drawImage(canvas, 0, sliceTop, canvas.width, copied, 0, 0, canvas.width, copied);
-  // Добор фоном: берётся НИЖНЯЯ строка пикселей самого куска и растягивается вниз. Фон
-  // страницы — вертикальный градиент, поэтому его продолжение и есть последняя строка;
-  // отдельного знания о цвете шаблона конвейеру не требуется, а внешний шаблон с любой
-  // подложкой получает своё продолжение, а не выдуманный цвет.
-  if (target.height > copied && copied > 0) {
-    ctx.drawImage(
-      canvas,
-      0, sliceTop + copied - 1, canvas.width, 1,
-      0, copied, canvas.width, target.height - copied,
-    );
-  }
-  return target;
-}
 
 /** Страница отчёта: макет варианта, его CSS и контекст (PRD-27 Фаза 2). */
 export interface ReportPage {
@@ -190,12 +147,16 @@ export async function exportReportPdf(page: ReportPage, testName: string, deps: 
     // Let the browser lay the page out (web fonts, grid) before rasterizing.
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // РАСКЛАДКА ПО ЛИСТАМ. Отчёт печатался одной страницей произвольной высоты, которую
-    // нельзя ни распечатать, ни пролистать; теперь лист всегда A4, а разрыв проходит между
-    // карточками. Считает её ОБЩИЙ `paginate-dom`, потому что тот же ответ нужен
-    // предпросмотру в редакторе: автор согласовывает документ, который получит слушатель, и
-    // две раскладки означали бы два разных документа.
-    const sheets = buildReportSheets(rendered, doc, stage);
+    // РАСКЛАДКА ПО СТРАНИЦАМ. Отчёт печатался одной страницей произвольной высоты,
+    // которую нельзя ни распечатать, ни пролистать; теперь лист всегда A4, а разрыв
+    // проходит между карточками. Считает её ОБЩИЙ `paginate-dom`, потому что тот же ответ
+    // нужен предпросмотру в редакторе: автор согласовывает документ, который получит
+    // слушатель, и две раскладки означали бы два разных документа.
+    //
+    // Страница приходит ГОТОВЫМ элементом ровно в лист. Раньше конвейер резал один общий
+    // снимок, и обе беды стыка росли отсюда: фон продолжался сквозь границу листа, а
+    // неполный кусок дотягивался повтором нижней строки пикселей — вместе с буквами.
+    const pages = buildReportPages(rendered, doc, stage);
     const pxToMm = A4_WIDTH_MM / PAGE_WIDTH_PX;
     const pdf = new deps.jsPDF({
       orientation: "portrait",
@@ -203,62 +164,27 @@ export async function exportReportPdf(page: ReportPage, testName: string, deps: 
       format: [A4_WIDTH_MM, A4_HEIGHT_MM],
     });
 
-    // Снимок на КОРЕНЬ, а не на лист: у карточки-переростка листы делят один и тот же
-    // элемент, и растеризовать его заново на каждый кусок значило бы платить за одно и то
-    // же по нескольку раз.
-    const shots = new Map<HTMLElement, HTMLCanvasElement>();
-    let sheetIndex = 0;
-    for (const sheet of sheets) {
-      let canvas = shots.get(sheet.root);
-      if (!canvas) {
-        canvas = await deps.html2canvas(sheet.root, {
-          scale: 2,
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: null,
-          logging: false,
-        });
-        shots.set(sheet.root, canvas);
-      }
-      const links = collectLinks(sheet.root);
-      const pxPerCssPx = canvas.width / PAGE_WIDTH_PX;
-      // Кусок вырезается только тогда, когда лист не покрывает элемент целиком; резать
-      // нечем (нет 2D-контекста, как в jsdom) — печатается снимок целиком.
-      const pageHeightPx = Math.round(PAGE_HEIGHT_PX * pxPerCssPx);
-      // Два РАЗНЫХ повода тронуть снимок, и путать их нельзя. РЕЗАТЬ надо, когда лист не
-      // покрывает элемент целиком. ДОПОЛНЯТЬ — когда снимок ниже страницы: иначе внизу
-      // листа останется белая бумага вместо фона отчёта.
-      const whole = sheet.top === 0 && sheet.height * pxPerCssPx >= canvas.height - 1;
-      const short = canvas.height < pageHeightPx - 1;
-      const image =
-        whole && !short
-          ? canvas
-          : sliceCanvas(
-              canvas,
-              Math.round(sheet.top * pxPerCssPx),
-              Math.round(sheet.height * pxPerCssPx),
-              doc,
-              pageHeightPx,
-            );
-      const drawn = image ?? canvas;
-      if (sheetIndex > 0) pdf.addPage?.();
-      sheetIndex += 1;
-      const imgHeight = (drawn.height * A4_WIDTH_MM) / drawn.width;
-      pdf.addImage(drawn.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, A4_WIDTH_MM, imgHeight);
-      // Ссылки этого листа: координаты чипа отсчитываются от верха ЭЛЕМЕНТА, поэтому у
-      // продолжающих листов из них вычитается уже напечатанная высота.
-      for (const link of links) {
-        const y = link.y - sheet.top;
-        if (y < 0 || y >= sheet.height) continue;
-        pdf.link(link.x * pxToMm, y * pxToMm, link.width * pxToMm, link.height * pxToMm, {
+    for (const [index, page] of pages.entries()) {
+      const canvas = await deps.html2canvas(page, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null,
+        logging: false,
+      });
+      if (index > 0) pdf.addPage?.();
+      // Страница и лист — одно и то же, поэтому снимок ложится на всю бумагу: ни белой
+      // полосы внизу, ни искажения пропорций.
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
+      // Ссылки берутся с САМОЙ страницы: содержимое на ней уже сдвинуто, поэтому
+      // координаты чипа отсчитываются от верха листа и поправок не требуют.
+      for (const link of collectLinks(page)) {
+        if (link.y < 0 || link.y >= PAGE_HEIGHT_PX) continue;
+        pdf.link(link.x * pxToMm, link.y * pxToMm, link.width * pxToMm, link.height * pxToMm, {
           url: link.url,
           newWindow: true,
         });
       }
-      // Прерываться можно ТОЛЬКО когда не удалось разрезать там, где разрез был нужен
-      // (нет 2D-контекста — так выглядит jsdom). Неудавшийся ДОБОР фона документ не
-      // портит: лист печатается как есть, остальные листы по-прежнему нужны.
-      if (!image && !whole) break;
     }
 
     const fileName = reportFileName(testName);
