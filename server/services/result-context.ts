@@ -26,7 +26,8 @@ import { withResolvedScaleIcons } from "./scale-icons";
 import { parseIndicatorInterpretation, parseScaleInterpretation } from "@shared/scales/interpretation";
 import type { RenderKind } from "@shared/template/measure-view";
 import type { ResultsBlockSettings } from "@shared/template/results-blocks";
-import type { FeedbackContent, ResultVariable, Scale } from "@shared/schema";
+import { resolveReportIntro } from "@shared/schema";
+import type { FeedbackContent, ResultVariable, Scale, TestIntro } from "@shared/schema";
 import type { ScaleResult } from "@shared/formula/types";
 
 export type { ResultRenderContext };
@@ -35,6 +36,14 @@ export type { ResultRenderContext };
 export interface MeasuresSource {
   scales: Scale[];
   variables: ResultVariable[];
+  /**
+   * Вводные блоки теста (`tests.intro_json`) — текст экрана и текст отчёта.
+   *
+   * Лежат здесь по той же причине, что `testFeedback` и `hasPassThreshold`: это
+   * материал ЭКРАНА ИТОГОВ, который маршрут собирает один раз и раздаёт обоим
+   * построителям — контекста экрана и входа отчёта.
+   */
+  intro?: TestIntro | null;
   /**
    * Scale values of the attempt. Omitted by the web route: they are read from the
    * SAVED `AttemptResult` by {@link module:server/services/template-render
@@ -247,6 +256,8 @@ export function buildResultContext(
       // `undefined` when the material could not be read at all; the builder then treats
       // it as unknown and shows the feedback.
       ...(measures ? { hasPassThreshold: measures.hasPassThreshold } : {}),
+      // Вводный блок ЭКРАНА: у отчёта свой текст, и путать их нельзя — адресаты разные.
+      ...(measures?.intro?.results ? { intro: measures.intro.results } : {}),
       ...(hasMeasures ? { measures: buildMeasuresInput(measures as MeasuresSource) } : {}),
     },
   );
@@ -270,6 +281,8 @@ function reportFeedbackMeta(measures?: MeasuresSource): Partial<ReportMeta> {
   return {
     ...(feedback ? { feedback } : {}),
     ...(measures ? { hasPassThreshold: measures.hasPassThreshold } : {}),
+    // Переключатель «как на экране итогов» разрешается ОДНИМ правилом на все хосты.
+    ...(resolveReportIntro(measures?.intro) ? { intro: resolveReportIntro(measures?.intro) } : {}),
   };
 }
 

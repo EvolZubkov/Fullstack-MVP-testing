@@ -11,6 +11,7 @@ import { copyDirToFiles, getTemplatesRootDir } from "./builders/template-copy";
 import { getSharedRuntimeBundle } from "./builders/shared-runtime";
 import { readVendorDsCss, readPackageFontFiles, assemblePackageStyles } from "./builders/ds-styles";
 import { resolveReportBake, reportKindForMode } from "@shared/report/report-variants";
+import { isReportEnabled } from "@shared/schema";
 import type { ReportSettings } from "@shared/schema";
 import fs from "node:fs";
 import path from "node:path";
@@ -187,7 +188,14 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     );
     reportBake = { ...fromDefault, variantKey: null, layoutKey: reportKind };
   }
-  if (data.designSettings) data.designSettings.report = reportBake;
+  // «Выдавать отчёт обучающемуся» — общая настройка теста, и в пакет она едет вместе с
+  // выбором вида: в LMS кнопку рисует рантайм, и другого источника этого факта у него нет.
+  if (data.designSettings) {
+    data.designSettings.report = {
+      ...reportBake,
+      enabled: isReportEnabled(data.test.reportSettingsJson as ReportSettings | null),
+    };
+  }
 
   const testJson = buildTestJson(data);
 

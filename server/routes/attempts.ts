@@ -58,6 +58,7 @@ import { isMeasurementOnly } from "@shared/questions/question-type";
 import { feedbackAssets, topicFeedbackTexts } from "@shared/template/result-context";
 // issue #34: общий/условный режим обратной связи вопроса — одно правило на оба хоста.
 import { feedbackTextFor } from "@shared/template/feedback-banner";
+import { isReportEnabled } from "@shared/schema";
 import type {
   Test,
   Question,
@@ -67,6 +68,7 @@ import type {
   PassRule,
   RetakePolicy,
   ReportSettings,
+  TestIntro,
   FeedbackContent,
   QuestionScoring,
 } from "@shared/schema";
@@ -254,6 +256,9 @@ async function resultsMaterialForAttempt(
       ),
       hasPassThreshold: !!passRule && passRule.type !== "none",
       testFeedback: (deliveredTest?.feedbackJson as Partial<FeedbackContent> | null) ?? null,
+      // Вводные блоки: экрана и отчёта. Берутся из ВЫДАННОЙ версии теста, как и всё
+      // остальное здесь, — попытка показывает то содержание, на котором её проходили.
+      intro: (deliveredTest?.introJson as TestIntro | null) ?? null,
     };
   } catch (error) {
     // The results screen must not fail because this material could not be read: the
@@ -1632,12 +1637,13 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
           : undefined;
       // Footer state for the layout-drawn results row (the package fills the same
       // block). «Скачать отчёт» is on now that the web host produces the report from
-      // the SHARED generator (shared/report/*) — the same PDF the package hands out.
+      // the SHARED generator (shared/report/*) — the same PDF the package hands out,
+      // unless the author switched the report off for this test (`report.enabled`).
       if (render?.context && typeof render.context === "object") {
         const ctx = render.context as { result?: Record<string, unknown> };
         if (ctx.result) {
           ctx.result.nav = buildResultsNav({
-            canReport: true,
+            canReport: isReportEnabled(test?.reportSettingsJson as ReportSettings | null),
             canRetry: !resultJson?.overallPassed && canRetake,
             // Attempts alone — the adaptive footer re-runs the test rather than
             // offering a remedy, so a pass does not close it (see results-nav).

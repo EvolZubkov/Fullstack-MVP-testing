@@ -197,6 +197,9 @@ export function buildTestJson(data: ExportData): string {
     // `testFeedback` above (a different column, left untouched). Included only when
     // authored, so a test without it keeps exactly the TEST_DATA shape it had (FR-02).
     ...(data.test.feedbackJson ? { testFeedbackJson: data.test.feedbackJson } : {}),
+    // Вводные блоки экрана и отчёта (PRD-27 §7.1). Едут одним полем: рантайм сам берёт
+    // свою ветвь — экран печатает свой текст, конвейер отчёта свой.
+    ...(data.test.introJson ? { introJson: data.test.introJson } : {}),
     timeLimitMinutes: data.test.timeLimitMinutes || null,
     maxAttempts: data.test.maxAttempts || null,
     showCorrectAnswers: data.test.showCorrectAnswers || false,

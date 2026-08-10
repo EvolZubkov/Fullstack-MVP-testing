@@ -175,6 +175,8 @@ export interface TestPayload {
   retakePolicyJson?: unknown;
   /** PRD-27: выбранный вариант отчёта и значения его полей, по режиму теста. */
   reportSettingsJson?: unknown;
+  /** Вводные блоки экрана итогов и отчёта (`tests.intro_json`). */
+  introJson?: unknown;
   telemetryEnabled?: boolean;
   timeLimitMinutes?: number | null;
   maxAttempts?: number | null;
@@ -276,6 +278,7 @@ export class TestSettingsService {
         flowPolicyJson: payload.test.flowPolicyJson ?? null,
         retakePolicyJson: (payload.test.retakePolicyJson as never) ?? null,
         reportSettingsJson: (payload.test.reportSettingsJson as never) ?? null,
+        introJson: (payload.test.introJson as never) ?? null,
         showCorrectAnswers: payload.test.showCorrectAnswers ?? false,
         // PRD-19 (Блок A): новый тест — возврат ВКЛ по умолчанию (FR-01).
         allowReturnToUnanswered: payload.test.allowReturnToUnanswered ?? true,

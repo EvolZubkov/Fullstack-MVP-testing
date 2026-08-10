@@ -96,6 +96,15 @@ function pdfReportMeta() {
     if (feedback) meta.feedback = feedback;
   }
   if (typeof vrHasPassThreshold === 'function') meta.hasPassThreshold = vrHasPassThreshold();
+  // Вводный блок ОТЧЁТА — своя ветвь `intro_json`: у документа вводное слово не то же,
+  // что на экране, и подмена одного другим была бы молчаливой ошибкой (PRD-27 §7.1).
+  var intro = (typeof TEST_DATA !== 'undefined' && TEST_DATA) ? TEST_DATA.introJson : null;
+  // Переключатель «как на экране итогов»: правило то же, что на вебе, и живёт оно в
+  // общем модуле — своя копия здесь разошлась бы при первой же правке.
+  var reportIntro = (TB && typeof TB.resolveReportIntro === 'function')
+    ? TB.resolveReportIntro(intro)
+    : (intro && intro.report ? intro.report : null);
+  if (reportIntro) meta.intro = reportIntro;
   return meta;
 }
 

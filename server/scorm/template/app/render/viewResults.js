@@ -108,6 +108,30 @@ function vrTestFeedback() {
 }
 
 /**
+ * Вводный блок ЭКРАНА итогов (`tests.intro_json.results`, PRD-27 §7.1).
+ *
+ * Ветвь отчёта здесь намеренно не читается: у документа своё вводное слово, и подмена
+ * одного другим — ровно та ошибка, ради которой тексты и хранятся раздельно.
+ */
+function vrScreenIntro() {
+  var intro = (typeof TEST_DATA !== 'undefined' && TEST_DATA) ? TEST_DATA.introJson : null;
+  return (intro && intro.results) ? intro.results : null;
+}
+
+/**
+ * Выдавать ли отчёт обучающемуся (PRD-27 §7.1).
+ *
+ * Признак приезжает вместе с выбором вида отчёта (`designSettings.report`), потому что
+ * другого источника у рантайма нет. Его отсутствие означает «выдавать»: пакеты, собранные
+ * до этой настройки, обязаны сохранить кнопку.
+ */
+function vrReportEnabled() {
+  var ds = (typeof TEST_DATA !== 'undefined' && TEST_DATA) ? TEST_DATA.designSettings : null;
+  var report = ds && ds.report;
+  return !report || report.enabled !== false;
+}
+
+/**
  * Whether the TEST declares a pass threshold at all (`tests.overall_pass_rule_json`,
  * baked as `TEST_DATA.overallPassRule`). It is the one fact that tells an explicit
  * «Пройден» from a test that pronounces no verdict. The shared builder reads it twice:
@@ -358,13 +382,15 @@ function renderViewResultsTemplated(app, results) {
     { values: results.resultValues || {} }
   );
   if (measures) opts.measures = measures;
+  var screenIntro = vrScreenIntro();
+  if (screenIntro) opts.intro = screenIntro;
   var ctx = window.TBTemplate.buildResultContext(input, TEST_DATA.title || '', opts);
   ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
   // NB: no attempt counter in the header — the scene header names the test, run
   // parameters belong to the screen's own content (parity with the web host).
 
   ctx.result.nav = window.TBTemplate.buildResultsNav({
-    canReport: true,
+    canReport: vrReportEnabled(),
     canRetry: false,
     hasPostPages: false,
     finishLabel: 'Вернуться к тесту'
@@ -445,11 +471,13 @@ function renderResultsTemplated(app, results) {
   // which leaves the context byte-identical to what it has always been).
   var measures = currentAttemptMeasures(results);
   if (measures) opts.measures = measures;
+  var screenIntro = vrScreenIntro();
+  if (screenIntro) opts.intro = screenIntro;
   var ctx = window.TBTemplate.buildResultContext(input, TEST_DATA.title || '', opts);
   ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
 
   ctx.result.nav = window.TBTemplate.buildResultsNav({
-    canReport: true,
+    canReport: vrReportEnabled(),
     // PRD-31 barrier B: hide the retry while the interval between attempts is still
     // closed — the start route would refuse it anyway, and an offered click that
     // bounces reads as a broken screen. Note this is deliberately NOT folded into

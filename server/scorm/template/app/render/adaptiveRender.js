@@ -432,6 +432,9 @@ function renderAdaptiveResultsTemplated(app, result) {
     // who wrote a closing word for an adaptive test owes it to the learner just the same,
     // and the web host hands over the very same block on this screen.
     testFeedback: vrTestFeedback(),
+    // Вводный блок ЭКРАНА — тот же, что у обычного режима: он свойство теста, а не
+    // способа выдачи. Читатель у него один и тот же.
+    intro: (typeof vrScreenIntro === 'function') ? vrScreenIntro() : null,
     // Absent for a test without measurements — `undefined` and not `null`, so the shared
     // builder's `if (opts.measures)` reads it the same way the web host's spread does.
     measures: measures || undefined,
@@ -450,7 +453,7 @@ function renderAdaptiveResultsTemplated(app, result) {
   // sets — so the same template offered a report in the LMS and none in the browser.
   // Retry/finish stay adaptive-specific (`restart-adaptive` is not `restart`).
   ctx.result.nav = window.TBTemplate.buildResultsNav({
-    canReport: true,
+    canReport: (typeof vrReportEnabled === 'function') ? vrReportEnabled() : true,
     canRetry: false,
     hasPostPages: false
   });

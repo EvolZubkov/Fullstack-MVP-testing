@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "../storage";
 import { db } from "../db";
-import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, reportSettingsSchema, questionScoringSchema } from "@shared/schema";
+import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, reportSettingsSchema, testIntroSchema, questionScoringSchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { readScreenTemplate, readManifestContentTemplates, readVariantLayouts } from "../services/template-render";
 import { withTemplateAssetBase } from "@shared/template/asset-base";
@@ -116,6 +116,7 @@ const testBodyBaseSchema = z.object({
   retakePolicyJson: retakePolicySchema.nullish(), // PRD-6
   // PRD-27: выбранный вариант отчёта и значения его полей, по режиму теста.
   reportSettingsJson: reportSettingsSchema.nullish(),
+  introJson: testIntroSchema.nullish(),
   // PRD-15 block D (FR-31): test-wide default price; null = system default (1).
   defaultQuestionPoints: z.number().int().min(0).nullable().optional(),
 
@@ -622,6 +623,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       flowPolicyJson,
       retakePolicyJson,
       reportSettingsJson,
+      introJson,
       defaultQuestionPoints,
       folderId,
     } = parsed.data;
@@ -677,6 +679,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         flowPolicyJson: flowPolicyJson ?? null,
         retakePolicyJson: retakePolicyJson ?? null,
         reportSettingsJson: reportSettingsJson ?? null,
+        introJson: introJson ?? null,
         defaultQuestionPoints: defaultQuestionPoints ?? null,
         folderId: folderId ?? null,
         // PRD-13: creator owns the test atomically in the INSERT (the post-insert
@@ -982,6 +985,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       flowPolicyJson,
       retakePolicyJson,
       reportSettingsJson,
+      introJson,
       defaultQuestionPoints,
     } = parsed.data;
 
@@ -1042,6 +1046,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
         flowPolicyJson: flowPolicyJson ?? undefined,
         retakePolicyJson: retakePolicyJson ?? undefined,
         reportSettingsJson: reportSettingsJson ?? undefined,
+        introJson: introJson ?? undefined,
         defaultQuestionPoints,
       },
       // PRD-7 §6.3: sections live with the standard mode only. For adaptive,
