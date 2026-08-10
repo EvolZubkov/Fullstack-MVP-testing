@@ -8,7 +8,7 @@
  */
 
 import type { DrawBlueprint, FormSet, RetakePolicy } from "@shared/schema";
-import type { ReportSettings } from "@shared/schema";
+import type { ReportSettings, TestIntro } from "@shared/schema";
 import type { LearnerVisibility, LevelTone, Valence } from "@shared/scales/interpretation";
 import type { TestQuestionOrder } from "@shared/draw/assemble-delivery";
 import type { QuestionScoringOverride } from "./scoring-api";
@@ -500,6 +500,8 @@ export type TestEditorModel = {
    * до блока D. Потребители обязаны читать через `?? {}`.
    */
   report?: ReportSettings;
+  /** Вводные блоки экрана итогов и отчёта (`tests.intro_json`, PRD-27 §7.1). */
+  intro?: TestIntro;
   /**
    * PRD-15 block D (FR-31): test-side scoring edited in the «Оценка» tab.
    * `defaultQuestionPoints = null` = system default (1 point). `questionOverrides`
@@ -571,6 +573,8 @@ export type TestSettingsPayload = {
   retakePolicyJson?: RetakePolicy | null;
   /** PRD-27: выбор варианта отчёта и значения его полей. */
   reportSettingsJson?: ReportSettings | null;
+  /** Вводные блоки экрана итогов и отчёта; `null` — ни одного не задано. */
+  introJson?: TestIntro | null;
   /** PRD-15 block D (FR-31): test-wide default price; `null` = system (1). */
   defaultQuestionPoints: number | null;
   expectedVersion: number;

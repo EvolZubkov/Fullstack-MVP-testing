@@ -560,6 +560,9 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
               model={editor.model}
               updateModel={editor.updateModel}
               fieldErrors={fieldErrors}
+              // Карточке отчёта нужен ЧЕРНОВОЙ шаблон вкладки «Оформление»: виды и их поля
+              // предлагает он, а не сохранённый (PRD-27 §4.2).
+              design={design}
             />
           )}
           {editor.model && activeTab === "design" && (

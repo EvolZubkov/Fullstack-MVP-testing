@@ -240,6 +240,9 @@ export function DesignSection({ testId, design: designProp, model, updateModel }
             // вкладки, а не пришедшие из соседней.
             model && updateModel ? (
               <ReportSettingsCard
+                // Здесь только облик документа: что в нём показывать, автор задаёт в
+                // «Настройках», рядом с обратной связью (PRD-27 §7.1).
+                scope="appearance"
                 mode={model.mode}
                 draftTemplateId={design.draft.templateId}
                 designParams={design.draft.params}

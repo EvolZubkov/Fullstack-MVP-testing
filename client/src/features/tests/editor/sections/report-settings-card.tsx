@@ -31,6 +31,7 @@ import {
   type ReportVariantOption,
 } from "../use-report-variants";
 import { resolveReportValues } from "@shared/report/report-variants";
+import { fieldsOfScope, type ReportFieldScope } from "@shared/report/report-field-scope";
 import { ReportPreviewModal } from "./report-preview-modal";
 
 /** Одно поле варианта: тип решает, каким компонентом дизайн-системы его показать. */
@@ -121,8 +122,17 @@ function ReportField(props: {
 }
 
 /**
- * Карточка настроек отчёта.
+ * Карточка настроек отчёта — ОДНА СТОРОНА за раз.
  *
+ * Настройки отчёта разложены по двум экранам редактора, потому что отвечают на разные
+ * вопросы: «что получит слушатель» автор ищет в «Настройках», рядом с обратной связью, а
+ * «как это выглядит» — в «Оформлении», рядом с шаблоном и брендингом. Компонент один:
+ * каталог видов, перенос значений при смене вида и предпросмотр у обеих сторон общие, и
+ * разводить их по двум копиям значило бы чинить каждую правку дважды.
+ *
+ * Поля вида делит САМ ШАБЛОН признаком `scope` ({@link module:shared/report/report-field-scope}).
+ *
+ * @param scope Какую сторону показывает этот экземпляр: содержание или оформление.
  * @param mode Режим теста: определяет ВИД отчёта, виды другого режима не предлагаются (D-5).
  * @param draftTemplateId Черновой шаблон вкладки «Оформление».
  * @param value Текущий срез `report` черновика редактора.
@@ -134,6 +144,7 @@ function ReportField(props: {
  * @param levelNames Лестница уровней адаптивного теста.
  */
 export function ReportSettingsCard(props: {
+  scope?: ReportFieldScope;
   mode: "standard" | "adaptive";
   draftTemplateId?: string;
   value: ReportSettings;
@@ -144,6 +155,8 @@ export function ReportSettingsCard(props: {
   sections?: ReportPreviewSection[];
   levelNames?: string[];
 }) {
+  const scope: ReportFieldScope = props.scope ?? "appearance";
+  const isContent = scope === "content";
   const branchKey = props.mode === "adaptive" ? "adaptive" : "standard";
   const branch = props.value?.[branchKey] ?? null;
   const catalogue = useReportVariants(props.draftTemplateId, undefined, props.mode, branch?.variantKey);
@@ -151,6 +164,12 @@ export function ReportSettingsCard(props: {
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const values = branch?.values ?? {};
+  // Поля этой стороны — в порядке объявления шаблоном. Сторона без единого поля вовсе не
+  // рисует список: пустая подпись «Параметры вида» ничего не сообщает.
+  const fields = fieldsOfScope(catalogue.fields, scope);
+  // Отсутствие признака = выдавать: до этой настройки отчёт получал каждый (см.
+  // `isReportEnabled`), и переключатель обязан открываться в том же положении.
+  const enabled = props.value?.enabled !== false;
 
   const setBranch = (variantKey: string, nextValues: Record<string, unknown>) => {
     props.onChange({ ...props.value, [branchKey]: { variantKey, values: nextValues } });
@@ -174,10 +193,28 @@ export function ReportSettingsCard(props: {
   };
 
   return (
-    <Card variant="outlined" size="sm" data-testid="report-settings-card">
-      <CardHeader title="Отчёт о результатах" />
+    <Card variant="outlined" size="sm" data-testid={isContent ? "report-content-card" : "report-settings-card"}>
+      <CardHeader title={isContent ? "Отчёт о результатах" : "Оформление отчёта"} />
       <CardBody>
         <div className="tb-feedback-block">
+          {/* Выдавать ли документ вообще — вопрос содержания, а не облика, поэтому
+              переключатель стоит рядом с обратной связью и только там. Выключенный отчёт
+              оставляет свои настройки нетронутыми: автор вернёт кнопку, ничего не
+              перенастраивая. */}
+          {isContent && (
+            <div className="ou-formfield">
+              <Switch
+                id="report-enabled"
+                label="Выдавать отчёт обучающемуся"
+                description="Кнопка «Скачать отчёт» на экране результатов. Выключите, если документ по этому тесту не выдаётся."
+                checked={enabled}
+                disabled={props.readOnly}
+                onChange={(e) => props.onChange({ ...props.value, enabled: e.target.checked })}
+                data-testid="report-enabled-switch"
+              />
+            </div>
+          )}
+
           {/* Пока каталог грузится, пустой отключённый селектор показывать нельзя: автор
               видит мигающий контрол без вариантов и не понимает, есть ли выбор вообще. */}
           {catalogue.loading ? (
@@ -190,25 +227,28 @@ export function ReportSettingsCard(props: {
             />
           ) : (
             <>
-              <div className="ou-formfield">
-                <Select<string>
-                  id="report-variant"
-                  size="m"
-                  fullWidth
-                  label="Вид отчёта"
-                  hint={
-                    catalogue.templateName
-                      ? `Виды предлагает шаблон оформления «${catalogue.templateName}»`
-                      : "Виды предлагает шаблон оформления теста"
-                  }
-                  value={catalogue.selected?.key ?? ""}
-                  options={catalogue.variants.map((v) => ({ value: v.key, label: v.label || v.key }))}
-                  disabled={props.readOnly}
-                  onChange={onPickVariant}
-                />
-              </div>
+              {/* Вид отчёта — выбор МАКЕТА, и живёт он на стороне оформления. */}
+              {!isContent && (
+                <div className="ou-formfield">
+                  <Select<string>
+                    id="report-variant"
+                    size="m"
+                    fullWidth
+                    label="Вид отчёта"
+                    hint={
+                      catalogue.templateName
+                        ? `Виды предлагает шаблон оформления «${catalogue.templateName}»`
+                        : "Виды предлагает шаблон оформления теста"
+                    }
+                    value={catalogue.selected?.key ?? ""}
+                    options={catalogue.variants.map((v) => ({ value: v.key, label: v.label || v.key }))}
+                    disabled={props.readOnly}
+                    onChange={onPickVariant}
+                  />
+                </div>
+              )}
 
-              {dropped.length > 0 && (
+              {dropped.length > 0 && !isContent && (
                 <div data-testid="report-drop-warning">
                   <Banner
                     tone="warning"
@@ -220,11 +260,13 @@ export function ReportSettingsCard(props: {
                 </div>
               )}
 
-              {catalogue.fields.length > 0 && (
+              {fields.length > 0 && (
                 <div className="ou-formfield">
-                  <label className="ou-formfield__lbl">Параметры вида</label>
+                  <label className="ou-formfield__lbl">
+                    {isContent ? "Что показывать в отчёте" : "Параметры вида"}
+                  </label>
                   <div className="tb-report-fields">
-                    {catalogue.fields.map((f) => (
+                    {fields.map((f) => (
                       <ReportField
                         key={f.key}
                         field={f}

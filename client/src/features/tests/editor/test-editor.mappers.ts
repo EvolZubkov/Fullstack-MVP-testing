@@ -19,7 +19,7 @@
  *   - FR-25h adaptive payload excluded when `mode === "standard"`
  */
 import type { DrawBlueprint, EligibilityPluginRef, FormSet, RetakePolicy } from "@shared/schema";
-import type { ReportSettings } from "@shared/schema";
+import type { ReportSettings, TestIntro } from "@shared/schema";
 import type { LearnerVisibility, LevelTone } from "@shared/scales/interpretation";
 import { formSetSchema } from "@shared/schema";
 import type { FeedbackEditorValue } from "./sections/feedback-editor-modal";
@@ -102,6 +102,7 @@ export type ApiTestResponse = {
   adaptiveSettings?: unknown;
   retakePolicyJson?: unknown;
   reportSettingsJson?: unknown;
+  introJson?: unknown;
   /** PRD-15 block D (FR-31): test-wide default price; null = system (1). */
   defaultQuestionPoints?: number | null;
   /** PRD-15 block D (FR-30): per-(test, question) scoring overrides. */
@@ -869,6 +870,31 @@ export function defaultRetakePolicy(): RetakePolicy {
  * Anything that is not a well-formed branch is dropped rather than half-read: a
  * malformed value must not make the block offer a variant that does not exist.
  */
+/**
+ * Вводные блоки экрана итогов и отчёта (`tests.intro_json`).
+ *
+ * Читается защитно, как и прочий jsonb автора: ветвь без текста — это отсутствие блока,
+ * а не пустая карточка, поэтому пустые тексты не поднимаются в модель вовсе.
+ */
+function readIntroFromApi(api: ApiTestResponse): TestIntro {
+  const raw = api.introJson;
+  if (!isPlainObject(raw)) return {};
+  const out: TestIntro = {};
+  for (const side of ["results", "report"] as const) {
+    const branch = (raw as Record<string, unknown>)[side];
+    if (!isPlainObject(branch)) continue;
+    const b = branch as Record<string, unknown>;
+    const text = typeof b.text === "string" ? b.text : "";
+    if (!text.trim()) continue;
+    const format = b.format === "richText" || b.format === "html" ? b.format : "plain";
+    out[side] = { text, format };
+  }
+  // Признак «в отчёте тот же текст» живёт рядом с текстами и читается независимо от них:
+  // включённым он остаётся и тогда, когда собственный текст отчёта пуст, — в этом и смысл.
+  if ((raw as Record<string, unknown>).reportSameAsResults === true) out.reportSameAsResults = true;
+  return out;
+}
+
 function readReportSettingsFromApi(api: ApiTestResponse): ReportSettings {
   const raw = api.reportSettingsJson;
   if (!isPlainObject(raw)) return {};
@@ -1114,6 +1140,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
     measurements: buildMeasurementsFromApi(src, scalesModel),
     retakePolicy: readRetakePolicyFromApi(src),
     report: readReportSettingsFromApi(src),
+    intro: readIntroFromApi(src),
     scoring: {
       defaultQuestionPoints:
         typeof src.defaultQuestionPoints === "number" ? src.defaultQuestionPoints : null,
@@ -1179,6 +1206,12 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     // с `isDefault`, и колонка не заполняется бессмысленным `{}`.
     reportSettingsJson:
       model.report && (model.report.standard || model.report.adaptive) ? model.report : null,
+    // Вводные блоки: пустой набор персистится как `null` — колонка не заполняется
+    // бессмысленным `{}`, а «текст стёрт» и «блока не было» для выдачи одно и то же.
+    introJson:
+      model.intro && (model.intro.results || model.intro.report || model.intro.reportSameAsResults)
+        ? model.intro
+        : null,
     // PRD-15 block D (FR-31): test-wide default price (null = system default).
     // Defensive `?.` — drafts persisted before block D have no scoring slice.
     defaultQuestionPoints: model.scoring?.defaultQuestionPoints ?? null,

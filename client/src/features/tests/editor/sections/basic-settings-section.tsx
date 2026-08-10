@@ -36,7 +36,7 @@ import {
   Switch,
   Textarea,
 } from "@universityrt/ui-kit";
-import type { EligibilityPluginRef, Form, RetakePolicy } from "@shared/schema";
+import type { EligibilityPluginRef, Form, IntroBlock, RetakePolicy } from "@shared/schema";
 import { resolveEffectiveScoring } from "@shared/scoring/effective-scoring";
 // PRD-31: the clamp is shared with the mapper so the field and a value read back
 // from the server can never disagree about the valid range.
@@ -63,6 +63,8 @@ import type {
   TopicPassRule,
 } from "../test-editor.types";
 import { EMPTY_FIELD_ERRORS, type FieldErrorIndex } from "../field-errors";
+import type { UseDesignSettingsResult } from "../use-design-settings";
+import { ReportSettingsCard } from "./report-settings-card";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -71,6 +73,13 @@ export type SettingsSectionProps = {
   updateModel: (updater: (m: TestEditorModel) => TestEditorModel) => void;
   /** FR-20c: per-field validation errors for inline highlighting. */
   fieldErrors?: FieldErrorIndex;
+  /**
+   * Черновик вкладки «Оформление» — нужен карточке отчёта: виды предлагает ВЫБРАННЫЙ
+   * шаблон, и считать надо черновой выбор, иначе автор выбирает из списка, которого после
+   * сохранения не будет (PRD-27 §4.2, риск R-5). Необязателен: раздел собирают и в
+   * компонентных тестах, где черновика нет, — тогда карточка отчёта не показывается.
+   */
+  design?: UseDesignSettingsResult;
 };
 
 /** Backwards-compatible alias: original skeleton lived under this name. */
@@ -109,6 +118,7 @@ export function SettingsSection({
   model,
   updateModel,
   fieldErrors = EMPTY_FIELD_ERRORS,
+  design,
 }: SettingsSectionProps) {
   const [active, setActive] = useState<RailKey>("basic");
   // Per requirements: «Адаптивный режим» sub-section is only relevant when
@@ -180,7 +190,7 @@ export function SettingsSection({
         data-testid={`settings-pane-${effectiveActive}`}
       >
         {effectiveActive === "basic" && (
-          <BasicPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
+          <BasicPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} design={design} />
         )}
         {effectiveActive === "pass-rules" && (
           <PassRulesPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
@@ -211,6 +221,7 @@ function BasicPane({
   model,
   updateModel,
   fieldErrors = EMPTY_FIELD_ERRORS,
+  design,
 }: SettingsSectionProps) {
   // PRD-7 S13.2-G7: «Общая обратная связь теста» card. The model already
   // carries the underlying fields (basic.feedback / feedbackLinks /
@@ -391,6 +402,89 @@ function BasicPane({
           </div>
         </CardBody>
       </Card>
+
+      <hr className="wf-sep" />
+
+      {/*
+        ВВОДНЫЕ БЛОКИ. Идут первыми в своей выдаче и объясняют слушателю, что он читает.
+        Текстов два, потому что адресаты разные: экран пробегают глазами сразу, отчёт
+        уносят с собой и показывают специалисту. Пустой текст = блока нет.
+      */}
+      <Card variant="outlined" data-testid="settings-intro-card">
+        <CardHeader title="Вводный текст" />
+        <CardBody>
+          <IntroEditTrigger
+            label="На экране итогов"
+            modalTitle="Вводный текст на экране итогов"
+            description="Идёт первым, до сводки и результатов по темам. Пусто — блока нет."
+            value={model.intro?.results ?? null}
+            onSave={(next) =>
+              updateModel((m) => ({ ...m, intro: { ...(m.intro ?? {}), results: next } }))
+            }
+            testId="settings-intro-results"
+          />
+          <hr className="wf-sep" />
+          {/* Переключатель — ССЫЛКА, а не копия: включённый, он не переносит текст в
+              ветвь отчёта, поэтому правка на экране меняет обе выдачи разом, а
+              собственный текст отчёта дожидается своего часа нетронутым. */}
+          <div className="ou-formfield">
+            <Switch
+              id="intro-report-same"
+              label="В отчёте — тот же текст, что на экране итогов"
+              description="Правится в одном месте. Выключите, чтобы задать отчёту своё вводное слово."
+              checked={!!model.intro?.reportSameAsResults}
+              onChange={(e) =>
+                updateModel((m) => ({
+                  ...m,
+                  intro: { ...(m.intro ?? {}), reportSameAsResults: e.target.checked },
+                }))
+              }
+              data-testid="settings-intro-same-switch"
+            />
+          </div>
+          {!model.intro?.reportSameAsResults && (
+            <IntroEditTrigger
+              label="В отчёте"
+              modalTitle="Вводный текст в отчёте"
+              description="Идёт первым, до карточки результата. Задаётся отдельно от текста экрана."
+              value={model.intro?.report ?? null}
+              onSave={(next) =>
+                updateModel((m) => ({ ...m, intro: { ...(m.intro ?? {}), report: next } }))
+              }
+              testId="settings-intro-report"
+            />
+          )}
+        </CardBody>
+      </Card>
+
+      {/*
+        Отчёт — тоже обратная связь обучающемуся, поэтому его СОДЕРЖАНИЕ (выдавать ли
+        документ и что в нём показывать) стоит здесь, рядом с текстом, который слушатель
+        прочтёт (PRD-27 §7.1). Облик документа — подложка, логотип, вид — остался в
+        «Оформлении», где живут шаблон и брендинг: поля делит сам шаблон признаком `scope`.
+      */}
+      <hr className="wf-sep" />
+
+      <ReportSettingsCard
+        scope="content"
+        mode={model.mode}
+        draftTemplateId={design?.draft.templateId}
+        designParams={design?.draft.params}
+        value={model.report ?? {}}
+        onChange={(next) => updateModel((m) => ({ ...m, report: next }))}
+        // FR-18: предпросмотр строится на РЕАЛЬНОЙ структуре редактируемого теста.
+        testName={model.basic.title}
+        sections={model.sections.map((s) => ({
+          topicId: s.topicId,
+          topicName: s.topicName,
+          questionCount: s.drawCount,
+        }))}
+        levelNames={
+          model.mode === "adaptive"
+            ? (model.adaptive.topics.find((t) => t.enabled)?.levels ?? []).map((l) => l.levelName)
+            : undefined
+        }
+      />
     </>
   );
 }
@@ -2006,6 +2100,58 @@ function AdaptiveLevelCard(props: {
  * PDF assets - both required at the test scope per the wireframe section
  * «Общая обратная связь теста» (prd7-editor-settings-tab.html lines 710-839).
  */
+/**
+ * Один вводный блок: предпросмотр текста и та же модалка, в которой автор пишет обратную
+ * связь. Редактор один на все авторские тексты — форматы и поведение обязаны совпадать.
+ *
+ * Вложения и ссылки скрыты: вводное слово — это текст, а не набор материалов; материалы
+ * автор вешает на обратную связь, где им и место.
+ */
+function IntroEditTrigger(props: {
+  label: string;
+  modalTitle: string;
+  description: string;
+  value: IntroBlock | null;
+  onSave: (next: IntroBlock | null) => void;
+  testId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const value = props.value ?? { format: "plain" as const, text: "" };
+
+  return (
+    <>
+      <label className="ou-formfield__lbl">{props.label}</label>
+      <FeedbackPreview
+        format={value.format}
+        text={value.text}
+        links={[]}
+        assets={[]}
+        events={[]}
+        onEdit={() => setOpen(true)}
+        editAriaLabel={`Редактировать: ${props.modalTitle}`}
+        testId={`${props.testId}-trigger`}
+      />
+      <FeedbackEditorModal
+        open={open}
+        title={props.modalTitle}
+        description={props.description}
+        value={{ format: value.format, text: value.text, links: [], assets: [], events: [] }}
+        hideAssets
+        hideEvents
+        hideLinks
+        onCancel={() => setOpen(false)}
+        onSave={(v: FeedbackEditorValue) => {
+          // Пустой текст = блока нет: автор, стерший текст, ожидает, что блок исчезнет,
+          // а не станет пустой рамкой.
+          props.onSave(v.text.trim() ? { format: v.format, text: v.text } : null);
+          setOpen(false);
+        }}
+        testId={`${props.testId}-modal`}
+      />
+    </>
+  );
+}
+
 function TestFeedbackTrigger(props: {
   feedback: FeedbackContent;
   links: FeedbackLink[];

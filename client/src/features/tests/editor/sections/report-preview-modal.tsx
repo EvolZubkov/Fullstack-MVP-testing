@@ -13,7 +13,7 @@
  * ни растеризации, ни скачивания (FR-21).
  */
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Banner, Button, ModalDialog, SegmentedControl, Tag } from "@universityrt/ui-kit";
 import { TemplateScreen } from "@/components/template-screen";
 import { buildTemplateCssVars } from "@shared/template/params-css";
@@ -26,6 +26,7 @@ import {
   type ReportPreviewSection,
 } from "@shared/report/report-preview";
 import { reportKindForMode } from "@shared/report/report-variants";
+import { buildReportSheets, PAGE_HEIGHT_PX, PAGE_WIDTH_PX } from "@shared/report/paginate-dom";
 import { reportImageKeys, resolveReportImageValues } from "@shared/report/report-assets";
 import { useTemplateBundle } from "./use-template-bundle";
 import type { ReportVariantOption } from "../use-report-variants";
@@ -47,6 +48,16 @@ export interface ReportPreviewModalProps {
   sections: ReportPreviewSection[];
   /** Лестница уровней адаптивного теста. */
   levelNames?: string[];
+}
+
+/** Склонение слова «страница» для подписи «N страниц A4». */
+function pageWord(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod100 >= 11 && mod100 <= 19) return "страниц";
+  if (mod10 === 1) return "страница";
+  if (mod10 >= 2 && mod10 <= 4) return "страницы";
+  return "страниц";
 }
 
 export function ReportPreviewModal({
@@ -115,6 +126,73 @@ export function ReportPreviewModal({
     [params, bundle],
   );
 
+  // ПРЕДПРОСМОТР ПОКАЗЫВАЕТ ЛИСТЫ, а не ленту. Раскладку считает тот же
+  // `buildReportSheets`, что режет PDF (FR-21/FR-23): пока она жила только в конвейере
+  // экспорта, автор согласовывал документ одной длинной страницей и узнавал о разрывах
+  // уже из скачанного файла.
+  const shadowRef = useRef<ShadowRoot | null>(null);
+  const [sheetCount, setSheetCount] = useState(0);
+  const onShadowReady = useCallback((shadow: ShadowRoot) => {
+    shadowRef.current = shadow;
+  }, []);
+
+  useEffect(() => {
+    const shadow = shadowRef.current;
+    if (!shadow) return;
+    // Эффекты потомков выполняются раньше родительских, поэтому к этому моменту
+    // `TemplateScreen` уже отрисовал страницу в теневой корень.
+    const root = shadow.querySelector<HTMLElement>(".tb-report");
+    const stage = root?.parentElement;
+    if (!root || !stage) return;
+    const doc = shadow.ownerDocument ?? document;
+
+    // Клоны листов сначала уезжают в служебный контейнер: раскладке нужна ЖИВАЯ
+    // раскладка браузера, поэтому мерить их приходится в дереве, а не в отрыве от него.
+    const scratch = doc.createElement("div");
+    stage.appendChild(scratch);
+    const sheets = buildReportSheets(root, doc, scratch);
+
+    // Фон листа берётся с самой страницы: последний лист короче своего содержимого, и без
+    // этого его низ был бы дырой вместо подложки, которую слушатель увидит в PDF.
+    const sheetBackground = doc.defaultView?.getComputedStyle(root).background ?? "";
+
+    const holder = doc.createElement("div");
+    holder.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:20px;width:" + PAGE_WIDTH_PX + "px;";
+    sheets.forEach((sheet, i) => {
+      const page = doc.createElement("div");
+      // Лист ВСЕГДА высотой A4 — таким он и уйдёт в файл. Содержимое обрезается по окну, а
+      // продолжение карточки-переростка сдвигается вверх на уже показанную высоту: тот же
+      // кусок, что напечатает конвейер.
+      page.style.cssText =
+        "position:relative;width:" + PAGE_WIDTH_PX + "px;height:" + PAGE_HEIGHT_PX +
+        "px;overflow:hidden;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.35);" +
+        (sheetBackground ? "background:" + sheetBackground + ";" : "");
+      const inner = sheet.root.cloneNode(true) as HTMLElement;
+      inner.style.display = "";
+      inner.style.marginTop = "-" + Math.round(sheet.top) + "px";
+      page.appendChild(inner);
+      holder.appendChild(page);
+
+      // Подпись — ПОД листом, а не поверх: на плотной странице она легла бы на текст,
+      // которого в документе на этом месте нет.
+      const caption = doc.createElement("div");
+      caption.textContent = `Страница ${i + 1} из ${sheets.length}`;
+      caption.style.cssText =
+        "align-self:flex-end;margin-top:-14px;font:11px/1 system-ui,sans-serif;opacity:.6;";
+      holder.appendChild(caption);
+    });
+
+    // Служебные клоны и исходная лента убираются: в кадре остаются только листы, и
+    // подгонка по ширине (она смотрит на первого ребёнка сцены) масштабирует именно их.
+    scratch.remove();
+    root.remove();
+    stage.appendChild(holder);
+    setSheetCount(sheets.length);
+    return () => {
+      holder.remove();
+    };
+  }, [context, layout, bundle, cssVars]);
+
   if (!open) return null;
 
   const variantLabel = variant?.label || variant?.key || "вид шаблона «Стандартный»";
@@ -133,7 +211,11 @@ export function ReportPreviewModal({
           </Tag>
         </>
       }
-      description={`${variantLabel} · темы этого теста, показатели демонстрационные`}
+      description={
+        sheetCount > 0
+          ? `${variantLabel} · темы этого теста, показатели демонстрационные · ${sheetCount} ${pageWord(sheetCount)} A4`
+          : `${variantLabel} · темы этого теста, показатели демонстрационные`
+      }
       footer={
         <Button variant="ghost" size="m" onClick={onClose} data-testid="report-preview-close">
           Закрыть
@@ -171,6 +253,7 @@ export function ReportPreviewModal({
                 css={bundle.css}
                 cssVars={cssVars}
                 fill={false}
+                onShadowReady={onShadowReady}
               />
             </div>
           ) : (

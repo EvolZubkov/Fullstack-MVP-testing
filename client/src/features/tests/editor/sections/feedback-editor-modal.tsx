@@ -73,6 +73,12 @@ export type FeedbackEditorModalProps = {
   hideAssets?: boolean;
   /** When true, the «Мероприятия» section is hidden (contexts that do not persist events). */
   hideEvents?: boolean;
+  /**
+   * When true, the «Курсы» section is hidden. Set by contexts that store a TEXT and
+   * nothing else — the intro blocks of the results screen and the report: a link there
+   * would be persisted nowhere and silently lost on save.
+   */
+  hideLinks?: boolean;
   onCancel: () => void;
   onSave: (value: FeedbackEditorValue) => void;
   /** Optional test id for the modal root. */
@@ -367,6 +373,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
         )}
 
         {/* ── Courses section (data field `links`; UI label «Курсы») ────── */}
+        {!props.hideLinks && (
         <div className="tb-feedback-editor__section">
           <div className="tb-feedback-editor__sec-title">
             <LinkIcon size={14} aria-hidden="true" />
@@ -445,6 +452,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
             </Button>
           </div>
         </div>
+        )}
 
         {/* ── Events section (TD-02; URL optional) ─────────────────────── */}
         {!props.hideEvents && (
