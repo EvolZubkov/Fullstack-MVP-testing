@@ -699,11 +699,26 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
    the two levels are parted by WEIGHT: the heading keeps 600, the name drops to 400. */
 .tb-measure .ou-formsection__title { font: var(--ou-text-heading-s); font-weight: 400; }
 
+/* Имя и значение — ОДНА строка: это одно высказывание («шкала — столько-то»), а
+   разнесённое по двум рядам оно стоило лишнего ряда на каждой шкале, и числа не
+   выстраивались в столбец, по которому глаз идёт сверху вниз. Значение держит правый
+   край, имя берёт остаток. Выравнивание по базовой линии, а не по центру: рядом стоят
+   число размера display и имя размера heading, и центрирование не посадило бы на общую
+   линию ни то, ни другое. Правило структурное — оно приехало вместе с разметкой
+   «Стандартного», и без него значение в «Сертификации» встало бы отдельным рядом. */
+.tb-measure__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ou-space-4);
+}
+/* Имя переносится, показание — нет: «39 из 98», разорванное по строкам, нечитаемо. */
+.tb-measure__head .ou-slider__val { white-space: nowrap; }
+
 /* The DS slider is a 360px-wide form control; here it is a full-width readout inside
-   the content column, so the cap is relaxed. With the name moved to the label column
-   the header holds the value alone — keep it against the right end of the rail. */
+   the content column, so the cap is relaxed. Значение переехало в строку имени, и шапка
+   слайдера ушла из разметки совсем — обёртка держит одну дорожку. */
 .tb-measure__slider { max-width: none; display: flex; }
-.tb-measure__slider .ou-slider__header { justify-content: flex-end; }
 /* Sizes: this is not a control operated at arm's length in a dense form but a readout
    taken in at a glance, so the rail and the boundary labels move one step up the DS
    scale. The DS lays the labels UNDER the rail absolutely, so they take no space of
