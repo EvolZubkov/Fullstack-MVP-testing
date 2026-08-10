@@ -561,7 +561,7 @@ export const SETTING_PARAMS: SettingParam[] = [
   // ── Ограничения ──
   intParam("Максимум попыток", (s) => s.maxAttempts, "test", "maxAttempts", { zeroIsNull: true }),
   intParam("Лимит времени теста", (s) => s.timeLimitMinutes, "test", "timeLimitMinutes", { zeroIsNull: true }),
-  intParam("Цена вопроса по умолчанию", (s) => s.defaultQuestionPoints, "test", "defaultQuestionPoints"),
+  intParam("Балл за вопрос по умолчанию", (s) => s.defaultQuestionPoints, "test", "defaultQuestionPoints"),
   boolParam("Разрешить возврат к неотвеченным вопросам", (s) => s.allowReturnToUnanswered, "test", "allowReturnToUnanswered"),
   boolParam("Позволить изменять ответ до завершения", (s) => s.allowAnswerChange, "test", "allowAnswerChange"),
   boolParam("Не показывать обзор, если отвечены все вопросы", (s) => s.skipReviewWhenComplete, "test", "skipReviewWhenComplete"),
@@ -1217,7 +1217,7 @@ describe("«Структура»: поля раздела (PRD-48 FR-09)", () =>
     });
     expect(row["Выдавать все вопросы темы"]).toBe("да");
     expect(row["Лимит времени темы"]).toBe(15);
-    expect(row["Цена вопроса по умолчанию"]).toBe(2);
+    expect(row["Балл по умолчанию в секции"]).toBe(2);
 
     const parsed = parseStructureRow(row, 0);
     expect(parsed.ok).toBe(true);
@@ -1256,7 +1256,7 @@ export const STRUCTURE_HEADERS = [
   "Раздел", "Порядок", "Вопросов в выборке", "Тип порога", "Порог", "Обязательный",
   "Случайный порядок вопросов",
   // PRD-48 FR-09: the section fields the workbook was missing for a full transfer.
-  "Выдавать все вопросы темы", "Лимит времени темы", "Цена вопроса по умолчанию",
+  "Выдавать все вопросы темы", "Лимит времени темы", "Балл по умолчанию в секции",
 ];
 export const STRUCTURE_WIDTHS = [28, 10, 20, 16, 10, 14, 26, 24, 20, 26];
 ```
@@ -1267,7 +1267,7 @@ export const STRUCTURE_WIDTHS = [28, 10, 20, 16, 10, 14, 26, 24, 20, 26];
 ```ts
     "Выдавать все вопросы темы": section.drawAll ? "да" : "нет",
     "Лимит времени темы": section.timeLimitMinutes ?? "",
-    "Цена вопроса по умолчанию": section.defaultPoints ?? "",
+    "Балл по умолчанию в секции": section.defaultPoints ?? "",
 ```
 
 В `parseStructureRow` добавить разбор (перед `return { ok: true, value: ... }`) и три поля в
@@ -1279,12 +1279,12 @@ export const STRUCTURE_WIDTHS = [28, 10, 20, 16, 10, 14, 26, 24, 20, 26];
   // the book entirely (an older export).
   const drawAll = String(row["Выдавать все вопросы темы"] ?? "").trim().toLowerCase() === "да";
   const timeLimitRaw = String(row["Лимит времени темы"] ?? "").trim();
-  const defaultPointsRaw = String(row["Цена вопроса по умолчанию"] ?? "").trim();
+  const defaultPointsRaw = String(row["Балл по умолчанию в секции"] ?? "").trim();
   if (timeLimitRaw !== "" && !/^\d+$/.test(timeLimitRaw)) {
     return { ok: false, error: `«Лимит времени темы»: нужно целое число, получено "${timeLimitRaw}"` };
   }
   if (defaultPointsRaw !== "" && !/^\d+$/.test(defaultPointsRaw)) {
-    return { ok: false, error: `«Цена вопроса по умолчанию»: нужно целое число, получено "${defaultPointsRaw}"` };
+    return { ok: false, error: `«Балл по умолчанию в секции»: нужно целое число, получено "${defaultPointsRaw}"` };
   }
   const timeLimitMinutes = timeLimitRaw === "" ? null : Number(timeLimitRaw);
   const defaultPoints = defaultPointsRaw === "" ? null : Number(defaultPointsRaw);
