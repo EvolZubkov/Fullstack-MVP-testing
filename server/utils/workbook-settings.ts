@@ -95,13 +95,19 @@ const NO = "Нет";
  * zero-width spaces, a BOM, and runs of ordinary spaces. Applied to parameter NAMES and to
  * the values of closed-vocabulary parameters — never to free text, where the inner spacing
  * is content the author typed.
+ *
+ * Exported because other sheets of the SAME workbook must clean a cell identically: a topic
+ * name spelled with a non-breaking space has to match the one the «Структура» sheet wrote.
  */
-function cleanCell(raw: string): string {
+export function cleanCell(raw: string): string {
   return raw.replace(/[\s ​﻿]+/g, " ").trim();
 }
 
-/** {@link cleanCell} plus case folding — the form in which names and labels are compared. */
-function normalizeCell(raw: string): string {
+/**
+ * {@link cleanCell} plus case folding — the form in which names and labels are compared,
+ * and the form in which a sheet keys its owners (a parameter name, a topic name).
+ */
+export function normalizeCell(raw: string): string {
   return cleanCell(raw).toLowerCase();
 }
 
@@ -271,7 +277,12 @@ const COMPLETION_LABELS = {
   all_required_passed: "Только если все обязательные разделы пройдены",
 };
 
-const FORMAT_LABELS = { plain: "Простой", richText: "Форматированный", html: "HTML" };
+/**
+ * Rich-text format labels. Exported as the ONE vocabulary of the workbook: the same three
+ * labels name the format of an intro block here and the format of feedback on the
+ * «Обратная связь» sheet, and a second copy of them would eventually drift.
+ */
+export const FORMAT_LABELS = { plain: "Простой", richText: "Форматированный", html: "HTML" };
 
 const FAIL_POLICY_LABELS = { failOpen: "Разрешить старт", failClosed: "Заблокировать" };
 
