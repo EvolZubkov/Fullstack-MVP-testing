@@ -27,6 +27,7 @@ import type {
 import { buildMeasureView, type RenderKind } from "./measure-view";
 import { richTextToHtml, type RichTextFormat } from "./rich-text";
 import { buildScalesChart, type ChartKindSettings } from "./scales-chart";
+import { parseScaleAppearance } from "./scale-appearance";
 import { collectRecommendations } from "./recommendations";
 import { resolveResultsBlocks, type ResultsBlocks, type ResultsBlockSettings } from "./results-blocks";
 import type {
@@ -416,8 +417,17 @@ function fillMeasureBlocks(
 ): Array<FeedbackBlock | null> {
   const { visibleScales, visibleIndicators, blocks } = resolved;
   if (blocks.scales && visibleScales.length) {
+    // «Оформление шкал» читается ДО карточек, а не только диаграммой: цвет шкалы — свойство
+    // самой шкалы, и карточка с полосой обязана совпасть с её сектором на розе. Диаграмму
+    // могли и выключить — цвет от этого никуда не девается.
+    const appearance = parseScaleAppearance(measures.chartSettings?.scaleAppearance);
     result.scales = visibleScales.map((m) =>
-      buildMeasureView({ ...m, requestedKind: measures.scaleKind, ramp: measures.ramp }));
+      buildMeasureView({
+        ...m,
+        requestedKind: measures.scaleKind,
+        ramp: measures.ramp,
+        color: appearance[m.key]?.color,
+      }));
     // PRD-35/46. The chart is built INSIDE the scales branch: a hidden block must not
     // leave a dangling diagram on the screen. `buildScalesChart` returns null on every
     // refusal — the setting says «none», or the builder cannot draw the figure it was

@@ -23,7 +23,7 @@ import {
   type ScaleInterpretation,
   type Valence,
 } from "../scales/interpretation";
-import { rampColor, zoneColors, type HslTriple, type LevelRamp } from "./level-ramp";
+import { LEVEL_SCHEMES, rampColor, zoneColors, type HslTriple, type LevelRamp } from "./level-ramp";
 import { richTextToHtml } from "./rich-text";
 
 export type RenderKind = "label" | "value" | "value_of_max" | "ring" | "band_ruler" | "gradient_bar";
@@ -112,6 +112,16 @@ export interface MeasureViewInput {
   /** Author's choice from the design params, before feasibility fallback. */
   requestedKind: RenderKind;
   ramp: LevelRamp;
+  /**
+   * Цвет, объявленный автором для ЭТОЙ шкалы в «Оформлении шкал»
+   * ({@link module:shared/template/scale-appearance}). До сих пор его читала только роза;
+   * полосе он нужен по той же причине — у типологии цвет несёт ИДЕНТИЧНОСТЬ шкалы, и
+   * сектор розы с полосой той же шкалы обязаны совпадать.
+   *
+   * Отсутствие = автор цвет не задавал; тогда отвечает рампа. Показатели его не получают:
+   * «Оформление шкал» — карта по ключу ШКАЛЫ, у показателей своих записей в ней нет.
+   */
+  color?: HslTriple;
 }
 
 /**
@@ -340,7 +350,22 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
         label: "",
         leftPercent: 0,
         widthPercent: 100,
-        color: rampColor(input.ramp, interpretation.valence === "lower_is_better" ? 1 - clamped : clamped),
+        // Цвет полосы решается в два шага, и оба — правило PRD-46 §7.
+        //
+        // 1. Направление объявлено — цвет ВЫСКАЗЫВАЕТ ВЕРДИКТ, поэтому его назначает
+        //    рампа и авторский цвет к полосе не допускается.
+        // 2. Направления нет (типология) — цвет несёт ИДЕНТИЧНОСТЬ шкалы: берётся тот,
+        //    что автор задал в «Оформлении шкал», чтобы полоса совпала с сектором розы.
+        //    Не задан — нейтральная схема, ТА ЖЕ, что у зон линейки ({@link zoneColors}):
+        //    у типологии нет лучшего и худшего уровня, и светофор высказал бы оценку,
+        //    которой методика не выносит.
+        color:
+          interpretation.valence === "none" && input.color
+            ? input.color
+            : rampColor(
+                interpretation.valence === "none" ? LEVEL_SCHEMES.neutral : input.ramp,
+                interpretation.valence === "lower_is_better" ? 1 - clamped : clamped,
+              ),
         current: true,
       },
     ];

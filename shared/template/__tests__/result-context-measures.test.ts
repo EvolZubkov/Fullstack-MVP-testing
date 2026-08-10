@@ -523,3 +523,47 @@ describe("normalizeFeedback — адрес вложения", () => {
     expect(block?.assets).toEqual([]);
   });
 });
+
+describe("«Оформление шкал» доезжает до карточки шкалы, а не только до диаграммы", () => {
+  /** Типология: домен есть, уровней нет, направление не объявлено. */
+  const TYPOLOGY = {
+    ramp: LEVEL_SCHEMES.traffic,
+    scaleKind: "gradient_bar" as const,
+    indicatorKind: "label" as const,
+    scales: [
+      {
+        key: "kom",
+        name: "Командный",
+        value: 40,
+        visibility: "level_and_value" as const,
+        interpretation: { domainMin: 0, domainMax: 98, valence: "none" as const, bands: [] },
+      },
+    ],
+    indicators: [],
+  };
+
+  it("красит полосу цветом, который автор задал этой шкале", () => {
+    const ctx = buildResultContext(BASE, "Типология", {
+      measures: { ...TYPOLOGY, chartSettings: { scaleAppearance: { kom: { color: "271 76% 53%" } } } },
+    });
+    expect(ctx.result.scales?.[0].zones[0].color).toBe("271 76% 53%");
+  });
+
+  it("без «Оформления шкал» полоса остаётся нейтральной", () => {
+    const ctx = buildResultContext(BASE, "Типология", { measures: TYPOLOGY });
+    expect(ctx.result.scales?.[0].zones[0].color).toMatch(/^215 16%/);
+  });
+
+  it("цвет доезжает и когда диаграмма выключена", () => {
+    // Диаграмма и карточка — разные вещи: «не показывать диаграмму» не значит
+    // «забыть, какого цвета шкала».
+    const ctx = buildResultContext(BASE, "Типология", {
+      measures: {
+        ...TYPOLOGY,
+        chartSettings: { scalesChartKind: "none" as const, scaleAppearance: { kom: { color: "271 76% 53%" } } },
+      },
+    });
+    expect(ctx.result.scalesChart).toBeUndefined();
+    expect(ctx.result.scales?.[0].zones[0].color).toBe("271 76% 53%");
+  });
+});

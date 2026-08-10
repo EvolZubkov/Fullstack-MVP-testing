@@ -264,3 +264,62 @@ describe("числовой показатель без полос интерпр
     expect(v.levelLabel).toBe("Возрастающее истощение");
   });
 });
+
+describe("gradient_bar: шкала без уровней", () => {
+  /** Типология: домен объявлен, уровней нет, оценки нет. */
+  function style(overrides: Partial<Parameters<typeof buildMeasureView>[0]> = {}) {
+    return buildMeasureView({
+      key: "kom",
+      name: "Командный",
+      value: 40,
+      visibility: "level_and_value",
+      interpretation: { domainMin: 0, domainMax: 98, valence: "none", bands: [] },
+      requestedKind: "gradient_bar",
+      ramp: LEVEL_SCHEMES.traffic,
+      ...overrides,
+    });
+  }
+
+  it("рисует ОДНУ полосу во всю длину домена", () => {
+    const view = style();
+    expect(view.renderKind).toBe("gradient_bar");
+    expect(view.zones).toHaveLength(1);
+    expect(view.zones[0].leftPercent).toBe(0);
+    expect(view.zones[0].widthPercent).toBe(100);
+  });
+
+  it("ставит маркер по положению значения в домене", () => {
+    // 40 из 0..98 — это 40.8 %.
+    expect(style().markerPercent).toBeCloseTo(40.8, 1);
+  });
+
+  it("при валентности «Без оценки» красит НЕЙТРАЛЬНОЙ схемой", () => {
+    // Та же политика, что у зон линейки: у типологии нет лучшего и худшего уровня,
+    // поэтому светофорная рампа высказала бы вердикт, которого методика не выносит.
+    const neutral = style().zones[0].color;
+    const graded = style({ interpretation: { domainMin: 0, domainMax: 98, valence: "higher_is_better", bands: [] } })
+      .zones[0].color;
+    expect(neutral).not.toBe(graded);
+    expect(neutral).toMatch(/^215 16%/);
+  });
+
+  it("красит полосу цветом, заданным автором для этой шкалы", () => {
+    // Цвет объявлен в «Оформлении шкал» и до сих пор читался только розой. У типологии он
+    // несёт ИДЕНТИЧНОСТЬ шкалы, поэтому полоса обязана совпадать с сектором розы.
+    expect(style({ color: "271 76% 53%" }).zones[0].color).toBe("271 76% 53%");
+  });
+
+  it("без заданного цвета остаётся нейтральной", () => {
+    expect(style().zones[0].color).toMatch(/^215 16%/);
+  });
+
+  it("НЕ берёт авторский цвет, когда у шкалы объявлено направление", () => {
+    // PRD-46 §7: где направление объявлено, цвет высказывает вердикт, и подменять им
+    // рампу нельзя — иначе «хорошо» и «плохо» перестанут читаться с одного взгляда.
+    const view = style({
+      color: "271 76% 53%",
+      interpretation: { domainMin: 0, domainMax: 98, valence: "higher_is_better", bands: [] },
+    });
+    expect(view.zones[0].color).not.toBe("271 76% 53%");
+  });
+});
