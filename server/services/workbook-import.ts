@@ -766,6 +766,10 @@ export async function importWorkbook(
           required: sec.required,
           // PRD-30 FR-02/FR-15: delivery order («Случайный порядок вопросов»).
           questionOrder: sec.questionOrder,
+          // PRD-48 FR-09: the section fields the book carries since «Структура» grew.
+          drawAll: sec.drawAll,
+          timeLimitMinutes: sec.timeLimitMinutes,
+          defaultPoints: sec.defaultPoints,
           drawBlueprintJson: strata.length ? { strata } : null,
           formSetJson,
         },

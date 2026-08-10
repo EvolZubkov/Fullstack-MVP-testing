@@ -166,6 +166,10 @@ router.get(
           required: s.required,
           // PRD-30 FR-15: delivery order of the topic's questions.
           questionOrder: s.questionOrder,
+          // PRD-48 FR-09: whole-topic delivery, time limit and the price default.
+          drawAll: s.drawAll,
+          timeLimitMinutes: s.timeLimitMinutes,
+          defaultPoints: s.defaultPoints,
         }),
       );
       const quotaRows: Record<string, unknown>[] = [];

@@ -253,6 +253,10 @@ describe("parseStructureRow", () => {
       // PRD-30 FR-02: книга без колонки «Случайный порядок вопросов» читается
       // как сегодняшняя случайная выдача.
       questionOrder: null,
+      // PRD-48 FR-09: колонок нет — значит умолчания раздела, а не нули.
+      drawAll: false,
+      timeLimitMinutes: null,
+      defaultPoints: null,
     });
   });
 
@@ -293,6 +297,51 @@ describe("parseStructureRow", () => {
       required: parsed.value.required,
     });
     expect(out).toMatchObject({ "Раздел": "О компании", "Вопросов в выборке": 12, "Тип порога": "Сумма баллов", "Порог": 15, "Обязательный": "да" });
+  });
+});
+
+describe("«Структура»: поля раздела (PRD-48 FR-09)", () => {
+  it("три новые колонки ходят по кругу", () => {
+    const row = serializeStructureRow({
+      topicName: "Финансы",
+      sortOrder: 0,
+      drawCount: 5,
+      topicPassRuleJson: null,
+      required: true,
+      drawAll: true,
+      timeLimitMinutes: 15,
+      defaultPoints: 2,
+    });
+    expect(row["Выдавать все вопросы темы"]).toBe("да");
+    expect(row["Лимит времени темы"]).toBe(15);
+    expect(row["Балл по умолчанию в секции"]).toBe(2);
+
+    const parsed = parseStructureRow(row, 0);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.drawAll).toBe(true);
+    expect(parsed.value.timeLimitMinutes).toBe(15);
+    expect(parsed.value.defaultPoints).toBe(2);
+  });
+
+  // Книги, выгруженные до PRD-48, этих колонок не несут — и обязаны
+  // импортироваться ровно как раньше.
+  it("отсутствие колонок оставляет умолчания", () => {
+    const parsed = parseStructureRow(
+      { "Раздел": "Финансы", "Порядок": 1, "Вопросов в выборке": 5 },
+      0,
+    );
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.drawAll).toBe(false);
+    expect(parsed.value.timeLimitMinutes).toBeNull();
+    expect(parsed.value.defaultPoints).toBeNull();
+  });
+
+  it("нецелые «Лимит времени темы» / «Балл по умолчанию в секции» → ошибка строки", () => {
+    const base = { "Раздел": "Финансы", "Вопросов в выборке": 5 };
+    expect(parseStructureRow({ ...base, "Лимит времени темы": "полчаса" }, 0).ok).toBe(false);
+    expect(parseStructureRow({ ...base, "Балл по умолчанию в секции": "1,5" }, 0).ok).toBe(false);
   });
 });
 

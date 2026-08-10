@@ -642,9 +642,10 @@ export function serializeMeasurementRow(m: {
 // The test's structure — its sections (a topic + draw count + per-topic pass rule)
 // and the PRD-11 per-tag draw quotas — is the one part of the model the workbook
 // previously left to the editor. These two sheets carry it so a whole test (not
-// just its content) round-trips through Excel. The flow is fixed to
-// `router_by_topics` by the importer; the router page is materialized by the
-// service. A quota row maps 1:1 to a PRD-11 `DrawStratum` ({tag, count, mode}).
+// just its content) round-trips through Excel. The flow comes from the «Настройки»
+// sheet (PRD-48 FR-06), not from the presence of this one; the router page is
+// materialized by the service. A quota row maps 1:1 to a PRD-11 `DrawStratum`
+// ({tag, count, mode}).
 
 /** Canonical «Структура» headers (one row per section). */
 export const STRUCTURE_HEADERS = [
@@ -652,8 +653,10 @@ export const STRUCTURE_HEADERS = [
   // is why the PRD-30 delivery setting is a separate, explicitly named column.
   "Раздел", "Порядок", "Вопросов в выборке", "Тип порога", "Порог", "Обязательный",
   "Случайный порядок вопросов",
+  // PRD-48 FR-09: the section fields the workbook was missing for a full transfer.
+  "Выдавать все вопросы темы", "Лимит времени темы", "Балл по умолчанию в секции",
 ];
-export const STRUCTURE_WIDTHS = [28, 10, 20, 16, 10, 14, 26];
+export const STRUCTURE_WIDTHS = [28, 10, 20, 16, 10, 14, 26, 24, 20, 26];
 
 /** Canonical «Квоты» headers (one row per PRD-11 stratum). */
 export const QUOTA_HEADERS = ["Раздел", "Тег", "Количество", "Режим"];
@@ -734,6 +737,12 @@ export interface ParsedSection {
   required: boolean;
   /** PRD-30 FR-02/FR-18: the topic's override; `null` = «как в тесте». */
   questionOrder: "random" | "fixed" | null;
+  /** PRD-48 FR-09: deliver the WHOLE topic, ignoring «Вопросов в выборке». */
+  drawAll: boolean;
+  /** PRD-48 FR-09: the section's own time limit; `null` = no limit. */
+  timeLimitMinutes: number | null;
+  /** PRD-48 FR-09: section-level price default; `null` = inherit the test's. */
+  defaultPoints: number | null;
 }
 
 /** Parse a «Структура» row. `rowIndex` (0-based) is the «Порядок» fallback. */
@@ -787,9 +796,26 @@ export function parseStructureRow(
   const randomRaw = String(row["Случайный порядок вопросов"] ?? "").trim();
   const questionOrder = randomRaw === "" ? null : parseBool(randomRaw) ? "random" : "fixed";
 
+  // An empty cell means the section default, NOT zero: the columns may be absent from
+  // the book entirely (an older export).
+  const drawAll = String(row["Выдавать все вопросы темы"] ?? "").trim().toLowerCase() === "да";
+  const timeLimitRaw = String(row["Лимит времени темы"] ?? "").trim();
+  const defaultPointsRaw = String(row["Балл по умолчанию в секции"] ?? "").trim();
+  if (timeLimitRaw !== "" && !/^\d+$/.test(timeLimitRaw)) {
+    return { ok: false, error: `«Лимит времени темы»: нужно целое число, получено "${timeLimitRaw}"` };
+  }
+  if (defaultPointsRaw !== "" && !/^\d+$/.test(defaultPointsRaw)) {
+    return { ok: false, error: `«Балл по умолчанию в секции»: нужно целое число, получено "${defaultPointsRaw}"` };
+  }
+  const timeLimitMinutes = timeLimitRaw === "" ? null : Number(timeLimitRaw);
+  const defaultPoints = defaultPointsRaw === "" ? null : Number(defaultPointsRaw);
+
   return {
     ok: true,
-    value: { topicName, sortOrder, drawCount, passRule, required, questionOrder },
+    value: {
+      topicName, sortOrder, drawCount, passRule, required, questionOrder,
+      drawAll, timeLimitMinutes, defaultPoints,
+    },
   };
 }
 
@@ -802,6 +828,12 @@ export function serializeStructureRow(s: {
   required: boolean;
   /** PRD-30 FR-02/FR-18: null or absent = «как в тесте» (the topic inherits). */
   questionOrder?: "random" | "fixed" | null;
+  /** PRD-48 FR-09: deliver the whole topic instead of a draw. */
+  drawAll?: boolean;
+  /** PRD-48 FR-09: the section's own time limit; null/absent = no limit. */
+  timeLimitMinutes?: number | null;
+  /** PRD-48 FR-09: section-level price default; null/absent = inherit the test's. */
+  defaultPoints?: number | null;
 }): Record<string, unknown> {
   const rule = (s.topicPassRuleJson ?? {}) as { source?: string; type?: string; value?: number };
   let passType = "Как у теста";
@@ -823,6 +855,9 @@ export function serializeStructureRow(s: {
     "Обязательный": serBool(s.required),
     // FR-18: пустая ячейка = «как в тесте», иначе явное переопределение темы.
     "Случайный порядок вопросов": s.questionOrder == null ? "" : serBool(s.questionOrder !== "fixed"),
+    "Выдавать все вопросы темы": s.drawAll ? "да" : "нет",
+    "Лимит времени темы": s.timeLimitMinutes ?? "",
+    "Балл по умолчанию в секции": s.defaultPoints ?? "",
   };
 }
 
