@@ -349,6 +349,21 @@ export async function importWorkbook(
     // `undefined` = the test level was not named, so its feedback is not touched;
     // `null` = named and empty, which the patch must carry as an explicit erasure.
     if (feedback.test !== undefined) settingsDraft.test.feedbackJson = feedback.test;
+
+    // A named owner takes its feedback WHOLE, so a book carrying «Обратная связь»
+    // without «Рекомендации» strips every course, material and event those owners had.
+    // That is the rule working as designed, and precisely why it is worth saying out
+    // loud: an author who kept only the feedback sheet to fix a typo would otherwise
+    // lose every attachment without a word.
+    if (!recommendationSheet) {
+      const named = (feedback.test !== undefined ? 1 : 0) + feedback.byTopic.size;
+      if (named > 0) {
+        result.warnings.push(
+          `Лист «${RECOMMENDATION_SHEET_NAME}» отсутствует: у владельцев, названных на листе `
+          + `«${FEEDBACK_SHEET_NAME}» (${named}), курсы, материалы и мероприятия будут очищены`,
+        );
+      }
+    }
   } else if (recommendationSheet) {
     result.errors.push(
       `Лист «${RECOMMENDATION_SHEET_NAME}» требует листа «${FEEDBACK_SHEET_NAME}» `

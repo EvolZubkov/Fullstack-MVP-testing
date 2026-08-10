@@ -16,7 +16,12 @@
  * quietly move that topic's feedback up to the test level.
  *
  * Application rules (spec §4, plan «Правила применения»):
- * - a sheet that is absent changes nobody's feedback;
+ * - an absent «Обратная связь» sheet changes nobody's feedback. An absent «Рекомендации»
+ *   sheet is NOT the same thing: an owner named on «Обратная связь» takes its whole
+ *   feedback from the workbook, so with no rows to attach it ends up with no courses,
+ *   materials or events. That is the price of "named = whole", and the import warns about
+ *   it rather than staying silent — an author who kept only the feedback sheet to fix a
+ *   typo would otherwise lose every attachment without a word;
  * - an owner named on the sheet takes its feedback WHOLE from the workbook: text and format
  *   from its own row, courses/materials/events from the «Рекомендации» rows with the same
  *   owner. Named without recommendations means it ends up without them — recommendations
