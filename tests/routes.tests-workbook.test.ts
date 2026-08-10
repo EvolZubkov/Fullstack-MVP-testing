@@ -62,6 +62,7 @@ vi.mock("../server/logger", () => ({
 }));
 
 import testsWorkbookRouter from "../server/routes/tests-workbook";
+import { FlowPolicyValidationError, validateFlowPolicy } from "../server/services/flow-policy-validator";
 
 const baseTest = { id: "test-1", title: "Тест" };
 const authorUser = { id: "user-1", role: "author", status: "active" };
@@ -1033,6 +1034,44 @@ describe("POST /:id/workbook/import — сценарий прохождения 
       mode: "router_by_topics",
       router: { completionPolicy: "all_required_passed" },
     });
+  });
+});
+
+// ─── PRD-48: отказ службы настроек виден построчно ───────────────────────────
+// Служба запрещает сочетания, которые редактор не даст даже собрать (адаптивный
+// режим в плоском сценарии). Раньше её исключение доходило до роута и
+// становилось ответом 500 «Failed to import workbook»: автор видел отказ без
+// единого слова о причине.
+
+describe("POST /:id/workbook/import — отказ службы настроек", () => {
+  const finTopic = {
+    id: "t-fin", name: "Финансы", description: null, folderId: null, createdAt: new Date(),
+  };
+
+  beforeEach(() => {
+    storageMock.getTopics.mockResolvedValue([finTopic]);
+    // Мок службы прогоняет НАСТОЯЩУЮ проверку сценария — иначе тест доказывал бы
+    // только то, что мок умеет бросать.
+    testSettingsMock.save.mockImplementation(async (_id: string, payload: any) => {
+      const violations = validateFlowPolicy(payload.test, payload.sections, payload.adaptiveSettings);
+      if (violations.length > 0) throw new FlowPolicyValidationError(violations);
+      return { id: "test-1" };
+    });
+  });
+
+  it("недопустимое сочетание настроек → ошибка в результате, а не исключение", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [
+        { "Параметр": "Режим теста", "Значение": "Адаптивный" },
+        { "Параметр": "Сценарий прохождения", "Значение": "Линейный" },
+      ],
+      "Структура": [{ "Раздел": "Финансы", "Порядок": 1, "Вопросов в выборке": 2 }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors.some((e: string) => /адаптивн/i.test(e))).toBe(true);
+    expect(res.body.errors.every((e: string) => e.startsWith("Настройки теста:"))).toBe(true);
   });
 });
 

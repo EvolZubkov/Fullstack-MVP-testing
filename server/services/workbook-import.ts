@@ -42,6 +42,7 @@ import type { Role } from "@shared/access";
 import { importQuestionRows, type ResolvedQuestion } from "./questions-import";
 import { syncScaleFeedbackUsages, syncVariableFeedbackUsages } from "./media/usage-index";
 import { testSettingsService, type SectionPayload } from "./test-settings";
+import { FlowPolicyValidationError } from "./flow-policy-validator";
 import { parseScoringCell } from "../utils/scoring-excel";
 import { hasOptionList, isMeasurementOnly, distributesBudget } from "@shared/questions/question-type";
 
@@ -178,6 +179,30 @@ function buildTestPatch(draft: SettingsDraft, current: Test | undefined): Record
   }
 
   return patch;
+}
+
+/**
+ * Save, turning the service's refusals into per-row workbook errors.
+ *
+ * The service throws `FlowPolicyValidationError` on combinations the editor cannot even
+ * assemble (adaptive mode in the flat flow, an adaptive section without levels). Before
+ * PRD-48 that exception reached the route and became a 500 "Failed to import workbook" —
+ * the author saw a refusal without a single word about the cause.
+ */
+async function saveOrCollect(
+  testId: string,
+  payload: Parameters<typeof testSettingsService.save>[1],
+  errors: string[],
+): Promise<void> {
+  try {
+    await testSettingsService.save(testId, payload);
+  } catch (error) {
+    if (error instanceof FlowPolicyValidationError) {
+      for (const v of error.violations) errors.push(`Настройки теста: ${v.message}`);
+      return;
+    }
+    throw error;
+  }
 }
 
 /**
@@ -836,7 +861,7 @@ export async function importWorkbook(
 
     if (!dryRun && sections.length > 0) {
       const current = await storage.getTest(testId);
-      await testSettingsService.save(testId, {
+      await saveOrCollect(testId, {
         test: {
           status: (current?.status as "draft" | "published" | "archived") ?? "draft",
           // PRD-48 §4.1: settings from «Настройки»; a key the sheet did not carry
@@ -844,7 +869,7 @@ export async function importWorkbook(
           ...buildTestPatch(settingsDraft, current),
         },
         sections,
-      });
+      }, result.errors);
     }
   }
 
@@ -855,12 +880,12 @@ export async function importWorkbook(
     const current = await storage.getTest(testId);
     const patch = buildTestPatch(settingsDraft, current);
     if (Object.keys(patch).length > 0) {
-      await testSettingsService.save(testId, {
+      await saveOrCollect(testId, {
         test: {
           ...patch,
           status: (current?.status as "draft" | "published" | "archived") ?? "draft",
         },
-      });
+      }, result.errors);
     }
   }
 
