@@ -1091,6 +1091,67 @@ describe("POST /:id/workbook/import — сценарий прохождения 
   });
 });
 
+// ─── PRD-48: пустой лист «Структура» не глотает «Настройки» ──────────────────
+// Выгрузка пишет «Структуру» ВСЕГДА — у теста без разделов одними заголовками, — и
+// шаблон книги везёт её такой же. Ветвь применения настроек стояла под
+// `sections.length > 0`, запасная — под «листа нет вовсе»: у книги с заголовочной
+// «Структурой» не срабатывала ни одна, и все 38 параметров молча терялись.
+
+describe("POST /:id/workbook/import — заголовочная «Структура» + «Настройки»", () => {
+  /** Книга с листом «Настройки» и «Структурой» БЕЗ строк данных. */
+  async function headerOnlyStructureBook(
+    settings: Record<string, unknown>[],
+    structureHeaders: string[] = ["Раздел", "Порядок", "Вопросов в выборке"],
+  ): Promise<Buffer> {
+    const wb = new ExcelJS.Workbook();
+    // makeWorkbook пропускает листы с нулём строк данных — собираем лист явно.
+    addJsonSheet(wb, "Настройки", settings);
+    wb.addWorksheet("Структура").addRow(structureHeaders);
+    return workbookToBuffer(wb);
+  }
+
+  it("настройки применяются, разделы не переписываются", async () => {
+    const buf = await headerOnlyStructureBook([
+      { "Параметр": "Лимит времени теста", "Значение": "45" },
+      { "Параметр": "Максимум попыток", "Значение": "3" },
+    ]);
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.structure.sections).toBe(0);
+    expect(testSettingsMock.save).toHaveBeenCalledTimes(1);
+    const payload = testSettingsMock.save.mock.calls[0][1] as any;
+    expect(payload.test).toMatchObject({ timeLimitMinutes: 45, maxAttempts: 3 });
+    // Разделов книга не описала — служба не должна их трогать.
+    expect(payload).not.toHaveProperty("sections");
+  });
+
+  it("пустая «Структура» без «Настроек» ничего не сохраняет", async () => {
+    const buf = await headerOnlyStructureBook([{ "Параметр": "Лимит времени теста", "Значение": "" }]);
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(testSettingsMock.save).not.toHaveBeenCalled();
+  });
+
+  it("книга со «Структурой» и «Настройками» сохраняется ОДНИМ вызовом", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [{ "Параметр": "Лимит времени теста", "Значение": "45" }],
+      "Структура": [{ "Раздел": "JavaScript", "Порядок": 1, "Вопросов в выборке": 2 }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(testSettingsMock.save).toHaveBeenCalledTimes(1);
+    const payload = testSettingsMock.save.mock.calls[0][1] as any;
+    expect(payload.test).toMatchObject({ timeLimitMinutes: 45 });
+    expect(payload.sections).toHaveLength(1);
+  });
+});
+
 // ─── PRD-48 FR-11: правила разблокировки разделов ────────────────────────────
 // Правила ключуются ИДЕНТИФИКАТОРАМИ ТЕМ (`isSectionUnlocked` читает
 // `unlockRules[section.topicId]`), поэтому книга адресует их именами тем:

@@ -138,8 +138,8 @@ function buildFlowPatch(draft: SettingsDraft, current: Test | undefined): Record
  * «Период охлаждения» row without a «Разделять период» row would otherwise wipe the half
  * of the policy the book never mentioned (FR-20).
  *
- * BOTH save branches (with and without «Структура») go through here, so a parameter is
- * applied on the same terms wherever the book happens to carry it.
+ * The save goes through here once, whatever else the book carries, so a parameter is
+ * applied on the same terms in a book of settings alone and in a book of the whole test.
  */
 function buildTestPatch(draft: SettingsDraft, current: Test | undefined): Record<string, unknown> {
   const patch: Record<string, unknown> = { ...draft.test, ...buildFlowPatch(draft, current) };
@@ -685,6 +685,9 @@ export async function importWorkbook(
   const structureSheet = findSheet(workbook, "Структура");
   const quotasSheet = findSheet(workbook, "Квоты");
 
+  /** Sections the book describes; empty when it describes none (see the save below). */
+  let sections: SectionPayload[] = [];
+
   if (quotasSheet && !structureSheet) {
     result.errors.push('Лист «Квоты» требует листа «Структура» (квоты привязаны к разделам)');
   }
@@ -908,35 +911,36 @@ export async function importWorkbook(
 
     // The array order becomes each section's sortOrder in the service.
     pending.sort((a, b) => a.order - b.order);
-    const sections = pending.map((p) => p.payload);
+    sections = pending.map((p) => p.payload);
     result.structure.sections = sections.length;
-
-    if (!dryRun && sections.length > 0) {
-      const current = await storage.getTest(testId);
-      await saveOrCollect(testId, {
-        test: {
-          status: (current?.status as "draft" | "published" | "archived") ?? "draft",
-          // PRD-48 §4.1: settings from «Настройки»; a key the sheet did not carry
-          // stays absent, and the service leaves that column alone.
-          ...buildTestPatch(settingsDraft, current),
-        },
-        sections,
-      }, result.errors);
-    }
   }
 
-  // A book may carry «Настройки» WITHOUT «Структура» — settings of an existing test,
-  // edited on their own. Saving them must not require re-sending sections (the service
-  // rewrites sections only when the payload names them).
-  if (!dryRun && !structureSheet) {
+  // ── ONE save for the settings and the structure ─────────────────────────────
+  // The two travel together when the book carries both, and stand alone otherwise:
+  //
+  // - sections are re-sent ONLY when the book described any. «Структура» replaces the
+  //   test's structure wholesale, so an empty list would wipe it — and the export writes
+  //   the sheet ALWAYS, header-only for a test without sections, as does the downloadable
+  //   template. Under the old shape («Структура» present, no data rows) neither branch
+  //   fired and every «Настройки» parameter was lost without a word in `errors`;
+  // - the settings patch is applied whenever it is non-empty, no matter how many rows
+  //   «Структура» happened to have.
+  //
+  // Nothing to say = no call at all: `save` is a rewrite, and calling it with an empty
+  // patch would re-stamp the test for a book that asked for nothing.
+  if (!dryRun) {
     const current = await storage.getTest(testId);
+    // PRD-48 §4.1: settings from «Настройки»; a key the sheet did not carry stays
+    // absent, and the service leaves that column alone.
     const patch = buildTestPatch(settingsDraft, current);
-    if (Object.keys(patch).length > 0) {
+    if (sections.length > 0 || Object.keys(patch).length > 0) {
       await saveOrCollect(testId, {
         test: {
-          ...patch,
           status: (current?.status as "draft" | "published" | "archived") ?? "draft",
+          ...patch,
         },
+        // The service rewrites sections only when the payload names them.
+        ...(sections.length > 0 ? { sections } : {}),
       }, result.errors);
     }
   }
