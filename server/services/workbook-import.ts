@@ -234,12 +234,28 @@ async function resolveFolderPath(path: string, actorId: string | null): Promise<
   return parentId;
 }
 
+/** Options of one import run. */
+export interface WorkbookImportOptions {
+  dryRun: boolean;
+  actor?: { id: string; roles: readonly Role[] };
+  /**
+   * Keep the target test's current title, ignoring the «Название» parameter of the
+   * «Настройки» sheet (PRD-48 §4.1).
+   *
+   * Set by `/api/workbook/import-new`, where the author has just typed the title into the
+   * form: the book may not overrule a name entered by hand a second ago. An explicit flag
+   * rather than a guess from the data — "the target has no title yet" is not a thing the
+   * importer can tell, and a wrong guess renames someone's test.
+   */
+  keepTitle?: boolean;
+}
+
 export async function importWorkbook(
   testId: string,
   workbook: ExcelJS.Workbook,
-  opts: { dryRun: boolean; actor?: { id: string; roles: readonly Role[] } },
+  opts: WorkbookImportOptions,
 ): Promise<WorkbookImportResult> {
-  const { dryRun, actor } = opts;
+  const { dryRun, actor, keepTitle = false } = opts;
   const result: WorkbookImportResult = {
     questions: { created: 0, updated: 0, skipped: 0 },
     scales: { created: 0, updated: 0 },
@@ -270,6 +286,9 @@ export async function importWorkbook(
     const parsed = parseSettingsSheet(sheetToObjects(settingsSheet));
     settingsDraft = parsed.draft;
     result.errors.push(...parsed.errors);
+    // PRD-48 §4.1: «Название из книги в этом случае игнорируется без ошибки» — no error
+    // and no warning, so the author who typed the title sees nothing to act upon.
+    if (keepTitle) delete settingsDraft.test.title;
   }
 
   const questionsSheet = findSheet(workbook, "Вопросы");

@@ -242,6 +242,37 @@ describe("POST /api/workbook/import-new", () => {
     expect(saved.flowPolicyJson).toMatchObject({ mode: "router_by_topics" });
   });
 
+  // PRD-48 §4.1: «При создании нового теста выигрывает название из ФОРМЫ: автор
+  // только что ввёл его руками, и книга не вправе его отменить». Иначе ответ роута
+  // отдавал название формы, а в базе оказывалось книжное — список тестов и база
+  // показывали разное.
+  it("«Название» из книги НЕ отменяет название из формы", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [
+        { "Параметр": "Название", "Значение": "Имя из книги" },
+        { "Параметр": "Описание", "Значение": "Описание из книги" },
+      ],
+      "Вопросы": [questionRow],
+    });
+    const res = await request(makeApp())
+      .post("/api/workbook/import-new")
+      .field("newTestTitle", "Имя из формы")
+      .attach("file", buf, "wb.xlsx");
+
+    expect(res.status).toBe(201);
+    // Игнорирование молчаливое: ни ошибки, ни предупреждения (так требует спека).
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.warnings).toEqual([]);
+    expect(res.body.test).toEqual({ id: "test-new", title: "Новый тест" });
+    expect(testSettingsMock.create).toHaveBeenCalledWith(
+      expect.objectContaining({ test: expect.objectContaining({ title: "Имя из формы" }) }),
+    );
+    // Остальные параметры книги применяются как обычно — молчит только «Название».
+    const saved = (testSettingsMock.save.mock.calls[0][1] as any).test;
+    expect(saved).not.toHaveProperty("title");
+    expect(saved).toMatchObject({ description: "Описание из книги" });
+  });
+
   it("без названия нового теста → 400", async () => {
     const buf = await makeWorkbook({ "Шкалы": [scaleRow] });
     const res = await request(makeApp())

@@ -1091,6 +1091,27 @@ describe("POST /:id/workbook/import — сценарий прохождения 
   });
 });
 
+// ─── PRD-48 §4.1: «Название» ─────────────────────────────────────────────────
+// В СУЩЕСТВУЮЩИЙ тест книга название применяет — это переименование, которого
+// автор и ждёт. Не применяется оно только при создании теста импортом
+// (`/api/workbook/import-new`, признак `keepTitle`), см. tests/routes.workbook.
+
+describe("POST /:id/workbook/import — «Название»", () => {
+  it("книга переименовывает существующий тест", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [{ "Параметр": "Название", "Значение": "Имя из книги" }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(testSettingsMock.save).toHaveBeenCalledWith(
+      "test-1",
+      expect.objectContaining({ test: expect.objectContaining({ title: "Имя из книги" }) }),
+    );
+  });
+});
+
 // ─── PRD-48: пустой лист «Структура» не глотает «Настройки» ──────────────────
 // Выгрузка пишет «Структуру» ВСЕГДА — у теста без разделов одними заголовками, — и
 // шаблон книги везёт её такой же. Ветвь применения настроек стояла под
