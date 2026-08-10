@@ -323,8 +323,15 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-cover__title { margin: 0; font-weight: 700; font-size: 44px; line-height: 1.08; letter-spacing: -0.02em; color: var(--ou-fg-default); text-wrap: pretty; }
 .tb-cover__desc { margin: 0; font: var(--ou-text-body-l); color: var(--ou-fg-soft); max-width: 60ch; text-wrap: pretty; }
 .tb-cover__note { display: flex; flex-direction: column; gap: var(--ou-space-1); }
-.tb-cover__media { min-width: 0; min-height: 0; border-radius: var(--ou-radius-l); overflow: hidden; background: var(--ou-bg-surface-2); }
-.tb-cover__media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* The illustration is taken OUT OF FLOW (absolute inside the panel) on purpose: the
+   cover grid row is `auto`, so a picture left in flow SIZES the row. `height: 100%`
+   then has no definite height to resolve against, collapses to `auto`, and the image
+   lays out at its natural ratio — a portrait illustration grew the row past the field,
+   the body scrolled and the panel ran under the footer instead of fitting the screen.
+   Out of flow the panel takes the row height (the field, via `.tb-cover`'s
+   `min-height: 100%`) and `object-fit: cover` finally gets a box to fill. */
+.tb-cover__media { position: relative; min-width: 0; min-height: 0; border-radius: var(--ou-radius-l); overflow: hidden; background: var(--ou-bg-surface-2); }
+.tb-cover__media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 /* Placeholder shown by the image-right start VARIANT when no start image is set —
    keeps the right media panel visible so the layout reads as «image right». */
 .tb-cover__media-ph { width: 100%; height: 100%; min-height: 220px; display: flex; align-items: center; justify-content: center; color: var(--ou-fg-muted); opacity: 0.55; }
@@ -871,13 +878,19 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 .tb-content--text { max-width: 720px; }
 .tb-content--image { max-width: 1120px; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; align-items: center; }
 .tb-content--image-right { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+/* Same rule as the cover panel above: the picture is absolute so it fills the 4:3
+   frame instead of sizing it. A height from `aspect-ratio` is not a definite height
+   for a percentage child — `height: 100%` (and the runtime's inline `max-height:
+   100%`) collapsed to `auto`, so a portrait image ran at its natural ratio, spilled
+   past the frame and got cut off at the bottom rather than framed by `cover`. */
 .tb-content__media {
+  position: relative;
   width: 100%; aspect-ratio: 4 / 3; box-sizing: border-box;
   border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-l); overflow: hidden;
   background: var(--ou-bg-surface-2); display: grid; place-items: center;
   color: var(--ou-fg-muted); font: var(--ou-text-body-s);
 }
-.tb-content__media img { width: 100%; height: 100%; object-fit: cover; }
+.tb-content__media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .tb-content__text { min-width: 0; display: flex; flex-direction: column; gap: var(--ou-space-3); }
 .tb-content__title { margin: 0; font-weight: 600; font-size: var(--tb-question-fs, 30px); line-height: 1.2; letter-spacing: -0.015em; color: var(--ou-fg-default); text-wrap: pretty; }
 .tb-content__lead { font: var(--ou-text-body-l); color: var(--ou-fg-default); }

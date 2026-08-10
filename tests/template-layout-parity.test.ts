@@ -113,6 +113,27 @@ describe("certification ships no layer of the retired fixed-stage model", () => 
     expect(css).not.toMatch(/\d(cqh|cqw)\b/);
   });
 
+  /**
+   * Twin of the standard template's guard (tests/template-scene-css): the start cover
+   * and the info-page frame get their height from the layout, which is not a definite
+   * height a percentage can resolve against. An illustration left in flow therefore
+   * fell back to its natural ratio and outgrew the panel — past the field on the cover,
+   * past the 4:3 frame on an info page. Both templates carry the same media rules by
+   * hand, so the certification copy is guarded here too.
+   */
+  it("keeps the cover / content illustration out of flow so it cannot outgrow its panel", () => {
+    const css = fs
+      .readFileSync(path.join(CERT_DIR, "styles", "theme.css"), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const panel of [".tb-cover__media", ".tb-content__media"]) {
+      const esc = panel.replace(".", "\\.");
+      expect(css, `${panel} must position its panel`).toMatch(new RegExp(`${esc}\\s*\\{[^}]*position:\\s*relative`));
+      expect(css, `${panel} img must be absolute inside it`).toMatch(
+        new RegExp(`${esc}\\s+img\\s*\\{[^}]*position:\\s*absolute[^}]*inset:\\s*0`),
+      );
+    }
+  });
+
   it("mounts the standard shell (no mountShell wrapper)", () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(CERT_DIR, "manifest.json"), "utf8"));
     expect(manifest.mountShell).toBeUndefined();
