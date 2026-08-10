@@ -42,8 +42,11 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     getTestSections: vi.fn(),
     getQuestions: vi.fn(),
     getQuestionMeasurements: vi.fn(),
-    // PRD-48 §4.1: «Папка» of the settings sheet is resolved from the folder tree.
+    // PRD-48 §4.1: «Папка» of the settings sheet is resolved from the folder tree;
+    // a segment the tree does not have yet is created (the import creates topics
+    // by name the same way).
     getTestFolders: vi.fn().mockResolvedValue([]),
+    createTestFolder: vi.fn(),
     // PRD-15 block D: «Оценка» sheet (per-test scoring overrides).
     getTestQuestionScoring: vi.fn().mockResolvedValue([]),
     replaceTestQuestionScoring: vi.fn().mockResolvedValue([]),
@@ -120,6 +123,7 @@ beforeEach(() => {
   storageMock.getTestQuestionScoring.mockResolvedValue([]);
   storageMock.replaceTestQuestionScoring.mockResolvedValue([]);
   storageMock.getTestFolders.mockResolvedValue([]);
+  storageMock.createTestFolder.mockResolvedValue({ id: "folder-new", name: "Папка", parentId: null });
   testSettingsMock.save.mockResolvedValue({ id: "test-1" });
 });
 
@@ -919,5 +923,78 @@ describe("POST /:id/workbook/import — «Пороги вариантов» (PRD
     expect(testSettingsMock.save.mock.calls[0][1].sections[0].topicPassRuleJson).toEqual({
       source: "custom", type: "percent", value: 70,
     });
+  });
+});
+
+// ─── PRD-48 §4.1: лист «Настройки», параметр «Папка» ─────────────────────────
+
+describe("POST /:id/workbook/import — «Настройки»: папка теста", () => {
+  /** A one-parameter «Настройки» sheet: a «Папка» row and nothing else. */
+  const folderBook = (path: string) =>
+    makeWorkbook({ "Настройки": [{ "Параметр": "Папка", "Значение": path }] });
+
+  it("«Папка» создаёт недостающие папки и кладёт тест в последнюю", async () => {
+    storageMock.getTestFolders.mockResolvedValue([]);
+    storageMock.createTestFolder
+      .mockResolvedValueOnce({ id: "f1", name: "Аттестация", parentId: null })
+      .mockResolvedValueOnce({ id: "f2", name: "2026", parentId: "f1" });
+
+    const res = await postWorkbook(await folderBook("Аттестация / 2026"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(storageMock.createTestFolder).toHaveBeenCalledTimes(2);
+    expect(storageMock.createTestFolder).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ name: "Аттестация", parentId: null }),
+    );
+    expect(storageMock.createTestFolder).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ name: "2026", parentId: "f1" }),
+    );
+    expect(testSettingsMock.save).toHaveBeenCalledWith(
+      "test-1",
+      expect.objectContaining({ test: expect.objectContaining({ folderId: "f2" }) }),
+    );
+  });
+
+  it("существующая папка не создаётся повторно", async () => {
+    storageMock.getTestFolders.mockResolvedValue([{ id: "f1", name: "Аттестация", parentId: null }]);
+    storageMock.createTestFolder.mockResolvedValue({ id: "f2", name: "2026", parentId: "f1" });
+
+    const res = await postWorkbook(await folderBook("Аттестация / 2026"));
+
+    expect(res.status).toBe(200);
+    expect(storageMock.createTestFolder).toHaveBeenCalledTimes(1);
+    expect(storageMock.createTestFolder).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "2026", parentId: "f1" }),
+    );
+    expect(testSettingsMock.save).toHaveBeenCalledWith(
+      "test-1",
+      expect.objectContaining({ test: expect.objectContaining({ folderId: "f2" }) }),
+    );
+  });
+
+  it("путь из одного имени кладёт тест в корневую папку", async () => {
+    storageMock.getTestFolders.mockResolvedValue([]);
+    storageMock.createTestFolder.mockResolvedValue({ id: "f1", name: "Аттестация", parentId: null });
+
+    await postWorkbook(await folderBook("Аттестация"));
+
+    expect(storageMock.createTestFolder).toHaveBeenCalledTimes(1);
+    expect(testSettingsMock.save).toHaveBeenCalledWith(
+      "test-1",
+      expect.objectContaining({ test: expect.objectContaining({ folderId: "f1" }) }),
+    );
+  });
+
+  it("dryRun не создаёт папок и ничего не сохраняет", async () => {
+    storageMock.getTestFolders.mockResolvedValue([]);
+
+    const res = await postWorkbook(await folderBook("Аттестация / 2026"), "?dryRun=true");
+
+    expect(res.status).toBe(200);
+    expect(storageMock.createTestFolder).not.toHaveBeenCalled();
+    expect(testSettingsMock.save).not.toHaveBeenCalled();
   });
 });

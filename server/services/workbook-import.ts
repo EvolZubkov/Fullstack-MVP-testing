@@ -150,6 +150,35 @@ function buildTestPatch(draft: SettingsDraft, current: Test | undefined): Record
   return patch;
 }
 
+/**
+ * A «Папка / Подпапка» path → the id of the last folder, creating the missing ones.
+ *
+ * Creating rather than failing: the workbook already creates missing TOPICS by name, and a
+ * folder is the same hierarchy of names. Demanding a pre-built tree would ask the author to
+ * reproduce by hand the structure the book already describes.
+ */
+async function resolveFolderPath(path: string, actorId: string | null): Promise<string | null> {
+  const names = path.split("/").map((s) => s.trim()).filter(Boolean);
+  if (names.length === 0) return null;
+
+  const existing = await storage.getTestFolders();
+  let parentId: string | null = null;
+  for (const name of names) {
+    const key = name.toLowerCase();
+    const found = existing.find(
+      (f) => f.name.trim().toLowerCase() === key && (f.parentId ?? null) === parentId,
+    );
+    if (found) {
+      parentId = found.id;
+      continue;
+    }
+    const created = await storage.createTestFolder({ name, parentId, createdBy: actorId });
+    existing.push(created);
+    parentId = created.id;
+  }
+  return parentId;
+}
+
 export async function importWorkbook(
   testId: string,
   workbook: ExcelJS.Workbook,
@@ -583,6 +612,13 @@ export async function importWorkbook(
     if (!dryRun) {
       await storage.replaceTestQuestionScoring(testId, overrideRows);
     }
+  }
+
+  // The folder resolves HERE, not in the registry: the registry is pure cell parsing,
+  // while a path needs storage and may create rows.
+  if (!dryRun && settingsDraft.folderPath !== undefined) {
+    const folderId = await resolveFolderPath(settingsDraft.folderPath, actor?.id ?? null);
+    settingsDraft.test.folderId = folderId;
   }
 
   // ── Pass 6: «Структура» + «Квоты» (FR-16: sections + PRD-11 quotas, router). ──
