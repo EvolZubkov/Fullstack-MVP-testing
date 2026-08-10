@@ -62,6 +62,9 @@
 
 .tb-report__title { font-size: 22px; font-weight: 400; margin-bottom: 4px; }
 .tb-report__title--tight { margin-bottom: 15px; }
+/* Название теста в ШАПКЕ документа: над вердиктом и крупнее подзаголовков карточек, но
+   мельче самого вердикта — сначала читатель понимает, что за бумага, потом каков итог. */
+.tb-report__title--head { font-size: 26px; font-weight: 500; margin-bottom: 10px; }
 .tb-report__title--solid { font-weight: 500; margin-bottom: 0; }
 .tb-report__subtitle { font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 20px; }
 .tb-report__lead { font-size: 11px; font-weight: 300; color: #aca9a9; margin-bottom: 15px; line-height: 1.5; }

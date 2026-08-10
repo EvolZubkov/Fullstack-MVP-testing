@@ -1,6 +1,11 @@
 <div class="tb-report {{ report.verdictClass }}" style="{{#if report.values.backgroundImage}}background-image: url({{ report.values.backgroundImage }});{{/if}}">
   {{#if report.values.logoImage}}<div class="tb-report__brand"><img src="{{ report.values.logoImage }}" alt=""></div>{{/if}}
 
+  <!-- НАЗВАНИЕ ТЕСТА — первой строкой документа. Оно отвечает на вопрос «что это за
+       бумага», и до него не должно стоять ни вердикта, ни вводного слова автора. Раньше
+       оно лежало в карточке счёта, то есть после вводного блока и посреди страницы, а у
+       методики без баллов эта карточка вырождалась в плашку с одним названием. -->
+  <div class="tb-report__title tb-report__title--head" data-path="course.title"></div>
   <div class="tb-report__headline" data-path="report.verdictHeadline"></div>
   <div class="tb-report__attempts" data-path="report.attemptsCountLabel"></div>
   {{#if report.hasLearnerName}}<div class="tb-report__learner">Слушатель: <span data-path="report.learnerName"></span></div>{{/if}}
@@ -11,13 +16,12 @@
        специалисту. Пусто = блока нет. -->
   {{#if result.introHtml}}<section class="tb-report__card tb-report__intro">{{& result.introHtml }}</section>{{/if}}
 
+  <!-- Сводка баллов гейтится ТЕМ ЖЕ признаком, что на экране итогов (PRD-29 §6.7):
+       измерительная методика не приносит баллов, и «0 вопросов / 0.0 баллов / 0 %» —
+       утверждение, которого экран не делает. Гейт стоит на ВСЕЙ карточке: с переездом
+       названия в шапку внутри неё не осталось ничего, что печаталось бы без сводки. -->
+  {{#unless result.hideScoreSummary}}
   <section class="tb-report__card">
-    <div class="tb-report__title" data-path="course.title"></div>
-    <!-- Сводка баллов гейтится ТЕМ ЖЕ признаком, что на экране итогов (PRD-29 §6.7):
-         измерительная методика не приносит баллов, и «0 вопросов / 0.0 баллов / 0 %» —
-         утверждение, которого экран не делает. Название теста остаётся вне гейта: в
-         документе оно единственное, экран же держит его в шапке сцены. -->
-    {{#unless result.hideScoreSummary}}
     <div class="tb-report__subtitle">Результат теста</div>
 
     <div class="tb-report__score">
@@ -49,8 +53,8 @@
            сводку принудительно, но вердикта у неоцениваемого теста всё равно нет. -->
       {{#if report.verdictBadge}}<div class="tb-report__badge" data-path="report.verdictBadge"></div>{{/if}}
     </div>
-    {{/unless}}
   </section>
+  {{/unless}}
 
   {{#if report.hasTopics}}
   <section class="tb-report__card">
