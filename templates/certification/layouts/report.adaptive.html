@@ -6,6 +6,11 @@
   {{#if report.hasLearnerName}}<div class="tb-report__learner">Слушатель: <span data-path="report.learnerName"></span></div>{{/if}}
   <div class="tb-report__date">Дата прохождения: <span data-path="report.attemptDateLabel"></span></div>
 
+  <!-- ВВОДНЫЙ БЛОК автора — первым, до карточки счёта и всего остального. Текст отчёта
+       задаётся отдельно от текста экрана: документ уносят с собой и показывают
+       специалисту. Пусто = блока нет. -->
+  {{#if result.introHtml}}<section class="tb-report__card tb-report__intro">{{& result.introHtml }}</section>{{/if}}
+
   <section class="tb-report__card">
     <div class="tb-report__title tb-report__title--solid" data-path="course.title"></div>
   </section>
@@ -46,7 +51,7 @@
             {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
             {{#if levelLabel}}<span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>{{/if}}
           </div>
-          {{#if text}}<div class="tb-report__scale-text">{{text}}</div>{{/if}}
+          {{#if text}}<div class="tb-report__scale-text">{{& textHtml }}</div>{{/if}}
         </div>
         {{/each}}
       </div>
@@ -57,7 +62,11 @@
   {{#if result.scales}}
   <section class="tb-report__card">
     <div class="tb-report__title tb-report__title--tight">По шкалам</div>
-    <div class="tb-report__scales">
+    <!-- Колонки «диаграмма слева, список справа» включает МОДИФИКАТОР, и ставится он по
+         тому же признаку, каким гейтится сама фигура. Без него единственный ребёнок —
+         список толкований — занимал колонку под диаграмму, 240 px из 545 доступных, и
+         текст уходил вниз лентой. Блок показателей диаграммы не имеет вовсе. -->
+    <div class="tb-report__scales{{#if result.scalesChart}} tb-report__scales--chart{{/if}}">
       {{#if result.scalesChart}}
       <!-- PRD-46: ОДИН блок на радар и розу. Ядро отдаёт обе диаграммы одной формой, и
           неподходящие списки приходят ПУСТЫМИ — пустой цикл не рисует ничего. Порядок
@@ -102,7 +111,7 @@
             {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
             <span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>
           </div>
-          {{#if text}}<div class="tb-report__scale-text">{{text}}</div>{{/if}}
+          {{#if text}}<div class="tb-report__scale-text">{{& textHtml }}</div>{{/if}}
         </div>
         {{/each}}
       </div>
@@ -112,9 +121,13 @@
   {{#if result.recommendations.hasAny}}
   <section class="tb-report__card">
     <div class="tb-report__title tb-report__title--tight">Рекомендации</div>
-    {{#each result.recommendations.texts}}
+    <!-- Текст рекомендации печатается РАЗМЕТКОЙ: автор выбирает формат («Обычный»,
+         «Форматированный», «HTML») в редакторе обратной связи, и его выбор доезжает сюда
+         полем `textsHtml`. Обычный текст ядро экранирует само, а переводы строк отдаёт
+         переносами — абзацы автора сохраняются. -->
+    {{#each result.recommendations.textsHtml}}
     <div class="tb-report__rec tb-report__rec--plain">
-      <div class="tb-report__event">{{this}}</div>
+      <div class="tb-report__event">{{& this }}</div>
     </div>
     {{/each}}
     {{#if result.recommendations.links}}

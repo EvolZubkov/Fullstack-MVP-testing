@@ -11,6 +11,11 @@
 
   <main class="tb-scene__body">
     <div class="tb-scene__col tb-scene__col--wide">
+      <!-- ВВОДНЫЙ БЛОК автора — первым, до всего остального: он объясняет слушателю, что
+           он сейчас читает. Разметку строит ядро из текста и его формата, поэтому печать
+           идёт контролируемым каналом; пусто = блока нет. -->
+      {{#if result.introHtml}}<div class="tb-intro">{{& result.introHtml }}</div>{{/if}}
+
       <div class="tb-adaptive-hero">
         <h2 class="tb-scene__hero tb-scene__hero--s">Тест завершён</h2>
         <span class="tb-scene__lead">Адаптивный тест подобрал уровень по каждой теме</span>
@@ -54,7 +59,7 @@
             <div class="ou-banner ou-banner--subtle ou-banner--{{bannerVariant}}">
               <div class="ou-banner__body">
                 <div class="ou-banner__title">{{levelLabel}}</div>
-                {{#if text}}<div class="ou-banner__desc">{{text}}</div>{{/if}}
+                {{#if text}}<div class="ou-banner__desc">{{& textHtml }}</div>{{/if}}
               </div>
             </div>
           </div>
@@ -130,7 +135,7 @@
             {{#unless zones}}{{#unless isRing}}
             {{#if showValue}}<span class="ou-slider__val"><strong>{{valueLabel}}</strong></span>{{/if}}
             {{/unless}}{{/unless}}
-            {{#if text}}<p class="ou-formsection__sub">{{text}}</p>{{/if}}
+            {{#if text}}<p class="ou-formsection__sub">{{& textHtml }}</p>{{/if}}
           </div>
         </div>
         {{/each}}
@@ -144,7 +149,7 @@
       <div class="tb-recs-block">
         {{#if result.recommendations.texts}}
         <div class="tb-recs-group">
-          {{#each result.recommendations.texts}}<p class="tb-recs-group__text">{{this}}</p>{{/each}}
+          {{#each result.recommendations.textsHtml}}<p class="tb-recs-group__text">{{& this }}</p>{{/each}}
         </div>
         {{/if}}
         {{#if result.recommendations.links}}

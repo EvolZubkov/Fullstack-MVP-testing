@@ -15,6 +15,11 @@
     <div class="tb-scene__col tb-scene__col--wide">
       <!-- PRD-34 (FR-16): место водяного знака, объявленное макетом. -->
       <div data-slot="protection-mark"></div>
+      <!-- ВВОДНЫЙ БЛОК автора — первым, до всего остального: он объясняет слушателю, что
+           он сейчас читает. Разметку строит ядро из текста и его формата, поэтому печать
+           идёт контролируемым каналом; пусто = блока нет. -->
+      {{#if result.introHtml}}<div class="tb-intro">{{& result.introHtml }}</div>{{/if}}
+
       {{#unless result.hideScoreSummary}}
       <div class="tb-score-strip">
         <div class="ou-ring tb-ring">
@@ -50,7 +55,7 @@
             <div class="ou-banner ou-banner--subtle ou-banner--{{bannerVariant}}">
               <div class="ou-banner__body">
                 <div class="ou-banner__title">{{levelLabel}}</div>
-                {{#if text}}<div class="ou-banner__desc">{{text}}</div>{{/if}}
+                {{#if text}}<div class="ou-banner__desc">{{& textHtml }}</div>{{/if}}
               </div>
             </div>
             {{/if}}
@@ -145,7 +150,7 @@
             {{#unless zones}}{{#unless isRing}}
             {{#if showValue}}<span class="ou-slider__val"><strong>{{valueLabel}}</strong></span>{{/if}}
             {{/unless}}{{/unless}}
-            {{#if text}}<p class="ou-formsection__sub">{{text}}</p>{{/if}}
+            {{#if text}}<p class="ou-formsection__sub">{{& textHtml }}</p>{{/if}}
           </div>
         </div>
         {{/each}}
@@ -185,7 +190,7 @@
       <div class="tb-recs-block">
         {{#if result.recommendations.texts}}
         <div class="tb-recs-group">
-          {{#each result.recommendations.texts}}<p class="tb-recs-group__text">{{this}}</p>{{/each}}
+          {{#each result.recommendations.textsHtml}}<p class="tb-recs-group__text">{{& this }}</p>{{/each}}
         </div>
         {{/if}}
         {{#if result.recommendations.links}}

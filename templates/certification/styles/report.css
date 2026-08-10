@@ -47,6 +47,16 @@
   margin-bottom: 15px;
 }
 
+/* Вводный блок автора — обычная карточка отчёта, но без заголовка: его пишет сам автор,
+   если считает нужным. Переводы строк держатся, как и в остальных авторских текстах. */
+.tb-report__intro { font-size: 14px; font-weight: 300; line-height: 1.55; white-space: pre-wrap; }
+.tb-report__intro > :first-child { margin-top: 0; }
+.tb-report__intro > :last-child { margin-bottom: 0; }
+/* Разметка автора внутри блока: `pre-wrap` держит переводы строк простого текста, а у
+   готовой разметки переносы делают сами теги — иначе абзацы разъезжались бы вдвое. */
+.tb-report__intro p, .tb-report__intro ul, .tb-report__intro ol { white-space: normal; margin: 0 0 8px; }
+.tb-report__intro ul, .tb-report__intro ol { padding-left: 20px; }
+
 .tb-report__title { font-size: 22px; font-weight: 400; margin-bottom: 4px; }
 .tb-report__title--tight { margin-bottom: 15px; }
 .tb-report__title--solid { font-weight: 500; margin-bottom: 0; }
@@ -224,14 +234,22 @@
   background: #59209b;
 }
 .tb-report__rec-chip--level { background: #1e40af; }
-.tb-report__event { font-size: 14px; font-weight: 300; color: #fafafa; }
+/* Текст рекомендации печатается этим же узлом, поэтому переводы строк автора держатся
+   и здесь — см. `.tb-report__scale-text`. */
+.tb-report__event { font-size: 14px; font-weight: 300; color: #fafafa; white-space: pre-wrap; }
 
 /* ── PRD-35: шкалы и радар компетенций в отчёте ──────────────────────────────
    Отчёт печатается и растеризуется, поэтому здесь нет ни контейнерных запросов,
    ни интерактива: ширина страницы A4 известна заранее. Диаграмма стоит слева от
    списка — та же композиция, что на экране итогов, чтобы документ и экран
    читались одинаково. Цвет вершины приходит тройкой HSL из ядра. */
-.tb-report__scales {
+/* Две колонки — только у блока, который РИСУЕТ диаграмму: модификатор ставит макет по
+   тому же признаку, каким гейтит саму фигуру. Пока колонки объявлял сам блок, список
+   толкований без диаграммы падал в первую колонку — 240 px из 545 доступных на A4 — и
+   печатался узкой лентой во всю высоту страницы. У блока показателей диаграммы нет
+   вовсе, поэтому колонок у него не бывает никогда. */
+.tb-report__scales { display: block; }
+.tb-report__scales--chart {
   display: grid;
   grid-template-columns: 240px 1fr;
   gap: 20px;
@@ -243,7 +261,11 @@
 .tb-report__scale-meta { display: flex; align-items: baseline; gap: 10px; margin-top: 2px; }
 .tb-report__scale-val { font-size: 14px; font-weight: 300; }
 .tb-report__scale-lvl { font-size: 12px; font-weight: 700; }
-.tb-report__scale-text { font-size: 12px; font-weight: 300; margin-top: 4px; }
+/* Абзацы автора сохраняются: толкование уровня и текст рекомендации пишутся в поле
+   переводами строк, а HTML их схлопывает — методичка на полторы страницы приходила
+   слушателю одним сплошным полотном. `pre-wrap` держит переносы автора и переносит
+   длинные строки по ширине страницы. */
+.tb-report__scale-text { font-size: 12px; font-weight: 300; margin-top: 4px; white-space: pre-wrap; }
 .tb-report .tb-chart__svg { width: 100%; height: auto; display: block; }
 .tb-report .tb-chart__ring,
 .tb-report .tb-chart__axis { fill: none; stroke: rgba(255, 255, 255, 0.18); stroke-width: 1; }
