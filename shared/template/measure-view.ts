@@ -24,6 +24,7 @@ import {
   type Valence,
 } from "../scales/interpretation";
 import { rampColor, zoneColors, type HslTriple, type LevelRamp } from "./level-ramp";
+import { richTextToHtml } from "./rich-text";
 
 export type RenderKind = "label" | "value" | "value_of_max" | "ring" | "band_ruler" | "gradient_bar";
 
@@ -58,6 +59,13 @@ export interface CtxMeasureView {
   toneClass: string;
   bannerVariant: BannerVariant;
   text?: string;
+  /**
+   * Толкование РАЗМЕТКОЙ: то же, что {@link CtxMeasureView.text}, пропущенное через
+   * {@link module:shared/template/rich-text}. Абзацы, которыми автор разделил объяснение
+   * уровня, доходят до слушателя переносами, а не схлопываются в полотно. Идёт рядом со
+   * строкой, а не вместо неё: `text` печатают макеты внешних шаблонов.
+   */
+  textHtml?: string;
   zones: CtxMeasureZone[];
   marks: CtxMeasureMark[];
   markerPercent?: number;
@@ -282,7 +290,7 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
       tone,
       toneClass: `tb-tone--${tone}`,
       bannerVariant: BANNER_BY_TONE[tone],
-      ...(outcome.text ? { text: outcome.text } : {}),
+      ...(outcome.text ? { text: outcome.text, textHtml: richTextToHtml(outcome.text) } : {}),
     };
   }
 
@@ -302,7 +310,7 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
     tone,
     toneClass: `tb-tone--${tone}`,
     bannerVariant: BANNER_BY_TONE[tone],
-    ...(band?.text ? { text: band.text } : {}),
+    ...(band?.text ? { text: band.text, textHtml: richTextToHtml(band.text) } : {}),
   };
 
   if (!hasDomain) return view;

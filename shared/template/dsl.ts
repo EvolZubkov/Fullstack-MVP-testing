@@ -14,6 +14,14 @@
  * Supported (spec §9):
  *
  *   {{ path }}                     escaped text interpolation
+ *   {{& path }}                    CONTROLLED HTML: the value is printed as markup.
+ *                                  The only markup channel available INSIDE `{{#each}}`
+ *                                  (`data-slot` addresses a named node, so a repeating
+ *                                  one is out of its reach) — which is where the level
+ *                                  interpretations and recommendation texts are printed.
+ *                                  What lands in such a field is prepared by the CORE
+ *                                  ({@link module:shared/template/rich-text}), never by
+ *                                  the layout author.
  *   {{#if path}}…{{/if}}           render body when `path` is truthy
  *   {{#unless path}}…{{/unless}}   render body when `path` is falsy
  *   {{#each path}}…{{/each}}       iterate an array; the body sees the item as the
@@ -22,10 +30,11 @@
  *   {{> name }}                    include a partial with the current context
  *
  * NOT supported by design: JavaScript, helper functions, expressions inside `if`,
- * and raw/unescaped interpolation `{{{ … }}}` (throws). All `{{ … }}` output is
- * HTML-escaped; rich/controlled HTML is injected post-render via data-placeholder
- * / data-slot, not here. Malformed templates throw at compile time — the host is
- * expected to wrap rendering in a fallback (spec §8.2.1.3).
+ * and triple-brace interpolation `{{{ … }}}` (throws — controlled HTML has ONE
+ * spelling, `{{& … }}`). All `{{ … }}` output is HTML-escaped; page-level rich HTML
+ * is still injected post-render via data-placeholder / data-slot. Malformed templates
+ * throw at compile time — the host is expected to wrap rendering in a fallback
+ * (spec §8.2.1.3).
  */
 
 /** Block helpers that open a body and require a matching close tag. */
@@ -35,6 +44,7 @@ type BlockType = "if" | "unless" | "each";
 type Token =
   | { kind: "text"; value: string }
   | { kind: "interp"; path: string }
+  | { kind: "raw"; path: string }
   | { kind: "partial"; name: string }
   | { kind: "open"; type: BlockType; path: string }
   | { kind: "close"; type: BlockType };
@@ -43,6 +53,7 @@ type Token =
 type Node =
   | { t: "text"; v: string }
   | { t: "interp"; path: string }
+  | { t: "raw"; path: string }
   | { t: "partial"; name: string }
   | { t: "if"; path: string; body: Node[] }
   | { t: "unless"; path: string; body: Node[] }
@@ -171,6 +182,11 @@ function classify(raw: string): Token {
     assertPath(name, "partial name");
     return { kind: "partial", name };
   }
+  if (raw.startsWith("&")) {
+    const path = raw.slice(1).trim();
+    assertPath(path, "raw interpolation path");
+    return { kind: "raw", path };
+  }
   assertPath(raw, "interpolation path");
   return { kind: "interp", path: raw };
 }
@@ -195,6 +211,7 @@ function parse(tokens: Token[]): Node[] {
       pos++;
       if (tok.kind === "text") nodes.push({ t: "text", v: tok.value });
       else if (tok.kind === "interp") nodes.push({ t: "interp", path: tok.path });
+      else if (tok.kind === "raw") nodes.push({ t: "raw", path: tok.path });
       else if (tok.kind === "partial") nodes.push({ t: "partial", name: tok.name });
       else {
         const body = parseNodes(tok.type);
@@ -245,6 +262,14 @@ function renderNodes(
         break;
       case "interp":
         out += escapeHtml(stringify(resolveInScope(node.path, scope)));
+        break;
+      // КОНТРОЛИРУЕМЫЙ HTML. Значение печатается разметкой, поэтому оно и не приходит от
+      // автора макета: в контекст его кладёт ЯДРО, из полей, которые само же и подготовило
+      // (`shared/template/rich-text`). Разметку в них пишет автор ТЕСТА — тот же
+      // доверенный источник, что наполняет `richText`/`html` контентных страниц, где
+      // продукт вставляет её ровно так же.
+      case "raw":
+        out += stringify(resolveInScope(node.path, scope));
         break;
       case "if":
         if (truthy(resolveInScope(node.path, scope))) {

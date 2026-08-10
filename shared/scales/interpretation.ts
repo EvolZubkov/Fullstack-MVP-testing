@@ -14,6 +14,8 @@
  * Pure — no DOM, no Node — bundled verbatim into the SCORM package.
  */
 
+import type { RichTextFormat } from "../template/rich-text";
+
 export type LevelTone = "favorable" | "neutral" | "attention" | "critical";
 export type Valence = "higher_is_better" | "lower_is_better" | "none";
 export type LearnerVisibility = "hidden" | "level" | "level_and_value";
@@ -22,6 +24,14 @@ export interface RecommendationLink { title: string; url?: string }
 
 export interface FeedbackBlock {
   text?: string;
+  /**
+   * В каком виде автор написал `text` (`feedback_json.format`, PRD-7 §3.4).
+   *
+   * Ехало до базы и там останавливалось: выдача везла один голый текст, и «Форматированный»
+   * с «HTML» приходили слушателю сплошным абзацем. Отсутствие поля = `plain` — так выглядят
+   * и старые записи, и всякий хост, который про формат ещё не знает.
+   */
+  format?: RichTextFormat;
   links?: RecommendationLink[];
   events?: RecommendationLink[];
   assets?: RecommendationLink[];

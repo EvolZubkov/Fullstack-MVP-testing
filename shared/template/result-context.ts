@@ -25,6 +25,7 @@ import type {
   CtxRecommendation,
 } from "./context";
 import { buildMeasureView, type RenderKind } from "./measure-view";
+import { richTextToHtml, type RichTextFormat } from "./rich-text";
 import { buildScalesChart, type ChartKindSettings } from "./scales-chart";
 import { collectRecommendations } from "./recommendations";
 import { resolveResultsBlocks, type ResultsBlocks, type ResultsBlockSettings } from "./results-blocks";
@@ -220,6 +221,9 @@ export function normalizeFeedback(raw: unknown): FeedbackBlock | null {
   const assets = (f.assets as Array<{ title?: string; url?: string; scormHref?: string }> | undefined) ?? [];
   return {
     ...(f.text ? { text: String(f.text) } : {}),
+    // Формат едет ВМЕСТЕ с текстом: без него «Форматированный» и «HTML», которые автор
+    // выбрал в редакторе, приходят слушателю сплошным абзацем (см. `FeedbackBlock.format`).
+    ...(f.format === "richText" || f.format === "html" ? { format: f.format } : {}),
     links: links.map((l) => ({ title: String(l.title ?? ""), ...(l.url ? { url: l.url } : {}) })),
     events: events.map((e) => ({ title: String(e.title ?? ""), ...(e.url ? { url: e.url } : {}) })),
     assets: assets
@@ -502,6 +506,14 @@ export interface ResultContextOptions {
    * leaves the context byte-identical to what a control test has always produced.
    */
   measures?: MeasuresInput;
+  /**
+   * Вводный блок этой выдачи: авторский текст и его формат (`tests.intro_json`).
+   *
+   * Разметку строит построитель, а не хост: правило одно и то же для экрана и для отчёта,
+   * а два его применения разошлись бы ровно так же, как разошлись бы два расчёта вердикта.
+   * Пустой текст блока не даёт (см. {@link CtxResult.introHtml}).
+   */
+  intro?: { text?: string | null; format?: RichTextFormat | null } | null;
 }
 
 /** Built `{ course, result }` for the results layouts. */
@@ -661,6 +673,10 @@ export function buildResultContext(
     // the whole «Результаты по темам» section down with it.
     topicResults: (input.topicResults || []).filter(topicHasContent).map((t) => topicView(t, withTopicPoints)),
   };
+  // Вводный блок — первым, до всего остального (см. `CtxResult.introHtml`). Разметку
+  // строит ядро, поэтому правило одно и то же для экрана и для отчёта.
+  const introHtml = richTextToHtml(opts.intro?.text, opts.intro?.format ?? undefined);
+  if (introHtml) result.introHtml = introHtml;
   if (opts.recommendedCourses && opts.recommendedCourses.length) result.recommendedCourses = opts.recommendedCourses;
   if (opts.recommendedEvents && opts.recommendedEvents.length) result.recommendedEvents = opts.recommendedEvents;
   if (opts.backAction) {
@@ -914,6 +930,8 @@ export interface AdaptiveResultContextOptions {
    * to what the adaptive screen produced before.
    */
   measures?: MeasuresInput;
+  /** Вводный блок этой выдачи — тот же, что у стандартного экрана (см. там же). */
+  intro?: { text?: string | null; format?: RichTextFormat | null } | null;
 }
 
 /**
@@ -1008,6 +1026,9 @@ export function buildAdaptiveResultContext(
     adaptive: true,
     topicResults: (input.topicResults || []).map(adaptiveTopicView),
   };
+  // Вводный блок — первым, до уровней и измерений: правило общее для обоих режимов.
+  const adaptiveIntroHtml = richTextToHtml(opts.intro?.text, opts.intro?.format ?? undefined);
+  if (adaptiveIntroHtml) result.introHtml = adaptiveIntroHtml;
   if (opts.hasScormActions) {
     result.hasScormActions = true;
     result.showPdf = !!opts.showPdf;

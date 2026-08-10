@@ -21,9 +21,17 @@
  */
 
 import type { FeedbackBlock, RecommendationLink } from "../scales/interpretation";
+import { richTextToHtml } from "./rich-text";
 
 export interface CtxRecommendations {
   texts: string[];
+  /**
+   * Те же тексты, но РАЗМЕТКОЙ — в том виде, в каком автор их написал
+   * ({@link module:shared/template/rich-text}). Идёт параллельным списком, а не заменой:
+   * `texts` печатают макеты внешних шаблонов, и подмена строки на разметку вывела бы им
+   * теги текстом. Индексы совпадают со списком выше.
+   */
+  textsHtml: string[];
   links: RecommendationLink[];
   events: RecommendationLink[];
   assets: RecommendationLink[];
@@ -48,18 +56,23 @@ export function collectRecommendations(
 ): CtxRecommendations {
   const present = sources.filter((s): s is FeedbackBlock => !!s);
   const texts: string[] = [];
+  const textsHtml: string[] = [];
   const seenText = new Set<string>();
   for (const source of present) {
     const text = String(source.text ?? "").trim();
     if (!text || seenText.has(text)) continue;
     seenText.add(text);
     texts.push(text);
+    // Разметка считается ЗДЕСЬ, рядом с дедупом: формат — свойство того же источника,
+    // и восстановить его потом, по одной строке, было бы уже нечем.
+    textsHtml.push(richTextToHtml(text, source.format));
   }
   const links = dedupLinks(present.flatMap((s) => s.links ?? []));
   const events = dedupLinks(present.flatMap((s) => s.events ?? []));
   const assets = dedupLinks(present.flatMap((s) => s.assets ?? []));
   return {
     texts,
+    textsHtml,
     links,
     events,
     assets,

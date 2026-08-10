@@ -145,8 +145,37 @@ describe("partials", () => {
   });
 });
 
+describe("контролируемый HTML ({{& path }})", () => {
+  // Единственный канал разметки, доступный ВНУТРИ `{{#each}}`: `data-slot` адресуется по
+  // имени и повторяющемуся узлу не годится, а именно там печатаются толкования уровней и
+  // тексты рекомендаций, которым автор задал формат «Форматированный» или «HTML».
+  it("вставляет значение как разметку, а не как текст", () => {
+    expect(renderTemplate("{{& body }}", { body: "<b>жирно</b>" })).toBe("<b>жирно</b>");
+  });
+
+  it("обычная интерполяция того же значения по-прежнему экранирует", () => {
+    expect(renderTemplate("{{ body }}", { body: "<b>жирно</b>" })).toBe("&lt;b&gt;жирно&lt;/b&gt;");
+  });
+
+  it("работает внутри цикла и видит поле элемента", () => {
+    const out = renderTemplate("{{#each items}}<p>{{& html }}</p>{{/each}}", {
+      items: [{ html: "<em>раз</em>" }, { html: "<em>два</em>" }],
+    });
+    expect(out).toBe("<p><em>раз</em></p><p><em>два</em></p>");
+  });
+
+  it("отсутствующее значение печатается пустотой, а не словом undefined", () => {
+    expect(renderTemplate("{{& nope }}", {})).toBe("");
+  });
+
+  it("выражений не допускает, как и обычная интерполяция", () => {
+    expect(() => renderTemplate("{{& a b }}", {})).toThrow(/not supported/i);
+  });
+});
+
 describe("parse errors (host falls back, spec §8.2.1.3)", () => {
   it("rejects raw triple-brace interpolation", () => {
+    // Тройные скобки остаются запрещёнными: у контролируемого HTML один явный вид записи.
     expect(() => renderTemplate("{{{ html }}}", {})).toThrow(/not supported/i);
   });
 

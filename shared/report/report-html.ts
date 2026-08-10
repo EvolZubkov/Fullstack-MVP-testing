@@ -55,6 +55,13 @@ export interface ReportMeta {
    * Отсутствие = «неизвестно», и неизвестность трактуется в пользу показа.
    */
   hasPassThreshold?: boolean;
+  /**
+   * Вводный блок ОТЧЁТА (`tests.intro_json.report`) — текст и его формат.
+   *
+   * Отдельный от текста экрана: документ уносят с собой и показывают специалисту, поэтому
+   * вводное слово у него своё. Отсутствие = блока в отчёте нет.
+   */
+  intro?: { text?: string | null; format?: "plain" | "richText" | "html" | null } | null;
 }
 
 /** Standard-mode report input — the SAME normalized result the results screen takes. */

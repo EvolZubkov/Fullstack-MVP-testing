@@ -53,11 +53,14 @@ export interface ReportBlock {
    * разрешает их в data-URL — ядро не знает ни имён этих полей, ни их файлов.
    */
   values: Record<string, unknown>;
-  /** Заголовок отчёта: «Тест пройден» / «Тест не пройден». */
+  /**
+   * Заголовок отчёта: «Тест пройден» / «Тест не пройден», а у теста, который ничего не
+   * оценивает, — «Результаты теста» (PRD-29 §6.7).
+   */
   verdictHeadline: string;
-  /** Подпись бейджа вердикта — строчными, как в отчёте. */
+  /** Подпись бейджа вердикта — строчными, как в отчёте. ПУСТА, когда вердикта нет. */
   verdictBadge: string;
-  /** Класс вердикта для CSS отчёта: `is-pass` / `is-fail`. */
+  /** Класс вердикта для CSS отчёта: `is-pass` / `is-fail`; пуст, когда вердикта нет. */
   verdictClass: string;
   /** Гейт блока тем. */
   hasTopics: boolean;
@@ -219,6 +222,8 @@ export function buildReportContext(input: ReportInput, opts: ReportContextOption
     ...(input.feedback ? { testFeedback: input.feedback } : {}),
     ...(input.hasPassThreshold !== undefined ? { hasPassThreshold: input.hasPassThreshold } : {}),
     ...(opts.measures ? { measures: opts.measures } : {}),
+    // Вводный блок ОТЧЁТА: у экрана свой текст, и подменять один другим нельзя.
+    ...(input.intro ? { intro: input.intro } : {}),
   });
   // ТЕ ЖЕ темы, что оставил экранный сборщик (`topicHasContent`), и по той же причине:
   // §5.2 — отчёт не вправе показать иное, чем экран, с которого его скачали, а тема без
@@ -234,10 +239,22 @@ export function buildReportContext(input: ReportInput, opts: ReportContextOption
   const circumference = 2 * Math.PI * REPORT_RING_RADIUS;
   const rec = unmasteredRecommendations(topics);
 
+  // ЕСТЬ ЛИ ВЕРДИКТ — вопрос, на который отвечает общий построитель (PRD-29 §6.7: порог
+  // задан И есть что оценивать), и отчёт лишь читает его ответ. Своего расчёта здесь нет
+  // намеренно: две копии правила — это две шапки, и отчёт объявлял бы «Тест пройден» там,
+  // где экран, с которого документ скачали, не утверждает о слушателе ничего (§5.2).
+  // Признаком служит погашенная экраном метка: измерительный опросник несёт порог 70 % по
+  // умолчанию и нулевые баллы, поэтому печатал зелёное «Тест пройден» над сводкой «0 из 0».
+  const hasVerdict = base.result.statusLabel !== "";
   const report = reportBlock(input, topics.length, opts);
-  report.verdictHeadline = passed ? "Тест пройден" : "Тест не пройден";
-  report.verdictBadge = passed ? "пройден" : "не пройден";
-  report.verdictClass = passed ? "is-pass" : "is-fail";
+  // Шапка не пустеет: у документа над ней нет заголовка теста, который есть у экрана.
+  // Формулировка не новая — её уже печатает адаптивный отчёт, где вердикта нет по природе
+  // режима, поэтому два вида документа сходятся на одном слове.
+  report.verdictHeadline = !hasVerdict ? "Результаты теста" : passed ? "Тест пройден" : "Тест не пройден";
+  // Бейдж и класс гасятся ПОЛНОСТЬЮ, а не заменяются нейтральным значением: плашка несёт
+  // цвет вердикта, и любой из двух цветов был бы утверждением. Макет гейтит их на пустоте.
+  report.verdictBadge = !hasVerdict ? "" : passed ? "пройден" : "не пройден";
+  report.verdictClass = !hasVerdict ? "" : passed ? "is-pass" : "is-fail";
   report.correctLabel = `${input.result.correct}/${input.result.totalQuestions}`;
   report.earnedPointsLabel = fixed1(input.result.earnedPoints);
   report.ringDasharray = circumference;
@@ -299,6 +316,7 @@ export function buildAdaptiveReportContext(
   // нечего сказать.
   const base = buildAdaptiveResultContext(input.result, input.testName || "", {
     ...(input.feedback ? { testFeedback: input.feedback } : {}),
+    ...(input.intro ? { intro: input.intro } : {}),
     // issue #33: измерения печатаются и в адаптивном отчёте — тем же блоком и из того же
     // сборщика, что на экране, с которого документ скачали (§5.2). Радар у отчёта СВОЙ
     // переключатель (поле варианта отчёта), и он уже подмешан в `opts.measures` хостом,
