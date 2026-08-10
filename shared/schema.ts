@@ -417,9 +417,30 @@ export const reportModeSettingsSchema = z.object({
  * не терялась (§4.1). Отсутствие ветки = вариант с `isDefault` активного шаблона.
  */
 export const reportSettingsSchema = z.object({
+  /**
+   * Выдавать ли отчёт обучающемуся. Настройка ОБЩАЯ, вне ветвей режима: документ либо
+   * положен слушателю этого теста, либо нет, и от режима выдачи это не зависит.
+   *
+   * Отсутствие = выдавать. До этой настройки отчёт был доступен всегда (`canReport: true`
+   * прямо в маршруте результата), и умолчание сохраняет поведение каждого уже
+   * существующего теста.
+   */
+  enabled: z.boolean().optional(),
   standard: reportModeSettingsSchema.nullish(),
   adaptive: reportModeSettingsSchema.nullish(),
 });
+
+/**
+ * Положен ли отчёт обучающемуся по настройкам теста.
+ *
+ * Одно правило на оба хоста и на все места, где спрашивают: маршрут результата, сборка
+ * пакета, предпросмотр. Отдельная функция, а не сравнение с `true` на каждом вызове, —
+ * потому что «поле отсутствует» и «поле включено» здесь означают одно и то же, и забыть об
+ * этом в одном из мест значило бы отнять отчёт у половины уже существующих тестов.
+ */
+export function isReportEnabled(settings: ReportSettings | null | undefined): boolean {
+  return settings?.enabled !== false;
+}
 
 export type ReportModeSettings = z.infer<typeof reportModeSettingsSchema>;
 export type ReportSettings = z.infer<typeof reportSettingsSchema>;
@@ -502,6 +523,12 @@ export const tests = pgTable("tests", {
   // «Настройки», и один черновик связал бы две вкладки порядком сохранения (§4.2).
   // NULL = автор ничего не выбирал: берётся вариант с `isDefault`.
   reportSettingsJson: jsonb("report_settings_json").$type<ReportSettings>(),
+  /**
+   * Вводные блоки экрана итогов и отчёта (см. {@link testIntroSchema}). Своя колонка, а не
+   * ветвь `report_settings_json`: текст экрана к настройкам отчёта отношения не имеет, и
+   * складывать их вместе значило бы связать два независимых черновика редактора.
+   */
+  introJson: jsonb("intro_json").$type<TestIntro>(),
 }, (table) => ({
   // Test lists filter by lifecycle status (draft/published/archived).
   statusIdx: index("tests_status_idx").on(table.status),
@@ -977,6 +1004,54 @@ export const feedbackContentSchema = z.object({
   assets: z.array(feedbackAssetSchema).default([]),
   events: z.array(feedbackEventSchema).default([]),
 });
+
+/**
+ * ВВОДНЫЙ ТЕКСТ — блок, который идёт ПЕРВЫМ, до всего остального: до сводки баллов, до тем,
+ * до измерений и рекомендаций. Объясняет слушателю, что он сейчас читает.
+ *
+ * Формат тот же, что у обратной связи (`plain` / `richText` / `html`), и разметку из него
+ * строит тот же {@link module:shared/template/rich-text richTextToHtml}: автор пишет эти
+ * тексты в одном редакторе и вправе ожидать одинакового поведения.
+ *
+ * Пустой текст = блока нет. Гейт стоит именно на тексте, а не на наличии записи: автор,
+ * стерший текст, ожидает, что блок исчезнет, а не станет пустой рамкой.
+ */
+export const introBlockSchema = z.object({
+  format: feedbackFormatSchema.default("plain"),
+  text: z.string().default(""),
+});
+
+/**
+ * `tests.intro_json`. Экран итогов и отчёт — РАЗНЫЕ адресаты: экран читают сразу и бегло,
+ * отчёт уносят с собой и показывают специалисту, поэтому тексты хранятся раздельно и
+ * задаются независимо. Отсутствие ветви = вводного блока в этой выдаче нет.
+ */
+export const testIntroSchema = z.object({
+  results: introBlockSchema.nullish(),
+  report: introBlockSchema.nullish(),
+  /**
+   * Печатать в отчёте ТОТ ЖЕ текст, что на экране итогов.
+   *
+   * Не копия при сохранении, а ссылка: автор правит вводное слово в одном месте, и обе
+   * выдачи меняются вместе. Скопировать текст в обе ветви значило бы завести вторую
+   * редакцию, которая молча разойдётся с первой при следующей правке.
+   *
+   * Собственный текст отчёта при этом НЕ стирается — он просто не используется, пока
+   * переключатель включён, и возвращается, стоит его выключить.
+   */
+  reportSameAsResults: z.boolean().optional(),
+});
+
+export type IntroBlock = z.infer<typeof introBlockSchema>;
+export type TestIntro = z.infer<typeof testIntroSchema>;
+
+/**
+ * Вводный блок ОТЧЁТА с учётом переключателя «как на экране итогов».
+ *
+ * Реэкспорт: само правило живёт в чистом `shared/report/report-intro`, потому что тот же
+ * ответ нужен ВНУТРИ SCORM-пакета, а схему туда не затащить — она тянет drizzle и zod.
+ */
+export { resolveReportIntro } from "./report/report-intro";
 
 export type FeedbackFormat = z.infer<typeof feedbackFormatSchema>;
 export type FeedbackLink = z.infer<typeof feedbackLinkSchema>;
