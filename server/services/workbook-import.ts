@@ -117,11 +117,11 @@ function unitCountOfQuestion(q: { type: string; dataJson: unknown }): number {
  *
  * The router branch alone (a book naming «Политика завершения маршрутизатора» without a
  * scenario) rides on the CURRENT mode. On a router test the named parameter is applied. On
- * a LINEAR one it is DROPPED with the rest of the branch — and that is the right outcome,
- * not an oversight: a linear test has no router page, so the policy has nothing to govern,
- * and storing it would leave dead JSON to be resurrected by a later scenario switch. The
- * drop is silent because it changes nothing an author or a learner can observe; either way
- * the scenario itself stays as it was.
+ * a LINEAR one it is DROPPED — and that is the right outcome, not an oversight: a linear
+ * test has no router page, so the policy has nothing to govern, and storing it would leave
+ * dead JSON to be resurrected by a later scenario switch. Note what the drop still costs:
+ * the branch returns `{ mode, router: null }`, so the save DOES run and clears whatever
+ * router JSON the test carried. The scenario itself is never changed by this branch.
  */
 function buildFlowPatch(draft: SettingsDraft, current: Test | undefined): Record<string, unknown> {
   const cur = (current?.flowPolicyJson ?? {}) as { mode?: unknown; router?: unknown };
