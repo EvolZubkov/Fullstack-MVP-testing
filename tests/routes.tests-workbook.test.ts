@@ -1573,6 +1573,146 @@ describe("POST /:id/workbook/import — заголовочная «Структ�
   });
 });
 
+// ─── PRD-48 FR-12/FR-13: загрузка обратной связи и рекомендаций ──────────────
+// Владелец, названный на листе «Обратная связь», получает обратную связь ЦЕЛИКОМ
+// из книги: текст и формат из своей строки, курсы/материалы/мероприятия — из строк
+// «Рекомендаций» с тем же владельцем. Не названный не меняется вовсе.
+
+describe("POST /:id/workbook/import — обратная связь и рекомендации", () => {
+  const structureRows = [{ "Раздел": "JavaScript", "Порядок": 1, "Вопросов в выборке": 2 }];
+
+  it("применяет обратную связь тесту и разделу вместе с рекомендациями", async () => {
+    const buf = await makeWorkbook({
+      "Структура": structureRows,
+      "Обратная связь": [
+        { "Уровень": "Тест", "Раздел": "", "Формат": "Простой", "Текст": "Общий отзыв" },
+        { "Уровень": "Раздел", "Раздел": "JavaScript", "Формат": "HTML", "Текст": "<b>Отзыв темы</b>" },
+      ],
+      "Рекомендации": [
+        { "Уровень": "Тест", "Раздел": "", "Тип": "Курс", "Заголовок": "Курс", "Ссылка": "https://example.test/c" },
+        { "Уровень": "Тест", "Раздел": "", "Тип": "Материал", "Заголовок": "Памятка", "Ссылка": "https://example.test/m.pdf" },
+        { "Уровень": "Тест", "Раздел": "", "Тип": "Мероприятие", "Заголовок": "Вебинар", "Ссылка": "" },
+        { "Уровень": "Раздел", "Раздел": "JavaScript", "Тип": "Курс", "Заголовок": "Курс темы", "Ссылка": "https://example.test/t" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    const payload = testSettingsMock.save.mock.calls[0][1] as any;
+    expect(payload.test.feedbackJson).toEqual({
+      format: "plain",
+      text: "Общий отзыв",
+      links: [{ title: "Курс", url: "https://example.test/c" }],
+      assets: [{ title: "Памятка", url: "https://example.test/m.pdf" }],
+      events: [{ title: "Вебинар", url: "" }],
+    });
+    expect(payload.sections[0].feedbackJson).toEqual({
+      format: "html",
+      text: "<b>Отзыв темы</b>",
+      links: [{ title: "Курс темы", url: "https://example.test/t" }],
+      assets: [],
+      events: [],
+    });
+  });
+
+  // Книга Э1 листов не несёт — и обратной связи не касается ни у кого.
+  it("книга без листа «Обратная связь» обратную связь не трогает", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [{ "Параметр": "Лимит времени теста", "Значение": "45" }],
+      "Структура": structureRows,
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    const payload = testSettingsMock.save.mock.calls[0][1] as any;
+    expect(payload.test).not.toHaveProperty("feedbackJson");
+    expect(payload.sections[0]).not.toHaveProperty("feedbackJson");
+  });
+
+  // Пустой текст при пустых рекомендациях — это «обратной связи нет», а не пустая
+  // структура: иначе экран итогов нарисовал бы пустую рамку.
+  it("владелец с пустым текстом и без рекомендаций получает null", async () => {
+    const buf = await makeWorkbook({
+      "Обратная связь": [{ "Уровень": "Тест", "Раздел": "", "Формат": "Простой", "Текст": "" }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    const payload = testSettingsMock.save.mock.calls[0][1] as any;
+    expect(payload.test.feedbackJson).toBeNull();
+  });
+
+  // Выгрузка пишет оба листа ВСЕГДА — у теста без обратной связи одними заголовками.
+  // Такая книга не называет ни одного владельца, а значит и сохранять ей нечего.
+  it("заголовочные листы никого не называют и сохранения не вызывают", async () => {
+    const wb = new ExcelJS.Workbook();
+    wb.addWorksheet("Обратная связь").addRow(["Уровень", "Раздел", "Формат", "Текст"]);
+    wb.addWorksheet("Рекомендации").addRow(["Уровень", "Раздел", "Тип", "Заголовок", "Ссылка"]);
+    const res = await postWorkbook(await workbookToBuffer(wb));
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(testSettingsMock.save).not.toHaveBeenCalled();
+  });
+
+  // Рекомендации физически лежат ВНУТРИ обратной связи владельца, поэтому владельца,
+  // которого нет на первом листе, у рекомендации быть не может.
+  it("рекомендация-сирота даёт ошибку строки, остальные строки применяются", async () => {
+    const buf = await makeWorkbook({
+      "Структура": structureRows,
+      "Обратная связь": [{ "Уровень": "Тест", "Раздел": "", "Формат": "Простой", "Текст": "Общий отзыв" }],
+      "Рекомендации": [
+        { "Уровень": "Раздел", "Раздел": "Право", "Тип": "Курс", "Заголовок": "Курс права", "Ссылка": "https://example.test/law" },
+        { "Уровень": "Тест", "Раздел": "", "Тип": "Курс", "Заголовок": "Курс", "Ссылка": "https://example.test/c" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors.some((e: string) => /Право/.test(e))).toBe(true);
+    const payload = testSettingsMock.save.mock.calls[0][1] as any;
+    expect(payload.test.feedbackJson).toMatchObject({
+      text: "Общий отзыв",
+      links: [{ title: "Курс", url: "https://example.test/c" }],
+    });
+  });
+
+  // Иначе обратная связь раздела ушла бы в пустоту: разделов с таким именем в тесте нет.
+  it("раздел не с листа «Структура» даёт ошибку строки", async () => {
+    const buf = await makeWorkbook({
+      "Структура": structureRows,
+      "Обратная связь": [
+        { "Уровень": "Раздел", "Раздел": "Право", "Формат": "Простой", "Текст": "Отзыв права" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors.some((e: string) => /Право/.test(e))).toBe(true);
+  });
+
+  // Книга без «Структуры» разделы не переписывает — применить обратную связь разделу
+  // в ней нечему, зато обратная связь ТЕСТА обязана примениться.
+  it("без листа «Структура» обратная связь теста применяется, а раздела — ошибка", async () => {
+    const buf = await makeWorkbook({
+      "Обратная связь": [
+        { "Уровень": "Тест", "Раздел": "", "Формат": "Простой", "Текст": "Общий отзыв" },
+        { "Уровень": "Раздел", "Раздел": "JavaScript", "Формат": "Простой", "Текст": "Отзыв темы" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors.some((e: string) => /JavaScript/.test(e) && /Структура/.test(e))).toBe(true);
+    const payload = testSettingsMock.save.mock.calls[0][1] as any;
+    expect(payload.test.feedbackJson).toMatchObject({ text: "Общий отзыв" });
+    expect(payload).not.toHaveProperty("sections");
+  });
+});
+
 // ─── PRD-48 FR-11: правила разблокировки разделов ────────────────────────────
 // Правила ключуются ИДЕНТИФИКАТОРАМИ ТЕМ (`isSectionUnlocked` читает
 // `unlockRules[section.topicId]`), поэтому книга адресует их именами тем:

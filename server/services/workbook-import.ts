@@ -3,7 +3,8 @@
  *
  * Multi-sheet workbook import for ONE test (PRD-14 FR-15). Role sheets —
  * «Вопросы» / «Шкалы» / «Показатели» / «Вклады вопросов» / «Оценка» /
- * «Структура» / «Квоты» — are recognized by name; missing sheets are skipped.
+ * «Структура» / «Квоты» / «Обратная связь» / «Рекомендации» — are recognized by name;
+ * missing sheets are skipped.
  * Questions are global; everything else is written into the target `testId`.
  *
  * Multi-pass order (FR-15.7): questions first (фиксируем `ID`↔`Ключ строки`),
@@ -59,8 +60,12 @@ import {
   parseVariantThresholdRow,
   parseScoringOverrideRow,
   variantsColumnOf,
+  parseFeedbackSheets,
+  FEEDBACK_SHEET_NAME,
+  RECOMMENDATION_SHEET_NAME,
   type ParsedQuota,
   type SettingsDraft,
+  type ParsedFeedbackSheets,
 } from "../utils/workbook-sheets";
 
 export interface WorkbookImportResult {
@@ -293,6 +298,33 @@ export async function importWorkbook(
     // PRD-48 §4.1: «Название из книги в этом случае игнорируется без ошибки» — no error
     // and no warning, so the author who typed the title sees nothing to act upon.
     if (keepTitle) delete settingsDraft.test.title;
+  }
+
+  // ── «Обратная связь» + «Рекомендации» (PRD-48 FR-12/FR-13) ──────────────────
+  // Read HERE, next to «Настройки», and applied later: the test's feedback rides into
+  // the same patch as every other column of the `tests` row, and a section's is a field
+  // of its {@link SectionPayload} — it can only be filled where the sections are built.
+  //
+  // «Рекомендации» without «Обратная связь» is refused whole: a recommendation lives
+  // INSIDE its owner's feedback, so with no owner named there is nothing to attach it
+  // to, and reporting it once beats repeating the same line for every row.
+  const feedbackSheet = findSheet(workbook, FEEDBACK_SHEET_NAME);
+  const recommendationSheet = findSheet(workbook, RECOMMENDATION_SHEET_NAME);
+  let feedback: ParsedFeedbackSheets | undefined;
+  if (feedbackSheet) {
+    feedback = parseFeedbackSheets(
+      sheetToObjects(feedbackSheet),
+      recommendationSheet ? sheetToObjects(recommendationSheet) : [],
+    );
+    result.errors.push(...feedback.errors);
+    // `undefined` = the test level was not named, so its feedback is not touched;
+    // `null` = named and empty, which the patch must carry as an explicit erasure.
+    if (feedback.test !== undefined) settingsDraft.test.feedbackJson = feedback.test;
+  } else if (recommendationSheet) {
+    result.errors.push(
+      `Лист «${RECOMMENDATION_SHEET_NAME}» требует листа «${FEEDBACK_SHEET_NAME}» `
+      + "(рекомендации хранятся внутри обратной связи владельца)",
+    );
   }
 
   const questionsSheet = findSheet(workbook, "Вопросы");
@@ -710,6 +742,13 @@ export async function importWorkbook(
 
   /** Sections the book describes; empty when it describes none (see the save below). */
   let sections: SectionPayload[] = [];
+  /**
+   * Topic keys «Структура» actually claimed. Declared out here because the orphan
+   * checks of «Квоты» and «Обратная связь» both consult it, and the second one has to
+   * run even when there is NO «Структура» sheet at all — a book naming a section's
+   * feedback without describing the sections has nowhere to put it.
+   */
+  const usedTopicKeys = new Set<string>();
 
   if (quotasSheet && !structureSheet) {
     result.errors.push('Лист «Квоты» требует листа «Структура» (квоты привязаны к разделам)');
@@ -742,7 +781,6 @@ export async function importWorkbook(
 
     const structRows = sheetToObjects(structureSheet);
     const pending: Array<{ order: number; payload: SectionPayload }> = [];
-    const usedTopicKeys = new Set<string>();
     // PRD-48 FR-11: unlock rules by topic NAME for now — the ids the rules are keyed by
     // are known only once every row has resolved its topic.
     const unlockByTopicKey = new Map<string, { mode: string; dependsOn: string[] }>();
@@ -821,6 +859,10 @@ export async function importWorkbook(
           defaultPoints: sec.defaultPoints,
           drawBlueprintJson: strata.length ? { strata } : null,
           formSetJson,
+          // PRD-48 FR-12: the key is set ONLY for a section the «Обратная связь» sheet
+          // names. A section it does not name keeps the field absent, so a book without
+          // the sheet says nothing about feedback at all.
+          ...(feedback?.byTopic.has(key) ? { feedbackJson: feedback.byTopic.get(key) } : {}),
         },
       });
       result.structure.quotas += strata.length;
@@ -936,6 +978,23 @@ export async function importWorkbook(
     pending.sort((a, b) => a.order - b.order);
     sections = pending.map((p) => p.payload);
     result.structure.sections = sections.length;
+  }
+
+  // ── Sections named by «Обратная связь» that no section of this run claimed ───
+  // Silently dropping such a row would send the feedback into the void — the author
+  // wrote it for a section the target test will not have. The two cases are told apart
+  // because the fix differs: with «Структура» present the name is wrong, without it the
+  // book cannot rewrite sections at all (the test's own feedback still applies).
+  if (feedback) {
+    for (const [key, name] of feedback.topicNames) {
+      if (usedTopicKeys.has(key)) continue;
+      result.errors.push(
+        structureSheet
+          ? `Лист «${FEEDBACK_SHEET_NAME}»: раздел "${name}" не найден на листе «Структура»`
+          : `Лист «${FEEDBACK_SHEET_NAME}»: раздел "${name}" — обратную связь раздела `
+            + "можно применить только вместе с листом «Структура»",
+      );
+    }
   }
 
   // ── ONE save for the settings and the structure ─────────────────────────────
