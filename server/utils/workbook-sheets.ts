@@ -659,72 +659,20 @@ export const STRUCTURE_WIDTHS = [28, 10, 20, 16, 10, 14, 26];
 export const QUOTA_HEADERS = ["Раздел", "Тег", "Количество", "Режим"];
 export const QUOTA_WIDTHS = [28, 24, 14, 14];
 
-/**
- * Canonical «Настройки» headers (PRD-30 FR-22). The sheet is a key/value list,
- * not a table of columns: it carries settings OF THE TEST, of which there is one
- * of each, and a new setting must not widen a row every author already has.
- */
-export const SETTINGS_HEADERS = ["Параметр", "Значение"];
-export const SETTINGS_WIDTHS = [34, 30];
-
-/** Test-level settings the workbook transfers. */
-export interface ParsedTestSettings {
-  /** PRD-30 FR-16: test-wide delivery order; absent = `random` (the default). */
-  questionOrder?: "fixed" | "random" | "shuffle_all";
-}
-
-/** «Порядок выдачи вопросов» — the parameter name on the sheet. */
-const SETTING_QUESTION_ORDER = "Порядок выдачи вопросов";
-
-/** Cell ↔ stored value. Labels match the editor's Select verbatim (FR-16). */
-const TEST_ORDER_FROM: Record<string, "fixed" | "random" | "shuffle_all"> = {
-  "фиксированный порядок": "fixed",
-  "перемешивание": "random",
-  "полное перемешивание": "shuffle_all",
-};
-const TEST_ORDER_TO: Record<"fixed" | "random" | "shuffle_all", string> = {
-  fixed: "Фиксированный порядок",
-  random: "Перемешивание",
-  shuffle_all: "Полное перемешивание",
-};
-
-/**
- * Parse one «Настройки» row. An empty value means «оставить как есть» — the
- * import must not silently reset a setting the author cleared out of the cell.
- */
-export function parseSettingsRow(row: Record<string, unknown>): ParseResult<ParsedTestSettings> {
-  const name = String(row["Параметр"] ?? "").replace(/[\s ​﻿]+/g, " ").trim();
-  if (!name) return { ok: false, error: "не указан «Параметр»" };
-  const raw = String(row["Значение"] ?? "").trim();
-
-  if (name.toLowerCase() === SETTING_QUESTION_ORDER.toLowerCase()) {
-    if (raw === "") return { ok: true, value: {} };
-    const order = TEST_ORDER_FROM[raw.toLowerCase()];
-    if (!order) return { ok: false, error: `неизвестное значение «${SETTING_QUESTION_ORDER}»: "${raw}"` };
-    return { ok: true, value: { questionOrder: order } };
-  }
-
-  return { ok: false, error: `неизвестный параметр: "${name}"` };
-}
-
-/** Values offered for «Порядок выдачи вопросов» (template dropdown). */
-export const TEST_ORDER_CHOICES = [
-  TEST_ORDER_TO.fixed,
-  TEST_ORDER_TO.random,
-  TEST_ORDER_TO.shuffle_all,
-];
-
-/** Serialize the test's settings to «Настройки» rows (export). */
-export function serializeSettingsRows(test: {
-  questionOrder?: "fixed" | "random" | "shuffle_all" | null;
-}): Record<string, unknown>[] {
-  return [
-    {
-      "Параметр": SETTING_QUESTION_ORDER,
-      "Значение": TEST_ORDER_TO[test.questionOrder ?? "random"],
-    },
-  ];
-}
+// ─── «Настройки» (PRD-48 §4.1) ────────────────────────────────────────────────
+// The sheet's contract lives in its own module: it grew from one parameter into a
+// registry of forty, and keeping it here would drown the other eight sheets in it.
+export {
+  SETTINGS_HEADERS,
+  SETTINGS_WIDTHS,
+  SETTING_PARAM_NAMES,
+  SETTING_PARAMS,
+  emptySettingsDraft,
+  parseSettingsSheet,
+  serializeSettingsRows,
+  type SettingsDraft,
+  type SettingsSource,
+} from "./workbook-settings";
 
 /** «Тип порога» cell → the editor's `topicPassRuleJson` shape (PRD-7). */
 const PASS_TYPE_FROM: Record<string, "percent" | "absolute"> = {

@@ -65,7 +65,7 @@ import {
   STRUCTURE_PASS_TYPE_CHOICES,
   SETTINGS_HEADERS,
   SETTINGS_WIDTHS,
-  TEST_ORDER_CHOICES,
+  SETTING_PARAM_NAMES,
 } from "../utils/workbook-sheets";
 
 /** Canonical role-sheet names (must match the importer/exporter). */
@@ -175,8 +175,11 @@ const VALIDATED_COLUMNS: Record<string, Record<string, string[]>> = {
     "Следование вариантов ответов": SHUFFLE_CHOICES,
     "Режим ОС": FEEDBACK_MODE_CHOICES,
   },
+  // The «Значение» column gets NO dropdown: every parameter has its own range of
+  // values, and one list for the whole column would offer «Перемешивание» where a
+  // «Да» is expected.
   [SHEET_SETTINGS]: {
-    "Значение": TEST_ORDER_CHOICES,
+    "Параметр": SETTING_PARAM_NAMES,
   },
   [SHEET_STRUCTURE]: {
     "Тип порога": STRUCTURE_PASS_TYPE_CHOICES,

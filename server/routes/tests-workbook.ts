@@ -210,10 +210,25 @@ router.get(
         .filter((o) => aliasByQuestionId.has(o.questionId))
         .map((o) => serializeScoringOverrideRow(o, aliasByQuestionId.get(o.questionId)!));
 
+      // «Папка» of the settings sheet — the path from the root, walked up the parents.
+      const folders = await storage.getTestFolders();
+      const folderById = new Map(folders.map((f) => [f.id, f]));
+      const folderPath = (() => {
+        const parts: string[] = [];
+        let cur = test.folderId ? folderById.get(test.folderId) : undefined;
+        const guard = new Set<string>();
+        while (cur && !guard.has(cur.id)) {
+          guard.add(cur.id);
+          parts.unshift(cur.name);
+          cur = cur.parentId ? folderById.get(cur.parentId) : undefined;
+        }
+        return parts.join(" / ");
+      })();
+
       const wb = new ExcelJS.Workbook();
       // PRD-30 FR-22: настройки САМОГО теста идут первым листом: они
       // описывают всю книгу, а остальные листы — её содержимое.
-      addSheet(wb, "Настройки", serializeSettingsRows(test), SETTINGS_HEADERS, SETTINGS_WIDTHS);
+      addSheet(wb, "Настройки", serializeSettingsRows({ ...test, folderPath }), SETTINGS_HEADERS, SETTINGS_WIDTHS);
       addSheet(wb, "Вопросы", questionRows, ["Ключ строки", ...QUESTION_HEADERS, VARIANTS_COLUMN], [12, ...QUESTION_WIDTHS, 25]);
       addSheet(wb, "Структура", structureRows, STRUCTURE_HEADERS, STRUCTURE_WIDTHS);
       addSheet(wb, "Квоты", quotaRows, QUOTA_HEADERS, QUOTA_WIDTHS);

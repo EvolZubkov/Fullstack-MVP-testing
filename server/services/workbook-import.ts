@@ -33,6 +33,7 @@ import {
   type QuestionScoring,
   type InsertTestQuestionScoring,
   type FormSet,
+  type Test,
 } from "@shared/schema";
 import { buildFormSet, parseVariantNumbers, type VariantMembership } from "@shared/draw/forms";
 import { randomUUID } from "crypto";
@@ -50,14 +51,15 @@ import {
   parseResultVariableRow,
   parseMeasurementRow,
   validateSourceKey,
-  parseSettingsRow,
+  parseSettingsSheet,
+  emptySettingsDraft,
   parseStructureRow,
   parseQuotaRow,
   parseVariantThresholdRow,
   parseScoringOverrideRow,
   variantsColumnOf,
   type ParsedQuota,
-  type ParsedTestSettings,
+  type SettingsDraft,
 } from "../utils/workbook-sheets";
 
 export interface WorkbookImportResult {
@@ -101,6 +103,53 @@ function unitCountOfQuestion(q: { type: string; dataJson: unknown }): number {
   return d.items?.length ?? 0;
 }
 
+/**
+ * Patch for the `tests` row built from the «Настройки» draft.
+ *
+ * JSON columns are merged OVER the current value rather than rebuilt from scratch: a
+ * «Период охлаждения» row without a «Разделять период» row would otherwise wipe the half
+ * of the policy the book never mentioned (FR-20).
+ */
+function buildTestPatch(draft: SettingsDraft, current: Test | undefined): Record<string, unknown> {
+  const patch: Record<string, unknown> = { ...draft.test };
+
+  if (Object.keys(draft.overall).length > 0) {
+    patch.overallPassRuleJson = { ...(current?.overallPassRuleJson as object ?? {}), ...draft.overall };
+  }
+
+  const hasRetake = [draft.retake, draft.attemptInterval, draft.plugin].some(
+    (b) => Object.keys(b).length > 0,
+  );
+  if (hasRetake) {
+    const cur = (current?.retakePolicyJson ?? {}) as Record<string, unknown>;
+    const retake: Record<string, unknown> = { ...cur, ...draft.retake };
+    if (Object.keys(draft.attemptInterval).length > 0) {
+      retake.attemptInterval = { ...(cur.attemptInterval as object ?? {}), ...draft.attemptInterval };
+    }
+    if (Object.keys(draft.plugin).length > 0) {
+      retake.eligibilityPlugin = { ...(cur.eligibilityPlugin as object ?? {}), ...draft.plugin };
+    }
+    patch.retakePolicyJson = retake;
+  }
+
+  const hasIntro = [draft.introResults, draft.introReport, draft.introRoot].some(
+    (b) => Object.keys(b).length > 0,
+  );
+  if (hasIntro) {
+    const cur = (current?.introJson ?? {}) as Record<string, unknown>;
+    const intro: Record<string, unknown> = { ...cur, ...draft.introRoot };
+    if (Object.keys(draft.introResults).length > 0) {
+      intro.results = { format: "plain", text: "", ...(cur.results as object ?? {}), ...draft.introResults };
+    }
+    if (Object.keys(draft.introReport).length > 0) {
+      intro.report = { format: "plain", text: "", ...(cur.report as object ?? {}), ...draft.introReport };
+    }
+    patch.introJson = intro;
+  }
+
+  return patch;
+}
+
 export async function importWorkbook(
   testId: string,
   workbook: ExcelJS.Workbook,
@@ -127,22 +176,16 @@ export async function importWorkbook(
   // PRD-17 (FR-13): per-topic variant memberships from the «Варианты» column —
   // each topic's distinct labels become its section's variants (built in Pass 6).
   const membershipByTopic = new Map<string, VariantMembership[]>();
-  // ── «Настройки» (PRD-30 FR-22): settings OF THE TEST, read before anything
-  // else so the structure pass can save them together with the sections. A book
-  // without the sheet changes nothing about the test — that is what a workbook
-  // exported before the sheet existed has to keep meaning.
-  const testSettings: ParsedTestSettings = {};
+  // ── «Настройки» (PRD-48 §4.1): settings OF THE TEST, read before anything else so
+  // the structure pass can save them together with the sections. A book without the
+  // sheet changes nothing — that is what a book exported before a parameter existed
+  // has to keep meaning.
+  let settingsDraft: SettingsDraft = emptySettingsDraft();
   const settingsSheet = findSheet(workbook, "Настройки");
   if (settingsSheet) {
-    const rows = sheetToObjects(settingsSheet);
-    for (let i = 0; i < rows.length; i++) {
-      const parsed = parseSettingsRow(rows[i]);
-      if (!parsed.ok) {
-        result.errors.push(`Лист «Настройки», строка ${i + 2}: ${parsed.error}`);
-        continue;
-      }
-      Object.assign(testSettings, parsed.value);
-    }
+    const parsed = parseSettingsSheet(sheetToObjects(settingsSheet));
+    settingsDraft = parsed.draft;
+    result.errors.push(...parsed.errors);
   }
 
   const questionsSheet = findSheet(workbook, "Вопросы");
@@ -730,26 +773,29 @@ export async function importWorkbook(
         test: {
           flowPolicyJson: { mode: "router_by_topics" },
           status: (current?.status as "draft" | "published" | "archived") ?? "draft",
-          // PRD-30 FR-22: settings from «Настройки»; a key the sheet did not
-          // carry stays absent, and the service leaves that column alone.
-          ...testSettings,
+          // PRD-48 §4.1: settings from «Настройки»; a key the sheet did not carry
+          // stays absent, and the service leaves that column alone.
+          ...buildTestPatch(settingsDraft, current),
         },
         sections,
       });
     }
   }
 
-  // A book may carry «Настройки» WITHOUT «Структура» — settings of an existing
-  // test, edited on their own. Saving them must not require re-sending sections
-  // (the service rewrites sections only when the payload names them).
-  if (!dryRun && !structureSheet && Object.keys(testSettings).length > 0) {
+  // A book may carry «Настройки» WITHOUT «Структура» — settings of an existing test,
+  // edited on their own. Saving them must not require re-sending sections (the service
+  // rewrites sections only when the payload names them).
+  if (!dryRun && !structureSheet) {
     const current = await storage.getTest(testId);
-    await testSettingsService.save(testId, {
-      test: {
-        ...testSettings,
-        status: (current?.status as "draft" | "published" | "archived") ?? "draft",
-      },
-    });
+    const patch = buildTestPatch(settingsDraft, current);
+    if (Object.keys(patch).length > 0) {
+      await testSettingsService.save(testId, {
+        test: {
+          ...patch,
+          status: (current?.status as "draft" | "published" | "archived") ?? "draft",
+        },
+      });
+    }
   }
 
   return result;

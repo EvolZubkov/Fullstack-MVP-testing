@@ -42,6 +42,8 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     getTestSections: vi.fn(),
     getQuestions: vi.fn(),
     getQuestionMeasurements: vi.fn(),
+    // PRD-48 §4.1: «Папка» of the settings sheet is resolved from the folder tree.
+    getTestFolders: vi.fn().mockResolvedValue([]),
     // PRD-15 block D: «Оценка» sheet (per-test scoring overrides).
     getTestQuestionScoring: vi.fn().mockResolvedValue([]),
     replaceTestQuestionScoring: vi.fn().mockResolvedValue([]),
@@ -117,6 +119,7 @@ beforeEach(() => {
   storageMock.upsertQuestionMeasurements.mockResolvedValue([]);
   storageMock.getTestQuestionScoring.mockResolvedValue([]);
   storageMock.replaceTestQuestionScoring.mockResolvedValue([]);
+  storageMock.getTestFolders.mockResolvedValue([]);
   testSettingsMock.save.mockResolvedValue({ id: "test-1" });
 });
 
