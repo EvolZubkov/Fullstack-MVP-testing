@@ -2210,13 +2210,6 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
           "label": "Оформление шкал",
           "description": "Цвет и пиктограмма каждой шкалы. Читает только роза: на радаре цвет вершины показывает уровень. Цвет доступен, пока ни у одной шкалы не объявлено направление — иначе цвет высказывает вердикт.",
           "default": {}
-        },
-        {
-          "key": "showCompetencyRadar",
-          "type": "boolean",
-          "label": "Радар компетенций (устаревшее)",
-          "description": "Оставлено для тестов, настроенных до появления выбора вида. Читается только когда «Диаграмма по шкалам» не задана.",
-          "default": false
         }
       ],
       "placeholders": []
@@ -2266,14 +2259,6 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
             "declared": "Заданный автором",
             "attempt": "По попытке"
           }
-        },
-        {
-          "key": "showCompetencyRadar",
-          "type": "boolean",
-          "scope": "content",
-          "label": "Радар компетенций (устаревшее)",
-          "description": "Оставлено для тестов, настроенных до появления выбора вида. Читается только когда «Диаграмма по шкалам» не задана.",
-          "default": false
         },
         {
           "key": "backgroundImage",
@@ -2337,14 +2322,6 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
             "declared": "Заданный автором",
             "attempt": "По попытке"
           }
-        },
-        {
-          "key": "showCompetencyRadar",
-          "type": "boolean",
-          "scope": "content",
-          "label": "Радар компетенций (устаревшее)",
-          "description": "Оставлено для тестов, настроенных до появления выбора вида. Читается только когда «Диаграмма по шкалам» не задана.",
-          "default": false
         },
         {
           "key": "backgroundImage",
@@ -6006,6 +5983,7 @@ var TBTemplate = (() => {
     reportTimestamp: () => formatTimestamp,
     resolveContentTemplate: () => resolveContentTemplate,
     resolveOverallRule: () => resolveOverallRule,
+    resolveReportIntro: () => resolveReportIntro,
     resolveSceneTheme: () => resolveSceneTheme,
     resolveStartImageUrl: () => resolveStartImageUrl,
     resolveThemeParams: () => resolveThemeParams,
@@ -7535,7 +7513,19 @@ var TBTemplate = (() => {
           label: "",
           leftPercent: 0,
           widthPercent: 100,
-          color: rampColor(input.ramp, interpretation.valence === "lower_is_better" ? 1 - clamped : clamped),
+          // Цвет полосы решается в два шага, и оба — правило PRD-46 §7.
+          //
+          // 1. Направление объявлено — цвет ВЫСКАЗЫВАЕТ ВЕРДИКТ, поэтому его назначает
+          //    рампа и авторский цвет к полосе не допускается.
+          // 2. Направления нет (типология) — цвет несёт ИДЕНТИЧНОСТЬ шкалы: берётся тот,
+          //    что автор задал в «Оформлении шкал», чтобы полоса совпала с сектором розы.
+          //    Не задан — нейтральная схема, ТА ЖЕ, что у зон линейки ({@link zoneColors}):
+          //    у типологии нет лучшего и худшего уровня, и светофор высказал бы оценку,
+          //    которой методика не выносит.
+          color: interpretation.valence === "none" && input.color ? input.color : rampColor(
+            interpretation.valence === "none" ? LEVEL_SCHEMES.neutral : input.ramp,
+            interpretation.valence === "lower_is_better" ? 1 - clamped : clamped
+          ),
           current: true
         }
       ];
@@ -8119,15 +8109,24 @@ var TBTemplate = (() => {
     };
   }
   function fillMeasureBlocks(result, measures, resolved) {
-    var _a;
+    var _a, _b;
     const { visibleScales, visibleIndicators, blocks } = resolved;
     if (blocks.scales && visibleScales.length) {
-      result.scales = visibleScales.map((m) => buildMeasureView({ ...m, requestedKind: measures.scaleKind, ramp: measures.ramp }));
+      const appearance = parseScaleAppearance((_a = measures.chartSettings) == null ? void 0 : _a.scaleAppearance);
+      result.scales = visibleScales.map((m) => {
+        var _a2;
+        return buildMeasureView({
+          ...m,
+          requestedKind: measures.scaleKind,
+          ramp: measures.ramp,
+          color: (_a2 = appearance[m.key]) == null ? void 0 : _a2.color
+        });
+      });
       result.scalesBlockClass = "tb-measures";
       const chart = buildScalesChart({
         axes: visibleScales,
         ramp: measures.ramp,
-        settings: (_a = measures.chartSettings) != null ? _a : {},
+        settings: (_b = measures.chartSettings) != null ? _b : {},
         ipsative: measures.ipsativeScales === true
       });
       if (chart) {
@@ -10786,6 +10785,14 @@ var TBTemplate = (() => {
       showCompetencyRadar: values.showCompetencyRadar === true
     };
     return { ...screen, chartSettings };
+  }
+
+  // shared/report/report-intro.ts
+  function resolveReportIntro(intro) {
+    var _a;
+    if (!intro) return null;
+    const source = intro.reportSameAsResults ? intro.results : intro.report;
+    return source && String((_a = source.text) != null ? _a : "").trim() ? source : null;
   }
   return __toCommonJS(runtime_entry_exports);
 })();

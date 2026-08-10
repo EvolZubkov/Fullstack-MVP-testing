@@ -39,11 +39,14 @@ function variants(path: string): ContentTemplate[] {
 }
 
 describe.each(Object.entries(TEMPLATES))("манифест «%s»: выбор вида диаграммы", (_name, path) => {
-  it("объявлен там же, где жила галочка радара", () => {
+  it("объявлен там, где раньше жила галочка радара", () => {
+    // Сама галочка из манифеста убрана (см. `template-manifest-prd35.test.ts`): в
+    // интерфейсе она называла себя устаревшей и ничего не меняла у теста с заданным видом.
+    // Здесь важно, что её место занял выбор вида, а не осталось пустым.
     const withKind = variants(path);
     expect(withKind.length).toBeGreaterThan(0);
     for (const variant of withKind) {
-      expect(variant.settings!.some((s) => s.key === "showCompetencyRadar")).toBe(true);
+      expect(variant.settings!.some((s) => s.key === "showCompetencyRadar")).toBe(false);
     }
   });
 

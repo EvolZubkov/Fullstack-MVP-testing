@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { chartKindSetting } from "@shared/template/scales-chart";
 
 interface Field {
   key: string;
@@ -18,20 +19,46 @@ const manifest = JSON.parse(
   readFileSync(resolve("server/scorm/templates/default/manifest.json"), "utf-8"),
 ) as { contentTemplates: ContentTemplate[] };
 
-function fieldOf(key: string, field: string): Field | undefined {
-  return manifest.contentTemplates.find((c) => c.key === key)?.settings?.find((s) => s.key === field);
-}
-
-describe("манифест «Стандартного»: переключатель радара", () => {
-  it("объявлен у варианта итогов и выключен по умолчанию", () => {
-    const field = fieldOf("results.standard", "showCompetencyRadar");
-    expect(field).toBeDefined();
-    expect(field!.type).toBe("boolean");
-    expect(field!.default).toBe(false);
+/**
+ * Галочка радара PRD-35 УБРАНА ИЗ ИНТЕРФЕЙСА: поле объявляет манифест, и пока оно там
+ * стояло, автор видел в «Оформлении» переключатель, который сам себя называл устаревшим и
+ * ничего не менял у теста с заданным видом диаграммы.
+ *
+ * Убрано именно ОБЪЯВЛЕНИЕ, а не чтение: значение, сохранённое до PRD-46, лежит в
+ * `settings_json` теста, и читается оно оттуда напрямую — ни `chartKindSetting`, ни
+ * `legacyChartKind` в манифест не смотрят. Поэтому у старого теста диаграмма остаётся на
+ * месте, хотя переключателя больше нет. Эти два факта и держит файл.
+ */
+describe("манифест «Стандартного»: галочка радара убрана из интерфейса", () => {
+  it("не объявлена ни одним вариантом", () => {
+    const withField = manifest.contentTemplates.filter((c) =>
+      c.settings?.some((s) => s.key === "showCompetencyRadar"),
+    );
+    expect(withField.map((c) => c.key)).toEqual([]);
   });
 
-  it("не заводит режима «авто»: у радара только да или нет", () => {
-    const field = fieldOf("results.standard", "showCompetencyRadar") as Field & { options?: unknown };
-    expect(field.options).toBeUndefined();
+  it("вид диаграммы остался и объявлен там, где стояла галочка", () => {
+    const withKind = manifest.contentTemplates.filter((c) =>
+      c.settings?.some((s) => s.key === "scalesChartKind"),
+    );
+    expect(withKind.map((c) => c.key)).toEqual([
+      "results.standard",
+      "report.standard",
+      "report.adaptive.standard",
+    ]);
+  });
+});
+
+describe("сохранённое значение галочки продолжает читаться", () => {
+  it("тест, настроенный до выбора вида, по-прежнему получает радар", () => {
+    expect(chartKindSetting({ showCompetencyRadar: true })).toBe("radar");
+  });
+
+  it("заданный вид старше галочки", () => {
+    expect(chartKindSetting({ scalesChartKind: "rose", showCompetencyRadar: true })).toBe("rose");
+  });
+
+  it("без того и другого диаграммы нет", () => {
+    expect(chartKindSetting({})).toBe("none");
   });
 });
