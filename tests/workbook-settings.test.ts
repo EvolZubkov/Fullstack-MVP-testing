@@ -1,10 +1,10 @@
 /**
  * @module tests/workbook-settings
  *
- * PRD-48 Э1: реестр параметров листа «Настройки». Проверяется не список имён (он длинный и
- * будет расти), а СВОЙСТВА реестра: каждый параметр читается и записывается одним и тем же
- * именем, пустая ячейка ничего не меняет, а «Да»/«Нет» и «0» разбираются по правилам раздела
- * 4.4 спеки.
+ * PRD-48 stage 1: the parameter registry of the «Настройки» sheet. What is checked is not the
+ * list of names (it is long and will grow) but the PROPERTIES of the registry: every parameter
+ * is read and written under one and the same name, an empty cell changes nothing, and «Да»/«Нет»
+ * and «0» are parsed by the rules of spec §4.4.
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -14,7 +14,7 @@ import {
   serializeSettingsRows,
 } from "../server/utils/workbook-settings";
 
-/** Строка листа по имени параметра. */
+/** A sheet row addressed by parameter name. */
 function row(name: string, value: unknown) {
   return { "Параметр": name, "Значение": value };
 }

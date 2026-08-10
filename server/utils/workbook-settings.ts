@@ -1,55 +1,56 @@
 /**
  * @module server/utils/workbook-settings
- * @description Лист «Настройки» книги теста (PRD-48 §4.1): ОДИН декларативный реестр
- * параметров, который читают и выгрузка, и загрузка.
+ * @description The «Настройки» sheet of the test workbook (PRD-48 §4.1): ONE declarative
+ * registry of parameters read by both the export and the import.
  *
- * Реестр, а не две функции: до PRD-48 экспорт и импорт держали по своему списку, и списки
- * разошлись — лист нёс один параметр, пока у теста их было тридцать. Здесь у параметра одно
- * имя ячейки, одно чтение и одна запись, и разойтись им негде.
+ * A registry rather than two functions: before PRD-48 the export and the import each kept
+ * their own list, and the lists drifted apart — the sheet carried a single parameter while
+ * the test had thirty. Here a parameter has one cell name, one read and one write, and
+ * there is nowhere for them to drift.
  *
- * Правила ячейки (§4.4 спеки): пустое «Значение» — «оставить как есть», поэтому книга,
- * снятая до появления параметра, ничего не сбрасывает; `0` в ограничении — «без
- * ограничения», дословно как подсказка редактора; логическое — «Да»/«Нет».
+ * Cell rules (spec §4.4): an empty «Значение» means "leave as is", so a workbook taken
+ * before a parameter existed resets nothing; `0` in a limit means "no limit", verbatim as
+ * the editor's hint puts it; a boolean is «Да»/«Нет».
  *
- * Несколько параметров пишут в одну JSON-колонку, поэтому лист применяется не к строке
- * `tests`, а к ЧЕРНОВИКУ {@link SettingsDraft}: импорт накладывает его ветви на текущее
- * состояние теста и только потом зовёт службу настроек.
+ * Several parameters write into one JSON column, so the sheet is applied not to the `tests`
+ * row but to a DRAFT ({@link SettingsDraft}): the import merges its branches onto the test's
+ * current state and only then calls the settings service.
  */
 import type { Test } from "@shared/schema";
 import { ELIGIBILITY_PLUGINS } from "@shared/eligibility/registry";
 
-/** Заголовки листа. Лист — список «параметр — значение», а не таблица колонок. */
+/** Sheet headers. The sheet is a «параметр — значение» list, not a table of columns. */
 export const SETTINGS_HEADERS = ["Параметр", "Значение"];
 export const SETTINGS_WIDTHS = [46, 44];
 
-/** Источник для выгрузки: строка теста плюс путь его папки (её резолвит маршрут). */
+/** Export source: the test row plus its folder path (resolved by the route). */
 export type SettingsSource = Partial<Test> & { folderPath?: string | null };
 
-/** Ветви черновика, в которые пишут параметры. */
+/** Draft branches the parameters write into. */
 export interface SettingsDraft {
-  /** Прямые колонки `tests`. */
+  /** Direct `tests` columns. */
   test: Record<string, unknown>;
-  /** `flow_policy_json.mode`; `undefined` — книга сценарий не называла. */
+  /** `flow_policy_json.mode`; `undefined` means the workbook named no scenario. */
   flowMode?: "linear_flat" | "linear_by_topics" | "router_by_topics";
-  /** Накладывается на текущий `flow_policy_json.router`. */
+  /** Merged onto the current `flow_policy_json.router`. */
   router: Record<string, unknown>;
-  /** Накладывается на текущий `overall_pass_rule_json`. */
+  /** Merged onto the current `overall_pass_rule_json`. */
   overall: Record<string, unknown>;
-  /** Накладывается на текущий `retake_policy_json`. */
+  /** Merged onto the current `retake_policy_json`. */
   retake: Record<string, unknown>;
-  /** Накладывается на `retake_policy_json.attemptInterval`. */
+  /** Merged onto `retake_policy_json.attemptInterval`. */
   attemptInterval: Record<string, unknown>;
-  /** Накладывается на `retake_policy_json.eligibilityPlugin`. */
+  /** Merged onto `retake_policy_json.eligibilityPlugin`. */
   plugin: Record<string, unknown>;
-  /** Накладывается на `intro_json.results` / `.report` / корень. */
+  /** Merged onto `intro_json.results` / `.report` / its root. */
   introResults: Record<string, unknown>;
   introReport: Record<string, unknown>;
   introRoot: Record<string, unknown>;
-  /** Путь папки; в `folderId` его превращает импорт — ему доступно хранилище. */
+  /** Folder path; the import turns it into `folderId` — it is the one with storage access. */
   folderPath?: string;
 }
 
-/** Пустой черновик. Отдельная функция: тесты сравнивают с ним «книга ничего не изменила». */
+/** Empty draft. A separate function: tests compare against it for "the workbook changed nothing". */
 export function emptySettingsDraft(): SettingsDraft {
   return {
     test: {},
@@ -64,16 +65,16 @@ export function emptySettingsDraft(): SettingsDraft {
   };
 }
 
-/** Ветви черновика, доступные простым параметрам (всё, кроме скалярных полей). */
+/** Draft branches available to plain parameters (everything except the scalar fields). */
 type Bucket = "test" | "router" | "overall" | "retake" | "attemptInterval" | "plugin"
   | "introResults" | "introReport" | "introRoot";
 
 export interface SettingParam {
-  /** Текст ячейки «Параметр» — дословная метка редактора. */
+  /** Text of the «Параметр» cell — the editor's label, verbatim. */
   name: string;
-  /** Значение для выгрузки; пустая строка, когда у теста ничего нет. */
+  /** Value for the export; empty string when the test carries nothing. */
   read(src: SettingsSource): string;
-  /** Применить НЕПУСТУЮ ячейку к черновику; вернуть текст ошибки или ничего. */
+  /** Apply a NON-EMPTY cell to the draft; return an error message or nothing. */
   write(raw: string, draft: SettingsDraft): string | undefined;
 }
 
@@ -135,8 +136,9 @@ function textParam(
   return {
     name,
     read: (s) => String(get(s) ?? ""),
-    // Пустая ячейка сюда не доходит (её отсеивает parseSettingsSheet), поэтому текстовый
-    // параметр книгой не стирается — осознанное следствие правила «пусто = как есть».
+    // An empty cell never reaches here (parseSettingsSheet filters it out), so a text
+    // parameter cannot be cleared by the workbook — a deliberate consequence of the
+    // "empty = leave as is" rule.
     write: (raw, draft) => { draft[bucket][key] = raw; return; },
   };
 }
@@ -168,7 +170,7 @@ function enumParam(
   };
 }
 
-/** Ветвь JSON-колонки источника, безопасно к `null` и к чужой форме. */
+/** A branch of the source's JSON column, safe against `null` and against a foreign shape. */
 function branch(value: unknown, ...path: string[]): Record<string, unknown> {
   let cur: unknown = value;
   for (const key of path) {
@@ -178,7 +180,7 @@ function branch(value: unknown, ...path: string[]): Record<string, unknown> {
   return typeof cur === "object" && cur !== null ? (cur as Record<string, unknown>) : {};
 }
 
-// ─── Словари значений (метки дословно из редактора и PRD-8) ──────────────────
+// ─── Value dictionaries (labels verbatim from the editor and from PRD-8) ─────
 
 const MODE_LABELS = { standard: "Стандартный", adaptive: "Адаптивный" };
 
@@ -200,7 +202,7 @@ const OVERALL_TYPE_LABELS = {
   none: "Не задано",
 };
 
-/** PRD-8 §3.2: смысл политик приведён к длине ячейки, термины оттуда же. */
+/** PRD-8 §3.2: the meaning of the policies cut down to a cell's length, terms from there. */
 const COMPLETION_LABELS = {
   all_required_completed: "После завершения всех обязательных разделов",
   all_required_passed: "Только если все обязательные разделы пройдены",
@@ -210,19 +212,19 @@ const FORMAT_LABELS = { plain: "Простой", richText: "Форматиров
 
 const FAIL_POLICY_LABELS = { failOpen: "Разрешить старт", failClosed: "Заблокировать" };
 
-/** Плагины допуска — по человеческому имени из общего реестра, не по ключу. */
+/** Eligibility plugins — by their human name from the shared registry, not by key. */
 const PLUGIN_LABELS: Record<string, string> = Object.fromEntries(
   ELIGIBILITY_PLUGINS.map((p) => [p.key, p.name]),
 );
 
-// ─── Реестр ──────────────────────────────────────────────────────────────────
+// ─── Registry ────────────────────────────────────────────────────────────────
 
 /**
- * Порядок строк = порядок групп вкладки «Настройки» редактора. Автор, открывший книгу,
- * читает её сверху вниз в том же порядке, в каком настраивал тест.
+ * Row order = the group order of the editor's «Настройки» tab. An author opening the
+ * workbook reads it top to bottom in the same order in which they configured the test.
  */
 export const SETTING_PARAMS: SettingParam[] = [
-  // ── Основное ──
+  // ── Basics ──
   textParam("Название", (s) => s.title, "test", "title"),
   textParam("Описание", (s) => s.description, "test", "description"),
   {
@@ -253,7 +255,7 @@ export const SETTING_PARAMS: SettingParam[] = [
   boolParam("Показывать правильные ответы после прохождения", (s) => s.showCorrectAnswers, "test", "showCorrectAnswers"),
   boolParam("Показывать уровень сложности при прохождении", (s) => s.showDifficultyLevel, "test", "showDifficultyLevel"),
 
-  // ── Правила прохождения ──
+  // ── Pass rules ──
   enumParam("Тип общего правила", OVERALL_TYPE_LABELS, (s) => branch(s.overallPassRuleJson).type, "overall", "type"),
   intParam("Порог", (s) => branch(s.overallPassRuleJson).value, "overall", "value"),
   enumParam(
@@ -264,7 +266,7 @@ export const SETTING_PARAMS: SettingParam[] = [
     "completionPolicy",
   ),
 
-  // ── Ограничения ──
+  // ── Limits ──
   intParam("Максимум попыток", (s) => s.maxAttempts, "test", "maxAttempts", { zeroIsNull: true }),
   intParam("Лимит времени теста", (s) => s.timeLimitMinutes, "test", "timeLimitMinutes", { zeroIsNull: true }),
   intParam("Цена вопроса по умолчанию", (s) => s.defaultQuestionPoints, "test", "defaultQuestionPoints"),
@@ -277,7 +279,7 @@ export const SETTING_PARAMS: SettingParam[] = [
   boolParam("Показывать водяной знак", (s) => s.protectionWatermark, "test", "protectionWatermark"),
   boolParam("Скрывать задание при уходе из окна", (s) => s.protectionHideOnBlur, "test", "protectionHideOnBlur"),
 
-  // ── Повторное прохождение ──
+  // ── Retaking ──
   boolParam("Ограничить повторное прохождение", (s) => branch(s.retakePolicyJson).enabled, "retake", "enabled"),
   intParam("Период охлаждения, календарных дней", (s) => branch(s.retakePolicyJson).cooldownPeriodDays, "retake", "cooldownPeriodDays", { min: 1, max: 3650 }),
   boolParam("Разделять период по результату попытки", (s) => branch(s.retakePolicyJson).cooldownByOutcome, "retake", "cooldownByOutcome"),
@@ -288,11 +290,11 @@ export const SETTING_PARAMS: SettingParam[] = [
   boolParam("Ограничение между попытками", (s) => branch(s.retakePolicyJson, "attemptInterval").enabled, "attemptInterval", "enabled"),
   intParam("Интервал, часов", (s) => branch(s.retakePolicyJson, "attemptInterval").hours, "attemptInterval", "hours", { min: 1, max: 8760 }),
 
-  // ── Интеграция ──
+  // ── Integration ──
   textParam("Webhook URL", (s) => s.webhookUrl, "test", "webhookUrl"),
   boolParam("Отправлять телеметрию о прохождении", (s) => s.telemetryEnabled, "test", "telemetryEnabled"),
 
-  // ── Вводные блоки экрана итогов и отчёта ──
+  // ── Intro blocks of the results screen and of the report ──
   textParam("Вводный текст на экране итогов", (s) => branch(s.introJson, "results").text, "introResults", "text"),
   enumParam("Формат вводного текста на экране итогов", FORMAT_LABELS, (s) => branch(s.introJson, "results").format, "introResults", "format"),
   textParam("Вводный текст в отчёте", (s) => branch(s.introJson, "report").text, "introReport", "text"),
@@ -300,21 +302,21 @@ export const SETTING_PARAMS: SettingParam[] = [
   boolParam("В отчёте — тот же текст, что на экране итогов", (s) => branch(s.introJson).reportSameAsResults, "introRoot", "reportSameAsResults"),
 ];
 
-/** Параметр по имени ячейки: сравнение без регистра и без «залипших» пробелов Excel. */
+/** Parameter by cell name: compared case-insensitively and free of Excel's sticky spaces. */
 const PARAM_BY_NAME = new Map(SETTING_PARAMS.map((p) => [normalizeName(p.name), p]));
 
 function normalizeName(raw: string): string {
   return raw.replace(/[\s ​﻿]+/g, " ").trim().toLowerCase();
 }
 
-/** Выгрузка: по строке на каждый параметр реестра, всегда все. */
+/** Export: one row per registry parameter, always all of them. */
 export function serializeSettingsRows(src: SettingsSource): Record<string, unknown>[] {
   return SETTING_PARAMS.map((p) => ({ "Параметр": p.name, "Значение": p.read(src) }));
 }
 
 /**
- * Загрузка листа. Возвращает черновик и построчные ошибки: строка с ошибкой отбрасывается,
- * остальные применяются — как у всех прочих листов книги.
+ * Sheet import. Returns the draft and per-row errors: a row with an error is dropped and
+ * the rest are applied — as with every other sheet of the workbook.
  */
 export function parseSettingsSheet(rows: Record<string, unknown>[]): {
   draft: SettingsDraft;
@@ -336,7 +338,7 @@ export function parseSettingsSheet(rows: Record<string, unknown>[]): {
       return;
     }
     const raw = String(row["Значение"] ?? "").trim();
-    if (raw === "") return; // «оставить как есть»
+    if (raw === "") return; // "leave as is"
     const error = param.write(raw, draft);
     if (error) errors.push(`${where}: «${name}» — ${error}`);
   });
@@ -344,5 +346,5 @@ export function parseSettingsSheet(rows: Record<string, unknown>[]): {
   return { draft, errors };
 }
 
-/** Имена всех параметров — шаблон книги подставляет их в колонку «Параметр». */
+/** Names of all parameters — the workbook template fills the «Параметр» column with them. */
 export const SETTING_PARAM_NAMES: string[] = SETTING_PARAMS.map((p) => p.name);
