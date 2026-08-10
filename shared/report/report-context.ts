@@ -37,7 +37,10 @@ import { formatTimestamp, pluralize } from "./report-html";
 export interface ReportBlock {
   /** Готовая подпись даты прохождения (`дд.мм.гггг чч:мм`). */
   attemptDateLabel: string;
-  /** Готовая подпись числа попыток, со склонением. */
+  /**
+   * Готовая подпись числа попыток, со склонением. ПУСТА у теста, который ничего не
+   * оценивает: «лучшей» попытки у него нет (см. {@link buildReportContext}).
+   */
   attemptsCountLabel: string;
   /** ФИО слушателя: `cmi.learner_name` в LMS, пользователь сессии в вебе. */
   learnerName: string;
@@ -255,6 +258,15 @@ export function buildReportContext(input: ReportInput, opts: ReportContextOption
   // цвет вердикта, и любой из двух цветов был бы утверждением. Макет гейтит их на пустоте.
   report.verdictBadge = !hasVerdict ? "" : passed ? "пройден" : "не пройден";
   report.verdictClass = !hasVerdict ? "" : passed ? "is-pass" : "is-fail";
+  // «Лучший результат за N попыток» — утверждение о СРАВНЕНИИ попыток по баллам, то есть о
+  // том же, о чём вердикт и сводка. Тест, который ничего не оценивает, лучшей попытки не
+  // знает: у всех его прогонов баллов ноль поровну, а документ печатал «Лучший результат за
+  // 1 попытку» над профилем измерений, где сравнивать нечего. Подпись гасится ЦЕЛИКОМ, а не
+  // переписывается нейтрально: число попыток к содержанию измерительного документа
+  // отношения не имеет, а дата прохождения в шапке остаётся. Признак берётся тот же, что у
+  // вердикта (§5.2), а не признак сводки: неизвестный порог не должен стирать строку у
+  // хоста, который не научился слать флаг.
+  if (!hasVerdict) report.attemptsCountLabel = "";
   report.correctLabel = `${input.result.correct}/${input.result.totalQuestions}`;
   report.earnedPointsLabel = fixed1(input.result.earnedPoints);
   report.ringDasharray = circumference;

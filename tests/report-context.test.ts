@@ -173,6 +173,9 @@ describe("контекст обычного отчёта", () => {
     expect(ctx.report.verdictHeadline).toBe("Результаты теста");
     expect(ctx.report.verdictBadge).toBe("");
     expect(ctx.report.verdictClass).toBe("");
+    // «Лучший результат за N попыток» — то же утверждение о сравнении прогонов по баллам:
+    // у теста, который не оценивает, лучшей попытки нет, и строка снимается целиком.
+    expect(ctx.report.attemptsCountLabel).toBe("");
     // Признак сводки доезжает до макета: карточку счёта гейтит он.
     const withMeasures = buildReportContext(measurement, {
       measures: {

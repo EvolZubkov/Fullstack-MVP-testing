@@ -297,7 +297,8 @@ function reportFeedbackMeta(measures?: MeasuresSource): Partial<ReportMeta> {
  *
  * @param result Computed attempt result.
  * @param testTitle Test title (the report headline + the file name).
- * @param meta Who took it and when, plus the attempt count for the «Лучший результат» line.
+ * @param meta Who took it and when, plus the attempt count for the «Лучший результат» line
+ *   (dropped entirely for a test that grades nothing — see `buildReportContext`).
  * @param measures The material of the results screen. Only the two facts the consolidated
  *   feedback block needs are read off it — see {@link reportFeedbackMeta}.
  */
