@@ -308,6 +308,8 @@ export const audit = {
     writeAudit("user.deactivate", { targetUserId }),
   userActivate:   (targetUserId: string) =>
     writeAudit("user.activate", { targetUserId }),
+  userInvite:     (targetUserId: string) =>
+    writeAudit("user.invite", { targetUserId }),
   bulkImport:     (created: number, updated: number, skipped: number) =>
     writeAudit("user.bulkImport", { created, updated, skipped }),
   attemptsReset:  (targetUserId: string, testId: string | null) =>

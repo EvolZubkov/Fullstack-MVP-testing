@@ -44,6 +44,7 @@ CREATE TABLE "attempts" (
 	"test_id" varchar(36) NOT NULL,
 	"test_version" integer DEFAULT 1 NOT NULL,
 	"snapshot_id" varchar(36),
+	"assignment_id" varchar(36),
 	"variant_json" jsonb NOT NULL,
 	"answers_json" jsonb,
 	"result_json" jsonb,
@@ -85,6 +86,28 @@ CREATE TABLE "groups" (
 	"created_by" varchar(36)
 );
 
+CREATE TABLE "media_assets" (
+	"id" varchar(36) PRIMARY KEY NOT NULL,
+	"checksum" varchar(64) NOT NULL,
+	"storage_key" text NOT NULL,
+	"mime_type" text NOT NULL,
+	"byte_size" integer NOT NULL,
+	"kind" text NOT NULL,
+	"original_name" text NOT NULL,
+	"title" text,
+	"owner_id" varchar(36),
+	"visibility" text DEFAULT 'shared' NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL
+);
+
+CREATE TABLE "media_usages" (
+	"asset_id" varchar(36) NOT NULL,
+	"entity_type" text NOT NULL,
+	"entity_id" varchar(36) NOT NULL,
+	"field" text NOT NULL,
+	CONSTRAINT "media_usages_asset_id_entity_type_entity_id_field_pk" PRIMARY KEY("asset_id","entity_type","entity_id","field")
+);
+
 CREATE TABLE "password_reset_tokens" (
 	"id" varchar(36) PRIMARY KEY NOT NULL,
 	"user_id" varchar(36) NOT NULL,
@@ -121,6 +144,7 @@ CREATE TABLE "questions" (
 	"media_url" text,
 	"media_type" text,
 	"shuffle_answers" boolean DEFAULT true NOT NULL,
+	"order_index" integer,
 	"feedback" text,
 	"feedback_mode" text DEFAULT 'general' NOT NULL,
 	"feedback_correct" text,
@@ -137,7 +161,8 @@ CREATE TABLE "result_variables" (
 	"label" text NOT NULL,
 	"type" text NOT NULL,
 	"formula" text NOT NULL,
-	"show_to_learner" boolean DEFAULT false NOT NULL,
+	"config_json" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"learner_visibility" text DEFAULT 'hidden' NOT NULL,
 	"scorm_target" text DEFAULT 'both' NOT NULL,
 	"controls_status" text DEFAULT 'none' NOT NULL,
 	"sort_order" integer DEFAULT 0 NOT NULL,
@@ -157,7 +182,7 @@ CREATE TABLE "scales" (
 	"normalization" text DEFAULT 'none' NOT NULL,
 	"direction" text DEFAULT 'positive' NOT NULL,
 	"config_json" jsonb DEFAULT '{}'::jsonb NOT NULL,
-	"show_to_learner" boolean DEFAULT false NOT NULL,
+	"learner_visibility" text DEFAULT 'hidden' NOT NULL,
 	"scorm_target" text DEFAULT 'none' NOT NULL,
 	"sort_order" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
@@ -295,6 +320,7 @@ CREATE TABLE "test_sections" (
 	"feedback_json" jsonb,
 	"draw_blueprint_json" jsonb,
 	"form_set_json" jsonb,
+	"question_order" text,
 	"default_points" integer,
 	"sort_order" integer DEFAULT 0 NOT NULL
 );
@@ -334,10 +360,15 @@ CREATE TABLE "tests" (
 	"design_settings_json" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"retake_policy_json" jsonb,
 	"default_question_points" integer,
+	"question_order" text DEFAULT 'random' NOT NULL,
 	"allow_return_to_unanswered" boolean DEFAULT true NOT NULL,
 	"allow_answer_change" boolean DEFAULT false NOT NULL,
+	"quick_advance" boolean DEFAULT false NOT NULL,
 	"show_section_results" boolean DEFAULT true NOT NULL,
-	"report_settings_json" jsonb
+	"report_settings_json" jsonb,
+	"copy_protection" boolean DEFAULT true NOT NULL,
+	"protection_watermark" boolean DEFAULT false NOT NULL,
+	"protection_hide_on_blur" boolean DEFAULT false NOT NULL
 );
 
 CREATE TABLE "topic_access_grants" (
@@ -399,6 +430,7 @@ CREATE TABLE "users" (
 
 ALTER TABLE "content_pages" ADD CONSTRAINT "content_pages_test_id_tests_id_fk" FOREIGN KEY ("test_id") REFERENCES "public"."tests"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "content_pages" ADD CONSTRAINT "content_pages_topic_id_topics_id_fk" FOREIGN KEY ("topic_id") REFERENCES "public"."topics"("id") ON DELETE no action ON UPDATE no action;
+ALTER TABLE "media_usages" ADD CONSTRAINT "media_usages_asset_id_media_assets_id_fk" FOREIGN KEY ("asset_id") REFERENCES "public"."media_assets"("id") ON DELETE no action ON UPDATE no action;
 ALTER TABLE "question_measurements" ADD CONSTRAINT "question_measurements_test_id_tests_id_fk" FOREIGN KEY ("test_id") REFERENCES "public"."tests"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "question_measurements" ADD CONSTRAINT "question_measurements_question_id_questions_id_fk" FOREIGN KEY ("question_id") REFERENCES "public"."questions"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "question_measurements" ADD CONSTRAINT "question_measurements_scale_id_scales_id_fk" FOREIGN KEY ("scale_id") REFERENCES "public"."scales"("id") ON DELETE cascade ON UPDATE no action;
@@ -412,6 +444,9 @@ CREATE INDEX "attempts_snapshot_id_idx" ON "attempts" USING btree ("snapshot_id"
 CREATE INDEX "content_pages_test_topic_position_sort_idx" ON "content_pages" USING btree ("test_id","topic_id","position","sort_order");
 CREATE INDEX "content_pages_test_kind_idx" ON "content_pages" USING btree ("test_id","kind");
 CREATE INDEX "content_pages_topic_id_idx" ON "content_pages" USING btree ("topic_id");
+CREATE UNIQUE INDEX "media_assets_owner_checksum_idx" ON "media_assets" USING btree ("owner_id","checksum") WHERE "media_assets"."owner_id" is not null;
+CREATE INDEX "media_assets_checksum_idx" ON "media_assets" USING btree ("checksum");
+CREATE INDEX "media_usages_entity_idx" ON "media_usages" USING btree ("entity_type","entity_id");
 CREATE INDEX "password_reset_tokens_token_hash_idx" ON "password_reset_tokens" USING btree ("token_hash");
 CREATE INDEX "password_reset_tokens_user_id_idx" ON "password_reset_tokens" USING btree ("user_id");
 CREATE INDEX "question_measurements_test_id_idx" ON "question_measurements" USING btree ("test_id");

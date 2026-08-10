@@ -28,8 +28,10 @@
         <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
         <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
       </div>
-      <span class="tb-scene__mapcount tb-scene__mapcount--answered">отвечено <strong>{{state.questionsProgress.answeredCount}}</strong> из {{state.questionsProgress.total}}</span>
-      <span class="tb-scene__mapcount tb-scene__mapcount--skipped">пропущено {{state.questionsProgress.skippedCount}}</span>
+      <div class="tb-scene__mapcounts">
+        <span class="tb-scene__mapcount tb-scene__mapcount--answered">отвечено <strong>{{state.questionsProgress.answeredCount}}</strong> из {{state.questionsProgress.total}}</span>
+        <span class="tb-scene__mapcount tb-scene__mapcount--skipped">пропущено {{state.questionsProgress.skippedCount}}</span>
+      </div>
     </div>
     {{/if}}
     <div class="tb-scene__progress"><div class="tb-scene__progress-fill" id="q-progress-fill"></div></div>
@@ -42,11 +44,16 @@
         {{#if state.sectionName}}<span class="ou-tag ou-tag--neutral" data-path="state.sectionName"></span>{{/if}}
       </div>
       <div class="tb-scene__q">
+        <div data-slot="question-media"></div>
         <h2 class="tb-scene__qtitle" data-slot="question-text"></h2>
-        {{#if state.questionHint}}<span class="tb-scene__qhint" data-path="state.questionHint"></span>{{/if}}
+        <!-- PRD-34 (FR-16): строка подсказки — она же место водяного знака. Якорь пустой:
+             разметку, кегль и контраст знака даёт ЯДРО, шаблон отвечает только за место. -->
+        <div class="tb-scene__qmeta">
+          {{#if state.questionHint}}<span class="tb-scene__qhint" data-path="state.questionHint"></span>{{/if}}
+          <div data-slot="protection-mark"></div>
+        </div>
       </div>
       <div class="tb-qbody">
-        <div class="tb-qbody__media" data-slot="question-media"></div>
         <div class="tb-qbody__answers">
           <div data-slot="question-feedback"></div>
           <div data-slot="question-interaction"></div>

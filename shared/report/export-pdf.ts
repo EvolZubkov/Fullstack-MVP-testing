@@ -16,10 +16,13 @@
 
 import { reportFileName } from "./report-html";
 import { renderScreenInto } from "../template/render-screen";
+import { buildReportSheets, PAGE_WIDTH_PX } from "./paginate-dom";
 
 /** Minimal surface this module uses from jsPDF. */
 export interface JsPdfLike {
   addImage(data: string, format: string, x: number, y: number, w: number, h: number): unknown;
+  /** Начать следующий лист. Зовётся только у многостраничного отчёта. */
+  addPage?(): unknown;
   link(x: number, y: number, w: number, h: number, options: { url: string; newWindow?: boolean }): unknown;
   save(fileName: string): unknown;
 }
@@ -36,10 +39,10 @@ export interface ExportDeps {
 
 /** A4 width in millimetres — the PDF page width the image is scaled to. */
 const A4_WIDTH_MM = 210;
-/** A4 height in millimetres — the minimum page height (a taller report grows). */
+/** A4 height in millimetres. Every page of the report is exactly this tall. */
 const A4_HEIGHT_MM = 297;
-/** Report page width in CSS pixels (see `report-html`), the px→mm scale reference. */
-const PAGE_WIDTH_PX = 595;
+// Размеры страницы отчёта в CSS-пикселях приходят из `paginate-dom`: там же живёт
+// раскладка, и второй набор констант рано или поздно разошёлся бы с ней.
 
 /** A clickable region carried over from a `.pdf-link-btn` chip. */
 interface LinkBox {
@@ -48,6 +51,61 @@ interface LinkBox {
   y: number;
   width: number;
   height: number;
+}
+
+/**
+ * Кликабельные области страницы: чипы рекомендаций, снятые с ОТРИСОВАННОГО листа.
+ *
+ * Растр сам по себе делает из чипа мёртвую картинку, поэтому каждый адрес возвращается в
+ * PDF настоящей ссылкой. Координаты отсчитываются от верха ЭТОГО листа: на второй странице
+ * они иначе указали бы в начало документа.
+ *
+ * @param pageRoot Корень листа (страница целиком либо её клон).
+ */
+function collectLinks(pageRoot: Element): LinkBox[] {
+  const pageRect = pageRoot.getBoundingClientRect();
+  const links: LinkBox[] = [];
+  pageRoot.querySelectorAll(".pdf-link-btn").forEach((chip) => {
+    const url = chip.getAttribute("data-url");
+    if (!url) return;
+    const rect = chip.getBoundingClientRect();
+    links.push({
+      url,
+      x: rect.left - pageRect.left,
+      y: rect.top - pageRect.top,
+      width: rect.width,
+      height: rect.height,
+    });
+  });
+  return links;
+}
+
+/**
+ * Вырезать из снимка страницы кусок высотой в лист.
+ *
+ * Нужно единственному случаю — карточке, которая выше страницы сама по себе: перенести её
+ * некуда, и она печатается несколькими листами. Возвращает `null`, когда резать нечем
+ * (нет 2D-контекста, как в jsdom) — вызывающий тогда печатает снимок целиком, что для
+ * одностраничного отчёта и есть верный ответ.
+ *
+ * @param canvas Снимок листа.
+ * @param sliceTop Верх куска в пикселях снимка.
+ * @param sliceHeight Высота куска в пикселях снимка.
+ * @param doc Документ, в котором создаётся промежуточный холст.
+ */
+function sliceCanvas(
+  canvas: HTMLCanvasElement,
+  sliceTop: number,
+  sliceHeight: number,
+  doc: Document,
+): HTMLCanvasElement | null {
+  const target = doc.createElement("canvas");
+  target.width = canvas.width;
+  target.height = Math.min(sliceHeight, canvas.height - sliceTop);
+  const ctx = target.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(canvas, 0, sliceTop, canvas.width, target.height, 0, 0, canvas.width, target.height);
+  return target;
 }
 
 /** Страница отчёта: макет варианта, его CSS и контекст (PRD-27 Фаза 2). */
@@ -110,49 +168,66 @@ export async function exportReportPdf(page: ReportPage, testName: string, deps: 
 
   try {
     renderScreenInto(stage, { layout: page.layout, context: page.context });
-    const rendered = stage.firstElementChild;
+    const rendered = stage.firstElementChild as HTMLElement | null;
     if (!rendered) throw new Error("Макет отчёта ничего не отрисовал");
 
     // Let the browser lay the page out (web fonts, grid) before rasterizing.
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    const canvas = await deps.html2canvas(rendered, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: null,
-      logging: false,
-    });
-
-    // Collect the link boxes while the container is still laid out.
-    const pageRect = rendered.getBoundingClientRect();
-    const links: LinkBox[] = [];
-    container.querySelectorAll<HTMLElement>(".pdf-link-btn").forEach((chip) => {
-      const url = chip.getAttribute("data-url");
-      if (!url) return;
-      const rect = chip.getBoundingClientRect();
-      links.push({
-        url,
-        x: rect.left - pageRect.left,
-        y: rect.top - pageRect.top,
-        width: rect.width,
-        height: rect.height,
-      });
-    });
-
-    const imgHeight = (canvas.height * A4_WIDTH_MM) / canvas.width;
+    // РАСКЛАДКА ПО ЛИСТАМ. Отчёт печатался одной страницей произвольной высоты, которую
+    // нельзя ни распечатать, ни пролистать; теперь лист всегда A4, а разрыв проходит между
+    // карточками. Считает её ОБЩИЙ `paginate-dom`, потому что тот же ответ нужен
+    // предпросмотру в редакторе: автор согласовывает документ, который получит слушатель, и
+    // две раскладки означали бы два разных документа.
+    const sheets = buildReportSheets(rendered, doc, stage);
     const pxToMm = A4_WIDTH_MM / PAGE_WIDTH_PX;
     const pdf = new deps.jsPDF({
       orientation: "portrait",
       unit: "mm",
-      format: [A4_WIDTH_MM, Math.max(imgHeight, A4_HEIGHT_MM)],
+      format: [A4_WIDTH_MM, A4_HEIGHT_MM],
     });
-    pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, A4_WIDTH_MM, imgHeight);
-    for (const link of links) {
-      pdf.link(link.x * pxToMm, link.y * pxToMm, link.width * pxToMm, link.height * pxToMm, {
-        url: link.url,
-        newWindow: true,
-      });
+
+    // Снимок на КОРЕНЬ, а не на лист: у карточки-переростка листы делят один и тот же
+    // элемент, и растеризовать его заново на каждый кусок значило бы платить за одно и то
+    // же по нескольку раз.
+    const shots = new Map<HTMLElement, HTMLCanvasElement>();
+    let sheetIndex = 0;
+    for (const sheet of sheets) {
+      let canvas = shots.get(sheet.root);
+      if (!canvas) {
+        canvas = await deps.html2canvas(sheet.root, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: null,
+          logging: false,
+        });
+        shots.set(sheet.root, canvas);
+      }
+      const links = collectLinks(sheet.root);
+      const pxPerCssPx = canvas.width / PAGE_WIDTH_PX;
+      // Кусок вырезается только тогда, когда лист не покрывает элемент целиком; резать
+      // нечем (нет 2D-контекста, как в jsdom) — печатается снимок целиком.
+      const whole = sheet.top === 0 && sheet.height * pxPerCssPx >= canvas.height - 1;
+      const image = whole
+        ? canvas
+        : sliceCanvas(canvas, Math.round(sheet.top * pxPerCssPx), Math.round(sheet.height * pxPerCssPx), doc);
+      const drawn = image ?? canvas;
+      if (sheetIndex > 0) pdf.addPage?.();
+      sheetIndex += 1;
+      const imgHeight = (drawn.height * A4_WIDTH_MM) / drawn.width;
+      pdf.addImage(drawn.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, A4_WIDTH_MM, imgHeight);
+      // Ссылки этого листа: координаты чипа отсчитываются от верха ЭЛЕМЕНТА, поэтому у
+      // продолжающих листов из них вычитается уже напечатанная высота.
+      for (const link of links) {
+        const y = link.y - sheet.top;
+        if (y < 0 || y >= sheet.height) continue;
+        pdf.link(link.x * pxToMm, y * pxToMm, link.width * pxToMm, link.height * pxToMm, {
+          url: link.url,
+          newWindow: true,
+        });
+      }
+      if (!image) break;
     }
 
     const fileName = reportFileName(testName);
@@ -193,29 +268,38 @@ export function loadImageDataUrl(src: string): Promise<string | null> {
   });
 }
 
-/** The report's background plates — one is picked per export. */
-export const REPORT_BACKGROUND_FILES = ["pdf-bg-1.png", "pdf-bg-2.png", "pdf-bg-3.png"] as const;
-/** The report's brand logo (the report page is always dark, so the light logo). */
-export const REPORT_LOGO_FILE = "logo-light.png";
-
 /**
- * Resolve the report's background + logo from a base URL.
+ * Inline the variant's pictures as data URLs, ready for the rasterizer (PRD-27 FR-05).
  *
- * @param baseUrl Where the report assets live, with a trailing slash
- *   (`assets/media/` inside a package, an API path on the web).
- * @param pick Chooses the background plate; defaults to a random one, as the package
- *   has always done. Injectable so a test gets a deterministic page.
- * @returns Data URLs for {@link module:shared/report/report-html}'s `ReportAssets`.
+ * The rasterizer never fetches anything: it snapshots what the DOM already has, and a
+ * canvas tainted by a cross-origin image silently drops the picture. So every image the
+ * page prints is read here first — the background and logo the TEMPLATE declared, or
+ * whatever the author put in their place.
+ *
+ * An image that cannot be read resolves to an empty string rather than failing the
+ * export: the layout gates its rows on the value, so the report degrades to «no
+ * background / no logo» instead of not existing.
+ *
+ * @param values Values of the variant's `settings[]`, already resolved to URLs by
+ *   {@link module:shared/report/report-assets resolveReportImageValues}.
+ * @param imageKeys Which keys hold pictures (`ReportBake.imageKeys`).
+ * @returns A copy of `values` with those keys replaced by data URLs.
  */
-export async function loadReportAssets(
-  baseUrl: string,
-  pick: (count: number) => number = (count) => Math.floor(Math.random() * count),
-): Promise<{ backgroundDataUrl: string | null; logoDataUrl: string | null }> {
-  const plates = await Promise.all(REPORT_BACKGROUND_FILES.map((f) => loadImageDataUrl(baseUrl + f)));
-  const available = plates.filter((p): p is string => !!p);
-  const logoDataUrl = await loadImageDataUrl(baseUrl + REPORT_LOGO_FILE);
-  return {
-    backgroundDataUrl: available.length > 0 ? available[pick(available.length)] ?? available[0] : null,
-    logoDataUrl,
-  };
+export async function inlineReportImageValues(
+  values: Record<string, unknown> | null | undefined,
+  imageKeys: readonly string[],
+): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = { ...(values ?? {}) };
+  await Promise.all(
+    imageKeys.map(async (key) => {
+      const src = typeof out[key] === "string" ? (out[key] as string) : "";
+      if (!src) {
+        out[key] = "";
+        return;
+      }
+      if (src.startsWith("data:")) return;
+      out[key] = (await loadImageDataUrl(src)) ?? "";
+    }),
+  );
+  return out;
 }

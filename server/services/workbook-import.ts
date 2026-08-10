@@ -39,21 +39,25 @@ import { randomUUID } from "crypto";
 import type { ValueType } from "@shared/formula";
 import type { Role } from "@shared/access";
 import { importQuestionRows, type ResolvedQuestion } from "./questions-import";
+import { syncScaleFeedbackUsages, syncVariableFeedbackUsages } from "./media/usage-index";
 import { testSettingsService, type SectionPayload } from "./test-settings";
 import { parseScoringCell } from "../utils/scoring-excel";
-import { hasOptionList, isMeasurementOnly } from "@shared/questions/question-type";
+import { hasOptionList, isMeasurementOnly, distributesBudget } from "@shared/questions/question-type";
 
 import {
   parseScaleRow,
+  mergeScaleConfig,
   parseResultVariableRow,
   parseMeasurementRow,
   validateSourceKey,
+  parseSettingsRow,
   parseStructureRow,
   parseQuotaRow,
   parseVariantThresholdRow,
   parseScoringOverrideRow,
   variantsColumnOf,
   type ParsedQuota,
+  type ParsedTestSettings,
 } from "../utils/workbook-sheets";
 
 export interface WorkbookImportResult {
@@ -123,6 +127,24 @@ export async function importWorkbook(
   // PRD-17 (FR-13): per-topic variant memberships from the «Варианты» column —
   // each topic's distinct labels become its section's variants (built in Pass 6).
   const membershipByTopic = new Map<string, VariantMembership[]>();
+  // ── «Настройки» (PRD-30 FR-22): settings OF THE TEST, read before anything
+  // else so the structure pass can save them together with the sections. A book
+  // without the sheet changes nothing about the test — that is what a workbook
+  // exported before the sheet existed has to keep meaning.
+  const testSettings: ParsedTestSettings = {};
+  const settingsSheet = findSheet(workbook, "Настройки");
+  if (settingsSheet) {
+    const rows = sheetToObjects(settingsSheet);
+    for (let i = 0; i < rows.length; i++) {
+      const parsed = parseSettingsRow(rows[i]);
+      if (!parsed.ok) {
+        result.errors.push(`Лист «Настройки», строка ${i + 2}: ${parsed.error}`);
+        continue;
+      }
+      Object.assign(testSettings, parsed.value);
+    }
+  }
+
   const questionsSheet = findSheet(workbook, "Вопросы");
   // Hoisted so the «Оценка» pass can fall back to the «Вопросы» sheet's legacy
   // «Балл»/«Цена ответа» columns when no «Оценка» sheet is present (see Pass 5).
@@ -169,16 +191,26 @@ export async function importWorkbook(
   const scalesSheet = findSheet(workbook, "Шкалы");
   if (scalesSheet) {
     const rows = sheetToObjects(scalesSheet);
+    // The HEADER row, not the row objects: `sheetToObjects` drops empty cells, so only
+    // the headers can tell «the book has no such column» from «the author cleared it».
+    const scaleColumns = sheetHeaders(scalesSheet);
     for (let i = 0; i < rows.length; i++) {
       const where = `Лист «Шкалы», строка ${i + 2}`;
-      const parsed = parseScaleRow(rows[i]);
+      const parsed = parseScaleRow(rows[i], scaleColumns);
       if (!parsed.ok) {
         result.errors.push(`${where}: ${parsed.error}`);
         continue;
       }
       const existing = scaleByKey.get(String(parsed.value.key));
       const sortOrder = existing?.sortOrder ?? scaleIdByKey.size;
-      const check = insertScaleSchema.safeParse({ ...parsed.value, testId, sortOrder });
+      // Merged HERE and not in `parseScaleRow`: the parser sees one row and knows
+      // nothing of what is stored, while `existing` is already in hand. Without this
+      // the update wrote `{ bands }` wholesale and one round trip through the book
+      // erased the domain, the valence, `displayMax` and every level's feedback.
+      const configJson = existing
+        ? mergeScaleConfig(existing.configJson, parsed.value.configJson as Record<string, unknown>)
+        : parsed.value.configJson;
+      const check = insertScaleSchema.safeParse({ ...parsed.value, configJson, testId, sortOrder });
       if (!check.success) {
         const first = check.error.issues[0];
         result.errors.push(`${where}: ${first.message} (${first.path.join(".")})`);
@@ -199,6 +231,11 @@ export async function importWorkbook(
         result.scales.created++;
       }
     }
+    // The import writes scales straight through the storage, so nothing else re-indexes
+    // their attachments. It matters when the book DROPS a level: the level's feedback
+    // goes with it, and its `media_usages` rows would otherwise stay and keep granting
+    // a file the test no longer uses. The set-wide rewrite is self-healing.
+    if (!dryRun) await syncScaleFeedbackUsages(testId);
   }
 
   // ── Pass 3: «Показатели» (upsert by name; validate formula; controlsStatus guard). ──
@@ -267,6 +304,10 @@ export async function importWorkbook(
         controllerOwner.set(data.controlsStatus, data.name);
       }
     }
+    // Same rule as the scales pass: whoever writes the entity re-indexes it. The book
+    // does not carry indicator feedback today, but it does CREATE indicators, and the
+    // rule must not depend on which fields a sheet happens to have a column for.
+    if (!dryRun) await syncVariableFeedbackUsages(testId);
   }
 
   // Resolve a «Вопрос» cell → ResolvedQuestion: alias first, then ID. Shared by
@@ -456,9 +497,15 @@ export async function importWorkbook(
       // effect right now — silently storing dead numbers is how «почему не считается»
       // tickets are born.
       if (q.measurementOnly && (input.points != null || input.scoringRaw !== "")) {
+        // Причина у двух измерительных типов разная, и называть её надо точно: у шкалы
+        // это ОТСУТСТВИЕ правильной градации (появится — цена оживёт), у распределения
+        // сам тип (PRD-44 FR-10) — оживать нечему.
         result.warnings.push(
-          `${input.where}: вопрос "${input.ref}" — измерительная шкала без правильной ` +
-            `градации, поэтому «Балл»/«Цена ответа» на результат не влияют (значения сохранены)`,
+          distributesBudget(q.type)
+            ? `${input.where}: вопрос "${input.ref}" — распределение баллов, оно не проверяется ` +
+              `и не приносит баллов, поэтому «Балл»/«Цена ответа» на результат не влияют (значения сохранены)`
+            : `${input.where}: вопрос "${input.ref}" — измерительная шкала без правильной ` +
+              `градации, поэтому «Балл»/«Цена ответа» на результат не влияют (значения сохранены)`,
         );
       }
 
@@ -582,6 +629,8 @@ export async function importWorkbook(
           drawCount: sec.drawCount,
           topicPassRuleJson: sec.passRule,
           required: sec.required,
+          // PRD-30 FR-02/FR-15: delivery order («Случайный порядок вопросов»).
+          questionOrder: sec.questionOrder,
           drawBlueprintJson: strata.length ? { strata } : null,
           formSetJson,
         },
@@ -681,10 +730,26 @@ export async function importWorkbook(
         test: {
           flowPolicyJson: { mode: "router_by_topics" },
           status: (current?.status as "draft" | "published" | "archived") ?? "draft",
+          // PRD-30 FR-22: settings from «Настройки»; a key the sheet did not
+          // carry stays absent, and the service leaves that column alone.
+          ...testSettings,
         },
         sections,
       });
     }
+  }
+
+  // A book may carry «Настройки» WITHOUT «Структура» — settings of an existing
+  // test, edited on their own. Saving them must not require re-sending sections
+  // (the service rewrites sections only when the payload names them).
+  if (!dryRun && !structureSheet && Object.keys(testSettings).length > 0) {
+    const current = await storage.getTest(testId);
+    await testSettingsService.save(testId, {
+      test: {
+        ...testSettings,
+        status: (current?.status as "draft" | "published" | "archived") ?? "draft",
+      },
+    });
   }
 
   return result;

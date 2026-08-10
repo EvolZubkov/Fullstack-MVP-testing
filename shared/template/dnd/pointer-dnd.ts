@@ -25,6 +25,13 @@
 /** A node the controller can delegate events on and host the ghost within. */
 export type DndRoot = Document | ShadowRoot | HTMLElement;
 
+/**
+ * Movement, in CSS pixels, that separates a tap from the start of a drag. Sized
+ * for a fingertip: touch contact wanders by several pixels before the gesture is
+ * intentional, so a tighter value turns taps into accidental drags.
+ */
+export const DRAG_START_SLOP = 8;
+
 /** Configuration for {@link attachPointerDnd}. */
 export interface PointerDndConfig {
   /**
@@ -70,7 +77,13 @@ interface DragState {
  * @returns A teardown function.
  */
 export function attachPointerDnd(root: DndRoot, config: PointerDndConfig): () => void {
-  const cardSelector = config.cardSelector || ".match-tile, .rank-item";
+  // The card is the element that gets cloned into the drag ghost. The default
+  // names the DS components the shared renderer actually emits — the previous
+  // default (`.match-tile, .rank-item`) referred to markup that only ever existed
+  // in the legacy preview bootstrap, so `closest()` always missed and the code
+  // fell through to the `[data-drag]` element itself. That happened to be the
+  // right node, but by accident; naming it makes the intent checkable.
+  const cardSelector = config.cardSelector || ".ou-match__card--drag, .ou-rank__item";
   const threshold = typeof config.overlapThreshold === "number" ? config.overlapThreshold : 0.1;
   // Documents cannot host arbitrary children; append the ghost to <body> instead.
   const ghostParent: ParentNode & { appendChild: (n: Node) => Node } =
@@ -167,7 +180,10 @@ export function attachPointerDnd(root: DndRoot, config: PointerDndConfig): () =>
     if (!st) return;
     const pe = e as PointerEvent;
     if (!st.started) {
-      if (Math.hypot(pe.clientX - st.startX, pe.clientY - st.startY) < 4) return;
+      // 8px, not 4: a fingertip wobbles by roughly that much on contact, so the
+      // lower threshold started a drag on what the learner meant as a tap. The
+      // same value is comfortable with a mouse.
+      if (Math.hypot(pe.clientX - st.startX, pe.clientY - st.startY) < DRAG_START_SLOP) return;
       st.started = true;
       beginGhost(st);
     }

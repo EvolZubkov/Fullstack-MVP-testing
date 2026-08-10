@@ -1,8 +1,9 @@
-import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, index, check, uuid, real } from "drizzle-orm/pg-core"
+import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, index, check, uuid, real, primaryKey } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { normalizeTag, normalizeTags, TAG_MAX_LENGTH } from "./tags";
+import { isAllocationFeasible } from "./questions/allocation";
 import { STORED_ROLES } from "./access/roles";
 import { PLACEHOLDER_TYPES, SETTING_TYPES } from "./template/field-types";
 
@@ -249,7 +250,7 @@ export type QuestionScoring = z.infer<typeof questionScoringSchema>;
 export const questions = pgTable("questions", {
   id: varchar("id", { length: 36 }).primaryKey(),
   topicId: varchar("topic_id", { length: 36 }).notNull(),
-  type: text("type", { enum: ["single", "multiple", "matching", "ranking", "scale"] }).notNull(),
+  type: text("type", { enum: ["single", "multiple", "matching", "ranking", "scale", "allocation"] }).notNull(),
   prompt: text("prompt").notNull(),
   dataJson: jsonb("data_json").notNull(),
   correctJson: jsonb("correct_json").notNull(),
@@ -263,6 +264,17 @@ export const questions = pgTable("questions", {
   mediaUrl: text("media_url"),
   mediaType: text("media_type", { enum: ["image", "audio", "video"] }),
   shuffleAnswers: boolean("shuffle_answers").notNull().default(true),
+  /**
+   * PRD-30 FR-01: author-defined position of the question inside its topic
+   * («Индекс в теме»). NULL = not set — such questions are delivered after all
+   * indexed ones (FR-04). Nullable WITHOUT a default on purpose: any non-null
+   * default would migrate every existing question into one group of equals, and
+   * no topic would gain an order. Values need not be dense or unique — equal
+   * indices form a group that the delivery engine shuffles inside (FR-05).
+   * Named `order_index`, not `sort_order`: `test_sections.sort_order` is a dense
+   * technical order the editor rewrites on every save, this one is author data.
+   */
+  orderIndex: integer("order_index"),
   feedback: text("feedback"),
   feedbackMode: text("feedback_mode", { enum: ["general", "conditional"] }).notNull().default("general"),
   feedbackCorrect: text("feedback_correct"),
@@ -299,8 +311,32 @@ export const eligibilityPluginRefSchema = z.object({
 });
 
 /**
- * `tests.retake_policy_json`. `cooldownPeriodDays` is whole calendar days
- * (1–3650); legacy `cooldownDays` is accepted on input and normalized.
+ * PRD-31 barrier B: minimum interval between attempts INSIDE one assignment.
+ * Wall-clock hours, so an author asking for "once a day" gets 24 h rather than a
+ * calendar boundary. Absence of the whole branch = the barrier is off.
+ */
+export const attemptIntervalSchema = z.object({
+  enabled: z.boolean().default(false),
+  /** Whole hours, 1..8760 (one year). Required when `enabled` (see the refine below). */
+  hours: z.number().int().min(1).max(8760).optional(),
+});
+
+/**
+ * `tests.retake_policy_json`. Two INDEPENDENT barriers (PRD-31 §3), applied at
+ * disjoint moments:
+ *   - `enabled` + `cooldownPeriodDays` — barrier A, calendar days BETWEEN assignments;
+ *   - `attemptInterval` — barrier B, wall-clock hours INSIDE one assignment.
+ *
+ * `cooldownPeriodDays` is optional at the type level and required only when barrier
+ * A is on, so a test can carry barrier B alone without inventing a cooldown value
+ * for a switch that is off. Legacy `cooldownDays` is accepted and normalized.
+ *
+ * PRD-40: `cooldownByOutcome` (default off) splits barrier A's single period into
+ * two — `cooldownPeriodDaysPassed` / `cooldownPeriodDaysFailed` — chosen at runtime
+ * by the outcome of the last attempt of the OTHER assignment that anchors the
+ * decision (see `shared/eligibility/engine.ts` `resolveCooldownDays`). Off (the
+ * default, and every existing test) keeps `cooldownPeriodDays` as the only period,
+ * byte-identical to pre-PRD-40 behaviour.
  */
 export const retakePolicySchema = z.preprocess(
   (val) => {
@@ -312,22 +348,65 @@ export const retakePolicySchema = z.preprocess(
     }
     return val;
   },
-  z.object({
-    enabled: z.boolean().default(false),
-    cooldownPeriodDays: z.number().int().min(1).max(3650),
-    gateMode: z.literal("before_internal_start").default("before_internal_start"),
-    eligibilityPlugin: eligibilityPluginRefSchema.nullish(),
-    blockedPageId: z.string().optional(),
-  }),
+  z
+    .object({
+      enabled: z.boolean().default(false),
+      cooldownPeriodDays: z.number().int().min(1).max(3650).optional(),
+      cooldownByOutcome: z.boolean().default(false),
+      cooldownPeriodDaysPassed: z.number().int().min(1).max(3650).optional(),
+      cooldownPeriodDaysFailed: z.number().int().min(1).max(3650).optional(),
+      gateMode: z.literal("before_internal_start").default("before_internal_start"),
+      eligibilityPlugin: eligibilityPluginRefSchema.nullish(),
+      blockedPageId: z.string().optional(),
+      attemptInterval: attemptIntervalSchema.nullish(),
+    })
+    .superRefine((v, ctx) => {
+      if (v.enabled && v.cooldownByOutcome) {
+        if (v.cooldownPeriodDaysPassed == null) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["cooldownPeriodDaysPassed"],
+            message: "cooldownPeriodDaysPassed обязателен при разделении кулдауна по исходу",
+          });
+        }
+        if (v.cooldownPeriodDaysFailed == null) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["cooldownPeriodDaysFailed"],
+            message: "cooldownPeriodDaysFailed обязателен при разделении кулдауна по исходу",
+          });
+        }
+      } else if (v.enabled && v.cooldownPeriodDays == null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["cooldownPeriodDays"],
+          message: "cooldownPeriodDays обязателен при включённом кулдауне",
+        });
+      }
+      if (v.attemptInterval?.enabled && v.attemptInterval.hours == null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["attemptInterval", "hours"],
+          message: "Интервал в часах обязателен при включённом ограничении между попытками",
+        });
+      }
+    }),
 );
 
 export type EligibilityPluginRef = z.infer<typeof eligibilityPluginRefSchema>;
+export type AttemptInterval = z.infer<typeof attemptIntervalSchema>;
 export type RetakePolicy = z.infer<typeof retakePolicySchema>;
 
 /** Выбор варианта отчёта и значения его полей для ОДНОГО режима (PRD-27 §4.1). */
 export const reportModeSettingsSchema = z.object({
-  /** `contentTemplates[].key` выбранного варианта. */
-  variantKey: z.string().min(1),
+  /**
+   * `contentTemplates[].key` выбранного варианта. Необязателен: настройки отчёта
+   * существовали ДО того, как у отчёта появились варианты (PRD-35), и такие ветки лежат в
+   * базе без ключа. Отсутствие ключа = вариант, помеченный `isDefault`, — ровно так его
+   * и разрешает `resolveReportVariant`, поэтому требовать ключ значило бы отбрасывать
+   * настройку, по которой хосты уже собирают отчёт.
+   */
+  variantKey: z.string().min(1).optional(),
   /** Значения `settings[]` варианта. Ключи, которых вариант не объявляет, отбрасываются. */
   values: z.record(z.string(), z.unknown()).default({}),
 });
@@ -338,9 +417,30 @@ export const reportModeSettingsSchema = z.object({
  * не терялась (§4.1). Отсутствие ветки = вариант с `isDefault` активного шаблона.
  */
 export const reportSettingsSchema = z.object({
+  /**
+   * Выдавать ли отчёт обучающемуся. Настройка ОБЩАЯ, вне ветвей режима: документ либо
+   * положен слушателю этого теста, либо нет, и от режима выдачи это не зависит.
+   *
+   * Отсутствие = выдавать. До этой настройки отчёт был доступен всегда (`canReport: true`
+   * прямо в маршруте результата), и умолчание сохраняет поведение каждого уже
+   * существующего теста.
+   */
+  enabled: z.boolean().optional(),
   standard: reportModeSettingsSchema.nullish(),
   adaptive: reportModeSettingsSchema.nullish(),
 });
+
+/**
+ * Положен ли отчёт обучающемуся по настройкам теста.
+ *
+ * Одно правило на оба хоста и на все места, где спрашивают: маршрут результата, сборка
+ * пакета, предпросмотр. Отдельная функция, а не сравнение с `true` на каждом вызове, —
+ * потому что «поле отсутствует» и «поле включено» здесь означают одно и то же, и забыть об
+ * этом в одном из мест значило бы отнять отчёт у половины уже существующих тестов.
+ */
+export function isReportEnabled(settings: ReportSettings | null | undefined): boolean {
+  return settings?.enabled !== false;
+}
 
 export type ReportModeSettings = z.infer<typeof reportModeSettingsSchema>;
 export type ReportSettings = z.infer<typeof reportSettingsSchema>;
@@ -378,6 +478,19 @@ export const tests = pgTable("tests", {
   // PRD-15 block D (FR-31): test-wide default price of a question. Null = no
   // default — the effective chain falls through to the system default (1 point).
   defaultQuestionPoints: integer("default_question_points"),
+  /**
+   * PRD-30 FR-16: the test-wide delivery order, and the default every topic
+   * inherits unless it overrides it (`test_sections.question_order`).
+   *
+   * `random` (default, today's behaviour) shuffles inside each topic and keeps
+   * topics as blocks; `fixed` delivers topics and questions in the author's
+   * order; `shuffle_all` merges the questions of ALL topics into one shuffled
+   * stream and is offered only in the flat flow (FR-17) — a topic that stays
+   * `fixed` is then delivered as one unbroken block (FR-20).
+   */
+  questionOrder: text("question_order", { enum: ["fixed", "random", "shuffle_all"] })
+    .notNull()
+    .default("random"),
   // PRD-19 (FR-01): allow skipping a question and returning to unanswered ones within an
   // attempt. Default true (new tests); migration 031 backfills EXISTING tests to false to
   // preserve their strict-linear navigation.
@@ -386,15 +499,36 @@ export const tests = pgTable("tests", {
   // Default false. Depends on allowReturnToUnanswered=true and is mutually exclusive with
   // showCorrectAnswers (FR-04b) — enforced in the editor/service layer, not as a DB CHECK.
   allowAnswerChange: boolean("allow_answer_change").notNull().default(false),
+  // PRD-43: independent of allowReturnToUnanswered — whether submitting an answer
+  // also advances to the next question in one click, or needs a separate «Далее»
+  // click. Default false (today's two-step behaviour for a brand-new test); the
+  // backfill migration sets EXISTING rows to `NOT allow_return_to_unanswered` so
+  // no existing test's navigation changes after this ships.
+  quickAdvance: boolean("quick_advance").notNull().default(false),
   // PRD-19 (FR-05a): show the section-results screen (optional system node, sectioned tests).
   // Default true; not applicable to linear_flat (no sections) — ignored by the runtime there.
   showSectionResults: boolean("show_section_results").notNull().default(true),
+  // PRD-34 (FR-01): protection of the question text from casual copying. Default TRUE —
+  // existing tests DO change behaviour, which is the accepted decision (FR-03), not a
+  // side effect. A training test whose text is meant to be taken away turns it off.
+  copyProtection: boolean("copy_protection").notNull().default(true),
+  // PRD-34 (FR-16): anonymised watermark over the scene. Independent of copyProtection
+  // (FR-02) — attribution is useful on its own. Default false.
+  protectionWatermark: boolean("protection_watermark").notNull().default(false),
+  // PRD-34 (FR-21): hide the task while the window is not active. Independent too.
+  protectionHideOnBlur: boolean("protection_hide_on_blur").notNull().default(false),
   // PRD-27 (D-4): выбранный вариант ОТЧЁТА и значения его полей, по режиму теста.
   // Отдельно от `design_settings_json`, хотя выбор и принадлежит шаблону: тот коммитится
   // черновиком вкладки «Оформление», а поля отчёта живут в блоке обратной связи вкладки
   // «Настройки», и один черновик связал бы две вкладки порядком сохранения (§4.2).
   // NULL = автор ничего не выбирал: берётся вариант с `isDefault`.
   reportSettingsJson: jsonb("report_settings_json").$type<ReportSettings>(),
+  /**
+   * Вводные блоки экрана итогов и отчёта (см. {@link testIntroSchema}). Своя колонка, а не
+   * ветвь `report_settings_json`: текст экрана к настройкам отчёта отношения не имеет, и
+   * складывать их вместе значило бы связать два независимых черновика редактора.
+   */
+  introJson: jsonb("intro_json").$type<TestIntro>(),
 }, (table) => ({
   // Test lists filter by lifecycle status (draft/published/archived).
   statusIdx: index("tests_status_idx").on(table.status),
@@ -500,6 +634,19 @@ export const testSections = pgTable("test_sections", {
   // draw_count/draw_all/draw_blueprint are then not applied (FR-03). Null = legacy
   // draw (uniform / quotas), backward-compatible.
   formSetJson: jsonb("form_set_json").$type<FormSet>(),
+  /**
+   * PRD-30 FR-02/FR-18: how this topic's questions are ordered on delivery.
+   * `random` shuffles the drawn set (today's behaviour), `fixed` orders it by
+   * `questions.order_index` (FR-03) or, in variants mode, by the variant's own
+   * list (FR-07).
+   *
+   * NULL is the default and means «как в тесте» — the topic inherits
+   * `tests.question_order`. A value here is an OVERRIDE, and the editor shows a
+   * reset control next to it precisely because a value is present. An enum
+   * rather than a boolean so the next position («by ascending difficulty»)
+   * needs no second migration.
+   */
+  questionOrder: text("question_order", { enum: ["random", "fixed"] }),
   // PRD-15 block D (FR-31): per-section default price of a question. Null = no
   // default — the chain falls through to the test default, then the system 1.
   defaultPoints: integer("default_points"),
@@ -551,6 +698,19 @@ export const attempts = pgTable("attempts", {
   // and graded from. NULL = legacy/live delivery (drafts, preview, or attempts
   // started before snapshots existed) — the transitional mode.
   snapshotId: varchar("snapshot_id", { length: 36 }),
+  /**
+   * PRD-31 (FR-12): the assignment this attempt was taken under. The assignment is
+   * the UNIT OF ACCESS: `maxAttempts` and the hour interval (barrier B) are counted
+   * INSIDE it, while the calendar cooldown (barrier A) gates the FIRST attempt of a
+   * new one. NULL = a legacy row or an attempt taken outside any assignment; all
+   * such rows behave as ONE implicit assignment (FR-13). No FK on purpose — a
+   * deleted assignment simply stops being "current", which is the intended meaning.
+   *
+   * Deliberately NOT indexed: every caller already loads a learner's attempts of one
+   * test through `(user_id, test_id)` and splits them by assignment in memory, so a
+   * third index would only cost writes on the fastest-growing table.
+   */
+  assignmentId: varchar("assignment_id", { length: 36 }),
   variantJson: jsonb("variant_json").notNull(),
   answersJson: jsonb("answers_json"),
   resultJson: jsonb("result_json"),
@@ -803,9 +963,25 @@ export const feedbackLinkSchema = z.object({
 export const feedbackAssetSchema = z.object({
   id: z.string().optional(),
   title: z.string().min(1),
-  fileName: z.string().min(1),
-  mimeType: z.literal("application/pdf"),
-  /** Filled by backend when the asset is persisted to SCORM (decisions.md §6.5). */
+  /**
+   * Legacy-only: descriptors saved through the retired upload flow (PRD-32) carry the
+   * original file name. New rows (PRD-42, title + URL only) do not write it.
+   */
+  fileName: z.string().optional(),
+  /** Legacy-only, see `fileName` above. */
+  mimeType: z.literal("application/pdf").optional(),
+  /**
+   * The material's address. A plain, unvalidated string ON PURPOSE (PRD-42 §7 technical
+   * debt): a descriptor saved through the retired upload flow still carries the relative
+   * media-library address `/api/media/<id>` here, and tightening this to `.url()` (as
+   * `feedbackLinkSchema` does) would make saving ANY test with such a legacy row fail
+   * validation. New rows are expected to carry a real external URL, but nothing enforces it.
+   */
+  url: z.string().optional(),
+  /**
+   * Read-only legacy field: packages exported before the media library existed carry the
+   * in-package address here. New code does not write it — the address belongs in `url`.
+   */
   scormHref: z.string().optional(),
 });
 
@@ -829,6 +1005,54 @@ export const feedbackContentSchema = z.object({
   events: z.array(feedbackEventSchema).default([]),
 });
 
+/**
+ * ВВОДНЫЙ ТЕКСТ — блок, который идёт ПЕРВЫМ, до всего остального: до сводки баллов, до тем,
+ * до измерений и рекомендаций. Объясняет слушателю, что он сейчас читает.
+ *
+ * Формат тот же, что у обратной связи (`plain` / `richText` / `html`), и разметку из него
+ * строит тот же {@link module:shared/template/rich-text richTextToHtml}: автор пишет эти
+ * тексты в одном редакторе и вправе ожидать одинакового поведения.
+ *
+ * Пустой текст = блока нет. Гейт стоит именно на тексте, а не на наличии записи: автор,
+ * стерший текст, ожидает, что блок исчезнет, а не станет пустой рамкой.
+ */
+export const introBlockSchema = z.object({
+  format: feedbackFormatSchema.default("plain"),
+  text: z.string().default(""),
+});
+
+/**
+ * `tests.intro_json`. Экран итогов и отчёт — РАЗНЫЕ адресаты: экран читают сразу и бегло,
+ * отчёт уносят с собой и показывают специалисту, поэтому тексты хранятся раздельно и
+ * задаются независимо. Отсутствие ветви = вводного блока в этой выдаче нет.
+ */
+export const testIntroSchema = z.object({
+  results: introBlockSchema.nullish(),
+  report: introBlockSchema.nullish(),
+  /**
+   * Печатать в отчёте ТОТ ЖЕ текст, что на экране итогов.
+   *
+   * Не копия при сохранении, а ссылка: автор правит вводное слово в одном месте, и обе
+   * выдачи меняются вместе. Скопировать текст в обе ветви значило бы завести вторую
+   * редакцию, которая молча разойдётся с первой при следующей правке.
+   *
+   * Собственный текст отчёта при этом НЕ стирается — он просто не используется, пока
+   * переключатель включён, и возвращается, стоит его выключить.
+   */
+  reportSameAsResults: z.boolean().optional(),
+});
+
+export type IntroBlock = z.infer<typeof introBlockSchema>;
+export type TestIntro = z.infer<typeof testIntroSchema>;
+
+/**
+ * Вводный блок ОТЧЁТА с учётом переключателя «как на экране итогов».
+ *
+ * Реэкспорт: само правило живёт в чистом `shared/report/report-intro`, потому что тот же
+ * ответ нужен ВНУТРИ SCORM-пакета, а схему туда не затащить — она тянет drizzle и zod.
+ */
+export { resolveReportIntro } from "./report/report-intro";
+
 export type FeedbackFormat = z.infer<typeof feedbackFormatSchema>;
 export type FeedbackLink = z.infer<typeof feedbackLinkSchema>;
 export type FeedbackAsset = z.infer<typeof feedbackAssetSchema>;
@@ -851,6 +1075,64 @@ export const matchingDataSchema = z.object({
 export const rankingDataSchema = z.object({
   items: z.array(z.string()),
 });
+
+/**
+ * Budget-allocation question (PRD-44 FR-02 - FR-05). The statements live in `options`,
+ * the SAME field single/multiple/scale use, so every existing reader of `dataJson.options`
+ * — the option editor, the workbook column, the font-fitting pass, the preview — keeps
+ * working with no change of its own.
+ *
+ * `maxPerOption` defaults to the whole budget and cannot be defaulted with `.default()`:
+ * it depends on a sibling field, so the fallback is applied in the transform. The
+ * feasibility rule (`count * min <= budget <= count * max`) is checked HERE rather than
+ * only in the editor, because without it an author can save a configuration no learner can
+ * complete — the reference discussion asked for a floor of 2 across four statements on a
+ * budget of 7, i.e. 8 points out of 7 available. The message names both numbers.
+ */
+export const allocationDataSchema = z
+  .object({
+    options: z
+      .array(z.string().trim().min(1, "Подпись утверждения не может быть пустой"))
+      .min(2, "Утверждений должно быть не меньше двух")
+      .max(10, "Утверждений должно быть не больше десяти"),
+    budget: z.number().int().min(1).max(1000),
+    minPerOption: z.number().int().min(0).optional(),
+    maxPerOption: z.number().int().min(0).optional(),
+  })
+  .transform((d) => ({
+    options: d.options,
+    budget: d.budget,
+    minPerOption: d.minPerOption ?? 0,
+    maxPerOption: d.maxPerOption ?? d.budget,
+  }))
+  .superRefine((d, ctx) => {
+    if (d.minPerOption > d.maxPerOption) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["minPerOption"],
+        message: "Минимум на вариант не может превышать максимум",
+      });
+      return;
+    }
+    if (d.maxPerOption > d.budget) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["maxPerOption"],
+        message: "Максимум на вариант не может превышать бюджет",
+      });
+      return;
+    }
+    const feasibility = isAllocationFeasible(d);
+    if (feasibility.ok) return;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [feasibility.kind === "min" ? "minPerOption" : "maxPerOption"],
+      message:
+        feasibility.kind === "min"
+          ? `Распределение невыполнимо: минимумы требуют ${feasibility.required} баллов, а бюджет — ${feasibility.available}`
+          : `Распределение невыполнимо: нужно распределить ${feasibility.required} баллов, а максимумы дают только ${feasibility.available}`,
+    });
+  });
 
 export const singleChoiceCorrectSchema = z.object({
   correctIndex: z.number(),
@@ -899,6 +1181,17 @@ export const testVariantSchema = z.object({
      */
     timeLimitMinutes: z.number().int().positive().nullable().optional(),
   })),
+  /**
+   * PRD-30 FR-19: the delivery stream as question ids, when it does NOT follow
+   * from concatenating the sections — that is, under the test-wide «полное
+   * перемешивание», where the questions of all topics travel interleaved. The
+   * per-section lists keep the composition (grading, section screens read them),
+   * this keeps the order.
+   *
+   * Absent for every other test and for pre-PRD-30 attempts: the client then
+   * walks the sections in order, exactly as it always has.
+   */
+  deliveryOrder: z.array(z.string()).optional(),
 });
 
 export type TestVariant = z.infer<typeof testVariantSchema>;
@@ -920,6 +1213,22 @@ export const topicResultSchema = z.object({
   // TD-02: recommended events for a failed topic (url optional). `.default([])`
   // keeps legacy stored results (without the field) valid.
   recommendedEvents: z.array(z.object({ title: z.string(), url: z.string().optional() })).default([]),
+  // PRD-32: PDF attachments of the topic (`topics.feedback_json`) and of this test's
+  // section over it (`test_sections.feedback_json`), addresses already normalised at
+  // grading time. Stored WITH the attempt, like the courses above: the results screen
+  // renders from the saved result, and re-reading live content would hand a past
+  // attempt today's materials. `.default([])` keeps attempts graded before PRD-32 valid.
+  recommendedAssets: z.array(z.object({ title: z.string(), url: z.string() })).default([]),
+  // Feedback texts of the topic (`topics.feedback_json.text`, or the legacy
+  // `topics.feedback` column) and of this test's section over it
+  // (`test_sections.feedback_json.text`). Stored WITH the attempt, like the
+  // recommendations above: the results screen renders from the saved result, and
+  // re-reading live content would hand a past attempt today's wording.
+  // An ARRAY and not one glued string on purpose — the topic and the section are two
+  // INDEPENDENT authoring points; gluing them would lose the boundary the consolidated
+  // recommendations block de-duplicates on. `.default([])` keeps attempts graded before
+  // this work valid.
+  feedbackTexts: z.array(z.string()).default([]),
 });
 
 export const attemptResultSchema = z.object({
@@ -1000,12 +1309,37 @@ export const adaptiveTopicResultSchema = z.object({
   })),
   feedback: z.string().nullable(),
   recommendedLinks: z.array(z.object({ title: z.string(), url: z.string() })),
+  // The SAME two fields the standard `topicResultSchema` carries, and for the same
+  // reason: the results screen renders from the SAVED result, so what the author wrote
+  // for the topic (`topics.feedback_json`) and for this test's section over it
+  // (`test_sections.feedback_json`) travels WITH the attempt — re-reading live content
+  // would hand a past attempt today's wording and today's files.
+  //
+  // They live here and not only on the standard result because the consolidated
+  // recommendations block is a property of the TEST, not of its flow mode: an author who
+  // hung a leaflet on a topic owes it to the learner of an adaptive test just the same.
+  // `.default([])` keeps adaptive attempts finished before this work valid — they simply
+  // carry nothing.
+  recommendedAssets: z.array(z.object({ title: z.string(), url: z.string() })).default([]),
+  feedbackTexts: z.array(z.string()).default([]),
 });
 
 export const adaptiveAttemptResultSchema = z.object({
   mode: z.literal("adaptive"),
   overallPassed: z.boolean(),
   topicResults: z.array(adaptiveTopicResultSchema),
+  // issue #33: the graded namespaces of THIS attempt — scales (PRD-5) and indicators
+  // (PRD-2) — computed once at finish and never recomputed on read, exactly as on the
+  // standard result. They live here because a scale is fed by the measurements hung on
+  // questions, and an adaptive test asks questions like any other; the values used to
+  // reach the LMS from the package while no host showed them on the results screen.
+  //
+  // Optional, like their standard counterparts: a test with neither scales nor
+  // indicators stores nothing, and adaptive attempts finished before this work stay
+  // valid. No `status` twin, though: `controls_status` does not override an adaptive
+  // verdict — that one is pronounced by the confirmed levels (see `buildAdaptiveResult`).
+  scaleResults: z.record(z.string(), z.unknown()).optional(),
+  resultVariables: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type AdaptiveTopicResult = z.infer<typeof adaptiveTopicResultSchema>;
@@ -1049,7 +1383,7 @@ export type AdaptiveAnswerResponse = z.infer<typeof adaptiveAnswerResponseSchema
 export const detailedAnswerSchema = z.object({
   questionId: z.string(),
   questionPrompt: z.string(),
-  questionType: z.enum(["single", "multiple", "matching", "ranking", "scale"]),
+  questionType: z.enum(["single", "multiple", "matching", "ranking", "scale", "allocation"]),
   topicId: z.string(),
   topicName: z.string(),
   userAnswer: z.unknown(),
@@ -1121,7 +1455,7 @@ export type AdaptiveLevelStats = z.infer<typeof adaptiveLevelStatsSchema>;
 export const questionStatsSchema = z.object({
   questionId: z.string(),
   questionPrompt: z.string(),
-  questionType: z.enum(["single", "multiple", "matching", "ranking", "scale"]),
+  questionType: z.enum(["single", "multiple", "matching", "ranking", "scale", "allocation"]),
   topicId: z.string(),
   topicName: z.string(),
   difficulty: z.number(),
@@ -1306,7 +1640,7 @@ export const scormAnswers = pgTable("scorm_answers", {
   // Данные вопроса
   questionId: varchar("question_id", { length: 36 }).notNull(),
   questionPrompt: text("question_prompt").notNull(),
-  questionType: text("question_type", { enum: ["single", "multiple", "matching", "ranking", "scale"] }).notNull(),
+  questionType: text("question_type", { enum: ["single", "multiple", "matching", "ranking", "scale", "allocation"] }).notNull(),
   topicId: varchar("topic_id", { length: 36 }),
   topicName: text("topic_name"),
   difficulty: integer("difficulty"),
@@ -1615,7 +1949,15 @@ export const resultVariables = pgTable("result_variables", {
   label: text("label").notNull(),
   type: text("type", { enum: ["boolean", "number", "string"] }).notNull(),
   formula: text("formula").notNull(),
-  showToLearner: boolean("show_to_learner").notNull().default(false),
+  // PRD-29: interpretation of the indicator — the outcome list for string/boolean
+  // values, bands for numeric ones. `scales` already has its own config_json.
+  configJson: jsonb("config_json").$type<Record<string, unknown>>().notNull().default({}),
+  // PRD-29: three positions instead of a boolean. Psychodiagnostics routinely needs
+  // the LEVEL disclosed while the raw score stays hidden — the score invites
+  // self-diagnosis and comparison between people.
+  learnerVisibility: text("learner_visibility", { enum: ["hidden", "level", "level_and_value"] })
+    .notNull()
+    .default("hidden"),
   scormTarget: text("scorm_target", { enum: ["interaction", "suspend_data", "both", "none"] }).notNull().default("both"),
   controlsStatus: text("controls_status", { enum: ["none", "success", "completion"] }).notNull().default("none"),
   sortOrder: integer("sort_order").notNull().default(0),
@@ -1648,6 +1990,10 @@ export const insertResultVariableSchema = createInsertSchema(resultVariables)
     // allowed; consumers fall back to the name for display. Column is NOT NULL, so
     // "" (not null) is stored.
     label: z.string().max(120).default(""),
+    configJson: z.record(z.string(), z.unknown()).default({}),
+    // PRD-29: see the same note on insertScaleSchema — drizzle-zod does not carry
+    // the column default into the parsed value.
+    learnerVisibility: z.enum(["hidden", "level", "level_and_value"]).default("hidden"),
   });
 
 export type InsertResultVariable = z.infer<typeof insertResultVariableSchema>;
@@ -1668,7 +2014,12 @@ export const scales = pgTable("scales", {
   normalization: text("normalization", { enum: ["none", "percent", "custom"] }).notNull().default("none"),
   direction: text("direction", { enum: ["positive", "inverse"] }).notNull().default("positive"),
   configJson: jsonb("config_json").$type<Record<string, unknown>>().notNull().default({}),
-  showToLearner: boolean("show_to_learner").notNull().default(false),
+  // PRD-29: three positions instead of a boolean. Psychodiagnostics routinely needs
+  // the LEVEL disclosed while the raw score stays hidden — the score invites
+  // self-diagnosis and comparison between people.
+  learnerVisibility: text("learner_visibility", { enum: ["hidden", "level", "level_and_value"] })
+    .notNull()
+    .default("hidden"),
   scormTarget: text("scorm_target", { enum: ["none", "suspend_data", "interaction", "both"] }).notNull().default("none"),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -1691,6 +2042,10 @@ export const insertScaleSchema = createInsertSchema(scales)
     // Label is OPTIONAL (per the approved wireframe). Empty is allowed; consumers
     // fall back to the key for display. Column is NOT NULL, so "" (not null) is stored.
     label: z.string().max(120).default(""),
+    // PRD-29: drizzle-zod marks a defaulted column optional but does NOT carry the
+    // column default into the parsed value, so state it here — an insert payload
+    // must always name what the learner sees.
+    learnerVisibility: z.enum(["hidden", "level", "level_and_value"]).default("hidden"),
   });
 
 export type InsertScale = z.infer<typeof insertScaleSchema>;
@@ -1704,7 +2059,12 @@ export const questionMeasurements = pgTable("question_measurements", {
   testId: varchar("test_id", { length: 36 }).notNull().references(() => tests.id, { onDelete: "cascade" }),
   questionId: varchar("question_id", { length: 36 }).notNull().references(() => questions.id, { onDelete: "cascade" }),
   scaleId: uuid("scale_id").notNull().references(() => scales.id, { onDelete: "cascade" }),
-  sourceType: text("source_type", { enum: ["question", "option", "matching_pair", "ranking_position"] }).notNull(),
+  // PRD-44: `option_allocation` is the first source whose contribution the LEARNER sets —
+  // the unit fires on a non-zero assignment and contributes `assigned * value * weight`.
+  // No migration needed: the column is plain `text NOT NULL` with no CHECK.
+  sourceType: text("source_type", {
+    enum: ["question", "option", "matching_pair", "ranking_position", "option_allocation"],
+  }).notNull(),
   sourceKey: text("source_key"),
   valueJson: jsonb("value_json").$type<number>().notNull(),
   weight: real("weight").notNull().default(1),
@@ -1733,3 +2093,79 @@ export const insertQuestionMeasurementSchema = createInsertSchema(questionMeasur
 
 export type InsertQuestionMeasurement = z.infer<typeof insertQuestionMeasurementSchema>;
 export type QuestionMeasurement = typeof questionMeasurements.$inferSelect;
+
+/**
+ * Media library: the registry row for ONE author file. The `id` IS the address —
+ * content stores the string `/api/media/<id>`, so the column type of every existing
+ * media reference stays `text` and no mass JSON migration is needed.
+ *
+ * Two layers of dedup, deliberately different: the PHYSICAL file is addressed by
+ * `checksum` (re-uploading identical bytes writes no second file), while a REGISTRY
+ * ROW is per (content, owner). One row per checksum would leak a private file to
+ * anyone who happened to upload the same bytes.
+ *
+ * `owner_id` is nullable: rows created by the backfill of pre-registry files have no
+ * knowable author (the old file name carried none).
+ */
+export const mediaAssets = pgTable("media_assets", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  checksum: varchar("checksum", { length: 64 }).notNull(),
+  storageKey: text("storage_key").notNull(),
+  mimeType: text("mime_type").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  kind: text("kind", { enum: ["image", "audio", "video", "document"] }).notNull(),
+  originalName: text("original_name").notNull(),
+  title: text("title"),
+  ownerId: varchar("owner_id", { length: 36 }),
+  visibility: text("visibility", { enum: ["private", "shared"] }).notNull().default("shared"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  // Dedup barrier, not just a lookup: without uniqueness two concurrent uploads of the
+  // same bytes by the same author both miss the SELECT and both insert. Partial because
+  // backfilled rows have no owner, and Postgres treats NULLs as distinct — uniqueness
+  // could not constrain them anyway.
+  ownerChecksumIdx: uniqueIndex("media_assets_owner_checksum_idx")
+    .on(table.ownerId, table.checksum)
+    .where(sql`${table.ownerId} is not null`),
+  // Reference counting before physically removing a file.
+  checksumIdx: index("media_assets_checksum_idx").on(table.checksum),
+}));
+
+/**
+ * Media library: the reverse index "asset -> where it is used". It serves three
+ * consumers at once: the delivery rule (may this user receive the file), the
+ * «где используется» report, and orphan collection.
+ *
+ * `field` is the dotted path inside the entity, so the report can say WHERE exactly
+ * and a re-sync can replace one entity's rows wholesale.
+ */
+export const mediaUsages = pgTable("media_usages", {
+  // Not polymorphic like entity_type/entity_id: asset_id always points at ONE table,
+  // so a real FK is warranted. No cascade on purpose — deletion of an asset is blocked
+  // at the application layer (409 when usages exist); the FK is an integrity backstop,
+  // not a cascade mechanism.
+  assetId: varchar("asset_id", { length: 36 }).notNull().references(() => mediaAssets.id),
+  entityType: text("entity_type", {
+    enum: [
+      "question",
+      "content_page",
+      "test_design",
+      "test_feedback",
+      "topic_feedback",
+      "scale_feedback",
+      "variable_feedback",
+      "snapshot",
+    ],
+  }).notNull(),
+  entityId: varchar("entity_id", { length: 36 }).notNull(),
+  field: text("field").notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.assetId, table.entityType, table.entityId, table.field] }),
+  // Re-syncing one entity deletes its rows by this key.
+  entityIdx: index("media_usages_entity_idx").on(table.entityType, table.entityId),
+}));
+
+export type MediaAsset = typeof mediaAssets.$inferSelect;
+export type InsertMediaAsset = typeof mediaAssets.$inferInsert;
+export type MediaUsage = typeof mediaUsages.$inferSelect;
+export type MediaEntityType = MediaUsage["entityType"];

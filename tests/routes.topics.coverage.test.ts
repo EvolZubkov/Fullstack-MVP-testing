@@ -322,7 +322,7 @@ describe("DELETE /api/topics/:id — delete branches", () => {
   it("admin ?force=true overrides the block and deletes", async () => {
     storageMock.getTopic.mockResolvedValue(topic("t1"));
     assessMock.mockResolvedValue(BLOCKED);
-    storageMock.deleteTopic.mockResolvedValue(true);
+    storageMock.deleteTopic.mockResolvedValue({ deleted: true, questionIds: [], contentPageIds: [] });
     const res = await asUser(request(app).delete("/api/topics/t1?force=true"));
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -345,7 +345,7 @@ describe("POST /api/topics/bulk-delete — partition edges", () => {
   it("lists forbidden topics the actor may not delete, deletes none", async () => {
     asAuthor();
     storageMock.getTopic.mockResolvedValue(topic("t1", { ownerId: "other" }));
-    storageMock.deleteTopicsBulk.mockResolvedValue(0);
+    storageMock.deleteTopicsBulk.mockResolvedValue({ count: 0, questionIds: [], contentPageIds: [] });
     const res = await asUser(request(app).post("/api/topics/bulk-delete").send({ ids: ["t1"] }));
     expect(res.status).toBe(200);
     expect(storageMock.deleteTopicsBulk).toHaveBeenCalledWith([]);
@@ -354,7 +354,7 @@ describe("POST /api/topics/bulk-delete — partition edges", () => {
 
   it("silently skips ids with no matching topic", async () => {
     storageMock.getTopic.mockImplementation(async (id: string) => (id === "t1" ? topic("t1") : undefined));
-    storageMock.deleteTopicsBulk.mockResolvedValue(1);
+    storageMock.deleteTopicsBulk.mockResolvedValue({ count: 1, questionIds: [], contentPageIds: [] });
     const res = await asUser(request(app).post("/api/topics/bulk-delete").send({ ids: ["t1", "miss"] }));
     expect(res.status).toBe(200);
     expect(storageMock.deleteTopicsBulk).toHaveBeenCalledWith(["t1"]);

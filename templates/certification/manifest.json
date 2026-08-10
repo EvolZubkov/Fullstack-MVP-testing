@@ -1,7 +1,7 @@
 {
   "id": "certification",
   "name": "Сертификация (РТК)",
-  "version": "1.4.0",
+  "version": "1.7.0",
   "templateApiVersion": "1.0",
   "description": "Сертификационный тест РТК: брендовая палитра Ростелекома (светлая и тёмная) с переопределяемыми цветами, оранжевый акцент, страница-роутер, кнопки навигации, пропуск и возврат к неотвеченным, экран обзора. Набор вариантов страниц совпадает со стандартным шаблоном — тест переключается между ними без переназначения страниц.",
   "themes": [
@@ -138,6 +138,105 @@
       "group": "Навигация",
       "section": "progress",
       "description": "Полоса заполнения под счётчиком в шапке."
+    },
+    {
+      "key": "levelScheme",
+      "type": "select",
+      "label": "Цветовая схема уровней",
+      "default": "traffic",
+      "group": "Цвета",
+      "section": "branding",
+      "options": [
+        "traffic",
+        "neutral",
+        "custom"
+      ],
+      "optionLabels": {
+        "traffic": "Зелёный — жёлтый — красный",
+        "neutral": "Нейтральная, оттенки одного цвета",
+        "custom": "Своя"
+      },
+      "description": "Как окрашиваются уровни шкал и показателей. «Своя» задействует три поля цвета ниже."
+    },
+    {
+      "key": "levelColorFavorable",
+      "type": "color",
+      "cssVar": "--tb-level-favorable",
+      "label": "Цвет благоприятного края",
+      "default": null,
+      "group": "Цвета",
+      "section": "branding",
+      "description": "Применяется, когда выбрана схема «Своя»."
+    },
+    {
+      "key": "levelColorMid",
+      "type": "color",
+      "cssVar": "--tb-level-mid",
+      "label": "Цвет середины",
+      "default": null,
+      "group": "Цвета",
+      "section": "branding",
+      "description": "Необязателен: без него переход идёт напрямую из края в край."
+    },
+    {
+      "key": "levelColorUnfavorable",
+      "type": "color",
+      "cssVar": "--tb-level-unfavorable",
+      "label": "Цвет неблагоприятного края",
+      "default": null,
+      "group": "Цвета",
+      "section": "branding",
+      "description": "Применяется, когда выбрана схема «Своя»."
+    },
+    {
+      "key": "scaleRenderKind",
+      "type": "select",
+      "label": "Вид шкал",
+      "default": "band_ruler",
+      "group": "Итоги",
+      "section": "branding",
+      "options": [
+        "label",
+        "value",
+        "value_of_max",
+        "ring",
+        "band_ruler",
+        "gradient_bar"
+      ],
+      "optionLabels": {
+        "label": "Только уровень",
+        "value": "Значение",
+        "value_of_max": "Значение из максимума",
+        "ring": "Кольцо",
+        "band_ruler": "Линейка с зонами",
+        "gradient_bar": "Полоса-градусник"
+      },
+      "description": "Применяется там, где выполним; иначе откатывается на ближайший доступный."
+    },
+    {
+      "key": "indicatorRenderKind",
+      "type": "select",
+      "label": "Вид показателей",
+      "default": "label",
+      "group": "Итоги",
+      "section": "branding",
+      "options": [
+        "label",
+        "value",
+        "value_of_max",
+        "ring",
+        "band_ruler",
+        "gradient_bar"
+      ],
+      "optionLabels": {
+        "label": "Только уровень",
+        "value": "Значение",
+        "value_of_max": "Значение из максимума",
+        "ring": "Кольцо",
+        "band_ruler": "Линейка с зонами",
+        "gradient_bar": "Полоса-градусник"
+      },
+      "description": "Применяется там, где выполним; иначе откатывается на ближайший доступный."
     }
   ],
   "contentTemplates": [
@@ -170,6 +269,58 @@
       "kind": "results",
       "pageKind": "results",
       "layoutFile": "layouts/results.html",
+      "settings": [
+        {
+          "key": "scalesChartKind",
+          "type": "select",
+          "label": "Диаграмма по шкалам",
+          "description": "Роза показывает расклад одного целого и годится, когда шкалы делят общий бюджет; радар — каждую шкалу относительно её предела. «Авто» выбирает розу для методик с общим бюджетом. Рисуется при трёх и более видимых шкалах.",
+          "default": "none",
+          "options": [
+            "none",
+            "auto",
+            "radar",
+            "rose"
+          ],
+          "optionLabels": {
+            "none": "Не показывать",
+            "auto": "Авто — по устройству методики",
+            "radar": "Радар — каждая шкала к своему пределу",
+            "rose": "Роза — расклад целого"
+          }
+        },
+        {
+          "key": "radarAxisLimit",
+          "type": "select",
+          "label": "Предел оси радара",
+          "description": "Чем считается полный луч. «Домен» — предел шкалы, сетка совпадает с границами интервалов в карточке. «Заданный» берёт предел показа из настроек шкалы и годится, когда домен недостижимо велик. «По попытке» растягивает фигуру на весь круг, но делает масштаб зависящим от ответов: фигуры разных попыток становятся несравнимы.",
+          "default": "domain",
+          "options": [
+            "domain",
+            "declared",
+            "attempt"
+          ],
+          "optionLabels": {
+            "domain": "Домен шкалы",
+            "declared": "Заданный автором",
+            "attempt": "По попытке"
+          }
+        },
+        {
+          "key": "scaleAppearance",
+          "type": "scaleAppearance",
+          "label": "Оформление шкал",
+          "description": "Цвет и пиктограмма каждой шкалы. Читает только роза: на радаре цвет вершины показывает уровень. Цвет доступен, пока ни у одной шкалы не объявлено направление — иначе цвет высказывает вердикт.",
+          "default": {}
+        },
+        {
+          "key": "showCompetencyRadar",
+          "type": "boolean",
+          "label": "Радар компетенций (устаревшее)",
+          "description": "Оставлено для тестов, настроенных до появления выбора вида. Читается только когда «Диаграмма по шкалам» не задана.",
+          "default": false
+        }
+      ],
       "placeholders": []
     },
     {
@@ -179,7 +330,68 @@
       "layoutFile": "layouts/report.html",
       "styleFile": "styles/report.css",
       "isDefault": true,
-      "settings": [],
+      "settings": [
+        {
+          "key": "scalesChartKind",
+          "type": "select",
+          "scope": "content",
+          "label": "Диаграмма по шкалам",
+          "description": "Независима от экрана итогов: отчёт уносят с собой и показывают специалисту. «Авто» выбирает розу для методик с общим бюджетом.",
+          "default": "none",
+          "options": [
+            "none",
+            "auto",
+            "radar",
+            "rose"
+          ],
+          "optionLabels": {
+            "none": "Не показывать",
+            "auto": "Авто — по устройству методики",
+            "radar": "Радар — каждая шкала к своему пределу",
+            "rose": "Роза — расклад целого"
+          }
+        },
+        {
+          "key": "radarAxisLimit",
+          "type": "select",
+          "scope": "content",
+          "label": "Предел оси радара",
+          "description": "Чем считается полный луч. «Домен» — предел шкалы, сетка совпадает с границами интервалов в карточке. «Заданный» берёт предел показа из настроек шкалы и годится, когда домен недостижимо велик. «По попытке» растягивает фигуру на весь круг, но делает масштаб зависящим от ответов: фигуры разных попыток становятся несравнимы.",
+          "default": "domain",
+          "options": [
+            "domain",
+            "declared",
+            "attempt"
+          ],
+          "optionLabels": {
+            "domain": "Домен шкалы",
+            "declared": "Заданный автором",
+            "attempt": "По попытке"
+          }
+        },
+        {
+          "key": "showCompetencyRadar",
+          "type": "boolean",
+          "scope": "content",
+          "label": "Радар компетенций (устаревшее)",
+          "description": "Оставлено для тестов, настроенных до появления выбора вида. Читается только когда «Диаграмма по шкалам» не задана.",
+          "default": false
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Подложка страницы",
+          "description": "Фон страницы отчёта. Без изображения печатается градиент шаблона.",
+          "default": "assets/report/bg.png"
+        },
+        {
+          "key": "logoImage",
+          "type": "image",
+          "label": "Логотип в отчёте",
+          "description": "Показывается над заголовком. Пусто — строки логотипа нет.",
+          "default": "assets/report/logo.png"
+        }
+      ],
       "placeholders": []
     },
     {
@@ -189,7 +401,68 @@
       "layoutFile": "layouts/report.adaptive.html",
       "styleFile": "styles/report.css",
       "isDefault": true,
-      "settings": [],
+      "settings": [
+        {
+          "key": "scalesChartKind",
+          "type": "select",
+          "scope": "content",
+          "label": "Диаграмма по шкалам",
+          "description": "Независима от экрана итогов: отчёт уносят с собой и показывают специалисту. «Авто» выбирает розу для методик с общим бюджетом.",
+          "default": "none",
+          "options": [
+            "none",
+            "auto",
+            "radar",
+            "rose"
+          ],
+          "optionLabels": {
+            "none": "Не показывать",
+            "auto": "Авто — по устройству методики",
+            "radar": "Радар — каждая шкала к своему пределу",
+            "rose": "Роза — расклад целого"
+          }
+        },
+        {
+          "key": "radarAxisLimit",
+          "type": "select",
+          "scope": "content",
+          "label": "Предел оси радара",
+          "description": "Чем считается полный луч. «Домен» — предел шкалы, сетка совпадает с границами интервалов в карточке. «Заданный» берёт предел показа из настроек шкалы и годится, когда домен недостижимо велик. «По попытке» растягивает фигуру на весь круг, но делает масштаб зависящим от ответов: фигуры разных попыток становятся несравнимы.",
+          "default": "domain",
+          "options": [
+            "domain",
+            "declared",
+            "attempt"
+          ],
+          "optionLabels": {
+            "domain": "Домен шкалы",
+            "declared": "Заданный автором",
+            "attempt": "По попытке"
+          }
+        },
+        {
+          "key": "showCompetencyRadar",
+          "type": "boolean",
+          "scope": "content",
+          "label": "Радар компетенций (устаревшее)",
+          "description": "Оставлено для тестов, настроенных до появления выбора вида. Читается только когда «Диаграмма по шкалам» не задана.",
+          "default": false
+        },
+        {
+          "key": "backgroundImage",
+          "type": "image",
+          "label": "Подложка страницы",
+          "description": "Фон страницы отчёта. Без изображения печатается градиент шаблона.",
+          "default": "assets/report/bg.png"
+        },
+        {
+          "key": "logoImage",
+          "type": "image",
+          "label": "Логотип в отчёте",
+          "description": "Показывается над заголовком. Пусто — строки логотипа нет.",
+          "default": "assets/report/logo.png"
+        }
+      ],
       "placeholders": []
     },
     {
@@ -1075,7 +1348,10 @@
     "scripts": [
       "scripts/template.js"
     ],
-    "images": [],
+    "images": [
+      "assets/report/bg.png",
+      "assets/report/logo.png"
+    ],
     "preview": "preview.svg"
   },
   "capabilities": {

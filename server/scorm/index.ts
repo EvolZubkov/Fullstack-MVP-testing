@@ -6,10 +6,12 @@ import { buildMetadataXml } from "./builders/metadata";
 import { escapeXml } from "./utils/escape";
 import { readAsset } from "./assets/read-asset";
 import { extractEmbeddedMediaIntoAssets } from "./builders/media-assets";
+import { registryMediaResolver } from "./builders/media-resolver";
 import { copyDirToFiles, getTemplatesRootDir } from "./builders/template-copy";
 import { getSharedRuntimeBundle } from "./builders/shared-runtime";
 import { readVendorDsCss, readPackageFontFiles, assemblePackageStyles } from "./builders/ds-styles";
 import { resolveReportBake, reportKindForMode } from "@shared/report/report-variants";
+import { isReportEnabled } from "@shared/schema";
 import type { ReportSettings } from "@shared/schema";
 import fs from "node:fs";
 import path from "node:path";
@@ -44,32 +46,6 @@ function tryReadAsset(paths: string[]): string {
   return "";
 }
 
-function tryReadBinaryAsset(relativePath: string): Buffer | null {
-  const possiblePaths = [
-    path.resolve(__dirname, "template", relativePath),
-    path.resolve(__dirname, relativePath),
-    path.resolve(__dirname, "assets", relativePath),
-    path.resolve(process.cwd(), "server", "scorm", "template", relativePath),
-    path.resolve(process.cwd(), "dist", "scorm", "template", relativePath),
-    path.resolve(process.cwd(), "scorm", "template", relativePath),
-  ];
-  
-  logger.info("[tryReadBinaryAsset] Looking for: " + relativePath);
-  
-  for (const p of possiblePaths) {
-    try {
-      if (fs.existsSync(p)) {
-        logger.info("[tryReadBinaryAsset] Found at: " + p);
-        return fs.readFileSync(p);
-      }
-    } catch {
-      continue;
-    }
-  }
-  logger.info("[tryReadBinaryAsset] Not found: " + relativePath);
-  return null;
-}
-
 /**
  * System screens that fall back to the `default` template when the active template
  * does not declare them (PRD-1 §4.3.2, PRD-3 NFR-06), mapped to the layout key the
@@ -81,6 +57,14 @@ function tryReadBinaryAsset(relativePath: string): Buffer | null {
  * layout, so swapping in the standard template's identical generic layout would buy
  * nothing; their real fallback is at the variant level (`variant-binding.ts`).
  */
+/** How many lost media addresses the export log spells out before summarising the rest. */
+const MISSING_MEDIA_LOGGED = 5;
+
+/** Where the ACTIVE template's own files sit inside the package. */
+const PACKAGE_TEMPLATE_DIR = "template";
+/** Where the bundled `default` sits when the active template needs fallbacks (G21). */
+const PACKAGE_DEFAULT_TEMPLATE_DIR = "template-default";
+
 const FALLBACK_KIND_LAYOUT: Record<string, string> = {
   start: "start",
   results: "results",
@@ -185,16 +169,33 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     (data.test.reportSettingsJson as ReportSettings | null)?.[
       data.test.mode === "adaptive" ? "adaptive" : "standard"
     ] ?? null,
+    // FR-05: картинки варианта — файлы ШАБЛОНА, а он лежит в пакете под `template/`.
+    // Резолвятся здесь, а не в рантайме: только сборщик знает, из какого каталога
+    // приехал вариант.
+    `${PACKAGE_TEMPLATE_DIR}/`,
   );
   if (!reportBake.variantKey) {
     // Активный шаблон вида не объявил. Макет приходит из вложенного «Стандартного» по
     // КАНОНИЧЕСКОМУ ключу (так его находит `systemLayout`), а стиль — из его же
     // варианта: без этого шага страница собиралась бы вообще без оформления, потому
-    // что своего `styleFile` у несуществующего варианта нет.
-    const fromDefault = resolveReportBake(readTemplateManifest(defaultDir), reportKind, null);
+    // что своего `styleFile` у несуществующего варианта нет. Оттуда же берутся и его
+    // картинки — база другая, потому что `default` лежит в пакете рядом, отдельно.
+    const fromDefault = resolveReportBake(
+      readTemplateManifest(defaultDir),
+      reportKind,
+      null,
+      `${PACKAGE_DEFAULT_TEMPLATE_DIR}/`,
+    );
     reportBake = { ...fromDefault, variantKey: null, layoutKey: reportKind };
   }
-  if (data.designSettings) data.designSettings.report = reportBake;
+  // «Выдавать отчёт обучающемуся» — общая настройка теста, и в пакет она едет вместе с
+  // выбором вида: в LMS кнопку рисует рантайм, и другого источника этого факта у него нет.
+  if (data.designSettings) {
+    data.designSettings.report = {
+      ...reportBake,
+      enabled: isReportEnabled(data.test.reportSettingsJson as ReportSettings | null),
+    };
+  }
 
   const testJson = buildTestJson(data);
 
@@ -209,7 +210,22 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   const runtimeJs = readAsset("runtime.js");
 
   const testObj = JSON.parse(testJson);
-  const { testObj: patchedTestObj, assets } = extractEmbeddedMediaIntoAssets(testObj);
+  const { testObj: patchedTestObj, assets, missing } = await extractEmbeddedMediaIntoAssets(testObj, {
+    resolveRef: registryMediaResolver,
+  });
+  // Media lost silently is why the packing defect lived unnoticed: the address is blanked, the
+  // file is not in the package, and without this line nobody would learn of it. Only the first
+  // few are spelled out — the count is the signal, and a broken test can hold dozens.
+  if (missing.length > 0) {
+    const shown = missing.slice(0, MISSING_MEDIA_LOGGED);
+    const rest = missing.length - shown.length;
+    logger.warn(
+      `SCORM package ${data.test.id}: ${missing.length} media reference(s) lost: ` +
+        shown.join("; ") +
+        (rest > 0 ? `; …and ${rest} more` : ""),
+      "scorm-export",
+    );
+  }
 
   const appTpl = readAsset("app.js");
   const testJsonB64 = Buffer.from(JSON.stringify(patchedTestObj), "utf8").toString("base64");
@@ -231,6 +247,12 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   const shuffleJs = readOneOf([
     "app/utils/scorm/shuffle.js",
     "app/utils/shuffle.js",
+  ]);
+
+  // PRD-34: сборщик решения о защите. Утилита, а не часть рендера, — её вызывают
+  // несколько render-модулей, поэтому объявлена ДО них и ровно один раз.
+  const protectionJs = readOneOf([
+    "app/utils/protection.js",
   ]);
 
   const suspendAttemptsJs = readOneOf([
@@ -323,7 +345,15 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     patchedTestObj?.retakePolicy?.eligibilityPlugin?.key &&
     patchedTestObj?.retakePlugin?.runtimeEntry
   );
-  const eligibilityEngineJs = retakeGated ? readOneOf(["app/eligibility/engine.js"]) : "";
+  // PRD-31 barrier B: the hour interval between attempts inside ONE assignment. It
+  // needs no plugin and no gate — it is decided AFTER Initialize from suspend_data —
+  // but it does need the engine's date math and the trusted clock. So the bundling
+  // condition splits: engine + clock for EITHER barrier, plugins + gate only for the
+  // cooldown. A package with neither barrier still gets none of it (FR-14).
+  const attemptIntervalOn = patchedTestObj?.retakePolicy?.attemptInterval?.enabled === true;
+  const needsEligibilityCore = retakeGated || attemptIntervalOn;
+  const eligibilityEngineJs = needsEligibilityCore ? readOneOf(["app/eligibility/engine.js"]) : "";
+  const trustedNowJs = needsEligibilityCore ? readOneOf(["app/utils/trusted-now.js"]) : "";
   const eligibilityPluginsJs = retakeGated ? readOneOf(["app/eligibility/plugins.js"]) : "";
   const eligibilityGateJs = retakeGated ? readOneOf(["app/eligibility/gate.js"]) : "";
 
@@ -344,6 +374,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   const qMatchingJs = readOneOf(["app/render/questions/matching.js"]);
   const qRankingJs  = readOneOf(["app/render/questions/ranking.js"]);
   const qScaleJs    = readOneOf(["app/render/questions/scale.js"]);
+  const qAllocJs    = readOneOf(["app/render/questions/allocation.js"]);
   const qIndexJs    = readOneOf(["app/render/questions/index.js"]);
   const viewResultsJs = readOneOf(["app/render/viewResults.js"]);
 
@@ -401,7 +432,12 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   let appJs = joinJsParts([
     sharedRuntimeJs,
     escapeHtmlJs,
+    // PRD-31: the trusted clock is a UTILITY, not gate machinery — suspendAttempts
+    // stamps a finished attempt with it, so it must be defined before the parts that
+    // use it rather than sitting with the gate at the tail of the bundle.
+    trustedNowJs,
     qTypeJs,
+    protectionJs,
     telemetryJs,
     shuffleJs,
     suspendAttemptsJs,
@@ -419,6 +455,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     qMatchingJs,
     qRankingJs,
     qScaleJs,
+    qAllocJs,
     qIndexJs,
     answerActionsJs,
     matchingDndJs,
@@ -444,28 +481,16 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     bootstrapMainJs,
   ]).replace("__TEST_JSON_B64__", testJsonB64);
 
+  // Картинки отчёта здесь больше не перечисляются: с PRD-27 FR-05 подложка и логотип —
+  // файлы ШАБЛОНА, они приезжают вместе с его каталогом (`template/…`) и попадают в
+  // манифест ниже, вместе со всеми прочими файлами шаблона.
   const mediaHrefs = Object.keys(assets);
-
-  // Добавляем PDF-ассеты в список файлов для манифеста
-  const pdfAssetPaths = [
-    "assets/media/pdf-bg-1.png",
-    "assets/media/pdf-bg-2.png", 
-    "assets/media/pdf-bg-3.png",
-    "assets/media/logo-light.png"
-  ];
-
-  // Добавляем только те PDF-ассеты, которые реально существуют
-  pdfAssetPaths.forEach(assetPath => {
-    if (tryReadBinaryAsset(assetPath)) {
-      mediaHrefs.push(assetPath);
-    }
-  });
 
   // templateId / builtinRoot / templateDir / defaultDir / fallbackLayoutKeys were
   // resolved at the top of the function (needed before buildTestJson).
   const templateFiles: Record<string, string | Buffer> = {};
   if (fs.existsSync(templateDir)) {
-    copyDirToFiles(templateDir, "template", templateFiles);
+    copyDirToFiles(templateDir, PACKAGE_TEMPLATE_DIR, templateFiles);
   } else {
     logger.warn(`Template directory not found for "${templateId}" (${templateDir})`, "scorm-export");
   }
@@ -473,7 +498,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   // runtime can render fallback system screens (start/results the active template
   // doesn't declare) from default's own layout + CSS.
   if (fallbackLayoutKeys.length > 0 && fs.existsSync(defaultDir) && path.resolve(defaultDir) !== path.resolve(templateDir)) {
-    copyDirToFiles(defaultDir, "template-default", templateFiles);
+    copyDirToFiles(defaultDir, PACKAGE_DEFAULT_TEMPLATE_DIR, templateFiles);
   }
   // Revision «Стандартный» on ui-kit: brand-font woff2 embedded under assets/fonts/,
   // referenced by the vendored DS `@font-face` in styles.css. Declared in the manifest
@@ -542,21 +567,6 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   };
   if (stylesDefaultCss) files["styles-default.css"] = stylesDefaultCss;
 
-  // Добавляем подложки и логотипы для PDF (только в assets/media/)
-  try {
-    const pdfBg1 = tryReadBinaryAsset("assets/media/pdf-bg-1.png");
-    const pdfBg2 = tryReadBinaryAsset("assets/media/pdf-bg-2.png");
-    const pdfBg3 = tryReadBinaryAsset("assets/media/pdf-bg-3.png");
-    const logoLight = tryReadBinaryAsset("assets/media/logo-light.png");
-    
-    if (pdfBg1) files["assets/media/pdf-bg-1.png"] = pdfBg1;
-    if (pdfBg2) files["assets/media/pdf-bg-2.png"] = pdfBg2;
-    if (pdfBg3) files["assets/media/pdf-bg-3.png"] = pdfBg3;
-    if (logoLight) files["assets/media/logo-light.png"] = logoLight;
-  } catch (e) {
-    logger.info("PDF assets not found, skipping");
-  }
-  
   for (const [zipPath, buf] of Object.entries(assets)) {
     files[zipPath] = buf;
   }

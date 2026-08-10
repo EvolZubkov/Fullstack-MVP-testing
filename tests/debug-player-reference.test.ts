@@ -3,17 +3,27 @@
  * @description PRD-18 Phase 4 — the «Эталон» overlay (§5.4). Loads the REAL shared
  * compute IIFE (`inspector-compute.js`) into jsdom so `window.TBInspector` is the
  * production object, builds the revised «Стандартный» question DOM (the SAME markup
- * the SCORM render emits — `.ou-radio-card[data-index]`, `.ou-rank__item`,
- * `.ou-match__row`) for the CURRENT question (state.currentIndex) and asserts the
+ * the SCORM render emits — `.ou-radio-card[data-index]`, `.ou-rank__item[data-item]`,
+ * `.ou-match__card--fixed[data-drop]` / `--drag[data-drag]`) for the CURRENT question
+ * (state.currentIndex) and asserts the
  * correct-answer markers land on the right elements: ✓ on correct options, the
  * correct ordinal on ranking items, paired letters on matching.
+ *
+ * Ranking and matching are also asserted against the REAL renderer output (imported
+ * from `@shared/template/question-interaction`) with wording the typography pass
+ * rewrites: hand-written fixtures of clean ASCII text are exactly what hid the
+ * text-matching defect these two markers used to have.
  */
 // @vitest-environment jsdom
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { renderMatching, renderRanking } from "@shared/template/question-interaction";
 
-interface ProtocolStatusRow { idx: number; status: string; answered: boolean }
+interface ProtocolStatusRow {
+  idx: number; status: string; answered: boolean; verdict: string; measurement: boolean;
+  points: number; earned: number; score: number | null; sMax: number | null; priceNote: string | null;
+}
 interface ScoreSection { topicName: string; percent: number; passed: boolean | null; completed: boolean }
 interface RefApi {
   applyReference(win: { document: Document; state: unknown } | null): void;
@@ -69,13 +79,13 @@ describe("Эталон overlay — applyReference", () => {
     expect(marks()).toHaveLength(2);
   });
 
-  it("marks ranking items with their correct 1-based position (matched by title text)", () => {
+  it("marks ranking items with their correct 1-based position (by data-item)", () => {
     // Rows displayed A,B,C; correct order is items [2,0,1] → A(0)→pos2, B(1)→pos3, C(2)→pos1.
     document.body.innerHTML =
       '<div class="ou-rank">' +
-      '<div class="ou-rank__item" data-drag="0"><span class="ou-rank__title">A</span></div>' +
-      '<div class="ou-rank__item" data-drag="1"><span class="ou-rank__title">B</span></div>' +
-      '<div class="ou-rank__item" data-drag="2"><span class="ou-rank__title">C</span></div>' +
+      '<div class="ou-rank__item" data-drag="0" data-item="0"><span class="ou-rank__title">A</span></div>' +
+      '<div class="ou-rank__item" data-drag="1" data-item="1"><span class="ou-rank__title">B</span></div>' +
+      '<div class="ou-rank__item" data-drag="2" data-item="2"><span class="ou-rank__title">C</span></div>' +
       "</div>";
     ref().applyReference(fakeWin({
       currentIndex: 0,
@@ -85,13 +95,35 @@ describe("Эталон overlay — applyReference", () => {
     expect(m).toEqual([["A", "2"], ["B", "3"], ["C", "1"]]);
   });
 
+  it("marks ranking items on the REAL render, whose text went through the typography pass", () => {
+    const items = [
+      "Подключение абонента к сети",
+      "Проверка качества связи на линии",
+      "Передача заявки в отдел монтажа",
+    ];
+    document.body.innerHTML = renderRanking({ type: "ranking", dataJson: { items } }, null);
+    ref().applyReference(fakeWin({
+      currentIndex: 0,
+      flatQuestions: [{ question: { id: "q6", type: "ranking", data: { items }, correct: { correctOrder: [2, 0, 1] } } }],
+    }));
+    expect(marks()).toHaveLength(3);
+    // correctOrder [2,0,1] → item 0 goes 2nd, item 1 goes 3rd, item 2 goes 1st.
+    const ordinals = Array.from(document.querySelectorAll<HTMLElement>(".ou-rank__item"))
+      .map((row) => [row.getAttribute("data-item"), row.querySelector("[data-tb-ref]")?.textContent]);
+    expect(ordinals).toEqual([["0", "2"], ["1", "3"], ["2", "1"]]);
+  });
+
   it("marks matching pairs with the same letter on the fixed prompt and the chip", () => {
+    // Both sides carry their index the way the render emits it: `data-drop="r<right>"`
+    // on the prompt, `data-drag="<left>"` on the chip. The chips sit in a shuffled
+    // order (1, 0), so a row-position match would pass by accident — the letters must
+    // follow the indices.
     document.body.innerHTML =
       '<div class="ou-match">' +
-      '<div class="ou-match__row"><div class="ou-match__card ou-match__card--fixed"><span class="ou-match__card-title">R0</span></div>' +
-      '<div class="ou-match__card ou-match__card--drag" data-drag="1"><span class="ou-match__card-title">L1</span></div></div>' +
-      '<div class="ou-match__row"><div class="ou-match__card ou-match__card--fixed"><span class="ou-match__card-title">R1</span></div>' +
-      '<div class="ou-match__card ou-match__card--drag" data-drag="0"><span class="ou-match__card-title">L0</span></div></div>' +
+      '<div class="ou-match__row"><div class="ou-match__card ou-match__card--fixed" data-drop="r0"><span class="ou-match__card-title">R0</span></div>' +
+      '<div class="ou-match__card ou-match__card--drag" data-drag="1" data-drop="r0"><span class="ou-match__card-title">L1</span></div></div>' +
+      '<div class="ou-match__row"><div class="ou-match__card ou-match__card--fixed" data-drop="r1"><span class="ou-match__card-title">R1</span></div>' +
+      '<div class="ou-match__card ou-match__card--drag" data-drag="0" data-drop="r1"><span class="ou-match__card-title">L0</span></div></div>' +
       "</div>";
     // Correct: left 0 ↔ right 0 (letter A), left 1 ↔ right 1 (letter B).
     ref().applyReference(fakeWin({
@@ -105,6 +137,37 @@ describe("Эталон overlay — applyReference", () => {
       .find((el) => el.querySelector(".ou-match__card-title")?.textContent === "L0");
     expect(fixedR0?.querySelector("[data-tb-ref]")?.textContent).toBe("A");
     expect(chipL0?.querySelector("[data-tb-ref]")?.textContent).toBe("A");
+  });
+
+  it("marks matching pairs on the REAL render, whose text went through the typography pass", () => {
+    // The render pipes every answer text through renderInlineMarkdown (markdown +
+    // Russian typography): «в сеть» comes out with U+00A0, quotes become guillemets,
+    // a newline becomes <br>. Matching the overlay by raw TEST_DATA text therefore
+    // missed exactly the long prompts — the wording that carries short prepositions.
+    const left = ["xDSL (Digital Subscriber Line)", "БШПД (Беспроводной широкополосный доступ)"];
+    const right = [
+      "Доступ в сеть Интернет через медную телефонную абонентскую линию связи",
+      "Предоставление пользователям доступа в сеть без использования проводов",
+    ];
+    document.body.innerHTML = renderMatching({ type: "matching", dataJson: { left, right } }, {});
+    ref().applyReference(fakeWin({
+      currentIndex: 0,
+      flatQuestions: [{
+        question: {
+          id: "q5",
+          type: "matching",
+          data: { left, right },
+          correct: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }] },
+        },
+      }],
+    }));
+    expect(marks()).toHaveLength(4); // 2 pairs × (fixed prompt + chip)
+    const letterOf = (sel: string) =>
+      document.querySelector<HTMLElement>(sel)?.querySelector("[data-tb-ref]")?.textContent;
+    expect(letterOf('.ou-match__card--fixed[data-drop="r0"]')).toBe("A");
+    expect(letterOf('.ou-match__card--drag[data-drag="0"]')).toBe("A");
+    expect(letterOf('.ou-match__card--fixed[data-drop="r1"]')).toBe("B");
+    expect(letterOf('.ou-match__card--drag[data-drag="1"]')).toBe("B");
   });
 
   it("is idempotent — re-applying does not stack markers", () => {
@@ -121,6 +184,71 @@ describe("Эталон overlay — applyReference", () => {
     ref().applyReference(win);
     expect(marks()).toHaveLength(1);
     ref().clearReference(win);
+    expect(marks()).toHaveLength(0);
+  });
+
+  it("in adaptive mode keys off the question ON SCREEN, not flatQuestions[currentIndex]", () => {
+    // Adaptive delivery drives the screen from adaptiveState (getCurrentAdaptiveQuestion);
+    // the flat draw is a DIFFERENT question set. Keying the overlay off
+    // flatQuestions[currentIndex] painted another question's answer key — a single-choice
+    // key on a multiple-choice screen and vice versa.
+    document.body.innerHTML =
+      '<label class="ou-radio-card" data-index="0"></label>' +
+      '<label class="ou-radio-card" data-index="1"></label>' +
+      '<label class="ou-radio-card" data-index="2"></label>' +
+      '<label class="ou-radio-card" data-index="3"></label>';
+    const onScreen = { id: "qm", type: "multiple", correct: { correctIndices: [0, 3] } };
+    const win = {
+      document,
+      // The package's own resolver — the same one the adaptive render calls.
+      getCurrentAdaptiveQuestion: () => ({ id: "qm", question: onScreen }),
+      state: {
+        currentIndex: 0,
+        adaptiveState: { isFinished: false, currentQuestionId: "qm" },
+        // The flat draw holds an unrelated single-choice question at currentIndex.
+        flatQuestions: [{ question: { id: "qs", type: "single", correct: { correctIndex: 1 } } }],
+      },
+    };
+    ref().applyReference(win);
+    const hit = Array.from(marks()).map((n) => n.closest(".ou-radio-card")?.getAttribute("data-index"));
+    expect(hit).toEqual(["0", "3"]);
+  });
+
+  it("adaptive: resolves the on-screen question from TEST_DATA when the package resolver is unavailable", () => {
+    document.body.innerHTML =
+      '<label class="ou-radio-card" data-index="0"></label>' +
+      '<label class="ou-radio-card" data-index="1"></label>';
+    const win = {
+      document,
+      TEST_DATA: {
+        mode: "adaptive",
+        adaptiveTopics: [{ topicId: "T", questions: [{ id: "qm", type: "single", correct: { correctIndex: 1 } }] }],
+      },
+      state: {
+        currentIndex: 0,
+        adaptiveState: { isFinished: false, currentQuestionId: "qm" },
+        flatQuestions: [{ question: { id: "qs", type: "multiple", correct: { correctIndices: [0, 1] } } }],
+      },
+    };
+    ref().applyReference(win);
+    const hit = Array.from(marks()).map((n) => n.closest(".ou-radio-card")?.getAttribute("data-index"));
+    expect(hit).toEqual(["1"]);
+  });
+
+  it("adaptive: paints nothing when the on-screen question cannot be resolved (never a foreign key)", () => {
+    document.body.innerHTML =
+      '<label class="ou-radio-card" data-index="0"></label>' +
+      '<label class="ou-radio-card" data-index="1"></label>';
+    const win = {
+      document,
+      TEST_DATA: { mode: "adaptive", adaptiveTopics: [] },
+      state: {
+        currentIndex: 0,
+        adaptiveState: { isFinished: false, currentQuestionId: "unknown" },
+        flatQuestions: [{ question: { id: "qs", type: "multiple", correct: { correctIndices: [0, 1] } } }],
+      },
+    };
+    ref().applyReference(win);
     expect(marks()).toHaveLength(0);
   });
 
@@ -182,6 +310,50 @@ describe("Протокол — skip/return commit status (PRD-19 FR-24)", () => 
     const { rows } = ref().buildProtocolRows(pkg, {}, "live");
     // q1/q2 carry an answer → 'answered'; q3 has none → 'unanswered'.
     expect(rows.map((r) => r.status)).toEqual(["answered", "answered", "unanswered"]);
+  });
+});
+
+describe("Протокол — измерительный вопрос не получает вердикта (PRD-26 FR-08)", () => {
+  // Эталона у измерительного вопроса нет, поэтому вердикт к нему неприменим. Пакет в
+  // этой сцене без ScoringEngine — цена не считается ни у кого, и проверяемый вопрос
+  // честно уходит в «wrong»: именно на этом фоне видно, что измерительный из него выведен.
+  const win = {
+    TEST_DATA: { mode: "standard" },
+    state: {
+      phase: "question",
+      currentIndex: 3,
+      flatQuestions: [
+        // Шкала без правильной градации и распределение — измерительные.
+        { question: { id: "m1", type: "scale", prompt: "Шкала", correct: {}, points: 1 }, topicName: "T" },
+        { question: { id: "m2", type: "allocation", prompt: "Распределение", correct: { correctIndex: 1 }, points: 1, data: { budget: 10 } }, topicName: "T" },
+        // Шкала С правильной градацией остаётся проверяемой.
+        { question: { id: "g1", type: "scale", prompt: "Шкала с ключом", correct: { correctIndex: 1 }, points: 1 }, topicName: "T" },
+      ],
+      answers: { m1: 2, m2: { 0: 10 }, g1: 0 },
+      questionStatuses: { m1: "answered", m2: "answered", g1: "answered" },
+    },
+  };
+
+  it("вместо «неверно» ставит вердикт «measure» и не начисляет возможного балла", () => {
+    const pkg = ref().readPkg(win);
+    const { rows } = ref().buildProtocolRows(pkg, {}, "live");
+    expect(rows.map((r) => r.verdict)).toEqual(["measure", "measure", "wrong"]);
+    // Возможный балл измерительного вопроса — ноль, как и в агрегате: иначе итог
+    // протокола («из N баллов») расходился бы с панелью «Оценка».
+    expect(rows.map((r) => r.points)).toEqual([0, 0, 1]);
+    expect(rows.map((r) => r.earned)).toEqual([0, 0, 0]);
+    expect(rows[0].measurement).toBe(true);
+    expect(rows[2].measurement).toBe(false);
+  });
+
+  it("подменяет заметку о цене — начислять измерительному вопросу нечего", () => {
+    const pkg = ref().readPkg(win);
+    const { rows } = ref().buildProtocolRows(pkg, {}, "live");
+    expect(rows[0].priceNote).toBe("цена: не начисляется — измерительный вопрос");
+    expect(rows[0].score).toBeNull();
+    expect(rows[0].sMax).toBeNull();
+    // Статус «отвечен» измерительный вопрос сохраняет — он про навигацию, не про оценку.
+    expect(rows[0].status).toBe("answered");
   });
 });
 

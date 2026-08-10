@@ -104,7 +104,20 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
    ================================================================= */
 
 /* ── Scene frame ────────────────────────────────────────────────── */
+/* The scene is the layout's size CONTAINER (`tbscene`), and every width-dependent rule
+   in this file is a `@container tbscene (…)` query rather than a viewport `@media`.
+   Reason — the same one already stated for `tbhead` further down: on the web host the
+   scene lives inside a Shadow DOM whose box is NOT the viewport (narrow preview modals,
+   the debug player's inset frame), and in the LMS it lives inside an iframe. A viewport
+   query measures the wrong box in exactly the cases the mobile layout has to be right in.
+   `inline-size` gives no size containment on the block axis, so `height:100%` /
+   `flex:1` / `overflow:hidden` below keep resolving as before.
+
+   Steps: 900 (S1, ported from the old viewport queries — desktop unchanged),
+   700 (S2, two-column grids fold; chosen below 768 so a tablet KEEPS them),
+   520 (S3, phone portrait). */
 .tb-scene {
+  container: tbscene / inline-size;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -153,7 +166,7 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   flex-direction: column;
   gap: var(--ou-space-4);
 }
-@media (max-width: 900px) {
+@container tbscene (max-width: 900px) {
   .tb-scene__col { width: 100%; }
 }
 /* Footer action panel — shared look for the host-rendered nav row. Vertical padding
@@ -189,7 +202,7 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-scene__logo-ph { color: var(--ou-accent-default); opacity: 0.75; }
 .tb-scene__titles { min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-top: 2px; }
 .tb-scene__title { margin: 0; font: var(--ou-text-display-s); color: var(--ou-fg-default); letter-spacing: -0.01em; text-wrap: pretty; }
-.tb-scene__subtitle { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-scene__subtitle { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
 .tb-scene__timers { margin-left: auto; display: flex; align-items: flex-start; gap: var(--ou-space-6); flex: none; }
 
 /* Progress bar pinned to the header's bottom edge. */
@@ -217,46 +230,46 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
    where a viewport media query would measure the wrong box. */
 .tb-scene__header { container: tbhead / inline-size; }
 
-/* Question map (wireframe): ONE row — dots (indicator) + legend + counters. As the
-   header narrows it degrades in ORDERED steps (@container below): (1) the legend drops
-   to a line under the indicator, (2) «пропущено» drops to its own line, (3) the
-   indicator cells wrap into rows, (4) «отвечено» drops too. Each dropped element gets
-   `flex-basis:100%` (a full row of its own) and an `order` so the stack reads
-   dots → legend → отвечено → пропущено. */
+/* Question map (wireframe): ONE row — dots (indicator) + legend, snug beside each
+   other, + a counters block. The indicator's OWN dots wrap onto extra rows whenever
+   they don't fit — unconditionally, not gated behind header width: a long question
+   list (e.g. 60 questions) overflows a wide header just as easily as a narrow one,
+   since it is the DOT COUNT, not the container size, that decides whether the row's
+   natural width exceeds the available space. As the header narrows it additionally
+   degrades: the legend drops to a line under the indicator, then the counters block
+   drops «пропущено» to a second line under «отвечено» (@container below). When the
+   counters block itself doesn't fit beside the indicator, normal flex-wrap moves the
+   WHOLE block to its own row, still right-aligned. */
 /* `padding-bottom: 0` on purpose: the DS component ships a 16px bottom padding of its
    own, which stacked on the header's own padding and pushed the pills 24px above the
    progress bar instead of the 8px the header sets. The gap belongs to the header. */
 .tb-scene__map { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--ou-space-2) var(--ou-space-4); padding-bottom: 0; }
-.tb-scene__map .ou-quiz__dots { flex: 0 0 auto; }
+/* `flex-shrink: 1` + `min-width: 0` is what lets the indicator shrink below its own
+   dots' natural row width and wrap them internally when they don't fit. `flex-grow: 0`
+   (an `auto`, not zero, basis) is what keeps it from claiming the row's free space for
+   itself when there's room — a growing indicator box stretches past its own (left-
+   aligned) dots and shoves the legend all the way to the row's right edge instead of
+   leaving it snug beside the dots. */
+.tb-scene__map .ou-quiz__dots { flex: 0 1 auto; min-width: 0; }
 .tb-scene__map .ou-quiz__legend { margin-top: 0; align-items: center; order: 1; }
-/* Right-aligned so that when a counter wraps to its own full-width row it stacks
-   UNDER «отвечено» (which is pushed right), not off at the left edge. */
-.tb-scene__mapcount { flex: none; text-align: right; font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+/* «отвечено N из M · пропущено K» on one line, right-aligned, as long as there's room
+   beside the indicator + legend; flex-wrap moves the WHOLE block to its own row,
+   still right-aligned, once it doesn't fit. */
+.tb-scene__mapcounts { flex: none; margin-left: auto; order: 2; display: flex; align-items: baseline; gap: 4px; }
+.tb-scene__mapcount { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
 .tb-scene__mapcount strong { color: var(--ou-fg-default); font-weight: 600; }
-.tb-scene__mapcount--answered { margin-left: auto; order: 2; }
-.tb-scene__mapcount--skipped { order: 3; }
 .tb-scene__mapcount--skipped::before { content: "· "; }
 
 /* Step 1 — legend under the indicator. */
 @container tbhead (max-width: 1000px) {
   .tb-scene__map .ou-quiz__legend { flex-basis: 100%; order: 10; }
 }
-/* Step 2 — «пропущено» to its own line (the middot separator is then redundant). */
+/* Step 2 — «пропущено» drops to its own line, directly under «отвечено» (the two stay
+   a fixed unit and never drift apart onto the indicator's or legend's row); the middot
+   separator is then redundant. */
 @container tbhead (max-width: 820px) {
-  .tb-scene__mapcount--skipped { flex-basis: 100%; order: 12; }
+  .tb-scene__mapcounts { flex-direction: column; align-items: flex-end; gap: 2px; }
   .tb-scene__mapcount--skipped::before { content: none; }
-}
-/* Step 3 — indicator cells wrap into multiple rows. `flex: 1 1 0` (a ZERO basis) is
-   what keeps «отвечено» on the dots' row: with an auto basis the flex line-break would
-   push «отвечено» down first (its natural single-row width forces a break) — instead the
-   dots box takes a 0 base, grows into the free space and wraps its cells internally, so
-   the counter stays beside the (now multi-row) indicator until step 4. */
-@container tbhead (max-width: 640px) {
-  .tb-scene__map .ou-quiz__dots { flex: 1 1 0; min-width: 0; }
-}
-/* Step 4 — «отвечено» to its own line as well. */
-@container tbhead (max-width: 480px) {
-  .tb-scene__mapcount--answered { flex-basis: 100%; order: 11; margin-left: 0; }
 }
 /* Legend swatches (DS ships the base dot only). */
 .ou-quiz__legend-dot.is-answered { background: var(--ou-accent-default); box-shadow: none; }
@@ -307,7 +320,18 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 /* Placeholder shown by the image-right start VARIANT when no start image is set —
    keeps the right media panel visible so the layout reads as «image right». */
 .tb-cover__media-ph { width: 100%; height: 100%; min-height: 220px; display: flex; align-items: center; justify-content: center; color: var(--ou-fg-muted); opacity: 0.55; }
-@media (max-width: 900px) { .tb-cover--media { grid-template-columns: 1fr; } .tb-cover__media { min-height: 220px; } }
+@container tbscene (max-width: 900px) { .tb-cover--media { grid-template-columns: 1fr; } .tb-cover__media { min-height: 220px; } }
+/* Image-right cover WITHOUT an image. The slot used to draw a hollow frame — a bordered
+   grey box with a picture glyph — which reads as a broken image rather than as design.
+   It becomes an abstract panel instead, the same device the certification template
+   already uses for its own coverless variant (its `.tb-cover:not(.tb-cover--media)::after`).
+   The glyph goes: a panel that says nothing needs no icon explaining that it says nothing. */
+.tb-cover__media:has(.tb-cover__media-ph) {
+  background: linear-gradient(140deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.82) 100%);
+  box-shadow: inset -6rem -7rem 0 -5.6rem hsl(0 0% 100% / 0.16);
+}
+.tb-cover__media-ph { display: none; }
+
 
 /* Facts strip — big number + small label, spaced (start screen). */
 .tb-facts { display: flex; flex-wrap: wrap; gap: var(--ou-space-9); }
@@ -317,9 +341,14 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 
 /* Centred column (section intro / blocked / short system screens): balanced,
    reading measure, vertically centred — no unjustified vertical stretching. */
+/* `min-height` (not `height`) plus `safe center`: a centred column whose content is
+   TALLER than the field would otherwise be centred past the top edge, and the part
+   above the fold becomes unreachable — the body scrolls to its own top, which is
+   already below the content's start. `safe` degrades to flex-start exactly then. The
+   same pairing is used by `.tb-content-body` below. */
 .tb-scene__col--center {
-  max-width: 680px; margin: 0 auto; height: 100%;
-  align-items: center; justify-content: center; text-align: center;
+  max-width: 680px; margin: 0 auto; min-height: 100%;
+  align-items: center; justify-content: safe center; text-align: center;
   gap: var(--ou-space-5);
 }
 .tb-scene__col--narrow { max-width: 640px; }
@@ -344,27 +373,95 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 
 /* ── Question body ──────────────────────────────────────────────── */
 .tb-scene__meta { display: flex; align-items: center; gap: var(--ou-space-3); font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
-.tb-scene__q { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+/* PRD-38: медиа принадлежит блоку вопроса, а не блоку ответов. Одна колонка, пока медиа
+   нет; при непустом слоте — медиа 5 модулей слева, текст с подсказкой 7 справа: та же
+   пропорция, что и раньше, но справа теперь стоит ТЕКСТ ЗАДАНИЯ, а не блок ответов.
+   Ветвление по ТИПУ медиа возможно только здесь: макеты обязаны совпадать побайтово у всех
+   шаблонов (tests/template-layout-parity), а DSL не имеет выражений.
+
+   Ряды объявлены явно, потому что без grid-template-rows строка `-1` равна строке `1`:
+   правило grid-row:1/-1 у медиа схлопнулось бы в одну ячейку, а подсказка уехала бы под
+   медиа в ЛЕВУЮ колонку. Второй ряд — `1fr`, а не `auto`: когда медиа выше пары «заголовок +
+   подсказка», лишнюю высоту забирает нижний ряд целиком, и подсказка остаётся прижатой к
+   заголовку, а не повисает посреди пустоты. */
+.tb-scene__q { display: grid; grid-template-columns: 1fr; gap: var(--ou-space-2); }
+.tb-scene__q:has([data-slot="question-media"]:not(:empty)) {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  grid-template-rows: auto 1fr;
+  column-gap: var(--ou-space-5);
+  align-items: start;
+}
+.tb-scene__q:has([data-slot="question-media"]:not(:empty)) > [data-slot="question-media"] {
+  grid-column: 1; grid-row: 1 / -1;
+}
+.tb-scene__q:has([data-slot="question-media"]:not(:empty)) > .tb-scene__qtitle,
+.tb-scene__q:has([data-slot="question-media"]:not(:empty)) > .tb-scene__qmeta {
+  grid-column: 2;
+}
+/* Аудио визуальной площади не имеет: плеер идёт строкой над текстом во всю ширину колонки.
+
+   Аргумент `:has()` намеренно длиннее, чем нужно для попадания: специфичность `:has()` равна
+   специфичности САМОГО СПЕЦИФИЧНОГО аргумента, поэтому короткое
+   `:has([data-media-type="audio"])` (0,2,0) ПРОИГРЫВАЕТ правилу выше (0,3,0 из-за
+   `:not(:empty)`) и аудио молча остаётся в колонке 5 из 12. Проверено в браузере: до правки
+   плашка плеера была шириной 376px. */
+.tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto;
+}
+.tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) > [data-slot="question-media"],
+.tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) > .tb-scene__qtitle,
+.tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) > .tb-scene__qmeta {
+  grid-column: 1; grid-row: auto;
+}
+/* Порядок в DOM выбран так, что во всех одноколоночных случаях медиа само оказывается над
+   текстом — отдельного правила порядка не требуется. */
+.tb-scene__q > [data-slot="question-media"]:empty { display: none; }
+/* Медиа и текст задания разделяет тот же интервал, что и остальные блоки колонки. */
+.tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) > [data-slot="question-media"] {
+  margin-bottom: var(--ou-space-3);
+}
 .tb-scene__qtitle {
   margin: 0; font-weight: 600; line-height: 1.25; letter-spacing: -0.015em;
   color: var(--ou-fg-default); text-wrap: pretty;
   font-size: var(--tb-question-fs, 30px);
 }
-.tb-scene__qhint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+/* PRD-34 (FR-16): строка подсказки — ряд, в котором слева подсказка, справа якорь
+   водяного знака. Знак делит строку с уже существующей подсказкой и потому не
+   занимает у фиксированного кадра собственной высоты. Вид знака задаёт ЯДРО. */
+.tb-scene__qmeta { display: flex; align-items: baseline; gap: var(--ou-space-4); min-width: 0; }
+.tb-scene__qmeta > [data-slot="protection-mark"] { margin-inline-start: auto; }
+.tb-scene__qhint { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
 
-/* Media + answers: stacked by default; side-by-side (media 5 / answers 7) when
-   the media slot actually has content. */
-/* Media + answers: fill the column when content is short (flex-grow), but keep the
-   content's natural height when long (flex-basis:auto, no shrink) so it grows the
-   column and the body scrolls rather than clipping the last options. */
+/* Ответы: занимают колонку, когда содержимое короткое (flex-grow), и держат natural height,
+   когда длинное, — тело сцены тогда прокручивается, а не обрезает последние варианты.
+   PRD-38: колонки здесь больше нет — медиа ушло в блок вопроса, ответы всегда во всю ширину. */
 .tb-qbody { flex: 1 0 auto; display: grid; grid-template-columns: 1fr; gap: var(--ou-space-5); }
-.tb-qbody:has([data-slot="question-media"]:not(:empty)) {
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  align-items: start;
+
+/* Размер медиа задаёт ШАБЛОН, а не инлайн рантайма: в этом и смысл общего рендерера —
+   инлайновый стиль иначе перебивает theme.css.
+   max-height держит кадр вопроса: высокая вертикальная картинка иначе растянула бы левую
+   колонку и утопила варианты ответа под сгиб.
+   Обёртка изображения и видео хватает по содержимому (width: fit-content), поэтому кнопка
+   «во весь экран» стоит в углу САМОЙ картинки, а не у края пустой колонки, и вокруг картинки
+   не остаётся полей от `object-fit`.
+   Картинка не растягивается сверх натурального размера: апскейл даёт мыло. */
+.question-media[data-media-type="image"],
+.question-media[data-media-type="video"] {
+  width: fit-content; max-width: 100%; margin-inline: auto;
 }
-.tb-qbody__media:empty { display: none; }
-.tb-qbody__media img,
-.tb-qbody__media video { width: 100%; border-radius: var(--ou-radius-m); }
+.question-media img,
+.question-media video {
+  display: block; width: auto; height: auto;
+  max-width: 100%; max-height: 320px;
+  border-radius: var(--ou-radius-m);
+}
+.question-media img { cursor: zoom-in; }
+/* Result-variable rings are printed with `width`/`height` ATTRIBUTES from the author's
+   `size` option (renderers.ts ringChart, default 120 and up), which a narrow field
+   cannot override — cap them here so an indicator cannot overflow the scene. */
+.renderer__ring,
+.ou-ring__svg { max-width: 100%; height: auto; }
 .tb-qbody__answers { min-height: 0; display: flex; flex-direction: column; }
 /* Verdict banner sits ABOVE the options — keep it off the first option (only when
    filled, so the empty slot adds no phantom gap). */
@@ -385,9 +482,11 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
    this one file, so the flip point cannot differ between the web run and the LMS
    package. The count-based half of the rule (more than seven graduations) is applied
    by renderScale; this is the WIDTH half: a narrow answer column cannot fit a row of
-   labelled points, so the scale stands up. */
+   labelled points, so the scale stands up. The flip rides the S2 step (700) rather than
+   its old 640 viewport value: the answer column is 7/12 of the scene, so a scene of 700
+   is already the point where a labelled row stops fitting. */
 .tb-scene .ou-stepper--choice { width: 100%; margin-block: var(--ou-space-4); }
-@media (max-width: 640px) {
+@container tbscene (max-width: 700px) {
   .tb-scene .ou-stepper--choice { flex-direction: column; align-items: stretch; }
   .tb-scene .ou-stepper--choice .ou-stepper__step {
     flex: 0 0 auto; flex-direction: row; align-items: center;
@@ -469,8 +568,9 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 }
 
 /* ── Matching scene ─────────────────────────────────────────────── */
-/* Column gap between the two matching sides — 24px (DS default is 56px wide). */
-.tb-scene .ou-match { width: 100%; row-gap: var(--ou-space-2); --ou-match-gap-w: var(--ou-space-6); }
+/* Merge-panel gap (PRD-39): no override — the DS's own narrow-mode default (8px) is
+   exactly the flush, seam-between look the merge is designed for. */
+.tb-scene .ou-match { width: 100%; row-gap: var(--ou-space-2); }
 /* The draggable answer chips no longer carry the native `draggable` flag (it broke
    real-mouse dragging), so restore the grab affordance explicitly. */
 .tb-scene .ou-match__card--drag:not(.ou-match__card--empty),
@@ -480,13 +580,35 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 /* Drop-target feedback comes from the DS itself: the pointer engine adds
    `.ou-match__row.is-target`, which lights the LEFT prompt (`.ou-match__row.is-target
    .ou-match__card--fixed` in university-rt.css). No extra rule needed here. */
-/* After a pair connects, the DS tints only the RIGHT card + the arrow. Tint the LEFT
-   prompt too so the whole matched row reads as connected (review states keep their own
-   green/red tint, so exclude them). */
-.tb-scene .ou-match__row.is-connected:not(.correct-answer):not(.incorrect-answer) .ou-match__card--fixed {
-  border-color: var(--ou-accent-default);
-  background: var(--ou-accent-soft);
-  color: var(--ou-accent-on-soft);
+/* "Just connected" tint needs no scene rule any more: in merge mode the DS already
+   tints BOTH cards + the gap together (`ou-match--gap-narrow` in university-rt.css),
+   unlike the old arrow mode which only tinted the answer card. */
+/* Review verdict (PRD-39): this app marks a matched row `correct-answer`/
+   `incorrect-answer` (the choice/ranking convention), not the DS component's own BEM
+   modifiers — so the DS ships no color for the fixed prompt or the gap/seam under
+   those classes. Paint them here so the WHOLE merged panel reads as one verdict, not
+   just the draggable half. */
+.tb-scene .ou-match__row.correct-answer .ou-match__card--fixed {
+  border-color: var(--ou-success-default);
+  background: var(--ou-success-soft);
+  color: var(--ou-success-on-soft);
+}
+.tb-scene .ou-match__row.correct-answer .ou-match__gap {
+  background: var(--ou-success-soft);
+  border-top: 1px solid var(--ou-success-default);
+  border-bottom: 1px solid var(--ou-success-default);
+  color: var(--ou-success-default);
+}
+.tb-scene .ou-match__row.incorrect-answer .ou-match__card--fixed {
+  border-color: var(--ou-error-default);
+  background: var(--ou-error-soft);
+  color: var(--ou-error-on-soft);
+}
+.tb-scene .ou-match__row.incorrect-answer .ou-match__gap {
+  background: var(--ou-error-soft);
+  border-top: 1px solid var(--ou-error-default);
+  border-bottom: 1px solid var(--ou-error-default);
+  color: var(--ou-error-default);
 }
 .ou-match__placeholder { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 
@@ -516,14 +638,17 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
 .tb-scene__col--wide { width: 100%; }
 /* Score strip: ring + facts side by side. */
 .tb-score-strip { display: flex; align-items: center; gap: var(--ou-space-8); flex-wrap: wrap; }
-/* Per-topic cards — responsive grid. */
-.tb-topics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--ou-space-4); }
+/* Per-topic cards — responsive grid. The track floor is `min(340px, 100%)`, not a
+   bare 340px: a bare floor cannot shrink below itself, so on a 360px phone (312px of
+   field) auto-fit still lays a 340px track and the BODY gets a horizontal scrollbar.
+   `min()` lets the single remaining track fall back to the field width. */
+.tb-topics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: var(--ou-space-4); }
 .tb-topic-card .ou-card__body { display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: flex-start; }
 .tb-topic-card__name { font: var(--ou-text-heading-s); color: var(--ou-fg-default); }
 .tb-topic-card__bar { width: 100%; margin-top: var(--ou-space-1); }
 .tb-topic-card__bar.is-pass .ou-progress__fill { background: var(--ou-success-default); }
 .tb-topic-card__bar.is-fail .ou-progress__fill { background: var(--ou-error-default); }
-.tb-topic-card__req { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-topic-card__req { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
 .tb-stat-rows { display: flex; flex-direction: column; width: 100%; }
 .tb-stat-val { font: var(--ou-text-body-m); color: var(--ou-fg-default); }
 /* Per-topic feedback block — feedback text + recommendation chips, divided off. */
@@ -532,30 +657,48 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   margin-top: var(--ou-space-2); padding-top: var(--ou-space-3);
   border-top: 1px solid var(--ou-border-soft);
 }
-.tb-topic-card__fb-text { font: var(--ou-text-body-s); color: var(--ou-fg-soft); }
+.tb-topic-card__fb-text { font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
+/* Readable layer, not a caption layer: the question hint, the per-topic feedback,
+   «требуется N%» and these chips carry the author's message TO the learner, so they
+   are set in `body-m` (14/20) rather than `body-s` (12/16) — the step buys a quarter
+   more leading as well as two pixels, and on a feedback paragraph the leading matters
+   more. Labels that are SCANNED rather than read — the answered/skipped counters,
+   fact captions, eyebrows, tags — stay at `body-s` on purpose. */
 .tb-recs { display: flex; flex-wrap: wrap; gap: var(--ou-space-2); }
 .tb-rec {
   display: inline-flex; align-items: center; gap: var(--ou-space-2);
   padding: var(--ou-space-1) var(--ou-space-3);
   border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-pill);
-  background: var(--ou-bg-elevated); font: var(--ou-text-body-s); color: var(--ou-fg-default);
+  background: var(--ou-bg-elevated); font: var(--ou-text-body-m); color: var(--ou-fg-default);
   text-decoration: none;
 }
 a.tb-rec:hover { border-color: var(--ou-accent-default); }
+/* Chip pictogram. Courses and events land in ONE unlabelled row here — unlike the
+   report, which gives each kind its own titled section — so the glyph is the only
+   thing telling them apart. The glyphs are the ones the author side already uses for
+   the same three groups (features/tests/editor/sections/feedback-preview): a link for
+   a course, a calendar for an event. Muted by default so the chip reads as its title
+   first; it picks up the accent with the link's hover, like the border does. */
+.tb-rec__ico { flex: none; display: inline-flex; color: var(--ou-fg-muted); }
+.tb-rec__ico svg { display: block; }
+a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
 
 /* Adaptive results: centred hero (no score ring) + level cards. */
 .tb-adaptive-hero { display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-3); text-align: center; margin-bottom: var(--ou-space-2); }
-.tb-adaptive-hero__icon {
-  width: 64px; height: 64px; flex: none; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: var(--ou-accent-soft); color: var(--ou-accent-default);
-}
 /* The adaptive level tag needs no rule here: its tone comes as DS modifiers from the
    context — solid accent when a level was confirmed, solid error when the test's
    minimum was not (shared/template/result-context). The rungs carry no colour of
    their own: the ladder is the author's and differs from test to test. */
 
 /* ── Verdict (results / section-results) ────────────────────────── */
+/* PRD-29: interpretation tones. Named in methodology terms; the DS semantic families
+   already carry the three roles a zone needs — solid, soft fill, text on fill. One tone
+   class per measure rather than the DS modifiers directly, because the SAME class also
+   paints the ring arc, where the DS names differ (`--success` / `--warn` / `--danger`). */
+.tb-scene .ou-tag.tb-tone--favorable { background: var(--ou-success-soft); color: var(--ou-success-on-soft); }
+.tb-scene .ou-tag.tb-tone--neutral   { background: var(--ou-info-soft);    color: var(--ou-info-on-soft); }
+.tb-scene .ou-tag.tb-tone--attention { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
+.tb-scene .ou-tag.tb-tone--critical  { background: var(--ou-error-soft);   color: var(--ou-error-on-soft); }
 /* passClass (is-pass/is-fail) drives the DS ring fill + verdict tag colour. */
 .ou-ring__fill.is-pass { stroke: var(--ou-success-default); }
 .ou-ring__fill.is-fail { stroke: var(--ou-error-default); }
@@ -563,6 +706,191 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
 .ou-tag.is-pass { background: var(--ou-success-soft); color: var(--ou-success-on-soft); }
 .ou-tag.is-fail { background: var(--ou-error-soft); color: var(--ou-error-on-soft); }
 .ou-tag.is-partial { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
+
+/* ── PRD-29: measure row (a scale or an indicator on the results screen) ──
+   `ou-formsection` supplies the rhythm and the hairline between rows; the delta is only
+   what the DS cannot know — the zone colour, the read-only state of a control-shaped
+   element, and the vertical budget of THIS screen.
+
+   The section's own 32px rhythm is meant for a settings form that scrolls freely. Here
+   four sections spend 256px of a 650px body on padding alone, which pushes the third
+   scale below the fold — and a measurement result exists to be read as a whole.
+
+   The DS grid is DROPPED (PRD-46). `ou-formsection` is a FORM layout: its 280px first
+   column is meant for the label and description of a field, with the controls beside it.
+   A measure row is a readout, not a form — its left column holds two short lines (name
+   and level tag) next to a tall right column (rail, boundary labels, interpretation), so
+   280px plus a 48px gutter stand empty down the whole row. The wider the screen, the
+   more of it. Stacking also gives the rail the full width of the block, which is what a
+   readout wants. The narrow-scene container query that used to do this at 700px is gone
+   with it: there is nothing left for it to collapse. */
+.tb-measure.ou-formsection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-4);
+  padding: var(--ou-space-4) 0;
+}
+/* The level tag does not stretch across the label column. */
+.tb-measure__level { align-self: flex-start; }
+/* The entity name sits one step BELOW the block heading. The DS gives a form section's
+   title heading-m because there the section is its own top level; here a block heading
+   («По шкалам», `tb-scene__subhead`, heading-s) stands above it, and the name of a
+   single scale must not out-shout it. The block heading is NOT raised instead — it is
+   shared with «Результаты по темам» on the control screen, which stays as it was — so
+   the two levels are parted by WEIGHT: the heading keeps 600, the name drops to 400. */
+.tb-measure .ou-formsection__title { font: var(--ou-text-heading-s); font-weight: 400; }
+
+/* The DS slider is a 360px-wide form control; here it is a full-width readout, so the
+   cap is relaxed. The name stands above the rail on its own line, so the header holds
+   the value alone — keep it against the right end of the rail. */
+.tb-measure__slider { max-width: none; display: flex; }
+.tb-measure__slider .ou-slider__header { justify-content: flex-end; }
+/* Sizes: this is not a control operated at arm's length in a dense form but a readout
+   taken in at a glance, so the rail and the boundary labels move one step up the DS
+   scale. The DS lays the labels UNDER the rail absolutely, so they take no space of
+   their own — the clearance below has to be given to the rail explicitly, or the
+   numbers run into the interpretation text. */
+.tb-measure__slider .ou-slider__rail { height: var(--ou-space-3); margin-bottom: var(--ou-space-6); }
+.tb-measure__slider .ou-slider__mark-lbl { font: var(--ou-text-body-s); top: var(--ou-space-5); }
+/* Nobody drags this handle: it marks a value, it is not a control. The diameter is a
+   literal because the DS has no size token for a control part — it follows the rail,
+   which is now 12px, and the DS 18px thumb would sit on it too tightly. */
+.tb-measure__marker { cursor: default; pointer-events: none; width: 22px; height: 22px; }
+
+/* The value is the reading the learner came for, so it carries display weight while the
+   domain stays quiet. At the slider's own body-s it read as a footnote next to the
+   scale name.
+
+   Scoped to the ROW, not to the slider: a scale with no domain prints its value OUTSIDE
+   the slider wrapper (the `{{#unless zones}}` branch of results.html), and scoping to
+   `.tb-measure__slider` would leave it small and muted next to a large one in the same
+   list. The interpretation text under the readout is the finding itself, not a form
+   hint, so it leaves the DS caption size too. */
+.tb-measure .ou-slider__val { font: var(--ou-text-body-m); }
+.tb-measure .ou-slider__val strong { font: var(--ou-text-display-s); }
+/* Толкование уровня — авторский текст, его переводы строк держатся (см. `.tb-recs-group__text`). */
+.tb-measure .ou-formsection__sub { font: var(--ou-text-body-m); white-space: pre-wrap; }
+.tb-measure .ou-banner__desc { white-space: pre-wrap; }
+
+/* The ring arc defaults to the accent colour; the measure's tone lives in `toneClass`,
+   so the ring has to pick it up too — otherwise a critical level draws in the brand
+   colour while the tag beside it is red. */
+.tb-scene .ou-ring__fill.tb-tone--favorable { stroke: var(--ou-success-default); }
+.tb-scene .ou-ring__fill.tb-tone--neutral   { stroke: var(--ou-info-default); }
+.tb-scene .ou-ring__fill.tb-tone--attention { stroke: var(--ou-warning-default); }
+.tb-scene .ou-ring__fill.tb-tone--critical  { stroke: var(--ou-error-default); }
+
+/* Zones paint the rail DISCRETELY: the finding of a banded method is categorical, and a
+   gradient would hide the step across a boundary. `ou-slider__fill` already gives the
+   absolute positioning and the pill radius; only the colour is ours, and it arrives as
+   an HSL TRIPLE the way design params are already carried (shared/template/params-css)
+   — the ramp is interpolated by the core, CSS computes nothing. Square inner corners
+   keep adjacent zones from showing a gap the method does not have. */
+.tb-zone { background: hsl(var(--tb-zone)); border-radius: 0; }
+/* Only the DOMAIN ends stay rounded. Note the sibling tests: `:first-of-type` /
+   `:last-of-type` match by ELEMENT type, and the rail's last `span` is the MARKER, not
+   a zone — `:last-of-type` would therefore match nothing and the right end would stay
+   square over the rail's own pill. */
+.tb-zone:first-child {
+  border-start-start-radius: var(--ou-radius-pill);
+  border-end-start-radius: var(--ou-radius-pill);
+}
+.tb-zone:not(:has(~ .tb-zone)) {
+  border-start-end-radius: var(--ou-radius-pill);
+  border-end-end-radius: var(--ou-radius-pill);
+}
+
+/* ── PRD-35: competency radar ────────────────────────────────────
+   The first CROSS-SCALE view: it sums up the whole block, so it sits BESIDE the cards
+   rather than inside one. The cards keep the level tag and the interpretation text —
+   the diagram carries neither, and the level tag is present at any render kind.
+
+   The two-column layout is switched by a class the CORE prepares
+   (`result.scalesBlockClass`), not by `:has(.tb-radar)`: the package renders inside
+   whatever engine the LMS embeds, and core-side computation exists precisely to avoid
+   depending on it. */
+/* 480 and not 360 (PRD-46): the viewport of both diagrams is 360 units wide because the
+   captions of a six-axis chart need that much horizontal room, but the FIGURE itself is a
+   circle of radius 100 in the middle of it. Rendered into a 360px column the figure came out
+   about 120px across — a small mark in a large box, while the cards beside it had width to
+   spare. The column is the only lever here: the geometry cannot be widened without pushing
+   the captions off the canvas. */
+.tb-measures--chart {
+  display: grid;
+  grid-template-columns: minmax(0, 480px) minmax(0, 1fr);
+  gap: var(--ou-space-6);
+  align-items: start;
+}
+/* The list of scales is longer than the diagram, so the diagram follows the reading
+   down instead of leaving a column of air beside it. */
+.tb-chart { position: sticky; top: 0; }
+.tb-chart__svg { width: 100%; height: auto; display: block; }
+/* Rings and rays are the auxiliary grid, not data — border tone, not text tone. The
+   rings carry NO labels: three scales have three different band boundaries, so one
+   labelled grid would state something false about two of them. */
+.tb-chart__ring,
+.tb-chart__axis { fill: none; stroke: var(--ou-border-soft); stroke-width: 1; }
+/* The figure itself is neutral. Each axis has its OWN tone, so there is nothing to
+   paint the whole polygon with; evaluation is carried by the vertices and the level
+   labels beside them. */
+.tb-radar__shape {
+  fill: var(--ou-accent-default); fill-opacity: 0.16;
+  stroke: var(--ou-accent-default); stroke-width: 2;
+}
+/* The vertex takes the tone of ITS OWN scale, as an HSL triple from the core — the
+   same carriage as `--tb-zone` on the rail above, so a value never reads one colour on
+   the ruler and another on the diagram. */
+.tb-radar__dot { fill: hsl(var(--tb-zone)); stroke: var(--ou-bg-surface-2); stroke-width: 2; }
+/* A quantized ray (visibility «level»): the hollow vertex says the exact position is
+   not disclosed. Without the distinction the dot would read as a precise value. */
+.tb-radar__dot--quantized { fill: var(--ou-bg-surface-2); stroke: hsl(var(--tb-zone)); }
+/* PRD-46: балл выше предела оси. Луч упёрся в кольцо, и точка обязана сказать об этом:
+   иначе значение «ровно на пределе» и значение «за пределом» рисуются одинаково, а
+   молча обрезанный луч занижает как раз ту шкалу, которая выделяется сильнее прочих.
+   Кольцо вокруг точки, а не другой цвет: цвет здесь уже занят уровнем. */
+.tb-radar__dot--over { stroke: var(--ou-fg-default); stroke-width: 2; }
+.tb-radar__label { fill: var(--ou-fg-default); font: var(--ou-text-body-s); }
+.tb-radar__level { fill: var(--ou-fg-muted); font: var(--ou-text-body-xs); }
+/* Подпись предела: чем считается полный луч. Это масштаб рисунка, а не балл ученика,
+   поэтому запрет на числа из PRD-35 §4.3 не нарушается. Под фигурой и мелким кеглем —
+   служебная строка не должна спорить за внимание с самим профилем. */
+.tb-chart__limit {
+  margin: var(--ou-space-2) 0 0;
+  font: var(--ou-text-body-xs);
+  color: var(--ou-fg-muted);
+  text-align: center;
+}
+
+/* Narrow scene: the diagram moves ABOVE the cards. The step is 900, not the 700 used by
+   the measure row — two columns need the width of the diagram plus a readable card
+   column, and that runs out earlier than the row itself collapses. */
+@container tbscene (max-width: 900px) {
+  .tb-measures--chart { grid-template-columns: 1fr; }
+  .tb-chart { position: static; max-width: 360px; margin-inline: auto; }
+}
+
+/* PRD-29: the single recommendations block, structured by resource type. The chip row
+   (`tb-recs`) and the chip itself (`tb-rec`) already exist above and are reused as they
+   are; an empty group is not printed at all. */
+/* Вводный блок автора на экране итогов: идёт первым, до сводки. Разметку строит ядро,
+   поэтому здесь только типографика; `pre-wrap` держит абзацы простого текста. */
+.tb-intro {
+  margin-bottom: var(--ou-space-4);
+  font: var(--ou-text-body-m);
+  color: var(--ou-fg-default);
+  white-space: pre-wrap;
+}
+.tb-intro > :first-child { margin-top: 0; }
+.tb-intro > :last-child { margin-bottom: 0; }
+.tb-intro p, .tb-intro ul, .tb-intro ol { white-space: normal; margin: 0 0 var(--ou-space-2); }
+.tb-intro ul, .tb-intro ol { padding-left: 20px; }
+
+.tb-recs-block { display: flex; flex-direction: column; gap: var(--ou-space-4); }
+.tb-recs-group { display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: flex-start; }
+/* Абзацы автора сохраняются: тексты обратной связи и толкований пишутся переводами
+   строк, а HTML их схлопывает — на экране и в отчёте методичка приходила слушателю одним
+   полотном. Правило зеркально `report.css`: один и тот же текст, две выдачи. */
+.tb-recs-group__text { margin: 0; font: var(--ou-text-body-m); color: var(--ou-fg-soft); white-space: pre-wrap; }
 
 /* ── Content / gallery pages ────────────────────────────────────── */
 /* The body CENTRES its block — reading measure, balanced, no vertical stretching
@@ -637,7 +965,7 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
 .q-timer { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
 .q-timer--hidden { display: none; }
 
-/* Question media + fullscreen affordance (renderQuestionMedia). */
+/* Question media + fullscreen affordance (renderQuestionMedia, PRD-38). */
 .question-media { position: relative; }
 .qm-fs-btn {
   position: absolute; top: 10px; right: 10px;
@@ -646,6 +974,44 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
   cursor: pointer; font-size: 16px; line-height: 1; opacity: 0.9;
 }
 .qm-fs-btn:hover { opacity: 1; }
+
+/* PRD-38: аудио — не картинка, а полоса управления. Плашка даёт ей поверхность сцены.
+   Своего плеера у DS пока нет — осознанный техдолг PRD-38 (раздел 9 спеки).
+
+   ПРО color-scheme: своего объявления здесь НЕ НУЖНО, и объявлять его прямо вредно.
+   `color-scheme` НАСЛЕДУЕТСЯ, а ДС уже ставит его на корне темы (`.ou, .ou--light` — light,
+   `.ou--dark` — dark, см. university-rt.css); корень сцены и есть `.ou` на обоих хостах.
+   Правило вида `color-scheme: light dark` это наследование ПЕРЕБИВАЕТ и возвращает плеер к
+   СИСТЕМНОЙ теме: проверено в браузере — на тёмной сцене плеер становился белым. */
+.question-media[data-media-type="audio"] {
+  padding: var(--ou-space-3);
+  border: 1px solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-surface-2);
+}
+.qm-audio { display: block; width: 100%; }
+
+/* Полноэкранный просмотр (attachQuestionMediaFullscreen). Разметку строит ЯДРО, поэтому
+   здесь только вид: до PRD-38 те же значения писались инлайном из рантайма.
+   Правило `[hidden]` обязательно: собственный `display: flex` перебивает браузерное
+   `display: none` от атрибута, и без него оверлей виден всегда.
+   Затемнение — токеном ДС (им же затемняют фон модалка и ящик), а не литералом:
+   слой сцены обязан брать палитру только из `--ou-*`, иначе он не следует теме. */
+.qm-overlay {
+  position: fixed; inset: 0; z-index: 99999;
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--ou-space-6); background: var(--ou-bg-backdrop);
+}
+.qm-overlay[hidden] { display: none; }
+.qm-overlay__stage { display: flex; align-items: center; justify-content: center; max-width: 95vw; max-height: 90vh; }
+.qm-overlay__stage img,
+.qm-overlay__stage video { max-width: 95vw; max-height: 90vh; object-fit: contain; border-radius: var(--ou-radius-m); }
+.qm-overlay__close {
+  position: absolute; top: var(--ou-space-4); right: var(--ou-space-4);
+  border: 0; border-radius: var(--ou-radius-s); padding: 10px 12px;
+  background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+  cursor: pointer; font-size: 22px; line-height: 1;
+}
 
 /* Adaptive / content-page nav row + its progress bar. */
 .navigation { display: flex; justify-content: space-between; margin-top: 32px; }
@@ -704,7 +1070,7 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
    page-content slot, on both hosts and in the «Структура» preview. */
 /* Same footprint as the results «Результаты по темам» grid (.tb-topics-grid): min
    column 340px and the DS card spacing, so hub cards read at the same size. */
-.router-topic-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--ou-space-4); margin-top: 24px; }
+.router-topic-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: var(--ou-space-4); margin-top: 24px; }
 .router-progress { margin: 18px 0 4px; }
 .router-progress__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
 .router-progress__label { font-size: 13px; font-weight: 600; color: var(--ou-fg-muted); }
@@ -754,3 +1120,337 @@ a.tb-rec:hover { border-color: var(--ou-accent-default); }
 }
 .router-stat__label { font-size: 11px; color: var(--ou-fg-muted); }
 .router-stat__value { font-size: 14px; font-weight: 700; color: var(--ou-fg-default); font-variant-numeric: tabular-nums; }
+
+/* =================================================================
+   MOBILE LAYER — tablet (S2) and phone portrait (S3)
+   ─────────────────────────────────────────────────────────────────
+   Every query here measures the SCENE (`@container tbscene`, declared on
+   `.tb-scene` at the top of this file), never the viewport. The whole layer
+   lives at the END of the file on purpose: its rules mirror selectors declared
+   above at the SAME specificity, so cascade ORDER is what makes them win — there is
+   no `!important` anywhere in this layer.
+
+   One constraint shapes all of it: NOT ONE LAYOUT FILE MAY CHANGE.
+   `tests/template-layout-parity.test.ts` requires the 19 layouts to stay byte
+   for byte equal to the `certification` template's, and the template DSL has no
+   expressions, so a layout cannot branch on width. Everything below is therefore
+   pure CSS over unchanged markup.
+
+   Note the one rule of container queries that shapes the selectors: a query can
+   style the container's DESCENDANTS but never the container itself — `.tb-scene`
+   is not addressable in here, only what it contains.
+   ================================================================= */
+
+/* ── S2 · scene <= 700px — tablet portrait and narrow embeds ────────
+   The two-column grids fold. The step sits BELOW 768 deliberately: on a tablet
+   "media left / prompt right" is still a good composition (media ~291px, text
+   ~385px), and folding it there would only add scrolling. */
+@container tbscene (max-width: 700px) {
+  /* PRD-38: складывается БЛОК ВОПРОСА, а у блока ответов складывать нечего — колонок у него
+     нет ни при какой ширине. Медиа оказывается над текстом само собой: в разметке оно идёт
+     первым. Потолок высоты ниже, чем на широкой сцене: на телефоне картинка в 320px съедает
+     экран и утапливает варианты под сгиб. */
+  .tb-scene__q:has([data-slot="question-media"]:not(:empty)) {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+  .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > [data-slot="question-media"],
+  .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > .tb-scene__qtitle,
+  .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > .tb-scene__qmeta {
+    grid-column: 1; grid-row: auto;
+  }
+  .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > [data-slot="question-media"] {
+    margin-bottom: var(--ou-space-3);
+  }
+  .question-media img,
+  .question-media video { max-height: 220px; }
+  /* The content page's image + text: one column. */
+  .tb-content--image,
+  .tb-content--image-right { grid-template-columns: 1fr; gap: var(--ou-space-5); }
+
+  /* Matching stands up: one track, prompt over chip. Plain specificity is enough now
+     that the renderer passes its column ratio as `--ou-match-cols` instead of printing
+     `grid-template-columns` inline (question-interaction, renderMatching) — an inline
+     track list used to outrank every rule, which is why DS's own fold at
+     `max-width: 560px` never worked and left three tracks with the gap column hidden,
+     auto-placing the cards into the wrong ones. Restated here in SCENE coordinates
+     because the DS rule is a viewport query and would not fire in a narrow modal. */
+  .tb-scene .ou-match { grid-template-columns: 1fr; }
+  .tb-scene .ou-match__gap { display: none; }
+
+  /* Typography, first step down. `clamp()` WRAPS the runtime variable rather than
+     replacing it: `--tb-question-fs` / `--tb-answer-fs` are set inline on the
+     ancestor `.tb-scene__col` (by fit-font before render and fitQuestionScene
+     after it), while `font-size` is declared on the descendant — so a rule here
+     wins without `!important` and still honours the fitted value between the
+     bounds. The ceiling stops a short prompt from printing at 32px in a narrow
+     column; the floor stops the height-fitter from shrinking text to 14px on a
+     phone, where scrolling is the better trade. Keep these numbers in sync with
+     the narrow profile in `shared/template/fit-question.ts`. */
+  .tb-scene__qtitle,
+  .tb-content__title { font-size: clamp(16px, var(--tb-question-fs, 30px), 26px); }
+  .tb-scene__hero { font-size: clamp(22px, var(--tb-question-fs, 32px), 28px); }
+  .tb-scene .ou-radio-card__title,
+  .tb-scene .ou-rank__text,
+  .tb-scene .ou-match__card-title { font-size: clamp(14px, var(--tb-answer-fs, 20px), 19px); }
+  .tb-scene__hero--s { font-size: 24px; }
+  .tb-cover__title { font-size: 34px; }
+
+  /* Spacing built for a wide field: halve the largest gaps. */
+  .tb-facts { gap: var(--ou-space-6); }
+  .tb-score-strip { gap: var(--ou-space-6); }
+  .tb-cover { gap: var(--ou-space-6); }
+  .tb-cover__logo { margin-bottom: var(--ou-space-5); }
+  .tb-scene__timers { gap: var(--ou-space-4); }
+  .card { padding: var(--ou-space-5); }
+  .navigation { margin-top: var(--ou-space-5); }
+  .renderer__value { font-size: 32px; }
+  .content-placeholder--title { font-size: 24px; }
+}
+
+/* ── S3 · scene <= 520px — phone portrait (360 / 390) ───────────────
+   520 rather than 640 so that neither a tablet nor a phone in landscape falls
+   into the phone layout. */
+@container tbscene (max-width: 520px) {
+
+  /* Frame padding: 24px took 13% of a 360px screen. */
+  .tb-scene__header { padding: var(--ou-space-3) 16px calc(var(--ou-space-2) + 2px); }
+  .tb-scene__body { padding: 16px; }
+  .tb-scene__header--flush { padding-bottom: var(--ou-space-3); }
+  .tb-scene--cover .tb-scene__body { padding: var(--ou-space-5) 16px; }
+  .tb-scene__col { gap: var(--ou-space-3); }
+  .tb-scene__col--doc { gap: var(--ou-space-4); }
+
+  /* Header. Measured on a phone the old stack cost 162px of an 844px screen: a brand
+     row, then a tier for the timers (the DS digital timer stacks a label OVER a 22px
+     number), then a tier for the counters. Here the header itself becomes the wrapping
+     row and BOTH inner wrappers dissolve, so the title, the timers and the counters are
+     its own children and can share lines: title on the first, timers + counters on the
+     second. Dissolving `.tb-scene__map` is safe at this step because its dots and legend
+     are already hidden below — only the two counters are left inside it.
+
+     The logo steps aside on a phone: 36px plus a gap of horizontal space, spent on a
+     decorative tile while the test name wraps to two lines, is the wrong trade at 360px.
+     Branding still opens the run — the start screen's cover carries the logo large. */
+  .tb-scene__header {
+    flex-direction: row; flex-wrap: wrap; align-items: center;
+    row-gap: var(--ou-space-2);
+  }
+  .tb-scene__brandrow,
+  .tb-scene__map { display: contents; }
+  .tb-scene__logo { display: none; }
+  .tb-scene__title { font: var(--ou-text-heading-m); }
+  .tb-scene__titles { flex: 1 1 100%; min-width: 0; order: 1; }
+  /* Timers lie flat — label BESIDE the number, not above it. This one change returns
+     24px; the empty wrapper costs nothing when no timer runs, because the layout ships
+     both `.ou-timer`s hidden. */
+  .tb-scene__timers { flex: 0 0 auto; order: 2; margin-left: 0; gap: var(--ou-space-4); }
+  .tb-scene__timers .ou-timer--digital { flex-direction: row; align-items: baseline; gap: 6px; }
+  .tb-scene__timers .ou-timer--digital .ou-timer__num { font-size: 15px; }
+
+  /* Question map: the DOTS and the legend go away on a phone; the counters stay.
+     Twelve touch-sized dots plus the legend cost ~100px of a 740px screen, and
+     the map is an ACCELERATOR — the review screen keeps a full, touch-sized map
+     and the "К обзору" action stays in the footer, so nothing becomes
+     unreachable. Only the counters block is addressed separately because it sits
+     INSIDE `.tb-scene__map` in the layout, next to the dots. */
+  .tb-scene__map .ou-quiz__dots,
+  .tb-scene__map .ou-quiz__legend { display: none; }
+  .tb-scene__mapcounts { order: 3; }
+  .tb-scene__mapcount { font: var(--ou-text-body-s); }
+
+  /* Prompt cap (fit-question phase 4). The two properties are written by the shared
+     fitter and are ABSENT unless it decided to cap, so a short prompt keeps its natural
+     height with no scrollbar and no faded last line. The mask is the only cue that the
+     text continues — without it a hard cut reads as the end of the sentence. */
+  .tb-scene__q {
+    max-height: var(--tb-prompt-max-h, none);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-mask-image: var(--tb-prompt-mask, none);
+            mask-image: var(--tb-prompt-mask, none);
+  }
+
+  /* Centred / narrow columns stop capping below the field width. */
+  .tb-scene__col--center,
+  .tb-scene__col--narrow { max-width: none; }
+
+  /* Cover (start screen). */
+  .tb-cover__title { font-size: 28px; }
+  .tb-cover__desc { font: var(--ou-text-body-m); }
+  .tb-cover__content { gap: var(--ou-space-4); justify-content: flex-start; }
+  .tb-cover__media,
+  .tb-cover__media-ph { min-height: 160px; }
+
+  /* On a phone the decorative panel is dropped outright: with no image behind it, it
+     carries nothing and would take about a third of the screen away from the facts and
+     the start button. An image the author DID set still shows — only the placeholder
+     goes. */
+  .tb-cover--media:has(.tb-cover__media-ph) { grid-template-columns: 1fr; }
+  .tb-cover__media:has(.tb-cover__media-ph) { display: none; }
+
+  .tb-facts { gap: var(--ou-space-4) var(--ou-space-5); }
+  .tb-facts__num { font: var(--ou-text-heading-m); }
+
+  /* Results / review. */
+  .tb-ring { width: 112px; height: 112px; }
+  .tb-ring .ou-ring__svg { width: 112px; height: 112px; }
+  .tb-score-strip { gap: var(--ou-space-4); }
+  .tb-topics-grid,
+  .router-topic-cards { grid-template-columns: 1fr; }
+  .tb-unanswered__row { flex-wrap: wrap; row-gap: var(--ou-space-2); }
+  .tb-unanswered__go { margin-left: auto; }
+
+  /* Content pages. 4:3 is too tall on a 328px field — 3:2 gives the text room. */
+  .tb-content__media { aspect-ratio: 3 / 2; }
+  .tb-content--text,
+  .tb-content--image { max-width: none; }
+  .tb-content--image { gap: var(--ou-space-4); }
+  .tb-card { padding: var(--ou-space-4); }
+  .tb-meta-dots { gap: var(--ou-space-3); }
+  .content-placeholder--heroImage,
+  .content-placeholder--image { height: 180px; }
+
+  /* System screens. */
+  .tb-transition-icon { width: 64px; height: 64px; }
+  .tb-blocked-icon { width: 60px; height: 60px; }
+  .retake-wall { padding: 16px; }
+  .retake-wall__card { padding: var(--ou-space-5); }
+
+  /* Typography, second step down. */
+  .tb-scene__qtitle,
+  .tb-content__title { font-size: clamp(15px, var(--tb-question-fs, 30px), 22px); }
+  .tb-scene__hero { font-size: clamp(20px, var(--tb-question-fs, 32px), 24px); }
+  .tb-scene .ou-radio-card__title,
+  .tb-scene .ou-rank__text,
+  .tb-scene .ou-match__card-title { font-size: clamp(15px, var(--tb-answer-fs, 20px), 17px); }
+
+  /* ── Footer ──────────────────────────────────────────────────────
+     Measured on the package at 360: the question row alone wants 383px of the
+     312px available, and the primary button hung 59px OFF-SCREEN — the main
+     action was partly unreachable, not merely cramped.
+
+     The fix leans on the ONE node every footer in this template shares: the
+     spacer. It stops pushing right and becomes a zero-height line break, so the
+     row splits into "secondary actions" over "primary action". `order` puts the
+     primary last no matter where it sits in the markup — on the start and
+     results screens secondary buttons FOLLOW it in the DOM, and without this
+     they would land on a third row. Secondary buttons are compressed rather than
+     stretched: `.ou-btn` is `white-space: nowrap`, so they cannot reflow. */
+  .tb-scene__foot {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 16px;
+    /* Keeps the primary action clear of the iOS home indicator. */
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+  /* The spacer stops laying out entirely rather than forcing a line break: letting the
+     wrap decide costs 26px less than a hard second row, and on a wider phone the whole
+     footer can still collapse to one line. `order` keeps the primary last regardless —
+     on the start and results screens secondary buttons FOLLOW it in the markup. */
+  .tb-scene__foot-spacer { display: none; }
+  .tb-scene__foot .ou-btn--ghost,
+  .tb-scene__foot .ou-btn--secondary {
+    flex: 0 1 auto; padding-inline: var(--ou-space-3); font-size: 13px;
+    height: 44px; min-height: 44px;
+  }
+  /* 48px, not the DS `--l` 56: still past the 44px touch floor, and the 8px go back to
+     the question. `flex: 1 1 auto` makes it fill whatever line it lands on. */
+  .tb-scene__foot .ou-btn--primary {
+    order: 99; flex: 1 1 auto; min-width: 150px; height: 48px; min-height: 48px;
+  }
+}
+
+/* ── Touch density ─────────────────────────────────────────────────
+   Sized by the POINTER, not by width — a phone and a 10" tablet both need a
+   finger-sized target, and a narrow window on a desktop does not. `pointer:
+   coarse` describes the PRIMARY pointing device, so a touchscreen laptop driven
+   by its trackpad stays `fine` and the desktop layout is untouched. Deliberately
+   NOT `any-pointer: coarse`, which matches every touch-capable laptop.
+
+   This is the size half of the DS `.ou--spacious` density (university-rt.css),
+   without its spacing half: that class also scales the whole `--ou-space-*` ramp
+   by ~30%, which on a 360px screen would hand the cover 128px of horizontal
+   padding. It also leaves `.ou-quiz__dot` at its literal 26px, so it would not
+   have fixed the worst target anyway.
+
+   The tokens are declared on `.tb-scene` — NOT on `.ou` or `:host`. On the web
+   host the scene lives in a Shadow DOM, and by the cascade's encapsulation-context
+   rule a normal declaration from the OUTER tree wins: the document's own `.ou`
+   rule (client/src/index.css) would beat a `:host` override from this stylesheet
+   and the density would silently never apply. `.tb-scene` lives inside the shadow
+   tree, where nothing outside can outrank it. */
+@media (pointer: coarse) {
+  .tb-scene,
+  .tb-scene__foot {
+    --ou-size-control-xs: 32px;
+    --ou-size-control-s: 40px;
+    --ou-size-control-m: 48px;
+    --ou-size-control-l: 56px;
+    --ou-size-row: 56px;
+    --ou-size-row-compact: 48px;
+  }
+
+  /* Answer rows: the 52px baseline set above becomes a full touch row. */
+  .tb-scene .ou-radio-card,
+  .tb-scene .ou-rank__item { min-height: var(--ou-size-row); }
+
+  /* The question map sizes itself from a literal `--qsize`, which the density
+     tokens do not reach — raise it explicitly. The review screen's map is the
+     primary navigation on a phone (the header map is hidden at S3), so it gets
+     the full 44px target. */
+  .tb-scene__map .ou-quiz__dot { --qsize: 36px; }
+  .tb-review-map .ou-quiz__dot { --qsize: 44px; }
+
+  /* ── Ranking: drag from the grip ────────────────────────────────
+     `touch-action: none` is what lets a pointer drag survive on a touchscreen —
+     without it the browser claims the gesture for scrolling and the engine gets
+     a `pointercancel` (which is why ranking drag did not work on a phone at all).
+     It is applied to the GRIP only, in the DS: putting it on the whole row would
+     take vertical scrolling away from a list that fills the screen — a worse
+     regression than the bug. Gesture from the grip drags; gesture from the row
+     scrolls; the up/down buttons remain the primary, accessible path.
+
+     DS hides the grip and collapses the row to three columns below 480px
+     (university-rt.css). Restoring the grip therefore has to restore the FOURTH
+     column too — otherwise the controls wrap to a second line and the row
+     doubles in height. */
+  .tb-scene .ou-rank__item { grid-template-columns: auto auto 1fr auto; gap: var(--ou-space-2); }
+  .tb-scene .ou-rank__grip {
+    display: inline-flex; align-items: center; justify-content: center;
+    /* `height: auto` is load-bearing: DS pins the grip to 20px, and a definite
+       height makes `align-self: stretch` a no-op — the drag target stayed 28x20,
+       under the 44px touch minimum on the axis that matters for a vertical list.
+       Stretched, the handle spans the row, which is also how a drag handle reads. */
+    align-self: stretch; height: auto; min-width: 28px;
+    touch-action: none;
+  }
+  .tb-scene .ou-rank__btn { min-width: 44px; min-height: 44px; }
+}
+/* ── PRD-46: роза. Заливка непрозрачна, поэтому сетка рисуется ПОВЕРХ секторов —
+   под ними она видна только в промежутках между короткими секторами, то есть там,
+   где говорит меньше всего. Цвет приходит тройкой HSL из ядра, как и у зон PRD-29:
+   палитра здесь своя не заводится. */
+.tb-rose__sector {
+  fill: hsl(var(--tb-hue));
+  /* Зазор в 2px между заливками: без него соседние секторы сливаются в одно пятно
+     там, где их доли близки. Обводка цветом ФОНА, а не линией — так зазор одинаково
+     работает и на светлой, и на тёмной сцене. */
+  stroke: var(--ou-bg-surface-2);
+  stroke-width: 2;
+}
+/* Доля, не поместившаяся в поле, упирается в кольцо: пунктирный край говорит, что
+   сектор обрезан, а не что шкала ровно на пределе. */
+.tb-rose__sector--overflow { stroke: var(--ou-fg-default); stroke-dasharray: 3 3; }
+/* Пиктограмма приходит контурами lucide: обводка без заливки и скруглённые концы —
+   иначе штрихи выглядят обрубленными на мелком размере. */
+.tb-rose__icon {
+  fill: none;
+  stroke: var(--ou-fg-muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tb-rose__label { fill: var(--ou-fg-default); font: var(--ou-text-body-s); }
+.tb-rose__level { fill: var(--ou-fg-muted); font: var(--ou-text-body-xs); }

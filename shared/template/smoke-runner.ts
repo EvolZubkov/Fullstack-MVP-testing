@@ -24,12 +24,15 @@
 import { renderScreenInto, type ScreenRenderInput } from "./render-screen";
 import { buildScreenInputs, type PreviewDemoDataset, type PreviewManifest } from "./preview-context";
 import { REPORT_KINDS, reportVariants, resolveReportValues } from "../report/report-variants";
+import { reportImageKeys, resolveReportImageValues } from "../report/report-assets";
 import { buildAdaptiveReportContext, buildReportContext } from "../report/report-context";
+import { buildReportMeasures } from "../report/report-measures";
 import {
   buildAdaptiveReportPreviewInput,
   buildReportPreviewInput,
   type ReportPreviewTest,
 } from "../report/report-preview";
+import { PROTECTION_STYLE_ATTR } from "./protection/apply";
 
 /** Per-screen smoke result. */
 export interface SmokeRouteResult {
@@ -73,6 +76,13 @@ export interface SmokeRunOptions {
   createContainer?: () => HTMLElement;
   /** Renderer override (default {@link renderScreenInto}); injectable for tests. */
   render?: (root: HTMLElement, input: ScreenRenderInput) => void;
+  /**
+   * Where this host reaches the template's own files, with a trailing slash. Report
+   * variants address their pictures by a template-relative path (PRD-27 FR-05), which
+   * only becomes fetchable against a base. Absent: the paths stay as declared and the
+   * report renders without them — which is a check of the LAYOUT, not of the pictures.
+   */
+  assetBase?: string;
 }
 
 /** Default container: a detached div on the ambient document (browser / jsdom). */
@@ -126,6 +136,21 @@ function checkPlaceholdersReachTheScreen(
   );
 }
 
+/**
+ * Did the TEMPLATE put nothing on the screen?
+ *
+ * Not `root.innerHTML.trim()`: since PRD-34 `applyProtection` injects its own stylesheet
+ * into every rendered root unconditionally (the sheet carries the watermark and the blur
+ * veil too), so the root is never literally empty — and the check that guards activation
+ * against a broken layout stopped firing, silently. What the runtime adds to a screen is
+ * not what the screen renders, so it is subtracted before judging.
+ */
+function renderedNothing(root: HTMLElement): boolean {
+  const clone = root.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll("[" + PROTECTION_STYLE_ATTR + "]").forEach((n) => n.remove());
+  return !clone.innerHTML.trim();
+}
+
 /** Render one screen in isolation and collect render/slot/console findings. */
 function checkScreen(
   spec: ReturnType<typeof buildScreenInputs>[number],
@@ -175,7 +200,7 @@ function checkScreen(
   for (const m of capWarn) warnings.push("Предупреждение в консоли: " + m);
 
   if (errors.length === 0) {
-    if (!root.innerHTML.trim()) {
+    if (renderedNothing(root)) {
       errors.push("Экран отрисован пустым");
     }
     // A missing/unfilled slot never blocks activation (spec §17.1/§17.2, PRD-3
@@ -211,6 +236,32 @@ function checkTemplateJs(src: string): SmokeRouteResult {
 }
 
 /**
+ * PRD-34 (FR-16): объявляет ли шаблон место водяного знака. Это НЕ ошибка и загрузку
+ * не блокирует: без якоря знак встанет строкой в начало сцены. Строка нужна, чтобы
+ * «знак уехал наверх» открывалось администратору при загрузке шаблона, а не участнику
+ * на приёмке.
+ */
+function checkWatermarkAnchor(layouts: Record<string, string>): SmokeRouteResult {
+  const declared = Object.keys(layouts).filter((key) =>
+    (layouts[key] ?? "").includes('data-slot="protection-mark"'),
+  );
+  const warnings = declared.length
+    ? []
+    : [
+        "Макеты не объявляют [data-slot=\"protection-mark\"] — при включённом водяном знаке " +
+          "он встанет строкой в начало сцены, а не в место, выбранное шаблоном.",
+      ];
+  return {
+    id: "protection.mark",
+    route: "protection-mark",
+    label: "Место водяного знака",
+    status: rowStatus([], warnings),
+    errors: [],
+    warnings,
+  };
+}
+
+/**
  * Экраны ОТЧЁТА — по одному варианту каждого объявленного вида (PRD-27 FR-26).
  *
  * Отчёт не входит в `preview.routes[]`: это не экран прохождения, а документ. Но
@@ -220,10 +271,13 @@ function checkTemplateJs(src: string): SmokeRouteResult {
  *
  * @param manifest Манифест проверяемого шаблона.
  * @param dataset Демонстрационный набор шаблона — из него берутся название и темы.
+ * @param assetBase База файлов шаблона у этого хоста (FR-05); пусто — картинки
+ *   остаются путями и просто не покажутся.
  */
 function reportSpecs(
   manifest: PreviewManifest,
   dataset: PreviewDemoDataset,
+  assetBase?: string,
 ): ReturnType<typeof buildScreenInputs> {
   const out: ReturnType<typeof buildScreenInputs> = [];
   const test: ReportPreviewTest = {
@@ -234,13 +288,27 @@ function reportSpecs(
     const variants = reportVariants(manifest, kind);
     if (variants.length === 0) continue;
     const variant = variants.find((v) => v.isDefault === true) ?? variants[0];
-    const values = resolveReportValues(variant, null);
+    const declared = resolveReportValues(variant, null);
+    const imageKeys = reportImageKeys(variant);
+    // Картинки объявляет ШАБЛОН своими полями, и адресуются они против базы хоста —
+    // проверка обязана гонять ту же страницу, что уйдёт в PDF, вместе с подложкой.
+    const values = assetBase ? resolveReportImageValues(declared, imageKeys, assetBase) : declared;
     // Исход «не пройден»: на нём страница показывает БОЛЬШЕ — вердикт, непройденные
     // темы и блок рекомендаций, — то есть отрисовывается больше макета.
+    // PRD-47 §5.4: те же демо-измерения, что у экранов, и через ТОТ ЖЕ сборщик, каким
+    // пользуются оба хоста — иначе проверка гоняла бы страницу без блока измерений, то
+    // есть не ту, что уйдёт в PDF. Набор без измерений сохраняет прежнее поведение.
+    const reportOpts = {
+      values,
+      isPreview: true,
+      ...(dataset.runtime?.measures
+        ? { measures: buildReportMeasures(dataset.runtime.measures, values) }
+        : {}),
+    };
     const context =
       kind === "report.adaptive"
-        ? buildAdaptiveReportContext(buildAdaptiveReportPreviewInput(test, "failed"), { values, isPreview: true })
-        : buildReportContext(buildReportPreviewInput(test, "failed"), { values, isPreview: true });
+        ? buildAdaptiveReportContext(buildAdaptiveReportPreviewInput(test, "failed"), reportOpts)
+        : buildReportContext(buildReportPreviewInput(test, "failed"), reportOpts);
     out.push({
       id: variant.key,
       route: variant.key,
@@ -265,11 +333,12 @@ export function runSmokeChecks(opts: SmokeRunOptions): SmokeReport {
   const routes: SmokeRouteResult[] = specs.map((spec) => checkScreen(spec, opts, render));
 
   // PRD-27 FR-26: виды отчёта проверяются наравне с экранами.
-  for (const spec of reportSpecs(opts.manifest, opts.dataset)) {
+  for (const spec of reportSpecs(opts.manifest, opts.dataset, opts.assetBase)) {
     routes.push(checkScreen(spec, opts, render));
   }
 
   if (opts.templateJs != null) routes.push(checkTemplateJs(opts.templateJs));
+  routes.push(checkWatermarkAnchor(opts.layouts));
 
   const failed = routes.filter((r) => r.status === "fail").length;
   const warned = routes.filter((r) => r.status === "warn").length;

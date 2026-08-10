@@ -44,6 +44,7 @@ function promptHtml(prompt: string): string {
       onAnswer={() => {}}
       nav={{
         flexible: false,
+        quickAdvance: true,
         committed: false,
         canPrev: false,
         answerReady: true,

@@ -17,10 +17,11 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { buildResultContext, buildAdaptiveResultContext } from "./result-context";
+import { buildResultContext, buildAdaptiveResultContext, type MeasuresSource } from "./result-context";
 import { buildTemplateCssVars, type TemplateParamDef } from "@shared/template/params-css";
 import { buildPaletteBridge } from "@shared/template/palette-bridge";
 import { baseParams, buildTemplateThemeCss, sceneThemeAttribute } from "@shared/template/theme-css";
+import { resolveThemeParams } from "@shared/template/theme-params";
 import { supportsThemes } from "@shared/template/themes";
 import type { StoredDesignSettings } from "@shared/template/theme-params";
 import type { AttemptResult } from "@shared/schema";
@@ -29,6 +30,19 @@ import {
   resolveReportValues,
   type ReportKind,
 } from "@shared/report/report-variants";
+import { reportImageKeys, resolveReportImageValues } from "@shared/report/report-assets";
+
+/**
+ * Where the browser reaches ONE template's own files (`GET /api/templates/:id/assets/*`).
+ *
+ * The web host has no package directory to resolve template-relative paths against, so
+ * a report variant's pictures are addressed through that route (PRD-27 FR-05).
+ *
+ * @param templateId Template whose files back the report page.
+ */
+function templateAssetBase(templateId: string): string {
+  return `/api/templates/${encodeURIComponent(templateId)}/assets/`;
+}
 
 /**
  * The test's stored design settings, as the routes read them off the test row.
@@ -87,6 +101,21 @@ export interface ScreenRenderPayload {
    * declare one (`startImageForVariant`).
    */
   design?: { logoUrl?: string; startImageUrl?: string };
+  /**
+   * PRD-29: the test's design params RESOLVED against the ACTIVE template's manifest
+   * — the very resolution the CSS variables above are printed from, handed out so a
+   * consumer can read the params that carry no CSS variable at all (the level colour
+   * scheme, the render kinds of scales and indicators). Resolving the design a
+   * SECOND time next to the payload is what this field exists to prevent: the two
+   * calculations would drift on the first edit of either.
+   *
+   * PRD-23 caveat: a themed template keeps its COLOUR params per palette, so the
+   * pinned palette's colours are folded in; under «Авто» the palette is only chosen
+   * in the browser, so only the palette-independent params travel.
+   *
+   * Omitted when the test overrides nothing.
+   */
+  params?: Record<string, unknown>;
 }
 
 /**
@@ -265,7 +294,8 @@ export function readScreenTemplate(
     // template without themes `baseParams` is the whole param set and `themeCss` is
     // empty — the payload is byte-identical to what it was before.
     const manifest = readBrandingManifest(paramsDir || dir);
-    const base = baseParams(design, manifest);
+    const resolved = resolveThemeParams(design, manifest);
+    const base = resolved.base;
     const cssVars = buildTemplateCssVars(base, manifest.params);
     const themeCss = buildTemplateThemeCss(design, manifest, { rootSelector: ":host" });
     const dataTheme = sceneThemeAttribute(design, manifest);
@@ -283,6 +313,11 @@ export function readScreenTemplate(
       card: paletteVar("--card", cssVars, themeCss, css),
       border: paletteVar("--border", cssVars, themeCss, css),
     });
+    // PRD-29: the params Core reads (level scheme, render kinds, custom ramp colours)
+    // come from THIS resolution, not from a second one. A pinned palette contributes
+    // its colours; under «Авто» there is no server-side answer to which palette the
+    // browser will paint, so only the palette-independent params travel.
+    const params = { ...base, ...(dataTheme ? resolved.byTheme[dataTheme] ?? {} : {}) };
     return {
       layout,
       css: bridge ? `${css}\n${bridge}` : css,
@@ -291,6 +326,7 @@ export function readScreenTemplate(
       ...(themeCss ? { themeCss } : {}),
       ...(dataTheme ? { dataTheme } : {}),
       ...(supportsThemes(manifest) ? { themed: true } : {}),
+      ...(Object.keys(params).length ? { params } : {}),
       ...(Object.keys(design_).length ? { design: design_ } : {}),
     };
   } catch {
@@ -299,9 +335,52 @@ export function readScreenTemplate(
 }
 
 /**
+ * Completes the caller's measures source with what the payload already knows.
+ *
+ * Two things travel from here rather than from the route. The design params are the
+ * ONE resolution {@link readScreenTemplate} did for this very screen, so the ramp and
+ * the render kinds can never disagree with the CSS the screen is painted with. The
+ * measured VALUES are read off the SAVED {@link AttemptResult} and are never
+ * recomputed: grading a finished attempt again against today's configuration would
+ * change what the learner already scored.
+ *
+ * A caller that supplies either of them keeps its own — nothing is overwritten
+ * silently.
+ *
+ * Exported because the ROUTE completes the very same source a second time: the results
+ * response carries the measurements on to the browser, which builds the PDF report from
+ * them, and that copy has to be the SAME one the screen was painted from. It takes the
+ * payload's own `params` (see {@link ScreenRenderPayload.params}), so the completion
+ * rule stays in one place instead of being re-derived at the route.
+ */
+export function completeMeasuresSource(
+  measures: MeasuresSource,
+  payloadParams: Record<string, unknown> | undefined,
+  // The stored result, of EITHER mode: only the two computed namespaces are read off it,
+  // and since issue #33 an adaptive result carries them too (`adaptiveAttemptResultSchema`).
+  result: Pick<AttemptResult, "scaleResults" | "resultVariables">,
+): MeasuresSource {
+  return {
+    ...measures,
+    params: { ...payloadParams, ...measures.params },
+    scaleResults:
+      measures.scaleResults ?? ((result.scaleResults ?? {}) as NonNullable<MeasuresSource["scaleResults"]>),
+    variableValues: measures.variableValues ?? result.resultVariables ?? {},
+  };
+}
+
+/**
  * Build the render payload for the RESULTS screen of a completed standard attempt.
  * Returns null when the layout is missing or the result is not a standard result
  * (e.g. adaptive), so the caller can fall back to legacy rendering.
+ *
+ * `measures` carries the material of the results screen: the test's scales and
+ * indicators with their block settings (PRD-29) AND the test's own feedback block
+ * (PRD-32). It is NOT a statement that the test measures anything — the caller hands it
+ * over for every standard attempt, and `buildResultContext` decides what the emptiness
+ * of the scale/indicator arrays means. The ADAPTIVE branch takes it as well, but reads
+ * ONLY the test's own feedback block out of it — an adaptive result composes its own
+ * levels and measures nothing.
  */
 export function readResultsRenderPayload(
   dir: string,
@@ -310,6 +389,7 @@ export function readResultsRenderPayload(
   design?: DesignSettingsInput | null,
   paramsDir?: string,
   subtitle?: string,
+  measures?: MeasuresSource,
 ): ScreenRenderPayload | null {
   try {
     const isAdaptive = (result as { mode?: string }).mode === "adaptive";
@@ -320,9 +400,20 @@ export function readResultsRenderPayload(
       paramsDir,
     );
     if (!base) return null;
+    // ONE call, not a fork on `measures`. The fork used to hand the builder two
+    // arguments whenever the material was absent, which quietly dropped everything
+    // the material carries besides measurements — the test's own feedback block above
+    // all. The builder already treats an absent third argument as «nothing to add».
+    // BOTH branches complete the material the same way — with the design params of THIS
+    // screen and the values stored WITH the attempt. Until issue #33 the adaptive branch
+    // took the material raw and read only the test's own feedback out of it, on the
+    // reading that «an adaptive result measures nothing»; it measures exactly what the
+    // author hung on its questions, and the values were being computed and shipped to the
+    // LMS while the screen showed none of them.
+    const completed = measures ? completeMeasuresSource(measures, base.params, result as AttemptResult) : undefined;
     const context = isAdaptive
-      ? buildAdaptiveResultContext(result, testTitle)
-      : buildResultContext(result as AttemptResult, testTitle);
+      ? buildAdaptiveResultContext(result, testTitle, completed)
+      : buildResultContext(result as AttemptResult, testTitle, completed);
     // Header subtitle «Попытка N из M» (Core-prepared by the caller), same as the
     // other learner screens — merged into the server-built course context.
     if (subtitle) (context as { course: { subtitle?: string } }).course.subtitle = subtitle;
@@ -352,6 +443,10 @@ export function readResultsRenderPayload(
  * @param design The test's design settings (branding / pinned palette).
  * @param paramsDir Directory whose manifest the design params were set against — the
  *   ACTIVE template, even when the layout falls back to `default`.
+ * @param assetTemplateId Template id whose files back this variant's pictures — the id
+ *   `GET /api/templates/:id/assets/*` serves (PRD-27 FR-05). It follows the LAYOUT, so
+ *   on a fallback it is `default`, not the active template. Omitted (dev/tests) leaves
+ *   template-relative paths unresolved rather than pointing them at the wrong template.
  * @returns Payload, or `null` when this directory offers no such variant.
  */
 export function readReportRenderPayload(
@@ -360,7 +455,17 @@ export function readReportRenderPayload(
   authored: { variantKey?: string | null; values?: Record<string, unknown> | null } | null | undefined,
   design?: DesignSettingsInput | null,
   paramsDir?: string,
-): { layout: string; css: string; variantKey: string; values: Record<string, unknown>; cssVars?: Record<string, string>; themeCss?: string; design?: Record<string, string> } | null {
+  assetTemplateId?: string,
+): {
+  layout: string;
+  css: string;
+  variantKey: string;
+  values: Record<string, unknown>;
+  imageKeys: string[];
+  cssVars?: Record<string, string>;
+  themeCss?: string;
+  design?: Record<string, string>;
+} | null {
   try {
     const raw = readFileSafe(path.join(dir, "manifest.json"));
     if (!raw) return null;
@@ -377,11 +482,19 @@ export function readReportRenderPayload(
     // Токены отчёта ставятся на КОНТЕЙНЕР, а не на `:host`: сцены здесь нет.
     const themeCss = buildTemplateThemeCss(design, brandingManifest, { rootSelector: ".tb-report" });
     const logoUrl = resolveMediaUrl(base?.logoUrl);
+    // FR-05: картинки варианта — файлы шаблона, а браузеру они видны только через
+    // роут ассетов. Инлайнит их в data-URL уже клиент: сюда они не кладутся, чтобы
+    // ответ с результатом попытки не тащил сотни килобайт base64.
+    const imageKeys = reportImageKeys(variant);
+    const values = resolveReportValues(variant, authored?.values ?? null);
     return {
       layout,
       css,
       variantKey: variant.key,
-      values: resolveReportValues(variant, authored?.values ?? null),
+      values: assetTemplateId
+        ? resolveReportImageValues(values, imageKeys, templateAssetBase(assetTemplateId))
+        : values,
+      imageKeys,
       ...(Object.keys(cssVars).length > 0 ? { cssVars } : {}),
       ...(themeCss ? { themeCss } : {}),
       ...(logoUrl ? { design: { logoUrl } } : {}),

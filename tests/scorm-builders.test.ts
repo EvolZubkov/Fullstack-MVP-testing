@@ -175,6 +175,44 @@ describe("buildTestJson — standard mode", () => {
     expect(data.passPercent).toBe(100); // 1/1 * 100
   });
 
+  it("контрольный тест не несёт флага hasGradedContent — пакет байт-в-байт прежний", () => {
+    const data = JSON.parse(buildTestJson(exportData));
+    expect("hasGradedContent" in data).toBe(false);
+  });
+
+  it("измерительная методика помечена hasGradedContent: false — старт не покажет порог", () => {
+    const measurementOnly = {
+      ...exportData,
+      sections: [
+        {
+          ...dbSection,
+          questions: [
+            { ...dbQuestion, id: "a1", type: "allocation", correctJson: {} },
+            { ...dbQuestion, id: "s1q", type: "scale", correctJson: {} },
+          ],
+        },
+      ],
+    };
+    const data = JSON.parse(buildTestJson(measurementOnly));
+    expect(data.hasGradedContent).toBe(false);
+    // The threshold itself still travels — the results screen and the LMS rollup
+    // read it; only the start screen's fact is dropped, and by the shared builder.
+    expect(data.passPercent).toBe(70);
+  });
+
+  it("смешанный тест оценивает — флаг не ставится", () => {
+    const mixed = {
+      ...exportData,
+      sections: [
+        {
+          ...dbSection,
+          questions: [{ ...dbQuestion, id: "a1", type: "allocation", correctJson: {} }, dbQuestion],
+        },
+      ],
+    };
+    expect("hasGradedContent" in JSON.parse(buildTestJson(mixed))).toBe(false);
+  });
+
   it("includes totalQuestions as sum of section drawCounts", () => {
     const data = JSON.parse(buildTestJson(exportData));
     expect(data.totalQuestions).toBe(1);

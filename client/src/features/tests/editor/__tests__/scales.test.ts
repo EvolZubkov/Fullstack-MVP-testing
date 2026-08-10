@@ -9,10 +9,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { apiToEditorModel, emptyEditorModel } from "../test-editor.mappers";
 import { validateTestEditor } from "../test-editor.validation";
 import { saveScales, saveMeasurements, loadContributionQuestions, previewScales } from "../scales-api";
-import type { QuestionMeasurementModel, ScaleBandModel, ScaleModel, TestEditorModel } from "../test-editor.types";
+import type {
+  QuestionMeasurementModel,
+  ResultVariableModel,
+  ScaleBandModel,
+  ScaleModel,
+  TestEditorModel,
+} from "../test-editor.types";
 
 function band(overrides: Partial<ScaleBandModel> = {}): ScaleBandModel {
-  return { min: "0", max: "10", label: "Низкий", level: "low", ...overrides };
+  return { min: "0", max: "10", label: "Низкий", level: "low", text: "", tone: "", ...overrides };
 }
 
 function scale(overrides: Partial<ScaleModel> = {}): ScaleModel {
@@ -24,7 +30,10 @@ function scale(overrides: Partial<ScaleModel> = {}): ScaleModel {
     normalization: "none",
     direction: "positive",
     bands: [],
-    showToLearner: false,
+    domainMin: null,
+    domainMax: null,
+    valence: "none",
+    learnerVisibility: "hidden",
     scormTarget: "none",
     sortOrder: 0,
     ...overrides,
@@ -56,7 +65,7 @@ describe("apiToEditorModel — scales", () => {
           direction: "inverse",
           configJson: { bands: [{ min: 0, max: 27, level: "high", label: "Высокий" }] },
           scormTarget: "both",
-          showToLearner: true,
+          learnerVisibility: "level_and_value",
           sortOrder: 2,
         },
         { id: "a", key: "ee", label: "EE", type: "number", configJson: {}, sortOrder: 1 },
@@ -68,8 +77,8 @@ describe("apiToEditorModel — scales", () => {
     expect(d.normalization).toBe("percent");
     expect(d.direction).toBe("inverse");
     expect(d.scormTarget).toBe("both");
-    expect(d.showToLearner).toBe(true);
-    expect(d.bands).toEqual([{ min: "0", max: "27", label: "Высокий", level: "high" }]);
+    expect(d.learnerVisibility).toBe("level_and_value");
+    expect(d.bands).toEqual([{ min: "0", max: "27", label: "Высокий", level: "high", text: "", tone: "" }]);
   });
 
   it("defaults unknown enum values and missing fields safely", () => {
@@ -139,13 +148,124 @@ describe("validateTestEditor — scales", () => {
     expect(scaleErrors([scale({ bands })]).some((e) => e.code === "band_overlap")).toBe(true);
   });
 
+  it("requires a level code, and says so per level", () => {
+    // The code is the level's identity: `parseScaleInterpretation` DROPS a level
+    // without one, so saving it would quietly delete the level on the next read.
+    const bands = [band({ min: "0", max: "16" }), band({ min: "16", max: "30", level: "  " })];
+    const errors = scaleErrors([scale({ bands })]);
+    expect(errors.some((e) => e.field === "scales[0].bands[1]" && e.code === "band_code")).toBe(true);
+    expect(errors.some((e) => e.field === "scales[0].bands[0]")).toBe(false);
+  });
+
+  it("keeps the level LABEL optional — only the code is required", () => {
+    expect(scaleErrors([scale({ bands: [band({ label: "" })] })])).toEqual([]);
+  });
+
   it("ignores a fully-empty trailing band row", () => {
-    const bands = [band({ min: "0", max: "16" }), { min: "", max: "", label: "", level: "" }];
+    const bands = [band({ min: "0", max: "16" }), { min: "", max: "", label: "", level: "", text: "", tone: "" as const }];
+    expect(scaleErrors([scale({ bands })])).toEqual([]);
+  });
+
+  // PRD-45 FR-11: the levels editor writes ONE threshold into both neighbours, so
+  // touching boundaries are what every scale it creates looks like. A gate that
+  // rejected `min === prevMax` would block saving every such scale, and the
+  // non-adjacent pair above (16/17) would not notice the regression.
+  it("accepts touching band boundaries (the levels editor's own output)", () => {
+    const bands = [band({ min: "0", max: "15" }), band({ min: "15", max: "29" })];
+    expect(scaleErrors([scale({ bands })])).toEqual([]);
+  });
+
+  // PRD-45: «Добавить уровень» seeds the new threshold as the midpoint of the last
+  // level, formatted through `formatAuthorNumber` — a ru-decimal comma. Parsing it
+  // with a bare `Number` yielded NaN, so «Сохранить» went dead with the card green
+  // and no field highlighted.
+  it("accepts a fractional threshold written with a ru-decimal comma", () => {
+    const bands = [band({ min: "0", max: "73,5" }), band({ min: "73,5", max: "98" })];
     expect(scaleErrors([scale({ bands })])).toEqual([]);
   });
 });
 
+// ─── Validation — numeric indicator bands (PRD-45 FR-09/FR-14) ─────────────────
+
+describe("validateTestEditor — bands of a numeric result variable", () => {
+  const variable = (over: Partial<ResultVariableModel> = {}): ResultVariableModel => ({
+    name: "idx",
+    label: "Индекс",
+    type: "number",
+    formula: "1",
+    learnerVisibility: "hidden",
+    scormTarget: "none",
+    controlsStatus: "none",
+    bands: [],
+    outcomes: [],
+    domainMin: null,
+    domainMax: null,
+    valence: "none",
+    sortOrder: 0,
+    ...over,
+  });
+  const varErrors = (vars: ResultVariableModel[]) =>
+    validateTestEditor({ ...emptyEditorModel({ folderId: null }), resultVariables: vars }).errors.filter((e) =>
+      e.field.startsWith("resultVariables"),
+    );
+
+  it("blocks a descending pair — it would leave every score without a level", () => {
+    const bands = [band({ min: "0", max: "42" }), band({ min: "42", max: "29" })];
+    const errors = varErrors([variable({ bands })]);
+    expect(errors.some((e) => e.field === "resultVariables[0].bands[1]" && e.code === "band_order")).toBe(true);
+  });
+
+  it("accepts a well-formed ascending pair", () => {
+    const bands = [band({ min: "0", max: "42" }), band({ min: "42", max: "60" })];
+    expect(varErrors([variable({ bands })])).toEqual([]);
+  });
+
+  it("leaves a non-numeric indicator's bands alone", () => {
+    // A boolean indicator interprets through `outcomes`; stale numeric bands from
+    // a type flip must not block saving.
+    const bands = [band({ min: "0", max: "42" }), band({ min: "42", max: "29" })];
+    expect(varErrors([variable({ type: "boolean", bands })])).toEqual([]);
+  });
+});
+
 // ─── Save orchestrator ──────────────────────────────────────────────────────
+
+describe("apiToEditorModel — домен и направление шкалы (PRD-29)", () => {
+  const readScale = (configJson: unknown) =>
+    apiToEditorModel({
+      id: "t1",
+      title: "T",
+      scales: [{ id: "a", key: "ee", label: "EE", type: "number", configJson, sortOrder: 0 }],
+    }).scales[0];
+
+  it("читает заданные границы и направление", () => {
+    const s = readScale({ bands: [], domainMin: 0, domainMax: 45, valence: "lower_is_better" });
+    expect(s.domainMin).toBe(0);
+    expect(s.domainMax).toBe(45);
+    expect(s.valence).toBe("lower_is_better");
+  });
+
+  it("ноль читается как граница, а не как «не задано»", () => {
+    expect(readScale({ domainMin: 0, domainMax: 0 })).toMatchObject({ domainMin: 0, domainMax: 0 });
+  });
+
+  it("границ нет → null, направления нет → «без оценки»", () => {
+    // Охват интервалов НЕ подставляется: редактору нужно отличать заданный
+    // домен от выводимого, иначе переключатель ручных границ соврёт.
+    const s = readScale({ bands: [{ min: 0, max: 45, level: "low" }] });
+    expect(s.domainMin).toBeNull();
+    expect(s.domainMax).toBeNull();
+    expect(s.valence).toBe("none");
+  });
+
+  it("половина пары границ = границы не заданы", () => {
+    expect(readScale({ domainMin: 0 })).toMatchObject({ domainMin: null, domainMax: null });
+  });
+
+  it("неизвестное направление вырождается в «без оценки»", () => {
+    expect(readScale({ valence: "sideways" }).valence).toBe("none");
+  });
+});
 
 describe("saveScales — diff on save", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -171,6 +291,37 @@ describe("saveScales — diff on save", () => {
     await saveScales("t1", [scale({ bands: [band({ label: "  " })] })], []);
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.configJson.bands[0]).toEqual({ min: 0, max: 10, level: "low" });
+  });
+
+  it("кладёт границы и направление в config_json (PRD-29)", async () => {
+    await saveScales(
+      "t1",
+      [scale({ key: "ee", domainMin: 0, domainMax: 45, valence: "lower_is_better" })],
+      [],
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.configJson).toMatchObject({ domainMin: 0, domainMax: 45, valence: "lower_is_better" });
+  });
+
+  it("не задан домен → в config_json его нет, но направление пишется всегда", async () => {
+    await saveScales("t1", [scale({ key: "ee" })], []);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.configJson).not.toHaveProperty("domainMin");
+    expect(body.configJson.valence).toBe("none");
+  });
+
+  it("PUTs when only the domain changed", async () => {
+    const snap = [scale({ id: "a", key: "a" })];
+    const draft = [scale({ id: "a", key: "a", domainMin: 0, domainMax: 45 })];
+    await saveScales("t1", draft, snap);
+    expect(calls()).toEqual([["PUT", `${base}/a`]]);
+  });
+
+  it("PUTs when only the valence changed", async () => {
+    const snap = [scale({ id: "a", key: "a" })];
+    const draft = [scale({ id: "a", key: "a", valence: "higher_is_better" })];
+    await saveScales("t1", draft, snap);
+    expect(calls()).toEqual([["PUT", `${base}/a`]]);
   });
 
   it("DELETEs scales dropped from the draft", async () => {

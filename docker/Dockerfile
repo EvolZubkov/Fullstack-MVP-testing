@@ -4,7 +4,7 @@
 # Image contains: Node.js runtime + compiled application + node_modules.
 #
 # .env, config/ and uploads/ are NOT baked in — they are mounted as volumes
-# from the host at runtime (see docker/scripts/deploy.sh).
+# from the host at runtime (see scripts/deploy/deploy.sh).
 #
 # Build args:
 #   SERVICE_PORT - TCP port the app listens on (default: 8081)
@@ -53,17 +53,17 @@ COPY --chown=nodejs:nodejs drizzle.config.ts ./
 COPY --chown=nodejs:nodejs drizzle ./drizzle
 
 # Legacy hand-written data/DDL migrations, kept as a historical record and for
-# ad-hoc fixes via `node script/run-sql.cjs <file>`. The deploy no longer runs
+# ad-hoc fixes via `node scripts/db/run-sql.cjs <file>`. The deploy no longer runs
 # these — schema is applied by drizzle-kit migrate (drizzle/ above).
 COPY --chown=nodejs:nodejs migrations ./migrations
-COPY --chown=nodejs:nodejs script/run-sql.cjs ./script/run-sql.cjs
+COPY --chown=nodejs:nodejs scripts/db/run-sql.cjs ./scripts/db/run-sql.cjs
 # Shared config loader (server/config-loader.mjs) — required at runtime by
 # run-sql.cjs (dynamic import) and the set-password tool. server/ is otherwise
 # excluded from the image, so copy this one file explicitly.
 COPY --chown=nodejs:nodejs server/config-loader.mjs ./server/config-loader.mjs
 # Legacy PRD-15 schema gate (was run before the removed drizzle-kit push; kept for
 # reference / ad-hoc verification via run-sql.cjs).
-COPY --chown=nodejs:nodejs script/verify-prd15-pre-push.sql ./script/verify-prd15-pre-push.sql
+COPY --chown=nodejs:nodejs scripts/db/verify-prd15-pre-push.sql ./scripts/db/verify-prd15-pre-push.sql
 
 # Built-in design template manifests/previews — read from disk at runtime by
 # server/template-registry.ts and the preview routes (process.cwd()/server/scorm/templates).
@@ -79,7 +79,7 @@ COPY --chown=nodejs:nodejs docs/dist ./docs/dist
 
 # Non-secret application config (config/*.config.jsonc) is deliberately NOT in the
 # image — it is a host-side volume mounted at /app/config (see
-# docker/templates/docker-compose.yml + docker/scripts/deploy.sh, which seeds the
+# docker/templates/docker-compose.yml + scripts/deploy/deploy.sh, which seeds the
 # host copy from the deploy package). A settings change is then an edit plus
 # `docker compose restart`, never a rebuild, and the same image can serve several
 # instances. The mount point is created below; the entrypoint fails fast when the

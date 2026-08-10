@@ -11,7 +11,12 @@
 /** Minimal, PII-free context handed to a plugin's `evaluate` (PRD-6 §3.4). */
 export interface EligibilityContext {
   test: { id: string; title: string };
-  retakePolicy: { cooldownPeriodDays: number };
+  retakePolicy: {
+    cooldownPeriodDays?: number;
+    cooldownByOutcome?: boolean;
+    cooldownPeriodDaysPassed?: number;
+    cooldownPeriodDaysFailed?: number;
+  };
   runtime: { todayDate: string; timezone?: string; launchUrl?: string };
   lms?: { scormVersion?: string; sessionId?: string };
   /** Admin-managed plugin config (endpoints, filter, parsing) from the registry. */

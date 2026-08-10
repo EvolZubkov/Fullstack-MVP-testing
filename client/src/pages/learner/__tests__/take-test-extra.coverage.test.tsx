@@ -9,7 +9,7 @@
  *     mappings), the resume timer-expired gate, the resume error toast, and the
  *     «no in-progress → start fresh» fallthrough;
  *   - strict-mode «Далее» validation (unanswered / empty multiple / incomplete
- *     matching) and per-type `checkAnswerLocally` via showCorrectAnswers feedback
+ *     matching) and per-type `scoreAnswerLocally` via showCorrectAnswers feedback
  *     for multiple / matching / ranking (right AND wrong);
  *   - flexible back-nav («Назад») + pill navigation (jump + out-of-range guard);
  *   - the sectional flexible flow end-to-end (section обзор → freeze →
@@ -73,11 +73,16 @@ vi.mock("../template-question-screen", () => ({
     <div data-testid="question-screen">
       <div data-testid="qs-counter">{props.counterLabel}</div>
       <div data-testid="qs-prompt">{props.question?.prompt}</div>
+      {/* Verdict banner markup as the host composes it — exposed as text so the
+          three-position verdict (правильно / частично / неверно) is assertable. */}
+      <div data-testid="qs-feedback">{props.feedbackHtml ?? ""}</div>
       <button type="button" data-testid="qs-ans-0" onClick={() => props.onAnswer(0)}>a0</button>
       <button type="button" data-testid="qs-ans-1" onClick={() => props.onAnswer(1)}>a1</button>
       <button type="button" data-testid="qs-ans-multi" onClick={() => props.onAnswer([0, 1])}>am</button>
       <button type="button" data-testid="qs-ans-multi-empty" onClick={() => props.onAnswer([])}>ame</button>
       <button type="button" data-testid="qs-ans-multi-wrong" onClick={() => props.onAnswer([0])}>amw</button>
+      {/* Nothing from the correct set — c = 0, so no tier of a graded question fires. */}
+      <button type="button" data-testid="qs-ans-multi-none" onClick={() => props.onAnswer([2])}>amn</button>
       <button type="button" data-testid="qs-ans-match-full" onClick={() => props.onAnswer({ 0: 0, 1: 1 })}>mf</button>
       <button type="button" data-testid="qs-ans-match-partial" onClick={() => props.onAnswer({ 0: 0 })}>mp</button>
       <button type="button" data-testid="qs-ans-match-wrong" onClick={() => props.onAnswer({ 0: 1, 1: 0 })}>mw</button>
@@ -330,7 +335,7 @@ describe("<TakeTestPage /> strict next validation", () => {
   });
 });
 
-// ─── showCorrectAnswers feedback per type (checkAnswerLocally) ──────────────────
+// ─── showCorrectAnswers feedback per type (scoreAnswerLocally) ──────────────────
 
 describe("<TakeTestPage /> showCorrectAnswers per type", () => {
   const feedbackAttempt = (question: unknown, id: string) =>
@@ -367,6 +372,85 @@ describe("<TakeTestPage /> showCorrectAnswers per type", () => {
   });
   it("grades a wrong ranking answer and finishes", async () => {
     await confirmAndFinish("qs-ans-rank-wrong", qRanking("rk1", "Ранж."), "rk1");
+  });
+
+  // PRD-10 (FR-12): a graded (tiered/weighted) question earns PARTIAL credit, and the
+  // instant verdict must say so — the same three tones the SCORM package emits from
+  // the same `scoreRatio`. Absent `scoring` = exact = the legacy two-tone verdict.
+  describe("частичный балл в мгновенном фидбеке", () => {
+    // c >= 1 → 1 балл, c == T → 2 балла. Ответ [0] при верных [0, 1] = частично.
+    const qTiered = () => ({
+      ...qMultiple("m1", "Множ."),
+      scoring: {
+        kind: "tiered",
+        tiers: [
+          { when: { all: [{ lhs: "c", op: "==", rhs: "T" }] }, score: 2 },
+          { when: { all: [{ lhs: "c", op: ">=", rhs: 1 }] }, score: 1 },
+        ],
+        sMax: 2,
+      },
+    });
+
+    async function verdictAfter(answerTestId: string, question: unknown) {
+      await renderToQuestion({ startAttempt: feedbackAttempt(question, "m1") });
+      fireEvent.click(screen.getByTestId(answerTestId));
+      fireEvent.click(await screen.findByText("Принять"));
+      return screen.getByTestId("qs-feedback").textContent ?? "";
+    }
+
+    it("показывает «Частично правильно» при частично верном ответе", async () => {
+      expect(await verdictAfter("qs-ans-multi-wrong", qTiered())).toContain("Частично правильно");
+    });
+
+    it("оставляет «Правильно!» при полностью верном ответе", async () => {
+      expect(await verdictAfter("qs-ans-multi", qTiered())).toContain("Правильно!");
+    });
+
+    it("оставляет «Неверно», когда ступенчатая таблица не дала ни балла", async () => {
+      const verdict = await verdictAfter("qs-ans-multi-none", qTiered());
+      expect(verdict).toContain("Неверно");
+      expect(verdict).not.toContain("Частично");
+    });
+
+    it("без ступенчатой цены тот же частичный ответ остаётся «Неверно»", async () => {
+      const verdict = await verdictAfter("qs-ans-multi-wrong", qMultiple("m1", "Множ."));
+      expect(verdict).toContain("Неверно");
+      expect(verdict).not.toContain("Частично");
+    });
+  });
+
+  // issue #34: у вопроса с условной обратной связью общий `feedback` пуст — веб-хост
+  // обязан выбрать ветку по вердикту тем же правилом, что и пакет, иначе баннер
+  // выходит вообще без пояснения.
+  describe("условная обратная связь", () => {
+    const qConditional = () => ({
+      ...qSingle("q1", "В1"),
+      feedback: null,
+      feedbackMode: "conditional",
+      feedbackCorrect: "Верно: это база",
+      feedbackIncorrect: "Неверно: перечитайте раздел",
+    });
+
+    async function verdictAfter(answerTestId: string, question: unknown) {
+      await renderToQuestion({ startAttempt: feedbackAttempt(question, "q1") });
+      fireEvent.click(screen.getByTestId(answerTestId));
+      fireEvent.click(await screen.findByText("Принять"));
+      return screen.getByTestId("qs-feedback").textContent ?? "";
+    }
+
+    it("показывает ветку верного ответа", async () => {
+      expect(await verdictAfter("qs-ans-0", qConditional())).toContain("Верно: это база");
+    });
+
+    it("показывает ветку неверного ответа", async () => {
+      const verdict = await verdictAfter("qs-ans-1", qConditional());
+      expect(verdict).toContain("Неверно: перечитайте раздел");
+      expect(verdict).not.toContain("Верно: это база");
+    });
+
+    it("в общем режиме по-прежнему показывает общий текст", async () => {
+      expect(await verdictAfter("qs-ans-1", qSingle("q1", "В1"))).toContain("Пояснение");
+    });
   });
 
   it("«Принять» is disabled until the question is answered", async () => {

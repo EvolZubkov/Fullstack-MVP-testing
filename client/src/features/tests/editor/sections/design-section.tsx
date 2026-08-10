@@ -68,6 +68,8 @@ import { DEFAULT_PARAM_CSS_VARS } from "@shared/template/params-css";
 import { TemplatePreviewModal } from "./template-preview-modal";
 import { TemplateGalleryModal } from "./template-gallery-modal";
 import { TemplateThumb } from "./template-thumb";
+import { ReportSettingsCard } from "./report-settings-card";
+import type { TestEditorModel } from "../test-editor.types";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -82,9 +84,19 @@ export type DesignSectionProps = {
    * footer save, no per-pane save button).
    */
   design?: UseDesignSettingsResult;
+  /**
+   * PRD-47 §6.2: модель теста нужна пункту «Отчёт о результатах» — карточка правит
+   * `model.report`. Хранение осталось своей колонкой (PRD-27 §4.2), переехал только
+   * элемент интерфейса, поэтому поля отчёта по-прежнему часть модели теста.
+   *
+   * Необязательные: раздел собирают и в компонентных тестах, где модели нет, и там
+   * пункт просто не показывает карточку.
+   */
+  model?: TestEditorModel;
+  updateModel?: (updater: (m: TestEditorModel) => TestEditorModel) => void;
 };
 
-type DesignRailKey = "template" | "branding" | "colors" | "layout" | "progress";
+type DesignRailKey = "template" | "branding" | "colors" | "layout" | "progress" | "report";
 
 const RAIL_ITEMS: { key: DesignRailKey; label: string }[] = [
   { key: "template", label: "Шаблон" },
@@ -95,6 +107,10 @@ const RAIL_ITEMS: { key: DesignRailKey; label: string }[] = [
   { key: "colors", label: "Цвета" },
   { key: "layout", label: "Макет" },
   { key: "progress", label: "Прогресс и шапка" },
+  // PRD-47 §6.2: отчёт — часть шаблона, его поля объявляет манифест ровно как параметры
+  // оформления. Место им здесь, а не в общих настройках теста. Хранение при этом НЕ
+  // переезжает: поля отчёта остаются своей колонкой (PRD-27 §4.2).
+  { key: "report", label: "Отчёт о результатах" },
 ];
 
 /**
@@ -116,7 +132,7 @@ function paramsForRail(
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function DesignSection({ testId, design: designProp }: DesignSectionProps) {
+export function DesignSection({ testId, design: designProp, model, updateModel }: DesignSectionProps) {
   const [active, setActive] = useState<DesignRailKey>("template");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -138,7 +154,13 @@ export function DesignSection({ testId, design: designProp }: DesignSectionProps
     const params = design.template?.manifest.params;
     if (!design.template) return RAIL_ITEMS;
     return RAIL_ITEMS.filter(
-      (item) => item.key === "template" || paramsForRail(params, item.key).length > 0,
+      (item) =>
+        item.key === "template" ||
+        // PRD-47 §6.2: отчёт есть у любого теста. Даже когда шаблон не объявил видов,
+        // карточка объясняет, что отчёт соберётся видом «Стандартный», — спрятать пункт
+        // значит спрятать это объяснение. Остальные пункты без параметров бессмысленны.
+        item.key === "report" ||
+        paramsForRail(params, item.key).length > 0,
     );
   }, [design.template]);
 
@@ -212,6 +234,37 @@ export function DesignSection({ testId, design: designProp }: DesignSectionProps
             />
           ) : effectiveActive === "colors" ? (
             <ColorsPane design={design} onPreview={() => setPreviewOpen(true)} />
+          ) : effectiveActive === "report" ? (
+            // PRD-47 §6.2: переезд, а не переработка — состав карточки тот же, что стоял
+            // в «Настройки → Основное». Черновые шаблон и брендинг теперь СВОИ, этой же
+            // вкладки, а не пришедшие из соседней.
+            model && updateModel ? (
+              <ReportSettingsCard
+                // Здесь только облик документа: что в нём показывать, автор задаёт в
+                // «Настройках», рядом с обратной связью (PRD-27 §7.1).
+                scope="appearance"
+                mode={model.mode}
+                draftTemplateId={design.draft.templateId}
+                designParams={design.draft.params}
+                value={model.report ?? {}}
+                onChange={(next) => updateModel((m) => ({ ...m, report: next }))}
+                // FR-18: предпросмотр строится на РЕАЛЬНОЙ структуре редактируемого теста —
+                // его названии и разделах; демонстрационные только числа и вердикты.
+                testName={model.basic.title}
+                sections={model.sections.map((s) => ({
+                  topicId: s.topicId,
+                  topicName: s.topicName,
+                  questionCount: s.drawCount,
+                }))}
+                levelNames={
+                  model.mode === "adaptive"
+                    ? (model.adaptive.topics.find((t) => t.enabled)?.levels ?? []).map(
+                        (l) => l.levelName,
+                      )
+                    : undefined
+                }
+              />
+            ) : null
           ) : effectiveActive === "layout" ? (
             <SectionPane
               design={design}

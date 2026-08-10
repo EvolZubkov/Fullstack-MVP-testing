@@ -25,6 +25,12 @@
    main into a column flex container for these screens only — the list/history pages
    keep the plain block flow they lay out in. */
 main:has(> .tbh-inset-screen) { display: flex; flex-direction: column; min-height: 0; }
+/* The shell's column is `min-height: 100dvh` — it GROWS with its content, so a scene
+   taller than the window stretches `main`, the scene stretches with it, and the PAGE
+   scrolls: the scene's pinned footer leaves the screen. Bound the column to the
+   viewport for the screens that host an inset scene; the list and history pages keep
+   the growing flow they lay out in. */
+.ou-stack--minh-screen:has(.tbh-inset-screen) { height: 100dvh; }
 .tbh-inset-screen { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .tbh-col { display: flex; flex-direction: column; }
 .tbh-noselect { user-select: none; }

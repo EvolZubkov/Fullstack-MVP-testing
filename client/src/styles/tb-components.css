@@ -32,6 +32,15 @@
   --tb-input-w-sm: 140px;
   --tb-accent-rail-w: 2px;
   --tb-space-half:   2px;
+  /* PRD-46 «Оформление шкал»: ширина колонки цвета рассчитана на самую длинную
+     подпись чипа («По схеме уровней»), ширина превью — на читаемую розу. */
+  --tb-appearance-color-w: 190px;
+  --tb-appearance-icon-w: 170px;
+  --tb-appearance-preview-w: 260px;
+  --tb-icon-trigger-h: 36px;
+  --tb-icon-trigger-box: 28px;
+  --tb-icon-cell: 44px;
+  --tb-icon-grid-h: 320px;
 
   --wf-border-w: 1px;   /* fallback for portal-rendered components outside .tb-tests-list */
   /* gate-skip-end */
@@ -195,10 +204,11 @@
 .tb-table--mb { margin-bottom: var(--ou-space-3); }
 .tb-table__cell--nowrap { white-space: nowrap; }
 
-/* PRD-5 «Диапазоны (пороги)» editor: a 5-column row of DS Inputs must FIT the
-   drawer pane (it scrolls only vertically) instead of overflowing to the right.
-   Fixed layout + full-width, shrinkable inputs make the columns share the available
-   width; the actions column is a fixed narrow track for the delete button. */
+/* PRD-29 «Исходы» editor (OutcomesEditor): a row of DS Inputs must FIT the drawer
+   pane (it scrolls only vertically) instead of overflowing to the right. Fixed
+   layout + full-width, shrinkable inputs make the columns share the available
+   width; the actions column is a fixed narrow track for the delete button.
+   PRD-45 moved the NUMERIC twin off this table — see .tb-levels below. */
 .tb-bands-table { table-layout: fixed; }
 .tb-bands-table__act { width: 40px; }
 .tb-bands-table .ou-field,
@@ -243,6 +253,14 @@
 
 /* Scale value columns: ~half their prior auto width (input fills the cell). */
 .tb-contrib-grid__val-col { width: var(--tb-contrib-val-w, 7rem); }
+/* A scale key ("EMOTIONAL_EXHAUSTION") is one unbreakable word — an underscore is
+   not a break opportunity — so in a fixed-width column it overflows and paints
+   over the neighbouring headers. The markup supplies <wbr> break points at each
+   underscore; `anywhere` is the fallback for a long key with no underscores. */
+.tb-contrib-grid th.tb-contrib-grid__val-col {
+  overflow-wrap: anywhere;
+  vertical-align: bottom;
+}
 
 /* Compact rule cell inside table (custom rule + fields + unit). */
 .tb-rule-cell { display: flex; flex-direction: column; gap: var(--ou-space-1); }
@@ -468,44 +486,6 @@
   min-width: 0;
 }
 
-/* PDF asset row inside feedback editor. */
-.tb-feedback-editor__asset {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--ou-space-2);
-  flex: 1;
-  min-width: 0;
-}
-.tb-feedback-editor__asset-ico {
-  flex-shrink: 0;
-  color: var(--ou-fg-muted);
-  margin-top: var(--ou-space-1);
-}
-.tb-feedback-editor__asset-meta {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ou-space-1);
-  flex: 1;
-  min-width: 0;
-}
-.tb-feedback-editor__asset-meta > .ou-field { width: 100%; }
-.tb-feedback-editor__asset-file {
-  font: var(--ou-text-caption);
-  color: var(--ou-fg-muted);
-}
-
-/* Upload row below asset list. */
-.tb-feedback-editor__upload {
-  display: flex;
-  align-items: center;
-  gap: var(--ou-space-3);
-  flex-wrap: wrap;
-}
-.tb-feedback-editor__upload-hint {
-  font: var(--ou-text-caption);
-  color: var(--ou-fg-muted);
-}
-
 /* ── RTE (Rich Text Editor, execCommand-based toolbar) ───────────────────
    Used in FeedbackEditorModal when format === "richText". No external RTE
    library — only browser execCommand for bold/italic/link. */
@@ -696,6 +676,41 @@
 }
 .tb-draw-all-row__lbl { font: var(--ou-text-body-s); }
 .tb-draw-all-row__hint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* PRD-30: «Случайный порядок вопросов» — switch row in the topic card body.
+   Same anatomy as .tb-draw-all-row above (switch + label + muted hint): the new
+   row must sit in the SAME rank as «Все вопросы темы», otherwise the card body
+   falls apart into two different kinds of switch rows. */
+.tb-question-order-row {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  margin-bottom: var(--ou-space-2);
+}
+/* PRD-30 раздел 14 (эскиз approved/prd30-test-level-order.html): the row is no
+   longer a switch but a «label + control» pair, like «Вопросов в тест» right
+   above it — the label takes the same width, otherwise the left edges of two
+   neighbouring controls drift apart. */
+.tb-question-order-row__lbl {
+  font: var(--ou-text-body-s);
+  width: var(--wf-size-150); flex-shrink: 0;
+}
+.tb-question-order-row__hint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* PRD-30 FR-16: the test-wide delivery rule, above the topic list. Same anatomy
+   as .tb-draw-count-row — label of a fixed width, control, muted tail. */
+.tb-test-order-row {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  margin-bottom: var(--ou-space-2);
+}
+.tb-test-order-row__label {
+  font: var(--ou-text-body-s);
+  width: var(--wf-size-150); flex-shrink: 0;
+}
+.tb-test-order-row__hint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+/* The option labels do not fit the DS default 180px trigger: in the test row they
+   wrapped out of the fixed-height control, in the topic row they hit the chevron.
+   One width for both also lines the test rule up with the topics' rules. */
+.tb-test-order-row .ou-select__trigger,
+.tb-question-order-row .ou-select__trigger { min-width: var(--tb-input-w-md); }
 
 /* Draw-count row: «Вопросов в тест [ N ] из M» — standard mode. */
 .tb-draw-count-row {
@@ -2282,13 +2297,259 @@
   align-items: flex-start;
   overflow: auto;
   margin-top: var(--ou-space-4);
-  /* Ровно ОДНА страница A4 в масштабе — короткий отчёт виден целиком без прокрутки,
-     длинный прокручивается, как он и разложится на несколько страниц в PDF. И не выше
-     60 % экрана, чтобы на невысоком мониторе окно не выходило за границы. */
+  /* Окно высотой в ОДНУ страницу A4 в масштабе: короткий отчёт виден целиком, а
+     многостраничный листается — окно показывает те же листы, что уйдут в PDF (PRD-27
+     §6.5), по одному за раз. И не выше 60 % экрана, чтобы на невысоком мониторе окно не
+     выходило за границы. */
   max-height: min(calc(842px * var(--tb-report-preview-zoom)), 60vh);
 }
 .tb-report-preview__stage > [data-template-screen] {
   flex: 0 0 auto;
   width: 595px;
   zoom: var(--tb-report-preview-zoom);
+}
+
+/* ─── PRD-45: tone dot inside the level's SegmentedControl ──────────────────── */
+.tb-tone-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  display: inline-block; flex: 0 0 auto;
+}
+
+/* ─── PRD-45: levels editor ─────────────────────────────────────────────────── */
+/* The predecessor was a six-column table whose header carried every field label —
+   scrolling the drawer left the fields anonymous. Here each field owns its label,
+   and the only shared grid is the coverage strip: one 88 / 1fr / 88 track set on
+   two rows, so the labels share a baseline and the ribbon shares the control
+   baseline with both number fields. */
+/* One width for the two boundary columns: the threshold field MUST line up under
+   «Начало», and the whole layout is that alignment. Two literals could drift apart
+   in separate edits; one token cannot. */
+.tb-levels { display: flex; flex-direction: column; gap: var(--ou-space-2); --tb-levels-bound-w: 88px; }
+
+.tb-levels__cover {
+  display: grid; grid-template-columns: var(--tb-levels-bound-w) 1fr var(--tb-levels-bound-w);
+  column-gap: var(--ou-space-2); align-items: center;
+  margin-bottom: var(--ou-space-3);
+}
+.tb-levels__caplbl { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+.tb-levels__caplbl--end { text-align: right; }
+/* Height comes from the SAME token the DS gives an `s` control, not a literal:
+   `--ou-size-control-s` is 32px normally, 28px dense and 40px roomy, so a hard
+   34px matched the flanking number fields in no density at all (FR-04). */
+.tb-levels__ribbon { display: flex; height: var(--ou-size-control-s); border-radius: var(--ou-radius-s); overflow: hidden; }
+/* No `color` here: the stripe's foreground comes from its tone, inline, paired with
+   the background it must be legible on (see `TONE_CHIPS.ribbonFg`). A blanket white
+   was unreadable on the «Авто» and warning stripes.
+
+   `flex-basis: 0` is what makes FR-04's «доля ширины пропорциональна охвату
+   уровня» actually true. With the default `auto` the caption's own width is the
+   base and `flex-grow` only splits what is LEFT, so the CEL scale's 15.3 / 14.3 /
+   70.4 span was drawn as 19.6 / 20.1 / 59.5 — measured in a browser. From zero the
+   grow factors own the whole width; the residual (~0.8pp) is the fixed padding,
+   which is chrome and not span. A narrow level then has to ellipse its caption,
+   which `.tb-levels__seglbl` below does — this box cannot. */
+.tb-levels__seg {
+  display: flex; align-items: center; justify-content: center;
+  min-width: 0; flex-basis: 0; padding: 0 var(--ou-space-1);
+  font: var(--ou-text-body-xs); font-weight: 600;
+  overflow: hidden;
+}
+/* The caption needs a box of its own: `text-overflow` requires a block formatting
+   context, and the anonymous text of a flex item never gets one. Declared on
+   `.tb-levels__seg` itself the ellipsis silently did nothing — «Слабо выражен»
+   spilled past BOTH edges of a 74px stripe and was clipped to «лабо выраже»
+   (measured live: scrollWidth 83 vs clientWidth 74). The very defect PRD-45 set
+   out to remove, so it cannot come back through the ribbon. Inside this span the
+   same declarations work, and the stripe carries a `title` with the full name. */
+.tb-levels__seglbl {
+  min-width: 0; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Without this the ribbon is one flat bar. Tone defaults to «Авто», so a typical
+   scale paints EVERY stripe the same `--ou-bg-muted` and the boundaries — the
+   proportions the ribbon exists to show — are invisible.
+   `currentColor`, not a fixed divider colour, and not a `gap`: measured in a
+   browser, a `--ou-border-default` seam reaches only 1.21:1 against the warning
+   stripe and 1.02:1 against the favourable one, i.e. it vanishes on exactly the
+   saturated fills. A stripe's `currentColor` is its `TONE_CHIPS.ribbonFg`, which
+   that table guarantees ≥4.5:1 against its own `ribbonBg` — measured here at
+   7.11–14:1 across all five tones, in BOTH themes, whatever the neighbour is.
+   An inset shadow also costs no width, so the spans stay exactly proportional. */
+.tb-levels__seg + .tb-levels__seg { box-shadow: inset var(--wf-border-w) 0 0 currentColor; }
+/* The hatch alternates two REAL DS surfaces. `--ou-bg-subtle` reads like a token
+   but is defined nowhere in the DS, so a stripe built on it collapses to
+   transparent — the ribbon would show the page through the «uncovered» span. */
+.tb-levels__seg--gap {
+  background: repeating-linear-gradient(45deg,
+    var(--ou-bg-muted), var(--ou-bg-muted) 5px,
+    var(--ou-bg-surface-2) 5px, var(--ou-bg-surface-2) 10px);
+  color: var(--ou-fg-muted); font-weight: 400;
+}
+.tb-levels__seg--unknown { flex: 1; background: var(--ou-bg-muted); color: var(--ou-fg-muted); font-weight: 400; }
+/* Third grid row, under the ribbon only — the verdict on coverage in words. */
+.tb-levels__coverstat {
+  grid-column: 2; text-align: center;
+  font: var(--ou-text-caption); color: var(--ou-fg-muted);
+  margin-top: var(--ou-space-1);
+}
+
+.tb-levels__card {
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-left-width: 4px; border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-surface-1);
+  padding: var(--ou-space-3) var(--ou-space-4);
+}
+.tb-levels__head { display: flex; align-items: center; gap: var(--ou-space-2); margin-bottom: var(--ou-space-3); }
+.tb-levels__title { font: var(--ou-text-body-m); font-weight: 600; }
+.tb-levels__spacer { flex: 1; }
+.tb-levels__range { font: var(--ou-text-body-s); color: var(--ou-fg-muted); font-variant-numeric: tabular-nums; }
+
+.tb-levels__grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--ou-space-3); }
+
+/* The tone row is a DS SegmentedControl: inline-flex, nowrap by design, natural
+   width ~540px with all five labels. The drawer is `--xl` (1040px) minus a 240px
+   rail, so it fits at full size — but the drawer caps at `100vw - space-7`, and on
+   a ~800px viewport the card narrows past the row's natural width. Without this
+   the row would push out of the card. Scrolling the row inside its own strip keeps
+   the card intact and keeps every label readable, which is the whole point of
+   leaving the Select behind. */
+.tb-levels__tone { margin-top: var(--ou-space-3); overflow-x: auto; }
+.tb-levels__tonelbl { display: block; font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-bottom: var(--ou-space-1); }
+.tb-levels__tonehint { display: block; font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); }
+
+.tb-levels__fold {
+  display: flex; align-items: center; gap: var(--ou-space-2); width: 100%;
+  margin-top: var(--ou-space-3); padding-top: var(--ou-space-2);
+  border: none; border-top: var(--wf-border-w) solid var(--ou-border-soft);
+  background: none; color: var(--ou-fg-default);
+  font: var(--ou-text-body-s); text-align: left; cursor: pointer;
+}
+/* `Collapsible` stamps data-state on its trigger, so the closed «▸» turns into an
+   open «▾» without the component tracking the state twice. */
+.tb-levels__chev { color: var(--ou-fg-muted); flex: 0 0 auto; transition: transform var(--ou-motion-fast) var(--ou-easing-standard); }
+.tb-levels__fold[data-state="open"] > .tb-levels__chev { transform: rotate(90deg); }
+.tb-levels__badge { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+
+/* `start`, not `center`: an invalid threshold grows its field by a message line,
+   and centring would drag the rule line down with it. The rule keeps its own
+   control-height box instead, so it stays level with the field either way. */
+.tb-levels__cut { display: grid; grid-template-columns: var(--tb-levels-bound-w) 1fr var(--tb-levels-bound-w); column-gap: var(--ou-space-2); align-items: start; padding: var(--ou-space-2) 0; }
+/* Grid children default to min-width:auto, which a long error message would push
+   past the track; this lets the field shrink to its column instead. */
+.tb-levels__cutfield { min-width: 0; }
+.tb-levels__cutrule { display: flex; align-items: center; gap: var(--ou-space-2); min-width: 0; min-height: var(--ou-size-control-s); }
+.tb-levels__cutline { flex: 1; height: var(--wf-border-w); background: var(--ou-border-soft); }
+.tb-levels__cutlbl { font: var(--ou-text-caption); color: var(--ou-fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.tb-levels__empty {
+  border: var(--wf-border-w) dashed var(--ou-border-default); border-radius: var(--ou-radius-m);
+  padding: var(--ou-space-6); text-align: center; color: var(--ou-fg-muted);
+}
+.tb-levels__empty-act { margin-top: var(--ou-space-3); }
+
+/* ── PRD-46: оформление шкал в настройках варианта «Итоги теста» ─────────
+   Эскиз: docs/wireframes/approved/prd46-scale-visual.html.
+
+   Список и превью стоят РЯДОМ: цвета выбираются набором, и следствие выбора
+   должно быть видно, пока выбор идёт, а не после прохождения теста. */
+.tb-appearance-field { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+
+.tb-appearance {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--tb-appearance-preview-w);
+  gap: var(--ou-space-6);
+  align-items: start;
+}
+.tb-appearance__list { display: flex; flex-direction: column; }
+/* Колонки фиксированной ширины, содержимое прижато влево. Во flex-строке чипы
+   уезжали к правому краю и вставали на разной высоте по горизонтали: ширина
+   чипа зависит от текста («#8F6AE6» против «По схеме уровней»), и колонка
+   переставала читаться колонкой. Ширина рассчитана на самый длинный вариант. */
+.tb-appearance__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--tb-appearance-color-w) var(--tb-appearance-icon-w);
+  align-items: center;
+  justify-items: start;
+  gap: var(--ou-space-3);
+  padding: var(--ou-space-3) 0;
+  border-block-end: var(--wf-border-w) solid var(--ou-border-soft);
+}
+.tb-appearance__row:last-child { border-block-end: 0; }
+.tb-appearance__name { min-width: 0; font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+.tb-appearance__note { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: var(--ou-space-2) 0 0; }
+
+.tb-appearance__preview { width: 100%; height: auto; }
+
+/* Превью строится ядром розы, поэтому классы фигуры — те же, что в макетах
+   пакета: расхождение классов означало бы, что автор сверяет НЕ ту картинку,
+   которую получит. Стили ДС-шаблона в авторскую оболочку не попадают, отсюда
+   эта короткая копия правил заливки и сетки. */
+.tb-appearance__preview .tb-rose__sector {
+  fill: hsl(var(--tb-hue));
+  /* Обводка цветом ФОНА: зазор между соседними заливками, а не линия. */
+  stroke: var(--ou-bg-surface-1);
+  stroke-width: 2;
+}
+.tb-appearance__preview .tb-rose__sector--overflow { stroke: var(--ou-fg-default); stroke-dasharray: 3 3; }
+.tb-appearance__preview .tb-chart__ring,
+.tb-appearance__preview .tb-chart__axis {
+  fill: none; stroke: var(--ou-border-soft); stroke-width: var(--wf-border-w);
+}
+
+/* Контуры lucide: обводка без заливки и скруглённые концы — иначе штрихи
+   выглядят обрубленными на мелком размере. Те же правила, что у `.tb-rose__icon`
+   в теме шаблона: пиктограмма в редакторе и на диаграмме — одна и та же фигура. */
+.tb-icon,
+.tb-appearance__preview .tb-rose__icon {
+  fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.tb-appearance__preview .tb-rose__icon { color: var(--ou-fg-muted); }
+
+/* Триггер пиктограммы повторяет геометрию ou-color-trigger: два соседних
+   контрола одной строки не должны различаться высотой и радиусом. */
+.tb-icon-trigger {
+  display: inline-flex; align-items: center; gap: var(--ou-space-2);
+  height: var(--tb-icon-trigger-h); padding: var(--tb-space-half) var(--ou-space-3) var(--tb-space-half) var(--tb-space-half);
+  background: var(--ou-bg-elevated);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  cursor: pointer; font: var(--ou-text-body-s); color: var(--ou-fg-default);
+  max-width: 100%; min-width: 0;
+}
+.tb-icon-trigger:hover { border-color: var(--ou-fg-muted); }
+.tb-icon-trigger:disabled { cursor: default; opacity: 0.6; }
+.tb-icon-trigger > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-icon-trigger__box {
+  width: var(--tb-icon-trigger-box); height: var(--tb-icon-trigger-box);
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: calc(var(--ou-radius-m) - var(--tb-space-half));
+  background: var(--ou-bg-surface-3); color: var(--ou-fg-default); flex-shrink: 0;
+}
+/* Пустая ячейка — пунктиром, а не пустым квадратом: пиктограмма НЕОБЯЗАТЕЛЬНА,
+   и «не выбрана» должно читаться как состояние, а не как не догрузившийся глиф. */
+.tb-icon-trigger__box--empty {
+  background: transparent;
+  border: var(--wf-border-w) dashed var(--ou-border-default);
+}
+
+.tb-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tb-icon-cell), 1fr));
+  gap: var(--ou-space-2);
+  max-height: var(--tb-icon-grid-h); overflow-y: auto;
+  padding-top: var(--ou-space-3);
+}
+.tb-icon-cell {
+  aspect-ratio: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: var(--wf-border-w) solid transparent;
+  border-radius: var(--ou-radius-m);
+  background: transparent; color: var(--ou-fg-muted); cursor: pointer;
+}
+.tb-icon-cell:hover { background: var(--ou-bg-hover); color: var(--ou-fg-default); }
+.tb-icon-cell.is-selected {
+  border-color: var(--ou-accent-default);
+  background: var(--ou-accent-soft);
+  color: var(--ou-fg-default);
 }

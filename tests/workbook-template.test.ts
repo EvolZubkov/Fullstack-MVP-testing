@@ -249,10 +249,13 @@ describe("шаблон книги — валидность примеров", ()
     expect(result.measurements.rows).toBeGreaterThan(0);
   });
 
-  it("примеры покрывают все пять типов вопросов", async () => {
+  it("примеры покрывают ВСЕ типы вопросов", async () => {
+    // Список сверяется с перечнем типов, а не с рукописной копией: тип, добавленный
+    // без строки-примера, обязан ронять этот тест — иначе автор узнает о новом типе
+    // только из документации, которой в шаблоне нет.
     const types = EXAMPLE_ROWS["Вопросы"].map((r) => r["Тип вопроса"]);
     expect(new Set(types)).toEqual(
-      new Set(["multiple_choice", "multiple_response", "matching", "ranking", "scale"]),
+      new Set(["multiple_choice", "multiple_response", "matching", "ranking", "scale", "allocation"]),
     );
   });
 

@@ -746,12 +746,13 @@ describe("<TestEditor /> — footer «Отменить» discards and closes wit
   });
 });
 
-// ─── Read-only footer when test is published (G19, wf s-readonly) ─────────────
+// ─── Опубликованный тест остаётся редактируемым (BRD 4.7, BRC-20) ─────────────
 
-describe("<TestEditor /> — published test renders single «Закрыть» footer", () => {
-  it("hides Save / Cancel / «Показать изменения» when status === 'published'", async () => {
-    // s-readonly per docs/wireframes/approved/prd7-structure-linear-by-topics.html
-    // (footer line 847-849): footer collapses to a single ghost «Закрыть» button.
+describe("<TestEditor /> — публикация не запирает редактор", () => {
+  it("опубликованный тест открывается в обычном режиме, а не в «только чтение»", async () => {
+    // Публикуется СНАПШОТ: доставка идёт из него, поэтому рабочая версия правится
+    // всегда. Прежний замок пришёл из PRD-7 (`s-readonly`) — эскиза, нарисованного
+    // до снапшотов, — и отбирал у автора правку методики после публикации.
     nextResponse(buildApiResponse({ status: "published" }));
     const client = makeClient();
     render(
@@ -764,12 +765,8 @@ describe("<TestEditor /> — published test renders single «Закрыть» fo
     await screen.findByText("Sample Test");
 
     const foot = await screen.findByTestId("test-editor-foot");
-    expect(foot.getAttribute("data-state")).toBe("readonly");
-    expect(screen.queryByTestId("test-editor-save")).toBeNull();
-    expect(screen.queryByTestId("test-editor-show-changes")).toBeNull();
-
-    const closeBtn = screen.getByTestId("test-editor-cancel");
-    expect(closeBtn).toHaveTextContent("Закрыть");
+    expect(foot.getAttribute("data-state")).toBe("default");
+    expect(screen.getByTestId("test-editor-cancel")).toHaveTextContent("Закрыть");
   });
 
   it("closes immediately without confirm when published and clean", async () => {

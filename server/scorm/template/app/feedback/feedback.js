@@ -235,15 +235,11 @@ function insertFeedback(q, isCorrect, scoreRatio) {
   var tone = isCorrect ? 'success' : (scoreRatio > 0 ? 'warning' : 'error');
   var statusText = isCorrect ? 'Правильно!' : (scoreRatio > 0 ? 'Частично правильно' : 'Неверно');
 
-  var feedbackText = null;
-  if (q.feedbackMode === 'conditional') {
-    feedbackText = isCorrect ? q.feedbackCorrect : q.feedbackIncorrect;
-  } else {
-    feedbackText = q.feedback;
-  }
-
   var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
   if (!TB || !TB.feedbackBanner) return;
+  // issue #34: ветку общего/условного режима выбирает ОБЩЕЕ правило — веб-хост
+  // зовёт его же, поэтому четвёртой копии не появится.
+  var feedbackText = TB.feedbackTextFor(q, isCorrect);
   var html = TB.feedbackBanner(tone, statusText, feedbackText ? TB.feedbackDesc(feedbackText) : '');
 
   // Prefer the template's dedicated feedback slot (question.html); fall back to

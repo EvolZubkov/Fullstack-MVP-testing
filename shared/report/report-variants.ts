@@ -17,6 +17,8 @@
  */
 
 import { validateVariantFields, isSettingType, SETTING_TYPES } from "../template/field-types";
+import { legacyChartKind, type ChartKindSettings } from "../template/scales-chart";
+import { reportImageKeys, resolveReportImageValues } from "./report-assets";
 
 /** Виды отчёта. Обычный режим и адаптивный — разные виды (D-5). */
 export const REPORT_KINDS = ["report", "report.adaptive"] as const;
@@ -110,6 +112,9 @@ export function resolveReportVariant(
  * Поле, которого вариант не объявляет, отбрасывается — так смена варианта не тащит
  * чужие значения (FR-14).
  *
+ * Единственное исключение из «умолчание перекрывает пустоту» — вид диаграммы по шкалам:
+ * см. {@link applyLegacyChartKind}.
+ *
  * @param variant Объявление варианта.
  * @param authored Значения, сохранённые автором теста.
  */
@@ -125,13 +130,52 @@ export function resolveReportValues(
     const given = authored ? authored[key] : undefined;
     out[key] = given !== undefined && given !== null ? given : (field.default ?? "");
   }
-  return out;
+  return applyLegacyChartKind(out, authored);
+}
+
+/**
+ * Перенести галочку радара PRD-35 в новое поле вида диаграммы, пока автор его не трогал.
+ *
+ * Без этого умолчание манифеста (`none`) молча отменяло авторскую настройку: PRD-46 добавил
+ * варианту отчёта поле `scalesChartKind`, у сохранённых раньше тестов его в значениях нет,
+ * значит поле берёт умолчание — а явная строка старше булева флага, и диаграмма из отчёта
+ * исчезала без единой правки автора. Экрана это не касалось: там нетронутое поле остаётся
+ * ОТСУТСТВУЮЩИМ, и перенос делает сам `chartKindSetting`.
+ *
+ * Правило действует только когда вариант объявляет оба поля; выбранное автором «Не
+ * показывать» остаётся в силе — это тронутое поле.
+ *
+ * @param values Значения, уже слитые с умолчаниями манифеста.
+ * @param authored Значения, сохранённые автором.
+ */
+function applyLegacyChartKind(
+  values: Record<string, unknown>,
+  authored?: Record<string, unknown> | null,
+): Record<string, unknown> {
+  if (!authored) return values;
+  if (!Object.prototype.hasOwnProperty.call(values, "scalesChartKind")) return values;
+  const carried = legacyChartKind(authored as ChartKindSettings);
+  return carried ? { ...values, scalesChartKind: carried } : values;
 }
 
 /** Что нужно знать хосту, чтобы собрать отчёт выбранным вариантом (FR-22). */
 export interface ReportBake {
   /** Выбранный вариант; `null` — шаблон видов не объявил, идёт деградация (FR-10/FR-15). */
   variantKey: string | null;
+  /**
+   * Выдавать ли отчёт обучающемуся (общая настройка теста, PRD-27 §7.1).
+   *
+   * Едет в пакет вместе с выбором вида, потому что в LMS кнопку рисует рантайм и другого
+   * источника этого факта у него нет. Отсутствие = выдавать: пакеты, собранные до
+   * настройки, обязаны сохранить кнопку.
+   */
+  enabled?: boolean;
+  /**
+   * Ключи полей-картинок варианта (FR-05). Хост инлайнит именно их в data-URL перед
+   * растеризацией: растеризатор дозагружать ничего не станет, а незагруженная подложка
+   * молча меняет PDF.
+   */
+  imageKeys: string[];
   /**
    * Ключ, под которым макет лежит у рантайма. Вариант называет свой файл (`layoutFile`),
    * и загрузчик пакета регистрирует его ПО ПУТИ; когда файла нет, остаётся канонический
@@ -153,19 +197,26 @@ export interface ReportBake {
  * @param manifest Разобранный `manifest.json` активного шаблона.
  * @param kind Вид отчёта, отвечающий режиму теста.
  * @param branch Ветка `tests.report_settings_json` этого режима (может отсутствовать).
+ * @param assetBase Где у ЭТОГО хоста лежат файлы шаблона, со слешем на конце
+ *   (`template/` в пакете, `/api/templates/<id>/assets/` на вебе). Пути картинок из
+ *   манифеста разрешаются против неё (FR-05); пустая база оставляет их как есть.
  */
 export function resolveReportBake(
   manifest: unknown,
   kind: ReportKind,
   branch?: { variantKey?: string | null; values?: Record<string, unknown> | null } | null,
+  assetBase = "",
 ): ReportBake {
   const variant = resolveReportVariant(manifest, kind, branch?.variantKey);
   const layoutFile = typeof variant?.layoutFile === "string" ? variant.layoutFile : "";
+  const imageKeys = reportImageKeys(variant);
+  const values = resolveReportValues(variant, branch?.values ?? null);
   return {
     variantKey: variant?.key ?? null,
+    imageKeys,
     layoutKey: layoutFile || kind,
     styleFile: typeof variant?.styleFile === "string" && variant.styleFile ? variant.styleFile : null,
-    values: resolveReportValues(variant, branch?.values ?? null),
+    values: assetBase ? resolveReportImageValues(values, imageKeys, assetBase) : values,
   };
 }
 

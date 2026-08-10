@@ -26,6 +26,8 @@ export function formatQuestionType(type: string): string {
     multiple: "Несколько ответов",
     matching: "Сопоставление",
     ranking: "Ранжирование",
+    scale: "Шкала",
+    allocation: "Распределение баллов",
   };
   return types[type] || type;
 }
@@ -119,6 +121,16 @@ export function formatUserAnswerText(type: string, dataJson: any, userAnswer: un
         if (userAnswer.length === 0) return "(ничего не выбрано)";
         return userAnswer
           .map((idx: number) => `${idx + 1}) ${dataJson.options[idx] || "?"}`)
+          .join(", ");
+      }
+      break;
+    // PRD-44: распределение показывается ПОЛНОСТЬЮ, вместе с нулями — ноль здесь
+    // содержателен, он отличает «рассмотрел и не дал веса» от «не дошёл».
+    case "allocation":
+      if (typeof userAnswer === "object" && dataJson?.options) {
+        const assigned = userAnswer as Record<string, number>;
+        return (dataJson.options as string[])
+          .map((label, i) => `${label}: ${Number(assigned[String(i)] ?? 0)}`)
           .join(", ");
       }
       break;

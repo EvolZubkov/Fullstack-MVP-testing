@@ -11,6 +11,9 @@ const { storageMock } = vi.hoisted(() => ({
     getTestSections: vi.fn(),
     getAttemptsByUserAndTest: vi.fn(),
     getAttemptsByUser: vi.fn(),
+    // PRD-31: attempts here carry no assignment, so they all fall into the implicit
+    // legacy bucket (null) — one assignment as far as the access rules are concerned.
+    getCurrentAssignmentId: vi.fn().mockResolvedValue(null),
     getTest: vi.fn(),
     getTests: vi.fn(),
     getTopics: vi.fn(),
@@ -48,9 +51,24 @@ function daysAgo(days: number): Date {
   return new Date(Date.now() - days * 86400000);
 }
 
+/**
+ * PRD-31 §3: barrier A (the calendar cooldown) guards the boundary BETWEEN
+ * assignments, so a case that exercises it must place the prior attempt in an
+ * EARLIER assignment and put the learner on a fresh one. Inside a single
+ * assignment the cooldown deliberately does not apply — that is the defect the
+ * PRD fixed, so a test asserting the opposite would re-introduce it.
+ */
+function onNewAssignment() {
+  storageMock.getCurrentAssignmentId.mockResolvedValue("a-new");
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   storageMock.getTestSections.mockResolvedValue([{ drawCount: 5 }]);
+  // `clearAllMocks` wipes CALLS, not implementations: without this, `onNewAssignment`
+  // would leak into every later case and move its attempts out of the bucket they
+  // are meant to be in.
+  storageMock.getCurrentAssignmentId.mockResolvedValue(null);
 });
 
 describe("buildAssigned", () => {
@@ -67,6 +85,64 @@ describe("buildAssigned", () => {
     expect(result.items[1].testId).toBe("t1");
     expect(result.items[1].inProgressAttemptId).toBeNull();
     expect(result.total).toBe(2);
+  });
+
+  it("drops a test whose attempt cap is spent", async () => {
+    storageMock.getAssignedTestsForUser.mockResolvedValue([t1, t2]);
+    storageMock.getAttemptsByUserAndTest.mockImplementation(async (_u: string, testId: string) =>
+      testId === "t1"
+        ? [
+            { id: "a1", finishedAt: daysAgo(3), variantJson: null, assignmentId: null },
+            { id: "a2", finishedAt: daysAgo(2), variantJson: null, assignmentId: null },
+          ]
+        : [],
+    );
+
+    const result = await buildAssigned("u1");
+
+    expect(result.items.map((i) => i.testId)).toEqual(["t2"]);
+    expect(result.total).toBe(1);
+  });
+
+  it("keeps a spent test while its attempt is still running", async () => {
+    storageMock.getAssignedTestsForUser.mockResolvedValue([t1]);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([
+      { id: "a1", finishedAt: daysAgo(3), variantJson: null, assignmentId: null },
+      { id: "a2", finishedAt: daysAgo(2), variantJson: null, assignmentId: null },
+      { id: "a3", finishedAt: null, variantJson: null, assignmentId: null },
+    ]);
+
+    const result = await buildAssigned("u1");
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].inProgressAttemptId).toBe("a3");
+  });
+
+  it("keeps an uncapped test however many attempts are behind it", async () => {
+    storageMock.getAssignedTestsForUser.mockResolvedValue([t2]);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([
+      { id: "a1", finishedAt: daysAgo(3), variantJson: null, assignmentId: null },
+      { id: "a2", finishedAt: daysAgo(2), variantJson: null, assignmentId: null },
+    ]);
+
+    const result = await buildAssigned("u1");
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].completedAttempts).toBe(2);
+  });
+
+  it("keeps a test the cooldown blocks — it is takeable later, just not now", async () => {
+    const gated = { ...t1, retakePolicyJson: { enabled: true, cooldownPeriodDays: 30 } };
+    storageMock.getAssignedTestsForUser.mockResolvedValue([gated]);
+    onNewAssignment();
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([
+      { id: "a1", finishedAt: daysAgo(1), variantJson: null, assignmentId: "a-old" },
+    ]);
+
+    const result = await buildAssigned("u1");
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].blockedUntil).not.toBeNull();
   });
 
   it("caps the list at four items but reports the true total", async () => {
@@ -94,22 +170,26 @@ describe("buildAssigned", () => {
   it("reports blockedUntil while the retake cooldown is closed", async () => {
     const gated = { ...t1, retakePolicyJson: { enabled: true, cooldownPeriodDays: 30 } };
     storageMock.getAssignedTestsForUser.mockResolvedValue([gated]);
+    onNewAssignment();
     storageMock.getAttemptsByUserAndTest.mockResolvedValue([
-      { id: "a1", finishedAt: daysAgo(1), resultJson: null },
+      { id: "a1", finishedAt: daysAgo(1), resultJson: null, assignmentId: "a-old" },
     ]);
 
     const result = await buildAssigned("u1");
 
     const expected = new Date(daysAgo(1).getTime() + 30 * 86400000).toISOString().slice(0, 10);
     expect(result.items[0].blockedUntil).toBe(expected);
-    expect(result.items[0].completedAttempts).toBe(1);
+    // PRD-31 (FR-07): the counter belongs to the assignment, and this one is fresh —
+    // the attempt behind the cooldown was spent under the PREVIOUS assignment.
+    expect(result.items[0].completedAttempts).toBe(0);
   });
 
   it("leaves blockedUntil null once the cooldown has elapsed", async () => {
     const gated = { ...t1, retakePolicyJson: { enabled: true, cooldownPeriodDays: 2 } };
     storageMock.getAssignedTestsForUser.mockResolvedValue([gated]);
+    onNewAssignment();
     storageMock.getAttemptsByUserAndTest.mockResolvedValue([
-      { id: "a1", finishedAt: daysAgo(10), resultJson: null },
+      { id: "a1", finishedAt: daysAgo(10), resultJson: null, assignmentId: "a-old" },
     ]);
 
     const result = await buildAssigned("u1");

@@ -26,6 +26,7 @@ import {
 } from "../services/topic-access";
 import { normalizeTopicName } from "@shared/topics/naming";
 import { feedbackContentSchema, type FeedbackContent } from "@shared/schema";
+import { syncEntityUsages, clearCascadedUsages } from "../services/media/usage-index";
 
 const router = Router();
 
@@ -163,6 +164,13 @@ router.post("/", requirePermission("topics.manage"), async (req, res) => {
       folderId,
       createdBy: ownerId,
     });
+    // Медиатека: сбой индексации не должен стоить автору его правки. Недостающая строка
+    // индекса безопасна (она отказывает в доступе, а не выдаёт лишнее) и чинится пересборкой.
+    try {
+      await syncEntityUsages("topic_feedback", topic.id, fb.value ?? null);
+    } catch (error) {
+      logger.error(`Media usage sync failed for topic feedback ${topic.id}: ${(error as Error).message}`);
+    }
     // FR-27 non-blocking warning: same name visible elsewhere (other owners).
     const duplicates = await visibleSameNameTopics(
       req.effectiveRoles ?? [],
@@ -226,6 +234,14 @@ router.put("/:id", requirePermission("topics.manage"), async (req, res) => {
     if (!updated) {
       return res.status(404).json({ error: "Topic not found" });
     }
+    // Медиатека: индексируется СОХРАНЁННОЕ значение, а не присланное: тело запроса может
+    // вовсе не нести `feedbackJson`, и тогда `fb.value` равен `undefined` — по нему индекс
+    // обнулился бы, хотя вложение в теме осталось.
+    try {
+      await syncEntityUsages("topic_feedback", updated.id, updated.feedbackJson ?? null);
+    } catch (error) {
+      logger.error(`Media usage sync failed for topic feedback ${updated.id}: ${(error as Error).message}`);
+    }
     // PRD-2 §4.2: a rename rewrites `topicByName("…")` references in the live
     // formulas of tests using this topic, so показатели stay intact.
     if (typeof name === "string" && name.length > 0 && name !== topic.name) {
@@ -268,10 +284,18 @@ router.delete("/:id", requirePermission("topics.manage"), async (req, res) => {
     const assessment = await assessTopicDeletion(req.params.id);
     if (isDryRun(req)) return respondDryRun(req, res, assessment);
     if (respondIfBlocked(req, res, assessment)) return;
-    const success = await storage.deleteTopic(req.params.id);
-    if (!success) {
+    const result = await storage.deleteTopic(req.params.id);
+    if (!result.deleted) {
       return res.status(404).json({ error: "Topic not found" });
     }
+    // Медиатека: сама тема удалена (транзакция уже закоммичена), поэтому сбой
+    // чистки индекса не должен стоить автору его действия — недостающая строка
+    // безопасна и чинится пересборкой.
+    await clearCascadedUsages([
+      { entityType: "topic_feedback" as const, entityId: req.params.id },
+      ...result.questionIds.map((id) => ({ entityType: "question" as const, entityId: id })),
+      ...result.contentPageIds.map((id) => ({ entityType: "content_page" as const, entityId: id })),
+    ]);
     res.json({ success: true, warnings: assessment.warnings });
   } catch (error) {
     logger.error("Delete topic error: " + (error as Error).message);
@@ -348,10 +372,15 @@ router.post("/bulk-delete", requirePermission("topics.manage"), async (req, res)
       });
     }
     const deletableIds = part.deletable.map((t) => t.topicId);
-    const deletedCount = await storage.deleteTopicsBulk(deletableIds);
+    const result = await storage.deleteTopicsBulk(deletableIds);
+    await clearCascadedUsages([
+      ...deletableIds.map((id) => ({ entityType: "topic_feedback" as const, entityId: id })),
+      ...result.questionIds.map((id) => ({ entityType: "question" as const, entityId: id })),
+      ...result.contentPageIds.map((id) => ({ entityType: "content_page" as const, entityId: id })),
+    ]);
     res.json({
       success: true,
-      deletedCount,
+      deletedCount: result.count,
       deletedIds: deletableIds,
       skipped: [
         ...part.blocked.map((b) => ({ topicId: b.topicId, name: b.name, reason: "in_use", blocking: b.blocking })),
@@ -588,6 +617,33 @@ router.post("/:id/duplicate", requirePermission("topics.manage"), async (req, re
     if (!result) {
       return res.status(404).json({ error: "Topic not found" });
     }
+
+    // Медиатека: каждый продублированный вопрос — НОВАЯ сущность со своим id,
+    // индексируется под ним (не под id вопроса-оригинала). Вопросы уже
+    // зафиксированы (storage.duplicateTopicWithQuestions вернулся), поэтому
+    // синхронизация здесь не меняет то, что реально записано. Последовательно,
+    // как и остальной импорт/дублирование — при большой теме это заметно
+    // медленнее (см. отчёт задачи). Сбой одного вопроса не роняет остальные.
+    for (const q of result.questions ?? []) {
+      try {
+        await syncEntityUsages("question", q.id, q);
+      } catch (error) {
+        logger.error(`Media usage sync failed for question ${q.id}: ${(error as Error).message}`);
+      }
+    }
+
+    // Обратная связь темы едет с копией (TD-02 r.3), значит копия — НОВАЯ сущность,
+    // ссылающаяся на те же файлы: без своей строки индекса правило выдачи откажет
+    // ученику в файле, приложенном к скопированной теме.
+    const copied = result.topic;
+    if (copied) {
+      try {
+        await syncEntityUsages("topic_feedback", copied.id, copied.feedbackJson ?? null);
+      } catch (error) {
+        logger.error(`Media usage sync failed for topic feedback ${copied.id}: ${(error as Error).message}`);
+      }
+    }
+
     res.status(201).json(result);
   } catch (error) {
     logger.error("Duplicate topic error: " + (error as Error).message);

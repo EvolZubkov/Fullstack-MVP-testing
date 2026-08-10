@@ -14,14 +14,49 @@
 
 import { parseAuthorNumber } from "./numeric-input";
 import type { QuestionMeasurementModel, ScaleBandModel, ScaleModel } from "./test-editor.types";
+import type { LevelTone } from "@shared/scales/interpretation";
+import type { FeedbackEditorValue } from "./sections/feedback-editor-modal";
 
 // ─── Persisted payload + diff ───────────────────────────────────────────────────
 
-/** One interpretation band as persisted in `config_json.bands`. */
-type BandPayload = { min: number; max: number; level: string; label?: string };
+/**
+ * True when a level's recommendations actually carry something. An empty block
+ * must not reach `config_json` — it would only inflate the config — and must not
+ * make the editor claim that recommendations are set. Lives next to the
+ * serializers because it is exactly the rule that decides what gets serialized.
+ */
+export function hasFeedbackContent(value: FeedbackEditorValue | undefined): boolean {
+  if (!value) return false;
+  return (
+    value.text.trim() !== "" ||
+    value.links.length > 0 ||
+    value.assets.length > 0 ||
+    (value.events?.length ?? 0) > 0
+  );
+}
 
-/** Drop empty draft rows and parse min/max; bands the validator rejected never reach here. */
-function bandsToPayload(bands: ScaleBandModel[]): BandPayload[] {
+/**
+ * One interpretation band as persisted in `config_json.bands` (mirror of the
+ * shared `InterpretationBand`). Everything past `level` is PRD-29 and optional:
+ * empty values are left out so the config does not swell with blanks.
+ */
+type BandPayload = {
+  min: number;
+  max: number;
+  level: string;
+  label?: string;
+  text?: string;
+  tone?: LevelTone;
+  feedback?: FeedbackEditorValue;
+};
+
+/**
+ * Drop empty draft rows and parse min/max; bands the validator rejected never
+ * reach here. The PRD-29 interpretation fields (text, tone, recommendations) are
+ * written here and read back by `buildScaleBands` — the two must stay a pair, or
+ * a save would rewrite `config_json` without them and erase the author's work.
+ */
+export function bandsToPayload(bands: ScaleBandModel[]): BandPayload[] {
   const out: BandPayload[] = [];
   for (const b of bands) {
     const minRaw = b.min.trim();
@@ -32,9 +67,31 @@ function bandsToPayload(bands: ScaleBandModel[]): BandPayload[] {
     if (min === null || max === null) continue;
     const payload: BandPayload = { min, max, level: b.level.trim() };
     if (b.label.trim() !== "") payload.label = b.label.trim();
+    if (b.text.trim() !== "") payload.text = b.text.trim();
+    if (b.tone !== "") payload.tone = b.tone;
+    if (hasFeedbackContent(b.feedback)) payload.feedback = b.feedback;
     out.push(payload);
   }
   return out;
+}
+
+/**
+ * The scale's `config_json` as persisted: the interpretation bands plus the PRD-29
+ * domain and favourable direction. The domain is written ONLY as a complete pair —
+ * a half-pair would read back as "not set" (see `buildScaleDomain`) and quietly
+ * discard the other bound. `valence` is always written so clearing it back to
+ * «Без оценки» actually erases the stored value instead of leaving the old one.
+ */
+function toConfigJson(s: ScaleModel): Record<string, unknown> {
+  const config: Record<string, unknown> = { bands: bandsToPayload(s.bands), valence: s.valence };
+  if (s.domainMin !== null && s.domainMax !== null) {
+    config.domainMin = s.domainMin;
+    config.domainMax = s.domainMax;
+  }
+  // PRD-46 §6: written only when set, so a scale nobody rescaled keeps the config it had
+  // and the radar keeps drawing to the domain.
+  if (s.displayMax !== null) config.displayMax = s.displayMax;
+  return config;
 }
 
 /** Fields sent to the create/update endpoints. */
@@ -46,8 +103,8 @@ function toPayload(s: ScaleModel, sortOrder: number) {
     aggregation: s.aggregation,
     normalization: s.normalization,
     direction: s.direction,
-    configJson: { bands: bandsToPayload(s.bands) },
-    showToLearner: s.showToLearner,
+    configJson: toConfigJson(s),
+    learnerVisibility: s.learnerVisibility,
     scormTarget: s.scormTarget,
     sortOrder,
   };
@@ -62,10 +119,12 @@ function sameScale(a: ScaleModel, b: ScaleModel): boolean {
     a.aggregation === b.aggregation &&
     a.normalization === b.normalization &&
     a.direction === b.direction &&
-    a.showToLearner === b.showToLearner &&
+    a.learnerVisibility === b.learnerVisibility &&
     a.scormTarget === b.scormTarget &&
     a.sortOrder === b.sortOrder &&
-    JSON.stringify(bandsToPayload(a.bands)) === JSON.stringify(bandsToPayload(b.bands))
+    // One comparison for the whole config_json: bands, domain and valence all live
+    // there, so a separate per-field list would drift the moment a field is added.
+    JSON.stringify(toConfigJson(a)) === JSON.stringify(toConfigJson(b))
   );
 }
 
@@ -218,7 +277,8 @@ export async function previewScales(
 
 // ─── Preview demo-answer context ──────────────────────────────────────────────────
 
-import { QUESTION_TYPES, hasOptionList, type QuestionType } from "@shared/questions/question-type";
+import { QUESTION_TYPES, hasOptionList, distributesBudget, type QuestionType } from "@shared/questions/question-type";
+import { allocationSpec, type AllocationSpec } from "@shared/questions/allocation";
 
 /** One selectable answer unit of a measured question, derived from its measurements. */
 export type PreviewUnit = {
@@ -311,7 +371,7 @@ export async function loadScalePreviewContext(testId: string): Promise<PreviewQu
 
 /** One editable row of the contributions matrix: an answer unit of a question. */
 export type ContributionUnit = {
-  sourceType: "option" | "matching_pair" | "ranking_position";
+  sourceType: "option" | "matching_pair" | "ranking_position" | "option_allocation";
   sourceKey: string;
   label: string;
   /** True when this unit is (part of) the correct answer — surfaced as a marker. */
@@ -325,6 +385,12 @@ export type ContributionQuestion = {
   prompt: string;
   type: QuestionType;
   units: ContributionUnit[];
+  /**
+   * PRD-44: бюджет и домен варианта у вопроса-распределения. Нужны редактору, чтобы
+   * посчитать домен шкалы: у этого типа верх ограничен бюджетом, а не суммой
+   * максимумов вариантов, и без спецификации домен схлопывается в ноль.
+   */
+  allocation?: AllocationSpec;
 };
 
 type RawQuestion = {
@@ -350,6 +416,18 @@ function asStringArray(v: unknown): string[] {
 function buildContributionUnits(q: RawQuestion, type: QuestionType): ContributionUnit[] {
   const data = (q.dataJson ?? {}) as Record<string, unknown>;
   const correct = (q.correctJson ?? {}) as Record<string, unknown>;
+
+  // PRD-44: утверждения распределения перечисляются как варианты — они лежат в том же
+  // списке, — но источник ДРУГОЙ: вклад равен присвоенному баллу, а не фиксированной
+  // величине. Верных единиц у типа нет вовсе, поэтому `correct` всегда `false`.
+  if (distributesBudget(type)) {
+    return asStringArray(data.options).map((label, i) => ({
+      sourceType: "option_allocation" as const,
+      sourceKey: String(i),
+      label: `${String.fromCharCode(65 + i)}. ${label}`,
+      correct: false,
+    }));
+  }
 
   if (hasOptionList(type)) {
     const options = asStringArray(data.options);
@@ -421,6 +499,13 @@ export async function loadContributionQuestions(topicIds: string[]): Promise<Con
     .filter((q) => topicSet.has(q.topicId))
     .map((q) => {
       const type = (QUESTION_TYPES.includes(q.type as QuestionType) ? q.type : "single") as QuestionType;
-      return { id: q.id, topicId: q.topicId, prompt: q.prompt ?? q.id, type, units: buildContributionUnits(q, type) };
+      return {
+        id: q.id,
+        topicId: q.topicId,
+        prompt: q.prompt ?? q.id,
+        type,
+        units: buildContributionUnits(q, type),
+        allocation: distributesBudget(type) ? allocationSpec(q.dataJson) : undefined,
+      };
     });
 }

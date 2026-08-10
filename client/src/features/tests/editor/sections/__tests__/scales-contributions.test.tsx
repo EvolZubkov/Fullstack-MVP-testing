@@ -45,7 +45,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       feedbackLinks: [], feedbackAssets: [], feedbackEvents: [],
       webhookUrl: "", telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
@@ -75,7 +75,8 @@ afterEach(() => vi.unstubAllGlobals());
 
 const SCALE: ScaleModel = {
   key: "comp", label: "Компетенция", type: "number", aggregation: "sum",
-  normalization: "none", direction: "positive", bands: [], showToLearner: false,
+  normalization: "none", direction: "positive", bands: [],
+  domainMin: null, domainMax: null, displayMax: null, valence: "none", learnerVisibility: "hidden",
   scormTarget: "none", sortOrder: 0,
 };
 

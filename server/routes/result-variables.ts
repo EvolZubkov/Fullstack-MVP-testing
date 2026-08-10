@@ -20,6 +20,7 @@ import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { logger } from "../logger";
+import { syncVariableFeedbackUsages } from "../services/media/usage-index";
 import { insertResultVariableSchema } from "@shared/schema";
 import type { ValueType } from "@shared/formula";
 
@@ -35,6 +36,22 @@ async function controlsStatusConflict(
   if (controlsStatus !== "success" && controlsStatus !== "completion") return false;
   const existing = await storage.getResultVariables(testId);
   return existing.some((rv) => rv.id !== excludeId && rv.controlsStatus === controlsStatus);
+}
+
+/**
+ * Keep only the fields the client actually sent. `insertResultVariableSchema
+ * .partial()` still APPLIES the schema defaults, so a PUT touching one field
+ * would otherwise silently reset every defaulted column — including
+ * `config_json`, which carries the indicator's interpretation (PRD-29). An
+ * update must never write what it was not asked to write.
+ */
+function onlyProvided<T extends object>(parsed: T, body: unknown): Partial<T> {
+  const sent = (body ?? {}) as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (Object.prototype.hasOwnProperty.call(sent, key)) out[key] = value;
+  }
+  return out as Partial<T>;
 }
 
 // ─── GET /api/tests/:id/result-variables ─────────────────────────────────────
@@ -78,6 +95,7 @@ router.post("/:id/result-variables", requirePermission("tests.edit"), requireTes
     }
 
     const created = await storage.createResultVariable(data);
+    await syncVariableFeedbackUsages(testId);
     res.status(201).json({ ...created, validation });
   } catch (error) {
     logger.error("Create result variable error: " + (error as Error).message, "result-variables");
@@ -95,6 +113,10 @@ router.put("/:id/result-variables/reorder", requirePermission("tests.edit"), req
       return res.status(422).json({ error: "Body must be an array of { id, sortOrder }", field: "body" });
     }
     await storage.reorderResultVariables(updates);
+    // Reorder moves no attachment, but the recorded `field` path starts with the indicator's
+    // POSITION in the set (`0.configJson…`) — see the scales counterpart: access never
+    // depends on it, «где используется» does.
+    await syncVariableFeedbackUsages(req.params.id);
     res.json({ ok: true });
   } catch (error) {
     logger.error("Reorder result variables error: " + (error as Error).message, "result-variables");
@@ -142,7 +164,7 @@ router.put("/:id/result-variables/:varId", requirePermission("tests.edit"), requ
       const first = parsed.error.issues[0];
       return res.status(422).json({ error: first.message, field: first.path.join(".") });
     }
-    const updates = parsed.data;
+    const updates = onlyProvided(parsed.data, req.body);
     const merged = { ...current, ...updates };
 
     if (await controlsStatusConflict(testId, merged.controlsStatus, varId)) {
@@ -158,6 +180,7 @@ router.put("/:id/result-variables/:varId", requirePermission("tests.edit"), requ
     }
 
     const saved = await storage.updateResultVariable(varId, updates);
+    await syncVariableFeedbackUsages(testId);
     res.json({ ...saved, validation });
   } catch (error) {
     logger.error("Update result variable error: " + (error as Error).message, "result-variables");
@@ -176,6 +199,7 @@ router.delete("/:id/result-variables/:varId", requirePermission("tests.edit"), r
       return res.status(404).json({ error: "Result variable not found" });
     }
     await storage.deleteResultVariable(varId);
+    await syncVariableFeedbackUsages(testId);
     res.json({ ok: true });
   } catch (error) {
     logger.error("Delete result variable error: " + (error as Error).message, "result-variables");

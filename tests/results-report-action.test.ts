@@ -128,6 +128,9 @@ function makeRuntime(opts: { hasAttemptsLeft?: boolean; postResultsPages?: unkno
     "finishAndClose",
     "hasAttemptsLeft",
     "render",
+    // PRD-34: с тех пор рантайм спрашивает у пакета настройки защиты экрана. Без
+    // подстановки этой глобали обе экранные функции падают на ReferenceError.
+    "buildScormProtection",
     `${viewResultsSrc}\nreturn { renderViewResultsTemplated: renderViewResultsTemplated, renderResultsTemplated: renderResultsTemplated };`,
   );
   const rt = factory(
@@ -142,6 +145,7 @@ function makeRuntime(opts: { hasAttemptsLeft?: boolean; postResultsPages?: unkno
     spies.finishAndClose,
     () => !!opts.hasAttemptsLeft,
     spies.render,
+    () => ({}),
   ) as Runtime;
   return { rt, app, state, spies };
 }

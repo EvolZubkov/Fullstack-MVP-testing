@@ -120,6 +120,92 @@ export function daysUntilDate(
   return diff > 0 ? diff : null;
 }
 
+/** Parse an ISO instant to epoch-ms; null for empty/unparseable input. */
+export function parseIsoInstant(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const t = Date.parse(String(value));
+  return Number.isFinite(t) ? t : null;
+}
+
+/** Format epoch-ms back to a canonical ISO instant (UTC, milliseconds). */
+export function formatIsoInstant(ms: number): string {
+  return new Date(ms).toISOString();
+}
+
+export interface AttemptIntervalDecision {
+  allowed: boolean;
+  /** Instant from which the next attempt is open; null when there is no prior attempt. */
+  availableAt: string | null;
+  /** Milliseconds elapsed since the previous attempt, after clock normalization. */
+  msSince: number | null;
+  /** "Now" AFTER normalizing an untrusted clock; null when an input was unusable. */
+  effectiveNow: string | null;
+}
+
+/**
+ * PRD-31 barrier B: minimum interval between attempts INSIDE one assignment.
+ * Wall-clock hours, not calendar days — an author asking for 24 h means 24 h, and
+ * both hosts have a real timestamp for the previous attempt (`attempts.finished_at`
+ * on the web, `suspend_data.attempts[].completedAt` in the package).
+ *
+ * No previous attempt (null/unparseable) => allowed, mirroring `cooldownDecision`.
+ * A "now" that precedes the last attempt is impossible, so the clock that produced
+ * it is not trusted and the interval runs its full length from the attempt instead
+ * (the same rule FR-TD-05 applies to the calendar cooldown).
+ */
+export function attemptIntervalDecision(
+  lastFinishedAt: string | null,
+  nowIso: string,
+  intervalHours: number,
+): AttemptIntervalDecision {
+  const reportedNow = parseIsoInstant(nowIso);
+  const last = parseIsoInstant(lastFinishedAt);
+  if (last == null || reportedNow == null) {
+    return { allowed: true, availableAt: null, msSince: null, effectiveNow: null };
+  }
+  const now = Math.max(reportedNow, last);
+  const msSince = now - last;
+  return {
+    allowed: msSince >= intervalHours * 3600000,
+    availableAt: formatIsoInstant(last + intervalHours * 3600000),
+    msSince,
+    effectiveNow: formatIsoInstant(now),
+  };
+}
+
+/** The subset of `RetakePolicy` the resolver needs. */
+export interface CooldownDaysPolicy {
+  cooldownPeriodDays?: number;
+  cooldownByOutcome?: boolean;
+  cooldownPeriodDaysPassed?: number;
+  cooldownPeriodDaysFailed?: number;
+}
+
+/**
+ * PRD-40: which barrier-A period applies, given the outcome of the last attempt of
+ * the OTHER assignment that anchors the cooldown decision. `!cooldownByOutcome`
+ * (the default, and every pre-PRD-40 test) always returns `cooldownPeriodDays` —
+ * byte-identical to the single-period behaviour. `passed === null` (outcome not
+ * determined) is deliberately conservative: it resolves to the LARGER of the two
+ * configured values, so an unrecognized LMS status can never shorten the wait
+ * below what the author configured for either outcome.
+ */
+export function resolveCooldownDays(
+  policy: CooldownDaysPolicy,
+  passed: boolean | null,
+): number | null {
+  if (!policy.cooldownByOutcome) {
+    return policy.cooldownPeriodDays ?? null;
+  }
+  const p = policy.cooldownPeriodDaysPassed;
+  const f = policy.cooldownPeriodDaysFailed;
+  if (passed === true) return p ?? f ?? null;
+  if (passed === false) return f ?? p ?? null;
+  if (p == null) return f ?? null;
+  if (f == null) return p;
+  return Math.max(p, f);
+}
+
 /** Default result when no plugin is configured for the test (PRD-6 §3.4). */
 export const CORE_DEFAULT_RESULT: EligibilityResult = {
   allowed: true,
@@ -176,7 +262,10 @@ export function buildRetakeState(
     effectiveToday,
     availableDate: result.availableDate ?? null,
     nextAllowedDate: result.availableDate ?? null,
-    cooldownPeriodDays: ctx.cooldownPeriodDays,
+    cooldownPeriodDays:
+      result.data && typeof result.data.cooldownPeriodDays === "number"
+        ? result.data.cooldownPeriodDays
+        : ctx.cooldownPeriodDays,
     source: result.source ?? null,
     reason: result.reason ?? null,
   };

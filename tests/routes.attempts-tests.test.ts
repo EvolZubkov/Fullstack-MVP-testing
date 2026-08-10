@@ -15,10 +15,18 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
     patchTestStatus: vi.fn(),
     getAttempt: vi.fn(), createAttempt: vi.fn(), updateAttempt: vi.fn(),
     getAttemptsByUser: vi.fn(), getAttemptsByUserAndTest: vi.fn(),
+    annulInProgressAttempts: vi.fn().mockResolvedValue(0),
+    // PRD-31: the attempt counter and the retake gate are scoped to the CURRENT
+    // assignment, so every attempt route resolves it. `null` = the legacy bucket
+    // these fixtures live in (see `dbAttempt.assignmentId`).
+    getCurrentAssignmentId: vi.fn().mockResolvedValue(null),
     getUser: vi.fn(), getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getUsers: vi.fn().mockResolvedValue([]),
     setTestOwner: vi.fn().mockResolvedValue(undefined),
     getTopics: vi.fn(), getQuestionsByTopic: vi.fn(),
+    // «Оценивает ли тест хоть что-нибудь» для обложки списка: пусто = нечего
+    // оценивать, что для этих наборов безразлично — они смотрят другие поля.
+    getGradingTraitsByTopics: vi.fn().mockResolvedValue([]),
     getQuestionsByIds: vi.fn(), getTopicCourses: vi.fn(),
     getTopicEvents: vi.fn().mockResolvedValue([]),
     getAssignedTestsForUser: vi.fn(),
@@ -55,6 +63,10 @@ vi.mock("../server/scorm/exporter", () => ({
 
 import attemptsRouter from "../server/routes/attempts";
 import testsRouter from "../server/routes/tests";
+// The REAL report-context builder: the web host's «Скачать отчёт» hands it the
+// `measures` field of this very route's response, so the shape contract between the
+// two is only provable by running the actual consumer over the actual payload.
+import { buildReportContext } from "@shared/report/report-context";
 
 // ─── App factory ──────────────────────────────────────────────────────────────
 const authorUser = {
@@ -99,6 +111,11 @@ const dbQuestion = {
 };
 const dbAttempt = {
   id: "atmp1", userId: "learner1", testId: "test1",
+  // PRD-31: a real row always carries the column; `null` is the implicit legacy
+  // bucket — the same value `getCurrentAssignmentId` returns here. Leaving it
+  // undefined would put the attempt in a DIFFERENT bucket than the current
+  // assignment and silently zero the per-assignment attempt counter.
+  assignmentId: null,
   variantJson: { sections: [{ topicId: "t1", topicName: "JS", questionIds: ["q1"] }] },
   answersJson: {}, resultJson: null,
   startedAt: new Date(), finishedAt: null, testVersion: 1,
@@ -246,6 +263,80 @@ describe("Attempts routes — start attempt", () => {
     expect(res.body.questions[0].correctJson).toBeUndefined();
   });
 
+  // An abandoned run costs nothing: both barriers and the attempt counter read
+  // FINISHED attempts only. Handing out a FRESH draw on every restart therefore let
+  // a learner leaf through the whole pool — start, look, walk away, start again —
+  // without ever spending an attempt or arming a barrier. The delivered set is
+  // carried over instead, so a restart shows the SAME questions.
+  describe("POST /tests/:testId/attempts/start — an abandoned run is not a free re-draw", () => {
+    const openAttempt = {
+      ...dbAttempt,
+      id: "open-1",
+      snapshotId: null,
+      finishedAt: null,
+      variantJson: {
+        sections: [{ topicId: "t1", topicName: "JS", questionIds: ["q7", "q9"], timeLimitMinutes: null }],
+        deliveryOrder: ["q9", "q7"],
+      },
+    };
+
+    beforeEach(() => {
+      storageMock.getTest.mockResolvedValue(dbTest);
+      storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 1 }]);
+      storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+      // The live pool holds a DIFFERENT question than the open run was given, so a
+      // fresh draw is unmistakable in the assertions below.
+      storageMock.getQuestionsByTopic.mockResolvedValue([dbQuestion]);
+      storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+      storageMock.createAttempt.mockResolvedValue(dbAttempt);
+      storageMock.getContentPages.mockResolvedValue([]);
+      storageMock.annulInProgressAttempts.mockResolvedValue(1);
+    });
+
+    it("carries the open run's questions instead of drawing anew", async () => {
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([openAttempt]);
+      const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+      expect(res.status).toBe(201);
+      const variant = storageMock.createAttempt.mock.calls[0][0].variantJson;
+      expect(variant.sections[0].questionIds).toEqual(["q7", "q9"]);
+      // PRD-30: the delivery stream travels with the set it orders.
+      expect(variant.deliveryOrder).toEqual(["q9", "q7"]);
+    });
+
+    it("drops the learner's own abandoned row, not the whole test's", async () => {
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([openAttempt]);
+      await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+      expect(storageMock.annulInProgressAttempts).toHaveBeenCalledWith("test1", "learner1");
+    });
+
+    it("carries no progress over: the restart begins from a clean variant", async () => {
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([
+        { ...openAttempt, variantJson: { ...openAttempt.variantJson, currentIndex: 5, questionStatus: { q7: "answered" } } },
+      ]);
+      await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+      const variant = storageMock.createAttempt.mock.calls[0][0].variantJson;
+      expect(variant.currentIndex).toBeUndefined();
+      expect(variant.questionStatus).toBeUndefined();
+    });
+
+    // A republished test has a NEW snapshot over a new pool: carrying ids across it
+    // could deliver questions the test no longer contains.
+    it("draws anew when the open run came from a different snapshot", async () => {
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([{ ...openAttempt, snapshotId: "snap-old" }]);
+      await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+      const variant = storageMock.createAttempt.mock.calls[0][0].variantJson;
+      expect(variant.sections[0].questionIds).toEqual(["q1"]);
+    });
+
+    it("draws anew when there is no abandoned run, and annuls nothing", async () => {
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+      await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+      const variant = storageMock.createAttempt.mock.calls[0][0].variantJson;
+      expect(variant.sections[0].questionIds).toEqual(["q1"]);
+      expect(storageMock.annulInProgressAttempts).not.toHaveBeenCalled();
+    });
+  });
+
   it("POST /tests/:testId/attempts/start — carries section timeLimitMinutes into the variant (PRD-4 v1.1 §3.2)", async () => {
     storageMock.getTest.mockResolvedValue(dbTest);
     storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
@@ -277,6 +368,56 @@ describe("Attempts routes — start attempt", () => {
     const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
     expect(res.status).toBe(201);
     expect(res.body.questions[0].correctJson).toBeDefined();
+  });
+
+  // PRD-10 (FR-12): the instant web feedback can only report PARTIAL credit if the
+  // run carries the test-effective graded config. It rides with correctJson — same
+  // gate, same field name the SCORM bake uses (`q.scoring`).
+  describe("POST /tests/:testId/attempts/start — effective graded scoring in the payload", () => {
+    const tiered = {
+      kind: "tiered",
+      tiers: [
+        { when: { all: [{ lhs: "c", op: "==", rhs: "T" }] }, score: 2 },
+        { when: { all: [{ lhs: "c", op: ">=", rhs: 1 }] }, score: 1 },
+      ],
+      sMax: 2,
+    };
+    const arrange = (over: Record<string, unknown> = {}) => {
+      storageMock.getTest.mockResolvedValue({ ...dbTest, showCorrectAnswers: true, ...over });
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+      storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 1 }]);
+      storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+      storageMock.getQuestionsByTopic.mockResolvedValue([dbQuestion]);
+      storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+      storageMock.createAttempt.mockResolvedValue(dbAttempt);
+    };
+
+    it("ships the per-test override so a graded question can score partially", async () => {
+      arrange();
+      storageMock.getTestQuestionScoring.mockResolvedValue([
+        { questionId: "q1", points: 2, scoringJson: tiered, difficulty: null, pinnedContentHash: null },
+      ]);
+      const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+      expect(res.status).toBe(201);
+      expect(res.body.questions[0].scoring).toEqual(tiered);
+    });
+
+    it("omits `scoring` for a question on the system default (exact), like the SCORM bake", async () => {
+      arrange();
+      storageMock.getTestQuestionScoring.mockResolvedValue([]);
+      const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+      expect(res.body.questions[0].scoring).toBeUndefined();
+    });
+
+    it("withholds `scoring` together with correctJson when correctness is not shown", async () => {
+      arrange({ showCorrectAnswers: false });
+      storageMock.getTestQuestionScoring.mockResolvedValue([
+        { questionId: "q1", points: 2, scoringJson: tiered, difficulty: null, pinnedContentHash: null },
+      ]);
+      const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+      expect(res.body.questions[0].correctJson).toBeUndefined();
+      expect(res.body.questions[0].scoring).toBeUndefined();
+    });
   });
 
   it("POST /tests/:testId/attempts/start — returns 404 when test not found", async () => {
@@ -532,6 +673,51 @@ describe("Attempts routes — answer-adaptive", () => {
     expect(res.body.isFinished).toBe(false);
   });
 
+  // issue #34: у вопроса с условной обратной связью общий `feedback` пуст (редактор
+  // его обнуляет), поэтому маршрут обязан отдать ветку по вердикту — иначе ученик
+  // на вебе видит вердикт без пояснения, а в пакете тот же вопрос его показывает.
+  describe("условная обратная связь", () => {
+    const conditionalQuestion = {
+      ...dbQuestion,
+      feedback: null,
+      feedbackMode: "conditional",
+      feedbackCorrect: "Верно: это база",
+      feedbackIncorrect: "Неверно: перечитайте раздел",
+    };
+    const arrange = (question: unknown) => {
+      storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, answersJson: {}, variantJson: twoLevelVariant() });
+      storageMock.getTest.mockResolvedValue({ ...adaptiveTest, showCorrectAnswers: true });
+      storageMock.getTestSections.mockResolvedValue([]);
+      storageMock.getQuestionsByIds
+        .mockResolvedValueOnce([question])
+        .mockResolvedValue([{ ...dbQuestion, id: "q1b" }]);
+      storageMock.updateAttempt.mockResolvedValue({});
+    };
+
+    it("отдаёт ветку верного ответа", async () => {
+      arrange(conditionalQuestion);
+      const res = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive")
+        .send({ questionId: "q1", answer: 0 })); // correctIndex = 0
+      expect(res.body.isCorrect).toBe(true);
+      expect(res.body.feedback).toBe("Верно: это база");
+    });
+
+    it("отдаёт ветку неверного ответа", async () => {
+      arrange(conditionalQuestion);
+      const res = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive")
+        .send({ questionId: "q1", answer: 1 }));
+      expect(res.body.isCorrect).toBe(false);
+      expect(res.body.feedback).toBe("Неверно: перечитайте раздел");
+    });
+
+    it("в общем режиме по-прежнему отдаёт общий текст", async () => {
+      arrange({ ...dbQuestion, feedback: "Общее пояснение" });
+      const res = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive")
+        .send({ questionId: "q1", answer: 1 }));
+      expect(res.body.feedback).toBe("Общее пояснение");
+    });
+  });
+
   it("wrong answer on a started upper level moves DOWN to the pending lower one", async () => {
     const variant = twoLevelVariant();
     variant.currentTopicIndex = 0;
@@ -604,6 +790,80 @@ describe("Attempts routes — answer-adaptive", () => {
       achievedLevelName: "База", feedback: "Молодец",
       recommendedLinks: [{ title: "Курс", url: "https://x" }],
     });
+  });
+
+  // Консолидация обратной связи: адаптивная попытка обязана сохранить тексты и вложения
+  // тем ровно так же, как стандартная. Экран итогов рисуется из СОХРАНЁННОГО результата,
+  // и адаптивный результат до сих пор не нёс ни того, ни другого — блок рекомендаций в
+  // адаптивном режиме оставался пустым, хотя автор материалы повесил.
+  it("finishing adaptive stores the topic's feedback texts and attachments", async () => {
+    const variant = twoLevelVariant();
+    variant.topics[0].levelsState.splice(1); // single level, no way down → failure
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, answersJson: {}, variantJson: variant });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getTestSections.mockResolvedValue([{
+      topicId: "t1",
+      feedbackJson: {
+        text: "Текст раздела",
+        assets: [{ title: "Памятка раздела", fileName: "s.pdf", mimeType: "application/pdf", url: "/api/media/bbbb" }],
+      },
+    }]);
+    storageMock.getTopic.mockResolvedValue({
+      id: "t1",
+      name: "JS",
+      feedbackJson: {
+        text: "Текст темы",
+        assets: [{ title: "Разбор темы", fileName: "t.pdf", mimeType: "application/pdf", url: "/api/media/aaaa" }],
+      },
+    });
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([{ topicId: "t1", failureFeedback: null }]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([
+      { id: "lvl-0", topicId: "t1", levelIndex: 0, levelName: "База", feedback: null },
+    ]);
+    storageMock.getAdaptiveLevelLinks.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue({});
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive")
+      .send({ questionId: "q1", answer: 1 })); // wrong
+
+    expect(res.status).toBe(200);
+    expect(res.body.isFinished).toBe(true);
+    // Тема впереди раздела: общий источник раньше частного — тот же порядок, что у
+    // стандартного режима и у запечённого пакета.
+    expect(res.body.result.topicResults[0].feedbackTexts).toEqual(["Текст темы", "Текст раздела"]);
+    expect(res.body.result.topicResults[0].recommendedAssets).toEqual([
+      { title: "Разбор темы", url: "/api/media/aaaa" },
+      { title: "Памятка раздела", url: "/api/media/bbbb" },
+    ]);
+    // Сохраняются ВМЕСТЕ с попыткой, а не пересчитываются при показе.
+    expect(storageMock.updateAttempt.mock.calls[0][1].resultJson.topicResults[0].feedbackTexts)
+      .toEqual(["Текст темы", "Текст раздела"]);
+    storageMock.getTopic.mockReset();
+  });
+
+  it("finishing adaptive keeps the lists empty when nothing is authored", async () => {
+    const variant = twoLevelVariant();
+    variant.topics[0].levelsState.splice(1);
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, answersJson: {}, variantJson: variant });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1" }]);
+    storageMock.getTopic.mockResolvedValue({ id: "t1", name: "JS", feedbackJson: null, feedback: null });
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([{ topicId: "t1", failureFeedback: null }]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([
+      { id: "lvl-0", topicId: "t1", levelIndex: 0, levelName: "База", feedback: null },
+    ]);
+    storageMock.getAdaptiveLevelLinks.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue({});
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive")
+      .send({ questionId: "q1", answer: 1 }));
+
+    expect(res.status).toBe(200);
+    expect(res.body.result.topicResults[0].feedbackTexts).toEqual([]);
+    expect(res.body.result.topicResults[0].recommendedAssets).toEqual([]);
+    storageMock.getTopic.mockReset();
   });
 
   it("rejects an unexpected questionId (400) and a foreign attempt (403)", async () => {
@@ -855,7 +1115,7 @@ describe("Attempts routes — finish attempt", () => {
     // even though the answer below is correct (parity with the SCORM runtime).
     storageMock.getResultVariables.mockResolvedValue([
       { id: "rv1", testId: "test1", name: "ok", label: "OK", type: "boolean",
-        formula: "percent >= 200", controlsStatus: "success", showToLearner: false,
+        formula: "percent >= 200", controlsStatus: "success", learnerVisibility: "hidden",
         scormTarget: "both", sortOrder: 0 },
     ]);
     storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
@@ -885,6 +1145,158 @@ describe("Attempts routes — finish attempt", () => {
     expect(res.status).toBe(200);
     expect(res.body.result.topicResults[0].passed).toBe(true);
     expect(res.body.result.overallPassed).toBe(true);
+  });
+
+  // PRD-32 (приёмочный дефект Д-2): вложения ТЕМЫ (`topics.feedback_json`) и РАЗДЕЛА
+  // (`test_sections.feedback_json`) — два разных места, оба обязаны доехать до итогов.
+  // Сохраняются вместе с попыткой: экран итогов рисуется из сохранённого результата.
+  it("POST /attempts/:id/finish — кладёт вложения темы и раздела в результат попытки", async () => {
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getTestSections.mockResolvedValue([{
+      topicId: "t1",
+      topicPassRuleJson: null,
+      feedbackJson: {
+        assets: [{ title: "Памятка раздела", fileName: "s.pdf", mimeType: "application/pdf", url: "/api/media/bbbb" }],
+      },
+    }]);
+    storageMock.getTopic.mockResolvedValue({
+      id: "t1",
+      name: "Тема",
+      feedbackJson: {
+        assets: [{ title: "Разбор темы", fileName: "t.pdf", mimeType: "application/pdf", url: "/api/media/aaaa" }],
+      },
+    });
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getTopicCourses.mockResolvedValue([]);
+    storageMock.getTestQuestionScoring.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+
+    expect(res.status).toBe(200);
+    // Тема впереди раздела: общий источник раньше частного.
+    expect(res.body.result.topicResults[0].recommendedAssets).toEqual([
+      { title: "Разбор темы", url: "/api/media/aaaa" },
+      { title: "Памятка раздела", url: "/api/media/bbbb" },
+    ]);
+    storageMock.getTopic.mockReset();
+  });
+
+  // Консолидация текстов обратной связи: текст ТЕМЫ (`topics.feedback_json.text`) и
+  // РАЗДЕЛА (`test_sections.feedback_json.text`) — два независимых источника, оба
+  // обязаны доехать до сохранённого результата: экран итогов рисуется из него.
+  it("POST /attempts/:id/finish — кладёт тексты обратной связи темы и раздела в результат попытки", async () => {
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getTestSections.mockResolvedValue([{
+      topicId: "t1",
+      topicPassRuleJson: null,
+      feedbackJson: { format: "plain", text: "Текст раздела" },
+    }]);
+    storageMock.getTopic.mockResolvedValue({
+      id: "t1",
+      name: "Тема",
+      feedbackJson: { format: "plain", text: "Текст темы" },
+    });
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getTopicCourses.mockResolvedValue([]);
+    storageMock.getTestQuestionScoring.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+
+    expect(res.status).toBe(200);
+    // Тема впереди раздела: общий источник раньше частного (как у вложений).
+    expect(res.body.result.topicResults[0].feedbackTexts).toEqual([
+      "Текст темы",
+      "Текст раздела",
+    ]);
+    storageMock.getTopic.mockReset();
+  });
+
+  it("POST /attempts/:id/finish — одинаковые тексты схлопываются, пустые отбрасываются", async () => {
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getTestSections.mockResolvedValue([{
+      topicId: "t1",
+      topicPassRuleJson: null,
+      feedbackJson: { format: "plain", text: "Общий текст" },
+    }]);
+    storageMock.getTopic.mockResolvedValue({
+      id: "t1",
+      name: "Тема",
+      feedbackJson: { format: "plain", text: "Общий текст" },
+    });
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getTopicCourses.mockResolvedValue([]);
+    storageMock.getTestQuestionScoring.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+
+    expect(res.status).toBe(200);
+    expect(res.body.result.topicResults[0].feedbackTexts).toEqual(["Общий текст"]);
+
+    // Пробельный текст — тот же пустой: слот не должен получить пустой абзац.
+    storageMock.getTestSections.mockResolvedValue([{
+      topicId: "t1",
+      topicPassRuleJson: null,
+      feedbackJson: { format: "plain", text: " " },
+    }]);
+    storageMock.getTopic.mockResolvedValue({
+      id: "t1",
+      name: "Тема",
+      feedbackJson: { format: "plain", text: "" },
+    });
+    const empty = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+
+    expect(empty.status).toBe(200);
+    expect(empty.body.result.topicResults[0].feedbackTexts).toEqual([]);
+    storageMock.getTopic.mockReset();
+  });
+
+  // Действующий редактор темы пишет только `feedback_json`, поэтому у тем, которых он не
+  // касался, текст остался в легаси-колонке `topics.feedback`. Пакет её читает — веб
+  // обязан читать так же, иначе хосты разъедутся.
+  it("POST /attempts/:id/finish — у темы читается легаси-колонка, когда feedback_json без текста", async () => {
+    storageMock.getAttempt.mockResolvedValue(dbAttempt);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", topicPassRuleJson: null }]);
+    storageMock.getTopic.mockResolvedValue({
+      id: "t1",
+      name: "Тема",
+      feedback: "Легаси-текст темы",
+      feedbackJson: null,
+    });
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getTopicCourses.mockResolvedValue([]);
+    storageMock.getTestQuestionScoring.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue(finishedAttempt);
+
+    const res = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+
+    expect(res.status).toBe(200);
+    expect(res.body.result.topicResults[0].feedbackTexts).toEqual(["Легаси-текст темы"]);
+
+    // Заполнены обе — побеждает действующий источник, легаси-копия молчит.
+    storageMock.getTopic.mockResolvedValue({
+      id: "t1",
+      name: "Тема",
+      feedback: "Устаревшая копия",
+      feedbackJson: { format: "plain", text: "Текст из feedback_json" },
+    });
+    const both = await asLearner(request(app).post("/api/attempts/atmp1/finish")
+      .send({ answers: { q1: 0 } }));
+
+    expect(both.status).toBe(200);
+    expect(both.body.result.topicResults[0].feedbackTexts).toEqual(["Текст из feedback_json"]);
+    storageMock.getTopic.mockReset();
   });
 
   it("POST /attempts/:id/finish — an explicit exact override shadows graded scoring", async () => {
@@ -936,6 +1348,38 @@ describe("Attempts routes — result and history", () => {
     expect(res.body.attemptsInfo).toEqual({ completed: 1, max: 1 });
   });
 
+  // PRD-31 FR-10: a closed barrier withdraws «Пройти ещё раз» on the results screen
+  // too — the package already does this (`viewResults.js` consults
+  // `attemptIntervalState()`), while the web offered a retry the start route would
+  // then refuse with 403.
+  it("GET /attempts/:id/result — canRetake is false while the hour interval is closed", async () => {
+    const justFinished = { ...finishedAttempt, finishedAt: new Date(Date.now() - 60 * 60 * 1000) };
+    storageMock.getAttempt.mockResolvedValue(justFinished);
+    storageMock.getTest.mockResolvedValue({
+      ...dbTest,
+      retakePolicyJson: { enabled: false, attemptInterval: { enabled: true, hours: 24 } },
+    });
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([justFinished]);
+    const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+    expect(res.status).toBe(200);
+    // Attempts are NOT exhausted — the test has no limit at all (`attemptsInfo` is
+    // reported only for a limited test), so only the barrier can be closing this.
+    expect(res.body.attemptsInfo).toBeNull();
+    expect(res.body.canRetake).toBe(false);
+  });
+
+  it("GET /attempts/:id/result — canRetake returns once the interval has elapsed", async () => {
+    const oldAttempt = { ...finishedAttempt, finishedAt: new Date(Date.now() - 48 * 60 * 60 * 1000) };
+    storageMock.getAttempt.mockResolvedValue(oldAttempt);
+    storageMock.getTest.mockResolvedValue({
+      ...dbTest,
+      retakePolicyJson: { enabled: false, attemptInterval: { enabled: true, hours: 24 } },
+    });
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([oldAttempt]);
+    const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+    expect(res.body.canRetake).toBe(true);
+  });
+
   it("GET /attempts/:id/result — returns 404 when not found", async () => {
     storageMock.getAttempt.mockResolvedValue(undefined);
     const res = await asLearner(request(app).get("/api/attempts/x/result"));
@@ -946,6 +1390,224 @@ describe("Attempts routes — result and history", () => {
     storageMock.getAttempt.mockResolvedValue({ ...finishedAttempt, userId: "other" });
     const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
     expect(res.status).toBe(403);
+  });
+
+  // Консолидированный блок рекомендаций в АДАПТИВНОМ режиме. Разметка блока в
+  // `results.adaptive.html` уже есть, но до этой работы ни один источник в него не
+  // подавался: экран рисуется из `render.context`, который собирает роут.
+  describe("GET /attempts/:id/result — адаптивный экран и консолидированный блок", () => {
+    const TOPIC_PDF = { title: "Разбор темы", url: "/api/media/aaaa" };
+
+    /** Завершённая адаптивная попытка: тема без подтверждённого уровня = провал. */
+    function adaptiveAttempt(achievedLevelIndex: number | null, overallPassed = false) {
+      return {
+        ...finishedAttempt,
+        resultJson: {
+          mode: "adaptive",
+          overallPassed,
+          topicResults: [{
+            topicId: "t1",
+            topicName: "Сети",
+            achievedLevelIndex,
+            achievedLevelName: achievedLevelIndex === null ? null : "Средний",
+            feedback: null,
+            recommendedLinks: [],
+            feedbackTexts: ["Текст темы", "Текст раздела"],
+            recommendedAssets: [TOPIC_PDF],
+          }],
+        },
+      };
+    }
+
+    /** Тексты консолидированного блока в порядке показа. */
+    function texts(res: request.Response): string[] {
+      return (res.body.render?.context?.result?.recommendations?.texts ?? []) as string[];
+    }
+
+    it("показывает тексты и вложения непройденной темы и обратную связь теста", async () => {
+      storageMock.getAttempt.mockResolvedValue(adaptiveAttempt(null));
+      storageMock.getTest.mockResolvedValue({ ...dbTest, mode: "adaptive", feedbackJson: { text: "Разберите ошибки." } });
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([finishedAttempt]);
+
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      expect(res.status).toBe(200);
+      // Обратная связь теста — самый общий источник, поэтому впереди материалов темы.
+      expect(texts(res)).toEqual(["Разберите ошибки.", "Текст темы", "Текст раздела"]);
+      expect(res.body.render.context.result.recommendations.assets).toEqual([TOPIC_PDF]);
+    });
+
+    it("тема с подтверждённым уровнем молчит, обратная связь теста остаётся", async () => {
+      storageMock.getAttempt.mockResolvedValue(adaptiveAttempt(1));
+      storageMock.getTest.mockResolvedValue({ ...dbTest, mode: "adaptive", feedbackJson: { text: "Разберите ошибки." } });
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([finishedAttempt]);
+
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      expect(res.status).toBe(200);
+      expect(texts(res)).toEqual(["Разберите ошибки."]);
+      expect(res.body.render.context.result.recommendations.assets ?? []).toEqual([]);
+    });
+
+    it("явно пройденный тест не показывает и своей обратной связи", async () => {
+      storageMock.getAttempt.mockResolvedValue(adaptiveAttempt(1, true));
+      storageMock.getTest.mockResolvedValue({ ...dbTest, mode: "adaptive", feedbackJson: { text: "Разберите ошибки." } });
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([finishedAttempt]);
+
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      expect(res.status).toBe(200);
+      expect(res.body.render.context.result.recommendations).toBeUndefined();
+    });
+
+    it("без материалов блока не возникает вовсе", async () => {
+      const bare = adaptiveAttempt(null);
+      bare.resultJson.topicResults[0].feedbackTexts = [];
+      bare.resultJson.topicResults[0].recommendedAssets = [];
+      storageMock.getAttempt.mockResolvedValue(bare);
+      storageMock.getTest.mockResolvedValue({ ...dbTest, mode: "adaptive", feedbackJson: null });
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([finishedAttempt]);
+
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      expect(res.status).toBe(200);
+      expect(res.body.render.context.result.recommendations).toBeUndefined();
+    });
+  });
+
+  // Измерения, уезжающие клиенту (PRD-35). Экран итогов рисует СЕРВЕР, а отчёт
+  // собирает браузер — поэтому поле обязано приехать в том виде, который общий
+  // сборщик отчёта принимает БЕЗ доработки на клиенте. Проверяется настоящим
+  // `buildReportContext`, а не формой полей: рассинхрон вида ловится только тем,
+  // что потребитель на этих данных работает.
+  describe("GET /attempts/:id/result — измерения для отчёта", () => {
+    /** Шкала с доменом и двумя полосами: радару нужен домен и числовое значение. */
+    function scaleRow(key: string, sortOrder: number, learnerVisibility = "level_and_value") {
+      return {
+        id: `sc-${key}`, testId: "test1", key, label: `Шкала ${key.toUpperCase()}`,
+        sortOrder, learnerVisibility,
+        configJson: {
+          domainMin: 0, domainMax: 10, valence: "higher_is_better",
+          bands: [
+            { min: 0, max: 5, level: "low", label: "Низкий" },
+            { min: 5.01, max: 10, level: "high", label: "Высокий" },
+          ],
+        },
+      };
+    }
+
+    /** Показатель со строковым исходом — вид по умолчанию «Только уровень». */
+    const variableRow = {
+      id: "rv1", testId: "test1", name: "vr1", label: "Готовность", sortOrder: 0,
+      learnerVisibility: "level_and_value",
+      configJson: { outcomes: [{ code: "ok", label: "Норма" }] },
+    };
+
+    /** Завершённая попытка измерительного теста: значения лежат В РЕЗУЛЬТАТЕ. */
+    const measuredAttempt = {
+      ...finishedAttempt,
+      resultJson: {
+        totalCorrect: 1, totalQuestions: 1, totalEarnedPoints: 1, totalPossiblePoints: 1,
+        overallPercent: 100, overallPassed: true, topicResults: [],
+        scaleResults: { a: { raw: 8 }, b: { raw: 3 }, c: { raw: 6 } },
+        resultVariables: { vr1: "ok" },
+      },
+    };
+
+    /**
+     * Оформление теста задаёт виды отображения и схему уровней ЯВНО и не по умолчанию:
+     * иначе потеря параметров шаблона при нормализации была бы неотличима от их
+     * применения — манифест «Стандартного» отдаёт ровно значения по умолчанию.
+     */
+    const measuringTest = {
+      ...dbTest,
+      designSettingsJson: {
+        params: { scaleRenderKind: "ring", indicatorRenderKind: "value", levelScheme: "neutral" },
+      },
+    };
+
+    function mockMeasuringTest() {
+      storageMock.getAttempt.mockResolvedValue(measuredAttempt);
+      storageMock.getTest.mockResolvedValue(measuringTest);
+      storageMock.getAttemptsByUserAndTest.mockResolvedValue([measuredAttempt]);
+      storageMock.getScales.mockResolvedValue([scaleRow("a", 0), scaleRow("b", 1), scaleRow("c", 2)]);
+      storageMock.getResultVariables.mockResolvedValue([variableRow]);
+      storageMock.getContentPages.mockResolvedValue([]);
+    }
+
+    it("отдаёт измерения нормализованными: шкалы, показатели, рампа и виды", async () => {
+      mockMeasuringTest();
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      expect(res.status).toBe(200);
+      // Виды и рампа разрешены СЕРВЕРОМ, по параметрам того же шаблона, которым
+      // нарисован экран, — клиент этих правил не знает.
+      expect(res.body.measures).toMatchObject({
+        scaleKind: "ring",
+        indicatorKind: "value",
+        hasPassThreshold: true,
+        // Схема «нейтральная» из оформления теста, а не значение по умолчанию.
+        ramp: { favorable: "215 16% 65%", mid: null, unfavorable: "215 16% 35%" },
+      });
+      // Строки БД в ответ не едут: у сборщика другой контракт.
+      expect(res.body.measures).not.toHaveProperty("variables");
+      expect(res.body.measures.scales.map((s: any) => s.key)).toEqual(["a", "b", "c"]);
+      expect(res.body.measures.scales[0]).toMatchObject({
+        name: "Шкала A", value: 8, visibility: "level_and_value",
+      });
+      expect(res.body.measures.scales[0].interpretation.domainMax).toBe(10);
+      expect(res.body.measures.indicators).toEqual([
+        expect.objectContaining({ key: "vr1", name: "Готовность", value: "ok" }),
+      ]);
+    });
+
+    it("сборщик отчёта строит по ним контекст: шкалы и показатели на странице", async () => {
+      mockMeasuringTest();
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      expect(res.status).toBe(200);
+      // Ровно то, что делает клиент (`features/learner/attempt-report`): отдаёт поле
+      // ответа в общий сборщик как есть.
+      const ctx = buildReportContext(res.body.report, { values: {}, measures: res.body.measures });
+      expect(ctx.result.scales?.map((s: any) => s.name)).toEqual(["Шкала A", "Шкала B", "Шкала C"]);
+      expect(ctx.result.indicators?.map((i: any) => i.name)).toEqual(["Готовность"]);
+      expect(ctx.result.scalesChart).toBeUndefined();
+    });
+
+    it("радар включается переключателем варианта отчёта", async () => {
+      mockMeasuringTest();
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      // PRD-35: у отчёта СВОЙ переключатель — клиент подмешивает его к тем же измерениям.
+      const ctx = buildReportContext(res.body.report, {
+        values: { showCompetencyRadar: true },
+        measures: { ...res.body.measures, chartSettings: { scalesChartKind: "radar" as const } },
+      });
+      expect(ctx.result.scalesChart?.axes).toHaveLength(3);
+    });
+
+    it("тест без шкал и показателей измерений не отдаёт", async () => {
+      mockMeasuringTest();
+      storageMock.getScales.mockResolvedValue([]);
+      storageMock.getResultVariables.mockResolvedValue([]);
+      // Экран при этом строится как обычно: пустой набор измерений — не поломка.
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      expect(res.status).toBe(200);
+      expect(res.body).not.toHaveProperty("measures");
+    });
+
+    // issue #33: адаптивной попытке измерения ЕДУТ — теми же значениями и в том же виде.
+    // Шкалу питают вклады, навешенные на вопросы, а адаптивный тест задаёт вопросы, как
+    // любой другой; значения по нему считались и уезжали в LMS и раньше, не доходя только
+    // до экрана итогов и до отчёта.
+    it("адаптивной попытке измерения едут так же, как обычной", async () => {
+      mockMeasuringTest();
+      storageMock.getAttempt.mockResolvedValue({
+        ...measuredAttempt,
+        resultJson: { ...measuredAttempt.resultJson, mode: "adaptive" },
+      });
+      storageMock.getTest.mockResolvedValue({ ...measuringTest, mode: "adaptive" });
+      const res = await asLearner(request(app).get("/api/attempts/atmp1/result"));
+      expect(res.status).toBe(200);
+      expect(res.body.measures.scales.map((s: any) => s.key)).toEqual(["a", "b", "c"]);
+      expect(res.body.measures.scales[0].value).toBe(8);
+      expect(res.body.measures.indicators.map((i: any) => i.key)).toEqual(["vr1"]);
+      // Виды отображения — из оформления ТОГО ЖЕ теста, а не значения по умолчанию.
+      expect(res.body.measures).toMatchObject({ scaleKind: "ring", indicatorKind: "value" });
+    });
   });
 
   it("GET /learner/attempts — returns attempt history grouped by test", async () => {

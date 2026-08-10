@@ -3,51 +3,291 @@
     "percent": 80,
     "score": 14,
     "topics": {
-      "t1": { "percent": 90, "passed": true, "score": 9 },
-      "t2": { "percent": 50, "passed": false, "score": 5 }
+      "t1": {
+        "percent": 90,
+        "passed": true,
+        "score": 9
+      },
+      "t2": {
+        "percent": 50,
+        "passed": false,
+        "score": 5
+      }
     },
     "topicsByName": {
-      "Финансы": { "percent": 90, "passed": true, "score": 9 }
+      "Финансы": {
+        "percent": 90,
+        "passed": true,
+        "score": 9
+      }
     },
-    "tags": { "scale:EE": { "percent": 60, "score": 6, "maxScore": 10, "count": 3 } },
+    "tags": {
+      "scale:EE": {
+        "percent": 60,
+        "score": 6,
+        "maxScore": 10,
+        "count": 3
+      }
+    },
     "scales": {
-      "leadership": { "raw": 12, "normalized": 0.8, "percent": 80, "level": "high", "label": "Высокий", "hasValue": true }
+      "leadership": {
+        "raw": 12,
+        "normalized": 0.8,
+        "percent": 80,
+        "level": "high",
+        "label": "Высокий",
+        "hasValue": true
+      },
+      "cel": {
+        "raw": 34,
+        "normalized": 34,
+        "percent": 34,
+        "level": "high",
+        "label": "Высокий",
+        "hasValue": true
+      },
+      "vdo": {
+        "raw": 16,
+        "normalized": 16,
+        "percent": 16,
+        "level": "mid",
+        "label": "Средний",
+        "hasValue": true
+      },
+      "kom": {
+        "raw": 14,
+        "normalized": 14,
+        "percent": 14,
+        "level": "low",
+        "label": "Низкий",
+        "hasValue": true
+      },
+      "pro": {
+        "raw": 34,
+        "normalized": 34,
+        "percent": 34,
+        "level": "high",
+        "label": "Высокий",
+        "hasValue": true
+      },
+      "empty": {
+        "raw": 0,
+        "normalized": 0,
+        "percent": 0,
+        "level": "",
+        "label": "",
+        "hasValue": false
+      }
     },
-    "sections": { "sec1": { "percent": 70, "passed": true, "completed": true } },
-    "vars": { "ee_score": 12, "category": "high", "flag": true }
+    "sections": {
+      "sec1": {
+        "percent": 70,
+        "passed": true,
+        "completed": true
+      }
+    },
+    "vars": {
+      "ee_score": 12,
+      "category": "high",
+      "flag": true
+    },
+    "scaleOrder": [
+      "leadership",
+      "cel",
+      "vdo",
+      "kom",
+      "pro",
+      "empty"
+    ]
   },
   "cases": [
-    { "formula": "percent", "expected": 80 },
-    { "formula": "percent >= 75", "expected": true },
-    { "formula": "score", "expected": 14 },
-    { "formula": "score >= 10", "expected": true },
-    { "formula": "score + percent", "expected": 94 },
-    { "formula": "2 + 3 * 4", "expected": 14 },
-    { "formula": "(2 + 3) * 4", "expected": 20 },
-    { "formula": "true OR false AND false", "expected": true },
-    { "formula": "NOT true AND true", "expected": false },
-    { "formula": "1 + 1 = 2", "expected": true },
-    { "formula": "10 / 0", "expected": 0 },
-    { "formula": "-5 + 2", "expected": -3 },
-    { "formula": "topicById(\"t1\").percent", "expected": 90 },
-    { "formula": "topicById(\"t1\").passed", "expected": true },
-    { "formula": "topicByName(\"Финансы\").percent", "expected": 90 },
-    { "formula": "topicByName(\"Нет такой\").score", "expected": 0 },
-    { "formula": "topicById(\"missing\").score", "expected": 0 },
-    { "formula": "tag(\"scale:EE\").count", "expected": 3 },
-    { "formula": "scaleById(\"leadership\").level", "expected": "high" },
-    { "formula": "scaleById(\"leadership\").level = \"high\"", "expected": true },
-    { "formula": "scaleById(\"nope\").hasValue", "expected": false },
-    { "formula": "sectionById(\"sec1\").completed", "expected": true },
-    { "formula": "var(\"ee_score\")", "expected": 12 },
-    { "formula": "var(\"missing\")", "expected": null },
-    { "formula": "countTopics()", "expected": 2 },
-    { "formula": "countPassed()", "expected": 1 },
-    { "formula": "avgPercent()", "expected": 70 },
-    { "formula": "countVars([\"category\"], \"high\")", "expected": 1 },
-    { "formula": "countScales([\"leadership\"], \"high\")", "expected": 1 },
-    { "formula": "countScales([\"leadership\"], \"low\")", "expected": 0 },
-    { "formula": "IF(percent >= 90, \"Expert\", IF(percent >= 70, \"Advanced\", \"Beginner\"))", "expected": "Advanced" },
-    { "formula": "topicById(\"t1\").percent * 0.4 + topicById(\"t2\").percent * 0.6", "expected": 66 }
+    {
+      "formula": "percent",
+      "expected": 80
+    },
+    {
+      "formula": "percent >= 75",
+      "expected": true
+    },
+    {
+      "formula": "score",
+      "expected": 14
+    },
+    {
+      "formula": "score >= 10",
+      "expected": true
+    },
+    {
+      "formula": "score + percent",
+      "expected": 94
+    },
+    {
+      "formula": "2 + 3 * 4",
+      "expected": 14
+    },
+    {
+      "formula": "(2 + 3) * 4",
+      "expected": 20
+    },
+    {
+      "formula": "true OR false AND false",
+      "expected": true
+    },
+    {
+      "formula": "NOT true AND true",
+      "expected": false
+    },
+    {
+      "formula": "1 + 1 = 2",
+      "expected": true
+    },
+    {
+      "formula": "10 / 0",
+      "expected": 0
+    },
+    {
+      "formula": "-5 + 2",
+      "expected": -3
+    },
+    {
+      "formula": "topicById(\"t1\").percent",
+      "expected": 90
+    },
+    {
+      "formula": "topicById(\"t1\").passed",
+      "expected": true
+    },
+    {
+      "formula": "topicByName(\"Финансы\").percent",
+      "expected": 90
+    },
+    {
+      "formula": "topicByName(\"Нет такой\").score",
+      "expected": 0
+    },
+    {
+      "formula": "topicById(\"missing\").score",
+      "expected": 0
+    },
+    {
+      "formula": "tag(\"scale:EE\").count",
+      "expected": 3
+    },
+    {
+      "formula": "scaleById(\"leadership\").level",
+      "expected": "high"
+    },
+    {
+      "formula": "scaleById(\"leadership\").level = \"high\"",
+      "expected": true
+    },
+    {
+      "formula": "scaleById(\"nope\").hasValue",
+      "expected": false
+    },
+    {
+      "formula": "sectionById(\"sec1\").completed",
+      "expected": true
+    },
+    {
+      "formula": "var(\"ee_score\")",
+      "expected": 12
+    },
+    {
+      "formula": "var(\"missing\")",
+      "expected": null
+    },
+    {
+      "formula": "countTopics()",
+      "expected": 2
+    },
+    {
+      "formula": "countPassed()",
+      "expected": 1
+    },
+    {
+      "formula": "avgPercent()",
+      "expected": 70
+    },
+    {
+      "formula": "countVars([\"category\"], \"high\")",
+      "expected": 1
+    },
+    {
+      "formula": "countScales([\"leadership\"], \"high\")",
+      "expected": 1
+    },
+    {
+      "formula": "countScales([\"leadership\"], \"low\")",
+      "expected": 0
+    },
+    {
+      "formula": "IF(percent >= 90, \"Expert\", IF(percent >= 70, \"Advanced\", \"Beginner\"))",
+      "expected": "Advanced"
+    },
+    {
+      "formula": "topicById(\"t1\").percent * 0.4 + topicById(\"t2\").percent * 0.6",
+      "expected": 66
+    },
+    {
+      "formula": "topScale([\"cel\",\"vdo\",\"kom\",\"pro\"], 1).key",
+      "expected": "cel"
+    },
+    {
+      "formula": "topScale([\"cel\",\"vdo\",\"kom\",\"pro\"], 2).key",
+      "expected": "pro"
+    },
+    {
+      "formula": "bottomScale([\"cel\",\"vdo\",\"kom\",\"pro\"], 1).key",
+      "expected": "kom"
+    },
+    {
+      "formula": "bottomScale([\"cel\",\"vdo\",\"kom\",\"pro\"], 2).key",
+      "expected": "vdo"
+    },
+    {
+      "formula": "topScale([\"cel\",\"vdo\",\"kom\",\"pro\"], 1).label",
+      "expected": "Высокий"
+    },
+    {
+      "formula": "topScale([\"cel\",\"vdo\",\"kom\",\"pro\"], 1).value",
+      "expected": 34
+    },
+    {
+      "formula": "topScale([\"cel\",\"vdo\",\"kom\",\"pro\"], 1).margin",
+      "expected": 18
+    },
+    {
+      "formula": "topScale([\"cel\",\"vdo\",\"kom\",\"pro\"], 1).tiedCount",
+      "expected": 2
+    },
+    {
+      "formula": "bottomScale([\"cel\",\"vdo\",\"kom\",\"pro\"], 1).tiedCount",
+      "expected": 1
+    },
+    {
+      "formula": "topScale([\"pro\",\"kom\",\"vdo\",\"cel\"], 1).key",
+      "expected": "cel"
+    },
+    {
+      "formula": "topScale([\"empty\",\"kom\"], 1).key",
+      "expected": "kom"
+    },
+    {
+      "formula": "topScale([\"empty\"], 1).key",
+      "expected": null
+    },
+    {
+      "formula": "topScale([\"cel\",\"vdo\",\"kom\",\"pro\"], 9).key",
+      "expected": null
+    },
+    {
+      "formula": "IF(topScale([\"cel\",\"vdo\",\"kom\",\"pro\"], 9).key = \"cel\", \"да\", \"нет\")",
+      "expected": "нет"
+    },
+    {
+      "formula": "IF(topScale([\"cel\",\"vdo\",\"kom\",\"pro\"], 1).tiedCount > 1, \"ничья\", \"лидер один\")",
+      "expected": "ничья"
+    }
   ]
 }

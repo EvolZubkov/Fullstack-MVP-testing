@@ -22,6 +22,7 @@ import {
   Upload,
   Download,
   FileSpreadsheet,
+  MailPlus,
 } from "lucide-react";
 import {
   Box,
@@ -104,6 +105,12 @@ export default function UsersPage() {
     roles: ["learner"] as string[],
     mustChangePassword: true,
     expiresAt: "",
+    /**
+     * Ask the server for an invitation letter (password-setup link) once the
+     * account is created. On by default, as in the bulk-import wizard: a person
+     * being added normally has to be told they now have an account.
+     */
+    sendInvite: true,
   });
   const [newPassword, setNewPassword] = useState("");
 
@@ -146,13 +153,23 @@ export default function UsersPage() {
         const error = await res.json();
         throw new Error(error.error || "Failed to create user");
       }
-      return res.json();
+      return res.json() as Promise<{ inviteSent?: boolean }>;
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setIsCreateOpen(false);
       resetForm();
       toast({ title: t.users.userCreated, description: t.users.userCreatedDescription });
+      // The account exists either way, so this is a second, weaker signal: the
+      // letter that WAS asked for never left (SMTP off — the link is in the
+      // server log, and the row menu can re-send it).
+      if (variables.sendInvite && !data.inviteSent) {
+        toast({
+          variant: "warning",
+          title: t.users.inviteNotSent,
+          description: t.users.inviteNotSentDescription,
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -318,6 +335,34 @@ export default function UsersPage() {
     },
   });
 
+  // Invite mutation — re-send the password-setup letter to a pending account.
+  // `sent: false` is a success for the request but a failure for the person
+  // waiting on the letter (SMTP off), so it gets its own warning toast.
+  const inviteUserMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/users/${id}/invite`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to send invite");
+      return res.json() as Promise<{ success: boolean; sent: boolean }>;
+    },
+    onSuccess: (data) => {
+      if (data.sent) {
+        toast({ title: t.users.inviteSent, description: t.users.inviteSentDescription });
+      } else {
+        toast({
+          variant: "warning",
+          title: t.users.inviteNotSent,
+          description: t.users.inviteNotSentDescription,
+        });
+      }
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: t.common.error, description: t.users.failedToSendInvite });
+    },
+  });
+
   // Reset attempts mutation
   const resetAttemptsMutation = useMutation({
     mutationFn: async ({ userId, testId }: { userId: string; testId: string }) => {
@@ -348,6 +393,7 @@ export default function UsersPage() {
       roles: ["learner"],
       mustChangePassword: true,
       expiresAt: "",
+      sendInvite: true,
     });
   };
 
@@ -369,6 +415,9 @@ export default function UsersPage() {
       roles: user.roles ?? [],
       mustChangePassword: user.mustChangePassword,
       expiresAt: user.expiresAt ? user.expiresAt.split("T")[0] : "",
+      // Editing never mails anything: the invitation is a create-time choice,
+      // and an existing pending account is re-invited from the row menu.
+      sendInvite: false,
     });
     setIsEditOpen(true);
   };
@@ -456,6 +505,15 @@ export default function UsersPage() {
         >
           <MenuItem icon={<Pencil size={16} />} onClick={() => openEditDialog(u)}>{t.common.edit}</MenuItem>
           <MenuItem icon={<KeyRound size={16} />} onClick={() => openResetPasswordDialog(u)}>{t.users.resetPassword}</MenuItem>
+          {/* Only a never-signed-in account: the letter carries a password-setup link. */}
+          {u.status === "pending" && (
+            <MenuItem
+              icon={<MailPlus size={16} />}
+              onClick={() => inviteUserMutation.mutate(u.id)}
+            >
+              {t.users.sendInvite}
+            </MenuItem>
+          )}
           {(u.roles ?? []).includes("learner") && (
             <MenuItem icon={<RotateCcw size={16} />} onClick={() => openResetAttemptsDialog(u)}>Сбросить попытки</MenuItem>
           )}
@@ -695,6 +753,13 @@ export default function UsersPage() {
             label={t.users.mustChangePassword}
             checked={formData.mustChangePassword}
             onChange={(e) => setFormData({ ...formData, mustChangePassword: e.target.checked })}
+          />
+          {/* Invitation letter with a password-setup link (valid 7 days), sent
+              by the server right after the account is created. */}
+          <Checkbox
+            label={t.users.sendInvite}
+            checked={formData.sendInvite}
+            onChange={(e) => setFormData({ ...formData, sendInvite: e.target.checked })}
           />
           <Input
             label={t.users.expiresAt}

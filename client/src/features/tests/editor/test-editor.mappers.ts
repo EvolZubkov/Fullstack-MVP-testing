@@ -19,8 +19,10 @@
  *   - FR-25h adaptive payload excluded when `mode === "standard"`
  */
 import type { DrawBlueprint, EligibilityPluginRef, FormSet, RetakePolicy } from "@shared/schema";
-import type { ReportSettings } from "@shared/schema";
+import type { ReportSettings, TestIntro } from "@shared/schema";
+import type { LearnerVisibility, LevelTone } from "@shared/scales/interpretation";
 import { formSetSchema } from "@shared/schema";
+import type { FeedbackEditorValue } from "./sections/feedback-editor-modal";
 import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
@@ -37,6 +39,7 @@ import type {
   FlowPolicyPayload,
   FlowRouterSettings,
   FlowSettings,
+  OutcomeModel,
   OverallPassRule,
   OverallPassType,
   PassDecisionPolicy,
@@ -78,6 +81,8 @@ export type ApiTestResponse = {
   feedback?: string | null;
   feedbackJson?: unknown;
   flowPolicyJson?: unknown;
+  /** PRD-30 FR-16: test-wide delivery order (`fixed`/`random`/`shuffle_all`). */
+  questionOrder?: string | null;
   telemetryEnabled?: boolean | null;
   timeLimitMinutes?: number | null;
   maxAttempts?: number | null;
@@ -85,13 +90,19 @@ export type ApiTestResponse = {
   // PRD-19 (Блок A)
   allowReturnToUnanswered?: boolean | null;
   allowAnswerChange?: boolean | null;
+  // PRD-43: независим от allowReturnToUnanswered.
+  quickAdvance?: boolean | null;
   showSectionResults?: boolean | null;
+  copyProtection?: boolean | null;
+  protectionWatermark?: boolean | null;
+  protectionHideOnBlur?: boolean | null;
   startPageContent?: string | null;
   folderId?: string | null;
   sections?: unknown[];
   adaptiveSettings?: unknown;
   retakePolicyJson?: unknown;
   reportSettingsJson?: unknown;
+  introJson?: unknown;
   /** PRD-15 block D (FR-31): test-wide default price; null = system (1). */
   defaultQuestionPoints?: number | null;
   /** PRD-15 block D (FR-30): per-(test, question) scoring overrides. */
@@ -389,6 +400,10 @@ function buildSectionsFromApi(src: ApiTestResponse): {
       formSet: readFormSetFromApi(raw.formSetJson),
       // PRD-15 block D (FR-31): per-section default price (null = inherit test).
       defaultPoints: typeof raw.defaultPoints === "number" ? raw.defaultPoints : null,
+      // PRD-30 FR-18: only an explicit value is an override; anything else —
+      // including a legacy section without the column — inherits the test.
+      questionOrder:
+        raw.questionOrder === "fixed" || raw.questionOrder === "random" ? raw.questionOrder : null,
     });
   }
 
@@ -514,7 +529,10 @@ function buildFlowSettingsFromApi(flowMode: FlowMode, api: ApiTestResponse): Flo
 
 // ─── Shared payload helpers ───────────────────────────────────────────────────
 
-/** Strip `scormHref` from assets — decisions §6.5. */
+/**
+ * Strip `scormHref` from assets — decisions §6.5. The canonical `url` is deliberately kept:
+ * it is what the backend indexes and what the packer rewrites (PRD-32).
+ */
 function stripScormHref(assets: FeedbackAsset[]): FeedbackAsset[] {
   return assets.map(({ scormHref: _scormHref, ...rest }) => rest);
 }
@@ -545,6 +563,14 @@ const RESULT_VAR_TYPES = new Set(["number", "string", "boolean"]);
 const RESULT_VAR_TARGETS = new Set(["none", "suspend_data", "interaction", "both"]);
 const RESULT_VAR_STATUS = new Set(["none", "success", "completion"]);
 
+// PRD-29: shared by scales and result variables — an unknown value degrades to
+// "hidden", so a malformed row never leaks a measurement to the learner.
+const LEARNER_VISIBILITIES = new Set(["hidden", "level", "level_and_value"]);
+
+function toLearnerVisibility(raw: unknown): LearnerVisibility {
+  return LEARNER_VISIBILITIES.has(raw as string) ? (raw as LearnerVisibility) : "hidden";
+}
+
 /**
  * Map the `resultVariables` array from the API test response into editor models,
  * ordered by `sortOrder`. Unknown enum values fall back to safe defaults so a
@@ -565,13 +591,20 @@ function buildResultVariablesFromApi(src: ApiTestResponse): ResultVariableModel[
         ? (r.type as ResultVariableModel["type"])
         : "number",
       formula: typeof r.formula === "string" ? r.formula : "",
-      showToLearner: r.showToLearner === true,
+      learnerVisibility: toLearnerVisibility(r.learnerVisibility),
       scormTarget: RESULT_VAR_TARGETS.has(r.scormTarget as string)
         ? (r.scormTarget as ResultVariableModel["scormTarget"])
         : "both",
       controlsStatus: RESULT_VAR_STATUS.has(r.controlsStatus as string)
         ? (r.controlsStatus as ResultVariableModel["controlsStatus"])
         : "none",
+      // PRD-29: the indicator's own interpretation. Both forms are read regardless
+      // of the current type — the type is DERIVED from the formula and flips while
+      // the author edits, and dropping the other form here would lose their work.
+      bands: buildScaleBands(r.configJson),
+      outcomes: buildOutcomes(r.configJson),
+      ...buildScaleDomain(r.configJson),
+      valence: buildScaleValence(r.configJson),
       sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : index,
     });
   });
@@ -610,13 +643,69 @@ function buildQuestionOverridesFromApi(src: ApiTestResponse): QuestionScoringOve
   return out;
 }
 
+const SCALE_VALENCES = new Set(["higher_is_better", "lower_is_better", "none"]);
+
+/**
+ * PRD-29: read a scale's explicit domain out of `config_json`. Deliberately NOT
+ * `parseScaleInterpretation` — that one falls back to the span of the bands, which
+ * is the right answer for RENDERING but the wrong one for the editor: the author's
+ * «границы заданы вручную» switch must distinguish a stored domain from a derived
+ * one. Only a complete pair counts; a half-written config reads as "not set".
+ */
+function buildScaleDomain(configJson: unknown): { domainMin: number | null; domainMax: number | null } {
+  const config = isPlainObject(configJson) ? (configJson as Record<string, unknown>) : {};
+  const min = typeof config.domainMin === "number" && Number.isFinite(config.domainMin) ? config.domainMin : null;
+  const max = typeof config.domainMax === "number" && Number.isFinite(config.domainMax) ? config.domainMax : null;
+  return min === null || max === null ? { domainMin: null, domainMax: null } : { domainMin: min, domainMax: max };
+}
+
+/**
+ * PRD-46 §6: the scale's display limit for the radar, or `null` when unset.
+ *
+ * A single optional number, unlike the domain: there is nothing to pair it with, and no
+ * fallback to derive here — «not set» is a meaningful state the chart answers itself.
+ */
+function buildScaleDisplayMax(configJson: unknown): number | null {
+  const config = isPlainObject(configJson) ? (configJson as Record<string, unknown>) : {};
+  const raw = config.displayMax;
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+}
+
+/** PRD-29: the favourable direction stored in `config_json`; unknown degrades to "none". */
+function buildScaleValence(configJson: unknown): ScaleModel["valence"] {
+  const config = isPlainObject(configJson) ? (configJson as Record<string, unknown>) : {};
+  return SCALE_VALENCES.has(config.valence as string) ? (config.valence as ScaleModel["valence"]) : "none";
+}
+
 const SCALE_TYPES = new Set(["number", "boolean", "category", "level"]);
 const SCALE_AGGREGATIONS = new Set(["sum", "avg", "weighted_avg", "max", "min"]);
 const SCALE_NORMALIZATIONS = new Set(["none", "percent", "custom"]);
 const SCALE_DIRECTIONS = new Set(["positive", "inverse"]);
 const SCALE_TARGETS = new Set(["none", "suspend_data", "interaction", "both"]);
 
-/** Map the bands stored in a scale's `config_json` into editor band models. */
+const LEVEL_TONES = new Set(["favorable", "neutral", "attention", "critical"]);
+
+/** PRD-29: the author's tone override; anything unknown degrades to «derive it». */
+function buildLevelTone(raw: unknown): LevelTone | "" {
+  return LEVEL_TONES.has(raw as string) ? (raw as LevelTone) : "";
+}
+
+/**
+ * PRD-29: read a level's recommendations back into the shape the shared feedback
+ * editor takes. Absent (or malformed) feedback stays `undefined` rather than
+ * becoming an empty block, so a level without recommendations round-trips as one.
+ */
+function buildInterpretationFeedback(raw: unknown): FeedbackEditorValue | undefined {
+  if (!isPlainObject(raw)) return undefined;
+  const { content, links, assets, events } = parseFeedbackObject(raw);
+  return { format: content.format, text: content.text, links, assets, events };
+}
+
+/**
+ * Map the bands stored in a scale's (or a numeric indicator's) `config_json` into
+ * editor band models. The PRD-29 counterpart of `bandsToPayload` in scales-api:
+ * every field written there is read back here, or a save would erase it.
+ */
 function buildScaleBands(configJson: unknown): ScaleBandModel[] {
   const bands = isPlainObject(configJson) ? (configJson as { bands?: unknown }).bands : undefined;
   if (!Array.isArray(bands)) return [];
@@ -624,11 +713,41 @@ function buildScaleBands(configJson: unknown): ScaleBandModel[] {
   bands.forEach((b) => {
     if (!isPlainObject(b)) return;
     const band = b as Record<string, unknown>;
+    const feedback = buildInterpretationFeedback(band.feedback);
     out.push({
       min: typeof band.min === "number" ? String(band.min) : typeof band.min === "string" ? band.min : "",
       max: typeof band.max === "number" ? String(band.max) : typeof band.max === "string" ? band.max : "",
       label: typeof band.label === "string" ? band.label : "",
       level: typeof band.level === "string" ? band.level : "",
+      text: typeof band.text === "string" ? band.text : "",
+      tone: buildLevelTone(band.tone),
+      ...(feedback ? { feedback } : {}),
+    });
+  });
+  return out;
+}
+
+/**
+ * PRD-29: map the outcome list stored in an indicator's `config_json` into editor
+ * models. A codeless row is dropped — the code IS the match, so a row without one
+ * can never fire.
+ */
+function buildOutcomes(configJson: unknown): OutcomeModel[] {
+  const raw = isPlainObject(configJson) ? (configJson as { outcomes?: unknown }).outcomes : undefined;
+  if (!Array.isArray(raw)) return [];
+  const out: OutcomeModel[] = [];
+  raw.forEach((item) => {
+    if (!isPlainObject(item)) return;
+    const o = item as Record<string, unknown>;
+    const code = typeof o.code === "string" ? o.code : "";
+    if (code === "") return;
+    const feedback = buildInterpretationFeedback(o.feedback);
+    out.push({
+      code,
+      label: typeof o.label === "string" ? o.label : "",
+      text: typeof o.text === "string" ? o.text : "",
+      tone: buildLevelTone(o.tone),
+      ...(feedback ? { feedback } : {}),
     });
   });
   return out;
@@ -661,7 +780,13 @@ function buildScalesFromApi(src: ApiTestResponse): ScaleModel[] {
         ? (r.direction as ScaleModel["direction"])
         : "positive",
       bands: buildScaleBands(r.configJson),
-      showToLearner: r.showToLearner === true,
+      ...buildScaleDomain(r.configJson),
+      // PRD-46 §6. NOT part of `buildScaleDomain`: that one insists on a complete PAIR,
+      // because half a domain is not a domain — the display limit is a single optional
+      // number and stands on its own.
+      displayMax: buildScaleDisplayMax(r.configJson),
+      valence: buildScaleValence(r.configJson),
+      learnerVisibility: toLearnerVisibility(r.learnerVisibility),
       scormTarget: SCALE_TARGETS.has(r.scormTarget as string)
         ? (r.scormTarget as ScaleModel["scormTarget"])
         : "none",
@@ -671,7 +796,20 @@ function buildScalesFromApi(src: ApiTestResponse): ScaleModel[] {
   return out.sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
-const MEASUREMENT_SOURCE_TYPES = new Set(["question", "option", "matching_pair", "ranking_position"]);
+/**
+ * Accepted source kinds, mirroring the `question_measurements.source_type` enum in
+ * `shared/schema.ts`. An unlisted kind is silently rewritten to `question` below, so a
+ * type missing here does not fail loudly — it hides the rows in the matrix and, worse,
+ * writes them back under the wrong kind on the next save. Adding a source kind means
+ * adding it HERE too (PRD-44 added `option_allocation`).
+ */
+const MEASUREMENT_SOURCE_TYPES = new Set([
+  "question",
+  "option",
+  "matching_pair",
+  "ranking_position",
+  "option_allocation",
+]);
 
 /**
  * Map the raw `measurements` rows from the API into editor models, resolving each
@@ -710,13 +848,20 @@ function clampCooldown(value: number): number {
   return Math.min(3650, Math.max(1, Math.round(value)));
 }
 
-/** Default (disabled) retake policy — legacy behaviour, no cooldown (PRD-6 FR-02). */
+/** Clamp an attempt-interval value into the schema-valid `[1, 8760]` hours (PRD-31). */
+export function clampIntervalHours(value: number): number {
+  return Math.min(8760, Math.max(1, Math.round(value || 1)));
+}
+
+/** Default (disabled) retake policy — legacy behaviour, no barrier (PRD-6 FR-02, PRD-31 FR-14). */
 export function defaultRetakePolicy(): RetakePolicy {
   return {
     enabled: false,
     cooldownPeriodDays: 30,
+    cooldownByOutcome: false,
     gateMode: "before_internal_start",
     eligibilityPlugin: null,
+    attemptInterval: null,
   };
 }
 
@@ -725,6 +870,31 @@ export function defaultRetakePolicy(): RetakePolicy {
  * Anything that is not a well-formed branch is dropped rather than half-read: a
  * malformed value must not make the block offer a variant that does not exist.
  */
+/**
+ * Вводные блоки экрана итогов и отчёта (`tests.intro_json`).
+ *
+ * Читается защитно, как и прочий jsonb автора: ветвь без текста — это отсутствие блока,
+ * а не пустая карточка, поэтому пустые тексты не поднимаются в модель вовсе.
+ */
+function readIntroFromApi(api: ApiTestResponse): TestIntro {
+  const raw = api.introJson;
+  if (!isPlainObject(raw)) return {};
+  const out: TestIntro = {};
+  for (const side of ["results", "report"] as const) {
+    const branch = (raw as Record<string, unknown>)[side];
+    if (!isPlainObject(branch)) continue;
+    const b = branch as Record<string, unknown>;
+    const text = typeof b.text === "string" ? b.text : "";
+    if (!text.trim()) continue;
+    const format = b.format === "richText" || b.format === "html" ? b.format : "plain";
+    out[side] = { text, format };
+  }
+  // Признак «в отчёте тот же текст» живёт рядом с текстами и читается независимо от них:
+  // включённым он остаётся и тогда, когда собственный текст отчёта пуст, — в этом и смысл.
+  if ((raw as Record<string, unknown>).reportSameAsResults === true) out.reportSameAsResults = true;
+  return out;
+}
+
 function readReportSettingsFromApi(api: ApiTestResponse): ReportSettings {
   const raw = api.reportSettingsJson;
   if (!isPlainObject(raw)) return {};
@@ -733,11 +903,14 @@ function readReportSettingsFromApi(api: ApiTestResponse): ReportSettings {
     const branch = (raw as Record<string, unknown>)[mode];
     if (!isPlainObject(branch)) continue;
     const b = branch as Record<string, unknown>;
-    if (typeof b.variantKey !== "string" || b.variantKey.length === 0) continue;
-    out[mode] = {
-      variantKey: b.variantKey,
-      values: isPlainObject(b.values) ? (b.values as Record<string, unknown>) : {},
-    };
+    const key = typeof b.variantKey === "string" && b.variantKey.length > 0 ? b.variantKey : undefined;
+    const values = isPlainObject(b.values) ? (b.values as Record<string, unknown>) : {};
+    // Ветка БЕЗ ключа варианта — не мусор, а настройки, сохранённые до появления
+    // вариантов отчёта (PRD-35): хосты собирают по ним отчёт, разрешая вариант через
+    // `isDefault`. Отбросить её значило бы показать автору пустую карточку и умолчания
+    // шаблона там, где настройка есть и работает.
+    if (!key && Object.keys(values).length === 0) continue;
+    out[mode] = { ...(key ? { variantKey: key } : {}), values };
   }
   return out;
 }
@@ -771,11 +944,30 @@ function readRetakePolicyFromApi(api: ApiTestResponse): RetakePolicy {
     }
   }
 
+  // PRD-31 barrier B. Read only as a whole: a branch without `enabled: true` is
+  // treated as absent, so a half-written value cannot switch the barrier on.
+  let attemptInterval: RetakePolicy["attemptInterval"] = null;
+  if (isPlainObject(r.attemptInterval)) {
+    const i = r.attemptInterval as Record<string, unknown>;
+    attemptInterval = {
+      enabled: i.enabled === true,
+      hours: clampIntervalHours(typeof i.hours === "number" ? i.hours : 24),
+    };
+  }
+
+  const cooldownByOutcome = r.cooldownByOutcome === true;
+  const cooldownPassedRaw = typeof r.cooldownPeriodDaysPassed === "number" ? r.cooldownPeriodDaysPassed : 30;
+  const cooldownFailedRaw = typeof r.cooldownPeriodDaysFailed === "number" ? r.cooldownPeriodDaysFailed : 30;
+
   return {
     enabled: r.enabled === true,
     cooldownPeriodDays: clampCooldown(cooldownRaw),
+    cooldownByOutcome,
+    cooldownPeriodDaysPassed: clampCooldown(cooldownPassedRaw),
+    cooldownPeriodDaysFailed: clampCooldown(cooldownFailedRaw),
     gateMode: "before_internal_start",
     eligibilityPlugin,
+    attemptInterval,
     ...(typeof r.blockedPageId === "string" ? { blockedPageId: r.blockedPageId } : {}),
   };
 }
@@ -785,6 +977,8 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
     version: 0,
     mode: "standard",
     flowMode: "linear_flat",
+    // PRD-30 FR-16: «перемешивание» — сегодняшнее поведение всех тестов.
+    questionOrder: "random",
     flowSettings: {},
     folderId: args.folderId,
     basic: {
@@ -805,7 +999,14 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
       // PRD-19 (Блок A): новый тест — возврат ВКЛ по умолчанию (FR-01).
       allowReturnToUnanswered: true,
       allowAnswerChange: false,
+      // PRD-43: новый тест — как сегодняшнее двухшаговое поведение (ВКЛ возврата
+      // + ВЫКЛ быстрого перехода).
+      quickAdvance: false,
       showSectionResults: true,
+      // PRD-34 (FR-03): новый тест — защита ВКЛ.
+      copyProtection: true,
+      protectionWatermark: false,
+      protectionHideOnBlur: false,
     },
     passRules: {
       decisionPolicy: "overall_only",
@@ -867,11 +1068,23 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
   // Scales must be mapped before measurements: the latter resolve scaleId→key.
   const scalesModel = buildScalesFromApi(src);
 
+  // PRD-19 (Блок A): загрузка существующего теста. Отсутствие поля (до A3) →
+  // консервативно: возврат ВЫКЛ (как у существующих после миграции). Also
+  // feeds the PRD-43 quickAdvance fallback below (drizzle/0013_prd43_quick_advance_backfill.sql).
+  const resolvedAllowReturnToUnanswered =
+    typeof src.allowReturnToUnanswered === "boolean" ? src.allowReturnToUnanswered : false;
+
   return {
     id: typeof src.id === "string" ? src.id : undefined,
     version: typeof src.version === "number" ? src.version : 1,
     mode,
     flowMode,
+    // PRD-30 FR-16: only the three known values; anything else (including a test
+    // saved before the column existed) is the default «перемешивание».
+    questionOrder:
+      src.questionOrder === "fixed" || src.questionOrder === "shuffle_all"
+        ? src.questionOrder
+        : "random",
     flowSettings,
     folderId: typeof src.folderId === "string" ? src.folderId : null,
     basic: {
@@ -892,14 +1105,24 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
       maxAttempts: typeof src.maxAttempts === "number" ? src.maxAttempts : null,
       showCorrectAnswers:
         typeof src.showCorrectAnswers === "boolean" ? src.showCorrectAnswers : false,
-      // PRD-19 (Блок A): загрузка существующего теста. Отсутствие поля (до A3) → консервативно:
-      // возврат ВЫКЛ (как у существующих после миграции), итоги раздела ВКЛ.
-      allowReturnToUnanswered:
-        typeof src.allowReturnToUnanswered === "boolean" ? src.allowReturnToUnanswered : false,
+      // PRD-19 (Блок A): consolidated in `resolvedAllowReturnToUnanswered` above.
+      allowReturnToUnanswered: resolvedAllowReturnToUnanswered,
       allowAnswerChange:
         typeof src.allowAnswerChange === "boolean" ? src.allowAnswerChange : false,
+      // PRD-43: поля нет в ответе (тест до PRD-43) → то же правило, что и у
+      // backfill-миграции (drizzle/0013_prd43_quick_advance_backfill.sql).
+      quickAdvance:
+        typeof src.quickAdvance === "boolean" ? src.quickAdvance : !resolvedAllowReturnToUnanswered,
+      // PRD-19 (Блок A): итоги раздела ВКЛ по умолчанию.
       showSectionResults:
         typeof src.showSectionResults === "boolean" ? src.showSectionResults : true,
+      // PRD-34 (FR-05): поля нет (тест до PRD-34) → умолчание, то есть защита ВКЛ.
+      copyProtection:
+        typeof src.copyProtection === "boolean" ? src.copyProtection : true,
+      protectionWatermark:
+        typeof src.protectionWatermark === "boolean" ? src.protectionWatermark : false,
+      protectionHideOnBlur:
+        typeof src.protectionHideOnBlur === "boolean" ? src.protectionHideOnBlur : false,
     },
     passRules: {
       decisionPolicy,
@@ -917,6 +1140,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
     measurements: buildMeasurementsFromApi(src, scalesModel),
     retakePolicy: readRetakePolicyFromApi(src),
     report: readReportSettingsFromApi(src),
+    intro: readIntroFromApi(src),
     scoring: {
       defaultQuestionPoints:
         typeof src.defaultQuestionPoints === "number" ? src.defaultQuestionPoints : null,
@@ -953,6 +1177,12 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     status: model.basic.status,
     mode: model.mode,
     flowMode: model.flowMode,
+    // PRD-30 FR-17: «полное перемешивание» живёт только в сплошном режиме — тест,
+    // переведённый в режим с разбивкой по темам, сохраняется как «перемешивание».
+    questionOrder:
+      model.questionOrder && !(model.questionOrder === "shuffle_all" && model.flowMode !== "linear_flat")
+        ? model.questionOrder
+        : "random",
     flowPolicyJson: buildFlowPolicyForPayload(model),
     overallPassRuleJson: model.passRules.overall,
     passDecisionPolicy: model.passRules.decisionPolicy,
@@ -961,7 +1191,11 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     showCorrectAnswers: model.runtime.showCorrectAnswers,
     allowReturnToUnanswered: model.runtime.allowReturnToUnanswered,
     allowAnswerChange: model.runtime.allowAnswerChange,
+    quickAdvance: model.runtime.quickAdvance,
     showSectionResults: model.runtime.showSectionResults,
+    copyProtection: model.runtime.copyProtection,
+    protectionWatermark: model.runtime.protectionWatermark,
+    protectionHideOnBlur: model.runtime.protectionHideOnBlur,
     feedbackJson,
     webhookUrl: emptyToNull(model.basic.webhookUrl),
     telemetryEnabled: model.basic.telemetryEnabled,
@@ -972,6 +1206,12 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     // с `isDefault`, и колонка не заполняется бессмысленным `{}`.
     reportSettingsJson:
       model.report && (model.report.standard || model.report.adaptive) ? model.report : null,
+    // Вводные блоки: пустой набор персистится как `null` — колонка не заполняется
+    // бессмысленным `{}`, а «текст стёрт» и «блока не было» для выдачи одно и то же.
+    introJson:
+      model.intro && (model.intro.results || model.intro.report || model.intro.reportSameAsResults)
+        ? model.intro
+        : null,
     // PRD-15 block D (FR-31): test-wide default price (null = system default).
     // Defensive `?.` — drafts persisted before block D have no scoring slice.
     defaultQuestionPoints: model.scoring?.defaultQuestionPoints ?? null,
@@ -1077,6 +1317,8 @@ export function mapEditorSectionsToPayload(model: TestEditorModel): TestSectionP
       formSetJson: section.formSet ?? null,
       // PRD-15 block D (FR-31): per-section default price.
       defaultPoints: section.defaultPoints ?? null,
+      // PRD-30 FR-18: the topic's override; `null` = «как в тесте».
+      questionOrder: section.questionOrder ?? null,
     };
   });
 }

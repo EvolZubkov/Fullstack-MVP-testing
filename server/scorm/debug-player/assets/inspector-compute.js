@@ -74,10 +74,29 @@
     return t === "single" || t === "scale";
   }
 
+  /**
+   * Measurement-only question: never checked, earns no points, adds nothing to the
+   * possible total — its only result is the contribution it makes to the PRD-5 scales
+   * (PRD-26 FR-08; an allocation is measurement-only by type, PRD-44 FR-09). Mirrors
+   * `isMeasurementOnly` (shared/questions/question-type) for the same reason as
+   * `isOneIndexChoice` above: this file is a standalone script in the host page and
+   * cannot reach the package's `TBQType` global.
+   *
+   * The answer key travels as `correct` in the baked payload and as `correctJson` on
+   * the server; both are accepted so no caller has to reshape its question first.
+   */
+  function isMeasureOnly(q) {
+    if (!q) return false;
+    if (q.type === "allocation") return true;
+    if (q.type !== "scale") return false;
+    var key = (q.correctJson !== undefined && q.correctJson !== null) ? q.correctJson : q.correct;
+    return !key || typeof key.correctIndex !== "number";
+  }
+
   function typeLabel(t) {
     return t === "single" ? "Один ответ" : t === "multiple" ? "Несколько" :
       t === "matching" ? "Соответствие" : t === "ranking" ? "Ранжирование" :
-      t === "scale" ? "Шкала" : (t || "?");
+      t === "scale" ? "Шкала" : t === "allocation" ? "Распределение баллов" : (t || "?");
   }
 
   // Human-readable answer using the package's own option/left/right/items text.
@@ -105,6 +124,15 @@
       var it = d.items || [], order = Array.isArray(ans) ? ans : [];
       return order.map(function (ix, pos) { return (pos + 1) + ". " + (it[ix] != null ? it[ix] : "#" + ix); }).join("   ");
     }
+    // PRD-44: распределение показывается ЦЕЛИКОМ, вместе с нулями — инспектор нужен,
+    // чтобы видеть вектор ответа, а не его непустую часть.
+    if (q.type === "allocation") {
+      var op = d.options || [], assigned = (ans && typeof ans === "object") ? ans : {};
+      if (!op.length) return "(нет ответа)";
+      return op.map(function (label, i) {
+        return (label != null ? label : "#" + i) + ": " + Number(assigned[i] || 0);
+      }).join("; ");
+    }
     return String(ans);
   }
 
@@ -128,6 +156,11 @@
       var ip = String(m.sourceKey).split(":"), item = Number(ip[0]), pos = Number(ip[1]);
       return Array.isArray(answer) && answer[pos] === item;
     }
+    if (m.sourceType === "option_allocation") {
+      if (typeof answer !== "object" || answer === null || Array.isArray(answer)) return false;
+      var assignedPts = answer[String(Number(m.sourceKey))];
+      return typeof assignedPts === "number" && isFinite(assignedPts) && assignedPts !== 0;
+    }
     return false;
   }
 
@@ -135,7 +168,13 @@
     var out = [];
     (pkg.measurements || []).forEach(function (m) {
       if (m.questionId !== q.id) return;
-      if (isActiveMeasure(m, ans, q.type)) out.push({ scaleKey: m.scaleKey, delta: m.value * m.weight });
+      if (!isActiveMeasure(m, ans, q.type)) return;
+      // PRD-44: вклад распределения равен ПРИСВОЕННОМУ баллу, а не фиксированной
+      // величине, — иначе инспектор показывал бы не то, что посчитал движок.
+      var delta = m.sourceType === "option_allocation"
+        ? (ans[String(Number(m.sourceKey))] || 0) * m.value * m.weight
+        : m.value * m.weight;
+      out.push({ scaleKey: m.scaleKey, delta: delta });
     });
     return out;
   }
@@ -261,16 +300,31 @@
       var ratio = pr ? pr.ratio : 0;
       var answered = !(ans == null || (Array.isArray(ans) && ans.length === 0) ||
         (q.type === "matching" && (!ans || !Object.keys(ans).length)));
-      var verdict = !answered ? "none" : ratio >= 1 ? "correct" : ratio > 0 ? "partial" : "wrong";
+      // PRD-44 FR-31: распределение отвечено только при полной сумме — частичное
+      // здесь должно читаться как «не отвечен», как и в самом прохождении.
+      if (q.type === "allocation") {
+        var spec = q.data || {};
+        var total = 0;
+        Object.keys(ans || {}).forEach(function (k) { total += Number(ans[k]) || 0; });
+        answered = Number(spec.budget) > 0 && total === Number(spec.budget);
+      }
+      // У измерительного вопроса эталона нет, поэтому «неверно» и «0 / 1» здесь читались
+      // бы как ошибка ученика и расходились бы с агрегатом: он такой вопрос не считает
+      // ни заработанным, ни возможным баллом (PRD-26 FR-08). Единственный его результат —
+      // вклад в шкалы, он и остаётся в строке.
+      var measure = isMeasureOnly(q);
+      var verdict = measure ? "measure"
+        : !answered ? "none" : ratio >= 1 ? "correct" : ratio > 0 ? "partial" : "wrong";
       var status = (liveStatuses && liveStatuses[q.id]) ? liveStatuses[q.id] : (answered ? "answered" : "unanswered");
-      var points = q.points || 1;
-      var earned = pr ? points * pr.ratio : 0;
+      var points = measure ? 0 : (q.points || 1);
+      var earned = (measure || !pr) ? 0 : points * pr.ratio;
       return {
         idx: i + 1, topicName: row.topicName || "", prompt: q.prompt || "", type: q.type, typeLabel: typeLabel(q.type),
         answerStr: humanAnswer(q, ans), answered: answered, status: status, verdict: verdict,
-        ratio: Math.round(ratio * 100) / 100, ratioPct: Math.round(ratio * 100),
-        score: pr ? pr.score : null, sMax: pr ? pr.sMax : null,
-        priceNote: priceNote(pr),
+        measurement: measure,
+        ratio: measure ? 0 : Math.round(ratio * 100) / 100, ratioPct: measure ? 0 : Math.round(ratio * 100),
+        score: (measure || !pr) ? null : pr.score, sMax: (measure || !pr) ? null : pr.sMax,
+        priceNote: measure ? "цена: не начисляется — измерительный вопрос" : priceNote(pr),
         earned: Math.round(earned * 100) / 100, points: points,
         difficulty: (showDiff && q.difficulty != null) ? q.difficulty : null,
         levelName: row.levelName || null,
@@ -875,11 +929,46 @@
     // start past ~44px or the badge touches the text; 52px leaves a clear gutter.
     el.style.paddingLeft = "52px";
   }
+  // The question CURRENTLY on screen. Which state holds it depends on the delivery
+  // mode, and the overlay must follow the render, not a parallel index:
+  //  - adaptive → the level engine drives the screen from
+  //    `adaptiveState.currentQuestionId` (getCurrentAdaptiveQuestion). The flat draw is
+  //    a DIFFERENT set (empty in legacy linear_flat adaptive, an unrelated variant in the
+  //    sectional modes), so `flatQuestions[currentIndex]` is another question entirely —
+  //    reading it painted a foreign answer key: a single-choice key (one ✓) on a
+  //    multiple-choice screen and a multi-key (several ✓) on a single-choice one.
+  //  - everything else → the flat draw at the current position, as the standard render does.
+  // Returns null when the on-screen question cannot be resolved: no overlay is far
+  // better than a confident overlay of the wrong answer key.
+  function currentScreenQuestion(iframeWin, st) {
+    var ad = st.adaptiveState;
+    if (ad && !ad.isFinished) {
+      // Preferred: the package's OWN resolver — the same call the adaptive render makes,
+      // so the overlay cannot drift from what is rendered.
+      try {
+        if (typeof iframeWin.getCurrentAdaptiveQuestion === "function") {
+          var qd = iframeWin.getCurrentAdaptiveQuestion();
+          if (qd && qd.question) return qd.question;
+        }
+      } catch (e) {}
+      // Fallback: resolve the pinned id against the package's adaptive banks.
+      var qid = ad.currentQuestionId;
+      if (!qid) return null;
+      var topics = (iframeWin.TEST_DATA && iframeWin.TEST_DATA.adaptiveTopics) || [];
+      for (var t = 0; t < topics.length; t++) {
+        var bank = topics[t].questions || [];
+        for (var b = 0; b < bank.length; b++) if (bank[b].id === qid) return bank[b];
+      }
+      return null;
+    }
+    var curFq = (st.flatQuestions || [])[st.currentIndex];
+    return (curFq && curFq.question) || null;
+  }
   function applyReference(iframeWin) {
     var doc = iframeWin && iframeWin.document;
     var st = null;
     try { st = iframeWin.state; } catch (e) {}
-    if (!doc || !st || !st.flatQuestions) return;
+    if (!doc || !st) return;
     // Never repaint mid-drag — see dragInFlight. Leaving the overlay untouched keeps
     // the captured chip's subtree stable so the gesture can complete.
     if (dragInFlight(doc)) return;
@@ -888,10 +977,8 @@
     // The debug player shows ONE question at a time. The revised «Стандартный»
     // markup (ou-radio-card / ou-rank / ou-match) no longer carries the qid on the
     // option, so the reference targets the CURRENT question from the live state.
-    var curFq = st.flatQuestions[st.currentIndex];
-    var curQ = curFq && curFq.question;
+    var curQ = currentScreenQuestion(iframeWin, st);
     if (!curQ) return;
-    var data = curQ.data || {};
     var c = curQ.correct || {};
 
     // single / multiple — ✓ on the correct option(s). Options are `.ou-radio-card`
@@ -924,47 +1011,48 @@
       }
     }
 
-    // ranking — the correct 1-based position of each item. Rows carry the DISPLAY
-    // position (`data-drag`), not the item index, so rows are matched to items by
-    // their rendered title text.
+    // ranking — the correct 1-based position of each item. A row carries BOTH its
+    // display position (`data-drag`, which the drag reorders) and the index of the
+    // item in it (`data-item`); the answer key is in item indices, so the row is
+    // keyed by `data-item`. Not by text — see the matching note below: the rendered
+    // text has been through markdown + typography and no longer equals the raw
+    // TEST_DATA string, so text matching left ordinary Russian wording unmarked.
     if (curQ.type === "ranking") {
-      var items = Array.isArray(data.items) ? data.items : [];
       var co = Array.isArray(c.correctOrder) ? c.correctOrder : [];
-      var textPos = {};
-      co.forEach(function (itemIdx, pos) { textPos[String(items[itemIdx])] = pos + 1; });
-      var rows = doc.querySelectorAll(".ou-rank__item");
+      var itemPos = {};
+      co.forEach(function (itemIdx, pos) { itemPos[String(itemIdx)] = pos + 1; });
+      var rows = doc.querySelectorAll(".ou-rank__item[data-item]");
       for (var r = 0; r < rows.length; r++) {
-        var t = rows[r].querySelector(".ou-rank__title");
-        var p = t ? textPos[t.textContent] : undefined;
+        var p = itemPos[rows[r].getAttribute("data-item")];
         if (p) { rows[r].style.position = "relative"; rows[r].appendChild(tbRefBadge(doc, String(p), "num")); }
       }
     }
 
     // matching — paired letters A/B/C on the fixed prompt (right item) and the
-    // draggable chip (left item), matched by text since the DOM keys chips by the
-    // left INDEX only. One letter per correct pair.
+    // draggable chip (left item). Both sides are found by their INDEX, which the
+    // render puts straight into the markup: `data-drop="r<rightIdx>"` on the fixed
+    // prompt, `data-drag="<leftIdx>"` on the chip. One letter per correct pair.
+    //
+    // NEVER by text: the render pipes every answer through renderInlineMarkdown
+    // (markdown + the Russian typography pass), so what the DOM carries is not the
+    // raw TEST_DATA string — «в сеть» comes back with U+00A0, quotes as guillemets,
+    // a spaced hyphen as an em dash, a newline as <br>. Comparing against the raw
+    // string therefore silently skipped exactly the long prompts (the wording that
+    // has short prepositions in it) while short latin terms still matched: the
+    // author saw letters on the chips and none on the prompts.
     if (curQ.type === "matching") {
-      var left = Array.isArray(data.left) ? data.left : [];
-      var right = Array.isArray(data.right) ? data.right : [];
       var pairs = Array.isArray(c.pairs) ? c.pairs : [];
-      var mrows = doc.querySelectorAll(".ou-match__row");
-      var chips = doc.querySelectorAll(".ou-match__card--drag:not(.ou-match__card--empty)");
       pairs.forEach(function (pair, idx) {
         var letter = String.fromCharCode(65 + idx);
-        var rightText = String(right[pair.right]);
-        var leftText = String(left[pair.left]);
-        for (var mr = 0; mr < mrows.length; mr++) {
-          var fixedT = mrows[mr].querySelector(".ou-match__card--fixed .ou-match__card-title");
-          if (fixedT && fixedT.textContent === rightText) {
-            var fc = mrows[mr].querySelector(".ou-match__card--fixed");
-            reserveKeyGutter(fc); fc.appendChild(tbRefBadge(doc, letter, "key"));
-          }
+        var ri = Number(pair && pair.right);
+        var li = Number(pair && pair.left);
+        if (isFinite(ri)) {
+          var fc = doc.querySelector('.ou-match__card--fixed[data-drop="r' + ri + '"]');
+          if (fc) { reserveKeyGutter(fc); fc.appendChild(tbRefBadge(doc, letter, "key")); }
         }
-        for (var ci = 0; ci < chips.length; ci++) {
-          var ct = chips[ci].querySelector(".ou-match__card-title");
-          if (ct && ct.textContent === leftText) {
-            reserveKeyGutter(chips[ci]); chips[ci].appendChild(tbRefBadge(doc, letter, "key"));
-          }
+        if (isFinite(li)) {
+          var chip = doc.querySelector('.ou-match__card--drag[data-drag="' + li + '"]');
+          if (chip) { reserveKeyGutter(chip); chip.appendChild(tbRefBadge(doc, letter, "key")); }
         }
       });
     }
@@ -977,7 +1065,9 @@
     var doc = iframeWin && iframeWin.document;
     if (!doc) return;
     var found = [];
-    var tagged = doc.querySelectorAll('[data-action="test-finish"], [data-action="router-finish"]');
+    var tagged = doc.querySelectorAll(
+      '[data-action="test-finish"], [data-action="router-finish"], [data-action="results-finish"], [data-action="finish"]'
+    );
     for (var i = 0; i < tagged.length; i++) found.push(tagged[i]);
     var all = doc.getElementsByTagName("button");
     for (var j = 0; j < all.length; j++) {

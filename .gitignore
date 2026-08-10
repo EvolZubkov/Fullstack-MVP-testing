@@ -56,3 +56,6 @@ templates/certification/certification-*.zip
 # of one-off names below had to grow with every test run.
 templates/*.zip
 .claude/settings.json
+.claude/worktrees/
+docs/references/workbook_Выгорание_Маслач (1).xlsx
+.superpowers/

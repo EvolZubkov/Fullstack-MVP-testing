@@ -20,6 +20,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SettingsSection } from "../basic-settings-section";
 import type { TestEditorModel } from "../../test-editor.types";
 import { defaultRetakePolicy } from "../../test-editor.mappers";
+import { buildFieldErrorIndex } from "../../field-errors";
 
 /**
  * Секция ходит в API за каталогом видов отчёта (PRD-27), поэтому провайдер запросов
@@ -53,7 +54,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       webhookUrl: "",
       telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, quickAdvance: false, showSectionResults: true, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
     passRules: {
       decisionPolicy: "overall_only",
       overall: { type: "percent", value: 70 },
@@ -130,6 +131,14 @@ describe("<SettingsSection /> — side rail", () => {
 // ─── Basic pane bindings ──────────────────────────────────────────────────────
 
 describe("<SettingsSection /> — Основное pane", () => {
+  it("не показывает карточку отчёта: она переехала на «Оформление» (PRD-47 §6.2)", () => {
+    // Отчёт — часть шаблона, и его поля объявляет манифест ровно как параметры
+    // оформления. В общих настройках теста им больше не место.
+    render(<SettingsSection model={baseModel()} updateModel={vi.fn()} />);
+
+    expect(screen.queryByTestId("report-settings-card")).toBeNull();
+  });
+
   it("updates basic.title on input change", () => {
     const updateModel = vi.fn();
     const model = baseModel();
@@ -296,7 +305,7 @@ describe("<SettingsSection /> — Ограничения pane", () => {
 
   it("sets timeLimitMinutes back to null when input is cleared", () => {
     const updateModel = vi.fn();
-    const model = baseModel({ runtime: { timeLimitMinutes: 30, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true } });
+    const model = baseModel({ runtime: { timeLimitMinutes: 30, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false } });
     render(<SettingsSection model={model} updateModel={updateModel} />);
     fireEvent.click(screen.getByTestId("settings-rail-limits"));
     fireEvent.change(screen.getByTestId("settings-time-limit-input"), {
@@ -578,6 +587,35 @@ describe("<SettingsSection /> — Правила прохождения pane", (
     expect(valInput.value).toBe("80");
   });
 
+  it("FR-20c: highlights and anchors a custom absolute threshold that exceeds the topic's max points", () => {
+    const model = baseModel({
+      sections: [buildSection({ topicId: "top-1", topicName: "Topic 1" })],
+      passRules: {
+        decisionPolicy: "overall_only",
+        overall: { type: "percent", value: 70 },
+        byTopic: {
+          "top-1": { source: "custom", type: "absolute", value: 100 },
+        },
+      },
+    });
+    const fieldErrors = buildFieldErrorIndex([
+      {
+        field: "passRules.byTopic[top-1].value",
+        code: "range",
+        message: "Topic absolute pass threshold (100) cannot exceed topic max points (10).",
+        severity: "error",
+      },
+    ]);
+    render(<SettingsSection model={model} updateModel={() => {}} fieldErrors={fieldErrors} />);
+    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+    const valInput = screen.getByTestId("pass-topic-custom-value-top-1") as HTMLInputElement;
+    expect(valInput).toHaveAttribute("aria-invalid", "true");
+    // FR-20c: the drawer's «Перейти к ошибкам» anchors on `[data-field="<exact field path>"]`.
+    expect(
+      valInput.closest('[data-field="passRules.byTopic[top-1].value"]'),
+    ).not.toBeNull();
+  });
+
   it("switching source to custom builds default percent/70 rule", () => {
     const updateModel = vi.fn();
     const model = baseModel({
@@ -588,6 +626,34 @@ describe("<SettingsSection /> — Правила прохождения pane", (
     selectOption("pass-topic-source-top-1", "Индивидуальное правило");
     const rule = runUpdater(updateModel, model).passRules.byTopic["top-1"];
     expect(rule).toEqual({ source: "custom", type: "percent", value: 70 });
+  });
+
+  // ─── PRD-43: quick-advance toggle ─────────────────────────────────────────
+
+  it("quickAdvance is independent of allowReturnToUnanswered", () => {
+    const updateModel = vi.fn();
+    const model = baseModel({
+      runtime: { ...baseModel().runtime, allowReturnToUnanswered: false, quickAdvance: false },
+    });
+    render(<SettingsSection model={model} updateModel={updateModel} />);
+    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+    const toggle = screen.getByTestId("settings-quick-advance-checkbox");
+    expect(toggle).not.toBeDisabled();
+    fireEvent.click(toggle);
+    const updated = runUpdater(updateModel, model);
+    expect(updated.runtime.quickAdvance).toBe(true);
+    // allowReturnToUnanswered must be untouched by toggling quickAdvance.
+    expect(updated.runtime.allowReturnToUnanswered).toBe(false);
+  });
+
+  it("quickAdvance is disabled when showCorrectAnswers is on", () => {
+    const model = baseModel({
+      runtime: { ...baseModel().runtime, showCorrectAnswers: true, quickAdvance: true },
+    });
+    render(<SettingsSection model={model} updateModel={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
+    const toggle = screen.getByTestId("settings-quick-advance-checkbox");
+    expect(toggle).toBeDisabled();
   });
 });
 
@@ -850,6 +916,7 @@ describe("<SettingsSection /> — Повторное прохождение pane
     retakePolicy: {
       enabled: true,
       cooldownPeriodDays: 30,
+      cooldownByOutcome: false,
       gateMode: "before_internal_start" as const,
       eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" as const },
       ...over,
@@ -882,11 +949,46 @@ describe("<SettingsSection /> — Повторное прохождение pane
     expect(screen.queryByTestId("settings-retake-besteffort-warning")).toBeNull();
   });
 
-  it("shows the best-effort warning for the suspend_data plugin", () => {
+  it("shows the outcome-split switch off by default, only the single field visible", () => {
+    renderRetake(enabledPolicy());
+    expect(screen.getByTestId("settings-retake-outcome-switch")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-retake-cooldown-input")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-retake-cooldown-passed-input")).toBeNull();
+    expect(screen.queryByTestId("settings-retake-cooldown-failed-input")).toBeNull();
+  });
+
+  it("turning the outcome-split switch on swaps the single field for two", () => {
+    const updateModel = vi.fn();
+    const model = enabledPolicy();
+    renderRetake(model, updateModel);
+    fireEvent.click(screen.getByTestId("settings-retake-outcome-switch"));
+    const next = runUpdater(updateModel, model);
+    expect(next.retakePolicy.cooldownByOutcome).toBe(true);
+  });
+
+  it("renders both split fields once the switch is on, seeded from defaults", () => {
     renderRetake(
-      enabledPolicy({ eligibilityPlugin: { key: "suspend_data_cooldown", failPolicy: "failOpen" } }),
+      enabledPolicy({ cooldownByOutcome: true, cooldownPeriodDaysPassed: 90, cooldownPeriodDaysFailed: 7 }),
     );
-    expect(screen.getByTestId("settings-retake-besteffort-warning")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-retake-cooldown-input")).toBeNull();
+    const passedInput = screen.getByTestId("settings-retake-cooldown-passed-input") as HTMLInputElement;
+    const failedInput = screen.getByTestId("settings-retake-cooldown-failed-input") as HTMLInputElement;
+    expect(passedInput.value).toBe("90");
+    expect(failedInput.value).toBe("7");
+  });
+
+  it("edits the passed/failed periods independently and clamps into [1, 3650]", () => {
+    const updateModel = vi.fn();
+    const model = enabledPolicy({
+      cooldownByOutcome: true,
+      cooldownPeriodDaysPassed: 90,
+      cooldownPeriodDaysFailed: 7,
+    });
+    renderRetake(model, updateModel);
+    fireEvent.change(screen.getByTestId("settings-retake-cooldown-passed-input"), { target: { value: "5000" } });
+    expect(runUpdater(updateModel, model).retakePolicy.cooldownPeriodDaysPassed).toBe(3650);
+    fireEvent.change(screen.getByTestId("settings-retake-cooldown-failed-input"), { target: { value: "0" } });
+    expect(runUpdater(updateModel, model, 1).retakePolicy.cooldownPeriodDaysFailed).toBe(1);
   });
 
   it("toggles failPolicy to failClosed via the segmented control", () => {
@@ -896,6 +998,77 @@ describe("<SettingsSection /> — Повторное прохождение pane
     fireEvent.click(screen.getByRole("button", { name: "Заблокировать" }));
     const next = runUpdater(updateModel, model);
     expect(next.retakePolicy.eligibilityPlugin?.failPolicy).toBe("failClosed");
+  });
+
+  // ─── PRD-31: интервал между попытками ────────────────────────────────────
+  //
+  // Второй барьер НЕЗАВИСИМ от кулдауна (FR-03): он должен настраиваться и при
+  // выключенном «Ограничить повторное прохождение» — это и есть новый случай,
+  // ради которого `cooldownPeriodDays` перестал быть обязательным.
+
+  it("shows the interval switch even when the cooldown is off", () => {
+    renderRetake(baseModel());
+    expect(screen.getByTestId("settings-attempt-interval-switch")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-attempt-interval-input")).toBeNull();
+  });
+
+  it("enabling the interval seeds 24 hours and reveals the field", () => {
+    const updateModel = vi.fn();
+    const model = baseModel();
+    renderRetake(model, updateModel);
+    fireEvent.click(screen.getByTestId("settings-attempt-interval-switch"));
+    const next = runUpdater(updateModel, model);
+    expect(next.retakePolicy.attemptInterval).toEqual({ enabled: true, hours: 24 });
+    // Включение интервала НЕ включает кулдаун: барьеры независимы.
+    expect(next.retakePolicy.enabled).toBe(false);
+  });
+
+  it("renders the hours field when the interval is on", () => {
+    renderRetake({
+      ...baseModel(),
+      retakePolicy: {
+        ...baseModel().retakePolicy,
+        attemptInterval: { enabled: true, hours: 12 },
+      },
+    });
+    const input = screen.getByTestId("settings-attempt-interval-input") as HTMLInputElement;
+    expect(input).toBeInTheDocument();
+    expect(input.value).toBe("12");
+  });
+
+  it("clamps the interval into [1, 8760]", () => {
+    const updateModel = vi.fn();
+    const model = {
+      ...baseModel(),
+      retakePolicy: {
+        ...baseModel().retakePolicy,
+        attemptInterval: { enabled: true, hours: 24 },
+      },
+    };
+    renderRetake(model, updateModel);
+    const input = screen.getByTestId("settings-attempt-interval-input");
+    fireEvent.change(input, { target: { value: "9000" } });
+    expect(runUpdater(updateModel, model).retakePolicy.attemptInterval?.hours).toBe(8760);
+    // `runUpdater` reads the FIRST recorded call unless told otherwise, so the
+    // second change has to be addressed by index — otherwise this would silently
+    // re-assert the previous one.
+    fireEvent.change(input, { target: { value: "0" } });
+    expect(runUpdater(updateModel, model, 1).retakePolicy.attemptInterval?.hours).toBe(1);
+  });
+
+  it("turning the interval off keeps the hours value for a later re-enable", () => {
+    const updateModel = vi.fn();
+    const model = {
+      ...baseModel(),
+      retakePolicy: {
+        ...baseModel().retakePolicy,
+        attemptInterval: { enabled: true, hours: 48 },
+      },
+    };
+    renderRetake(model, updateModel);
+    fireEvent.click(screen.getByTestId("settings-attempt-interval-switch"));
+    const next = runUpdater(updateModel, model);
+    expect(next.retakePolicy.attemptInterval).toEqual({ enabled: false, hours: 48 });
   });
 });
 

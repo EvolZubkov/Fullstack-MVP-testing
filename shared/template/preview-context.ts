@@ -23,12 +23,14 @@ import {
   buildSectionResultContext,
   buildSectionIntroContext,
   type ResultInput,
+  type MeasuresInput,
 } from "./result-context";
 import { buildResultsNav } from "./results-nav";
 import { buildTransitionContext } from "./transition-context";
 import { buildReviewContext } from "./review-context";
-import { renderSingleChoice, renderMultiple, renderRanking, renderMatching, renderScale } from "./question-interaction";
+import { renderSingleChoice, renderMultiple, renderRanking, renderMatching, renderScale, renderAllocation } from "./question-interaction";
 import { renderInlineMarkdown } from "../text/markdown";
+import { renderQuestionMedia } from "./question-media";
 import {
   buildSequencePlacements,
   buildPageContext,
@@ -78,6 +80,10 @@ export interface PreviewQuestion {
   id: string;
   type: string;
   prompt: string;
+  /** PRD-44: бюджет распределения и домен варианта (только для типа `allocation`). */
+  budget?: number;
+  minPerOption?: number;
+  maxPerOption?: number;
   options?: Array<{ id: string; text: string; correct?: boolean }>;
   pairs?: Array<{ id: string; left: string; right: string }>;
   order?: string[];
@@ -113,6 +119,15 @@ export interface PreviewDemoDataset {
     result?: Record<string, unknown>;
     sectionResult?: Record<string, unknown>;
     progress?: Record<string, unknown>;
+    /**
+     * PRD-47 §5.4: демо-измерения — блок шкал, показателей и диаграмма профиля.
+     *
+     * Живут ЗДЕСЬ, а не отдельным файлом отчёта: предпросмотр страницы итогов и
+     * предпросмотр отчёта обязаны показывать одно и то же, иначе автор сверяет два
+     * разных вымысла. Отсутствие ключа сохраняет прежний вид для шаблонов, чей
+     * демо-набор измерений не объявил.
+     */
+    measures?: MeasuresInput;
   };
 }
 
@@ -366,6 +381,21 @@ function buildInteraction(q: PreviewQuestion): string {
       // PRD-26: nothing is picked in the preview either, so the scale shows its
       // graduations with no fill — the administrator sees the control, not an answer.
       return renderScale({ type: "scale", dataJson: { options: texts } }, undefined);
+    case "allocation":
+      // PRD-44 FR-55: ничего не распределено — администратор видит сам интерактив и
+      // счётчик остатка, а не чужой ответ.
+      return renderAllocation(
+        {
+          type: "allocation",
+          dataJson: {
+            options: texts,
+            budget: q.budget ?? 7,
+            minPerOption: q.minPerOption ?? 0,
+            maxPerOption: q.maxPerOption ?? q.budget ?? 7,
+          },
+        },
+        {},
+      );
     case "matching": {
       const pairs = q.pairs ?? [];
       return renderMatching(
@@ -553,7 +583,12 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
             { passed: true, topicResults: (c.topics ?? []).map((t) => ({ topicName: t.title, achievedLevelIndex: 0, achievedLevelName: "Базовый" })) },
             c.title,
           )
-        : buildResultContext(resultInputFromRuntime(dataset), c.title);
+        : buildResultContext(resultInputFromRuntime(dataset), c.title, {
+            // PRD-47 §5.4: тот же демо-набор, из которого измерения получает отчёт.
+            // Отсутствие ключа сохраняет прежний вид для шаблонов, чей демо-набор
+            // измерений не объявил, — экран тогда рисуется как контрольный тест.
+            ...(dataset.runtime?.measures ? { measures: dataset.runtime.measures } : {}),
+          });
     // Both runtime hosts fill `result.nav`, so a preview WITHOUT it falls into the
     // layout's legacy single-button branch — a footer neither host renders any more.
     // Every flag is on so the preview proves the layout draws the whole row: without
@@ -577,7 +612,7 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
           // the SAME author-text pipeline as the two runtime hosts — otherwise the
           // author would approve a screen the players do not produce.
           "question-text": renderInlineMarkdown(String(q.prompt ?? "")),
-          "question-media": "",
+          "question-media": renderQuestionMedia(q as { mediaUrl?: string | null; mediaType?: string | null }),
           "question-interaction": buildInteraction(q),
         }
       : { "question-text": "", "question-media": "", "question-interaction": "" };

@@ -21,7 +21,7 @@
  */
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Layers, Plus, Trash2, X } from "lucide-react";
+import { Layers, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import type { DrawBlueprint, FormSet, Topic } from "@shared/schema";
 import { normalizeTag, tagKey, TAG_MAX_LENGTH } from "@shared/tags";
 import {
@@ -37,6 +37,7 @@ import {
   Switch,
   Tag,
 } from "@universityrt/ui-kit";
+import { effectiveSectionOrder, type TestQuestionOrder } from "@shared/draw/assemble-delivery";
 import { FeedbackEditorModal } from "./feedback-editor-modal";
 import { VariantsEditor } from "./variants-editor";
 import { FeedbackPreview as SharedFeedbackPreview } from "./feedback-preview";
@@ -72,6 +73,54 @@ async function fetchTopicsWithCount(): Promise<TopicWithQuestionCount[]> {
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
+
+/**
+ * PRD-30 (эскиз approved/prd30-test-level-order.html): подписи значений порядка.
+ * Одни и те же во всех режимах прохождения — уточнение «внутри темы» относится к
+ * состоянию, а не к значению, поэтому живёт в хвосте строки, а не в списке.
+ */
+const TEST_ORDER_OPTIONS: { value: TestQuestionOrder; label: string }[] = [
+  { value: "fixed", label: "Фиксированный порядок" },
+  { value: "random", label: "Перемешивание" },
+  { value: "shuffle_all", label: "Полное перемешивание" },
+];
+
+/** Хвост строки теста: что именно значение делает в текущем режиме. */
+const TEST_ORDER_HINTS: Record<TestQuestionOrder, (flatFlow: boolean) => string> = {
+  fixed: () => "темы идут в порядке списка, вопросы — по индексу, заданному в теме",
+  random: (flatFlow) =>
+    flatFlow
+      ? "вопросы перемешиваются внутри темы, темы идут в порядке списка"
+      : "вопросы перемешиваются внутри темы",
+  shuffle_all: () => "вопросы всех тем идут одним перемешанным потоком",
+};
+
+/** Значение «как в тесте» у темы — в модели это `null` (FR-18). */
+const INHERIT = "inherit";
+
+const TOPIC_ORDER_OPTIONS = [
+  { value: INHERIT, label: "Как в тесте" },
+  { value: "fixed", label: "Фиксированный порядок" },
+  { value: "random", label: "Перемешивание" },
+];
+
+/**
+ * Хвост строки темы. При наследовании он обязателен: «Как в тесте» само по себе
+ * не говорит, ЧТО именно тема унаследовала.
+ */
+function questionOrderHint(
+  effective: "random" | "fixed",
+  inherited: boolean,
+  variantsOn: boolean,
+  testOrder: TestQuestionOrder,
+): string {
+  if (effective === "fixed") {
+    return variantsOn ? "в порядке списка варианта" : "по индексу, заданному в теме";
+  }
+  // FR-19: в общем потоке вопросы такой темы уходят к остальным поштучно.
+  if (inherited && testOrder === "shuffle_all") return "вопросы темы уходят в общий поток";
+  return "вопросы темы перемешиваются при каждой попытке";
+}
 
 export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: CompositionSectionProps) {
   const { data: allTopics = [], isSuccess: topicsLoaded } = useQuery<TopicWithQuestionCount[]>({
@@ -145,6 +194,10 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
     setPickerOpen(false);
   };
 
+  // PRD-30 FR-16: absent = «перемешивание», today's behaviour of every test.
+  const testOrder: TestQuestionOrder = model.questionOrder ?? "random";
+  const flatFlow = model.flowMode === "linear_flat";
+
   return (
     <>
       {model.mode === "adaptive" && (
@@ -156,6 +209,24 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
         />
       )}
       <div className="tb-section-label">Темы и выборка вопросов</div>
+
+      {/* PRD-30 FR-16/FR-17 (эскиз approved/prd30-test-level-order.html): the
+          test-wide rule stands ABOVE the topic list — first the common rule,
+          then the topics that inherit it. «Полное перемешивание» is offered only
+          in the flat flow: the sectional flows carry the section screens on the
+          topic boundary, so there is nothing to mix across. */}
+      <div className="tb-test-order-row">
+        <span className="tb-test-order-row__label">Порядок выдачи вопросов</span>
+        <Select
+          size="s"
+          value={testOrder}
+          onChange={(value) => updateModel((m) => ({ ...m, questionOrder: value }))}
+          options={flatFlow ? TEST_ORDER_OPTIONS : TEST_ORDER_OPTIONS.slice(0, 2)}
+          aria-label="Порядок выдачи вопросов в тесте"
+          data-testid="test-question-order"
+        />
+        <span className="tb-test-order-row__hint">{TEST_ORDER_HINTS[testOrder](flatFlow)}</span>
+      </div>
 
       {model.sections.length === 0 && (
         <EmptyState
@@ -189,6 +260,8 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
               ...(drawAll ? { drawCount: Math.max(section.maxQuestions, 1) } : {}),
             })
           }
+          onChangeQuestionOrder={(order) => updateSection(section.topicId, { questionOrder: order })}
+          testOrder={testOrder}
           onToggleRequired={(required) =>
             updateSection(section.topicId, { required })
           }
@@ -247,6 +320,10 @@ function TopicRow(props: {
   onChangeDrawCount: (n: number) => void;
   /** Toggle the manual "draw the whole topic" flag. */
   onToggleDrawAll: (drawAll: boolean) => void;
+  /** PRD-30 FR-18: set the topic's override (`null` = «как в тесте»). */
+  onChangeQuestionOrder: (order: "random" | "fixed" | null) => void;
+  /** PRD-30 FR-16: the test-wide order this topic inherits when it has none. */
+  testOrder: TestQuestionOrder;
   onToggleRequired: (required: boolean) => void;
   /** Replace this section's draw blueprint (`null` = uniform draw). */
   onChangeBlueprint: (bp: DrawBlueprint | null) => void;
@@ -288,6 +365,9 @@ function TopicRow(props: {
       : undefined;
   // The draw-count error only applies to an editable partial whole-topic draw.
   const drawCountError = !partialDrawLocked ? props.drawCountError : undefined;
+  // PRD-30 FR-18: the topic's value is an OVERRIDE; null = «как в тесте», and
+  // the order it then delivers in comes from the test.
+  const effectiveOrder = effectiveSectionOrder(props.testOrder, section.questionOrder);
 
   return (
     <>
@@ -365,6 +445,42 @@ function TopicRow(props: {
               {drawCountError}
             </p>
           )}
+
+          {/* PRD-30 FR-02/FR-18 (эскиз approved/prd30-test-level-order.html): the
+              delivery-order control sits right under «Вопросов в тест», so the
+              three delivery parameters read as one row — how many, in what
+              order, in what slices. Three positions, so a Select, not a switch:
+              a topic may also say «как в тесте», which is its default. */}
+          <div className="tb-question-order-row">
+            <span className="tb-question-order-row__lbl">Порядок вопросов</span>
+            <Select
+              size="s"
+              value={section.questionOrder ?? INHERIT}
+              onChange={(value) =>
+                props.onChangeQuestionOrder(value === INHERIT ? null : (value as "random" | "fixed"))
+              }
+              options={TOPIC_ORDER_OPTIONS}
+              aria-label={`Порядок вопросов: ${section.topicName}`}
+              data-testid={`topic-question-order-${section.topicId}`}
+            />
+            {/* FR-18: shown ONLY on an override — its presence is also what marks
+                the topic as overriding, so the row needs no «изменено» badge.
+                Same control as «Оформление» uses to drop a colour override. */}
+            {section.questionOrder != null && (
+              <IconButton
+                icon={<RotateCcw width={14} height={14} aria-hidden="true" />}
+                aria-label={`Вернуть порядок как в тесте: ${section.topicName}`}
+                title="Как в тесте"
+                variant="ghost"
+                size="s"
+                onClick={() => props.onChangeQuestionOrder(null)}
+                data-testid={`topic-question-order-reset-${section.topicId}`}
+              />
+            )}
+            <span className="tb-question-order-row__hint">
+              {questionOrderHint(effectiveOrder, section.questionOrder == null, variantsOn, props.testOrder)}
+            </span>
+          </div>
 
           <QuotaEditor
             topicId={section.topicId}
@@ -671,7 +787,7 @@ function FeedbackPreview({
   section: EditorSection;
   onEdit?: () => void;
 }) {
-  // TD-02: delegate to the shared grouped-list preview (Документы / Курсы /
+  // TD-02: delegate to the shared grouped-list preview (Материалы / Курсы /
   // Мероприятия) with a pencil edit trigger.
   return (
     <SharedFeedbackPreview

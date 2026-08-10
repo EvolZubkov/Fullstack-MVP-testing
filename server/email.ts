@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import { logger } from "./logger";
 import { config, appBaseUrl } from "./config";
+import { EMAIL_COLORS as C } from "./email-theme";
 
 // SMTP settings are read from `config` (populated by initConfig) inside the
 // functions below — not at import time (the DI model). Non-secret settings
@@ -36,6 +37,44 @@ function fromAddress(): string {
   return config.email.from || config.email.auth.user;
 }
 
+/**
+ * Box of the call-to-action button (everything but its text colour), shared by
+ * the `<style>` rule and the inline `style` attribute below.
+ */
+const BUTTON_BOX =
+  `display: inline-block; background: ${C.accent}; ` +
+  "padding: 14px 36px; margin: 20px 0; text-decoration: none; border-radius: 6px; " +
+  "font-family: Arial, sans-serif; font-size: 16px; font-weight: 600; line-height: 1.2;";
+
+/** Text colour of the button, always `!important` — see {@link ctaButton}. */
+const BUTTON_TEXT_COLOR = `color: ${C.accentText} !important;`;
+
+/** `.button` rule for the letters' `<style>` block (a fallback only). */
+const BUTTON_CSS = `.button { ${BUTTON_BOX} ${BUTTON_TEXT_COLOR} }`;
+
+/**
+ * Render the call-to-action button of a letter.
+ *
+ * Mail clients (Gmail, Outlook.com, most mobile readers) apply their own link
+ * colour to `<a>` and it beats a class rule from `<style>` — the label used to
+ * come out accent-on-accent, i.e. unreadable. So the colour is repeated three
+ * times over: inline on the anchor, `!important` (inline `!important` outranks
+ * the client's stylesheet), and once more on an inner `<span>` for the clients
+ * that restyle the anchor but leave its children alone. The `.button` class
+ * stays for readers that keep the `<style>` block intact.
+ *
+ * @param href Absolute URL the button opens.
+ * @param label Visible button text.
+ * @returns HTML of a single anchor element.
+ */
+function ctaButton(href: string, label: string): string {
+  return (
+    `<a href="${href}" class="button" style="${BUTTON_BOX} ${BUTTON_TEXT_COLOR}">` +
+    `<span style="${BUTTON_TEXT_COLOR} text-decoration: none;">${label}</span>` +
+    "</a>"
+  );
+}
+
 export async function sendPasswordResetEmail(
   to: string,
   resetLink: string,
@@ -60,13 +99,13 @@ export async function sendPasswordResetEmail(
 <head>
   <meta charset="utf-8">
   <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: ${C.fg}; }
     .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: #2563eb; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-    .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
-    .button { display: inline-block; background: #2563eb; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
-    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
-    .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 10px; border-radius: 4px; margin-top: 20px; font-size: 14px; }
+    .header { background: ${C.accent}; color: ${C.accentText}; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: ${C.page}; padding: 30px; border-radius: 0 0 8px 8px; }
+    ${BUTTON_CSS}
+    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: ${C.fgMuted}; }
+    .warning { background: ${C.warningSoft}; border: 1px solid ${C.warning}; padding: 10px; border-radius: 4px; margin-top: 20px; font-size: 14px; }
   </style>
 </head>
 <body>
@@ -79,10 +118,10 @@ export async function sendPasswordResetEmail(
       <p>Здравствуйте${userName ? `, ${userName}` : ""}!</p>
       <p>Вы запросили сброс пароля для вашего аккаунта. Нажмите на кнопку ниже, чтобы установить новый пароль:</p>
       <p style="text-align: center;">
-        <a href="${resetLink}" class="button">Сбросить пароль</a>
+        ${ctaButton(resetLink, "Сбросить пароль")}
       </p>
       <p>Или скопируйте эту ссылку в браузер:</p>
-      <p style="word-break: break-all; background: #e5e7eb; padding: 10px; border-radius: 4px; font-size: 14px;">
+      <p style="word-break: break-all; background: ${C.sunken}; padding: 10px; border-radius: 4px; font-size: 14px;">
         ${resetLink}
       </p>
       <div class="warning">
@@ -184,10 +223,10 @@ export async function sendAssignmentEmail(opts: {
   const ctaHtmlBlock = hasMagicLink
     ? `<p>Для прохождения теста нажмите на кнопку ниже — вход произойдёт автоматически, пароль не требуется:</p>
       <p style="text-align: center;">
-        <a href="${ctaHref}" class="button">Пройти тест</a>
+        ${ctaButton(ctaHref, "Пройти тест")}
       </p>
-      <p style="font-size:13px;color:#666;">Или скопируйте ссылку в браузер:</p>
-      <p style="word-break: break-all; background: #e5e7eb; padding: 10px; border-radius: 4px; font-size: 13px;">
+      <p style="font-size:13px;color:${C.fgMuted};">Или скопируйте ссылку в браузер:</p>
+      <p style="word-break: break-all; background: ${C.sunken}; padding: 10px; border-radius: 4px; font-size: 13px;">
         ${ctaHref}
       </p>
       <div class="warning">
@@ -195,9 +234,9 @@ export async function sendAssignmentEmail(opts: {
       </div>`
     : `<p>Для прохождения теста нажмите на кнопку ниже:</p>
       <p style="text-align: center;">
-        <a href="${ctaHref}" class="button">Войти и пройти тест</a>
+        ${ctaButton(ctaHref, "Войти и пройти тест")}
       </p>
-      <p style="font-size:13px;color:#666;">После входа тест будет в списке назначенных.</p>`;
+      <p style="font-size:13px;color:${C.fgMuted};">После входа тест будет в списке назначенных.</p>`;
 
   const html = `
 <!DOCTYPE html>
@@ -205,15 +244,15 @@ export async function sendAssignmentEmail(opts: {
 <head>
   <meta charset="utf-8">
   <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: ${C.fg}; }
     .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: #2563eb; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-    .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
-    .button { display: inline-block; background: #2563eb; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; margin: 20px 0; font-size: 16px; font-weight: 600; }
-    .meta { background: #e5e7eb; border-radius: 6px; padding: 14px 18px; margin: 16px 0; font-size: 14px; }
+    .header { background: ${C.accent}; color: ${C.accentText}; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: ${C.page}; padding: 30px; border-radius: 0 0 8px 8px; }
+    ${BUTTON_CSS}
+    .meta { background: ${C.sunken}; border-radius: 6px; padding: 14px 18px; margin: 16px 0; font-size: 14px; }
     .meta p { margin: 4px 0; }
-    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
-    .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 10px; border-radius: 4px; margin-top: 20px; font-size: 13px; }
+    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: ${C.fgMuted}; }
+    .warning { background: ${C.warningSoft}; border: 1px solid ${C.warning}; padding: 10px; border-radius: 4px; margin-top: 20px; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -312,16 +351,16 @@ export async function sendInviteEmail(opts: {
 <head>
   <meta charset="utf-8">
   <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: ${C.fg}; }
     .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: #2563eb; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-    .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
-    .button { display: inline-block; background: #2563eb; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; margin: 20px 0; font-size: 16px; font-weight: 600; }
-    .steps { background: #eff6ff; border-radius: 6px; padding: 16px 20px; margin: 16px 0; }
+    .header { background: ${C.accent}; color: ${C.accentText}; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: ${C.page}; padding: 30px; border-radius: 0 0 8px 8px; }
+    ${BUTTON_CSS}
+    .steps { background: ${C.accentSoft}; border-radius: 6px; padding: 16px 20px; margin: 16px 0; }
     .steps ol { margin: 8px 0; padding-left: 20px; }
     .steps li { margin: 6px 0; }
-    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
-    .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 10px; border-radius: 4px; margin-top: 20px; font-size: 13px; }
+    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: ${C.fgMuted}; }
+    .warning { background: ${C.warningSoft}; border: 1px solid ${C.warning}; padding: 10px; border-radius: 4px; margin-top: 20px; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -335,7 +374,7 @@ export async function sendInviteEmail(opts: {
       <p>${opts.inviterName ? `<strong>${opts.inviterName}</strong> создал` : "Для вас создан"} аккаунт в системе <strong>${APP_NAME}</strong>.</p>
       <p>Для начала работы нажмите кнопку ниже — вы перейдёте на страницу создания пароля:</p>
       <p style="text-align: center;">
-        <a href="${opts.inviteLink}" class="button">Активировать аккаунт</a>
+        ${ctaButton(opts.inviteLink, "Активировать аккаунт")}
       </p>
       <div class="steps">
         <strong>Что нужно сделать:</strong>
@@ -345,8 +384,8 @@ export async function sendInviteEmail(opts: {
           <li>Начните работу с системой</li>
         </ol>
       </div>
-      <p style="font-size:13px;color:#666;">Или скопируйте ссылку в браузер:</p>
-      <p style="word-break: break-all; background: #e5e7eb; padding: 10px; border-radius: 4px; font-size: 13px;">
+      <p style="font-size:13px;color:${C.fgMuted};">Или скопируйте ссылку в браузер:</p>
+      <p style="word-break: break-all; background: ${C.sunken}; padding: 10px; border-radius: 4px; font-size: 13px;">
         ${opts.inviteLink}
       </p>
       <div class="warning">

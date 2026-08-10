@@ -6,16 +6,29 @@ import { useToast } from "@/hooks/use-toast";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
 import { TemplateQuestionScreen } from "./template-question-screen";
-import { fmtIsoDateHuman } from "./cooldown-format";
+import { fmtIsoDateHuman, fmtIsoInstantHuman } from "./cooldown-format";
+import { downloadAttemptReport } from "@/features/learner/attempt-report";
 import { deliversShuffledOrder, hasAnswer, rankingDeliveryOrder } from "./answer-gate";
 import { isSingleIndexChoice, isMeasurementOnly } from "@shared/questions/question-type";
+// PRD-10 (FR-12): мгновенный вердикт по ответу считает тот же движок, что и итоги
+// попытки и рантайм SCORM-пакета — второй копии правил оценивания на вебе нет.
+import {
+  scoreAnswer,
+  type CorrectData,
+  type QuestionType as ScoredQuestionType,
+} from "@shared/scoring/engine";
+import { applyDeliveryOrder } from "@shared/draw/assemble-delivery";
 import { buildStartState } from "@shared/template/start-state";
-import { feedbackBanner, feedbackDesc } from "@shared/template/feedback-banner";
+import { feedbackBanner, feedbackDesc, feedbackTextFor } from "@shared/template/feedback-banner";
 import { buildQuestionProgress } from "@shared/template/question-progress-context";
 import { buildReviewContext } from "@shared/template/review-context";
 import { QUESTION_NAV_ACTIONS, type QuestionNavState } from "@shared/template/question-nav";
 import { buildSectionResultContext, buildSectionIntroContext } from "@shared/template/result-context";
 import { buildTransitionContext } from "@shared/template/transition-context";
+import {
+  buildProtectionSpec,
+  type ProtectionSettings,
+} from "@shared/template/protection/spec";
 // PRD-12 FR-6: content pages render on the web from the SAME structure rules and
 // the SAME assembler as the SCORM package — no web-only copy of either.
 import { TemplateContentScreen, type ContentScreenTemplate } from "./template-content-screen";
@@ -37,10 +50,18 @@ import {
 import { t } from "@/lib/i18n";
 import { reportClientError } from "@/lib/report-error";
 import { useAuth } from "@/lib/auth";
-import type { Question, Attempt, Test } from "@shared/schema";
+import type { Question, QuestionScoring, Attempt, Test } from "@shared/schema";
+
+/**
+ * Вопрос попытки: строка банка плюс ЭФФЕКТИВНАЯ цена ответа этого теста
+ * (PRD-10 FR-12, PRD-15 блок D). `scoring` присылает сервер вместе с ключом
+ * ответа — то же поле и то же умолчание, что печёт SCORM-пакет: отсутствие =
+ * системное «точное совпадение», 0/1 без частичного балла.
+ */
+type GradedQuestion = Question & { scoring?: QuestionScoring | null };
 
 interface AttemptWithQuestions extends Attempt {
-  questions: Question[];
+  questions: GradedQuestion[];
   testTitle: string;
 }
 
@@ -119,13 +140,28 @@ export function contentPagesBetween(
 }
 
 interface FlatQuestion {
-  question: Question;
+  question: GradedQuestion;
   topicName: string;
   /** Owning topic id — drives the per-topic section timer (PRD-4 v1.1 §3.2). */
   topicId: string;
   /** Per-topic time budget in minutes, or null when the topic has no limit. */
   sectionTimeLimitMinutes: number | null;
   index: number;
+}
+
+/**
+ * PRD-30 FR-19: put the built list into the attempt's delivery stream. The
+ * variant stores composition per topic and the stream separately, because under
+ * the test-wide «полное перемешивание» the questions of different topics travel
+ * interleaved and no concatenation of the sections can express that. Absent
+ * stream = section order, which is every other test. `index` is renumbered
+ * because navigation keys off it.
+ */
+function orderedForDelivery(questions: FlatQuestion[], deliveryOrder?: string[] | null): FlatQuestion[] {
+  return applyDeliveryOrder(questions, deliveryOrder, (fq) => fq.question.id).map((fq, i) => ({
+    ...fq,
+    index: i,
+  }));
 }
 
 interface AdaptiveState {
@@ -195,14 +231,22 @@ function escSlot(s: unknown): string {
 }
 
 /**
- * After-answer feedback HTML for the adaptive question's question-feedback slot:
- * status + (single/multiple) correct-answer text + the question's feedback.
- * Mirrors the SCORM adaptive feedback block (binary correctness, no partial).
+ * After-answer feedback HTML for the question-feedback slot: status + (single/
+ * multiple) correct-answer text + the question's feedback. Serves BOTH delivery
+ * modes, so the verdict chrome cannot drift between them.
+ *
+ * PRD-10 (FR-12): the verdict is three-position whenever the caller supplies a
+ * `scoreRatio` — right / PARTLY right / wrong, the same tones and the same wording
+ * the SCORM package emits from the same ratio (`app/feedback/feedback.js`). The
+ * adaptive path deliberately supplies none: its per-answer verdict is binary
+ * because a level advance is a yes/no decision, and its server route returns
+ * `isCorrect` only.
  */
 function adaptiveFeedbackHtml(question: any, result: any): string {
   const ok = !!result.isCorrect;
+  const partial = !ok && typeof result.scoreRatio === "number" && result.scoreRatio > 0;
   // Revision «Стандартный»: the verdict is the shared DS `.ou-banner` — the SAME
-  // component and semantic success/error tokens the SCORM adaptive block now emits,
+  // component and semantic success/warning/error tokens the SCORM block emits,
   // so the web and package answer-check feedback cannot drift.
   let body = "";
   const opts = (question.dataJson as any)?.options as unknown[] | undefined;
@@ -215,13 +259,35 @@ function adaptiveFeedbackHtml(question: any, result: any): string {
     }
   }
   if (result.feedback) body += feedbackDesc(result.feedback);
-  return feedbackBanner(ok ? "success" : "error", ok ? "Правильно!" : "Неверно", body);
+  return feedbackBanner(
+    ok ? "success" : partial ? "warning" : "error",
+    ok ? "Правильно!" : partial ? "Частично правильно" : "Неверно",
+    body,
+  );
 }
 
-/** Cooldown facts as the server delivers them (start-screen block or the 403 body). */
-type RetakeCooldownFacts = { cooldownPeriodDays?: number; availableDate?: string | null; daysUntil?: number | null };
-/** Normalized cooldown facts held in component state. */
-type RetakeGateState = { cooldownPeriodDays: number | null; availableDate: string | null; daysUntil: number | null };
+/**
+ * Access-barrier facts as the server delivers them (start-screen block or the 403
+ * body). PRD-31: `blockedBy` names the barrier in force — the calendar cooldown
+ * between assignments (a DATE) or the hour interval inside one (an INSTANT).
+ */
+type RetakeCooldownFacts = {
+  blockedBy?: "cooldown" | "attemptInterval" | null;
+  cooldownPeriodDays?: number;
+  intervalHours?: number;
+  availableDate?: string | null;
+  availableAt?: string | null;
+  daysUntil?: number | null;
+};
+/** Normalized barrier facts held in component state. */
+type RetakeGateState = {
+  blockedBy: "cooldown" | "attemptInterval" | null;
+  cooldownPeriodDays: number | null;
+  intervalHours: number | null;
+  availableDate: string | null;
+  availableAt: string | null;
+  daysUntil: number | null;
+};
 
 /** Start-screen facts derived from one `/api/learner/tests` entry (component state shape). */
 type TestMetadata = {
@@ -231,6 +297,8 @@ type TestMetadata = {
   timeLimitMinutes: number | null;
   startPageContent: string | null;
   passPercent: number | null;
+  /** Whether the test grades anything (false ⇒ measurement method, no pass threshold). */
+  hasGradedContent: boolean;
   hasInProgress: boolean;
   resumeIndex: number | null;
   resumeTotal: number | null;
@@ -264,14 +332,20 @@ function buildTestMetadataFromListEntry(test: any): TestMetadata {
     timeLimitMinutes: test.timeLimitMinutes || null,
     startPageContent: test.startPageContent || null,
     passPercent,
+    // Absent on a payload from a server that predates the flag ⇒ treat as grading,
+    // i.e. exactly the behaviour this screen had before.
+    hasGradedContent: test.hasGradedContent !== false,
     hasInProgress,
     resumeIndex: test.resumeIndex ?? null,
     resumeTotal: test.resumeTotal ?? null,
     lastCompletedAttemptId: test.lastCompletedAttemptId ?? null,
     retakeGate: test.retakeGate
       ? {
+          blockedBy: test.retakeGate.blockedBy ?? null,
           cooldownPeriodDays: test.retakeGate.cooldownPeriodDays ?? null,
+          intervalHours: test.retakeGate.intervalHours ?? null,
           availableDate: test.retakeGate.availableDate ?? null,
+          availableAt: test.retakeGate.availableAt ?? null,
           daysUntil: test.retakeGate.daysUntil ?? null,
         }
       : null,
@@ -342,6 +416,9 @@ export default function TakeTestPage() {
   // the guard in ProtectedRoute would just bounce a "/learner" navigation back to
   // /login. Every "back to the list" control in this page is scoped by this flag.
   const magicScoped = !!user?.magicScope;
+  // Rasterizing the report takes a few seconds; a second click must not start a
+  // second export (same guard as the results screen).
+  const reportBusy = useRef(false);
 
   // Common state
   const [isStarting, setIsStarting] = useState(true);
@@ -534,6 +611,11 @@ export default function TakeTestPage() {
   const [standardFeedbackShown, setStandardFeedbackShown] = useState(false);
   const [standardAnswerResult, setStandardAnswerResult] = useState<{
     isCorrect: boolean;
+    /**
+     * PRD-10 (FR-12): доля от максимума за этот ответ. Есть только у стандартного
+     * режима — по ней вердикт становится трёхпозиционным (частичный балл).
+     */
+    scoreRatio?: number;
     correctAnswer?: any;
     feedback?: string;
   } | null>(null);
@@ -557,13 +639,24 @@ export default function TakeTestPage() {
   const [navSettings, setNavSettings] = useState<{
     allowReturnToUnanswered: boolean;
     allowAnswerChange: boolean;
+    // PRD-43: independent of allowReturnToUnanswered.
+    quickAdvance: boolean;
     showSectionResults: boolean;
     answerCommitScope: "test" | "section";
   }>({
     allowReturnToUnanswered: false,
     allowAnswerChange: false,
+    quickAdvance: true,
     showSectionResults: true,
     answerCommitScope: "test",
+  });
+  // PRD-34 (FR-01): настройки защиты текста задания. Как и navSettings, приходят с
+  // ответом старта/возобновления попытки — это веб-аналог TEST_DATA пакета. Умолчания
+  // повторяют умолчания колонок: отсутствие поля читается как «защита включена» (FR-05).
+  const [protectionSettings, setProtectionSettings] = useState<ProtectionSettings>({
+    copyProtection: true,
+    watermark: false,
+    hideOnBlur: false,
   });
   const [questionStatus, setQuestionStatus] = useState<
     Record<string, "unanswered" | "answered" | "skipped">
@@ -587,6 +680,33 @@ export default function TakeTestPage() {
 
   // Adaptive mode state
   const [adaptiveState, setAdaptiveState] = useState<AdaptiveState | null>(null);
+
+  // PRD-34 (FR-30): решение о защите принимает ОДИН общий построитель — тот же, что и в
+  // пакете, поэтому веб и SCORM не могут разойтись. Отметка знака обезличена (FR-17):
+  // идентификатор попытки, укороченный до шести знаков, чтобы читался на снимке.
+  const attemptId = attempt?.id ?? adaptiveState?.attemptId ?? null;
+  const protectionStamp = useMemo(
+    () => (attemptId ? { id: attemptId.slice(0, 6), at: new Date() } : null),
+    [attemptId],
+  );
+  const questionProtection = useMemo(
+    () =>
+      buildProtectionSpec({
+        screen: "question",
+        settings: protectionSettings,
+        stamp: protectionStamp,
+      }),
+    [protectionSettings, protectionStamp],
+  );
+  const reviewProtection = useMemo(
+    () =>
+      buildProtectionSpec({
+        screen: "review",
+        settings: protectionSettings,
+        stamp: protectionStamp,
+      }),
+    [protectionSettings, protectionStamp],
+  );
   const [isAnswering, setIsAnswering] = useState(false);
   const [showTransition, setShowTransition] = useState(false);
   const [feedbackShown, setFeedbackShown] = useState(false);
@@ -861,7 +981,11 @@ export default function TakeTestPage() {
         return;
       }
       const retake = (err as { retake?: RetakeCooldownFacts }).retake;
-      if ((err as Error)?.message === "RETAKE_COOLDOWN") {
+      // PRD-31: both barriers land here. `ATTEMPT_INTERVAL` is the hour interval
+      // inside the assignment, `RETAKE_COOLDOWN` the calendar cooldown between
+      // assignments; they render the same way, only the moment differs.
+      const barrierCode = (err as Error)?.message;
+      if (barrierCode === "RETAKE_COOLDOWN" || barrierCode === "ATTEMPT_INTERVAL") {
         // PRD-19 Block F (FR-20): a cooldown that the up-front gate missed (a race —
         // e.g. another tab consumed the last eligible window). Render the cooldown
         // state ON the start page (parity with the resolved-at-load path), not a
@@ -874,8 +998,13 @@ export default function TakeTestPage() {
               ? {
                   ...m,
                   retakeGate: {
+                    blockedBy:
+                      retake?.blockedBy ??
+                      (barrierCode === "ATTEMPT_INTERVAL" ? "attemptInterval" : "cooldown"),
                     cooldownPeriodDays: retake?.cooldownPeriodDays ?? null,
+                    intervalHours: retake?.intervalHours ?? null,
                     availableDate: retake?.availableDate ?? null,
+                    availableAt: retake?.availableAt ?? null,
                     daysUntil: retake?.daysUntil ?? null,
                   },
                 }
@@ -945,8 +1074,19 @@ export default function TakeTestPage() {
       setNavSettings({
         allowReturnToUnanswered: data.attempt.allowReturnToUnanswered ?? false,
         allowAnswerChange: data.attempt.allowAnswerChange ?? false,
+        // PRD-43: same fallback rule as the DB backfill migration — derive from
+        // allowReturnToUnanswered when the server response omits the field.
+        quickAdvance:
+          typeof data.attempt.quickAdvance === "boolean"
+            ? data.attempt.quickAdvance
+            : !(data.attempt.allowReturnToUnanswered ?? false),
         showSectionResults: data.attempt.showSectionResults ?? true,
         answerCommitScope: data.attempt.answerCommitScope ?? "test",
+      });
+      setProtectionSettings({
+        copyProtection: data.attempt.copyProtection ?? true,
+        watermark: data.attempt.protectionWatermark ?? false,
+        hideOnBlur: data.attempt.protectionHideOnBlur ?? false,
       });
       setQuestionStatus(data.questionStatus || {});
       // Where the learner stopped inside each section — a re-entry from the hub
@@ -977,6 +1117,8 @@ export default function TakeTestPage() {
 
       // Восстанавливаем вопросы
       const variant = data.attempt.variantJson as any;
+      // PRD-30 FR-19: обычно поток — это разделы подряд; при «полном
+      // перемешивании» вариант несёт собственный порядок выдачи.
       const questions: FlatQuestion[] = [];
       const mappings: Record<string, any> = {};
       let idx = 0;
@@ -1024,7 +1166,9 @@ export default function TakeTestPage() {
         }
       }
 
-      setFlatQuestions(questions);
+      // PRD-30 FR-19: тот же поток, что на старте попытки, восстанавливается из
+      // сохранённого варианта — иначе возобновление переставило бы вопросы.
+      setFlatQuestions(orderedForDelivery(questions, variant.deliveryOrder));
       setShuffleMappings(mappings);
 
       // PRD-12 FR-6: restore the STRUCTURE on resume too. Without it the resumed
@@ -1056,6 +1200,39 @@ export default function TakeTestPage() {
       });
     } finally {
       setIsStarting(false);
+    }
+  };
+
+  /**
+   * PRD-19 FR-20: «Скачать отчёт» по ПРОШЛОЙ попытке прямо со стартового экрана —
+   * тот же документ и тот же конвейер, что на экране итогов, и то же действие, что
+   * в пакете (`startPage.js` отдаёт `canDownloadReport` по лучшей сохранённой
+   * попытке). Данные отчёта тянутся по клику, а не на каждую загрузку старта:
+   * собирать их заранее — это лишний рендер макета отчёта на каждый вход в тест.
+   */
+  const handleStartReport = async () => {
+    const attemptId = testMetadata?.lastCompletedAttemptId;
+    if (!attemptId || reportBusy.current) return;
+    reportBusy.current = true;
+    toast({ variant: "info", title: "Готовим отчёт", description: "Файл скачается автоматически." });
+    try {
+      const res = await fetch(`/api/attempts/${attemptId}/result`, { credentials: "include" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data.report || !data.reportRender) {
+        throw new Error(
+          data.report ? "Шаблон не предоставил макет отчёта." : "Нет данных для отчёта по этой попытке.",
+        );
+      }
+      await downloadAttemptReport(data.report, data.reportRender, data.measures ?? undefined);
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Не удалось сформировать отчёт",
+        description: (e as Error).message,
+      });
+    } finally {
+      reportBusy.current = false;
     }
   };
 
@@ -1093,8 +1270,19 @@ export default function TakeTestPage() {
     setNavSettings({
       allowReturnToUnanswered: data.allowReturnToUnanswered ?? false,
       allowAnswerChange: data.allowAnswerChange ?? false,
+      // PRD-43: same fallback rule as the DB backfill migration — derive from
+      // allowReturnToUnanswered when the server response omits the field.
+      quickAdvance:
+        typeof data.quickAdvance === "boolean"
+          ? data.quickAdvance
+          : !(data.allowReturnToUnanswered ?? false),
       showSectionResults: data.showSectionResults ?? true,
       answerCommitScope: data.answerCommitScope ?? "test",
+    });
+    setProtectionSettings({
+      copyProtection: data.copyProtection ?? true,
+      watermark: data.protectionWatermark ?? false,
+      hideOnBlur: data.protectionHideOnBlur ?? false,
     });
     setQuestionStatus({});
 
@@ -1149,7 +1337,11 @@ export default function TakeTestPage() {
       }
     }
 
-    setFlatQuestions(questions);
+    // PRD-30 FR-19: the sections carry the composition, the variant carries the
+    // stream. They differ only under the test-wide «полное перемешивание»; for
+    // every other test (and every pre-PRD-30 attempt) this is the section order.
+    const delivered = orderedForDelivery(questions, variant.deliveryOrder);
+    setFlatQuestions(delivered);
     setShuffleMappings(mappings);
 
     // PRD-12 FR-6: the author's structure arrives with the attempt. Build the run
@@ -1168,9 +1360,9 @@ export default function TakeTestPage() {
       testMode: "standard",
       sections: variantSections,
       contentPages: structure.contentPages,
-      flatQuestions: questions,
+      flatQuestions: delivered,
     });
-    const leadPages = contentPagesBetween(built.sequence, null, questions.length ? 0 : null);
+    const leadPages = contentPagesBetween(built.sequence, null, delivered.length ? 0 : null);
     setPageQueue(leadPages);
 
     // Сохраняем shuffle mappings в варианте для восстановления
@@ -1293,47 +1485,29 @@ export default function TakeTestPage() {
     saveProgress(newAnswers, currentIndex, nextStatus);
   };
 
-  // Локальная проверка ответа для стандартного теста
-  const checkAnswerLocally = (question: Question, answer: any): boolean => {
-    const correct = question.correctJson as any;
-    if (!correct) return false;
-
-    // A scale with a correct graduation is checked exactly like single choice; a
-    // measurement-only scale never reaches here (the server marks it unscored).
-    if (isSingleIndexChoice(question.type)) {
-      return answer === correct.correctIndex;
-    }
-
-    if (question.type === "multiple") {
-      const correctSet = new Set(correct.correctIndices || []);
-      const answerSet = new Set(answer || []);
-      if (correctSet.size !== answerSet.size) return false;
-      for (const idx of correctSet) {
-        if (!answerSet.has(idx)) return false;
-      }
-      return true;
-    }
-
-    if (question.type === "matching") {
-      const pairs = correct.pairs || [];
-      const userPairs = answer || {};
-      for (const p of pairs) {
-        if (userPairs[p.left] !== p.right) return false;
-      }
-      return true;
-    }
-
-    if (question.type === "ranking") {
-      const correctOrder = correct.correctOrder || [];
-      const userOrder = answer || [];
-      if (correctOrder.length !== userOrder.length) return false;
-      for (let i = 0; i < correctOrder.length; i++) {
-        if (correctOrder[i] !== userOrder[i]) return false;
-      }
-      return true;
-    }
-
-    return false;
+  /**
+   * Вердикт по одному ответу для мгновенного фидбека стандартного теста —
+   * доля от максимума (`s / sMax`), 1 = полностью верно, 0 < r < 1 = частично.
+   *
+   * PRD-10 (FR-12): считает ОБЩИЙ движок оценивания по эффективному конфигу теста
+   * (`question.scoring`, то же поле, что печёт SCORM-пакет), а не собственная
+   * логика точного совпадения. До этого веб-хост в стандартном режиме не мог
+   * показать частичный балл: ступенчатая/весовая цена ответа доходила до итогов
+   * (`shared/scoring/aggregate`), но не до баннера сразу после ответа.
+   * Отсутствие конфига = `exact` = прежние 0/1.
+   *
+   * Ключ ответа приходит только у теста с «показывать правильность ответа» —
+   * без него `correctJson` вырезан на сервере и оценивать нечего.
+   */
+  const scoreAnswerLocally = (question: GradedQuestion, answer: any): number => {
+    const correct = question.correctJson as CorrectData | null;
+    if (!correct) return 0;
+    return scoreAnswer({
+      type: question.type as ScoredQuestionType,
+      correct,
+      answer,
+      scoring: question.scoring ?? null,
+    }).ratio;
   };
 
   // Подтвердить ответ (показать фидбек) для стандартного теста
@@ -1359,12 +1533,16 @@ export default function TakeTestPage() {
       return;
     }
 
-    const isCorrect = checkAnswerLocally(currentQ.question, currentAnswer);
+    const scoreRatio = scoreAnswerLocally(currentQ.question, currentAnswer);
     const correctAnswer = currentQ.question.correctJson;
-    const feedback = currentQ.question.feedback;
+    // issue #34: текст пояснения выбирает ОБЩЕЕ правило по режиму вопроса, то же,
+    // что и рантайм пакета. Читать один `feedback` было нельзя: у вопроса с условной
+    // обратной связью редактор обнуляет это поле, и баннер выходил без пояснения.
+    const feedback = feedbackTextFor(currentQ.question, scoreRatio === 1);
 
     setStandardAnswerResult({
-      isCorrect,
+      isCorrect: scoreRatio === 1,
+      scoreRatio,
       correctAnswer,
       feedback: feedback || undefined,
     });
@@ -2447,9 +2625,7 @@ export default function TakeTestPage() {
       testMetadata.maxAttempts !== null && testMetadata.completedAttempts >= testMetadata.maxAttempts;
     // PRD-19 Block F (FR-19/20): cooldown facts render the cooldown card + disabled
     // start button ON this start page (no separate block-wall). Prior summary shows
-    // for both eligible «повтор: можно» and cooldown. The web has no client-side PDF
-    // report, so «Скачать отчёт» is omitted (canDownloadReport stays off) — only
-    // «Мой результат» links the prior attempt.
+    // for both eligible «повтор: можно» and cooldown.
     const gate = testMetadata.retakeGate;
     const startContext = buildStartState({
       info: {
@@ -2460,6 +2636,7 @@ export default function TakeTestPage() {
         // вопросов» (the layout hides a fact it is not given).
         questionCount: testMode === "adaptive" ? undefined : testMetadata.totalQuestions,
         passPercent: testMetadata.passPercent,
+        hasGradedContent: testMetadata.hasGradedContent,
         timeLimitMinutes: testMetadata.timeLimitMinutes,
         maxAttempts: testMetadata.maxAttempts,
         startPageContent: testMetadata.startPageContent || "",
@@ -2478,13 +2655,23 @@ export default function TakeTestPage() {
       // completed-attempt count with no id would render a dead button.
       hasCompletedResults: testMetadata.lastCompletedAttemptId !== null,
       canStartNew: !exhausted,
+      // PRD-31: the same card carries both barriers. Barrier B opens at an instant,
+      // so it shows a date WITH a time; barrier A keeps the plain calendar date and
+      // its «через N дн.» countdown, which an hour interval has no use for.
       cooldown: gate
         ? {
-            availableDateHuman: fmtIsoDateHuman(gate.availableDate),
+            availableDateHuman:
+              gate.blockedBy === "attemptInterval"
+                ? fmtIsoInstantHuman(gate.availableAt)
+                : fmtIsoDateHuman(gate.availableDate),
             daysUntil: gate.daysUntil,
           }
         : null,
       priorResult: testMetadata.priorResult,
+      // PRD-19 FR-20: «Скачать отчёт» по прошлой попытке — тот же документ, что на
+      // экране итогов. Признак тот же, что у пакета: отчёт предлагается там, где есть
+      // сохранённый результат прошлой попытки (`priorResult` строится ровно из него).
+      canDownloadReport: !!testMetadata.priorResult,
       // A magic-link session has no test list to fall back to (it would just
       // bounce to /login), so the ghost «К списку тестов» button is not offered
       // at all in that case.
@@ -2492,11 +2679,11 @@ export default function TakeTestPage() {
     });
     return (
       <div
-        className="tbh-screen tbh-col tbh-noselect"
+        // PRD-34 (FR-09): стартовый экран ВНЕ периметра защиты. Безусловный запрет
+        // выделения и копирования снят: он стоял только на веб-хосте, настройкой не
+        // управлялся и расходился с пакетом, где его нет.
+        className="tbh-screen tbh-col"
         style={{ background: startTpl.theme?.background }}
-        onCopy={(e) => e.preventDefault()}
-        onCut={(e) => e.preventDefault()}
-        onContextMenu={(e) => e.preventDefault()}
       >
         <TemplateScreen
           className="tbh-fill"
@@ -2512,6 +2699,7 @@ export default function TakeTestPage() {
             else if (action === "resume") handleResumeTest();
             else if (action === "view-results" && testMetadata.lastCompletedAttemptId)
               navigate(`/learner/result/${testMetadata.lastCompletedAttemptId}`);
+            else if (action === "download-report") void handleStartReport();
             else if (action === "back") {
               // The button is hidden via `showBack` above in a restricted session,
               // but stay robust regardless of how the action was reached: a
@@ -2592,6 +2780,10 @@ export default function TakeTestPage() {
       // server knows when the session ends, so the row never says «Завершить тест».
       const adaptiveNav: QuestionNavState = {
         flexible: false,
+        // PRD-43: adaptive isn't author-configurable here — `onAdaptiveNavAction`
+        // already fixes-and-advances in one click whenever no feedback is shown,
+        // so `true` just makes that existing behaviour explicit on the type.
+        quickAdvance: true,
         committed: feedbackShown,
         canPrev: false,
         // Once the feedback is on screen the answer is fixed — «Далее» always works.
@@ -2613,6 +2805,7 @@ export default function TakeTestPage() {
       return (
         <TemplateQuestionScreen
           tpl={questionTpl}
+          protection={questionProtection}
           testTitle={testTitle}
           counterLabel={counter}
           progressPercent={(currentQuestion.questionNumber / currentQuestion.totalInLevel) * 100}
@@ -2683,6 +2876,7 @@ export default function TakeTestPage() {
       <div className="tbh-screen tbh-col" style={{ background: reviewTpl.theme?.background }}>
         <TemplateScreen
           className="tbh-fill"
+          protection={reviewProtection}
           layout={reviewTpl.layout}
           css={reviewTpl.css}
           cssVars={reviewTpl.cssVars}
@@ -2787,6 +2981,12 @@ export default function TakeTestPage() {
       <div className="tbh-screen tbh-col" style={{ background: sectionResultsTpl.theme?.background }}>
         <TemplateScreen
           className="tbh-fill"
+          // PRD-34 (FR-16): итоги раздела знак несут, от копирования не защищаются.
+          protection={buildProtectionSpec({
+            screen: "section-results",
+            settings: { ...protectionSettings, copyProtection: false },
+            stamp: protectionStamp,
+          })}
           layout={sectionResultsTpl.layout}
           css={sectionResultsTpl.css}
           cssVars={sectionResultsTpl.cssVars}
@@ -2894,6 +3094,8 @@ export default function TakeTestPage() {
     // This only resolves the run state it is built from.
     const questionNav: QuestionNavState = {
       flexible: navSettings.allowReturnToUnanswered,
+      // PRD-43: independent of `flexible`.
+      quickAdvance: navSettings.quickAdvance,
       committed: standardFeedbackShown || committedCurrent,
       canPrev: prevIdx !== null,
       answerReady: !isSubmitting && (!submitModeCurrent || answerReady),
@@ -2912,12 +3114,26 @@ export default function TakeTestPage() {
       }
       if (action === QUESTION_NAV_ACTIONS.submit) return handleStandardConfirm();
       if (action === QUESTION_NAV_ACTIONS.finish) return void handleSubmit();
-      // «Далее» — walk on past a committed answer (the layout's primary action).
-      if (action === QUESTION_NAV_ACTIONS.next) return handleStandardContinue();
+      // «Далее»: already committed (fixed earlier, or the learner navigated back to
+      // an answered question) → just walk on (handleStandardContinue). Not yet
+      // committed (PRD-43 quickAdvance) → fix AND walk on in the same click
+      // (handleNext) — mirrors the SCORM runtime's next(), which does both
+      // unconditionally every time.
+      //
+      // These two are NOT interchangeable: handleNext does not reset
+      // standardFeedbackShown/standardAnswerResult (it never runs while feedback
+      // is showing, since committedCurrent is guaranteed true whenever feedback is
+      // on screen). Routing an already-committed/feedback-shown question through
+      // handleNext instead of handleStandardContinue would leak the previous
+      // question's feedback banner onto the next question.
+      if (action === QUESTION_NAV_ACTIONS.next) {
+        return committedCurrent ? handleStandardContinue() : handleNext();
+      }
     };
     return (
       <TemplateQuestionScreen
         tpl={questionTpl}
+        protection={questionProtection}
         testTitle={attempt.testTitle}
         // Bare counter + the section as its own context field: the layout prints the
         // section as a tag, exactly as it does in the package (PRD-12 parity). The

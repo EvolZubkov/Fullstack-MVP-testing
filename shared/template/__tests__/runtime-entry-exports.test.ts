@@ -23,6 +23,16 @@ const REQUIRED = [
   "nextScaleIndex",
   "isSingleIndexChoice",
   "isMeasurementOnly",
+  // PRD-44: признак «распределяет бюджет», разметка группы и модель распределения —
+  // рантайм пакета считает по ним готовность ответа и потолок строки.
+  "distributesBudget",
+  "renderAllocation",
+  "allocationSpec",
+  "isAllocationComplete",
+  "optionCeiling",
+  "setAllocationValue",
+  "attachAllocation",
+  "syncAllocationDom",
   "questionHint",
   "answerTexts",
   "fitFont",
@@ -31,6 +41,9 @@ const REQUIRED = [
   "fitQuestionScene",
   "feedbackBanner",
   "feedbackDesc",
+  // issue #34: выбор текста обратной связи по режиму — рантайм пакета зовёт его
+  // через TBTemplate вместо трёх собственных копий правила.
+  "feedbackTextFor",
 ] as const;
 
 describe("runtime-entry public surface", () => {

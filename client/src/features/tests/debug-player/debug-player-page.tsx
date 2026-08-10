@@ -14,8 +14,8 @@ import {
   type TableColumn, type TreeNodeData,
 } from "@universityrt/ui-kit";
 import {
-  FlaskConical, Info, RefreshCw, RotateCcw, X, ChevronLeft, ChevronRight, Download, Search,
-  CircleDot, CheckSquare, Unplug, ListOrdered, ThermometerSun, List, Layers, ChevronDown, ChevronUp,
+  BugPlay, Info, RefreshCw, RotateCcw, X, ChevronLeft, ChevronRight, Download, Search,
+  CircleDot, CheckSquare, Unplug, ListOrdered, ThermometerSun, SlidersHorizontal, List, Layers, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useDebugSession } from "./use-debug-session";
 import {
@@ -127,7 +127,7 @@ export default function DebugPlayerPage() {
     return (
       <div className="dbg__center">
         <EmptyState
-          art={<FlaskConical size={48} color="var(--ou-fg-muted)" />}
+          art={<BugPlay size={48} color="var(--ou-fg-muted)" />}
           title="Нет доступа к отладке теста"
           description="Прогон отладки доступен только при праве на редактирование теста (как и экспорт SCORM)."
         />
@@ -149,7 +149,7 @@ export default function DebugPlayerPage() {
     <div className={collapsed ? "dbg is-collapsed" : "dbg"}>
       <header className="dbg__bar">
         <span className="dbg__title">
-          <FlaskConical size={18} />
+          <BugPlay size={18} />
           <Text weight="bold">{state.title || "Отладка теста"}</Text>
           <span className="dbg__sub">черновик</span>
           <IconButton variant="ghost" size="s" aria-label="О прогоне отладки" title={DISCLAIMER + (state.template ? ` Шаблон оформления: ${state.template}.` : "")} icon={<Info size={14} />} />
@@ -480,6 +480,9 @@ function qTypeIcon(type: string) {
   if (type === "multiple") return <CheckSquare {...p} />;
   if (type === "matching") return <Unplug {...p} />;
   if (type === "scale") return <ThermometerSun {...p} />;
+  // PRD-44: у распределения своя пиктограмма — без неё тип получал бы иконку
+  // ранжирования по остаточному принципу, и в списке вопросов они бы слились.
+  if (type === "allocation") return <SlidersHorizontal {...p} />;
   return <ListOrdered {...p} />;
 }
 
@@ -495,6 +498,9 @@ function QuestionLabel({ type, prompt, topic }: { type: string; prompt: string; 
 }
 
 function verdictTag(r: ProtocolRow) {
+  // Измерительный вопрос не проверяется — вердикта у него нет и быть не может
+  // (PRD-26 FR-08). Красное «неверно» здесь читалось бы как ошибка ученика.
+  if (r.verdict === "measure") return <Tag size="s" variant="outline">не оценивается</Tag>;
   if (r.verdict === "none") return <Tag size="s" variant="soft">нет ответа</Tag>;
   if (r.verdict === "correct") return <Tag size="s" tone="success">верно</Tag>;
   if (r.verdict === "partial") return <Tag size="s" tone="warning">{`частично ${r.ratioPct}%`}</Tag>;

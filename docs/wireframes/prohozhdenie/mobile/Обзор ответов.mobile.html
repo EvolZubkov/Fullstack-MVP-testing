@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../ui-kit/university-rt.css">
+<style>html,body{margin:0;padding:0;background:#0b0d12}</style>
+<title>Обзор ответов — телефон 360</title></head><body>
+<div class="ou ou--dark ou--normal" style="width:360px;height:800px;margin:24px auto;overflow:hidden;font-family:var(--ou-font-family-base);display:flex;flex-direction:column;background:var(--ou-bg-page)" data-wf-demo>
+
+  <header style="flex:none;position:relative;display:flex;flex-direction:column;gap:var(--ou-space-3);padding:var(--ou-space-3) 16px calc(var(--ou-space-2) + 2px);background:var(--ou-bg-elevated);border-bottom:1px solid var(--ou-border-soft)">
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:var(--ou-space-3)">
+      <span style="width:36px;height:36px;flex:none;border-radius:var(--ou-radius-m);background:var(--ou-accent-soft);color:var(--ou-accent-default);display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">РТ</span>
+      <div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px">
+        <h1 style="margin:0;font:var(--ou-text-heading-m);color:var(--ou-fg-default);text-wrap:pretty">Основы информационной безопасности</h1>
+      </div>
+      <span class="ou-tag ou-tag--neutral ou-tag--s" style="flex:none;margin-left:auto">Обзор</span>
+    </div>
+    <div style="position:absolute;left:0;right:0;bottom:-1px;height:3px;background:var(--ou-bg-surface-3)"><div style="height:100%;width:100%;background:var(--ou-accent-default)"></div></div>
+  </header>
+
+  <main style="flex:1;min-height:0;overflow:auto;padding:16px">
+    <div style="width:100%;min-height:100%;display:flex;flex-direction:column;gap:var(--ou-space-4)">
+
+      <div style="display:flex;flex-direction:column;gap:var(--ou-space-2)">
+        <h2 style="margin:0;font-weight:600;font-size:22px;line-height:1.25;color:var(--ou-fg-default)">Проверьте ответы перед завершением</h2>
+        <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Нажмите на номер, чтобы вернуться к вопросу</span>
+      </div>
+
+      <!-- Карта обзора — крупная (тач-размер 44px), в НЕСКОЛЬКО рядов: здесь она
+           главный элемент экрана, а не полоска в шапке, поэтому не схлопывается. -->
+      <div class="ou-quiz ou-quiz--circle ou-quiz--l" role="group" aria-label="Карта вопросов" style="width:100%;flex-direction:column;align-items:stretch;gap:var(--ou-space-3)">
+        <div class="ou-quiz__dots" style="flex-wrap:wrap">
+          <button type="button" class="ou-quiz__dot is-answered" style="--qsize:44px">1</button>
+          <button type="button" class="ou-quiz__dot is-answered" style="--qsize:44px">2</button>
+          <button type="button" class="ou-quiz__dot is-flagged" style="--qsize:44px">3</button>
+          <button type="button" class="ou-quiz__dot is-answered" style="--qsize:44px">4</button>
+          <button type="button" class="ou-quiz__dot is-answered" style="--qsize:44px">5</button>
+          <button type="button" class="ou-quiz__dot is-flagged" style="--qsize:44px">6</button>
+          <button type="button" class="ou-quiz__dot is-answered" style="--qsize:44px">7</button>
+          <button type="button" class="ou-quiz__dot is-answered" style="--qsize:44px">8</button>
+        </div>
+        <div class="ou-quiz__legend" style="align-items:center">
+          <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged" style="background:var(--ou-warning-default)"></span>пропущен</span>
+          <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered" style="background:var(--ou-accent-default)"></span>отвечен</span>
+        </div>
+        <span style="font:var(--ou-text-body-m);color:var(--ou-fg-muted)">отвечено <strong style="color:var(--ou-fg-default);font-weight:600">6</strong> из 8 · пропущено 2</span>
+      </div>
+
+      <div class="ou-card">
+        <div class="ou-card__body">
+          <div style="font:var(--ou-text-heading-s);color:var(--ou-fg-default);margin-bottom:var(--ou-space-3)">Без ответа</div>
+          <div style="display:flex;flex-direction:column;gap:var(--ou-space-2);width:100%">
+            <button type="button" style="display:flex;align-items:center;flex-wrap:wrap;justify-content:space-between;row-gap:var(--ou-space-2);gap:var(--ou-space-3);padding:var(--ou-space-3) var(--ou-space-4);border:1px solid var(--ou-border-soft);border-radius:var(--ou-radius-m);background:var(--ou-bg-elevated);color:var(--ou-fg-default);font:var(--ou-text-body-m);text-align:left;cursor:pointer;min-height:56px;box-sizing:border-box">
+              <span style="min-width:0">3. Какие признаки указывают на фишинг?</span>
+              <span style="color:var(--ou-accent-default);flex:none;margin-left:auto;font:var(--ou-text-body-s)">Перейти →</span>
+            </button>
+            <button type="button" style="display:flex;align-items:center;flex-wrap:wrap;justify-content:space-between;row-gap:var(--ou-space-2);gap:var(--ou-space-3);padding:var(--ou-space-3) var(--ou-space-4);border:1px solid var(--ou-border-soft);border-radius:var(--ou-radius-m);background:var(--ou-bg-elevated);color:var(--ou-fg-default);font:var(--ou-text-body-m);text-align:left;cursor:pointer;min-height:56px;box-sizing:border-box">
+              <span style="min-width:0">6. Расположите шаги реагирования на инцидент по порядку</span>
+              <span style="color:var(--ou-accent-default);flex:none;margin-left:auto;font:var(--ou-text-body-s)">Перейти →</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <footer style="flex:none;display:flex;align-items:stretch;flex-wrap:wrap;gap:var(--ou-space-2);padding:var(--ou-space-2) 16px;background:var(--ou-bg-elevated);border-top:1px solid var(--ou-border-soft)">
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" style="flex:0 1 auto;padding-inline:var(--ou-space-3);font-size:13px">← К вопросам</button>
+    <div style="order:50;flex:0 0 100%;height:0"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" style="order:99;flex:1 0 100%">Завершить тест</button>
+  </footer>
+
+</div>
+</body></html>

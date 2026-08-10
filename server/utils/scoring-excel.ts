@@ -26,10 +26,10 @@
  */
 
 import { questionScoringSchema, type QuestionScoring } from "@shared/schema";
-import { isSingleIndexChoice } from "@shared/questions/question-type";
+import { distributesBudget, isSingleIndexChoice } from "@shared/questions/question-type";
 
 /** Question types accepted by the scoring grammar. */
-export type ScoringQuestionType = "single" | "multiple" | "matching" | "ranking" | "scale";
+export type ScoringQuestionType = "single" | "multiple" | "matching" | "ranking" | "scale" | "allocation";
 
 /** Parse outcome: a validated scoring config (or null = exact), or an error. */
 export type ParseScoringResult =
@@ -132,6 +132,13 @@ export function parseScoringCell(
 ): ParseScoringResult {
   const text = String(raw ?? "").trim();
   if (!text || text.toLowerCase() === "точное") return { ok: true, value: null };
+
+  // PRD-44 FR-10: градуированная цена к распределению баллов неприменима — тип не
+  // проверяется вовсе, поэтому ни «веса», ни «ступени» не с чем сопоставлять. Сказать
+  // это прямо лучше, чем позволить формуле разобраться и молча ничего не посчитать.
+  if (distributesBudget(type)) {
+    return { ok: false, error: "распределение баллов не проверяется, «Цена ответа» к нему неприменима" };
+  }
 
   const lower = text.toLowerCase();
   let value: unknown;

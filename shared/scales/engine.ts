@@ -22,7 +22,8 @@
  */
 
 import type { ScaleResult } from "../formula/types";
-import { isSingleIndexChoice } from "../questions/question-type";
+import { distributesBudget, isSingleIndexChoice } from "../questions/question-type";
+import type { AllocationSpec } from "../questions/allocation";
 
 export type ScaleAggregation = "sum" | "avg" | "weighted_avg" | "max" | "min";
 export type ScaleNormalization = "none" | "percent" | "custom";
@@ -50,7 +51,12 @@ export interface ScaleSpec {
 export interface MeasurementSpec {
   questionId: string;
   scaleKey: string;
-  sourceType: "question" | "option" | "matching_pair" | "ranking_position";
+  /**
+   * `option_allocation` (PRD-44) is the odd one out: every other source contributes a
+   * value the AUTHOR fixed, while an allocation contributes the amount the LEARNER
+   * assigned to that statement. See {@link unitContribution}.
+   */
+  sourceType: "question" | "option" | "matching_pair" | "ranking_position" | "option_allocation";
   sourceKey: string | null;
   value: number;
   weight: number;
@@ -95,7 +101,43 @@ function isActive(m: MeasurementSpec, answer: Answer, qType: QuestionType | unde
     const [item, pos] = String(m.sourceKey).split(":").map(Number);
     return Array.isArray(answer) && answer[pos] === item;
   }
+  if (m.sourceType === "option_allocation") {
+    // A statement counts as measured when the learner actually put points on it
+    // (PRD-44 FR-12). Zero is «considered and rejected», not a contribution — and it
+    // must not fire, or `avg` would average in zeros the learner deliberately assigned
+    // and `hasValue` would report a measurement where none was made.
+    if (typeof answer !== "object" || answer === null || Array.isArray(answer)) return false;
+    const assigned = (answer as Record<string, number>)[String(Number(m.sourceKey))];
+    return typeof assigned === "number" && Number.isFinite(assigned) && assigned !== 0;
+  }
   return false;
+}
+
+/**
+ * What ONE measurement unit contributes for this answer — `0` when it does not fire.
+ *
+ * Every source except `option_allocation` contributes a value the AUTHOR fixed
+ * (`value * weight`), so «fired» and «contributed» carry the same number. An allocation
+ * contributes the amount the LEARNER assigned, scaled by the same coefficients (PRD-44
+ * FR-12/FR-13): `value` keeps its meaning as a coefficient (1 = the learner's points ARE
+ * the contribution, the reference case; -1 inverts; a fraction rescales) and `weight` keeps
+ * its meaning for `weighted_avg`.
+ *
+ * Both {@link computeAnswerContributions} and {@link computeScales} go through here, so the
+ * per-answer breakdown shown in the analytics export and the aggregate a learner is graded
+ * on cannot disagree — with two copies they eventually would.
+ */
+export function unitContribution(
+  m: MeasurementSpec,
+  answer: Answer,
+  qType: QuestionType | undefined,
+): number {
+  if (!isActive(m, answer, qType)) return 0;
+  if (m.sourceType === "option_allocation") {
+    const assigned = (answer as Record<string, number>)[String(Number(m.sourceKey))] ?? 0;
+    return assigned * m.value * m.weight;
+  }
+  return m.value * m.weight;
 }
 
 /** One fired measurement unit's contribution to a scale, for a single answer. */
@@ -128,7 +170,7 @@ export function computeAnswerContributions(
   const out: AnswerContribution[] = [];
   for (const m of measurements) {
     if (m.questionId !== questionId) continue;
-    if (isActive(m, answer, qType)) out.push({ scaleKey: m.scaleKey, delta: m.value * m.weight });
+    if (isActive(m, answer, qType)) out.push({ scaleKey: m.scaleKey, delta: unitContribution(m, answer, qType) });
   }
   return out;
 }
@@ -155,29 +197,33 @@ function aggregate(contribs: number[], agg: ScaleAggregation, weights: number[])
 }
 
 /**
- * The min/max raw a scale can take on THIS attempt (PRD-5 §5.2 minPossible /
- * maxPossible), used for percent normalization. Only questions actually delivered
- * to the learner bound the range: a bank question the draw did not deliver
- * contributes 0 to `raw`, so counting its extremes would push `raw` outside
- * [min, max] and make percent go negative / exceed 100 (the reported defect). A
- * question is "delivered" when it has an entry in `answers`.
+ * Achievable `{ min, max }` of a scale over a set of measurement units — the range
+ * `raw` can land in. Exported because two callers need the SAME arithmetic on
+ * different inputs: `percent` normalization runs it over the DELIVERED units, while
+ * PRD-29 seeds a scale's stored domain from ALL declared ones. A second copy would
+ * drift, and a domain computed differently from the one `percent` normalizes against
+ * puts the ruler's marker somewhere other than its own level.
  *
  * Per-question achievable contribution:
- * - single: exactly one unit fires and an unmeasured/other option scores 0, so the
- *   range is `[min(0, …vals), max(0, …vals)]`.
+ * - single / scale: exactly one unit fires and an unmeasured option scores 0, so the
+ *   range is `[min(0, …vals), max(0, …vals)]`;
  * - multiple / matching / ranking: several units can fire together (a subset of
- *   options, every formed pair, every placement), so the extremes are the sums of
- *   the negative / positive units — the same way `raw` sums the active ones.
+ *   options, every formed pair, every placement), so the extremes are the sums of the
+ *   negative / positive units — the same way `raw` sums the active ones.
+ *
+ * `null` when there is nothing to measure: an empty set has no range, and reporting
+ * `{ min: 0, max: 0 }` would look like a legitimate zero-width domain.
  */
-function rawRange(
-  scaleMeasurements: MeasurementSpec[],
+export function achievableRange(
+  measurements: MeasurementSpec[],
   agg: ScaleAggregation,
   questionTypes: Record<string, QuestionType>,
-  answers: Record<string, Answer>,
-): { min: number; max: number } {
+  budgets: Record<string, AllocationSpec> = {},
+): { min: number; max: number } | null {
+  if (measurements.length === 0) return null;
+
   const byQuestion = new Map<string, MeasurementSpec[]>();
-  for (const m of scaleMeasurements) {
-    if (!Object.prototype.hasOwnProperty.call(answers, m.questionId)) continue;
+  for (const m of measurements) {
     const list = byQuestion.get(m.questionId) ?? [];
     list.push(m);
     byQuestion.set(m.questionId, list);
@@ -188,9 +234,11 @@ function rawRange(
   const weights: number[] = [];
   for (const [questionId, ms] of byQuestion) {
     const vals = ms.map((m) => m.value * m.weight);
-    // One-index answers (single choice, scale) can activate at most ONE unit of the
-    // question, so the range is the extremum, not the sum.
-    if (isSingleIndexChoice(questionTypes[questionId] ?? "")) {
+    if (distributesBudget(questionTypes[questionId] ?? "")) {
+      const extremes = allocationExtremes(budgets[questionId], vals);
+      mins.push(extremes.min);
+      maxes.push(extremes.max);
+    } else if (isSingleIndexChoice(questionTypes[questionId] ?? "")) {
       mins.push(Math.min(0, ...vals));
       maxes.push(Math.max(0, ...vals));
     } else {
@@ -199,10 +247,102 @@ function rawRange(
     }
     weights.push(ms.reduce((s, m) => s + m.weight, 0) / ms.length);
   }
-  return {
-    min: aggregate(mins, agg, weights),
-    max: aggregate(maxes, agg, weights),
+
+  return { min: aggregate(mins, agg, weights), max: aggregate(maxes, agg, weights) };
+}
+
+/**
+ * The `{ min, max }` ONE allocation question can contribute to ONE scale (PRD-44 FR-15).
+ *
+ * The naive answer — sum the units' maxima — is wrong and dangerously so: the statements of
+ * a question share a single budget, so they cannot all reach their own ceiling at once. On
+ * the reference questionnaire the naive figure is 392 per style where the method's own note
+ * says 98, and since this domain is what percent normalization and the PRD-29 band ruler
+ * both read, the error would move the VERDICT rather than a number.
+ *
+ * The exact bounds come from a small optimisation. Let `n` be this scale's statements inside
+ * the question and `N` all of them. The scale's statements hold a total `S` bounded by
+ *
+ *   `S >= max(n * min, budget - (N - n) * max)`   — the others cannot absorb everything
+ *   `S <= min(n * max, budget - (N - n) * min)`   — nor can these exceed the budget
+ *
+ * and each statement lies in `[min, max]`. Maximising a linear objective over that box is
+ * pure greed: start every statement at `min`, then pour the free pool into the largest
+ * coefficient first, capped at `max - min` per statement. The lower bound is the mirror
+ * image. With equal coefficients — the ordinary case, and the reference's — this reduces to
+ * «the budget, capped by what this scale's statements can hold».
+ *
+ * A question with no spec contributes nothing: fabricating a domain from an unknown budget
+ * would hide the omission behind a plausible number.
+ */
+function allocationExtremes(spec: AllocationSpec | undefined, coeffs: number[]): { min: number; max: number } {
+  if (!spec || spec.budget <= 0 || coeffs.length === 0) return { min: 0, max: 0 };
+  const n = coeffs.length;
+  const total = Math.max(spec.options.length, n);
+  const others = total - n;
+  const lo = spec.minPerOption;
+  const hi = spec.maxPerOption;
+
+  const sumMin = Math.max(n * lo, spec.budget - others * hi);
+  const sumMax = Math.min(n * hi, spec.budget - others * lo);
+  if (sumMax < sumMin) return { min: 0, max: 0 }; // infeasible configuration — no domain
+
+  /** Best value of `Σ coeff * x` with each `x` in `[lo, hi]` and `Σ x` free in the range. */
+  const extreme = (maximise: boolean): number => {
+    const ordered = [...coeffs].sort((a, b) => (maximise ? b - a : a - b));
+    // Spending more than the floor only helps while the next coefficient still improves
+    // the objective; otherwise stay at the smallest legal total.
+    const best = ordered[0];
+    const worthSpending = maximise ? best > 0 : best < 0;
+    const target = worthSpending ? sumMax : sumMin;
+    let pool = target - n * lo;
+    let value = ordered.reduce((sum, c) => sum + c * lo, 0);
+    for (const c of ordered) {
+      if (pool <= 0) break;
+      if (maximise ? c <= 0 : c >= 0) break;
+      const take = Math.min(pool, hi - lo);
+      value += c * take;
+      pool -= take;
+    }
+    // Whatever is left of a forced total has to go somewhere: it lands on the statements
+    // that hurt the objective least, i.e. the tail of the same ordering.
+    if (pool > 0) {
+      for (let i = ordered.length - 1; i >= 0 && pool > 0; i--) {
+        const c = ordered[i];
+        if (maximise ? c > 0 : c < 0) continue;
+        const take = Math.min(pool, hi - lo);
+        value += c * take;
+        pool -= take;
+      }
+    }
+    return value;
   };
+
+  return { min: extreme(false), max: extreme(true) };
+}
+
+/**
+ * The min/max raw a scale can take on THIS attempt (PRD-5 §5.2 minPossible /
+ * maxPossible), used for percent normalization. Only questions actually delivered
+ * to the learner bound the range: a bank question the draw did not deliver
+ * contributes 0 to `raw`, so counting its extremes would push `raw` outside
+ * [min, max] and make percent go negative / exceed 100 (the reported defect). A
+ * question is "delivered" when it has an entry in `answers`.
+ */
+function rawRange(
+  scaleMeasurements: MeasurementSpec[],
+  agg: ScaleAggregation,
+  questionTypes: Record<string, QuestionType>,
+  answers: Record<string, Answer>,
+  budgets: Record<string, AllocationSpec>,
+): { min: number; max: number } {
+  // Only units the learner was actually given bound the range: a bank question the
+  // draw did not deliver contributes 0 to `raw`, so counting its extremes would push
+  // `raw` outside [min, max] and make percent go negative / exceed 100.
+  const delivered = scaleMeasurements.filter((m) =>
+    Object.prototype.hasOwnProperty.call(answers, m.questionId),
+  );
+  return achievableRange(delivered, agg, questionTypes, budgets) ?? { min: 0, max: 0 };
 }
 
 function applyBands(raw: number, bands: ScaleBand[] | undefined): { level: string; label: string } {
@@ -215,12 +355,19 @@ function applyBands(raw: number, bands: ScaleBand[] | undefined): { level: strin
 /**
  * Compute all scales. Deterministic — the same inputs always yield the same
  * output, so a recovered attempt recomputes identically.
+ *
+ * `budgets` carries the allocation spec of every budget question (PRD-44), keyed by
+ * question id; it is only read by `percent` normalization, which needs the scale's domain.
+ * Omitting it for a test WITHOUT allocation questions changes nothing — omitting it for a
+ * test with them collapses their domain to zero, which surfaces as the existing «диапазон
+ * нормализации невозможен или нулевой» diagnostic rather than as a silently wrong percent.
  */
 export function computeScales(
   scales: ScaleSpec[],
   measurements: MeasurementSpec[],
   answers: Record<string, Answer>,
   questionTypes: Record<string, QuestionType>,
+  budgets: Record<string, AllocationSpec> = {},
 ): ScaleComputation {
   const values: Record<string, ScaleResult> = {};
   const errors: Array<{ key: string; message: string }> = [];
@@ -236,8 +383,10 @@ export function computeScales(
       const activeContribs: number[] = [];
       const activeWeights: number[] = [];
       for (const m of scaleMeasurements) {
-        if (isActive(m, answers[m.questionId], questionTypes[m.questionId])) {
-          activeContribs.push(m.value * m.weight);
+        const qType = questionTypes[m.questionId];
+        const answer = answers[m.questionId];
+        if (isActive(m, answer, qType)) {
+          activeContribs.push(unitContribution(m, answer, qType));
           activeWeights.push(m.weight);
         }
       }
@@ -247,7 +396,7 @@ export function computeScales(
       let normalized = raw;
       let percent = 0;
       if (scale.normalization === "percent") {
-        const { min, max } = rawRange(scaleMeasurements, scale.aggregation, questionTypes, answers);
+        const { min, max } = rawRange(scaleMeasurements, scale.aggregation, questionTypes, answers, budgets);
         const span = max - min;
         if (span > 0) {
           percent =

@@ -85,7 +85,7 @@ router.get("/scorm-attempts/:attemptId", requirePermission("analytics.read"), as
     // baked points, contributions are not persisted). Empty for a deleted test.
     const scoringConfig = pkg?.testId
       ? await loadScoringConfig(pkg.testId)
-      : { scales: [], measurements: [], resultVariables: [] };
+      : { scales: [], measurements: [], resultVariables: [], budgets: {} };
     const rawAnswers: Record<string, Answer> = {};
     const questionTypes: Record<string, QuestionType> = {};
     for (const a of answers) {

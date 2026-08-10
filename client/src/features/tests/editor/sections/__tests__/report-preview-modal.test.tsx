@@ -19,13 +19,30 @@ import type { ReportVariantOption } from "../../use-report-variants";
 const rendered: Array<{ layout: string; context: Record<string, unknown>; css?: string }> = [];
 
 vi.mock("@/components/template-screen", () => ({
-  TemplateScreen: (props: { layout: string; context: unknown; css?: string }) => {
+  // Двойник рисует страницу в НАСТОЯЩИЙ теневой корень и зовёт `onShadowReady`: окно
+  // раскладывает документ по листам A4 уже после рендера, и без теневого дерева эта
+  // половина поведения не проверялась бы вовсе.
+  TemplateScreen: (props: {
+    layout: string;
+    context: unknown;
+    css?: string;
+    onShadowReady?: (shadow: ShadowRoot) => void;
+  }) => {
     rendered.push({
       layout: props.layout,
       context: props.context as Record<string, unknown>,
       css: props.css,
     });
-    return <div data-testid="template-screen">{props.layout}</div>;
+    // Сцена ставится ОДИН раз, как у настоящего компонента: он перестраивает теневое
+    // дерево только при смене входов, а не на каждый ререндер родителя. Иначе счётчик
+    // листов, поднятый окном в состояние, стирал бы собственные листы.
+    const mount = (host: HTMLDivElement | null) => {
+      if (!host || host.shadowRoot) return;
+      const shadow = host.attachShadow({ mode: "open" });
+      shadow.innerHTML = `<div><div class="tb-report"><section>Карточка</section></div></div>`;
+      props.onShadowReady?.(shadow);
+    };
+    return <div data-testid="template-screen" ref={mount}>{props.layout}</div>;
   },
 }));
 
@@ -151,6 +168,37 @@ describe("данные предпросмотра", () => {
     expect(lastContext().report.values.headline).toBe("Аттестация 2026");
   });
 
+  it("картинки вида адресуются роутом ассетов шаблона (FR-05)", async () => {
+    // Путь внутри шаблона браузеру ничего не говорит: без роута предпросмотр показал бы
+    // страницу без подложки, а обучающийся получил бы её.
+    mockFetch(BUNDLE);
+    renderModal({
+      templateId: "certification",
+      variant: {
+        ...CERTIFICATE,
+        settings: [{ key: "backgroundImage", type: "image", label: "Подложка" }],
+      },
+      values: { backgroundImage: "assets/report/bg.png" },
+    });
+    await waitFor(() => expect(rendered.length).toBeGreaterThan(0));
+    expect(lastContext().report.values.backgroundImage).toBe(
+      "/api/templates/certification/assets/assets/report/bg.png",
+    );
+  });
+
+  it("картинка автора остаётся своей ссылкой, а не подставляется под шаблон", async () => {
+    mockFetch(BUNDLE);
+    renderModal({
+      variant: {
+        ...CERTIFICATE,
+        settings: [{ key: "backgroundImage", type: "image", label: "Подложка" }],
+      },
+      values: { backgroundImage: { url: "/uploads/media/own.png" } },
+    });
+    await waitFor(() => expect(rendered.length).toBeGreaterThan(0));
+    expect(lastContext().report.values.backgroundImage).toBe("/uploads/media/own.png");
+  });
+
   it("страница помечена образцом", async () => {
     mockFetch(BUNDLE);
     renderModal();
@@ -191,11 +239,83 @@ describe("это страница, а не PDF (FR-21)", () => {
     expect(screen.getByTestId("report-preview-close")).toBeTruthy();
   });
 
+  // FR-21/FR-23: окно показывает ЛИСТЫ, а не ленту. Пока раскладка жила только в
+  // конвейере экспорта, автор согласовывал одну длинную страницу и узнавал о разрывах из
+  // скачанного файла. jsdom размеров не считает, поэтому документ здесь укладывается в
+  // один лист — проверяется сама проводка: листы построены, лента убрана, счёт объявлен.
+  it("раскладывает документ по листам A4 и подписывает их", async () => {
+    mockFetch(BUNDLE);
+    renderModal();
+    const host = await screen.findByTestId("template-screen");
+    await waitFor(() => {
+      const shadow = host.shadowRoot as ShadowRoot;
+      expect(shadow.textContent).toContain("Страница 1 из 1");
+    });
+    const shadow = host.shadowRoot as ShadowRoot;
+    // Исходная лента заменена окнами листов: страница осталась ровно одна.
+    expect(shadow.querySelectorAll(".tb-report")).toHaveLength(1);
+    expect(shadow.textContent).toContain("Карточка");
+    // Счёт листов объявлен автору в подзаголовке окна.
+    expect(screen.getByText(/1 страница A4/)).toBeTruthy();
+  });
+
   it("«Закрыть» закрывает окно", async () => {
     mockFetch(BUNDLE);
     const onClose = vi.fn();
     renderModal({ onClose });
     fireEvent.click(await screen.findByTestId("report-preview-close"));
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe("блок измерений в предпросмотре (PRD-47 §5.4)", () => {
+  /** Демо-набор шаблона: у предпросмотра нет прогона, измерения берутся отсюда. */
+  const DEMO_MEASURES = {
+    ramp: { favorable: "142 76% 36%", mid: "38 92% 50%", unfavorable: "0 84% 60%" },
+    scaleKind: "band_ruler",
+    indicatorKind: "label",
+    scales: ["demo_focus", "demo_team", "demo_care"].map((key, i) => ({
+      key,
+      name: `Шкала ${i + 1}`,
+      value: 20 + i * 8,
+      visibility: "level_and_value",
+      interpretation: {
+        domainMin: 0,
+        domainMax: 50,
+        displayMax: null,
+        valence: "higher_is_better",
+        bands: [{ min: 0, max: 50, level: "high", label: "Высокий" }],
+      },
+    })),
+    indicators: [],
+    // Настройки ЭКРАНА: вид отчёта берётся не отсюда.
+    chartSettings: { scalesChartKind: "rose" },
+  };
+
+  const WITH_DEMO = { ...BUNDLE, demo: { course: { title: "Демо" }, runtime: { measures: DEMO_MEASURES } } };
+
+  it("показывает карточки шкал из демо-набора шаблона", async () => {
+    mockFetch(WITH_DEMO);
+    renderModal({ variant: undefined });
+    await waitFor(() => expect(rendered.length).toBeGreaterThan(0));
+
+    expect((lastContext().result as { scales?: unknown[] }).scales).toHaveLength(3);
+  });
+
+  it("рисует диаграмму видом из полей ОТЧЁТА, а не из демо-набора", async () => {
+    mockFetch(WITH_DEMO);
+    renderModal({ variant: undefined, values: { scalesChartKind: "radar" } });
+    await waitFor(() => expect(rendered.length).toBeGreaterThan(0));
+
+    const chart = (lastContext().result as { scalesChart?: { kind?: string } }).scalesChart;
+    expect(chart?.kind).toBe("radar");
+  });
+
+  it("шаблон без демо-измерений рисует отчёт как раньше — без блока", async () => {
+    mockFetch(BUNDLE);
+    renderModal({ variant: undefined });
+    await waitFor(() => expect(rendered.length).toBeGreaterThan(0));
+
+    expect((lastContext().result as { scales?: unknown[] }).scales).toBeUndefined();
   });
 });

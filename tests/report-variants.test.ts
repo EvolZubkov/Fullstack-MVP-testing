@@ -147,6 +147,46 @@ describe("значения полей варианта", () => {
   });
 });
 
+describe("вид диаграммы: перенос галочки PRD-35", () => {
+  // Вариант отчёта «Стандартного» объявляет ОБА поля: новое с умолчанием «не показывать»
+  // и легаси-галочку. Именно эта пара и порождала дефект.
+  const variant = {
+    key: "v",
+    kind: "report" as const,
+    settings: [
+      { key: "scalesChartKind", type: "select", default: "none" },
+      { key: "showCompetencyRadar", type: "boolean", default: false },
+    ],
+  };
+
+  it("включённая галочка даёт радар, пока новое поле не тронуто", () => {
+    // До правки умолчание манифеста подставляло сюда "none", и явная строка побеждала
+    // булев флаг: отчёт теста, настроенного до PRD-46, молча переставал рисовать фигуру.
+    expect(resolveReportValues(variant, { showCompetencyRadar: true }).scalesChartKind).toBe("radar");
+  });
+
+  it("выбранное автором «не показывать» сильнее галочки", () => {
+    const out = resolveReportValues(variant, { scalesChartKind: "none", showCompetencyRadar: true });
+    expect(out.scalesChartKind).toBe("none");
+  });
+
+  it("выключенная галочка ничего не переносит", () => {
+    expect(resolveReportValues(variant, { showCompetencyRadar: false }).scalesChartKind).toBe("none");
+    expect(resolveReportValues(variant, {}).scalesChartKind).toBe("none");
+  });
+
+  it("вариант без поля вида диаграммы правило не задевает", () => {
+    const legacyOnly = {
+      key: "v",
+      kind: "report" as const,
+      settings: [{ key: "showCompetencyRadar", type: "boolean", default: false }],
+    };
+    expect(resolveReportValues(legacyOnly, { showCompetencyRadar: true })).toEqual({
+      showCompetencyRadar: true,
+    });
+  });
+});
+
 describe("перенос значений при смене варианта (FR-14)", () => {
   const from = {
     key: "a",

@@ -12,7 +12,7 @@
  */
 
 import type { Question } from "@shared/schema";
-import { hasOptionList, isMeasurementOnly } from "@shared/questions/question-type";
+import { hasOptionList, isMeasurementOnly, distributesBudget } from "@shared/questions/question-type";
 
 /** Маппинг типов: внутренний -> Excel. */
 const typeToExcel: Record<string, string> = {
@@ -21,6 +21,7 @@ const typeToExcel: Record<string, string> = {
   matching: "matching",
   ranking: "ranking",
   scale: "scale",
+  allocation: "allocation",
 };
 
 /** Canonical «Вопросы» headers (order = export column order). */
@@ -30,8 +31,14 @@ export const QUESTION_HEADERS = [
   "Тип вопроса",
   "Текст вопроса",
   "Сложность",
+  // PRD-30 FR-15: author's position of the question inside its topic.
+  "Индекс в теме",
   "Тексты вариантов ответа",
   "Номера правильных ответов",
+  // PRD-44 FR-38: бюджет и домен варианта у распределения. Для остальных типов пусты.
+  "Бюджет распределения",
+  "Минимум на вариант",
+  "Максимум на вариант",
   "Следование вариантов ответов",
   "Обратная связь",
   "Теги",
@@ -41,7 +48,9 @@ export const QUESTION_HEADERS = [
 ];
 
 /** Column widths matching {@link QUESTION_HEADERS}. */
-export const QUESTION_WIDTHS = [36, 25, 18, 50, 12, 60, 25, 15, 40, 25, 12, 30, 30];
+// Позиционно параллелен QUESTION_HEADERS: три ширины после «Номера правильных
+// ответов» — колонки бюджета распределения (PRD-44).
+export const QUESTION_WIDTHS = [36, 25, 18, 50, 12, 14, 60, 25, 20, 20, 20, 15, 40, 25, 12, 30, 30];
 
 // ─── canonical cell values of the enumerated «Вопросы» columns ───────────────
 //
@@ -93,8 +102,16 @@ export function serializeQuestionRow(q: Question, topicName: string): Record<str
     "Тип вопроса": typeToExcel[q.type] || q.type,
     "Текст вопроса": q.prompt,
     "Сложность": q.difficulty ?? 50,
+    // PRD-30 FR-01: an empty cell means «не задано». The fallback is the EMPTY
+    // STRING, not a number: 0 is a real index, and a default like the one above
+    // would invent an order the author never set.
+    "Индекс в теме": q.orderIndex ?? "",
     "Тексты вариантов ответа": optionsStr,
     "Номера правильных ответов": correctStr,
+    // Пусто у всех типов, кроме распределения: пустая ячейка и есть «неприменимо».
+    "Бюджет распределения": distributesBudget(q.type) ? (data.budget ?? "") : "",
+    "Минимум на вариант": distributesBudget(q.type) ? (data.minPerOption ?? "") : "",
+    "Максимум на вариант": distributesBudget(q.type) ? (data.maxPerOption ?? "") : "",
     "Следование вариантов ответов": q.shuffleAnswers === false ? "Fixed" : "Random",
     "Обратная связь": q.feedback || "",
     // PRD-14 Ф1 (FR-06..FR-08): паритет с моделью вопроса.

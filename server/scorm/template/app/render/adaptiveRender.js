@@ -39,9 +39,10 @@ function ensureAdaptiveShuffleMapping(q) {
 function buildAdaptiveFeedbackHtml(q) {
   var isCorrect = state.lastAdaptiveResult.isCorrect;
   var statusText = isCorrect ? 'Правильно!' : 'Неверно';
-  var feedbackText = (q.feedbackMode === 'conditional') ? (isCorrect ? q.feedbackCorrect : q.feedbackIncorrect) : q.feedback;
   var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
   if (!TB || !TB.feedbackBanner) return '';
+  // issue #34: общий/условный режим разбирает ОБЩЕЕ правило (см. feedback.js).
+  var feedbackText = TB.feedbackTextFor(q, isCorrect);
   return TB.feedbackBanner(isCorrect ? 'success' : 'error', statusText, feedbackText ? TB.feedbackDesc(feedbackText) : '');
 }
 
@@ -115,6 +116,7 @@ function renderAdaptiveQuestionTemplated(app, qData) {
   // Mount directly into #app so .tb-pad > .tb-scene fills the fixed
   // stage and the footer anchors at its bottom — mirrors renderGalleryPage (no wrapper div).
   window.TBTemplate.renderScreenInto(app, {
+    protection: buildScormProtection('question'),
     layout: (typeof systemLayout === 'function') ? systemLayout('question') : state.templateLayouts['question'],
     context: {
       course: { title: TEST_DATA.title },
@@ -124,7 +126,7 @@ function renderAdaptiveQuestionTemplated(app, qData) {
         // mode's — the runtime no longer appends a footer of its own next to the
         // scene, where neither the scene surface nor the DS palette reach it.
         nav: buildAdaptiveNavState(),
-        questionHint: (window.TBTemplate && window.TBTemplate.questionHint) ? window.TBTemplate.questionHint(q.type) : '',
+        questionHint: (window.TBTemplate && window.TBTemplate.questionHint) ? window.TBTemplate.questionHint(q.type, { type: q.type, dataJson: q.data }) : '',
         questionFont: (window.TBTemplate && window.TBTemplate.questionFont) ? window.TBTemplate.questionFont(q.prompt) : '',
         optionFont: (window.TBTemplate && window.TBTemplate.optionFont && window.TBTemplate.answerTexts) ? window.TBTemplate.optionFont(window.TBTemplate.answerTexts({ type: q.type, dataJson: q.data })) : ''
       },
@@ -275,6 +277,17 @@ function validateAdaptiveAnswer(question, answer) {
     }
   }
 
+  // PRD-44 FR-31: распределение готово, только когда сумма ровно равна бюджету.
+  // Адаптивный поток идёт своей проверкой, поэтому без этой ветки он пускал бы
+  // дальше с недобором — там, где обычный поток не пускает.
+  if (typeof TBQType !== 'undefined' && TBQType.distributesBudget(question.type)) {
+    var TBv = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    if (TBv && TBv.isAllocationComplete && !TBv.isAllocationComplete(TBv.allocationSpec(question.data), answer)) {
+      showToast('Распределите все баллы', 'warn');
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -375,8 +388,10 @@ function renderAdaptiveResults() {
  * / finish — gated layout blocks the web omits) go through opts.
  */
 function renderAdaptiveResultsTemplated(app, result) {
-  var hasLimit = !!TEST_DATA.maxAttempts;
-  var canRetry = hasAttemptsLeft();
+  // PRD-31 barrier B: a closed interval between attempts withdraws the retry here
+  // too, so the adaptive results screen cannot offer a run the start would refuse.
+  var intervalOpen = (typeof attemptIntervalState !== 'function') || attemptIntervalState().allowed;
+  var canRetry = hasAttemptsLeft() && intervalOpen;
   var input = {
     passed: !!result.overallPassed,
     topicResults: (result.topicResults || []).map(function (tr) {
@@ -387,24 +402,58 @@ function renderAdaptiveResultsTemplated(app, result) {
         // Unified per-topic feedback (plan 6.1): courses (was recommendedLinks) + events.
         feedback: tr.feedback,
         recommendedCourses: tr.recommendedCourses || tr.recommendedLinks || [],
-        recommendedEvents: tr.recommendedEvents || []
+        recommendedEvents: tr.recommendedEvents || [],
+        // Feedback texts and PRD-32 attachments of the topic and of this test's section
+        // over it, for the ONE recommendations block. The very readers the standard
+        // results screens use (viewResults.js) — the package bundles both files flat, so
+        // reusing them is what keeps the two modes reading the same baked section. Handed
+        // over for EVERY topic; the shared builder is what gates them by the topic's
+        // verdict (in this mode: whether any level was confirmed).
+        feedbackTexts: vrTopicFeedbackTexts(tr),
+        recommendedAssets: vrTopicAssets(tr)
       };
     })
   };
+  // PRD-29 / issue #33: scales and indicators of THIS run, through the SAME assembler the
+  // standard results screen goes through (`currentAttemptMeasures`, viewResults.js — the
+  // runtime is concatenated flat, so it is in scope). It wants the result in the STANDARD
+  // shape, which is what `getAdaptiveResultForScorm` restates the level ladder into; the
+  // computation is deterministic, so the values it produces here are the ones
+  // `finishAndClose` later persists and ships to the LMS. Null for a test that declares
+  // no scales and no indicators — the context then stays exactly as it was.
+  var flatResult = (typeof getAdaptiveResultForScorm === 'function') ? getAdaptiveResultForScorm() : null;
+  var measures = (flatResult && typeof currentAttemptMeasures === 'function')
+    ? currentAttemptMeasures(flatResult)
+    : null;
   var ctx = window.TBTemplate.buildAdaptiveResultContext(input, TEST_DATA.title || '', {
     hasScormActions: true,
+    // The test's OWN feedback (`TEST_DATA.testFeedbackJson`) — the widest source of the
+    // block and its first one. A property of the TEST, not of the flow mode: an author
+    // who wrote a closing word for an adaptive test owes it to the learner just the same,
+    // and the web host hands over the very same block on this screen.
+    testFeedback: vrTestFeedback(),
+    // Вводный блок ЭКРАНА — тот же, что у обычного режима: он свойство теста, а не
+    // способа выдачи. Читатель у него один и тот же.
+    intro: (typeof vrScreenIntro === 'function') ? vrScreenIntro() : null,
+    // Absent for a test without measurements — `undefined` and not `null`, so the shared
+    // builder's `if (opts.measures)` reads it the same way the web host's spread does.
+    measures: measures || undefined,
     // `showPdf` is the LEGACY report flag, kept for external templates whose adaptive
     // layout predates the unified contract; the shipped layouts read `result.nav`.
     showPdf: true,
-    canRetry: (!hasLimit) || canRetry,
-    showFinish: (!hasLimit) || (!canRetry)
+    // `(!hasLimit) || canRetry` used to be written out here, but it was already
+    // redundant — `hasAttemptsLeft()` returns true whenever no limit is set — and
+    // with PRD-31 it became WRONG: an unlimited test would keep offering the retry
+    // straight through a closed interval. The flag now says what it means.
+    canRetry: canRetry,
+    showFinish: !canRetry
   });
   // One report contract for BOTH results layouts (shared/template/results-nav): the
   // adaptive footer used to spell it `showPdf`/`download-pdf`, which the web host never
   // sets — so the same template offered a report in the LMS and none in the browser.
   // Retry/finish stay adaptive-specific (`restart-adaptive` is not `restart`).
   ctx.result.nav = window.TBTemplate.buildResultsNav({
-    canReport: true,
+    canReport: (typeof vrReportEnabled === 'function') ? vrReportEnabled() : true,
     canRetry: false,
     hasPostPages: false
   });
@@ -415,7 +464,11 @@ function renderAdaptiveResultsTemplated(app, result) {
   app.innerHTML = '';
   // Mount directly into #app so .tb-pad > .tb-scene fills the fixed stage —
   // mirrors renderGalleryPage (no wrapper div).
-  window.TBTemplate.renderScreenInto(app, { layout: state.templateLayouts['results.adaptive'], context: ctx });
+  window.TBTemplate.renderScreenInto(app, {
+    layout: state.templateLayouts['results.adaptive'],
+    context: ctx,
+    protection: buildScormProtection('results')
+  });
   // Both spellings are bound: `download-report` (unified) and the legacy `download-pdf`,
   // so an external template on either contract still produces the report.
   var report = app.querySelector('[data-action="download-report"]') || app.querySelector('[data-action="download-pdf"]');

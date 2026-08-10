@@ -67,7 +67,10 @@ function shuffleMappingFor(q) {
     return createRankingOrder(itemCount, q.correct && q.correct.correctOrder);
   }
   if (q.shuffleAnswers === false) return null;
-  if (q.type === 'single' || q.type === 'multiple') {
+  // PRD-44 FR-07: утверждения распределения перемешиваются как варианты выбора —
+  // ротацию, которую референс ведёт вручную ключом, обеспечивает общий механизм.
+  if (q.type === 'single' || q.type === 'multiple' ||
+      (typeof TBQType !== 'undefined' && TBQType.distributesBudget(q.type))) {
     var optCount = data.options ? data.options.length : 0;
     return optCount > 0 ? createShuffleMapping(optCount) : null;
   }

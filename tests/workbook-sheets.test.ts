@@ -8,7 +8,9 @@ import {
   parseBands,
   serializeBands,
   parseScaleRow,
+  serializeScaleRow,
   parseResultVariableRow,
+  serializeResultVariableRow,
   parseMeasurementRow,
   validateSourceKey,
   parseBool,
@@ -57,6 +59,15 @@ describe("parseBands / serializeBands", () => {
     expect(parseBands("abc").ok).toBe(false);
   });
 
+  it("подпись не может занять место кода", () => {
+    // Уровень без кода выгружался как «0..15  «Низкий»» (два пробела), и жадный
+    // разбор читал подпись как КОД, молча переименовывая уровень в его собственную
+    // подпись. Код — опознание уровня: на нём формулы, публикация в LMS и перенос
+    // толкования при загрузке. Лучше громкая ошибка, чем тихая подмена.
+    expect(parseBands("0..15  «Низкий»").ok).toBe(false);
+    expect(parseBands("0..15 «Низкий»").ok).toBe(false);
+  });
+
   it("round-trip serialize ∘ parse", () => {
     const cell = "0..16 low «Низкий»; 17..54 high «Высокий»";
     const parsed = parseBands(cell);
@@ -90,7 +101,7 @@ describe("parseScaleRow", () => {
       label: "Истощение",
       type: "level",
       aggregation: "sum",
-      showToLearner: true,
+      learnerVisibility: "level_and_value",
       scormTarget: "both",
       configJson: { bands: [{ min: 0, max: 16, level: "low", label: "Низкий" }] },
     });
@@ -103,6 +114,70 @@ describe("parseScaleRow", () => {
   it("дефолты агрегации/нормализации/направления", () => {
     const r = parseScaleRow({ "Ключ": "k", "Название": "L", "Тип": "number" });
     expect(r.ok && r.value).toMatchObject({ aggregation: "sum", normalization: "none", direction: "positive" });
+  });
+});
+
+describe("колонка «Показывать ученику» (PRD-29)", () => {
+  const scaleRow = (visibility: string) => ({
+    "Ключ": "ee",
+    "Название": "Истощение",
+    "Тип": "level",
+    "Показывать ученику": visibility,
+  });
+
+  it("читает три значения", () => {
+    const cases: Array<[string, string]> = [
+      ["нет", "hidden"],
+      ["уровень", "level"],
+      ["уровень и значение", "level_and_value"],
+    ];
+    for (const [cell, expected] of cases) {
+      const r = parseScaleRow(scaleRow(cell));
+      expect(r.ok && r.value.learnerVisibility).toBe(expected);
+    }
+  });
+
+  it("читает книги прежнего формата: «да» = уровень и значение, «нет» = нет", () => {
+    expect(parseScaleRow(scaleRow("да")).ok && parseScaleRow(scaleRow("да")).value).toMatchObject({
+      learnerVisibility: "level_and_value",
+    });
+    expect(parseScaleRow(scaleRow("нет")).ok && parseScaleRow(scaleRow("нет")).value).toMatchObject({
+      learnerVisibility: "hidden",
+    });
+  });
+
+  it("круговой обход шкалы не раскрывает значение: «уровень» остаётся «уровень»", () => {
+    const exported = serializeScaleRow({
+      key: "ee",
+      label: "Истощение",
+      description: null,
+      type: "level",
+      aggregation: "sum",
+      normalization: "none",
+      direction: "positive",
+      configJson: {},
+      learnerVisibility: "level",
+      scormTarget: "none",
+    });
+    expect(exported["Показывать ученику"]).toBe("уровень");
+    const back = parseScaleRow(exported as Record<string, unknown>);
+    expect(back.ok && back.value.learnerVisibility).toBe("level");
+  });
+
+  it("круговой обход показателя сохраняет все три позиции", () => {
+    for (const visibility of ["hidden", "level", "level_and_value"] as const) {
+      const exported = serializeResultVariableRow({
+        name: "grade",
+        label: "Оценка",
+        type: "string",
+        formula: "percent",
+        learnerVisibility: visibility,
+        scormTarget: "both",
+        controlsStatus: "none",
+      });
+      const back = parseResultVariableRow(exported as Record<string, unknown>);
+      expect(back.ok && back.value.learnerVisibility).toBe(visibility);
+    }
   });
 });
 
@@ -175,6 +250,9 @@ describe("parseStructureRow", () => {
       drawCount: 12,
       passRule: { source: "custom", type: "absolute", value: 15 },
       required: true,
+      // PRD-30 FR-02: книга без колонки «Случайный порядок вопросов» читается
+      // как сегодняшняя случайная выдача.
+      questionOrder: null,
     });
   });
 

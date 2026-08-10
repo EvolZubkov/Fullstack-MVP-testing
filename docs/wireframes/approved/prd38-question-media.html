@@ -1,0 +1,918 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: PRD-38 — медиа вопроса как часть блока вопроса.
+    Файл: docs/wireframes/prd38-question-media.html
+    Спецификация: docs/specs/prd-38/question-media-placement.md
+    План: docs/plans/PLAN_PRD38_QUESTION_MEDIA.md (Задача 1)
+
+    ЧТО ЭТО. Эскиз утверждает НОВУЮ композицию экрана вопроса и заменяет собой
+    состояние s-question-media из docs/wireframes/tpl-standard-scene-ds.html,
+    где медиа стоит рядом с блоком ответов.
+
+    ЗАЧЕМ. Сегодня непустой слот question-media превращает .tb-qbody в две
+    колонки 5fr | 7fr, где слева медиа, а справа ВЕСЬ блок ответов
+    (theme.css:394-398). Композиция рисовалась под вопрос с карточками, где
+    узкая колонка не мешает. На шкальном вопросе PRD-26 она ломается:
+    горизонтальный степпер на шесть градаций получает 7 модулей из 12, и подписи
+    градаций слипаются в сплошную строку. Медиа по смыслу относится к
+    ФОРМУЛИРОВКЕ задания, а забирает ширину у элемента ответа.
+
+    ЭТО ДОРАБОТКА, А НЕ НОВЫЙ ЭКРАН. Сцена взята дословно из макета
+    server/scorm/templates/default/layouts/question.html (tb-scene,
+    tb-scene__header, tb-scene__q, tb-qbody, tb-scene__foot), стили — из
+    server/scorm/templates/default/styles/theme.css, подключённого как есть.
+    Дельта ровно одна: слот question-media переехал из .tb-qbody внутрь
+    .tb-scene__q первым дочерним элементом, а раскладка блока вопроса стала
+    двухколоночной.
+
+    ЧТО ИМЕННО УТВЕРЖДАЕТСЯ ЭСКИЗОМ:
+      1. изображение и видео стоят СЛЕВА ОТ ТЕКСТА задания, доля 5 модулей из
+         12; текст с подсказкой — 7 (FR-03);
+      2. блок ответов ВСЕГДА во всю ширину колонки, каким бы ни было медиа
+         (FR-02) — именно это чинит шкальный вопрос;
+      3. аудио стоит СТРОКОЙ НАД текстом задания во всю ширину колонки, то есть
+         по ширине плашек вариантов (FR-04, FR-10);
+      4. на сцене не шире 700px всё складывается в одну колонку, медиа над
+         текстом (FR-05);
+      5. кнопка «во весь экран» есть у изображения и видео и отсутствует у
+         аудио (FR-09).
+
+    ОГРАНИЧЕНИЕ, ОПРЕДЕЛИВШЕЕ РЕШЕНИЕ. tests/template-layout-parity держит 19
+    макетов побайтово одинаковыми у шаблонов default и certification, а DSL
+    шаблонов не имеет выражений. Макет НЕ МОЖЕТ ветвиться по типу медиа:
+    разметка одна, а разница «изображение слева, аудио сверху» делается только
+    CSS по атрибуту data-media-type, который печатает общий рендерер
+    shared/template/question-media.ts (FR-06, FR-07).
+
+    ИСТОЧНИКИ РАЗМЕТКИ.
+      - сцена и её блоки — поставляемый шаблон «Стандартный» (theme.css
+        подключён как есть, без копирования правил);
+      - компоненты — ДС UniversityRT (client/src/styles/vendor/university-rt.css);
+      - степпер шкалы — реальный рендерер shared/template/question-interaction.ts,
+        функция renderScale: ou-stepper ou-stepper--choice, шаги
+        ou-stepper__step--btn со статусами is-done / is-current;
+      - карточки вариантов — тот же файл, renderChoice: ou-radio-group +
+        ou-radio-card;
+      - разметка медиа — общий рендерер из плана (задача 2): обёртка
+        .question-media с data-media-type, .qm-fs-btn, .qm-preview, .qm-audio,
+        БЕЗ инлайновых размеров и БЕЗ инлайновых обработчиков (FR-08, FR-16).
+      Слой «Дельта PRD-38» ниже — предлагаемая правка theme.css обоих шаблонов
+      (задачи 7 и 8 плана). Классы с префиксом wf- — каркас эскиза, не UI.
+
+    СОСТОЯНИЯ:
+      s-media-image-wide   шкальный вопрос PRD-26 с изображением, сцена 1280px
+      s-media-choice-wide  вопрос с карточками и изображением, сцена 1280px
+      s-media-audio        аудио-вопрос, сцена 1280px
+      s-media-narrow       сцена 700px: одна колонка, медиа над текстом
+
+    Разбор правил и соответствие требованиям — в таблицах под холстом.
+  -->
+  <title>PRD-38 — медиа вопроса как часть вопроса</title>
+  <!-- Пути ОТНОСИТЕЛЬНЫЕ, а не от корня репозитория: так эскиз открывается и
+       двойным щелчком (file://), и с локального сервера. -->
+  <!-- Absolute-from-root paths, like the other approved wireframes: the review recipe
+       serves the REPOSITORY ROOT over http, and this file moved into `approved/` after
+       it was drawn, which broke the relative ones. -->
+  <link rel="stylesheet" href="/client/src/styles/vendor/university-rt.css">
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css">
+  <link rel="stylesheet" href="/server/scorm/templates/default/styles/theme.css">
+  <style>
+    :root {
+      /* gate-skip-start */
+      /* WIREFRAME-ONLY: литеральные px. В ДС нет шкалы толщин линий и размеров
+         кадра, поэтому величины каркаса эскиза объявлены здесь один раз. */
+      --wf-border-w:   1px;
+      --wf-size-52:    52px;
+      --wf-size-1280: 1280px;
+      --wf-size-800:   800px;
+      --wf-size-700:   700px;
+      --wf-size-900:   900px;
+      /* gate-skip-end */
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       ДЕЛЬТА PRD-38 — предлагаемая правка theme.css обоих шаблонов.
+       Ровно эти правила уходят в
+       server/scorm/templates/default/styles/theme.css и
+       templates/certification/styles/theme.css (задачи 7 и 8 плана).
+       Здесь они лежат ПОСЛЕ подключённого theme.css, поэтому перебивают
+       действующие правила той же специфичности и показывают предложение.
+       ══════════════════════════════════════════════════════════════════════ */
+
+    /* Блок вопроса становится сеткой. Пока медиа нет — одна колонка, ровно как
+       сегодня. При непустом слоте — медиа 5 модулей слева, текст с подсказкой 7
+       справа: та же пропорция, что и раньше, но справа теперь стоит ТЕКСТ
+       ЗАДАНИЯ, а не блок ответов.
+
+       Ряды объявлены явно (заголовок + строка подсказки), потому что без
+       grid-template-rows строка `-1` равна строке `1`: правило grid-row:1/-1 у
+       медиа схлопнулось бы в одну ячейку, а подсказка уехала бы под медиа в ЛЕВУЮ
+       колонку. Второй ряд — `1fr`, а не `auto`: когда медиа выше пары «заголовок +
+       подсказка», лишнюю высоту забирает нижний ряд целиком, и подсказка остаётся
+       прижатой к заголовку, а не повисает посреди пустоты. Колонки детей заданы
+       явно по той же причине — авторазмещение расставляет их иначе. */
+    .tb-scene__q { display: grid; grid-template-columns: 1fr; gap: var(--ou-space-2); }
+    .tb-scene__q:has([data-slot="question-media"]:not(:empty)) {
+      grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+      grid-template-rows: auto 1fr;
+      column-gap: var(--ou-space-5);
+      align-items: start;
+    }
+    .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > [data-slot="question-media"] {
+      grid-column: 1; grid-row: 1 / -1;
+    }
+    .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > .tb-scene__qtitle,
+    .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > .tb-scene__qmeta {
+      grid-column: 2;
+    }
+    /* Аудио визуальной площади не имеет: плеер идёт строкой над текстом во всю
+       ширину колонки. Ветвление по ТИПУ возможно только здесь — макет один на
+       все типы медиа.
+
+       Аргумент `:has()` намеренно длиннее, чем нужно для попадания: специфичность
+       `:has()` равна специфичности САМОГО СПЕЦИФИЧНОГО аргумента, поэтому короткое
+       `:has([data-media-type="audio"])` (0,2,0) ПРОИГРЫВАЕТ правилу выше
+       (0,3,0 из-за `:not(:empty)`) и аудио молча остаётся в колонке 5 из 12.
+       Проверено в браузере: до правки плашка плеера была шириной 376px. */
+    .tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto;
+    }
+    .tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) > [data-slot="question-media"],
+    .tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) > .tb-scene__qtitle,
+    .tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) > .tb-scene__qmeta {
+      grid-column: 1; grid-row: auto;
+    }
+    /* Порядок в DOM выбран так, что во всех одноколоночных случаях медиа само
+       оказывается над текстом — отдельного правила порядка не требуется. */
+    .tb-scene__q > [data-slot="question-media"]:empty { display: none; }
+    /* Медиа и текст задания разделяет тот же интервал, что и остальные блоки
+       колонки: строка подсказки прижимается к заголовку, а не к медиа. */
+    .tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"]) > [data-slot="question-media"] {
+      margin-bottom: var(--ou-space-3);
+    }
+
+    /* Блок ответов: колонок здесь больше нет — медиа ушло в блок вопроса,
+       ответы всегда во всю ширину. */
+    .tb-qbody { flex: 1 0 auto; display: grid; grid-template-columns: 1fr; gap: var(--ou-space-5); }
+
+    /* Размер медиа задаёт ШАБЛОН, а не инлайн рантайма: в этом и смысл общего
+       рендерера — инлайновый стиль иначе перебивает theme.css.
+       max-height держит кадр вопроса: высокая вертикальная картинка иначе
+       растянула бы левую колонку и утопила варианты ответа под сгиб.
+       Обёртка изображения и видео хватает по содержимому (width: fit-content),
+       поэтому кнопка «во весь экран» стоит в углу САМОЙ картинки, а не у края
+       пустой колонки, и вокруг картинки не остаётся полей от `object-fit`.
+       Картинка не растягивается сверх натурального размера: апскейл даёт мыло. */
+    .question-media[data-media-type="image"],
+    .question-media[data-media-type="video"] {
+      width: fit-content; max-width: 100%; margin-inline: auto;
+    }
+    .question-media img,
+    .question-media video {
+      display: block; width: auto; height: auto;
+      max-width: 100%; max-height: 320px;
+      border-radius: var(--ou-radius-m);
+    }
+    .question-media img { cursor: zoom-in; }
+
+    /* Аудио — не картинка, а полоса управления. Плашка даёт ей поверхность сцены.
+       Собственного плеера у ДС пока нет — осознанный техдолг PRD-38 (раздел 9).
+
+       ПРО color-scheme: своего объявления здесь НЕ НУЖНО, и объявлять его прямо
+       вредно. `color-scheme` НАСЛЕДУЕТСЯ, а ДС уже ставит его на корне темы
+       (`.ou, .ou--light { color-scheme: light }`, `.ou--dark { color-scheme: dark }`
+       в university-rt.css) — корень сцены и есть `.ou` на обоих хостах. Правило
+       вида `color-scheme: light dark` это наследование ПЕРЕБИВАЕТ и возвращает
+       плеер к системной теме: проверено в браузере — на тёмной сцене плеер
+       становился белым.
+       Токен рамки — --ou-border-soft: имени --ou-border-subtle в
+       university-rt.css НЕТ, а несуществующий токен молча даёт прозрачный фон. */
+    .question-media[data-media-type="audio"] {
+      padding: var(--ou-space-3);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-m);
+      background: var(--ou-bg-surface-2);
+    }
+    .qm-audio { display: block; width: 100%; }
+
+    /* Узкая сцена (существующий порог 700px, новый не заводится): складывается
+       БЛОК ВОПРОСА, а у блока ответов складывать нечего — колонок у него нет. */
+    @container tbscene (max-width: 700px) {
+      .tb-scene__q:has([data-slot="question-media"]:not(:empty)) {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+      }
+      .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > [data-slot="question-media"],
+      .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > .tb-scene__qtitle,
+      .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > .tb-scene__qmeta {
+        grid-column: 1; grid-row: auto;
+      }
+      .tb-scene__q:has([data-slot="question-media"]:not(:empty)) > [data-slot="question-media"] {
+        margin-bottom: var(--ou-space-3);
+      }
+      .question-media img,
+      .question-media video { max-height: 220px; }
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       КАРКАС ЭСКИЗА. Перенесён из docs/wireframes/prd34-copy-protection.html и
+       docs/wireframes/tpl-standard-scene-ds.html без изменений по существу.
+       ══════════════════════════════════════════════════════════════════════ */
+    body { margin: 0; background: var(--ou-bg-surface-1); }
+    .wf-page { max-width: var(--wf-size-1280); margin-inline: auto; }
+    .wf-caption { max-width: var(--wf-size-1280); margin: 0 auto var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+    /* Кадр, изображающий окно, в котором играется тест: окно LMS, iframe
+       отладчика или область страницы приложения. Не часть UI. Ширина кадра —
+       это ширина СЦЕНЫ, от которой считаются контейнерные запросы theme.css. */
+    .wf-viewport {
+      width: var(--wf-size-1280); max-width: 100%; box-sizing: border-box;
+      margin-inline: auto;
+      border: var(--wf-border-w) solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-m); overflow: hidden;
+      height: var(--wf-size-800); display: flex; flex-direction: column;
+    }
+    .wf-viewport--narrow { width: var(--wf-size-700); height: var(--wf-size-900); }
+    .wf-viewport > .tb-scene { flex: 1; min-height: 0; }
+    /* Якорь для метки требования. НЕ задаёт display: класс вешается на элементы
+       раскладки, и своё display они держат сами. */
+    .wf-annot-wrap { position: relative; }
+    .wf-annot {
+      display: none; position: absolute; top: calc(-1 * var(--ou-space-2)); right: calc(-1 * var(--ou-space-1));
+      z-index: 200; background: var(--ou-warning-default); color: var(--ou-fg-default);
+      border-radius: var(--ou-radius-s); padding: 0 var(--ou-space-1);
+      font: var(--ou-text-body-xs); font-weight: 700; line-height: var(--ou-space-5);
+      pointer-events: none; white-space: nowrap; box-shadow: var(--ou-shadow-sm);
+    }
+    .wf-annot--left { right: auto; left: calc(-1 * var(--ou-space-1)); }
+    body.wf-annots-on .wf-annot { display: block; }
+    .wf-state { display: none; padding-top: var(--wf-size-52); }
+    .wf-state.active { display: block; }
+    .wf-notes, .wf-mapping { max-width: var(--wf-size-1280); margin-inline: auto; }
+    .wf-notes { margin-top: var(--ou-space-8); }
+    .wf-doc-title { max-width: var(--wf-size-1280); margin: var(--ou-space-8) auto 0; font: var(--ou-text-heading-m); color: var(--ou-fg-default); }
+    .wf-notes-title { font: var(--ou-text-body-m); font-weight: 700; margin: var(--ou-space-5) 0 var(--ou-space-2); }
+    .wf-notes-intro { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-3); }
+    .wf-notes-table { width: 100%; border-collapse: collapse; margin-bottom: var(--ou-space-7); }
+    .wf-notes-table th, .wf-notes-table td { border: var(--wf-border-w) solid var(--ou-border-soft); padding: var(--ou-space-2) var(--ou-space-3); font: var(--ou-text-body-s); text-align: left; vertical-align: top; }
+    .wf-notes-table th { background: var(--ou-bg-surface-3); font-weight: 600; }
+    .wf-notes-table code { font: var(--ou-text-mono-s); background: var(--ou-bg-surface-3); padding: 0 var(--ou-space-1); border-radius: var(--ou-radius-s); }
+    .wf-nav {
+      position: fixed; inset-block-start: 0; inset-inline: 0; z-index: 100;
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated); border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+    }
+    .wf-nav-title { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+    .wf-nav-sep { width: var(--ou-space-4); }
+    .wf-btn {
+      border: var(--wf-border-w) solid var(--ou-border-soft); background: var(--ou-bg-surface-2);
+      color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer;
+      padding: var(--ou-space-1) var(--ou-space-3); border-radius: var(--ou-radius-pill);
+    }
+    .wf-btn.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); }
+  </style>
+</head>
+<body class="ou ou--dark ou--normal wf-annots-on">
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">PRD-38 · медиа вопроса</span>
+  <span class="wf-nav-sep"></span>
+  <button class="wf-btn active" type="button" onclick="showState(this, 's-media-image-wide')">Шкала с изображением</button>
+  <button class="wf-btn" type="button" onclick="showState(this, 's-media-choice-wide')">Карточки с изображением</button>
+  <button class="wf-btn" type="button" onclick="showState(this, 's-media-audio')">Аудио</button>
+  <button class="wf-btn" type="button" onclick="showState(this, 's-media-narrow')">Узкая сцена 700px</button>
+  <span class="wf-nav-sep"></span>
+  <button class="wf-btn" type="button" onclick="toggleTheme(this)">Light</button>
+  <button class="wf-btn active" type="button" onclick="toggleAnnots(this)">Аннотации</button>
+</nav>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     s-media-image-wide — шкальный вопрос PRD-26 с изображением, сцена 1280px
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="wf-state active" id="s-media-image-wide">
+  <div class="wf-page">
+    <p class="wf-caption">
+      Изображение — часть блока вопроса: 5 модулей из 12 слева от текста задания, текст с
+      подсказкой — 7. Блок ответов лежит НИЖЕ и занимает все 12: степпер на шесть градаций
+      получает полную ширину колонки, подписи градаций не слипаются. Это тот случай, с
+      которого началась работа.
+    </p>
+    <div class="wf-viewport">
+      <div class="tb-scene">
+        <header class="tb-scene__header">
+          <div class="tb-scene__brandrow">
+            <div class="tb-scene__titles">
+              <h1 class="tb-scene__title">Аудит рабочих мест: охрана труда</h1>
+              <span class="tb-scene__subtitle">Ежегодная проверка · Попытка 1 из 1</span>
+            </div>
+            <div class="tb-scene__timers">
+              <div class="ou-timer ou-timer--digital ou-timer--s"><span class="ou-timer__lbl">тест</span><span class="ou-timer__num">21:40</span></div>
+            </div>
+          </div>
+          <div class="ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map" role="group" aria-label="Карта вопросов">
+            <div class="ou-quiz__dots">
+              <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 1, отвечен">1</button>
+              <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 2, отвечен">2</button>
+              <button type="button" class="ou-quiz__dot is-flagged" aria-label="Вопрос 3, пропущен">3</button>
+              <button type="button" class="ou-quiz__dot is-current" aria-label="Вопрос 4, текущий">4</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 5, не выдан">5</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 6, не выдан">6</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 7, не выдан">7</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 8, не выдан">8</button>
+            </div>
+            <div class="ou-quiz__legend">
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+            </div>
+            <span class="tb-scene__mapcount tb-scene__mapcount--answered">отвечено <strong>2</strong> из 8</span>
+            <span class="tb-scene__mapcount tb-scene__mapcount--skipped">пропущено 1</span>
+          </div>
+          <div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width:44%"></div></div>
+        </header>
+
+        <main class="tb-scene__body">
+          <div class="tb-scene__col" style="--tb-question-fs: 28px; --tb-answer-fs: 18px">
+            <div class="tb-scene__meta">
+              <span>Вопрос 4 из 8</span>
+              <span class="ou-tag ou-tag--neutral">Хранение документов</span>
+            </div>
+
+            <div class="tb-scene__q">
+              <!-- PRD-38: слот медиа — ПЕРВЫЙ дочерний элемент блока вопроса.
+                   Разметку внутри печатает общий рендерер: обёртка .question-media
+                   с data-media-type, кнопка «во весь экран» помечена
+                   data-media-fullscreen, инлайновых стилей и обработчиков нет. -->
+              <div data-slot="question-media" class="wf-annot-wrap">
+                <span class="wf-annot wf-annot--left">FR-03 · медиа 5 модулей из 12</span>
+                <div class="question-media" data-media-type="image">
+                  <button type="button" class="qm-fs-btn" data-media-fullscreen data-media-url="/api/media/41" data-media-type="image" aria-label="Открыть во весь экран">⛶</button>
+                  <img class="qm-preview" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='420' viewBox='0 0 640 420'%3E%3Crect width='640' height='420' fill='%23223047'/%3E%3Crect x='40' y='150' width='560' height='230' rx='10' fill='%23c8b48a'/%3E%3Crect x='40' y='150' width='560' height='18' rx='6' fill='%23a08f6c'/%3E%3Crect x='72' y='186' width='150' height='170' rx='6' fill='%23e6ddc6'/%3E%3Crect x='240' y='186' width='150' height='170' rx='6' fill='%23e6ddc6'/%3E%3Crect x='408' y='186' width='150' height='170' rx='6' fill='%23d6c9ad'/%3E%3Crect x='420' y='198' width='126' height='16' rx='4' fill='%23f2ece0'/%3E%3Crect x='420' y='222' width='126' height='16' rx='4' fill='%23f2ece0'/%3E%3Crect x='420' y='246' width='90' height='16' rx='4' fill='%23f2ece0'/%3E%3Crect x='96' y='212' width='100' height='12' rx='4' fill='%23b7ab8e'/%3E%3Crect x='96' y='234' width='100' height='12' rx='4' fill='%23b7ab8e'/%3E%3Crect x='264' y='212' width='100' height='12' rx='4' fill='%23b7ab8e'/%3E%3Crect x='264' y='234' width='70' height='12' rx='4' fill='%23b7ab8e'/%3E%3Crect x='150' y='40' width='340' height='90' rx='8' fill='%232e4160'/%3E%3Crect x='174' y='64' width='292' height='14' rx='5' fill='%23516a90'/%3E%3Crect x='174' y='92' width='200' height='14' rx='5' fill='%23516a90'/%3E%3C/svg%3E" alt="">
+                </div>
+              </div>
+              <h2 class="tb-scene__qtitle wf-annot-wrap">
+                <span class="wf-annot">FR-03 · текст 7 модулей из 12</span>
+                На снимке — шкаф с личными делами сотрудников в конце рабочего дня. Как часто вы
+                видите такое состояние хранения документов на своём этаже?
+              </h2>
+              <div class="tb-scene__qmeta">
+                <span class="tb-scene__qhint">Выберите ответ на шкале</span>
+                <div data-slot="protection-mark"></div>
+              </div>
+            </div>
+
+            <div class="tb-qbody wf-annot-wrap">
+              <span class="wf-annot">FR-02 · ответы 12 модулей из 12</span>
+              <div class="tb-qbody__answers">
+                <div data-slot="question-feedback"></div>
+                <div data-slot="question-interaction">
+                  <div class="ou-stepper ou-stepper--choice" role="radiogroup">
+                    <button type="button" class="ou-stepper__step ou-stepper__step--btn is-done" role="radio" aria-checked="false" data-index="0">
+                      <span class="ou-stepper__bullet"></span>
+                      <span class="ou-stepper__label"><span class="ou-stepper__title">Никогда</span></span>
+                    </button>
+                    <button type="button" class="ou-stepper__step ou-stepper__step--btn is-done" role="radio" aria-checked="false" data-index="1">
+                      <span class="ou-stepper__bullet"></span>
+                      <span class="ou-stepper__label"><span class="ou-stepper__title">Очень редко</span></span>
+                    </button>
+                    <button type="button" class="ou-stepper__step ou-stepper__step--btn is-current" role="radio" aria-checked="true" data-index="2">
+                      <span class="ou-stepper__bullet"></span>
+                      <span class="ou-stepper__label"><span class="ou-stepper__title">Редко</span></span>
+                    </button>
+                    <button type="button" class="ou-stepper__step ou-stepper__step--btn" role="radio" aria-checked="false" data-index="3">
+                      <span class="ou-stepper__bullet"></span>
+                      <span class="ou-stepper__label"><span class="ou-stepper__title">Часто</span></span>
+                    </button>
+                    <button type="button" class="ou-stepper__step ou-stepper__step--btn" role="radio" aria-checked="false" data-index="4">
+                      <span class="ou-stepper__bullet"></span>
+                      <span class="ou-stepper__label"><span class="ou-stepper__title">Очень часто</span></span>
+                    </button>
+                    <button type="button" class="ou-stepper__step ou-stepper__step--btn" role="radio" aria-checked="false" data-index="5">
+                      <span class="ou-stepper__bullet"></span>
+                      <span class="ou-stepper__label"><span class="ou-stepper__title">Постоянно</span></span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-scene__foot">
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">← Назад</button>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Пропустить</button>
+          <div class="tb-scene__foot-spacer"></div>
+          <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Отправить ответ</button>
+        </footer>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     s-media-choice-wide — вопрос с карточками и изображением, сцена 1280px
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="wf-state" id="s-media-choice-wide">
+  <div class="wf-page">
+    <p class="wf-caption">
+      То же правило на вопросе с вариантами-карточками: медиа 5 модулей слева от текста, текст
+      7. Карточки вариантов лежат ниже во всю ширину колонки — раньше они делили строку с медиа
+      и получали 7 модулей из 12.
+    </p>
+    <div class="wf-viewport">
+      <div class="tb-scene">
+        <header class="tb-scene__header">
+          <div class="tb-scene__brandrow">
+            <div class="tb-scene__titles">
+              <h1 class="tb-scene__title">Основы информационной безопасности</h1>
+              <span class="tb-scene__subtitle">Обязательный курс · Попытка 1 из 2</span>
+            </div>
+            <div class="tb-scene__timers">
+              <div class="ou-timer ou-timer--digital ou-timer--s"><span class="ou-timer__lbl">тест</span><span class="ou-timer__num">38:04</span></div>
+            </div>
+          </div>
+          <div class="ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map" role="group" aria-label="Карта вопросов">
+            <div class="ou-quiz__dots">
+              <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 1, отвечен">1</button>
+              <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 2, отвечен">2</button>
+              <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 3, отвечен">3</button>
+              <button type="button" class="ou-quiz__dot is-flagged" aria-label="Вопрос 4, пропущен">4</button>
+              <button type="button" class="ou-quiz__dot is-current" aria-label="Вопрос 5, текущий">5</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 6, не выдан">6</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 7, не выдан">7</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 8, не выдан">8</button>
+            </div>
+            <div class="ou-quiz__legend">
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+            </div>
+            <span class="tb-scene__mapcount tb-scene__mapcount--answered">отвечено <strong>3</strong> из 8</span>
+            <span class="tb-scene__mapcount tb-scene__mapcount--skipped">пропущено 1</span>
+          </div>
+          <div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width:62%"></div></div>
+        </header>
+
+        <main class="tb-scene__body">
+          <div class="tb-scene__col" style="--tb-question-fs: 30px; --tb-answer-fs: 20px">
+            <div class="tb-scene__meta">
+              <span>Вопрос 5 из 8</span>
+              <span class="ou-tag ou-tag--neutral">Фишинг</span>
+            </div>
+
+            <div class="tb-scene__q">
+              <div data-slot="question-media" class="wf-annot-wrap">
+                <span class="wf-annot wf-annot--left">FR-03 · медиа 5 модулей из 12</span>
+                <div class="question-media" data-media-type="image">
+                  <button type="button" class="qm-fs-btn" data-media-fullscreen data-media-url="/api/media/17" data-media-type="image" aria-label="Открыть во весь экран">⛶</button>
+                  <img class="qm-preview" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='420' viewBox='0 0 640 420'%3E%3Crect width='640' height='420' fill='%230f1728'/%3E%3Crect x='24' y='24' width='592' height='372' rx='12' fill='%23f5f6f8'/%3E%3Crect x='24' y='24' width='592' height='64' rx='12' fill='%23e0e4ea'/%3E%3Crect x='24' y='76' width='592' height='12' fill='%23e0e4ea'/%3E%3Ccircle cx='60' cy='56' r='16' fill='%23b6bdc9'/%3E%3Crect x='90' y='42' width='250' height='11' rx='5' fill='%237e8798'/%3E%3Crect x='90' y='62' width='170' height='9' rx='4' fill='%23a6adba'/%3E%3Crect x='48' y='112' width='330' height='16' rx='5' fill='%233c4657'/%3E%3Crect x='48' y='152' width='520' height='10' rx='5' fill='%23b9c0cc'/%3E%3Crect x='48' y='176' width='500' height='10' rx='5' fill='%23b9c0cc'/%3E%3Crect x='48' y='200' width='470' height='10' rx='5' fill='%23b9c0cc'/%3E%3Crect x='48' y='224' width='300' height='10' rx='5' fill='%23b9c0cc'/%3E%3Crect x='48' y='266' width='210' height='44' rx='8' fill='%232f6fed'/%3E%3Crect x='78' y='283' width='150' height='10' rx='5' fill='%23dce7ff'/%3E%3Crect x='48' y='334' width='380' height='9' rx='4' fill='%23ccd2dc'/%3E%3Crect x='48' y='354' width='260' height='9' rx='4' fill='%23ccd2dc'/%3E%3C/svg%3E" alt="">
+                </div>
+              </div>
+              <h2 class="tb-scene__qtitle wf-annot-wrap">
+                <span class="wf-annot">FR-03 · текст 7 модулей из 12</span>
+                Что в этом письме выдаёт попытку фишинга?
+              </h2>
+              <div class="tb-scene__qmeta">
+                <span class="tb-scene__qhint">Выберите один вариант ответа</span>
+                <div data-slot="protection-mark"></div>
+              </div>
+            </div>
+
+            <div class="tb-qbody wf-annot-wrap">
+              <span class="wf-annot">FR-02 · ответы 12 модулей из 12</span>
+              <div class="tb-qbody__answers">
+                <div data-slot="question-feedback"></div>
+                <div data-slot="question-interaction">
+                  <div class="ou-radio-group ou-radio-group--vertical">
+                    <div class="ou-radio-group__items">
+                      <label class="ou-radio-card">
+                        <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="q5"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                        <span class="ou-radio-card__text"><span class="ou-radio-card__title">Домен отправителя отличается от корпоративного одной буквой</span></span>
+                      </label>
+                      <label class="ou-radio-card is-on">
+                        <span class="ou-radio ou-radio--m is-on"><input type="radio" class="ou-radio__input" name="q5" checked><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                        <span class="ou-radio-card__text"><span class="ou-radio-card__title">Требование срочно подтвердить пароль по ссылке из письма</span></span>
+                      </label>
+                      <label class="ou-radio-card">
+                        <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="q5"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                        <span class="ou-radio-card__text"><span class="ou-radio-card__title">Письмо пришло в рабочее время</span></span>
+                      </label>
+                      <label class="ou-radio-card">
+                        <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="q5"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                        <span class="ou-radio-card__text"><span class="ou-radio-card__title">В подписи указана должность отправителя</span></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-scene__foot">
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">← Назад</button>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Пропустить</button>
+          <div class="tb-scene__foot-spacer"></div>
+          <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Отправить ответ</button>
+        </footer>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     s-media-audio — аудио-вопрос: плеер строкой над текстом
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="wf-state" id="s-media-audio">
+  <div class="wf-page">
+    <p class="wf-caption">
+      Аудио визуальной площади не имеет, поэтому колонки ему не отводится: плеер стоит строкой
+      НАД текстом задания и занимает всю ширину колонки — ровно ширину плашек вариантов. Плеер
+      остаётся нативным, но лежит в плашке шаблона: фон, рамка и радиус из токенов сцены. Тема
+      плеера наследуется от корня сцены (<code>color-scheme</code> объявлен на <code>.ou--dark</code>
+      и <code>.ou--light</code> в ДС) — переключатель Light/Dark в панели эскиза меняет и плеер.
+      Кнопки «во весь экран» у аудио нет.
+    </p>
+    <div class="wf-viewport">
+      <div class="tb-scene">
+        <header class="tb-scene__header">
+          <div class="tb-scene__brandrow">
+            <div class="tb-scene__titles">
+              <h1 class="tb-scene__title">Работа с обращениями клиентов</h1>
+              <span class="tb-scene__subtitle">Контроль качества · Попытка 2 из 3</span>
+            </div>
+            <div class="tb-scene__timers">
+              <div class="ou-timer ou-timer--digital ou-timer--s"><span class="ou-timer__lbl">тест</span><span class="ou-timer__num">12:18</span></div>
+            </div>
+          </div>
+          <div class="ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map" role="group" aria-label="Карта вопросов">
+            <div class="ou-quiz__dots">
+              <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 1, отвечен">1</button>
+              <button type="button" class="ou-quiz__dot is-current" aria-label="Вопрос 2, текущий">2</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 3, не выдан">3</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 4, не выдан">4</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 5, не выдан">5</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 6, не выдан">6</button>
+            </div>
+            <div class="ou-quiz__legend">
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+            </div>
+            <span class="tb-scene__mapcount tb-scene__mapcount--answered">отвечено <strong>1</strong> из 6</span>
+            <span class="tb-scene__mapcount tb-scene__mapcount--skipped">пропущено 0</span>
+          </div>
+          <div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width:18%"></div></div>
+        </header>
+
+        <main class="tb-scene__body">
+          <div class="tb-scene__col" style="--tb-question-fs: 30px; --tb-answer-fs: 20px">
+            <div class="tb-scene__meta">
+              <span>Вопрос 2 из 6</span>
+              <span class="ou-tag ou-tag--neutral">Разбор звонка</span>
+            </div>
+
+            <div class="tb-scene__q">
+              <div data-slot="question-media" class="wf-annot-wrap">
+                <span class="wf-annot wf-annot--left">FR-04 · аудио 12 модулей из 12, над текстом</span>
+                <div class="question-media" data-media-type="audio">
+                  <!-- Плеер НАТИВНЫЙ: собственного ou-audio в ДС пока нет, это
+                       техдолг PRD-38. Адрес источника в эскизе подставляет скрипт
+                       каркаса — файла с записью в репозитории нет. -->
+                  <audio class="qm-audio" controls preload="metadata"><source src="" data-wf-demo-audio>Ваш браузер не воспроизводит аудио.</audio>
+                </div>
+              </div>
+              <h2 class="tb-scene__qtitle wf-annot-wrap">
+                <span class="wf-annot">FR-04 · текст под плеером</span>
+                Прослушайте фрагмент разговора. Какое правило работы с обращением нарушил оператор?
+              </h2>
+              <div class="tb-scene__qmeta">
+                <span class="tb-scene__qhint">Выберите один вариант ответа</span>
+                <div data-slot="protection-mark"></div>
+              </div>
+            </div>
+
+            <div class="tb-qbody wf-annot-wrap">
+              <span class="wf-annot">FR-10 · ширина плашки плеера = ширина плашки варианта</span>
+              <div class="tb-qbody__answers">
+                <div data-slot="question-feedback"></div>
+                <div data-slot="question-interaction">
+                  <div class="ou-radio-group ou-radio-group--vertical">
+                    <div class="ou-radio-group__items">
+                      <label class="ou-radio-card">
+                        <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="q2"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                        <span class="ou-radio-card__text"><span class="ou-radio-card__title">Не представился и не назвал компанию</span></span>
+                      </label>
+                      <label class="ou-radio-card is-on">
+                        <span class="ou-radio ou-radio--m is-on"><input type="radio" class="ou-radio__input" name="q2" checked><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                        <span class="ou-radio-card__text"><span class="ou-radio-card__title">Перебил клиента и не уточнил суть обращения</span></span>
+                      </label>
+                      <label class="ou-radio-card">
+                        <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="q2"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                        <span class="ou-radio-card__text"><span class="ou-radio-card__title">Не назвал срок решения вопроса</span></span>
+                      </label>
+                      <label class="ou-radio-card">
+                        <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="q2"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                        <span class="ou-radio-card__text"><span class="ou-radio-card__title">Перевёл звонок без предупреждения</span></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-scene__foot">
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">← Назад</button>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Пропустить</button>
+          <div class="tb-scene__foot-spacer"></div>
+          <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Отправить ответ</button>
+        </footer>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     s-media-narrow — сцена 700px: одна колонка, медиа над текстом
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="wf-state" id="s-media-narrow">
+  <div class="wf-page">
+    <p class="wf-caption">
+      Сцена 700px — существующий порог мобильной раскладки (<code>@container tbscene
+      (max-width: 700px)</code>), новый не заводится. Блок вопроса складывается в одну колонку,
+      медиа оказывается над текстом само собой: в разметке оно идёт первым. Блоку ответов
+      складывать нечего — колонок у него нет ни при какой ширине.
+    </p>
+    <div class="wf-viewport wf-viewport--narrow">
+      <div class="tb-scene">
+        <header class="tb-scene__header">
+          <div class="tb-scene__brandrow">
+            <div class="tb-scene__titles">
+              <h1 class="tb-scene__title">Основы информационной безопасности</h1>
+              <span class="tb-scene__subtitle">Обязательный курс · Попытка 1 из 2</span>
+            </div>
+            <div class="tb-scene__timers">
+              <div class="ou-timer ou-timer--digital ou-timer--s"><span class="ou-timer__lbl">тест</span><span class="ou-timer__num">38:04</span></div>
+            </div>
+          </div>
+          <div class="ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map" role="group" aria-label="Карта вопросов">
+            <div class="ou-quiz__dots">
+              <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 1, отвечен">1</button>
+              <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 2, отвечен">2</button>
+              <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 3, отвечен">3</button>
+              <button type="button" class="ou-quiz__dot is-flagged" aria-label="Вопрос 4, пропущен">4</button>
+              <button type="button" class="ou-quiz__dot is-current" aria-label="Вопрос 5, текущий">5</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 6, не выдан">6</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 7, не выдан">7</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 8, не выдан">8</button>
+            </div>
+            <div class="ou-quiz__legend">
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+            </div>
+            <span class="tb-scene__mapcount tb-scene__mapcount--answered">отвечено <strong>3</strong> из 8</span>
+            <span class="tb-scene__mapcount tb-scene__mapcount--skipped">пропущено 1</span>
+          </div>
+          <div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width:62%"></div></div>
+        </header>
+
+        <main class="tb-scene__body">
+          <div class="tb-scene__col" style="--tb-question-fs: 30px; --tb-answer-fs: 20px">
+            <div class="tb-scene__meta">
+              <span>Вопрос 5 из 8</span>
+              <span class="ou-tag ou-tag--neutral">Фишинг</span>
+            </div>
+
+            <div class="tb-scene__q">
+              <div data-slot="question-media" class="wf-annot-wrap">
+                <span class="wf-annot wf-annot--left">FR-05 · медиа над текстом</span>
+                <div class="question-media" data-media-type="image">
+                  <button type="button" class="qm-fs-btn" data-media-fullscreen data-media-url="/api/media/17" data-media-type="image" aria-label="Открыть во весь экран">⛶</button>
+                  <img class="qm-preview" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='420' viewBox='0 0 640 420'%3E%3Crect width='640' height='420' fill='%230f1728'/%3E%3Crect x='24' y='24' width='592' height='372' rx='12' fill='%23f5f6f8'/%3E%3Crect x='24' y='24' width='592' height='64' rx='12' fill='%23e0e4ea'/%3E%3Crect x='24' y='76' width='592' height='12' fill='%23e0e4ea'/%3E%3Ccircle cx='60' cy='56' r='16' fill='%23b6bdc9'/%3E%3Crect x='90' y='42' width='250' height='11' rx='5' fill='%237e8798'/%3E%3Crect x='90' y='62' width='170' height='9' rx='4' fill='%23a6adba'/%3E%3Crect x='48' y='112' width='330' height='16' rx='5' fill='%233c4657'/%3E%3Crect x='48' y='152' width='520' height='10' rx='5' fill='%23b9c0cc'/%3E%3Crect x='48' y='176' width='500' height='10' rx='5' fill='%23b9c0cc'/%3E%3Crect x='48' y='200' width='470' height='10' rx='5' fill='%23b9c0cc'/%3E%3Crect x='48' y='224' width='300' height='10' rx='5' fill='%23b9c0cc'/%3E%3Crect x='48' y='266' width='210' height='44' rx='8' fill='%232f6fed'/%3E%3Crect x='78' y='283' width='150' height='10' rx='5' fill='%23dce7ff'/%3E%3Crect x='48' y='334' width='380' height='9' rx='4' fill='%23ccd2dc'/%3E%3Crect x='48' y='354' width='260' height='9' rx='4' fill='%23ccd2dc'/%3E%3C/svg%3E" alt="">
+                </div>
+              </div>
+              <h2 class="tb-scene__qtitle">Что в этом письме выдаёт попытку фишинга?</h2>
+              <div class="tb-scene__qmeta">
+                <span class="tb-scene__qhint">Выберите один вариант ответа</span>
+                <div data-slot="protection-mark"></div>
+              </div>
+            </div>
+
+            <div class="tb-qbody wf-annot-wrap">
+              <span class="wf-annot">FR-02 · ответы во всю ширину</span>
+              <div class="tb-qbody__answers">
+                <div data-slot="question-feedback"></div>
+                <div data-slot="question-interaction">
+                  <div class="ou-radio-group ou-radio-group--vertical">
+                    <div class="ou-radio-group__items">
+                      <label class="ou-radio-card">
+                        <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="q5n"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                        <span class="ou-radio-card__text"><span class="ou-radio-card__title">Домен отправителя отличается от корпоративного одной буквой</span></span>
+                      </label>
+                      <label class="ou-radio-card is-on">
+                        <span class="ou-radio ou-radio--m is-on"><input type="radio" class="ou-radio__input" name="q5n" checked><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                        <span class="ou-radio-card__text"><span class="ou-radio-card__title">Требование срочно подтвердить пароль по ссылке из письма</span></span>
+                      </label>
+                      <label class="ou-radio-card">
+                        <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="q5n"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                        <span class="ou-radio-card__text"><span class="ou-radio-card__title">Письмо пришло в рабочее время</span></span>
+                      </label>
+                      <label class="ou-radio-card">
+                        <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="q5n"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                        <span class="ou-radio-card__text"><span class="ou-radio-card__title">В подписи указана должность отправителя</span></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-scene__foot">
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">← Назад</button>
+          <div class="tb-scene__foot-spacer"></div>
+          <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Отправить</button>
+        </footer>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ Таблицы под холстом ══════════════════ -->
+<h2 class="wf-doc-title">PRD-38 — разбор эскиза</h2>
+
+<div class="wf-notes">
+
+  <h3 class="wf-notes-title">Состояния эскиза</h3>
+  <p class="wf-notes-intro">Что показывает каждое состояние и какие требования оно закрывает.</p>
+  <table class="wf-notes-table">
+    <thead><tr><th>Состояние</th><th>Что показывает</th><th>Требования</th></tr></thead>
+    <tbody>
+      <tr><td><code>s-media-image-wide</code></td><td>Шкальный вопрос PRD-26 с изображением на сцене 1280px: медиа 5 модулей слева от текста, степпер на шесть градаций во всю ширину колонки, подписи градаций читаются</td><td>FR-01, FR-02, FR-03, FR-09</td></tr>
+      <tr><td><code>s-media-choice-wide</code></td><td>Вопрос с вариантами-карточками и изображением на сцене 1280px: та же композиция вопроса, карточки во всю ширину</td><td>FR-01, FR-02, FR-03, FR-09</td></tr>
+      <tr><td><code>s-media-audio</code></td><td>Аудио-вопрос: плашка нативного плеера строкой над текстом, по ширине плашек вариантов; кнопки «во весь экран» нет</td><td>FR-04, FR-09, FR-10, FR-11, FR-12</td></tr>
+      <tr><td><code>s-media-narrow</code></td><td>Сцена 700px: блок вопроса складывается в одну колонку, медиа над текстом, ответы во всю ширину</td><td>FR-02, FR-05</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="wf-notes-title">Правила раскладки</h3>
+  <p class="wf-notes-intro">Доли ширины считаются от колонки содержимого <code>.tb-scene__col</code> (75% ширины сцены). Пропорция 5 к 7 не новая — это та же сетка, что действует сегодня; меняется только то, ЧТО стоит справа от медиа.</p>
+  <table class="wf-notes-table">
+    <thead><tr><th>Условие</th><th>Раскладка</th><th>Чем задано</th></tr></thead>
+    <tbody>
+      <tr><td>Медиа нет</td><td>Одна колонка, как сегодня</td><td><code>.tb-scene__q { grid-template-columns: 1fr }</code> плюс <code>[data-slot="question-media"]:empty { display: none }</code></td></tr>
+      <tr><td>Изображение или видео, сцена шире 700px</td><td>Две колонки <code>minmax(0,5fr) minmax(0,7fr)</code>: медиа слева на обе строки (заголовок и подсказка), текст справа</td><td><code>.tb-scene__q:has([data-slot="question-media"]:not(:empty))</code></td></tr>
+      <tr><td>Аудио, любая ширина</td><td>Одна колонка: плеер строкой над текстом, во всю ширину</td><td><code>.tb-scene__q:has([data-slot="question-media"] [data-media-type="audio"])</code> — аргумент длиннее, чем нужно для попадания, ради специфичности (см. замечания к плану ниже)</td></tr>
+      <tr><td>Сцена не шире 700px</td><td>Одна колонка: медиа над текстом</td><td>Существующий <code>@container tbscene (max-width: 700px)</code></td></tr>
+      <tr><td>Блок ответов, всегда</td><td>Одна колонка во всю ширину</td><td><code>.tb-qbody</code> двухколоночного правила больше не имеет</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="wf-notes-title">Дельта: было — стало</h3>
+  <table class="wf-notes-table">
+    <thead><tr><th>Что</th><th>Было</th><th>Стало</th></tr></thead>
+    <tbody>
+      <tr><td>Место слота <code>question-media</code></td><td>Внутри <code>.tb-qbody</code>, в обёртке <code>.tb-qbody__media</code></td><td>Внутри <code>.tb-scene__q</code>, первым дочерним элементом; обёртка <code>.tb-qbody__media</code> удаляется</td></tr>
+      <tr><td>Сосед медиа</td><td>Весь блок ответов (7 из 12)</td><td>Текст задания с подсказкой (7 из 12)</td></tr>
+      <tr><td>Шкальный вопрос с медиа</td><td>Степпер в колонке 7 из 12: подписи градаций слипаются в строку</td><td>Степпер во всю ширину колонки, подписи читаются</td></tr>
+      <tr><td>Аудио</td><td>Голый <code>&lt;audio controls&gt;</code> в левой колонке 5 из 12; светлый плеер поверх тёмной сцены</td><td>Плашка шаблона во всю ширину над текстом; тема наследуется от корня сцены, <code>preload="metadata"</code></td></tr>
+      <tr><td>Размер медиа</td><td>Инлайн рантайма (<code>max-height:250px;margin:16px auto</code> в пакете, <code>260px/8px</code> в вебе) — <code>theme.css</code> перебить не мог</td><td>Инлайна нет, размер и отступы задаёт <code>theme.css</code></td></tr>
+      <tr><td>Кнопка «во весь экран»</td><td>Инлайновый <code>onclick="qmOpenFromEl(this)"</code>, оверлей только в пакете</td><td><code>data-media-fullscreen</code> и делегирование; оверлей общий для обоих хостов</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="wf-notes-title">Разметка холста и её источники</h3>
+  <p class="wf-notes-intro">В холсте нет ни одного придуманного класса: всё, что не <code>wf-</code>, печатает продукт.</p>
+  <table class="wf-notes-table">
+    <thead><tr><th>Разметка</th><th>Откуда</th></tr></thead>
+    <tbody>
+      <tr><td><code>tb-scene</code>, <code>tb-scene__header</code>, <code>tb-scene__map</code>, <code>tb-scene__col</code>, <code>tb-scene__q</code>, <code>tb-qbody</code>, <code>tb-scene__foot</code></td><td><code>server/scorm/templates/default/layouts/question.html</code> и <code>styles/theme.css</code></td></tr>
+      <tr><td><code>question-media</code>, <code>qm-fs-btn</code>, <code>qm-preview</code>, <code>qm-audio</code>, <code>data-media-type</code>, <code>data-media-fullscreen</code></td><td>Общий рендерер <code>shared/template/question-media.ts</code> (задача 2 плана)</td></tr>
+      <tr><td><code>ou-stepper ou-stepper--choice</code>, <code>ou-stepper__step--btn</code>, статусы <code>is-done</code> / <code>is-current</code></td><td><code>shared/template/question-interaction.ts</code>, <code>renderScale</code> (PRD-26)</td></tr>
+      <tr><td><code>ou-radio-group</code>, <code>ou-radio-card</code>, <code>ou-radio</code></td><td>Тот же файл, <code>renderChoice</code></td></tr>
+      <tr><td><code>ou-quiz</code>, <code>ou-timer</code>, <code>ou-tag</code>, <code>ou-btn</code></td><td>ДС UniversityRT, <code>vendor/ui-kit/css/university-rt.css</code></td></tr>
+      <tr><td>Изображение в слоте медиа</td><td>Заглушка вместо загруженного автором файла: SVG в <code>data:</code>-адресе, чтобы эскиз открывался и по <code>file://</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="wf-notes-title">Открытые вопросы и замечания к плану</h3>
+  <table class="wf-notes-table">
+    <thead><tr><th>Пункт</th><th>Что важно</th></tr></thead>
+    <tbody>
+      <tr><td><code>grid-row: 1 / -1</code> без явных рядов</td><td>Черновик правила в плане (задача 7, шаг 1) даёт медиа <code>grid-row: 1 / -1</code>, но без <code>grid-template-rows</code> линия <code>-1</code> совпадает с линией <code>1</code>: спан схлопывается, и строка подсказки уезжает ПОД медиа в левую колонку. В эскизе ряды объявлены явно (<code>auto auto</code>), а колонки детей заданы явно — иначе авторазмещение расставляет их иначе</td></tr>
+      <tr><td>Специфичность правила аудио</td><td>Черновик даёт <code>.tb-scene__q:has([data-media-type="audio"])</code> — это (0,2,0), а правило двух колонок выше (0,3,0), потому что <code>:has()</code> берёт специфичность самого специфичного аргумента, а там <code>:not(:empty)</code>. Аудио молча оставалось в колонке 5 из 12: проверено в браузере, плашка плеера была 376px вместо 923px. В эскизе аргумент удлинён до <code>:has([data-slot="question-media"] [data-media-type="audio"])</code></td></tr>
+      <tr><td><code>color-scheme</code> у плеера</td><td>Черновик FR-11 предлагает «пробросить» <code>color-scheme</code> на плеер. Своего объявления не нужно и оно ВРЕДНО: свойство наследуется, а ДС уже ставит его на корне темы. Правило <code>color-scheme: light dark</code> это наследование перебивает — проверено в браузере, на тёмной сцене плеер становился белым</td></tr>
+      <tr><td>Кнопка «во весь экран» и ширина кадра</td><td>Если оставить у медиа <code>width: 100%</code>, на узкой сцене картинка вписывается в кадр с полями (<code>object-fit</code>), а кнопка уезжает к краю пустой колонки. В эскизе обёртка изображения и видео хватает по содержимому (<code>width: fit-content; margin-inline: auto</code>), картинка не растягивается сверх натурального размера, и кнопка стоит в её углу</td></tr>
+      <tr><td>Токен <code>--ou-border-subtle</code></td><td>Имени в <code>university-rt.css</code> НЕТ. Плашка аудио в эскизе обведена <code>--ou-border-soft</code>; при реализации брать его же</td></tr>
+      <tr><td><code>max-height</code> у медиа</td><td>Инлайновые размеры уходят, но потолок высоты нужен: вертикальная картинка иначе растягивает левую колонку и утапливает варианты под сгиб. В эскизе 320px на широкой сцене и 220px на узкой — величины на согласование</td></tr>
+      <tr><td>Собственный плеер <code>ou-audio</code></td><td>Внутренности нативного плеера различаются в Chrome, Firefox и Safari. Компонент ДС — техдолг PRD-38 (раздел 9), в эскизе намеренно не рисуется</td></tr>
+      <tr><td>Видео</td><td>Отдельного состояния нет: правило раскладки у видео то же, что у изображения, и разметка отличается только тегом</td></tr>
+    </tbody>
+  </table>
+
+</div>
+
+<div class="wf-mapping">
+  <h2 class="wf-mapping-title">Соответствие требованиям PRD-38</h2>
+  <p class="wf-mapping-sub">Только требования, у которых есть видимое проявление на экране; FR-06, FR-07, FR-13 и FR-14 — про код и паритет, экраном не проверяются.</p>
+  <table>
+    <thead><tr><th>Требование</th><th>Где видно</th></tr></thead>
+    <tbody>
+      <tr><td>FR-01 — медиа принадлежит блоку вопроса</td><td>Все четыре состояния: слот стоит внутри <code>.tb-scene__q</code></td></tr>
+      <tr><td>FR-02 — ответы всегда во всю ширину</td><td>Все четыре состояния, аннотация «ответы 12 модулей из 12»</td></tr>
+      <tr><td>FR-03 — изображение и видео слева от текста, 5 из 12</td><td><code>s-media-image-wide</code>, <code>s-media-choice-wide</code></td></tr>
+      <tr><td>FR-04 — аудио строкой над текстом во всю ширину</td><td><code>s-media-audio</code></td></tr>
+      <tr><td>FR-05 — сцена не шире 700px: медиа над текстом</td><td><code>s-media-narrow</code></td></tr>
+      <tr><td>FR-08 — в разметке медиа нет инлайновых размеров</td><td>Разметка холста: у <code>.qm-preview</code> нет атрибута <code>style</code></td></tr>
+      <tr><td>FR-09 — «во весь экран» у изображения и видео, у аудио нет</td><td><code>.qm-fs-btn</code> есть в трёх состояниях с изображением и отсутствует в <code>s-media-audio</code></td></tr>
+      <tr><td>FR-10 — плашка аудио из токенов сцены</td><td><code>s-media-audio</code>: фон, рамка и радиус плашки</td></tr>
+      <tr><td>FR-11 — плеер наследует тему</td><td><code>s-media-audio</code> при переключателе Light / Dark в панели эскиза</td></tr>
+      <tr><td>FR-12 — <code>preload="metadata"</code></td><td>Атрибут в разметке плеера</td></tr>
+      <tr><td>FR-16 — нет инлайновых обработчиков</td><td>Кнопка помечена <code>data-media-fullscreen</code>, атрибута <code>onclick</code> нет</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+  /* Wireframe-only controls. Перенесены из docs/wireframes/tpl-standard-scene-ds.html. */
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+    document.documentElement.style.setProperty('--wf-nav-h', nav.offsetHeight + 'px');
+  }
+
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav .wf-btn[onclick^="showState"]').forEach(function (b) {
+      b.classList.toggle('active', b === btn);
+    });
+    updateWireframeNavOffset();
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleAnnots = function toggleAnnots(btn) {
+    var on = document.body.classList.toggle('wf-annots-on');
+    if (btn) btn.classList.toggle('active', on);
+  };
+
+  /* Записи разговора в репозитории нет, а нативный плеер без источника рисуется
+     погашенным и не показывает длительность. Каркас эскиза подставляет тишину,
+     собранную на лету: продукт так НЕ делает — там в src стоит адрес файла. */
+  function wfFillDemoAudio() {
+    var sources = document.querySelectorAll('[data-wf-demo-audio]');
+    if (!sources.length || !window.Blob || !window.URL) return;
+    var rate = 8000, seconds = 42, samples = rate * seconds;
+    var buffer = new ArrayBuffer(44 + samples);
+    var view = new DataView(buffer);
+    function ascii(offset, text) {
+      for (var i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+    }
+    ascii(0, 'RIFF'); view.setUint32(4, 36 + samples, true); ascii(8, 'WAVEfmt ');
+    view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+    view.setUint32(24, rate, true); view.setUint32(28, rate, true);
+    view.setUint16(32, 1, true); view.setUint16(34, 8, true);
+    ascii(36, 'data'); view.setUint32(40, samples, true);
+    for (var s = 0; s < samples; s++) view.setUint8(44 + s, 128);
+    var url = URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }));
+    sources.forEach(function (source) {
+      source.setAttribute('src', url);
+      if (source.parentNode && source.parentNode.load) source.parentNode.load();
+    });
+  }
+
+  window.addEventListener('load', function () {
+    updateWireframeNavOffset();
+    wfFillDemoAudio();
+  });
+  window.addEventListener('resize', updateWireframeNavOffset);
+</script>
+
+</body>
+</html>

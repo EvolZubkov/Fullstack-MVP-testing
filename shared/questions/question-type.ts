@@ -19,7 +19,7 @@
  */
 
 /** Every question type the product supports. Mirrors the `questions.type` enum. */
-export const QUESTION_TYPES = ["single", "multiple", "matching", "ranking", "scale"] as const;
+export const QUESTION_TYPES = ["single", "multiple", "matching", "ranking", "scale", "allocation"] as const;
 
 export type QuestionType = (typeof QUESTION_TYPES)[number];
 
@@ -34,9 +34,25 @@ export function isSingleIndexChoice(type: string): boolean {
   return type === "single" || type === "scale";
 }
 
-/** Carries an answer list in `dataJson.options` — `single`, `multiple` and `scale`. */
+/**
+ * Carries an answer list in `dataJson.options` — `single`, `multiple`, `scale` and
+ * `allocation`. The allocation's STATEMENTS live in that same field on purpose
+ * (PRD-44 FR-02), so every existing reader of `dataJson.options` — the option editor,
+ * the workbook column, the font-fitting pass, the preview — keeps working unchanged.
+ */
 export function hasOptionList(type: string): boolean {
-  return type === "single" || type === "multiple" || type === "scale";
+  return type === "single" || type === "multiple" || type === "scale" || type === "allocation";
+}
+
+/**
+ * The learner splits a fixed BUDGET of points across the options (PRD-44). Two things
+ * follow, and both are why this is a trait rather than a `type === "allocation"` test:
+ * the answer is a per-option amount (`Record<index, points>`), and the SIZE of that
+ * amount — not the bare fact of choosing — is what a measurement reads, which makes
+ * this the first source whose contribution the learner sets rather than the author.
+ */
+export function distributesBudget(type: string): boolean {
+  return type === "allocation";
 }
 
 /**
@@ -61,20 +77,44 @@ export interface TypedQuestion {
 }
 
 /**
- * True for a MEASUREMENT-ONLY question: a scale whose author did not set a correct
- * graduation. Such a question is never checked, earns no points and adds nothing to
- * the possible total (PRD-26 FR-08); its only result is the contribution it makes to
- * the PRD-5 scales.
+ * True for a MEASUREMENT-ONLY question: never checked, earns no points, adds nothing
+ * to the possible total (PRD-26 FR-08); its only result is the contribution it makes
+ * to the PRD-5 scales.
  *
- * The absence of `correctIndex` IS the author's switch — there is no separate flag.
+ * Two ways in, and they differ in KIND. A scale is measurement-only by the author's
+ * choice — the absence of `correctIndex` IS the switch, there is no separate flag.
+ * An allocation is measurement-only by TYPE (PRD-44 FR-09/FR-11): the method has no
+ * reference distribution at all, so a stray `correctIndex` left behind by a type
+ * switch in the editor must not make the question checkable.
+ *
  * `questions.correct_json` is `NOT NULL`, so the measurement state is an empty object,
  * never `null`; both are accepted here for robustness against legacy rows.
  */
 export function isMeasurementOnly(question: TypedQuestion): boolean {
+  if (distributesBudget(question.type)) return true;
   if (question.type !== "scale") return false;
   const key = (question.correctJson ?? question.correct) as
     | { correctIndex?: unknown }
     | null
     | undefined;
   return !key || typeof key.correctIndex !== "number";
+}
+
+/**
+ * Does this SET of questions grade anything at all? False for a measurement method —
+ * a questionnaire built entirely of allocations and keyless scales, where no answer
+ * is right or wrong and no points exist to compare against a threshold.
+ *
+ * The question is asked BEFORE an attempt exists (the start screen's «проходной
+ * балл»), which is why it reads the content rather than the earned/possible points
+ * PRD-29 §6.7 uses on the results screen: at that moment there is nothing scored yet.
+ * A MIXED test — one graded question among measurements — grades, and keeps its
+ * threshold: the rule answers «is there anything to grade», not «is everything
+ * graded».
+ *
+ * An empty set counts as not grading: a test with no questions has nothing to
+ * threshold either.
+ */
+export function hasGradedContent(questions: readonly TypedQuestion[]): boolean {
+  return questions.some((q) => !isMeasurementOnly(q));
 }

@@ -23,6 +23,9 @@ const coreSrc = read("server/scorm/template/app/templateCore.js");
 const engineSrc = read("server/scorm/template/app/eligibility/engine.js");
 const pluginsSrc = read("server/scorm/template/app/eligibility/plugins.js");
 const gateSrc = read("server/scorm/template/app/eligibility/gate.js");
+// PRD-31: the portal clock moved out of the gate into a shared utility (both barriers
+// need it), so the runtime under test is assembled from four parts, not three.
+const trustedNowSrc = read("server/scorm/template/app/utils/trusted-now.js");
 const blockedLayout = read("server/scorm/templates/default/layouts/system.blocked.html");
 
 /** Build a fresh RetakeGate bound to the supplied runtime globals. */
@@ -37,7 +40,7 @@ function makeGate(globals: {
     "SCORM",
     "escapeHtml",
     "loadDesignTemplate",
-    `${engineSrc}\n${pluginsSrc}\n${gateSrc}\n;return RetakeGate;`,
+    `${trustedNowSrc}\n${engineSrc}\n${pluginsSrc}\n${gateSrc}\n;return RetakeGate;`,
   );
   // No template fetch needed: tests preload state.templateLayouts; loadDesignTemplate
   // is a never-called stub here (the real one runs only when layouts are absent).
@@ -51,14 +54,38 @@ const escapeHtml = (s: unknown) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
+/** Stub a successful portal chrome (SECID) + collection response with one record. */
+function stubWebtutorFetch(records: Array<Record<string, unknown>>) {
+  vi.stubGlobal("fetch", (url: string) => {
+    if (String(url).indexOf("extjs_json_collection_data") !== -1) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: () => Promise.resolve({ success: true, total: records.length, results: records }),
+        text: () => Promise.resolve(""),
+      });
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      text: () => Promise.resolve("ABCDEF0123456789ABCDEF0123456789"),
+    });
+  });
+}
+
 /**
  * Flush the microtask chain the gate schedules (no real timers involved). The
  * cooldown path may chain two ensureTemplate() loads (cooldown-start → block-wall
  * fallback) when a stub loadDesignTemplate never populates the layouts, so drain
- * generously.
+ * generously. PRD-40: `webtutor_cooldown` adds its own SECID/collection fetch
+ * chain ahead of that render chain (vs. the removed `suspend_data_cooldown`,
+ * which decided synchronously off `suspend_data`), so the loop needs more ticks
+ * to reach a settled DOM.
  */
 async function flush() {
-  for (let i = 0; i < 24; i++) await Promise.resolve();
+  for (let i = 0; i < 64; i++) await Promise.resolve();
 }
 
 function gatedTestData(over: Record<string, unknown> = {}) {
@@ -68,9 +95,21 @@ function gatedTestData(over: Record<string, unknown> = {}) {
     retakePolicy: {
       enabled: true,
       cooldownPeriodDays: 30,
-      eligibilityPlugin: { key: "k", failPolicy: "failOpen" },
+      eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" },
     },
-    retakePlugin: { runtimeEntry: "suspendDataCooldown", config: {} },
+    retakePlugin: {
+      runtimeEntry: "webtutorCooldown",
+      config: {
+        collectionEndpoint: "/pp/Ext5/extjs_json_collection_data.html",
+        secidSource: { endpoint: "/", pattern: "[A-F0-9]{32}" },
+        attemptFilter: {
+          stateField: "state",
+          stateIn: ["Пройден", "Не пройден"],
+          dateField: "last_usage_date",
+          dateFormat: "dd.MM.yyyy",
+        },
+      },
+    },
     ...over,
   };
 }
@@ -94,13 +133,14 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-04T10:00:00Z"));
     try {
+      stubWebtutorFetch([{ state: "Пройден", progress: "100%", last_usage_date: "20.05.2026" }]);
       const calls: string[] = [];
       const SCORM = {
-        getValue: (k: string) =>
-          k === "cmi.suspend_data"
-            ? JSON.stringify({ retake: { lastCompletedDate: "2026-05-20" } })
-            : "",
-        init: () => calls.push("initialize"),
+        getValue: () => "",
+        setValue: (k: string) => { calls.push("setValue:" + k); return true; },
+        commit: () => { calls.push("commit"); return true; },
+        init: () => { calls.push("initialize"); return true; },
+        terminate: () => { calls.push("terminate"); return true; },
       };
       const state: Record<string, unknown> = { templateLayouts: { "system.blocked": blockedLayout } };
       const gate = makeGate({ state, SCORM, escapeHtml });
@@ -125,10 +165,57 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
       expect(app.querySelector('[data-path="retake.cooldownPeriodDays"]')!.textContent).toBe("30");
       expect(app.querySelector('[data-path="retake.availableDateHuman"]')!.textContent).toBe("19.06.2026");
 
-      // NFR-01/02: blocked path never starts the course / SCORM.
+      // NFR-01 in its PRD-6 §9.1 wording + NFR-02: the requirement is about the
+      // RESULT, not the call order. The session IS opened — that is the only way to
+      // read suspend_data and tell a new assignment from a re-entry (PRD-31 §7.2) —
+      // but a blocked launch writes no `cmi.*` and is closed at once, so it never
+      // becomes a completed record and never starts the course.
       expect(started).toBe(false);
-      expect(calls).not.toContain("initialize");
+      expect(calls).toContain("initialize");
+      expect(calls).toContain("terminate");
+      expect(calls.filter((c) => c.indexOf("setValue:") === 0)).toEqual([]);
+      expect(calls).not.toContain("commit");
       expect((state.retake as any)?.allowed).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does NOT apply barrier A to a re-entry into the current assignment", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-04T10:00:00Z"));
+    try {
+      // The defect PRD-31 fixes. suspend_data carries a played attempt, i.e. this is
+      // the SAME registration — the same assignment — the learner already started.
+      // The cooldown would otherwise fire (last attempt 2026-05-20, 30-day period)
+      // and lock a learner out of their own assignment with attempts left.
+      const calls: string[] = [];
+      const SCORM = {
+        getValue: (k: string) =>
+          k === "cmi.suspend_data"
+            ? JSON.stringify({
+                attemptsUsed: 1,
+                attempts: [{ attemptNumber: 1, completedAt: "2026-05-20T10:00:00.000Z", percent: 40 }],
+                retake: { lastCompletedDate: "2026-05-20" },
+              })
+            : "",
+        setValue: (k: string) => { calls.push("setValue:" + k); return true; },
+        commit: () => { calls.push("commit"); return true; },
+        init: () => { calls.push("initialize"); return true; },
+        terminate: () => { calls.push("terminate"); return true; },
+      };
+      const state: Record<string, unknown> = { templateLayouts: { "system.blocked": blockedLayout } };
+      const gate = makeGate({ state, SCORM, escapeHtml });
+
+      let started = false;
+      gate.run(gatedTestData(), () => { started = true; });
+      await flush();
+
+      // The course runs; the interval (barrier B) is what governs the next attempt,
+      // and it is enforced on the start screen, not here.
+      expect(started).toBe(true);
+      expect(calls).not.toContain("terminate");
+      expect(document.getElementById("app")!.querySelector('[data-retake-branch="cooldown"]')).toBeNull();
     } finally {
       vi.useRealTimers();
     }
@@ -174,11 +261,9 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-04T10:00:00Z"));
     try {
+      stubWebtutorFetch([{ state: "Пройден", progress: "100%", last_usage_date: "20.05.2026" }]);
       const SCORM = {
-        getValue: (k: string) =>
-          k === "cmi.suspend_data"
-            ? JSON.stringify({ retake: { lastCompletedDate: "2026-05-20" } })
-            : "",
+        getValue: () => "",
         init: () => {},
       };
       const state: Record<string, unknown> = { templateLayouts: {} }; // no system.blocked
@@ -192,6 +277,76 @@ describe("PRD-6 gate block page — rendered from the design template", () => {
       // The built-in fallback wall is used, not the template's scene layout.
       expect(app.querySelector(".tb-scene")).toBeNull();
       expect(app.querySelector('[data-testid="retake-wall"]')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("PRD-40: resolves the FAILED period through the real gate.js when cooldownByOutcome is on", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-04T10:00:00Z"));
+    try {
+      const SCORM = {
+        getValue: () => "",
+        setValue: () => true,
+        commit: () => true,
+        init: () => true,
+        terminate: () => true,
+      };
+      const state: Record<string, unknown> = { templateLayouts: { "system.blocked": blockedLayout } };
+      const gate = makeGate({ state, SCORM, escapeHtml });
+
+      // Last matching WebTutor record is "Не пройден" (failed), dated 01.06.2026 -- only
+      // 3 calendar days before "today" (04.06.2026). Only the FAILED period (7 days) keeps
+      // this blocked: if buildContext failed to pass cooldownByOutcome/the split fields
+      // through to the plugin, resolveCooldownDays would fall back to policy.cooldownPeriodDays
+      // (unset here) -> null -> 0, which would ALLOW immediately (3 >= 0) instead of blocking --
+      // a silent flip that manual tracing alone would not have caught.
+      stubWebtutorFetch([{ state: "Не пройден", progress: "60%", last_usage_date: "01.06.2026" }]);
+
+      let started = false;
+      gate.run(
+        gatedTestData({
+          retakePolicy: {
+            enabled: true,
+            cooldownByOutcome: true,
+            cooldownPeriodDaysPassed: 90,
+            cooldownPeriodDaysFailed: 7,
+            eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" },
+          },
+          // passedStateIn must be configured for recordPassed() to resolve an outcome at
+          // all (see shared/eligibility/plugins.ts / the plain-JS twin) -- the base fixture
+          // in gatedTestData() does not set it, so it is repeated here in full since `over`
+          // REPLACES retakePlugin wholesale rather than merging into the base.
+          retakePlugin: {
+            runtimeEntry: "webtutorCooldown",
+            config: {
+              collectionEndpoint: "/pp/Ext5/extjs_json_collection_data.html",
+              secidSource: { endpoint: "/", pattern: "[A-F0-9]{32}" },
+              attemptFilter: {
+                stateField: "state",
+                stateIn: ["Пройден", "Не пройден"],
+                passedStateIn: ["Пройден"],
+                dateField: "last_usage_date",
+                dateFormat: "dd.MM.yyyy",
+              },
+            },
+          },
+        }),
+        () => { started = true; },
+      );
+      await flush();
+
+      expect(started).toBe(false);
+      expect((state.retake as any)?.allowed).toBe(false);
+      // 01.06.2026 + 7 days (the FAILED period) = 08.06.2026 -- proves the resolved period
+      // reached the plugin, not the PASSED period (90, which would give 30.08.2026) and not
+      // a silently-dropped split config (which would allow immediately, per the comment above).
+      expect((state.retake as any)?.availableDate).toBe("2026-06-08");
+      expect((state.retake as any)?.cooldownPeriodDays).toBe(7);
+
+      const app = document.getElementById("app")!;
+      expect(app.querySelector('[data-path="retake.cooldownPeriodDays"]')!.textContent).toBe("7");
     } finally {
       vi.useRealTimers();
     }

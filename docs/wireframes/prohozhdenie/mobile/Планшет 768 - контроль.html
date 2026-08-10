@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="../ui-kit/university-rt.css">
+<style>html,body{margin:0;padding:0;background:#0b0d12}</style>
+<title>Планшет 768 — контроль двухколоночности</title></head><body>
+<!-- КОНТРОЛЬНЫЙ эскиз. Показывает, что на 768 остаётся БЕЗ изменений:
+     сетка «медиа 5 / ответы 7» на экране вопроса и «картинка + текст» на
+     странице контента продолжают быть двухколоночными. Порог S2 = 700px
+     выбран именно так, чтобы 768 не схлопывался. -->
+<div class="ou ou--dark ou--normal" style="width:768px;height:1024px;margin:24px auto;overflow:hidden;font-family:var(--ou-font-family-base);display:flex;flex-direction:column;background:var(--ou-bg-page)" data-wf-demo>
+
+  <header style="flex:none;position:relative;display:flex;flex-direction:column;gap:var(--ou-space-3);padding:var(--ou-space-4) 24px calc(var(--ou-space-2) + 2px);background:var(--ou-bg-elevated);border-bottom:1px solid var(--ou-border-soft)">
+    <div style="display:flex;align-items:flex-start;gap:var(--ou-space-4)">
+      <span style="width:44px;height:44px;flex:none;border-radius:var(--ou-radius-m);background:var(--ou-accent-soft);color:var(--ou-accent-default);display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700">РТ</span>
+      <div style="min-width:0;display:flex;flex-direction:column;gap:2px;padding-top:2px">
+        <h1 style="margin:0;font:var(--ou-text-display-s);color:var(--ou-fg-default);letter-spacing:-.01em">Основы информационной безопасности</h1>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:flex-start;gap:var(--ou-space-6);flex:none">
+        <div class="ou-timer ou-timer--digital ou-timer--s"><span class="ou-timer__lbl">тест</span><span class="ou-timer__num">32:14</span></div>
+      </div>
+    </div>
+    <div class="ou-quiz ou-quiz--circle ou-quiz--m" role="group" aria-label="Карта вопросов" style="flex-direction:row;flex-wrap:wrap;align-items:center;gap:var(--ou-space-2) var(--ou-space-4);padding-bottom:0">
+      <div class="ou-quiz__dots" style="flex:0 0 auto">
+        <button type="button" class="ou-quiz__dot is-answered">1</button>
+        <button type="button" class="ou-quiz__dot is-answered">2</button>
+        <button type="button" class="ou-quiz__dot is-current">3</button>
+        <button type="button" class="ou-quiz__dot">4</button>
+        <button type="button" class="ou-quiz__dot">5</button>
+        <button type="button" class="ou-quiz__dot">6</button>
+        <button type="button" class="ou-quiz__dot">7</button>
+        <button type="button" class="ou-quiz__dot">8</button>
+      </div>
+      <div class="ou-quiz__legend" style="flex-basis:100%;order:10;margin-top:0;align-items:center">
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged" style="background:var(--ou-warning-default)"></span>пропущен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current" style="box-shadow:inset 0 0 0 2px var(--ou-accent-default);background:transparent"></span>текущий</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered" style="background:var(--ou-accent-default)"></span>отвечен</span>
+      </div>
+      <span style="flex:none;order:11;margin-left:auto;text-align:right;font:var(--ou-text-body-m);color:var(--ou-fg-muted)">отвечено <strong style="color:var(--ou-fg-default);font-weight:600">2</strong> из 8</span>
+    </div>
+    <div style="position:absolute;left:0;right:0;bottom:-1px;height:3px;background:var(--ou-bg-surface-3)"><div style="height:100%;width:31%;background:var(--ou-accent-default);border-radius:0 999px 999px 0"></div></div>
+  </header>
+
+  <main style="flex:1;min-height:0;overflow:auto;padding:24px">
+    <div style="width:100%;min-height:100%;display:flex;flex-direction:column;gap:var(--ou-space-4)">
+      <div style="display:flex;align-items:center;gap:var(--ou-space-3);font:var(--ou-text-body-m);color:var(--ou-fg-muted)"><span>Вопрос 3 из 8</span><span class="ou-tag ou-tag--neutral">Фишинг</span></div>
+      <div style="display:flex;flex-direction:column;gap:var(--ou-space-2)">
+        <h2 style="margin:0;font-weight:600;font-size:26px;line-height:1.25;letter-spacing:-.015em;color:var(--ou-fg-default)">Что не так с этим письмом?</h2>
+      </div>
+
+      <!-- Двухколоночная сетка СОХРАНЕНА: медиа 5 / ответы 7 -->
+      <div style="flex:1 0 auto;display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:var(--ou-space-5);align-items:start">
+        <div style="width:100%;aspect-ratio:4/3;border:1px solid var(--ou-border-soft);border-radius:var(--ou-radius-m);overflow:hidden;background:var(--ou-bg-surface-2);display:grid;place-items:center;color:var(--ou-fg-muted)">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+        </div>
+        <div style="min-height:0;display:flex;flex-direction:column">
+          <div class="ou-radio-group ou-radio-group--vertical" style="width:100%">
+            <div class="ou-radio-group__items" style="gap:var(--ou-space-2);flex-direction:column">
+              <label class="ou-radio-card" style="min-height:56px;align-items:center;gap:var(--ou-space-4);padding:var(--ou-space-3) var(--ou-space-4);box-sizing:border-box"><span class="ou-check__box" aria-hidden="true"></span><span class="ou-radio-card__title" style="font-size:19px;font-weight:400;line-height:1.35">Адрес отправителя подменён</span></label>
+              <label class="ou-radio-card" style="min-height:56px;align-items:center;gap:var(--ou-space-4);padding:var(--ou-space-3) var(--ou-space-4);box-sizing:border-box"><span class="ou-check__box" aria-hidden="true"></span><span class="ou-radio-card__title" style="font-size:19px;font-weight:400;line-height:1.35">Требуют срочного действия</span></label>
+              <label class="ou-radio-card" style="min-height:56px;align-items:center;gap:var(--ou-space-4);padding:var(--ou-space-3) var(--ou-space-4);box-sizing:border-box"><span class="ou-check__box" aria-hidden="true"></span><span class="ou-radio-card__title" style="font-size:19px;font-weight:400;line-height:1.35">Ссылка ведёт на чужой домен</span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Подвал на 768 остаётся ОДНОЙ строкой: 4 кнопки требуют ~481px при 720 доступных. -->
+  <footer style="flex:none;display:flex;align-items:center;gap:var(--ou-space-3);padding:var(--ou-space-2) 24px;background:var(--ou-bg-elevated);border-top:1px solid var(--ou-border-soft)">
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">← Назад</button>
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Пропустить</button>
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">К обзору</button>
+    <div style="margin-left:auto"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Отправить ответ</button>
+  </footer>
+
+</div>
+</body></html>

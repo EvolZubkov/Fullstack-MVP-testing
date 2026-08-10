@@ -77,7 +77,7 @@ describe("POST /api/topics/bulk-delete (partial-batch)", () => {
 
   it("deletes all when nothing is blocked", async () => {
     storageMock.getTopic.mockImplementation(async (id: string) => topic(id));
-    storageMock.deleteTopicsBulk.mockResolvedValue(2);
+    storageMock.deleteTopicsBulk.mockResolvedValue({ count: 2, questionIds: [], contentPageIds: [] });
     const res = await asAdmin(request(topicsApp).post("/api/topics/bulk-delete").send({ ids: ["t1", "t2"] }));
     expect(res.status).toBe(200);
     expect(res.body.deletedCount).toBe(2);
@@ -100,7 +100,7 @@ describe("POST /api/topics/bulk-delete (partial-batch)", () => {
   it("skips blocked topics, deletes the rest", async () => {
     storageMock.getTopic.mockImplementation(async (id: string) => topic(id));
     assessMock.mockImplementation(async (id: string) => (id === "t2" ? { blocking: [{ testId: "x", issues: [] }], warnings: [] } : NO_CONFLICT));
-    storageMock.deleteTopicsBulk.mockResolvedValue(1);
+    storageMock.deleteTopicsBulk.mockResolvedValue({ count: 1, questionIds: [], contentPageIds: [] });
     const res = await asAdmin(request(topicsApp).post("/api/topics/bulk-delete").send({ ids: ["t1", "t2"] }));
     expect(res.status).toBe(200);
     expect(storageMock.deleteTopicsBulk).toHaveBeenCalledWith(["t1"]);
@@ -110,7 +110,7 @@ describe("POST /api/topics/bulk-delete (partial-batch)", () => {
   it("admin ?force=true deletes blocked topics too", async () => {
     storageMock.getTopic.mockImplementation(async (id: string) => topic(id));
     assessMock.mockResolvedValue({ blocking: [{ testId: "x", issues: [] }], warnings: [] });
-    storageMock.deleteTopicsBulk.mockResolvedValue(2);
+    storageMock.deleteTopicsBulk.mockResolvedValue({ count: 2, questionIds: [], contentPageIds: [] });
     const res = await asAdmin(request(topicsApp).post("/api/topics/bulk-delete?force=true").send({ ids: ["t1", "t2"] }));
     expect(res.status).toBe(200);
     expect(storageMock.deleteTopicsBulk).toHaveBeenCalledWith(["t1", "t2"]);
@@ -310,7 +310,7 @@ describe("DELETE /api/folders/:id", () => {
     storageMock.getFolderSubtreeIds.mockResolvedValue(["f1"]);
     storageMock.getTopics.mockResolvedValue([topic("t1", { folderId: "f1" }), topic("t2", { folderId: "f1" })]);
     assessMock.mockImplementation(async (id: string) => (id === "t2" ? { blocking: [{ testId: "x", issues: [] }], warnings: [] } : NO_CONFLICT));
-    storageMock.deleteTopicsBulk.mockResolvedValue(1);
+    storageMock.deleteTopicsBulk.mockResolvedValue({ count: 1, questionIds: [], contentPageIds: [] });
     storageMock.deleteFoldersBulk.mockResolvedValue(1);
     const res = await asAdmin(request(foldersApp).delete("/api/folders/f1").send({ mode: "folder-and-content", confirmName: "F1" }));
     expect(res.status).toBe(200);

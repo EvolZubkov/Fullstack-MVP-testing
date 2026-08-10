@@ -12,6 +12,7 @@ import {
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
+import { syncEntityUsages, canonicalizeEntityMedia, clearCascadedUsages } from "../services/media/usage-index";
 import { normalizeTags } from "@shared/tags";
 import { normalizeAuthorText } from "@shared/text";
 import { normalizeOptionalText, normalizeQuestionData } from "../services/question-text";
@@ -30,7 +31,26 @@ import {
   canManageTopicContent,
   isAdminOrSuper,
 } from "../services/topic-access";
+import { allocationDataSchema } from "@shared/schema";
+import { distributesBudget } from "@shared/questions/question-type";
 import type { Question } from "@shared/schema";
+
+/**
+ * PRD-44 FR-46: границы полей и ВЫПОЛНИМОСТЬ распределения проверяются на сервере,
+ * а не только в редакторе. Без этого сохраняется вопрос, который нельзя заполнить ни
+ * одним способом, — и узнает об этом первым учащийся, а не автор. Возвращает текст
+ * ошибки или `null`.
+ *
+ * Остальные типы здесь не трогаются намеренно: их конфигурация не может стать
+ * невыполнимой, и вводить общую проверку «на всякий случай» значит менять поведение,
+ * о котором PRD-44 не просил.
+ */
+function allocationConfigError(type: string | undefined, dataJson: unknown): string | null {
+  if (!distributesBudget(type ?? "")) return null;
+  const parsed = allocationDataSchema.safeParse(dataJson);
+  if (parsed.success) return null;
+  return parsed.error.issues.map((i) => i.message).join("; ");
+}
 
 // PRD-15 FR-02: fields whose change affects delivery or grading of dependent
 // tests; such edits are restricted to the creator/administrator and, for
@@ -100,6 +120,12 @@ interface CreateQuestionBody {
   feedbackIncorrect?: string;
   /** PRD-11 §3a: sub-topic tags; normalized on save (trim/collapse, dedup, cap). */
   tags?: string[];
+  /**
+   * PRD-30 FR-01: author-defined index inside the topic («Индекс в теме»).
+   * `null` clears it («не задано»); an absent field leaves the stored value
+   * alone. Values need not be dense or unique.
+   */
+  orderIndex?: number | null;
 }
 
 interface UpdateQuestionBody extends Partial<CreateQuestionBody> {}
@@ -165,6 +191,7 @@ router.post(
         feedbackCorrect,
         feedbackIncorrect,
         tags,
+        orderIndex,
       } = req.body;
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
@@ -183,7 +210,12 @@ router.post(
         return;
       }
 
-      const question = await storage.createQuestion({
+      const allocationError = allocationConfigError(type, dataJson);
+      if (allocationError) {
+        return res.status(422).json({ error: allocationError, field: "dataJson" });
+      }
+
+      const questionInput = {
         topicId,
         type,
         prompt: canonicalPrompt,
@@ -198,8 +230,26 @@ router.post(
         feedbackCorrect: normalizeAuthorText(feedbackCorrect) || null,
         feedbackIncorrect: normalizeAuthorText(feedbackIncorrect) || null,
         tags: normalizeTags(Array.isArray(tags) ? tags : []),
+        // PRD-30 FR-01: `??` and not `||` — 0 is a legitimate index; absent
+        // means «не задано» and stores NULL.
+        orderIndex: orderIndex ?? null,
         createdBy: req.currentUser?.id ?? null,
-      } as any);
+      };
+
+      // Медиатека §5: пре-реестровый адрес приводится к каноническому в момент правки —
+      // так наследие вымывается редактированием, а не миграцией по чужим JSON.
+      const payload = await canonicalizeEntityMedia(questionInput);
+
+      const question = await storage.createQuestion(payload as any);
+
+      // Медиатека: сбой индексации не должен стоить автору его правки. Недостающая
+      // строка индекса безопасна (она отказывает в доступе, а не выдаёт лишнее) и
+      // чинится пересборкой; потерянное сохранение вопроса не чинится ничем.
+      try {
+        await syncEntityUsages("question", question.id, question);
+      } catch (error) {
+        logger.error(`Media usage sync failed for question ${question.id}: ${(error as Error).message}`);
+      }
 
       res.status(201).json(question);
     } catch (error) {
@@ -232,6 +282,7 @@ router.put(
         feedbackCorrect,
         feedbackIncorrect,
         tags,
+        orderIndex,
       } = req.body as UpdateQuestionBody;
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
@@ -252,6 +303,16 @@ router.put(
       if (movesTopic && !(await canManageQuestion(req, topicId))) {
         respondForbiddenContent(res);
         return;
+      }
+
+      // Правка может СДЕЛАТЬ конфигурацию невыполнимой (поднять минимум, урезать
+      // бюджет), поэтому проверка нужна и здесь, а не только на создании. Тип берётся
+      // из тела, а при его отсутствии — из сохранённого вопроса.
+      if (dataJson !== undefined) {
+        const allocationError = allocationConfigError(type ?? existing.type, dataJson);
+        if (allocationError) {
+          return res.status(422).json({ error: allocationError, field: "dataJson" });
+        }
       }
       let feasibilityWarnings: unknown[] = [];
       const affectsDelivery = gradingOrDrawFieldsChanged(existing, req.body as UpdateQuestionBody);
@@ -275,7 +336,7 @@ router.put(
         return respondDryRun(req, res, { blocking: [], warnings: [] });
       }
 
-      const updated = await storage.updateQuestion(req.params.id, {
+      const questionUpdate = {
         topicId,
         type,
         // A field the client did not send stays `undefined` — the storage layer
@@ -294,10 +355,28 @@ router.put(
         feedbackIncorrect: normalizeOptionalText(feedbackIncorrect),
         // Only touch tags when the client sent them; otherwise leave unchanged.
         tags: Array.isArray(tags) ? normalizeTags(tags) : undefined,
-      } as any);
+        // PRD-30 FR-01: `null` CLEARS the index, `undefined` leaves it alone —
+        // the storage layer reads undefined as «unchanged».
+        orderIndex,
+      };
+
+      // Медиатека §5: пре-реестровый адрес приводится к каноническому в момент правки —
+      // так наследие вымывается редактированием, а не миграцией по чужим JSON.
+      const payload = await canonicalizeEntityMedia(questionUpdate);
+
+      const updated = await storage.updateQuestion(req.params.id, payload as any);
 
       if (!updated) {
         return res.status(404).json({ error: "Question not found" });
+      }
+
+      // Медиатека: сбой индексации не должен стоить автору его правки. Недостающая
+      // строка индекса безопасна (она отказывает в доступе, а не выдаёт лишнее) и
+      // чинится пересборкой; потерянное сохранение вопроса не чинится ничем.
+      try {
+        await syncEntityUsages("question", updated.id, updated);
+      } catch (error) {
+        logger.error(`Media usage sync failed for question ${updated.id}: ${(error as Error).message}`);
       }
 
       res.json(
@@ -335,6 +414,16 @@ router.delete(
       if (!success) {
         return res.status(404).json({ error: "Question not found" });
       }
+
+      // Медиатека: сбой индексации не должен стоить автору его правки. Недостающая
+      // строка индекса безопасна (она отказывает в доступе, а не выдаёт лишнее) и
+      // чинится пересборкой; потерянное сохранение вопроса не чинится ничем.
+      try {
+        await syncEntityUsages("question", req.params.id, null);
+      } catch (error) {
+        logger.error(`Media usage sync failed for question ${req.params.id}: ${(error as Error).message}`);
+      }
+
       res.json({ success: true, warnings: assessment.warnings });
     } catch (error) {
       logger.error("Delete question error: " + (error as Error).message);
@@ -367,6 +456,10 @@ router.post(
       if (isDryRun(req)) return respondDryRun(req, res, assessment);
       if (respondIfBlocked(req, res, assessment)) return;
       const deletedCount = await storage.deleteQuestionsBulk(ids);
+      // Медиатека: сбой чистки индекса не должен стоить автору его удаления (см.
+      // тот же выбор в одиночном DELETE /:id выше). `ids` — запрошенные к удалению,
+      // не только реально удалённые: очистка несуществующей записи индекса — no-op.
+      await clearCascadedUsages(ids.map((id) => ({ entityType: "question" as const, entityId: id })));
       res.json({ success: true, deletedCount, warnings: assessment.warnings });
     } catch (error) {
       logger.error("Bulk delete questions error: " + (error as Error).message);
@@ -387,6 +480,16 @@ router.post(
       if (!result) {
         return res.status(404).json({ error: "Question not found" });
       }
+
+      // Медиатека: дубликат — НОВАЯ сущность со своим id; индексируется под
+      // ним, а не под id оригинала. Сбой индексации не должен стоить автору
+      // его правки — недостающая строка чинится пересборкой.
+      try {
+        await syncEntityUsages("question", result.id, result);
+      } catch (error) {
+        logger.error(`Media usage sync failed for question ${result.id}: ${(error as Error).message}`);
+      }
+
       res.status(201).json(result);
     } catch (error) {
       logger.error("Duplicate question error: " + (error as Error).message);

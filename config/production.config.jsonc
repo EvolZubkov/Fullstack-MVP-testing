@@ -28,7 +28,7 @@
     // terminates TLS). Used to build email links. No trailing slash (the loader
     // strips one anyway).
     "appUrl": "https://test.edtech-rtk.ru",
-    "appName": "СкилУм",
+    "appName": "Skill'Ум",
     // Enable only behind a reverse proxy that forwards X-Forwarded-Proto: https.
     "cookieSecure": true
   },

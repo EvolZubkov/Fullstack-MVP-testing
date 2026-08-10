@@ -8,6 +8,7 @@
  * returns data only.
  */
 
+import { drawnScaleKeys, isTestIpsative } from "../services/scale-composition";
 import { exportSourceForTest, liveDataSource } from "../services/test-snapshot";
 import { resolveTemplateDir } from "../services/template-dir";
 import { isSupportedTemplateApiVersion } from "../template-registry";
@@ -103,6 +104,23 @@ export async function buildScormExportData(
   const scales = await src.getScales(test.id);
   const measurements = await src.getQuestionMeasurements(test.id);
 
+  // PRD-46 §5: do the scales divide ONE WHOLE? Resolved HERE and baked, because the
+  // in-package runtime holds neither the contribution rows nor the allocation budgets
+  // the verdict is read from — only the answer.
+  //
+  // Unconditional, unlike the web host. There the computation is guarded by the `auto`
+  // setting because it runs on every rendering of the results screen; a build has no
+  // such loop, so the price is paid once per package — and a package whose author later
+  // switches the setting to `auto` must already carry the answer.
+  //
+  // Hidden scales are excluded by `drawnScaleKeys` — the same rule the renderer draws by.
+  const ipsativeScales = isTestIpsative({
+    scales,
+    scaleKeys: drawnScaleKeys(scales),
+    measurements,
+    questions: exportSections.flatMap((s) => s.questions),
+  });
+
   // PRD-15 block D (FR-32): per-test scoring overrides — the bake resolves the
   // effective points/scoring/difficulty into TEST_DATA. Snapshot exports read the
   // frozen rows; drafts/debug read live.
@@ -135,7 +153,11 @@ export async function buildScormExportData(
     resultVariables,
     scales,
     measurements,
+    ipsativeScales,
     designSettings,
     templateDir,
+    // PRD-34 (FR-26): признак сборки едет в бейк — отладочный пакет запекается с
+    // выключенной защитой. Отдельного канала для этого не заводится.
+    source: opts.source,
   };
 }

@@ -1,3 +1,69 @@
+// PRD-31 barrier B: the interval between attempts is decided against the PORTAL
+// clock, so the instant an attempt FINISHED must come from the same source —
+// otherwise moving the system clock forward once would both open the barrier and
+// poison the mark that the next decision reads back.
+//
+// Resolved once per launch and then carried forward by a MONOTONIC offset: a long
+// session must not re-fetch the portal on every attempt, and re-reading Date.now()
+// as an absolute value would reintroduce the very clock the resolution avoided.
+// Degrades silently to the machine clock — a package whose portal is unreachable
+// keeps working exactly as before, and `completedAtSource` records which clock won
+// so a live run can be diagnosed from suspend_data alone.
+var trustedNowMs = null;
+var trustedNowAt = null;
+
+function primeTrustedNow() {
+  if (typeof TrustedNow === 'undefined') return Promise.resolve();
+  return TrustedNow.resolveNowMs('/')
+    .then(function (ms) {
+      trustedNowMs = ms;
+      trustedNowAt = Date.now();
+    })
+    .catch(function () { /* stay on the machine clock */ });
+}
+
+function trustedNowSource() {
+  if (trustedNowMs == null || typeof TrustedNow === 'undefined') return 'client';
+  return TrustedNow.lastSource();
+}
+
+/** Current instant as ISO, from the portal clock when it was resolved. */
+function nowIso() {
+  if (trustedNowMs == null || trustedNowAt == null) return new Date().toISOString();
+  return new Date(trustedNowMs + (Date.now() - trustedNowAt)).toISOString();
+}
+
+/**
+ * PRD-31 barrier B: is a NEW attempt open inside THIS assignment (= this SCORM
+ * registration)? Reads the previous attempt's instant from suspend_data — available
+ * post-Initialize, which is where every caller runs — and compares it against the
+ * trusted clock. No policy => open, so a package without the barrier behaves exactly
+ * as it did before.
+ */
+function attemptIntervalState() {
+  var policy = (typeof TEST_DATA !== 'undefined' && TEST_DATA.retakePolicy)
+    ? TEST_DATA.retakePolicy.attemptInterval : null;
+  if (!policy || policy.enabled !== true || !policy.hours) return { allowed: true, availableAt: null };
+  if (typeof EligibilityEngine === 'undefined') return { allowed: true, availableAt: null };
+  var last = getLastAttempt();
+  var decision = EligibilityEngine.attemptIntervalDecision(
+    last ? last.completedAt : null,
+    nowIso(),
+    policy.hours
+  );
+  return { allowed: decision.allowed, availableAt: decision.availableAt };
+}
+
+/** «01.08.2026 в 14:30» — the instant barrier B opens at, in the learner's own zone. */
+function fmtInstantHuman(iso) {
+  if (!iso) return '';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  function p(n) { return n < 10 ? '0' + n : String(n); }
+  return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '.' + d.getFullYear() +
+    ' в ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
 function readSuspendObj() {
   try {
     var raw = SCORM.getValue('cmi.suspend_data') || '';
@@ -82,7 +148,7 @@ function getAttemptsUsed() {
 function setAttemptsUsed(n) {
   var s = readSuspendObj();
   s.attemptsUsed = n;
-  s.lastUpdated = new Date().toISOString();
+  s.lastUpdated = nowIso();
   // ✅ ВАЖНО: Не трогаем attempts и currentSession!
   writeSuspendObj(s);
   console.log('🔵 Установлены использованные попытки:', n);
@@ -126,7 +192,10 @@ function saveAttemptResult(resultData) {
   
   var attemptRecord = {
     attemptNumber: s.attemptsUsed,
-    completedAt: new Date().toISOString(),
+    // PRD-31: the portal clock, not the machine's — this mark is what barrier B
+    // measures the next attempt against.
+    completedAt: nowIso(),
+    completedAtSource: trustedNowSource(),
     percent: resultData.percent,
     totalCorrect: resultData.correct,
     totalQuestions: resultData.totalQuestions,

@@ -25,6 +25,13 @@
  */
 import { normalizePool } from "./dnd/matching-model";
 import { renderInlineMarkdown } from "../text/markdown";
+import {
+  allocationRemaining,
+  allocationSpec,
+  normalizeAllocation,
+  optionCeiling,
+  type AllocationSpec,
+} from "../questions/allocation";
 
 /**
  * Question shape this module reads. `dataJson` is untyped (a jsonb column reaches the
@@ -65,17 +72,35 @@ export interface ReviewCorrect {
 /**
  * The learner guidance shown as the question subtitle, by type — the SAME copy on both
  * hosts (the wireframe places it under the question title). Empty for unknown types.
+ *
+ * The copy must not name a POSITION: the matching grid stands the two columns up on a
+ * narrow scene (theme.css step S2), so «карточка справа» is simply false on a phone —
+ * there the chip sits under its prompt, not beside it. Naming the object instead of its
+ * place is true at every width.
  */
 const QUESTION_HINTS: Readonly<Record<string, string>> = {
   single: "Выберите один вариант ответа",
   multiple: "Выберите один или несколько вариантов",
   ranking: "Расставьте элементы в правильном порядке — перетащите или кнопками ↑/↓",
-  matching: "Перетащите карточку справа на нужную строку",
+  matching: "Перетащите карточку на нужную строку",
   scale: "Выберите ответ на шкале",
+  // PRD-44 FR-32: подставляется бюджет вопроса, когда он известен (см. ниже).
+  allocation: "Распределите баллы между вариантами",
 };
 
-/** Guidance subtitle for a question type (empty when the type has none). */
-export function questionHint(type: string): string {
+/**
+ * Guidance subtitle for a question type (empty when the type has none).
+ *
+ * The allocation hint names the BUDGET, so the copy depends on the question and not on
+ * the type alone — «распределите 7 баллов» is the one number the learner needs before
+ * touching anything. The question argument is optional: callers that only know the type
+ * (and every other type, whose copy is constant) keep working unchanged.
+ */
+export function questionHint(type: string, question?: InteractionQuestion): string {
+  if (type === "allocation" && question) {
+    const spec = allocationSpec(question.dataJson);
+    if (spec.budget > 0) return `Распределите ${spec.budget} баллов между вариантами`;
+  }
   return QUESTION_HINTS[type] ?? "";
 }
 
@@ -88,6 +113,8 @@ export function answerTexts(question: InteractionQuestion): unknown[] {
   const f = fields(question);
   if (question.type === "ranking") return f.items;
   if (question.type === "matching") return [...f.left, ...f.right];
+  // Allocation statements ride the same `options` list (PRD-44 FR-02), so they reach the
+  // font-fitting pass through this branch — see the guard test.
   return f.options;
 }
 
@@ -297,7 +324,7 @@ export function renderScale(
 
   const rootCls =
     "ou-stepper ou-stepper--choice" +
-    (options.length > SCALE_HORIZONTAL_MAX ? " ou-stepper--vertical" : "") +
+    (options.length > SCALE_HORIZONTAL_MAX ? " ou-stepper--vertical" : " ou-stepper--s") +
     (correct !== null ? " ou-stepper--review" : "");
 
   const steps = options
@@ -362,7 +389,11 @@ export function renderRanking(
       return (
         // No `draggable="true"` — the shared pointer engine drives the drag; the native
         // flag would start a browser drag that cancels the pointer gesture (see dragCard).
-        `<div class="${cls}" data-drag="${pos}" data-drop="${pos}">` +
+        // `data-item` is the ITEM index (`data-drag`/`data-drop` are display POSITIONS,
+        // which the drag reorders): it is what lets a tool key a row back to its source
+        // item — the debug player's «Эталон» overlay does exactly that. Matching text is
+        // not an option, the rendered text has been through markdown + typography.
+        `<div class="${cls}" data-drag="${pos}" data-drop="${pos}" data-item="${oi}">` +
         `<span class="ou-rank__grip" aria-hidden="true">${RANK_GRIP}</span>` +
         `<span class="ou-rank__index ou-rank__index--round ou-rank__index--accent">${pos + 1}</span>` +
         `<span class="ou-rank__text"><span class="ou-rank__title" ` +
@@ -448,7 +479,13 @@ export function renderMatching(
       : `minmax(0, 1fr) ${gapCol} minmax(0, 2fr)`;
 
   let poolSlot = 0;
-  let html = `<div class="ou-match ou-match--gap-wide ou-match--side-r ou-match--icon-dots" style="grid-template-columns:${columns}">`;
+  // The ratio goes out as a CUSTOM PROPERTY, never as `grid-template-columns` itself.
+  // An inline track list outranks every stylesheet, so the narrow-screen fold could not
+  // touch it — the grid kept three tracks while the gap column was hidden and the cards
+  // auto-placed into the wrong ones, overlapping on a phone. The DS base rule reads this
+  // variable (`.ou-match`), so the ratio still applies while a rule can still override
+  // the whole track list.
+  let html = `<div class="ou-match ou-match--gap-narrow ou-match--side-r ou-match--icon-dots" style="--ou-match-cols:${columns}">`;
   for (const ri of rightMapping) {
     const matchedLeft = rightToLeft[ri];
     const isJoined = matchedLeft !== undefined;
@@ -465,14 +502,14 @@ export function renderMatching(
       `<div class="ou-match__card ou-match__card--fixed" data-drop="r${ri}">` +
       `<span class="ou-match__card-text"><span class="ou-match__card-title" ` +
       `style="font-size:var(--tb-answer-fs,1.125rem)">${answerHtml(right[ri])}</span></span></div>`;
-    // Connection indicator in the gap: a chevron-left «‹» pointing from the answer
-    // toward its prompt. Dashed grey hint by default, solid + accent once the row is
-    // connected (the DS `ou-match__gap-arrow` styling). The path is drawn pointing
-    // right; the DS's `.ou-match--side-r` `scaleX(-1)` flips it to a left chevron.
+    // Connection indicator in the gap: a wavy seam, invisible until the row connects.
+    // Narrow-mode DS CSS (`ou-match--gap-narrow`) then fuses both cards and this cell
+    // into one panel and reveals the seam over the join — no arrow is ever drawn.
     html +=
       '<div class="ou-match__gap" aria-hidden="true">' +
-      '<svg class="ou-match__gap-arrow" viewBox="0 0 28 12"><path d="M10 2 L18 6 L10 10"></path></svg>' +
-      '</div>';
+      '<svg class="ou-match__seam" viewBox="0 0 6 48" preserveAspectRatio="none">' +
+      '<path d="M3 0 Q0 4 3 8 Q6 12 3 16 Q0 20 3 24 Q6 28 3 32 Q0 36 3 40 Q6 44 3 48"></path>' +
+      '</svg></div>';
     if (isJoined) {
       html += dragCard(matchedLeft, `r${ri}`);
     } else {
@@ -490,4 +527,134 @@ export function renderMatching(
   }
   html += "</div>";
   return html;
+}
+
+// ─── Allocation (budget distribution) ────────────────────────────────────────
+
+/** Author text as a safe attribute value: every character HTML can act on is escaped. */
+function attrText(text: unknown): string {
+  return String(text ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Percent position of `value` on a track whose scale is the whole budget. */
+function allocPercent(value: number, budget: number): string {
+  const pct = budget > 0 ? Math.min(100, Math.max(0, (value / budget) * 100)) : 0;
+  return `${Math.round(pct * 10) / 10}%`;
+}
+
+/** One statement row: label, slider (fixed budget scale) and the number field. */
+function allocationRow(
+  spec: AllocationSpec,
+  answer: Record<string, number>,
+  index: number,
+  review: boolean,
+): string {
+  const label = answerHtml(spec.options[index]);
+  // The screen-reader name comes from the PLAIN text: the rendered label may carry
+  // markdown tags, and «<b>Разбор</b> задачи» read aloud is not a statement. Escaping is
+  // FULL, not just quotes — an author's «<img onerror=…>» must not reach the DOM as
+  // markup through an attribute either.
+  const name = attrText(spec.options[index]);
+  const value = answer[index] ?? spec.minPerOption;
+  const ceiling = optionCeiling(spec, answer, index);
+  // The visual scale is the BUDGET, always: tie it to the ceiling and a row would move
+  // on screen when a NEIGHBOUR changes, though the row itself did not (PRD-44 §6).
+  const left = allocPercent(value, spec.budget);
+  const capLeft = allocPercent(ceiling, spec.budget);
+  // «Above the floor», not «non-zero»: with a floor the fields are pre-filled, and
+  // marking those would claim the learner chose what the system did.
+  const weighted = value > spec.minPerOption;
+
+  const slider =
+    `<div class="ou-alloc__slider">` +
+    `<div class="ou-slider ou-slider--h"><div class="ou-slider__rail">` +
+    `<div class="ou-slider__fill" style="left:0;right:${allocPercent(spec.budget - value, spec.budget)}"></div>` +
+    (review
+      ? `<div class="ou-slider__thumb" aria-hidden="true" style="left:${left}"></div>`
+      : `<div class="ou-slider__thumb" role="slider" tabindex="0" data-alloc="${index}" ` +
+        `aria-valuemin="${spec.minPerOption}" aria-valuemax="${ceiling}" aria-valuenow="${value}" ` +
+        `aria-label="${name}" style="left:${left}"></div>`) +
+    (ceiling < spec.budget ? `<div class="ou-alloc__cap" style="left:${capLeft}"></div>` : "") +
+    `</div></div></div>`;
+
+  const control = review
+    ? `<span class="ou-alloc__value">${value}</span>`
+    : `<div class="ou-alloc__field"><div class="ou-number ou-number--m ou-number--split">` +
+      `<div class="ou-number__box">` +
+      `<button type="button" class="ou-number__btn" aria-label="Меньше" data-alloc-step="${index}:-1"` +
+      `${value <= spec.minPerOption ? " disabled" : ""}>&minus;</button>` +
+      `<input class="ou-number__input" type="text" inputmode="numeric" value="${value}" ` +
+      `data-alloc="${index}" aria-label="Баллы: ${name}">` +
+      `<button type="button" class="ou-number__btn" aria-label="Больше" data-alloc-step="${index}:1"` +
+      `${value >= ceiling ? " disabled" : ""}>+</button>` +
+      `</div></div></div>`;
+
+  return (
+    `<div class="ou-alloc__row${weighted ? " is-weighted" : ""}" data-index="${index}">` +
+    `<span class="ou-alloc__label" style="font-size:var(--tb-answer-fs,1.25rem);line-height:1.35;` +
+    `text-wrap:pretty">${label}</span>${slider}${control}</div>`
+  );
+}
+
+/**
+ * A budget-allocation question as the DS `BudgetAllocation` group (PRD-44 FR-27).
+ *
+ * The learner splits a fixed budget across the statements, and the sum must land on it
+ * exactly. Two properties of this markup are load-bearing:
+ *
+ *  - **Overshoot is impossible by construction.** Every control publishes the CURRENT
+ *    ceiling of its row (`min(maxPerOption, value + remaining)`), so there is no «too
+ *    much» state to detect and no error message for one — only «not distributed yet»,
+ *    which the counter states.
+ *  - **The slider's visual scale is the budget, its `aria-valuemax` is the ceiling.**
+ *    A track that stretched to the ceiling would make a row jump when a NEIGHBOUR
+ *    changed; a `valuemax` of the budget would promise a keyboard user room that is not
+ *    there. The unreachable tail is drawn instead, so the stop is visible rather than
+ *    felt as an invisible wall.
+ *
+ * Input is delegated like every other type, but by ATTRIBUTE rather than by action:
+ * `data-alloc="<index>"` on the slider thumb and the number input, `data-alloc-step`
+ * on the stepper buttons. The hosts wire those to the shared model.
+ *
+ * `review` renders the same rows read-only and WITHOUT any verdict class: the type has
+ * no correct distribution, so there is nothing to mark (FR-33).
+ *
+ * `shuffleMapping` maps a display position to the AUTHOR's statement index. The rows move,
+ * the indices do not: the answer and the scale contributions are both keyed by the author
+ * index, so shuffling those would move the learner's points onto a different scale.
+ */
+export function renderAllocation(
+  question: InteractionQuestion,
+  answer: unknown,
+  review?: boolean,
+  shuffleMapping?: number[],
+): string {
+  const spec = allocationSpec(question.dataJson);
+  if (spec.options.length === 0) return `<div class="ou-alloc"></div>`;
+  const normalized = normalizeAllocation(spec, answer);
+  const remaining = allocationRemaining(spec, normalized);
+  const complete = remaining === 0 && spec.budget > 0;
+
+  const counter = review
+    ? `Распределено ${spec.budget - remaining} из ${spec.budget}`
+    : complete
+      ? "Вы использовали все баллы"
+      : `Осталось: <strong>${remaining}</strong> из ${spec.budget}`;
+
+  // Порядок ВЫДАЧИ берётся из карты перемешивания (FR-07), но внутри строки остаётся
+  // АВТОРСКИЙ индекс: на него ключуются и ответ, и вклады в шкалы. Перемешать сами
+  // индексы значило бы перенести баллы на чужую шкалу.
+  const rows = displayOrder(spec.options.length, shuffleMapping)
+    .map((i) => allocationRow(spec, normalized, i, review === true))
+    .join("");
+
+  return (
+    `<div class="ou-alloc${review ? " ou-alloc--readonly" : ""}">` +
+    `<div class="ou-alloc__counter${complete ? " is-complete" : ""}" role="status" aria-live="polite">` +
+    `${counter}</div><div class="ou-alloc__rows">${rows}</div></div>`
+  );
 }

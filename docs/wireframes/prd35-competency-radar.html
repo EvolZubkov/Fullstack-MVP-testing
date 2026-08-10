@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: PRD-35 — Радар компетенций на экране итогов.
+    Файл: docs/wireframes/prd35-competency-radar.html
+    Спецификация: docs/specs/prd-35/competency-radar.md
+    План: docs/plans/PLAN_PRD35_COMPETENCY_RADAR.md (Task 1, этап Э0)
+
+    ЧТО ЭТО. Экран итогов после PRD-29 показывает шкалы ПО ОДНОЙ: все виды
+    рендера односкальны, поэтому методика из трёх шкал выглядит как три
+    независимые карточки. Эскиз показывает дельту PRD-35: профиль теми же
+    данными, одной диаграммой, СБОКУ от карточек.
+
+    ЭТО ДОРАБОТКА, А НЕ НОВЫЙ ЭКРАН. Блок «По шкалам» взят дословно из
+    согласованного docs/wireframes/prd29-measurement-results.html: те же
+    ou-formsection / ou-slider / tb-zone / tb-tone--*, те же числа и тексты
+    опросника Маслача. Дельта — только контейнер радара слева и раскладка
+    блока в две колонки. Остальные блоки экрана (показатель, результаты по
+    темам, рекомендации) PRD-35 не трогает; здесь показан показатель — чтобы
+    было видно, что порядок блоков §8.2 не меняется.
+
+    ИСТОЧНИКИ РАЗМЕТКИ.
+      - сцена и существующие блоки — реальный шаблон «Стандартный»
+        (server/scorm/templates/default/styles/theme.css, подключён как есть);
+      - компоненты — ДС UniversityRT (client/src/styles/vendor/university-rt.css);
+      - слой «Дельта PRD-29» перенесён из эскиза PRD-29 без правок: без него
+        карточки шкал в этом файле выглядели бы иначе, чем в согласованном;
+      - слой «Дельта PRD-35» — новое: сетка блока и классы tb-radar*.
+      Классы с префиксом wf- — каркас эскиза, не UI.
+
+    ГЕОМЕТРИЯ НЕ НАРИСОВАНА НА ГЛАЗ. Координаты в SVG посчитаны той же
+    формулой, что и ядро (shared/template/radar-view.ts): первая ось сверху,
+    дальше по часовой, радиус = доля значения от домена. Домены и значения —
+    27/45, 6/25, 30/40, то есть 0.6, 0.24 и 0.75 радиуса.
+
+    ЧТО ПРОВЕРЯЕТ ЭСКИЗ:
+      1. луч НЕ переворачивается по благоприятному направлению: «Обесценивание
+         достижений» (30 из 40 — благополучие) даёт ДЛИННЫЙ луч, потому что
+         луч показывает значение, а оценку несёт цвет вершины и метка уровня;
+      2. вершина третьей оси при этом окрашена по своей шкале, а не «как у
+         соседей»: направления в одном тесте разные (PRD-29 §4.2);
+      3. при видимости «уровень без значения» луч квантуется по середине зоны и
+         вершина становится полой; цифр на диаграмме нет НИ У ОДНОЙ оси —
+         значение печатает карточка, диаграмма показывает форму профиля;
+      4. кольца сетки БЕЗЫМЯННЫЕ: у трёх шкал разные границы интервалов, общая
+         подписанная сетка была бы ложью (тот же довод, что у PRD-29 §6.5);
+      5. на узком экране две колонки схлопываются: радар над карточками;
+      6. с выключенным переключателем экран равен согласованному PRD-29.
+
+    СОСТОЯНИЯ:
+      s-wide    радар сбоку от карточек, все три шкалы видимы полностью
+      s-level   у «Отстранённости» видимость «уровень без значения»
+      s-narrow  та же методика в контейнере 360
+      s-off     переключатель выключен — экран как в PRD-29
+
+    Правила и соответствие разделам PRD-35 — в таблицах под холстом.
+  -->
+  <title>PRD-35 — Радар компетенций</title>
+  <link rel="stylesheet" href="/client/src/styles/vendor/university-rt.css">
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css">
+  <link rel="stylesheet" href="/server/scorm/templates/default/styles/theme.css">
+  <style>
+    :root {
+      /* gate-skip-start */
+      /* WIREFRAME-ONLY: литеральные px. В ДС нет шкалы толщин линий и размеров
+         кадра, поэтому величины каркаса эскиза объявлены здесь один раз. */
+      --wf-border-w:   1px;
+      --wf-size-52:    52px;
+      --wf-size-1280: 1280px;
+      --wf-size-800:   800px;
+      --wf-size-1024: 1024px;
+      --wf-size-640:   640px;
+      --wf-size-360:   360px;
+      --wf-marker-size: 22px;
+      /* gate-skip-end */
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       ДЕЛЬТА PRD-29 — перенесена дословно из согласованного эскиза
+       docs/wireframes/prd29-measurement-results.html. Здесь она не
+       пересматривается: карточки шкал обязаны выглядеть ровно так же.
+       ══════════════════════════════════════════════════════════════════════ */
+    .tb-measure.ou-formsection { padding: var(--ou-space-4) 0; }
+    .tb-measure__level { align-self: flex-start; }
+    .tb-measure .ou-formsection__title { font: var(--ou-text-heading-s); font-weight: 400; }
+    .tb-measure__slider { max-width: none; display: flex; }
+    .tb-measure__slider .ou-slider__header { justify-content: flex-end; }
+    .tb-measure__slider .ou-slider__rail { height: var(--ou-space-3); margin-bottom: var(--ou-space-6); }
+    .tb-measure__slider .ou-slider__val { font: var(--ou-text-body-m); }
+    .tb-measure__slider .ou-slider__val strong { font: var(--ou-text-display-s); }
+    .tb-measure__slider .ou-slider__mark-lbl { font: var(--ou-text-body-s); top: var(--ou-space-5); }
+    .tb-measure .ou-formsection__sub { font: var(--ou-text-body-m); }
+    .tb-measure__marker {
+      cursor: default; pointer-events: none;
+      width: var(--wf-marker-size); height: var(--wf-marker-size);
+    }
+    /* gate-skip-start */
+    .tb-zone { background: hsl(var(--tb-zone)); border-radius: 0; }
+    /* gate-skip-end */
+    .tb-zone:first-child {
+      border-start-start-radius: var(--ou-radius-pill);
+      border-end-start-radius: var(--ou-radius-pill);
+    }
+    .tb-zone:not(:has(~ .tb-zone)) {
+      border-start-end-radius: var(--ou-radius-pill);
+      border-end-end-radius: var(--ou-radius-pill);
+    }
+    .tb-scene .ou-tag.tb-tone--favorable { background: var(--ou-success-soft); color: var(--ou-success-on-soft); }
+    .tb-scene .ou-tag.tb-tone--neutral   { background: var(--ou-info-soft);    color: var(--ou-info-on-soft); }
+    .tb-scene .ou-tag.tb-tone--attention { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
+    .tb-scene .ou-tag.tb-tone--critical  { background: var(--ou-error-soft);   color: var(--ou-error-on-soft); }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       ДЕЛЬТА PRD-35 — предлагаемое дополнение к
+       server/scorm/templates/default/styles/theme.css.
+       Своих цветов слой не заводит: цвет вершины приходит тройкой HSL из ядра
+       (как у зон PRD-29), остальное — семантические токены ДС.
+       ══════════════════════════════════════════════════════════════════════ */
+    /* Радар СБОКУ от карточек: диаграмма — сводка блока, а карточки под ней
+       остаются носителями толкования и метки уровня. Колонка диаграммы не
+       растягивается, читаемая колонка карточек забирает остаток. */
+    .tb-measures--chart {
+      display: grid;
+      grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+      gap: var(--ou-space-6);
+      align-items: start;
+    }
+    /* Диаграмма прилипает к верху блока: список шкал длиннее её самой. */
+    .tb-radar { position: sticky; top: 0; }
+    .tb-radar__svg { width: 100%; height: auto; display: block; }
+    /* Кольца и лучи — вспомогательная сетка, а не данные: тон границы, не текста. */
+    .tb-radar__ring,
+    .tb-radar__axis { fill: none; stroke: var(--ou-border-soft); stroke-width: var(--wf-border-w); }
+    /* Фигура нейтральная: тон у каждой оси свой, и покрасить полигон целиком
+       нечем. Оценку несут вершины и метки уровня. */
+    .tb-radar__shape {
+      fill: var(--ou-accent-default); fill-opacity: 0.16;
+      stroke: var(--ou-accent-default); stroke-width: 2;
+    }
+    /* gate-skip-start */
+    /* Вершина — тон СВОЕЙ шкалы, тройкой HSL из ядра (тот же приём, что у
+       `--tb-zone` в PRD-29: интерполяцию рампы считает ядро, CSS не вычисляет). */
+    .tb-radar__dot { fill: hsl(var(--tb-zone)); stroke: var(--ou-bg-surface-2); stroke-width: 2; }
+    /* gate-skip-end */
+    .tb-radar__label { fill: var(--ou-fg-default); font: var(--ou-text-body-s); }
+    .tb-radar__level { fill: var(--ou-fg-muted); font: var(--ou-text-body-xs); }
+    /* Квантованный луч: вершина полая — знак того, что точное положение не
+       раскрывается. Без этого признака кружок читался бы как точное значение. */
+    .tb-radar__dot--quantized { fill: var(--ou-bg-surface-2); stroke: hsl(var(--tb-zone)); }
+
+    /* Тесная сцена: колонки схлопываются, радар встаёт НАД карточками. */
+    /* gate-skip-start */
+    @media (max-width: 860px) {
+      .tb-measures--chart { grid-template-columns: 1fr; }
+      .tb-radar { position: static; max-width: var(--wf-size-360); margin-inline: auto; }
+    }
+    @media (max-width: 640px) {
+      .tb-measure.ou-formsection { display: flex; flex-direction: column; gap: var(--ou-space-4); }
+    }
+    /* gate-skip-end */
+
+    /* ══════════════════════════════════════════════════════════════════════
+       КАРКАС ЭСКИЗА — не часть UI.
+       ══════════════════════════════════════════════════════════════════════ */
+    .wf-viewport {
+      width: var(--wf-size-1280); height: var(--wf-size-800);
+      max-width: 100%;
+      margin: 0 auto;
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      border-radius: var(--ou-radius-l);
+      overflow: hidden;
+      box-shadow: var(--ou-shadow-sm);
+    }
+    body.wf-window-s .wf-viewport { width: var(--wf-size-1024); height: var(--wf-size-640); }
+    .wf-viewport--narrow,
+    body.wf-window-s .wf-viewport--narrow { width: var(--wf-size-360); height: var(--wf-size-640); }
+    .wf-viewport--narrow .tb-scene__col { width: 100%; }
+    .wf-viewport--narrow .tb-measures--chart { grid-template-columns: 1fr; }
+    .wf-viewport--narrow .tb-radar { position: static; }
+    .wf-viewport--narrow .tb-measure.ou-formsection { display: flex; flex-direction: column; gap: var(--ou-space-4); }
+    .wf-caption { max-width: var(--wf-size-1280); margin: 0 auto var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+    .wf-state.active { display: block; }
+    .wf-page { max-width: var(--wf-size-1280); margin-inline: auto; }
+    .wf-notes, .wf-mapping { max-width: var(--wf-size-1280); margin-inline: auto; }
+    .wf-notes { margin-top: var(--ou-space-8); }
+    .wf-doc-title { max-width: var(--wf-size-1280); margin: var(--ou-space-8) auto 0; font: var(--ou-text-heading-m); color: var(--ou-fg-default); }
+    .wf-notes-title { font: var(--ou-text-body-m); font-weight: 700; margin: var(--ou-space-5) 0 var(--ou-space-2); }
+    .wf-notes-table { width: 100%; border-collapse: collapse; margin-bottom: var(--ou-space-7); }
+    .wf-notes-table th, .wf-notes-table td { border: var(--wf-border-w) solid var(--ou-border-soft); padding: var(--ou-space-2) var(--ou-space-3); font: var(--ou-text-body-s); text-align: left; vertical-align: top; }
+    .wf-notes-table th { background: var(--ou-bg-surface-3); font-weight: 600; }
+    .wf-notes-table tr:nth-child(even) td { background: var(--ou-bg-elevated); }
+    .wf-notes-table code { font: var(--ou-text-code-s); background: var(--ou-bg-surface-3); padding: 0 var(--ou-space-1); border-radius: var(--ou-radius-s); }
+    .wf-nav {
+      position: fixed; inset-block-start: 0; inset-inline: 0; z-index: 300;
+      display: flex; flex-wrap: wrap; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-block-end: var(--wf-border-w) solid var(--ou-border-soft);
+    }
+    .wf-nav-title { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+    .wf-nav-sep { width: var(--ou-space-4); }
+    .wf-btn {
+      font: var(--ou-text-body-s); padding: var(--ou-space-1) var(--ou-space-3);
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: var(--ou-bg-surface-2); color: var(--ou-fg-default); cursor: pointer;
+    }
+    .wf-btn.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); }
+  </style>
+</head>
+<body class="ou ou--dark ou--normal">
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">Итоги теста:</span>
+  <button type="button" class="wf-btn active" data-state-btn="s-wide" onclick="showState(this, 's-wide')">Радар сбоку</button>
+  <button type="button" class="wf-btn" data-state-btn="s-level" onclick="showState(this, 's-level')">Уровень без значения</button>
+  <button type="button" class="wf-btn" data-state-btn="s-narrow" onclick="showState(this, 's-narrow')">Узкий контейнер 360</button>
+  <button type="button" class="wf-btn" data-state-btn="s-off" onclick="showState(this, 's-off')">Переключатель выключен</button>
+  <span class="wf-nav-sep"></span>
+  <button type="button" class="ou-btn ou-btn--secondary ou-btn--s active" onclick="toggleTheme(this)">Dark</button>
+  <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="toggleWindow(this)">Окно 1280&times;800</button>
+</nav>
+
+<!-- ══════════════════ Радар сбоку от карточек ══════════════════ -->
+<section class="wf-state active" id="s-wide">
+  <div class="wf-page">
+    <p class="wf-caption">Переключатель «Радар компетенций» включён. Диаграмма — сводка блока «По шкалам», карточки под ней не меняются. Обратите внимание на третью ось: 30 из 40 по «Обесцениванию достижений» — это благополучие, и луч длинный, потому что луч показывает ЗНАЧЕНИЕ; оценку несут цвет вершины и метка уровня в карточке.</p>
+    <div class="wf-viewport">
+      <div class="tb-scene">
+
+        <header class="tb-scene__header tb-scene__header--flush">
+          <div class="tb-scene__brandrow tb-scene__brandrow--center">
+            <span class="tb-scene__logo" aria-hidden="true">РТ</span>
+            <div class="tb-scene__titles">
+              <h1 class="tb-scene__title">Опросник профессионального выгорания</h1>
+              <span class="tb-scene__subtitle">Результат методики</span>
+            </div>
+          </div>
+        </header>
+
+        <main class="tb-scene__body">
+          <div class="tb-scene__col tb-scene__col--wide">
+
+            <!-- Блок 2 порядка §8.2: показатель. PRD-35 его не трогает. -->
+            <div class="tb-scene__q"><h3 class="tb-scene__subhead">Ваш результат</h3></div>
+            <div class="tb-measures">
+              <div class="ou-formsection tb-measure">
+                <div class="ou-formsection__intro">
+                  <h4 class="ou-formsection__title">Состояние</h4>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-banner ou-banner--subtle ou-banner--warning">
+                    <div class="ou-banner__body">
+                      <div class="ou-banner__title">Возрастающее истощение</div>
+                      <div class="ou-banner__desc">Вы тратите на работу больше ресурса, чем восстанавливаете. Отношение к работе пока сохраняется, но запас прочности снижается.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <hr class="ou-separator ou-separator--horizontal">
+
+            <!-- Блок 3 порядка §8.2: шкалы. ДЕЛЬТА PRD-35 — две колонки. -->
+            <div class="tb-scene__q"><h3 class="tb-scene__subhead">По шкалам</h3></div>
+            <div class="tb-measures tb-measures--chart">
+
+              <!-- ДЕЛЬТА PRD-35: диаграмма профиля. Координаты посчитаны
+                   формулой ядра: центр 200×148, радиус 92, первая ось сверху,
+                   дальше по часовой; радиус луча = доля от домена. -->
+              <div class="tb-radar">
+                <svg class="tb-radar__svg" viewBox="0 0 340 300" role="img"
+                     aria-label="Профиль по шкалам: Эмоциональное истощение — высокий; Отстранённость — умеренная; Обесценивание достижений — умеренное">
+                  <circle class="tb-radar__ring" cx="170" cy="150" r="25"></circle>
+                  <circle class="tb-radar__ring" cx="170" cy="150" r="50"></circle>
+                  <circle class="tb-radar__ring" cx="170" cy="150" r="75"></circle>
+                  <circle class="tb-radar__ring" cx="170" cy="150" r="100"></circle>
+
+                  <line class="tb-radar__axis" x1="170" y1="150" x2="170" y2="50"></line>
+                  <line class="tb-radar__axis" x1="170" y1="150" x2="256.6" y2="200"></line>
+                  <line class="tb-radar__axis" x1="170" y1="150" x2="83.4" y2="200"></line>
+
+                  <polygon class="tb-radar__shape" points="170,90 190.8,162 105,187.5"></polygon>
+
+                  <circle class="tb-radar__dot" cx="170" cy="90" r="6" style="--tb-zone: 0 84% 60%"></circle>
+                  <circle class="tb-radar__dot" cx="190.8" cy="162" r="6" style="--tb-zone: 38 92% 50%"></circle>
+                  <circle class="tb-radar__dot" cx="105" cy="187.5" r="6" style="--tb-zone: 38 92% 50%"></circle>
+
+                  <text class="tb-radar__label" x="170" y="16" text-anchor="middle">Эмоциональное<tspan x="170" dy="15">истощение</tspan></text>
+                  <text class="tb-radar__level" x="170" y="45" text-anchor="middle">Высокий</text>
+
+                  <text class="tb-radar__label" x="256.6" y="232" text-anchor="middle">Отстранённость</text>
+                  <text class="tb-radar__level" x="256.6" y="248" text-anchor="middle">Умеренная</text>
+
+                  <text class="tb-radar__label" x="83.4" y="232" text-anchor="middle">Обесценивание<tspan x="83.4" dy="15">достижений</tspan></text>
+                  <text class="tb-radar__level" x="83.4" y="263" text-anchor="middle">Умеренное</text>
+                </svg>
+              </div>
+
+              <!-- Карточки шкал — дословно из согласованного эскиза PRD-29. -->
+              <div>
+                <div class="ou-formsection tb-measure" data-render="band_ruler">
+                  <div class="ou-formsection__intro">
+                    <h4 class="ou-formsection__title">Эмоциональное истощение</h4>
+                    <span class="ou-tag ou-tag--l tb-measure__level tb-tone--critical">Высокий</span>
+                  </div>
+                  <div class="ou-formsection__body">
+                    <div class="ou-slider ou-slider--h tb-measure__slider">
+                      <div class="ou-slider__header">
+                        <span class="ou-slider__val"><strong>27</strong> из 45</span>
+                      </div>
+                      <div class="ou-slider__rail" role="img" aria-label="Низкий 0–14, умеренный 15–24, высокий 25–45; значение 27 — высокий уровень">
+                        <span class="ou-slider__fill tb-zone" style="left: 0%; width: 33.3%; --tb-zone: 142 76% 36%"></span>
+                        <span class="ou-slider__fill tb-zone" style="left: 33.3%; width: 22.2%; --tb-zone: 38 92% 50%"></span>
+                        <span class="ou-slider__fill tb-zone is-current" style="left: 55.6%; width: 44.4%; --tb-zone: 0 84% 60%"></span>
+                        <span class="ou-slider__thumb tb-measure__marker" style="left: 60%"></span>
+                        <div class="ou-slider__marks">
+                          <span class="ou-slider__mark" style="left: 0%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                          <span class="ou-slider__mark" style="left: 33.3%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 33.3%">15</span>
+                          <span class="ou-slider__mark" style="left: 55.6%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 55.6%">25</span>
+                          <span class="ou-slider__mark" style="left: 100%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 100%">45</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p class="ou-formsection__sub">Ресурс расходуется быстрее, чем восстанавливается: усталость к концу дня стала фоном.</p>
+                  </div>
+                </div>
+
+                <div class="ou-formsection tb-measure" data-render="band_ruler">
+                  <div class="ou-formsection__intro">
+                    <h4 class="ou-formsection__title">Отстранённость</h4>
+                    <span class="ou-tag ou-tag--l tb-measure__level tb-tone--attention">Умеренная</span>
+                  </div>
+                  <div class="ou-formsection__body">
+                    <div class="ou-slider ou-slider--h tb-measure__slider">
+                      <div class="ou-slider__header">
+                        <span class="ou-slider__val"><strong>6</strong> из 25</span>
+                      </div>
+                      <div class="ou-slider__rail" role="img" aria-label="Низкая 0–4, умеренная 5–9, высокая 10–25; значение 6 — умеренная">
+                        <span class="ou-slider__fill tb-zone" style="left: 0%; width: 20%; --tb-zone: 142 76% 36%"></span>
+                        <span class="ou-slider__fill tb-zone is-current" style="left: 20%; width: 20%; --tb-zone: 38 92% 50%"></span>
+                        <span class="ou-slider__fill tb-zone" style="left: 40%; width: 60%; --tb-zone: 0 84% 60%"></span>
+                        <span class="ou-slider__thumb tb-measure__marker" style="left: 24%"></span>
+                        <div class="ou-slider__marks">
+                          <span class="ou-slider__mark" style="left: 0%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                          <span class="ou-slider__mark" style="left: 20%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 20%">5</span>
+                          <span class="ou-slider__mark" style="left: 40%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 40%">10</span>
+                          <span class="ou-slider__mark" style="left: 100%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 100%">25</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p class="ou-formsection__sub">Появляется дистанция в отношении к людям и задачам — обычная защитная реакция на перегрузку.</p>
+                  </div>
+                </div>
+
+                <div class="ou-formsection tb-measure" data-render="band_ruler">
+                  <div class="ou-formsection__intro">
+                    <h4 class="ou-formsection__title">Обесценивание достижений</h4>
+                    <span class="ou-tag ou-tag--l tb-measure__level tb-tone--attention">Умеренное</span>
+                  </div>
+                  <div class="ou-formsection__body">
+                    <div class="ou-slider ou-slider--h tb-measure__slider">
+                      <div class="ou-slider__header">
+                        <span class="ou-slider__val"><strong>30</strong> из 40</span>
+                      </div>
+                      <div class="ou-slider__rail" role="img" aria-label="Высокое 0–27, умеренное 28–32, низкое 33–40; значение 30 — умеренное">
+                        <span class="ou-slider__fill tb-zone" style="left: 0%; width: 70%; --tb-zone: 0 84% 60%"></span>
+                        <span class="ou-slider__fill tb-zone is-current" style="left: 70%; width: 12.5%; --tb-zone: 38 92% 50%"></span>
+                        <span class="ou-slider__fill tb-zone" style="left: 82.5%; width: 17.5%; --tb-zone: 142 76% 36%"></span>
+                        <span class="ou-slider__thumb tb-measure__marker" style="left: 75%"></span>
+                        <div class="ou-slider__marks">
+                          <span class="ou-slider__mark" style="left: 0%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                          <span class="ou-slider__mark" style="left: 70%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 70%">28</span>
+                          <span class="ou-slider__mark" style="left: 82.5%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 82.5%">33</span>
+                          <span class="ou-slider__mark" style="left: 100%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 100%">40</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p class="ou-formsection__sub">Вы в основном видите отдачу от своей работы, но уверенность в собственной эффективности неустойчива.</p>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </main>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ Уровень без значения ══════════════════ -->
+<section class="wf-state" id="s-level">
+  <div class="wf-page">
+    <p class="wf-caption">У «Отстранённости» видимость — «уровень без значения»: сырой балл не раскрывается ни цифрой, ни графикой. Луч квантован по середине своей зоны (5–10, то есть 7.5 из 25), вершина полая, засечки точного положения нет, в подписи только уровень. Две другие оси не меняются: видимость задаётся на каждой шкале отдельно.</p>
+    <div class="wf-viewport">
+      <div class="tb-scene">
+
+        <header class="tb-scene__header tb-scene__header--flush">
+          <div class="tb-scene__brandrow tb-scene__brandrow--center">
+            <span class="tb-scene__logo" aria-hidden="true">РТ</span>
+            <div class="tb-scene__titles">
+              <h1 class="tb-scene__title">Опросник профессионального выгорания</h1>
+              <span class="tb-scene__subtitle">Результат методики</span>
+            </div>
+          </div>
+        </header>
+
+        <main class="tb-scene__body">
+          <div class="tb-scene__col tb-scene__col--wide">
+            <div class="tb-scene__q"><h3 class="tb-scene__subhead">По шкалам</h3></div>
+            <div class="tb-measures tb-measures--chart">
+
+              <div class="tb-radar">
+                <svg class="tb-radar__svg" viewBox="0 0 340 300" role="img"
+                     aria-label="Профиль по шкалам: Эмоциональное истощение — высокий; Отстранённость — умеренная; Обесценивание достижений — умеренное">
+                  <circle class="tb-radar__ring" cx="170" cy="150" r="25"></circle>
+                  <circle class="tb-radar__ring" cx="170" cy="150" r="50"></circle>
+                  <circle class="tb-radar__ring" cx="170" cy="150" r="75"></circle>
+                  <circle class="tb-radar__ring" cx="170" cy="150" r="100"></circle>
+
+                  <line class="tb-radar__axis" x1="170" y1="150" x2="170" y2="50"></line>
+                  <line class="tb-radar__axis" x1="170" y1="150" x2="256.6" y2="200"></line>
+                  <line class="tb-radar__axis" x1="170" y1="150" x2="83.4" y2="200"></line>
+
+                  <polygon class="tb-radar__shape" points="170,90 196,165 105,187.5"></polygon>
+
+                  <circle class="tb-radar__dot" cx="170" cy="90" r="6" style="--tb-zone: 0 84% 60%"></circle>
+                  <circle class="tb-radar__dot tb-radar__dot--quantized" cx="196" cy="165" r="6" style="--tb-zone: 38 92% 50%"></circle>
+                  <circle class="tb-radar__dot" cx="105" cy="187.5" r="6" style="--tb-zone: 38 92% 50%"></circle>
+
+                  <text class="tb-radar__label" x="170" y="16" text-anchor="middle">Эмоциональное<tspan x="170" dy="15">истощение</tspan></text>
+                  <text class="tb-radar__level" x="170" y="45" text-anchor="middle">Высокий</text>
+
+                  <text class="tb-radar__label" x="256.6" y="232" text-anchor="middle">Отстранённость</text>
+                  <text class="tb-radar__level" x="256.6" y="248" text-anchor="middle">Умеренная</text>
+
+                  <text class="tb-radar__label" x="83.4" y="232" text-anchor="middle">Обесценивание<tspan x="83.4" dy="15">достижений</tspan></text>
+                  <text class="tb-radar__level" x="83.4" y="263" text-anchor="middle">Умеренное</text>
+                </svg>
+              </div>
+
+              <div>
+                <div class="ou-formsection tb-measure" data-render="band_ruler">
+                  <div class="ou-formsection__intro">
+                    <h4 class="ou-formsection__title">Эмоциональное истощение</h4>
+                    <span class="ou-tag ou-tag--l tb-measure__level tb-tone--critical">Высокий</span>
+                  </div>
+                  <div class="ou-formsection__body">
+                    <div class="ou-slider ou-slider--h tb-measure__slider">
+                      <div class="ou-slider__header">
+                        <span class="ou-slider__val"><strong>27</strong> из 45</span>
+                      </div>
+                      <div class="ou-slider__rail" role="img" aria-label="Низкий 0–14, умеренный 15–24, высокий 25–45; значение 27 — высокий уровень">
+                        <span class="ou-slider__fill tb-zone" style="left: 0%; width: 33.3%; --tb-zone: 142 76% 36%"></span>
+                        <span class="ou-slider__fill tb-zone" style="left: 33.3%; width: 22.2%; --tb-zone: 38 92% 50%"></span>
+                        <span class="ou-slider__fill tb-zone is-current" style="left: 55.6%; width: 44.4%; --tb-zone: 0 84% 60%"></span>
+                        <span class="ou-slider__thumb tb-measure__marker" style="left: 60%"></span>
+                        <div class="ou-slider__marks">
+                          <span class="ou-slider__mark" style="left: 0%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                          <span class="ou-slider__mark" style="left: 100%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 100%">45</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Видимость «уровень без значения»: слот значения пуст, метка
+                     уровня и толкование на месте (PRD-29 §8.3). -->
+                <div class="ou-formsection tb-measure" data-render="label">
+                  <div class="ou-formsection__intro">
+                    <h4 class="ou-formsection__title">Отстранённость</h4>
+                    <span class="ou-tag ou-tag--l tb-measure__level tb-tone--attention">Умеренная</span>
+                  </div>
+                  <div class="ou-formsection__body">
+                    <p class="ou-formsection__sub">Появляется дистанция в отношении к людям и задачам — обычная защитная реакция на перегрузку.</p>
+                  </div>
+                </div>
+
+                <div class="ou-formsection tb-measure" data-render="band_ruler">
+                  <div class="ou-formsection__intro">
+                    <h4 class="ou-formsection__title">Обесценивание достижений</h4>
+                    <span class="ou-tag ou-tag--l tb-measure__level tb-tone--attention">Умеренное</span>
+                  </div>
+                  <div class="ou-formsection__body">
+                    <div class="ou-slider ou-slider--h tb-measure__slider">
+                      <div class="ou-slider__header">
+                        <span class="ou-slider__val"><strong>30</strong> из 40</span>
+                      </div>
+                      <div class="ou-slider__rail" role="img" aria-label="Высокое 0–27, умеренное 28–32, низкое 33–40; значение 30 — умеренное">
+                        <span class="ou-slider__fill tb-zone" style="left: 0%; width: 70%; --tb-zone: 0 84% 60%"></span>
+                        <span class="ou-slider__fill tb-zone is-current" style="left: 70%; width: 12.5%; --tb-zone: 38 92% 50%"></span>
+                        <span class="ou-slider__fill tb-zone" style="left: 82.5%; width: 17.5%; --tb-zone: 142 76% 36%"></span>
+                        <span class="ou-slider__thumb tb-measure__marker" style="left: 75%"></span>
+                        <div class="ou-slider__marks">
+                          <span class="ou-slider__mark" style="left: 0%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                          <span class="ou-slider__mark" style="left: 100%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 100%">40</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </main>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ Узкий контейнер ══════════════════ -->
+<section class="wf-state" id="s-narrow">
+  <div class="wf-page">
+    <p class="wf-caption">Контейнер 360: две колонки схлопываются, радар встаёт НАД карточками. Диаграмма не уменьшается до нечитаемости — она занимает ширину колонки, подписи остаются на своих местах, потому что координаты живут в системе <code>viewBox</code>, а не в пикселях экрана.</p>
+    <div class="wf-viewport wf-viewport--narrow">
+      <div class="tb-scene">
+
+        <header class="tb-scene__header tb-scene__header--flush">
+          <div class="tb-scene__brandrow tb-scene__brandrow--center">
+            <div class="tb-scene__titles">
+              <h1 class="tb-scene__title">Опросник выгорания</h1>
+            </div>
+          </div>
+        </header>
+
+        <main class="tb-scene__body">
+          <div class="tb-scene__col tb-scene__col--wide">
+            <div class="tb-scene__q"><h3 class="tb-scene__subhead">По шкалам</h3></div>
+            <div class="tb-measures tb-measures--chart">
+
+              <div class="tb-radar">
+                <svg class="tb-radar__svg" viewBox="0 0 340 300" role="img"
+                     aria-label="Профиль по шкалам: Эмоциональное истощение — высокий; Отстранённость — умеренная; Обесценивание достижений — умеренное">
+                  <circle class="tb-radar__ring" cx="170" cy="150" r="25"></circle>
+                  <circle class="tb-radar__ring" cx="170" cy="150" r="50"></circle>
+                  <circle class="tb-radar__ring" cx="170" cy="150" r="75"></circle>
+                  <circle class="tb-radar__ring" cx="170" cy="150" r="100"></circle>
+
+                  <line class="tb-radar__axis" x1="170" y1="150" x2="170" y2="50"></line>
+                  <line class="tb-radar__axis" x1="170" y1="150" x2="256.6" y2="200"></line>
+                  <line class="tb-radar__axis" x1="170" y1="150" x2="83.4" y2="200"></line>
+
+                  <polygon class="tb-radar__shape" points="170,90 190.8,162 105,187.5"></polygon>
+
+                  <circle class="tb-radar__dot" cx="170" cy="90" r="6" style="--tb-zone: 0 84% 60%"></circle>
+                  <circle class="tb-radar__dot" cx="190.8" cy="162" r="6" style="--tb-zone: 38 92% 50%"></circle>
+                  <circle class="tb-radar__dot" cx="105" cy="187.5" r="6" style="--tb-zone: 38 92% 50%"></circle>
+
+                  <text class="tb-radar__label" x="170" y="16" text-anchor="middle">Эмоциональное<tspan x="170" dy="15">истощение</tspan></text>
+                  <text class="tb-radar__level" x="170" y="45" text-anchor="middle">Высокий</text>
+
+                  <text class="tb-radar__label" x="256.6" y="232" text-anchor="middle">Отстранённость</text>
+                  <text class="tb-radar__level" x="256.6" y="248" text-anchor="middle">Умеренная</text>
+
+                  <text class="tb-radar__label" x="83.4" y="232" text-anchor="middle">Обесценивание<tspan x="83.4" dy="15">достижений</tspan></text>
+                  <text class="tb-radar__level" x="83.4" y="263" text-anchor="middle">Умеренное</text>
+                </svg>
+              </div>
+
+              <div>
+                <div class="ou-formsection tb-measure" data-render="band_ruler">
+                  <div class="ou-formsection__intro">
+                    <h4 class="ou-formsection__title">Эмоциональное истощение</h4>
+                    <span class="ou-tag ou-tag--l tb-measure__level tb-tone--critical">Высокий</span>
+                  </div>
+                  <div class="ou-formsection__body">
+                    <div class="ou-slider ou-slider--h tb-measure__slider">
+                      <div class="ou-slider__header">
+                        <span class="ou-slider__val"><strong>27</strong> из 45</span>
+                      </div>
+                      <div class="ou-slider__rail" role="img" aria-label="значение 27 — высокий уровень">
+                        <span class="ou-slider__fill tb-zone" style="left: 0%; width: 33.3%; --tb-zone: 142 76% 36%"></span>
+                        <span class="ou-slider__fill tb-zone" style="left: 33.3%; width: 22.2%; --tb-zone: 38 92% 50%"></span>
+                        <span class="ou-slider__fill tb-zone is-current" style="left: 55.6%; width: 44.4%; --tb-zone: 0 84% 60%"></span>
+                        <span class="ou-slider__thumb tb-measure__marker" style="left: 60%"></span>
+                        <div class="ou-slider__marks">
+                          <span class="ou-slider__mark" style="left: 0%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                          <span class="ou-slider__mark" style="left: 100%"></span>
+                          <span class="ou-slider__mark-lbl" style="left: 100%">45</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </main>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ Переключатель выключен ══════════════════ -->
+<section class="wf-state" id="s-off">
+  <div class="wf-page">
+    <p class="wf-caption">Переключатель выключен — умолчание для всех тестов, существующих и новых. Блок «По шкалам» равен согласованному эскизу PRD-29: одна колонка, карточки во всю ширину. То же самое видит ученик, когда радар включён, но видимых шкал меньше трёх: отказ перед учеником молчаливый, причину получает только автор в редакторе.</p>
+    <div class="wf-viewport">
+      <div class="tb-scene">
+
+        <header class="tb-scene__header tb-scene__header--flush">
+          <div class="tb-scene__brandrow tb-scene__brandrow--center">
+            <span class="tb-scene__logo" aria-hidden="true">РТ</span>
+            <div class="tb-scene__titles">
+              <h1 class="tb-scene__title">Опросник профессионального выгорания</h1>
+              <span class="tb-scene__subtitle">Результат методики</span>
+            </div>
+          </div>
+        </header>
+
+        <main class="tb-scene__body">
+          <div class="tb-scene__col tb-scene__col--wide">
+            <div class="tb-scene__q"><h3 class="tb-scene__subhead">По шкалам</h3></div>
+            <div class="tb-measures">
+
+              <div class="ou-formsection tb-measure" data-render="band_ruler">
+                <div class="ou-formsection__intro">
+                  <h4 class="ou-formsection__title">Эмоциональное истощение</h4>
+                  <span class="ou-tag ou-tag--l tb-measure__level tb-tone--critical">Высокий</span>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-slider ou-slider--h tb-measure__slider">
+                    <div class="ou-slider__header">
+                      <span class="ou-slider__val"><strong>27</strong> из 45</span>
+                    </div>
+                    <div class="ou-slider__rail" role="img" aria-label="Низкий 0–14, умеренный 15–24, высокий 25–45; значение 27 — высокий уровень">
+                      <span class="ou-slider__fill tb-zone" style="left: 0%; width: 33.3%; --tb-zone: 142 76% 36%"></span>
+                      <span class="ou-slider__fill tb-zone" style="left: 33.3%; width: 22.2%; --tb-zone: 38 92% 50%"></span>
+                      <span class="ou-slider__fill tb-zone is-current" style="left: 55.6%; width: 44.4%; --tb-zone: 0 84% 60%"></span>
+                      <span class="ou-slider__thumb tb-measure__marker" style="left: 60%"></span>
+                      <div class="ou-slider__marks">
+                        <span class="ou-slider__mark" style="left: 0%"></span>
+                        <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                        <span class="ou-slider__mark" style="left: 33.3%"></span>
+                        <span class="ou-slider__mark-lbl" style="left: 33.3%">15</span>
+                        <span class="ou-slider__mark" style="left: 55.6%"></span>
+                        <span class="ou-slider__mark-lbl" style="left: 55.6%">25</span>
+                        <span class="ou-slider__mark" style="left: 100%"></span>
+                        <span class="ou-slider__mark-lbl" style="left: 100%">45</span>
+                      </div>
+                    </div>
+                  </div>
+                  <p class="ou-formsection__sub">Ресурс расходуется быстрее, чем восстанавливается: усталость к концу дня стала фоном.</p>
+                </div>
+              </div>
+
+              <div class="ou-formsection tb-measure" data-render="band_ruler">
+                <div class="ou-formsection__intro">
+                  <h4 class="ou-formsection__title">Отстранённость</h4>
+                  <span class="ou-tag ou-tag--l tb-measure__level tb-tone--attention">Умеренная</span>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-slider ou-slider--h tb-measure__slider">
+                    <div class="ou-slider__header">
+                      <span class="ou-slider__val"><strong>6</strong> из 25</span>
+                    </div>
+                    <div class="ou-slider__rail" role="img" aria-label="Низкая 0–4, умеренная 5–9, высокая 10–25; значение 6 — умеренная">
+                      <span class="ou-slider__fill tb-zone" style="left: 0%; width: 20%; --tb-zone: 142 76% 36%"></span>
+                      <span class="ou-slider__fill tb-zone is-current" style="left: 20%; width: 20%; --tb-zone: 38 92% 50%"></span>
+                      <span class="ou-slider__fill tb-zone" style="left: 40%; width: 60%; --tb-zone: 0 84% 60%"></span>
+                      <span class="ou-slider__thumb tb-measure__marker" style="left: 24%"></span>
+                      <div class="ou-slider__marks">
+                        <span class="ou-slider__mark" style="left: 0%"></span>
+                        <span class="ou-slider__mark-lbl" style="left: 0%">0</span>
+                        <span class="ou-slider__mark" style="left: 20%"></span>
+                        <span class="ou-slider__mark-lbl" style="left: 20%">5</span>
+                        <span class="ou-slider__mark" style="left: 40%"></span>
+                        <span class="ou-slider__mark-lbl" style="left: 40%">10</span>
+                        <span class="ou-slider__mark" style="left: 100%"></span>
+                        <span class="ou-slider__mark-lbl" style="left: 100%">25</span>
+                      </div>
+                    </div>
+                  </div>
+                  <p class="ou-formsection__sub">Появляется дистанция в отношении к людям и задачам — обычная защитная реакция на перегрузку.</p>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </main>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<h2 class="wf-doc-title">Правила</h2>
+<div class="wf-notes">
+  <table class="wf-notes-table">
+    <thead>
+      <tr><th>Правило</th><th>Как выглядит на холсте</th><th>Раздел PRD-35</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Луч — доля значения от домена, без переворота по благоприятному направлению</td>
+        <td>«Обесценивание достижений» 30 из 40 даёт луч 0.75 радиуса, хотя это благополучие, а «Отстранённость» 6 из 25 — короткий луч 0.24, хотя это тоже неплохой результат. Длина отвечает на «сколько», а не на «хорошо ли»</td>
+        <td>§4.1</td>
+      </tr>
+      <tr>
+        <td>Оценку несёт цвет вершины и метка уровня</td>
+        <td>Вершина «Эмоционального истощения» красная (критично), две другие — жёлтые (внимание). Цвет берётся из той же зоны, что окрашена на линейке карточки, поэтому диаграмма и карточка не спорят</td>
+        <td>§4.2</td>
+      </tr>
+      <tr>
+        <td>Направления в одном тесте разные</td>
+        <td>У третьей шкалы благоприятный край противоположен двум другим, и её вершина окрашена по её собственной шкале при одной цветовой схеме на тест</td>
+        <td>§4.2, PRD-29 §4.2</td>
+      </tr>
+      <tr>
+        <td>Видимость «уровень без значения» квантует луч</td>
+        <td>Состояние «Уровень без значения»: луч «Отстранённости» стоит на середине зоны 5–10, вершина полая, засечки точного положения нет</td>
+        <td>§4.3</td>
+      </tr>
+      <tr>
+        <td>Цифр на диаграмме нет ни у одной оси</td>
+        <td>Подпись луча — название шкалы и метка уровня. Значение печатает карточка рядом, с линейкой и границами интервалов; на диаграмме та же цифра была бы вторым экземпляром и заставляла бы читать профиль как таблицу. Побочный выигрыш — подписи короче, а это главный риск при пяти и более осях</td>
+        <td>§4.3, §7</td>
+      </tr>
+      <tr>
+        <td>Кольца сетки безымянные</td>
+        <td>Четыре кольца по четвертям домена без подписей: у трёх шкал разные границы интервалов, поэтому общая подписанная сетка была бы неверна</td>
+        <td>§7</td>
+      </tr>
+      <tr>
+        <td>Радар дополняет карточки, а не заменяет</td>
+        <td>Толкование и метка уровня остаются в карточках справа; диаграмма их не дублирует и не вмещает</td>
+        <td>§8</td>
+      </tr>
+      <tr>
+        <td>Показ только явным переключателем</td>
+        <td>Состояние «Переключатель выключен» — умолчание: блок равен согласованному PRD-29</td>
+        <td>§9</td>
+      </tr>
+      <tr>
+        <td>Отказ перед учеником молчаливый</td>
+        <td>Меньше трёх видимых шкал выглядит так же, как выключенный переключатель: ни диаграммы, ни объяснения. Причину видит только автор в редакторе</td>
+        <td>§6</td>
+      </tr>
+      <tr>
+        <td>Статичный SVG без скриптов</td>
+        <td>Ни одного обработчика и ни одной подсказки по наведению: всё, что нужно прочитать, подписано. В пакете разметка живёт внутри движка LMS, в отчёте — печатается</td>
+        <td>§7</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="wf-doc-title">Дельта и соответствие ДС</h2>
+<div class="wf-mapping">
+  <table class="wf-notes-table">
+    <thead>
+      <tr><th>Элемент</th><th>Чем нарисован</th><th>Новое в PRD-35</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Блок «По шкалам»</td><td><code>tb-measures</code> шаблона</td><td>модификатор <code>tb-measures--chart</code>: сетка в две колонки, на узком экране — одна</td></tr>
+      <tr><td>Карточка шкалы</td><td><code>ou-formsection</code> + <code>ou-slider</code> + <code>tb-zone</code> + <code>tb-tone--*</code></td><td>нет, взято дословно из PRD-29</td></tr>
+      <tr><td>Диаграмма</td><td>инлайновый <code>svg</code> без библиотек</td><td><code>tb-radar</code>, <code>tb-radar__svg</code></td></tr>
+      <tr><td>Сетка колец и лучи</td><td><code>circle</code> / <code>line</code>, цвет <code>--ou-border-soft</code></td><td><code>tb-radar__ring</code>, <code>tb-radar__axis</code></td></tr>
+      <tr><td>Фигура профиля</td><td><code>polygon</code>, заливка <code>--ou-accent-default</code> с <code>fill-opacity</code></td><td><code>tb-radar__shape</code></td></tr>
+      <tr><td>Вершина оси</td><td><code>circle</code>, цвет тройкой HSL из ядра через <code>--tb-zone</code> — тот же приём, что у зон PRD-29</td><td><code>tb-radar__dot</code>, <code>tb-radar__dot--quantized</code></td></tr>
+      <tr><td>Подписи осей</td><td><code>text</code> + <code>tspan</code>, токены <code>--ou-fg-default</code> и <code>--ou-fg-muted</code></td><td><code>tb-radar__label</code>, <code>tb-radar__level</code></td></tr>
+      <tr><td>Переключатель показа</td><td>поле <code>settings[]</code> варианта, тип <code>boolean</code></td><td><code>showCompetencyRadar</code> — правится в структуре теста, у отчёта свой</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+  function showState(btn, id) {
+    document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.remove('active'); });
+    document.getElementById(id).classList.add('active');
+    document.querySelectorAll('[data-state-btn]').forEach(function (el) { el.classList.remove('active'); });
+    btn.classList.add('active');
+  }
+  function toggleTheme(btn) {
+    var dark = document.body.classList.toggle('ou--dark');
+    document.body.classList.toggle('ou--light', !dark);
+    btn.textContent = dark ? 'Dark' : 'Light';
+  }
+  function toggleWindow(btn) {
+    var small = document.body.classList.toggle('wf-window-s');
+    btn.innerHTML = small ? 'Окно 1024&times;640' : 'Окно 1280&times;800';
+  }
+</script>
+
+</body>
+</html>

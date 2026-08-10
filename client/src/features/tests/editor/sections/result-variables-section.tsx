@@ -3,7 +3,8 @@
  * @description «Показатели» editor tab (PRD-2). Lists the test's result
  * variables as reorderable accordion cards. Each card is three blocks:
  * (1) Имя · Метка, (2) Формула (Конструктор/DSL → шаблон → расчёт), (3) Вывод
- * (управление статусом — только для булевых — + передача в LMS). The result type
+ * (видимость для обучающегося + управление статусом — только для булевых — +
+ * передача в LMS). The result type
  * is DERIVED (template in the constructor, inferred from the formula in DSL mode)
  * — there is no manual «Тип» field. Edits flow into the test draft via
  * `updateModel`; the single drawer «Сохранить» persists them through the
@@ -44,6 +45,10 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
+import { collectStringLiterals, findUnknownOutcomes } from "@shared/formula/outcome-literals";
+
+import type { LearnerVisibility, Valence } from "@shared/scales/interpretation";
+
 import type {
   ResultVariableControlsStatus,
   ResultVariableModel,
@@ -77,6 +82,9 @@ import {
   type ScaleRef,
   type TopicRef,
 } from "../result-variables-builder";
+import { bandSpan, DomainFields, VALENCE_OPTIONS, VISIBILITY_OPTIONS } from "./scales-section";
+import { LevelsEditor } from "./levels-editor";
+import { OutcomesEditor } from "./outcomes-editor";
 
 const STATUS_OPTIONS: Array<{ value: ResultVariableControlsStatus; label: string }> = [
   { value: "none", label: "Нет" },
@@ -116,9 +124,14 @@ function emptyVariable(sortOrder: number): ResultVariableModel {
     label: "",
     type: "boolean",
     formula: "",
-    showToLearner: false,
+    learnerVisibility: "hidden",
     scormTarget: "both",
     controlsStatus: "none",
+    bands: [],
+    outcomes: [],
+    domainMin: null,
+    domainMax: null,
+    valence: "none",
     sortOrder,
   };
 }
@@ -429,6 +442,33 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
 
   const isBoolean = v.type === "boolean";
 
+  const declaredCodes = useMemo(
+    () => v.outcomes.map((o) => o.code.trim()).filter((c) => c !== ""),
+    [v.outcomes],
+  );
+
+  /**
+   * PRD-29 Task 15: codes the formula can return that the list does not declare —
+   * the WARNING. Suppressed while the list is empty (`findUnknownOutcomes`): an
+   * author who has not started declaring outcomes is not doing anything wrong yet.
+   */
+  const unknownOutcomeCodes = useMemo(
+    () => findUnknownOutcomes(v.formula, declaredCodes),
+    [v.formula, declaredCodes],
+  );
+
+  /**
+   * The same codes as SUGGESTIONS — deliberately NOT suppressed on an empty list.
+   * Seeding an imported formula's outcome list in one click is the main scenario
+   * (PRD-29 §5.1), and it happens precisely when nothing is declared yet; reusing
+   * the warning's suppression here would switch the feature off exactly when it is
+   * needed most.
+   */
+  const suggestedOutcomeCodes = useMemo(
+    () => collectStringLiterals(v.formula).filter((code) => !declaredCodes.includes(code)),
+    [v.formula, declaredCodes],
+  );
+
   // DSL «Функции» reference + insert-at-cursor.
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [fnOpen, setFnOpen] = useState(false);
@@ -533,8 +573,102 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
 
       <hr className="wf-sep" />
 
+      {/* PRD-29: the indicator's interpretation. A numeric result is interpreted by
+          INTERVAL (the same editor the scales tab uses); a string or boolean one has
+          no intervals — the formula returns a CODE, so the author enumerates them. */}
+      <div className="tb-section-label">Толкование результата</div>
+      {v.type === "number" ? (
+        <>
+          <LevelsEditor
+            bands={v.bands}
+            index={index}
+            readOnly={readOnly}
+            valence={v.valence}
+            testIdPrefix="metrics"
+            domain={v.domainMin !== null && v.domainMax !== null
+              ? { min: v.domainMin, max: v.domainMax }
+              : null}
+            onChange={(bands) => onChange({ bands })}
+          />
+          {/* PRD-29+: same domain+valence mechanics as the «Шкалы» tab — a numeric
+              indicator degrades exactly the same way without an explicit domain
+              (span of its bands), so it reuses the shared component rather than a
+              second copy. No «Рассчитать по вкладам»: an indicator's value comes
+              from a formula, not enumerated question contributions, so there is
+              nothing to suggest a range from. */}
+          <DomainFields
+            domainMin={v.domainMin}
+            domainMax={v.domainMax}
+            readOnly={readOnly}
+            testIdPrefix="metrics"
+            index={index}
+            seed={bandSpan(v) ?? { min: 0, max: 0 }}
+            switchLabel="Задать границы вручную"
+            switchDescription="Выключено — границы берутся из охвата уровней. Ноль — законная граница, а не признак «не задано»."
+            minLabel="Минимум"
+            maxLabel="Максимум"
+            onChange={onChange}
+          />
+          <div className="ou-formfield">
+            <Select<Valence>
+              size="m"
+              fullWidth
+              label="Благоприятное направление"
+              value={v.valence}
+              disabled={readOnly}
+              options={VALENCE_OPTIONS}
+              onChange={(value) => onChange({ valence: value })}
+              data-testid={`metrics-valence-${index}`}
+            />
+          </div>
+        </>
+      ) : (
+        <OutcomesEditor
+          outcomes={v.outcomes}
+          index={index}
+          readOnly={readOnly}
+          onChange={(outcomes) => onChange({ outcomes })}
+          suggestedCodes={suggestedOutcomeCodes}
+        />
+      )}
+      {v.type !== "number" && unknownOutcomeCodes.length > 0 && (
+        <Banner
+          tone="warning"
+          size="sm"
+          description={`В формуле встречаются коды, которых нет в перечне: ${unknownOutcomeCodes.join(", ")}. Сохранение не заблокировано — добавьте их в перечень ниже.`}
+          data-testid={`metrics-unknown-outcomes-${index}`}
+        />
+      )}
+      <Banner
+        tone="info"
+        size="sm"
+        description={
+          v.type === "number"
+            ? "Толкование привязано к интервалу значения. «Оценка» — методологическое состояние уровня; как оно выглядит, решает шаблон."
+            : "Формула возвращает код исхода. Перечислите коды, которые она может вернуть, и что каждый из них означает для обучающегося."
+        }
+      />
+
+      <hr className="wf-sep" />
+
       <div className="tb-section-label">Вывод</div>
-      <Grid cols={isBoolean ? 2 : 1} gap={3}>
+      <Grid cols={2} gap={3}>
+        {/*
+          PRD-29 (defect D-1): without this control `learnerVisibility` stays
+          `hidden` forever and the methodology verdict — the very result a
+          measurement test exists for — can never reach the learner. Same option
+          list as the scales tab, deliberately imported rather than duplicated.
+        */}
+        <Select<LearnerVisibility>
+          size="m"
+          fullWidth
+          label="Показывать обучающемуся"
+          value={v.learnerVisibility}
+          disabled={readOnly}
+          options={VISIBILITY_OPTIONS}
+          onChange={(value) => onChange({ learnerVisibility: value })}
+          data-testid={`metrics-visibility-${index}`}
+        />
         {isBoolean && (
           <Select<ResultVariableControlsStatus>
             size="m"

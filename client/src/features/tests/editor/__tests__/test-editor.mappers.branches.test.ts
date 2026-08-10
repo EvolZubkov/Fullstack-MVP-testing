@@ -50,6 +50,7 @@ function makeModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       allowReturnToUnanswered: true,
       allowAnswerChange: false,
       showSectionResults: true,
+      quickAdvance: false,
     },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
@@ -519,6 +520,7 @@ describe("apiToEditorModel — runtime and scalar defaults", () => {
       allowReturnToUnanswered: true,
       allowAnswerChange: true,
       showSectionResults: false,
+      quickAdvance: false,
       showDifficultyLevel: false,
     });
     expect(m.id).toBe("abc");
@@ -599,7 +601,7 @@ describe("apiToEditorModel — result variables", () => {
           label: "B",
           type: "string",
           formula: "1+1",
-          showToLearner: true,
+          learnerVisibility: "level_and_value",
           scormTarget: "interaction",
           controlsStatus: "success",
           sortOrder: 2,
@@ -615,7 +617,7 @@ describe("apiToEditorModel — result variables", () => {
     expect(bare.label).toBe("");
     expect(bare.type).toBe("number"); // invalid → default
     expect(bare.formula).toBe("");
-    expect(bare.showToLearner).toBe(false); // non-true
+    expect(bare.learnerVisibility).toBe("hidden"); // absent → hidden
     expect(bare.scormTarget).toBe("both"); // invalid → default
     expect(bare.controlsStatus).toBe("none"); // invalid → default
 
@@ -623,7 +625,7 @@ describe("apiToEditorModel — result variables", () => {
     expect(full.type).toBe("string");
     expect(full.scormTarget).toBe("interaction");
     expect(full.controlsStatus).toBe("success");
-    expect(full.showToLearner).toBe(true);
+    expect(full.learnerVisibility).toBe("level_and_value");
   });
 
   it("falls back sortOrder to the row index when absent", () => {
@@ -654,7 +656,7 @@ describe("apiToEditorModel — scales and bands", () => {
           aggregation: "avg",
           normalization: "percent",
           direction: "inverse",
-          showToLearner: true,
+          learnerVisibility: "level_and_value",
           scormTarget: "both",
           sortOrder: 0,
           configJson: {
@@ -672,10 +674,10 @@ describe("apiToEditorModel — scales and bands", () => {
     expect(scale.aggregation).toBe("avg");
     expect(scale.normalization).toBe("percent");
     expect(scale.direction).toBe("inverse");
-    expect(scale.showToLearner).toBe(true);
+    expect(scale.learnerVisibility).toBe("level_and_value");
     expect(scale.bands).toEqual([
-      { min: "0", max: "10", label: "Low", level: "low" },
-      { min: "11", max: "20", label: "", level: "" },
+      { min: "0", max: "10", label: "Low", level: "low", text: "", tone: "" },
+      { min: "11", max: "20", label: "", level: "", text: "", tone: "" },
     ]);
   });
 
@@ -694,7 +696,7 @@ describe("apiToEditorModel — scales and bands", () => {
     expect(bad.normalization).toBe("none");
     expect(bad.direction).toBe("positive");
     expect(bad.scormTarget).toBe("none");
-    expect(bad.showToLearner).toBe(false);
+    expect(bad.learnerVisibility).toBe("hidden");
     expect(scales[0].bands).toEqual([]); // config_json not an object → no bands
   });
 });
@@ -733,6 +735,20 @@ describe("apiToEditorModel — measurements (scaleId → key resolution)", () =>
     expect(m.sourceKey).toBe("o3");
     expect(m.weight).toBe(4);
   });
+
+  // Каждый вид источника из перечисления схемы обязан пережить загрузку. Пропуск
+  // одного вида не падает, а молча превращается в `question`: матрица вкладов теряет
+  // значения, а следующее сохранение переписывает строки чужим видом.
+  it.each(["question", "option", "matching_pair", "ranking_position", "option_allocation"])(
+    "сохраняет вид источника %s",
+    (sourceType) => {
+      const [m] = apiToEditorModel({
+        ...base,
+        measurements: [{ scaleId: "s1", questionId: "q1", valueJson: 1, sourceType, sourceKey: "0" }],
+      }).measurements;
+      expect(m.sourceType).toBe(sourceType);
+    },
+  );
 
   it("drops rows with unresolved scale, non-string scaleId/questionId, non-object, or non-number value", () => {
     const out = apiToEditorModel({
@@ -951,6 +967,28 @@ describe("editorModelToPayload — scalar fields, normalization and scoring", ()
     expect(payload.feedbackJson.assets[0]).toMatchObject({ id: "a1", fileName: "f.pdf" });
   });
 
+  it("keeps the canonical url on feedback assets", () => {
+    const payload = editorModelToPayload(
+      makeModel({
+        basic: {
+          ...makeModel().basic,
+          feedbackAssets: [
+            {
+              id: "a1",
+              title: "T",
+              fileName: "f.pdf",
+              mimeType: "application/pdf",
+              url: "/api/media/33333333-3333-3333-3333-333333333333",
+              scormHref: "feedback/f.pdf",
+            },
+          ],
+        },
+      }),
+    );
+    expect(payload.feedbackJson.assets[0]).not.toHaveProperty("scormHref");
+    expect(payload.feedbackJson.assets[0].url).toBe("/api/media/33333333-3333-3333-3333-333333333333");
+  });
+
   it("persists retakePolicyJson as null when disabled and the full object when enabled", () => {
     expect(editorModelToPayload(makeModel()).retakePolicyJson).toBeNull();
     const enabled = editorModelToPayload(
@@ -1167,7 +1205,7 @@ describe("residual type-guard branches", () => {
     const [scale] = apiToEditorModel({
       scales: [{ id: "s1", key: "k", sortOrder: 0, configJson: { bands: [{ min: true, max: null, label: "L", level: "v" }] } }],
     }).scales;
-    expect(scale.bands).toEqual([{ min: "", max: "", label: "L", level: "v" }]);
+    expect(scale.bands).toEqual([{ min: "", max: "", label: "L", level: "v", text: "", tone: "" }]);
   });
 
   it("scale coerces a non-string key and a missing sortOrder (falls back to index)", () => {
@@ -1179,6 +1217,33 @@ describe("residual type-guard branches", () => {
   it("reads a numeric defaultQuestionPoints from the API into scoring", () => {
     expect(apiToEditorModel({ defaultQuestionPoints: 3 }).scoring.defaultQuestionPoints).toBe(3);
     expect(apiToEditorModel({ defaultQuestionPoints: "x" }).scoring.defaultQuestionPoints).toBeNull();
+  });
+});
+
+describe("report settings — legacy branch without a variant key", () => {
+  // Settings saved before the report had variants (PRD-35) carry values and no key. The
+  // hosts render from them (an absent key resolves to the `isDefault` variant), so the
+  // editor has to show them — dropping the branch left the author looking at an empty card
+  // while the report kept printing a radar.
+  it("keeps a keyless branch that still carries values", () => {
+    const model = apiToEditorModel({
+      reportSettingsJson: { standard: { values: { showCompetencyRadar: true } } },
+    });
+    expect(model.report.standard?.variantKey).toBeUndefined();
+    expect(model.report.standard?.values).toEqual({ showCompetencyRadar: true });
+  });
+
+  it("drops a branch that carries neither a key nor values", () => {
+    const model = apiToEditorModel({ reportSettingsJson: { standard: { values: {} }, adaptive: {} } });
+    expect(model.report.standard).toBeUndefined();
+    expect(model.report.adaptive).toBeUndefined();
+  });
+
+  it("keeps reading a normal branch with a key", () => {
+    const model = apiToEditorModel({
+      reportSettingsJson: { standard: { variantKey: "report.standard", values: { headline: "X" } } },
+    });
+    expect(model.report.standard).toEqual({ variantKey: "report.standard", values: { headline: "X" } });
   });
 });
 

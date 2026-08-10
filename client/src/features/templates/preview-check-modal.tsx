@@ -127,6 +127,9 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
           manifest: bundle.manifest,
           layouts: bundle.layouts,
           templateJs: bundle.templateJs,
+          // Картинки отчёта — файлы этого шаблона; в браузере они доступны только
+          // через роут ассетов (PRD-27 FR-05).
+          assetBase: `/api/templates/${encodeURIComponent(template.id)}/assets/`,
         });
         setReport(rep);
         const firstFail = rep.routes.find((r) => r.status === "fail");

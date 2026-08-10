@@ -13,7 +13,7 @@
  */
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CircleDot, CheckSquare, Unplug, ListOrdered, List, Plus, Trash2, ThermometerSun, type LucideIcon } from "lucide-react";
+import { CircleDot, CheckSquare, Unplug, ListOrdered, List, Plus, Trash2, ThermometerSun, SlidersHorizontal, type LucideIcon } from "lucide-react";
 import { Button, ModalDialog, Switch, Tabs, Tag, TransferList, type TransferItem } from "@universityrt/ui-kit";
 import type { FormSet, Form } from "@shared/schema";
 import type { QuestionType } from "@shared/scales/engine";
@@ -45,6 +45,7 @@ const TYPE_ICON: Record<QuestionType, LucideIcon> = {
   matching: Unplug,
   ranking: ListOrdered,
   scale: ThermometerSun,
+  allocation: SlidersHorizontal,
 };
 const TYPE_LABEL: Record<QuestionType, string> = {
   single: "Одиночный выбор",
@@ -52,6 +53,7 @@ const TYPE_LABEL: Record<QuestionType, string> = {
   matching: "Сопоставление",
   ranking: "Ранжирование",
   scale: "Шкала",
+  allocation: "Распределение баллов",
 };
 
 function makeForm(index: number): Form {

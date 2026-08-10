@@ -14,11 +14,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const exportReportPdf = vi.fn().mockResolvedValue("Результаты_Тест_30_07_2026.pdf");
-const loadReportAssets = vi.fn().mockResolvedValue({ backgroundDataUrl: null, logoDataUrl: null });
+/** Инлайн картинок варианта: по умолчанию отдаёт значения как есть (PRD-27 FR-05). */
+const inlineReportImageValues = vi.fn(async (values: Record<string, unknown>) => values);
 const buildReportContext = vi.fn().mockReturnValue({ report: { kind: "standard" } });
 const buildAdaptiveReportContext = vi.fn().mockReturnValue({ report: { kind: "adaptive" } });
 
-vi.mock("@shared/report/export-pdf", () => ({ exportReportPdf, loadReportAssets }));
+vi.mock("@shared/report/export-pdf", () => ({ exportReportPdf, inlineReportImageValues }));
 vi.mock("@shared/report/report-context", () => ({ buildReportContext, buildAdaptiveReportContext }));
 
 /** Resolve every injected <script> as soon as it is appended. */
@@ -46,7 +47,8 @@ const render = {
   layout: '<div class="tb-report">x</div>',
   css: ".tb-report { color: red }",
   variantKey: "report.standard",
-  values: { headline: "Итоги" },
+  values: { headline: "Итоги", backgroundImage: "/api/templates/default/assets/assets/report/bg.png" },
+  imageKeys: ["backgroundImage"],
   cssVars: { "--primary": "270 100% 50%" },
   themeCss: ".tb-report[data-theme=dark] { color: white }",
   design: { logoUrl: "/l.png" },
@@ -89,7 +91,48 @@ describe("downloadAttemptReport", () => {
     const [, opts] = buildReportContext.mock.calls[0];
     expect(opts.values).toEqual(render.values);
     expect(opts.design).toEqual(render.design);
-    expect(opts.assets).toBeDefined();
+  });
+
+  it("несёт облик шкал с экрана в отчёт (PRD-47 §4.2)", async () => {
+    // Своя сборка `chartSettings` строила объект с нуля и теряла карту цвета и
+    // пиктограмм: колонки у отчёта нет, покраска приезжает с экрана. Профиль в PDF
+    // выходил палитрой по умолчанию, пока автор видел на экране свои цвета.
+    const measures = {
+      ramp: { favorable: "142 76% 36%", mid: "38 92% 50%", unfavorable: "0 84% 60%" },
+      scaleKind: "band_ruler",
+      indicatorKind: "label",
+      scales: [],
+      indicators: [],
+      chartSettings: { scaleAppearance: { cel: { color: "210 60% 50%" } } },
+    };
+    const { downloadAttemptReport } = await import("../attempt-report");
+    await downloadAttemptReport(
+      standardReport as never,
+      { ...render, values: { ...render.values, scalesChartKind: "rose" } } as never,
+      measures as never,
+    );
+    const [, opts] = buildReportContext.mock.calls[0];
+    expect(opts.measures.chartSettings.scaleAppearance).toEqual({ cel: { color: "210 60% 50%" } });
+    // …и вид по-прежнему берётся из полей ОТЧЁТА, а не с экрана.
+    expect(opts.measures.chartSettings.scalesChartKind).toBe("rose");
+  });
+
+  it("инлайнит картинки варианта до сборки контекста (FR-05)", async () => {
+    // Растеризатор снимает то, что уже в документе: ссылку на файл шаблона он бы не
+    // догрузил, и подложка молча пропала бы из PDF.
+    inlineReportImageValues.mockResolvedValueOnce({ ...render.values, backgroundImage: "data:image/png;base64,BG" });
+    const { downloadAttemptReport } = await import("../attempt-report");
+    await downloadAttemptReport(standardReport as never, render as never);
+    expect(inlineReportImageValues).toHaveBeenCalledWith(render.values, render.imageKeys);
+    const [, opts] = buildReportContext.mock.calls[0];
+    expect(opts.values.backgroundImage).toBe("data:image/png;base64,BG");
+  });
+
+  it("вариант без картинок не просит инлайнить ничего", async () => {
+    const { downloadAttemptReport } = await import("../attempt-report");
+    const { imageKeys, ...noImages } = render;
+    await downloadAttemptReport(standardReport as never, noImages as never);
+    expect(inlineReportImageValues).toHaveBeenCalledWith(noImages.values, []);
   });
 
   it("строит АДАПТИВНУЮ страницу, когда сервер пометил режим", async () => {
@@ -112,7 +155,7 @@ describe("downloadAttemptReport", () => {
     expect(srcs).toEqual(["/api/report/lib/html2canvas.min.js", "/api/report/lib/jspdf.umd.min.js"]);
   });
 
-  it("грузит библиотеки и подложки не более одного раза на несколько скачиваний", async () => {
+  it("грузит библиотеки не более одного раза на несколько скачиваний", async () => {
     delete (window as unknown as Record<string, unknown>).jspdf;
     delete (window as unknown as Record<string, unknown>).html2canvas;
     const { downloadAttemptReport } = await import("../attempt-report");
@@ -123,16 +166,16 @@ describe("downloadAttemptReport", () => {
     await first;
     await downloadAttemptReport(standardReport as never, render as never);
     expect(document.head.querySelectorAll("script")).toHaveLength(2);
-    expect(loadReportAssets).toHaveBeenCalledTimes(1);
   });
 
-  it("строит отчёт и когда подложки недоступны", async () => {
-    loadReportAssets.mockRejectedValueOnce(new Error("404"));
+  it("строит отчёт и когда подложка не прочиталась", async () => {
+    // Общий инлайн отдаёт пустое значение вместо ссылки — страница печатается с
+    // градиентом шаблона, а не проваливает скачивание.
+    inlineReportImageValues.mockResolvedValueOnce({ ...render.values, backgroundImage: "" });
     const { downloadAttemptReport } = await import("../attempt-report");
-    await downloadAttemptReport(standardReport as never, render as never);
-    // Пустые ассеты, а не исключение: страница откатывается к своему градиенту.
+    await expect(downloadAttemptReport(standardReport as never, render as never)).resolves.toBeTruthy();
     const [, opts] = buildReportContext.mock.calls[0];
-    expect(opts.assets).toEqual({});
+    expect(opts.values.backgroundImage).toBe("");
   });
 
   it("пробрасывает не загрузившуюся библиотеку и позволяет повторить", async () => {

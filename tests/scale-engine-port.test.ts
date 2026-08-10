@@ -16,6 +16,7 @@ import {
   type Answer,
   type QuestionType,
 } from "../shared/scales/engine";
+import type { AllocationSpec } from "../shared/questions/allocation";
 
 const portSrc = readFileSync(
   resolve(process.cwd(), "server/scorm/template/app/scales/engine.js"),
@@ -49,7 +50,22 @@ type Scenario = {
   measurements: MeasurementSpec[];
   answers: Record<string, Answer>;
   questionTypes: Record<string, QuestionType>;
+  /** PRD-44: allocation specs by question id — read only by percent normalization. */
+  budgets?: Record<string, AllocationSpec>;
 };
+
+/** Four statements sharing a budget of 7 — the reference questionnaire's shape. */
+const allocationUnits = (questionId: string, scaleKey: string, indices: number[], value = 1): MeasurementSpec[] =>
+  indices.map((i) => ({
+    questionId,
+    scaleKey,
+    sourceType: "option_allocation" as const,
+    sourceKey: String(i),
+    value,
+    weight: 1,
+  }));
+
+const BUDGET_7: AllocationSpec = { options: ["a", "b", "c", "d"], budget: 7, minPerOption: 0, maxPerOption: 7 };
 
 const scenarios: Scenario[] = [
   {
@@ -136,13 +152,62 @@ const scenarios: Scenario[] = [
     answers: { q1: { 0: 1 }, q2: [2, 0, 1] },
     questionTypes: { q1: "matching", q2: "ranking" },
   },
+  // PRD-44: the allocation source. Its contribution is the LEARNER's amount, so a twin
+  // that kept the old `value * weight` rule would silently score every distribution as
+  // «one point per touched statement» — a divergence no other scenario can catch.
+  {
+    name: "allocation — вклад равен присвоенному баллу",
+    scales: [{ key: "s", aggregation: "sum", normalization: "none", direction: "positive" }],
+    measurements: allocationUnits("q1", "s", [0, 1, 2, 3]),
+    answers: { q1: { 0: 3, 1: 0, 2: 4, 3: 0 } },
+    questionTypes: { q1: "allocation" },
+    budgets: { q1: BUDGET_7 },
+  },
+  {
+    name: "allocation — коэффициент и обратный вклад",
+    scales: [{ key: "s", aggregation: "sum", normalization: "none", direction: "positive" }],
+    measurements: [...allocationUnits("q1", "s", [0], 2), ...allocationUnits("q1", "s", [1], -1)],
+    answers: { q1: { 0: 3, 1: 4, 2: 0, 3: 0 } },
+    questionTypes: { q1: "allocation" },
+    budgets: { q1: BUDGET_7 },
+  },
+  {
+    name: "allocation — процент от домена, ограниченного бюджетом",
+    scales: [{ key: "s", aggregation: "sum", normalization: "percent", direction: "positive" }],
+    measurements: allocationUnits("q1", "s", [0, 1]),
+    answers: { q1: { 0: 3, 1: 1, 2: 3, 3: 0 } },
+    questionTypes: { q1: "allocation" },
+    budgets: { q1: BUDGET_7 },
+  },
+  {
+    name: "allocation — среднее по активным единицам",
+    scales: [{ key: "s", aggregation: "avg", normalization: "none", direction: "positive" }],
+    measurements: allocationUnits("q1", "s", [0, 1, 2, 3]),
+    answers: { q1: { 0: 5, 1: 2, 2: 0, 3: 0 } },
+    questionTypes: { q1: "allocation" },
+    budgets: { q1: BUDGET_7 },
+  },
+  {
+    name: "allocation рядом с обычным выбором",
+    scales: [{ key: "s", aggregation: "sum", normalization: "percent", direction: "positive" }],
+    measurements: [...allocationUnits("q1", "s", [0]), ...likert("q2", "s")],
+    answers: { q1: { 0: 7, 1: 0, 2: 0, 3: 0 }, q2: 3 },
+    questionTypes: { q1: "allocation", q2: "single" },
+    budgets: { q1: BUDGET_7 },
+  },
 ];
 
 describe("scale engine port parity (PRD-5)", () => {
   for (const s of scenarios) {
     it(`${s.name} — TS ≡ runtime port`, () => {
-      const ts = tsCompute(s.scales, s.measurements, s.answers, s.questionTypes);
-      const port = ScaleEnginePort.computeScales(s.scales, s.measurements, s.answers, s.questionTypes);
+      const ts = tsCompute(s.scales, s.measurements, s.answers, s.questionTypes, s.budgets ?? {});
+      const port = ScaleEnginePort.computeScales(
+        s.scales,
+        s.measurements,
+        s.answers,
+        s.questionTypes,
+        s.budgets ?? {},
+      );
       expect(port).toEqual(ts);
     });
   }

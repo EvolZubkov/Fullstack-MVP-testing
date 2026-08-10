@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-30 — Порядок выдачи вопросов в теме.
+    Спека: docs/specs/prd-30/question-order.md (этап Э0).
+    Файл: docs/wireframes/approved/prd30-question-order.html
+
+    ЧТО ЭТО. Сегодня порядок вопросов внутри темы всегда случайный: перемешивание
+    зашито в shared/draw/blueprint.ts и shared/draw/forms.ts. Эскиз показывает три
+    места, где появляется управление порядком, и ни одно из них не переизобретает
+    раскладку — во всех трёх новый контрол встаёт в существующий ряд однотипных.
+
+    ОСНОВА — РЕАЛЬНАЯ РАЗМЕТКА, взятая дословно:
+      - строка темы (tb-topic-row / tb-draw-all-row / tb-draw-count-row /
+        tb-quota-toggle / tb-feedback-preview) — из утверждённого
+        prd17-test-variants.html, который снят с работающего
+        client/src/features/tests/editor/sections/topics-structure-section.tsx;
+      - поле «Сложность» в карточке вопроса (ou-formfield + qd-diffrow) — из
+        утверждённого content-bank-explorer.html, состояние s-q-drawer;
+      - дерево банка (cb-tree / cb-row / cb-cell) — оттуда же.
+    Компонентный CSS подключён РЕАЛЬНЫЙ (client/src/styles/tb-components.css),
+    а не копия в docs/wireframes. Классы с префиксом wf- — каркас эскиза, не UI.
+
+    ДЕЛЬТА (всё новое перечислено здесь и ниже в таблице «Дельта»):
+      1. строка темы: свитч «Случайный порядок вопросов» — ряд свитчей темы
+         (tb-question-order-row повторяет правила существующего tb-draw-all-row);
+      2. карточка вопроса: числовое поле «Индекс в теме» — под «Сложностью»;
+      3. дерево банка: колонка «Индекс» — по образцу колонки «Сложность».
+    Своих цветов, шрифтов и отступов дельта не заводит: только токены ДС.
+
+    ПОЧЕМУ СВИТЧ, А НЕ СЕЛЕКТ. У этой же семантики на уровень ниже — «Случайный
+    порядок вариантов» в карточке вопроса (questions.shuffle_answers) — в проекте
+    уже принят свитч. Модель остаётся перечислением (question_order), поэтому
+    появление третьей позиции («по возрастанию сложности») заменит свитч на Select
+    без миграции.
+
+    СОСТОЯНИЯ:
+      fixed     порядок задан: свитч ВЫКЛ, тема выдаётся по индексам
+      random    умолчание: свитч ВКЛ — экран как сегодня, дельты не видно
+      variants  режим вариантов: порядок берётся из списка варианта
+      flat      тест в режиме linear_flat: настройка не действует
+      question  карточка вопроса: поле «Индекс в теме» под «Сложностью»
+      bank      список вопросов темы: сортировка + колонка «Индекс»
+      docs      пояснения + DS Mapping
+
+    СОГЛАСОВАН 2026-08-01.
+    -->
+    <title>PRD-30 — Порядок выдачи вопросов в теме</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <!-- РЕАЛЬНЫЙ компонентный CSS приложения (а не устаревшая копия в docs/wireframes). -->
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+
+    <style>
+      .wf-sprite { display: none; }
+      /* Faux-drawer: показываем drawer редактора в потоке страницы (канон prd17). */
+      .wf-drawer {
+        max-width: var(--wf-size-860); margin: 0 auto;
+        background: var(--ou-bg-elevated);
+        border: var(--wf-border-w) solid var(--ou-border-soft);
+        border-radius: var(--ou-radius-l); box-shadow: var(--ou-shadow-m);
+        overflow: hidden; display: flex; flex-direction: column;
+      }
+      .wf-drawer__tabs { border-bottom: var(--wf-border-w) solid var(--ou-border-soft); padding: 0 var(--ou-space-5); }
+      .wf-drawer-body { padding: var(--ou-space-5) var(--ou-space-6); display: flex; flex-direction: column; gap: var(--ou-space-4); }
+      .wf-variants-block { margin-top: var(--ou-space-2); padding-left: var(--ou-space-5); border-left: var(--wf-border-w) solid var(--ou-border-soft); display: flex; flex-direction: column; gap: var(--ou-space-3); }
+      .wf-row-actions { display: flex; gap: var(--ou-space-2); }
+      .wf-sum { display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+      /* ── Дерево банка: каркас экрана «Темы и вопросы», взят дословно из
+           approved/content-bank-explorer.html (там это UI-каркас, не дельта). ── */
+      .cb-wrap { max-width: var(--wf-size-860); margin: 0 auto; display: flex; flex-direction: column; gap: var(--ou-space-4); }
+      .cb-tree { display: flex; flex-direction: column; }
+      .cb-thead, .cb-row { display: grid; grid-template-columns: 1fr var(--wf-size-110) var(--wf-size-95) var(--wf-size-90); align-items: center; border-bottom: var(--wf-border-w) solid var(--ou-border-default); }
+      .cb-thead { font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: .05em; }
+      .cb-thead > div { padding: var(--ou-space-2); text-align: center; }
+      .cb-thead > div:first-child { text-align: left; padding-left: var(--ou-space-3); }
+      .cb-row { min-height: var(--wf-size-44); cursor: pointer; user-select: none; }
+      .cb-row:hover { background: var(--ou-bg-hover); }
+      .cb-name { display: flex; align-items: center; gap: var(--ou-space-2); min-width: 0; padding: var(--ou-space-2) var(--ou-space-2) var(--ou-space-2) var(--ou-space-3); }
+      .cb-name__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .cb-cell { font: var(--ou-text-body-s); color: var(--ou-fg-default); text-align: center; padding: 0 var(--ou-space-2); }
+      .cb-acts { display: flex; align-items: center; justify-content: flex-end; gap: var(--ou-space-1); padding-right: var(--ou-space-3); }
+      .cb-qtype { display: inline-flex; color: var(--ou-fg-muted); }
+      .cb-row--topic-root .cb-name__label { font: var(--ou-text-body-s); font-weight: 600; }
+      .cb-row--q .cb-name { padding-left: calc(var(--ou-space-3) + var(--ou-space-6)); position: relative; }
+      .cb-row--q .cb-name::before { content: ""; position: absolute; left: calc(var(--ou-space-3) + var(--ou-space-2)); top: 0; bottom: 0; width: var(--wf-border-w); background: var(--ou-border-default); }
+
+      /* ── Карточка вопроса: раскладка поля «Сложность», взята дословно из
+           approved/content-bank-explorer.html (существующий UI). ── */
+      .qd-diffrow { display: flex; align-items: center; gap: var(--ou-space-4); }
+      .qd-diffrow .ou-slider { flex: 1; min-width: 0; max-width: none; padding-bottom: var(--ou-space-5); }
+      .qd-diffrow__num { width: var(--wf-size-90); flex: none; }
+      .qd-diffrow__sw { flex: none; white-space: nowrap; }
+      .ou-formfield.is-na .qd-diffrow .ou-slider,
+      .ou-formfield.is-na .qd-diffrow__num,
+      .ou-formfield.is-na .qd-hint { display: none; }
+      .qd-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+      /* Поле «Индекс в теме» не тянется на ширину формы: это короткое число.
+         Ширина — как у числового поля сложности рядом. */
+      .qd-order__num { width: var(--wf-size-160); flex: none; }
+
+      /* Аннотационные бейджи (канон prd11). */
+      .wf-annot { display: none; }
+      body.wf-annots-on .wf-annot {
+        display: inline-block;
+        margin: var(--ou-space-1) 0 0;
+        padding: 0 var(--ou-space-2);
+        border-radius: var(--ou-radius-xs);
+        background: var(--ou-accent-soft);
+        color: var(--ou-accent-default);
+        font: var(--ou-text-caption);
+        font-weight: 600;
+      }
+    </style>
+
+    <style data-wf-delta>
+      /* ══════════════════════════════════════════════════════════════════════
+         ДЕЛЬТА — предлагаемое дополнение к client/src/styles/tb-components.css.
+         Один класс: строка свитча «Случайный порядок вопросов» в теле темы.
+         Правила скопированы с существующего .tb-draw-all-row — новая строка
+         обязана стоять в том же ряду и той же анатомии, что «Все вопросы темы»,
+         иначе тело темы распадается на два разных вида строк со свитчами.
+         ══════════════════════════════════════════════════════════════════════ */
+      .tb-question-order-row {
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        margin-bottom: var(--ou-space-2);
+        cursor: pointer;
+      }
+      .tb-question-order-row__lbl { font: var(--ou-text-body-s); }
+      .tb-question-order-row__hint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+    </style>
+
+    <style data-wf-template-overrides>
+      /* gate-skip-start */
+      /* WIREFRAME-ONLY: навбар эскиза занимает ДВЕ строки (семь состояний +
+         тоглы), поэтому отступ под ним больше базового --wf-nav-offset из
+         wf-utils.css. Величина каркаса эскиза, к UI отношения не имеет. */
+      :root { --wf-nav-offset: 92px; }
+      /* gate-skip-end */
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap;
+      }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s); background: transparent;
+        color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer;
+      }
+      .wf-nav button:hover { background: var(--ou-bg-hover); }
+      .wf-nav button.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+      .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+      .wf-stage { padding: var(--wf-nav-offset) var(--ou-space-6) var(--ou-space-10); }
+      .wf-state { display: none; }
+      .wf-state.active { display: block; }
+      .wf-doc { padding: 0 var(--ou-space-6) var(--ou-space-10); max-width: var(--wf-size-960); margin: 0 auto; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" /><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" /><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" /></symbol>
+      <symbol id="i-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></symbol>
+      <symbol id="i-arrow-down-01" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4" /><path d="M7 20V4" /><rect x="15" y="4" width="5" height="6" rx="2.5" /><path d="M17 20v-6h-2" /><path d="M15 20h5" /></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" /></symbol>
+      <symbol id="i-q-single" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="1" fill="currentColor" /></symbol>
+      <symbol id="i-q-multiple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="m9 12 2 2 4-4" /></symbol>
+      <symbol id="i-q-ranking" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6h11" /><path d="M10 12h11" /><path d="M10 18h11" /><path d="M4 6h1v4" /><path d="M4 10h2" /><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Порядок вопросов:</span>
+      <button type="button" class="active" onclick="showState(this, 'fixed')">задан (свитч выкл)</button>
+      <button type="button" onclick="showState(this, 'random')">случайный (дефолт)</button>
+      <button type="button" onclick="showState(this, 'variants')">режим вариантов</button>
+      <button type="button" onclick="showState(this, 'flat')">сплошной список</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'question')">карточка вопроса</button>
+      <button type="button" onclick="showState(this, 'bank')">список банка</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <button type="button" onclick="toggleAnnots(this)">Аннотации</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd17-test-variants.html">&harr; Варианты</a>
+    </nav>
+
+    <div class="wf-stage">
+      <!-- ════════════ fixed: порядок задан — свитч ВЫКЛ ════════════ -->
+      <div class="wf-state active" id="wf-fixed">
+        <div class="wf-drawer">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Сертификационный тест для руководителей</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline" aria-label="Статус: черновик">Черновик</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v5</span>
+            <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s ou-drawer__close" aria-label="Закрыть редактор"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-x" /></svg></span></button>
+          </header>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m wf-drawer__tabs">
+            <div class="ou-tabs__list" role="tablist">
+              <button type="button" role="tab" aria-selected="true" class="ou-tabs__tab is-active"><span class="ou-tabs__label">Состав</span></button>
+              <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Настройки</span></button>
+              <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Оформление</span></button>
+              <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Структура</span></button>
+              <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Оценка</span></button>
+            </div>
+          </div>
+          <div class="wf-drawer-body">
+            <div class="tb-section-label">Темы и выборка вопросов</div>
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name">Охрана труда</span>
+                <span class="tb-topic-row__count">24 вопроса</span>
+                <label class="tb-topic-row__required">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-topic-row__required-lbl">Обязательная</span>
+                </label>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «Охрана труда»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
+              </div>
+              <div class="tb-topic-row__body">
+                <label class="tb-draw-all-row">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Все вопросы темы: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-draw-all-row__lbl">Все вопросы темы</span>
+                </label>
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="8" aria-label="Количество вопросов из темы Охрана труда" /><button type="button" class="ou-number__btn" aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 24</span>
+                </div>
+
+                <!-- ДЕЛЬТА 1: строка свитча в том же ряду, что «Все вопросы темы». -->
+                <label class="tb-question-order-row">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Случайный порядок вопросов: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-question-order-row__lbl">Случайный порядок вопросов</span>
+                  <span class="tb-question-order-row__hint">выключен — по индексу, заданному в теме</span>
+                </label>
+                <span class="wf-annot">question_order = fixed</span>
+
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Квоты по подтемам: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</span>
+                </label>
+                <div class="tb-card-desc">Выключено — выдача равномерная (случайные вопросы из всей темы). Включите, чтобы гарантировать покрытие подтем.</div>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Варианты теста: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-list" /></svg>Варианты теста</span>
+                </label>
+                <div class="tb-card-desc">Выключено — выдача из всего банка темы. Включите, чтобы раздавать заранее скурированные варианты и менять вариант на повторе.</div>
+
+                <div class="tb-card-desc">Обратная связь по теме</div>
+                <div role="button" tabindex="0" class="tb-feedback-preview is-empty" aria-label="Редактировать обратную связь по теме">Не задано — нажмите для редактирования</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════ random: умолчание — экран как сегодня ════════════ -->
+      <div class="wf-state" id="wf-random">
+        <div class="wf-drawer">
+          <div class="wf-drawer-body">
+            <div class="tb-section-label">Темы и выборка вопросов</div>
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name">Охрана труда</span>
+                <span class="tb-topic-row__count">24 вопроса</span>
+                <label class="tb-topic-row__required">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-topic-row__required-lbl">Обязательная</span>
+                </label>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «Охрана труда»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
+              </div>
+              <div class="tb-topic-row__body">
+                <label class="tb-draw-all-row">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Все вопросы темы: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-draw-all-row__lbl">Все вопросы темы</span>
+                </label>
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="8" aria-label="Количество вопросов из темы Охрана труда" /><button type="button" class="ou-number__btn" aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 24</span>
+                </div>
+                <label class="tb-question-order-row">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Случайный порядок вопросов: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-question-order-row__lbl">Случайный порядок вопросов</span>
+                </label>
+                <span class="wf-annot">question_order = random (умолчание)</span>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Квоты по подтемам: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</span>
+                </label>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Варианты теста: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-list" /></svg>Варианты теста</span>
+                </label>
+                <div class="tb-card-desc">Обратная связь по теме</div>
+                <div role="button" tabindex="0" class="tb-feedback-preview is-empty" aria-label="Редактировать обратную связь по теме">Не задано — нажмите для редактирования</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════ variants: порядок берётся из списка варианта ════════════ -->
+      <div class="wf-state" id="wf-variants">
+        <div class="wf-drawer">
+          <div class="wf-drawer-body">
+            <div class="tb-section-label">Темы и выборка вопросов</div>
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name">О компании</span>
+                <span class="tb-topic-row__count">41 вопрос</span>
+                <label class="tb-topic-row__required">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-topic-row__required-lbl">Обязательная</span>
+                </label>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «О компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
+              </div>
+              <div class="tb-topic-row__body">
+                <!-- Режим вариантов ВКЛ: контролы выдачи из всей темы показаны
+                     НЕАКТИВНЫМИ, а не скрыты (UX-уточнение PRD-17 1.2). -->
+                <label class="tb-draw-all-row">
+                  <label class="ou-switch-field is-disabled"><span class="ou-switch ou-switch--m is-disabled"><input class="ou-switch__input" type="checkbox" disabled aria-label="Все вопросы темы: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-draw-all-row__lbl">Все вопросы темы</span>
+                  <span class="tb-draw-all-row__hint">отключено в режиме вариантов</span>
+                </label>
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split is-disabled"><div class="ou-number__box"><button type="button" class="ou-number__btn" disabled aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="16" disabled aria-label="Количество вопросов из темы О компании" /><button type="button" class="ou-number__btn" disabled aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 41</span>
+                </div>
+
+                <!-- Свитч ОСТАЁТСЯ активным: он действует и в режиме вариантов,
+                     но источником порядка становится список варианта. -->
+                <label class="tb-question-order-row">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Случайный порядок вопросов: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-question-order-row__lbl">Случайный порядок вопросов</span>
+                  <span class="tb-question-order-row__hint">выключен — в порядке списка варианта</span>
+                </label>
+                <span class="wf-annot">источник порядка = form.questionIds</span>
+
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field is-disabled"><span class="ou-switch ou-switch--m is-disabled"><input class="ou-switch__input" type="checkbox" disabled aria-label="Квоты по подтемам: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</span>
+                </label>
+                <div class="tb-card-desc">Недоступно: активен режим «Варианты теста» — вопросы берутся из выпавшего варианта целиком.</div>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Варианты теста: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-list" /></svg>Варианты теста</span>
+                </label>
+                <div class="wf-variants-block">
+                  <table class="tb-table">
+                    <thead><tr><th>Вариант</th><th>Вопросов в варианте</th></tr></thead>
+                    <tbody>
+                      <tr><td>Вариант 1</td><td>16</td></tr>
+                      <tr><td>Вариант 2</td><td>16</td></tr>
+                      <tr><td>Вариант 3</td><td>16</td></tr>
+                    </tbody>
+                  </table>
+                  <div class="wf-row-actions">
+                    <button class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-list" /></svg></span><span>Настроить варианты…</span></button>
+                  </div>
+                  <div class="wf-sum"><span>Порядок вопросов внутри варианта задаётся списком в редакторе вариантов</span><span class="ou-tag ou-tag--neutral">по списку</span></div>
+                </div>
+                <div class="tb-card-desc">Обратная связь по теме</div>
+                <div role="button" tabindex="0" class="tb-feedback-preview is-empty" aria-label="Редактировать обратную связь по теме">Не задано — нажмите для редактирования</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════ flat: тест сплошным списком — настройка не действует ════════════ -->
+      <div class="wf-state" id="wf-flat">
+        <div class="wf-drawer">
+          <div class="wf-drawer-body">
+            <div class="tb-section-label">Темы и выборка вопросов</div>
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name">Охрана труда</span>
+                <span class="tb-topic-row__count">24 вопроса</span>
+                <label class="tb-topic-row__required">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-topic-row__required-lbl">Обязательная</span>
+                </label>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «Охрана труда»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
+              </div>
+              <div class="tb-topic-row__body">
+                <label class="tb-draw-all-row">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Все вопросы темы: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-draw-all-row__lbl">Все вопросы темы</span>
+                </label>
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="8" aria-label="Количество вопросов из темы Охрана труда" /><button type="button" class="ou-number__btn" aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 24</span>
+                </div>
+                <label class="tb-question-order-row">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Случайный порядок вопросов: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-question-order-row__lbl">Случайный порядок вопросов</span>
+                </label>
+                <!-- Предупреждение: тон warning, не error — сохранение НЕ блокируется. -->
+                <div class="ou-banner ou-banner--subtle ou-banner--warning" role="status">
+                  <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-triangle" /></svg></div>
+                  <div class="ou-banner__body"><div class="ou-banner__desc">Тест собирается сплошным списком: вопросы всех тем перемешиваются между собой, поэтому заданный порядок внутри темы не сохранится. Порядок работает в режимах с разбивкой по темам — измените режим на вкладке «Структура».</div></div>
+                </div>
+                <span class="wf-annot">flowPolicy.mode = linear_flat</span>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Квоты по подтемам: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</span>
+                </label>
+                <div class="tb-card-desc">Выключено — выдача равномерная (случайные вопросы из всей темы). Включите, чтобы гарантировать покрытие подтем.</div>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Варианты теста: Охрана труда" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-list" /></svg>Варианты теста</span>
+                </label>
+                <div class="tb-card-desc">Выключено — выдача из всего банка темы. Включите, чтобы раздавать заранее скурированные варианты и менять вариант на повторе.</div>
+                <div class="tb-card-desc">Обратная связь по теме</div>
+                <div role="button" tabindex="0" class="tb-feedback-preview is-empty" aria-label="Редактировать обратную связь по теме">Не задано — нажмите для редактирования</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════ question: карточка вопроса ════════════ -->
+      <div class="wf-state" id="wf-question">
+        <div class="wf-drawer">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Вопрос</h1></div>
+            <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s ou-drawer__close" aria-label="Закрыть карточку вопроса"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-x" /></svg></span></button>
+          </header>
+          <div class="wf-drawer-body">
+            <!-- Существующее поле, взято дословно из approved/content-bank-explorer.html -->
+            <div class="ou-formfield">
+              <span class="ou-formfield__lbl">Сложность</span>
+              <div class="qd-diffrow">
+<!-- Анатомия свитча взята из prd17 (ou-switch__thumb ВНУТРИ __track): в
+                     content-bank-explorer.html осталась устаревшая копия, где они
+                     сёстры, и ДС такой свитч не отрисовывает. -->
+                <label class="ou-switch-field qd-diffrow__sw"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" onchange="this.closest('.ou-formfield').classList.toggle('is-na', this.checked)" aria-label="Сложность не задана" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Не задано</span></span></label>
+                <div class="ou-slider ou-slider--h" aria-label="Сложность">
+                  <div class="ou-slider__rail">
+                    <div class="ou-slider__fill" style="left:0%;right:82%"></div>
+                    <div class="ou-slider__marks"><span class="ou-slider__mark" style="left:0%"></span><span class="ou-slider__mark-lbl" style="left:0%">0</span><span class="ou-slider__mark" style="left:50%"></span><span class="ou-slider__mark-lbl" style="left:50%">50</span><span class="ou-slider__mark" style="left:100%"></span><span class="ou-slider__mark-lbl" style="left:100%">100</span></div>
+                    <div role="slider" tabindex="0" class="ou-slider__thumb" style="left:18%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="18" aria-label="Сложность"></div>
+                  </div>
+                </div>
+                <div class="ou-field ou-field--m qd-diffrow__num"><div class="ou-field__box"><input class="ou-field__input" type="number" min="0" max="100" value="18" aria-label="Сложность (число)" /></div></div>
+              </div>
+              <span class="qd-hint">0 — очень легко, 100 — очень сложно</span>
+            </div>
+
+            <!-- ДЕЛЬТА 2: новое поле ровно в анатомии соседнего (ou-formfield +
+                 подпись + контрол + qd-hint). Слайдера нет: диапазон не ограничен,
+                 «не задано» выражается пустым полем, отдельный свитч не нужен. -->
+            <div class="ou-formfield">
+              <span class="ou-formfield__lbl">Индекс в теме</span>
+              <!-- Числовое ПОЛЕ, а не степпер ДС: NumberInput принимает
+                   ОБЯЗАТЕЛЬНОЕ число и пустое значение не выражает, а «не
+                   задано» здесь — штатное состояние. Тот же контрол, что у
+                   числа сложности выше. -->
+              <div class="ou-field ou-field--m qd-order__num"><div class="ou-field__box"><input class="ou-field__input" type="number" value="20" aria-label="Индекс в теме" /></div></div>
+              <span class="qd-hint">Пусто — индекс не задан: такие вопросы идут последними. Одинаковый индекс у нескольких вопросов допустим — внутри такой группы порядок случайный. Задавайте с шагом 10, чтобы вставлять вопросы между соседними. Действует, когда у темы в тесте выключен случайный порядок.</span>
+              <span class="wf-annot">questions.order_index (nullable)</span>
+            </div>
+
+            <div class="ou-formfield">
+              <span class="ou-formfield__lbl">Медиа (опционально)</span>
+              <span class="qd-hint">Существующее поле — показано для соседства.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════ bank: список вопросов темы ════════════ -->
+      <div class="wf-state" id="wf-bank">
+        <div class="cb-wrap">
+          <div class="tb-section-label">Темы и вопросы</div>
+          <div class="cb-tree" aria-label="Темы и вопросы">
+            <!-- ДЕЛЬТА 3: колонка «Порядок» — по образцу существующей «Сложность». -->
+            <div class="cb-thead"><div>Название</div><div>Индекс</div><div>Сложность</div><div></div></div>
+            <div class="cb-row cb-row--topic-root">
+              <div class="cb-name"><span class="cb-name__label">Охрана труда</span></div>
+              <div class="cb-cell"></div><div class="cb-cell"></div>
+              <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more" /></svg></button></div>
+            </div>
+            <div class="cb-row cb-row--q">
+              <div class="cb-name"><span class="cb-qtype" title="Один ответ"><svg width="16" height="16"><use href="#i-q-single" /></svg></span><span class="cb-name__label">Кто отвечает за проведение вводного инструктажа?</span></div>
+              <div class="cb-cell">10</div><div class="cb-cell">18</div>
+              <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more" /></svg></button></div>
+            </div>
+            <div class="cb-row cb-row--q">
+              <div class="cb-name"><span class="cb-qtype" title="Несколько ответов"><svg width="16" height="16"><use href="#i-q-multiple" /></svg></span><span class="cb-name__label">Какие инструктажи проводятся на рабочем месте?</span></div>
+              <div class="cb-cell">20</div><div class="cb-cell">54</div>
+              <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more" /></svg></button></div>
+            </div>
+            <div class="cb-row cb-row--q">
+              <div class="cb-name"><span class="cb-qtype" title="Ранжирование"><svg width="16" height="16"><use href="#i-q-ranking" /></svg></span><span class="cb-name__label">Расположите действия при несчастном случае по порядку</span></div>
+              <div class="cb-cell">20</div><div class="cb-cell">82</div>
+              <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more" /></svg></button></div>
+            </div>
+            <div class="cb-row cb-row--q">
+              <div class="cb-name"><span class="cb-qtype" title="Один ответ"><svg width="16" height="16"><use href="#i-q-single" /></svg></span><span class="cb-name__label">Срок хранения журнала инструктажей</span></div>
+              <div class="cb-cell">30</div><div class="cb-cell">33</div>
+              <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more" /></svg></button></div>
+            </div>
+            <div class="cb-row cb-row--q">
+              <div class="cb-name"><span class="cb-qtype" title="Один ответ"><svg width="16" height="16"><use href="#i-q-single" /></svg></span><span class="cb-name__label">Периодичность повторного инструктажа</span></div>
+              <div class="cb-cell ou-text ou-text--tone-muted">—</div><div class="cb-cell">27</div>
+              <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more" /></svg></button></div>
+            </div>
+          </div>
+          <span class="wf-annot">ORDER BY order_index NULLS LAST, id</span>
+        </div>
+      </div>
+
+      <!-- ════════════ docs: пояснения + DS Mapping ════════════ -->
+      <div class="wf-state" id="wf-docs">
+        <div class="wf-doc">
+          <div class="wf-notes">
+            <h2 class="wf-notes-title">Правила</h2>
+            <table class="tb-table">
+              <thead><tr><th>Элемент</th><th>Данные</th><th>Поведение</th></tr></thead>
+              <tbody>
+                <tr><td>Свитч «Случайный порядок вопросов»</td><td><code>test_sections.question_order</code></td><td>ВКЛ (умолчание) = <code>random</code>, экран как сегодня. ВЫКЛ = <code>fixed</code> (FR-02)</td></tr>
+                <tr><td>Место свитча</td><td>—</td><td>Тело темы, сразу под «Вопросов в тест»: три параметра выдачи подряд — сколько, в каком порядке, какими срезами</td></tr>
+                <tr><td>Поле «Индекс в теме»</td><td><code>questions.order_index</code> (nullable)</td><td>Пусто = не задано; такие вопросы идут последними и между собой перемешиваются (FR-04)</td></tr>
+                <tr><td>Совпадающие индексы</td><td>—</td><td>Перемешиваются внутри своей группы при каждой попытке — «эшелоны», а не строгая очередь (FR-05)</td></tr>
+                <tr><td>Шаг нумерации</td><td>—</td><td>Значения не обязаны быть плотными и уникальными; подсказка предлагает шаг 10 под будущие вставки</td></tr>
+                <tr><td>Отбор</td><td><code>draw_count</code>, квоты PRD-11</td><td>Не меняется: поле сортирует уже отобранное. При выборке меньше банка выдаётся подмножество в авторской последовательности (FR-06)</td></tr>
+                <tr><td>Режим вариантов</td><td><code>form_set_json</code></td><td>Свитч действует, но источник порядка — список варианта; <code>order_index</code> не применяется (FR-07)</td></tr>
+                <tr><td>Список банка</td><td>—</td><td>Сортировка совпадает с порядком выдачи; колонка «Индекс» показывает значение, прочерк = не задан (FR-08)</td></tr>
+                <tr><td>Режим <code>linear_flat</code></td><td><code>flowPolicy.mode</code></td><td>Настройка не действует — предупреждение тоном warning, сохранение НЕ блокируется (FR-12)</td></tr>
+                <tr><td>Хеш содержимого</td><td><code>content_hash</code></td><td>Порядок в него не входит: перестановка не помечает устаревшей закреплённую оценку PRD-15 (FR-09)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="wf-notes">
+            <h2 class="wf-notes-title">Дельта к существующему UI</h2>
+            <table class="tb-table">
+              <thead><tr><th>Что</th><th>Где</th><th>Почему так</th></tr></thead>
+              <tbody>
+                <tr><td>Строка свитча <code>tb-question-order-row</code></td><td>тело темы, <code>topics-structure-section.tsx</code></td><td>Правила скопированы с <code>tb-draw-all-row</code>: новая строка обязана стоять в том же ряду и анатомии, что «Все вопросы темы»</td></tr>
+                <tr><td>Поле «Индекс в теме»</td><td>карточка вопроса, <code>question-editor-drawer.tsx</code></td><td><code>ou-formfield</code> + <code>NumberInput</code> + подсказка — анатомия соседнего поля «Сложность». Слайдер не нужен: диапазон не ограничен</td></tr>
+                <tr><td>Колонка «Индекс»</td><td>дерево банка, <code>content-tree.tsx</code></td><td>По образцу существующей колонки «Сложность»; без неё сортировка списка необъяснима для автора</td></tr>
+                <tr><td>Свитч, а не Select</td><td>—</td><td>У той же семантики уровнем ниже — «Случайный порядок вариантов» — в проекте уже принят свитч. Модель остаётся перечислением, третья позиция заменит контрол без миграции</td></tr>
+                <tr><td>Своих цветов и размеров нет</td><td>—</td><td>Дельта состоит из одного класса раскладки на токенах ДС</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="wf-mapping">
+            <h2 class="wf-mapping-title">DS Mapping</h2>
+            <table class="tb-table">
+              <thead><tr><th>Элемент эскиза</th><th>DS-компонент</th><th>Примечание</th></tr></thead>
+              <tbody>
+                <tr><td>Свитч порядка</td><td><code>Switch</code> (<code>ou-switch-field</code>)</td><td>Тот же компонент, что «Все вопросы темы» и «Обязательная»</td></tr>
+                <tr><td>Поле «Индекс в теме»</td><td><code>Input type=number</code> (<code>ou-field</code>)</td><td>Тот же контрол, что число сложности. НЕ степпер: <code>NumberInput</code> ДС требует обязательное число и не выражает «не задано»</td></tr>
+                <tr><td>Подсказка поля</td><td><code>Text</code> tone=muted (<code>qd-hint</code>)</td><td>Как подсказка «Сложности»</td></tr>
+                <tr><td>Предупреждение <code>linear_flat</code></td><td><code>Banner</code> subtle/warning</td><td>Тон warning: сохранение не блокируется</td></tr>
+                <tr><td>Колонка «Индекс»</td><td>ячейка дерева (<code>cb-cell</code>)</td><td>Разметка колонки «Сложность» без изменений</td></tr>
+                <tr><td>custom</td><td>нет</td><td>Собственных компонентов эскиз не вводит</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      var STATE_IDS = ['fixed', 'random', 'variants', 'flat', 'question', 'bank', 'docs'];
+      window.showState = function showState(btn, id) {
+        STATE_IDS.forEach(function (s) {
+          document.getElementById('wf-' + s).classList.toggle('active', s === id);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+      window.toggleAnnots = function toggleAnnots(btn) {
+        var on = document.body.classList.toggle('wf-annots-on');
+        btn.classList.toggle('active', on);
+      };
+    </script>
+  </body>
+</html>

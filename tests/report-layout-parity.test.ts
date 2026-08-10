@@ -18,12 +18,24 @@ import fs from "node:fs";
 import path from "node:path";
 import { renderScreenInto } from "../shared/template/render-screen";
 import { buildReportContext, buildAdaptiveReportContext } from "../shared/report/report-context";
+import { LEVEL_SCHEMES } from "../shared/template/level-ramp";
 import type { ReportInput, AdaptiveReportInput } from "../shared/report/report-html";
 
 const DEFAULT_DIR = path.resolve(process.cwd(), "server", "scorm", "templates", "default");
+const CERT_DIR = path.resolve(process.cwd(), "templates", "certification");
 const layout = (name: string) => fs.readFileSync(path.join(DEFAULT_DIR, "layouts", name), "utf8");
 const REPORT = layout("report.html");
 const REPORT_ADAPTIVE = layout("report.adaptive.html");
+
+/** Макеты отчёта КАЖДОГО поставляемого шаблона — паритет держится вручную. */
+const REPORT_LAYOUTS: Array<[string, string, string]> = [
+  ["default", REPORT, REPORT_ADAPTIVE],
+  [
+    "certification",
+    fs.readFileSync(path.join(CERT_DIR, "layouts", "report.html"), "utf8"),
+    fs.readFileSync(path.join(CERT_DIR, "layouts", "report.adaptive.html"), "utf8"),
+  ],
+];
 
 /** Видимый текст со схлопнутыми пробелами. */
 function visibleText(source: HTMLElement): string {
@@ -132,7 +144,6 @@ describe("report.html: макет повторяет страницу, кото�
       "Не пройден",
       "1 из 12 (18%)",
       "4.0/22.0",
-      "Повторите раздел про сети",
       "Право",
       "1 из 10 (36%)",
       "5.0/14.0",
@@ -164,11 +175,13 @@ describe("report.html: макет повторяет страницу, кото�
     expect(cards[1].querySelector(".tb-report__topic-verdict")?.textContent).toBe("Не пройден");
   });
 
-  it("обратная связь печатается только по проваленной теме", () => {
+  // Слот текста в карточке темы снят: текст обратной связи печатается один раз, в
+  // консолидированном блоке (см. describe ниже). Контекст здесь нарочно несёт устаревшее
+  // поле `feedback` у проваленной темы — макет обязан его игнорировать.
+  it("карточка темы обратной связи не печатает", () => {
     const root = renderToRoot(REPORT, buildReportContext(STANDARD));
-    const cards = [...root.querySelectorAll(".tb-report__topic")];
-    expect(cards[0].querySelector(".tb-report__topic-fb")).toBeNull();
-    expect(cards[1].querySelector(".tb-report__topic-fb")?.textContent).toBe("Повторите раздел про сети");
+    expect(root.querySelector(".tb-report__topic-fb")).toBeNull();
+    expect(visibleText(root)).not.toContain("Повторите раздел про сети");
   });
 
   it("кликабельный чип один: дубль курса по двум проваленным темам убран", () => {
@@ -208,12 +221,12 @@ describe("report.html: макет повторяет страницу, кото�
     expect(root.querySelector(".tb-report__headline")).not.toBeNull();
   });
 
-  it("логотип и подложку ставит контекст, без них строк нет", () => {
+  it("логотип ставит поле ВАРИАНТА, без него строки нет", () => {
     const plain = renderToRoot(REPORT, buildReportContext(STANDARD));
     expect(plain.querySelector(".tb-report__brand")).toBeNull();
     const branded = renderToRoot(
       REPORT,
-      buildReportContext(STANDARD, { assets: { logoDataUrl: "data:image/png;base64,AA" } }),
+      buildReportContext(STANDARD, { values: { logoImage: "data:image/png;base64,AA" } }),
     );
     expect(branded.querySelector(".tb-report__brand img")?.getAttribute("src")).toBe("data:image/png;base64,AA");
   });
@@ -366,15 +379,249 @@ describe("содержательные правила отчёта, перене
     expect(text).not.toContain("Рекомендуемые мероприятия");
   });
 
-  it("подложка приходит из контекста, без неё макет держит свой фон", () => {
+  it("подложка приходит полем варианта, без неё макет держит свой фон", () => {
     const withBg = renderToRoot(
       REPORT,
-      buildReportContext(STANDARD, { assets: { backgroundDataUrl: "data:image/png;base64,AA" } }),
+      buildReportContext(STANDARD, { values: { backgroundImage: "data:image/png;base64,AA" } }),
     );
     expect(withBg.querySelector<HTMLElement>(".tb-report")?.style.backgroundImage).toContain("data:image/png;base64,AA");
     const plain = renderToRoot(REPORT, buildReportContext(STANDARD));
     expect(plain.querySelector<HTMLElement>(".tb-report")?.style.backgroundImage).toBe("");
   });
+});
+
+/**
+ * Консолидированный блок обратной связи — тот же, что на экране итогов. Отчёт печатал
+ * только курсы и мероприятия тем, а текстов не печатал вовсе: ни теста, ни темы.
+ */
+describe("макет печатает консолидированный блок обратной связи", () => {
+  const TEST_FEEDBACK = {
+    text: "Разберите ошибки.",
+    links: [{ title: "Курс по сетям", url: "https://e/net" }],
+    events: [{ title: "Разбор кейсов" }],
+    assets: [{ title: "Памятка теста", url: "assets/media/test.pdf" }],
+  };
+  const TOPIC_ASSET = { title: "Разбор темы", url: "assets/media/topic.pdf" };
+
+  const WITH_FEEDBACK: ReportInput = {
+    ...STANDARD,
+    feedback: TEST_FEEDBACK,
+    hasPassThreshold: true,
+    result: {
+      ...STANDARD.result,
+      topicResults: STANDARD.result.topicResults.map((t, i) =>
+        i === 1 ? { ...t, feedbackTexts: ["Текст темы", "Текст раздела"], recommendedAssets: [TOPIC_ASSET] } : t,
+      ),
+    },
+  };
+
+  /** Карточка блока: у неё СВОЙ заголовок, класс карточки общий с соседними. */
+  const recsCard = (root: HTMLElement): HTMLElement | null => {
+    const title = [...root.querySelectorAll(".tb-report__title")].find(
+      (n) => (n.textContent ?? "").trim() === "Рекомендации",
+    );
+    return (title?.parentElement as HTMLElement) ?? null;
+  };
+
+  it("печатает тексты теста, темы и раздела в порядке блока", () => {
+    const card = recsCard(renderToRoot(REPORT, buildReportContext(WITH_FEEDBACK)));
+    expect(card).not.toBeNull();
+    expect(visibleText(card as HTMLElement)).toContain("Разберите ошибки. Текст темы Текст раздела");
+  });
+
+  it("печатает вложения кликабельными чипами, как курсы", () => {
+    const root = renderToRoot(REPORT, buildReportContext(WITH_FEEDBACK));
+    const card = recsCard(root) as HTMLElement;
+    expect(linkUrls(card)).toEqual(["https://e/net", "assets/media/test.pdf", "assets/media/topic.pdf"]);
+    expect(visibleText(card)).toContain("Памятка теста");
+    expect(visibleText(card)).toContain("Разбор темы");
+  });
+
+  it("текст, написанный и у теста, и у темы, печатается один раз", () => {
+    const dup: ReportInput = {
+      ...WITH_FEEDBACK,
+      result: {
+        ...WITH_FEEDBACK.result,
+        topicResults: WITH_FEEDBACK.result.topicResults.map((t, i) =>
+          i === 1 ? { ...t, feedbackTexts: ["Разберите ошибки."] } : t,
+        ),
+      },
+    };
+    const text = visibleText(recsCard(renderToRoot(REPORT, buildReportContext(dup))) as HTMLElement);
+    expect(text.match(/Разберите ошибки\./g)).toHaveLength(1);
+  });
+
+  it("пройденная тема и явно пройденный тест молчат", () => {
+    const passed: ReportInput = {
+      ...WITH_FEEDBACK,
+      result: {
+        ...WITH_FEEDBACK.result,
+        passed: true,
+        topicResults: WITH_FEEDBACK.result.topicResults.map((t) => ({ ...t, passed: true })),
+      },
+    };
+    expect(recsCard(renderToRoot(REPORT, buildReportContext(passed)))).toBeNull();
+  });
+
+  it("отчёт без обратной связи блока не рисует", () => {
+    expect(recsCard(renderToRoot(REPORT, buildReportContext(STANDARD)))).toBeNull();
+  });
+
+  it("адаптивный отчёт печатает тот же блок", () => {
+    const adaptive: AdaptiveReportInput = {
+      ...ADAPTIVE,
+      feedback: TEST_FEEDBACK,
+      result: {
+        topicResults: ADAPTIVE.result.topicResults.map((t, i) =>
+          i === 0 ? { ...t, feedbackTexts: ["Текст темы"], recommendedAssets: [TOPIC_ASSET] } : t,
+        ),
+      },
+    };
+    const card = recsCard(renderToRoot(REPORT_ADAPTIVE, buildAdaptiveReportContext(adaptive))) as HTMLElement;
+    expect(card).not.toBeNull();
+    expect(visibleText(card)).toContain("Разберите ошибки. Текст темы");
+    expect(linkUrls(card)).toEqual(["https://e/net", "assets/media/test.pdf", "assets/media/topic.pdf"]);
+  });
+
+  it("адаптивный отчёт без обратной связи блока не рисует", () => {
+    expect(recsCard(renderToRoot(REPORT_ADAPTIVE, buildAdaptiveReportContext(ADAPTIVE)))).toBeNull();
+  });
+
+  for (const [templateId, reportLayout, adaptiveLayout] of REPORT_LAYOUTS) {
+    it(`${templateId}: карточка темы не дублирует текст блока`, () => {
+      const both: ReportInput = {
+        ...WITH_FEEDBACK,
+        result: {
+          ...WITH_FEEDBACK.result,
+          topicResults: WITH_FEEDBACK.result.topicResults.map((t, i) =>
+            // Один и тот же текст и в устаревшем per-topic поле, и в источниках блока.
+            i === 1 ? { ...t, feedback: "Текст темы", feedbackTexts: ["Текст темы"] } : t,
+          ),
+        },
+      };
+      const root = renderToRoot(reportLayout, buildReportContext(both));
+      expect(root.querySelector(".tb-report__topic-fb")).toBeNull();
+      expect(visibleText(root).match(/Текст темы/g)).toHaveLength(1);
+    });
+
+    // В АДАПТИВНОМ отчёте `feedback` темы — обратная связь достигнутого уровня, а не
+    // текст темы: в блок она не подаётся, поэтому слот в карточке сохранён.
+    it(`${templateId}: адаптивная карточка печатает обратную связь уровня`, () => {
+      const root = renderToRoot(adaptiveLayout, buildAdaptiveReportContext(ADAPTIVE));
+      const cards = [...root.querySelectorAll(".tb-report__topic")];
+      expect(cards[0].querySelector(".tb-report__topic-fb")?.textContent).toBe(
+        "Ваш уровень знаний по данной теме - начальный",
+      );
+    });
+
+    // issue #33: блок показателей — новый в обоих макетах отчёта, блок шкал в адаптивном
+    // до этой работы стоял мёртвым (контекст его не наполнял ни разу).
+    it(`${templateId}: печатает показатели и шкалы в обоих режимах`, () => {
+      const measures = {
+        ramp: LEVEL_SCHEMES.traffic,
+        scaleKind: "band_ruler" as const,
+        indicatorKind: "label" as const,
+        scales: [
+          {
+            key: "comm", name: "Коммуникация", value: 8, visibility: "level_and_value" as const,
+            interpretation: {
+              domainMin: 0, domainMax: 10, valence: "higher_is_better" as const,
+              bands: [
+                { min: 0, max: 5, level: "low", label: "Низкий" },
+                { min: 5.01, max: 10, level: "high", label: "Высокий" },
+              ],
+            },
+          },
+        ],
+        indicators: [
+          {
+            key: "profile", name: "Профиль", value: "ok", visibility: "level" as const,
+            interpretation: {
+              domainMin: null, domainMax: null, valence: "none" as const, bands: [],
+              outcomes: [{ code: "ok", label: "Устойчивый" }],
+            },
+          },
+        ],
+      };
+      for (const [layoutName, root] of [
+        ["report.html", renderToRoot(reportLayout, buildReportContext(STANDARD, { measures }))],
+        ["report.adaptive.html", renderToRoot(adaptiveLayout, buildAdaptiveReportContext(ADAPTIVE, { measures }))],
+      ] as const) {
+        const text = visibleText(root);
+        expect(text, layoutName).toContain("Ваш результат");
+        expect(text, layoutName).toContain("Устойчивый");
+        expect(text, layoutName).toContain("По шкалам");
+        expect(text, layoutName).toContain("Коммуникация");
+      }
+    });
+
+    // Сетка «диаграмма слева, список справа» включается модификатором, а не самим
+    // блоком: без диаграммы единственный ребёнок — список толкований — падал в колонку
+    // 240 px и печатался лентой в половину ширины страницы A4.
+    it(`${templateId}: колонки блока измерений только там, где есть диаграмма`, () => {
+      const scale = {
+        key: "comm", name: "Коммуникация", value: 8, visibility: "level_and_value" as const,
+        interpretation: {
+          domainMin: 0, domainMax: 10, displayMax: null, valence: "higher_is_better" as const,
+          bands: [
+            { min: 0, max: 5, level: "low", label: "Низкий" },
+            { min: 5.01, max: 10, level: "high", label: "Высокий" },
+          ],
+        },
+      };
+      const indicator = {
+        key: "profile", name: "Профиль", value: "ok", visibility: "level" as const,
+        interpretation: {
+          domainMin: null, domainMax: null, valence: "none" as const, bands: [],
+          outcomes: [{ code: "ok", label: "Устойчивый" }],
+        },
+      };
+      const base = {
+        ramp: LEVEL_SCHEMES.traffic,
+        scaleKind: "band_ruler" as const,
+        indicatorKind: "label" as const,
+        scales: [scale],
+        indicators: [indicator],
+      };
+      // Диаграмма выключена — ни один блок измерений колонок не получает.
+      const plain = renderToRoot(reportLayout, buildReportContext(STANDARD, { measures: base }));
+      const blocks = [...plain.querySelectorAll(".tb-report__scales")];
+      expect(blocks.length, "оба блока измерений на месте").toBe(2);
+      for (const block of blocks) {
+        expect(block.classList.contains("tb-report__scales--chart")).toBe(false);
+      }
+
+      // Диаграмма включена — колонки появляются РОВНО у блока шкал, который её рисует.
+      // Осей нужно три: фигуру по одной шкале ядро не строит.
+      const charted = renderToRoot(
+        reportLayout,
+        // Переключатель диаграммы у отчёта СВОЙ — поле варианта, а не блок экрана итогов.
+        buildReportContext(STANDARD, {
+          measures: {
+            ...base,
+            scales: ["a", "b", "c"].map((key, i) => ({ ...scale, key, name: `Шкала ${key}`, value: 2 + i * 3 })),
+            chartSettings: { scalesChartKind: "radar" },
+          },
+        }),
+      );
+      const chartBlock = charted.querySelector(".tb-chart")?.closest(".tb-report__scales");
+      expect(chartBlock, "блок с диаграммой").toBeTruthy();
+      expect(chartBlock!.classList.contains("tb-report__scales--chart")).toBe(true);
+      const indicatorsBlock = [...charted.querySelectorAll(".tb-report__scales")].find((b) => !b.querySelector(".tb-chart"));
+      expect(indicatorsBlock!.classList.contains("tb-report__scales--chart")).toBe(false);
+    });
+
+    // Тест без измерений печатает документ ровно как прежде — карточек не прибавилось.
+    it(`${templateId}: без измерений новых карточек в отчёте нет`, () => {
+      for (const [layoutName, root] of [
+        ["report.html", renderToRoot(reportLayout, buildReportContext(STANDARD))],
+        ["report.adaptive.html", renderToRoot(adaptiveLayout, buildAdaptiveReportContext(ADAPTIVE))],
+      ] as const) {
+        expect(visibleText(root), layoutName).not.toContain("Ваш результат");
+        expect(visibleText(root), layoutName).not.toContain("По шкалам");
+      }
+    });
+  }
 });
 
 describe("макеты отчёта соблюдают контракт среды стилей (§6.3)", () => {

@@ -1,7 +1,7 @@
 /**
  * @module features/tests/editor/sections/__tests__/feedback-preview.test
  * @description Tests for the shared FeedbackPreview (TD-02): grouped reference
- * lists (Документы / Курсы / Мероприятия) with real links, pencil edit trigger,
+ * lists (Материалы / Курсы / Мероприятия) with real links, pencil edit trigger,
  * and the click-to-edit empty placeholder.
  */
 import { describe, expect, it, vi } from "vitest";
@@ -32,7 +32,7 @@ describe("<FeedbackPreview /> (TD-02)", () => {
       links: [{ title: "Базовый курс", url: "https://e.com/course" }],
       events: [{ title: "Вебинар", url: "https://e.com/webinar" }],
     });
-    expect(screen.getByText("Документы")).toBeInTheDocument();
+    expect(screen.getByText("Материалы")).toBeInTheDocument();
     expect(screen.getByText("Курсы")).toBeInTheDocument();
     expect(screen.getByText("Мероприятия")).toBeInTheDocument();
     // Course/event titles are real links.
@@ -41,6 +41,24 @@ describe("<FeedbackPreview /> (TD-02)", () => {
     // Document title is a download link.
     const doc = screen.getByRole("link", { name: "Памятка" });
     expect(doc).toHaveAttribute("href", "assets/memo.pdf");
+    expect(doc).toHaveAttribute("download");
+  });
+
+  // PRD-32: the address of an attachment belongs in `url`; the preview used to read only
+  // the legacy `scormHref` and so showed newly uploaded files without a link.
+  it("links a document by its canonical `url`", () => {
+    renderPreview({
+      assets: [
+        {
+          title: "Памятка",
+          fileName: "memo.pdf",
+          mimeType: "application/pdf",
+          url: "/api/media/11111111-1111-1111-1111-111111111111",
+        },
+      ],
+    });
+    const doc = screen.getByRole("link", { name: "Памятка" });
+    expect(doc).toHaveAttribute("href", "/api/media/11111111-1111-1111-1111-111111111111");
     expect(doc).toHaveAttribute("download");
   });
 
@@ -53,7 +71,7 @@ describe("<FeedbackPreview /> (TD-02)", () => {
   it("hides empty groups", () => {
     renderPreview({ links: [{ title: "Курс", url: "https://e.com" }] });
     expect(screen.getByText("Курсы")).toBeInTheDocument();
-    expect(screen.queryByText("Документы")).not.toBeInTheDocument();
+    expect(screen.queryByText("Материалы")).not.toBeInTheDocument();
     expect(screen.queryByText("Мероприятия")).not.toBeInTheDocument();
   });
 

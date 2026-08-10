@@ -139,7 +139,7 @@ function shape(raw: Record<string, unknown>): AppConfig {
     server: {
       port: asNumber(server.port, 5000),
       appUrl: asString(server.appUrl, "").replace(/\/$/, ""),
-      appName: asString(server.appName, "СкилУм"),
+      appName: asString(server.appName, "Skill'Ум"),
       cookieSecure: asBool(server.cookieSecure, false),
     },
     email: {

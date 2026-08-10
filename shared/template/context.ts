@@ -18,6 +18,10 @@
  * into the builders' normalized inputs.
  */
 
+import type { CtxMeasureView } from "./measure-view";
+import type { CtxScalesChart } from "./scales-chart";
+import type { CtxRecommendations } from "./recommendations";
+
 /** Test-level info shown on the start screen and as the screen title (`course.*`). */
 export interface CtxCourse {
   title: string;
@@ -43,14 +47,18 @@ export interface CtxRecommendation {
 }
 
 /**
- * The unified per-topic feedback composition (spec §3.2 / plan 6.1): feedback text +
- * recommended courses + recommended events, with presence flags. The SAME shape in
- * standard and adaptive results, so the feedback block is composed identically in both
- * modes — feedback is a property of the test's settings, not the flow mode.
+ * The per-topic recommendation composition (spec §3.2 / plan 6.1): recommended courses +
+ * recommended events, with a presence flag. The SAME shape in standard and adaptive
+ * results, so the topic card is composed identically in both modes — recommendations are
+ * a property of the test's settings, not the flow mode.
+ *
+ * It carries NO feedback text: the text of a topic reaches the learner through the ONE
+ * consolidated «Рекомендации» block (`result.recommendations`), and a per-topic slot
+ * beside it would print the same sentence twice on one screen. The exception is the
+ * adaptive mode — see {@link CtxAdaptiveTopicView.feedback}, which is a different text
+ * altogether.
  */
 export interface CtxTopicFeedback {
-  feedback?: string;
-  hasFeedback: boolean;
   recommendedCourses: CtxRecommendation[];
   recommendedEvents: CtxRecommendation[];
   hasRecommendations: boolean;
@@ -89,6 +97,20 @@ export interface CtxAdaptiveTopicView extends CtxTopicFeedback {
    * the author's and differs from test to test.
    */
   levelClass: string;
+  /**
+   * Feedback of the CONFIRMED LEVEL (`adaptive_levels.feedback`), or the topic's
+   * failure text when no level was confirmed — NOT the topic's feedback text, which the
+   * standard mode prints and which travels to the consolidated block instead.
+   *
+   * This one has no other route to the learner: the consolidated block is fed from the
+   * topic's and the section's `feedback_json`, and a level's own wording is not among
+   * its sources. Dropping the slot from the adaptive card would therefore erase the
+   * text from the product, not move it — which is why the adaptive layout keeps a slot
+   * the standard one no longer has.
+   */
+  feedback?: string;
+  /** Whether {@link feedback} carries anything — the adaptive card's slot gate. */
+  hasFeedback: boolean;
 }
 
 /**
@@ -100,8 +122,9 @@ export interface CtxAdaptiveTopicView extends CtxTopicFeedback {
  */
 export interface CtxResult {
   passed: boolean;
-  /** Core-prepared class `is-pass`/`is-fail`. */
+  /** Core-prepared class `is-pass`/`is-fail`/`""` (empty when the test has no threshold). */
   passClass?: string;
+  /** Verdict label «Пройден»/«Не пройден»/`""` — empty drops the header tag. */
   statusLabel?: string;
   scorePercent?: number;
   /** Core-prepared SVG ring dash offset (precomputed; layout binds it directly). */
@@ -129,6 +152,46 @@ export interface CtxResult {
    * layout as written, so the same screen offered different actions.
    */
   nav?: CtxResultsNav;
+  /**
+   * PRD-29: measurement blocks. Present only when the test has visible scales /
+   * indicators AND the block is on — absence keeps the control-test screen
+   * byte-identical, so the layout gates on presence alone.
+   */
+  scales?: CtxMeasureView[];
+  indicators?: CtxMeasureView[];
+  /**
+   * PRD-35/46: cross-scale profile — a radar or a rose, in ONE shape. Present only when the
+   * author asked for a diagram and the chosen one is feasible: three or more visible scales,
+   * each with a domain, and for the rose a whole to divide.
+   */
+  scalesChart?: CtxScalesChart;
+  /**
+   * Class of the scales block: `tb-measures`, plus the `--chart` modifier when the
+   * radar is drawn. Core-prepared because the DSL cannot append a class
+   * conditionally, and a CSS `:has()` selector would depend on the engine the LMS
+   * embeds — the very dependency core-side computation exists to avoid.
+   */
+  scalesBlockClass?: string;
+  recommendations?: CtxRecommendations;
+  /**
+   * The score summary always HAS data, so it needs its own flag — and the flag is
+   * NEGATIVE. A control test passes no measures at all, so any positive flag would
+   * be absent and the layout would hide the summary everywhere. Absent = shown.
+   */
+  hideScoreSummary?: boolean;
+  /**
+   * ВВОДНЫЙ БЛОК — авторский текст, который идёт ПЕРВЫМ, до сводки, тем, измерений и
+   * рекомендаций: он объясняет слушателю, что он сейчас читает.
+   *
+   * Приходит РАЗМЕТКОЙ, уже построенной ядром из текста и его формата
+   * ({@link module:shared/template/rich-text}), поэтому макет печатает его через `{{& … }}`.
+   * Пусто (или поля нет вовсе) = блока нет: гейт стоит на самом значении, второго признака
+   * у него не заведено.
+   *
+   * У экрана итогов и у отчёта тексты РАЗНЫЕ — их адресаты не совпадают, — но имя поля
+   * одно: макет печатает «свой вводный блок», не зная, чей контекст ему дали.
+   */
+  introHtml?: string;
   [key: string]: unknown;
 }
 
@@ -138,6 +201,11 @@ export interface CtxResultsNav {
   showReport: boolean;
   /** Render «Пройти заново» (failed and attempts remain). */
   canRetry: boolean;
+  /**
+   * Attempts remain — the verdict does not matter. Weaker than {@link canRetry}:
+   * a learner who PASSED may still run the test again while the cap allows it.
+   */
+  canRetake: boolean;
   /** `data-action` of the primary button. */
   primaryAction: string;
   /** Its caption. */

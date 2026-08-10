@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: PRD-34 — Защита текста задания от копирования.
+    Файл: docs/wireframes/prd34-copy-protection.html
+    Спецификация: docs/specs/prd-34/copy-protection.md
+    План: docs/plans/PLAN_PRD34_COPY_PROTECTION.md (Task 1, этап Э0)
+
+    ЧТО ЭТО. Эскиз утверждает ДВА экранных элемента PRD-34, которые нельзя
+    реализовать без согласования: водяной знак (FR-16, FR-20) и заглушку при
+    потере окном фокуса (FR-21, FR-24). Всё остальное в треке — поведение, а не
+    вид: запрет выделения, перехват копирования, контекстное меню, печать.
+
+    ЭТО ДОРАБОТКА, А НЕ НОВЫЙ ЭКРАН. Сцена вопроса взята дословно из макета
+    server/scorm/templates/default/layouts/question.html: те же tb-scene,
+    tb-scene__q, tb-qbody, ou-radio-card, тот же футер. Сцена итогов — из
+    layouts/results.html. Дельта PRD-34 — ровно три элемента, каждый строится
+    ядром: .tb-protection-mark, .tb-protection-veil и штатный ou-toast ДС.
+
+    ЧТО ИМЕННО УТВЕРЖДАЕТСЯ ЭСКИЗОМ. Только два параметра знака: КЕГЛЬ и
+    КОНТРАСТ. Место знака эскизом не утверждается — его объявляет макет якорем
+    [data-slot="protection-mark"], и на этом эскизе показано, куда его ставит
+    поставляемый шаблон.
+
+    ИСТОЧНИКИ РАЗМЕТКИ.
+      - сцена и её блоки — реальный шаблон «Стандартный»
+        (server/scorm/templates/default/styles/theme.css, подключён как есть);
+      - компоненты — ДС UniversityRT (client/src/styles/vendor/university-rt.css);
+      - слой «Дельта PRD-34» — предлагаемое содержимое PROTECTION_CSS, который
+        ядро впрыскивает в корень сцены (FR-33), а НЕ правка theme.css.
+      Классы с префиксом wf- — каркас эскиза, не UI.
+
+    ЧТО ПРОВЕРЯЕТ ЭСКИЗ:
+      1. знак НЕ перекрывает ни текст задания, ни варианты ответа и не отнимает у
+         кадра высоты: он делит строку с уже существующей подсказкой «Выберите…»,
+         прижатый к правому краю (FR-16);
+      2. кегль знака фиксированный и минимальный — он НЕ участвует в
+         автоподборе, которому подчиняются задание и варианты, поэтому на
+         длинном задании остаётся тем же (состояние s-long);
+      3. поставляемый шаблон объявляет якорь на ВСЕХ четырёх экранах знака, а не
+         только на вопросе: запасное размещение (строка перед шапкой) выглядит
+         как случайная надпись у края кадра и годится только как деградация для
+         чужого шаблона, который якоря не объявил (FR-16);
+      4. заглушка закрывает ТОЛЬКО регионы задания и вариантов: шапка, карта
+         вопросов, таймеры, прогресс и футер видимы — попытка не прервана,
+         таймер идёт (FR-23). Кнопки на ней нет: возврат автоматический, по
+         возврату фокуса или видимости (FR-21);
+      5. предупреждение о копировании не перекрывает содержимое и гаснет само
+         (FR-13);
+      6. с выключенными настройками экран равен согласованному
+         docs/wireframes/prohozhdenie/Прохождение теста.html (состояние s-off).
+
+    СОСТОЯНИЯ:
+      s-mark     экран вопроса, знак в объявленном якоре
+      s-long     то же с длинным заданием и шестью вариантами — кегль знака тот же
+      s-results  экран итогов, знак в якоре, объявленном макетом итогов
+      s-veil     экран вопроса, заглушка при потере фокуса
+      s-toast    экран вопроса, предупреждение о попытке копирования
+      s-off      обе настройки выключены — экран без дельты
+
+    Правила и соответствие требованиям PRD-34 — в таблицах под холстом.
+  -->
+  <title>PRD-34 — Защита текста задания от копирования</title>
+  <!-- Пути ОТНОСИТЕЛЬНЫЕ, а не от корня репозитория: так эскиз открывается и двойным
+       щелчком (file://), и с локального сервера. Абсолютные пути соседних эскизов
+       требуют http.server из корня и по file:// дают страницу без стилей. -->
+  <link rel="stylesheet" href="../../client/src/styles/vendor/university-rt.css">
+  <link rel="stylesheet" href="ds/wf-utils.css">
+  <link rel="stylesheet" href="../../server/scorm/templates/default/styles/theme.css">
+  <style>
+    :root {
+      /* gate-skip-start */
+      /* WIREFRAME-ONLY: литеральные px. В ДС нет шкалы толщин линий и размеров
+         кадра, поэтому величины каркаса эскиза объявлены здесь один раз. */
+      --wf-border-w:   1px;
+      --wf-size-52:    52px;
+      --wf-size-1280: 1280px;
+      --wf-size-720:   720px;
+      /* gate-skip-end */
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       ДЕЛЬТА PRD-34 — предлагаемое содержимое PROTECTION_CSS.
+       Этот слой ядро впрыскивает в корень сцены при первом применении защиты
+       (FR-33), поэтому он одинаков для поставляемого и для любого внешнего
+       шаблона. В theme.css шаблона ничего из этого лежать не должно.
+       ══════════════════════════════════════════════════════════════════════ */
+
+    /* Водяной знак (FR-16 — FR-18). Кегль ФИКСИРОВАННЫЙ: он намеренно не
+       использует --tb-question-fs/--tb-answer-fs, которые подбирает fit-font,
+       поэтому знак не соревнуется с содержимым за место и не меняет размер от
+       экрана к экрану. Отступов нет, а прижатие вправо (margin-inline-start и
+       align-self) даёт правый край и в строке-флексе, и в колонке-флексе. */
+    .tb-protection-mark {
+      flex: 0 0 auto; margin: 0; margin-inline-start: auto; align-self: flex-end;
+      padding: 0; white-space: nowrap;
+      font-size: 10px; line-height: 1.2; letter-spacing: .02em;
+      color: var(--ou-fg-muted); opacity: .35;
+      pointer-events: none; user-select: none; -webkit-user-select: none;
+    }
+
+    /* ДЕЛЬТА ШАБЛОНА — предлагаемое дополнение к theme.css поставляемого
+       шаблона (НЕ к PROTECTION_CSS ядра): строка подсказки становится рядом,
+       в котором слева подсказка, справа якорь знака. Так знак не занимает
+       собственной высоты вовсе — он делит строку с уже существующей подсказкой.
+       Место — решение шаблона, поэтому и правило шаблонное. */
+    .tb-scene__qmeta {
+      display: flex; align-items: baseline; gap: var(--ou-space-4);
+      min-width: 0;
+    }
+    .tb-scene__qmeta > [data-slot="protection-mark"] { margin-inline-start: auto; }
+
+    /* Заглушка при потере фокуса (FR-21 — FR-23). Накрывает ТОЛЬКО регионы
+       периметра, а не сцену: шапка, таймеры и футер обязаны остаться видимыми,
+       потому что попытка продолжается. */
+    .tb-protection-veil {
+      position: absolute; inset: 0; z-index: 35;
+      /* Раскладку содержимого задаёт САМ компонент ДС (ou-empty); вуаль только
+         центрирует его и гасит фон, поэтому здесь grid + place-items, а не
+         собственная флекс-колонка со своими отступами. */
+      display: grid; place-items: center;
+      /* Нейтральный тон вместо --tone-info: акцентная иконка была ярче содержимого,
+         которое она закрывает. Цвет задаётся на вуали, чтобы штатная иконка ДС
+         унаследовала приглушённый тон без правки самого компонента. */
+      color: var(--ou-fg-muted);
+      padding: var(--ou-space-4);
+      backdrop-filter: blur(8px);
+      background: color-mix(in srgb, var(--ou-bg-surface-2) 80%, transparent);
+    }
+    /* Пиктограмма выравнивается с текстом по средней линии и уменьшается до размера
+       строки: штатные 56 px рассчитаны на пустую область страницы и рядом с одной
+       строкой заголовка смотрятся как отдельный элемент, а не как её значок. */
+    .tb-protection-veil .ou-empty { align-items: center; --_art-size: 22px; }
+    .tb-protection-veil .ou-empty__art { align-self: center; }
+
+    /* Предупреждение о попытке копирования (FR-13) — компонент ДС `ou-toast` в
+       штатной стойке `ou-toast-stack`. Своего класса и своего расположения у
+       него НЕТ: ДС задаёт и вид, и позицию (fixed, снизу справа). Единственное
+       отступление — знак не перехватывает указатель: кнопки закрытия у нашего
+       сообщения нет, оно гаснет само, и перехватывать клики ему незачем. */
+    .ou-toast-stack { pointer-events: none; }
+
+    /* Печать: регионы периметра из документа исключаются. Правило пишется по
+       служебному атрибуту ядра и никогда по классам разметки — так PDF-отчёт
+       (PRD-27) защищён признаком, а не аккуратностью. */
+    @media print { [data-tb-protected] { display: none !important; } }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       КАРКАС ЭСКИЗА
+       ══════════════════════════════════════════════════════════════════════ */
+    body { margin: 0; background: var(--ou-bg-surface-1); }
+    .wf-viewport {
+      max-width: var(--wf-size-1280); margin-inline: auto;
+      border: var(--wf-border-w) solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-m); overflow: hidden;
+      height: 78vh; display: flex; flex-direction: column;
+    }
+    .wf-viewport > .tb-scene { flex: 1; min-height: 0; }
+    /* Позиционирующий контекст для заглушки и предупреждения даёт ЯДРО инлайном
+       на самом регионе; в эскизе он объявлен здесь, чтобы не писать инлайн-стиль
+       в холсте. */
+    .wf-anchored { position: relative; }
+    .wf-caption { max-width: var(--wf-size-1280); margin: 0 auto var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+    .wf-state { display: none; padding-top: var(--wf-size-52); }
+    .wf-state.active { display: block; }
+    .wf-page { max-width: var(--wf-size-1280); margin-inline: auto; }
+    .wf-notes, .wf-mapping { max-width: var(--wf-size-1280); margin-inline: auto; }
+    .wf-notes { margin-top: var(--ou-space-8); }
+    .wf-doc-title { max-width: var(--wf-size-1280); margin: var(--ou-space-8) auto 0; font: var(--ou-text-heading-m); color: var(--ou-fg-default); }
+    .wf-notes-title { font: var(--ou-text-body-m); font-weight: 700; margin: var(--ou-space-5) 0 var(--ou-space-2); }
+    .wf-notes-table { width: 100%; border-collapse: collapse; margin-bottom: var(--ou-space-7); }
+    .wf-notes-table th, .wf-notes-table td { border: var(--wf-border-w) solid var(--ou-border-soft); padding: var(--ou-space-2) var(--ou-space-3); font: var(--ou-text-body-s); text-align: left; vertical-align: top; }
+    .wf-notes-table th { background: var(--ou-bg-surface-3); font-weight: 600; }
+    .wf-notes-table tr:nth-child(even) td { background: var(--ou-bg-elevated); }
+    .wf-notes-table code { font: var(--ou-text-code-s); background: var(--ou-bg-surface-3); padding: 0 var(--ou-space-1); border-radius: var(--ou-radius-s); }
+    .wf-nav {
+      position: fixed; inset-block-start: 0; inset-inline: 0; z-index: 100;
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated); border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+    }
+    .wf-nav-title { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+    .wf-nav-sep { width: var(--ou-space-4); }
+    .wf-btn {
+      border: var(--wf-border-w) solid var(--ou-border-soft); background: var(--ou-bg-surface-2);
+      color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer;
+      padding: var(--ou-space-1) var(--ou-space-3); border-radius: var(--ou-radius-pill);
+    }
+    .wf-btn.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); }
+  </style>
+</head>
+<body class="ou ou--dark ou--normal">
+
+<nav class="wf-nav">
+  <span class="wf-nav-title">PRD-34 · защита текста задания</span>
+  <span class="wf-nav-sep"></span>
+  <button type="button" class="wf-btn active" data-state="s-mark">Знак в якоре</button>
+  <button type="button" class="wf-btn" data-state="s-long">Длинное задание</button>
+  <button type="button" class="wf-btn" data-state="s-results">Знак на итогах</button>
+  <button type="button" class="wf-btn" data-state="s-veil">Заглушка</button>
+  <button type="button" class="wf-btn" data-state="s-toast">Предупреждение</button>
+  <button type="button" class="wf-btn" data-state="s-off">Выключено</button>
+</nav>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     s-mark — экран вопроса, знак в объявленном якоре
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="wf-state active" id="s-mark">
+  <div class="wf-page">
+    <p class="wf-caption">
+      Знак стоит в якоре <code>[data-slot="protection-mark"]</code>, который макет вопроса объявляет
+      в строке подсказки, справа. Собственной высоты знак не занимает: он делит строку с уже
+      существующей подсказкой, поэтому ни задание, ни варианты не перекрыты и не сдвинуты.
+    </p>
+    <div class="wf-viewport">
+      <div class="tb-scene">
+        <header class="tb-scene__header">
+          <div class="tb-scene__brandrow">
+            <div class="tb-scene__titles">
+              <h1 class="tb-scene__title">Основы информационной безопасности</h1>
+              <span class="tb-scene__subtitle">Обязательный курс · Попытка 1 из 2</span>
+            </div>
+            <div class="tb-scene__timers">
+              <div class="ou-timer ou-timer--digital ou-timer--s"><span class="ou-timer__lbl">тест</span><span class="ou-timer__num">44:51</span></div>
+            </div>
+          </div>
+          <div class="ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map" role="group" aria-label="Карта вопросов">
+            <div class="ou-quiz__dots">
+              <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 1">1</button>
+              <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 2">2</button>
+              <button type="button" class="ou-quiz__dot is-flagged" aria-label="Вопрос 3">3</button>
+              <button type="button" class="ou-quiz__dot is-current" aria-label="Вопрос 4">4</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 5">5</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 6">6</button>
+            </div>
+            <div class="ou-quiz__legend">
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+            </div>
+            <span class="tb-scene__mapcount tb-scene__mapcount--answered">отвечено <strong>2</strong> из 6</span>
+            <span class="tb-scene__mapcount tb-scene__mapcount--skipped">пропущено 1</span>
+          </div>
+          <div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width:58%"></div></div>
+        </header>
+
+        <main class="tb-scene__body">
+          <div class="tb-scene__col" style="--tb-question-fs: 30px; --tb-answer-fs: 20px">
+            <div class="tb-scene__meta">
+              <span>Вопрос 4 из 6</span>
+              <span class="ou-tag ou-tag--neutral">Пароли и аутентификация</span>
+            </div>
+            <div class="tb-scene__q">
+              <h2 class="tb-scene__qtitle" data-tb-protected>Какой пароль является наиболее надёжным с точки зрения безопасности?</h2>
+              <div class="tb-scene__qmeta">
+                <span class="tb-scene__qhint" data-tb-protected>Выберите один вариант ответа</span>
+                <!-- ДЕЛЬТА PRD-34: якорь в строке подсказки, справа. Разметку внутри строит ядро. -->
+                <div data-slot="protection-mark">
+                  <div class="tb-protection-mark" aria-hidden="true">ID 7f3ac2 · 02.08.2026 14:35</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tb-qbody">
+              <div class="tb-qbody__answers">
+                <div data-tb-protected>
+                  <div class="ou-radio-group ou-radio-group--vertical">
+                    <div class="ou-radio-group__items">
+                      <label class="ou-radio-card">
+                        <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a1"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                        <span class="ou-radio-card__text"><span class="ou-radio-card__title">Длинная фраза из четырёх несвязанных слов</span></span>
+                      </label>
+                      <label class="ou-radio-card">
+                        <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a1"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                        <span class="ou-radio-card__text"><span class="ou-radio-card__title">Название компании и год</span></span>
+                      </label>
+                      <label class="ou-radio-card">
+                        <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a1"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                        <span class="ou-radio-card__text"><span class="ou-radio-card__title">Дата рождения и инициалы</span></span>
+                      </label>
+                      <label class="ou-radio-card">
+                        <span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a1"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                        <span class="ou-radio-card__text"><span class="ou-radio-card__title">Восемь символов с заменой букв на цифры</span></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-scene__foot">
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">← Назад</button>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Пропустить</button>
+          <div class="tb-scene__foot-spacer"></div>
+          <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Отправить ответ</button>
+        </footer>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     s-long — длинное задание и шесть вариантов: кегль знака ТОТ ЖЕ
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="wf-state" id="s-long">
+  <div class="wf-page">
+    <p class="wf-caption">
+      Задание и варианты ужаты автоподбором (<code>--tb-question-fs</code> 22px против 30px в
+      предыдущем состоянии). Кегль знака не изменился: он константа и в автоподборе не участвует. Знак по-прежнему в строке подсказки, справа.
+    </p>
+    <div class="wf-viewport">
+      <div class="tb-scene">
+        <header class="tb-scene__header">
+          <div class="tb-scene__brandrow">
+            <div class="tb-scene__titles">
+              <h1 class="tb-scene__title">Основы информационной безопасности</h1>
+              <span class="tb-scene__subtitle">Обязательный курс · Попытка 1 из 2</span>
+            </div>
+            <div class="tb-scene__timers">
+              <div class="ou-timer ou-timer--digital ou-timer--s"><span class="ou-timer__lbl">тест</span><span class="ou-timer__num">41:08</span></div>
+            </div>
+          </div>
+          <div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width:66%"></div></div>
+        </header>
+
+        <main class="tb-scene__body">
+          <div class="tb-scene__col" style="--tb-question-fs: 22px; --tb-answer-fs: 16px">
+            <div class="tb-scene__meta">
+              <span>Вопрос 5 из 6</span>
+              <span class="ou-tag ou-tag--neutral">Реагирование на инциденты</span>
+            </div>
+            <div class="tb-scene__q">
+              <h2 class="tb-scene__qtitle" data-tb-protected>Сотрудник обнаружил, что с его рабочей станции ночью уходил трафик на неизвестный внешний адрес, а утром антивирус сообщил о карантине. Какое действие следует выполнить ПЕРВЫМ согласно порядку реагирования?</h2>
+              <div class="tb-scene__qmeta">
+                <span class="tb-scene__qhint" data-tb-protected>Выберите один вариант ответа</span>
+                <div data-slot="protection-mark">
+                  <div class="tb-protection-mark" aria-hidden="true">ID 7f3ac2 · 02.08.2026 14:41</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tb-qbody">
+              <div class="tb-qbody__answers">
+                <div data-tb-protected>
+                  <div class="ou-radio-group ou-radio-group--vertical">
+                    <div class="ou-radio-group__items">
+                      <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a2"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Изолировать станцию от сети и сообщить в службу ИБ</span></span></label>
+                      <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a2"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Самостоятельно удалить файлы из карантина</span></span></label>
+                      <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a2"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Перезагрузить станцию и продолжить работу</span></span></label>
+                      <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a2"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Сменить пароль учётной записи и ничего не сообщать</span></span></label>
+                      <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a2"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Отключить антивирус, чтобы он не мешал работе</span></span></label>
+                      <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a2"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Дождаться конца рабочего дня и выключить станцию</span></span></label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-scene__foot">
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">← Назад</button>
+          <div class="tb-scene__foot-spacer"></div>
+          <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Отправить ответ</button>
+        </footer>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     s-results — экран итогов: якоря нет, работает запасное размещение
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="wf-state" id="s-results">
+  <div class="wf-page">
+    <p class="wf-caption">
+      Макет итогов объявляет якорь под шапкой, над блоком результата. Вид знака тот же, что на
+      экране вопроса. От копирования экран итогов не защищается (FR-09) — знак на нём остаётся
+      единственной мерой.
+    </p>
+    <div class="wf-viewport">
+      <div class="tb-scene">
+        <header class="tb-scene__header">
+          <div class="tb-scene__brandrow">
+            <div class="tb-scene__titles">
+              <h1 class="tb-scene__title">Основы информационной безопасности</h1>
+            </div>
+            <div class="tb-scene__headtag"><span class="ou-tag ou-tag--success">Тест пройден</span></div>
+          </div>
+          <div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width:86%"></div></div>
+        </header>
+
+        <main class="tb-scene__body">
+          <div class="tb-scene__col tb-scene__col--wide">
+            <!-- ДЕЛЬТА PRD-34: якорь, объявленный макетом итогов. -->
+            <div data-slot="protection-mark">
+              <div class="tb-protection-mark" aria-hidden="true">ID 7f3ac2 · 02.08.2026 15:02</div>
+            </div>
+
+            <div class="tb-score-strip">
+              <div class="ou-ring tb-ring">
+                <svg class="ou-ring__svg" width="140" height="140" viewBox="0 0 140 140">
+                  <circle class="ou-ring__track" cx="70" cy="70" r="63" stroke-width="12"></circle>
+                  <circle class="ou-ring__fill ou-ring__fill--success" cx="70" cy="70" r="63" stroke-width="12" stroke-linecap="round" stroke-dasharray="395.84" stroke-dashoffset="55.4"></circle>
+                </svg>
+                <div class="ou-ring__center">
+                  <div class="ou-ring__value">86%</div>
+                  <div class="ou-ring__label">баллы</div>
+                </div>
+              </div>
+              <div class="tb-facts">
+                <div class="tb-facts__item"><div class="tb-facts__num">6</div><div class="tb-facts__lbl">вопросов</div></div>
+                <div class="tb-facts__item"><div class="tb-facts__num">5/6</div><div class="tb-facts__lbl">верно</div></div>
+                <div class="tb-facts__item"><div class="tb-facts__num">5.0</div><div class="tb-facts__lbl">баллов</div></div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-scene__foot">
+          <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Скачать отчёт</button>
+          <div class="tb-scene__foot-spacer"></div>
+          <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Завершить</button>
+        </footer>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     s-veil — заглушка при потере фокуса
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="wf-state" id="s-veil">
+  <div class="wf-page">
+    <p class="wf-caption">
+      Участник ушёл на другую вкладку. Закрыты ТОЛЬКО задание и варианты; шапка, карта вопросов,
+      таймер, прогресс и футер видимы — попытка не прервана, таймер идёт. Возврат АВТОМАТИЧЕСКИЙ: вернулся во вкладку — заглушка снялась сама, действий не требуется.
+    </p>
+    <div class="wf-viewport">
+      <div class="tb-scene">
+        <header class="tb-scene__header">
+          <div class="tb-scene__brandrow">
+            <div class="tb-scene__titles">
+              <h1 class="tb-scene__title">Основы информационной безопасности</h1>
+              <span class="tb-scene__subtitle">Обязательный курс · Попытка 1 из 2</span>
+            </div>
+            <div class="tb-scene__timers">
+              <div class="ou-timer ou-timer--digital ou-timer--s"><span class="ou-timer__lbl">тест</span><span class="ou-timer__num">44:38</span></div>
+            </div>
+          </div>
+          <div class="ou-quiz ou-quiz--circle ou-quiz--m tb-scene__map" role="group" aria-label="Карта вопросов">
+            <div class="ou-quiz__dots">
+              <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 1">1</button>
+              <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 2">2</button>
+              <button type="button" class="ou-quiz__dot is-flagged" aria-label="Вопрос 3">3</button>
+              <button type="button" class="ou-quiz__dot is-current" aria-label="Вопрос 4">4</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 5">5</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 6">6</button>
+            </div>
+            <span class="tb-scene__mapcount tb-scene__mapcount--answered">отвечено <strong>2</strong> из 6</span>
+          </div>
+          <div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width:58%"></div></div>
+        </header>
+
+        <main class="tb-scene__body">
+          <div class="tb-scene__col" style="--tb-question-fs: 30px; --tb-answer-fs: 20px">
+            <div class="tb-scene__meta">
+              <span>Вопрос 4 из 6</span>
+              <span class="ou-tag ou-tag--neutral">Пароли и аутентификация</span>
+            </div>
+
+            <div class="tb-scene__q wf-anchored">
+              <h2 class="tb-scene__qtitle" data-tb-protected>Какой пароль является наиболее надёжным с точки зрения безопасности?</h2>
+              <div class="tb-scene__qmeta">
+                <span class="tb-scene__qhint" data-tb-protected>Выберите один вариант ответа</span>
+                <div data-slot="protection-mark">
+                  <div class="tb-protection-mark" aria-hidden="true">ID 7f3ac2 · 02.08.2026 14:35</div>
+                </div>
+              </div>
+              <!-- ДЕЛЬТА PRD-34: заглушка над регионом задания. Знак уходит под неё вместе с
+                   подсказкой — атрибутировать нечего, пока задание скрыто. -->
+              <div class="tb-protection-veil" role="status">
+                <!-- Компактный вид ou-empty: --inline + --horizontal, пиктограмма СЛЕВА от
+                     текста и без описания. Вуаль накрывает регион в две строки, а не пустую
+                     область страницы: в вертикальном варианте иллюстрация вставала НАД текстом,
+                     и блок обрезался по границе региона. -->
+                <div class="ou-empty ou-empty--inline ou-empty--horizontal">
+                  <span class="ou-empty__art" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 6.2A9 9 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-2.5 3"/><path d="M6.3 8.3A17 17 0 0 0 3 12s4 6 9 6a9 9 0 0 0 3.7-.8"/><path d="M3 3l18 18"/></svg></span>
+                  <div class="ou-empty__content">
+                    <p class="ou-empty__title">Задание скрыто, пока окно неактивно</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tb-qbody">
+              <div class="tb-qbody__answers wf-anchored">
+                <div data-tb-protected>
+                  <div class="ou-radio-group ou-radio-group--vertical">
+                    <div class="ou-radio-group__items">
+                      <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a3"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Длинная фраза из четырёх несвязанных слов</span></span></label>
+                      <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a3"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Название компании и год</span></span></label>
+                      <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a3"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Дата рождения и инициалы</span></span></label>
+                      <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a3"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Восемь символов с заменой букв на цифры</span></span></label>
+                    </div>
+                  </div>
+                </div>
+                <!-- Регион вариантов закрыт той же заглушкой, но сообщение — один раз,
+                     на регионе задания: два одинаковых блока читались бы как ошибка. -->
+                <div class="tb-protection-veil" aria-hidden="true"></div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-scene__foot">
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">← Назад</button>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Пропустить</button>
+          <div class="tb-scene__foot-spacer"></div>
+          <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Отправить ответ</button>
+        </footer>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     s-toast — предупреждение о попытке копирования
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="wf-state" id="s-toast">
+  <div class="wf-page">
+    <p class="wf-caption">
+      Участник нажал Ctrl+C на тексте задания. Сообщение появляется только на
+      <code>copy</code> и <code>cut</code>, гаснет само и не перехватывает указатель. На правый клик
+      и перетаскивание сообщения нет — иначе обычный правый клик превращается в шум.
+    </p>
+    <div class="wf-viewport">
+      <div class="tb-scene wf-anchored">
+        <header class="tb-scene__header">
+          <div class="tb-scene__brandrow">
+            <div class="tb-scene__titles">
+              <h1 class="tb-scene__title">Основы информационной безопасности</h1>
+              <span class="tb-scene__subtitle">Обязательный курс · Попытка 1 из 2</span>
+            </div>
+            <div class="tb-scene__timers">
+              <div class="ou-timer ou-timer--digital ou-timer--s"><span class="ou-timer__lbl">тест</span><span class="ou-timer__num">44:12</span></div>
+            </div>
+          </div>
+          <div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width:58%"></div></div>
+        </header>
+
+        <main class="tb-scene__body">
+          <div class="tb-scene__col" style="--tb-question-fs: 30px; --tb-answer-fs: 20px">
+            <div class="tb-scene__meta">
+              <span>Вопрос 4 из 6</span>
+              <span class="ou-tag ou-tag--neutral">Пароли и аутентификация</span>
+            </div>
+            <div class="tb-scene__q">
+              <h2 class="tb-scene__qtitle" data-tb-protected>Какой пароль является наиболее надёжным с точки зрения безопасности?</h2>
+              <div class="tb-scene__qmeta">
+                <span class="tb-scene__qhint" data-tb-protected>Выберите один вариант ответа</span>
+                <div data-slot="protection-mark">
+                  <div class="tb-protection-mark" aria-hidden="true">ID 7f3ac2 · 02.08.2026 14:35</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tb-qbody">
+              <div class="tb-qbody__answers">
+                <div data-tb-protected>
+                  <div class="ou-radio-group ou-radio-group--vertical">
+                    <div class="ou-radio-group__items">
+                      <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a4"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Длинная фраза из четырёх несвязанных слов</span></span></label>
+                      <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a4"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Название компании и год</span></span></label>
+                      <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a4"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Дата рождения и инициалы</span></span></label>
+                      <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a4"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Восемь символов с заменой букв на цифры</span></span></label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-scene__foot">
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">← Назад</button>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Пропустить</button>
+          <div class="tb-scene__foot-spacer"></div>
+          <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Отправить ответ</button>
+        </footer>
+
+        <!-- ДЕЛЬТА PRD-34: предупреждение. -->
+        <div class="ou-toast-stack">
+          <div class="ou-toast ou-toast--info" role="status">
+            <span class="ou-toast__ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/></svg></span>
+            <div class="ou-toast__body">
+              <div class="ou-toast__title">Копирование отключено</div>
+              <div class="ou-toast__desc">В этом тесте текст задания защищён от копирования.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     s-off — обе настройки выключены: экран без дельты
+     ════════════════════════════════════════════════════════════════════════ -->
+<section class="wf-state" id="s-off">
+  <div class="wf-page">
+    <p class="wf-caption">
+      Контрольное состояние: <code>copyProtection</code> и <code>protectionWatermark</code>
+      выключены. Экран обязан быть равен согласованному
+      <code>docs/wireframes/prohozhdenie/Прохождение теста.html</code> — дельты нет ни одной.
+    </p>
+    <div class="wf-viewport">
+      <div class="tb-scene">
+        <header class="tb-scene__header">
+          <div class="tb-scene__brandrow">
+            <div class="tb-scene__titles">
+              <h1 class="tb-scene__title">Основы информационной безопасности</h1>
+              <span class="tb-scene__subtitle">Обязательный курс · Попытка 1 из 2</span>
+            </div>
+            <div class="tb-scene__timers">
+              <div class="ou-timer ou-timer--digital ou-timer--s"><span class="ou-timer__lbl">тест</span><span class="ou-timer__num">44:51</span></div>
+            </div>
+          </div>
+          <div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width:58%"></div></div>
+        </header>
+
+        <main class="tb-scene__body">
+          <div class="tb-scene__col" style="--tb-question-fs: 30px; --tb-answer-fs: 20px">
+            <div class="tb-scene__meta">
+              <span>Вопрос 4 из 6</span>
+              <span class="ou-tag ou-tag--neutral">Пароли и аутентификация</span>
+            </div>
+            <div class="tb-scene__q">
+              <h2 class="tb-scene__qtitle">Какой пароль является наиболее надёжным с точки зрения безопасности?</h2>
+              <span class="tb-scene__qhint">Выберите один вариант ответа</span>
+            </div>
+            <div class="tb-qbody">
+              <div class="tb-qbody__answers">
+                <div class="ou-radio-group ou-radio-group--vertical">
+                  <div class="ou-radio-group__items">
+                    <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a5"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Длинная фраза из четырёх несвязанных слов</span></span></label>
+                    <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a5"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Название компании и год</span></span></label>
+                    <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a5"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Дата рождения и инициалы</span></span></label>
+                    <label class="ou-radio-card"><span class="ou-radio ou-radio--m"><input type="radio" class="ou-radio__input" name="a5"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-card__text"><span class="ou-radio-card__title">Восемь символов с заменой букв на цифры</span></span></label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <footer class="tb-scene__foot">
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">← Назад</button>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Пропустить</button>
+          <div class="tb-scene__foot-spacer"></div>
+          <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Отправить ответ</button>
+        </footer>
+      </div>
+    </div>
+  </div>
+</section>
+
+<h2 class="wf-doc-title">Правила эскиза</h2>
+<div class="wf-notes">
+  <div class="wf-notes-title">Что утверждается и что нет</div>
+  <table class="wf-notes-table">
+    <thead><tr><th>Предмет</th><th>Утверждается эскизом</th></tr></thead>
+    <tbody>
+      <tr><td>Кегль знака</td><td>ДА. 10 px, фиксированный. Автоподбору <code>fit-font</code>, которому подчиняются задание и варианты, знак не подчиняется — состояния «Знак в якоре» и «Длинное задание» показывают его одинаковым при разном кегле содержимого.</td></tr>
+      <tr><td>Контраст знака</td><td>ДА. <code>--ou-fg-muted</code> при непрозрачности 0.35: читается на снимке и не спорит с содержимым.</td></tr>
+      <tr><td>Место знака</td><td>НЕТ. Место объявляет макет якорем <code>[data-slot="protection-mark"]</code>. Эскиз показывает, куда его ставит ПОСТАВЛЯЕМЫЙ шаблон, и что происходит там, где якоря нет.</td></tr>
+      <tr><td>Заглушка</td><td>ДА. Состав (только пояснение, без кнопки), периметр закрытия и то, что шапка, таймер и футер остаются видимыми.</td></tr>
+      <tr><td>Предупреждение</td><td>ДА. Место (низ сцены), вид (<code>ou-banner--info</code>) и то, что оно не перехватывает указатель.</td></tr>
+      <tr><td>Поведение защиты</td><td>НЕТ. Выделение, буфер обмена, контекстное меню, перетаскивание и печать — поведение, а не вид; их описывают FR-10 — FR-12 и проверяет приёмка в браузере.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="wf-notes-title">Источники разметки</div>
+  <table class="wf-notes-table">
+    <thead><tr><th>Слой</th><th>Откуда взят</th></tr></thead>
+    <tbody>
+      <tr><td>Сцена вопроса</td><td><code>server/scorm/templates/default/layouts/question.html</code>, дословно; мустейш-подстановки заменены значениями примера.</td></tr>
+      <tr><td>Сцена итогов</td><td><code>server/scorm/templates/default/layouts/results.html</code>, верхний блок.</td></tr>
+      <tr><td>Стили сцены</td><td><code>server/scorm/templates/default/styles/theme.css</code>, подключён как есть — не копия.</td></tr>
+      <tr><td>Компоненты</td><td>ДС UniversityRT, <code>client/src/styles/vendor/university-rt.css</code>.</td></tr>
+      <tr><td>Дельта PRD-34</td><td>Предлагаемое содержимое <code>PROTECTION_CSS</code>, который ядро впрыскивает в корень сцены (FR-33). В <code>theme.css</code> шаблона ничего из этого лежать не должно.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2 class="wf-doc-title">Соответствие требованиям PRD-34</h2>
+<div class="wf-mapping">
+  <table class="wf-notes-table">
+    <thead><tr><th>Состояние</th><th>Требование</th><th>Что показано</th></tr></thead>
+    <tbody>
+      <tr><td><code>s-mark</code></td><td>FR-16, FR-17, FR-20</td><td>Знак в объявленном якоре, между заданием и вариантами; обезличенное содержание «идентификатор + дата и время».</td></tr>
+      <tr><td><code>s-long</code></td><td>FR-16</td><td>Кегль знака не меняется при ужатом автоподбором содержимом — знак в подборе не участвует.</td></tr>
+      <tr><td><code>s-results</code></td><td>FR-09, FR-16</td><td>Якорь объявлен и на экране итогов: знак экран несёт, но от копирования экран не защищается. Запасное размещение здесь не используется — оно предназначено чужому шаблону.</td></tr>
+      <tr><td><code>s-veil</code></td><td>FR-21, FR-23, FR-24</td><td>Закрыты только задание и варианты; возврат автоматический, по возврату фокуса или видимости; таймер, карта вопросов и футер видимы — попытка не прервана.</td></tr>
+      <tr><td><code>s-toast</code></td><td>FR-13</td><td>Предупреждение на <code>copy</code>/<code>cut</code>, без записи куда-либо (FR-14).</td></tr>
+      <tr><td><code>s-off</code></td><td>FR-01, FR-02</td><td>Настройки независимы и выключаемы; выключенные дают экран без единой дельты.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+  function show(id) {
+    var target = document.getElementById(id);
+    if (!target) return;
+    document.querySelectorAll(".wf-btn").forEach(function (b) { b.classList.remove("active"); });
+    document.querySelectorAll(".wf-state").forEach(function (s) { s.classList.remove("active"); });
+    target.classList.add("active");
+    var btn = document.querySelector('.wf-btn[data-state="' + id + '"]');
+    if (btn) btn.classList.add("active");
+  }
+  document.querySelectorAll(".wf-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () { show(btn.dataset.state); });
+  });
+  // Состояние выбирается якорем в адресе — так каждое снимается отдельно.
+  if (location.hash.length > 1) show(location.hash.slice(1));
+  window.addEventListener("hashchange", function () { show(location.hash.slice(1)); });
+</script>
+
+</body>
+</html>

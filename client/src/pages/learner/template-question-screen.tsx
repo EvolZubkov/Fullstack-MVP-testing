@@ -14,7 +14,7 @@
  * the same engine the SCORM host runs — so both hosts compute drops identically.
  */
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TemplateScreen } from "@/components/template-screen";
 import type { Question } from "@shared/schema";
 import type { CtxQuestionsProgress } from "@shared/template/context";
@@ -31,25 +31,23 @@ import {
   renderRanking,
   renderMatching,
   renderScale,
+  renderAllocation,
   questionHint,
   answerTexts,
   type ReviewCorrect,
 } from "@shared/template/question-interaction";
+import { attachAllocation } from "@shared/template/allocation-dom";
+import { allocationSpec, seedAllocation } from "@shared/questions/allocation";
+import { distributesBudget } from "@shared/questions/question-type";
 import { questionFont, optionFont } from "@shared/template/fit-font";
 import { buildQuestionNav, QUESTION_NAV_ACTIONS, type QuestionNavState } from "@shared/template/question-nav";
 import type { SceneTimersState } from "@shared/template/scene-timers";
+import type { ProtectionSpec } from "@shared/template/protection/spec";
 import { renderInlineMarkdown } from "@shared/text";
+import { renderQuestionMedia } from "@shared/template/question-media";
 
 /** Action names the shared nav row emits (plus the layout's own `nav:next`). */
 const NAV_ACTIONS: readonly string[] = Object.values(QUESTION_NAV_ACTIONS);
-
-function esc(s: unknown): string {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 /** Compute the next answer when option `oi` is toggled, by question type. */
 function nextAnswer(question: Question, answer: unknown, oi: number): unknown {
@@ -116,19 +114,10 @@ function interactionHtml(
   // The scale takes no shuffle mapping: the order of graduations is content, not
   // presentation (see `hasFixedOptionOrder` in shared/questions/question-type).
   if (question.type === "scale") return renderScale(question, answer, review);
+  // PRD-44: у распределения нет разметки верности — `review` здесь означает «только
+  // чтение», а не «показать правильный ответ», которого у типа не существует.
+  if (distributesBudget(question.type)) return renderAllocation(question, answer, review !== undefined, arr);
   return renderSingleChoice(question, answer, arr, review);
-}
-
-function mediaHtml(question: Question): string {
-  const url = question.mediaUrl;
-  const type = question.mediaType;
-  if (!url || !type) return "";
-  if (type === "image")
-    return `<img src="${esc(url)}" alt="" style="max-height:260px;object-fit:contain;margin:8px auto;display:block;border-radius:8px;">`;
-  if (type === "audio") return `<audio controls style="width:100%"><source src="${esc(url)}"></audio>`;
-  if (type === "video")
-    return `<video controls style="max-height:260px;width:100%;border-radius:8px"><source src="${esc(url)}"></video>`;
-  return "";
 }
 
 export interface TemplateQuestionScreenProps {
@@ -188,6 +177,8 @@ export interface TemplateQuestionScreenProps {
   questionsProgress?: CtxQuestionsProgress;
   /** PRD-19 Block C: jump to an absolute question index from a pill click. */
   onNavigateToQuestion?: (index: number) => void;
+  /** PRD-34 (FR-30): protection decision for the question screen, from the shared builder. */
+  protection?: ProtectionSpec;
 }
 
 export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
@@ -205,13 +196,49 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
   // answer is `undefined` until the first drag). The board still displays the
   // shuffled order via rankingOrder's fallback to shuffleMapping.
 
+  // PRD-44: жест ползунка живёт вне React — обработчик читает вопрос и ответ через
+  // ссылки, чтобы не пересоздаваться на каждый рендер и не терять привязку.
+  const questionRef = useRef(question);
+  questionRef.current = question;
+  const answerRef = useRef(answer);
+  answerRef.current = answer;
+  const lockedRef = useRef(props.locked);
+  lockedRef.current = props.locked;
+  const onAnswerRef = useRef(onAnswer);
+  onAnswerRef.current = onAnswer;
+
+  const attachHostInputs = useCallback(
+    (shadow: ShadowRoot) =>
+      attachAllocation(shadow as never, {
+        getSpec: () =>
+          distributesBudget(questionRef.current.type)
+            ? allocationSpec(questionRef.current.dataJson)
+            : null,
+        getAnswer: () => answerRef.current,
+        onCommit: (next) => onAnswerRef.current(next),
+        isLocked: () => lockedRef.current === true,
+      }),
+    [],
+  );
+
+  // Предзаполнение минимумом (FR-30): вопрос с ненулевым минимумом стартует со
+  // значениями, а не с нулями, иначе учащийся распределит весь бюджет и застрянет с
+  // утверждением, которое уже нечем поднять. Ставится ОДИН раз на нетронутый вопрос.
+  useEffect(() => {
+    if (!distributesBudget(question.type)) return;
+    if (answer !== undefined && answer !== null) return;
+    const seed = seedAllocation(allocationSpec(question.dataJson));
+    if (Object.keys(seed).length > 0) onAnswer(seed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [question.id]);
+
   const css = `${tpl.css}\n#q-progress-fill{width:${Math.round(progressPercent)}%}`;
   const slots = {
     // Inline, not block: the prompt renders into the scene's `<h2>` heading, and a
     // paragraph inside it would be invalid. The SCORM twin fills the same slot
     // through the same renderer, so the two hosts show identical markup.
     "question-text": renderInlineMarkdown(question.prompt),
-    "question-media": mediaHtml(question),
+    "question-media": renderQuestionMedia(question),
     "question-interaction": interactionHtml(
       question,
       answer,
@@ -260,22 +287,25 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
       // paints its own surface. Painting the host with `tpl.theme` used to show a
       // LIGHT band under a dark scene — the value is read as the first
       // `--background` in theme.css, i.e. always the base (light) palette.
-      className="tbh-screen tbh-col tbh-noselect"
-      onCopy={(e) => e.preventDefault()}
-      onCut={(e) => e.preventDefault()}
-      onContextMenu={(e) => e.preventDefault()}
+      // PRD-34: запрет выделения и перехват копирования СНЯТЫ с этой обёртки. Раньше они
+      // стояли безусловно и только на веб-хосте: настройка теста их не выключала, автор
+      // не мог скопировать текст в отладочном прогоне, а пакет вёл себя иначе. Теперь
+      // мерой управляет общий механизм (`protection`), одинаковый на обоих хостах.
+      className="tbh-screen tbh-col"
     >
       <TemplateScreen
         className="tbh-fill"
+        protection={props.protection}
         layout={tpl.layout}
         css={css}
         cssVars={tpl.cssVars}
         themeCss={tpl.themeCss}
         dataTheme={tpl.dataTheme}
         themed={tpl.themed}
-        context={{ course: { title: testTitle, subtitle: props.subtitle }, state: { questionCounterLabel: counterLabel, sectionName: props.sectionName, questionHint: questionHint(question.type), questionFont: questionFont(question.prompt), optionFont: optionFont(answerTexts(question)), questionsProgress: props.questionsProgress, nav: buildQuestionNav(props.nav) }, design: tpl.design }}
+        context={{ course: { title: testTitle, subtitle: props.subtitle }, state: { questionCounterLabel: counterLabel, sectionName: props.sectionName, questionHint: questionHint(question.type, question), questionFont: questionFont(question.prompt), optionFont: optionFont(answerTexts(question)), questionsProgress: props.questionsProgress, nav: buildQuestionNav(props.nav) }, design: tpl.design }}
         slots={slots}
         timers={props.timers}
+        onShadowReady={attachHostInputs}
         onAction={(action) => {
           // Nav row: reported verbatim, so the caller reads the emitter's own action
           // names. Not gated by `locked` — navigating away is always allowed.

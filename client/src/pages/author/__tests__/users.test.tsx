@@ -58,6 +58,20 @@ const learnerUser: MockUser = {
   createdAt: "2025-12-02T09:00:00Z",
 };
 
+/** Never signed in — the only state an invitation letter makes sense for. */
+const pendingUser: MockUser = {
+  id: "u-pend",
+  email: "pending@test.dev",
+  name: "Новичок",
+  roles: ["learner"],
+  status: "pending",
+  mustChangePassword: true,
+  gdprConsent: false,
+  lastLoginAt: null,
+  expiresAt: null,
+  createdAt: "2025-12-03T09:00:00Z",
+};
+
 /** JSON-ish Response stub honoured by both getQueryFn and the raw mutations. */
 function jsonResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -89,10 +103,21 @@ function installDefaultFetch() {
 }
 
 beforeEach(() => {
-  usersData = [adminUser, learnerUser];
+  usersData = [adminUser, learnerUser, pendingUser];
   installDefaultFetch();
 });
 afterEach(() => vi.unstubAllGlobals());
+
+/**
+ * The `POST /api/users` call, if it happened. Not simply the last `fetch` call:
+ * a successful create invalidates the list, so a `GET` lands after it.
+ */
+function createCall(): [string, RequestInit] | undefined {
+  return fetchMock.mock.calls.find(
+    ([url, options]) =>
+      String(url) === "/api/users" && (options?.method ?? "GET").toUpperCase() === "POST",
+  ) as [string, RequestInit] | undefined;
+}
 
 function renderPage() {
   const client = new QueryClient({
@@ -140,6 +165,41 @@ describe("<UsersPage />", () => {
         expect.objectContaining({ method: "POST" }),
       ),
     );
+  });
+
+  it("asks for an invitation letter by default when creating a user", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Создать пользователя" }));
+    fireEvent.change(await screen.findByPlaceholderText("user@example.com"), {
+      target: { value: "new@test.dev" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Минимум 8 символов"), {
+      target: { value: "Passw0rd!42" },
+    });
+    expect(screen.getByLabelText("Отправить приглашение")).toBeChecked();
+
+    fireEvent.click(screen.getByRole("button", { name: "Создать" }));
+
+    await waitFor(() => expect(createCall()).toBeDefined());
+    const body = JSON.parse(createCall()![1].body as string);
+    expect(body.sendInvite).toBe(true);
+  });
+
+  it("omits the invitation when the box is unticked", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Создать пользователя" }));
+    fireEvent.change(await screen.findByPlaceholderText("user@example.com"), {
+      target: { value: "new@test.dev" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Минимум 8 символов"), {
+      target: { value: "Passw0rd!42" },
+    });
+    fireEvent.click(screen.getByLabelText("Отправить приглашение"));
+    fireEvent.click(screen.getByRole("button", { name: "Создать" }));
+
+    await waitFor(() => expect(createCall()).toBeDefined());
+    const body = JSON.parse(createCall()![1].body as string);
+    expect(body.sendInvite).toBe(false);
   });
 
   it("opens the edit drawer prefilled from the selected row", async () => {
@@ -214,6 +274,28 @@ describe("<UsersPage />", () => {
         expect.objectContaining({ method: "POST" }),
       ),
     );
+  });
+
+  it("re-sends the invitation for a pending user (POST .../invite)", async () => {
+    renderPage();
+    await screen.findByText("pending@test.dev");
+    // Third row — the account still awaiting its first sign-in.
+    fireEvent.click(screen.getAllByLabelText("Действия")[2]);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Отправить приглашение" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/users/u-pend/invite",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+  });
+
+  it("offers no invitation for an account that has already signed in", async () => {
+    renderPage();
+    await screen.findByText("admin@test.dev");
+    fireEvent.click(screen.getAllByLabelText("Действия")[0]);
+    await screen.findByRole("menuitem", { name: "Редактировать" });
+    expect(screen.queryByRole("menuitem", { name: "Отправить приглашение" })).toBeNull();
   });
 
   it("shows the empty state when no users exist", async () => {

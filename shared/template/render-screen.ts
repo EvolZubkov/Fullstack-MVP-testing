@@ -19,6 +19,10 @@
 
 import { renderTemplate } from "./dsl";
 import { renderResultField } from "./renderers";
+import { applyProtection } from "./protection/apply";
+import { applyWatermark } from "./protection/watermark";
+import { attachBlurGuard } from "./protection/blur-guard";
+import type { ProtectionSpec } from "./protection/spec";
 
 /** A content template's placeholder definition (subset; spec §8.2.1). */
 export interface PlaceholderDef {
@@ -47,6 +51,12 @@ export interface ScreenRenderInput {
   partials?: Record<string, string>;
   /** Content-page placeholders to fill into `data-placeholder` regions. */
   content?: ContentPageData;
+  /**
+   * PRD-34 (FR-30, FR-31): what this screen protects, hides and stamps. Built by the
+   * SHARED builder in `protection/spec`; absent ⇒ nothing is protected, which is the
+   * correct answer for every screen outside the perimeter (FR-09).
+   */
+  protection?: ProtectionSpec;
 }
 
 /** Escape & < > " for placeholder HTML (matches the SCORM placeholder twin). */
@@ -154,4 +164,12 @@ export function renderScreenInto(root: HTMLElement, input: ScreenRenderInput): v
   bindDataPaths(root, input.context);
   if (input.slots) fillSlots(root, input.slots);
   if (input.content) fillContentPlaceholders(root, input.content, input.context);
+  // PRD-34 (FR-31): LAST — the slot HTML above would otherwise overwrite the marks.
+  applyProtection(root, input.protection?.copy ?? null);
+  applyWatermark(root, input.protection?.watermarkText ?? null);
+  // PRD-34 (FR-21): предыдущий сторож снимается ДО установки нового — иначе повторный
+  // рендер экрана наращивал бы слушатели окна на каждый вопрос.
+  const holder = root as HTMLElement & { __tbBlurGuard?: () => void };
+  holder.__tbBlurGuard?.();
+  holder.__tbBlurGuard = attachBlurGuard(root, input.protection?.hide ?? null);
 }

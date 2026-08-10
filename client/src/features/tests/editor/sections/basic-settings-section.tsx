@@ -36,14 +36,16 @@ import {
   Switch,
   Textarea,
 } from "@universityrt/ui-kit";
-import type { EligibilityPluginRef, Form, RetakePolicy } from "@shared/schema";
+import type { EligibilityPluginRef, Form, IntroBlock, RetakePolicy } from "@shared/schema";
 import { resolveEffectiveScoring } from "@shared/scoring/effective-scoring";
+// PRD-31: the clamp is shared with the mapper so the field and a value read back
+// from the server can never disagree about the valid range.
+import { clampIntervalHours } from "../test-editor.mappers";
 import {
   FeedbackEditorModal,
   type FeedbackEditorValue,
 } from "./feedback-editor-modal";
 import { FeedbackPreview } from "./feedback-preview";
-import { ReportSettingsCard } from "./report-settings-card";
 import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
@@ -61,6 +63,8 @@ import type {
   TopicPassRule,
 } from "../test-editor.types";
 import { EMPTY_FIELD_ERRORS, type FieldErrorIndex } from "../field-errors";
+import type { UseDesignSettingsResult } from "../use-design-settings";
+import { ReportSettingsCard } from "./report-settings-card";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -69,10 +73,13 @@ export type SettingsSectionProps = {
   updateModel: (updater: (m: TestEditorModel) => TestEditorModel) => void;
   /** FR-20c: per-field validation errors for inline highlighting. */
   fieldErrors?: FieldErrorIndex;
-  /** PRD-27: черновой шаблон вкладки «Оформление» — каталог видов отчёта считается на нём (§4.2). */
-  draftTemplateId?: string;
-  /** PRD-27: черновой брендинг вкладки «Оформление» — им красится предпросмотр отчёта. */
-  draftDesignParams?: Record<string, unknown>;
+  /**
+   * Черновик вкладки «Оформление» — нужен карточке отчёта: виды предлагает ВЫБРАННЫЙ
+   * шаблон, и считать надо черновой выбор, иначе автор выбирает из списка, которого после
+   * сохранения не будет (PRD-27 §4.2, риск R-5). Необязателен: раздел собирают и в
+   * компонентных тестах, где черновика нет, — тогда карточка отчёта не показывается.
+   */
+  design?: UseDesignSettingsResult;
 };
 
 /** Backwards-compatible alias: original skeleton lived under this name. */
@@ -111,8 +118,7 @@ export function SettingsSection({
   model,
   updateModel,
   fieldErrors = EMPTY_FIELD_ERRORS,
-  draftTemplateId,
-  draftDesignParams,
+  design,
 }: SettingsSectionProps) {
   const [active, setActive] = useState<RailKey>("basic");
   // Per requirements: «Адаптивный режим» sub-section is only relevant when
@@ -184,13 +190,7 @@ export function SettingsSection({
         data-testid={`settings-pane-${effectiveActive}`}
       >
         {effectiveActive === "basic" && (
-          <BasicPane
-            model={model}
-            updateModel={updateModel}
-            fieldErrors={fieldErrors}
-            draftTemplateId={draftTemplateId}
-            draftDesignParams={draftDesignParams}
-          />
+          <BasicPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} design={design} />
         )}
         {effectiveActive === "pass-rules" && (
           <PassRulesPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
@@ -221,8 +221,7 @@ function BasicPane({
   model,
   updateModel,
   fieldErrors = EMPTY_FIELD_ERRORS,
-  draftTemplateId,
-  draftDesignParams,
+  design,
 }: SettingsSectionProps) {
   // PRD-7 S13.2-G7: «Общая обратная связь теста» card. The model already
   // carries the underlying fields (basic.feedback / feedbackLinks /
@@ -349,29 +348,13 @@ function BasicPane({
         )}
       </div>
 
-      <hr className="wf-sep" />
-
-      <ReportSettingsCard
-        mode={model.mode}
-        draftTemplateId={draftTemplateId}
-        designParams={draftDesignParams}
-        value={model.report ?? {}}
-        readOnly={model.basic.status === "published"}
-        onChange={(next) => updateModel((m) => ({ ...m, report: next }))}
-        // FR-18: предпросмотр строится на РЕАЛЬНОЙ структуре редактируемого теста —
-        // его названии и разделах; демонстрационные только числа и вердикты.
-        testName={model.basic.title}
-        sections={model.sections.map((s) => ({
-          topicId: s.topicId,
-          topicName: s.topicName,
-          questionCount: s.drawCount,
-        }))}
-        levelNames={
-          model.mode === "adaptive"
-            ? (model.adaptive.topics.find((t) => t.enabled)?.levels ?? []).map((l) => l.levelName)
-            : undefined
-        }
-      />
+      {/*
+        PRD-47 §6.2: карточка «Отчёт о результатах» переехала на вкладку «Оформление», в
+        свой пункт рейла. Отчёт — часть шаблона, его поля объявляет манифест ровно как
+        параметры оформления, и место им рядом с «Макетом», а не под правилами
+        прохождения. Хранение при этом НЕ переехало: поля отчёта остаются своей колонкой
+        (PRD-27 §4.2), поэтому `model.report` по-прежнему часть модели теста.
+      */}
 
       <hr className="wf-sep" />
 
@@ -419,6 +402,89 @@ function BasicPane({
           </div>
         </CardBody>
       </Card>
+
+      <hr className="wf-sep" />
+
+      {/*
+        ВВОДНЫЕ БЛОКИ. Идут первыми в своей выдаче и объясняют слушателю, что он читает.
+        Текстов два, потому что адресаты разные: экран пробегают глазами сразу, отчёт
+        уносят с собой и показывают специалисту. Пустой текст = блока нет.
+      */}
+      <Card variant="outlined" data-testid="settings-intro-card">
+        <CardHeader title="Вводный текст" />
+        <CardBody>
+          <IntroEditTrigger
+            label="На экране итогов"
+            modalTitle="Вводный текст на экране итогов"
+            description="Идёт первым, до сводки и результатов по темам. Пусто — блока нет."
+            value={model.intro?.results ?? null}
+            onSave={(next) =>
+              updateModel((m) => ({ ...m, intro: { ...(m.intro ?? {}), results: next } }))
+            }
+            testId="settings-intro-results"
+          />
+          <hr className="wf-sep" />
+          {/* Переключатель — ССЫЛКА, а не копия: включённый, он не переносит текст в
+              ветвь отчёта, поэтому правка на экране меняет обе выдачи разом, а
+              собственный текст отчёта дожидается своего часа нетронутым. */}
+          <div className="ou-formfield">
+            <Switch
+              id="intro-report-same"
+              label="В отчёте — тот же текст, что на экране итогов"
+              description="Правится в одном месте. Выключите, чтобы задать отчёту своё вводное слово."
+              checked={!!model.intro?.reportSameAsResults}
+              onChange={(e) =>
+                updateModel((m) => ({
+                  ...m,
+                  intro: { ...(m.intro ?? {}), reportSameAsResults: e.target.checked },
+                }))
+              }
+              data-testid="settings-intro-same-switch"
+            />
+          </div>
+          {!model.intro?.reportSameAsResults && (
+            <IntroEditTrigger
+              label="В отчёте"
+              modalTitle="Вводный текст в отчёте"
+              description="Идёт первым, до карточки результата. Задаётся отдельно от текста экрана."
+              value={model.intro?.report ?? null}
+              onSave={(next) =>
+                updateModel((m) => ({ ...m, intro: { ...(m.intro ?? {}), report: next } }))
+              }
+              testId="settings-intro-report"
+            />
+          )}
+        </CardBody>
+      </Card>
+
+      {/*
+        Отчёт — тоже обратная связь обучающемуся, поэтому его СОДЕРЖАНИЕ (выдавать ли
+        документ и что в нём показывать) стоит здесь, рядом с текстом, который слушатель
+        прочтёт (PRD-27 §7.1). Облик документа — подложка, логотип, вид — остался в
+        «Оформлении», где живут шаблон и брендинг: поля делит сам шаблон признаком `scope`.
+      */}
+      <hr className="wf-sep" />
+
+      <ReportSettingsCard
+        scope="content"
+        mode={model.mode}
+        draftTemplateId={design?.draft.templateId}
+        designParams={design?.draft.params}
+        value={model.report ?? {}}
+        onChange={(next) => updateModel((m) => ({ ...m, report: next }))}
+        // FR-18: предпросмотр строится на РЕАЛЬНОЙ структуре редактируемого теста.
+        testName={model.basic.title}
+        sections={model.sections.map((s) => ({
+          topicId: s.topicId,
+          topicName: s.topicName,
+          questionCount: s.drawCount,
+        }))}
+        levelNames={
+          model.mode === "adaptive"
+            ? (model.adaptive.topics.find((t) => t.enabled)?.levels ?? []).map((l) => l.levelName)
+            : undefined
+        }
+      />
     </>
   );
 }
@@ -616,13 +682,17 @@ type EligibilityPluginInfo = {
  * «Повторное прохождение» pane (PRD-6, wireframe `prd6-retake-policy.html`).
  * Binds `model.retakePolicy`:
  *   - Switch        → `enabled` (off = legacy behaviour, FR-02)
- *   - NumberInput   → `cooldownPeriodDays` (1–3650 calendar days)
+ *   - NumberInput   → `cooldownPeriodDays` (1–3650 calendar days), OR — when the
+ *     PRD-40 `cooldownByOutcome` switch is on — two NumberInputs bound to
+ *     `cooldownPeriodDaysPassed` / `cooldownPeriodDaysFailed` instead
  *   - Select        → `eligibilityPlugin.key` (active registry; one config per
  *                     plugin auto-resolved server-side in Phase 1)
  *   - SegmentedControl → `eligibilityPlugin.failPolicy` (failOpen / failClosed)
  *
  * The plugin list is global; we query it by `model.id` (the test scope is only
- * for auth). A best-effort plugin (suspend_data) shows the reliability warning.
+ * for auth). PRD-40 removed the second (best-effort) plugin, so the registry now
+ * has exactly one entry — the select is kept for forward compatibility rather than
+ * simplified away.
  */
 function RetakePane({ model, updateModel }: SettingsSectionProps) {
   const testId = model.id;
@@ -637,12 +707,31 @@ function RetakePane({ model, updateModel }: SettingsSectionProps) {
   const plugin = policy.eligibilityPlugin ?? null;
   const currentKey = plugin?.key ?? "";
   const defaultPluginKey = plugins[0]?.key ?? "webtutor_cooldown";
-  const selectedPlugin = plugins.find((p) => p.key === currentKey);
-  const isBestEffort =
-    selectedPlugin?.bestEffort ?? currentKey === "suspend_data_cooldown";
 
   const setPolicy = (patch: Partial<RetakePolicy>) =>
     updateModel((m) => ({ ...m, retakePolicy: { ...m.retakePolicy, ...patch } }));
+
+  // PRD-40: outcome-split cooldown. Independent toggle inside the SAME cooldown
+  // group (unlike attemptInterval, this does not stand on its own without `enabled`).
+  const cooldownByOutcome = policy.cooldownByOutcome === true;
+
+  // PRD-31 barrier B. Independent of the switch above: a test may carry only the
+  // hour interval, which is why `cooldownPeriodDays` became optional in the schema.
+  const interval = policy.attemptInterval ?? null;
+  const intervalOn = interval?.enabled === true;
+
+  const setInterval = (patch: Partial<NonNullable<RetakePolicy["attemptInterval"]>>) =>
+    updateModel((m) => ({
+      ...m,
+      retakePolicy: {
+        ...m.retakePolicy,
+        attemptInterval: {
+          enabled: m.retakePolicy.attemptInterval?.enabled === true,
+          hours: m.retakePolicy.attemptInterval?.hours ?? 24,
+          ...patch,
+        },
+      },
+    }));
 
   const setPlugin = (patch: Partial<EligibilityPluginRef>) =>
     updateModel((m) => {
@@ -689,21 +778,80 @@ function RetakePane({ model, updateModel }: SettingsSectionProps) {
 
       {enabled && (
         <>
-          <div className="ou-formfield">
-            <NumberInput
-              id="settings-retake-cooldown"
+          {!cooldownByOutcome && (
+            <div className="ou-formfield">
+              <NumberInput
+                id="settings-retake-cooldown"
+                size="m"
+                label="Период охлаждения, календарных дней"
+                hint="От 1 до 3650 дней."
+                // PRD-31: the field is optional in the schema (a policy may carry the
+                // hour interval alone), so the editor shows the default when barrier A
+                // has never been configured. The value is only persisted once the
+                // switch above is on, which is exactly when the schema requires it.
+                value={policy.cooldownPeriodDays ?? 30}
+                min={1}
+                max={3650}
+                data-testid="settings-retake-cooldown-input"
+                onChange={(next) =>
+                  setPolicy({ cooldownPeriodDays: Math.min(3650, Math.max(1, next || 1)) })
+                }
+              />
+            </div>
+          )}
+
+          <label className="ou-switch-field">
+            <Switch
               size="m"
-              label="Период охлаждения, календарных дней"
-              hint="От 1 до 3650 дней."
-              value={policy.cooldownPeriodDays}
-              min={1}
-              max={3650}
-              data-testid="settings-retake-cooldown-input"
-              onChange={(next) =>
-                setPolicy({ cooldownPeriodDays: Math.min(3650, Math.max(1, next || 1)) })
-              }
+              checked={cooldownByOutcome}
+              aria-label="Разделять период по результату попытки"
+              onChange={(e) => setPolicy({ cooldownByOutcome: e.target.checked })}
+              data-testid="settings-retake-outcome-switch"
             />
-          </div>
+            <span className="ou-switch-field__text">
+              <span className="ou-switch-field__label">Разделять период по результату попытки</span>
+              <span className="ou-switch-field__desc">
+                {cooldownByOutcome
+                  ? "Разный период охлаждения в зависимости от того, пройден тест или нет."
+                  : "Выключено — один период охлаждения для любого исхода."}
+              </span>
+            </span>
+          </label>
+
+          {cooldownByOutcome && (
+            <>
+              <div className="ou-formfield">
+                <NumberInput
+                  id="settings-retake-cooldown-passed"
+                  size="m"
+                  label="При успешном прохождении, дней"
+                  hint="От 1 до 3650 дней."
+                  value={policy.cooldownPeriodDaysPassed ?? 30}
+                  min={1}
+                  max={3650}
+                  data-testid="settings-retake-cooldown-passed-input"
+                  onChange={(next) =>
+                    setPolicy({ cooldownPeriodDaysPassed: Math.min(3650, Math.max(1, next || 1)) })
+                  }
+                />
+              </div>
+              <div className="ou-formfield">
+                <NumberInput
+                  id="settings-retake-cooldown-failed"
+                  size="m"
+                  label="При неуспешном прохождении, дней"
+                  hint="От 1 до 3650 дней."
+                  value={policy.cooldownPeriodDaysFailed ?? 30}
+                  min={1}
+                  max={3650}
+                  data-testid="settings-retake-cooldown-failed-input"
+                  onChange={(next) =>
+                    setPolicy({ cooldownPeriodDaysFailed: Math.min(3650, Math.max(1, next || 1)) })
+                  }
+                />
+              </div>
+            </>
+          )}
 
           <div className="ou-formfield">
             <Select<string>
@@ -717,15 +865,6 @@ function RetakePane({ model, updateModel }: SettingsSectionProps) {
               data-testid="settings-retake-plugin"
             />
           </div>
-
-          {isBestEffort && (
-            <Banner
-              tone="warning"
-              size="sm"
-              description="Надёжно работает только в пределах одной регистрации курса в LMS. Для строгого ограничения между новыми попытками используйте проверку через WebTutor."
-              data-testid="settings-retake-besteffort-warning"
-            />
-          )}
 
           {currentKey === "webtutor_cooldown" && (
             <Banner
@@ -755,6 +894,69 @@ function RetakePane({ model, updateModel }: SettingsSectionProps) {
               Если проверку не удалось выполнить — открыть курс или показать экран блокировки.
             </div>
           </div>
+        </>
+      )}
+
+      {/* PRD-31 барьер B: интервал между попытками ВНУТРИ одного назначения.
+          Отделён от группы выше, потому что барьеры независимы (FR-03) и стоят
+          на разных границах: кулдаун — между назначениями, интервал — внутри. */}
+      <div className="ou-card__divider" />
+
+      <label className="ou-switch-field">
+        <Switch
+          size="m"
+          checked={intervalOn}
+          aria-label="Ограничение между попытками"
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              retakePolicy: {
+                ...m.retakePolicy,
+                // Часы сохраняются и при выключении: автор, выключивший барьер на
+                // время, не должен вводить значение заново.
+                attemptInterval: { enabled: checked, hours: m.retakePolicy.attemptInterval?.hours ?? 24 },
+              },
+            }));
+          }}
+          data-testid="settings-attempt-interval-switch"
+        />
+        <span className="ou-switch-field__text">
+          <span className="ou-switch-field__label">Ограничение между попытками</span>
+          <span className="ou-switch-field__desc">
+            {intervalOn
+              ? "Следующая попытка внутри назначения открывается не сразу."
+              : "Выключено — попытки внутри одного назначения идут подряд."}
+          </span>
+        </span>
+      </label>
+
+      {intervalOn && (
+        <>
+          <div className="ou-formfield">
+            <NumberInput
+              id="settings-attempt-interval"
+              size="m"
+              label="Интервал, часов"
+              hint="От 1 до 8760 часов (до года)."
+              value={interval?.hours ?? 24}
+              min={1}
+              max={8760}
+              data-testid="settings-attempt-interval-input"
+              onChange={(next) => setInterval({ hours: clampIntervalHours(next) })}
+            />
+          </div>
+
+          <Banner
+            tone="info"
+            size="sm"
+            description={
+              enabled
+                ? "Период охлаждения действует между назначениями, ограничение между попытками — внутри одного назначения."
+                : "Ограничение между попытками действует внутри одного назначения. Период охлаждения выше — между назначениями."
+            }
+            data-testid="settings-attempt-interval-note"
+          />
         </>
       )}
     </>
@@ -824,6 +1026,10 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
   // правильных ответов (раздел «Ограничения»). showSectionResults — только для секционных.
   const changeDisabled =
     !model.runtime.allowReturnToUnanswered || model.runtime.showCorrectAnswers;
+  // PRD-43: НЕ зависит от allowReturnToUnanswered (все 4 комбинации допустимы) —
+  // блокируется только показом правильного ответа, который всегда требует
+  // отдельного шага перед переходом дальше.
+  const quickAdvanceDisabled = model.runtime.showCorrectAnswers;
   const showSectionResultsApplicable =
     model.flowMode !== "linear_flat" && model.sections.length > 0;
   return (
@@ -875,6 +1081,29 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
           />
         )}
       </div>
+      <div className="ou-formfield">
+        <Switch
+          label="Переходить к следующему вопросу сразу после ответа"
+          description="Без отдельного нажатия «Далее»: ответ фиксируется и сразу открывается следующий вопрос."
+          checked={model.runtime.quickAdvance && !quickAdvanceDisabled}
+          disabled={quickAdvanceDisabled}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, quickAdvance: checked },
+            }));
+          }}
+          data-testid="settings-quick-advance-checkbox"
+        />
+        {quickAdvanceDisabled && (
+          <Banner
+            tone="warning"
+            size="sm"
+            description="Недоступно при включённом показе правильных ответов (раздел «Ограничения»): нужно увидеть правильный ответ, прежде чем переходить дальше."
+          />
+        )}
+      </div>
       {showSectionResultsApplicable && (
         <div className="ou-formfield">
           <Switch
@@ -892,6 +1121,57 @@ function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }:
           />
         </div>
       )}
+
+      <hr className="wf-sep" />
+
+      {/* PRD-34: блок «Защита». Три переключателя НЕЗАВИСИМЫ (FR-02) — водяной знак и
+          скрытие при потере фокуса осмысленны и без основной защиты, поэтому
+          подчинённости между ними нет ни здесь, ни в базе. */}
+      <div className="ou-formfield">
+        <Switch
+          label="Защищать текст задания от копирования"
+          description="На экране вопроса и на экране обзора текст не выделяется, не копируется, не перетаскивается и не печатается. В тестовом прогоне автора защита не действует."
+          checked={model.runtime.copyProtection}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, copyProtection: checked },
+            }));
+          }}
+          data-testid="settings-copy-protection-checkbox"
+        />
+      </div>
+      <div className="ou-formfield">
+        <Switch
+          label="Показывать водяной знак"
+          description="Поверх экранов вопроса, обзора, итогов раздела и итогов теста печатается обезличенный идентификатор и время. Снимок экрана остаётся возможным, но становится атрибутируемым."
+          checked={model.runtime.protectionWatermark}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, protectionWatermark: checked },
+            }));
+          }}
+          data-testid="settings-protection-watermark-checkbox"
+        />
+      </div>
+      <div className="ou-formfield">
+        <Switch
+          label="Скрывать задание при уходе из окна"
+          description="Если ученик переключился на другую вкладку, задание закрывается заглушкой и открывается снова само, как только окно активно. Таймер и ответы не затрагиваются."
+          checked={model.runtime.protectionHideOnBlur}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, protectionHideOnBlur: checked },
+            }));
+          }}
+          data-testid="settings-protection-hide-on-blur-checkbox"
+        />
+      </div>
 
       <hr className="wf-sep" />
 
@@ -1161,7 +1441,10 @@ function PassTopicRow(props: {
                         data-testid={`pass-variant-type-${props.topicId}-${form.id}`}
                       />
                     </div>
-                    <div className="ou-formfield">
+                    <div
+                      className="ou-formfield"
+                      data-field={`passRules.byTopic[${props.topicId}].byForm[${form.id}].value`}
+                    >
                       <NumberInput
                         size="s"
                         value={entry?.value ?? 0}
@@ -1211,7 +1494,10 @@ function PassTopicRow(props: {
                   data-testid={`pass-topic-custom-type-${props.topicId}`}
                 />
               </div>
-              <div className="ou-formfield">
+              <div
+                className="ou-formfield"
+                data-field={`passRules.byTopic[${props.topicId}].value`}
+              >
                 <NumberInput
                   size="s"
                   label="Порог"
@@ -1219,6 +1505,7 @@ function PassTopicRow(props: {
                   min={0}
                   max={props.rule.type === "percent" ? 100 : undefined}
                   suffix={props.rule.type === "percent" ? "%" : undefined}
+                  error={props.fieldErrors?.get(`passRules.byTopic[${props.topicId}].value`)}
                   aria-label={`Значение порога темы ${props.topicName}`}
                   data-testid={`pass-topic-custom-value-${props.topicId}`}
                   onChange={(next) => props.onCustomValueChange(next)}
@@ -1813,6 +2100,58 @@ function AdaptiveLevelCard(props: {
  * PDF assets - both required at the test scope per the wireframe section
  * «Общая обратная связь теста» (prd7-editor-settings-tab.html lines 710-839).
  */
+/**
+ * Один вводный блок: предпросмотр текста и та же модалка, в которой автор пишет обратную
+ * связь. Редактор один на все авторские тексты — форматы и поведение обязаны совпадать.
+ *
+ * Вложения и ссылки скрыты: вводное слово — это текст, а не набор материалов; материалы
+ * автор вешает на обратную связь, где им и место.
+ */
+function IntroEditTrigger(props: {
+  label: string;
+  modalTitle: string;
+  description: string;
+  value: IntroBlock | null;
+  onSave: (next: IntroBlock | null) => void;
+  testId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const value = props.value ?? { format: "plain" as const, text: "" };
+
+  return (
+    <>
+      <label className="ou-formfield__lbl">{props.label}</label>
+      <FeedbackPreview
+        format={value.format}
+        text={value.text}
+        links={[]}
+        assets={[]}
+        events={[]}
+        onEdit={() => setOpen(true)}
+        editAriaLabel={`Редактировать: ${props.modalTitle}`}
+        testId={`${props.testId}-trigger`}
+      />
+      <FeedbackEditorModal
+        open={open}
+        title={props.modalTitle}
+        description={props.description}
+        value={{ format: value.format, text: value.text, links: [], assets: [], events: [] }}
+        hideAssets
+        hideEvents
+        hideLinks
+        onCancel={() => setOpen(false)}
+        onSave={(v: FeedbackEditorValue) => {
+          // Пустой текст = блока нет: автор, стерший текст, ожидает, что блок исчезнет,
+          // а не станет пустой рамкой.
+          props.onSave(v.text.trim() ? { format: v.format, text: v.text } : null);
+          setOpen(false);
+        }}
+        testId={`${props.testId}-modal`}
+      />
+    </>
+  );
+}
+
 function TestFeedbackTrigger(props: {
   feedback: FeedbackContent;
   links: FeedbackLink[];
@@ -1831,7 +2170,7 @@ function TestFeedbackTrigger(props: {
   return (
     <>
       <label className="ou-formfield__lbl">Обратная связь после прохождения</label>
-      {/* TD-02: grouped-list preview (Документы / Курсы / Мероприятия) + pencil. */}
+      {/* TD-02: grouped-list preview (Материалы / Курсы / Мероприятия) + pencil. */}
       <FeedbackPreview
         format={props.feedback.format}
         text={props.feedback.text}

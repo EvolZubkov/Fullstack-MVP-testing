@@ -44,6 +44,14 @@ export class ContentPagesRepository {
       .orderBy(contentPages.topicId, contentPages.position, contentPages.sortOrder);
   }
 
+  /**
+   * Every content page, for the media re-sync. The other reads are test-scoped; the
+   * rebuild needs the whole table, the same way `getAllAssignments` serves the home page.
+   */
+  async getAllContentPages(): Promise<ContentPage[]> {
+    return db.select().from(contentPages);
+  }
+
   async getContentPage(id: string): Promise<ContentPage | undefined> {
     const [page] = await db.select().from(contentPages).where(eq(contentPages.id, id));
     return page;

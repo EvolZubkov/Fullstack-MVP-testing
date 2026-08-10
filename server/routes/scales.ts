@@ -22,6 +22,9 @@ import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { logger } from "../logger";
+import { materializeScaleDomains } from "../services/scale-domain";
+import { allocationBudgets } from "@shared/questions/allocation";
+import { syncScaleFeedbackUsages } from "../services/media/usage-index";
 import { insertScaleSchema, insertQuestionMeasurementSchema, type Scale, type QuestionMeasurement } from "@shared/schema";
 import {
   computeScales,
@@ -34,6 +37,23 @@ import {
 
 const router = Router();
 
+/**
+ * PRD-35: writes the missing domains of the test's scales, never failing the request.
+ *
+ * The domain must EXIST by the time an attempt is taken (a radar has no radius
+ * without it), but it is repair of missing data, not the operation the author asked
+ * for — a failure here must not turn a successful save into an error. Idempotent, so
+ * calling it after every scale or measurement write costs one read when the domains
+ * are already in place.
+ */
+async function fillDomains(testId: string): Promise<void> {
+  try {
+    await materializeScaleDomains(testId);
+  } catch (error) {
+    logger.error("Materialize scale domains error: " + (error as Error).message, "scales");
+  }
+}
+
 /** True when another scale in the test already uses `key` (excluding `excludeId`). */
 async function keyConflict(testId: string, key: string, excludeId?: string): Promise<boolean> {
   const existing = await storage.getScales(testId);
@@ -41,6 +61,22 @@ async function keyConflict(testId: string, key: string, excludeId?: string): Pro
 }
 
 const measurementRowSchema = insertQuestionMeasurementSchema.omit({ testId: true, questionId: true });
+
+/**
+ * Keep only the fields the client actually sent. `insertScaleSchema.partial()`
+ * still APPLIES the schema defaults, so a PUT touching one field would otherwise
+ * silently reset every defaulted column — including `config_json`, which carries
+ * the scale's interpretation (PRD-29). An update must never write what it was
+ * not asked to write.
+ */
+function onlyProvided<T extends object>(parsed: T, body: unknown): Partial<T> {
+  const sent = (body ?? {}) as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (Object.prototype.hasOwnProperty.call(sent, key)) out[key] = value;
+  }
+  return out as Partial<T>;
+}
 
 /** DB scale row -> engine {@link ScaleSpec} (bands live in config_json). */
 function toScaleSpec(s: Scale): ScaleSpec {
@@ -107,6 +143,8 @@ router.post("/:id/scales", requirePermission("tests.edit"), requireTestScope("ed
       return res.status(422).json({ error: `Шкала с ключом «${data.key}» уже существует`, field: "key" });
     }
     const created = await storage.createScale(data);
+    await fillDomains(testId);
+    await syncScaleFeedbackUsages(testId);
     res.status(201).json(created);
   } catch (error) {
     logger.error("Create scale error: " + (error as Error).message, "scales");
@@ -124,6 +162,12 @@ router.put("/:id/scales/reorder", requirePermission("tests.edit"), requireTestSc
       return res.status(422).json({ error: "Body must be an array of { id, sortOrder }", field: "body" });
     }
     await storage.reorderScales(updates);
+    // Reorder moves no attachment, but the recorded `field` path starts with the scale's
+    // POSITION in the set (`0.configJson…`), so after a reorder the stored paths point at
+    // the wrong band until the set is re-indexed. Access itself never depends on it (the
+    // delivery rule matches on the asset id), yet «где используется» would name the wrong
+    // scale — one cheap read keeps the index literally true.
+    await syncScaleFeedbackUsages(req.params.id);
     res.json({ ok: true });
   } catch (error) {
     logger.error("Reorder scales error: " + (error as Error).message, "scales");
@@ -147,11 +191,13 @@ router.put("/:id/scales/:scaleId", requirePermission("tests.edit"), requireTestS
       const first = parsed.error.issues[0];
       return res.status(422).json({ error: first.message, field: first.path.join(".") });
     }
-    const updates = parsed.data;
+    const updates = onlyProvided(parsed.data, req.body);
     if (updates.key && (await keyConflict(testId, updates.key, scaleId))) {
       return res.status(422).json({ error: `Шкала с ключом «${updates.key}» уже существует`, field: "key" });
     }
     const saved = await storage.updateScale(scaleId, updates);
+    await fillDomains(testId);
+    await syncScaleFeedbackUsages(testId);
     res.json(saved);
   } catch (error) {
     logger.error("Update scale error: " + (error as Error).message, "scales");
@@ -170,6 +216,7 @@ router.delete("/:id/scales/:scaleId", requirePermission("tests.edit"), requireTe
       return res.status(404).json({ error: "Scale not found" });
     }
     await storage.deleteScale(scaleId);
+    await syncScaleFeedbackUsages(testId);
     res.json({ ok: true });
   } catch (error) {
     logger.error("Delete scale error: " + (error as Error).message, "scales");
@@ -210,6 +257,9 @@ router.put("/:id/measurements/:questionId", requirePermission("tests.edit"), req
       rows.push({ ...parsed.data, testId, questionId });
     }
     const saved = await storage.upsertQuestionMeasurements(testId, questionId, rows);
+    // Вклады и есть источник расчётного домена, поэтому после их правки шкала без
+    // собственных границ получает их здесь же.
+    await fillDomains(testId);
     res.json(saved);
   } catch (error) {
     logger.error("Upsert measurements error: " + (error as Error).message, "scales");
@@ -248,6 +298,7 @@ router.post("/:id/scales/preview", requirePermission("tests.edit"), requireTestS
       toMeasurementSpecs(measurements, scales),
       answers,
       questionTypes,
+      allocationBudgets(questions),
     );
     res.json({ values, errors });
   } catch (error) {

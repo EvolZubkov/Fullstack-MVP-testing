@@ -105,7 +105,9 @@
     }
     emptyEl.style.display = "none";
     listEl.innerHTML = rows.map(function (r) {
-      var vlabel = r.verdict === "none" ? '<span class="tag">— нет ответа</span>'
+      // Измерительный вопрос не проверяется — вердикта у него нет (PRD-26 FR-08).
+      var vlabel = r.verdict === "measure" ? '<span class="tag">не оценивается</span>'
+        : r.verdict === "none" ? '<span class="tag">— нет ответа</span>'
         : r.verdict === "correct" ? '<span class="tag ok">верно</span>'
         : r.verdict === "partial" ? '<span class="tag part">частично ' + r.ratioPct + "%</span>"
         : '<span class="tag no">неверно</span>';

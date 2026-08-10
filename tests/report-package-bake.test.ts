@@ -156,10 +156,34 @@ describe("выбор варианта запекается в пакет (FR-22)
   it("TEST_DATA несёт макет, стиль и значения выбранного варианта", async () => {
     const zip = await pack();
     const td = await readTestData(zip);
-    const expected = resolveReportBake(defaultManifest(), "report", null);
-    expect(td.designSettings.report).toEqual(expected);
+    // Картинки варианта — файлы шаблона, а он лежит в пакете под `template/` (FR-05),
+    // поэтому ожидание строится с той же базой, с какой запекает сборщик.
+    const expected = resolveReportBake(defaultManifest(), "report", null, "template/");
+    // `enabled` добавляет сборщик поверх выбора вида: выдавать ли документ — общая
+    // настройка теста, и рантайму она нужна там же, где макет (PRD-27 §7.1).
+    expect(td.designSettings.report).toEqual({ ...expected, enabled: true });
     // Не «какой-нибудь report.css по имени файла», а именно объявленный вариантом.
     expect(td.designSettings.report.styleFile).toBe(expected.styleFile);
+  });
+
+  it("картинки варианта запечены путями ВНУТРЬ пакета и эти файлы там есть (FR-05)", async () => {
+    const zip = await pack();
+    const td = await readTestData(zip);
+    const report = td.designSettings.report as {
+      imageKeys: string[];
+      values: Record<string, string>;
+    };
+    // Ключи полей-картинок объявляет шаблон, а не продукт.
+    expect(report.imageKeys.length).toBeGreaterThan(0);
+    for (const key of report.imageKeys) {
+      const src = report.values[key];
+      expect(src, key).toMatch(/^template\//);
+      // Растеризатор дозагружать ничего не станет — файл обязан лежать в пакете.
+      expect(zip.file(src), src).toBeTruthy();
+    }
+    // Прежних путей ядра в пакете больше нет.
+    expect(zip.file("assets/media/pdf-bg-1.png")).toBeNull();
+    expect(zip.file("assets/media/logo-light.png")).toBeNull();
   });
 
   it("макет, названный запеканием, ЛЕЖИТ в пакете", async () => {

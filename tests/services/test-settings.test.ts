@@ -7,6 +7,9 @@
  *   - save(): optimistic version check, VersionConflictError on mismatch
  *   - save(): syncs status <-> published per §4.1
  *   - save(): replaces sections atomically
+ *   - media usage sync on system page reconciliation (Медиатека Задача N):
+ *     created pages get indexed, deleted pages get their rows cleared —
+ *     both AFTER the owning transaction commits.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { VersionConflictError, TestSettingsService } from "../../server/services/test-settings";
@@ -20,6 +23,17 @@ import {
   adaptiveLevelLinks,
 } from "../../shared/schema";
 import { RequiredFieldsMissingError } from "../../server/services/required-fields-validator";
+
+// The real syncEntityUsages would reach into `storage`/`db` again (a SECOND,
+// unrelated db.transaction call) — mocked out so the page-reconciliation
+// tests above stay focused on their own transaction. Its call arguments are
+// asserted directly in the "media usage sync" describe block below.
+const { syncEntityUsagesMock } = vi.hoisted(() => ({
+  syncEntityUsagesMock: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("../../server/services/media/usage-index", () => ({
+  syncEntityUsages: syncEntityUsagesMock,
+}));
 
 // ─── DB mock ─────────────────────────────────────────────────────────────────
 
@@ -951,5 +965,107 @@ describe("TestSettingsService — legacy regression", () => {
     expect(inserts.filter((i) => i.table === adaptiveTopicSettings)).toHaveLength(0);
     expect(inserts.filter((i) => i.table === adaptiveLevels)).toHaveLength(0);
     expect(inserts.filter((i) => i.table === adaptiveLevelLinks)).toHaveLength(0);
+  });
+});
+
+// ─── Media usage sync on system page reconciliation (Медиатека) ───────────────
+//
+// `_reconcileSystemPages` writes/deletes `content_pages` rows directly (bypassing
+// `storage.createContentPage`/`deleteContentPage`), moving content — including
+// media references — between kinds/topics on a flowMode or template change. Without
+// this sync a learner is refused a picture that WAS on a page the reconciliation
+// just created, or a stale usage row survives a page the reconciliation deleted and
+// falsely blocks that file's removal with a 409 (spec §8.2).
+
+/** Makes `tx.insert(table).values(v)` return `[{ id, ...v }]` from `.returning()`,
+ *  so a created content_pages row actually carries the values it was inserted
+ *  with (unlike `captureInserts()`'s fixed `dbTest` stand-in above). */
+function returningInsert(id: string) {
+  return (table: unknown) => {
+    const c = makeChain([]);
+    (c as any).values = vi.fn().mockImplementation((v: Record<string, unknown>) => {
+      (c as any).returning = vi.fn().mockResolvedValue([{ ...(v as object), id }]);
+      return c;
+    });
+    return c;
+  };
+}
+
+describe("TestSettingsService — media usage sync on system page reconciliation", () => {
+  let svc: TestSettingsService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetTx();
+    svc = new TestSettingsService();
+  });
+
+  it("indexes a freshly created system page AFTER the transaction commits", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: defaultManifest }]],
+      [contentPages, []],
+    ]);
+    tx.insert.mockImplementation(returningInsert("new-page-1"));
+
+    await svc.create({
+      test: {
+        title: "T",
+        flowPolicyJson: { mode: "linear_flat" },
+        designSettingsJson: { templateId: "default" },
+      },
+      sections: [{ topicId: "tp1", drawCount: 5 }],
+    });
+
+    expect(syncEntityUsagesMock).toHaveBeenCalledWith(
+      "content_page",
+      "new-page-1",
+      expect.objectContaining({ id: "new-page-1", kind: "questions" }),
+    );
+  });
+
+  it("clears the usage rows (null) of a system page the reconciliation deletes", async () => {
+    // flowMode change linear_flat -> linear_by_topics collapses/replaces the
+    // flat `questions` row with a per-topic one — same fixture as the
+    // "deletes flat questions, creates per-topic" case above.
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: defaultManifest }]],
+      [contentPages, [
+        { id: "p-qflat", kind: "questions", topicId: null, templateKey: "q.std", valuesJson: { cover: "/api/media/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" } },
+      ]],
+    ]);
+    tx.update.mockReturnValue(makeChain([{
+      ...dbTest,
+      flowPolicyJson: { mode: "linear_by_topics" },
+      designSettingsJson: { templateId: "default" },
+    }]));
+    tx.insert.mockImplementation(returningInsert("new-page-2"));
+
+    await svc.save("t1", {
+      test: {
+        flowPolicyJson: { mode: "linear_by_topics" },
+        designSettingsJson: { templateId: "default" },
+      },
+      sections: [{ topicId: "tp1", drawCount: 5 }],
+    });
+
+    // The old flat row is gone — its usage rows must be cleared, or the media
+    // it referenced would be held hostage by a false 409 on delete even
+    // though nothing in the live content still points at it.
+    expect(syncEntityUsagesMock).toHaveBeenCalledWith("content_page", "p-qflat", null);
+  });
+
+  it("does not sync anything when reconciliation is a no-op (template manifest missing)", async () => {
+    setupSelectDispatch([
+      [templates, []], // no manifests -> _reconcileSystemPages returns early
+      [contentPages, []],
+    ]);
+    captureInserts();
+
+    await svc.create({
+      test: { title: "T", flowPolicyJson: { mode: "linear_flat" } },
+      sections: [],
+    });
+
+    expect(syncEntityUsagesMock).not.toHaveBeenCalled();
   });
 });

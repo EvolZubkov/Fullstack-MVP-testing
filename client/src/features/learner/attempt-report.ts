@@ -11,13 +11,14 @@
  * learner's initial download.
  */
 
-import type { ReportInput, AdaptiveReportInput, ReportAssets } from "@shared/report/report-html";
+import type { ReportInput, AdaptiveReportInput } from "@shared/report/report-html";
+import type { MeasuresInput } from "@shared/template/result-context";
 import { buildReportContext, buildAdaptiveReportContext } from "@shared/report/report-context";
-import { exportReportPdf, loadReportAssets } from "@shared/report/export-pdf";
+import { exportReportPdf, inlineReportImageValues } from "@shared/report/export-pdf";
+import { buildReportMeasures } from "@shared/report/report-measures";
 
-/** Where the server serves the report's ingredients (see server/routes/report.ts). */
+/** Where the server serves the report's libraries (see server/routes/report.ts). */
 const LIB_BASE = "/api/report/lib/";
-const ASSET_BASE = "/api/report/asset/";
 
 type Jspdf = { jsPDF: new (opts: any) => any };
 
@@ -30,8 +31,6 @@ declare global {
 
 /** In-flight/settled loader promise — the libraries load at most once per document. */
 let libsPromise: Promise<void> | null = null;
-/** Report background/logo, resolved once (a few hundred KB of image decode). */
-let assetsPromise: Promise<ReportAssets> | null = null;
 
 /** Load one classic script and resolve when it has executed. */
 function loadScript(src: string): Promise<void> {
@@ -87,6 +86,8 @@ export interface AttemptReportRender {
   css: string;
   variantKey: string;
   values: Record<string, unknown>;
+  /** Ключи полей-картинок варианта: их значения инлайнятся в data-URL (PRD-27 FR-05). */
+  imageKeys?: string[];
   cssVars?: Record<string, string>;
   themeCss?: string;
   design?: Record<string, string>;
@@ -102,19 +103,26 @@ export interface AttemptReportRender {
 export async function downloadAttemptReport(
   report: AttemptReport,
   render: AttemptReportRender,
+  measures?: MeasuresInput,
 ): Promise<string> {
   await ensureLibs();
-  if (!assetsPromise) {
-    assetsPromise = loadReportAssets(ASSET_BASE).catch(() => {
-      // Missing plates are not fatal: the page falls back to its gradient + no logo.
-      assetsPromise = null;
-      return {};
-    });
-  }
-  const assets = await assetsPromise;
-  // Контекст строится ЗДЕСЬ, а не на сервере: подложка и логотип читаются в браузере
-  // (растеризатору нужны data-URL), а сам построитель — общий с пакетом.
-  const opts = { assets, values: render.values, design: render.design };
+  // Картинки варианта читаются ЗДЕСЬ: растеризатору нужны data-URL, а сервер отдал
+  // ссылки на файлы шаблона (PRD-27 FR-05). Не загрузилась — страница печатается без
+  // подложки и без логотипа, а не падает.
+  const values = await inlineReportImageValues(render.values, render.imageKeys ?? []);
+  // Сам построитель контекста — общий с пакетом.
+  // PRD-35: у отчёта СВОЙ переключатель радара — он в полях варианта отчёта, а не в
+  // настройках экрана итогов. Документ уносят специалисту, и профиль там уместен
+  // даже тогда, когда ученику на экране его не показывают (и наоборот).
+  //
+  // PRD-47 §5.1: вход отчёта делает ОДИН сборщик, общий с пакетом. Сборка «здесь и
+  // руками» строила `chartSettings` с нуля и теряла облик шкал: колонки у отчёта нет,
+  // и карта цвета с пиктограммами приезжает с экрана.
+  const opts = {
+    values,
+    design: render.design,
+    ...(measures ? { measures: buildReportMeasures(measures, values) } : {}),
+  };
   // The server flags the mode (`adaptive`) — the page differs, the input shape follows.
   const context = report.adaptive
     ? buildAdaptiveReportContext(report as AdaptiveReportInput, opts)

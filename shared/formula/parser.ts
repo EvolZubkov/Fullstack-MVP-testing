@@ -13,7 +13,9 @@ import {
   type AccessorFn,
   type CountFn,
   type NullaryFn,
+  type ScaleRankFn,
   ACCESSOR_PROPS,
+  SCALE_RANK_PROPS,
   FormulaSyntaxError,
 } from "./types";
 import { tokenize, type Token } from "./tokens";
@@ -21,6 +23,7 @@ import { tokenize, type Token } from "./tokens";
 const ACCESSOR_FNS = new Set<AccessorFn>(["topicById", "topicByName", "tag", "scaleById", "sectionById"]);
 const NULLARY_FNS = new Set<NullaryFn>(["countPassed", "countTopics", "avgPercent"]);
 const COUNT_FNS = new Set<CountFn>(["countVars", "countScales"]);
+const SCALE_RANK_FNS = new Set<ScaleRankFn>(["topScale", "bottomScale"]);
 const COMPARISONS = new Set(["=", "!=", ">", ">=", "<", "<="]);
 
 class Parser {
@@ -139,6 +142,21 @@ class Parser {
     throw new FormulaSyntaxError(`Неожиданный токен «${t.value || "конец"}»`, t.pos);
   }
 
+  /** `["k1","k2"]` — the shared key-list argument of the counting and ranking sources. */
+  private parseKeyList(): string[] {
+    this.expectPunct("[");
+    const keys: string[] = [];
+    if (!(this.peek().type === "punct" && this.peek().value === "]")) {
+      keys.push(this.parseString());
+      while (this.peek().type === "punct" && this.peek().value === ",") {
+        this.next();
+        keys.push(this.parseString());
+      }
+    }
+    this.expectPunct("]");
+    return keys;
+  }
+
   private parseString(): string {
     const t = this.next();
     if (t.type !== "string") throw new FormulaSyntaxError("Ожидалась строка-аргумент", t.pos);
@@ -205,19 +223,37 @@ class Parser {
       return { type: "nullary", fn: name as NullaryFn };
     }
 
+    // `topScale(["k1","k2"], 1).key` — the counting form plus property access. The place
+    // is a NUMBER (a rank), unlike `countScales`, whose second argument is a level string.
+    if (SCALE_RANK_FNS.has(name as ScaleRankFn)) {
+      this.next();
+      this.expectPunct("(");
+      const keys = this.parseKeyList();
+      this.expectPunct(",");
+      const placeTok = this.next();
+      if (placeTok.type !== "number") {
+        throw new FormulaSyntaxError("Ожидалось место в рейтинге числом", placeTok.pos);
+      }
+      this.expectPunct(")");
+      this.expectPunct(".");
+      const propTok = this.next();
+      if (propTok.type !== "ident") throw new FormulaSyntaxError("Ожидалось свойство", propTok.pos);
+      if (!SCALE_RANK_PROPS.includes(propTok.value)) {
+        throw new FormulaSyntaxError(`У «${name}» нет свойства «${propTok.value}»`, propTok.pos);
+      }
+      return {
+        type: "scaleRank",
+        fn: name as ScaleRankFn,
+        keys,
+        place: Number(placeTok.value),
+        prop: propTok.value,
+      };
+    }
+
     if (COUNT_FNS.has(name as CountFn)) {
       this.next();
       this.expectPunct("(");
-      this.expectPunct("[");
-      const keys: string[] = [];
-      if (!(this.peek().type === "punct" && this.peek().value === "]")) {
-        keys.push(this.parseString());
-        while (this.peek().type === "punct" && this.peek().value === ",") {
-          this.next();
-          keys.push(this.parseString());
-        }
-      }
-      this.expectPunct("]");
+      const keys = this.parseKeyList();
       this.expectPunct(",");
       const level = this.parseString();
       this.expectPunct(")");

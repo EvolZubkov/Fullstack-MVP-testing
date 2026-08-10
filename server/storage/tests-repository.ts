@@ -129,6 +129,15 @@ export class TestsRepository {
       .orderBy(desc(testSnapshots.version));
   }
 
+  /**
+   * Every snapshot in the database, for the media re-sync (Медиатека). The other
+   * reads are test-scoped; the rebuild needs the whole table, the same way
+   * `getAllContentPages` serves it.
+   */
+  async getAllSnapshots(): Promise<TestSnapshot[]> {
+    return db.select().from(testSnapshots);
+  }
+
   async deleteSnapshotsForTest(testId: string): Promise<void> {
     await db.delete(testSnapshots).where(eq(testSnapshots.testId, testId));
   }

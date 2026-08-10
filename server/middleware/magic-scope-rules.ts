@@ -11,6 +11,10 @@
  *   - `test`    — the captured `testId` must equal the session's magic test;
  *   - `attempt` — the captured `attemptId` must be an attempt of that test owned
  *                 by the session user.
+ *
+ * A trailing `*` segment matches the REST of the path — used only where the route
+ * itself takes a file path (template assets). It never spans a bind, so the widening
+ * stays confined to one route.
  */
 
 /** How a matched route is bound to the session's magic scope. */
@@ -53,7 +57,10 @@ export const MAGIC_SCOPE_RULES: MagicScopeRule[] = [
   { method: "POST", pattern: "/api/attempts/:attemptId/expire-topic-adaptive", bind: "attempt" },
   { method: "GET", pattern: "/api/attempts/:attemptId/result", bind: "attempt" },
   { method: "GET", pattern: "/api/report/lib/:file", bind: "none" },
-  { method: "GET", pattern: "/api/report/asset/:file", bind: "none" },
+  // PRD-27 FR-05: подложка и логотип отчёта — файлы ШАБЛОНА, а не ассеты продукта
+  // (прежний `/api/report/asset/:file` удалён вместе с ними). Без этой строки ученик,
+  // пришедший по ссылке-приглашению, скачал бы отчёт без оформления.
+  { method: "GET", pattern: "/api/templates/:templateId/assets/*", bind: "none" },
 ];
 
 function splitPath(value: string): string[] {
@@ -75,7 +82,10 @@ export function matchMagicScopeRule(method: string, pathname: string): MagicScop
   for (const rule of MAGIC_SCOPE_RULES) {
     if (rule.method !== method.toUpperCase()) continue;
     const expected = splitPath(rule.pattern);
-    if (expected.length !== actual.length) continue;
+    const wildcard = expected[expected.length - 1] === "*";
+    // A `*` tail absorbs the remaining segments, so it needs at least one of them:
+    // `/assets` alone is not `/assets/<file>` and must not match.
+    if (wildcard ? actual.length <= expected.length - 1 : expected.length !== actual.length) continue;
 
     const params: Record<string, string> = {};
     let ok = true;
@@ -85,6 +95,10 @@ export function matchMagicScopeRule(method: string, pathname: string): MagicScop
     // being decoded into something that could equal a literal by surprise).
     for (let i = 0; i < expected.length; i += 1) {
       const segment = expected[i];
+      if (segment === "*") {
+        // The tail is a file path handled (and traversal-guarded) by the route itself.
+        break;
+      }
       if (segment.startsWith(":")) {
         try {
           params[segment.slice(1)] = decodeURIComponent(actual[i]);

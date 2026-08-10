@@ -79,8 +79,11 @@ describe("buildResultContext → render real results.html (e2e)", () => {
   });
 });
 
-// TD-02: recommended courses (links) and events from FAILED topics must surface
-// on the web template results screen, deduped, mirroring the SCORM runtime.
+// TD-02: recommended courses (links) and events of the topics the learner has NOT
+// mastered must surface on the web template results screen, deduped, mirroring the SCORM
+// runtime (`vrRecommended`). «Not mastered» is everything except an explicit pass — the
+// owner's one rule for all four things a topic carries; a topic with no verdict at all is
+// the commonest case, since per-topic thresholds are rarely set.
 describe("buildResultContext recommendations (TD-02 web parity)", () => {
   const withRecs: AttemptResult = {
     ...attemptResult,
@@ -106,15 +109,23 @@ describe("buildResultContext recommendations (TD-02 web parity)", () => {
         recommendedCourses: [{ title: "Курс по ИБ", url: "https://e.test/sec" }],
         recommendedEvents: [{ title: "Митап" }],
       },
+      // Topic with NO verdict (no per-topic threshold) — nothing was judged, so it is not
+      // a success and its recommendations surface too.
+      {
+        topicId: "t4", topicName: "Тема D", correct: 3, total: 5, percent: 60,
+        earnedPoints: 3, possiblePoints: 5, passed: null, passRule: null,
+        recommendedCourses: [{ title: "Курс по охране труда", url: "https://e.test/ot" }],
+        recommendedEvents: [{ title: "Инструктаж" }],
+      },
     ],
   } as AttemptResult;
   const ctx = buildResultContext(withRecs, "Демо-тест");
 
-  it("aggregates + dedups courses/events from FAILED topics only", () => {
+  it("aggregates + dedups courses/events of every topic except the PASSED one", () => {
     const courses = (ctx.result.recommendedCourses ?? []) as Array<{ title: string; url?: string }>;
     const events = (ctx.result.recommendedEvents ?? []) as Array<{ title: string; url?: string }>;
-    expect(courses.map((c) => c.title)).toEqual(["Курс по ИБ"]);
-    expect(events.map((e) => e.title)).toEqual(["Конференция по ИБ", "Митап"]);
+    expect(courses.map((c) => c.title)).toEqual(["Курс по ИБ", "Курс по охране труда"]);
+    expect(events.map((e) => e.title)).toEqual(["Конференция по ИБ", "Митап", "Инструктаж"]);
   });
 
   it("renders the events into the real results.html", () => {
@@ -122,6 +133,64 @@ describe("buildResultContext recommendations (TD-02 web parity)", () => {
     renderScreenInto(root, { layout: resultsLayout, context: ctx });
     expect(root.textContent).toContain("Конференция по ИБ");
     expect(root.textContent).toContain("Митап");
+  });
+});
+
+// PRD-29 §6.7 on the WEB adapter. A test with neither scales nor indicators — the
+// commonest configuration there is — never hands the shared builder a `measures` block,
+// and the verdict gate used to live inside that branch. The result was a screen
+// contradicting itself: a green «Пройден» in the header while the feedback block, gated
+// by the same «does this test grade» question, printed underneath.
+describe("вердикт контрольного теста (PRD-29 §6.7)", () => {
+  const nothingGraded: AttemptResult = {
+    ...attemptResult,
+    overallPassed: true,
+    totalCorrect: 0,
+    totalQuestions: 0,
+    overallPercent: 0,
+    totalEarnedPoints: 0,
+    totalPossiblePoints: 0,
+    topicResults: [],
+  };
+  // What `resultsMaterialForAttempt` returns for a test without measurements: no scales,
+  // no indicators, but the pass rule and the test's own feedback are read all the same.
+  const controlMaterial = {
+    scales: [],
+    variables: [],
+    blockSettings: {},
+    hasPassThreshold: true,
+    testFeedback: { text: "Повторите материал курса." },
+  };
+
+  it("порог есть, оценивать нечего — шапки нет, обратная связь на месте", () => {
+    const ctx = buildResultContext(nothingGraded, "Опросник", controlMaterial);
+    expect(ctx.result.statusLabel).toBe("");
+    expect(ctx.result.passClass).toBe("");
+    expect(ctx.result.recommendations?.texts).toEqual(["Повторите материал курса."]);
+  });
+
+  it("порога у теста нет — вердикта тоже нет", () => {
+    const graded: AttemptResult = { ...nothingGraded, totalPossiblePoints: 10, totalEarnedPoints: 10, overallPercent: 100 };
+    const ctx = buildResultContext(graded, "Без порога", { ...controlMaterial, hasPassThreshold: false });
+    expect(ctx.result.statusLabel).toBe("");
+  });
+
+  it("порог и баллы на месте — вердикт остаётся, обратная связь молчит", () => {
+    const graded: AttemptResult = { ...nothingGraded, totalPossiblePoints: 10, totalEarnedPoints: 10, overallPercent: 100 };
+    const ctx = buildResultContext(graded, "Контрольный", controlMaterial);
+    expect(ctx.result.statusLabel).toBe("Пройден");
+    expect(ctx.result.recommendations).toBeUndefined();
+  });
+
+  it("в реальном макете плашка не рисуется вовсе", () => {
+    const root = document.createElement("div");
+    renderScreenInto(root, {
+      layout: resultsLayout,
+      context: buildResultContext(nothingGraded, "Опросник", controlMaterial),
+    });
+    expect(root.querySelector(".tb-scene__headtag .ou-tag")).toBeNull();
+    expect(root.textContent).not.toContain("Пройден");
+    expect(root.textContent).toContain("Повторите материал курса.");
   });
 });
 
@@ -203,5 +272,71 @@ describe("buildAdaptiveResultContext → render real results.adaptive.html (e2e)
     // exactly one feedback block and one recommendation chip (second topic has neither)
     expect(root.querySelectorAll(".tb-topic-card__fb-text")).toHaveLength(1);
     expect(root.querySelectorAll(".tb-rec")).toHaveLength(1);
+  });
+
+  // issue #33: a test without scales or indicators must render the screen it always did.
+  it("draws no measurement blocks for a test that declares none", () => {
+    expect(root.textContent).not.toContain("По шкалам");
+    expect(root.textContent).not.toContain("Ваш результат");
+  });
+});
+
+/**
+ * issue #33: измерения на АДАПТИВНОМ экране итогов — сквозь настоящий адаптер веб-хоста
+ * (`server/services/result-context`) и настоящий макет, потому что дефект был именно
+ * между ними: значения считались, а до экрана не доходили.
+ */
+describe("adaptive results + measures → render real results.adaptive.html (e2e)", () => {
+  /** Материал экрана в том виде, в каком его читает маршрут результата. */
+  const material = {
+    scales: [
+      {
+        id: "s1", testId: "t", key: "comm", label: "Коммуникация", sortOrder: 0,
+        learnerVisibility: "level_and_value",
+        configJson: {
+          domainMin: 0, domainMax: 10, valence: "higher_is_better",
+          bands: [
+            { min: 0, max: 5, level: "low", label: "Низкий" },
+            { min: 5.01, max: 10, level: "high", label: "Высокий" },
+          ],
+        },
+      },
+    ] as any,
+    variables: [
+      {
+        id: "v1", testId: "t", name: "profile", label: "Профиль", sortOrder: 0,
+        learnerVisibility: "level",
+        configJson: { outcomes: [{ code: "ok", label: "Устойчивый", text: "Рекомендаций нет." }] },
+      },
+    ] as any,
+    // Значения — из СОХРАНЁННОГО результата попытки, как их кладёт `completeMeasuresSource`.
+    scaleResults: { comm: { raw: 8, normalized: 8, percent: 80, level: "high", label: "Высокий", hasValue: true } },
+    variableValues: { profile: "ok" },
+    blockSettings: {},
+    hasPassThreshold: false,
+  };
+
+  const ctx = buildAdaptiveResultContext(adaptiveResult, "Адаптивный тест", material);
+  const root = document.createElement("div");
+  renderScreenInto(root, { layout: adaptiveLayout, context: ctx });
+
+  it("рисует блок показателей и блок шкал", () => {
+    expect(root.textContent).toContain("Ваш результат");
+    expect(root.textContent).toContain("Устойчивый");
+    expect(root.textContent).toContain("По шкалам");
+    expect(root.textContent).toContain("Коммуникация");
+    expect(root.textContent).toContain("Высокий");
+  });
+
+  it("уровни тем остаются на месте и выше измерений", () => {
+    const text = root.textContent ?? "";
+    expect(text.indexOf("Результаты по темам")).toBeGreaterThan(-1);
+    expect(text.indexOf("Результаты по темам")).toBeLessThan(text.indexOf("Ваш результат"));
+    expect(text.indexOf("Ваш результат")).toBeLessThan(text.indexOf("По шкалам"));
+  });
+
+  it("шкала рисуется линейкой с зонами, как на обычном экране", () => {
+    expect(root.querySelector(".tb-measure__slider")).not.toBeNull();
+    expect(root.querySelectorAll(".ou-slider__fill.tb-zone").length).toBeGreaterThan(0);
   });
 });

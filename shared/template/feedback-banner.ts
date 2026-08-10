@@ -19,6 +19,43 @@
 /** DS banner tone for a verdict: a right answer, partial credit, or a miss. */
 export type FeedbackTone = "success" | "warning" | "error";
 
+/** The feedback fields of a question, in either host's shape (DB row or baked TEST_DATA). */
+export interface FeedbackTextSource {
+  feedbackMode?: "general" | "conditional" | string | null;
+  feedback?: string | null;
+  feedbackCorrect?: string | null;
+  feedbackIncorrect?: string | null;
+}
+
+/**
+ * The feedback text ONE answer earns, chosen by the question's mode: `conditional`
+ * takes the branch matching the verdict, anything else (including a legacy row with
+ * no mode at all) takes the single general text. Returns `null` when the applicable
+ * text is empty — the caller then renders the verdict banner without a body.
+ *
+ * Single source for both hosts and both delivery modes (issue #34). The rule used to
+ * exist as three copies inside the SCORM runtime, while the web host did not know it
+ * at all: it read `feedback` unconditionally, and since the editor NULLs that field
+ * the moment the author switches to `conditional`, a conditional question showed the
+ * learner no explanation whatsoever on the web.
+ *
+ * The general text is deliberately NOT used as a fallback for an empty branch: the
+ * author removed it from this mode, so showing a leftover legacy value would hand the
+ * learner text that is no longer part of the question.
+ *
+ * `isCorrect` is the FULL-correctness verdict (`ratio === 1`), so a partially scored
+ * answer (PRD-10) takes the incorrect branch — the same split the package applies.
+ */
+export function feedbackTextFor(q: FeedbackTextSource, isCorrect: boolean): string | null {
+  const text =
+    q.feedbackMode === "conditional"
+      ? isCorrect
+        ? q.feedbackCorrect
+        : q.feedbackIncorrect
+      : q.feedback;
+  return text ? text : null;
+}
+
 /** HTML-escape user text (same convention as {@link module:shared/template/renderers}). */
 function esc(s: unknown): string {
   return String(s)

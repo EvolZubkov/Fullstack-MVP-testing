@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button, Center, Stack, Text } from "@universityrt/ui-kit";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
+import { buildProtectionSpec } from "@shared/template/protection/spec";
 import { RESULTS_NAV_ACTIONS } from "@shared/template/results-nav";
 import {
   downloadAttemptReport,
@@ -15,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
 import type { Attempt, AttemptResult } from "@shared/schema";
+import type { MeasuresInput } from "@shared/template/result-context";
 
 interface AttemptWithResult extends Attempt {
   testTitle: string;
@@ -50,6 +52,11 @@ interface AttemptWithResult extends Attempt {
    * только когда макета не дал ни активный шаблон, ни «Стандартный».
    */
   reportRender?: AttemptReportRender | null;
+  /**
+   * PRD-29/PRD-35: измерения попытки — те же, по которым сервер отрисовал экран.
+   * Отчёт собирается на клиенте, поэтому шкалы и радар печатаются из них.
+   */
+  measures?: MeasuresInput | null;
 }
 
 export default function ResultPage() {
@@ -146,7 +153,7 @@ function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
     reportBusy.current = true;
     toast({ variant: "info", title: "Готовим отчёт", description: "Файл скачается автоматически." });
     try {
-      await downloadAttemptReport(attempt.report, attempt.reportRender);
+      await downloadAttemptReport(attempt.report, attempt.reportRender, attempt.measures ?? undefined);
     } catch (e) {
       toast({
         variant: "destructive",
@@ -165,6 +172,18 @@ function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
     <div className="tbh-inset-screen tbh-col">
       <TemplateScreen
         className="tbh-fill"
+        // PRD-34 (FR-09, FR-16): экран итогов от копирования НЕ защищается — автор,
+        // включивший показ правильных ответов, уже согласился раскрыть ключи. Водяной
+        // знак он при этом несёт, и на нём знак остаётся единственной мерой.
+        protection={buildProtectionSpec({
+          screen: "results",
+          settings: {
+            copyProtection: false,
+            watermark: (attempt as { protectionWatermark?: boolean }).protectionWatermark ?? false,
+            hideOnBlur: false,
+          },
+          stamp: attempt.id ? { id: String(attempt.id).slice(0, 6), at: new Date() } : null,
+        })}
         layout={render.layout}
         css={render.css}
         cssVars={render.cssVars}

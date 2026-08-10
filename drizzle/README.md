@@ -14,7 +14,7 @@
 - `drizzle/baseline-existing-db.sql` — разовый бейзлайн существующей БД.
 - `migrations/` — ЛЕГАСИ рукописные data/DDL-шаги эпохи `push`. Деплой их больше
   не запускает; оставлены как история и для разовых правок через
-  `node script/run-sql.cjs <file>`.
+  `node scripts/db/run-sql.cjs <file>`.
 
 ## Изменение схемы
 
@@ -63,7 +63,7 @@ node_modules/.bin/drizzle-kit generate --custom --name=<краткое_имя>
    ```bash
    docker compose run --rm --no-deps \
      -v /srv/app/<project>/../<путь>/drizzle/baseline-existing-db.sql:/tmp/baseline.sql:ro \
-     --entrypoint sh <project> -c "node script/run-sql.cjs /tmp/baseline.sql"
+     --entrypoint sh <project> -c "node scripts/db/run-sql.cjs /tmp/baseline.sql"
    ```
 
    Файл также лежит в образе: `/app/drizzle/baseline-existing-db.sql`, поэтому
@@ -71,7 +71,7 @@ node_modules/.bin/drizzle-kit generate --custom --name=<краткое_имя>
 
    ```bash
    docker compose run --rm --no-deps --entrypoint sh <project> \
-     -c "node script/run-sql.cjs drizzle/baseline-existing-db.sql"
+     -c "node scripts/db/run-sql.cjs drizzle/baseline-existing-db.sql"
    ```
 
 3. Дальше деплой идёт как обычно — `drizzle-kit migrate` катит только миграции
@@ -101,7 +101,7 @@ node -e "const f=require('fs'),c=require('crypto');const p='drizzle/0001_x.sql';
 
 ## Как это применяется в деплое
 
-`docker/scripts/deploy.sh` — один скрипт для всех инстансов (прод и тест) —
+`scripts/deploy/deploy.sh` — один скрипт для всех инстансов (прод и тест) —
 выполняет `drizzle-kit migrate` в одноразовом контейнере до старта приложения.
 Инициализация БД — единственное, что различается: тестовому инстансу без БД она
 создаётся клонированием прода (`--clone-from`), дальше миграции одинаковы.
@@ -118,12 +118,12 @@ node -e "const f=require('fs'),c=require('crypto');const p='drizzle/0001_x.sql';
 
 Такие шаги оформляются отдельным скриптом:
 
-1. Скрипт кладётся в `script/<имя>.ts` и пишется на общих модулях приложения.
-2. `script/build.ts` собирает его esbuild-ом рядом с сервером — в
+1. Скрипт кладётся в `scripts/db/<имя>.ts` и пишется на общих модулях приложения.
+2. `scripts/build/build.ts` собирает его esbuild-ом рядом с сервером — в
    `dist/<имя>.cjs`. Это обязательно: продовый образ ставится с
    `npm ci --omit=dev`, поэтому `tsx` в нём нет, а рукописный JS-двойник снова
    означал бы вторую копию логики.
-3. `docker/scripts/deploy.sh` запускает его в одноразовом контейнере СРАЗУ ПОСЛЕ
+3. `scripts/deploy/deploy.sh` запускает его в одноразовом контейнере СРАЗУ ПОСЛЕ
    `drizzle-kit migrate`.
 
 Требования к такому скрипту:
@@ -139,4 +139,4 @@ node -e "const f=require('fs'),c=require('crypto');const p='drizzle/0001_x.sql';
 Текущие шаги:
 
 - `dist/backfill-page-text.cjs` — каноническая форма текста `content_pages`
-  (исходник `script/backfill-page-text.ts`).
+  (исходник `scripts/db/backfill-page-text.ts`).

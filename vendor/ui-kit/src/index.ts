@@ -53,6 +53,7 @@ import {
 } from './components/Menu';
 import { ModalDialog, Modal, DialogHeader, DialogContent } from './components/Modal';
 // Modal is a deprecated alias — kept for backward compatibility
+import { BudgetAllocation } from './components/BudgetAllocation';
 import { NumberInput } from './components/NumberInput';
 import { PageNav } from './components/PageNav';
 import { Pagination, PaginationBar } from './components/Pagination';
@@ -129,6 +130,7 @@ export {
   Menu, MenuDivider, MenuGroup, MenuHeader, MenuItem, MenuLabel, MenuTrigger,
   ModalDialog, Modal,
   DialogHeader, DialogContent,
+  BudgetAllocation,
   NumberInput,
   PageNav,
   Pagination, PaginationBar,
@@ -249,6 +251,7 @@ export type {
   ModalDialogProps, ModalProps, ModalSize, ModalIconTone,
   DialogHeaderProps, DialogContentProps,
 } from './components/Modal';
+export type { BudgetAllocationProps, BudgetAllocationItem } from './components/BudgetAllocation';
 export type { NumberInputProps, StepperLayout } from './components/NumberInput';
 export type {
   PageNavProps, PageNavItem, PageNavVariant, PageNavOrientation,

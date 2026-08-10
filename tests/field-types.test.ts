@@ -33,7 +33,17 @@ describe("field-type registry", () => {
   });
 
   it("setting types carry the page properties, including the sequence identifier", () => {
-    expect([...SETTING_TYPES]).toEqual(["number", "boolean", "select", "text", "image", "sequence"]);
+    expect([...SETTING_TYPES]).toEqual([
+      "number",
+      "boolean",
+      "select",
+      "text",
+      "image",
+      "sequence",
+      // PRD-46: карта облика шкал — свой тип, потому что контрол рисует строку на шкалу,
+      // а не поле над JSON.
+      "scaleAppearance",
+    ]);
   });
 
   it("a type is recognised only in its own list", () => {

@@ -147,12 +147,6 @@
     }
     .tb-feedback-editor__item-fields { flex: 1; display: flex; flex-direction: row; gap: var(--ou-space-2); min-width: 0; }
     .tb-feedback-editor__item-fields > .ou-field { flex: 1; min-width: 0; }
-    .tb-feedback-editor__asset { flex: 1; display: flex; align-items: center; gap: var(--ou-space-2); min-width: 0; }
-    .tb-feedback-editor__asset-ico { color: var(--ou-fg-muted); flex-shrink: 0; }
-    .tb-feedback-editor__asset-meta { flex: 1; display: flex; flex-direction: column; gap: var(--wf-space-half); min-width: 0; }
-    .tb-feedback-editor__asset-file { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
-    .tb-feedback-editor__upload { display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; }
-    .tb-feedback-editor__upload-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
     /* Drawer dimmed beneath the modal */
     #s-feedback-edit .ou-drawer { opacity: 0.55; }
 
@@ -1108,34 +1102,28 @@
           </button>
         </div>
 
-        <!-- PDF assets section (FR-37) -->
+        <!-- Materials section (PRD-42 — link only, no upload) -->
         <span class="wf-annot-wrap--block">
         <div class="tb-feedback-editor__section">
           <div class="tb-feedback-editor__sec-title">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-paperclip"/></svg>
-            Прикреплённые файлы (PDF)
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-link"/></svg>
+            Материалы
           </div>
-          <ul class="tb-feedback-editor__list" aria-label="Прикреплённые файлы">
+          <ul class="tb-feedback-editor__list" aria-label="Материалы">
             <li class="tb-feedback-editor__item">
-              <div class="tb-feedback-editor__asset">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tb-feedback-editor__asset-ico" aria-hidden="true"><use href="#i-paperclip"/></svg>
-                <div class="tb-feedback-editor__asset-meta">
-                  <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Памятка по информационной безопасности" aria-label="Название файла"></div></div>
-                  <div class="tb-feedback-editor__asset-file">security-basics.pdf · 245 KB</div>
-                </div>
+              <div class="tb-feedback-editor__item-fields">
+                <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Памятка по информационной безопасности" aria-label="Название материала"></div></div>
+                <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="url" value="https://wiki.internal/security-basics.pdf" aria-label="URL материала"></div></div>
               </div>
-              <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить файл"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-trash"/></svg></button>
+              <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить материал"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-trash"/></svg></button>
             </li>
           </ul>
-          <div class="tb-feedback-editor__upload">
-            <button type="button" class="ou-btn ou-btn--secondary ou-btn--s">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-plus"/></svg>
-              Загрузить PDF
-            </button>
-            <span class="tb-feedback-editor__upload-hint">PDF до 5 MB; попадёт в SCORM-пакет и доступен по download-link</span>
-          </div>
+          <button type="button" class="ou-btn ou-btn--secondary ou-btn--s">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-plus"/></svg>
+            Добавить материал
+          </button>
         </div>
-        <span class="wf-annot">FR-37</span>
+        <span class="wf-annot">PRD-42</span>
         </span>
 
       </div>
@@ -1215,7 +1203,7 @@
             <td><code>s-feedback-edit</code></td>
             <td>Клик по `tb-feedback-preview` (любой состав) или CTA «Добавить обратную связь»</td>
             <td>Отменить | Сохранить (modal footer)</td>
-            <td>Модал `ou-modal--l` поверх Drawer (Состав). Селектор формата (plain/richText/html), richtext-editor, секция ссылок (FR-37), секция PDF-assets (FR-37). Drawer footer disabled, body `aria-hidden`. FR-36.</td>
+            <td>Модал `ou-modal--l` поверх Drawer (Состав). Селектор формата (plain/richText/html), richtext-editor, секция ссылок (FR-37), секция материалов (PRD-42). Drawer footer disabled, body `aria-hidden`. FR-36.</td>
           </tr>
         </tbody>
       </table>
@@ -1260,7 +1248,7 @@
           </tr>
           <tr>
             <td>Редактирование обратной связи по теме (FR-36/37)</td>
-            <td>Клик по `tb-feedback-preview` (read-only / empty) открывает модал поверх Drawer; richtext + ссылки + PDF-assets. Сохранить → возврат к Состав, drawer переходит в s-dirty.</td>
+            <td>Клик по `tb-feedback-preview` (read-only / empty) открывает модал поверх Drawer; richtext + ссылки + материалы. Сохранить → возврат к Состав, drawer переходит в s-dirty.</td>
             <td>s-feedback-edit</td>
           </tr>
         </tbody>
@@ -1567,7 +1555,7 @@
     if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
     if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
     if (hasIn(state, '.skel, .skeleton, .ou-skeleton')) addMappingRow(rows, 'skeleton', 'Загрузка', '<code>Skeleton</code>', ['--ou-bg-surface-3', '--ou-bg-hover'], 'Повторяет структуру default-состояния.');
-    if (hasIn(state, '.tb-feedback-editor')) addMappingRow(rows, 'feedback-editor', 'Feedback edit modal', '<code>FeedbackEditor</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-accent-soft'], 'Модал richtext + ссылки + PDF-assets (FR-36/FR-37).');
+    if (hasIn(state, '.tb-feedback-editor')) addMappingRow(rows, 'feedback-editor', 'Feedback edit modal', '<code>FeedbackEditor</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-accent-soft'], 'Модал richtext + ссылки + материалы (FR-36/FR-37, PRD-42).');
     if (hasIn(state, '.tb-rte')) addMappingRow(rows, 'rich-text', 'Rich-text editor', '<code>RichTextEditor</code>', ['--ou-bg-elevated', '--ou-border-soft', '--ou-bg-surface-2'], 'Toolbar + contenteditable area; формат plain/richText/html.');
     return rows;
   }

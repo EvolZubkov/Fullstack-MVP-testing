@@ -244,6 +244,8 @@ describe("GET /api/workbook/template", () => {
     const wb = await readWorkbookFromBuffer(res.body as Buffer);
     const names = wb.worksheets.map((w) => w.name);
     expect(names).toEqual([
+      // PRD-30: правило выдачи теста; лист идёт первым, потому что относится к тесту целиком.
+      "Настройки",
       "Вопросы",
       "Структура",
       "Квоты",

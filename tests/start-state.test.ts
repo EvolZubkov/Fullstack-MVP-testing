@@ -109,6 +109,48 @@ describe("buildStartState", () => {
     expect(buildStartState({ info, maxAttempts: null, completedAttempts: 0, hasCompletedResults: false, canStartNew: true }).state.showBack).toBe(false);
   });
 
+  describe("PRD-29 §6.7 на обложке — порог только у теста, который оценивает", () => {
+    it("измерительный тест: «проходной балл» не показывается", () => {
+      const { course } = buildStartState({
+        info: { ...info, hasGradedContent: false },
+        maxAttempts: 3,
+        completedAttempts: 0,
+        resume: null,
+        hasCompletedResults: false,
+        canStartNew: true,
+      });
+      // The layouts gate the fact on `{{#if course.passPercent}}` — null hides it.
+      expect(course.passPercent).toBeNull();
+      // Everything else on the cover is untouched.
+      expect(course.questionCount).toBe(20);
+      expect(course.maxAttempts).toBe(3);
+    });
+
+    it("флаг не передан (старый хост) — порог показывается как раньше", () => {
+      const { course } = buildStartState({
+        info,
+        maxAttempts: 3,
+        completedAttempts: 0,
+        resume: null,
+        hasCompletedResults: false,
+        canStartNew: true,
+      });
+      expect(course.passPercent).toBe(70);
+    });
+
+    it("тест оценивает — порог показывается", () => {
+      const { course } = buildStartState({
+        info: { ...info, hasGradedContent: true },
+        maxAttempts: 3,
+        completedAttempts: 0,
+        resume: null,
+        hasCompletedResults: false,
+        canStartNew: true,
+      });
+      expect(course.passPercent).toBe(70);
+    });
+  });
+
   describe("PRD-19 Block F — cooldown / prior result (FR-20)", () => {
     it("cooldown present: start disabled (via state.cooldown), no resume, review where available", () => {
       const { state } = buildStartState({

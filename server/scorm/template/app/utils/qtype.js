@@ -16,9 +16,22 @@ var TBQType = (function () {
     return type === 'single' || type === 'scale';
   }
 
-  /** Carries an answer list in `data.options` — 'single', 'multiple' and 'scale'. */
+  /**
+   * Carries an answer list in `data.options` — 'single', 'multiple', 'scale' and
+   * 'allocation'. The allocation's STATEMENTS live in that same field (PRD-44 FR-02),
+   * so every existing reader of `data.options` keeps working unchanged.
+   */
   function hasOptionList(type) {
-    return type === 'single' || type === 'multiple' || type === 'scale';
+    return type === 'single' || type === 'multiple' || type === 'scale' || type === 'allocation';
+  }
+
+  /**
+   * The learner splits a fixed BUDGET across the options (PRD-44): the answer is a
+   * per-option amount and the SIZE of that amount is what a measurement reads. Branch
+   * on this, never on `type === 'allocation'`.
+   */
+  function distributesBudget(type) {
+    return type === 'allocation';
   }
 
   /** Option order is content, not presentation: never shuffle it. */
@@ -27,12 +40,16 @@ var TBQType = (function () {
   }
 
   /**
-   * Measurement-only question: a scale with no correct graduation. Never checked,
-   * earns no points, contributes only to the scales (PRD-26 FR-08). The answer key
-   * reaches the runtime as `q.correct`.
+   * Measurement-only question: never checked, earns no points, contributes only to
+   * the scales (PRD-26 FR-08). Two ways in: a scale with no correct graduation (the
+   * author's choice), and an allocation ALWAYS (PRD-44 FR-09 — the method has no
+   * reference distribution, so a stray key must not make it checkable). The answer
+   * key reaches the runtime as `q.correct`.
    */
   function isMeasurementOnly(q) {
-    if (!q || q.type !== 'scale') return false;
+    if (!q) return false;
+    if (distributesBudget(q.type)) return true;
+    if (q.type !== 'scale') return false;
     // The key travels as `correctJson` on the server and as `correct` in the baked
     // payload; accept both so no caller has to reshape its question first.
     var key = (q.correctJson !== undefined && q.correctJson !== null) ? q.correctJson : q.correct;
@@ -43,6 +60,7 @@ var TBQType = (function () {
     isSingleIndexChoice: isSingleIndexChoice,
     hasOptionList: hasOptionList,
     hasFixedOptionOrder: hasFixedOptionOrder,
+    distributesBudget: distributesBudget,
     isMeasurementOnly: isMeasurementOnly,
   };
 }());

@@ -12,7 +12,7 @@
 import { UsersRepository } from "./storage/users-repository";
 import { GroupsRepository } from "./storage/groups-repository";
 import { AccessRepository } from "./storage/access-repository";
-import { TopicsRepository } from "./storage/topics-repository";
+import { TopicsRepository, type TopicDeletionResult, type TopicsBulkDeletionResult } from "./storage/topics-repository";
 import { QuestionsRepository } from "./storage/questions-repository";
 import { ScormRepository } from "./storage/scorm-repository";
 import { AdaptiveRepository } from "./storage/adaptive-repository";
@@ -22,8 +22,11 @@ import { TestsRepository, type TestUsageRef } from "./storage/tests-repository";
 import { ContentPagesRepository, type ContentPageBinding } from "./storage/content-pages-repository";
 import { AssignmentsRepository } from "./storage/assignments-repository";
 import { FoldersRepository } from "./storage/folders-repository";
+import { MediaRepository, type MediaUsageRef } from "./storage/media-repository";
 
 export type { TestUsageRef };
+export type { MediaUsageRef };
+export type { TopicDeletionResult, TopicsBulkDeletionResult };
 // Type-only imports: the facade names these in `IStorage` and its delegating
 // method signatures. Table objects and query helpers live in the repositories.
 import type {
@@ -56,6 +59,7 @@ import type {
   Scale, InsertScale,
   QuestionMeasurement, InsertQuestionMeasurement,
   TestQuestionScoring, InsertTestQuestionScoring,
+  MediaAsset, InsertMediaAsset, MediaUsage, MediaEntityType,
 } from "@shared/schema";
 import type { StoredRole } from "@shared/access";
 import { type ValidationResult, type ValueType } from "@shared/formula";
@@ -115,6 +119,8 @@ export interface IStorage {
   getLatestSnapshot(testId: string): Promise<TestSnapshot | undefined>;
   getSnapshot(id: string): Promise<TestSnapshot | undefined>;
   getSnapshotsForTest(testId: string): Promise<TestSnapshot[]>;
+  /** Every snapshot in the database, for the media re-sync (Медиатека). */
+  getAllSnapshots(): Promise<TestSnapshot[]>;
   deleteSnapshotsForTest(testId: string): Promise<void>;
   /** Distinct snapshot ids still referenced by any attempt of the test (FR-17). */
   getReferencedSnapshotIds(testId: string): Promise<string[]>;
@@ -131,6 +137,8 @@ export interface IStorage {
   createTestAssignment(assignment: InsertTestAssignment & { assignedBy: string }): Promise<TestAssignment>;
   deleteTestAssignment(id: string): Promise<boolean>;
   getAssignedTestsForUser(userId: string): Promise<Test[]>;
+  /** PRD-31 §5.3: assignment a new attempt belongs to; null = implicit legacy bucket. */
+  getCurrentAssignmentId(userId: string, testId: string): Promise<string | null>;
 
   // Password Reset Tokens
   createPasswordResetToken(userId: string, tokenHash: string, requestIp: string, ttlMs?: number): Promise<PasswordResetToken>;
@@ -186,8 +194,8 @@ export interface IStorage {
   createTopic(topic: InsertTopic): Promise<Topic>;
   updateTopic(id: string, topic: Partial<InsertTopic>): Promise<Topic | undefined>;
   renameTopicInFormulas(topicId: string, oldName: string, newName: string): Promise<void>;
-  deleteTopic(id: string): Promise<boolean>;
-  deleteTopicsBulk(ids: string[]): Promise<number>;
+  deleteTopic(id: string): Promise<TopicDeletionResult>;
+  deleteTopicsBulk(ids: string[]): Promise<TopicsBulkDeletionResult>;
   /** Bulk-moves topics into a folder (or to root when `null`). Organizational. */
   moveTopicsToFolder(ids: string[], folderId: string | null): Promise<number>;
 
@@ -221,6 +229,10 @@ export interface IStorage {
   getMeasurementsForQuestions(questionIds: string[]): Promise<Array<{ testId: string; questionId: string }>>;
   getTopicPageRefs(topicId: string): Promise<Array<{ testId: string }>>;
   getContentHashesByTopic(topicId: string): Promise<Set<string>>;
+  /** Question type + answer key of the given topics — input of `isMeasurementOnly`. */
+  getGradingTraitsByTopics(
+    topicIds: string[],
+  ): Promise<Array<{ topicId: string; type: string; correctJson: unknown }>>;
   getQuestion(id: string): Promise<Question | undefined>;
   getQuestionsByIds(ids: string[]): Promise<Question[]>;
   createQuestion(question: InsertQuestion): Promise<Question>;
@@ -245,8 +257,11 @@ export interface IStorage {
   getAttemptsByUser(userId: string): Promise<Attempt[]>;
   getAttemptsByUserAndTest(userId: string, testId: string): Promise<Attempt[]>;
   deleteAttemptsByUserAndTest(userId: string, testId: string): Promise<void>;
-  /** PRD-15 FR-14: annul (delete) all in-progress attempts of a test; returns the count. */
-  annulInProgressAttempts(testId: string): Promise<number>;
+  /**
+   * PRD-15 FR-14: annul (delete) in-progress attempts of a test; returns the count.
+   * `userId` narrows it to one learner (the start route drops its own abandoned run).
+   */
+  annulInProgressAttempts(testId: string, userId?: string): Promise<number>;
   getAllAttempts(): Promise<Attempt[]>;
 
   // Adaptive testing
@@ -288,6 +303,8 @@ export interface IStorage {
   /** PRD-22: variant bindings of many tests in ONE query (tests-list audit). */
   getContentPageBindings(testIds: string[]): Promise<ContentPageBinding[]>;
   getContentPages(testId: string): Promise<ContentPage[]>;
+  /** Every content page across every test — the media re-sync's full-table read. */
+  getAllContentPages(): Promise<ContentPage[]>;
   getContentPage(id: string): Promise<ContentPage | undefined>;
   createContentPage(page: InsertContentPage): Promise<ContentPage>;
   updateContentPage(id: string, updates: Partial<InsertContentPage>): Promise<ContentPage | undefined>;
@@ -331,6 +348,19 @@ export interface IStorage {
     testId: string,
     rows: Omit<InsertTestQuestionScoring, "testId">[],
   ): Promise<TestQuestionScoring[]>;
+
+  // Media library: asset registry (media_assets) and reverse usage index (media_usages).
+  createMediaAsset(asset: Omit<InsertMediaAsset, "id">): Promise<MediaAsset>;
+  getMediaAsset(id: string): Promise<MediaAsset | undefined>;
+  getMediaAssetByStorageKey(storageKey: string): Promise<MediaAsset | undefined>;
+  findMediaAssetByOwnerChecksum(ownerId: string | null, checksum: string): Promise<MediaAsset | undefined>;
+  countMediaAssetsByChecksum(checksum: string): Promise<number>;
+  listMediaAssetsByOwner(ownerId: string): Promise<MediaAsset[]>;
+  deleteMediaAsset(id: string): Promise<boolean>;
+  replaceMediaUsages(entityType: MediaEntityType, entityId: string, refs: MediaUsageRef[]): Promise<void>;
+  getMediaUsagesByAsset(assetId: string): Promise<MediaUsage[]>;
+  listOrphanMediaAssets(): Promise<MediaAsset[]>;
+  deleteMediaUsagesExcept(entityType: MediaEntityType, keepIds: string[]): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -349,6 +379,7 @@ export class DatabaseStorage implements IStorage {
   private readonly contentPagesRepo = new ContentPagesRepository();
   private readonly assignmentsRepo = new AssignmentsRepository();
   private readonly foldersRepo = new FoldersRepository();
+  private readonly mediaRepo = new MediaRepository();
 
   // ============================================
   // Users (delegated to UsersRepository)
@@ -499,6 +530,10 @@ export class DatabaseStorage implements IStorage {
     return this.testsRepo.getSnapshotsForTest(testId);
   }
 
+  getAllSnapshots(): Promise<TestSnapshot[]> {
+    return this.testsRepo.getAllSnapshots();
+  }
+
   deleteSnapshotsForTest(testId: string): Promise<void> {
     return this.testsRepo.deleteSnapshotsForTest(testId);
   }
@@ -569,6 +604,10 @@ export class DatabaseStorage implements IStorage {
 
   getAssignedTestsForUser(userId: string): Promise<Test[]> {
     return this.assignmentsRepo.getAssignedTestsForUser(userId);
+  }
+
+  getCurrentAssignmentId(userId: string, testId: string): Promise<string | null> {
+    return this.assignmentsRepo.getCurrentAssignmentId(userId, testId);
   }
 
   // ============================================
@@ -744,11 +783,11 @@ export class DatabaseStorage implements IStorage {
     return this.accessRepo.removeTopicGrant(id);
   }
 
-  deleteTopic(id: string): Promise<boolean> {
+  deleteTopic(id: string): Promise<TopicDeletionResult> {
     return this.topicsRepo.deleteTopic(id);
   }
 
-  deleteTopicsBulk(ids: string[]): Promise<number> {
+  deleteTopicsBulk(ids: string[]): Promise<TopicsBulkDeletionResult> {
     return this.topicsRepo.deleteTopicsBulk(ids);
   }
 
@@ -778,6 +817,12 @@ export class DatabaseStorage implements IStorage {
 
   getContentHashesByTopic(topicId: string): Promise<Set<string>> {
     return this.questionsRepo.getContentHashesByTopic(topicId);
+  }
+
+  getGradingTraitsByTopics(
+    topicIds: string[],
+  ): Promise<Array<{ topicId: string; type: string; correctJson: unknown }>> {
+    return this.questionsRepo.getGradingTraitsByTopics(topicIds);
   }
 
   getQuestion(id: string): Promise<Question | undefined> {
@@ -889,8 +934,8 @@ export class DatabaseStorage implements IStorage {
     return this.attemptsRepo.deleteAttemptsByUserAndTest(userId, testId);
   }
 
-  annulInProgressAttempts(testId: string): Promise<number> {
-    return this.attemptsRepo.annulInProgressAttempts(testId);
+  annulInProgressAttempts(testId: string, userId?: string): Promise<number> {
+    return this.attemptsRepo.annulInProgressAttempts(testId, userId);
   }
 
   getAllAttempts(): Promise<Attempt[]> {
@@ -1033,6 +1078,10 @@ export class DatabaseStorage implements IStorage {
     return this.contentPagesRepo.getContentPages(testId);
   }
 
+  getAllContentPages(): Promise<ContentPage[]> {
+    return this.contentPagesRepo.getAllContentPages();
+  }
+
   getContentPage(id: string): Promise<ContentPage | undefined> {
     return this.contentPagesRepo.getContentPage(id);
   }
@@ -1143,6 +1192,54 @@ export class DatabaseStorage implements IStorage {
     rows: Omit<InsertTestQuestionScoring, "testId">[],
   ): Promise<TestQuestionScoring[]> {
     return this.scalesVariablesRepo.replaceTestQuestionScoring(testId, rows);
+  }
+
+  // ============================================
+  // Media library (delegated to MediaRepository)
+  // ============================================
+
+  createMediaAsset(asset: Omit<InsertMediaAsset, "id">): Promise<MediaAsset> {
+    return this.mediaRepo.createAsset(asset);
+  }
+
+  getMediaAsset(id: string): Promise<MediaAsset | undefined> {
+    return this.mediaRepo.getAsset(id);
+  }
+
+  getMediaAssetByStorageKey(storageKey: string): Promise<MediaAsset | undefined> {
+    return this.mediaRepo.getAssetByStorageKey(storageKey);
+  }
+
+  findMediaAssetByOwnerChecksum(ownerId: string | null, checksum: string): Promise<MediaAsset | undefined> {
+    return this.mediaRepo.findAssetByOwnerChecksum(ownerId, checksum);
+  }
+
+  countMediaAssetsByChecksum(checksum: string): Promise<number> {
+    return this.mediaRepo.countAssetsByChecksum(checksum);
+  }
+
+  listMediaAssetsByOwner(ownerId: string): Promise<MediaAsset[]> {
+    return this.mediaRepo.listAssetsByOwner(ownerId);
+  }
+
+  deleteMediaAsset(id: string): Promise<boolean> {
+    return this.mediaRepo.deleteAsset(id);
+  }
+
+  replaceMediaUsages(entityType: MediaEntityType, entityId: string, refs: MediaUsageRef[]): Promise<void> {
+    return this.mediaRepo.replaceUsages(entityType, entityId, refs);
+  }
+
+  getMediaUsagesByAsset(assetId: string): Promise<MediaUsage[]> {
+    return this.mediaRepo.getUsagesByAsset(assetId);
+  }
+
+  listOrphanMediaAssets(): Promise<MediaAsset[]> {
+    return this.mediaRepo.listOrphanAssets();
+  }
+
+  deleteMediaUsagesExcept(entityType: MediaEntityType, keepIds: string[]): Promise<void> {
+    return this.mediaRepo.deleteUsagesExcept(entityType, keepIds);
   }
 }
 

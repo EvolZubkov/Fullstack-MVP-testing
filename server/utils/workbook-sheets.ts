@@ -17,6 +17,7 @@
  */
 
 import type { ScaleBand } from "@shared/scales/engine";
+import type { InterpretationBand, LearnerVisibility, Valence } from "@shared/scales/interpretation";
 import type { DrawStratum, QuestionScoring } from "@shared/schema";
 import { scales, resultVariables } from "@shared/schema";
 import { normalizeTags, TAG_MAX_LENGTH } from "@shared/tags";
@@ -27,9 +28,10 @@ export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string
 /** Canonical headers per test-scoped sheet (export column order). */
 export const SCALE_HEADERS = [
   "Ключ", "Название", "Описание", "Тип", "Агрегация", "Нормализация", "Направление",
-  "Диапазоны", "Показывать ученику", "SCORM",
+  "Диапазоны", "Границы шкалы", "Предел показа", "Благоприятное направление",
+  "Показывать ученику", "SCORM",
 ];
-export const SCALE_WIDTHS = [16, 28, 40, 12, 14, 14, 12, 50, 18, 14];
+export const SCALE_WIDTHS = [16, 28, 40, 12, 14, 14, 12, 50, 16, 14, 24, 18, 14];
 
 export const RESULT_VAR_HEADERS = [
   "Имя", "Метка", "Тип", "Формула", "Показывать ученику", "SCORM", "Управляет статусом",
@@ -101,12 +103,17 @@ const SOURCE_FROM: Record<string, string> = {
   option: "option",
   matching_pair: "matching_pair",
   ranking_position: "ranking_position",
+  // PRD-44: вклад распределения бюджета. Ключ — индекс утверждения, как у «варианта»:
+  // утверждения лежат в том же списке `options`.
+  распределение: "option_allocation",
+  option_allocation: "option_allocation",
 };
 const SOURCE_TO: Record<string, string> = {
   question: "вопрос",
   option: "вариант",
   matching_pair: "пара",
   ranking_position: "позиция",
+  option_allocation: "распределение",
 };
 
 const CONTROLS_FROM: Record<string, string> = {
@@ -176,7 +183,17 @@ function splitBandSegments(text: string): string[] {
   return out.map((s) => s.trim()).filter(Boolean);
 }
 
-const BAND_RE = /^(-?\d+(?:\.\d+)?)\.\.(-?\d+(?:\.\d+)?)\s+(\S+)(?:\s+«([^»]*)»)?$/;
+/**
+ * `мин..макс код «подпись»`.
+ *
+ * The code group excludes the quotation marks on purpose. It used to be `\S+`, which is
+ * greedy: a level whose code was empty serialized to «0..15  «Низкий»» and parsed back
+ * with the LABEL as its code, silently renaming the level to its own caption. The code is
+ * the level's identity — formulas name it, the LMS receives it as `scale.<ключ>.level`,
+ * and the import keeps a level's text and feedback by it — so a cell that cannot state it
+ * must fail loudly instead of inventing one.
+ */
+const BAND_RE = /^(-?\d+(?:\.\d+)?)\.\.(-?\d+(?:\.\d+)?)\s+([^\s«»]+)(?:\s+«([^»]*)»)?$/;
 
 /**
  * Parse the «Диапазоны» cell: `min..max код «подпись»; …` (PRD-14 §12.2).
@@ -210,15 +227,167 @@ export function serializeBands(bands: ScaleBand[] | undefined): string {
     .join("; ");
 }
 
+// ─── Видимость ученику (PRD-29) ───────────────────────────────────────────────
+
+/** The three positions of «Показывать ученику», as written into the cell. */
+const VISIBILITY_TO: Record<LearnerVisibility, string> = {
+  hidden: "нет",
+  level: "уровень",
+  level_and_value: "уровень и значение",
+};
+
+/**
+ * The column offers all THREE positions of {@link LearnerVisibility}. A yes/no pair
+ * would be a trap once the middle position is authorable: an export followed by an
+ * import would collapse «уровень» into «уровень и значение» and DISCLOSE the raw
+ * score the methodologist had closed.
+ *
+ * Legacy books stay readable: `да` reads as «уровень и значение» (the mapping
+ * migration 036 applies to the old boolean column), anything else as «нет».
+ */
+function parseLearnerVisibility(raw: unknown): LearnerVisibility {
+  const cell = String(raw ?? "").trim().toLowerCase();
+  if (cell === VISIBILITY_TO.level) return "level";
+  if (cell === VISIBILITY_TO.level_and_value) return "level_and_value";
+  return parseBool(cell) ? "level_and_value" : "hidden";
+}
+
+/** Serialize a visibility position into its cell text. */
+function serLearnerVisibility(v: LearnerVisibility): string {
+  return VISIBILITY_TO[v] ?? VISIBILITY_TO.hidden;
+}
+
+/**
+ * The values offered in the column's dropdown. «нет» is byte-identical to
+ * {@link serBool}(false), so a book written before PRD-29 still reads cleanly.
+ */
+export const VISIBILITY_CHOICES = [
+  VISIBILITY_TO.hidden,
+  VISIBILITY_TO.level,
+  VISIBILITY_TO.level_and_value,
+];
+
+// ─── «Границы шкалы» и «Предел показа» ────────────────────────────────────────
+
+const DOMAIN_RE = /^(-?\d+(?:\.\d+)?)\.\.(-?\d+(?:\.\d+)?)$/;
+
+/**
+ * Parse the «Границы шкалы» cell: `мин..макс`, the same `..` the bands use.
+ *
+ * ONE cell for the pair, because half a domain is not a domain — a lone bound would
+ * have to be stored, and the results screen prints «18 из 0» the moment it is. Empty
+ * → `null`, meaning the author left the bounds to the span of the levels.
+ */
+export function parseDomain(raw: unknown): ParseResult<{ min: number; max: number } | null> {
+  const text = String(raw ?? "").trim();
+  if (!text) return { ok: true, value: null };
+
+  const m = DOMAIN_RE.exec(text);
+  if (!m) return { ok: false, error: `некорректные границы шкалы "${text}", ожидается «мин..макс»` };
+  const min = Number(m[1]);
+  const max = Number(m[2]);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) {
+    return { ok: false, error: `некорректные границы шкалы "${text}"` };
+  }
+  return { ok: true, value: { min, max } };
+}
+
+/** Serialize a scale domain back to the «Границы шкалы» grammar. */
+export function serializeDomain(min: number | null, max: number | null): string {
+  return min === null || max === null ? "" : `${min}..${max}`;
+}
+
+/**
+ * A plain number, or `null` for an empty cell.
+ *
+ * `null` and `""` are ruled out BEFORE `Number()`: both convert to a finite zero, and
+ * zero is a legal display limit, so absence can never be expressed by a value.
+ */
+function parseOptionalNumber(raw: unknown): ParseResult<number | null> {
+  const text = String(raw ?? "").trim();
+  if (!text) return { ok: true, value: null };
+  const n = Number(text.replace(",", "."));
+  return Number.isFinite(n) ? { ok: true, value: n } : { ok: false, error: `не число: "${text}"` };
+}
+
+/** The same reading, applied to a value already stored in `config_json`. */
+function storedNumber(value: unknown): number | null {
+  const parsed = parseOptionalNumber(value);
+  return parsed.ok ? parsed.value : null;
+}
+
+// ─── «Благоприятное направление» (valence, PRD-29) ────────────────────────────
+
+/**
+ * The three positions of {@link Valence}, worded exactly as the scale card words them
+ * («Благоприятное направление»). NOT to be confused with the «Направление» column,
+ * which is the `direction` of the DB row: that one inverts the value during
+ * aggregation, this one only says how the value is to be JUDGED — it colours the
+ * levels and orders the ramp. Two different questions, hence two columns.
+ */
+const VALENCE_TO: Record<Valence, string> = {
+  higher_is_better: "Чем больше, тем лучше",
+  lower_is_better: "Чем больше, тем хуже",
+  none: "Без оценки",
+};
+
+/** The values offered in the column's dropdown. */
+export const VALENCE_CHOICES = Object.values(VALENCE_TO);
+
+/** Read the column, accepting the stored code as well as the wording. */
+function parseValence(raw: unknown): Valence {
+  const cell = String(raw ?? "").trim().toLowerCase();
+  for (const [code, text] of Object.entries(VALENCE_TO) as Array<[Valence, string]>) {
+    if (cell === text.toLowerCase() || cell === code) return code;
+  }
+  return "none";
+}
+
+/** Serialize a valence into its cell text. */
+function serValence(v: Valence): string {
+  return VALENCE_TO[v] ?? VALENCE_TO.none;
+}
+
 // ─── «Шкалы» ──────────────────────────────────────────────────────────────────
 
-/** Parse a «Шкалы» row into an `insertScaleSchema` input (без testId/sortOrder). */
-export function parseScaleRow(row: Record<string, unknown>): ParseResult<Record<string, unknown>> {
+/**
+ * Parse a «Шкалы» row into an `insertScaleSchema` input (без testId/sortOrder).
+ *
+ * @param headers The sheet's ACTUAL header row. It decides which interpretation
+ *   fields the returned `configJson` names at all, and {@link mergeScaleConfig}
+ *   leaves every field it does not name alone — that is what keeps a book written
+ *   before these columns existed readable instead of destructive. The row object
+ *   cannot answer this on its own: `sheetToObjects` drops empty cells, so «no
+ *   column» and «empty cell» look identical there while meaning opposite things.
+ *   Defaults to the row's own keys, which is what a hand-written row object means.
+ */
+export function parseScaleRow(
+  row: Record<string, unknown>,
+  headers: Set<string> | string[] = Object.keys(row),
+): ParseResult<Record<string, unknown>> {
   const key = String(row["Ключ"] ?? "").trim();
   if (!key) return { ok: false, error: "не указан ключ шкалы" };
 
   const bands = parseBands(row["Диапазоны"]);
   if (!bands.ok) return bands;
+
+  const columns = headers instanceof Set ? headers : new Set(headers);
+  const config: Record<string, unknown> = { bands: bands.value };
+
+  if (columns.has("Границы шкалы")) {
+    const domain = parseDomain(row["Границы шкалы"]);
+    if (!domain.ok) return { ok: false, error: `колонка «Границы шкалы»: ${domain.error}` };
+    config.domainMin = domain.value?.min ?? null;
+    config.domainMax = domain.value?.max ?? null;
+  }
+  if (columns.has("Предел показа")) {
+    const displayMax = parseOptionalNumber(row["Предел показа"]);
+    if (!displayMax.ok) return { ok: false, error: `колонка «Предел показа»: ${displayMax.error}` };
+    config.displayMax = displayMax.value;
+  }
+  if (columns.has("Благоприятное направление")) {
+    config.valence = parseValence(row["Благоприятное направление"]);
+  }
 
   return {
     ok: true,
@@ -230,8 +399,12 @@ export function parseScaleRow(row: Record<string, unknown>): ParseResult<Record<
       aggregation: String(row["Агрегация"] ?? "").trim() || "sum",
       normalization: String(row["Нормализация"] ?? "").trim() || "none",
       direction: String(row["Направление"] ?? "").trim() || "positive",
-      configJson: bands.value.length ? { bands: bands.value } : {},
-      showToLearner: parseBool(row["Показывать ученику"]),
+      // `bands` is ALWAYS present, empty array included: {@link mergeScaleConfig} treats a
+      // missing key as «the book does not set this field», and an emptied «Диапазоны» cell
+      // is the author's only way to clear the levels. Written as `{}` before, an emptied
+      // cell silently kept the old levels once merging arrived.
+      configJson: config,
+      learnerVisibility: parseLearnerVisibility(row["Показывать ученику"]),
       scormTarget: String(row["SCORM"] ?? "").trim() || "none",
     },
   };
@@ -247,10 +420,14 @@ export function serializeScaleRow(s: {
   normalization: string;
   direction: string;
   configJson: unknown;
-  showToLearner: boolean;
+  learnerVisibility: LearnerVisibility;
   scormTarget: string;
 }): Record<string, unknown> {
-  const bands = (s.configJson as { bands?: ScaleBand[] })?.bands;
+  // Read RAW, not through `parseScaleInterpretation`: that one falls back to the span of
+  // the levels when no domain is stored, and exporting an invented domain would turn it
+  // into an explicit one on the next import — the book would author what nobody authored.
+  const config = (s.configJson ?? {}) as Record<string, unknown>;
+  const bands = config.bands as ScaleBand[] | undefined;
   return {
     "Ключ": s.key,
     "Название": s.label,
@@ -260,9 +437,74 @@ export function serializeScaleRow(s: {
     "Нормализация": s.normalization,
     "Направление": s.direction,
     "Диапазоны": serializeBands(bands),
-    "Показывать ученику": serBool(s.showToLearner),
+    "Границы шкалы": serializeDomain(storedNumber(config.domainMin), storedNumber(config.domainMax)),
+    "Предел показа": storedNumber(config.displayMax) ?? "",
+    "Благоприятное направление": serValence(parseValence(config.valence)),
+    "Показывать ученику": serLearnerVisibility(s.learnerVisibility),
     "SCORM": s.scormTarget,
   };
+}
+
+/**
+ * Carry over what the «Диапазоны» grammar cannot express.
+ *
+ * The cell says `min..max код «подпись»` and nothing more, so a level's explanatory
+ * text, its tone override and its whole feedback block (PRD-29/PRD-32: text, links,
+ * events, assets) have no place in the book. They are matched back by the level CODE,
+ * which is the level's identity — the code is what formulas address as
+ * `scale.<ключ>.level`, and it is what the author keeps stable while moving a
+ * boundary. Bounds and label come from the cell: those the book DOES express.
+ *
+ * A code the book no longer names loses its content, deliberately: the level is gone.
+ * Duplicate codes are consumed in order, so a config that has two of them stays
+ * predictable instead of copying the first one everywhere.
+ */
+function mergeBands(stored: InterpretationBand[], incoming: ScaleBand[]): InterpretationBand[] {
+  const byLevel = new Map<string, InterpretationBand[]>();
+  for (const band of stored) {
+    const list = byLevel.get(band.level) ?? [];
+    list.push(band);
+    byLevel.set(band.level, list);
+  }
+  return incoming.map((band) => {
+    const prev = byLevel.get(band.level)?.shift();
+    if (!prev) return band;
+    const merged: InterpretationBand = { ...band };
+    if (prev.text !== undefined) merged.text = prev.text;
+    if (prev.tone !== undefined) merged.tone = prev.tone;
+    if (prev.feedback !== undefined) merged.feedback = prev.feedback;
+    return merged;
+  });
+}
+
+/**
+ * Merge a parsed «Шкалы» row's `configJson` onto the one already stored.
+ *
+ * **The book defines, in full, the fields it has a column for, and does not touch the
+ * fields it has none for.** The «Шкалы» sheet carries the bands (and, since PRD-46,
+ * the domain, the valence and the display limit); everything else in `config_json`
+ * belongs to the editor and must survive a round trip through Excel untouched.
+ *
+ * The distinction that carries the meaning here is «no column» versus «empty cell».
+ * A key absent from `incoming` means the book does not set that field, so the stored
+ * value stands — that is what makes a legacy book readable. An empty CELL of a column
+ * the book does have arrives as an explicit value (`[]`, `null`) and wins, because
+ * clearing a field is something the author must be able to do from the book.
+ *
+ * Only for an EXISTING scale. A scale the book creates has nothing to merge with and
+ * gets exactly what the row says.
+ */
+export function mergeScaleConfig(
+  stored: unknown,
+  incoming: Record<string, unknown>,
+): Record<string, unknown> {
+  const base = (stored && typeof stored === "object" ? stored : {}) as Record<string, unknown>;
+  const merged: Record<string, unknown> = { ...base, ...incoming };
+  if (Array.isArray(incoming.bands)) {
+    const storedBands = Array.isArray(base.bands) ? (base.bands as InterpretationBand[]) : [];
+    merged.bands = mergeBands(storedBands, incoming.bands as ScaleBand[]);
+  }
+  return merged;
 }
 
 // ─── «Показатели» ──────────────────────────────────────────────────────────────
@@ -285,7 +527,7 @@ export function parseResultVariableRow(row: Record<string, unknown>): ParseResul
       label: String(row["Метка"] ?? "").trim(),
       type: String(row["Тип"] ?? "").trim(),
       formula: String(row["Формула"] ?? "").trim(),
-      showToLearner: parseBool(row["Показывать ученику"]),
+      learnerVisibility: parseLearnerVisibility(row["Показывать ученику"]),
       scormTarget: String(row["SCORM"] ?? "").trim() || "both",
       controlsStatus,
     },
@@ -298,7 +540,7 @@ export function serializeResultVariableRow(rv: {
   label: string;
   type: string;
   formula: string;
-  showToLearner: boolean;
+  learnerVisibility: LearnerVisibility;
   scormTarget: string;
   controlsStatus: string;
 }): Record<string, unknown> {
@@ -307,7 +549,7 @@ export function serializeResultVariableRow(rv: {
     "Метка": rv.label,
     "Тип": rv.type,
     "Формула": rv.formula,
-    "Показывать ученику": serBool(rv.showToLearner),
+    "Показывать ученику": serLearnerVisibility(rv.learnerVisibility),
     "SCORM": rv.scormTarget,
     "Управляет статусом": CONTROLS_TO[rv.controlsStatus] ?? rv.controlsStatus,
   };
@@ -320,7 +562,7 @@ export interface ParsedMeasurement {
   questionRef: string;
   /** Scale `key`. */
   scaleKey: string;
-  sourceType: "question" | "option" | "matching_pair" | "ranking_position";
+  sourceType: "question" | "option" | "matching_pair" | "ranking_position" | "option_allocation";
   /** 0-based source key string (empty for `question`). */
   sourceKey: string;
   value: number;
@@ -340,7 +582,10 @@ export function parseMeasurementRow(row: Record<string, unknown>): ParseResult<P
 
   const sourceKey = String(row["Ключ источника"] ?? "").trim();
 
-  const value = Number(String(row["Значение"] ?? "").trim());
+  // PRD-44 FR-14: пустой коэффициент означает 1 — в опроснике из 56 строк вкладов
+  // единица стоит в каждой, и требовать её явно значит требовать 56 одинаковых ячеек.
+  const valueRaw = String(row["Значение"] ?? "").trim();
+  const value = valueRaw === "" ? 1 : Number(valueRaw);
   if (!Number.isFinite(value)) return { ok: false, error: `некорректное значение "${row["Значение"]}"` };
 
   const weightRaw = String(row["Вес"] ?? "").trim();
@@ -362,7 +607,8 @@ export function validateSourceKey(
   if (sourceType === "question") {
     return sourceKey ? "для источника «вопрос» ключ источника должен быть пустым" : null;
   }
-  if (sourceType === "option") {
+  // «вариант» и «распределение» ключуются одинаково — индексом в списке `options`.
+  if (sourceType === "option" || sourceType === "option_allocation") {
     const i = Number(sourceKey);
     if (!Number.isInteger(i) || i < 0 || i >= unitCount) return `ключ источника вне диапазона: "${sourceKey}"`;
     return null;
@@ -402,13 +648,83 @@ export function serializeMeasurementRow(m: {
 
 /** Canonical «Структура» headers (one row per section). */
 export const STRUCTURE_HEADERS = [
+  // NB: «Порядок» here is the ORDER OF SECTIONS in the test (sort_order), which
+  // is why the PRD-30 delivery setting is a separate, explicitly named column.
   "Раздел", "Порядок", "Вопросов в выборке", "Тип порога", "Порог", "Обязательный",
+  "Случайный порядок вопросов",
 ];
-export const STRUCTURE_WIDTHS = [28, 10, 20, 16, 10, 14];
+export const STRUCTURE_WIDTHS = [28, 10, 20, 16, 10, 14, 26];
 
 /** Canonical «Квоты» headers (one row per PRD-11 stratum). */
 export const QUOTA_HEADERS = ["Раздел", "Тег", "Количество", "Режим"];
 export const QUOTA_WIDTHS = [28, 24, 14, 14];
+
+/**
+ * Canonical «Настройки» headers (PRD-30 FR-22). The sheet is a key/value list,
+ * not a table of columns: it carries settings OF THE TEST, of which there is one
+ * of each, and a new setting must not widen a row every author already has.
+ */
+export const SETTINGS_HEADERS = ["Параметр", "Значение"];
+export const SETTINGS_WIDTHS = [34, 30];
+
+/** Test-level settings the workbook transfers. */
+export interface ParsedTestSettings {
+  /** PRD-30 FR-16: test-wide delivery order; absent = `random` (the default). */
+  questionOrder?: "fixed" | "random" | "shuffle_all";
+}
+
+/** «Порядок выдачи вопросов» — the parameter name on the sheet. */
+const SETTING_QUESTION_ORDER = "Порядок выдачи вопросов";
+
+/** Cell ↔ stored value. Labels match the editor's Select verbatim (FR-16). */
+const TEST_ORDER_FROM: Record<string, "fixed" | "random" | "shuffle_all"> = {
+  "фиксированный порядок": "fixed",
+  "перемешивание": "random",
+  "полное перемешивание": "shuffle_all",
+};
+const TEST_ORDER_TO: Record<"fixed" | "random" | "shuffle_all", string> = {
+  fixed: "Фиксированный порядок",
+  random: "Перемешивание",
+  shuffle_all: "Полное перемешивание",
+};
+
+/**
+ * Parse one «Настройки» row. An empty value means «оставить как есть» — the
+ * import must not silently reset a setting the author cleared out of the cell.
+ */
+export function parseSettingsRow(row: Record<string, unknown>): ParseResult<ParsedTestSettings> {
+  const name = String(row["Параметр"] ?? "").replace(/[\s ​﻿]+/g, " ").trim();
+  if (!name) return { ok: false, error: "не указан «Параметр»" };
+  const raw = String(row["Значение"] ?? "").trim();
+
+  if (name.toLowerCase() === SETTING_QUESTION_ORDER.toLowerCase()) {
+    if (raw === "") return { ok: true, value: {} };
+    const order = TEST_ORDER_FROM[raw.toLowerCase()];
+    if (!order) return { ok: false, error: `неизвестное значение «${SETTING_QUESTION_ORDER}»: "${raw}"` };
+    return { ok: true, value: { questionOrder: order } };
+  }
+
+  return { ok: false, error: `неизвестный параметр: "${name}"` };
+}
+
+/** Values offered for «Порядок выдачи вопросов» (template dropdown). */
+export const TEST_ORDER_CHOICES = [
+  TEST_ORDER_TO.fixed,
+  TEST_ORDER_TO.random,
+  TEST_ORDER_TO.shuffle_all,
+];
+
+/** Serialize the test's settings to «Настройки» rows (export). */
+export function serializeSettingsRows(test: {
+  questionOrder?: "fixed" | "random" | "shuffle_all" | null;
+}): Record<string, unknown>[] {
+  return [
+    {
+      "Параметр": SETTING_QUESTION_ORDER,
+      "Значение": TEST_ORDER_TO[test.questionOrder ?? "random"],
+    },
+  ];
+}
 
 /** «Тип порога» cell → the editor's `topicPassRuleJson` shape (PRD-7). */
 const PASS_TYPE_FROM: Record<string, "percent" | "absolute"> = {
@@ -468,6 +784,8 @@ export interface ParsedSection {
   /** Editor-shape `topicPassRuleJson` (PRD-7): `{source, type?, value?}`. */
   passRule: Record<string, unknown>;
   required: boolean;
+  /** PRD-30 FR-02/FR-18: the topic's override; `null` = «как в тесте». */
+  questionOrder: "random" | "fixed" | null;
 }
 
 /** Parse a «Структура» row. `rowIndex` (0-based) is the «Порядок» fallback. */
@@ -514,7 +832,17 @@ export function parseStructureRow(
   const requiredRaw = String(row["Обязательный"] ?? "").trim();
   const required = requiredRaw === "" ? true : parseBool(requiredRaw);
 
-  return { ok: true, value: { topicName, sortOrder, drawCount, passRule, required } };
+  // PRD-30 FR-18: an empty cell — and a workbook without the column at all —
+  // means «как в тесте»: the topic follows the test-wide rule, which is what a
+  // book that never touched the column has to keep meaning. «нет» fixes the
+  // order, «да» is an explicit override back to shuffling.
+  const randomRaw = String(row["Случайный порядок вопросов"] ?? "").trim();
+  const questionOrder = randomRaw === "" ? null : parseBool(randomRaw) ? "random" : "fixed";
+
+  return {
+    ok: true,
+    value: { topicName, sortOrder, drawCount, passRule, required, questionOrder },
+  };
 }
 
 /** Serialize a section to a «Структура» row (export). */
@@ -524,6 +852,8 @@ export function serializeStructureRow(s: {
   drawCount: number;
   topicPassRuleJson: unknown;
   required: boolean;
+  /** PRD-30 FR-02/FR-18: null or absent = «как в тесте» (the topic inherits). */
+  questionOrder?: "random" | "fixed" | null;
 }): Record<string, unknown> {
   const rule = (s.topicPassRuleJson ?? {}) as { source?: string; type?: string; value?: number };
   let passType = "Как у теста";
@@ -543,6 +873,8 @@ export function serializeStructureRow(s: {
     "Тип порога": passType,
     "Порог": passValue,
     "Обязательный": serBool(s.required),
+    // FR-18: пустая ячейка = «как в тесте», иначе явное переопределение темы.
+    "Случайный порядок вопросов": s.questionOrder == null ? "" : serBool(s.questionOrder !== "fixed"),
   };
 }
 

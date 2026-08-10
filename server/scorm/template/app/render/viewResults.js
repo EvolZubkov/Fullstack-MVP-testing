@@ -43,11 +43,126 @@ function vrRequiredLabel(tr) {
   return resolved.type === 'percent' ? 'Требуется: ' + resolved.value + '%' : undefined;
 }
 
-/** Deduped recommended courses/events across failed topics (failed-topic guidance). */
+/**
+ * PRD-32 attachments of a topic row: the PDFs the author hung on the TOPIC
+ * (`topics.feedback_json`) and on this test's SECTION over it
+ * (`test_sections.feedback_json`), merged and address-normalised at bake time into
+ * `section.recommendedAssets`.
+ *
+ * Read off TEST_DATA rather than off the attempt: the addresses are in-package paths
+ * resolved when the ZIP was built, so they belong to the package, not to a saved run —
+ * and a run saved by a package built before PRD-32 gets them too.
+ *
+ * A plain reader: it hands over what the package holds for the topic and judges nothing.
+ * The attachments are withheld from the learner only where the topic was EXPLICITLY
+ * passed, exactly like the courses and events of `vrRecommended` — but that gate lives in
+ * the shared builder (`shared/template/result-context.ts`), the one place both hosts go
+ * through, so the web and the package cannot hand out different materials. Until the
+ * consolidation these attachments were shown whatever the verdict, on the reading that a
+ * material hung on the topic's feedback is due for having TAKEN the topic; the owner
+ * settled every resource of a topic on ONE rule once they landed in one block — silent on
+ * a pass, shown on a failure AND on the absent verdict most topics carry.
+ */
+function vrTopicAssets(tr) {
+  var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
+  return (section && section.recommendedAssets) || [];
+}
+
+/**
+ * Feedback TEXTS of a topic row: the text the author wrote on the TOPIC
+ * (`topics.feedback_json.text`, falling back to the legacy `topics.feedback` column) and
+ * on this test's SECTION over it (`test_sections.feedback_json.text`), resolved by the
+ * bake into `section.feedbackTexts` — topic first, then section, which is the order the
+ * consolidated block de-duplicates on.
+ *
+ * Read off TEST_DATA for the same reason `vrTopicAssets` is: the text belongs to the
+ * package's content, not to a saved run, so a run saved by an earlier package gets it too.
+ * And gated the same way — not here, but in the shared builder, which drops everything a
+ * topic carries once the topic is explicitly passed. The text is help with a topic the
+ * learner has not mastered, the same as the topic's courses, events and attachments.
+ *
+ * The name matches what the web host stores on the attempt, and it is the ONE name the
+ * shared builder reads — the former `topicFeedback` was a name nothing read, which is
+ * exactly why the topic's text never reached the learner from a package.
+ */
+function vrTopicFeedbackTexts(tr) {
+  var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
+  return (section && section.feedbackTexts) || [];
+}
+
+/**
+ * The test's OWN feedback block (`tests.feedback_json`, baked as `TEST_DATA.testFeedbackJson`),
+ * normalised for the recommendations block — the widest source, and the first one.
+ *
+ * Read OUTSIDE `buildResultsMeasures`, which returns null for a test with neither scales
+ * nor indicators: the feedback of such a test is exactly as due to the learner as any
+ * other, and the commonest test in the product has no measurements at all. The address
+ * rule lives in the shared normaliser — the fired band/outcome blocks pass through the
+ * same one inside the builder.
+ */
+function vrTestFeedback() {
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  var raw = (typeof TEST_DATA !== 'undefined' && TEST_DATA.testFeedbackJson) || null;
+  if (!raw || !TB || typeof TB.normalizeFeedback !== 'function') return null;
+  return TB.normalizeFeedback(raw);
+}
+
+/**
+ * Вводный блок ЭКРАНА итогов (`tests.intro_json.results`, PRD-27 §7.1).
+ *
+ * Ветвь отчёта здесь намеренно не читается: у документа своё вводное слово, и подмена
+ * одного другим — ровно та ошибка, ради которой тексты и хранятся раздельно.
+ */
+function vrScreenIntro() {
+  var intro = (typeof TEST_DATA !== 'undefined' && TEST_DATA) ? TEST_DATA.introJson : null;
+  return (intro && intro.results) ? intro.results : null;
+}
+
+/**
+ * Выдавать ли отчёт обучающемуся (PRD-27 §7.1).
+ *
+ * Признак приезжает вместе с выбором вида отчёта (`designSettings.report`), потому что
+ * другого источника у рантайма нет. Его отсутствие означает «выдавать»: пакеты, собранные
+ * до этой настройки, обязаны сохранить кнопку.
+ */
+function vrReportEnabled() {
+  var ds = (typeof TEST_DATA !== 'undefined' && TEST_DATA) ? TEST_DATA.designSettings : null;
+  var report = ds && ds.report;
+  return !report || report.enabled !== false;
+}
+
+/**
+ * Whether the TEST declares a pass threshold at all (`tests.overall_pass_rule_json`,
+ * baked as `TEST_DATA.overallPassRule`). It is the one fact that tells an explicit
+ * «Пройден» from a test that pronounces no verdict. The shared builder reads it twice:
+ * it withholds the test's own feedback only on an explicit pass — a measurement method
+ * without a threshold (PRD-29) must keep showing its feedback, since that feedback IS its
+ * result — and it drops the verdict tag itself when nothing was judged, so the header and
+ * the feedback block cannot claim opposite things about the same run (PRD-29 §6.7).
+ *
+ * Read OUTSIDE `buildResultsMeasures` for the same reason `vrTestFeedback` is: that one
+ * returns null for a test with neither scales nor indicators, and the commonest test in
+ * the product is exactly that — it must still be able to say that it grades.
+ */
+function vrHasPassThreshold() {
+  var rule = (typeof TEST_DATA !== 'undefined' && TEST_DATA.overallPassRule) || null;
+  return !!(rule && rule.type && rule.type !== 'none');
+}
+
+/**
+ * Deduped recommended courses/events of the topics of this attempt.
+ *
+ * Skips a topic ONLY on an explicit pass — the owner's one rule for everything a topic
+ * carries (its texts and attachments are gated the same way inside the shared builder).
+ * It used to skip on `tr.passed !== false`, i.e. show only on an explicit failure; but
+ * per-topic thresholds are the exception in a standard test, so most topics carry no
+ * verdict at all, and «nothing was judged» was silencing the author's courses across
+ * every test that never set them.
+ */
 function vrRecommended(results) {
   var seenC = {}, seenE = {}, courses = [], events = [];
   results.topicResults.forEach(function (tr) {
-    if (tr.passed !== false) return;
+    if (tr.passed === true) return;
     var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
     var cs = (section && section.recommendedCourses && section.recommendedCourses.length > 0) ? section.recommendedCourses : (tr.recommendedCourses || []);
     var es = (section && section.recommendedEvents) ? section.recommendedEvents : [];
@@ -55,6 +170,155 @@ function vrRecommended(results) {
     es.forEach(function (e) { if (!seenE[e.title]) { seenE[e.title] = true; events.push({ title: e.title }); } });
   });
   return { courses: courses, events: events };
+}
+
+/**
+ * PRD-29: design params the measures block reads (level scheme, ramp colours, render
+ * kinds), resolved the way the WEB host resolves them for the very same screen — base
+ * params plus the colours of the PINNED palette (`readScreenTemplate`). A themed
+ * template keeps its colours in `paramsByTheme`, and under «Авто» no palette is pinned,
+ * so only the palette-independent params travel — exactly as on the web.
+ * Degrades to the flat baked params when the shared resolver is unavailable.
+ */
+function resultsDesignParams() {
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  var design = (typeof TEST_DATA !== 'undefined' && TEST_DATA.designSettings) || {};
+  var flat = design.params || {};
+  if (!TB || typeof TB.resolveThemeParams !== 'function') return flat;
+  var manifest = (typeof state !== 'undefined' && state && state.templateManifest) || null;
+  var resolved = TB.resolveThemeParams(design, manifest);
+  var pinned = (typeof TB.sceneThemeAttribute === 'function') ? TB.sceneThemeAttribute(design, manifest) : null;
+  var out = {};
+  var key;
+  for (key in resolved.base) {
+    if (Object.prototype.hasOwnProperty.call(resolved.base, key)) out[key] = resolved.base[key];
+  }
+  var themed = (pinned && resolved.byTheme && resolved.byTheme[pinned]) || {};
+  for (key in themed) {
+    if (Object.prototype.hasOwnProperty.call(themed, key)) out[key] = themed[key];
+  }
+  return out;
+}
+
+/**
+ * PRD-29: the level colour ramp — a named scheme, or the author's three triples when
+ * «Своя» is chosen. A missing custom colour falls back to the traffic scheme's own end,
+ * so a half-filled form still paints a sane ramp (mirrors `resolveRamp` on the web).
+ */
+function resultsLevelRamp(params) {
+  var schemes = window.TBTemplate.LEVEL_SCHEMES;
+  var scheme = String(params.levelScheme || 'traffic');
+  if (scheme !== 'custom') return schemes[scheme === 'neutral' ? 'neutral' : 'traffic'];
+  return {
+    favorable: String(params.levelColorFavorable || schemes.traffic.favorable),
+    mid: params.levelColorMid ? String(params.levelColorMid) : null,
+    unfavorable: String(params.levelColorUnfavorable || schemes.traffic.unfavorable)
+  };
+}
+
+/**
+ * PRD-29: settings of the «Итоги» variant — the three-position show/hide/auto switches
+ * of the score summary, the indicators and the scales. No `results` page, or a page
+ * without settings: everything stays on «Автоматически» (mirrors `measuresForAttempt`).
+ */
+function resultsBlockSettings() {
+  var pages = (typeof TEST_DATA !== 'undefined' && TEST_DATA.contentPages) || [];
+  for (var i = 0; i < pages.length; i++) {
+    if (pages[i] && pages[i].kind === 'results') return pages[i].settings || {};
+  }
+  return {};
+}
+
+/** Rows in the author's order — the same ORDER BY the web host reads them with. */
+function measuresBySortOrder(rows) {
+  return rows.slice().sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
+}
+
+/**
+ * PRD-29: the measures input for the SHARED results builder, assembled to the very
+ * shape `server/services/result-context.buildMeasuresInput` assembles on the web host —
+ * that is what keeps the two players drawing the same cards.
+ *
+ * Returns null for a test with neither scales nor indicators, so `opts.measures` stays
+ * absent and such a test keeps EXACTLY the results context it has always had (the
+ * score summary is suppressed only when the builder is actually handed measures).
+ *
+ * @param {object|null} scaleComputation `{ values }` — this attempt's scale values.
+ * @param {object|null} varComputation   `{ values }` — this attempt's indicator values.
+ * @returns {object|null} MeasuresInput for `buildResultContext`, or null.
+ */
+function buildResultsMeasures(scaleComputation, varComputation) {
+  var TD = (typeof TEST_DATA !== 'undefined' && TEST_DATA) || {};
+  var rawScales = TD.scales || [];
+  var rawVars = TD.resultVariables || [];
+  if (!rawScales.length && !rawVars.length) return null;
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (!TB || typeof TB.parseScaleInterpretation !== 'function') return null;
+
+  var params = resultsDesignParams();
+  var scaleValues = (scaleComputation && scaleComputation.values) || {};
+  var varValues = (varComputation && varComputation.values) || {};
+
+  var scales = measuresBySortOrder(rawScales).map(function (s) {
+    var computed = scaleValues[s.key];
+    return {
+      key: s.key,
+      name: s.label || s.key,
+      value: computed ? computed.raw : null,
+      visibility: s.learnerVisibility || 'hidden',
+      // The BAKED scale carries its interpretation flat (domainMin/domainMax/valence/
+      // bands) and the shared parser reads exactly those keys, so the package ends up
+      // with the identical interpretation object the web host parses from config_json.
+      interpretation: TB.parseScaleInterpretation(s)
+    };
+  });
+
+  var indicators = measuresBySortOrder(rawVars).map(function (v) {
+    return {
+      key: v.name,
+      name: v.label || v.name,
+      value: varValues[v.name],
+      visibility: v.learnerVisibility || 'hidden',
+      interpretation: TB.parseIndicatorInterpretation(v.configJson)
+    };
+  });
+
+  var blockSettings = resultsBlockSettings();
+  return {
+    ramp: resultsLevelRamp(params),
+    scaleKind: String(params.scaleRenderKind || 'band_ruler'),
+    indicatorKind: String(params.indicatorRenderKind || 'label'),
+    scales: scales,
+    indicators: indicators,
+    // ONE reading of the pass rule, shared with the top-level option the builder gates
+    // the test's feedback on — two copies could disagree about the very same test.
+    hasPassThreshold: vrHasPassThreshold(),
+    blockSettings: blockSettings,
+    // PRD-35/46: the chart setting travels in the SAME settings of the «Итоги» variant, so
+    // the package hands them over untouched and the ONE decision rule in Core reads them —
+    // including PRD-35's boolean, which it migrates. A package built before either PRD has
+    // no key at all and keeps the screen exactly as it was.
+    chartSettings: blockSettings,
+    // PRD-46: the verdict is BAKED, not derived here. The package carries neither the
+    // contribution rows nor the allocation budgets it is read from, and a second rule for
+    // «what counts as ipsative» would be a second chance to disagree with the web host
+    // (PRD-29 §9). No key ⇒ false, so a package built before this PRD draws what it drew.
+    ipsativeScales: TD.ipsativeScales === true
+  };
+}
+
+/**
+ * PRD-29 measures of the attempt being finished. `renderResults` computes scale.* and
+ * result.* before persisting the attempt, so screen and record agree; recomputing here
+ * is the fallback for any other entry into this renderer and is deterministic — the
+ * same answers yield the same values (NFR-04).
+ */
+function currentAttemptMeasures(results) {
+  var scaleComp = results.scaleComputation ||
+    ((typeof computeTestScales === 'function') ? computeTestScales() : null);
+  var varComp = results.resultComputation ||
+    ((typeof computeTestResultVariables === 'function') ? computeTestResultVariables(results, scaleComp) : null);
+  return buildResultsMeasures(scaleComp, varComp);
 }
 
 /**
@@ -88,21 +352,45 @@ function renderViewResultsTemplated(app, results) {
         possiblePoints: tr.possiblePoints,
         passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
         requiredLabel: vrRequiredLabel(tr),
-        topicFeedback: tr.topicFeedback
+        // Feedback texts of the topic and of this test's section over it, for the ONE
+        // recommendations block, under the very name the web host fills. Handed over for
+        // every topic — the shared builder is what gates them by the topic's verdict.
+        feedbackTexts: vrTopicFeedbackTexts(tr),
+        // PRD-32 attachments of the topic and of the section, for the ONE «Материалы»
+        // block; gated by the same verdict rule inside the shared builder.
+        recommendedAssets: vrTopicAssets(tr)
       };
     })
   };
-  var ctx = window.TBTemplate.buildResultContext(input, TEST_DATA.title || '', {
+  // PRD-29: a SAVED attempt renders from the values persisted WITH it and never from a
+  // recomputation — regrading a finished attempt against today's interpretation would
+  // change what the learner already scored (the rule the web host follows too).
+  var opts = {
     withTopicPoints: true,
     recommendedCourses: rec.courses,
-    recommendedEvents: rec.events
-  });
+    recommendedEvents: rec.events,
+    // PRD-29 §7.1 / PRD-32: the test's own feedback is a source of recommendations in
+    // its own right, whether or not the test has scales and indicators.
+    testFeedback: vrTestFeedback(),
+    // …and the builder withholds it on an EXPLICIT pass only, so it needs to know
+    // whether this test pronounces a verdict at all. Travels for every test, unlike the
+    // copy inside `measures`, which a test without measurements never sends.
+    hasPassThreshold: vrHasPassThreshold()
+  };
+  var measures = buildResultsMeasures(
+    { values: results.scaleValues || {} },
+    { values: results.resultValues || {} }
+  );
+  if (measures) opts.measures = measures;
+  var screenIntro = vrScreenIntro();
+  if (screenIntro) opts.intro = screenIntro;
+  var ctx = window.TBTemplate.buildResultContext(input, TEST_DATA.title || '', opts);
   ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
   // NB: no attempt counter in the header — the scene header names the test, run
   // parameters belong to the screen's own content (parity with the web host).
 
   ctx.result.nav = window.TBTemplate.buildResultsNav({
-    canReport: true,
+    canReport: vrReportEnabled(),
     canRetry: false,
     hasPostPages: false,
     finishLabel: 'Вернуться к тесту'
@@ -115,7 +403,11 @@ function renderViewResultsTemplated(app, results) {
   app.innerHTML = '';
   // Mount directly into #app so .tb-pad > .tb-scene fills the fixed stage —
   // mirrors renderGalleryPage (a wrapper div would defeat the child-combinator rule).
-  window.TBTemplate.renderScreenInto(app, { layout: layout, context: ctx });
+  window.TBTemplate.renderScreenInto(app, {
+    layout: layout,
+    context: ctx,
+    protection: buildScormProtection('results')
+  });
   wireFinishResultsFooter(app, {
     // The screen shows the BEST saved attempt, so the report must be that attempt —
     // not whatever `downloadPDF()` would pick for the CURRENT run.
@@ -153,27 +445,58 @@ function renderResultsTemplated(app, results) {
         possiblePoints: tr.possiblePoints,
         passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
         requiredLabel: vrRequiredLabel(tr),
-        topicFeedback: tr.topicFeedback
+        // Feedback texts of the topic and of this test's section over it, for the ONE
+        // recommendations block, under the very name the web host fills. Handed over for
+        // every topic — the shared builder is what gates them by the topic's verdict.
+        feedbackTexts: vrTopicFeedbackTexts(tr),
+        // PRD-32 attachments of the topic and of the section, for the ONE «Материалы»
+        // block; gated by the same verdict rule inside the shared builder.
+        recommendedAssets: vrTopicAssets(tr)
       };
     })
   };
-  var ctx = window.TBTemplate.buildResultContext(input, TEST_DATA.title || '', {
+  var opts = {
     withTopicPoints: true,
     recommendedCourses: rec.courses,
-    recommendedEvents: rec.events
-  });
+    recommendedEvents: rec.events,
+    // PRD-29 §7.1 / PRD-32: the test's own feedback is a source of recommendations in
+    // its own right, whether or not the test has scales and indicators.
+    testFeedback: vrTestFeedback(),
+    // …and the builder withholds it on an EXPLICIT pass only, so it needs to know
+    // whether this test pronounces a verdict at all. Travels for every test, unlike the
+    // copy inside `measures`, which a test without measurements never sends.
+    hasPassThreshold: vrHasPassThreshold()
+  };
+  // PRD-29: scales and indicators of THIS attempt (null for a test that declares none,
+  // which leaves the context byte-identical to what it has always been).
+  var measures = currentAttemptMeasures(results);
+  if (measures) opts.measures = measures;
+  var screenIntro = vrScreenIntro();
+  if (screenIntro) opts.intro = screenIntro;
+  var ctx = window.TBTemplate.buildResultContext(input, TEST_DATA.title || '', opts);
   ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
 
   ctx.result.nav = window.TBTemplate.buildResultsNav({
-    canReport: true,
-    canRetry: !results.passed && (typeof hasAttemptsLeft === 'function') && hasAttemptsLeft(),
+    canReport: vrReportEnabled(),
+    // PRD-31 barrier B: hide the retry while the interval between attempts is still
+    // closed — the start route would refuse it anyway, and an offered click that
+    // bounces reads as a broken screen. Note this is deliberately NOT folded into
+    // `attemptsExhausted` (resultsPage.js): that flag force-closes the course in the
+    // LMS, which must stay reserved for a terminal state, not a wait of a few hours.
+    canRetry: !results.passed &&
+      (typeof hasAttemptsLeft === 'function') && hasAttemptsLeft() &&
+      (typeof attemptIntervalState !== 'function' || attemptIntervalState().allowed),
     hasPostPages: !!(state.postResultsPages && state.postResultsPages.length > 0)
   });
 
   var layout = (typeof systemLayout === 'function') ? systemLayout('results') : state.templateLayouts['results'];
   if (typeof applySystemScreenStyles === 'function') applySystemScreenStyles('results');
   app.innerHTML = '';
-  window.TBTemplate.renderScreenInto(app, { layout: layout, context: ctx });
+  window.TBTemplate.renderScreenInto(app, {
+    layout: layout,
+    context: ctx,
+    protection: buildScormProtection('results')
+  });
   wireFinishResultsFooter(app);
 }
 

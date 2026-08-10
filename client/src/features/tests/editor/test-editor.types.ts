@@ -8,8 +8,11 @@
  */
 
 import type { DrawBlueprint, FormSet, RetakePolicy } from "@shared/schema";
-import type { ReportSettings } from "@shared/schema";
+import type { ReportSettings, TestIntro } from "@shared/schema";
+import type { LearnerVisibility, LevelTone, Valence } from "@shared/scales/interpretation";
+import type { TestQuestionOrder } from "@shared/draw/assemble-delivery";
 import type { QuestionScoringOverride } from "./scoring-api";
+import type { FeedbackEditorValue } from "./sections/feedback-editor-modal";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // All enums are frozen by docs/prd-7-decisions.md section 2.
@@ -58,14 +61,16 @@ export type FeedbackContent = {
 };
 
 /**
- * PDF asset attached to feedback. `scormHref` is filled by the backend when
- * the file is persisted, never by the frontend (decisions §6.5).
+ * Material attached to feedback — title + external URL (PRD-42). `fileName`/`mimeType` are
+ * legacy-only: descriptors saved through the retired upload flow (PRD-32) carry them, new
+ * rows do not. `scormHref` is a legacy in-package address kept for reading old data only.
  */
 export type FeedbackAsset = {
   id?: string;
   title: string;
-  fileName: string;
-  mimeType: "application/pdf";
+  fileName?: string;
+  mimeType?: "application/pdf";
+  url?: string;
   scormHref?: string;
 };
 
@@ -206,6 +211,13 @@ export type EditorSection = {
    */
   formSet?: FormSet | null;
   /**
+   * PRD-30 FR-02/FR-18: this topic's OVERRIDE of the test-wide delivery order.
+   * `null`/absent = «как в тесте» (the default), `random` = today's shuffle,
+   * `fixed` = by the author's «Индекс в теме», or by the variant's own list
+   * when the section runs in variants mode (FR-07).
+   */
+  questionOrder?: "random" | "fixed" | null;
+  /**
    * PRD-15 block D (FR-31): per-section default price of a question. `null` =
    * inherit the test default. Edited in the «Оценка» tab, persisted with the
    * section row.
@@ -253,9 +265,33 @@ export type ResultVariableModel = {
   label: string;
   type: ResultVariableType;
   formula: string;
-  showToLearner: boolean;
+  /** PRD-29: what the learner sees — nothing, the level only, or level + value. */
+  learnerVisibility: LearnerVisibility;
   scormTarget: ResultVariableScormTarget;
   controlsStatus: ResultVariableControlsStatus;
+  /**
+   * PRD-29: interpretation of a NUMERIC indicator, persisted in the indicator's
+   * own `config_json`. Empty for string/boolean indicators — those interpret
+   * through {@link ResultVariableModel.outcomes}.
+   */
+  bands: ScaleBandModel[];
+  /** PRD-29: interpretation of a string/boolean indicator, matched by exact code. */
+  outcomes: OutcomeModel[];
+  /**
+   * The NUMERIC indicator's explicit domain, persisted alongside `bands` in the
+   * indicator's own `config_json` — same meaning and round trip as
+   * {@link ScaleModel.domainMin}/`domainMax`. BOTH `null` = not set; the domain
+   * is then derived from the span of `bands` (mirrors `parseIndicatorInterpretation`).
+   */
+  domainMin: number | null;
+  domainMax: number | null;
+  /**
+   * Which end of a NUMERIC indicator's range is favourable — same enum and
+   * meaning as {@link ScaleModel.valence}. Unused by a string/boolean indicator
+   * (its cards are toned per-outcome instead), but always round-tripped so a
+   * type flip during editing does not lose it.
+   */
+  valence: Valence;
   sortOrder: number;
 };
 
@@ -285,6 +321,31 @@ export type ScaleBandModel = {
   max: string;
   label: string;
   level: string;
+  /** PRD-29: what this level MEANS, shown to the learner under the ruler. */
+  text: string;
+  /**
+   * PRD-29: author's override of the tone derived from the ramp position. Empty =
+   * derive it. A closed list of METHODOLOGICAL states, never a colour — the template
+   * decides how each state looks.
+   */
+  tone: LevelTone | "";
+  /** PRD-29: recommendations that fire when the learner lands in this band. */
+  feedback?: FeedbackEditorValue;
+};
+
+/**
+ * PRD-29: one outcome of a non-numeric interpretation — the string/boolean twin of
+ * {@link ScaleBandModel}. The match is an exact `code` (what the formula returns)
+ * instead of a numeric interval; everything the learner sees is the same triple of
+ * label, explanatory text and optional tone/recommendations.
+ */
+export type OutcomeModel = {
+  clientKey?: string;
+  code: string;
+  label: string;
+  text: string;
+  tone: LevelTone | "";
+  feedback?: FeedbackEditorValue;
 };
 
 /**
@@ -304,13 +365,45 @@ export type ScaleModel = {
   normalization: ScaleNormalization;
   direction: ScaleDirection;
   bands: ScaleBandModel[];
-  showToLearner: boolean;
+  /**
+   * PRD-29: the scale's explicit numeric domain, persisted in `config_json`.
+   * BOTH `null` = not set; the domain is then derived from the span the
+   * interpretation bands cover (mirrors `parseScaleInterpretation`). A zero is a
+   * legitimate bound — every domain of the reference methodology starts at zero —
+   * so absence can never be signalled by the value itself, only by `null`.
+   */
+  domainMin: number | null;
+  domainMax: number | null;
+  /**
+   * PRD-46 §6: how far a full ray of the radar stretches, when the domain is not the
+   * right answer. Read ONLY by the chart, and only when the test sets the axis limit to
+   * «заданный автором»; `null` = not set, the chart falls back to the domain.
+   *
+   * Deliberately separate from the domain: the domain says what the scale MEASURES and
+   * drives the ruler and the band boundaries in the card, while this one says nothing
+   * about the measurement and only rescales a drawing.
+   */
+  displayMax: number | null;
+  /**
+   * PRD-29: which end of the scale is favourable. NOT the same as `direction`:
+   * `direction` inverts the value during aggregation, `valence` says how the
+   * value is to be JUDGED (it colours levels and orders the ruler's ramp).
+   */
+  valence: Valence;
+  /** PRD-29: what the learner sees — nothing, the level only, or level + value. */
+  learnerVisibility: LearnerVisibility;
   scormTarget: ScaleScormTarget;
   sortOrder: number;
 };
 
 /** The answer-unit kind a measurement is bound to (PRD-5 §9.2). */
-export type MeasurementSourceType = "question" | "option" | "matching_pair" | "ranking_position";
+export type MeasurementSourceType =
+  | "question"
+  | "option"
+  | "matching_pair"
+  | "ranking_position"
+  // PRD-44: вклад распределения — величину задаёт учащийся, ключ это индекс утверждения.
+  | "option_allocation";
 
 /**
  * One contribution cell of the «Вклады вопросов» matrix: an explicit numeric
@@ -344,6 +437,16 @@ export type TestEditorModel = {
   version: number;
   mode: TestMode;
   flowMode: FlowMode;
+  /**
+   * PRD-30 FR-16: the test-wide delivery order and the default every topic
+   * inherits. `shuffle_all` («полное перемешивание») is only offered in the flat
+   * flow — a sectional flow rewrites it to `random` on save (FR-17).
+   *
+   * Optional like the other delivery extras: a draft assembled locally, or one
+   * loaded from an API response older than the column, simply has no value, and
+   * every read defaults it to `random` — today's behaviour.
+   */
+  questionOrder?: TestQuestionOrder;
   flowSettings: FlowSettings;
   /** Parent folder; `null` means root (no folder). */
   folderId: string | null;
@@ -365,7 +468,13 @@ export type TestEditorModel = {
     // PRD-19 (Блок A): правила навигации/завершения.
     allowReturnToUnanswered: boolean; // FR-01
     allowAnswerChange: boolean; // FR-04a (зависит от возврата; взаимоискл. с showCorrectAnswers)
+    // PRD-43: НЕЗАВИСИМ от allowReturnToUnanswered; взаимоискл. с showCorrectAnswers (гасится в UI).
+    quickAdvance: boolean;
     showSectionResults: boolean; // FR-05a (секционные)
+    // PRD-34: защита текста задания. Три НЕЗАВИСИМЫХ переключателя (FR-02).
+    copyProtection: boolean; // FR-01, умолчание ВКЛ
+    protectionWatermark: boolean; // FR-16, умолчание ВЫКЛ
+    protectionHideOnBlur: boolean; // FR-21, умолчание ВЫКЛ
   };
   passRules: PassRules;
   sections: EditorSection[];
@@ -391,6 +500,8 @@ export type TestEditorModel = {
    * до блока D. Потребители обязаны читать через `?? {}`.
    */
   report?: ReportSettings;
+  /** Вводные блоки экрана итогов и отчёта (`tests.intro_json`, PRD-27 §7.1). */
+  intro?: TestIntro;
   /**
    * PRD-15 block D (FR-31): test-side scoring edited in the «Оценка» tab.
    * `defaultQuestionPoints = null` = system default (1 point). `questionOverrides`
@@ -432,6 +543,8 @@ export type TestSettingsPayload = {
   status: TestStatus;
   mode: TestMode;
   flowMode: FlowMode;
+  /** PRD-30 FR-16: the test-wide delivery order. */
+  questionOrder: TestQuestionOrder;
   flowPolicyJson?: FlowPolicyPayload;
   overallPassRuleJson: OverallPassRule;
   passDecisionPolicy: PassDecisionPolicy;
@@ -441,7 +554,13 @@ export type TestSettingsPayload = {
   // PRD-19 (Блок A): правила навигации/завершения теста.
   allowReturnToUnanswered: boolean;
   allowAnswerChange: boolean;
+  // PRD-43: независим от allowReturnToUnanswered.
+  quickAdvance: boolean;
   showSectionResults: boolean;
+  // PRD-34: настройки защиты текста задания.
+  copyProtection: boolean;
+  protectionWatermark: boolean;
+  protectionHideOnBlur: boolean;
   /**
    * Test-level feedback. Sent under the `feedbackJson` key because the legacy
    * `feedback` server field is `string`-typed (zod-validated). The new structured
@@ -454,6 +573,8 @@ export type TestSettingsPayload = {
   retakePolicyJson?: RetakePolicy | null;
   /** PRD-27: выбор варианта отчёта и значения его полей. */
   reportSettingsJson?: ReportSettings | null;
+  /** Вводные блоки экрана итогов и отчёта; `null` — ни одного не задано. */
+  introJson?: TestIntro | null;
   /** PRD-15 block D (FR-31): test-wide default price; `null` = system (1). */
   defaultQuestionPoints: number | null;
   expectedVersion: number;
@@ -477,6 +598,8 @@ export type TestSectionPayload = {
   formSetJson: FormSet | null;
   /** PRD-15 block D (FR-31): per-section default price; `null` = inherit test. */
   defaultPoints: number | null;
+  /** PRD-30 FR-02/FR-18: the topic's override; `null` = «как в тесте». */
+  questionOrder: "random" | "fixed" | null;
 };
 
 export type AdaptiveSettingsPayload = {

@@ -6,7 +6,7 @@
  * package then consumes the SAME `@shared` engines as the web host instead of a
  * drifting plain-JS port.
  *
- * Resolution: in production the bundle is pre-built by `script/build.ts` into
+ * Resolution: in production the bundle is pre-built by `scripts/build/build.ts` into
  * `dist/scorm/assets/shared-runtime.js` and read via {@link readAsset}; in dev
  * (no build step) it is bundled from the TS sources on demand and cached. esbuild
  * is imported dynamically so it never enters the production server's load path

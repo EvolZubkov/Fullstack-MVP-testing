@@ -12,7 +12,7 @@
  */
 import type * as React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SettingsSection } from "../basic-settings-section";
 import type { TestEditorModel } from "../../test-editor.types";
@@ -39,7 +39,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       webhookUrl: "",
       telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
@@ -183,7 +183,7 @@ describe("<SettingsSection /> — навигация прохождения (PRD
     renderSettings(model);
     fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
     expect(screen.getByTestId("settings-allow-change-checkbox")).toBeDisabled();
-    expect(screen.getByText(/показе правильных ответов/i)).toBeInTheDocument();
+    expect(screen.getByText(/иначе ученик увидит правильный ответ/i)).toBeInTheDocument();
   });
 
   it("shows and toggles «итоги раздела» for a sectioned (non-flat) test", () => {
@@ -450,7 +450,6 @@ describe("<SettingsSection /> — Повторное прохождение (д�
   const plugins = {
     plugins: [
       { key: "webtutor_cooldown", name: "WebTutor", version: "1", description: "", bestEffort: false, configs: [] },
-      { key: "suspend_data_cooldown", name: "Suspend data", version: "1", description: "", bestEffort: true, configs: [] },
     ],
   };
 
@@ -460,6 +459,7 @@ describe("<SettingsSection /> — Повторное прохождение (д�
       retakePolicy: {
         enabled: true,
         cooldownPeriodDays: 30,
+        cooldownByOutcome: false,
         gateMode: "before_internal_start",
         eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" },
         ...over,
@@ -483,17 +483,5 @@ describe("<SettingsSection /> — Повторное прохождение (д�
     fireEvent.click(screen.getByTestId("settings-rail-retake"));
     fireEvent.change(screen.getByTestId("settings-retake-cooldown-input"), { target: { value: "5000" } });
     expect(runUpdater(updateModel, model).retakePolicy.cooldownPeriodDays).toBe(3650);
-  });
-
-  it("selecting the suspend_data plugin updates the key and shows the best-effort warning", async () => {
-    const updateModel = vi.fn();
-    const model = enabledModel();
-    renderSettings(model, updateModel, { seedPlugins: plugins });
-    fireEvent.click(screen.getByTestId("settings-rail-retake"));
-    await waitFor(() =>
-      expect(within(screen.getByTestId("settings-retake-plugin")).getByRole("button")).toBeInTheDocument(),
-    );
-    selectOption("settings-retake-plugin", "Suspend data");
-    expect(runUpdater(updateModel, model).retakePolicy.eligibilityPlugin?.key).toBe("suspend_data_cooldown");
   });
 });

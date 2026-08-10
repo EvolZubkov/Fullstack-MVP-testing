@@ -48,6 +48,7 @@ const AUTHOR_CAPABILITIES: readonly Capability[] = [
   "questions.manage",
   "questions.importExport",
   "folders.manage",
+  "media.manage",
   "tests.read",
   "tests.create",
   "tests.edit",

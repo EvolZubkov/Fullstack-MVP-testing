@@ -69,6 +69,13 @@ function expectedScreenCount(): number {
  * (PRD-27 FR-26). Тоже считается, а не пишется числом: шаблон вправе объявить только
  * обычный вид, только адаптивный или оба.
  */
+/**
+ * Строки, которые проверка добавляет ПОМИМО экранов и видов отчёта: якорь водяного знака
+ * (PRD-34, `checkWatermarkAnchor`). Он не экран и не вид, но занимает строку в отчёте.
+ * Строка `template.js` сюда не входит — она появляется, только если хост её передал.
+ */
+const EXTRA_ROWS = 1;
+
 function expectedReportRows(): number {
   const kinds = new Set(
     (manifest.contentTemplates as Array<{ kind?: string }>)
@@ -361,7 +368,7 @@ describe("runSmokeChecks — default template passes its own smoke-test", () => 
     }
     expect(report.ok).toBe(true);
     expect(report.failed).toBe(0);
-    expect(report.total).toBe(expectedScreenCount() + expectedReportRows());
+    expect(report.total).toBe(expectedScreenCount() + expectedReportRows() + EXTRA_ROWS);
     expect(report.passed).toBeGreaterThan(0);
     // The appended router screen renders the topic menu on the demo topics.
     const router = report.routes.find((r) => r.route === "content.router")!;

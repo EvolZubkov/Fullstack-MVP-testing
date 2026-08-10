@@ -34,6 +34,15 @@ var SCORM = (function() {
         log('API not found - running in standalone mode');
         return true;
       }
+      // PRD-31: the retake gate now opens the session itself (it must read
+      // suspend_data to tell a new assignment from a re-entry), and runCourse calls
+      // init again on the allowed path. A second Initialize is an error state in the
+      // SCORM 2004 API — error 103, "already initialized" — so the wrapper makes the
+      // repeat a no-op rather than letting the LMS log a spurious failure.
+      if (initialized) {
+        log('Initialize: already initialized, skipped');
+        return true;
+      }
       var result = api.Initialize("");
       initialized = (result === "true" || result === true);
       log('Initialize: ' + result);

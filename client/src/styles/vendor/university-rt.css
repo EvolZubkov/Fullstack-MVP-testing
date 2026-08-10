@@ -4066,10 +4066,18 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
   --ou-match-card-min: var(--ou-size-row);
 
   display: grid;
-  grid-template-columns:
+  /* The column ratio is a VARIABLE, not a hardcoded track list: the renderer gives the
+   * wordier side a 2:1 share and used to print `grid-template-columns` inline, which
+   * no stylesheet can override — so the narrow-screen fold below never worked, and it
+   * hid the gap column while three tracks remained, leaving the cards to auto-place
+   * into the wrong ones. Setting only the variable keeps the ratio and lets a rule win
+   * normally. Fallback = the previous hardcoded value, so a consumer that sets nothing
+   * is unaffected.
+   */
+  grid-template-columns: var(--ou-match-cols,
     minmax(0, 1fr)
     var(--ou-match-gap-w)
-    minmax(0, 1fr);
+    minmax(0, 1fr));
   row-gap: var(--ou-space-2);
   -moz-column-gap: 0;
        column-gap: 0;
@@ -4293,12 +4301,19 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
  *
  * Tint scoped away from review rows so semantic colors win below.
  */
-.ou-match--gap-narrow .ou-match__row.is-connected:not(.ou-match__row--correct):not(.ou-match__row--incorrect) .ou-match__card {
+/* A consumer may mark a reviewed row with this component's own BEM modifiers
+ * (`ou-match__row--correct`/`--incorrect`, set by `Matching.tsx`'s `rowMod`) OR with
+ * the generic `correct-answer`/`incorrect-answer` classes the rest of this DS's
+ * question components use. Either convention must exclude the "just connected"
+ * accent tint from a reviewed row, or accent purple silently outranks the verdict
+ * color by specificity.
+ */
+.ou-match--gap-narrow .ou-match__row.is-connected:not(.ou-match__row--correct):not(.ou-match__row--incorrect):not(.correct-answer):not(.incorrect-answer) .ou-match__card {
   background: var(--ou-accent-soft);
   border-color: var(--ou-accent-default);
   color: var(--ou-accent-on-soft);
 }
-.ou-match--gap-narrow .ou-match__row.is-connected:not(.ou-match__row--correct):not(.ou-match__row--incorrect) .ou-match__gap {
+.ou-match--gap-narrow .ou-match__row.is-connected:not(.ou-match__row--correct):not(.ou-match__row--incorrect):not(.correct-answer):not(.incorrect-answer) .ou-match__gap {
   background: var(--ou-accent-soft);
   border-top: 1px solid var(--ou-accent-default);
   border-bottom: 1px solid var(--ou-accent-default);
@@ -5542,6 +5557,14 @@ span.ou-quiz__dot:hover { transform: none; }
   height: 20px;
   color: var(--ou-fg-subtle);
   flex-shrink: 0;
+  /* The grip is the drag HANDLE, so it must opt out of the browser's touch
+   * gestures: without this a touch drag is claimed for scrolling and the pointer
+   * engine receives a `pointercancel` instead of a drop — reordering by finger
+   * does not work at all. Declared on the grip and not on `.ou-rank__item`
+   * deliberately: taking `touch-action` away from the whole row would also take
+   * away vertical scrolling from a list that can fill the screen.
+   * `.ou-match__card--drag` carries the same declaration for the same reason. */
+  touch-action: none;
 }
 .ou-rank__grip svg { width: 18px; height: 18px; display: block; }
 .ou-rank__item:hover .ou-rank__grip { color: var(--ou-fg-muted); }
@@ -6096,6 +6119,103 @@ span.ou-quiz__dot:hover { transform: none; }
 .ou-slider--error   .ou-slider__thumb { border-color: var(--ou-error-default); }
 
 
+/* ─── BudgetAllocation.css ───────────────────────────────── */
+/* Распределение бюджета между утверждениями (PRD-44). Составлен из существующих
+   примитивов: строка это Slider + NumberInput, новое здесь — только группа с общим
+   бюджетом. Разметку с теми же классами порождает framework-free двойник для сцены
+   учащегося, поэтому имена классов менять нельзя в одностороннем порядке. */
+.ou-alloc { display: flex; flex-direction: column; gap: var(--ou-space-4); }
+.ou-alloc.is-disabled { opacity: 0.6; pointer-events: none; }
+
+/* Счётчик остатка — главный статус экрана, читается с одного взгляда. */
+.ou-alloc__counter {
+  display: flex; align-items: baseline; gap: var(--ou-space-2);
+  font: var(--ou-text-heading-s); color: var(--ou-fg-muted);
+}
+.ou-alloc__counter strong {
+  font-size: 1.5em; line-height: 1; color: var(--ou-fg-default);
+  font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.ou-alloc__counter.is-complete,
+.ou-alloc__counter.is-complete strong { color: var(--ou-success-on-soft); }
+
+.ou-alloc__rows { display: flex; flex-direction: column; gap: var(--ou-space-3); }
+
+/* Строка: подпись занимает свободное место, пара «ползунок и поле» — колонку справа.
+   Порядок именно такой: сначала читают утверждение, потом назначают ему вес. */
+.ou-alloc__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px 108px;
+  align-items: center;
+  gap: var(--ou-space-4);
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border: 1px solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-elevated);
+}
+/* Строка, которой дали вес СВЕРХ минимума. Это НЕ «правильно», а «сюда положен вес»:
+   цвета вердикта у типа нет вовсе. Именно «выше минимума», а не «не ноль» — при
+   ненулевом минимуме поля предзаполнены, и правило «не ноль» отметило бы все строки
+   сразу, сказав «вы это выбрали» там, где выбрала система. */
+.ou-alloc__row.is-weighted { border-color: var(--ou-accent-default); }
+
+.ou-alloc__label {
+  font-size: var(--tb-answer-fs, 20px); font-weight: 400; line-height: 1.35;
+  color: var(--ou-fg-default); text-wrap: pretty;
+}
+
+.ou-alloc__slider { position: relative; justify-self: stretch; }
+.ou-alloc__slider .ou-slider { max-width: none; width: 100%; }
+.ou-alloc__field .ou-number__box { width: 108px; }
+
+/* Недоступный хвост дорожки. Шкала ползунка ФИКСИРОВАНА бюджетом: длина дорожки
+   всегда означает одно и то же, иначе значение строки визуально прыгало бы при
+   изменении СОСЕДНЕЙ строки. Подвижен только стоп — он равен «значение + остаток»,
+   и без этой зоны ползунок упирается в невидимую стену. */
+.ou-alloc__cap {
+  position: absolute; top: 50%; right: 0;
+  height: 12px; transform: translateY(-50%);
+  border-radius: 0 999px 999px 0;
+  /* Фон РОВНО как у строки: дорожка визуально заканчивается на стопе, а не меняет
+     оттенок. В светлой теме `--ou-bg-surface-2` почти совпадал с полупрозрачной
+     дорожкой, и стоп был не виден вовсе — проверено в браузере. */
+  background: var(--ou-bg-elevated);
+  border-left: 2px solid var(--ou-border-default);
+  pointer-events: none;
+}
+
+/* The thumb goes ON TOP of the tail. Both are positioned siblings with no z-index, so
+   they paint in DOM order and the tail — which comes last — cut the right half of the
+   thumb away whenever the stop met it, i.e. exactly when the budget was spent
+   (ceiling === value) and the handle sat on the boundary. */
+.ou-alloc__slider .ou-slider__thumb { z-index: 1; }
+
+/* Только чтение (обзор ответов): интерактив снят, разметки верности НЕТ —
+   правильного распределения не существует. */
+.ou-alloc--readonly .ou-alloc__row { background: var(--ou-bg-surface-2); }
+.ou-alloc--readonly .ou-slider__thumb { cursor: default; }
+.ou-alloc__value {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 108px; height: var(--ou-size-control-m);
+  border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-m);
+  font: var(--ou-text-heading-s); font-variant-numeric: tabular-nums;
+  color: var(--ou-fg-default); background: var(--ou-bg-elevated);
+}
+
+/* Узкий контейнер: ползунок уезжает ПОД текст утверждения. Порог тот же, что у
+   ступени S2 сцены, — подпись рядом с парой ниже него уже рвётся. */
+@media (max-width: 700px) {
+  .ou-alloc__row {
+    grid-template-columns: minmax(0, 1fr) 108px;
+    grid-template-areas: "label label" "slider field";
+    row-gap: var(--ou-space-3);
+  }
+  .ou-alloc__label  { grid-area: label; }
+  .ou-alloc__slider { grid-area: slider; }
+  .ou-alloc__field  { grid-area: field; }
+  .ou-alloc__value  { grid-area: field; }
+}
+
 /* ─── Spinner.css ───────────────────────────────── */
 /* UniversityRT · Spinner */
 .ou-spinner-wrap { display: inline-flex; align-items: center; gap: var(--ou-space-3); }
@@ -6292,6 +6412,15 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-stepper--choice .ou-stepper__step.is-error .ou-stepper__title { color: var(--ou-error-on-soft); font-weight: 600; }
 /* Verdict shown: mute the «where I am» fill so only success/error carry colour. */
 .ou-stepper--choice.ou-stepper--review .ou-stepper__step.is-done::after { background: var(--ou-border-default); }
+/* Small: horizontal choice mode at the DS control-size scale (32px) instead of the
+   default 44px — connector recomputed the same way as the default/44px blocks
+   (inset = radius + 4, top = radius - half the connector weight). */
+.ou-stepper--choice.ou-stepper--s .ou-stepper__bullet {
+  width: var(--ou-size-control-s); height: var(--ou-size-control-s);
+}
+.ou-stepper--choice.ou-stepper--s .ou-stepper__step:not(:last-child)::after {
+  top: 14px; left: calc(50% + 20px); right: calc(-50% + 20px); height: 4px; border-radius: 999px;
+}
 /* Vertical: the base 28px bullet, connector at the same weight as horizontal. */
 .ou-stepper--choice.ou-stepper--vertical .ou-stepper__bullet { width: 28px; height: 28px; }
 .ou-stepper--choice.ou-stepper--vertical .ou-stepper__step:not(:last-child)::after {

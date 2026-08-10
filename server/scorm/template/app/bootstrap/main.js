@@ -71,7 +71,17 @@
       ? loadDesignTemplate()
       : Promise.resolve(null);
 
-    templateReady.then(function () {
+    // PRD-31 barrier B: resolve the portal clock in PARALLEL with the template load,
+    // so the start screen decides the interval on the trusted clock without adding a
+    // serial delay (the resolution has its own 2500 ms cap and degrades to the machine
+    // clock). Only for tests that actually carry the barrier — every other package
+    // must not make a portal request it has no use for.
+    var _interval = TEST_DATA.retakePolicy && TEST_DATA.retakePolicy.attemptInterval;
+    var clockReady = (_interval && _interval.enabled === true && typeof primeTrustedNow === 'function')
+      ? primeTrustedNow()
+      : Promise.resolve();
+
+    Promise.all([templateReady, clockReady]).then(function () {
       // биндинги DnD
       bindMatchingDnDOnce();
       bindRankingDnDOnce();

@@ -65,4 +65,30 @@ describe("matchMagicScopeRule", () => {
     expect(m?.rule.bind).toBe("test");
     expect(m?.params.testId).toBe("T1");
   });
+
+  describe("файлы шаблона для отчёта (PRD-27 FR-05)", () => {
+    it("пропускает вложенный путь ассета: подложка отчёта лежит в подкаталоге шаблона", () => {
+      const m = matchMagicScopeRule("GET", "/api/templates/default/assets/assets/report/bg.png");
+      expect(m?.rule.bind).toBe("none");
+      expect(m?.params.templateId).toBe("default");
+    });
+
+    it("пропускает и одиночный файл", () => {
+      expect(matchMagicScopeRule("GET", "/api/templates/default/assets/preview.svg")).not.toBeNull();
+    });
+
+    it("хвост обязателен: сам каталог ассетов правилом не покрыт", () => {
+      expect(matchMagicScopeRule("GET", "/api/templates/default/assets")).toBeNull();
+    });
+
+    it("не открывает шаблон целиком: манифест и прочие роуты остаются вне области", () => {
+      expect(matchMagicScopeRule("GET", "/api/templates/default")).toBeNull();
+      expect(matchMagicScopeRule("GET", "/api/templates/default/bundle")).toBeNull();
+      expect(matchMagicScopeRule("GET", "/api/templates")).toBeNull();
+    });
+
+    it("метод по-прежнему значим", () => {
+      expect(matchMagicScopeRule("POST", "/api/templates/default/assets/x.png")).toBeNull();
+    });
+  });
 });

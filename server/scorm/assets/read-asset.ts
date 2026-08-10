@@ -20,13 +20,12 @@ function assetCandidates(name: string): string[] {
 }
 
 /**
- * Read a BINARY packaged asset (report backgrounds, the brand logo).
+ * Read a BINARY packaged asset.
  *
- * The web host serves these over HTTP for the shared PDF report, so they resolve
- * through the same ladder as everything else the package ships — no second copy under
- * `client/`, and production works wherever SCORM export already does.
+ * Resolves through the same ladder as everything else the package ships, so production
+ * works wherever SCORM export already does.
  *
- * @param name Asset path relative to `server/scorm/assets` (e.g. `media/logo-light.png`).
+ * @param name Asset path relative to `server/scorm/assets` (e.g. `media/logo-dark.png`).
  * @returns The file's bytes, or `null` when the deploy does not carry it.
  */
 export function readBinaryAsset(name: string): Buffer | null {

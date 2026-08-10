@@ -3,7 +3,7 @@
 # Container entrypoint for test-builder.
 # Runs as root to prepare volume mount points, then drops privileges to nodejs.
 #
-# Expected volume mounts (configured by docker/scripts/deploy.sh):
+# Expected volume mounts (configured by scripts/deploy/deploy.sh):
 #   /app/uploads/   - media and SCORM uploads (writable)
 #   /app/logs/      - application logs (writable)
 #   /app/.env       - application env file, secrets (read-only)
@@ -62,7 +62,7 @@ fi
 # less obvious error.
 #
 # Which file the app picks is NOT decided by NODE_ENV here: the server bundle has
-# NODE_ENV folded to "production" at build time (script/build.ts), so on its own it
+# NODE_ENV folded to "production" at build time (scripts/build/build.ts), so on its own it
 # would always look for config/production.config.jsonc. Compose therefore sets
 # CONFIG_FILE explicitly for every instance (docker/templates/docker-compose.yml);
 # it is read at runtime and wins. Mirror that order so this check matches reality.

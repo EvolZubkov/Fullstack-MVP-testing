@@ -27,6 +27,16 @@ const ctx = (days = 30, today = "2026-05-20"): EligibilityContext => ({
   runtime: { todayDate: today },
 });
 
+const outcomeCtx = (
+  passedDays: number,
+  failedDays: number,
+  today = "2026-05-20",
+): EligibilityContext => ({
+  test: { id: "t", title: "T" },
+  retakePolicy: { cooldownByOutcome: true, cooldownPeriodDaysPassed: passedDays, cooldownPeriodDaysFailed: failedDays },
+  runtime: { todayDate: today },
+});
+
 const filter = {
   stateField: "state",
   stateIn: ["Завершен", "Пройден"],
@@ -76,6 +86,67 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
     for (const [iso, today] of cases) {
       expect(port.EligibilityEngine.daysUntilDate(iso, today)).toEqual(tsEngine.daysUntilDate(iso, today));
     }
+  });
+
+  it("attemptIntervalDecision matches", () => {
+    const cases: Array<[string | null, string, number]> = [
+      [null, "2026-08-01T10:00:00.000Z", 24],
+      ["2026-08-01T10:00:00.000Z", "2026-08-02T09:59:59.999Z", 24],
+      ["2026-08-01T10:00:00.000Z", "2026-08-02T10:00:00.000Z", 24],
+      // Clock rolled back behind the last attempt (untrusted "now").
+      ["2026-08-01T10:00:00.000Z", "2026-07-20T00:00:00.000Z", 24],
+      ["garbage", "2026-08-01T10:00:00.000Z", 24],
+      ["2026-08-01T10:00:00.000Z", "garbage", 24],
+      ["2026-08-01T10:00:00.000Z", "2026-08-01T12:00:00.000Z", 1],
+    ];
+    for (const [last, now, hours] of cases) {
+      expect(port.EligibilityEngine.attemptIntervalDecision(last, now, hours)).toEqual(
+        tsEngine.attemptIntervalDecision(last, now, hours),
+      );
+    }
+  });
+
+  it("resolveCooldownDays matches", () => {
+    const cases: Array<[Record<string, unknown>, boolean | null]> = [
+      [{ cooldownPeriodDays: 30 }, true],
+      [{ cooldownPeriodDays: 30 }, false],
+      [{ cooldownPeriodDays: 30 }, null],
+      [{ cooldownByOutcome: true, cooldownPeriodDaysPassed: 90, cooldownPeriodDaysFailed: 7 }, true],
+      [{ cooldownByOutcome: true, cooldownPeriodDaysPassed: 90, cooldownPeriodDaysFailed: 7 }, false],
+      // Unknown outcome -> the LARGER of the two (conservative default).
+      [{ cooldownByOutcome: true, cooldownPeriodDaysPassed: 90, cooldownPeriodDaysFailed: 7 }, null],
+      [{ cooldownByOutcome: true, cooldownPeriodDaysPassed: 7, cooldownPeriodDaysFailed: 90 }, null],
+      // Only one split value configured (should not happen past schema validation,
+      // but the resolver must not throw): falls back to the one present.
+      [{ cooldownByOutcome: true, cooldownPeriodDaysPassed: 90 }, null],
+      [{ cooldownByOutcome: true, cooldownPeriodDaysFailed: 7 }, null],
+      [{ cooldownByOutcome: true }, null],
+    ];
+    for (const [policy, passed] of cases) {
+      expect(port.EligibilityEngine.resolveCooldownDays(policy, passed)).toEqual(
+        tsEngine.resolveCooldownDays(policy as any, passed),
+      );
+    }
+    // Concrete values, not just "both sides agree" (a both-undefined match proves nothing).
+    expect(tsEngine.resolveCooldownDays({ cooldownPeriodDays: 30 }, true)).toBe(30);
+    expect(
+      tsEngine.resolveCooldownDays(
+        { cooldownByOutcome: true, cooldownPeriodDaysPassed: 90, cooldownPeriodDaysFailed: 7 },
+        true,
+      ),
+    ).toBe(90);
+    expect(
+      tsEngine.resolveCooldownDays(
+        { cooldownByOutcome: true, cooldownPeriodDaysPassed: 90, cooldownPeriodDaysFailed: 7 },
+        false,
+      ),
+    ).toBe(7);
+    expect(
+      tsEngine.resolveCooldownDays(
+        { cooldownByOutcome: true, cooldownPeriodDaysPassed: 90, cooldownPeriodDaysFailed: 7 },
+        null,
+      ),
+    ).toBe(90);
   });
 
   it("normalizeVerdict matches", () => {
@@ -145,23 +216,48 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
     );
   });
 
-  it("suspendDataCooldownDecide matches", () => {
-    // The last entry is an attempt AFTER the reported "today" — an untrusted (rolled
-    // back) clock — so `data.effectiveToday` differs from `data.todayDate` and the
-    // parity check covers the clamp, not just the pass-through case.
-    for (const d of ["2026-04-01", "2026-05-15", null, "2026-06-01"]) {
-      expect(port.EligibilityPlugins.suspendDataCooldownDecide(d, ctx())).toEqual(
-        tsPlugins.suspendDataCooldownDecide(d, ctx()),
-      );
-    }
-    // The clamped value is the one the plugin reports (both twins, same assertion).
-    for (const impl of [tsPlugins, port.EligibilityPlugins as typeof tsPlugins]) {
-      expect(impl.suspendDataCooldownDecide("2026-06-01", ctx()).data).toMatchObject({
-        todayDate: "2026-05-20",
-        effectiveToday: "2026-06-01",
-      });
-      expect(impl.suspendDataCooldownDecide(null, ctx()).data).toMatchObject({ effectiveToday: null });
-    }
+  it("webtutorCooldownDecide resolves the period by outcome (passedStateIn)", () => {
+    // progressCompletePattern is unset here: with both outcomes in stateIn, completion
+    // is decided by state (per the filter's own doc comment), not by progress — leaving
+    // the inherited "^100\b" pattern would silently drop non-100%-progress "Не пройден"
+    // records from consideration, defeating the outcome-selection this test targets.
+    const outcomeFilter = {
+      ...filter,
+      progressCompletePattern: undefined,
+      passedStateIn: ["Пройден"],
+      stateIn: ["Пройден", "Не пройден"],
+    };
+    // Last (latest-dated) matching record is "Пройден" -> the PASSED period (90) applies.
+    const passedRecords = [
+      { state: "Не пройден", progress: "60%", last_usage_date: "01.04.2026" },
+      { state: "Пройден", progress: "100%", last_usage_date: "08.05.2026" },
+    ];
+    expect(port.EligibilityPlugins.webtutorCooldownDecide(passedRecords, outcomeFilter, outcomeCtx(90, 7))).toEqual(
+      tsPlugins.webtutorCooldownDecide(passedRecords, outcomeFilter, outcomeCtx(90, 7)),
+    );
+    expect(
+      tsPlugins.webtutorCooldownDecide(passedRecords, outcomeFilter, outcomeCtx(90, 7)).data?.cooldownPeriodDays,
+    ).toBe(90);
+
+    // Last matching record is "Не пройден" -> the FAILED period (7) applies.
+    const failedRecords = [
+      { state: "Пройден", progress: "100%", last_usage_date: "01.04.2026" },
+      { state: "Не пройден", progress: "60%", last_usage_date: "08.05.2026" },
+    ];
+    expect(port.EligibilityPlugins.webtutorCooldownDecide(failedRecords, outcomeFilter, outcomeCtx(90, 7))).toEqual(
+      tsPlugins.webtutorCooldownDecide(failedRecords, outcomeFilter, outcomeCtx(90, 7)),
+    );
+    expect(
+      tsPlugins.webtutorCooldownDecide(failedRecords, outcomeFilter, outcomeCtx(90, 7)).data?.cooldownPeriodDays,
+    ).toBe(7);
+
+    // No passedStateIn configured -> outcome unknown -> the LARGER of the two.
+    expect(
+      tsPlugins.webtutorCooldownDecide(passedRecords, filter, outcomeCtx(90, 7)).data?.cooldownPeriodDays,
+    ).toBe(90);
+    expect(
+      tsPlugins.webtutorCooldownDecide(failedRecords, filter, outcomeCtx(7, 90)).data?.cooldownPeriodDays,
+    ).toBe(90);
   });
 
   it("ClientBridge parse (extractCourseCompletionDate / extractSecid / unescapeXml) matches", () => {

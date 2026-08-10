@@ -22,11 +22,51 @@ import { touchTopics } from "./shared";
 /** Repository for the `questions` table. */
 export class QuestionsRepository {
   async getQuestions(): Promise<Question[]> {
-    return db.select().from(questions);
+    // PRD-30 FR-08: the whole-bank read feeds the author's «Темы и вопросы»
+    // tree, which groups by topic — so it needs the SAME order as the per-topic
+    // read below, otherwise the tree and the delivery disagree about the order.
+    return db
+      .select()
+      .from(questions)
+      .orderBy(questions.topicId, sql`${questions.orderIndex} ASC NULLS LAST`, questions.id);
   }
 
   async getQuestionsByTopic(topicId: string): Promise<Question[]> {
-    return db.select().from(questions).where(eq(questions.topicId, topicId));
+    // PRD-30 FR-08: the bank is read in the author's order — ascending
+    // `order_index`, questions without one last, `id` breaking ties so the read
+    // is deterministic. Before this the query had no ORDER BY at all, so both
+    // the author's list and the input of the draw engines were arbitrary.
+    return db
+      .select()
+      .from(questions)
+      .where(eq(questions.topicId, topicId))
+      .orderBy(sql`${questions.orderIndex} ASC NULLS LAST`, questions.id);
+  }
+
+  /**
+   * The grading TRAITS of every question in the given topics — the two columns
+   * {@link module:shared/questions/question-type isMeasurementOnly} reads, and
+   * nothing else.
+   *
+   * Batched over topics on purpose: its caller is the learner's test LIST, which
+   * asks the question «does this test grade at all» once per assigned test. Reading
+   * whole rows per topic there would be a query per section and a payload of option
+   * texts nobody looks at. The predicate itself stays in the shared module — the
+   * measurement rule must not be re-expressed in SQL, or the answer key's meaning
+   * would live in two places.
+   */
+  async getGradingTraitsByTopics(
+    topicIds: string[],
+  ): Promise<Array<{ topicId: string; type: string; correctJson: unknown }>> {
+    if (topicIds.length === 0) return [];
+    return db
+      .select({
+        topicId: questions.topicId,
+        type: questions.type,
+        correctJson: questions.correctJson,
+      })
+      .from(questions)
+      .where(inArray(questions.topicId, topicIds));
   }
 
   async getContentHashesByTopic(topicId: string): Promise<Set<string>> {
@@ -67,6 +107,9 @@ export class QuestionsRepository {
         feedbackIncorrect: question.feedbackIncorrect || null,
         contentHash: question.contentHash || null,
         tags: question.tags ?? [],
+        // PRD-30 FR-01: `??` and not `||` — 0 is a legitimate index, only an
+        // absent value means «not set».
+        orderIndex: question.orderIndex ?? null,
         createdBy: question.createdBy || null,
       }).returning();
       // PRD-25 FR-20: the topic gained a question — that is a change to it.
@@ -97,6 +140,10 @@ export class QuestionsRepository {
         mediaType: original.mediaType,
         shuffleAnswers: original.shuffleAnswers,
         tags: original.tags,
+        // PRD-30: the copy keeps the original's index. It lands in the same
+        // group of equals right next to its source, which is where the author
+        // expects to find a duplicate before re-indexing it.
+        orderIndex: original.orderIndex,
       }).returning();
       await touchTopics(tx, [newQuestion.topicId]);
       return newQuestion;

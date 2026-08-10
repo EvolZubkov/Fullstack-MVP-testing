@@ -41,7 +41,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       feedbackLinks: [], feedbackAssets: [], feedbackEvents: [],
       webhookUrl: "", telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true, quickAdvance: false, copyProtection: true, protectionWatermark: false, protectionHideOnBlur: false },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
@@ -61,9 +61,14 @@ function makeVar(over: Partial<ResultVariableModel> = {}): ResultVariableModel {
     label: "",
     type: "boolean",
     formula: "",
-    showToLearner: false,
+    learnerVisibility: "hidden",
     scormTarget: "both",
     controlsStatus: "none",
+    bands: [],
+    outcomes: [],
+    domainMin: null,
+    domainMax: null,
+    valence: "none",
     sortOrder: 0,
     ...over,
   };
@@ -93,10 +98,11 @@ function scaleWithLevels(over: Partial<ScaleModel> = {}): ScaleModel {
     key: "comp", label: "Компетенция", type: "number", aggregation: "sum",
     normalization: "none", direction: "positive",
     bands: [
-      { min: "0", max: "5", label: "Низкий", level: "low" },
-      { min: "6", max: "10", label: "Высокий", level: "high" },
+      { min: "0", max: "5", label: "Низкий", level: "low", text: "", tone: "" },
+      { min: "6", max: "10", label: "Высокий", level: "high", text: "", tone: "" },
     ],
-    showToLearner: false, scormTarget: "none", sortOrder: 0,
+    domainMin: null, domainMax: null, displayMax: null, valence: "none",
+    learnerVisibility: "hidden", scormTarget: "none", sortOrder: 0,
     ...over,
   };
 }
@@ -105,7 +111,7 @@ function scaleWithLevels(over: Partial<ScaleModel> = {}): ScaleModel {
 function scaleNoLevels(): ScaleModel {
   return scaleWithLevels({
     key: "flat", label: "", // empty label → exercises the `label || key` fallback
-    bands: [{ min: "0", max: "10", label: "—", level: "" }],
+    bands: [{ min: "0", max: "10", label: "—", level: "", text: "", tone: "" }],
   });
 }
 

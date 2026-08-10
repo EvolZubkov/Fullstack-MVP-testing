@@ -11,7 +11,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-  aggregateStandardResult, aggregateAdaptiveResult,
+  aggregateStandardResult, aggregateAdaptiveResult, adaptiveResultAsStandard,
   type AggregateSection, type AdaptiveTopicInput,
 } from "../shared/scoring/aggregate";
 import { resolveOverallRule, resolveTopicRule, checkPassRule } from "../shared/scoring/pass-rule";
@@ -466,5 +466,59 @@ describe("aggregateAdaptiveResult", () => {
     };
     expect(aggregateAdaptiveResult({ topics: [ok, ok] }).overallPassed).toBe(true);
     expect(aggregateAdaptiveResult({ topics: [ok, failed] }).overallPassed).toBe(false);
+  });
+});
+
+/**
+ * issue #33 — ОДНО правило, каким адаптивный результат пересказывается в словах обычного:
+ * его читают формулы показателей (PRD-2) и отчёт в LMS (PRD-4), а с этой работы — оба
+ * хоста, поэтому вторая копия правила означала бы разные значения одной формулы в
+ * браузере и в LMS.
+ */
+describe("adaptiveResultAsStandard", () => {
+  const result = aggregateAdaptiveResult({
+    topics: [
+      {
+        topicId: "t1", topicName: "Достигнутая", finalLevelIndex: 1,
+        levelsState: [
+          lvlState({ levelIndex: 0, status: "passed", answeredCount: 2, correctCount: 2 }),
+          lvlState({ levelIndex: 1, levelName: "Средний", status: "passed", answeredCount: 4, correctCount: 3 }),
+        ],
+        levels: [{ levelName: "Низкий" }, { levelName: "Средний", links: [{ title: "Курс", url: "u" }] }],
+      },
+      {
+        topicId: "t2", topicName: "Проваленная", finalLevelIndex: null,
+        levelsState: [lvlState({ status: "failed", answeredCount: 3, correctCount: 0 })],
+        levels: [{ levelName: "Низкий" }],
+      },
+    ],
+  });
+
+  it("один отвеченный вопрос — один балл, процент по всей попытке", () => {
+    const flat = adaptiveResultAsStandard(result);
+    expect(flat.totalQuestions).toBe(9);
+    expect(flat.correct).toBe(5);
+    expect(flat.earnedPoints).toBe(5);
+    expect(flat.possiblePoints).toBe(9);
+    expect(Math.round(flat.percent)).toBe(56);
+    expect(flat.passed).toBe(false);
+  });
+
+  it("тема «пройдена», когда подтверждён хоть какой-то уровень", () => {
+    const [achieved, none] = adaptiveResultAsStandard(result).topicResults;
+    expect(achieved).toMatchObject({ topicId: "t1", passed: true, percent: 75, achievedLevelName: "Средний" });
+    expect(achieved.recommendedCourses).toEqual([{ title: "Курс", url: "u" }]);
+    expect(none).toMatchObject({ topicId: "t2", passed: false, percent: 0, achievedLevelName: null });
+  });
+
+  it("попытка без ответов не делит на ноль", () => {
+    const empty = aggregateAdaptiveResult({
+      topics: [{
+        topicId: "t", topicName: "T", finalLevelIndex: null,
+        levelsState: [lvlState({ status: "pending", answeredCount: 0, correctCount: 0 })],
+        levels: [{ levelName: "L" }],
+      }],
+    });
+    expect(adaptiveResultAsStandard(empty).percent).toBe(0);
   });
 });

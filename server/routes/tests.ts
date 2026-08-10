@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "../storage";
 import { db } from "../db";
-import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, reportSettingsSchema, questionScoringSchema } from "@shared/schema";
+import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, reportSettingsSchema, testIntroSchema, questionScoringSchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { readScreenTemplate, readManifestContentTemplates, readVariantLayouts } from "../services/template-render";
 import { withTemplateAssetBase } from "@shared/template/asset-base";
@@ -34,6 +34,7 @@ import {
 import { RequiredFieldsMissingError } from "../services/required-fields-validator";
 import { FlowPolicyValidationError } from "../services/flow-policy-validator";
 import { buildTestScoringContext } from "../services/effective-scoring";
+import { syncEntityUsages, testFeedbackUsageEntity } from "../services/media/usage-index";
 
 // ─── Validation schemas (PRD-7 §5.4) ─────────────────────────────────────────
 
@@ -58,6 +59,10 @@ const sectionBodySchema = z
     formSetJson: formSetSchema.nullish(),
     // PRD-15 block D (FR-31): per-section default price; null = inherit test.
     defaultPoints: z.number().int().min(0).nullable().optional(),
+    // PRD-30 FR-02/FR-18: the topic's OVERRIDE of the test-wide order; null =
+    // «как в тесте». MUST be listed here for the same reason as formSetJson
+    // above — an unlisted key is stripped and silently lost.
+    questionOrder: z.enum(["random", "fixed"]).nullish(),
   })
   .superRefine((s, ctx) => {
     // PRD-11 FR-05: the quotas are minimums inside the topic's sample, so their
@@ -86,7 +91,15 @@ const testBodyBaseSchema = z.object({
   // PRD-19 (Блок A): правила навигации/завершения.
   allowReturnToUnanswered: z.boolean().optional(),
   allowAnswerChange: z.boolean().optional(),
+  // PRD-43: independent of allowReturnToUnanswered.
+  quickAdvance: z.boolean().optional(),
   showSectionResults: z.boolean().optional(),
+  // PRD-34 (FR-01): настройки защиты от копирования.
+  copyProtection: z.boolean().optional(),
+  // PRD-30 FR-16: the test-wide delivery order (the topics' default).
+  questionOrder: z.enum(["fixed", "random", "shuffle_all"]).optional(),
+  protectionWatermark: z.boolean().optional(),
+  protectionHideOnBlur: z.boolean().optional(),
   timeLimitMinutes: z.number().int().positive().nullable().optional(),
   maxAttempts: z.number().int().positive().nullable().optional(),
   startPageContent: z.string().nullable().optional(),
@@ -103,6 +116,7 @@ const testBodyBaseSchema = z.object({
   retakePolicyJson: retakePolicySchema.nullish(), // PRD-6
   // PRD-27: выбранный вариант отчёта и значения его полей, по режиму теста.
   reportSettingsJson: reportSettingsSchema.nullish(),
+  introJson: testIntroSchema.nullish(),
   // PRD-15 block D (FR-31): test-wide default price; null = system default (1).
   defaultQuestionPoints: z.number().int().min(0).nullable().optional(),
 
@@ -589,7 +603,12 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       showCorrectAnswers,
       allowReturnToUnanswered,
       allowAnswerChange,
+      quickAdvance,
       showSectionResults,
+      copyProtection,
+      protectionWatermark,
+      protectionHideOnBlur,
+      questionOrder,
       timeLimitMinutes,
       maxAttempts,
       startPageContent,
@@ -604,6 +623,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       flowPolicyJson,
       retakePolicyJson,
       reportSettingsJson,
+      introJson,
       defaultQuestionPoints,
       folderId,
     } = parsed.data;
@@ -642,7 +662,12 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         showCorrectAnswers,
         allowReturnToUnanswered,
         allowAnswerChange,
+        quickAdvance,
         showSectionResults,
+        copyProtection,
+        protectionWatermark,
+        protectionHideOnBlur,
+        questionOrder,
         timeLimitMinutes,
         maxAttempts,
         startPageContent,
@@ -654,6 +679,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         flowPolicyJson: flowPolicyJson ?? null,
         retakePolicyJson: retakePolicyJson ?? null,
         reportSettingsJson: reportSettingsJson ?? null,
+        introJson: introJson ?? null,
         defaultQuestionPoints: defaultQuestionPoints ?? null,
         folderId: folderId ?? null,
         // PRD-13: creator owns the test atomically in the INSERT (the post-insert
@@ -668,6 +694,22 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
 
     // PRD-13: the creator becomes the test owner.
     await storage.setTestOwner(test.id, req.session.userId ?? null);
+
+    // Медиатека: сбой индексации не должен стоить автору его правки (тот же довод, что и на
+    // пути сохранения оформления). Индексируется именно блок обратной связи, а не вся строка
+    // теста: оформление уже учтено под `test_design`, и двойной учёт дал бы две строки на файл.
+    // Разделы индексируются ТЕМ ЖЕ вызовом (см. `testFeedbackUsageEntity`): у них нет своего
+    // ключа в индексе, а раздельные вызовы затёрли бы строки друг друга. Разделы перечитываются
+    // из хранилища — присланные payload'ы ещё не имеют идентификаторов и порядка вставки.
+    try {
+      await syncEntityUsages(
+        "test_feedback",
+        test.id,
+        testFeedbackUsageEntity(feedbackJson ?? null, await storage.getTestSections(test.id)),
+      );
+    } catch (error) {
+      logger.error(`Media usage sync failed for test feedback ${test.id}: ${(error as Error).message}`, "tests");
+    }
 
     const full = await loadFullTest(test.id);
     res.status(201).json(full ?? test);
@@ -746,6 +788,15 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
     // Empty body or explicit reset — restore defaults
     if (!body || Object.keys(body).length === 0) {
       await storage.updateTest(testId, { designSettingsJson: {} });
+      // Медиатека: a reset to defaults clears whatever media the previous
+      // design held — same fail-soft contract as the branch below. Indexing
+      // `null` (not the reloaded test row) keeps the walk scoped to design
+      // content only, mirroring the delete convention used elsewhere.
+      try {
+        await syncEntityUsages("test_design", testId, null);
+      } catch (error) {
+        logger.error(`Media usage sync failed for test design ${testId}: ${(error as Error).message}`, "tests");
+      }
       return res.json({ templateId: "default" });
     }
 
@@ -869,6 +920,20 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
     }
 
     await storage.updateTest(testId, { designSettingsJson: designSettings });
+
+    // Медиатека: сбой индексации не должен стоить автору его правки. Недостающая
+    // строка индекса безопасна (она отказывает в доступе, а не выдаёт лишнее) и
+    // чинится пересборкой; потерянное сохранение оформления не чинится ничем.
+    // Indexed value is `designSettings` (what was just saved into
+    // `designSettingsJson`), not the whole test row — the test also carries
+    // `test_feedback`-scoped media (feedbackJson) that must not be double-
+    // counted under `test_design`.
+    try {
+      await syncEntityUsages("test_design", testId, designSettings);
+    } catch (error) {
+      logger.error(`Media usage sync failed for test design ${testId}: ${(error as Error).message}`, "tests");
+    }
+
     res.json(designSettings);
   } catch (error) {
     logger.error("Update design settings error: " + (error as Error).message, "tests");
@@ -900,7 +965,12 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       showCorrectAnswers,
       allowReturnToUnanswered,
       allowAnswerChange,
+      quickAdvance,
       showSectionResults,
+      copyProtection,
+      protectionWatermark,
+      protectionHideOnBlur,
+      questionOrder,
       timeLimitMinutes,
       maxAttempts,
       startPageContent,
@@ -915,6 +985,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       flowPolicyJson,
       retakePolicyJson,
       reportSettingsJson,
+      introJson,
       defaultQuestionPoints,
     } = parsed.data;
 
@@ -956,7 +1027,12 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
         showCorrectAnswers,
         allowReturnToUnanswered,
         allowAnswerChange,
+        quickAdvance,
         showSectionResults,
+        copyProtection,
+        protectionWatermark,
+        protectionHideOnBlur,
+        questionOrder,
         timeLimitMinutes,
         maxAttempts,
         startPageContent,
@@ -970,6 +1046,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
         flowPolicyJson: flowPolicyJson ?? undefined,
         retakePolicyJson: retakePolicyJson ?? undefined,
         reportSettingsJson: reportSettingsJson ?? undefined,
+        introJson: introJson ?? undefined,
         defaultQuestionPoints,
       },
       // PRD-7 §6.3: sections live with the standard mode only. For adaptive,
@@ -978,6 +1055,26 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       adaptiveSettings: mode === "adaptive" ? (adaptiveSettings as AdaptiveTopicPayload[] | undefined) : undefined,
       expectedVersion,
     });
+
+    // Медиатека: индексируется СОХРАНЁННОЕ значение (`test.feedbackJson` — строка, которую
+    // вернул апдейт), а не присланное: тело запроса может вовсе не нести `feedbackJson`,
+    // и служба сохранения тогда оставляет прежний блок нетронутым — по присланному
+    // `undefined` индекс обнулился бы, хотя вложение в тесте осталось. Сбой индексации
+    // не должен стоить автору его правки: недостающая строка безопасна (она отказывает
+    // в доступе, а не выдаёт лишнее) и чинится пересборкой.
+    //
+    // Разделы (`test_sections.feedback_json`) едут ТЕМ ЖЕ вызовом и под тем же ключом теста
+    // (см. `testFeedbackUsageEntity`); перечитываются ПОСЛЕ сохранения — служба пересоздаёт
+    // строки разделов, поэтому `existingSections`, прочитанные до save, здесь уже неверны.
+    try {
+      await syncEntityUsages(
+        "test_feedback",
+        test.id,
+        testFeedbackUsageEntity(test.feedbackJson ?? null, await storage.getTestSections(test.id)),
+      );
+    } catch (error) {
+      logger.error(`Media usage sync failed for test feedback ${test.id}: ${(error as Error).message}`, "tests");
+    }
 
     const full = await loadFullTest(test.id);
     res.json(full ?? test);
@@ -1144,6 +1241,26 @@ router.delete("/:id", requirePermission("tests.delete"), requireTestScope("delet
     // deleteTest is now the single, atomic owner of test deletion (adaptive rows,
     // sections, assignments, grants, attempts and snapshots all go with it).
     await storage.deleteTest(req.params.id);
+
+    // Медиатека: deleteTest does not cascade `media_usages` (no FK cascade by
+    // design — see shared/schema.ts on `mediaUsages`), so the test's design
+    // usage rows would otherwise dangle, pointing at a testId that no longer
+    // exists. content_pages rows are removed by the DB cascade on delete, but
+    // their `content_page`-scoped usage rows are equally orphaned — the full
+    // re-sync (Задача 11) is what ultimately reconciles those; here we clear
+    // only the entities this route owns directly. Besides `test_design` those are the
+    // three feedback kinds keyed by the TEST id: the test's own feedback block, and the
+    // scale/indicator sets, which are indexed set-wide under the test rather than per row
+    // (spec §6.1) — their rows would outlive the test with no owner left to clear them.
+    try {
+      await syncEntityUsages("test_design", req.params.id, null);
+      await syncEntityUsages("test_feedback", req.params.id, null);
+      await syncEntityUsages("scale_feedback", req.params.id, null);
+      await syncEntityUsages("variable_feedback", req.params.id, null);
+    } catch (error) {
+      logger.error(`Media usage sync failed for test ${req.params.id}: ${(error as Error).message}`, "tests");
+    }
+
     res.status(204).end();
   } catch (error) {
     logger.error("Delete test error: " + (error as Error).message, "tests");

@@ -22,9 +22,15 @@ const { storageMock } = vi.hoisted(() => ({
     getUser: vi.fn(), getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getUsers: vi.fn().mockResolvedValue([]),
     getTopics: vi.fn().mockResolvedValue([]), getQuestionsByTopic: vi.fn(),
+    // «Оценивает ли тест хоть что-нибудь» для обложки списка (пусто = нет).
+    getGradingTraitsByTopics: vi.fn().mockResolvedValue([]),
     getQuestionsByIds: vi.fn(), getTopicCourses: vi.fn().mockResolvedValue([]),
     getTopicEvents: vi.fn().mockResolvedValue([]),
     getAssignedTestsForUser: vi.fn(),
+    // PRD-31: the assignment is the unit of access. These cases exercise the barriers
+    // and the counter, not the assignment lookup, so every attempt lands in the
+    // implicit legacy bucket (null) — which behaves as one assignment of its own.
+    getCurrentAssignmentId: vi.fn().mockResolvedValue(null),
     getAdaptiveTopicSettingsByTest: vi.fn().mockResolvedValue([]),
     getAdaptiveLevelsByTest: vi.fn().mockResolvedValue([]),
     getResultVariables: vi.fn().mockResolvedValue([]),
@@ -83,6 +89,11 @@ const dbQuestion = {
 };
 const dbAttempt = {
   id: "atmp1", userId: "learner1", testId: "test1", snapshotId: null,
+  // PRD-31: a real row always carries the column; null = the implicit legacy bucket,
+  // which is also what `getCurrentAssignmentId` returns in these tests. Leaving it
+  // undefined would put the attempt in a DIFFERENT bucket than the current
+  // assignment and quietly defeat the per-assignment counter.
+  assignmentId: null,
   variantJson: { sections: [{ topicId: "t1", topicName: "JS", questionIds: ["q1"] }] },
   answersJson: {}, resultJson: null,
   startedAt: new Date(), finishedAt: null, testVersion: 1,
@@ -129,6 +140,10 @@ let app: express.Express;
 beforeEach(() => {
   vi.clearAllMocks();
   storageMock.getUser.mockResolvedValue(learnerUser);
+  // `clearAllMocks` wipes CALLS, not implementations, so a per-case override of the
+  // current assignment would leak into every later case and silently change which
+  // bucket its attempts fall into. Restore the default (the legacy NULL bucket).
+  storageMock.getCurrentAssignmentId.mockResolvedValue(null);
   app = makeApp(attemptsRouter);
 });
 
@@ -145,15 +160,50 @@ describe("GET /learner/tests — branches", () => {
     // Section on a topic missing from getTopics -> topicName "Unknown".
     storageMock.getTopics.mockResolvedValue([]);
     storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 5 }]);
-    // A completed attempt today keeps the 30-day cooldown active.
+    // A completed attempt today keeps the 30-day cooldown active — but PRD-31 §3
+    // scopes barrier A to the boundary BETWEEN assignments, so that attempt must
+    // belong to the PREVIOUS one while the learner is now on a fresh assignment.
+    storageMock.getCurrentAssignmentId.mockResolvedValue("a-new");
     storageMock.getAttemptsByUserAndTest.mockResolvedValue([
-      { ...finishedAttempt, finishedAt: new Date(), resultJson: { overallPercent: 42, overallPassed: false, topicResults: [] } },
+      {
+        ...finishedAttempt,
+        assignmentId: "a-old",
+        finishedAt: new Date(),
+        resultJson: { overallPercent: 42, overallPassed: false, topicResults: [] },
+      },
     ]);
     const res = await asLearner(request(app).get("/api/learner/tests"));
     expect(res.status).toBe(200);
     expect(res.body[0].sections[0].topicName).toBe("Unknown");
     expect(res.body[0].retakeGate).toMatchObject({ cooldownPeriodDays: 30 });
     expect(res.body[0].priorResult).toMatchObject({ percent: 42, passed: false });
+  });
+
+  it("отвечает, оценивает ли тест: измерительная методика — нет", async () => {
+    storageMock.getAssignedTestsForUser.mockResolvedValue([dbTest]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "Стили" }]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 5 }]);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+    storageMock.getGradingTraitsByTopics.mockResolvedValue([
+      { topicId: "t1", type: "allocation", correctJson: {} },
+      { topicId: "t1", type: "scale", correctJson: {} },
+    ]);
+    const res = await asLearner(request(app).get("/api/learner/tests"));
+    expect(res.status).toBe(200);
+    expect(res.body[0].hasGradedContent).toBe(false);
+  });
+
+  it("один проверяемый вопрос в теме — тест оценивает", async () => {
+    storageMock.getAssignedTestsForUser.mockResolvedValue([dbTest]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "Стили" }]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 5 }]);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+    storageMock.getGradingTraitsByTopics.mockResolvedValue([
+      { topicId: "t1", type: "allocation", correctJson: {} },
+      { topicId: "t1", type: "single", correctJson: { correctIndex: 0 } },
+    ]);
+    const res = await asLearner(request(app).get("/api/learner/tests"));
+    expect(res.body[0].hasGradedContent).toBe(true);
   });
 
   it("returns 500 when the store throws", async () => {
@@ -198,16 +248,52 @@ describe("POST .../attempts/start — branches", () => {
     expect(storageMock.getLatestSnapshot).toHaveBeenCalled();
   });
 
-  it("returns 403 RETAKE_COOLDOWN while the cooldown is active", async () => {
+  it("returns 403 RETAKE_COOLDOWN on the first attempt of a NEW assignment", async () => {
     storageMock.getTest.mockResolvedValue({
       ...dbTest, retakePolicyJson: { enabled: true, cooldownPeriodDays: 30 },
     });
+    // PRD-31 §3: barrier A guards the boundary BETWEEN assignments — the recent
+    // attempt belongs to the previous one, the learner is starting a fresh one.
+    storageMock.getCurrentAssignmentId.mockResolvedValue("a-new");
     storageMock.getAttemptsByUserAndTest.mockResolvedValue([
-      { ...finishedAttempt, finishedAt: new Date() },
+      { ...finishedAttempt, assignmentId: "a-old", finishedAt: new Date() },
     ]);
     const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
     expect(res.status).toBe(403);
     expect(res.body.code).toBe("RETAKE_COOLDOWN");
+    expect(res.body.blockedBy).toBe("cooldown");
+  });
+
+  it("does NOT apply the cooldown to a repeat inside the SAME assignment", async () => {
+    // The defect PRD-31 fixes: the learner still has attempts left in the assignment
+    // they were given, so the between-assignments cooldown must not stop them.
+    storageMock.getTest.mockResolvedValue({
+      ...dbTest, maxAttempts: 3, retakePolicyJson: { enabled: true, cooldownPeriodDays: 30 },
+    });
+    storageMock.getCurrentAssignmentId.mockResolvedValue("a-1");
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([
+      { ...finishedAttempt, assignmentId: "a-1", finishedAt: new Date() },
+    ]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 1 }]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([dbQuestion]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.createAttempt.mockResolvedValue(dbAttempt);
+    const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+    expect(res.status).toBe(201);
+  });
+
+  it("pins a started attempt to the current assignment", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getCurrentAssignmentId.mockResolvedValue("a-42");
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 1 }]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([dbQuestion]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.createAttempt.mockResolvedValue(dbAttempt);
+    await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+    expect(storageMock.createAttempt.mock.calls[0][0].assignmentId).toBe("a-42");
   });
 
   it("returns 500 when a store read throws", async () => {
@@ -229,12 +315,14 @@ describe("POST .../attempts/start-adaptive — branches", () => {
     expect(res.status).toBe(404);
   });
 
-  it("returns 403 RETAKE_COOLDOWN for an adaptive test in cooldown", async () => {
+  it("returns 403 RETAKE_COOLDOWN for an adaptive test on a new assignment", async () => {
     storageMock.getTest.mockResolvedValue({
       ...adaptiveTest, retakePolicyJson: { enabled: true, cooldownPeriodDays: 30 },
     });
+    // Same framing as the standard start: barrier A is a between-assignments rule.
+    storageMock.getCurrentAssignmentId.mockResolvedValue("a-new");
     storageMock.getAttemptsByUserAndTest.mockResolvedValue([
-      { ...finishedAttempt, finishedAt: new Date() },
+      { ...finishedAttempt, assignmentId: "a-old", finishedAt: new Date() },
     ]);
     const res = await asLearner(request(app).post("/api/tests/test1/attempts/start-adaptive"));
     expect(res.status).toBe(403);
@@ -373,6 +461,72 @@ describe("POST .../answer-adaptive — branches", () => {
     const res = await asLearner(request(app).post("/api/attempts/atmp1/answer-adaptive").send({ questionId: "q1", answer: 0 }));
     expect(res.status).toBe(500);
     expect(res.body.error).toBe("Failed to process answer");
+  });
+
+  // issue #33: у адаптивной попытки шкалы и показатели раньше не считались ВОВСЕ, поэтому
+  // экран итогов и отчёт нечего было показывать. Считаются при завершении и ложатся В
+  // РЕЗУЛЬТАТ — пересчёт по сегодняшней конфигурации изменил бы то, что ученик получил.
+  it("считает шкалы и показатели при завершении и кладёт их в результат", async () => {
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, answersJson: {}, variantJson: minimalAdaptiveVariant() });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getTestSections.mockResolvedValue([]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([{ topicId: "t1" }]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([
+      { id: "lvl1", topicId: "t1", levelIndex: 0, levelName: "L1" },
+    ]);
+    storageMock.getAdaptiveLevelLinks.mockResolvedValue([]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS", code: "js" }]);
+    storageMock.getScales.mockResolvedValue([
+      { id: "sc1", testId: "test1", key: "s", label: "Шкала", aggregation: "sum",
+        normalization: "none", direction: "positive", sortOrder: 0, learnerVisibility: "level",
+        configJson: { domainMin: 0, domainMax: 5, bands: [{ min: 0, max: 5, level: "any", label: "Любой" }] } },
+    ]);
+    storageMock.getQuestionMeasurements.mockResolvedValue([
+      { id: "m1", testId: "test1", questionId: "q1", scaleId: "sc1", sourceType: "option", sourceKey: "0", valueJson: 3, weight: 1 },
+    ]);
+    storageMock.getResultVariables.mockResolvedValue([
+      { id: "rv1", testId: "test1", name: "score", type: "number", formula: "percent", sortOrder: 0, controlsStatus: null },
+    ]);
+    storageMock.updateAttempt.mockResolvedValue({});
+
+    const res = await asLearner(
+      request(app).post("/api/attempts/atmp1/answer-adaptive").send({ questionId: "q1", answer: 0 }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.isFinished).toBe(true);
+    const saved = storageMock.updateAttempt.mock.calls.at(-1)![1].resultJson;
+    // Вклад сработал на выбранном варианте ответа.
+    expect(saved.scaleResults.s.raw).toBe(3);
+    // Формула получила процент попытки в словах обычного результата (один вопрос, верно).
+    expect(saved.resultVariables.score).toBe(100);
+    // Уровни на месте: измерения ДОБАВЛЯЮТСЯ к адаптивному результату, а не заменяют его.
+    expect(saved.mode).toBe("adaptive");
+    expect(saved.topicResults).toHaveLength(1);
+  });
+
+  it("тест без шкал и показателей хранит прежний адаптивный результат", async () => {
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, answersJson: {}, variantJson: minimalAdaptiveVariant() });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getTestSections.mockResolvedValue([]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([{ topicId: "t1" }]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([
+      { id: "lvl1", topicId: "t1", levelIndex: 0, levelName: "L1" },
+    ]);
+    storageMock.getAdaptiveLevelLinks.mockResolvedValue([]);
+    storageMock.getScales.mockResolvedValue([]);
+    storageMock.getQuestionMeasurements.mockResolvedValue([]);
+    storageMock.getResultVariables.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue({});
+
+    const res = await asLearner(
+      request(app).post("/api/attempts/atmp1/answer-adaptive").send({ questionId: "q1", answer: 0 }),
+    );
+    expect(res.status).toBe(200);
+    const saved = storageMock.updateAttempt.mock.calls.at(-1)![1].resultJson;
+    expect(saved).not.toHaveProperty("scaleResults");
+    expect(saved).not.toHaveProperty("resultVariables");
   });
 });
 

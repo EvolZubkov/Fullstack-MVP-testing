@@ -3,8 +3,9 @@
  * executed inside the SCORM package (joined before resultsPage.js). Kept in
  * golden parity with the TypeScript source by tests/scale-engine-port.test.ts.
  *
- * Exposes `ScaleEngine.computeScales(scales, measurements, answers, questionTypes)`
- * returning `{ values: { [key]: ScaleResult }, errors: [] }`.
+ * Exposes `ScaleEngine.computeScales(scales, measurements, answers, questionTypes, budgets)`
+ * returning `{ values: { [key]: ScaleResult }, errors: [] }`. `budgets` (PRD-44) maps a
+ * question id to its allocation spec and is read only by percent normalization.
  */
 var ScaleEngine = (function () {
   var EMPTY_RESULT = { raw: 0, normalized: 0, percent: 0, level: '', label: '', hasValue: false };
@@ -34,7 +35,76 @@ var ScaleEngine = (function () {
       var pos = Number(ip[1]);
       return Array.isArray(answer) && answer[pos] === item;
     }
+    if (m.sourceType === 'option_allocation') {
+      // PRD-44 FR-12: a statement is measured when the learner actually put points on
+      // it. Zero is «considered and rejected», not a contribution.
+      if (typeof answer !== 'object' || answer === null || Array.isArray(answer)) return false;
+      var assigned = answer[String(Number(m.sourceKey))];
+      return typeof assigned === 'number' && isFinite(assigned) && assigned !== 0;
+    }
     return false;
+  }
+
+  /**
+   * What ONE unit contributes for this answer — 0 when it does not fire. Every source
+   * except `option_allocation` contributes the value the AUTHOR fixed; an allocation
+   * contributes the amount the LEARNER assigned, scaled by the same coefficients
+   * (PRD-44 FR-12/FR-13). Twin of `unitContribution` in shared/scales/engine.ts.
+   */
+  function unitContribution(m, answer, qType) {
+    if (!isActive(m, answer, qType)) return 0;
+    if (m.sourceType === 'option_allocation') {
+      var assigned = answer[String(Number(m.sourceKey))] || 0;
+      return assigned * m.value * m.weight;
+    }
+    return m.value * m.weight;
+  }
+
+  /**
+   * The { min, max } ONE allocation question can contribute to ONE scale (PRD-44 FR-15).
+   * Twin of `allocationExtremes` in shared/scales/engine.ts — see the reasoning there:
+   * statements share a single budget, so summing their ceilings overstates the domain,
+   * and the domain decides the interpretation band, not just a number.
+   */
+  function allocationExtremes(spec, coeffs) {
+    if (!spec || spec.budget <= 0 || coeffs.length === 0) return { min: 0, max: 0 };
+    var n = coeffs.length;
+    var total = Math.max((spec.options || []).length, n);
+    var others = total - n;
+    var lo = spec.minPerOption;
+    var hi = spec.maxPerOption;
+
+    var sumMin = Math.max(n * lo, spec.budget - others * hi);
+    var sumMax = Math.min(n * hi, spec.budget - others * lo);
+    if (sumMax < sumMin) return { min: 0, max: 0 };
+
+    function extreme(maximise) {
+      var ordered = coeffs.slice().sort(function (a, b) { return maximise ? b - a : a - b; });
+      var best = ordered[0];
+      var worthSpending = maximise ? best > 0 : best < 0;
+      var target = worthSpending ? sumMax : sumMin;
+      var pool = target - n * lo;
+      var value = ordered.reduce(function (sum, c) { return sum + c * lo; }, 0);
+      for (var i = 0; i < ordered.length && pool > 0; i++) {
+        var c = ordered[i];
+        if (maximise ? c <= 0 : c >= 0) break;
+        var take = Math.min(pool, hi - lo);
+        value += c * take;
+        pool -= take;
+      }
+      if (pool > 0) {
+        for (var k = ordered.length - 1; k >= 0 && pool > 0; k--) {
+          var ck = ordered[k];
+          if (maximise ? ck > 0 : ck < 0) continue;
+          var takeK = Math.min(pool, hi - lo);
+          value += ck * takeK;
+          pool -= takeK;
+        }
+      }
+      return value;
+    }
+
+    return { min: extreme(false), max: extreme(true) };
   }
 
   function aggregate(contribs, agg, weights) {
@@ -59,7 +129,7 @@ var ScaleEngine = (function () {
   // [min, max] and make percent negative / >100. single: one unit fires, other
   // option = 0 -> [min(0,vals), max(0,vals)]; multiple/matching/ranking: several
   // units fire together -> sum of negative / positive units (as `raw` sums actives).
-  function rawRange(scaleMeasurements, agg, questionTypes, answers) {
+  function rawRange(scaleMeasurements, agg, questionTypes, answers, budgets) {
     var byQuestion = {};
     for (var i = 0; i < scaleMeasurements.length; i++) {
       var m = scaleMeasurements[i];
@@ -74,7 +144,11 @@ var ScaleEngine = (function () {
       var vals = ms.map(function (m) { return m.value * m.weight; });
       // One-index answers (single choice, scale) activate at most ONE unit of the
       // question, so the range is the extremum, not the sum.
-      if (TBQType.isSingleIndexChoice(questionTypes[questionId])) {
+      if (TBQType.distributesBudget(questionTypes[questionId])) {
+        var extremes = allocationExtremes((budgets || {})[questionId], vals);
+        mins.push(extremes.min);
+        maxes.push(extremes.max);
+      } else if (TBQType.isSingleIndexChoice(questionTypes[questionId])) {
         mins.push(Math.min.apply(null, [0].concat(vals)));
         maxes.push(Math.max.apply(null, [0].concat(vals)));
       } else {
@@ -96,7 +170,7 @@ var ScaleEngine = (function () {
     return { level: hit.level, label: hit.label != null ? hit.label : hit.level };
   }
 
-  function computeScales(scales, measurements, answers, questionTypes) {
+  function computeScales(scales, measurements, answers, questionTypes, budgets) {
     var values = {};
     var errors = [];
 
@@ -113,8 +187,10 @@ var ScaleEngine = (function () {
         var activeWeights = [];
         for (var j = 0; j < scaleMeasurements.length; j++) {
           var m = scaleMeasurements[j];
-          if (isActive(m, answers[m.questionId], questionTypes[m.questionId])) {
-            activeContribs.push(m.value * m.weight);
+          var qType = questionTypes[m.questionId];
+          var answer = answers[m.questionId];
+          if (isActive(m, answer, qType)) {
+            activeContribs.push(unitContribution(m, answer, qType));
             activeWeights.push(m.weight);
           }
         }
@@ -124,7 +200,7 @@ var ScaleEngine = (function () {
         var normalized = raw;
         var percent = 0;
         if (scale.normalization === 'percent') {
-          var range = rawRange(scaleMeasurements, scale.aggregation, questionTypes, answers);
+          var range = rawRange(scaleMeasurements, scale.aggregation, questionTypes, answers, budgets);
           var span = range.max - range.min;
           if (span > 0) {
             percent = scale.direction === 'inverse'

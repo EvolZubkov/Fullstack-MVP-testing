@@ -150,6 +150,14 @@ describe("renderMatching", () => {
     expect(html).toContain('data-drop="r0"');
   });
 
+  it("uses the narrow merge-panel gap mode, never the arrow", () => {
+    const html = renderMatching(Q, {}, undefined);
+    expect(html).toContain("ou-match--gap-narrow");
+    expect(html).not.toContain("ou-match--gap-wide");
+    expect(html).toContain("ou-match__seam");
+    expect(html).not.toContain("ou-match__gap-arrow");
+  });
+
   it("adapts the column ratio to the longer side (66/33), else keeps 50/50", () => {
     const long = "x".repeat(80);
     // LEFT column = prompts (`right`); RIGHT column = answers (`left`).

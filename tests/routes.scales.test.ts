@@ -60,7 +60,7 @@ const savedScale = {
   normalization: "none",
   direction: "positive",
   configJson: {},
-  showToLearner: false,
+  learnerVisibility: "hidden",
   scormTarget: "none",
   sortOrder: 0,
 };
@@ -228,7 +228,7 @@ describe("POST /api/tests/:id/scales/preview", () => {
     normalization: "none",
     direction: "positive",
     configJson: { bands: [{ min: 0, max: 5, level: "low", label: "Низкий" }, { min: 6, max: 100, level: "high", label: "Высокий" }] },
-    showToLearner: false,
+    learnerVisibility: "hidden",
     scormTarget: "both",
     sortOrder: 0,
   };

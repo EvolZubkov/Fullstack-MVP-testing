@@ -16,14 +16,7 @@
  */
 
 import type { ResultInput, AdaptiveResultInput, AdaptiveTopicInput } from "../template/result-context";
-
-/** Background + logo of the report page, already resolved to data URLs. */
-export interface ReportAssets {
-  /** Page background (one of the `pdf-bg-*.png` plates); absent = gradient fallback. */
-  backgroundDataUrl?: string | null;
-  /** Brand logo printed above the headline; absent = no logo row. */
-  logoDataUrl?: string | null;
-}
+import type { FeedbackBlock } from "../scales/interpretation";
 
 /** What the report prints besides the result itself. */
 export interface ReportMeta {
@@ -40,6 +33,35 @@ export interface ReportMeta {
   timestamp?: string | null;
   /** How many attempts the «Лучший результат за N попыток» line counts. */
   attemptsCount?: number;
+  /**
+   * Обратная связь САМОГО теста (`tests.feedback_json`), уже нормализованная хостом
+   * (`normalizeFeedback`) — самый общий источник консолидированного блока рекомендаций
+   * и первый в нём.
+   *
+   * Лежит во ВХОДЕ отчёта, а не в параметрах сборки, потому что оба хоста собирают вход
+   * там, где этот факт известен: веб — в маршруте результата, рядом с материалом экрана
+   * итогов; пакет — в рантайме, из `TEST_DATA.testFeedbackJson`. Клиенту тогда нечего
+   * прокидывать: он лишь передаёт то, что приехало с сервера.
+   *
+   * Отсутствие поля оставляет отчёт прежним: блок соберётся из того, что несут темы.
+   */
+  feedback?: FeedbackBlock | null;
+  /**
+   * Объявлен ли у теста порог прохождения (`tests.overall_pass_rule_json` с типом,
+   * отличным от `none`). Единственный факт, отличающий ЯВНЫЙ успех от `passed: false` по
+   * умолчанию у теста, который вердикта не выносит: обратная связь теста молчит только
+   * при явном успехе (см. `ResultContextOptions.hasPassThreshold`).
+   *
+   * Отсутствие = «неизвестно», и неизвестность трактуется в пользу показа.
+   */
+  hasPassThreshold?: boolean;
+  /**
+   * Вводный блок ОТЧЁТА (`tests.intro_json.report`) — текст и его формат.
+   *
+   * Отдельный от текста экрана: документ уносят с собой и показывают специалисту, поэтому
+   * вводное слово у него своё. Отсутствие = блока в отчёте нет.
+   */
+  intro?: { text?: string | null; format?: "plain" | "richText" | "html" | null } | null;
 }
 
 /** Standard-mode report input — the SAME normalized result the results screen takes. */

@@ -15,8 +15,10 @@
 import { createHash } from "crypto";
 import { storage } from "../storage";
 import { logger } from "../logger";
+import { syncEntityUsages } from "./media/usage-index";
 import { normalizeTags } from "@shared/tags";
-import { hasOptionList, hasFixedOptionOrder, isMeasurementOnly } from "@shared/questions/question-type";
+import { hasOptionList, hasFixedOptionOrder, isMeasurementOnly, distributesBudget } from "@shared/questions/question-type";
+import { isAllocationFeasible } from "@shared/questions/allocation";
 import { normalizeIncomingText, normalizeQuestionData } from "./question-text";
 import type { Question } from "@shared/schema";
 import type { Role } from "@shared/access";
@@ -38,9 +40,13 @@ const typeFromExcel: Record<string, string> = {
   // PRD-26: the scale is declared by its own name. Its rule for the correct-answer
   // column differs from single choice — an empty cell means measurement mode (FR-23).
   scale: "scale",
+  // PRD-44: budget allocation. Its statements ride the ordinary options column; the
+  // budget and the per-option domain come in three columns of their own.
+  allocation: "allocation",
+  распределение: "allocation",
 };
 
-type QuestionType = "single" | "multiple" | "matching" | "ranking" | "scale";
+type QuestionType = "single" | "multiple" | "matching" | "ranking" | "scale" | "allocation";
 
 /** SHA-256 от type + prompt + нормализованные варианты ответов. */
 export function computeQuestionHash(type: string, prompt: string, dataJson: unknown): string {
@@ -232,7 +238,54 @@ export async function importQuestionRows(
         }
         dataJson = { options };
 
-        if (type === "scale") {
+        if (type === "allocation") {
+          // PRD-44 FR-38/FR-39/FR-40. Три колонки описывают бюджет и домен варианта;
+          // колонка правильных ответов должна быть ПУСТА — эталонного распределения у
+          // метода нет вовсе, поэтому заполненная ячейка это ошибка автора, а не
+          // значение, которое можно молча выбросить.
+          if (correctStr !== "") {
+            result.errors.push(
+              `Строка ${rowNum}: у распределения баллов нет правильного ответа — ` +
+                `колонка «Номера правильных ответов» должна быть пустой`,
+            );
+            continue;
+          }
+          const budgetRaw = String(row["Бюджет распределения"] ?? "").trim();
+          const budget = Number(budgetRaw);
+          if (budgetRaw === "" || !Number.isInteger(budget) || budget < 1 || budget > 1000) {
+            result.errors.push(
+              `Строка ${rowNum}: укажите «Бюджет распределения» — целое от 1 до 1000, получено "${budgetRaw}"`,
+            );
+            continue;
+          }
+          const minRaw = String(row["Минимум на вариант"] ?? "").trim();
+          const maxRaw = String(row["Максимум на вариант"] ?? "").trim();
+          const minPerOption = minRaw === "" ? 0 : Number(minRaw);
+          const maxPerOption = maxRaw === "" ? budget : Number(maxRaw);
+          if (!Number.isInteger(minPerOption) || minPerOption < 0 || !Number.isInteger(maxPerOption)) {
+            result.errors.push(`Строка ${rowNum}: минимум и максимум на вариант — целые неотрицательные числа`);
+            continue;
+          }
+          if (minPerOption > maxPerOption || maxPerOption > budget) {
+            result.errors.push(
+              `Строка ${rowNum}: домен варианта должен укладываться в 0 <= минимум <= максимум <= бюджет`,
+            );
+            continue;
+          }
+          const spec = { options, budget, minPerOption, maxPerOption };
+          const feasibility = isAllocationFeasible(spec);
+          if (!feasibility.ok) {
+            result.errors.push(
+              `Строка ${rowNum}: ` +
+                (feasibility.kind === "min"
+                  ? `распределение невыполнимо — минимумы требуют ${feasibility.required} баллов, а бюджет ${feasibility.available}`
+                  : `распределение невыполнимо — нужно распределить ${feasibility.required} баллов, а максимумы дают только ${feasibility.available}`),
+            );
+            continue;
+          }
+          dataJson = spec;
+          correctJson = {};
+        } else if (type === "scale") {
           // PRD-26 FR-23: the correct-answer column IS the author's switch. Empty →
           // measurement mode: `{}`, never `null` (the column is NOT NULL). One number
           // → a checked scale. Several numbers make no sense: a scale answer is one
@@ -387,6 +440,21 @@ export async function importQuestionRows(
         );
       }
 
+      // PRD-44 FR-38: три колонки бюджета описывают ТОЛЬКО распределение. Заполненные
+      // у другого типа они не ошибка (значения просто некуда положить), но означают,
+      // что автор ждал поведения, которого не будет, — об этом стоит сказать.
+      const BUDGET_COLUMNS = ["Бюджет распределения", "Минимум на вариант", "Максимум на вариант"];
+      if (!distributesBudget(type)) {
+        const filled = BUDGET_COLUMNS.filter((c) => String(row[c] ?? "").trim() !== "");
+        if (filled.length > 0) {
+          result.warnings.push(
+            `Строка ${rowNum}: ${filled.map((c) => `«${c}»`).join(", ")} ` +
+              `${filled.length === 1 ? "применяется" : "применяются"} только к распределению баллов — ` +
+              `у типа «${String(row["Тип вопроса"] || row["Тип"]).trim()}» значение не используется`,
+          );
+        }
+      }
+
       // PRD-14 Ф0 (FR-04): сложность сохраняет явный 0; диапазон 0..100. T-40:
       // «Балл» больше не свойство вопроса — цена задаётся листом «Оценка» теста.
       const difficulty = parseIntCell(row["Сложность"], 50);
@@ -394,6 +462,17 @@ export async function importQuestionRows(
         result.errors.push(`Строка ${rowNum}: сложность вне диапазона 0..100 ("${row["Сложность"]}")`);
         continue;
       }
+
+      // PRD-30 FR-01/FR-15: «Индекс в теме». Пустая ячейка = «не задано» (NULL),
+      // а не 0 — ноль здесь обычный индекс. Книга без колонки не трогает
+      // сохранённое значение (см. hasCol ниже).
+      const orderIndexRaw = String(row["Индекс в теме"] ?? "").trim();
+      const parsedOrderIndex = orderIndexRaw === "" ? null : Number(orderIndexRaw);
+      if (parsedOrderIndex !== null && !Number.isInteger(parsedOrderIndex)) {
+        result.errors.push(`Строка ${rowNum}: «Индекс в теме» должен быть целым ("${row["Индекс в теме"]}")`);
+        continue;
+      }
+      const orderIndex = parsedOrderIndex;
 
       // PRD-14 Ф1 (FR-06): теги — разделители `;`/`,`.
       const tags = normalizeTags(String(row["Теги"] ?? "").split(/[;,]/));
@@ -485,6 +564,7 @@ export async function importQuestionRows(
             contentHash,
           };
           if (hasCol("Сложность")) updatePayload.difficulty = difficulty;
+          if (hasCol("Индекс в теме")) updatePayload.orderIndex = orderIndex;
           if (hasCol("Следование вариантов ответов")) updatePayload.shuffleAnswers = shuffleAnswers;
           if (hasCol("Обратная связь")) updatePayload.feedback = feedback;
           if (hasCol("ОС при верном")) updatePayload.feedbackCorrect = feedbackCorrect;
@@ -495,7 +575,22 @@ export async function importQuestionRows(
             updatePayload.feedbackMode = "general";
           }
           if (hasCol("Теги")) updatePayload.tags = tags;
-          if (!dryRun) await storage.updateQuestion(rowId, updatePayload as any);
+          if (!dryRun) {
+            const updatedQuestion = await storage.updateQuestion(rowId, updatePayload as any);
+            // Медиатека: индекс за импортом мимо не должен оставаться неактуальным.
+            // Сбой индексации не должен ронять весь импорт — только строку журнала;
+            // недостающая строка индекса безопасна (отказывает в доступе) и чинится
+            // полной пересборкой (reindexAllUsages).
+            if (updatedQuestion) {
+              try {
+                await syncEntityUsages("question", updatedQuestion.id, updatedQuestion);
+              } catch (error) {
+                logger.error(
+                  `Media usage sync failed for question ${updatedQuestion.id}: ${(error as Error).message}`,
+                );
+              }
+            }
+          }
           result.updated++;
           recordAlias(row, { id: rowId, type, unitCount, contentHash, measurementOnly: isMeasurementOnly({ type, correctJson }) });
           continue;
@@ -542,10 +637,20 @@ export async function importQuestionRows(
           feedbackCorrect: feedbackMode === "conditional" ? feedbackCorrect : null,
           feedbackIncorrect: feedbackMode === "conditional" ? feedbackIncorrect : null,
           tags,
+          orderIndex,
           contentHash,
           createdBy: actor?.id ?? null,
         } as any);
-        if (created?.id) newId = created.id;
+        if (created?.id) {
+          newId = created.id;
+          // Медиатека: та же логика, что при обновлении (см. выше) — сбой не
+          // должен ронять импорт, недостающая строка чинится пересборкой.
+          try {
+            await syncEntityUsages("question", created.id, created);
+          } catch (error) {
+            logger.error(`Media usage sync failed for question ${created.id}: ${(error as Error).message}`);
+          }
+        }
       }
 
       existingHashes.add(contentHash);

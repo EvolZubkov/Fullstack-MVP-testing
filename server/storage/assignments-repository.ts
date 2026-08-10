@@ -11,7 +11,7 @@
  * Exposed through the `IStorage` facade, never imported by routes.
  */
 import { randomUUID } from "crypto";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, or, desc, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   testAssignments, assignmentAccessTokens, userGroups, tests,
@@ -73,6 +73,33 @@ export class AssignmentsRepository {
       .where(and(eq(testAssignments.testId, testId), inArray(testAssignments.groupId, groupIds)))
       .limit(1);
     return !!viaGroup;
+  }
+
+  /**
+   * PRD-31 (§5.3): the assignment a NEW attempt of `testId` belongs to — the most
+   * recently made one applicable to the learner, personal or through a group. The
+   * assignment is the unit of access, so this is what `maxAttempts` and the hour
+   * interval are counted within, and what the calendar cooldown is measured across.
+   *
+   * Returns null when none applies (legacy data, direct access): the learner then
+   * falls into the implicit bucket `assignment_id IS NULL`, which the access rules
+   * treat as one assignment of its own — never as "no restrictions".
+   *
+   * Newest wins: re-assigning a test is exactly how an author hands out a fresh set
+   * of attempts, so the latest row is the one in force.
+   */
+  async getCurrentAssignmentId(userId: string, testId: string): Promise<string | null> {
+    const groupIds = await this.getUserGroupIds(userId);
+    const applicable = groupIds.length > 0
+      ? or(eq(testAssignments.userId, userId), inArray(testAssignments.groupId, groupIds))
+      : eq(testAssignments.userId, userId);
+    const [latest] = await db
+      .select({ id: testAssignments.id })
+      .from(testAssignments)
+      .where(and(eq(testAssignments.testId, testId), applicable))
+      .orderBy(desc(testAssignments.assignedAt))
+      .limit(1);
+    return latest?.id ?? null;
   }
 
   async createTestAssignment(assignment: InsertTestAssignment & { assignedBy: string }): Promise<TestAssignment> {

@@ -50,9 +50,11 @@ const RESULT_VAR = {
   label: "V1",
   type: "number" as const,
   formula: "0",
-  showToLearner: false,
+  learnerVisibility: "hidden",
   scormTarget: "both" as const,
   controlsStatus: "none" as const,
+  bands: [],
+  outcomes: [],
   sortOrder: 0,
 };
 
@@ -64,7 +66,7 @@ const SCALE = {
   normalization: "none" as const,
   direction: "positive" as const,
   bands: [],
-  showToLearner: false,
+  learnerVisibility: "hidden",
   scormTarget: "none" as const,
   sortOrder: 0,
 };

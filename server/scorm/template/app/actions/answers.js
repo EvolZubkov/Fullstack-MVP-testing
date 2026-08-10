@@ -101,6 +101,15 @@ function hasAnswer(q, answer) {
     return !!(state.rankingTouched && state.rankingTouched[q.id]);
   }
 
+  // PRD-44 FR-31: распределение отвечено, только когда сумма ровно равна бюджету.
+  // Зеркало веб-хоста; без этой ветки хвост функции вернул бы `true` для любого
+  // объекта, и пакет пускал бы дальше с недобором, а веб — нет.
+  if (typeof TBQType !== 'undefined' && TBQType.distributesBudget(q.type)) {
+    var TBa = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    if (!TBa || !TBa.isAllocationComplete || !TBa.allocationSpec) return false;
+    return TBa.isAllocationComplete(TBa.allocationSpec(q.data), answer);
+  }
+
   return answer !== undefined && answer !== null;
 }
 
@@ -228,6 +237,8 @@ var __qInputClicksBound = false;
 function bindQuestionInputClicksOnce() {
   if (__qInputClicksBound) return;
   __qInputClicksBound = true;
+  // Распределение цепляется той же точкой входа: у хоста один момент «интерактив готов».
+  bindAllocationInputOnce();
   if (typeof document === 'undefined') return;
   document.addEventListener('click', function (e) {
     var el = (e.target && e.target.closest) ? e.target.closest('[data-action]') : null;
@@ -277,6 +288,44 @@ function bindQuestionInputClicksOnce() {
       var again = document.querySelectorAll('.ou-stepper--choice .ou-stepper__step');
       if (again[next] && again[next].focus) again[next].focus();
     }, 0);
+  });
+}
+
+var __allocBound = false;
+/**
+ * PRD-44: живой ввод распределения. Привязывается ОДИН раз к документу — как и
+ * остальные делегации, потому что строки заменяются на каждой перерисовке.
+ *
+ * Ответ приходит уже готовым и УЖЕ отражённым в DOM (модуль правит узлы на месте во
+ * время жеста), поэтому здесь только запись в состояние и обновление кнопки: полная
+ * перерисовка заменила бы узлы, за которые держится палец, и порвала бы жест.
+ */
+function bindAllocationInputOnce() {
+  if (__allocBound) return;
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (!TB || !TB.attachAllocation || typeof document === 'undefined') return;
+  __allocBound = true;
+
+  TB.attachAllocation(document, {
+    getSpec: function () {
+      var q = __currentQuestionForInput();
+      if (!q || typeof TBQType === 'undefined' || !TBQType.distributesBudget(q.type)) return null;
+      return TB.allocationSpec(q.data);
+    },
+    getAnswer: function () {
+      var q = __currentQuestionForInput();
+      return q ? state.answers[q.id] : null;
+    },
+    isLocked: function () {
+      return isAnswerLocked(state.flatQuestions[state.currentIndex]);
+    },
+    onCommit: function (next) {
+      var q = __currentQuestionForInput();
+      if (!q) return;
+      reopenIfCommitted(state.flatQuestions[state.currentIndex]);
+      state.answers[q.id] = next;
+      refreshSubmitEnabled();
+    }
   });
 }
 

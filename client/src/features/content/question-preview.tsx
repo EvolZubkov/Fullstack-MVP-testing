@@ -9,7 +9,7 @@
 import { CheckSquare, Image as ImageIcon, Music, Square, Video } from "lucide-react";
 import { Chip, Cluster, Grid, Stack, Text } from "@universityrt/ui-kit";
 import type { Question } from "@shared/schema";
-import { hasOptionList } from "@shared/questions/question-type";
+import { hasOptionList, distributesBudget } from "@shared/questions/question-type";
 
 export function QuestionPreview({ question }: { question: Question }) {
   const data = question.dataJson as { options?: string[]; left?: string[]; right?: string[]; items?: string[] };
@@ -33,7 +33,22 @@ export function QuestionPreview({ question }: { question: Question }) {
       <Stack gap={2}>
         {media}
 
-        {hasOptionList(type) && (
+        {/* PRD-44: у распределения нет верного варианта, поэтому вместо колонки
+            галочек показывается бюджет и сами утверждения — иначе предпросмотр
+            выглядел бы как список без единого отмеченного ответа, будто автор
+            забыл его отметить. */}
+        {distributesBudget(type) && (
+          <Stack gap={1}>
+            <Text variant="body-s" tone="muted">
+              Распределить {Number((data as { budget?: number }).budget ?? 0)} баллов между утверждениями
+            </Text>
+            {(data.options ?? []).map((opt, i) => (
+              <Text key={i} variant="body-s">{i + 1}. {opt}</Text>
+            ))}
+          </Stack>
+        )}
+
+        {!distributesBudget(type) && hasOptionList(type) && (
           <Stack gap={1}>
             {(data.options ?? []).map((opt, i) => {
               // PRD-26: a measurement-only scale has no key at all, so nothing is

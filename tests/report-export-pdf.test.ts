@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { exportReportPdf, loadReportAssets, loadImageDataUrl } from "../shared/report/export-pdf";
+import { exportReportPdf, inlineReportImageValues, loadImageDataUrl } from "../shared/report/export-pdf";
 
 /** A canvas double: html2canvas' output is only read for size + data URL. */
 function fakeCanvas(width = 1190, height = 1684) {
@@ -22,6 +22,7 @@ function fakePdf() {
   const calls = {
     ctor: [] as unknown[],
     addImage: [] as unknown[][],
+    addPage: 0,
     link: [] as unknown[][],
     saved: [] as string[],
   };
@@ -32,6 +33,9 @@ function fakePdf() {
     addImage(...args: unknown[]) {
       calls.addImage.push(args);
     }
+    addPage() {
+      calls.addPage += 1;
+    }
     link(...args: unknown[]) {
       calls.link.push(args);
     }
@@ -40,6 +44,26 @@ function fakePdf() {
     }
   }
   return { calls, jsPDF: Doc as unknown as never };
+}
+
+/**
+ * Дать jsdom высоты: он раскладку не считает, а разбивка на страницы стоит именно на
+ * измеренных координатах. Высота блока читается из его `data-h`, корень занимает их сумму.
+ */
+function stubLayout() {
+  return vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const own = Number((this as HTMLElement).dataset?.h ?? NaN);
+    if (Number.isFinite(own)) {
+      let top = 0;
+      for (const sibling of [...(this.parentElement?.children ?? [])]) {
+        if (sibling === this) break;
+        top += Number((sibling as HTMLElement).dataset?.h ?? 0);
+      }
+      return { top, bottom: top + own, left: 0, right: 595, width: 595, height: own } as DOMRect;
+    }
+    const total = [...this.children].reduce((sum, c) => sum + Number((c as HTMLElement).dataset?.h ?? 0), 0);
+    return { top: 0, bottom: total, left: 0, right: 595, width: 595, height: total } as DOMRect;
+  });
 }
 
 /** Страница отчёта: макет варианта + контекст, как их отдаёт шаблон. */
@@ -91,6 +115,86 @@ describe("exportReportPdf", () => {
     expect(opts).toEqual({ url: "https://e/a", newWindow: true });
   });
 
+  it("раскладывает документ по страницам A4, не разрывая карточки", async () => {
+    // Отчёт печатался ОДНОЙ страницей произвольной высоты — «колбасой», которую нечем
+    // ни распечатать, ни пролистать. Теперь страница всегда A4, а разрыв проходит между
+    // карточками: три по 500 px при полезной высоте A4 не уживаются на одном листе.
+    const rect = stubLayout();
+    try {
+      const { calls, jsPDF } = fakePdf();
+      const html2canvas = vi.fn().mockResolvedValue(fakeCanvas(1190, 1000));
+      await exportReportPdf(
+        {
+          layout:
+            '<div class="tb-report">' +
+            '<section data-h="500">Счёт</section>' +
+            '<section data-h="500">Темы</section>' +
+            '<section data-h="500">Показатели</section>' +
+            "</div>",
+          context: {},
+        },
+        "T",
+        { jsPDF, html2canvas },
+      );
+      // Каждая карточка получает свой лист: снимок на страницу, addPage между ними.
+      expect(html2canvas).toHaveBeenCalledTimes(3);
+      expect(calls.addImage).toHaveLength(3);
+      expect(calls.addPage).toBe(2);
+      // Формат страницы — A4, а не высота содержимого.
+      expect(calls.ctor[0]).toMatchObject({ format: [210, 297] });
+      // На каждом листе — только его карточка: разрыва внутри карточки нет.
+      const printed = html2canvas.mock.calls.map(([el]) => (el as HTMLElement).textContent);
+      expect(printed).toEqual(["Счёт", "Темы", "Показатели"]);
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
+  it("короткий отчёт остаётся одной страницей", async () => {
+    const rect = stubLayout();
+    try {
+      const { calls, jsPDF } = fakePdf();
+      const html2canvas = vi.fn().mockResolvedValue(fakeCanvas(1190, 400));
+      await exportReportPdf(
+        { layout: '<div class="tb-report"><section data-h="200">Счёт</section></div>', context: {} },
+        "T",
+        { jsPDF, html2canvas },
+      );
+      expect(calls.addPage).toBe(0);
+      expect(calls.addImage).toHaveLength(1);
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
+  it("ссылки уходят на ТУ страницу, где напечатан их чип", async () => {
+    // Растр без этого превращает рекомендацию в мёртвую картинку, а координаты чипа
+    // на второй странице отсчитываются от её собственного верха, а не от начала документа.
+    const rect = stubLayout();
+    try {
+      const { calls, jsPDF } = fakePdf();
+      const html2canvas = vi.fn().mockResolvedValue(fakeCanvas(1190, 1000));
+      await exportReportPdf(
+        {
+          layout:
+            '<div class="tb-report">' +
+            '<section data-h="600">Первая</section>' +
+            '<section data-h="600"><div class="pdf-link-btn" data-url="https://e/a">Курс</div></section>' +
+            "</div>",
+          context: {},
+        },
+        "T",
+        { jsPDF, html2canvas },
+      );
+      expect(calls.addPage).toBe(1);
+      expect(calls.link).toHaveLength(1);
+      const [, , , , opts] = calls.link[0] as [number, number, number, number, { url: string }];
+      expect(opts.url).toBe("https://e/a");
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
   it("refuses to run without the libraries", async () => {
     await expect(
       exportReportPdf(PAGE, "T", { jsPDF: undefined as never, html2canvas: vi.fn() }),
@@ -138,8 +242,16 @@ describe("exportReportPdf", () => {
     );
     expect(sawStyle).toBe(true);
     expect(sawVar).toBe("270 100% 50%");
-    // После экспорта ни стилей, ни контейнера в документе нет.
-    expect(document.querySelectorAll("style").length).toBe(0);
+    // После экспорта в документе не остаётся ни контейнера, ни СВОЕГО стиля варианта.
+    // Единственный `<style>`, который вправе пережить экспорт, — глобальный
+    // `[data-tb-protection]` (PRD-34): `renderScreenInto` инжектит его в `document.head`
+    // безусловно при КАЖДОМ рендере сцены (см. `applyProtection` в
+    // `shared/template/protection/apply.ts`) и он идемпотентен — не течёт при повторных
+    // экспортах, просто живёт в head как обычная страница. Это не утечка страницы отчёта.
+    const leftoverPageStyles = Array.from(document.querySelectorAll("style")).filter(
+      (el) => !el.hasAttribute("data-tb-protection"),
+    );
+    expect(leftoverPageStyles).toHaveLength(0);
     expect(document.body.children.length).toBe(0);
   });
 });
@@ -162,45 +274,50 @@ describe("report assets", () => {
 
   it("resolves null for an asset that cannot be read (report falls back)", async () => {
     stubImage(() => "error");
-    await expect(loadImageDataUrl("/api/report/asset/pdf-bg-1.png")).resolves.toBeNull();
+    await expect(loadImageDataUrl("template/assets/report/bg.png")).resolves.toBeNull();
     vi.unstubAllGlobals();
   });
 
-  it("returns no background and no logo when every asset is missing", async () => {
+  it("нечитаемая картинка становится пустым значением, а не роняет экспорт", async () => {
     stubImage(() => "error");
-    await expect(loadReportAssets("/api/report/asset/")).resolves.toEqual({
-      backgroundDataUrl: null,
-      logoDataUrl: null,
-    });
+    await expect(
+      inlineReportImageValues({ backgroundImage: "template/assets/report/bg.png" }, ["backgroundImage"]),
+    ).resolves.toEqual({ backgroundImage: "" });
     vi.unstubAllGlobals();
   });
 
-  it("asks for the plates and the logo under the given base URL", async () => {
+  it("читает ИМЕННО объявленные вариантом картинки, по их путям", async () => {
     const asked: string[] = [];
     stubImage((src) => {
       asked.push(src);
       return "error";
     });
-    await loadReportAssets("/api/report/asset/");
-    expect(asked).toEqual([
-      "/api/report/asset/pdf-bg-1.png",
-      "/api/report/asset/pdf-bg-2.png",
-      "/api/report/asset/pdf-bg-3.png",
-      "/api/report/asset/logo-light.png",
-    ]);
+    await inlineReportImageValues(
+      {
+        backgroundImage: "template/assets/report/bg.png",
+        logoImage: "/uploads/media/own-logo.png",
+        headline: "Итоги",
+      },
+      ["backgroundImage", "logoImage"],
+    );
+    // Заголовок — не картинка, его никто не грузит; порядок — как объявлено.
+    expect(asked).toEqual(["template/assets/report/bg.png", "/uploads/media/own-logo.png"]);
     vi.unstubAllGlobals();
   });
 
-  it("picks a plate deterministically when the caller supplies the chooser", async () => {
-    // jsdom has no 2D context, so `loadImageDataUrl` cannot produce a data URL here;
-    // the point of the assertion is that `pick` drives the choice, not Math.random.
-    const pick = vi.fn().mockReturnValue(0);
-    stubImage(() => "load");
-    await loadReportAssets("/base/", pick);
+  it("незаполненное и уже инлайненное значения сети не касаются", async () => {
+    const asked: string[] = [];
+    stubImage((src) => {
+      asked.push(src);
+      return "load";
+    });
+    const values = await inlineReportImageValues(
+      { backgroundImage: "", logoImage: "data:image/png;base64,AAA" },
+      ["backgroundImage", "logoImage"],
+    );
+    expect(asked).toEqual([]);
+    expect(values).toEqual({ backgroundImage: "", logoImage: "data:image/png;base64,AAA" });
     vi.unstubAllGlobals();
-    // With no readable plates there is nothing to choose from, so `pick` stays unused —
-    // guarding that the empty case never indexes into an empty list.
-    expect(pick).not.toHaveBeenCalled();
   });
 
   describe("с работающим 2D-контекстом", () => {
@@ -222,32 +339,42 @@ describe("report assets", () => {
       vi.unstubAllGlobals();
     });
 
-    it("читает ассет в data-URL", async () => {
+    it("читает ассет шаблона в data-URL", async () => {
       stubImage(() => "load");
-      await expect(loadImageDataUrl("/api/report/asset/logo-light.png")).resolves.toBe("data:image/png;base64,PLATE");
+      await expect(loadImageDataUrl("template/assets/report/logo.png")).resolves.toBe(
+        "data:image/png;base64,PLATE",
+      );
     });
 
-    it("подложку выбирает переданный chooser, а не случай", async () => {
+    it("все объявленные картинки приходят в макет уже инлайненными", async () => {
       stubImage(() => "load");
-      const pick = vi.fn().mockReturnValue(2);
-      const assets = await loadReportAssets("/base/", pick);
-      // Три подложки прочитаны — выбор делается из них.
-      expect(pick).toHaveBeenCalledWith(3);
-      expect(assets.backgroundDataUrl).toBe("data:image/png;base64,PLATE");
-      expect(assets.logoDataUrl).toBe("data:image/png;base64,PLATE");
+      const values = await inlineReportImageValues(
+        { backgroundImage: "template/assets/report/bg.png", logoImage: "template/assets/report/logo.png" },
+        ["backgroundImage", "logoImage"],
+      );
+      expect(values).toEqual({
+        backgroundImage: "data:image/png;base64,PLATE",
+        logoImage: "data:image/png;base64,PLATE",
+      });
     });
 
-    it("chooser вне диапазона не роняет сборку", async () => {
-      stubImage(() => "load");
-      const assets = await loadReportAssets("/base/", () => 99);
-      expect(assets.backgroundDataUrl).toBe("data:image/png;base64,PLATE");
+    it("подложки нет, а логотип есть — отчёт печатается с градиентом шаблона", async () => {
+      stubImage((src) => (src.includes("bg.png") ? "error" : "load"));
+      const values = await inlineReportImageValues(
+        { backgroundImage: "template/assets/report/bg.png", logoImage: "template/assets/report/logo.png" },
+        ["backgroundImage", "logoImage"],
+      );
+      expect(values.backgroundImage).toBe("");
+      expect(values.logoImage).toBe("data:image/png;base64,PLATE");
     });
 
-    it("подложки нет, а логотип есть — отчёт печатается с градиентом", async () => {
-      stubImage((src) => (src.includes("pdf-bg") ? "error" : "load"));
-      const assets = await loadReportAssets("/base/");
-      expect(assets.backgroundDataUrl).toBeNull();
-      expect(assets.logoDataUrl).toBe("data:image/png;base64,PLATE");
+    it("значения, которых вариант не объявлял картинками, не трогаются", async () => {
+      stubImage(() => "load");
+      const values = await inlineReportImageValues(
+        { headline: "Итоги", backgroundImage: "template/assets/report/bg.png" },
+        ["backgroundImage"],
+      );
+      expect(values.headline).toBe("Итоги");
     });
   });
 });
