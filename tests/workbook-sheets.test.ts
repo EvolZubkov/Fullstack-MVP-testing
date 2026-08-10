@@ -259,6 +259,9 @@ describe("parseStructureRow", () => {
       drawAll: false,
       timeLimitMinutes: null,
       defaultPoints: null,
+      // PRD-48 FR-11: колонок правил нет — разблокировку книга не трогает.
+      unlockMode: null,
+      unlockDependsOn: [],
     });
   });
 
@@ -338,6 +341,42 @@ describe("«Структура»: поля раздела (PRD-48 FR-09)", () =>
     expect(parsed.value.drawAll).toBe(false);
     expect(parsed.value.timeLimitMinutes).toBeNull();
     expect(parsed.value.defaultPoints).toBeNull();
+  });
+
+  it("правила разблокировки ходят по кругу", () => {
+    const row = serializeStructureRow({
+      topicName: "Основной",
+      sortOrder: 1,
+      drawCount: 5,
+      topicPassRuleJson: null,
+      required: true,
+      unlockMode: "after_sections_passed",
+      unlockDependsOn: ["Вводный", "Правовой"],
+    });
+    expect(row["Доступность раздела"]).toBe("После успешного прохождения выбранных разделов");
+    expect(row["Зависит от разделов"]).toBe("Вводный; Правовой");
+
+    const parsed = parseStructureRow(row, 0);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.unlockMode).toBe("after_sections_passed");
+    expect(parsed.value.unlockDependsOn).toEqual(["Вводный", "Правовой"]);
+  });
+
+  it("без колонок правил раздел доступен сразу, зависимостей нет", () => {
+    const parsed = parseStructureRow({ "Раздел": "Финансы", "Вопросов в выборке": 5 }, 0);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.unlockMode).toBeNull();
+    expect(parsed.value.unlockDependsOn).toEqual([]);
+  });
+
+  it("недопустимая «Доступность раздела» → ошибка строки", () => {
+    const r = parseStructureRow(
+      { "Раздел": "Финансы", "Вопросов в выборке": 5, "Доступность раздела": "когда-нибудь" },
+      0,
+    );
+    expect(r.ok).toBe(false);
   });
 
   it("нецелые «Лимит времени темы» / «Балл по умолчанию в секции» → ошибка строки", () => {

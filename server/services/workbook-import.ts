@@ -717,6 +717,11 @@ export async function importWorkbook(
     const structRows = sheetToObjects(structureSheet);
     const pending: Array<{ order: number; payload: SectionPayload }> = [];
     const usedTopicKeys = new Set<string>();
+    // PRD-48 FR-11: unlock rules by topic NAME for now — the ids the rules are keyed by
+    // are known only once every row has resolved its topic.
+    const unlockByTopicKey = new Map<string, { mode: string; dependsOn: string[] }>();
+    /** Topic id per section of THIS book — what a dependency name may point at. */
+    const sectionTopicIdByKey = new Map<string, string>();
     for (let i = 0; i < structRows.length; i++) {
       const where = `Лист «Структура», строка ${i + 2}`;
       const parsed = parseStructureRow(structRows[i], i);
@@ -763,6 +768,16 @@ export async function importWorkbook(
       if (formSetJson && formSetJson.forms.length < 2) {
         result.errors.push(`${where}: у вопросов темы задан только один вариант — нужно ≥2`);
         formSetJson = null;
+      }
+
+      // Registered only for a section that survived the row's checks: a discarded row
+      // must not leave a rule behind, and must not satisfy anyone's dependency.
+      sectionTopicIdByKey.set(key, topicId);
+      if (sec.unlockMode !== null || sec.unlockDependsOn.length > 0) {
+        unlockByTopicKey.set(key, {
+          mode: sec.unlockMode ?? "always_available",
+          dependsOn: sec.unlockDependsOn,
+        });
       }
 
       pending.push({
@@ -864,6 +879,31 @@ export async function importWorkbook(
           `Раздел с типом порога «По вариантам»: задано ${covered} из ${forms.length} порогов — нужен порог на каждый вариант`,
         );
       }
+    }
+
+    // ── Unlock rules (PRD-48 FR-11) ─────────────────────────────────────────
+    // Dependency NAMES → topic ids, once every section of the book has resolved its
+    // topic. A name absent from the book's sections is an author's typo, and a silently
+    // dropped dependency would OPEN a section that is meant to stay locked.
+    const unlockRules: Record<string, unknown> = {};
+    for (const [key, rule] of unlockByTopicKey) {
+      const topicId = sectionTopicIdByKey.get(key);
+      if (!topicId) continue;
+      const sectionIds: string[] = [];
+      for (const dep of rule.dependsOn) {
+        const depId = sectionTopicIdByKey.get(normalizeName(dep));
+        if (!depId) {
+          result.errors.push(`Лист «Структура»: раздел "${dep}" из «Зависит от разделов» не найден`);
+          continue;
+        }
+        sectionIds.push(depId);
+      }
+      unlockRules[topicId] = rule.mode === "always_available"
+        ? { mode: "always_available" }
+        : { mode: rule.mode, sectionIds };
+    }
+    if (Object.keys(unlockRules).length > 0) {
+      settingsDraft.router.sectionUnlockRules = unlockRules;
     }
 
     // The array order becomes each section's sortOrder in the service.

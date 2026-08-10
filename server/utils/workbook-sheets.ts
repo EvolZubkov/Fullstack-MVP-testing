@@ -655,8 +655,10 @@ export const STRUCTURE_HEADERS = [
   "Случайный порядок вопросов",
   // PRD-48 FR-09: the section fields the workbook was missing for a full transfer.
   "Выдавать все вопросы темы", "Лимит времени темы", "Балл по умолчанию в секции",
+  // PRD-48 FR-11: the router's unlock rules, addressed by topic NAME.
+  "Доступность раздела", "Зависит от разделов",
 ];
-export const STRUCTURE_WIDTHS = [28, 22, 10, 20, 16, 10, 14, 26, 24, 20, 26];
+export const STRUCTURE_WIDTHS = [28, 22, 10, 20, 16, 10, 14, 26, 24, 20, 26, 34, 34];
 
 /** Canonical «Квоты» headers (one row per PRD-11 stratum). */
 export const QUOTA_HEADERS = ["Раздел", "Тег", "Количество", "Режим"];
@@ -703,6 +705,35 @@ const QUOTA_MODE_FROM: Record<string, "exact" | "min"> = {
 /** PRD-11 mode → «Режим» cell (export). */
 const QUOTA_MODE_TO: Record<string, string> = { exact: "Ровно", min: "Не менее" };
 
+/** The router's unlock modes (PRD-8 §3.2). */
+export type UnlockMode = "always_available" | "after_sections_completed" | "after_sections_passed";
+
+/**
+ * «Доступность раздела» → the router's unlock mode (PRD-8 §3.2).
+ *
+ * The rules are keyed by TOPIC ids, not section ids: `isSectionUnlocked` in
+ * `shared/flow/router-hub` reads `unlockRules[section.topicId]`. That is why the workbook
+ * addresses them by topic NAME — section ids are minted anew on every import anyway.
+ *
+ * An EMPTY cell is not in the table on purpose: it is handled before the lookup, because
+ * «the book never carried the column» must stay distinguishable from «available right
+ * away» — an older book may not silently rewrite rules it knows nothing about.
+ */
+const UNLOCK_MODE_FROM: Record<string, UnlockMode> = {
+  "доступен сразу": "always_available",
+  "после завершения выбранных разделов": "after_sections_completed",
+  "после успешного прохождения выбранных разделов": "after_sections_passed",
+};
+/** Unlock mode → «Доступность раздела» cell (export). */
+const UNLOCK_MODE_TO: Record<string, string> = {
+  always_available: "Доступен сразу",
+  after_sections_completed: "После завершения выбранных разделов",
+  after_sections_passed: "После успешного прохождения выбранных разделов",
+};
+
+/** «Доступность раздела» of «Структура». */
+export const UNLOCK_MODE_CHOICES = Object.values(UNLOCK_MODE_TO);
+
 /** «Режим» of «Квоты». */
 export const QUOTA_MODE_CHOICES = Object.values(QUOTA_MODE_TO);
 
@@ -745,6 +776,10 @@ export interface ParsedSection {
   timeLimitMinutes: number | null;
   /** PRD-48 FR-09: section-level price default; `null` = inherit the test's. */
   defaultPoints: number | null;
+  /** PRD-48 FR-11: the router's unlock mode; `null` = the book did not carry it. */
+  unlockMode: UnlockMode | null;
+  /** PRD-48 FR-11: topic NAMES the unlock depends on (resolved to ids later). */
+  unlockDependsOn: string[];
 }
 
 /** Parse a «Структура» row. `rowIndex` (0-based) is the «Порядок» fallback. */
@@ -817,11 +852,24 @@ export function parseStructureRow(
   const timeLimitMinutes = timeLimitRaw === "" ? null : Number(timeLimitRaw);
   const defaultPoints = defaultPointsRaw === "" ? null : Number(defaultPointsRaw);
 
+  // PRD-48 FR-11: an empty cell leaves the rules alone; a filled one names a mode, and
+  // the dependencies are topic names the orchestrator turns into topic ids.
+  const unlockRaw = String(row["Доступность раздела"] ?? "").trim().toLowerCase();
+  let unlockMode: UnlockMode | null = null;
+  if (unlockRaw !== "") {
+    unlockMode = UNLOCK_MODE_FROM[unlockRaw] ?? null;
+    if (!unlockMode) {
+      return { ok: false, error: `«Доступность раздела»: недопустимое значение "${row["Доступность раздела"]}"` };
+    }
+  }
+  const unlockDependsOn = String(row["Зависит от разделов"] ?? "")
+    .split(";").map((s) => s.trim()).filter(Boolean);
+
   return {
     ok: true,
     value: {
       topicName, topicCode, sortOrder, drawCount, passRule, required, questionOrder,
-      drawAll, timeLimitMinutes, defaultPoints,
+      drawAll, timeLimitMinutes, defaultPoints, unlockMode, unlockDependsOn,
     },
   };
 }
@@ -843,6 +891,10 @@ export function serializeStructureRow(s: {
   timeLimitMinutes?: number | null;
   /** PRD-48 FR-09: section-level price default; null/absent = inherit the test's. */
   defaultPoints?: number | null;
+  /** PRD-48 FR-11: the router's unlock mode; null/absent = available right away. */
+  unlockMode?: string | null;
+  /** PRD-48 FR-11: topic NAMES the unlock depends on. */
+  unlockDependsOn?: string[];
 }): Record<string, unknown> {
   const rule = (s.topicPassRuleJson ?? {}) as { source?: string; type?: string; value?: number };
   let passType = "Как у теста";
@@ -868,6 +920,9 @@ export function serializeStructureRow(s: {
     "Выдавать все вопросы темы": s.drawAll ? "да" : "нет",
     "Лимит времени темы": s.timeLimitMinutes ?? "",
     "Балл по умолчанию в секции": s.defaultPoints ?? "",
+    "Доступность раздела":
+      UNLOCK_MODE_TO[s.unlockMode ?? "always_available"] ?? UNLOCK_MODE_TO.always_available,
+    "Зависит от разделов": (s.unlockDependsOn ?? []).join("; "),
   };
 }
 

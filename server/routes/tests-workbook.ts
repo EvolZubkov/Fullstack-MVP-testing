@@ -160,6 +160,12 @@ router.get(
       // «Структура» + «Квоты» (FR-16): sections ordered by sortOrder; each
       // section's blueprint strata flatten into «Квоты» rows (round-trip).
       const orderedSections = sections.slice().sort((a, b) => a.sortOrder - b.sortOrder);
+      // PRD-48 FR-11: the router's unlock rules are keyed by TOPIC id — the workbook
+      // spells both the rule's owner and its dependencies as topic names.
+      const routerRules =
+        (test.flowPolicyJson as {
+          router?: { sectionUnlockRules?: Record<string, { mode?: string; sectionIds?: string[] }> };
+        } | null)?.router?.sectionUnlockRules ?? {};
       const structureRows = orderedSections.map((s) =>
         serializeStructureRow({
           topicName: topicName.get(s.topicId) || "",
@@ -174,6 +180,10 @@ router.get(
           drawAll: s.drawAll,
           timeLimitMinutes: s.timeLimitMinutes,
           defaultPoints: s.defaultPoints,
+          unlockMode: routerRules[s.topicId]?.mode ?? null,
+          unlockDependsOn: (routerRules[s.topicId]?.sectionIds ?? []).map(
+            (id) => topicName.get(id) ?? id,
+          ),
         }),
       );
       const quotaRows: Record<string, unknown>[] = [];

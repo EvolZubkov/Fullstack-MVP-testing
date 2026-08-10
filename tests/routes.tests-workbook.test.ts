@@ -1091,6 +1091,70 @@ describe("POST /:id/workbook/import — сценарий прохождения 
   });
 });
 
+// ─── PRD-48 FR-11: правила разблокировки разделов ────────────────────────────
+// Правила ключуются ИДЕНТИФИКАТОРАМИ ТЕМ (`isSectionUnlocked` читает
+// `unlockRules[section.topicId]`), поэтому книга адресует их именами тем:
+// идентификаторы разделов на импорте всё равно новые.
+
+describe("POST /:id/workbook/import — разблокировка разделов (PRD-48)", () => {
+  const introTopic = {
+    id: "t-intro", name: "Вводный", code: null, description: null, folderId: null, createdAt: new Date(),
+  };
+  const mainTopic = {
+    id: "t-main", name: "Основной", code: null, description: null, folderId: null, createdAt: new Date(),
+  };
+  const routerRow = { "Параметр": "Сценарий прохождения", "Значение": "Через страницу-маршрутизатор" };
+
+  beforeEach(() => {
+    storageMock.getTopics.mockResolvedValue([introTopic, mainTopic]);
+  });
+
+  it("зависимость по имени темы превращается в идентификатор темы", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [routerRow],
+      "Структура": [
+        { "Раздел": "Вводный", "Порядок": 1, "Вопросов в выборке": 1, "Доступность раздела": "Доступен сразу", "Зависит от разделов": "" },
+        { "Раздел": "Основной", "Порядок": 2, "Вопросов в выборке": 1, "Доступность раздела": "После завершения выбранных разделов", "Зависит от разделов": "Вводный" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    const flow = (testSettingsMock.save.mock.calls[0][1] as any).test.flowPolicyJson;
+    expect(flow.mode).toBe("router_by_topics");
+    expect(flow.router.sectionUnlockRules[mainTopic.id]).toEqual({
+      mode: "after_sections_completed",
+      sectionIds: [introTopic.id],
+    });
+  });
+
+  // Молча выброшенная зависимость ОТКРЫЛА бы раздел, который должен быть закрыт.
+  it("имя зависимости не из разделов книги → ошибка строки", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [routerRow],
+      "Структура": [
+        { "Раздел": "Основной", "Порядок": 1, "Вопросов в выборке": 1, "Доступность раздела": "После успешного прохождения выбранных разделов", "Зависит от разделов": "Отсутствующий" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors.some((e: string) => /Отсутствующий/.test(e))).toBe(true);
+  });
+
+  it("книга без колонок правил не трогает разблокировку", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [routerRow],
+      "Структура": [{ "Раздел": "Вводный", "Порядок": 1, "Вопросов в выборке": 1 }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    const flow = (testSettingsMock.save.mock.calls[0][1] as any).test.flowPolicyJson;
+    expect(flow.router).not.toHaveProperty("sectionUnlockRules");
+  });
+});
+
 // ─── PRD-48: отказ службы настроек виден построчно ───────────────────────────
 // Служба запрещает сочетания, которые редактор не даст даже собрать (адаптивный
 // режим в плоском сценарии). Раньше её исключение доходило до роута и
