@@ -365,10 +365,12 @@ CREATE TABLE "tests" (
 	"allow_answer_change" boolean DEFAULT false NOT NULL,
 	"quick_advance" boolean DEFAULT false NOT NULL,
 	"show_section_results" boolean DEFAULT true NOT NULL,
-	"report_settings_json" jsonb,
+	"skip_review_when_complete" boolean DEFAULT false NOT NULL,
 	"copy_protection" boolean DEFAULT true NOT NULL,
 	"protection_watermark" boolean DEFAULT false NOT NULL,
-	"protection_hide_on_blur" boolean DEFAULT false NOT NULL
+	"protection_hide_on_blur" boolean DEFAULT false NOT NULL,
+	"report_settings_json" jsonb,
+	"intro_json" jsonb
 );
 
 CREATE TABLE "topic_access_grants" (
