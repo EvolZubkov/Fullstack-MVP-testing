@@ -1,25 +1,40 @@
 /**
  * @module server/services/workbook-import
  *
- * Multi-sheet workbook import for ONE test (PRD-14 FR-15). Role sheets —
- * «Вопросы» / «Шкалы» / «Показатели» / «Вклады вопросов» / «Оценка» /
- * «Структура» / «Квоты» / «Обратная связь» / «Рекомендации» — are recognized by name;
- * missing sheets are skipped.
- * Questions are global; everything else is written into the target `testId`.
+ * Multi-sheet workbook import for ONE test (PRD-14 FR-15). Role sheets are recognized by
+ * name and a missing one is skipped — that is what every book exported before a sheet
+ * existed has to keep meaning:
  *
- * Multi-pass order (FR-15.7): questions first (фиксируем `ID`↔`Ключ строки`),
- * then scales (upsert by `key`), then measurements (resolve question by
- * `ID`/alias and scale by `key`) and result variables (validate formula), then
- * the per-test scoring overrides (PRD-15 block D FR-36 — from the «Оценка» sheet,
- * or, when it is absent, derived from the legacy «Балл»/«Цена ответа» columns of
- * the «Вопросы» sheet) and finally the structure + quotas (FR-16). Writes are
- * skipped under `dryRun`; counts are still computed (FR-13).
+ * - «Настройки» — the test's own parameters (PRD-48 §4.1);
+ * - «Вопросы» — the questions themselves (GLOBAL: they belong to topics, not to the test);
+ * - «Шкалы», «Показатели», «Вклады вопросов» — scales, result variables, contributions;
+ * - «Оценка» — the per-test scoring overrides (PRD-15 block D);
+ * - «Структура», «Квоты», «Пороги вариантов» — sections, per-tag draw quotas, per-variant
+ *   pass thresholds;
+ * - «Обратная связь» + «Рекомендации» — feedback of the test and of its sections, with the
+ *   courses/materials/events that live inside it (PRD-48 FR-12/FR-13);
+ * - «Страницы» + «Поля страниц» — the test's content pages and their field values
+ *   (PRD-48 FR-14/FR-15).
+ *
+ * Everything except the questions is written into the target `testId`.
+ *
+ * Multi-pass order (FR-15.7): «Настройки», «Обратная связь» and «Рекомендации» are READ
+ * first and applied later — they ride into the same save as the structure. Then questions
+ * (фиксируем `ID`↔`Ключ строки`), scales (upsert by `key`), measurements (resolve question
+ * by `ID`/alias and scale by `key`) and result variables (validate formula), then the
+ * per-test scoring overrides (from the «Оценка» sheet, or, when it is absent, derived from
+ * the legacy «Балл»/«Цена ответа» columns of the «Вопросы» sheet), then the structure +
+ * quotas (FR-16). ONE save applies the settings and the sections together. The content
+ * pages come LAST, and only there: the system pages the book expects to find are
+ * materialised by that save out of the scenario and the topic list. Writes are skipped
+ * under `dryRun`; counts are still computed (FR-13).
  *
  * Upsert keys (FR-15 idempotency): scale = (test, key); result variable =
  * (test, name); measurements are replaced per question (the sheet is
  * authoritative for a question's contributions, matching the editor's PUT);
  * scoring overrides are replaced per test (the «Оценка» sheet is authoritative
- * for the test's override set).
+ * for the test's override set); a system page is found by «вид + тема» and never created,
+ * while author pages are replaced per ZONE — they have no key of their own.
  */
 
 import type ExcelJS from "exceljs";
@@ -35,8 +50,8 @@ import {
   type InsertTestQuestionScoring,
   type FormSet,
   type Test,
+  type ContentPage,
 } from "@shared/schema";
-import type { ContentPage } from "@shared/schema";
 import { buildFormSet, parseVariantNumbers, type VariantMembership } from "@shared/draw/forms";
 import { randomUUID } from "crypto";
 import type { ValueType } from "@shared/formula";
