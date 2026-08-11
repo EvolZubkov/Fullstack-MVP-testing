@@ -1761,6 +1761,55 @@ describe("POST /:id/workbook/import — «Оформление»", () => {
     });
   });
 
+  it("книга с одними строками отчёта доезжает до теста без сохранённого оформления", async () => {
+    // `design_settings_json` пуст, пока автор не ТРОГАЛ параметры оформления, а карточка
+    // отчёта сохраняется общим `PUT /:id`. Это состояние любого теста на «Стандартном»,
+    // и отказ по шаблону стоил такой книге настроек отчёта — вместе с «Выдавать отчёт»,
+    // отсутствие которого читается как «выдавать».
+    setDesignTemplate("default");
+    storageMock.getTest.mockResolvedValue({
+      ...baseTest,
+      designSettingsJson: {},
+      reportSettingsJson: { standard: { variantKey: "report.standard", values: { showScales: true } } },
+    });
+    const buf = await makeWorkbook({
+      "Оформление": [
+        row("Отчёт", "", "", "Выдавать отчёт", "Нет"),
+        row("Отчёт", "Стандартный", "", "Вид отчёта", "report.standard"),
+        row("Отчёт", "Стандартный", "", "title", "Итоговый отчёт"),
+      ],
+    });
+
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    const [, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
+    expect(payload.test.reportSettingsJson).toEqual({
+      enabled: false,
+      standard: { variantKey: "report.standard", values: { title: "Итоговый отчёт" } },
+    });
+    // Оформление книга не называла — своим путём ничего не писалось.
+    expect(storageMock.updateTest).not.toHaveBeenCalled();
+  });
+
+  it("параметры без строки «Шаблон» — ошибка, а отчёт той же книги применяется", async () => {
+    // Красить приёмник параметрами неизвестного манифеста нельзя: это ровно то
+    // частичное оформление, ради которого лист отвергается целиком.
+    const buf = await makeWorkbook({
+      "Оформление": [
+        row("Параметр", "", "", "fontFamily", "Roboto"),
+        row("Отчёт", "", "", "Выдавать отчёт", "Нет"),
+      ],
+    });
+
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors.join("\n")).toContain("строки «Шаблон» нет");
+    expect(storageMock.updateTest).not.toHaveBeenCalled();
+    const [, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
+    expect(payload.test.reportSettingsJson).toEqual({ enabled: false });
+  });
+
   it("книга без листа «Оформление» не трогает ни оформления, ни отчёта", async () => {
     // Каждая книга, снятая до этой работы, обязана сохранить это значение.
     const buf = await makeWorkbook({ "Вопросы": [questionRow] });

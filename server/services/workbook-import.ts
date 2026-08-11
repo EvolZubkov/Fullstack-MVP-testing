@@ -861,12 +861,16 @@ async function applyDesignSheet(
   const stored = asObject(test?.designSettingsJson);
   const storedId = typeof stored.templateId === "string" ? stored.templateId : "";
   // The sheet's template is the one to APPLY; without it the test keeps its own, and the
-  // manifest of that one still types the report values.
-  const templateId = parsed.templateId ?? storedId;
-  if (templateId === "") {
-    result.errors.push(`${at}: не указан шаблон, и у теста его нет — типизировать значения нечем`);
-    return undefined;
-  }
+  // manifest of that one still types the report values. An EMPTY column falls back to
+  // «default», the way the whole product reads it (`GET /:id/design` answers an empty column
+  // with `{templateId: "default"}`, `attempts` and the SCORM builder read
+  // `templateId || "default"`): `design_settings_json` stays empty until the author TOUCHES a
+  // design parameter, while the report card saves through the common `PUT /:id`, so «пустое
+  // оформление + настроенный отчёт» is the state of every test on the standard template. A
+  // refusal here cost such a book its report settings, «Выдавать отчёт» among them — and the
+  // absence of that switch reads as «выдавать», so a test that deliberately withheld the
+  // report started handing it out after the transfer.
+  const templateId = parsed.templateId || storedId || "default";
 
   const template = await loadActiveTemplate(templateId);
   if (!template) {
