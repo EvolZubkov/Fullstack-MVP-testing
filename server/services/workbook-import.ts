@@ -296,6 +296,38 @@ async function keepUnnamedSectionFeedback(
 }
 
 /**
+ * Resolve the «оставить как есть» state of every topic's «Обратная связь при непройденном
+ * уровне» against the target, and turn the eraser into the `null` the column stores.
+ *
+ * Same hazard as {@link keepUnnamedSectionFeedback}, one table over: `adaptiveSettings` is a
+ * WHOLESALE rewrite — `testSettingsService` deletes the test's `adaptive_topic_settings` and
+ * inserts the payload — so a text the payload leaves at `null` is not «left alone», it is
+ * ERASED. The column reads an empty cell as «leave as is» (that is what the sheet, the format
+ * spec and the parser all promise), so the promise has to be kept HERE, where the target is
+ * readable.
+ *
+ * Three states arrive from {@link parseStructureRow} and two leave:
+ *
+ * - `null` (empty cell) → the target's own text, or `null` if it had none;
+ * - `""` (the eraser dash) → `null`, an explicit erasure;
+ * - a text → itself.
+ */
+async function resolveFailureFeedback(
+  testId: string,
+  topics: AdaptiveTopicPayload[],
+): Promise<void> {
+  const unnamed = topics.filter((t) => t.failureFeedback === null);
+  if (unnamed.length > 0) {
+    const current = await storage.getAdaptiveTopicSettingsByTest(testId);
+    const byTopic = new Map(current.map((s) => [s.topicId, s.failureFeedback ?? null]));
+    for (const topic of unnamed) topic.failureFeedback = byTopic.get(topic.topicId) ?? null;
+  }
+  for (const topic of topics) {
+    if (topic.failureFeedback === "") topic.failureFeedback = null;
+  }
+}
+
+/**
  * A «Папка / Подпапка» path → the id of the last folder, creating the missing ones.
  *
  * Creating rather than failing: the workbook already creates missing TOPICS by name, and a
@@ -1561,6 +1593,7 @@ export async function importWorkbook(
       // and under `dryRun` there is no rewrite — the plan the preview reports does not
       // depend on it, exactly as the test row above is only read on the saving path.
       if (sections.length > 0) await keepUnnamedSectionFeedback(testId, sections);
+      if (adaptiveTopics.length > 0) await resolveFailureFeedback(testId, adaptiveTopics);
       await saveOrCollect(testId, {
         test: {
           status: (current?.status as "draft" | "published" | "archived") ?? "draft",

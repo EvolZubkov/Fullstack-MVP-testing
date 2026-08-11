@@ -387,6 +387,27 @@ describe("«Структура»: поля раздела (PRD-48 FR-09)", () =>
     expect(empty.ok && empty.value.failureFeedback).toBeNull();
   });
 
+  // Пусто = «оставить как есть», поэтому стереть текст нечем — кроме прочерка. Принимаются
+  // все три: Excel сам меняет дефис на тире, и автор не должен из-за этого терять очистку.
+  it("прочерк в обратной связи темы — это стирание, а не текст «-»", () => {
+    for (const dash of ["-", "–", "—", " — "]) {
+      const parsed = parseStructureRow(
+        { "Раздел": "Финансы", "Вопросов в выборке": 5, "Обратная связь при непройденном уровне": dash },
+        0,
+      );
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+      expect(parsed.value.failureFeedback).toBe("");
+    }
+
+    // Прочерк ВНУТРИ текста стирателем не считается.
+    const text = parseStructureRow(
+      { "Раздел": "Финансы", "Вопросов в выборке": 5, "Обратная связь при непройденном уровне": "— повторите" },
+      0,
+    );
+    expect(text.ok && text.value.failureFeedback).toBe("— повторите");
+  });
+
   it("без колонок правил раздел доступен сразу, зависимостей нет", () => {
     const parsed = parseStructureRow({ "Раздел": "Финансы", "Вопросов в выборке": 5 }, 0);
     expect(parsed.ok).toBe(true);

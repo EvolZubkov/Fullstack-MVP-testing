@@ -666,6 +666,18 @@ export const STRUCTURE_HEADERS = [
 ];
 export const STRUCTURE_WIDTHS = [28, 22, 10, 20, 16, 10, 14, 26, 24, 20, 26, 34, 34, 60];
 
+/**
+ * Cells that erase «Обратная связь при непройденном уровне» instead of filling it in.
+ *
+ * The column reads an empty cell as «leave as is» — it has to, since a book exported before
+ * the column existed says nothing about the text and must not wipe it. That alone would make
+ * the text write-only: a test copied over a target would keep the target's stale wording with
+ * no way to drop it from the book. A dash alone in the cell is that way, and all three dashes
+ * a Russian keyboard/autocorrect produces are accepted — an author writing «-» and getting the
+ * em-dash back from Excel must not silently lose the erasure.
+ */
+export const FAILURE_FEEDBACK_ERASER = new Set(["-", "–", "—"]);
+
 /** Canonical «Квоты» headers (one row per PRD-11 stratum). */
 export const QUOTA_HEADERS = ["Раздел", "Тег", "Количество", "Режим"];
 export const QUOTA_WIDTHS = [28, 24, 14, 14];
@@ -859,9 +871,15 @@ export interface ParsedSection {
   unlockDependsOn: string[];
   /**
    * PRD-48 FR-16: the topic's adaptive «failed a level» text
-   * (`adaptive_topic_settings.failure_feedback`). `null` = the cell was empty (or the book
-   * has no such column), which reads as «leave as is» — like every other optional column of
-   * this sheet, an older book may not silently erase a text it knows nothing about.
+   * (`adaptive_topic_settings.failure_feedback`). Three states in two values:
+   *
+   * - `null` — the cell was empty (or the book has no such column): «leave as is». Like every
+   *   other optional column of this sheet, an older book may not silently erase a text it
+   *   knows nothing about;
+   * - `""` — the cell held {@link FAILURE_FEEDBACK_ERASER} alone: erase the text explicitly.
+   *   Without such a value the column could only ever ADD a text, and a test copied over a
+   *   target would keep a stale one forever;
+   * - anything else — the text itself, verbatim.
    */
   failureFeedback: string | null;
 }
@@ -949,10 +967,14 @@ export function parseStructureRow(
   const unlockDependsOn = String(row["Зависит от разделов"] ?? "")
     .split(";").map((s) => s.trim()).filter(Boolean);
 
-  // Free text: stored verbatim, since its inner spacing is what the author typed. Only a
-  // whitespace-only cell is levelled to `null` — «оставить как есть».
+  // Free text: stored verbatim, since its inner spacing is what the author typed. A
+  // whitespace-only cell is levelled to `null` — «оставить как есть» — and the eraser dash
+  // to `""`, the one way the book erases the text.
   const failureRaw = String(row["Обратная связь при непройденном уровне"] ?? "");
-  const failureFeedback = failureRaw.trim() === "" ? null : failureRaw;
+  const failureTrimmed = failureRaw.trim();
+  let failureFeedback: string | null = failureRaw;
+  if (failureTrimmed === "") failureFeedback = null;
+  else if (FAILURE_FEEDBACK_ERASER.has(failureTrimmed)) failureFeedback = "";
 
   return {
     ok: true,

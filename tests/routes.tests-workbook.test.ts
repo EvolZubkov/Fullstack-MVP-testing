@@ -2834,6 +2834,65 @@ describe("Адаптивные уровни: выгрузка и загрузк�
     expect(payload.adaptiveSettings).toBeUndefined();
   });
 
+  /** Книга «Структура» + строки уровней JavaScript; `over` меняет ячейки строки уровня. */
+  function levelBook(
+    structure: Record<string, unknown>,
+    over: Record<string, unknown> = {},
+  ): Promise<Buffer> {
+    return makeWorkbook({
+      "Структура": [{ "Раздел": "JavaScript", "Порядок": 1, "Вопросов в выборке": 4, ...structure }],
+      "Адаптивные уровни": [
+        {
+          "Раздел": "JavaScript", "Номер": 1, "Название": "Базовый", "Сложность от": 0,
+          "Сложность до": 100, "Вопросов": 4, "Тип порога": "Процент", "Порог": 60, ...over,
+        },
+      ],
+    });
+  }
+
+  // `adaptiveSettings` переписывает настройки тем ЦЕЛИКОМ, поэтому пустая ячейка обязана
+  // приехать текстом приёмника: иначе колонка, которой нет в книгах прежнего формата,
+  // стирала бы тексты молча.
+  it("пустая ячейка обратной связи темы оставляет текст приёмника", async () => {
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([
+      { id: "ats-1", testId: "test-1", topicId: dbTopic.id, failureFeedback: "Текст приёмника" },
+    ]);
+    const res = await postWorkbook(await levelBook({}));
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    const [, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
+    expect(payload.adaptiveSettings).toHaveLength(1);
+    expect(payload.adaptiveSettings[0].failureFeedback).toBe("Текст приёмника");
+  });
+
+  it("заполненная ячейка обратной связи темы заменяет текст приёмника", async () => {
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([
+      { id: "ats-1", testId: "test-1", topicId: dbTopic.id, failureFeedback: "Текст приёмника" },
+    ]);
+    const res = await postWorkbook(
+      await levelBook({ "Обратная связь при непройденном уровне": "Текст из книги" }),
+    );
+
+    expect(res.status).toBe(200);
+    const [, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
+    expect(payload.adaptiveSettings[0].failureFeedback).toBe("Текст из книги");
+  });
+
+  it("прочерк стирает обратную связь темы", async () => {
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([
+      { id: "ats-1", testId: "test-1", topicId: dbTopic.id, failureFeedback: "Текст приёмника" },
+    ]);
+    const res = await postWorkbook(
+      await levelBook({ "Обратная связь при непройденном уровне": "-" }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    const [, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
+    expect(payload.adaptiveSettings[0].failureFeedback).toBeNull();
+  });
+
   it("уровень темы вне теста — ошибка строки", async () => {
     const buf = await makeWorkbook({
       "Структура": [{ "Раздел": "JavaScript", "Порядок": 1, "Вопросов в выборке": 4 }],
