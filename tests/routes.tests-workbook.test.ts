@@ -52,12 +52,37 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     // PRD-15 block D: «Оценка» sheet (per-test scoring overrides).
     getTestQuestionScoring: vi.fn().mockResolvedValue([]),
     replaceTestQuestionScoring: vi.fn().mockResolvedValue([]),
+    // PRD-48 Э3: листы «Страницы» и «Поля страниц».
+    getContentPages: vi.fn().mockResolvedValue([]),
+    createContentPage: vi.fn(),
+    updateContentPage: vi.fn(),
+    deleteContentPage: vi.fn(),
   },
   // FR-16: the structure pass applies sections via testSettingsService.save.
   testSettingsMock: { create: vi.fn(), save: vi.fn() },
 }));
 
+/**
+ * Манифест шаблона оформления читается ПРЯМЫМ запросом к базе
+ * (`resolveContentTemplates`), а не через хранилище: подменяем сам `db`, чтобы проход
+ * страниц работал на настоящей нормализации и настоящем санитайзере.
+ */
+const { dbMock, setContentTemplates } = vi.hoisted(() => {
+  const state: { rows: unknown[] } = { rows: [] };
+  const chain: any = { select: () => chain, from: () => chain, where: () => chain, then: (r: any) => r(state.rows) };
+  return {
+    dbMock: chain,
+    /** `null` — шаблона нет вовсе; массив — варианты активного шаблона. */
+    setContentTemplates: (variants: unknown[] | null) => {
+      state.rows = variants === null
+        ? []
+        : [{ id: "default", isActive: true, manifest: { contentTemplates: variants } }];
+    },
+  };
+});
+
 vi.mock("../server/storage", () => ({ storage: storageMock }));
+vi.mock("../server/db", () => ({ db: dbMock }));
 vi.mock("../server/services/test-settings", () => ({ testSettingsService: testSettingsMock }));
 vi.mock("../server/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -67,6 +92,21 @@ import testsWorkbookRouter from "../server/routes/tests-workbook";
 import { FlowPolicyValidationError, validateFlowPolicy } from "../server/services/flow-policy-validator";
 
 const baseTest = { id: "test-1", title: "Тест" };
+
+/**
+ * Варианты шаблона оформления приёмника: у стартовой страницы два содержательных поля
+ * и одна настройка, у авторской — одно поле. Ключа `ghost` не объявляет ни один вариант:
+ * на нём проверяется, что книга не пишет незаявленных ключей.
+ */
+const CONTENT_TEMPLATES = [
+  {
+    key: "start.default",
+    kind: "intro",
+    placeholders: [{ key: "title", type: "text" }, { key: "lead", type: "richText" }],
+    settings: [{ key: "buttonLabel", type: "text" }],
+  },
+  { key: "info.wide", kind: "info", placeholders: [{ key: "body", type: "richText" }] },
+];
 const authorUser = { id: "user-1", role: "author", status: "active" };
 const dbTopic = { id: "t1", name: "JavaScript", description: null, folderId: null, createdAt: new Date() };
 
@@ -131,6 +171,12 @@ beforeEach(() => {
   // Разделы приёмника: импорт «Структуры» читает их, чтобы не стереть обратную связь
   // раздела, которого книга не назвала. По умолчанию тест-приёмник разделов не имеет.
   storageMock.getTestSections.mockResolvedValue([]);
+  // Страниц у приёмника по умолчанию нет, шаблон оформления — с двумя вариантами.
+  storageMock.getContentPages.mockResolvedValue([]);
+  storageMock.createContentPage.mockImplementation(async (page: any) => ({ id: "page-new", ...page }));
+  storageMock.updateContentPage.mockImplementation(async (id: string, updates: any) => ({ id, ...updates }));
+  storageMock.deleteContentPage.mockResolvedValue(true);
+  setContentTemplates(CONTENT_TEMPLATES);
   testSettingsMock.save.mockResolvedValue({ id: "test-1" });
 });
 
@@ -1134,14 +1180,14 @@ describe("GET /:id/workbook/export — обратная связь и реком
 
   // Порядок листов описывает тест сверху вниз: обратная связь принадлежит структуре,
   // а не оценке, поэтому стоит между «Порогами вариантов» и «Оценкой».
-  it("оба листа стоят между «Порогами вариантов» и «Оценкой»", async () => {
+  it("оба листа стоят между «Порогами вариантов» и «Страницами»", async () => {
     const res = await getExport();
     const wb = await readWorkbookFromBuffer(res.body as Buffer);
     const names = wb.worksheets.map((w) => w.name);
 
     expect(names.indexOf("Обратная связь")).toBe(names.indexOf("Пороги вариантов") + 1);
     expect(names.indexOf("Рекомендации")).toBe(names.indexOf("Обратная связь") + 1);
-    expect(names.indexOf("Оценка")).toBe(names.indexOf("Рекомендации") + 1);
+    expect(names.indexOf("Страницы")).toBe(names.indexOf("Рекомендации") + 1);
   });
 
   // Тест без обратной связи — листы всё равно есть, одними заголовками: книга
@@ -1160,6 +1206,101 @@ describe("GET /:id/workbook/export — обратная связь и реком
 
     expect(sheetToObjects(wb.getWorksheet("Обратная связь")!)).toEqual([]);
     expect(sheetToObjects(wb.getWorksheet("Рекомендации")!)).toEqual([]);
+  });
+});
+
+// ─── PRD-48 FR-14/FR-15: «Страницы» + «Поля страниц» ─────────────────────────
+// У страницы нет естественного ключа, поэтому она едет адресом: зона, раздел, вид и
+// порядковый номер внутри зоны. Значения полей живут на втором листе с тем же адресом,
+// а «Куда» разводит содержание и настройки.
+
+describe("GET /:id/workbook/export — страницы и их поля", () => {
+  const jsTopic = { id: "topic-js-0001", name: "JavaScript", code: null };
+
+  /** Системная страница: её создаёт сервер, книга переносит только содержимое. */
+  const startPage = {
+    id: "p-start", testId: "test-1", topicId: null, position: "before", kind: "start",
+    mode: "template", type: "intro", templateKey: "start.default", sortOrder: 0,
+    valuesJson: { values: { title: "Добро пожаловать" } },
+    settingsJson: { buttonLabel: "Начать" },
+    autoAdvance: false, autoAdvanceDelayMs: null,
+  };
+  /** Две авторские страницы ОДНОЙ зоны — их и различает номер. */
+  const authorPage = (id: string, sortOrder: number, body: string) => ({
+    ...startPage,
+    id, position: "after", kind: "info", type: "info", templateKey: "info.wide",
+    sortOrder, valuesJson: { values: { body } }, settingsJson: {},
+  });
+  /** Страница зоны темы: раздел адресуется ИМЕНЕМ темы. */
+  const topicPage = {
+    ...authorPage("p-topic", 0, "<p>После темы</p>"),
+    topicId: jsTopic.id, position: "after_topic",
+  };
+
+  beforeEach(() => {
+    storageMock.getTopics.mockResolvedValue([jsTopic]);
+    storageMock.getTestSections.mockResolvedValue([
+      {
+        topicId: jsTopic.id, drawCount: 5, sortOrder: 0, required: true,
+        topicPassRuleJson: null, drawBlueprintJson: null,
+      },
+    ]);
+    storageMock.getQuestions.mockResolvedValue([]);
+    storageMock.getScales.mockResolvedValue([]);
+    storageMock.getResultVariables.mockResolvedValue([]);
+    storageMock.getQuestionMeasurements.mockResolvedValue([]);
+    storageMock.getContentPages.mockResolvedValue([
+      startPage,
+      authorPage("p-a1", 1, "<p>Первая</p>"),
+      authorPage("p-a2", 2, "<p>Вторая</p>"),
+      topicPage,
+    ]);
+  });
+
+  it("адреса страниц различимы номером внутри зоны, а раздел выгружается именем темы", async () => {
+    const res = await getExport();
+    expect(res.status).toBe(200);
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+
+    const rows = sheetToObjects(wb.getWorksheet("Страницы")!).map((r: any) =>
+      ["Зона", "Раздел", "Вид", "Номер", "Вариант", "Режим", "Автопереход"].map((h) => String(r[h] ?? "")),
+    );
+    expect(rows).toEqual([
+      ["До теста", "", "Стартовая", "1", "start.default", "Шаблон", "Нет"],
+      ["После теста", "", "Авторская", "1", "info.wide", "Шаблон", "Нет"],
+      ["После теста", "", "Авторская", "2", "info.wide", "Шаблон", "Нет"],
+      ["После темы", "JavaScript", "Авторская", "1", "info.wide", "Шаблон", "Нет"],
+    ]);
+    // Идентификаторов в книге нет: на другом стенде они мертвы.
+    expect(JSON.stringify(rows)).not.toContain(jsTopic.id);
+  });
+
+  it("значения полей едут вторым листом с правильным «Куда»", async () => {
+    const res = await getExport();
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+
+    const rows = sheetToObjects(wb.getWorksheet("Поля страниц")!).map((r: any) =>
+      ["Зона", "Раздел", "Вид", "Номер", "Куда", "Ключ", "Значение"].map((h) => String(r[h] ?? "")),
+    );
+    expect(rows).toEqual([
+      ["До теста", "", "Стартовая", "1", "Содержание", "title", "Добро пожаловать"],
+      ["До теста", "", "Стартовая", "1", "Настройка", "buttonLabel", "Начать"],
+      ["После теста", "", "Авторская", "1", "Содержание", "body", "<p>Первая</p>"],
+      ["После теста", "", "Авторская", "2", "Содержание", "body", "<p>Вторая</p>"],
+      ["После темы", "JavaScript", "Авторская", "1", "Содержание", "body", "<p>После темы</p>"],
+    ]);
+  });
+
+  // Тест без страниц: листы всё равно есть, одними заголовками — иначе автору некуда
+  // вписать первую строку.
+  it("тест без страниц даёт листы с одними заголовками", async () => {
+    storageMock.getContentPages.mockResolvedValue([]);
+
+    const res = await getExport();
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+
+    expect(sheetToObjects(wb.getWorksheet("Страницы")!)).toEqual([]);
+    expect(sheetToObjects(wb.getWorksheet("Поля страниц")!)).toEqual([]);
   });
 });
 

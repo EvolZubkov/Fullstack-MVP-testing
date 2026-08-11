@@ -54,9 +54,18 @@ import {
   RECOMMENDATION_WIDTHS,
   serializeFeedbackRows,
   serializeRecommendationRows,
+  PAGE_SHEET_NAME,
+  PAGE_FIELD_SHEET_NAME,
+  PAGE_HEADERS,
+  PAGE_WIDTHS,
+  PAGE_FIELD_HEADERS,
+  PAGE_FIELD_WIDTHS,
+  serializePageRows,
+  serializePageFieldRows,
   type FeedbackSource,
+  type PageSource,
 } from "../utils/workbook-sheets";
-import type { DrawBlueprint, FormSet } from "@shared/schema";
+import type { ContentPage, DrawBlueprint, FormSet } from "@shared/schema";
 
 const router = Router();
 
@@ -70,6 +79,42 @@ function addSheet(
 ): void {
   if (rows.length > 0) addJsonSheet(wb, name, rows, widths);
   else addAoaSheet(wb, name, [headers], widths);
+}
+
+/**
+ * Content pages as the «Страницы» sheet needs them: the topic resolved to a NAME (the
+ * only key that survives a trip to another stand) and the rows ordered so the ordinal
+ * the sheet assigns is the one the author sees in the editor.
+ *
+ * The ordinal counts inside a ZONE and follows `sort_order` there, so the rows of one
+ * zone are sorted by it; the zones themselves keep the order the storage returned them
+ * in, which is the delivery order of the test. Position in the incoming array breaks a
+ * tie — `sort_order` is not unique by contract, and a sort that reshuffles equals would
+ * hand the same page a different number on every export.
+ */
+function pagesForSheet(
+  pages: readonly ContentPage[],
+  topicNameById: Map<string, string>,
+): PageSource[] {
+  const zoneRank = new Map<string, number>();
+  return pages
+    .map((page, at) => {
+      const zoneKey = `${page.position}|${page.topicId ?? ""}`;
+      if (!zoneRank.has(zoneKey)) zoneRank.set(zoneKey, zoneRank.size);
+      return { page, at, zone: zoneRank.get(zoneKey)! };
+    })
+    .sort((a, b) => a.zone - b.zone || a.page.sortOrder - b.page.sortOrder || a.at - b.at)
+    .map(({ page }) => ({
+      position: page.position,
+      topicName: page.topicId ? topicNameById.get(page.topicId) ?? "" : "",
+      kind: page.kind,
+      templateKey: page.templateKey,
+      mode: page.mode,
+      autoAdvance: page.autoAdvance,
+      autoAdvanceDelayMs: page.autoAdvanceDelayMs,
+      valuesJson: page.valuesJson,
+      settingsJson: page.settingsJson,
+    }));
 }
 
 // ─── POST /api/tests/:id/workbook/import ─────────────────────────────────────
@@ -242,6 +287,14 @@ router.get(
       const feedbackRows = serializeFeedbackRows(testFeedback, feedbackSections);
       const recommendationRows = serializeRecommendationRows(testFeedback, feedbackSections);
 
+      // «Страницы» + «Поля страниц» (PRD-48 FR-14/FR-15): the pages of the test and
+      // the values of their fields. A page has no natural key, so it travels by its
+      // address — zone, section, kind and the ordinal inside the zone.
+      const contentPages = await storage.getContentPages(testId);
+      const pageSources = pagesForSheet(contentPages, topicName);
+      const pageRows = serializePageRows(pageSources);
+      const pageFieldRows = serializePageFieldRows(pageSources);
+
       // «Оценка» (PRD-15 block D, FR-36): the test's per-question scoring
       // overrides, referenced by the same local alias as «Вклады вопросов».
       const overrides = await storage.getTestQuestionScoring(testId);
@@ -276,6 +329,10 @@ router.get(
       // оценке, поэтому оба листа стоят сразу за разделами и перед «Оценкой».
       addSheet(wb, FEEDBACK_SHEET_NAME, feedbackRows, FEEDBACK_HEADERS, FEEDBACK_WIDTHS);
       addSheet(wb, RECOMMENDATION_SHEET_NAME, recommendationRows, RECOMMENDATION_HEADERS, RECOMMENDATION_WIDTHS);
+      // PRD-48 FR-14/FR-15: страницы — тоже структура теста, поэтому оба листа стоят
+      // сразу за обратной связью и по-прежнему перед «Оценкой».
+      addSheet(wb, PAGE_SHEET_NAME, pageRows, PAGE_HEADERS, PAGE_WIDTHS);
+      addSheet(wb, PAGE_FIELD_SHEET_NAME, pageFieldRows, PAGE_FIELD_HEADERS, PAGE_FIELD_WIDTHS);
       addSheet(wb, "Оценка", scoringRows, SCORING_OVERRIDE_HEADERS, SCORING_OVERRIDE_WIDTHS);
       addSheet(wb, "Шкалы", scaleRows, SCALE_HEADERS, SCALE_WIDTHS);
       addSheet(wb, "Показатели", rvRows, RESULT_VAR_HEADERS, RESULT_VAR_WIDTHS);

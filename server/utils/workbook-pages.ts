@@ -422,6 +422,18 @@ function addressLabel(scope: Scope, kind: PageKind, index?: number): string {
 }
 
 /**
+ * Human spelling of a parsed page's address — «До теста / Стартовая / №1».
+ *
+ * Exported because the IMPORT reports about a page too («не найдена на приёмнике», «вариант
+ * не объявлен шаблоном»), and an address spelled by hand there would drift from the one the
+ * sheets print the moment a label changes.
+ */
+export function formatPageAddress(page: ParsedPage): string {
+  const scope: Scope = { zone: page.zone, topicName: page.topicName, topicKey: page.topicKey };
+  return addressLabel(scope, page.kind, page.index);
+}
+
+/**
  * Read both sheets into a set of pages with their field values.
  *
  * Rows are independent: a row with an error is dropped and the rest are applied, as on every

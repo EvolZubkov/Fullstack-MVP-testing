@@ -705,6 +705,37 @@ export {
   type ParsedFeedbackSheets,
 } from "./workbook-feedback";
 
+// ─── «Страницы» / «Поля страниц» (PRD-48 §4, FR-14/FR-15) ─────────────────────
+// Two sheets and one contract again, subordinate the same way: a page has no natural
+// key, so it is addressed by «Зона» + «Раздел» + «Вид» + «Номер», and a field row whose
+// address is not on the page sheet has nowhere to be stored. The module knows nothing of
+// the variant manifest on purpose — filtering keys and sanitising values is the import's
+// duty (`server/services/content-page-fields`), so the book never becomes an entry point
+// past the sanitiser. Re-exported here so the sheets keep ONE entry point.
+export {
+  PAGE_SHEET_NAME,
+  PAGE_FIELD_SHEET_NAME,
+  PAGE_HEADERS,
+  PAGE_WIDTHS,
+  PAGE_FIELD_HEADERS,
+  PAGE_FIELD_WIDTHS,
+  PAGE_ZONE_CHOICES,
+  PAGE_KIND_CHOICES,
+  PAGE_MODE_CHOICES,
+  PAGE_TARGET_CHOICES,
+  serializePageRows,
+  serializePageFieldRows,
+  parsePageSheets,
+  formatPageAddress,
+  type PageSource,
+  type PageZone,
+  type PageKind,
+  type PageMode,
+  type PageFieldTarget,
+  type ParsedPage,
+  type ParsedPageSheets,
+} from "./workbook-pages";
+
 /** «Тип порога» cell → the editor's `topicPassRuleJson` shape (PRD-7). */
 const PASS_TYPE_FROM: Record<string, "percent" | "absolute"> = {
   "процент": "percent",
