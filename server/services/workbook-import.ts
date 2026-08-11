@@ -563,6 +563,21 @@ async function applyPageSheets(
     }
   }
 
+  // A book carrying «Страницы» without «Поля страниц» says nothing about any field value.
+  // For a page that already EXISTS that means «leave as is» — the patch simply carries no
+  // `values_json`. An author page has no such luck: it is deleted with its zone and created
+  // again from the book alone, so it comes back EMPTY. Same class as «Обратная связь»
+  // without «Рекомендации», and answered the same way — a warning, never a refusal, because
+  // deliberately emptying a page has to stay possible. Counted, not merely presence-checked:
+  // the template ships both sheets, so a presence check would fire on every book built from
+  // it and stop being read.
+  if (!fieldSheet && authorPages.length > 0) {
+    result.warnings.push(
+      `Лист «${PAGE_FIELD_SHEET_NAME}» отсутствует: авторские страницы, названные на листе `
+      + `«${PAGE_SHEET_NAME}» (${authorPages.length}), будут созданы с пустым содержимым`,
+    );
+  }
+
   // Author pages of a NAMED zone are replaced whole by the book's set for that zone — the
   // set may be empty, which is how a book clears a zone. A zone the sheet never mentions
   // keeps its pages, so a book that describes one zone says nothing about the others.

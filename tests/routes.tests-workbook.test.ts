@@ -2241,6 +2241,36 @@ describe("POST /:id/workbook/import — «Страницы» и «Поля ст�
     );
   });
 
+  // Авторскую страницу пересоздают из книги целиком: без листа полей она возвращается
+  // ПУСТОЙ. У системной такой беды нет — её содержимое остаётся как есть.
+  it("книга без листа «Поля страниц» предупреждает о пустом содержимом авторских", async () => {
+    storageMock.getContentPages.mockResolvedValue([startPage, authorPage("p-old-1", "after", 1)]);
+    const buf = await makeWorkbook({
+      "Страницы": [
+        pageRow({ "Зона": "После теста", "Вид": "Авторская", "Номер": 1, "Вариант": "info.wide" }),
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(
+      res.body.warnings.some((w: string) => /Поля страниц/.test(w) && /пустым содержимым/.test(w)),
+    ).toBe(true);
+    // Предупреждение не отменяет правила: страница создана, и правда пустой.
+    expect(storageMock.createContentPage).toHaveBeenCalledWith(
+      expect.objectContaining({ valuesJson: { values: {}, placeholderStyles: {} } }),
+    );
+  });
+
+  it("книга без листа «Поля страниц» молчит, когда авторских страниц она не называет", async () => {
+    storageMock.getContentPages.mockResolvedValue([startPage]);
+    const buf = await makeWorkbook({ "Страницы": [pageRow()] });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.warnings.some((w: string) => /Поля страниц/.test(w))).toBe(false);
+  });
+
   // Зону «называет» ЛЮБАЯ строка с её адресом, включая системную: книга, подрезанная
   // руками (строку «Итоги» оставили, свои страницы той же зоны убрали), сносит авторские
   // страницы приёмника. Правило верное — очистка зоны книгой должна оставаться возможной,
