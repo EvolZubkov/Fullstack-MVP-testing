@@ -21,6 +21,9 @@ import type { Test, ContentPage, TemplateManifest, DrawBlueprint, FormSet } from
 import {
   planSystemPages,
   SYSTEM_KINDS,
+  DEFAULT_TEMPLATE_ID,
+  extractFlowMode,
+  extractTemplateId,
   type FlowMode,
   type SystemKind,
   type ExistingSystemPage,
@@ -36,26 +39,6 @@ import {
 } from "./flow-policy-validator";
 import { syncEntityUsages } from "./media/usage-index";
 import { logger } from "../logger";
-
-const DEFAULT_TEMPLATE_ID = "default";
-
-/** Extracts `flowMode` from `tests.flow_policy_json`, defaulting per FR-40. */
-function extractFlowMode(flowPolicyJson: unknown): FlowMode {
-  if (typeof flowPolicyJson === "object" && flowPolicyJson !== null) {
-    const mode = (flowPolicyJson as { mode?: unknown }).mode;
-    if (mode === "linear_by_topics" || mode === "router_by_topics") return mode;
-  }
-  return "linear_flat";
-}
-
-/** Extracts `templateId` from `tests.design_settings_json`, defaulting per NFR-01. */
-function extractTemplateId(designSettingsJson: unknown): string {
-  if (typeof designSettingsJson === "object" && designSettingsJson !== null) {
-    const id = (designSettingsJson as { templateId?: unknown }).templateId;
-    if (typeof id === "string" && id.length > 0) return id;
-  }
-  return DEFAULT_TEMPLATE_ID;
-}
 
 /** Legacy `type` value for a freshly-created system row. `questions`/`router`
  *  have no native legacy mapping — we pick `info` since the column will be

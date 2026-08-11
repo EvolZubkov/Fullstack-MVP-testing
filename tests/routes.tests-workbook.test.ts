@@ -76,7 +76,7 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
  * (`resolveContentTemplates`), а не через хранилище: подменяем сам `db`, чтобы проход
  * страниц работал на настоящей нормализации и настоящем санитайзере.
  */
-const { dbMock, setTemplateRow } = vi.hoisted(() => {
+const { dbMock, setTemplateRow, setTemplateRows } = vi.hoisted(() => {
   const state: { rows: unknown[] } = { rows: [] };
   const chain: any = { select: () => chain, from: () => chain, where: () => chain, then: (r: any) => r(state.rows) };
   return {
@@ -88,6 +88,14 @@ const { dbMock, setTemplateRow } = vi.hoisted(() => {
      */
     setTemplateRow: (row: unknown | null) => {
       state.rows = row === null ? [] : [row];
+    },
+    /**
+     * Несколько строк сразу — для проверок, где на стенде стоят и шаблон теста, и
+     * встроенный «default»: планировщик системных страниц читает ОБА манифеста.
+     * Запросы «по одному id» берут первую строку, поэтому шаблон теста идёт первым.
+     */
+    setTemplateRows: (rows: unknown[]) => {
+      state.rows = rows;
     },
   };
 });
@@ -525,6 +533,241 @@ describe("POST /:id/workbook/import?dryRun=true — счётчики всех л
     expect(res.body.feedback).toMatchObject({ owners: 0, recommendations: 0 });
     expect(res.body.adaptive).toMatchObject({ topics: 0, levels: 0 });
     expect(res.body.design).toMatchObject({ params: 0, report: 0 });
+  });
+});
+
+// Дефект приёмки PRD-48 (критерий 8.6): предпросмотр той же книги показывал
+// «pages: 0», а боевой импорт обновлял три страницы. Причина — не счётчик: системные
+// страницы материализует СОХРАНЕНИЕ этого же прогона, а под `dryRun` его нет, и проход
+// страниц заставал приёмник в состоянии, в котором книге не к чему приложиться.
+// Свойство здесь одно и проверяется единственным способом, который ловит такое: ОДНА
+// книга, ДВА прогона, и отчёт предпросмотра совпадает с отчётом импорта. Проверка
+// «счётчик ненулевой» этот дефект пропустила.
+describe("POST /:id/workbook/import — предпросмотр обещает то же, что делает импорт", () => {
+  /**
+   * Варианты шаблона-приёмника по системным видам: планировщик страниц привязывает
+   * системный вид к варианту манифеста, поэтому вид без варианта не создаётся вовсе.
+   */
+  const SYSTEM_TEMPLATES = [
+    { key: "start.default", kind: "start", placeholders: [{ key: "title", type: "text" }] },
+    { key: "results.default", kind: "results", placeholders: [{ key: "title", type: "text" }] },
+    { key: "questions.default", kind: "questions" },
+    { key: "review.default", kind: "review" },
+    { key: "section-results.default", kind: "section-results" },
+    { key: "intro.default", kind: "intro", placeholders: [{ key: "title", type: "text" }] },
+    { key: "info.wide", kind: "info", placeholders: [{ key: "body", type: "richText" }] },
+    {
+      key: "report.standard", kind: "report", isDefault: true,
+      settings: [{ key: "showScales", type: "boolean" }],
+    },
+    {
+      key: "report.adaptive.standard", kind: "report.adaptive", isDefault: true,
+      settings: [{ key: "showLevels", type: "boolean" }],
+    },
+  ];
+
+  /**
+   * Шаблон-приёмник целиком: параметры оформления для листа «Оформление» и варианты всех
+   * системных видов для планировщика страниц. Рядом стоит встроенный «default» — без него
+   * планировщик не привязывает ни одного вида и молча ничего не создаёт.
+   */
+  const FULL_MANIFEST = {
+    id: "corporate",
+    themes: [{ id: "light", label: "Светлая" }, { id: "dark", label: "Тёмная" }],
+    params: [
+      { key: "primaryColor", type: "color" },
+      { key: "showProgressBar", type: "boolean" },
+    ],
+    contentTemplates: SYSTEM_TEMPLATES,
+  };
+
+  /** Страница приёмника — ровно тот набор полей, который читает проход страниц. */
+  const page = (id: string, kind: string, topicId: string | null, templateKey: string) => ({
+    id, testId: "test-1", topicId, kind, templateKey,
+    position: topicId ? "before_topic" : kind === "results" ? "after" : "before",
+    mode: "template", type: "info", sortOrder: 0,
+    valuesJson: { values: {} }, settingsJson: {},
+    autoAdvance: false, autoAdvanceDelayMs: null,
+  });
+
+  /**
+   * Приёмник в состоянии «тест без разделов»: страницы уровня теста у него есть, а
+   * постраздельных нет — их создаст сохранение структуры. `save` службы настроек здесь
+   * делает ровно это, потому что в бою системные страницы появляются именно так, и
+   * предпросмотр обязан считать по состоянию, которое приёмник ПОЛУЧИТ.
+   */
+  function setUpReceiver(): void {
+    const pages = [
+      page("p-start", "start", null, "start.default"),
+      page("p-results", "results", null, "results.default"),
+      page("p-review", "review", null, "review.default"),
+      page("p-questions", "questions", null, "questions.default"),
+    ];
+    storageMock.getContentPages.mockImplementation(async () => pages.map((p) => ({ ...p })));
+    testSettingsMock.save.mockImplementation(async (_id: string, payload: any) => {
+      for (const section of payload.sections ?? []) {
+        pages.push(page(`p-intro-${section.topicId}`, "intro", section.topicId, "intro.default"));
+        pages.push(page(`p-questions-${section.topicId}`, "questions", section.topicId, "questions.default"));
+      }
+      if (payload.sections?.length) {
+        pages.push(page("p-section-results", "section-results", null, "section-results.default"));
+      }
+      return { id: "test-1" };
+    });
+    storageMock.createContentPage.mockImplementation(async (created: any) => {
+      const row = { id: `p-new-${pages.length}`, ...created };
+      pages.push(row);
+      return row;
+    });
+  }
+
+  /**
+   * Книга целого теста: ЗАПОЛНЕН КАЖДЫЙ лист, потому что расхождение предпросмотра с
+   * импортом ищется у всех счётчиков сразу, а не у одного названного приёмкой. Страницы
+   * представлены обоими родами — системным (его создаёт сохранение) и авторским.
+   */
+  function book(): Promise<Buffer> {
+    return makeWorkbook({
+      "Настройки": [
+        { "Параметр": "Сценарий прохождения", "Значение": "Линейный по темам" },
+        { "Параметр": "Лимит времени теста", "Значение": "45" },
+      ],
+      "Вопросы": [questionRow],
+      "Шкалы": [scaleRow],
+      "Показатели": [{ "Имя": "passed", "Метка": "Сдал", "Тип": "boolean", "Формула": "score >= 60" }],
+      "Вклады вопросов": [
+        { "Вопрос": "q1", "Шкала": "ee", "Источник": "вариант", "Ключ источника": "1", "Значение": "3" },
+      ],
+      "Оценка": [{ "Вопрос": "q1", "Балл": 2 }],
+      "Структура": [{ "Раздел": "JavaScript", "Порядок": 1, "Вопросов в выборке": 2 }],
+      "Квоты": [{ "Раздел": "JavaScript", "Тег": "основы", "Количество": 1, "Режим": "ровно" }],
+      "Обратная связь": [
+        { "Кому": "Тест", "Раздел": "", "Формат": "Простой", "Текст": "Общий отзыв" },
+        { "Кому": "Раздел", "Раздел": "JavaScript", "Формат": "Простой", "Текст": "Отзыв темы" },
+      ],
+      "Рекомендации": [
+        {
+          "Кому": "Тест", "Раздел": "", "Номер уровня": "",
+          "Тип": "Курс", "Заголовок": "Курс", "Ссылка": "https://example.test/c",
+        },
+        {
+          "Кому": "Уровень", "Раздел": "JavaScript", "Номер уровня": 1,
+          "Тип": "Курс", "Заголовок": "Курс уровня", "Ссылка": "https://example.test/l",
+        },
+      ],
+      "Адаптивные уровни": [
+        {
+          "Раздел": "JavaScript", "Номер": 1, "Название": "Базовый", "Сложность от": 0,
+          "Сложность до": 50, "Вопросов": 3, "Тип порога": "Процент", "Порог": 60,
+        },
+      ],
+      "Оформление": [
+        { "Что": "Шаблон", "Режим": "", "Тема": "", "Ключ": "", "Значение": "corporate" },
+        { "Что": "Тема теста", "Режим": "", "Тема": "", "Ключ": "", "Значение": "Тёмная" },
+        { "Что": "Параметр", "Режим": "", "Тема": "", "Ключ": "showProgressBar", "Значение": "Да" },
+        { "Что": "Отчёт", "Режим": "Стандартный", "Тема": "", "Ключ": "Вид отчёта", "Значение": "report.standard" },
+        { "Что": "Отчёт", "Режим": "Стандартный", "Тема": "", "Ключ": "showScales", "Значение": "Да" },
+      ],
+      "Страницы": [
+        {
+          "Зона": "До теста", "Раздел": "", "Вид": "Стартовая", "Номер": 1,
+          "Вариант": "start.default", "Режим": "Шаблон", "Автопереход": "Нет", "Задержка, мс": "",
+        },
+        {
+          "Зона": "До темы", "Раздел": "JavaScript", "Вид": "Введение раздела", "Номер": 1,
+          "Вариант": "intro.default", "Режим": "Шаблон", "Автопереход": "Нет", "Задержка, мс": "",
+        },
+        {
+          "Зона": "После теста", "Раздел": "", "Вид": "Авторская", "Номер": 1,
+          "Вариант": "info.wide", "Режим": "Шаблон", "Автопереход": "Нет", "Задержка, мс": "",
+        },
+      ],
+      "Поля страниц": [
+        {
+          "Зона": "До теста", "Раздел": "", "Вид": "Стартовая", "Номер": 1,
+          "Куда": "Содержание", "Ключ": "title", "Значение": "Здравствуйте",
+        },
+        {
+          "Зона": "До темы", "Раздел": "JavaScript", "Вид": "Введение раздела", "Номер": 1,
+          "Куда": "Содержание", "Ключ": "title", "Значение": "О разделе",
+        },
+        {
+          "Зона": "После теста", "Раздел": "", "Вид": "Авторская", "Номер": 1,
+          "Куда": "Содержание", "Ключ": "body", "Значение": "<p>Спасибо</p>",
+        },
+      ],
+    });
+  }
+
+  beforeEach(() => {
+    // Шаблон теста и встроенный «default» стоят на стенде оба: по первой строке отвечают
+    // запросы «дай шаблон по id», по обеим — планировщик системных страниц.
+    const row = { isActive: true, version: "3.1.0", templateApiVersion: "1.0" };
+    setTemplateRows([
+      { ...row, id: "corporate", manifest: FULL_MANIFEST },
+      { ...row, id: "default", manifest: { ...FULL_MANIFEST, id: "default" } },
+    ]);
+    setUpReceiver();
+    storageMock.getQuestion.mockResolvedValue({
+      id: "q1", type: "multiple", dataJson: { options: ["3", "4", "5"] },
+    });
+    // Свой набор хэшей на каждый вызов: импорт дописывает в него хэши строк книги, и
+    // общий на два прогона объект превратил бы «предпросмотр создаст вопрос» в
+    // «импорт его пропустил» — расхождение мока, а не продукта.
+    storageMock.getContentHashesByTopic.mockImplementation(async () => new Set());
+  });
+
+  it("отчёт предпросмотра совпадает с отчётом боевого импорта", async () => {
+    const buf = await book();
+
+    // Порядок как у автора: сперва предпросмотр по нетронутому приёмнику, затем импорт.
+    const preview = await postWorkbook(buf, "?dryRun=true");
+    const applied = await postWorkbook(buf);
+
+    expect(preview.status).toBe(200);
+    expect(applied.status).toBe(200);
+    // Сравниваются ВСЕ поля отчёта разом: расхождение любого счётчика — та же ложь
+    // предпросмотра, что и найденная приёмкой, и перечислять их поимённо значило бы
+    // ловить только те, о которых мы уже знаем.
+    expect({ ...preview.body, dryRun: null }).toEqual({ ...applied.body, dryRun: null });
+    expect(preview.body.errors).toEqual([]);
+    // Страница раздела существует только после сохранения структуры — и предпросмотр
+    // обязан пообещать её обновление наравне со стартовой.
+    expect(preview.body.pages).toEqual({ updated: 2, created: 1, deleted: 0 });
+  });
+
+  // Отказ службы настроек — тоже часть плана: сохранение отвергает сочетания, которых
+  // редактор не собрал бы, и книгу целиком. Предпросмотр, молчащий о таком отказе, обещает
+  // перенос, которого не будет.
+  it("отказ сохранения назван и в предпросмотре", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [
+        { "Параметр": "Режим теста", "Значение": "Адаптивный" },
+        { "Параметр": "Сценарий прохождения", "Значение": "Линейный" },
+      ],
+      "Структура": [{ "Раздел": "JavaScript", "Порядок": 1, "Вопросов в выборке": 2 }],
+    });
+    testSettingsMock.save.mockImplementation(async (_id: string, payload: any) => {
+      const violations = validateFlowPolicy(payload.test, payload.sections, payload.adaptiveSettings);
+      if (violations.length > 0) throw new FlowPolicyValidationError(violations);
+      return { id: "test-1" };
+    });
+
+    const preview = await postWorkbook(buf, "?dryRun=true");
+    const applied = await postWorkbook(buf);
+
+    expect(preview.body.errors.length).toBeGreaterThan(0);
+    expect(preview.body.errors).toEqual(applied.body.errors);
+  });
+
+  it("предпросмотр по-прежнему ничего не пишет", async () => {
+    await postWorkbook(await book(), "?dryRun=true");
+
+    expect(testSettingsMock.save).not.toHaveBeenCalled();
+    expect(storageMock.updateContentPage).not.toHaveBeenCalled();
+    expect(storageMock.createContentPage).not.toHaveBeenCalled();
+    expect(storageMock.deleteContentPage).not.toHaveBeenCalled();
+    expect(storageMock.updateTest).not.toHaveBeenCalled();
   });
 });
 

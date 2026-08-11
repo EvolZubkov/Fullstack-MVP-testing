@@ -33,7 +33,14 @@
  * the settings and the sections together. The content pages come LAST, and only there: the
  * system pages the book expects to find are materialised by that save out of the scenario and
  * the topic list, and the design template is by then the one whose manifest types their
- * fields. Writes are skipped under `dryRun`; counts are still computed (FR-13).
+ * fields.
+ *
+ * Writes are skipped under `dryRun`; everything else is not. The preview must report the plan
+ * the WRITING run would carry out, so a pass whose result depends on what an earlier pass
+ * would have changed reads that state as PROJECTED, never as found: the pages pass gets the
+ * system rows the save materialises ({@link projectSystemPages}) and the template the design
+ * sheet binds, and the settings service's refusal is computed instead of caught. `dryRun`
+ * forbids changing the target, not looking at it (FR-13, §8.6).
  *
  * Upsert keys (FR-15 idempotency): scale = (test, key); result variable =
  * (test, name); measurements are replaced per question (the sheet is
@@ -44,7 +51,7 @@
  */
 
 import type ExcelJS from "exceljs";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { storage } from "../storage";
 import { db } from "../db";
 import { sheetHeaders, sheetToObjects } from "../utils/excel";
@@ -60,6 +67,7 @@ import {
   type FormSet,
   type Test,
   type ContentPage,
+  type TemplateManifest,
 } from "@shared/schema";
 import { buildFormSet, parseVariantNumbers, type VariantMembership } from "@shared/draw/forms";
 import { randomUUID } from "crypto";
@@ -89,7 +97,19 @@ import {
   type SectionPayload,
   type AdaptiveTopicPayload,
 } from "./test-settings";
-import { FlowPolicyValidationError } from "./flow-policy-validator";
+// PRD-48: the preview has to PREDICT the system pages the save of this same run
+// materialises, so it runs the very planner the settings service executes — importing it
+// from the pure module keeps one contract instead of two that drift.
+import {
+  planSystemPages,
+  extractFlowMode,
+  extractTemplateId,
+  DEFAULT_TEMPLATE_ID,
+  SYSTEM_KINDS,
+  type SystemKind,
+  type ExistingSystemPage,
+} from "./content-pages-lifecycle";
+import { FlowPolicyValidationError, validateFlowPolicy } from "./flow-policy-validator";
 import { parseScoringCell } from "../utils/scoring-excel";
 import { hasOptionList, isMeasurementOnly, distributesBudget } from "@shared/questions/question-type";
 
@@ -529,6 +549,107 @@ function buildPageFields(
   return { fields, errors, warnings };
 }
 
+/**
+ * The state THIS run leaves the test in, as the pages pass has to see it.
+ *
+ * The pages pass runs last precisely because the save before it materialises the system
+ * pages a book addresses — so under `dryRun`, where that save does not happen, the pass
+ * would look at a receiver the run has not built yet and report «такой страницы в тесте
+ * нет» for every page the very same run would have created. A preview that shows zero
+ * where work will happen is worse than no counter at all (PRD-48 §8.6), so the plan is
+ * carried here instead and the missing state is PROJECTED from it.
+ */
+interface PlannedTestState {
+  /** Sections «Структура» described; empty when the book does not rewrite the structure. */
+  sections: readonly SectionPayload[];
+  /** Whether the run saves at all — an empty patch and no sections means no save, no reconcile. */
+  saves: boolean;
+  /** `flow_policy_json` of the patch, `undefined` when «Настройки» says nothing about the flow. */
+  flowPolicyJson: unknown;
+  /** `design_settings_json` this run writes, `undefined` when «Оформление» says nothing. */
+  designSettingsJson: unknown;
+}
+
+/**
+ * The content pages the pages pass must work against: what the receiver holds, plus what
+ * the save of THIS run would materialise (and minus what it would drop).
+ *
+ * On the writing path there is nothing to project — the save has already run, and the rows
+ * are in the table. Under `dryRun` the same rows are computed instead, through the same
+ * pure planner the settings service executes ({@link planSystemPages}), against the same
+ * triple it reconciles by (flowMode + topics + template). Reading the receiver and the
+ * template manifests to do so is not a write: `dryRun` forbids changing the target, not
+ * looking at it.
+ *
+ * Silent fallbacks mirror the service exactly: it no-ops when a manifest cannot be read,
+ * and reconciles only when the sections, the flow or the design are part of the payload.
+ */
+async function projectSystemPages(
+  testId: string,
+  stored: ContentPage[],
+  planned: PlannedTestState,
+  test: Test,
+  topicIds: string[],
+): Promise<ContentPage[]> {
+  const needsReconcile = planned.saves
+    && (planned.sections.length > 0
+      || planned.flowPolicyJson !== undefined
+      || planned.designSettingsJson !== undefined);
+  if (!needsReconcile) return stored;
+
+  const templateId = extractTemplateId(planned.designSettingsJson ?? test.designSettingsJson);
+  const wantedIds = templateId === DEFAULT_TEMPLATE_ID
+    ? [DEFAULT_TEMPLATE_ID]
+    : [templateId, DEFAULT_TEMPLATE_ID];
+  const rows = await db
+    .select({ id: templates.id, manifest: templates.manifest })
+    .from(templates)
+    .where(inArray(templates.id, wantedIds));
+  const byId = new Map(rows.map((r) => [r.id, r.manifest as TemplateManifest]));
+  const template = byId.get(templateId) ?? byId.get(DEFAULT_TEMPLATE_ID);
+  const defaultTemplate = byId.get(DEFAULT_TEMPLATE_ID);
+  if (!template || !defaultTemplate) return stored;
+
+  const systemKindSet = new Set<string>(SYSTEM_KINDS);
+  const existing: ExistingSystemPage[] = stored
+    .filter((p) => systemKindSet.has(p.kind))
+    .map((p) => ({
+      id: p.id,
+      kind: p.kind as SystemKind,
+      topicId: p.topicId,
+      templateKey: p.templateKey,
+      valuesJson: asObject(p.valuesJson),
+    }));
+
+  const plan = planSystemPages(existing, {
+    flowMode: extractFlowMode(planned.flowPolicyJson ?? test.flowPolicyJson),
+    topicIds,
+    template,
+    defaultTemplate,
+  });
+
+  const doomed = new Set(plan.delete.map((d) => d.id));
+  // Only the fields a system page is ADDRESSED and read by are filled: the id (synthetic —
+  // nothing writes these rows), «вид + тема», the bound variant and the values the pass
+  // merges the book over. A column the projection cannot know (`position`, `sort_order`)
+  // is left absent rather than guessed: the pages pass never reads them for a system page,
+  // and a made-up value would be a lie about a row that does not exist yet.
+  const created = plan.create.map((ins, i) => ({
+    id: `__newpage__:${ins.kind}:${ins.topicId ?? ""}:${i}`,
+    testId,
+    topicId: ins.topicId,
+    kind: ins.kind,
+    mode: "template",
+    templateKey: ins.templateKey,
+    valuesJson: ins.valuesJson,
+    settingsJson: {},
+    autoAdvance: false,
+    autoAdvanceDelayMs: null,
+  } as unknown as ContentPage));
+
+  return [...stored.filter((p) => !doomed.has(p.id)), ...created];
+}
+
 /** An author page the book describes, ready to be created once its zone is cleared. */
 interface PendingAuthorPage {
   page: ParsedPage;
@@ -555,18 +676,25 @@ interface PendingAuthorPage {
  * names ends up looking exactly as the sheet says, and a zone the sheet never names is not
  * touched.
  *
- * @param bookSections Sections the «Структура» sheet described, empty when the book did not
- *   rewrite the structure. It decides WHICH sections a topic zone may address: with the sheet
- *   the book's own list rules (under `dryRun` it is the only list there is), without it the
- *   target's — exactly the split `POST /content-pages` makes when it validates `topicId`.
+ * Both runs of the same book must report the same plan, so everything this pass reads is the
+ * state the run PRODUCES rather than the state it happened to find: the design template is the
+ * one «Оформление» applies (the writing path re-reads it from the row it has just updated),
+ * and the system pages are the ones the save materialises ({@link projectSystemPages}).
+ *
+ * @param planned What this run writes: the sections, the flow and the design. It decides WHICH
+ *   sections a topic zone may address — with «Структура» the book's own list rules (under
+ *   `dryRun` it is the only list there is), without it the target's, exactly the split
+ *   `POST /content-pages` makes when it validates `topicId` — and it is what the receiver's
+ *   projected page set is computed from.
  */
 async function applyPageSheets(
   testId: string,
   workbook: ExcelJS.Workbook,
   dryRun: boolean,
-  bookSections: readonly SectionPayload[],
+  planned: PlannedTestState,
   result: WorkbookImportResult,
 ): Promise<void> {
+  const bookSections = planned.sections;
   const pageSheet = findSheet(workbook, PAGE_SHEET_NAME);
   const fieldSheet = findSheet(workbook, PAGE_FIELD_SHEET_NAME);
   // A book without «Страницы» does not touch the pages at all — that is what every book
@@ -594,7 +722,16 @@ async function applyPageSheets(
   // The variant manifest is the ONLY thing that filters and sanitises a field value. With no
   // template to resolve, every protection fails at once, so nothing is written: this is a
   // different case from «the template has no such variant», and it must not read the same.
-  const contentTemplates = await resolveContentTemplates(test);
+  //
+  // The template of THIS RUN, not of the row as it stands: «Оформление» is applied before this
+  // pass, so on the writing path the test already wears it, and under `dryRun` naming it here
+  // is the only way the preview types the fields by the same manifest the import will.
+  const contentTemplates = await resolveContentTemplates(
+    test,
+    planned.designSettingsJson !== undefined
+      ? extractTemplateId(planned.designSettingsJson)
+      : undefined,
+  );
   if (contentTemplates === null) {
     result.errors.push(
       `Лист «${PAGE_SHEET_NAME}»: шаблон оформления теста не разрешается, `
@@ -603,7 +740,6 @@ async function applyPageSheets(
     return;
   }
 
-  const current = await storage.getContentPages(testId);
   const topics = await storage.getTopics();
   const topicIdByName = new Map(topics.map((t) => [normalizeName(t.name), t.id]));
 
@@ -611,11 +747,15 @@ async function applyPageSheets(
   // test never uses. Such a page renders nowhere and yet holds the topic for `content-guard`,
   // so the same rule the page editor enforces applies here: a page's topic must be a section
   // of THIS test (`POST /content-pages` answers 422).
-  const sectionTopicIds = new Set(
-    bookSections.length > 0
-      ? bookSections.map((s) => s.topicId)
-      : (await storage.getTestSections(testId)).map((s) => s.topicId),
-  );
+  const topicIds = bookSections.length > 0
+    ? bookSections.map((s) => s.topicId)
+    : (await storage.getTestSections(testId)).map((s) => s.topicId);
+  const sectionTopicIds = new Set(topicIds);
+
+  const stored = await storage.getContentPages(testId);
+  const current = dryRun
+    ? await projectSystemPages(testId, stored, planned, test, topicIds)
+    : stored;
 
   /** Zone of a page as both sides address it: the position plus the topic (empty for a test zone). */
   const zoneKeyOf = (position: string, topicId: string | null) => `${position}|${topicId ?? ""}`;
@@ -840,21 +980,29 @@ async function loadActiveTemplate(id: string): Promise<DesignTemplate | undefine
  *   answers an unknown key with the default variant and no diagnostic, so the substitution
  *   could only be found by eye in a finished PDF.
  *
- * @returns The `report_settings_json` to write, already merged over the target's own, or
- *   `undefined` when the book says nothing about the report. It travels in the test patch
- *   rather than being written here: the report is an ordinary column of the `tests` row, and
- *   one save per import is the rule the settings sheet already follows.
+ * @returns What this run applies. `reportSettings` is the `report_settings_json` to write,
+ *   already merged over the target's own, or `undefined` when the book says nothing about the
+ *   report; it travels in the test patch rather than being written here, because the report is
+ *   an ordinary column of the `tests` row and one save per import is the rule the settings
+ *   sheet already follows. `designSettings` is the `design_settings_json` this run writes (or
+ *   would write under `dryRun`) — the pages pass needs it, since the manifest that types a
+ *   page field is the one of the template the design NAMES, not of the one the row still holds.
  */
+interface AppliedDesign {
+  reportSettings?: Record<string, unknown>;
+  designSettings?: Record<string, unknown>;
+}
+
 async function applyDesignSheet(
   testId: string,
   workbook: ExcelJS.Workbook,
   dryRun: boolean,
   result: WorkbookImportResult,
-): Promise<Record<string, unknown> | undefined> {
+): Promise<AppliedDesign> {
   const sheet = findSheet(workbook, DESIGN_SHEET_NAME);
   // A book without the sheet changes neither the design nor the report — that is what
   // every book exported before Э5 has to keep meaning.
-  if (!sheet) return undefined;
+  if (!sheet) return {};
 
   const at = `Лист «${DESIGN_SHEET_NAME}»`;
   const parsed = parseDesignSheet(sheetToObjects(sheet));
@@ -865,7 +1013,7 @@ async function applyDesignSheet(
     || Object.keys(parsed.params).length > 0
     || Object.keys(parsed.paramsByTheme).length > 0;
   const hasReport = parsed.reportEnabled !== undefined || Object.keys(parsed.report).length > 0;
-  if (parsed.templateId === undefined && !hasParams && !hasReport) return undefined;
+  if (parsed.templateId === undefined && !hasParams && !hasReport) return {};
 
   const test = await storage.getTest(testId);
   const stored = asObject(test?.designSettingsJson);
@@ -888,9 +1036,11 @@ async function applyDesignSheet(
       `${at}: шаблон «${templateId}» не установлен на этом стенде или отключён; `
       + "поставьте его и повторите импорт",
     );
-    return undefined;
+    return {};
   }
   const manifest = template.manifest;
+  /** What the run applies, filled in as each half of the sheet survives its checks. */
+  const applied: AppliedDesign = {};
 
   // Parameters without a «Шаблон» row: nothing says WHICH manifest they came from, and
   // painting them over whatever template the target happens to wear is the partial design
@@ -937,6 +1087,9 @@ async function applyDesignSheet(
           designSettings.paramsByTheme = design.paramsByTheme;
         }
       }
+      // Handed back on BOTH paths: the caller needs the template this run binds, and under
+      // `dryRun` there is no row to read it off afterwards.
+      applied.designSettings = designSettings;
 
       // The design values that survived the manifest: the template row itself, the palette
       // row when the template has palettes, and every parameter left after the drop above.
@@ -961,7 +1114,7 @@ async function applyDesignSheet(
     }
   }
 
-  if (!hasReport) return undefined;
+  if (!hasReport) return applied;
 
   // Merged over the target's own settings, branch by branch: a branch the sheet did not
   // name is not touched, and an empty «Выдавать отчёт» leaves the switch as it was — the
@@ -992,7 +1145,8 @@ async function applyDesignSheet(
   // Nothing applied — nothing written. A refused branch may not become a rewrite of the
   // column with the value it already held: the import writes what the book said, and here
   // the book said nothing the receiver could take.
-  return touched ? merged : undefined;
+  if (touched) applied.reportSettings = merged;
+  return applied;
 }
 
 /** Options of one import run. */
@@ -1895,8 +2049,8 @@ export async function importWorkbook(
   // into the same patch as every other column of the `tests` row, and the design — which
   // is written on its own path — has to be in place before the pages pass, because the
   // template it names is the one whose manifest types the page fields.
-  const reportSettings = await applyDesignSheet(testId, workbook, dryRun, result);
-  if (reportSettings) settingsDraft.test.reportSettingsJson = reportSettings;
+  const design = await applyDesignSheet(testId, workbook, dryRun, result);
+  if (design.reportSettings) settingsDraft.test.reportSettingsJson = design.reportSettings;
 
   // ── ONE save for the settings and the structure ─────────────────────────────
   // The two travel together when the book carries both, and stand alone otherwise:
@@ -1911,36 +2065,61 @@ export async function importWorkbook(
   //
   // Nothing to say = no call at all: `save` is a rewrite, and calling it with an empty
   // patch would re-stamp the test for a book that asked for nothing.
-  if (!dryRun) {
-    const current = await storage.getTest(testId);
-    // PRD-48 §4.1: settings from «Настройки»; a key the sheet did not carry stays
-    // absent, and the service leaves that column alone.
-    const patch = buildTestPatch(settingsDraft, current);
-    if (sections.length > 0 || Object.keys(patch).length > 0) {
+  //
+  // The patch is built on BOTH paths, and only the writing is skipped: the pages pass below
+  // has to know what the save would change (the flow decides which system pages exist at
+  // all), so under `dryRun` the plan is assembled and then simply not sent. Reading the test
+  // row for it is not a write.
+  const currentTest = await storage.getTest(testId);
+  // PRD-48 §4.1: settings from «Настройки»; a key the sheet did not carry stays
+  // absent, and the service leaves that column alone.
+  const patch = buildTestPatch(settingsDraft, currentTest);
+  const saves = sections.length > 0 || Object.keys(patch).length > 0;
+  const payload = {
+    test: {
+      status: (currentTest?.status as "draft" | "published" | "archived") ?? "draft",
+      ...patch,
+    },
+    // The service rewrites sections only when the payload names them.
+    ...(sections.length > 0 ? { sections } : {}),
+    // Same rule for the levels, and for the same reason: `adaptiveSettings` is a
+    // wholesale rewrite, so an empty list would DELETE the target's levels — and the
+    // export writes the sheet always, header-only for a test that has none.
+    ...(adaptiveTopics.length > 0 ? { adaptiveSettings: adaptiveTopics } : {}),
+  };
+  if (saves) {
+    if (dryRun) {
+      // The refusal the SAVE would answer with, told in the preview instead. The service
+      // guards combinations the editor cannot even assemble, and on the writing path
+      // {@link saveOrCollect} turns that exception into these very lines — so without this
+      // the preview reported a clean plan for a book the import goes on to refuse whole.
+      // The gate repeats the service's own: a patch that touches neither the sections, nor
+      // the levels, nor the mode, nor the flow cannot violate the strict gating.
+      if (sections.length > 0 || adaptiveTopics.length > 0 || patch.mode || patch.flowPolicyJson) {
+        for (const v of validateFlowPolicy(payload.test, payload.sections, payload.adaptiveSettings)) {
+          result.errors.push(`Настройки теста: ${v.message}`);
+        }
+      }
+    } else {
       // Read HERE and nowhere earlier: the query answers "what would the rewrite destroy",
       // and under `dryRun` there is no rewrite — the plan the preview reports does not
-      // depend on it, exactly as the test row above is only read on the saving path.
+      // depend on it.
       if (sections.length > 0) await keepUnnamedSectionFeedback(testId, sections);
       if (adaptiveTopics.length > 0) await keepUnnamedFailureFeedback(testId, adaptiveTopics);
-      await saveOrCollect(testId, {
-        test: {
-          status: (current?.status as "draft" | "published" | "archived") ?? "draft",
-          ...patch,
-        },
-        // The service rewrites sections only when the payload names them.
-        ...(sections.length > 0 ? { sections } : {}),
-        // Same rule for the levels, and for the same reason: `adaptiveSettings` is a
-        // wholesale rewrite, so an empty list would DELETE the target's levels — and the
-        // export writes the sheet always, header-only for a test that has none.
-        ...(adaptiveTopics.length > 0 ? { adaptiveSettings: adaptiveTopics } : {}),
-      }, result.errors);
+      await saveOrCollect(testId, payload, result.errors);
     }
   }
 
   // ── Pass 7: «Страницы» + «Поля страниц» (PRD-48 FR-14/FR-15) ──
   // LAST, and only here: the system pages the book expects to find are materialised by the
-  // save above, out of the scenario («Настройки») and the topic list («Структура»).
-  await applyPageSheets(testId, workbook, dryRun, sections, result);
+  // save above, out of the scenario («Настройки») and the topic list («Структура»). Under
+  // `dryRun` that save did not run, so the pass is handed the plan and projects it.
+  await applyPageSheets(testId, workbook, dryRun, {
+    sections,
+    saves,
+    flowPolicyJson: patch.flowPolicyJson,
+    designSettingsJson: design.designSettings,
+  }, result);
 
   return result;
 }
