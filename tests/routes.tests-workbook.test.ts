@@ -2093,6 +2093,338 @@ describe("POST /:id/workbook/import — отказ службы настроек
   });
 });
 
+// ─── PRD-48 FR-14/FR-15: загрузка страниц и их полей ─────────────────────────
+// Из девяти видов страниц авторский ровно один: остальные материализует служба по
+// сценарию и составу тем, поэтому книга может только НАЙТИ системную строку и обновить
+// её. Авторские страницы ключа не имеют вовсе — единицей идемпотентности служит зона.
+
+describe("POST /:id/workbook/import — «Страницы» и «Поля страниц»", () => {
+  /** Системная страница приёмника: у неё уже есть содержимое и настройка. */
+  const startPage = {
+    id: "p-start", testId: "test-1", topicId: null, position: "before", kind: "start",
+    mode: "template", type: "intro", templateKey: "start.default", sortOrder: 0,
+    valuesJson: { values: { title: "Старый заголовок", lead: "Подзаголовок" } },
+    settingsJson: { buttonLabel: "Дальше" },
+    autoAdvance: false, autoAdvanceDelayMs: null,
+  };
+  /** Авторская страница приёмника. */
+  const authorPage = (id: string, position: string, sortOrder: number) => ({
+    ...startPage,
+    id, position, kind: "info", type: "info", templateKey: "info.wide", sortOrder,
+    valuesJson: { values: { body: `<p>${id}</p>` } }, settingsJson: {},
+  });
+
+  /** Строка листа «Страницы» — все колонки, как их пишет выгрузка. */
+  const pageRow = (over: Record<string, unknown> = {}) => ({
+    "Зона": "До теста", "Раздел": "", "Вид": "Стартовая", "Номер": 1,
+    "Вариант": "start.default", "Режим": "Шаблон", "Автопереход": "Нет", "Задержка, мс": "",
+    ...over,
+  });
+  /** Строка листа «Поля страниц». */
+  const fieldRow = (over: Record<string, unknown> = {}) => ({
+    "Зона": "До теста", "Раздел": "", "Вид": "Стартовая", "Номер": 1,
+    "Куда": "Содержание", "Ключ": "title", "Значение": "",
+    ...over,
+  });
+
+  beforeEach(() => {
+    storageMock.getContentPages.mockResolvedValue([startPage]);
+  });
+
+  it("обновляет системную страницу: значение поля применилось", async () => {
+    const buf = await makeWorkbook({
+      "Страницы": [pageRow()],
+      "Поля страниц": [fieldRow({ "Значение": "Новый заголовок" })],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.pages).toMatchObject({ updated: 1, created: 0 });
+    expect(storageMock.updateContentPage).toHaveBeenCalledWith(
+      "p-start",
+      expect.objectContaining({
+        valuesJson: expect.objectContaining({
+          values: expect.objectContaining({ title: "Новый заголовок" }),
+        }),
+      }),
+    );
+  });
+
+  // Иначе книга — вход в обход санитайзера: значение приезжает с чужого стенда и
+  // проходит ровно тот же путь, что и сохранение из редактора страниц.
+  it("значение проходит санитайзер, а не пишется как есть", async () => {
+    const buf = await makeWorkbook({
+      "Страницы": [pageRow()],
+      "Поля страниц": [
+        fieldRow({ "Ключ": "lead", "Значение": "<p>Текст</p><script>alert(1)</script>" }),
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    const [, patch] = storageMock.updateContentPage.mock.calls[0] as [string, any];
+    expect(patch.valuesJson.values.lead).toContain("<p>Текст</p>");
+    expect(patch.valuesJson.values.lead).not.toContain("<script>");
+  });
+
+  // Сохранение заменяет `values_json` ЦЕЛИКОМ, поэтому слить обязан импортёр: иначе
+  // ключ, которого книга не назвала, исчезает молча.
+  it("значения сливаются: ключ, которого книга не назвала, уцелел", async () => {
+    const buf = await makeWorkbook({
+      "Страницы": [pageRow()],
+      "Поля страниц": [fieldRow({ "Значение": "Новый заголовок" })],
+    });
+    await postWorkbook(buf);
+
+    const [, patch] = storageMock.updateContentPage.mock.calls[0] as [string, any];
+    expect(patch.valuesJson.values).toEqual({
+      title: "Новый заголовок",
+      lead: "Подзаголовок",
+    });
+    // Настройку книга не называла — колонка настроек в патч не попадает вовсе.
+    expect(patch).not.toHaveProperty("settingsJson");
+  });
+
+  it("настройка страницы едет своей строкой с «Куда» = «Настройка»", async () => {
+    const buf = await makeWorkbook({
+      "Страницы": [pageRow()],
+      "Поля страниц": [fieldRow({ "Куда": "Настройка", "Ключ": "buttonLabel", "Значение": "Поехали" })],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    const [, patch] = storageMock.updateContentPage.mock.calls[0] as [string, any];
+    expect(patch.settingsJson).toEqual({ buttonLabel: "Поехали" });
+  });
+
+  // У авторских страниц ключа нет, поэтому единственная предсказуемая идемпотентность —
+  // «названная зона выглядит как в книге».
+  it("авторские страницы названной зоны заменяются набором из книги", async () => {
+    storageMock.getContentPages.mockResolvedValue([
+      startPage,
+      authorPage("p-old-1", "after", 1),
+      authorPage("p-old-2", "after", 2),
+    ]);
+    const buf = await makeWorkbook({
+      "Страницы": [
+        pageRow({ "Зона": "После теста", "Вид": "Авторская", "Номер": 1, "Вариант": "info.wide" }),
+      ],
+      "Поля страниц": [
+        fieldRow({
+          "Зона": "После теста", "Вид": "Авторская", "Номер": 1,
+          "Ключ": "body", "Значение": "<p>Новая страница</p>",
+        }),
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.pages).toMatchObject({ created: 1, deleted: 2 });
+    expect(storageMock.deleteContentPage.mock.calls.map((c: any[]) => c[0]).sort()).toEqual([
+      "p-old-1", "p-old-2",
+    ]);
+    expect(storageMock.createContentPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        testId: "test-1",
+        position: "after",
+        kind: "info",
+        templateKey: "info.wide",
+        valuesJson: { values: { body: "<p>Новая страница</p>" }, placeholderStyles: {} },
+      }),
+    );
+  });
+
+  it("зона, которой лист не назвал, не тронута", async () => {
+    storageMock.getContentPages.mockResolvedValue([
+      startPage,
+      authorPage("p-before", "before", 1),
+      authorPage("p-after", "after", 1),
+    ]);
+    const buf = await makeWorkbook({
+      "Страницы": [
+        pageRow({ "Зона": "После теста", "Вид": "Авторская", "Номер": 1, "Вариант": "info.wide" }),
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    // Названа только зона «После теста» — авторская страница «До теста» цела.
+    expect(storageMock.deleteContentPage).toHaveBeenCalledTimes(1);
+    expect(storageMock.deleteContentPage).toHaveBeenCalledWith("p-after");
+  });
+
+  // Значение поля физически лежит НА странице: адреса нет на первом листе — значению
+  // негде храниться.
+  it("поле-сирота даёт ошибку строки", async () => {
+    const buf = await makeWorkbook({
+      "Страницы": [pageRow()],
+      "Поля страниц": [
+        fieldRow({ "Зона": "После теста", "Вид": "Авторская", "Значение": "Ничьё" }),
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors.some((e: string) => /не названа на листе «Страницы»/.test(e))).toBe(true);
+  });
+
+  // Системную страницу создаёт служба по сценарию: «нет такой» почти всегда значит, что
+  // книга и приёмник разошлись сценарием — молчать об этом нельзя.
+  it("системная страница, которой на приёмнике нет, даёт внятную ошибку", async () => {
+    storageMock.getContentPages.mockResolvedValue([startPage]);
+    const buf = await makeWorkbook({
+      "Страницы": [pageRow({ "Зона": "После теста", "Вид": "Итоги", "Вариант": "start.default" })],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors.some((e: string) => /Итоги/.test(e) && /сценари/i.test(e))).toBe(true);
+    expect(storageMock.updateContentPage).not.toHaveBeenCalled();
+  });
+
+  // Незаявленный ключ не проходит санитайзер ВООБЩЕ (`normalizeValuesForTemplate`
+  // пропускает его как есть), поэтому книга не вправе его вносить.
+  it("ключ, не объявленный вариантом, отброшен, и об этом сказано", async () => {
+    const buf = await makeWorkbook({
+      "Страницы": [pageRow()],
+      "Поля страниц": [
+        fieldRow({ "Ключ": "ghost", "Значение": "<script>alert(1)</script>" }),
+        fieldRow({ "Ключ": "title", "Значение": "Новый заголовок" }),
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.warnings.some((w: string) => /ghost/.test(w))).toBe(true);
+    expect(JSON.stringify(storageMock.updateContentPage.mock.calls)).not.toContain("ghost");
+  });
+
+  // Шаблона нет вовсе — отказывает вся защита разом, и это НЕ то же самое, что
+  // «варианта нет в шаблоне».
+  it("нерезолвимый шаблон оформления: ошибка, и ничего не записано", async () => {
+    setContentTemplates(null);
+    const buf = await makeWorkbook({
+      "Страницы": [pageRow()],
+      "Поля страниц": [fieldRow({ "Значение": "Новый заголовок" })],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors.some((e: string) => /шаблон оформления/.test(e))).toBe(true);
+    expect(storageMock.updateContentPage).not.toHaveBeenCalled();
+  });
+
+  it("вариант, которого нет в шаблоне приёмника, даёт ошибку строки", async () => {
+    const buf = await makeWorkbook({
+      "Страницы": [pageRow({ "Вариант": "start.exotic" })],
+      "Поля страниц": [fieldRow({ "Значение": "Новый заголовок" })],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors.some((e: string) => /start\.exotic/.test(e))).toBe(true);
+    expect(storageMock.updateContentPage).not.toHaveBeenCalled();
+  });
+
+  it("dryRun считает план, но страниц не трогает", async () => {
+    const buf = await makeWorkbook({
+      "Страницы": [pageRow()],
+      "Поля страниц": [fieldRow({ "Значение": "Новый заголовок" })],
+    });
+    const res = await postWorkbook(buf, "?dryRun=true");
+
+    expect(res.body.pages).toMatchObject({ updated: 1 });
+    expect(storageMock.updateContentPage).not.toHaveBeenCalled();
+  });
+
+  // Книга Э2 листов страниц не несёт — и страниц не касается ни одной.
+  it("книга без листа «Страницы» страницы не трогает", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [{ "Параметр": "Лимит времени теста", "Значение": "45" }],
+      "Структура": [{ "Раздел": "JavaScript", "Порядок": 1, "Вопросов в выборке": 2 }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.pages).toEqual({ updated: 0, created: 0, deleted: 0 });
+    expect(storageMock.getContentPages).not.toHaveBeenCalled();
+    expect(storageMock.updateContentPage).not.toHaveBeenCalled();
+    expect(storageMock.createContentPage).not.toHaveBeenCalled();
+    expect(storageMock.deleteContentPage).not.toHaveBeenCalled();
+  });
+
+  it("лист «Поля страниц» без листа «Страницы» — ошибка, а не молчание", async () => {
+    const buf = await makeWorkbook({
+      "Поля страниц": [fieldRow({ "Значение": "Новый заголовок" })],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors.some((e: string) => /требует листа «Страницы»/.test(e))).toBe(true);
+  });
+});
+
+// Круг этапа: что написала выгрузка, то загрузка принимает и даёт исходное.
+describe("Round-trip: страницы и их поля через роуты", () => {
+  const sourcePages = [
+    {
+      id: "p-start", testId: "test-1", topicId: null, position: "before", kind: "start",
+      mode: "template", type: "intro", templateKey: "start.default", sortOrder: 0,
+      valuesJson: { values: { title: "Добро пожаловать", lead: "<p>Пара слов</p>" } },
+      settingsJson: { buttonLabel: "Начать" },
+      autoAdvance: false, autoAdvanceDelayMs: null,
+    },
+    {
+      id: "p-info", testId: "test-1", topicId: null, position: "after", kind: "info",
+      mode: "template", type: "info", templateKey: "info.wide", sortOrder: 1,
+      valuesJson: { values: { body: "<p>Спасибо</p>" } }, settingsJson: {},
+      autoAdvance: false, autoAdvanceDelayMs: null,
+    },
+  ];
+
+  beforeEach(() => {
+    storageMock.getTestSections.mockResolvedValue([]);
+    storageMock.getQuestions.mockResolvedValue([]);
+    storageMock.getScales.mockResolvedValue([]);
+    storageMock.getResultVariables.mockResolvedValue([]);
+    storageMock.getQuestionMeasurements.mockResolvedValue([]);
+    storageMock.getContentPages.mockResolvedValue(sourcePages);
+  });
+
+  it("книга переносит содержимое стартовой страницы и авторскую страницу в другой тест", async () => {
+    const exportRes = await getExport();
+    expect(exportRes.status).toBe(200);
+
+    // Приёмник — другой тест: системная страница у него своя и пустая, авторских нет.
+    const receiverStart = { ...sourcePages[0], id: "p2-start", testId: "test-2", valuesJson: {}, settingsJson: {} };
+    storageMock.getTest.mockResolvedValue({ id: "test-2", title: "Приёмник", status: "draft" });
+    storageMock.getContentPages.mockResolvedValue([receiverStart]);
+
+    const res = await request(makeApp())
+      .post("/api/tests/test-2/workbook/import")
+      .attach("file", exportRes.body as Buffer, "wb.xlsx");
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.warnings).toEqual([]);
+
+    const [, patch] = storageMock.updateContentPage.mock.calls[0] as [string, any];
+    expect(patch.valuesJson.values).toEqual({ title: "Добро пожаловать", lead: "<p>Пара слов</p>" });
+    expect(patch.settingsJson).toEqual({ buttonLabel: "Начать" });
+    expect(storageMock.createContentPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        testId: "test-2",
+        position: "after",
+        kind: "info",
+        templateKey: "info.wide",
+        valuesJson: { values: { body: "<p>Спасибо</p>" }, placeholderStyles: {} },
+      }),
+    );
+  });
+});
+
 // ─── PRD-48 §4.1: лист «Настройки», параметр «Папка» ─────────────────────────
 
 describe("POST /:id/workbook/import — «Настройки»: папка теста", () => {

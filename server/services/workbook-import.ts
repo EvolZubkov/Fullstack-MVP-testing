@@ -36,12 +36,26 @@ import {
   type FormSet,
   type Test,
 } from "@shared/schema";
+import type { ContentPage } from "@shared/schema";
 import { buildFormSet, parseVariantNumbers, type VariantMembership } from "@shared/draw/forms";
 import { randomUUID } from "crypto";
 import type { ValueType } from "@shared/formula";
 import type { Role } from "@shared/access";
 import { importQuestionRows, type ResolvedQuestion } from "./questions-import";
-import { syncScaleFeedbackUsages, syncVariableFeedbackUsages } from "./media/usage-index";
+import { syncEntityUsages, syncScaleFeedbackUsages, syncVariableFeedbackUsages } from "./media/usage-index";
+// PRD-48 Э3: the page-field rules live in ONE place, and the workbook calls exactly the
+// functions the page editor calls — a second, «simpler» path here would turn the book into
+// an entry point past the sanitiser.
+import {
+  resolveContentTemplates,
+  findContentTemplate,
+  normalizeValuesForTemplate,
+  normalizeSettingsForTemplate,
+  sanitizeAllStringValues,
+  ContentPageFieldError,
+  type ContentTemplateEntry,
+} from "./content-page-fields";
+import { logger } from "../logger";
 import { testSettingsService, type SectionPayload } from "./test-settings";
 import { FlowPolicyValidationError } from "./flow-policy-validator";
 import { parseScoringCell } from "../utils/scoring-excel";
@@ -63,9 +77,14 @@ import {
   parseFeedbackSheets,
   FEEDBACK_SHEET_NAME,
   RECOMMENDATION_SHEET_NAME,
+  parsePageSheets,
+  formatPageAddress,
+  PAGE_SHEET_NAME,
+  PAGE_FIELD_SHEET_NAME,
   type ParsedQuota,
   type SettingsDraft,
   type ParsedFeedbackSheets,
+  type ParsedPage,
 } from "../utils/workbook-sheets";
 
 export interface WorkbookImportResult {
@@ -77,6 +96,12 @@ export interface WorkbookImportResult {
   scoring: { rows: number };
   /** PRD-14 FR-16: sections + quotas written from «Структура»/«Квоты». */
   structure: { sections: number; quotas: number };
+  /**
+   * PRD-48 FR-14/FR-15: pages touched by «Страницы»/«Поля страниц». System pages are only
+   * ever `updated` — the book cannot create one; `created`/`deleted` count the author
+   * pages of the zones the sheet named and therefore replaced.
+   */
+  pages: { updated: number; created: number; deleted: number };
   errors: string[];
   /**
    * Non-blocking notices: the book imports, but something in it is likely not
@@ -272,6 +297,311 @@ async function resolveFolderPath(path: string, actorId: string | null): Promise<
   return parentId;
 }
 
+// ─── «Страницы» + «Поля страниц» (PRD-48 FR-14/FR-15) ────────────────────────
+
+/** A `jsonb` column, or a branch of one, as a plain object — `null` and foreign shapes included. */
+function asObject(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/** The two field columns of a page, present only when the book named something for them. */
+interface PageFields {
+  valuesJson?: { values: Record<string, unknown>; placeholderStyles: Record<string, unknown> };
+  settingsJson?: Record<string, unknown>;
+}
+
+/** Re-index a page's media the way the page routes do — a failed index may not cost a write. */
+async function syncPageUsages(pageId: string, page: ContentPage | null): Promise<void> {
+  try {
+    await syncEntityUsages("content_page", pageId, page);
+  } catch (error) {
+    logger.error(
+      `Media usage sync failed for content page ${pageId}: ${(error as Error).message}`,
+      "workbook-import",
+    );
+  }
+}
+
+/**
+ * The values and settings of ONE page: the keys the book named, MERGED over what the page
+ * already holds and put through the service the page editor calls.
+ *
+ * Three rules live here, and none of them is optional:
+ *
+ * - the merge is the IMPORTER's job. `updateContentPage` replaces `values_json` whole, so a
+ *   key the book did not name survives only because it is read back and re-sent here;
+ * - every value goes through {@link normalizeValuesForTemplate} /
+ *   {@link normalizeSettingsForTemplate} — the very functions `PUT /content-pages/:pageId`
+ *   calls. A second, «simpler» path would make the workbook an entry point past the sanitiser;
+ * - a key the variant does NOT declare is dropped and REPORTED. `normalizeValuesForTemplate`
+ *   lets an undeclared key through untouched, which is right for the editor (a page keeps the
+ *   values of a variant it was switched away from) but means the value is never sanitised —
+ *   so the book, which comes from another stand, may not be the one to introduce it. Silently
+ *   losing content is worse than saying so, hence the warning.
+ *
+ * @param variant The page's variant, or `undefined` for a page in the «HTML» / «Стандартный»
+ *   mode, whose fields no manifest declares at all.
+ */
+function buildPageFields(
+  page: ParsedPage,
+  existing: ContentPage | undefined,
+  variant: ContentTemplateEntry | undefined,
+): { fields: PageFields; errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const fields: PageFields = {};
+
+  const namedValues = Object.entries(page.values);
+  const namedSettings = Object.entries(page.settings);
+  const existingValues = asObject(asObject(existing?.valuesJson).values);
+  const existingStyles = asObject(asObject(existing?.valuesJson).placeholderStyles);
+  const existingSettings = asObject(existing?.settingsJson);
+
+  if (!variant) {
+    // No manifest types these fields, so the values take the free-form author pass — the
+    // same one the editor's PUT takes for such a page — and the settings, which are
+    // declared by a variant or not at all, have nothing to be checked against.
+    if (namedValues.length > 0) {
+      const merged = { ...existingValues };
+      for (const [key, value] of namedValues) merged[key] = value;
+      fields.valuesJson = { values: sanitizeAllStringValues(merged), placeholderStyles: {} };
+    }
+    if (namedSettings.length > 0) {
+      warnings.push(
+        "настройки не применены: у страницы вне режима «Шаблон» нет варианта, который бы их объявлял",
+      );
+    }
+    return { fields, errors, warnings };
+  }
+
+  const placeholders = variant.placeholders ?? [];
+  const valueKeys = new Set(placeholders.map((p) => p.key));
+  const settingKeys = new Set((variant.settings ?? []).map((s) => s.key));
+  const undeclared = [
+    ...namedValues.filter(([key]) => !valueKeys.has(key)).map(([key]) => key),
+    ...namedSettings.filter(([key]) => !settingKeys.has(key)).map(([key]) => key),
+  ];
+  if (undeclared.length > 0) {
+    warnings.push(
+      `вариант «${variant.key}» не объявляет полей ${undeclared.map((k) => `"${k}"`).join(", ")} — они не применены`,
+    );
+  }
+
+  const keptValues = namedValues.filter(([key]) => valueKeys.has(key));
+  if (keptValues.length > 0) {
+    const merged = { ...existingValues };
+    for (const [key, value] of keptValues) merged[key] = value;
+    try {
+      const normalized = normalizeValuesForTemplate(
+        { values: merged, placeholderStyles: existingStyles },
+        placeholders,
+      );
+      fields.valuesJson = { values: normalized.values, placeholderStyles: normalized.placeholderStyles };
+    } catch (error) {
+      if (!(error instanceof ContentPageFieldError)) throw error;
+      errors.push(`${error.field ?? "значение поля"}: ${error.message}`);
+    }
+  }
+
+  const keptSettings = namedSettings.filter(([key]) => settingKeys.has(key));
+  if (keptSettings.length > 0) {
+    const merged = { ...existingSettings };
+    for (const [key, value] of keptSettings) merged[key] = value;
+    fields.settingsJson = normalizeSettingsForTemplate(merged, variant.settings, existingSettings);
+  }
+
+  return { fields, errors, warnings };
+}
+
+/** An author page the book describes, ready to be created once its zone is cleared. */
+interface PendingAuthorPage {
+  page: ParsedPage;
+  topicId: string | null;
+  mode: "template" | "standard" | "html";
+  templateKey: string | null;
+  fields: PageFields;
+}
+
+/**
+ * Apply «Страницы» and «Поля страниц» to the test's content pages.
+ *
+ * Runs LAST, after the settings and the structure have been saved, and that order is not a
+ * preference: of the nine kinds of page exactly one — `info` — is authored, while the other
+ * eight are materialised by `testSettingsService` from the SCENARIO and the topic list. Only
+ * once the save has run does the target hold the rows the book expects to find.
+ *
+ * What follows from the same fact: the book can never CREATE a system page, only find one by
+ * «вид + тема» and update it. «Не нашлось» is therefore reported instead of invented — a
+ * missing row almost always means the book and the target disagree about the scenario or the
+ * topic list, and inventing a page would hide that.
+ *
+ * Author pages have no key at all, so the unit of idempotency is the ZONE: a zone the sheet
+ * names ends up looking exactly as the sheet says, and a zone the sheet never names is not
+ * touched.
+ */
+async function applyPageSheets(
+  testId: string,
+  workbook: ExcelJS.Workbook,
+  dryRun: boolean,
+  result: WorkbookImportResult,
+): Promise<void> {
+  const pageSheet = findSheet(workbook, PAGE_SHEET_NAME);
+  const fieldSheet = findSheet(workbook, PAGE_FIELD_SHEET_NAME);
+  // A book without «Страницы» does not touch the pages at all — that is what every book
+  // exported before these sheets existed has to keep meaning.
+  if (!pageSheet) {
+    if (fieldSheet) {
+      result.errors.push(
+        `Лист «${PAGE_FIELD_SHEET_NAME}» требует листа «${PAGE_SHEET_NAME}» `
+        + "(значение поля хранится на странице)",
+      );
+    }
+    return;
+  }
+
+  const parsed = parsePageSheets(
+    sheetToObjects(pageSheet),
+    fieldSheet ? sheetToObjects(fieldSheet) : [],
+  );
+  result.errors.push(...parsed.errors);
+  if (parsed.pages.length === 0) return;
+
+  const test = await storage.getTest(testId);
+  if (!test) return;
+
+  // The variant manifest is the ONLY thing that filters and sanitises a field value. With no
+  // template to resolve, every protection fails at once, so nothing is written: this is a
+  // different case from «the template has no such variant», and it must not read the same.
+  const contentTemplates = await resolveContentTemplates(test);
+  if (contentTemplates === null) {
+    result.errors.push(
+      `Лист «${PAGE_SHEET_NAME}»: шаблон оформления теста не разрешается, `
+      + "поэтому страницы и их поля не применены",
+    );
+    return;
+  }
+
+  const current = await storage.getContentPages(testId);
+  const topics = await storage.getTopics();
+  const topicIdByName = new Map(topics.map((t) => [normalizeName(t.name), t.id]));
+
+  /** Zone of a page as both sides address it: the position plus the topic (empty for a test zone). */
+  const zoneKeyOf = (position: string, topicId: string | null) => `${position}|${topicId ?? ""}`;
+
+  /** System pages of the target by «вид + тема» — the only key the book has for them. */
+  const systemPages = new Map<string, ContentPage>();
+  for (const p of current) {
+    if (p.kind !== "info") systemPages.set(`${p.kind}|${p.topicId ?? ""}`, p);
+  }
+
+  const namedZones = new Set<string>();
+  const updates: Array<{ id: string; patch: Record<string, unknown> }> = [];
+  const authorPages: PendingAuthorPage[] = [];
+
+  for (const page of parsed.pages) {
+    const where = `Лист «${PAGE_SHEET_NAME}», страница «${formatPageAddress(page)}»`;
+
+    let topicId: string | null = null;
+    if (page.topicKey) {
+      topicId = topicIdByName.get(page.topicKey) ?? null;
+      if (!topicId) {
+        result.errors.push(`${where}: тема "${page.topicName}" не найдена`);
+        continue;
+      }
+    }
+    namedZones.add(zoneKeyOf(page.zone, topicId));
+
+    const existing = page.kind === "info"
+      ? undefined
+      : systemPages.get(`${page.kind}|${topicId ?? ""}`);
+    if (page.kind !== "info" && !existing) {
+      result.errors.push(
+        `${where}: такой страницы в тесте нет. Системные страницы создаёт сценарий `
+        + "прохождения и состав тем — книга и приёмник разошлись одним из них",
+      );
+      continue;
+    }
+
+    // An empty cell means «leave as is», so the effective values fall back to the page's own.
+    const mode = (page.mode ?? existing?.mode ?? "template") as "template" | "standard" | "html";
+    const templateKey = page.templateKey ?? existing?.templateKey ?? null;
+    let variant: ContentTemplateEntry | undefined;
+    if (mode === "template") {
+      variant = findContentTemplate(contentTemplates, templateKey);
+      if (!variant) {
+        // The variant is missing from the RECEIVING template: nothing here can be typed or
+        // sanitised, and a page bound to a variant that does not exist does not render.
+        result.errors.push(
+          `${where}: вариант "${templateKey ?? ""}" не объявлен шаблоном оформления теста`,
+        );
+        continue;
+      }
+    }
+
+    const built = buildPageFields(page, existing, variant);
+    for (const e of built.errors) result.errors.push(`${where}: ${e}`);
+    for (const w of built.warnings) result.warnings.push(`${where}: ${w}`);
+
+    if (existing) {
+      const patch: Record<string, unknown> = {};
+      if (page.templateKey !== undefined) patch.templateKey = page.templateKey;
+      if (page.mode !== undefined) patch.mode = page.mode;
+      if (page.autoAdvance !== undefined) patch.autoAdvance = page.autoAdvance;
+      if (page.autoAdvanceDelayMs !== undefined) patch.autoAdvanceDelayMs = page.autoAdvanceDelayMs;
+      if (built.fields.valuesJson) patch.valuesJson = built.fields.valuesJson;
+      if (built.fields.settingsJson) patch.settingsJson = built.fields.settingsJson;
+      if (Object.keys(patch).length > 0) updates.push({ id: existing.id, patch });
+    } else {
+      authorPages.push({ page, topicId, mode, templateKey, fields: built.fields });
+    }
+  }
+
+  // Author pages of a NAMED zone are replaced whole by the book's set for that zone — the
+  // set may be empty, which is how a book clears a zone. A zone the sheet never mentions
+  // keeps its pages, so a book that describes one zone says nothing about the others.
+  const doomed = current.filter(
+    (p) => p.kind === "info" && namedZones.has(zoneKeyOf(p.position, p.topicId)),
+  );
+
+  result.pages = { updated: updates.length, created: authorPages.length, deleted: doomed.length };
+  if (dryRun) return;
+
+  for (const { id, patch } of updates) {
+    const updated = await storage.updateContentPage(
+      id,
+      patch as Parameters<typeof storage.updateContentPage>[1],
+    );
+    if (updated) await syncPageUsages(updated.id, updated);
+  }
+  for (const page of doomed) {
+    await storage.deleteContentPage(page.id);
+    await syncPageUsages(page.id, null);
+  }
+  for (const item of authorPages) {
+    const created = await storage.createContentPage({
+      testId,
+      topicId: item.topicId,
+      position: item.page.zone,
+      mode: item.mode,
+      // The legacy `type` column still exists next to `kind`: an author page is `info`,
+      // and `html` there is the render mode the column used to double as (PRD-1 §4.3).
+      type: item.mode === "html" ? "html" : "info",
+      kind: "info",
+      templateKey: item.templateKey,
+      // The ordinal of the address is the page's place inside its zone, which is exactly
+      // what `sort_order` means there.
+      sortOrder: item.page.index,
+      valuesJson: item.fields.valuesJson ?? { values: {}, placeholderStyles: {} },
+      settingsJson: item.fields.settingsJson ?? {},
+      autoAdvance: item.page.autoAdvance ?? false,
+      autoAdvanceDelayMs: item.page.autoAdvanceDelayMs ?? null,
+    });
+    await syncPageUsages(created.id, created);
+  }
+}
+
 /** Options of one import run. */
 export interface WorkbookImportOptions {
   dryRun: boolean;
@@ -301,6 +631,7 @@ export async function importWorkbook(
     measurements: { rows: 0, questions: 0 },
     scoring: { rows: 0 },
     structure: { sections: 0, quotas: 0 },
+    pages: { updated: 0, created: 0, deleted: 0 },
     errors: [],
     warnings: [],
     dryRun,
@@ -1074,6 +1405,11 @@ export async function importWorkbook(
       }, result.errors);
     }
   }
+
+  // ── Pass 7: «Страницы» + «Поля страниц» (PRD-48 FR-14/FR-15) ──
+  // LAST, and only here: the system pages the book expects to find are materialised by the
+  // save above, out of the scenario («Настройки») and the topic list («Структура»).
+  await applyPageSheets(testId, workbook, dryRun, result);
 
   return result;
 }
