@@ -62,8 +62,14 @@ import {
   PAGE_FIELD_WIDTHS,
   serializePageRows,
   serializePageFieldRows,
+  ADAPTIVE_LEVEL_SHEET_NAME,
+  ADAPTIVE_LEVEL_HEADERS,
+  ADAPTIVE_LEVEL_WIDTHS,
+  serializeAdaptiveLevelRows,
   type FeedbackSource,
+  type FeedbackLevelSource,
   type PageSource,
+  type AdaptiveTopicSource,
 } from "../utils/workbook-sheets";
 import type { ContentPage, DrawBlueprint, FormSet } from "@shared/schema";
 
@@ -214,6 +220,36 @@ router.get(
       // «Структура» + «Квоты» (FR-16): sections ordered by sortOrder; each
       // section's blueprint strata flatten into «Квоты» rows (round-trip).
       const orderedSections = sections.slice().sort((a, b) => a.sortOrder - b.sortOrder);
+
+      // «Адаптивные уровни» (PRD-48 FR-16). Levels belong to a TOPIC, so they are gathered
+      // exactly the way `GET /api/tests/:id` gathers them for the editor: the topic's
+      // settings, its levels by ascending `level_index`, and the materials of each level.
+      // Gathered HERE, before «Структура», because the pieces scatter across three sheets:
+      // the topic's «failed a level» text is a column of «Структура», the levels themselves
+      // are their own sheet, and their materials are «Рекомендации» rows.
+      const adaptiveTopics: AdaptiveTopicSource[] = [];
+      const adaptiveLevelSources: FeedbackLevelSource[] = [];
+      const failureFeedbackByTopic = new Map<string, string | null>();
+      if (test.mode === "adaptive") {
+        const topicSettings = await storage.getAdaptiveTopicSettingsByTest(testId);
+        const allLevels = await storage.getAdaptiveLevelsByTest(testId);
+        for (const ts of topicSettings) {
+          failureFeedbackByTopic.set(ts.topicId, ts.failureFeedback ?? null);
+          const name = topicName.get(ts.topicId) ?? "";
+          const levels = allLevels
+            .filter((l) => l.topicId === ts.topicId)
+            .sort((a, b) => a.levelIndex - b.levelIndex);
+          adaptiveTopics.push({ topicName: name, levels });
+          for (const level of levels) {
+            const links = await storage.getAdaptiveLevelLinks(level.id);
+            if (links.length > 0) {
+              adaptiveLevelSources.push({ topicName: name, levelIndex: level.levelIndex, links });
+            }
+          }
+        }
+      }
+      const adaptiveRows = serializeAdaptiveLevelRows(adaptiveTopics);
+
       // PRD-48 FR-11: the router's unlock rules are keyed by TOPIC id — the workbook
       // spells both the rule's owner and its dependencies as topic names.
       const routerRules =
@@ -238,6 +274,9 @@ router.get(
           unlockDependsOn: (routerRules[s.topicId]?.sectionIds ?? []).map(
             (id) => topicName.get(id) ?? id,
           ),
+          // PRD-48 FR-16: одно значение на тему, поэтому оно едет листом, у которого
+          // ровно одна строка на тему.
+          failureFeedback: failureFeedbackByTopic.get(s.topicId) ?? null,
         }),
       );
       const quotaRows: Record<string, unknown>[] = [];
@@ -285,7 +324,11 @@ router.get(
       }));
       const testFeedback = (test.feedbackJson ?? null) as FeedbackSource | null;
       const feedbackRows = serializeFeedbackRows(testFeedback, feedbackSections);
-      const recommendationRows = serializeRecommendationRows(testFeedback, feedbackSections);
+      const recommendationRows = serializeRecommendationRows(
+        testFeedback,
+        feedbackSections,
+        adaptiveLevelSources,
+      );
 
       // «Страницы» + «Поля страниц» (PRD-48 FR-14/FR-15): the pages of the test and
       // the values of their fields. A page has no natural key, so it travels by its
@@ -333,6 +376,9 @@ router.get(
       // сразу за обратной связью и по-прежнему перед «Оценкой».
       addSheet(wb, PAGE_SHEET_NAME, pageRows, PAGE_HEADERS, PAGE_WIDTHS);
       addSheet(wb, PAGE_FIELD_SHEET_NAME, pageFieldRows, PAGE_FIELD_HEADERS, PAGE_FIELD_WIDTHS);
+      // PRD-48 FR-16: адаптивные уровни — тоже структура теста, поэтому лист стоит
+      // последним среди структурных и по-прежнему перед «Оценкой».
+      addSheet(wb, ADAPTIVE_LEVEL_SHEET_NAME, adaptiveRows, ADAPTIVE_LEVEL_HEADERS, ADAPTIVE_LEVEL_WIDTHS);
       addSheet(wb, "Оценка", scoringRows, SCORING_OVERRIDE_HEADERS, SCORING_OVERRIDE_WIDTHS);
       addSheet(wb, "Шкалы", scaleRows, SCALE_HEADERS, SCALE_WIDTHS);
       addSheet(wb, "Показатели", rvRows, RESULT_VAR_HEADERS, RESULT_VAR_WIDTHS);

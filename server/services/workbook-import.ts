@@ -14,7 +14,10 @@
  * - «Обратная связь» + «Рекомендации» — feedback of the test and of its sections, with the
  *   courses/materials/events that live inside it (PRD-48 FR-12/FR-13);
  * - «Страницы» + «Поля страниц» — the test's content pages and their field values
- *   (PRD-48 FR-14/FR-15).
+ *   (PRD-48 FR-14/FR-15);
+ * - «Адаптивные уровни» — the levels of the adaptive topics, with their materials taken
+ *   off «Рекомендации» (PRD-48 FR-16). They ride into the same save as the sections: the
+ *   service takes them only as `adaptiveSettings` of that payload.
  *
  * Everything except the questions is written into the target `testId`.
  *
@@ -71,7 +74,11 @@ import {
   type ContentTemplateEntry,
 } from "./content-page-fields";
 import { logger } from "../logger";
-import { testSettingsService, type SectionPayload } from "./test-settings";
+import {
+  testSettingsService,
+  type SectionPayload,
+  type AdaptiveTopicPayload,
+} from "./test-settings";
 import { FlowPolicyValidationError } from "./flow-policy-validator";
 import { parseScoringCell } from "../utils/scoring-excel";
 import { hasOptionList, isMeasurementOnly, distributesBudget } from "@shared/questions/question-type";
@@ -97,10 +104,14 @@ import {
   formatPageZone,
   PAGE_SHEET_NAME,
   PAGE_FIELD_SHEET_NAME,
+  parseAdaptiveLevelSheet,
+  adaptiveLevelKey,
+  ADAPTIVE_LEVEL_SHEET_NAME,
   type ParsedQuota,
   type SettingsDraft,
   type ParsedFeedbackSheets,
   type ParsedPage,
+  type ParsedAdaptiveSheet,
 } from "../utils/workbook-sheets";
 
 export interface WorkbookImportResult {
@@ -742,6 +753,21 @@ export async function importWorkbook(
     if (keepTitle) delete settingsDraft.test.title;
   }
 
+  // ── «Адаптивные уровни» (PRD-48 FR-16) ──────────────────────────────────────
+  // Read BEFORE «Рекомендации»: a level's materials are addressed by «Раздел» + «Номер
+  // уровня», and that address only exists if THIS sheet described the level. Applied later
+  // still — levels ride into the same save as the sections (there is no separate write for
+  // them), so the payload can only be assembled where the sections are.
+  //
+  // A book WITHOUT the sheet does not touch the adaptive settings at all: that is what every
+  // book exported before Э4 has to keep meaning.
+  const adaptiveSheet = findSheet(workbook, ADAPTIVE_LEVEL_SHEET_NAME);
+  let adaptive: ParsedAdaptiveSheet | undefined;
+  if (adaptiveSheet) {
+    adaptive = parseAdaptiveLevelSheet(sheetToObjects(adaptiveSheet));
+    result.errors.push(...adaptive.errors);
+  }
+
   // ── «Обратная связь» + «Рекомендации» (PRD-48 FR-12/FR-13) ──────────────────
   // Read HERE, next to «Настройки», and applied later: the test's feedback rides into
   // the same patch as every other column of the `tests` row, and a section's is a field
@@ -757,6 +783,9 @@ export async function importWorkbook(
     feedback = parseFeedbackSheets(
       sheetToObjects(feedbackSheet),
       recommendationSheet ? sheetToObjects(recommendationSheet) : [],
+      // A level row of «Рекомендации» may only name a level the book itself described;
+      // with no adaptive sheet the set is empty and such rows are reported as orphans.
+      adaptive?.levelKeys,
     );
     result.errors.push(...feedback.errors);
     // `undefined` = the test level was not named, so its feedback is not touched;
@@ -1200,6 +1229,14 @@ export async function importWorkbook(
   /** Sections the book describes; empty when it describes none (see the save below). */
   let sections: SectionPayload[] = [];
   /**
+   * Adaptive topics the book describes, empty when it describes none.
+   *
+   * Assembled together with the sections and handed to the SAME `save`: the service takes
+   * levels only as `adaptiveSettings` of the section payload — there is no separate write for
+   * them — so a second call would rewrite the structure a second time.
+   */
+  const adaptiveTopics: AdaptiveTopicPayload[] = [];
+  /**
    * Topic keys «Структура» actually claimed. Declared out here because the orphan
    * checks of «Квоты» and «Обратная связь» both consult it, and the second one has to
    * run even when there is NO «Структура» sheet at all — a book naming a section's
@@ -1241,6 +1278,8 @@ export async function importWorkbook(
     // PRD-48 FR-11: unlock rules by topic NAME for now — the ids the rules are keyed by
     // are known only once every row has resolved its topic.
     const unlockByTopicKey = new Map<string, { mode: string; dependsOn: string[] }>();
+    /** Topics whose «failed a level» text has no levels sheet to ride with (warned about). */
+    const failureWithoutLevels: string[] = [];
     /** Topic id per section of THIS book — what a dependency name may point at. */
     const sectionTopicIdByKey = new Map<string, string>();
     for (let i = 0; i < structRows.length; i++) {
@@ -1323,6 +1362,34 @@ export async function importWorkbook(
         },
       });
       result.structure.quotas += strata.length;
+
+      // PRD-48 FR-16: the topic's levels, with the materials «Рекомендации» attached to each
+      // of them by the SAME address the levels sheet spells. An entry is made for a topic the
+      // book gave levels to, or one whose «Обратная связь при непройденном уровне» is filled
+      // in — those two are the whole of `adaptive_topic_settings`.
+      const levels = adaptive?.byTopic.get(key) ?? [];
+      if (!adaptive && sec.failureFeedback !== null) failureWithoutLevels.push(sec.topicName);
+      if (adaptive && (levels.length > 0 || sec.failureFeedback !== null)) {
+        adaptiveTopics.push({
+          topicId,
+          failureFeedback: sec.failureFeedback,
+          levels: levels.map((level) => ({
+            ...level,
+            links: feedback?.byLevel.get(adaptiveLevelKey(key, level.levelIndex + 1))?.links ?? [],
+          })),
+        });
+      }
+    }
+
+    // The column and the sheet arrived together (Э4), so this is a hand-edited book. Silence
+    // would lose a text the author wrote: the failure feedback is a field of
+    // `adaptive_topic_settings`, and that row is only written as part of the levels payload.
+    if (failureWithoutLevels.length > 0) {
+      result.warnings.push(
+        `Лист «${ADAPTIVE_LEVEL_SHEET_NAME}» отсутствует: «Обратная связь при непройденном `
+        + `уровне» разделов ${failureWithoutLevels.map((n) => `"${n}"`).join(", ")} не применена `
+        + "— адаптивные настройки такая книга не трогает",
+      );
     }
 
     // Quota rows pointing at a section absent from «Структура» are orphans.
@@ -1454,6 +1521,23 @@ export async function importWorkbook(
     }
   }
 
+  // ── Topics named by «Адаптивные уровни» that no section of this run claimed ──
+  // Levels belong to a topic but act only for a topic the TEST contains, so a level of a
+  // foreign topic would be written where nothing ever reads it. Same split as «Обратная
+  // связь»: with «Структура» present the name is wrong, without it the book cannot describe
+  // the test's topics at all.
+  if (adaptive) {
+    for (const [key, name] of adaptive.topicNames) {
+      if (usedTopicKeys.has(key)) continue;
+      result.errors.push(
+        structureSheet
+          ? `Лист «${ADAPTIVE_LEVEL_SHEET_NAME}»: раздел "${name}" не найден на листе «Структура»`
+          : `Лист «${ADAPTIVE_LEVEL_SHEET_NAME}»: раздел "${name}" — уровни можно применить `
+            + "только вместе с листом «Структура»",
+      );
+    }
+  }
+
   // ── ONE save for the settings and the structure ─────────────────────────────
   // The two travel together when the book carries both, and stand alone otherwise:
   //
@@ -1484,6 +1568,10 @@ export async function importWorkbook(
         },
         // The service rewrites sections only when the payload names them.
         ...(sections.length > 0 ? { sections } : {}),
+        // Same rule for the levels, and for the same reason: `adaptiveSettings` is a
+        // wholesale rewrite, so an empty list would DELETE the target's levels — and the
+        // export writes the sheet always, header-only for a test that has none.
+        ...(adaptiveTopics.length > 0 ? { adaptiveSettings: adaptiveTopics } : {}),
       }, result.errors);
     }
   }

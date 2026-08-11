@@ -52,6 +52,11 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     // PRD-15 block D: «Оценка» sheet (per-test scoring overrides).
     getTestQuestionScoring: vi.fn().mockResolvedValue([]),
     replaceTestQuestionScoring: vi.fn().mockResolvedValue([]),
+    // PRD-48 Э4: лист «Адаптивные уровни» — уровни собираются так же, как их
+    // собирает GET /api/tests/:id: настройки темы, её уровни, материалы уровня.
+    getAdaptiveTopicSettingsByTest: vi.fn().mockResolvedValue([]),
+    getAdaptiveLevelsByTest: vi.fn().mockResolvedValue([]),
+    getAdaptiveLevelLinks: vi.fn().mockResolvedValue([]),
     // PRD-48 Э3: листы «Страницы» и «Поля страниц».
     getContentPages: vi.fn().mockResolvedValue([]),
     createContentPage: vi.fn(),
@@ -176,6 +181,10 @@ beforeEach(() => {
   // Разделы приёмника: импорт «Структуры» читает их, чтобы не стереть обратную связь
   // раздела, которого книга не назвала. По умолчанию тест-приёмник разделов не имеет.
   storageMock.getTestSections.mockResolvedValue([]);
+  // Адаптивных настроек у теста по умолчанию нет.
+  storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([]);
+  storageMock.getAdaptiveLevelsByTest.mockResolvedValue([]);
+  storageMock.getAdaptiveLevelLinks.mockResolvedValue([]);
   // Страниц у приёмника по умолчанию нет, шаблон оформления — с двумя вариантами.
   storageMock.getContentPages.mockResolvedValue([]);
   storageMock.createContentPage.mockImplementation(async (page: any) => ({ id: "page-new", ...page }));
@@ -2684,5 +2693,200 @@ describe("POST /:id/workbook/import — «Настройки»: папка те�
     expect(res.status).toBe(200);
     expect(storageMock.createTestFolder).not.toHaveBeenCalled();
     expect(testSettingsMock.save).not.toHaveBeenCalled();
+  });
+});
+
+// ─── PRD-48 FR-16: адаптивные уровни ─────────────────────────────────────────
+// Уровни принадлежат теме, но действуют только для тем теста, и служба настроек
+// принимает их ОДНИМ payload вместе с разделами. Поэтому проверяется именно то, что
+// уходит в `save`: и разделы, и уровни в одном вызове.
+
+describe("Адаптивные уровни: выгрузка и загрузка", () => {
+  const jsTopic = { id: "topic-js-0001", name: "JavaScript", code: null };
+  const adaptiveTest = {
+    ...baseTest,
+    mode: "adaptive",
+    flowPolicyJson: { mode: "linear_by_topics" },
+  };
+  const levelOne = {
+    id: "lvl-1", testId: "test-1", topicId: jsTopic.id, levelIndex: 0,
+    levelName: "Базовый", minDifficulty: 0, maxDifficulty: 40, questionsCount: 5,
+    passThreshold: 60, passThresholdType: "percent", feedback: "Повторите основы",
+  };
+  const levelTwo = {
+    id: "lvl-2", testId: "test-1", topicId: jsTopic.id, levelIndex: 1,
+    levelName: "Продвинутый", minDifficulty: 41, maxDifficulty: 100, questionsCount: 3,
+    passThreshold: 2, passThresholdType: "absolute", feedback: null,
+  };
+  const levelLink = {
+    id: "ln-1", levelId: "lvl-1", title: "Курс по основам", url: "https://example.test/base",
+  };
+
+  /** Источник: адаптивный тест с одной темой, двумя уровнями и материалом у первого. */
+  function mockAdaptiveSource(): void {
+    storageMock.getTopics.mockResolvedValue([jsTopic]);
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getTestSections.mockResolvedValue([
+      {
+        topicId: jsTopic.id, drawCount: 8, sortOrder: 0, required: true,
+        topicPassRuleJson: null, drawBlueprintJson: null,
+      },
+    ]);
+    storageMock.getQuestions.mockResolvedValue([]);
+    storageMock.getScales.mockResolvedValue([]);
+    storageMock.getResultVariables.mockResolvedValue([]);
+    storageMock.getQuestionMeasurements.mockResolvedValue([]);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([
+      { id: "ats-1", testId: "test-1", topicId: jsTopic.id, failureFeedback: "Уровень не пройден" },
+    ]);
+    // Порядок из хранилища НЕ по номеру: лист обязан упорядочить уровни сам.
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([levelTwo, levelOne]);
+    storageMock.getAdaptiveLevelLinks.mockImplementation(
+      async (levelId: string) => (levelId === "lvl-1" ? [levelLink] : []),
+    );
+  }
+
+  it("книга переносит уровни темы, их материалы и обратную связь темы в другой тест", async () => {
+    mockAdaptiveSource();
+    const exportRes = await getExport();
+    expect(exportRes.status).toBe(200);
+
+    const wb = await readWorkbookFromBuffer(exportRes.body as Buffer);
+    // Лист стоит между «Полями страниц» и «Оценкой».
+    const names = wb.worksheets.map((w) => w.name);
+    expect(names.indexOf("Адаптивные уровни")).toBe(names.indexOf("Поля страниц") + 1);
+    expect(names.indexOf("Оценка")).toBe(names.indexOf("Адаптивные уровни") + 1);
+
+    // «Номер» в книге с единицы, в модели `level_index` с нуля.
+    const levelRows = sheetToObjects(wb.getWorksheet("Адаптивные уровни")!);
+    expect(levelRows).toHaveLength(2);
+    expect(levelRows[0]).toMatchObject({
+      "Раздел": "JavaScript", "Номер": 1, "Название": "Базовый",
+      "Сложность от": 0, "Сложность до": 40, "Вопросов": 5,
+      "Тип порога": "Процент", "Порог": 60, "Обратная связь": "Повторите основы",
+    });
+    expect(levelRows[1]).toMatchObject({
+      "Номер": 2, "Название": "Продвинутый", "Тип порога": "Сумма баллов",
+    });
+
+    // Материал уровня уехал на «Рекомендации», обратная связь темы — на «Структуру».
+    const recRows = sheetToObjects(wb.getWorksheet("Рекомендации")!);
+    expect(recRows).toEqual([
+      expect.objectContaining({
+        "Кому": "Уровень", "Раздел": "JavaScript", "Номер уровня": 1,
+        "Тип": "Курс", "Заголовок": "Курс по основам", "Ссылка": "https://example.test/base",
+      }),
+    ]);
+    const structRows = sheetToObjects(wb.getWorksheet("Структура")!);
+    expect(structRows[0]).toMatchObject({
+      "Обратная связь при непройденном уровне": "Уровень не пройден",
+    });
+
+    // Приёмник — другой тест: всё, что окажется в сохранении, приехало книгой.
+    storageMock.getTest.mockResolvedValue({ id: "test-2", title: "Приёмник", status: "draft" });
+    storageMock.getTestSections.mockResolvedValue([]);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([]);
+
+    const res = await request(makeApp())
+      .post("/api/tests/test-2/workbook/import")
+      .attach("file", exportRes.body as Buffer, "wb.xlsx");
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+
+    // Разделы и уровни — в ОДНОМ вызове: отдельной записи уровней у службы нет.
+    expect(testSettingsMock.save).toHaveBeenCalledTimes(1);
+    const [savedTestId, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
+    expect(savedTestId).toBe("test-2");
+    expect(payload.sections).toHaveLength(1);
+    expect(payload.adaptiveSettings).toEqual([
+      {
+        topicId: jsTopic.id,
+        failureFeedback: "Уровень не пройден",
+        levels: [
+          {
+            levelIndex: 0, levelName: "Базовый", minDifficulty: 0, maxDifficulty: 40,
+            questionsCount: 5, passThreshold: 60, passThresholdType: "percent",
+            feedback: "Повторите основы",
+            links: [{ title: "Курс по основам", url: "https://example.test/base" }],
+          },
+          {
+            levelIndex: 1, levelName: "Продвинутый", minDifficulty: 41, maxDifficulty: 100,
+            questionsCount: 3, passThreshold: 2, passThresholdType: "absolute",
+            feedback: null, links: [],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("книга без листа уровней адаптивные настройки не трогает", async () => {
+    const buf = await makeWorkbook({
+      "Структура": [{ "Раздел": "JavaScript", "Порядок": 1, "Вопросов в выборке": 4 }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    const [, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
+    expect(payload.sections).toHaveLength(1);
+    expect(payload.adaptiveSettings).toBeUndefined();
+  });
+
+  it("уровень темы вне теста — ошибка строки", async () => {
+    const buf = await makeWorkbook({
+      "Структура": [{ "Раздел": "JavaScript", "Порядок": 1, "Вопросов в выборке": 4 }],
+      "Адаптивные уровни": [
+        {
+          "Раздел": "Финансы", "Номер": 1, "Название": "Базовый", "Сложность от": 0,
+          "Сложность до": 50, "Вопросов": 3, "Тип порога": "Процент", "Порог": 60,
+        },
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([
+      "Лист «Адаптивные уровни»: раздел \"Финансы\" не найден на листе «Структура»",
+    ]);
+    const [, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
+    expect(payload.adaptiveSettings).toBeUndefined();
+  });
+
+  // Тот самый разрыв, ради которого нужен этап: до Э4 книга адаптивного теста несла
+  // «Режим теста = Адаптивный» и структуру, но не уровни, и упиралась в проверку
+  // «раздел без уровней». Мок службы прогоняет НАСТОЯЩУЮ проверку сценария.
+  it("адаптивный тест из книги сохраняется без ошибки «раздел без уровней»", async () => {
+    testSettingsMock.save.mockImplementation(async (_id: string, payload: any) => {
+      const violations = validateFlowPolicy(payload.test, payload.sections, payload.adaptiveSettings);
+      if (violations.length > 0) throw new FlowPolicyValidationError(violations);
+      return { id: "test-1" };
+    });
+
+    const adaptiveBook = (sheets: Record<string, Record<string, unknown>[]>) => makeWorkbook({
+      "Настройки": [
+        { "Параметр": "Режим теста", "Значение": "Адаптивный" },
+        { "Параметр": "Сценарий прохождения", "Значение": "Линейный по темам" },
+      ],
+      "Структура": [{ "Раздел": "JavaScript", "Порядок": 1, "Вопросов в выборке": 4 }],
+      ...sheets,
+    });
+
+    // Без листа уровней разрыв никуда не делся — это контрольный замер.
+    const without = await postWorkbook(await adaptiveBook({}));
+    expect(without.body.errors.some((e: string) => /adaptive level/i.test(e))).toBe(true);
+
+    const res = await postWorkbook(await adaptiveBook({
+      "Адаптивные уровни": [
+        {
+          "Раздел": "JavaScript", "Номер": 1, "Название": "Базовый", "Сложность от": 0,
+          "Сложность до": 100, "Вопросов": 4, "Тип порога": "Процент", "Порог": 60,
+        },
+      ],
+    }));
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
   });
 });
