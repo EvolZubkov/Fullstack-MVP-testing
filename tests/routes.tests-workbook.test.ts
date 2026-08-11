@@ -20,6 +20,9 @@ vi.hoisted(() => {
 const { storageMock, testSettingsMock } = vi.hoisted(() => ({
   storageMock: {
     getTest: vi.fn(),
+    // PRD-48 Э5: оформление пишется своим путём — той же записью, что и маршрут
+    // `PUT /api/tests/:id/design`, а не через службу настроек.
+    updateTest: vi.fn(),
     getUser: vi.fn(),
     getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     // questions
@@ -73,16 +76,18 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
  * (`resolveContentTemplates`), а не через хранилище: подменяем сам `db`, чтобы проход
  * страниц работал на настоящей нормализации и настоящем санитайзере.
  */
-const { dbMock, setContentTemplates } = vi.hoisted(() => {
+const { dbMock, setTemplateRow } = vi.hoisted(() => {
   const state: { rows: unknown[] } = { rows: [] };
   const chain: any = { select: () => chain, from: () => chain, where: () => chain, then: (r: any) => r(state.rows) };
   return {
     dbMock: chain,
-    /** `null` — шаблона нет вовсе; массив — варианты активного шаблона. */
-    setContentTemplates: (variants: unknown[] | null) => {
-      state.rows = variants === null
-        ? []
-        : [{ id: "default", isActive: true, manifest: { contentTemplates: variants } }];
+    /**
+     * Строка таблицы шаблонов, которую увидит ЛЮБОЙ запрос: подмена условия `where`
+     * потребовала бы разбирать SQL-объекты drizzle. `null` — шаблона на стенде нет вовсе,
+     * и это ровно то состояние, в котором лист «Оформление» обязан быть отвергнут.
+     */
+    setTemplateRow: (row: unknown | null) => {
+      state.rows = row === null ? [] : [row];
     },
   };
 });
@@ -118,6 +123,62 @@ const CONTENT_TEMPLATES = [
     settings: [{ key: "nextLabel", type: "text" }],
   },
 ];
+/**
+ * Манифест шаблона-приёмника для листа «Оформление»: две палитры, параметры трёх типов
+ * и по одному виду отчёта на режим. Ключа `ghostParam` он не объявляет — на нём
+ * проверяется, что незаявленный ключ отбрасывается с предупреждением.
+ */
+const DESIGN_MANIFEST = {
+  id: "corporate",
+  themes: [{ id: "light", label: "Светлая" }, { id: "dark", label: "Тёмная" }],
+  params: [
+    { key: "primaryColor", type: "color" },
+    { key: "showProgressBar", type: "boolean" },
+    { key: "fontFamily", type: "select", options: ["Inter", "Roboto"] },
+  ],
+  contentTemplates: [
+    ...CONTENT_TEMPLATES,
+    {
+      key: "report.standard",
+      kind: "report",
+      isDefault: true,
+      settings: [{ key: "showScales", type: "boolean" }, { key: "title", type: "text" }],
+    },
+    {
+      key: "report.adaptive.standard",
+      kind: "report.adaptive",
+      isDefault: true,
+      settings: [{ key: "showLevels", type: "boolean" }],
+    },
+  ],
+};
+
+/** Активный шаблон оформления приёмника; версии стенда отличаются от версий книги. */
+function setDesignTemplate(id = "corporate"): void {
+  setTemplateRow({
+    id,
+    isActive: true,
+    version: "3.1.0",
+    templateApiVersion: "1.0",
+    manifest: DESIGN_MANIFEST,
+  });
+}
+
+/** Шаблон только со страничными вариантами: `null` — шаблона на стенде нет. */
+function setContentTemplates(variants: unknown[] | null): void {
+  setTemplateRow(
+    variants === null
+      ? null
+      : {
+        id: "default",
+        isActive: true,
+        version: "1.0.0",
+        templateApiVersion: "1.0",
+        manifest: { contentTemplates: variants },
+      },
+  );
+}
+
 const authorUser = { id: "user-1", role: "author", status: "active" };
 const dbTopic = { id: "t1", name: "JavaScript", description: null, folderId: null, createdAt: new Date() };
 
@@ -162,6 +223,7 @@ const scaleRow = { "Ключ": "ee", "Название": "Истощение", "
 beforeEach(() => {
   vi.clearAllMocks();
   storageMock.getTest.mockResolvedValue(baseTest);
+  storageMock.updateTest.mockImplementation(async (id: string, patch: any) => ({ id, ...patch }));
   storageMock.getUser.mockResolvedValue(authorUser);
   storageMock.getUserRoles.mockResolvedValue(["administrator"]);
   storageMock.getTopics.mockResolvedValue([dbTopic]);
@@ -1418,6 +1480,194 @@ describe("GET /:id/workbook/export — оформление и настройк�
     storageMock.getTest.mockResolvedValue(baseTest);
 
     expect(await designRows()).toEqual([]);
+  });
+});
+
+// ─── PRD-48 FR-17/FR-18: загрузка листа «Оформление» ─────────────────────────
+// Оформление пишется СВОИМ путём (маршрут `PUT /:id/design` импорту недоступен), а
+// настройки отчёта едут колонкой в общем патче теста. Проверяется и то, и другое.
+
+describe("POST /:id/workbook/import — «Оформление»", () => {
+  /** Строка листа: у книги пять колонок, и первая строка задаёт их состав целиком. */
+  const row = (what: string, mode: string, theme: string, key: string, value: unknown) => ({
+    "Что": what, "Режим": mode, "Тема": theme, "Ключ": key, "Значение": value,
+  });
+
+  beforeEach(() => {
+    setDesignTemplate();
+    storageMock.getTestSections.mockResolvedValue([]);
+    storageMock.getQuestions.mockResolvedValue([]);
+    storageMock.getScales.mockResolvedValue([]);
+    storageMock.getResultVariables.mockResolvedValue([]);
+    storageMock.getQuestionMeasurements.mockResolvedValue([]);
+  });
+
+  // Круг этапа: тест с выбранным шаблоном, темой, цветами по палитрам и настроенным
+  // отчётом переезжает книгой в ДРУГОЙ тест — то есть ровно так, как его переносят
+  // между стендами.
+  it("книга переносит оформление и обе ветви отчёта в другой тест", async () => {
+    storageMock.getTest.mockResolvedValue({
+      ...baseTest,
+      designSettingsJson: {
+        templateId: "corporate",
+        // Версии книга не несёт: приёмник проставит СВОИ.
+        templateVersion: "2.4.0",
+        templateApiVersion: "1.0",
+        theme: "dark",
+        params: { showProgressBar: false, fontFamily: "Roboto" },
+        paramsByTheme: { light: { primaryColor: "#0055ff" }, dark: { primaryColor: "#88aaff" } },
+      },
+      reportSettingsJson: {
+        enabled: false,
+        standard: { variantKey: "report.standard", values: { showScales: true, title: "Итоговый отчёт" } },
+        // Ветвь БЕЗ вида (настройки, сохранённые до появления выбора) и ветвь режима,
+        // в котором тест сейчас не работает: обе обязаны пережить перенос.
+        adaptive: { values: { showLevels: false } },
+      },
+    });
+    const exportRes = await getExport();
+    expect(exportRes.status).toBe(200);
+
+    storageMock.getTest.mockResolvedValue({ id: "test-2", title: "Приёмник", status: "draft" });
+    const res = await request(makeApp())
+      .post("/api/tests/test-2/workbook/import")
+      .attach("file", exportRes.body as Buffer, "wb.xlsx");
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.warnings).toEqual([]);
+
+    // Оформление: значения вернулись своими типами, версии — со стенда-приёмника.
+    expect(storageMock.updateTest).toHaveBeenCalledWith("test-2", {
+      designSettingsJson: {
+        templateId: "corporate",
+        templateVersion: "3.1.0",
+        templateApiVersion: "1.0",
+        theme: "dark",
+        params: { showProgressBar: false, fontFamily: "Roboto" },
+        paramsByTheme: { light: { primaryColor: "#0055ff" }, dark: { primaryColor: "#88aaff" } },
+      },
+    });
+
+    // Отчёт: колонка уходит вместе с прочим патчем теста. Ветвь без вида доехала БЕЗ
+    // выдуманного ключа — умолчание приёмника может отличаться от умолчания источника.
+    const [, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
+    expect(payload.test.reportSettingsJson).toEqual({
+      enabled: false,
+      standard: { variantKey: "report.standard", values: { showScales: true, title: "Итоговый отчёт" } },
+      adaptive: { values: { showLevels: false } },
+    });
+    expect(payload.test.reportSettingsJson.adaptive.variantKey).toBeUndefined();
+  });
+
+  it("шаблона нет на приёмнике — лист отвергается целиком", async () => {
+    // Частично применённое оформление хуже неприменённого: тест получил бы чужие цвета
+    // поверх чужого макета, а поставить шаблон книга не может.
+    setTemplateRow(null);
+    const buf = await makeWorkbook({
+      "Оформление": [
+        row("Шаблон", "", "", "", "brandbook"),
+        row("Параметр", "", "", "primaryColor", "#ff0000"),
+        row("Отчёт", "", "", "Выдавать отчёт", "Да"),
+      ],
+    });
+
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors.join("\n")).toContain("шаблон «brandbook» не установлен");
+    expect(storageMock.updateTest).not.toHaveBeenCalled();
+    // Отчёт тоже не применён: лист отвергнут целиком, а не наполовину.
+    expect(testSettingsMock.save).not.toHaveBeenCalled();
+  });
+
+  it("ключ, которого манифест приёмника не объявляет, отбрасывается с предупреждением", async () => {
+    const buf = await makeWorkbook({
+      "Оформление": [
+        row("Шаблон", "", "", "", "corporate"),
+        row("Параметр", "", "", "fontFamily", "Roboto"),
+        row("Параметр", "", "", "ghostParam", "42"),
+      ],
+    });
+
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.warnings.join("\n")).toContain("ghostParam");
+    const [, patch] = storageMock.updateTest.mock.calls[0] as [string, any];
+    expect(patch.designSettingsJson.params).toEqual({ fontFamily: "Roboto" });
+  });
+
+  it("вид отчёта, которого нет в манифесте приёмника, — ошибка строки", async () => {
+    // Продукт молча подменил бы вид на умолчательный, и увидеть подмену можно было бы
+    // только глазами в готовом PDF. Книга здесь сознательно строже.
+    const buf = await makeWorkbook({
+      "Оформление": [
+        row("Шаблон", "", "", "", "corporate"),
+        row("Отчёт", "Стандартный", "", "Вид отчёта", "report.fancy"),
+      ],
+    });
+
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors.join("\n")).toContain("report.fancy");
+    // Ветвь не применена — и колонка отчёта не переписана «тем же, что было».
+    const saved = testSettingsMock.save.mock.calls[0]?.[1] as any;
+    expect(saved?.test?.reportSettingsJson).toBeUndefined();
+  });
+
+  it("«Выдавать отчёт» пустой ячейкой не выключает выдачу", async () => {
+    // Отсутствие настройки означает «выдавать», поэтому пустая ячейка обязана читаться
+    // как «оставить как есть», а не как «выключено».
+    storageMock.getTest.mockResolvedValue({
+      ...baseTest,
+      reportSettingsJson: { enabled: true, standard: { variantKey: "report.standard", values: {} } },
+    });
+    // Ветвь режима книга задаёт ЦЕЛИКОМ — как и обратную связь владельца, — поэтому
+    // строка «Вид отчёта» в ней стоит: её пустая ячейка означала бы «вида нет».
+    const buf = await makeWorkbook({
+      "Оформление": [
+        row("Шаблон", "", "", "", "corporate"),
+        row("Отчёт", "", "", "Выдавать отчёт", ""),
+        row("Отчёт", "Стандартный", "", "Вид отчёта", "report.standard"),
+        row("Отчёт", "Стандартный", "", "showScales", "Да"),
+      ],
+    });
+
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    const [, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
+    expect(payload.test.reportSettingsJson).toEqual({
+      enabled: true,
+      standard: { variantKey: "report.standard", values: { showScales: true } },
+    });
+  });
+
+  it("книга без листа «Оформление» не трогает ни оформления, ни отчёта", async () => {
+    // Каждая книга, снятая до этой работы, обязана сохранить это значение.
+    const buf = await makeWorkbook({ "Вопросы": [questionRow] });
+
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    expect(storageMock.updateTest).not.toHaveBeenCalled();
+    const saved = testSettingsMock.save.mock.calls[0]?.[1] as any;
+    expect(saved?.test?.reportSettingsJson).toBeUndefined();
+  });
+
+  it("dryRun ничего не пишет", async () => {
+    const buf = await makeWorkbook({
+      "Оформление": [
+        row("Шаблон", "", "", "", "corporate"),
+        row("Параметр", "", "", "fontFamily", "Roboto"),
+      ],
+    });
+
+    const res = await postWorkbook(buf, "?dryRun=true");
+
+    expect(res.body.errors).toEqual([]);
+    expect(storageMock.updateTest).not.toHaveBeenCalled();
   });
 });
 

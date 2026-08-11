@@ -41,9 +41,12 @@
  */
 
 import type ExcelJS from "exceljs";
+import { and, eq } from "drizzle-orm";
 import { storage } from "../storage";
+import { db } from "../db";
 import { sheetHeaders, sheetToObjects } from "../utils/excel";
 import {
+  templates,
   insertScaleSchema,
   insertResultVariableSchema,
   type Scale,
@@ -73,6 +76,10 @@ import {
   ContentPageFieldError,
   type ContentTemplateEntry,
 } from "./content-page-fields";
+// PRD-48 Э5: the design/report values are typed by the RECEIVING manifest in ONE place,
+// and the import calls it instead of re-implementing the design route's checks loosely.
+import { normalizeDesignParams, normalizeReportBranch } from "./design-fields";
+import { supportsThemes } from "@shared/template/themes";
 import { logger } from "../logger";
 import {
   testSettingsService,
@@ -107,6 +114,9 @@ import {
   parseAdaptiveLevelSheet,
   adaptiveLevelKey,
   ADAPTIVE_LEVEL_SHEET_NAME,
+  parseDesignSheet,
+  DESIGN_SHEET_NAME,
+  type ReportMode,
   type ParsedQuota,
   type SettingsDraft,
   type ParsedFeedbackSheets,
@@ -721,6 +731,184 @@ async function applyPageSheets(
     });
     await syncPageUsages(created.id, created);
   }
+}
+
+// ─── «Оформление» (PRD-48 FR-17/FR-18) ───────────────────────────────────────
+
+/** The receiving template row, as much of it as applying a design needs. */
+interface DesignTemplate {
+  id: string;
+  version: string;
+  templateApiVersion: string;
+  manifest: unknown;
+}
+
+/**
+ * The ACTIVE template of that id — the same row `PUT /api/tests/:id/design` demands.
+ *
+ * Read straight from the table rather than through the storage facade, exactly as
+ * {@link import("./content-page-fields").resolveContentTemplates} does: the design template
+ * is not part of the `IStorage` contract, and adding a second reader of the same row through
+ * a different path is how the two would start disagreeing about what «installed» means.
+ */
+async function loadActiveTemplate(id: string): Promise<DesignTemplate | undefined> {
+  const [row] = await db
+    .select()
+    .from(templates)
+    .where(and(eq(templates.id, id), eq(templates.isActive, true)));
+  return row as DesignTemplate | undefined;
+}
+
+/**
+ * Apply the «Оформление» sheet: the test's design and the settings of its report.
+ *
+ * The design is written on its OWN path, and that is a consequence of the model rather
+ * than a choice: `design_settings_json` is saved by `PUT /api/tests/:id/design` and by
+ * nothing else, and the import cannot go to itself over HTTP. So the route's checks are
+ * repeated here — the template must exist and be ACTIVE, `params` must be declared by its
+ * manifest, per-palette overrides are for a themed template's colours only — through the
+ * one module that owns them ({@link normalizeDesignParams}), because a second, looser copy
+ * would make the workbook a way past the route.
+ *
+ * Three refusals differ on purpose:
+ *
+ * - the TEMPLATE is missing or inactive → the sheet is refused WHOLE, report included.
+ *   Half an applied design is worse than none: the test would wear foreign colours over a
+ *   foreign layout, and the workbook cannot install a template (they arrive as a ZIP
+ *   through the admin registry);
+ * - a key the receiving manifest does not declare → dropped with a WARNING. The route
+ *   answers such a key with a 422 for the whole request, so it cannot be stored; and
+ *   silence would let the author read «оформление перенесено» with half of it missing;
+ * - a report VARIANT the manifest does not declare → an error of that branch. This is the
+ *   one place the workbook is stricter than the product, deliberately: `resolveReportVariant`
+ *   answers an unknown key with the default variant and no diagnostic, so the substitution
+ *   could only be found by eye in a finished PDF.
+ *
+ * @returns The `report_settings_json` to write, already merged over the target's own, or
+ *   `undefined` when the book says nothing about the report. It travels in the test patch
+ *   rather than being written here: the report is an ordinary column of the `tests` row, and
+ *   one save per import is the rule the settings sheet already follows.
+ */
+async function applyDesignSheet(
+  testId: string,
+  workbook: ExcelJS.Workbook,
+  dryRun: boolean,
+  result: WorkbookImportResult,
+): Promise<Record<string, unknown> | undefined> {
+  const sheet = findSheet(workbook, DESIGN_SHEET_NAME);
+  // A book without the sheet changes neither the design nor the report — that is what
+  // every book exported before Э5 has to keep meaning.
+  if (!sheet) return undefined;
+
+  const at = `Лист «${DESIGN_SHEET_NAME}»`;
+  const parsed = parseDesignSheet(sheetToObjects(sheet));
+  result.errors.push(...parsed.errors);
+
+  const hasParams =
+    parsed.theme !== undefined
+    || Object.keys(parsed.params).length > 0
+    || Object.keys(parsed.paramsByTheme).length > 0;
+  const hasReport = parsed.reportEnabled !== undefined || Object.keys(parsed.report).length > 0;
+  if (parsed.templateId === undefined && !hasParams && !hasReport) return undefined;
+
+  const test = await storage.getTest(testId);
+  const stored = asObject(test?.designSettingsJson);
+  const storedId = typeof stored.templateId === "string" ? stored.templateId : "";
+  // The sheet's template is the one to APPLY; without it the test keeps its own, and the
+  // manifest of that one still types the report values.
+  const templateId = parsed.templateId ?? storedId;
+  if (templateId === "") {
+    result.errors.push(`${at}: не указан шаблон, и у теста его нет — типизировать значения нечем`);
+    return undefined;
+  }
+
+  const template = await loadActiveTemplate(templateId);
+  if (!template) {
+    result.errors.push(
+      `${at}: шаблон «${templateId}» не установлен на этом стенде или отключён; `
+      + "поставьте его и повторите импорт",
+    );
+    return undefined;
+  }
+  const manifest = template.manifest;
+
+  // Parameters without a «Шаблон» row: nothing says WHICH manifest they came from, and
+  // painting them over whatever template the target happens to wear is the partial design
+  // the whole-sheet refusal above exists to prevent.
+  if (parsed.templateId === undefined && hasParams) {
+    result.errors.push(`${at}: параметры оформления есть, а строки «Шаблон» нет — применять их не к чему`);
+  } else if (parsed.templateId !== undefined) {
+    const design = normalizeDesignParams(
+      { theme: parsed.theme, params: parsed.params, paramsByTheme: parsed.paramsByTheme },
+      manifest,
+    );
+    result.errors.push(...design.errors.map((e) => `${at}: ${e}`));
+    if (design.dropped.length > 0) {
+      result.warnings.push(
+        `${at}: шаблон «${templateId}» не объявляет параметров `
+        + `${design.dropped.map((k) => `"${k}"`).join(", ")} — они не применены`,
+      );
+    }
+
+    // Shaped exactly as the design route shapes it, versions included: BOTH are stamped
+    // from the receiving template's own row. The book carries neither — a version from the
+    // source stand raises the «Шаблон обновлён» banner here, whose one button drops every
+    // parameter the local manifest no longer declares.
+    const designSettings: Record<string, unknown> = {
+      templateId,
+      templateVersion: template.version,
+      templateApiVersion: template.templateApiVersion,
+      params: design.params,
+    };
+    if (supportsThemes(manifest)) {
+      designSettings.theme = design.theme ?? "auto";
+      if (Object.keys(design.paramsByTheme).length > 0) {
+        designSettings.paramsByTheme = design.paramsByTheme;
+      }
+    }
+
+    if (!dryRun) {
+      await storage.updateTest(testId, { designSettingsJson: designSettings });
+      // Медиатека: сбой индексации не должен стоить автору переноса — как и на маршруте
+      // оформления, недостающая строка индекса чинится пересборкой, потерянная запись нет.
+      try {
+        await syncEntityUsages("test_design", testId, designSettings);
+      } catch (error) {
+        logger.error(
+          `Media usage sync failed for test design ${testId}: ${(error as Error).message}`,
+          "workbook-import",
+        );
+      }
+    }
+  }
+
+  if (!hasReport) return undefined;
+
+  // Merged over the target's own settings, branch by branch: a branch the sheet did not
+  // name is not touched, and an empty «Выдавать отчёт» leaves the switch as it was — the
+  // ABSENCE of that setting means «выдавать», so reading a blank cell as «выключено»
+  // would take the report away from every test whose author never touched it.
+  const merged: Record<string, unknown> = { ...asObject(test?.reportSettingsJson) };
+  let touched = parsed.reportEnabled !== undefined;
+  if (parsed.reportEnabled !== undefined) merged.enabled = parsed.reportEnabled;
+  for (const mode of Object.keys(parsed.report) as ReportMode[]) {
+    const branch = normalizeReportBranch(parsed.report[mode], manifest, mode);
+    result.errors.push(...branch.errors.map((e) => `${at}: ${e}`));
+    if (branch.dropped.length > 0) {
+      result.warnings.push(
+        `${at}: выбранный вид отчёта не объявляет полей `
+        + `${branch.dropped.map((k) => `"${k}"`).join(", ")} — они не применены`,
+      );
+    }
+    if (branch.branch) {
+      merged[mode] = branch.branch;
+      touched = true;
+    }
+  }
+  // Nothing applied — nothing written. A refused branch may not become a rewrite of the
+  // column with the value it already held: the import writes what the book said, and here
+  // the book said nothing the receiver could take.
+  return touched ? merged : undefined;
 }
 
 /** Options of one import run. */
@@ -1586,6 +1774,14 @@ export async function importWorkbook(
       );
     }
   }
+
+  // ── «Оформление» (PRD-48 FR-17/FR-18) ───────────────────────────────────────
+  // BEFORE the save, and that order carries meaning twice over: the report settings ride
+  // into the same patch as every other column of the `tests` row, and the design — which
+  // is written on its own path — has to be in place before the pages pass, because the
+  // template it names is the one whose manifest types the page fields.
+  const reportSettings = await applyDesignSheet(testId, workbook, dryRun, result);
+  if (reportSettings) settingsDraft.test.reportSettingsJson = reportSettings;
 
   // ── ONE save for the settings and the structure ─────────────────────────────
   // The two travel together when the book carries both, and stand alone otherwise:
