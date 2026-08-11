@@ -47,7 +47,13 @@
  *   declared `default` fills it in.)
  */
 import { contentPages } from "@shared/schema";
-import { cleanCell, normalizeCell } from "./workbook-settings";
+import {
+  byLabelOrValue,
+  cleanCell,
+  decodeFieldValue,
+  encodeFieldValue,
+  normalizeCell,
+} from "./workbook-settings";
 
 /** Sheet names, as the workbook writes and the import looks them up. */
 export const PAGE_SHEET_NAME = "Страницы";
@@ -236,44 +242,6 @@ function addressed(pages: readonly PageSource[]): AddressedPage[] {
   return out;
 }
 
-/**
- * A field value as a cell. Scalars keep their literal spelling so the import's coercion
- * (`Number(raw)`, `raw === "true"`) reads them back; anything structured travels as compact
- * JSON, which {@link decodeFieldValue} turns back into an object.
- */
-function encodeFieldValue(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  try {
-    return JSON.stringify(value) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-/**
- * A cell back into a field value.
- *
- * Only text that is ENTIRELY a JSON object or array is decoded; a scalar spelling stays a
- * string, because a text placeholder holding `5` or `true` is the author's text and must not
- * silently change type. Author prose that is a complete JSON object is not something the
- * editor can produce, whereas a `resultField` placeholder is — so the asymmetry is worth it.
- */
-function decodeFieldValue(raw: string): unknown {
-  const text = raw.trim();
-  if (text === "") return "";
-  if (text.startsWith("{") || text.startsWith("[")) {
-    try {
-      const parsed: unknown = JSON.parse(text);
-      if (parsed !== null && typeof parsed === "object") return parsed;
-    } catch {
-      // Text that merely looks like JSON is text.
-    }
-  }
-  return text;
-}
-
 /** Export of the «Страницы» sheet: one row per addressable page. */
 export function serializePageRows(pages: readonly PageSource[] = []): Record<string, unknown>[] {
   return addressed(pages).map(({ page, zone, topicName, kind, index }) => {
@@ -335,22 +303,6 @@ export function serializePageFieldRows(pages: readonly PageSource[] = []): Recor
 /** Is every cell of the row blank? Excel keeps trailing rows that carry nothing. */
 function isBlankRow(row: Record<string, unknown>, headers: string[]): boolean {
   return headers.every((h) => String(row[h] ?? "").trim() === "");
-}
-
-/** A value by its label or by the stored value itself, so a hand-filled `html` also loads. */
-function byLabelOrValue<T extends string>(
-  labels: Record<T, string>,
-  raw: string,
-  extra: readonly string[] = [],
-): T | undefined {
-  const normalized = normalizeCell(raw);
-  const entry = (Object.entries(labels) as [T, string][])
-    .find(([, label]) => normalizeCell(label) === normalized);
-  if (entry) return entry[0];
-  const cleaned = cleanCell(raw);
-  if (Object.prototype.hasOwnProperty.call(labels, cleaned)) return cleaned as T;
-  if ((extra as readonly string[]).includes(cleaned)) return cleaned as T;
-  return undefined;
 }
 
 /** The zone + section half of an address, shared by both sheets. */

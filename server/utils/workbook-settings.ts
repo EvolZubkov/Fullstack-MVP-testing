@@ -112,6 +112,75 @@ export function normalizeCell(raw: string): string {
 }
 
 /**
+ * A closed-vocabulary cell → the stored value: by its label first, then by the stored value
+ * itself, so a sheet filled by hand with `html` loads as well as one filled with «HTML».
+ *
+ * Lives here rather than next to the sheet that first needed it: «Страницы», «Оформление» and
+ * every later sheet read their dictionaries the same way, and a per-sheet copy is how one of
+ * them starts accepting a spelling the others reject.
+ *
+ * @param labels Stored value → cell label.
+ * @param raw The cell.
+ * @param extra Stored values accepted on import but absent from `labels` (legacy spellings).
+ */
+export function byLabelOrValue<T extends string>(
+  labels: Record<T, string>,
+  raw: string,
+  extra: readonly string[] = [],
+): T | undefined {
+  const normalized = normalizeCell(raw);
+  const entry = (Object.entries(labels) as [T, string][])
+    .find(([, label]) => normalizeCell(label) === normalized);
+  if (entry) return entry[0];
+  const cleaned = cleanCell(raw);
+  if (Object.prototype.hasOwnProperty.call(labels, cleaned)) return cleaned as T;
+  if ((extra as readonly string[]).includes(cleaned)) return cleaned as T;
+  return undefined;
+}
+
+/**
+ * A stored field value as a cell. Scalars keep their literal spelling so the import's
+ * coercion (`Number(raw)`, `raw === "true"`) reads them back; anything structured travels as
+ * compact JSON, which {@link decodeFieldValue} turns back into an object.
+ *
+ * Shared by every sheet that carries values typed by a MANIFEST rather than by this module —
+ * «Поля страниц» and «Оформление» — because both are read back by the same coercion rules.
+ */
+export function encodeFieldValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * A cell back into a field value.
+ *
+ * Only text that is ENTIRELY a JSON object or array is decoded; a scalar spelling stays a
+ * string, because a text placeholder holding `5` or `true` is the author's text and must not
+ * silently change type. Author prose that is a complete JSON object is not something the
+ * editor can produce, whereas a `resultField` placeholder or a media envelope is — so the
+ * asymmetry is worth it.
+ */
+export function decodeFieldValue(raw: string): unknown {
+  const text = raw.trim();
+  if (text === "") return "";
+  if (text.startsWith("{") || text.startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(text);
+      if (parsed !== null && typeof parsed === "object") return parsed;
+    } catch {
+      // Text that merely looks like JSON is text.
+    }
+  }
+  return text;
+}
+
+/**
  * A yes/no parameter. Reads as «Да»/«Нет» and accepts either spelling in any case; a cell
  * that is neither is a row error, since there is no third reading of a switch.
  */
@@ -251,7 +320,12 @@ function branch(value: unknown, ...path: string[]): Record<string, unknown> {
 
 // ─── Value dictionaries (labels verbatim from the editor and from PRD-8) ─────
 
-const MODE_LABELS = { standard: "Стандартный", adaptive: "Адаптивный" };
+/**
+ * Test mode labels. Exported for the same reason as {@link FORMAT_LABELS}: the «Оформление»
+ * sheet names the same two modes when it splits the report settings by branch, and a second
+ * copy of the pair is how the two sheets start spelling a mode differently.
+ */
+export const MODE_LABELS = { standard: "Стандартный", adaptive: "Адаптивный" };
 
 const FLOW_LABELS = {
   linear_flat: "Линейный",
