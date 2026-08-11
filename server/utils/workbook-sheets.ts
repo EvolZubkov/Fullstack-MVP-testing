@@ -765,6 +765,31 @@ export {
   type ParsedPageSheets,
 } from "./workbook-pages";
 
+// ─── «Оформление» (PRD-48 §4, FR-17/FR-18) ───────────────────────────────────
+// The test's design (template, palette, manifest parameters — flat and per palette) and
+// its report settings, on ONE sheet: both describe how the test LOOKS and both are typed
+// by the same template manifest. The module knows nothing of that manifest on purpose —
+// filtering keys and typing values is the import's duty (`server/services/design-fields`),
+// the same split the page sheets make. Re-exported here so the sheets keep ONE entry point.
+export {
+  DESIGN_SHEET_NAME,
+  DESIGN_HEADERS,
+  DESIGN_WIDTHS,
+  DESIGN_WHAT_CHOICES,
+  DESIGN_MODE_CHOICES,
+  DESIGN_THEME_CHOICES,
+  DESIGN_PALETTE_CHOICES,
+  REPORT_VARIANT_KEY,
+  REPORT_ENABLED_KEY,
+  serializeDesignRows,
+  parseDesignSheet,
+  type DesignSource,
+  type ReportSource,
+  type ReportMode,
+  type ParsedReportBranch,
+  type ParsedDesignSheet,
+} from "./workbook-design";
+
 // «Тип порога» is asked by three sheets («Структура», «Пороги вариантов» and «Адаптивные
 // уровни»), so its dictionary lives in the shared vocabulary module (imported at the top of
 // this file) rather than here — a per-sheet copy is how the sheets start disagreeing.

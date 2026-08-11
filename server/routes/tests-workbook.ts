@@ -66,6 +66,12 @@ import {
   ADAPTIVE_LEVEL_HEADERS,
   ADAPTIVE_LEVEL_WIDTHS,
   serializeAdaptiveLevelRows,
+  DESIGN_SHEET_NAME,
+  DESIGN_HEADERS,
+  DESIGN_WIDTHS,
+  serializeDesignRows,
+  type DesignSource,
+  type ReportSource,
   type FeedbackSource,
   type FeedbackLevelSource,
   type PageSource,
@@ -338,6 +344,16 @@ router.get(
       const pageRows = serializePageRows(pageSources);
       const pageFieldRows = serializePageFieldRows(pageSources);
 
+      // «Оформление» (PRD-48 FR-17/FR-18): the design of the test and the settings of its
+      // report, read straight off the two `jsonb` columns. NO template VERSION travels:
+      // `templateVersion` from the source stand raises the «Шаблон обновлён» banner on the
+      // receiver, whose one button drops every parameter the new manifest no longer
+      // declares — the server stamps both version fields itself.
+      const designRows = serializeDesignRows(
+        test.designSettingsJson as DesignSource | null,
+        test.reportSettingsJson as ReportSource | null,
+      );
+
       // «Оценка» (PRD-15 block D, FR-36): the test's per-question scoring
       // overrides, referenced by the same local alias as «Вклады вопросов».
       const overrides = await storage.getTestQuestionScoring(testId);
@@ -379,6 +395,9 @@ router.get(
       // PRD-48 FR-16: адаптивные уровни — тоже структура теста, поэтому лист стоит
       // последним среди структурных и по-прежнему перед «Оценкой».
       addSheet(wb, ADAPTIVE_LEVEL_SHEET_NAME, adaptiveRows, ADAPTIVE_LEVEL_HEADERS, ADAPTIVE_LEVEL_WIDTHS);
+      // PRD-48 FR-17/FR-18: оформление и отчёт — облик теста, а не его содержимое,
+      // поэтому лист замыкает структурные и по-прежнему стоит перед «Оценкой».
+      addSheet(wb, DESIGN_SHEET_NAME, designRows, DESIGN_HEADERS, DESIGN_WIDTHS);
       addSheet(wb, "Оценка", scoringRows, SCORING_OVERRIDE_HEADERS, SCORING_OVERRIDE_WIDTHS);
       addSheet(wb, "Шкалы", scaleRows, SCALE_HEADERS, SCALE_WIDTHS);
       addSheet(wb, "Показатели", rvRows, RESULT_VAR_HEADERS, RESULT_VAR_WIDTHS);

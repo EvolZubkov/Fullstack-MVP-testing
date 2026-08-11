@@ -1319,6 +1319,108 @@ describe("GET /:id/workbook/export — страницы и их поля", () =>
   });
 });
 
+// ─── PRD-48 FR-17/FR-18: лист «Оформление» ───────────────────────────────────
+// Оформление и настройки отчёта живут в двух jsonb-колонках теста, и выгрузка читает
+// их напрямую. Проверяется не только состав строк, но и МЕСТО листа в книге и то, чего
+// на нём быть не должно: версий шаблона.
+
+describe("GET /:id/workbook/export — оформление и настройки отчёта", () => {
+  /** Тест-источник: шаблон с палитрами, тема, плоский параметр и цвет по палитре. */
+  const designedTest = {
+    ...baseTest,
+    designSettingsJson: {
+      templateId: "corporate",
+      templateVersion: "2.4.0",
+      templateApiVersion: "1.0",
+      theme: "dark",
+      params: { showProgressBar: false, fontFamily: "Roboto" },
+      paramsByTheme: { light: { primaryColor: "#0055ff" }, dark: { primaryColor: "#88aaff" } },
+    },
+    reportSettingsJson: {
+      enabled: false,
+      standard: { variantKey: "report.compact", values: { showScales: true, title: "Итоговый отчёт" } },
+      // Ветвь БЕЗ вида — состояние, сохранённое до появления выбора вида.
+      adaptive: { values: { showLevels: false } },
+    },
+  };
+
+  beforeEach(() => {
+    storageMock.getTest.mockResolvedValue(designedTest);
+    storageMock.getTestSections.mockResolvedValue([]);
+    storageMock.getQuestions.mockResolvedValue([]);
+    storageMock.getScales.mockResolvedValue([]);
+    storageMock.getResultVariables.mockResolvedValue([]);
+    storageMock.getQuestionMeasurements.mockResolvedValue([]);
+  });
+
+  /** Строки листа как кортежи колонок — так их читать вместе с порядком. */
+  async function designRows(): Promise<string[][]> {
+    const res = await getExport();
+    expect(res.status).toBe(200);
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+    return sheetToObjects(wb.getWorksheet("Оформление")!).map((r: any) =>
+      ["Что", "Режим", "Тема", "Ключ", "Значение"].map((h) => String(r[h] ?? "")),
+    );
+  }
+
+  it("лист стоит после «Адаптивных уровней» и перед «Оценкой»", async () => {
+    const res = await getExport();
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+    const names = wb.worksheets.map((w) => w.name);
+
+    expect(names.indexOf("Оформление")).toBe(names.indexOf("Адаптивные уровни") + 1);
+    expect(names.indexOf("Оценка")).toBe(names.indexOf("Оформление") + 1);
+  });
+
+  it("выгружает шаблон, тему, плоский параметр и переопределение по палитре", async () => {
+    const rows = await designRows();
+
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        ["Шаблон", "", "", "", "corporate"],
+        ["Тема теста", "", "", "", "Тёмная"],
+        ["Параметр", "", "", "showProgressBar", "false"],
+        ["Параметр", "", "", "fontFamily", "Roboto"],
+        ["Параметр", "", "Светлая", "primaryColor", "#0055ff"],
+        ["Параметр", "", "Тёмная", "primaryColor", "#88aaff"],
+      ]),
+    );
+    // Шаблон идёт первой строкой: без него параметры не к чему применять.
+    expect(rows[0]).toEqual(["Шаблон", "", "", "", "corporate"]);
+  });
+
+  it("версии шаблона в книгу НЕ попадают", async () => {
+    // Чужая версия даёт автору баннер «Шаблон обновлён», а кнопка в нём выбрасывает
+    // параметры, которых нет в новом манифесте. Обе версии проставляет сервер.
+    const rows = await designRows();
+    expect(JSON.stringify(rows)).not.toContain("2.4.0");
+    expect(JSON.stringify(rows)).not.toContain("templateVersion");
+  });
+
+  it("выгружает обе ветви отчёта и общий переключатель выдачи", async () => {
+    const rows = await designRows();
+
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        ["Отчёт", "", "", "Выдавать отчёт", "Нет"],
+        ["Отчёт", "Стандартный", "", "Вид отчёта", "report.compact"],
+        ["Отчёт", "Стандартный", "", "showScales", "true"],
+        ["Отчёт", "Стандартный", "", "title", "Итоговый отчёт"],
+        // Ветвь без вида доезжает пустой строкой «Вид отчёта»: именно она говорит,
+        // что ветвь существует, а дозаполнять её видом импорт не вправе.
+        ["Отчёт", "Адаптивный", "", "Вид отчёта", ""],
+        ["Отчёт", "Адаптивный", "", "showLevels", "false"],
+      ]),
+    );
+  });
+
+  it("тест без оформления и отчёта даёт лист с одними заголовками", async () => {
+    storageMock.getTest.mockResolvedValue(baseTest);
+
+    expect(await designRows()).toEqual([]);
+  });
+});
+
 // Круг этапа: обратная связь обоих владельцев вместе со всеми тремя видами
 // рекомендаций переезжает книгой из одного теста в ДРУГОЙ — то есть ровно так, как
 // её переносят между стендами.
@@ -2753,10 +2855,10 @@ describe("Адаптивные уровни: выгрузка и загрузк�
     expect(exportRes.status).toBe(200);
 
     const wb = await readWorkbookFromBuffer(exportRes.body as Buffer);
-    // Лист стоит между «Полями страниц» и «Оценкой».
+    // Лист стоит между «Полями страниц» и «Оформлением».
     const names = wb.worksheets.map((w) => w.name);
     expect(names.indexOf("Адаптивные уровни")).toBe(names.indexOf("Поля страниц") + 1);
-    expect(names.indexOf("Оценка")).toBe(names.indexOf("Адаптивные уровни") + 1);
+    expect(names.indexOf("Оформление")).toBe(names.indexOf("Адаптивные уровни") + 1);
 
     // «Номер» в книге с единицы, в модели `level_index` с нуля.
     const levelRows = sheetToObjects(wb.getWorksheet("Адаптивные уровни")!);
