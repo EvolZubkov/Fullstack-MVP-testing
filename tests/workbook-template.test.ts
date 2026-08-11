@@ -44,9 +44,16 @@ import {
   RECOMMENDATION_HEADERS,
   RECOMMENDATION_TYPE_CHOICES,
   LEVEL_CHOICES,
+  PAGE_HEADERS,
+  PAGE_FIELD_HEADERS,
+  PAGE_ZONE_CHOICES,
+  PAGE_KIND_CHOICES,
+  PAGE_MODE_CHOICES,
+  PAGE_TARGET_CHOICES,
   parseBool,
   parseFeedbackSheets,
   parseMeasurementRow,
+  parsePageSheets,
   parseQuotaRow,
   parseStructureRow,
   parseVariantThresholdRow,
@@ -77,11 +84,29 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     upsertQuestionMeasurements: vi.fn(),
     getTestQuestionScoring: vi.fn(),
     replaceTestQuestionScoring: vi.fn(),
+    getContentPages: vi.fn(),
+    createContentPage: vi.fn(),
+    updateContentPage: vi.fn(),
+    deleteContentPage: vi.fn(),
   },
   testSettingsMock: { create: vi.fn(), save: vi.fn() },
 }));
 
 vi.mock("../server/storage", () => ({ storage: storageMock }));
+/**
+ * Варианты оформления берутся из НАСТОЯЩЕГО манифеста «Стандартного» шаблона: только так
+ * прогон примерных строк проверяет, что ключ варианта и ключи полей в примере существуют.
+ * Выдуманный здесь список проверял бы согласованность примера сам с собой.
+ */
+vi.mock("../server/services/content-page-fields", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../server/services/content-page-fields")>();
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const manifest = JSON.parse(
+    readFileSync(join(process.cwd(), "server/scorm/templates/default/manifest.json"), "utf8"),
+  ) as { contentTemplates?: unknown[] };
+  return { ...actual, resolveContentTemplates: vi.fn(async () => manifest.contentTemplates ?? null) };
+});
 vi.mock("../server/services/test-settings", () => ({ testSettingsService: testSettingsMock }));
 vi.mock("../server/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
@@ -107,6 +132,15 @@ beforeEach(() => {
   storageMock.getTestQuestionScoring.mockResolvedValue([]);
   storageMock.validateResultVariableFormula.mockResolvedValue({ valid: true });
   storageMock.getTest.mockResolvedValue({ id: "test-1", status: "draft" });
+  // Системные страницы создаёт сам тест, поэтому у приёмника примерных строк обязана
+  // существовать страница итогов: строка «Итоги» её НАХОДИТ, а не создаёт.
+  storageMock.getContentPages.mockResolvedValue([
+    {
+      id: "p-results", testId: "test-1", topicId: null, position: "after", kind: "results",
+      mode: "template", type: "info", templateKey: "results.standard", sortOrder: 0,
+      valuesJson: {}, settingsJson: {}, autoAdvance: false, autoAdvanceDelayMs: null,
+    },
+  ]);
 });
 
 /**
@@ -121,6 +155,8 @@ const CANONICAL: Record<string, string[]> = {
   "Пороги вариантов": VARIANT_THRESHOLD_HEADERS,
   "Обратная связь": FEEDBACK_HEADERS,
   "Рекомендации": RECOMMENDATION_HEADERS,
+  "Страницы": PAGE_HEADERS,
+  "Поля страниц": PAGE_FIELD_HEADERS,
   "Оценка": SCORING_OVERRIDE_HEADERS,
   "Шкалы": SCALE_HEADERS,
   "Показатели": RESULT_VAR_HEADERS,
@@ -277,6 +313,31 @@ describe("шаблон книги — валидность примеров", ()
     expect(result.scales.created).toBeGreaterThan(0);
     expect(result.resultVariables.created).toBeGreaterThan(0);
     expect(result.measurements.rows).toBeGreaterThan(0);
+    // Обе страницы примера доехали: системная найдена и обновлена, авторская создана.
+    expect(result.pages).toMatchObject({ updated: 1, created: 1 });
+    // Ключ, которого вариант «Стандартного» шаблона не объявляет, применён не был бы —
+    // и загрузка сказала бы об этом. Пример не вправе учить такому.
+    expect(result.warnings.filter((w) => w.includes("не объявляет полей"))).toEqual([]);
+  });
+
+  // Значение поля хранится НА странице: строка примера с адресом, которого нет на листе
+  // «Страницы», дала бы читателю готовую ошибку-сироту. Свойство проверяется на самих
+  // строках, чтобы поломка была названа причиной, а не общей ошибкой импорта.
+  it("каждое примерное поле страницы ссылается на страницу из примера «Страниц»", () => {
+    const address = (r: Record<string, unknown>) =>
+      ["Зона", "Раздел", "Вид", "Номер"]
+        .map((c) => String(r[c] ?? "").trim().toLowerCase())
+        .join("|");
+    const pages = new Set(EXAMPLE_ROWS["Страницы"].map(address));
+
+    expect(pages.size).toBeGreaterThan(1);
+    expect(EXAMPLE_ROWS["Поля страниц"].filter((r) => !pages.has(address(r)))).toEqual([]);
+    // Пример показывает обе стороны страницы: и содержание, и настройку.
+    expect(new Set(EXAMPLE_ROWS["Поля страниц"].map((r) => r["Куда"])))
+      .toEqual(new Set(PAGE_TARGET_CHOICES));
+    // …и оба положения книги: системную страницу, которую можно только найти, и авторскую.
+    expect(EXAMPLE_ROWS["Страницы"].some((r) => r["Вид"] === "Авторская")).toBe(true);
+    expect(EXAMPLE_ROWS["Страницы"].some((r) => r["Вид"] !== "Авторская")).toBe(true);
   });
 
   it("примеры покрывают ВСЕ типы вопросов", async () => {
@@ -386,6 +447,15 @@ describe("шаблон книги — проверка ввода", () => {
     expect(choicesBehind(wb, "Обратная связь", "Формат")).toEqual(FEEDBACK_FORMAT_CHOICES);
     expect(choicesBehind(wb, "Рекомендации", "Уровень")).toEqual(LEVEL_CHOICES);
     expect(choicesBehind(wb, "Рекомендации", "Тип")).toEqual(RECOMMENDATION_TYPE_CHOICES);
+    // Адрес страницы набирается на ДВУХ листах и должен совпасть побуквенно, поэтому
+    // закрытые колонки адреса получают список на обоих.
+    expect(choicesBehind(wb, "Страницы", "Зона")).toEqual(PAGE_ZONE_CHOICES);
+    expect(choicesBehind(wb, "Страницы", "Вид")).toEqual(PAGE_KIND_CHOICES);
+    expect(choicesBehind(wb, "Страницы", "Режим")).toEqual(PAGE_MODE_CHOICES);
+    expect(choicesBehind(wb, "Страницы", "Автопереход")).toEqual(BOOL_CHOICES);
+    expect(choicesBehind(wb, "Поля страниц", "Зона")).toEqual(PAGE_ZONE_CHOICES);
+    expect(choicesBehind(wb, "Поля страниц", "Вид")).toEqual(PAGE_KIND_CHOICES);
+    expect(choicesBehind(wb, "Поля страниц", "Куда")).toEqual(PAGE_TARGET_CHOICES);
   });
 
   // Excel не открывает книгу, где подсказка проверки длиннее 255 символов, а текст
@@ -491,6 +561,42 @@ describe("шаблон книги — проверка ввода", () => {
         [{ "Уровень": "Тест", "Раздел": "", "Тип": type, "Заголовок": "Материал", "Ссылка": "https://a.test" }],
       );
       expect(parsed.errors, `«Тип» = «${type}»`).toEqual([]);
+    }
+
+    // Страницы: значение из любого списка обязано читаться разборщиком листов. «Зона»
+    // проверяется двумя прогонами — с разделом и без: какие зоны требуют раздела, знает
+    // сам разборщик, и повторять это знание здесь значило бы разойтись с ним.
+    for (const zone of choicesBehind(wb, "Страницы", "Зона")) {
+      const row = (topic: string) => ({
+        "Зона": zone, "Раздел": topic, "Вид": "Авторская", "Номер": 1,
+        "Вариант": "info.text-lead", "Режим": "Шаблон", "Автопереход": "нет", "Задержка, мс": "",
+      });
+      const clean = [row("Финансы"), row("")].filter((r) => parsePageSheets([r], []).errors.length === 0);
+      expect(clean, `«Зона» = «${zone}» должна читаться ровно в одном из двух видов`).toHaveLength(1);
+    }
+    for (const kind of choicesBehind(wb, "Страницы", "Вид")) {
+      for (const mode of choicesBehind(wb, "Страницы", "Режим")) {
+        for (const auto of choicesBehind(wb, "Страницы", "Автопереход")) {
+          const parsed = parsePageSheets(
+            [{
+              "Зона": "После теста", "Раздел": "", "Вид": kind, "Номер": 1,
+              "Вариант": "info.text-lead", "Режим": mode, "Автопереход": auto, "Задержка, мс": "",
+            }],
+            [],
+          );
+          expect(parsed.errors, `«${kind}» / «${mode}» / «${auto}»`).toEqual([]);
+        }
+      }
+    }
+    for (const target of choicesBehind(wb, "Поля страниц", "Куда")) {
+      const parsed = parsePageSheets(
+        [{ "Зона": "После теста", "Раздел": "", "Вид": "Авторская", "Номер": 1 }],
+        [{
+          "Зона": "После теста", "Раздел": "", "Вид": "Авторская", "Номер": 1,
+          "Куда": target, "Ключ": "title", "Значение": "Текст",
+        }],
+      );
+      expect(parsed.errors, `«Куда» = «${target}»`).toEqual([]);
     }
 
     // «да»/«нет» — то, что пишет экспорт и читает parseBool.
