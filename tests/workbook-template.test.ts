@@ -204,6 +204,22 @@ function headersOf(ws: ExcelJS.Worksheet): string[] {
   return out;
 }
 
+/**
+ * Строки справки как пары «лист, колонка». Строки-заголовки разделов и пояснения
+ * лист/колонку не называют и сюда не попадают.
+ */
+function helpRowsOf(wb: ExcelJS.Workbook): Array<[string, string]> {
+  const ws = wb.worksheets.find((w) => w.name === HELP_SHEET)!;
+  const out: Array<[string, string]> = [];
+  ws.eachRow((row, i) => {
+    if (i === 1) return; // строка заголовков самой справки
+    const sheet = String(row.getCell(1).value ?? "").trim();
+    const column = String(row.getCell(2).value ?? "").trim();
+    if (sheet && column) out.push([sheet, column]);
+  });
+  return out;
+}
+
 /** Whole-sheet text, for reference-content assertions. */
 function textOf(ws: ExcelJS.Worksheet | undefined): string {
   return JSON.stringify(ws?.getSheetValues() ?? []);
@@ -246,7 +262,13 @@ describe("шаблон книги — актуальность", () => {
 describe("шаблон книги — полнота справки", () => {
   it("справка описывает каждую колонку каждого ролевого листа", async () => {
     const wb = await buildWorkbookTemplate();
-    const help = textOf(wb.worksheets.find((w) => w.name === HELP_SHEET));
+    // Пары (лист, колонка) из самой справки, а не её сплошной текст: половина имён
+    // колонок повторяется на разных листах («Раздел», «Тип порога», «Значение»), и
+    // проверка «встречается где-нибудь» объявила бы описанной колонку, о которой на
+    // её листе не сказано ни строки.
+    const documented = new Set(
+      helpRowsOf(wb).map(([sheet, column]) => `${sheet} → ${column}`),
+    );
 
     // Read the columns off the TEMPLATE ITSELF, not off a list kept here by
     // hand: any column added to the template must gain a reference row, and a
@@ -255,7 +277,7 @@ describe("шаблон книги — полнота справки", () => {
     for (const name of ROLE_SHEET_NAMES) {
       const ws = wb.worksheets.find((w) => w.name === name)!;
       for (const col of headersOf(ws)) {
-        if (col && !help.includes(col)) missing.push(`${name} → ${col}`);
+        if (col && !documented.has(`${name} → ${col}`)) missing.push(`${name} → ${col}`);
       }
     }
     expect(missing).toEqual([]);
@@ -346,6 +368,15 @@ describe("шаблон книги — валидность примеров", ()
     expect(result.measurements.rows).toBeGreaterThan(0);
     // Обе страницы примера доехали: системная найдена и обновлена, авторская создана.
     expect(result.pages).toMatchObject({ updated: 1, created: 1 });
+    // Строки примера согласованы между листами, а не просто «не ломают импорт»:
+    // владелец каждой рекомендации назван на «Обратной связи», тема каждого уровня
+    // есть в «Структуре», адрес каждого поля — на «Страницах». Иначе строка была бы
+    // отвергнута и в счётчик не попала.
+    expect(result.settings.params).toBeGreaterThan(0);
+    expect(result.feedback).toMatchObject({ owners: 2, recommendations: 5 });
+    expect(result.adaptive).toMatchObject({ topics: 1, levels: 2 });
+    expect(result.design.params).toBeGreaterThan(0);
+    expect(result.design.report).toBeGreaterThan(0);
     // Ключ, которого вариант «Стандартного» шаблона не объявляет, применён не был бы —
     // и загрузка сказала бы об этом. Пример не вправе учить такому.
     expect(result.warnings.filter((w) => w.includes("не объявляет полей"))).toEqual([]);
