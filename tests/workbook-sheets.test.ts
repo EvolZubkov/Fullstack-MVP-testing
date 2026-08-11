@@ -262,6 +262,8 @@ describe("parseStructureRow", () => {
       // PRD-48 FR-11: колонок правил нет — разблокировку книга не трогает.
       unlockMode: null,
       unlockDependsOn: [],
+      // PRD-48 FR-16: колонки нет — обратную связь темы книга не трогает.
+      failureFeedback: null,
     });
   });
 
@@ -361,6 +363,28 @@ describe("«Структура»: поля раздела (PRD-48 FR-09)", () =>
     if (!parsed.ok) return;
     expect(parsed.value.unlockMode).toBe("after_sections_passed");
     expect(parsed.value.unlockDependsOn).toEqual(["Вводный", "Правовой"]);
+  });
+
+  // PRD-48 FR-16: значение ОДНО на тему, поэтому оно и стоит на листе, где строка одна
+  // на тему. Пустая ячейка — «оставить как есть», как у прочих колонок «Структуры».
+  it("обратная связь темы при непройденном уровне ходит по кругу", () => {
+    const row = serializeStructureRow({
+      topicName: "Финансы",
+      sortOrder: 0,
+      drawCount: 5,
+      topicPassRuleJson: null,
+      required: true,
+      failureFeedback: "Вернитесь к материалам уровня.",
+    });
+    expect(row["Обратная связь при непройденном уровне"]).toBe("Вернитесь к материалам уровня.");
+
+    const parsed = parseStructureRow(row, 0);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.failureFeedback).toBe("Вернитесь к материалам уровня.");
+
+    const empty = parseStructureRow({ ...row, "Обратная связь при непройденном уровне": "   " }, 0);
+    expect(empty.ok && empty.value.failureFeedback).toBeNull();
   });
 
   it("без колонок правил раздел доступен сразу, зависимостей нет", () => {

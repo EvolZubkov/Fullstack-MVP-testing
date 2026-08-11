@@ -15,6 +15,19 @@
  * literally named «Тест» exists in the bank, and a reserved word in a shared column would
  * quietly move that topic's feedback up to the test level.
  *
+ * «Рекомендации» knows a THIRD owner — an adaptive LEVEL (PRD-48 Э4), addressed by «Раздел»
+ * + «Номер уровня». Three asymmetries with the other two owners are deliberate:
+ * - a level owner exists on «Рекомендации» only. Its feedback TEXT lives on «Адаптивные
+ *   уровни» (`adaptive_levels.feedback`), which has no format column, so naming a level on
+ *   «Обратная связь» — where a format is asked for — would promise what cannot be stored;
+ * - a level takes «Курс» rows only. Its materials are `adaptive_level_links`, a title and a
+ *   URL and nothing else: «Материал» and «Мероприятие» have no column to land in, so such a
+ *   row is an error WITH the reason rather than a silent skip;
+ * - a level row is subordinate to «Адаптивные уровни» exactly as an ordinary row is
+ *   subordinate to «Обратная связь»: a level the workbook never described has no row to
+ *   attach a material to. The known addresses are handed in by the caller, so a book with no
+ *   adaptive sheet at all reports its level rows as orphans instead of inventing levels.
+ *
  * Application rules (spec §4, plan «Правила применения»):
  * - an absent «Обратная связь» sheet changes nobody's feedback. An absent «Рекомендации»
  *   sheet is NOT the same thing: an owner named on «Обратная связь» takes its whole
@@ -45,6 +58,7 @@ import {
   type FeedbackEvent,
 } from "@shared/schema";
 import { FORMAT_LABELS, cleanCell, normalizeCell } from "./workbook-settings";
+import { adaptiveLevelKey, ADAPTIVE_LEVEL_SHEET_NAME } from "./workbook-adaptive";
 
 /** Sheet names, as the workbook writes and the import looks them up. */
 export const FEEDBACK_SHEET_NAME = "Обратная связь";
@@ -53,12 +67,16 @@ export const RECOMMENDATION_SHEET_NAME = "Рекомендации";
 export const FEEDBACK_HEADERS = ["Кому", "Раздел", "Формат", "Текст"];
 export const FEEDBACK_WIDTHS = [12, 28, 20, 80];
 
-export const RECOMMENDATION_HEADERS = ["Кому", "Раздел", "Тип", "Заголовок", "Ссылка"];
-export const RECOMMENDATION_WIDTHS = [12, 28, 16, 34, 46];
+export const RECOMMENDATION_HEADERS = [
+  // «Номер уровня» stands next to «Раздел» because the two of them are ONE address: a level
+  // is named by its topic and its number, and the columns of an address belong together.
+  "Кому", "Раздел", "Номер уровня", "Тип", "Заголовок", "Ссылка",
+];
+export const RECOMMENDATION_WIDTHS = [12, 28, 14, 16, 34, 46];
 
 /** Column keys, taken from the headers so a rename lands in one place. */
 const [FB_OWNER, FB_TOPIC, FB_FORMAT, FB_TEXT] = FEEDBACK_HEADERS;
-const [RC_OWNER, RC_TOPIC, RC_TYPE, RC_TITLE, RC_URL] = RECOMMENDATION_HEADERS;
+const [RC_OWNER, RC_TOPIC, RC_LEVEL, RC_TYPE, RC_TITLE, RC_URL] = RECOMMENDATION_HEADERS;
 
 /** «Тема» is the legacy spelling of the «Раздел» column, accepted by every sheet here. */
 const TOPIC_COL_LEGACY = "Тема";
@@ -74,9 +92,17 @@ const OWNER_COL_LEGACY = "Уровень";
 
 const OWNER_TEST = "Тест";
 const OWNER_SECTION = "Раздел";
+const OWNER_LEVEL = "Уровень";
 
-/** Values of the «Кому» column — the workbook template turns them into a drop-down. */
+/**
+ * Values of the «Кому» column of «Обратная связь» — the workbook template turns them into a
+ * drop-down. An adaptive level is NOT here: its text lives on «Адаптивные уровни», so
+ * offering it would only produce rows the sheet has to refuse.
+ */
 export const OWNER_CHOICES = [OWNER_TEST, OWNER_SECTION];
+
+/** Values of the «Кому» column of «Рекомендации» — the same two owners plus a level. */
+export const RECOMMENDATION_OWNER_CHOICES = [OWNER_TEST, OWNER_SECTION, OWNER_LEVEL];
 
 /**
  * Recommendation kinds by the branch of `feedback_json` they live in. The labels are the
@@ -126,6 +152,28 @@ export interface FeedbackSectionSource {
   feedback?: FeedbackSource | null;
 }
 
+/**
+ * An adaptive level as the export sees it: its topic NAME and its 0-based `level_index`,
+ * carrying the `links` of `AdaptiveLevelPayload` — the level's materials.
+ */
+export interface FeedbackLevelSource {
+  topicName: string;
+  /** 0-based, as the model stores it; the sheet prints it as «Номер уровня» + 1. */
+  levelIndex: number;
+  links?: readonly RecommendationSource[] | null;
+}
+
+/** Materials of ONE adaptive level, as «Рекомендации» read them. */
+export interface ParsedLevelRecommendations {
+  /** {@link normalizeCell}-normalized topic name, the key «Структура» uses for a section. */
+  topicKey: string;
+  /** Topic name as the author spelled it — the only thing they can go and fix. */
+  topicName: string;
+  /** 1-based number of the book, as «Адаптивные уровни» spells it (`level_index` + 1). */
+  number: number;
+  links: FeedbackLink[];
+}
+
 /** Result of reading both sheets. */
 export interface ParsedFeedbackSheets {
   /** `undefined` = the test level was not named at all, so its feedback is not touched. */
@@ -137,11 +185,19 @@ export interface ParsedFeedbackSheets {
    * «Структура» does not contain, and the author can only find it by the name they typed.
    */
   topicNames: Map<string, string>;
+  /**
+   * Materials of adaptive levels, keyed by {@link adaptiveLevelKey} — the SAME address
+   * «Адаптивные уровни» hands in, so the two sheets cannot key levels differently.
+   */
+  byLevel: Map<string, ParsedLevelRecommendations>;
   errors: string[];
 }
 
-/** Owner of a row, resolved from the «Кому» + «Раздел» pair. */
-type Owner = { kind: "test" } | { kind: "section"; key: string; name: string };
+/** Owner of a row, resolved from the «Кому» + «Раздел» (+ «Номер уровня») columns. */
+type Owner =
+  | { kind: "test" }
+  | { kind: "section"; key: string; name: string }
+  | { kind: "level"; key: string; name: string; number: number };
 
 /** Accumulator of one owner's feedback while both sheets are being read. */
 interface OwnerDraft {
@@ -213,7 +269,7 @@ export function serializeFeedbackRows(
 
 /**
  * Export of the «Рекомендации» sheet: one row per course, material and event of every owner
- * named on «Обратная связь», in that order.
+ * named on «Обратная связь», in that order, followed by the materials of the adaptive levels.
  *
  * An entry with a blank title is dropped: `feedbackContentSchema` requires a title, so such
  * an entry cannot be stored on the far side either — writing it would give the export a row
@@ -222,6 +278,7 @@ export function serializeFeedbackRows(
 export function serializeRecommendationRows(
   testFeedback: FeedbackSource | null | undefined,
   sections: readonly FeedbackSectionSource[] = [],
+  levels: readonly FeedbackLevelSource[] = [],
 ): Record<string, unknown>[] {
   const rows: Record<string, unknown>[] = [];
   for (const owner of ownersOf(testFeedback, sections)) {
@@ -237,11 +294,31 @@ export function serializeRecommendationRows(
         rows.push({
           [RC_OWNER]: owner.level,
           [RC_TOPIC]: owner.topicName,
+          [RC_LEVEL]: "",
           [RC_TYPE]: RECOMMENDATION_TYPE_TO[kind],
           [RC_TITLE]: title,
           [RC_URL]: String(item?.url ?? ""),
         });
       }
+    }
+  }
+
+  // A level's materials are `adaptive_level_links` — a title and a URL — so they can only be
+  // written as courses; the type column has nothing else to offer for a level.
+  for (const level of levels) {
+    const topicName = cleanCell(String(level.topicName ?? ""));
+    if (topicName === "") continue;
+    for (const item of level.links ?? []) {
+      const title = String(item?.title ?? "").trim();
+      if (!title) continue;
+      rows.push({
+        [RC_OWNER]: OWNER_LEVEL,
+        [RC_TOPIC]: topicName,
+        [RC_LEVEL]: level.levelIndex + 1,
+        [RC_TYPE]: RECOMMENDATION_TYPE_TO.link,
+        [RC_TITLE]: title,
+        [RC_URL]: String(item?.url ?? ""),
+      });
     }
   }
   return rows;
@@ -270,34 +347,69 @@ function isBlankRow(row: Record<string, unknown>, headers: string[]): boolean {
 }
 
 /**
- * Resolve the owner of a row from the «Кому» + «Раздел» pair.
+ * Resolve the owner of a row from the «Кому» + «Раздел» pair (+ «Номер уровня» where the
+ * sheet has one).
  *
- * A test-level row with a topic name is an ERROR rather than a topic name ignored: the two
+ * A test-level row with a topic name is an ERROR rather than a topic name ignored: the
  * columns exist so that an owner is never guessed at, and a copied-but-not-cleared cell is
- * exactly the mistake they are meant to catch.
+ * exactly the mistake they are meant to catch. A «Номер уровня» left behind on a test or a
+ * section row is the same mistake and is refused the same way.
+ *
+ * @param levelCol Name of the level-number column, or `undefined` on a sheet where a level
+ *   cannot be an owner. On such a sheet «Уровень» is not silently ignored either: the row
+ *   fails and says where level feedback actually lives.
  */
 function readOwner(
   row: Record<string, unknown>,
   ownerCol: string,
   topicCol: string,
+  levelCol?: string,
 ): { ok: true; value: Owner } | { ok: false; error: string } {
   const ownerRaw = String(row[ownerCol] ?? row[OWNER_COL_LEGACY] ?? "");
   const owner = normalizeCell(ownerRaw);
   const topicName = cleanCell(String(row[topicCol] ?? row[TOPIC_COL_LEGACY] ?? ""));
+  const levelRaw = levelCol === undefined ? "" : cleanCell(String(row[levelCol] ?? ""));
+  const choices = levelCol === undefined ? OWNER_CHOICES : RECOMMENDATION_OWNER_CHOICES;
+
+  const levelMustBeEmpty = (who: string): string | undefined =>
+    levelCol !== undefined && levelRaw !== ""
+      ? `для «${ownerCol}» = «${who}» колонка «${levelCol}» должна быть пустой`
+      : undefined;
 
   if (owner === normalizeCell(OWNER_TEST)) {
     if (topicName !== "") {
       return { ok: false, error: `для «${ownerCol}» = «${OWNER_TEST}» колонка «${topicCol}» должна быть пустой` };
     }
+    const error = levelMustBeEmpty(OWNER_TEST);
+    if (error) return { ok: false, error };
     return { ok: true, value: { kind: "test" } };
   }
   if (owner === normalizeCell(OWNER_SECTION) || owner === normalizeCell(TOPIC_COL_LEGACY)) {
     if (topicName === "") return { ok: false, error: "не указан раздел (тема)" };
+    const error = levelMustBeEmpty(OWNER_SECTION);
+    if (error) return { ok: false, error };
     return { ok: true, value: { kind: "section", key: normalizeCell(topicName), name: topicName } };
+  }
+  if (owner === normalizeCell(OWNER_LEVEL)) {
+    if (levelCol === undefined) {
+      return {
+        ok: false,
+        error: `владелец «${OWNER_LEVEL}» на этом листе не адресуется: `
+          + `обратная связь уровня описывается на листе «${ADAPTIVE_LEVEL_SHEET_NAME}»`,
+      };
+    }
+    if (topicName === "") return { ok: false, error: "не указан раздел (тема)" };
+    if (!/^\d+$/.test(levelRaw) || Number(levelRaw) < 1) {
+      return { ok: false, error: `«${levelCol}»: нужно целое ≥ 1, получено "${String(row[levelCol] ?? "")}"` };
+    }
+    return {
+      ok: true,
+      value: { kind: "level", key: normalizeCell(topicName), name: topicName, number: Number(levelRaw) },
+    };
   }
   return {
     ok: false,
-    error: `неизвестный «${ownerCol}»: "${ownerRaw}"; ожидается одно из: ${OWNER_CHOICES.join(", ")}`,
+    error: `неизвестный «${ownerCol}»: "${ownerRaw}"; ожидается одно из: ${choices.join(", ")}`,
   };
 }
 
@@ -315,6 +427,18 @@ function finalize(draft: OwnerDraft): FeedbackPayload | null {
     assets: draft.assets,
     events: draft.events,
   };
+}
+
+/**
+ * A course row as a stored link. Shared by the two callers on purpose: an ordinary owner
+ * takes it through {@link applyRecommendation}, an adaptive level takes it directly (a level
+ * has no other kind), and a second copy of the URL rule would let the two drift apart.
+ */
+function readLink(title: string, url: string): { ok: true; value: FeedbackLink } | { ok: false; error: string } {
+  if (url === "") return { ok: false, error: `для типа «${RECOMMENDATION_TYPE_TO.link}» «${RC_URL}» обязательна` };
+  const parsed = feedbackLinkSchema.safeParse({ title, url });
+  if (!parsed.success) return { ok: false, error: `некорректная «${RC_URL}»: "${url}"` };
+  return { ok: true, value: parsed.data };
 }
 
 /**
@@ -336,10 +460,9 @@ function applyRecommendation(
   url: string,
 ): string | undefined {
   if (kind === "link") {
-    if (url === "") return `для типа «${RECOMMENDATION_TYPE_TO.link}» «${RC_URL}» обязательна`;
-    const parsed = feedbackLinkSchema.safeParse({ title, url });
-    if (!parsed.success) return `некорректная «${RC_URL}»: "${url}"`;
-    draft.links.push(parsed.data);
+    const link = readLink(title, url);
+    if (!link.ok) return link.error;
+    draft.links.push(link.value);
     return;
   }
   if (kind === "asset") {
@@ -361,14 +484,22 @@ function applyRecommendation(
  * other sheet of the workbook. The «Рекомендации» sheet is read AFTER «Обратная связь», so
  * an owner missing from the first sheet makes its recommendation an orphan — reported with
  * the owner's name, since that name is the only thing the author can go and fix.
+ *
+ * @param knownLevels Addresses of the adaptive levels the workbook describes, as
+ *   `parseAdaptiveLevelSheet` collected them ({@link adaptiveLevelKey}). A level row whose
+ *   address is not here is the SAME orphan as a recommendation whose owner is missing from
+ *   «Обратная связь». Omitting the argument therefore means "the book describes no levels" —
+ *   which is exactly what a book without the «Адаптивные уровни» sheet says.
  */
 export function parseFeedbackSheets(
   feedbackRows: Record<string, unknown>[] = [],
   recommendationRows: Record<string, unknown>[] = [],
+  knownLevels: ReadonlySet<string> = new Set<string>(),
 ): ParsedFeedbackSheets {
   const errors: string[] = [];
   const topicDrafts = new Map<string, OwnerDraft>();
   const topicNames = new Map<string, string>();
+  const byLevel = new Map<string, ParsedLevelRecommendations>();
   let testDraft: OwnerDraft | undefined;
 
   const newDraft = (format: FeedbackFormat, text: string): OwnerDraft =>
@@ -411,18 +542,35 @@ export function parseFeedbackSheets(
     if (isBlankRow(row, RECOMMENDATION_HEADERS)) return;
     const where = `Лист «${RECOMMENDATION_SHEET_NAME}», строка ${i + 2}`;
 
-    const owner = readOwner(row, RC_OWNER, RC_TOPIC);
+    const owner = readOwner(row, RC_OWNER, RC_TOPIC, RC_LEVEL);
     if (!owner.ok) {
       errors.push(`${where}: ${owner.error}`);
       return;
     }
-    const draft = owner.value.kind === "test" ? testDraft : topicDrafts.get(owner.value.key);
-    if (!draft) {
-      const who = owner.value.kind === "test"
-        ? `владелец «${OWNER_TEST}»`
-        : `раздел «${owner.value.name}»`;
-      errors.push(`${where}: ${who} не назван на листе «${FEEDBACK_SHEET_NAME}»`);
-      return;
+    // A level is subordinate to «Адаптивные уровни», the other two owners to «Обратная
+    // связь»: either way the row has to name something the workbook already described.
+    let draft: OwnerDraft | undefined;
+    /** Set for a level row: the bucket is claimed only once a material is actually read. */
+    let levelOwner: { kind: "level"; key: string; name: string; number: number } | undefined;
+    if (owner.value.kind === "level") {
+      const key = adaptiveLevelKey(owner.value.key, owner.value.number);
+      if (!knownLevels.has(key)) {
+        errors.push(
+          `${where}: уровень №${owner.value.number} раздела «${owner.value.name}» `
+          + `не описан на листе «${ADAPTIVE_LEVEL_SHEET_NAME}»`,
+        );
+        return;
+      }
+      levelOwner = owner.value;
+    } else {
+      draft = owner.value.kind === "test" ? testDraft : topicDrafts.get(owner.value.key);
+      if (!draft) {
+        const who = owner.value.kind === "test"
+          ? `владелец «${OWNER_TEST}»`
+          : `раздел «${owner.value.name}»`;
+        errors.push(`${where}: ${who} не назван на листе «${FEEDBACK_SHEET_NAME}»`);
+        return;
+      }
     }
 
     const typeRaw = String(row[RC_TYPE] ?? "");
@@ -435,12 +583,41 @@ export function parseFeedbackSheets(
       );
       return;
     }
+    const kind = kindEntry[0] as RecommendationKind;
     const title = String(row[RC_TITLE] ?? "").trim();
     if (!title) {
       errors.push(`${where}: не указан «${RC_TITLE}»`);
       return;
     }
-    const error = applyRecommendation(draft, kindEntry[0] as RecommendationKind, title, String(row[RC_URL] ?? "").trim());
+    const url = String(row[RC_URL] ?? "").trim();
+
+    if (levelOwner) {
+      // `adaptive_level_links` holds a title and a URL and nothing else, so «Материал» and
+      // «Мероприятие» are refused WITH the reason: a silently skipped row would look like
+      // a transfer that worked.
+      if (kind !== "link") {
+        errors.push(
+          `${where}: для «${RC_OWNER}» = «${OWNER_LEVEL}» доступен только тип `
+          + `«${RECOMMENDATION_TYPE_TO.link}»: у материала уровня есть только заголовок и ссылка`,
+        );
+        return;
+      }
+      const link = readLink(title, url);
+      if (!link.ok) {
+        errors.push(`${where}: ${link.error}`);
+        return;
+      }
+      // Claimed only now: a level whose every row failed states nothing, and an empty bucket
+      // would read as «у уровня материалов нет» — the opposite of what the author wrote.
+      const key = adaptiveLevelKey(levelOwner.key, levelOwner.number);
+      const entry = byLevel.get(key)
+        ?? { topicKey: levelOwner.key, topicName: levelOwner.name, number: levelOwner.number, links: [] };
+      entry.links.push(link.value);
+      byLevel.set(key, entry);
+      return;
+    }
+
+    const error = applyRecommendation(draft!, kind, title, url);
     if (error) errors.push(`${where}: ${error}`);
   });
 
@@ -451,6 +628,7 @@ export function parseFeedbackSheets(
     test: testDraft ? finalize(testDraft) : undefined,
     byTopic,
     topicNames,
+    byLevel,
     errors,
   };
 }

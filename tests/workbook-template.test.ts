@@ -44,6 +44,7 @@ import {
   RECOMMENDATION_HEADERS,
   RECOMMENDATION_TYPE_CHOICES,
   OWNER_CHOICES,
+  RECOMMENDATION_OWNER_CHOICES,
   PAGE_HEADERS,
   PAGE_FIELD_HEADERS,
   PAGE_ZONE_CHOICES,
@@ -445,7 +446,9 @@ describe("шаблон книги — проверка ввода", () => {
     expect(choicesBehind(wb, "Вклады вопросов", "Источник")).toEqual(MEASUREMENT_SOURCE_CHOICES);
     expect(choicesBehind(wb, "Обратная связь", "Кому")).toEqual(OWNER_CHOICES);
     expect(choicesBehind(wb, "Обратная связь", "Формат")).toEqual(FEEDBACK_FORMAT_CHOICES);
-    expect(choicesBehind(wb, "Рекомендации", "Кому")).toEqual(OWNER_CHOICES);
+    // У «Рекомендаций» владельцев на одного больше: материал адаптивного уровня едет
+    // этим же листом, а на «Обратной связи» уровня нет — его текст живёт на своём листе.
+    expect(choicesBehind(wb, "Рекомендации", "Кому")).toEqual(RECOMMENDATION_OWNER_CHOICES);
     expect(choicesBehind(wb, "Рекомендации", "Тип")).toEqual(RECOMMENDATION_TYPE_CHOICES);
     // Адрес страницы набирается на ДВУХ листах и должен совпасть побуквенно, поэтому
     // закрытые колонки адреса получают список на обоих.

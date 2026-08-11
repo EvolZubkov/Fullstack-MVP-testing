@@ -658,8 +658,13 @@ export const STRUCTURE_HEADERS = [
   "Выдавать все вопросы темы", "Лимит времени темы", "Балл по умолчанию в секции",
   // PRD-48 FR-11: the router's unlock rules, addressed by topic NAME.
   "Доступность раздела", "Зависит от разделов",
+  // PRD-48 FR-16: `adaptive_topic_settings.failure_feedback`. It lives HERE and not on the
+  // «Адаптивные уровни» sheet because there is exactly ONE such text per topic, and
+  // «Структура» is the sheet with exactly one row per topic — on the levels sheet it would
+  // have to be repeated in every row, with nothing to say which copy wins.
+  "Обратная связь при непройденном уровне",
 ];
-export const STRUCTURE_WIDTHS = [28, 22, 10, 20, 16, 10, 14, 26, 24, 20, 26, 34, 34];
+export const STRUCTURE_WIDTHS = [28, 22, 10, 20, 16, 10, 14, 26, 24, 20, 26, 34, 34, 60];
 
 /** Canonical «Квоты» headers (one row per PRD-11 stratum). */
 export const QUOTA_HEADERS = ["Раздел", "Тег", "Количество", "Режим"];
@@ -695,6 +700,7 @@ export {
   RECOMMENDATION_HEADERS,
   RECOMMENDATION_WIDTHS,
   OWNER_CHOICES,
+  RECOMMENDATION_OWNER_CHOICES,
   RECOMMENDATION_TYPE_CHOICES,
   FEEDBACK_FORMAT_CHOICES,
   serializeFeedbackRows,
@@ -703,8 +709,29 @@ export {
   type FeedbackPayload,
   type FeedbackSource,
   type FeedbackSectionSource,
+  type FeedbackLevelSource,
+  type ParsedLevelRecommendations,
   type ParsedFeedbackSheets,
 } from "./workbook-feedback";
+
+// ─── «Адаптивные уровни» (PRD-48 §4, FR-16) ───────────────────────────────────
+// The levels of an adaptive topic, addressed by «Раздел» + «Номер». Its module is separate
+// for the same reason the others are, and «Рекомендации» leans on it: a level's materials
+// are keyed by the address THIS module spells ({@link adaptiveLevelKey}), so a level row of
+// «Рекомендации» that names a level the book never described is an orphan.
+export {
+  ADAPTIVE_LEVEL_SHEET_NAME,
+  ADAPTIVE_LEVEL_HEADERS,
+  ADAPTIVE_LEVEL_WIDTHS,
+  ADAPTIVE_PASS_TYPE_CHOICES,
+  adaptiveLevelKey,
+  serializeAdaptiveLevelRows,
+  parseAdaptiveLevelSheet,
+  type AdaptiveLevelSource,
+  type AdaptiveTopicSource,
+  type ParsedAdaptiveLevel,
+  type ParsedAdaptiveSheet,
+} from "./workbook-adaptive";
 
 // ─── «Страницы» / «Поля страниц» (PRD-48 §4, FR-14/FR-15) ─────────────────────
 // Two sheets and one contract again, subordinate the same way: a page has no natural
@@ -830,6 +857,13 @@ export interface ParsedSection {
   unlockMode: UnlockMode | null;
   /** PRD-48 FR-11: topic NAMES the unlock depends on (resolved to ids later). */
   unlockDependsOn: string[];
+  /**
+   * PRD-48 FR-16: the topic's adaptive «failed a level» text
+   * (`adaptive_topic_settings.failure_feedback`). `null` = the cell was empty (or the book
+   * has no such column), which reads as «leave as is» — like every other optional column of
+   * this sheet, an older book may not silently erase a text it knows nothing about.
+   */
+  failureFeedback: string | null;
 }
 
 /** Parse a «Структура» row. `rowIndex` (0-based) is the «Порядок» fallback. */
@@ -915,11 +949,16 @@ export function parseStructureRow(
   const unlockDependsOn = String(row["Зависит от разделов"] ?? "")
     .split(";").map((s) => s.trim()).filter(Boolean);
 
+  // Free text: stored verbatim, since its inner spacing is what the author typed. Only a
+  // whitespace-only cell is levelled to `null` — «оставить как есть».
+  const failureRaw = String(row["Обратная связь при непройденном уровне"] ?? "");
+  const failureFeedback = failureRaw.trim() === "" ? null : failureRaw;
+
   return {
     ok: true,
     value: {
       topicName, topicCode, sortOrder, drawCount, passRule, required, questionOrder,
-      drawAll, timeLimitMinutes, defaultPoints, unlockMode, unlockDependsOn,
+      drawAll, timeLimitMinutes, defaultPoints, unlockMode, unlockDependsOn, failureFeedback,
     },
   };
 }
@@ -945,6 +984,8 @@ export function serializeStructureRow(s: {
   unlockMode?: string | null;
   /** PRD-48 FR-11: topic NAMES the unlock depends on. */
   unlockDependsOn?: string[];
+  /** PRD-48 FR-16: the topic's adaptive «failed a level» text; null/absent = none. */
+  failureFeedback?: string | null;
 }): Record<string, unknown> {
   const rule = (s.topicPassRuleJson ?? {}) as { source?: string; type?: string; value?: number };
   let passType = "Как у теста";
@@ -973,6 +1014,7 @@ export function serializeStructureRow(s: {
     "Доступность раздела":
       UNLOCK_MODE_TO[s.unlockMode ?? "always_available"] ?? UNLOCK_MODE_TO.always_available,
     "Зависит от разделов": (s.unlockDependsOn ?? []).join("; "),
+    "Обратная связь при непройденном уровне": s.failureFeedback ?? "",
   };
 }
 
