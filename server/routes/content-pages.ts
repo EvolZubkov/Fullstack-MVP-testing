@@ -16,21 +16,22 @@
 import { Router } from "express";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { and, eq } from "drizzle-orm";
 import { storage } from "../storage";
-import { db } from "../db";
-import { templates } from "@shared/schema";
-import { normalizeAuthorPlain, normalizeAuthorHtml } from "@shared/text";
 import { requireAuth, requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { syncEntityUsages } from "../services/media/usage-index";
 import { logger } from "../logger";
+import { type SanitizeDiagnostics } from "../utils/html-sanitizer";
+// PRD-48 Э3: the field rules live in ONE place, so the Excel workbook applies the
+// same normalisation and the same sanitiser this route does.
 import {
-  sanitizeHtmlWithDiagnostics,
-  sanitizeValuesWithDiagnostics,
-  placeholderScope,
-  type SanitizeDiagnostics,
-} from "../utils/html-sanitizer";
+  resolveContentTemplates,
+  findContentTemplate,
+  normalizeValuesForTemplate,
+  normalizeSettingsForTemplate,
+  sanitizeAllStringValues,
+  sanitizeAllStringValuesWithDiagnostics,
+} from "../services/content-page-fields";
 import { encodeJsonForScript, injectIntoPreview } from "../scorm/preview-embed";
 
 const router = Router();
@@ -43,234 +44,10 @@ async function getTestTopicIds(testId: string): Promise<Set<string>> {
   return new Set(sections.map((s) => s.topicId));
 }
 
-type PlaceholderDefinition = {
-  key: string;
-  type: string;
-  textFit?: { allowAuthorFontSize?: boolean };
-  allowedPaths?: string[];
-  allowedRenderers?: string[];
-  defaultPath?: string;
-  defaultRenderer?: string;
-};
-
-/** One `settings[]` declaration of a variant (PRD-22): a PROPERTY of the page. */
-type SettingDefinition = {
-  key: string;
-  type: string;
-  options?: string[];
-  default?: unknown;
-  required?: boolean;
-};
-
-type ContentTemplateEntry = {
-  key: string;
-  label?: string;
-  kind?: "questions" | "router" | "summary" | "intro" | "info";
-  placeholders?: PlaceholderDefinition[];
-  settings?: SettingDefinition[];
-};
-
-/**
- * Returns the contentTemplates array a test's content pages validate against.
- *
- * Prefers `overrideTemplateId` — the in-progress «Оформление» DRAFT the editor
- * sends as `?templateId=` — but ONLY when it resolves to an ACTIVE template, so
- * structure edits (add / replace-variant / value validation) work against the
- * chosen template before the design is saved. Otherwise falls back to the test's
- * saved design template, then the built-in "default".
- */
-async function getTestContentTemplates(
-  test: { designSettingsJson: unknown },
-  overrideTemplateId?: string,
-): Promise<ContentTemplateEntry[] | null> {
-  const settings = test.designSettingsJson as { templateId?: string } | null;
-  const savedId = settings?.templateId || "default";
-
-  const readTemplates = (id: string, activeOnly: boolean) =>
-    db
-      .select()
-      .from(templates)
-      .where(activeOnly ? and(eq(templates.id, id), eq(templates.isActive, true)) : eq(templates.id, id));
-
-  // Draft override wins only when it points to a different, ACTIVE template.
-  if (overrideTemplateId && overrideTemplateId !== savedId) {
-    const [draftTpl] = await readTemplates(overrideTemplateId, true);
-    if (draftTpl) {
-      const manifest = draftTpl.manifest as { contentTemplates?: ContentTemplateEntry[] };
-      return manifest.contentTemplates ?? null;
-    }
-  }
-
-  const [template] = await readTemplates(savedId, false);
-  if (!template) return null;
-  const manifest = template.manifest as { contentTemplates?: ContentTemplateEntry[] };
-  return manifest.contentTemplates ?? null;
-}
-
 /** The draft «Оформление» template id the editor sends as `?templateId=`, if any. */
 function draftTemplateIdFrom(req: { query: Record<string, unknown> }): string | undefined {
   const v = req.query.templateId;
   return typeof v === "string" && v.length > 0 ? v : undefined;
-}
-
-/**
- * Sanitises arbitrary string values without a template manifest (used for
- * mode='custom' / free-form payloads). Aggregates diagnostics so the PUT
- * route can surface them to the UI alongside the cleaned payload.
- *
- * Author CSS is confined to the region the value renders into
- * ({@link placeholderScope}) — an `html`-mode page renders as a whole into
- * `.content-page--html`, so its `<style>` can no longer restyle the player.
- */
-function sanitizeAllStringValuesWithDiagnostics(
-  values: Record<string, unknown> | undefined,
-): { values: Record<string, unknown>; diagnostics: SanitizeDiagnostics } {
-  const result: Record<string, unknown> = {};
-  const diagnostics: SanitizeDiagnostics = {};
-  for (const [key, value] of Object.entries(values ?? {})) {
-    if (typeof value === "string") {
-      const { value: cleaned, removed } = sanitizeHtmlWithDiagnostics(value, {
-        scope: placeholderScope(key),
-      });
-      // An `html`-mode page is markup with no manifest to type its fields, so the
-      // markup-aware pass applies: canonical whitespace and typography for the
-      // text, nothing for the tags, and no markdown anywhere.
-      result[key] = normalizeAuthorHtml(cleaned);
-      if (removed.length > 0) diagnostics[key] = removed;
-    } else {
-      result[key] = value;
-    }
-  }
-  return { values: result, diagnostics };
-}
-
-/** Back-compat wrapper - used by POST route that does not yet surface diagnostics. */
-function sanitizeAllStringValues(values: Record<string, unknown> | undefined): Record<string, unknown> {
-  return sanitizeAllStringValuesWithDiagnostics(values).values;
-}
-
-function normalizeValuesForTemplate(
-  valuesJson: { values?: Record<string, unknown>; placeholderStyles?: Record<string, unknown> } | undefined,
-  placeholders: PlaceholderDefinition[],
-): { values: Record<string, unknown>; placeholderStyles: Record<string, unknown>; sanitizeDiagnostics: SanitizeDiagnostics } {
-  const { values, diagnostics: sanitizeDiagnostics } = sanitizeValuesWithDiagnostics(
-    valuesJson?.values ?? {},
-    placeholders,
-  );
-  const placeholderStyles: Record<string, unknown> = {};
-
-  for (const ph of placeholders) {
-    const style = valuesJson?.placeholderStyles?.[ph.key] as { fontSize?: unknown } | undefined;
-    if (ph.textFit?.allowAuthorFontSize && typeof style?.fontSize === "number" && Number.isFinite(style.fontSize)) {
-      placeholderStyles[ph.key] = { fontSize: style.fontSize };
-    }
-
-    // Author text is stored canonically whatever field it sits in. Plain fields
-    // take the plain pass; `richText`/`html` take the markup-aware one, which
-    // applies the same whitespace and typography rules to the TEXT only and never
-    // touches a tag, an attribute, a style block or preformatted content.
-    // Markdown is never interpreted in a markup field — there the author writes
-    // HTML, and `*` is a character.
-    const value = values[ph.key];
-    if (typeof value === "string") {
-      if (ph.type === "text" || ph.type === "textarea") {
-        values[ph.key] = normalizeAuthorPlain(value);
-      } else if (ph.type === "richText" || ph.type === "html") {
-        values[ph.key] = normalizeAuthorHtml(value);
-      }
-    }
-
-    if (ph.type === "resultField") {
-      const raw = values[ph.key] as { path?: unknown; renderer?: unknown; rendererOptions?: unknown; label?: unknown } | undefined;
-      if (!raw || typeof raw !== "object") continue;
-
-      const path = typeof raw.path === "string" ? raw.path : ph.defaultPath;
-      if (path && ph.allowedPaths && !ph.allowedPaths.includes(path)) {
-        throw Object.assign(new Error("path is not allowed for resultField"), { status: 422, field: `valuesJson.values.${ph.key}.path` });
-      }
-
-      const renderer = typeof raw.renderer === "string" ? raw.renderer : ph.defaultRenderer;
-      if (renderer && ph.allowedRenderers && !ph.allowedRenderers.includes(renderer)) {
-        throw Object.assign(new Error("renderer is not allowed for resultField"), { status: 422, field: `valuesJson.values.${ph.key}.renderer` });
-      }
-
-      values[ph.key] = {
-        ...raw,
-        path: path ?? raw.path,
-        renderer: renderer ?? raw.renderer,
-        rendererOptions:
-          raw.rendererOptions && typeof raw.rendererOptions === "object" && !Array.isArray(raw.rendererOptions)
-            ? raw.rendererOptions
-            : {},
-      };
-    }
-  }
-
-  return { values, placeholderStyles, sanitizeDiagnostics };
-}
-
-/**
- * Normalises the page's SETTINGS against the variant's `settings[]` (PRD-22).
- *
- * Kept apart from {@link normalizeValuesForTemplate} because settings obey their
- * own rules: only declared keys are stored, values are coerced to the declared
- * type, a declared `default` fills an absent value, and `text` settings are
- * sanitised (they reach the layout as a caption, e.g. the «Далее» button).
- *
- * `sequence` values survive a variant that no longer declares the setting
- * (FR-29): the caller passes the previously stored settings as `existing`, and
- * an undeclared sequence identifier is carried over rather than dropped — an
- * author who switches a page to another variant and back keeps its place in the
- * sequence.
- */
-function normalizeSettingsForTemplate(
-  incoming: Record<string, unknown> | undefined,
-  declared: SettingDefinition[] | undefined,
-  existing?: Record<string, unknown>,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  const source = incoming ?? existing ?? {};
-
-  for (const def of declared ?? []) {
-    const raw = source[def.key];
-    let value: unknown = raw;
-
-    if (raw === undefined || raw === null || raw === "") {
-      if (def.default === undefined) continue;
-      value = def.default;
-    } else if (def.type === "number") {
-      const n = typeof raw === "number" ? raw : Number(raw);
-      if (!Number.isFinite(n)) continue;
-      value = n;
-    } else if (def.type === "boolean") {
-      value = raw === true || raw === "true";
-    } else if (def.type === "select") {
-      // A value outside the declared choices is dropped, not stored blindly.
-      if (Array.isArray(def.options) && !def.options.includes(String(raw))) continue;
-      value = String(raw);
-    } else if (def.type === "text" || def.type === "sequence") {
-      value = sanitizeHtmlWithDiagnostics(String(raw)).value;
-    }
-
-    out[def.key] = value;
-  }
-
-  // FR-29: keep a stored sequence identifier the current variant does not declare.
-  const declaredKeys = new Set((declared ?? []).map((d) => d.key));
-  for (const [key, value] of Object.entries(existing ?? {})) {
-    if (!declaredKeys.has(key) && !(key in out) && isSequenceKey(key)) out[key] = value;
-  }
-
-  return out;
-}
-
-/**
- * Keys that carry a sequence identifier and therefore survive undeclared. The
- * setting is identified by its stored key: the variant that declared it is gone,
- * so its type declaration is unavailable at this point.
- */
-function isSequenceKey(key: string): boolean {
-  return key === "sequenceId";
 }
 
 // ─── GET /api/tests/:id/content-pages/:pageId/preview-page ───────────────────
@@ -438,7 +215,7 @@ router.get("/:id/content-pages", requirePermission("tests.read"), requireTestSco
     if (!test) return res.status(404).json({ error: "Test not found" });
 
     const pages = await storage.getContentPages(req.params.id);
-    const contentTemplates = await getTestContentTemplates(test, draftTemplateIdFrom(req));
+    const contentTemplates = await resolveContentTemplates(test, draftTemplateIdFrom(req));
     const validKeys = contentTemplates ? new Set(contentTemplates.map((ct) => ct.key)) : null;
 
     const result = pages.map((page) => ({
@@ -505,9 +282,9 @@ router.post("/:id/content-pages", requirePermission("tests.edit"), requireTestSc
     // variant's `settings[]`; an undeclared key never reaches the database.
     let normalizedSettings: Record<string, unknown> = {};
     if (mode === "template" || (!mode && templateKey)) {
-      const contentTemplates = await getTestContentTemplates(test, draftTemplateIdFrom(req));
+      const contentTemplates = await resolveContentTemplates(test, draftTemplateIdFrom(req));
       if (contentTemplates !== null) {
-        const ct = contentTemplates.find((c) => c.key === templateKey);
+        const ct = findContentTemplate(contentTemplates, templateKey);
         if (!ct) {
           return res.status(422).json({ error: "templateKey not found in current template", field: "templateKey" });
         }
@@ -635,9 +412,9 @@ router.put("/:id/content-pages/:pageId", requirePermission("tests.edit"), requir
       effectiveTemplateKey &&
       (valuesJson?.values !== undefined || settingsJson !== undefined || templateKey !== undefined)
     ) {
-      const contentTemplates = await getTestContentTemplates(test, draftTemplateIdFrom(req));
+      const contentTemplates = await resolveContentTemplates(test, draftTemplateIdFrom(req));
       if (contentTemplates !== null) {
-        const ct = contentTemplates.find((c) => c.key === effectiveTemplateKey);
+        const ct = findContentTemplate(contentTemplates, effectiveTemplateKey);
         if (!ct) {
           return res.status(422).json({ error: "templateKey not found in current template", field: "templateKey" });
         }
@@ -724,13 +501,13 @@ router.post("/:id/content-pages/:pageId/replace-variant", requirePermission("tes
       return res.status(404).json({ error: "Content page not found" });
     }
 
-    const contentTemplates = await getTestContentTemplates(test, draftTemplateIdFrom(req));
+    const contentTemplates = await resolveContentTemplates(test, draftTemplateIdFrom(req));
     if (!contentTemplates) {
       return res.status(422).json({ error: "Test has no resolvable template" });
     }
 
-    const currentVariant = contentTemplates.find((ct) => ct.key === existing.templateKey);
-    const newVariant = contentTemplates.find((ct) => ct.key === newTemplateKey);
+    const currentVariant = findContentTemplate(contentTemplates, existing.templateKey);
+    const newVariant = findContentTemplate(contentTemplates, newTemplateKey);
 
     if (!newVariant) {
       return res.status(404).json({
