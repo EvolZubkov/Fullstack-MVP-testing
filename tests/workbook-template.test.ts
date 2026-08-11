@@ -43,7 +43,7 @@ import {
   FEEDBACK_FORMAT_CHOICES,
   RECOMMENDATION_HEADERS,
   RECOMMENDATION_TYPE_CHOICES,
-  LEVEL_CHOICES,
+  OWNER_CHOICES,
   PAGE_HEADERS,
   PAGE_FIELD_HEADERS,
   PAGE_ZONE_CHOICES,
@@ -373,7 +373,7 @@ describe("шаблон книги — валидность примеров", ()
   // названа причиной, а не общей ошибкой импорта.
   it("каждая примерная рекомендация ссылается на владельца из примера обратной связи", () => {
     const owner = (r: Record<string, unknown>) =>
-      `${String(r["Уровень"] ?? "")}|${String(r["Раздел"] ?? "").trim().toLowerCase()}`;
+      `${String(r["Кому"] ?? "")}|${String(r["Раздел"] ?? "").trim().toLowerCase()}`;
     const owners = new Set(EXAMPLE_ROWS["Обратная связь"].map(owner));
 
     expect(owners.size).toBeGreaterThan(1);
@@ -443,9 +443,9 @@ describe("шаблон книги — проверка ввода", () => {
     expect(choicesBehind(wb, "Шкалы", "Тип")).toEqual(SCALE_TYPE_CHOICES);
     expect(choicesBehind(wb, "Показатели", "Управляет статусом")).toEqual(CONTROLS_CHOICES);
     expect(choicesBehind(wb, "Вклады вопросов", "Источник")).toEqual(MEASUREMENT_SOURCE_CHOICES);
-    expect(choicesBehind(wb, "Обратная связь", "Уровень")).toEqual(LEVEL_CHOICES);
+    expect(choicesBehind(wb, "Обратная связь", "Кому")).toEqual(OWNER_CHOICES);
     expect(choicesBehind(wb, "Обратная связь", "Формат")).toEqual(FEEDBACK_FORMAT_CHOICES);
-    expect(choicesBehind(wb, "Рекомендации", "Уровень")).toEqual(LEVEL_CHOICES);
+    expect(choicesBehind(wb, "Рекомендации", "Кому")).toEqual(OWNER_CHOICES);
     expect(choicesBehind(wb, "Рекомендации", "Тип")).toEqual(RECOMMENDATION_TYPE_CHOICES);
     // Адрес страницы набирается на ДВУХ листах и должен совпасть побуквенно, поэтому
     // закрытые колонки адреса получают список на обоих.
@@ -544,12 +544,12 @@ describe("шаблон книги — проверка ввода", () => {
     expect(choicesBehind(wb, "Показатели", "SCORM")).toEqual([...resultVariables.scormTarget.enumValues]);
 
     // Оба листа обратной связи: значение из списка обязано быть принято разборщиком —
-    // «Уровень» опознаёт владельца, «Формат» и «Тип» отвергают строку целиком.
-    for (const level of choicesBehind(wb, "Обратная связь", "Уровень")) {
+    // «Кому» опознаёт владельца, «Формат» и «Тип» отвергают строку целиком.
+    for (const level of choicesBehind(wb, "Обратная связь", "Кому")) {
       const isTest = level === "Тест";
       for (const format of choicesBehind(wb, "Обратная связь", "Формат")) {
         const parsed = parseFeedbackSheets(
-          [{ "Уровень": level, "Раздел": isTest ? "" : "Финансы", "Формат": format, "Текст": "ОС" }],
+          [{ "Кому": level, "Раздел": isTest ? "" : "Финансы", "Формат": format, "Текст": "ОС" }],
           [],
         );
         expect(parsed.errors, `«${level}» / «${format}»`).toEqual([]);
@@ -557,8 +557,8 @@ describe("шаблон книги — проверка ввода", () => {
     }
     for (const type of choicesBehind(wb, "Рекомендации", "Тип")) {
       const parsed = parseFeedbackSheets(
-        [{ "Уровень": "Тест", "Раздел": "", "Формат": "Простой", "Текст": "ОС" }],
-        [{ "Уровень": "Тест", "Раздел": "", "Тип": type, "Заголовок": "Материал", "Ссылка": "https://a.test" }],
+        [{ "Кому": "Тест", "Раздел": "", "Формат": "Простой", "Текст": "ОС" }],
+        [{ "Кому": "Тест", "Раздел": "", "Тип": type, "Заголовок": "Материал", "Ссылка": "https://a.test" }],
       );
       expect(parsed.errors, `«Тип» = «${type}»`).toEqual([]);
     }

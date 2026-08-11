@@ -11,7 +11,7 @@
  * «Структура»: a recommendation whose owner is not named on «Обратная связь» has nowhere
  * to be stored, and is a row error rather than a silent new owner.
  *
- * The owner is addressed by TWO columns, «Уровень» and «Раздел», not by one. A topic
+ * The owner is addressed by TWO columns, «Кому» and «Раздел», not by one. A topic
  * literally named «Тест» exists in the bank, and a reserved word in a shared column would
  * quietly move that topic's feedback up to the test level.
  *
@@ -50,24 +50,33 @@ import { FORMAT_LABELS, cleanCell, normalizeCell } from "./workbook-settings";
 export const FEEDBACK_SHEET_NAME = "Обратная связь";
 export const RECOMMENDATION_SHEET_NAME = "Рекомендации";
 
-export const FEEDBACK_HEADERS = ["Уровень", "Раздел", "Формат", "Текст"];
+export const FEEDBACK_HEADERS = ["Кому", "Раздел", "Формат", "Текст"];
 export const FEEDBACK_WIDTHS = [12, 28, 20, 80];
 
-export const RECOMMENDATION_HEADERS = ["Уровень", "Раздел", "Тип", "Заголовок", "Ссылка"];
+export const RECOMMENDATION_HEADERS = ["Кому", "Раздел", "Тип", "Заголовок", "Ссылка"];
 export const RECOMMENDATION_WIDTHS = [12, 28, 16, 34, 46];
 
 /** Column keys, taken from the headers so a rename lands in one place. */
-const [FB_LEVEL, FB_TOPIC, FB_FORMAT, FB_TEXT] = FEEDBACK_HEADERS;
-const [RC_LEVEL, RC_TOPIC, RC_TYPE, RC_TITLE, RC_URL] = RECOMMENDATION_HEADERS;
+const [FB_OWNER, FB_TOPIC, FB_FORMAT, FB_TEXT] = FEEDBACK_HEADERS;
+const [RC_OWNER, RC_TOPIC, RC_TYPE, RC_TITLE, RC_URL] = RECOMMENDATION_HEADERS;
 
 /** «Тема» is the legacy spelling of the «Раздел» column, accepted by every sheet here. */
 const TOPIC_COL_LEGACY = "Тема";
 
-const LEVEL_TEST = "Тест";
-const LEVEL_SECTION = "Раздел";
+/**
+ * «Уровень» is the legacy spelling of the «Кому» column, accepted the same way «Тема» is.
+ *
+ * The column was renamed once a third owner — an adaptive LEVEL — became addressable
+ * (PRD-48 Э4): «Уровень = Уровень» names nothing. Books written before the rename still
+ * load, since the values themselves did not change.
+ */
+const OWNER_COL_LEGACY = "Уровень";
 
-/** Values of the «Уровень» column — the workbook template turns them into a drop-down. */
-export const LEVEL_CHOICES = [LEVEL_TEST, LEVEL_SECTION];
+const OWNER_TEST = "Тест";
+const OWNER_SECTION = "Раздел";
+
+/** Values of the «Кому» column — the workbook template turns them into a drop-down. */
+export const OWNER_CHOICES = [OWNER_TEST, OWNER_SECTION];
 
 /**
  * Recommendation kinds by the branch of `feedback_json` they live in. The labels are the
@@ -131,7 +140,7 @@ export interface ParsedFeedbackSheets {
   errors: string[];
 }
 
-/** Owner of a row, resolved from the «Уровень» + «Раздел» pair. */
+/** Owner of a row, resolved from the «Кому» + «Раздел» pair. */
 type Owner = { kind: "test" } | { kind: "section"; key: string; name: string };
 
 /** Accumulator of one owner's feedback while both sheets are being read. */
@@ -174,14 +183,14 @@ function ownersOf(
 ): { level: string; topicName: string; feedback: FeedbackSource }[] {
   const owners: { level: string; topicName: string; feedback: FeedbackSource }[] = [];
   if (hasFeedback(testFeedback)) {
-    owners.push({ level: LEVEL_TEST, topicName: "", feedback: testFeedback });
+    owners.push({ level: OWNER_TEST, topicName: "", feedback: testFeedback });
   }
   for (const section of sections) {
     // A section with no topic name cannot be addressed by the sheet at all — the sheet has
     // no other key for it — so it is skipped instead of producing an unloadable row.
     if (!hasFeedback(section.feedback) || !String(section.topicName ?? "").trim()) continue;
     owners.push({
-      level: LEVEL_SECTION,
+      level: OWNER_SECTION,
       topicName: String(section.topicName),
       feedback: section.feedback,
     });
@@ -195,7 +204,7 @@ export function serializeFeedbackRows(
   sections: readonly FeedbackSectionSource[] = [],
 ): Record<string, unknown>[] {
   return ownersOf(testFeedback, sections).map((owner) => ({
-    [FB_LEVEL]: owner.level,
+    [FB_OWNER]: owner.level,
     [FB_TOPIC]: owner.topicName,
     [FB_FORMAT]: formatLabel(owner.feedback.format),
     [FB_TEXT]: String(owner.feedback.text ?? ""),
@@ -226,7 +235,7 @@ export function serializeRecommendationRows(
         const title = String(item?.title ?? "").trim();
         if (!title) continue;
         rows.push({
-          [RC_LEVEL]: owner.level,
+          [RC_OWNER]: owner.level,
           [RC_TOPIC]: owner.topicName,
           [RC_TYPE]: RECOMMENDATION_TYPE_TO[kind],
           [RC_TITLE]: title,
@@ -261,7 +270,7 @@ function isBlankRow(row: Record<string, unknown>, headers: string[]): boolean {
 }
 
 /**
- * Resolve the owner of a row from the «Уровень» + «Раздел» pair.
+ * Resolve the owner of a row from the «Кому» + «Раздел» pair.
  *
  * A test-level row with a topic name is an ERROR rather than a topic name ignored: the two
  * columns exist so that an owner is never guessed at, and a copied-but-not-cleared cell is
@@ -269,26 +278,26 @@ function isBlankRow(row: Record<string, unknown>, headers: string[]): boolean {
  */
 function readOwner(
   row: Record<string, unknown>,
-  levelCol: string,
+  ownerCol: string,
   topicCol: string,
 ): { ok: true; value: Owner } | { ok: false; error: string } {
-  const levelRaw = String(row[levelCol] ?? "");
-  const level = normalizeCell(levelRaw);
+  const ownerRaw = String(row[ownerCol] ?? row[OWNER_COL_LEGACY] ?? "");
+  const owner = normalizeCell(ownerRaw);
   const topicName = cleanCell(String(row[topicCol] ?? row[TOPIC_COL_LEGACY] ?? ""));
 
-  if (level === normalizeCell(LEVEL_TEST)) {
+  if (owner === normalizeCell(OWNER_TEST)) {
     if (topicName !== "") {
-      return { ok: false, error: `для уровня «${LEVEL_TEST}» колонка «${topicCol}» должна быть пустой` };
+      return { ok: false, error: `для «${ownerCol}» = «${OWNER_TEST}» колонка «${topicCol}» должна быть пустой` };
     }
     return { ok: true, value: { kind: "test" } };
   }
-  if (level === normalizeCell(LEVEL_SECTION) || level === normalizeCell(TOPIC_COL_LEGACY)) {
+  if (owner === normalizeCell(OWNER_SECTION) || owner === normalizeCell(TOPIC_COL_LEGACY)) {
     if (topicName === "") return { ok: false, error: "не указан раздел (тема)" };
     return { ok: true, value: { kind: "section", key: normalizeCell(topicName), name: topicName } };
   }
   return {
     ok: false,
-    error: `неизвестный «${levelCol}»: "${levelRaw}"; ожидается одно из: ${LEVEL_CHOICES.join(", ")}`,
+    error: `неизвестный «${ownerCol}»: "${ownerRaw}"; ожидается одно из: ${OWNER_CHOICES.join(", ")}`,
   };
 }
 
@@ -369,7 +378,7 @@ export function parseFeedbackSheets(
     if (isBlankRow(row, FEEDBACK_HEADERS)) return;
     const where = `Лист «${FEEDBACK_SHEET_NAME}», строка ${i + 2}`;
 
-    const owner = readOwner(row, FB_LEVEL, FB_TOPIC);
+    const owner = readOwner(row, FB_OWNER, FB_TOPIC);
     if (!owner.ok) {
       errors.push(`${where}: ${owner.error}`);
       return;
@@ -402,7 +411,7 @@ export function parseFeedbackSheets(
     if (isBlankRow(row, RECOMMENDATION_HEADERS)) return;
     const where = `Лист «${RECOMMENDATION_SHEET_NAME}», строка ${i + 2}`;
 
-    const owner = readOwner(row, RC_LEVEL, RC_TOPIC);
+    const owner = readOwner(row, RC_OWNER, RC_TOPIC);
     if (!owner.ok) {
       errors.push(`${where}: ${owner.error}`);
       return;
@@ -410,7 +419,7 @@ export function parseFeedbackSheets(
     const draft = owner.value.kind === "test" ? testDraft : topicDrafts.get(owner.value.key);
     if (!draft) {
       const who = owner.value.kind === "test"
-        ? `уровень «${LEVEL_TEST}»`
+        ? `владелец «${OWNER_TEST}»`
         : `раздел «${owner.value.name}»`;
       errors.push(`${where}: ${who} не назван на листе «${FEEDBACK_SHEET_NAME}»`);
       return;
