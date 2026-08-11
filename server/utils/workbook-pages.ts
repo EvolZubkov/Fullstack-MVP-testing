@@ -422,6 +422,18 @@ function addressLabel(scope: Scope, kind: PageKind, index?: number): string {
 }
 
 /**
+ * Human spelling of a ZONE — «После теста», or «До темы / JavaScript» when a topic scopes it.
+ *
+ * Exported for the same reason as {@link formatPageAddress}: the import speaks about a whole
+ * zone as well (its author pages are replaced by the book's set for that zone), and a label
+ * spelled by hand over there would drift from the sheets' the moment a dictionary changes.
+ */
+export function formatPageZone(zone: PageZone, topicName = ""): string {
+  const name = cleanCell(topicName);
+  return name === "" ? ZONE_TO[zone] : `${ZONE_TO[zone]} / ${name}`;
+}
+
+/**
  * Human spelling of a parsed page's address — «До теста / Стартовая / №1».
  *
  * Exported because the IMPORT reports about a page too («не найдена на приёмнике», «вариант

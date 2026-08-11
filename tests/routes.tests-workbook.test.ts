@@ -2236,6 +2236,35 @@ describe("POST /:id/workbook/import — «Страницы» и «Поля ст�
     );
   });
 
+  // Зону «называет» ЛЮБАЯ строка с её адресом, включая системную: книга, подрезанная
+  // руками (строку «Итоги» оставили, свои страницы той же зоны убрали), сносит авторские
+  // страницы приёмника. Правило верное — очистка зоны книгой должна оставаться возможной,
+  // поэтому предупреждение, а не отказ.
+  it("зона, названная только системной страницей, предупреждает об удалении авторских", async () => {
+    storageMock.getContentPages.mockResolvedValue([
+      { ...startPage, position: "after", kind: "results", id: "p-results", templateKey: "start.default" },
+      authorPage("p-old-1", "after", 1),
+      authorPage("p-old-2", "after", 2),
+    ]);
+    const buf = await makeWorkbook({
+      "Страницы": [
+        pageRow({ "Зона": "После теста", "Вид": "Итоги", "Номер": 1, "Вариант": "start.default" }),
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.pages).toMatchObject({ created: 0, deleted: 2 });
+    expect(
+      res.body.warnings.some((w: string) => /После теста/.test(w) && /\(2\)/.test(w)),
+    ).toBe(true);
+    // Предупреждение не отменяет правила: страницы всё-таки удалены.
+    expect(storageMock.deleteContentPage.mock.calls.map((c: any[]) => c[0]).sort()).toEqual([
+      "p-old-1", "p-old-2",
+    ]);
+  });
+
   it("зона, которой лист не назвал, не тронута", async () => {
     storageMock.getContentPages.mockResolvedValue([
       startPage,

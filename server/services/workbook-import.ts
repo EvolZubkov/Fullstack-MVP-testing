@@ -79,6 +79,7 @@ import {
   RECOMMENDATION_SHEET_NAME,
   parsePageSheets,
   formatPageAddress,
+  formatPageZone,
   PAGE_SHEET_NAME,
   PAGE_FIELD_SHEET_NAME,
   type ParsedQuota,
@@ -497,6 +498,8 @@ async function applyPageSheets(
   }
 
   const namedZones = new Set<string>();
+  /** Human label of every named zone, for a report the author can act on. */
+  const zoneLabels = new Map<string, string>();
   const updates: Array<{ id: string; patch: Record<string, unknown> }> = [];
   const authorPages: PendingAuthorPage[] = [];
 
@@ -511,7 +514,9 @@ async function applyPageSheets(
         continue;
       }
     }
-    namedZones.add(zoneKeyOf(page.zone, topicId));
+    const zoneKey = zoneKeyOf(page.zone, topicId);
+    namedZones.add(zoneKey);
+    zoneLabels.set(zoneKey, formatPageZone(page.zone, page.topicName));
 
     const existing = page.kind === "info"
       ? undefined
@@ -564,6 +569,26 @@ async function applyPageSheets(
   const doomed = current.filter(
     (p) => p.kind === "info" && namedZones.has(zoneKeyOf(p.position, p.topicId)),
   );
+
+  // A zone is «named» by ANY row carrying its address, a system one included. So a book
+  // trimmed by hand — the «Итоги» row kept, the author pages of that zone deleted out of the
+  // sheet — wipes the target's author pages there while looking like it only touched the
+  // system page. The rule is right (clearing a zone from a book has to stay possible, so this
+  // is a warning and not a refusal), but silence about it is not: the author who trimmed the
+  // sheet to fix one heading would otherwise lose whole pages without a word.
+  const bookAuthorZones = new Set(authorPages.map((item) => zoneKeyOf(item.page.zone, item.topicId)));
+  const wipedByZone = new Map<string, number>();
+  for (const p of doomed) {
+    const zoneKey = zoneKeyOf(p.position, p.topicId);
+    if (bookAuthorZones.has(zoneKey)) continue;
+    wipedByZone.set(zoneKey, (wipedByZone.get(zoneKey) ?? 0) + 1);
+  }
+  for (const [zoneKey, count] of wipedByZone) {
+    result.warnings.push(
+      `Лист «${PAGE_SHEET_NAME}»: зону «${zoneLabels.get(zoneKey) ?? zoneKey}» называют только `
+      + `системные страницы, поэтому авторские страницы приёмника в ней (${count}) будут удалены`,
+    );
+  }
 
   result.pages = { updated: updates.length, created: authorPages.length, deleted: doomed.length };
   if (dryRun) return;

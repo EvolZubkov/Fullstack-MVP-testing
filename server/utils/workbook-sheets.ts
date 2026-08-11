@@ -727,6 +727,7 @@ export {
   serializePageFieldRows,
   parsePageSheets,
   formatPageAddress,
+  formatPageZone,
   type PageSource,
   type PageZone,
   type PageKind,
