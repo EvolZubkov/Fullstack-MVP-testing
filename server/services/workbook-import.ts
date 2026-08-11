@@ -296,8 +296,8 @@ async function keepUnnamedSectionFeedback(
 }
 
 /**
- * Resolve the «оставить как есть» state of every topic's «Обратная связь при непройденном
- * уровне» against the target, and turn the eraser into the `null` the column stores.
+ * Carry the target's own «Обратная связь при непройденном уровне» into every topic whose cell
+ * on «Структура» was empty.
  *
  * Same hazard as {@link keepUnnamedSectionFeedback}, one table over: `adaptiveSettings` is a
  * WHOLESALE rewrite — `testSettingsService` deletes the test's `adaptive_topic_settings` and
@@ -306,25 +306,21 @@ async function keepUnnamedSectionFeedback(
  * spec and the parser all promise), so the promise has to be kept HERE, where the target is
  * readable.
  *
- * Three states arrive from {@link parseStructureRow} and two leave:
- *
- * - `null` (empty cell) → the target's own text, or `null` if it had none;
- * - `""` (the eraser dash) → `null`, an explicit erasure;
- * - a text → itself.
+ * A filled cell replaces the text; erasing it from the book is not possible and no eraser
+ * value is invented for this one column (PRD-48 §4.4) — that is the whole workbook's rule for
+ * text, and a single cell where a dash meant something else would be worse than a book that
+ * consistently cannot erase.
  */
-async function resolveFailureFeedback(
+async function keepUnnamedFailureFeedback(
   testId: string,
   topics: AdaptiveTopicPayload[],
 ): Promise<void> {
   const unnamed = topics.filter((t) => t.failureFeedback === null);
-  if (unnamed.length > 0) {
-    const current = await storage.getAdaptiveTopicSettingsByTest(testId);
-    const byTopic = new Map(current.map((s) => [s.topicId, s.failureFeedback ?? null]));
-    for (const topic of unnamed) topic.failureFeedback = byTopic.get(topic.topicId) ?? null;
-  }
-  for (const topic of topics) {
-    if (topic.failureFeedback === "") topic.failureFeedback = null;
-  }
+  if (unnamed.length === 0) return;
+
+  const current = await storage.getAdaptiveTopicSettingsByTest(testId);
+  const byTopic = new Map(current.map((s) => [s.topicId, s.failureFeedback ?? null]));
+  for (const topic of unnamed) topic.failureFeedback = byTopic.get(topic.topicId) ?? null;
 }
 
 /**
@@ -1407,8 +1403,8 @@ export async function importWorkbook(
       // gate reads the mode from the payload, so a book with no «Настройки» sheet never turns
       // it on, and a book whose level rows ALL failed their row checks passes it too.
       //
-      // `failureFeedback` still carries the parser's three-state marker here — the target is
-      // only consulted on the saving path, by {@link resolveFailureFeedback}.
+      // `failureFeedback` is still the parser's «оставить как есть» `null` here — the target
+      // is only consulted on the saving path, by {@link keepUnnamedFailureFeedback}.
       const levels = adaptive?.byTopic.get(key) ?? [];
       if (sec.failureFeedback !== null && levels.length === 0) {
         (adaptive ? failureWithoutRows : failureWithoutLevels).push(sec.topicName);
@@ -1614,7 +1610,7 @@ export async function importWorkbook(
       // and under `dryRun` there is no rewrite — the plan the preview reports does not
       // depend on it, exactly as the test row above is only read on the saving path.
       if (sections.length > 0) await keepUnnamedSectionFeedback(testId, sections);
-      if (adaptiveTopics.length > 0) await resolveFailureFeedback(testId, adaptiveTopics);
+      if (adaptiveTopics.length > 0) await keepUnnamedFailureFeedback(testId, adaptiveTopics);
       await saveOrCollect(testId, {
         test: {
           status: (current?.status as "draft" | "published" | "archived") ?? "draft",

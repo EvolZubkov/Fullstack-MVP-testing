@@ -2880,7 +2880,9 @@ describe("Адаптивные уровни: выгрузка и загрузк�
     expect(payload.adaptiveSettings[0].failureFeedback).toBe("Текст из книги");
   });
 
-  it("прочерк стирает обратную связь темы", async () => {
+  // Стереть текст книгой нельзя (PRD-48 §4.4): значения-«стирателя» в книге нет, поэтому
+  // прочерк едет обычным текстом и в теме окажется прочерк.
+  it("прочерк в ячейке — это текст, а не команда стереть", async () => {
     storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([
       { id: "ats-1", testId: "test-1", topicId: dbTopic.id, failureFeedback: "Текст приёмника" },
     ]);
@@ -2891,7 +2893,7 @@ describe("Адаптивные уровни: выгрузка и загрузк�
     expect(res.status).toBe(200);
     expect(res.body.errors).toEqual([]);
     const [, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
-    expect(payload.adaptiveSettings[0].failureFeedback).toBeNull();
+    expect(payload.adaptiveSettings[0].failureFeedback).toBe("-");
   });
 
   it("уровень темы вне теста — ошибка строки", async () => {
