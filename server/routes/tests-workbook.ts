@@ -17,7 +17,7 @@ import { addAoaSheet, addJsonSheet, readWorkbookFromBuffer, workbookToBuffer } f
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
-import { memoryUpload } from "../middleware/upload";
+import { workbookUploadSingle } from "../middleware/upload";
 import { importWorkbook } from "../services/workbook-import";
 import { serializeQuestionRow, QUESTION_HEADERS, QUESTION_WIDTHS } from "../services/questions-export";
 import {
@@ -68,7 +68,7 @@ router.post(
   "/:id/workbook/import",
   requirePermission("tests.edit"),
   requireTestScope("edit"),
-  memoryUpload.single("file"),
+  workbookUploadSingle("file"),
   async (req: Request, res: Response) => {
     try {
       const testId = req.params.id;

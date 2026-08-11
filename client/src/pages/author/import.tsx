@@ -149,6 +149,18 @@ function PlanRow({
   );
 }
 
+/**
+ * A failed `/inspect` read, carrying the server's reason code so the toast can
+ * tell the author what to do next (`not_a_zip` / `unparsable`, or null when the
+ * response said nothing).
+ */
+class WorkbookReadFailure extends Error {
+  constructor(readonly code: string | null) {
+    super("inspect failed");
+    this.name = "WorkbookReadFailure";
+  }
+}
+
 export default function ImportPage() {
   const { toast } = useToast();
   const { can } = useAuth();
@@ -195,12 +207,27 @@ export default function ImportPage() {
       const fd = new FormData();
       fd.append("file", f);
       const res = await fetch("/api/workbook/inspect", { method: "POST", body: fd, credentials: "include" });
-      if (!res.ok) throw new Error("inspect failed");
+      if (!res.ok) {
+        // The server tells WHY the read failed; carry the code so the toast can
+        // say what to do about it instead of «проверьте формат».
+        const code = await res
+          .json()
+          .then((b) => (typeof b?.code === "string" ? b.code : null))
+          .catch(() => null);
+        throw new WorkbookReadFailure(code);
+      }
       return res.json();
     },
     onSuccess: (data) => setInspect(data),
-    onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: tr.failedToInspect });
+    onError: (error) => {
+      const code = error instanceof WorkbookReadFailure ? error.code : null;
+      const description =
+        code === "not_a_zip"
+          ? tr.notAnXlsxPackage
+          : code === "unparsable"
+            ? tr.unparsableXlsx
+            : tr.failedToInspect;
+      toast({ variant: "destructive", title: t.common.error, description });
       resetAll();
     },
   });

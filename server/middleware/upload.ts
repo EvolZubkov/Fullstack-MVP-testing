@@ -2,7 +2,7 @@ import multer from "multer";
 import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
-import { Response } from "express";
+import { NextFunction, Request, Response } from "express";
 
 // Директория для медиа-файлов
 const mediaDir = path.resolve(process.cwd(), "uploads", "media");
@@ -12,6 +12,45 @@ fs.mkdirSync(mediaDir, { recursive: true });
  * Multer для загрузки в память (Excel импорт и т.д.)
  */
 export const memoryUpload = multer({ storage: multer.memoryStorage() });
+
+/**
+ * Upload ceiling for Excel workbooks. A real book is measured in hundreds of
+ * kilobytes; the cap exists because the whole upload is held in memory, and
+ * reading a book whose namespaces need normalizing holds it TWICE (original plus
+ * rewritten package). Design-template zips keep using the unlimited
+ * {@link memoryUpload} — they are a different shape of upload.
+ */
+export const WORKBOOK_UPLOAD_LIMIT_BYTES = 25 * 1024 * 1024;
+
+const workbookUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: WORKBOOK_UPLOAD_LIMIT_BYTES },
+});
+
+/**
+ * Accept one uploaded workbook under `field`, answering `413` when it exceeds
+ * {@link WORKBOOK_UPLOAD_LIMIT_BYTES}.
+ *
+ * The size check has to be translated here: multer reports the overflow by
+ * calling `next(err)`, which skips the route handler entirely and would surface
+ * as a bare 500 from the app-level error handler.
+ *
+ * @param field Multipart field name holding the file.
+ */
+export function workbookUploadSingle(field: string) {
+  const handler = workbookUpload.single(field);
+  return (req: Request, res: Response, next: NextFunction) =>
+    handler(req, res, (err: unknown) => {
+      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({
+          error: "Workbook is too large",
+          code: "too_large",
+          maxBytes: WORKBOOK_UPLOAD_LIMIT_BYTES,
+        });
+      }
+      next(err);
+    });
+}
 
 // Uploads land in a scratch directory; `MediaStore.putFile` moves them to their
 // checksum-derived final key, so the upload never picks the storage layout itself.

@@ -34,10 +34,11 @@ import {
   readWorkbookFromBuffer,
   sheetToObjects,
   workbookToBuffer,
+  WorkbookReadError,
 } from "../utils/excel";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
-import { memoryUpload } from "../middleware/upload";
+import { workbookUploadSingle } from "../middleware/upload";
 import { importWorkbook } from "../services/workbook-import";
 import { testSettingsService } from "../services/test-settings";
 // The role-sheet names and the template itself live in one module, so /inspect
@@ -75,7 +76,7 @@ function rowCount(sheet: ExcelJS.Worksheet | undefined): number {
 router.post(
   "/inspect",
   requirePermission("questions.importExport"),
-  memoryUpload.single("file"),
+  workbookUploadSingle("file"),
   async (req: Request, res: Response) => {
     try {
       if (!req.file) return res.status(400).json({ error: "File required" });
@@ -122,7 +123,11 @@ router.post(
       });
     } catch (error) {
       logger.error("Workbook inspect error: " + (error as Error).message, "workbook");
-      res.status(400).json({ error: "Failed to read file" });
+      // `code` separates "this is not an .xlsx at all" from "it is a package we
+      // could not parse": the advice to the author differs (pick another file vs
+      // re-save the book), and the reader is the only place that knows which.
+      const code = error instanceof WorkbookReadError ? error.reason : undefined;
+      res.status(400).json({ error: "Failed to read file", ...(code ? { code } : {}) });
     }
   },
 );
@@ -133,7 +138,7 @@ router.post(
 router.post(
   "/import-new",
   requirePermission("tests.create"),
-  memoryUpload.single("file"),
+  workbookUploadSingle("file"),
   async (req: Request, res: Response) => {
     try {
       if (!req.file) return res.status(400).json({ error: "File required" });
