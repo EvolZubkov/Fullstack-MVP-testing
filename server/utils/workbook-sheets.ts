@@ -21,6 +21,7 @@ import type { InterpretationBand, LearnerVisibility, Valence } from "@shared/sca
 import type { DrawStratum, QuestionScoring } from "@shared/schema";
 import { scales, resultVariables } from "@shared/schema";
 import { normalizeTags, TAG_MAX_LENGTH } from "@shared/tags";
+import { PASS_TYPE_FROM, PASS_TYPE_TO } from "./workbook-settings";
 import { serializeScoring } from "./scoring-excel";
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -737,18 +738,9 @@ export {
   type ParsedPageSheets,
 } from "./workbook-pages";
 
-/** «Тип порога» cell → the editor's `topicPassRuleJson` shape (PRD-7). */
-const PASS_TYPE_FROM: Record<string, "percent" | "absolute"> = {
-  "процент": "percent",
-  "%": "percent",
-  "percent": "percent",
-  "сумма баллов": "absolute",
-  "баллы": "absolute",
-  "балл": "absolute",
-  "absolute": "absolute",
-};
-/** Internal pass type → «Тип порога» cell (export). */
-const PASS_TYPE_TO: Record<string, string> = { percent: "Процент", absolute: "Сумма баллов" };
+// «Тип порога» is asked by three sheets («Структура», «Пороги вариантов» and «Адаптивные
+// уровни»), so its dictionary lives in the shared vocabulary module (imported at the top of
+// this file) rather than here — a per-sheet copy is how the sheets start disagreeing.
 
 /** «Режим» cell → PRD-11 per-tag mode (default `exact`). */
 const QUOTA_MODE_FROM: Record<string, "exact" | "min"> = {

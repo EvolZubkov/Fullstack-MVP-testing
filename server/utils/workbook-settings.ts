@@ -284,6 +284,32 @@ const COMPLETION_LABELS = {
  */
 export const FORMAT_LABELS = { plain: "Простой", richText: "Форматированный", html: "HTML" };
 
+/**
+ * Threshold-type labels of the TABLE sheets — «Структура», «Пороги вариантов» and
+ * «Адаптивные уровни». Exported for the same reason as {@link FORMAT_LABELS}: three sheets
+ * ask the same question, and a per-sheet copy is how one of them starts offering a value
+ * the others no longer take.
+ *
+ * NOT the same wording as {@link OVERALL_TYPE_LABELS} above, on purpose: the «Настройки»
+ * sheet names the test's OVERALL rule in a parameter list, where «Процент» alone would not
+ * say percent of what. In a «Тип порога» column the header already says it.
+ */
+export const PASS_TYPE_TO: Record<string, string> = { percent: "Процент", absolute: "Сумма баллов" };
+
+/**
+ * A «Тип порога» cell → the stored type. Wider than {@link PASS_TYPE_TO} reversed: the
+ * synonyms and the English spellings keep older, hand-written books loading.
+ */
+export const PASS_TYPE_FROM: Record<string, "percent" | "absolute"> = {
+  "процент": "percent",
+  "%": "percent",
+  "percent": "percent",
+  "сумма баллов": "absolute",
+  "баллы": "absolute",
+  "балл": "absolute",
+  "absolute": "absolute",
+};
+
 const FAIL_POLICY_LABELS = { failOpen: "Разрешить старт", failClosed: "Заблокировать" };
 
 /** Eligibility plugins — by their human name from the shared registry, not by key. */
