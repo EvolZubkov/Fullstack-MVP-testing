@@ -537,10 +537,6 @@ async function applyPageSheets(
         continue;
       }
     }
-    const zoneKey = zoneKeyOf(page.zone, topicId);
-    namedZones.add(zoneKey);
-    zoneLabels.set(zoneKey, formatPageZone(page.zone, page.topicName));
-
     const existing = page.kind === "info"
       ? undefined
       : systemPages.get(`${page.kind}|${topicId ?? ""}`);
@@ -567,6 +563,14 @@ async function applyPageSheets(
         continue;
       }
     }
+
+    // Named only HERE, by a row that survived every check: naming a zone COSTS the target its
+    // author pages there, and a row that was rejected has bought nothing. Registered earlier,
+    // a book whose author rows all failed still emptied the zone — and the warning below then
+    // said «зону называют только системные страницы», which was simply untrue.
+    const zoneKey = zoneKeyOf(page.zone, topicId);
+    namedZones.add(zoneKey);
+    zoneLabels.set(zoneKey, formatPageZone(page.zone, page.topicName));
 
     const built = buildPageFields(page, existing, variant);
     for (const e of built.errors) result.errors.push(`${where}: ${e}`);

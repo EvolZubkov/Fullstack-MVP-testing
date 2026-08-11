@@ -2392,6 +2392,39 @@ describe("POST /:id/workbook/import — «Страницы» и «Поля ст�
     expect(storageMock.updateContentPage).not.toHaveBeenCalled();
   });
 
+  // Назвать зону — значит стереть в ней авторские страницы приёмника. Строка, которую
+  // импорт отверг, этого права не получает: иначе книга с опечаткой в варианте молча
+  // сносит страницы, ничего не создав взамен.
+  it("строка, отвергнутая по варианту, зону не называет — страницы приёмника целы", async () => {
+    storageMock.getContentPages.mockResolvedValue([
+      startPage,
+      authorPage("p-old-1", "after", 1),
+    ]);
+    const buf = await makeWorkbook({
+      "Страницы": [
+        pageRow({ "Зона": "После теста", "Вид": "Авторская", "Номер": 1, "Вариант": "info.exotic" }),
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors.some((e: string) => /info\.exotic/.test(e))).toBe(true);
+    expect(res.body.pages).toMatchObject({ created: 0, deleted: 0 });
+    expect(storageMock.deleteContentPage).not.toHaveBeenCalled();
+    // И предупреждения о «только системных страницах» тоже нет: зону никто не назвал.
+    expect(res.body.warnings.some((w: string) => /После теста/.test(w))).toBe(false);
+  });
+
+  it("отвергнутая системная строка зону не называет", async () => {
+    storageMock.getContentPages.mockResolvedValue([startPage, authorPage("p-old-1", "after", 1)]);
+    const buf = await makeWorkbook({
+      "Страницы": [pageRow({ "Зона": "После теста", "Вид": "Итоги", "Вариант": "start.default" })],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors.some((e: string) => /сценари/i.test(e))).toBe(true);
+    expect(storageMock.deleteContentPage).not.toHaveBeenCalled();
+  });
+
   it("dryRun считает план, но страниц не трогает", async () => {
     const buf = await makeWorkbook({
       "Страницы": [pageRow()],
